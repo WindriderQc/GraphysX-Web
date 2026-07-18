@@ -146,7 +146,7 @@ import type { ThreejsPlaygroundParameter } from "./threejs-playground-environmen
 
 const ARCHIVE_STATE_FLOW = ["scene-index", "scene-lab", "milky-way-lab", "nature-lab", "world-api-lab", "skybox-selector", "car-selector", "vehicle-pack-gallery", "common-room-lab", "threejs-playground", "ballz-blender-level1", "maison-explorer", "arena-archive", "xml-myworld-copy", "ballz-xml-worlds", "object-library-catalog", "dominus-asset-gallery", "dominus-port-evidence", "ballz-2011-level1", "ballz-slide1", "ballz-track-gallery", "suzanne2-archive", "game-lab", "physics-lab", "input-device-lab", "map-editor", "math-lab", "editor-lab", "cubx-lab", "cubx-actor-lineage", "notes-manager-lab", "xml-serializer-artifacts", "asset-catalog"] as const;
 const APP_VERSION = packageInfo.version;
-const APP_BUILD = "revival-2026.07.18-r13";
+const APP_BUILD = "graphysx-web v0.1 · foundation-r1";
 type ArchiveAppState = (typeof ARCHIVE_STATE_FLOW)[number];
 type AppState = "home" | "race-select" | "world-select" | "gameplay" | "after-race" | ArchiveAppState;
 
@@ -355,7 +355,7 @@ export class PrototypeApp {
 
     this.versionBadge = document.createElement("div");
     this.versionBadge.className = "version-badge";
-    this.versionBadge.innerHTML = `<span>GraphysX Web Revival</span><strong>v${escapeHtml(APP_VERSION)}</strong><small>${escapeHtml(APP_BUILD)}</small>`;
+    this.versionBadge.innerHTML = `<span>GraphysX Web</span><strong>v${escapeHtml(APP_VERSION)}</strong><small>${escapeHtml(APP_BUILD)}</small>`;
 
     this.title = document.createElement("h1");
     this.title.className = "panel-title";
@@ -1604,31 +1604,17 @@ export class PrototypeApp {
     this.updatePauseUi();
 
     if (state === "home") {
-      this.primaryAction.disabled = false;
-      this.secondaryAction.hidden = false;
-      const recommended = this.getRecommendedRace(BALLZ_RACES);
-      const completed = this.getCompletedCount(BALLZ_RACES);
-      const totalScore = this.getCareerScore(BALLZ_RACES);
-      this.title.textContent = "GRAPHYSX";
+      this.primaryAction.hidden = true;
+      this.secondaryAction.hidden = true;
+      this.title.textContent = "GRAPHYSX WEB";
       this.body.textContent =
-        "Choose a project family. Classic BallZ arenas, later BallZ concepts, standalone 3D environments, vehicles, CubZ, engine labs, Math Game, and editors are tracked by their original intent—not merely by which archive folder held them.";
-      this.primaryAction.textContent = "Play BallZ";
-      this.secondaryAction.textContent = "Engine & FX Lab";
+        "A browser engine for 3D + physics scenes that humans and AI agents create and inhabit together. Open the Scene Editor to start — the welcome showroom and on-platform games are being built on this spine.";
       this.stats.className = "stats-grid home-grid";
       this.stats.innerHTML = [
         this.homeDestinations(),
-        this.progressCard("BallZ Tour", completed, BALLZ_RACES.length, totalScore),
-        this.progressCard(
-          "Archive Concepts & Worlds",
-          this.getCompletedCount(RECOVERED_WORLD_RACES),
-          RECOVERED_WORLD_RACES.length,
-          this.getCareerScore(RECOVERED_WORLD_RACES)
-        ),
-        this.statCard(
-          "BallZ Next",
-          `${escapeHtml(recommended.name)}<small>${escapeHtml(challengeFor(recommended).focus)}</small>`
-        ),
-      this.statCard("BallZ Controls", "WASD / arrows<small>camera-relative roll · drag to orbit · wheel zoom · Space jump</small>")
+        this.statCard("What this is", "A 3D + physics scene engine<small>Humans and AI agents author and inhabit the same live scene.</small>"),
+        this.statCard("For agents", "window.__GRAPHYSX__<small>Discoverable bridge, JSON world files, revision-guarded commits — see AGENT_WORLD_API.md.</small>"),
+        this.statCard("Roadmap", "Foundation, then clean host, then showroom<small>Living behaviors and games are rebuilt on-platform, not ported.</small>"),
       ].join("");
       return;
     }
@@ -3936,182 +3922,16 @@ export class PrototypeApp {
   private homeDestinations(): string {
     return `<section class="wide-card home-destinations">
       <div class="destination-heading">
-        <span class="stat-label">Choose A Project Family</span>
-        <small>Play, inspect, build, or check the recovery ledger. Archive visits are never mixed into BallZ progression.</small>
+        <span class="stat-label">GraphysX Web — Platform</span>
+        <small>A browser engine for 3D + physics scenes that humans and AI agents build and inhabit together. The welcome showroom and on-platform games are being built on this spine; the archive revival lives in the workshop repo.</small>
       </div>
       <div class="destination-list">
-        <section class="destination-group destination-group-play">
-          <div class="destination-group-heading"><span>01</span><h3>Play</h3><small>Runnable challenges and vehicle experiments</small></div>
-          <div class="destination-group-grid">
-            <button class="destination-card destination-primary" data-mode-id="race">
-              <span>BallZ Tour</span>
-              <small>Classic ASCII races, Suzanne 1, ZombieKiller, medals, and records.</small>
-            </button>
-            <button class="destination-card destination-worlds" data-world-family="ballz-concepts">
-              <span>BallZ Concepts & Slides</span>
-              <small>World 1, Map 1, Great Slide/Level 0, and the concept recovery queue.</small>
-            </button>
-            <button class="destination-card" data-world-family="flightx">
-              <span>FlightX</span>
-              <small>Fly the decoded pipe loop with the archive airplane controls.</small>
-            </button>
-            <button class="destination-card" data-world-family="vehicles">
-              <span>Vehicle Experiments</span>
-              <small>Drive Piste Ovale and inspect recovered vehicle scenes.</small>
-            </button>
-            <button class="destination-card" data-world-family="dominus">
-              <span>Dominus Curated Visit</span>
-              <small>Explore a new tour built from recovered sources; exact port evidence stays separate.</small>
-            </button>
-          </div>
-        </section>
-
-        <section class="destination-group destination-group-archives">
-          <div class="destination-group-heading"><span>02</span><h3>Archived Worlds</h3><small>Source-backed visits, separate from progression</small></div>
-          <div class="destination-group-grid">
-            <button class="destination-card" data-mode-id="ballz-2011-level1">
-              <span>BallZ 2011 Level1 Mesh</span>
-              <small>Exact distinct TVM geometry as a source-bounded non-race visit.</small>
-            </button>
-            <button class="destination-card" data-mode-id="ballz-slide1">
-              <span>Active BallZ Slide 1</span>
-              <small>Exact Atmel slide + Ball assembly as a non-race visit.</small>
-            </button>
-            <button class="destination-card" data-mode-id="ballz-track-gallery">
-              <span>BallZ Slide / Track Gallery</span>
-              <small>Six exact remaining sources—materials and host boundaries, without invented races.</small>
-            </button>
-            <button class="destination-card" data-mode-id="suzanne2-archive">
-              <span>Suzanne 2</span>
-              <small>Distinct 40×40 ASCII/XML arena and its shipped rule conflict.</small>
-            </button>
-            <button class="destination-card" data-mode-id="xml-myworld-copy">
-              <span>MyWorld — Copy XML</span>
-              <small>MyWorld Copy's exact six-of-seven composition.</small>
-            </button>
-            <button class="destination-card" data-mode-id="ballz-xml-worlds">
-              <span>MyWorld / TestWorld XML</span>
-              <small>Two distinct evidence documents—exact records and unresolved serializer defects.</small>
-            </button>
-            <button class="destination-card" data-mode-id="object-library-catalog">
-              <span>ObjectLibrary Catalog</span>
-              <small>Exact 61-entry editor grid—47 recovered, 14 explicit source gaps.</small>
-            </button>
-            <button class="destination-card" data-mode-id="dominus-asset-gallery">
-              <span>Dominus Source Assets</span>
-              <small>65 audited local models—63 recovered, two honest binary gaps.</small>
-            </button>
-            <button class="destination-card" data-mode-id="dominus-port-evidence">
-              <span>Dominus Port Evidence</span>
-              <small>Exact 28-row multi-asset source grid, clearly separated from the modern curated visit.</small>
-            </button>
-            <button class="destination-card" data-mode-id="common-room-lab">
-              <span>Standalone 3D Environments</span>
-              <small>Common Rooms 1–2 and the separate sky.tvm component.</small>
-            </button>
-            <button class="destination-card" data-mode-id="threejs-playground">
-              <span>Three.js Playground</span>
-              <small>Recovered Asteroids-sky composition with airplane, morph shaders, terrain, planets, and animated light.</small>
-            </button>
-            <button class="destination-card" data-mode-id="ballz-blender-level1">
-              <span>BallZ / Blender Level 1</span>
-              <small>Complete best-revision geometry, source camera and light—kept honest as a visit, not an invented race.</small>
-            </button>
-            <button class="destination-card" data-mode-id="maison-explorer">
-              <span>Maison Explorer</span>
-              <small>Explore the complete House and detailed 87-object Kitchen compositions.</small>
-            </button>
-            <button class="destination-card" data-mode-id="arena-archive">
-              <span>Unity Arena Archive</span>
-              <small>Complete octagonal arena, hand-painted atlas, source camera and light.</small>
-            </button>
-            <button class="destination-card" data-mode-id="skybox-selector">
-              <span>Skybox Selector</span>
-              <small>Five rotating cubes, source camera chase, and panorama orbit.</small>
-            </button>
-            <button class="destination-card" data-mode-id="car-selector">
-              <span>Car Selector</span>
-              <small>Authentic one-Impreza terrain/water preview.</small>
-            </button>
-            <button class="destination-card" data-mode-id="vehicle-pack-gallery">
-              <span>GT4 / Low Cobra Sources</span>
-              <small>Exact car assets with selector and physics bindings honestly marked NONE.</small>
-            </button>
-            <button class="destination-card" data-mode-id="milky-way-lab">
-              <span>Voie Lactée Vignette</span>
-              <small>Five archived planetary bodies, not a generated star field.</small>
-            </button>
-            <button class="destination-card" data-mode-id="cubx-lab">
-              <span>CubZ Animated Menu</span>
-              <small>Eight source-layout cubes unfold into four internal panels.</small>
-            </button>
-            <button class="destination-card" data-mode-id="cubx-actor-lineage">
-              <span>CubX Actor Lineage</span>
-              <small>Separate exact Closed/Get/Rot/Open evidence and broken click 8.</small>
-            </button>
-            <button class="destination-card" data-mode-id="notes-manager-lab">
-              <span>CubX 3D Notes Block</span>
-              <small>Recovered 50-slot note subsystem with missing GUI disclosed.</small>
-            </button>
-          </div>
-        </section>
-
         <section class="destination-group destination-group-labs">
-          <div class="destination-group-heading"><span>03</span><h3>Labs & Creation</h3><small>Engine studies, generative worlds, and tools</small></div>
+          <div class="destination-group-heading"><span>01</span><h3>Create</h3><small>Author scenes with the shared human / agent runtime</small></div>
           <div class="destination-group-grid">
-            <button class="destination-card" data-mode-id="scene-lab">
-              <span>Scene Lab</span>
-              <small>Terrain, atmosphere, water, sky, spline, and day/night environment studies.</small>
-            </button>
-            <button class="destination-card destination-nature" data-mode-id="nature-lab">
-              <span>Nature Lab</span>
-              <small>Flocking, forces, flow fields, and a generative forest.</small>
-            </button>
-            <button class="destination-card destination-agent-world" data-mode-id="world-api-lab">
-              <span>Agent World API</span>
-              <small>Compose entities, lights, materials, behaviors, and scenes.</small>
-            </button>
-            <button class="destination-card" data-mode-id="game-lab">
-              <span>Engine & FX Labs</span>
-              <small>Particles, projectiles, physics, shaders, sky, water, and lighting.</small>
-            </button>
-            <button class="destination-card" data-mode-id="physics-lab">
-              <span>Physics Lab</span>
-              <small>Live hinges, distance constraints, rigid stacks, and wrecking-ball systems.</small>
-            </button>
-            <button class="destination-card" data-mode-id="input-device-lab">
-              <span>Input & Device Lab</span>
-              <small>Live controller monitor, simulated robot/sonar protocols, Atmel I/O schedules, and MeArm dry-runs.</small>
-            </button>
-            <button class="destination-card" data-mode-id="math-lab">
-              <span>Math Game</span>
-              <small>Archived formulas and A/B/C/M/X controls for 10,000 molecules; modern presets are inspection aids.</small>
-            </button>
-            <button class="destination-card" data-mode-id="map-editor">
-              <span>Editors & Archive Tools</span>
-              <small>BallZ tile editing and the scene/editor recovery path.</small>
-            </button>
-            <button class="destination-card" data-mode-id="editor-lab">
-              <span>Scene Editor Lab</span>
-              <small>Recovered add/load/save/clear vocabulary and object-inspection workflow.</small>
-            </button>
-          </div>
-        </section>
-
-        <section class="destination-group destination-group-status">
-          <div class="destination-group-heading"><span>04</span><h3>Recovery Status</h3><small>One ledger for every discovered scene</small></div>
-          <div class="destination-group-grid">
-            <button class="destination-card destination-index" data-mode-id="scene-index">
-              <span>Complete Scene Index</span>
-              <small>All ${ARCHIVE_SCENES.length} distinct screens, scenes, levels, environments, vehicle scenes, and demos—with live restoration status.</small>
-            </button>
-            <button class="destination-card" data-mode-id="xml-serializer-artifacts">
-              <span>XML Serializer Artifacts</span>
-              <small>BaseScene/test1 remain inspectable without being miscounted as composed worlds.</small>
-            </button>
-            <button class="destination-card" data-mode-id="asset-catalog">
-              <span>Asset & Provenance Catalog</span>
-              <small>Recovered textures, shaders, models, documents, and current binding status.</small>
+            <button class="destination-card destination-primary destination-agent-world" data-mode-id="world-api-lab">
+              <span>Open the Scene Editor</span>
+              <small>Compose entities, lights, materials, physics, behaviors, prefabs, and starter worlds — the same runtime agents drive through window.__GRAPHYSX__.</small>
             </button>
           </div>
         </section>
