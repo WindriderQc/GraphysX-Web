@@ -1,0 +1,3330 @@
+{
+  "activeCamera": "Camera",
+  "blenderVersion": [
+    2,
+    79,
+    0
+  ],
+  "images": [
+    {
+      "exists": false,
+      "filepath": "C:\\Users\\Yanik\\Desktop\\Maison\\31768676_10156115872840631_8145769982148476928_n.jpg",
+      "name": "31768676_10156115872840631_8145769982148476928_n.jpg",
+      "packed": false,
+      "size": [
+        0,
+        0
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "alpha": 1.0,
+      "diffuse": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "diffuseIntensity": 0.8,
+      "name": "Blanc",
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specularIntensity": 0.708333,
+      "textures": []
+    },
+    {
+      "alpha": 1.0,
+      "diffuse": [
+        0.827557,
+        0.827557,
+        0.827557
+      ],
+      "diffuseIntensity": 0.8,
+      "name": "Default",
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specularIntensity": 0.375,
+      "textures": [
+        {
+          "filepath": null,
+          "image": null,
+          "packed": false,
+          "texture": "Tex"
+        }
+      ]
+    },
+    {
+      "alpha": 1.0,
+      "diffuse": [
+        0.142401,
+        0.142401,
+        0.142401
+      ],
+      "diffuseIntensity": 0.8,
+      "name": "Gris",
+      "specular": [
+        0.420025,
+        0.313077,
+        0.254888
+      ],
+      "specularIntensity": 0.5,
+      "textures": []
+    }
+  ],
+  "meshTotals": {
+    "polygons": 3676,
+    "vertices": 4244
+  },
+  "objectCount": 87,
+  "objects": [
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "light": {
+        "color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "distance": 7.62,
+        "energy": 1.0,
+        "kind": "POINT"
+      },
+      "location": [
+        2.224452,
+        7.671852,
+        2.09272
+      ],
+      "name": "Point.001",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "LAMP"
+    },
+    {
+      "dimensions": [
+        1.006896,
+        0.6096,
+        0.6096
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        3.703483,
+        7.096327,
+        1.923419
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Cube.005",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube.004",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        1.977988,
+        1.977988,
+        1.977988
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        3.312227,
+        5.45923,
+        1.02438
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Cube",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube.002",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        -3.244731,
+        -3.244731,
+        -3.244731
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.635,
+        0.0508,
+        2.2352
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        3.879929,
+        3.045868,
+        1.039902
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Cube.003",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube.001",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.041667,
+        0.083333,
+        3.666667
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        3.497994,
+        0.005197,
+        2.15441
+      ],
+      "name": "TopLavabo",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "EMPTY"
+    },
+    {
+      "dimensions": [
+        0.6,
+        0.35,
+        0.697992
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        3.497994,
+        0.005197,
+        1.5
+      ],
+      "mesh": {
+        "edges": 52,
+        "materials": [],
+        "name": "Cabinet1.005",
+        "polygons": 26,
+        "uvLayers": [],
+        "vertices": 32
+      },
+      "name": "Cabinet1.005",
+      "parent": "TopLavabo",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        3.141593
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        0.775547
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.2995,
+        0.018,
+        0.696441
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.6,
+        -0.351,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Cabinet1_Door_R.002",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet1_Door_R.002",
+      "parent": "Cabinet1.005",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.111753,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.235419,
+        -0.018,
+        0.122226
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.019",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.018",
+      "parent": "Cabinet1_Door_R.002",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.2995,
+        0.018,
+        0.696441
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.351,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Cabinet1_Door_L.002",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet1_Door_L.002",
+      "parent": "Cabinet1.005",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.111753,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.235419,
+        -0.018,
+        0.122226
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.018",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.017",
+      "parent": "Cabinet1_Door_L.002",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.6096,
+        0.6096,
+        0.713903
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        3.875104,
+        2.695702,
+        0.96732
+      ],
+      "mesh": {
+        "edges": 76,
+        "materials": [],
+        "name": "Cube.002",
+        "polygons": 38,
+        "uvLayers": [],
+        "vertices": 40
+      },
+      "name": "Cube",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.7778,
+        0.5278,
+        0.491744
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        4.118426,
+        3.017747,
+        0.158308
+      ],
+      "mesh": {
+        "edges": 28,
+        "materials": [],
+        "name": "Cabinet1.006",
+        "polygons": 14,
+        "uvLayers": [],
+        "vertices": 16
+      },
+      "name": "Cabinet1.006",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        -1.570796
+      ],
+      "scale": [
+        1.296333,
+        1.508,
+        1.260882
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.7778,
+        0.5278,
+        0.244611
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.35,
+        0.195
+      ],
+      "mesh": {
+        "edges": 41,
+        "materials": [
+          "Gris"
+        ],
+        "name": "Drawer.001",
+        "polygons": 19,
+        "uvLayers": [],
+        "vertices": 24
+      },
+      "name": "Drawer.001",
+      "parent": "Cabinet1.006",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.153252,
+        0.032493,
+        0.009901
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.3,
+        -0.018,
+        0.130074
+      ],
+      "mesh": {
+        "edges": 176,
+        "materials": [],
+        "name": "Handle.021",
+        "polygons": 68,
+        "uvLayers": [],
+        "vertices": 112
+      },
+      "name": "Handle.020",
+      "parent": "Drawer.001",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.7778,
+        0.5278,
+        0.244611
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.35,
+        0.0
+      ],
+      "mesh": {
+        "edges": 41,
+        "materials": [
+          "Gris"
+        ],
+        "name": "Drawer",
+        "polygons": 19,
+        "uvLayers": [],
+        "vertices": 24
+      },
+      "name": "Drawer",
+      "parent": "Cabinet1.006",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.153252,
+        0.032493,
+        0.009901
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.3,
+        -0.018,
+        0.130074
+      ],
+      "mesh": {
+        "edges": 176,
+        "materials": [],
+        "name": "Handle.020",
+        "polygons": 68,
+        "uvLayers": [],
+        "vertices": 112
+      },
+      "name": "Handle.019",
+      "parent": "Drawer",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        3.813261,
+        0.369859,
+        2.163351
+      ],
+      "name": "TopCoin",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        -2.356194
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "EMPTY"
+    },
+    {
+      "dimensions": [
+        0.449885,
+        0.35,
+        0.697992
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        2.281862,
+        4.105803,
+        1.994692
+      ],
+      "mesh": {
+        "edges": 52,
+        "materials": [],
+        "name": "Cabinet1.004",
+        "polygons": 26,
+        "uvLayers": [],
+        "vertices": 32
+      },
+      "name": "Cabinet1.004",
+      "parent": "TopCoin",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        0.749808,
+        1.0,
+        0.58166
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.449135,
+        0.018,
+        0.696829
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.351,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Cabinet1_Door.002",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet1_Door.002",
+      "parent": "Cabinet1.004",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.083815,
+        0.029606,
+        0.005975
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.534919,
+        -0.018,
+        0.122226
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.017",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.016",
+      "parent": "Cabinet1_Door.002",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        4.180555,
+        3.019419,
+        2.155746
+      ],
+      "name": "TopPoele",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        -1.570796
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "EMPTY"
+    },
+    {
+      "dimensions": [
+        0.6,
+        0.35,
+        0.3
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        2.068467,
+        3.9624,
+        1.9
+      ],
+      "mesh": {
+        "edges": 52,
+        "materials": [
+          "Blanc"
+        ],
+        "name": "Cabinet1.003",
+        "polygons": 26,
+        "uvLayers": [],
+        "vertices": 32
+      },
+      "name": "Cabinet1.003",
+      "parent": "TopPoele",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.2995,
+        0.018,
+        0.298
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.6,
+        -0.351,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Blanc"
+        ],
+        "name": "Cabinet1_Door_R.001",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet1_Door_R.001",
+      "parent": "Cabinet1.003",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.235419,
+        -0.018,
+        0.122226
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.012",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.011",
+      "parent": "Cabinet1_Door_R.001",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.2995,
+        0.018,
+        0.298
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.351,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Blanc"
+        ],
+        "name": "Cabinet1_Door_L.001",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet1_Door_L.001",
+      "parent": "Cabinet1.003",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.235419,
+        -0.018,
+        0.122226
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.011",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.010",
+      "parent": "Cabinet1_Door_L.001",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.3,
+        0.35,
+        0.7
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        2.668467,
+        3.9624,
+        1.5
+      ],
+      "mesh": {
+        "edges": 52,
+        "materials": [
+          "Blanc"
+        ],
+        "name": "Cabinet2.002",
+        "polygons": 26,
+        "uvLayers": [],
+        "vertices": 32
+      },
+      "name": "Cabinet2.002",
+      "parent": "TopPoele",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.299,
+        0.018,
+        0.698
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.351,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Blanc"
+        ],
+        "name": "Cabinet2_Door",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet2_Door",
+      "parent": "Cabinet2.002",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.234919,
+        -0.018,
+        0.122226
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.013",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.012",
+      "parent": "Cabinet2_Door",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        1.14,
+        0.35,
+        0.4
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        2.968467,
+        3.9624,
+        1.8
+      ],
+      "mesh": {
+        "edges": 52,
+        "materials": [
+          "Blanc"
+        ],
+        "name": "Cabinet3.001",
+        "polygons": 26,
+        "uvLayers": [],
+        "vertices": 32
+      },
+      "name": "Cabinet3",
+      "parent": "TopPoele",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.5695,
+        0.018,
+        0.398
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        1.14,
+        -0.351,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Blanc"
+        ],
+        "name": "Cabinet3_Door_R",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet3_Door_R",
+      "parent": "Cabinet3",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.505419,
+        -0.018,
+        0.122226
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.015",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.014",
+      "parent": "Cabinet3_Door_R",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.5695,
+        0.018,
+        0.398
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.351,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Blanc"
+        ],
+        "name": "Cabinet3_Door_L",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet3_Door_L",
+      "parent": "Cabinet3",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.505419,
+        -0.018,
+        0.122226
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.014",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.013",
+      "parent": "Cabinet3_Door_L",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.29972,
+        0.32451,
+        0.7
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        4.108467,
+        3.935618,
+        1.5
+      ],
+      "mesh": {
+        "edges": 52,
+        "materials": [
+          "Blanc"
+        ],
+        "name": "Cabinet4",
+        "polygons": 26,
+        "uvLayers": [],
+        "vertices": 32
+      },
+      "name": "Cabinet4",
+      "parent": "TopPoele",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        0.499533,
+        0.927173,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.299221,
+        0.016689,
+        0.698
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.599,
+        -0.351,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Blanc"
+        ],
+        "name": "Cabinet4_Door",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet4_Door",
+      "parent": "Cabinet4",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.02745,
+        0.003981
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.534919,
+        -0.018,
+        0.122226
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.016",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.015",
+      "parent": "Cabinet4_Door",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        3.259012,
+        0.005767,
+        0.93
+      ],
+      "name": "Lavabo",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        3.141593
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "EMPTY"
+    },
+    {
+      "dimensions": [
+        0.88392,
+        0.59,
+        0.7
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        1.960969,
+        2.299894,
+        0.16
+      ],
+      "mesh": {
+        "edges": 52,
+        "materials": [],
+        "name": "Cabinet1.002",
+        "polygons": 26,
+        "uvLayers": [],
+        "vertices": 32
+      },
+      "name": "Cabinet1.002",
+      "parent": "Lavabo",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.4732,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.88392,
+        0.018,
+        0.16
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.531,
+        -0.16
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Baseboard1.002",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Baseboard1.002",
+      "parent": "Cabinet1.002",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.88392,
+        0.61,
+        0.07
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.0,
+        0.0,
+        0.7
+      ],
+      "mesh": {
+        "edges": 24,
+        "materials": [],
+        "name": "Countertop1.002",
+        "polygons": 12,
+        "uvLayers": [],
+        "vertices": 16
+      },
+      "name": "Countertop1.002",
+      "parent": "Cabinet1.002",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.441223,
+        0.018,
+        0.698
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.6,
+        -0.591,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Gris"
+        ],
+        "name": "Cabinet1_Door_R",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet1_Door_R",
+      "parent": "Cabinet1.002",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.011739
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.235419,
+        -0.018,
+        0.575774
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.008",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.007",
+      "parent": "Cabinet1_Door_R",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.441223,
+        0.018,
+        0.698
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.591,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Gris"
+        ],
+        "name": "Cabinet1_Door_L",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet1_Door_L",
+      "parent": "Cabinet1.002",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.011739
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.235419,
+        -0.018,
+        0.575774
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.007",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.006",
+      "parent": "Cabinet1_Door_L",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.85,
+        0.59,
+        0.7
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        2.843485,
+        2.299894,
+        0.16
+      ],
+      "mesh": {
+        "edges": 52,
+        "materials": [],
+        "name": "Cabinet2.001",
+        "polygons": 26,
+        "uvLayers": [],
+        "vertices": 32
+      },
+      "name": "Cabinet2.001",
+      "parent": "Lavabo",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.85,
+        0.018,
+        0.16
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.531,
+        -0.16
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Baseboard2.001",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Baseboard2.001",
+      "parent": "Cabinet2.001",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.85,
+        0.61,
+        0.07
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.0,
+        0.0,
+        0.7
+      ],
+      "mesh": {
+        "edges": 24,
+        "materials": [],
+        "name": "Countertop2.001",
+        "polygons": 12,
+        "uvLayers": [],
+        "vertices": 16
+      },
+      "name": "Countertop2.001",
+      "parent": "Cabinet2.001",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.4245,
+        0.018,
+        0.698
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.85,
+        -0.591,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Gris"
+        ],
+        "name": "Cabinet2_Door_R.001",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet2_Door_R.001",
+      "parent": "Cabinet2.001",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.360419,
+        -0.018,
+        0.575774
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.010",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.009",
+      "parent": "Cabinet2_Door_R.001",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.4245,
+        0.018,
+        0.698
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.591,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Gris"
+        ],
+        "name": "Cabinet2_Door_L.001",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet2_Door_L.001",
+      "parent": "Cabinet2.001",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.360419,
+        -0.018,
+        0.575774
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.009",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.008",
+      "parent": "Cabinet2_Door_L.001",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        4.007487,
+        0.496221,
+        0.93
+      ],
+      "name": "Coin",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        -2.356194
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "EMPTY"
+    },
+    {
+      "dimensions": [
+        0.45,
+        0.59,
+        0.7
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.824168,
+        3.582304,
+        0.16
+      ],
+      "mesh": {
+        "edges": 52,
+        "materials": [],
+        "name": "Cabinet1.001",
+        "polygons": 26,
+        "uvLayers": [],
+        "vertices": 32
+      },
+      "name": "Cabinet1.001",
+      "parent": "Coin",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.45,
+        0.018,
+        0.16
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.531,
+        -0.16
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Baseboard1.001",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Baseboard1.001",
+      "parent": "Cabinet1.001",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.45,
+        0.62,
+        0.07
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.0,
+        0.0,
+        0.7
+      ],
+      "mesh": {
+        "edges": 24,
+        "materials": [],
+        "name": "Countertop1.001",
+        "polygons": 12,
+        "uvLayers": [],
+        "vertices": 16
+      },
+      "name": "Countertop1.001",
+      "parent": "Cabinet1.001",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.449,
+        0.018,
+        0.698
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.591,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Gris"
+        ],
+        "name": "Cabinet1_Door.001",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet1_Door.001",
+      "parent": "Cabinet1.001",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.394919,
+        -0.018,
+        0.575774
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.006",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.005",
+      "parent": "Cabinet1_Door.001",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        4.165538,
+        2.250865,
+        0.93
+      ],
+      "name": "Poele",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        -0.0,
+        -1.570804
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "EMPTY"
+    },
+    {
+      "dimensions": [
+        0.36,
+        0.59,
+        0.7
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.843666,
+        3.602305,
+        0.16
+      ],
+      "mesh": {
+        "edges": 52,
+        "materials": [],
+        "name": "Cabinet1",
+        "polygons": 26,
+        "uvLayers": [],
+        "vertices": 32
+      },
+      "name": "Cabinet1",
+      "parent": "Poele",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.36,
+        0.018,
+        0.16
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.531,
+        -0.16
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Baseboard1",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Baseboard1",
+      "parent": "Cabinet1",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.36,
+        0.62,
+        0.07
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.0,
+        0.0,
+        0.7
+      ],
+      "mesh": {
+        "edges": 24,
+        "materials": [],
+        "name": "Countertop1",
+        "polygons": 12,
+        "uvLayers": [],
+        "vertices": 16
+      },
+      "name": "Countertop1",
+      "parent": "Cabinet1",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.359,
+        0.018,
+        0.698
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.591,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Gris"
+        ],
+        "name": "Cabinet1_Door",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet1_Door",
+      "parent": "Cabinet1",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.304919,
+        -0.018,
+        0.575774
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.002",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.002",
+      "parent": "Cabinet1_Door",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.96,
+        0.59,
+        0.7
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        1.184169,
+        3.602304,
+        0.16
+      ],
+      "mesh": {
+        "edges": 40,
+        "materials": [],
+        "name": "Cabinet2",
+        "polygons": 20,
+        "uvLayers": [],
+        "vertices": 24
+      },
+      "name": "Cabinet2",
+      "parent": "Poele",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.96,
+        0.018,
+        0.16
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.531,
+        -0.16
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Baseboard2",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Baseboard2",
+      "parent": "Cabinet2",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.96,
+        0.62,
+        0.07
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.0,
+        0.0,
+        0.7
+      ],
+      "mesh": {
+        "edges": 24,
+        "materials": [],
+        "name": "Countertop2",
+        "polygons": 12,
+        "uvLayers": [],
+        "vertices": 16
+      },
+      "name": "Countertop2",
+      "parent": "Cabinet2",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.4795,
+        0.018,
+        0.698
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.96,
+        -0.591,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Gris"
+        ],
+        "name": "Cabinet2_Door_R",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet2_Door_R",
+      "parent": "Cabinet2",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.425419,
+        -0.018,
+        0.575774
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.004",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.004",
+      "parent": "Cabinet2_Door_R",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.4795,
+        0.018,
+        0.698
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.591,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Gris"
+        ],
+        "name": "Cabinet2_Door_L",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cabinet2_Door_L",
+      "parent": "Cabinet2",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.144096,
+        0.029606,
+        0.007969
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.425419,
+        -0.018,
+        0.575774
+      ],
+      "mesh": {
+        "edges": 272,
+        "materials": [],
+        "name": "Handle.003",
+        "polygons": 128,
+        "uvLayers": [],
+        "vertices": 144
+      },
+      "name": "Handle.003",
+      "parent": "Cabinet2_Door_L",
+      "rotationEuler": [
+        0.0,
+        1.570796,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "light": {
+        "color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "distance": 7.62,
+        "energy": 1.0,
+        "kind": "SUN"
+      },
+      "location": [
+        2.0955,
+        -3.131003,
+        4.088454
+      ],
+      "name": "Sun",
+      "parent": null,
+      "rotationEuler": [
+        0.776494,
+        -0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "LAMP"
+    },
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "light": {
+        "color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "distance": 7.62,
+        "energy": 1.0,
+        "kind": "POINT"
+      },
+      "location": [
+        1.864434,
+        1.97,
+        2.443339
+      ],
+      "name": "Point",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "LAMP"
+    },
+    {
+      "dimensions": [
+        0.762,
+        0.762,
+        1.6764
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.388692,
+        0.403773,
+        0.753182
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Cube.001",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Fridge",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        2.75
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        4.391,
+        4.3624,
+        2.4384
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.004634,
+        0.0,
+        0.0
+      ],
+      "mesh": {
+        "edges": 10,
+        "materials": [
+          "Default"
+        ],
+        "name": "Room",
+        "polygons": 3,
+        "uvLayers": [
+          "UVMap"
+        ],
+        "vertices": 8
+      },
+      "name": "Room",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        4.191,
+        3.9624,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mesh": {
+        "edges": 4,
+        "materials": [],
+        "name": "Floor",
+        "polygons": 1,
+        "uvLayers": [
+          "UVMap"
+        ],
+        "vertices": 4
+      },
+      "name": "Floor",
+      "parent": "Room",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        4.191,
+        3.9624,
+        0.036576
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mesh": {
+        "edges": 10,
+        "materials": [],
+        "name": "Baseboard",
+        "polygons": 3,
+        "uvLayers": [
+          "UVMap"
+        ],
+        "vertices": 8
+      },
+      "name": "Baseboard",
+      "parent": "Room",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        2.0955,
+        -0.1224,
+        1.020306
+      ],
+      "name": "Window_Group",
+      "parent": "Room",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "EMPTY"
+    },
+    {
+      "dimensions": [
+        1.198,
+        0.65,
+        0.998
+      ],
+      "hidden": true,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.15,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "CTRL_Hole",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "CTRL_Hole",
+      "parent": "Window_Group",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        2.166667,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        1.22,
+        0.102,
+        1.02
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        2.0955,
+        0.0,
+        1.2192
+      ],
+      "mesh": {
+        "edges": 222,
+        "materials": [],
+        "name": "WindowFrane",
+        "polygons": 96,
+        "uvLayers": [],
+        "vertices": 128
+      },
+      "name": "WindowFrame",
+      "parent": "Window_Group",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        1.2,
+        0.22,
+        0.01
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        -0.1,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Windows_Sill",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Windows_Sill",
+      "parent": "WindowFrame",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.618,
+        0.0345,
+        0.95
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.59,
+        -0.0625,
+        0.025
+      ],
+      "mesh": {
+        "edges": 168,
+        "materials": [],
+        "name": "Window.R",
+        "polygons": 105,
+        "uvLayers": [],
+        "vertices": 100
+      },
+      "name": "Window.R",
+      "parent": "WindowFrame",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.015942,
+        0.003806,
+        0.125589
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.035,
+        -0.0355,
+        0.475
+      ],
+      "mesh": {
+        "edges": 452,
+        "materials": [],
+        "name": "Handle.001",
+        "polygons": 224,
+        "uvLayers": [],
+        "vertices": 232
+      },
+      "name": "Handle.001",
+      "parent": "Window.R",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.618,
+        0.0345,
+        0.95
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -0.59,
+        -0.023,
+        0.025
+      ],
+      "mesh": {
+        "edges": 168,
+        "materials": [],
+        "name": "Window.L",
+        "polygons": 105,
+        "uvLayers": [],
+        "vertices": 100
+      },
+      "name": "Window.L",
+      "parent": "WindowFrame",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.015942,
+        0.003806,
+        0.125589
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.035,
+        -0.0355,
+        0.475
+      ],
+      "mesh": {
+        "edges": 452,
+        "materials": [],
+        "name": "Handle",
+        "polygons": 224,
+        "uvLayers": [],
+        "vertices": 232
+      },
+      "name": "Handle",
+      "parent": "Window.L",
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "camera": {
+        "clipEnd": 100.0,
+        "clipStart": 0.1,
+        "lens": 35.0,
+        "worldForward": [
+          0.987497,
+          -0.153694,
+          -0.035048
+        ],
+        "worldLocation": [
+          -3.002289,
+          2.731321,
+          1.140502
+        ],
+        "worldUp": [
+          0.033268,
+          -0.014135,
+          0.999346
+        ]
+      },
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -3.002289,
+        2.731321,
+        1.140502
+      ],
+      "name": "Camera",
+      "parent": null,
+      "rotationEuler": [
+        1.53574,
+        0.008845,
+        -1.725508
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "CAMERA"
+    },
+    {
+      "dimensions": [
+        3.838207,
+        2.317305,
+        2.261614
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        3.312227,
+        7.642218,
+        1.02438
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Cube.004",
+        "polygons": 5,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube.003",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        -3.244731,
+        -3.244731,
+        -3.244731
+      ],
+      "type": "MESH"
+    }
+  ],
+  "objectsByType": {
+    "CAMERA": 1,
+    "EMPTY": 7,
+    "LAMP": 3,
+    "MESH": 76
+  },
+  "scene": "Scene",
+  "schema": "graphysx.archive-blend-inspection/v1",
+  "source": {
+    "bytes": 1131088,
+    "path": "E:\\Media\\Datalake\\blenderModel\\Maison\\Cuisine.blend",
+    "sha256": "C0441E2AC52CC05329A569DC31B056314B9EA5535460EFDDFADBB8B86B966855"
+  },
+  "world": "World"
+}

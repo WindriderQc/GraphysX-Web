@@ -1,0 +1,958 @@
+{
+  "schema": "graphysx.stockroom-xml-artifacts/v1",
+  "converter": {
+    "id": "convert-stockroom-xml-artifacts",
+    "version": 1,
+    "deterministic": true,
+    "sourceSearchScope": [
+      "E:/Media/Datalake/Tech/StockRoom",
+      "E:/Media/Datalake/Tech/Repos/GraphysX/StockRoom",
+      "E:/Media/Datalake/Tech/Repos/Obj3D.h",
+      "workspace GraphysX_1 host continuation"
+    ]
+  },
+  "classification": {
+    "distinctAssembledScenes": 0,
+    "serializerArtifacts": 2,
+    "conclusion": "BaseScene.xml and test1.xml are distinct schema artifacts, not distinct assembled worlds."
+  },
+  "textureCandidate": {
+    "serializedToken": "TwoWay",
+    "status": "same-folder-case-insensitive-stem-candidate-runtime-binding-unproven",
+    "source": "E:/Media/Datalake/Tech/StockRoom/twoway.jpg",
+    "bytes": 20876,
+    "sha256": "4998527ACE4E853954E77EC5B937024CB2D2E23064FBBDE4A039224E978A2B21",
+    "browserPath": "/assets/stockroom-xml/twoway.jpg",
+    "policy": "Disabled by default. This is exact nearby source art, but the surviving v1.1 host code that would prove extension resolution was not located."
+  },
+  "hostEvidence": [
+    {
+      "id": "obj3d-lineage",
+      "path": "E:/Media/Datalake/Tech/Repos/Obj3D.h",
+      "relevance": "Only located Obj3D source lineage; confirms XML attributes, vector fields, default PHYSICCUBE metadata, and the literal default texture token TwoWay.",
+      "bytes": 1708,
+      "sha256": "5ABE0627ACFA15440B01CCFF024DFAEDBD43064D51A4BA4F14C1EDFA5535DE9C"
+    },
+    {
+      "id": "primitive-host",
+      "path": "C:/Users/Yanik/codes/GraphysX/GraphysX_1/MeshPrimitive.cpp",
+      "relevance": "Later native continuation; CreateBox consumes serialized scale as box dimensions and applies position/rotation directly.",
+      "bytes": 5286,
+      "sha256": "9148C4B38D863A8D8D3DFC983F036F176CEEF89BD6BD01B43E89980CC022C722"
+    },
+    {
+      "id": "physics-host",
+      "path": "C:/Users/Yanik/codes/GraphysX/GraphysX_1/PhysGeom.cpp",
+      "relevance": "Later native continuation; a physics primitive with mass 0 remains static and receives no gravity/transform callbacks.",
+      "bytes": 12939,
+      "sha256": "A1E6C480CE8F127B4267CAAA9A88BBBBE4A4CBB78024D960899CD58483751207"
+    },
+    {
+      "id": "texture-host",
+      "path": "C:/Users/Yanik/codes/GraphysX/GraphysX_1/TextureCache.cpp",
+      "relevance": "Later native continuation expects a filename, so the serialized extensionless TwoWay token cannot be claimed as a proven twoway.jpg runtime binding.",
+      "bytes": 837,
+      "sha256": "67A9B5310D1C296436851A545B7404E399C4D01231BB52C0CBCC1A86A3B2830C"
+    }
+  ],
+  "documents": [
+    {
+      "id": "base-scene",
+      "label": "BaseScene.xml",
+      "root": "Scene3D",
+      "schemaGeneration": "Scene3D/Obj3D v1.1",
+      "classification": "serializer-default-duplication-artifact",
+      "assessment": "Eighteen byte-serialized PHYSICCUBE records have the same name, transform, scale, material metadata, and origin. They overlap exactly and do not evidence an assembled world.",
+      "header": {
+        "rawSha256": "0586951BC00052069B7AFAEA05AB6FC3FD3637679CFBAD717C82E0BC492392DB",
+        "normalized": "0=CUBE 1=SPHERE 2=CYLINDER 3=CONE 4=BILLBOARD 5=FLOOR 6=CUSTOM 7=PHYSICCUBE 8=PHYSICSPHERE 9=PHYSICSCYLINDER 10=PHYSICCONE 11=PHYSICCUSTOM 12=XMESH 13=PHYSICXMESH 14=PHYSICXSTATIC 15=DUPLICATE 16=TEXT 17=V1_1",
+        "version": "V1_1",
+        "actions": {
+          "0": "CUBE",
+          "1": "SPHERE",
+          "2": "CYLINDER",
+          "3": "CONE",
+          "4": "BILLBOARD",
+          "5": "FLOOR",
+          "6": "CUSTOM",
+          "7": "PHYSICCUBE",
+          "8": "PHYSICSPHERE",
+          "9": "PHYSICSCYLINDER",
+          "10": "PHYSICCONE",
+          "11": "PHYSICCUSTOM",
+          "12": "XMESH",
+          "13": "PHYSICXMESH",
+          "14": "PHYSICXSTATIC",
+          "15": "DUPLICATE",
+          "16": "TEXT"
+        },
+        "physicsMaterials": {}
+      },
+      "filepathASCII": "",
+      "mapSize": null,
+      "ringPositionCount": 0,
+      "ringPositionListSerialized": false,
+      "objectCount": 18,
+      "uniqueObjectSignatureCount": 1,
+      "distinctSerializedTransformCount": 1,
+      "exactOverlapGroupSizes": [
+        18
+      ],
+      "objects": [
+        {
+          "index": 0,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 1,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 2,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 3,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 4,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 5,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 6,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 7,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 8,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 9,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 10,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 11,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 12,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 13,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 14,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 15,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 16,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        },
+        {
+          "index": 17,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "CubeTestPhys",
+            "Enabled": "true",
+            "masse": "0",
+            "MeshControlled": "false",
+            "NewtonMat": "0"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "CubeTestPhys",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "masse",
+          "meshControlled": false,
+          "newtonMaterial": 0,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": null,
+          "scale": [
+            10,
+            10,
+            10
+          ],
+          "pathToMesh": "",
+          "textureName": "TwoWay",
+          "absentSerializedFields": [
+            "Rot"
+          ],
+          "signatureSha256": "740D057299E4393F9E8E84096FC606ED4B005E7DD1DE0A6CE2D65C275E2D079F"
+        }
+      ],
+      "unresolvedRecords": [
+        {
+          "kind": "source-field-absent",
+          "field": "Obj3D/Rot",
+          "count": 18,
+          "policy": "Inspection renderer applies identity rotation but does not claim it was serialized."
+        },
+        {
+          "kind": "runtime-texture-binding-unproven",
+          "field": "Obj3D/TextureName",
+          "serializedValue": "TwoWay",
+          "candidate": "twoway.jpg",
+          "policy": "The same-folder file is preserved as an opt-in candidate only; source mode does not silently bind it."
+        }
+      ],
+      "serializedSubsystems": {
+        "objects": true,
+        "mapSize": false,
+        "ringPositions": false,
+        "camera": false,
+        "lights": false,
+        "sky": false,
+        "gravity": false,
+        "physicsTimestep": false,
+        "interactions": false,
+        "gameplayObjective": false
+      },
+      "canonicalSource": "E:/Media/Datalake/Tech/StockRoom/BaseScene.xml",
+      "bytes": 5006,
+      "sha256": "1F56E50E0FE48B6F7BF34024FA11C010755C3F59FA6FB2F70377BA0B8574CCA8",
+      "semanticSha256": "F00AF05009F101110B1CA9F2B3CBEF7424EE34015E671FBADFF4D8BC4965987C",
+      "copies": [
+        {
+          "source": "E:/Media/Datalake/Tech/StockRoom/BaseScene.xml",
+          "bytes": 5006,
+          "sha256": "1F56E50E0FE48B6F7BF34024FA11C010755C3F59FA6FB2F70377BA0B8574CCA8",
+          "whitespaceSemanticSha256": "F00AF05009F101110B1CA9F2B3CBEF7424EE34015E671FBADFF4D8BC4965987C"
+        },
+        {
+          "source": "E:/Media/Datalake/Tech/Repos/GraphysX/StockRoom/BaseScene.xml",
+          "bytes": 5006,
+          "sha256": "1F56E50E0FE48B6F7BF34024FA11C010755C3F59FA6FB2F70377BA0B8574CCA8",
+          "whitespaceSemanticSha256": "F00AF05009F101110B1CA9F2B3CBEF7424EE34015E671FBADFF4D8BC4965987C"
+        }
+      ],
+      "copiesByteIdentical": true,
+      "copiesSemanticallyEquivalent": true
+    },
+    {
+      "id": "test1",
+      "label": "test1.xml",
+      "root": "Scene3D",
+      "schemaGeneration": "Scene3D/Obj3D v1.2",
+      "classification": "minimal-v1.2-schema-smoke-document",
+      "assessment": "One default-sized PHYSICCUBE with no texture or surrounding composition proves the v1.2 serializer shape, not an authored discovery world.",
+      "header": {
+        "rawSha256": "6E463D4F308A78798C20412D80BF04E6D042DB92BE9F65272C1FD3398155B2F9",
+        "normalized": "0=CUBE 1=SPHERE 2=CYLINDER 3=CONE 4=BILLBOARD 5=FLOOR 6=CUSTOM 7=PHYSICCUBE 8=PHYSICSPHERE 9=PHYSICSCYLINDER 10=PHYSICCONE 11=PHYSICCUSTOM 12=XMESH 13=PHYSICXMESH 14=PHYSICXSTATIC 15=DUPLICATEMESH 16=TEXT 17=VERTEXSTRIP 18=V1_2 0=DEFAULT_MAT 1=WOOD 2=FINISH 3=LEVEL 4=BALL 5=ELEVATOR",
+        "version": "V1_2",
+        "actions": {
+          "0": "CUBE",
+          "1": "SPHERE",
+          "2": "CYLINDER",
+          "3": "CONE",
+          "4": "BILLBOARD",
+          "5": "FLOOR",
+          "6": "CUSTOM",
+          "7": "PHYSICCUBE",
+          "8": "PHYSICSPHERE",
+          "9": "PHYSICSCYLINDER",
+          "10": "PHYSICCONE",
+          "11": "PHYSICCUSTOM",
+          "12": "XMESH",
+          "13": "PHYSICXMESH",
+          "14": "PHYSICXSTATIC",
+          "15": "DUPLICATEMESH",
+          "16": "TEXT",
+          "17": "VERTEXSTRIP"
+        },
+        "physicsMaterials": {
+          "0": "DEFAULT_MAT",
+          "1": "WOOD",
+          "2": "FINISH",
+          "3": "LEVEL",
+          "4": "BALL",
+          "5": "ELEVATOR"
+        }
+      },
+      "filepathASCII": "",
+      "mapSize": 0,
+      "ringPositionCount": 0,
+      "ringPositionListSerialized": true,
+      "objectCount": 1,
+      "uniqueObjectSignatureCount": 1,
+      "distinctSerializedTransformCount": 1,
+      "exactOverlapGroupSizes": [],
+      "objects": [
+        {
+          "index": 0,
+          "tag": "Obj3D",
+          "rawAttributes": {
+            "Type": "7",
+            "Name": "cubBasic",
+            "Enabled": "true",
+            "Masse": "0",
+            "MeshControlled": "true",
+            "NewtonMat": "1"
+          },
+          "type": 7,
+          "action": "PHYSICCUBE",
+          "name": "cubBasic",
+          "enabled": true,
+          "mass": 0,
+          "massAttributeName": "Masse",
+          "meshControlled": true,
+          "newtonMaterial": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "pathToMesh": "",
+          "textureName": "",
+          "absentSerializedFields": [],
+          "signatureSha256": "D929594313B412A58E0C37E5FCE229CE8D80C035BC1FAF9D0CB914CBDDBF896B"
+        }
+      ],
+      "unresolvedRecords": [],
+      "serializedSubsystems": {
+        "objects": true,
+        "mapSize": true,
+        "ringPositions": true,
+        "camera": false,
+        "lights": false,
+        "sky": false,
+        "gravity": false,
+        "physicsTimestep": false,
+        "interactions": false,
+        "gameplayObjective": false
+      },
+      "canonicalSource": "E:/Media/Datalake/Tech/StockRoom/test1.xml",
+      "bytes": 856,
+      "sha256": "BB8396EBA946E01948BA1072C2D683A505719CBC43AA4BE535784CA31FE0672F",
+      "semanticSha256": "9D6BB2BEF670EA858CE5FEAFA3E439EBAA1334A55B9B3289CDCE9B30718497E0",
+      "copies": [
+        {
+          "source": "E:/Media/Datalake/Tech/StockRoom/test1.xml",
+          "bytes": 856,
+          "sha256": "BB8396EBA946E01948BA1072C2D683A505719CBC43AA4BE535784CA31FE0672F",
+          "whitespaceSemanticSha256": "9D6BB2BEF670EA858CE5FEAFA3E439EBAA1334A55B9B3289CDCE9B30718497E0"
+        },
+        {
+          "source": "E:/Media/Datalake/Tech/Repos/GraphysX/StockRoom/test1.xml",
+          "bytes": 857,
+          "sha256": "56C4459DD6D9A483BB35B25978D7CD99C1AB05BF316D2B50D6DCB315FDAF24EB",
+          "whitespaceSemanticSha256": "9D6BB2BEF670EA858CE5FEAFA3E439EBAA1334A55B9B3289CDCE9B30718497E0"
+        }
+      ],
+      "copiesByteIdentical": false,
+      "copiesSemanticallyEquivalent": true
+    }
+  ],
+  "fidelityBoundary": {
+    "exact": [
+      "Raw source byte counts and SHA-256 hashes for all four located copies.",
+      "Per-document action/version headers, attributes with original case, vectors, paths, texture tokens, object order, and overlap counts.",
+      "Procedural cube dimensions, transforms, and static mass metadata as serialized."
+    ],
+    "unresolved": [
+      "BaseScene.xml omits Rot for all 18 objects; identity rotation is an inspection adapter, not serialized evidence.",
+      "The v1.1 runtime binding from extensionless TwoWay to twoway.jpg is not proven by surviving host code.",
+      "No authored camera, lighting, sky, gravity, physics timestep, interactions, or gameplay objective survives in either document."
+    ],
+    "forbiddenInference": [
+      "Do not spread BaseScene cubes apart to fabricate a level.",
+      "Do not add a floor, player, objective, or dynamic physics simulation to either artifact.",
+      "Do not count these serializer artifacts as restored discovery worlds."
+    ]
+  }
+}

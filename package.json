@@ -1,0 +1,37 @@
+{
+  "name": "graphysx-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "agent:stdio": "node tools/graphysx-agent-stdio.mjs --stdio",
+    "agent:manifest": "node tools/graphysx-agent-stdio.mjs",
+    "qa": "node scripts/qa-r6.mjs",
+    "qa:nature": "node scripts/qa-nature-gallery.mjs",
+    "qa:agent-world": "node scripts/qa-agent-world.mjs",
+    "qa:agent-entities": "node scripts/qa-agent-entities.mjs",
+    "qa:agent-world-ui": "node scripts/qa-agent-world-ui.mjs",
+    "qa:agent-levels": "node scripts/qa-agent-levels.mjs",
+    "qa:cubx-ui": "node scripts/qa-cubx-ui-revival.mjs",
+    "qa:camera-collision": "node scripts/qa-camera-collision.mjs",
+    "qa:input": "node scripts/qa-input-accessibility.mjs",
+    "qa:skyboxes": "node scripts/qa-skyboxes.mjs",
+    "qa:ballz18": "node scripts/qa-ballz18-level01.mjs",
+    "qa:device": "node scripts/qa-input-device-lab.mjs",
+    "qa:archive-blender": "node scripts/qa-archive-blender-scenes.mjs",
+    "qa:arena": "node scripts/qa-arena-archive.mjs"
+  },
+  "dependencies": {
+    "cannon-es": "^0.20.0",
+    "three": "^0.179.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.179.0",
+    "playwright": "^1.60.0",
+    "typescript": "^5.9.2",
+    "vite": "^8.0.16"
+  }
+}

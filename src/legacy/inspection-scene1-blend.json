@@ -1,0 +1,722 @@
+{
+  "activeCamera": "Camera",
+  "blenderVersion": [
+    2,
+    79,
+    0
+  ],
+  "images": [],
+  "materials": [
+    {
+      "alpha": 1.0,
+      "diffuse": [
+        0.00822,
+        0.010468,
+        0.8
+      ],
+      "diffuseIntensity": 0.8,
+      "name": "Material.001",
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specularIntensity": 0.5,
+      "textures": []
+    },
+    {
+      "alpha": 1.0,
+      "diffuse": [
+        0.8,
+        0.015742,
+        0.023664
+      ],
+      "diffuseIntensity": 0.8,
+      "name": "Material.002",
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specularIntensity": 0.5,
+      "textures": []
+    },
+    {
+      "alpha": 1.0,
+      "diffuse": [
+        0.8,
+        0.270833,
+        0.024122
+      ],
+      "diffuseIntensity": 0.8,
+      "name": "Material.005",
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specularIntensity": 0.5,
+      "textures": []
+    },
+    {
+      "alpha": 1.0,
+      "diffuse": [
+        0.8,
+        0.59972,
+        0.59972
+      ],
+      "diffuseIntensity": 0.8,
+      "name": "Material.006",
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specularIntensity": 0.5,
+      "textures": []
+    },
+    {
+      "alpha": 1.0,
+      "diffuse": [
+        0.063721,
+        0.063721,
+        0.063721
+      ],
+      "diffuseIntensity": 0.8,
+      "name": "Material.007",
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specularIntensity": 0.5,
+      "textures": []
+    },
+    {
+      "alpha": 1.0,
+      "diffuse": [
+        0.075167,
+        0.410939,
+        0.017732
+      ],
+      "diffuseIntensity": 0.8,
+      "name": "Material.008",
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specularIntensity": 0.5,
+      "textures": []
+    }
+  ],
+  "meshTotals": {
+    "polygons": 754,
+    "vertices": 823
+  },
+  "objectCount": 15,
+  "objects": [
+    {
+      "dimensions": [
+        6.071681,
+        6.534911,
+        2e-06
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "name": "NurbsPath",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "CURVE"
+    },
+    {
+      "dimensions": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        5.147134,
+        5.042878,
+        0.096861
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Material.007"
+        ],
+        "name": "Cube.008",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube.006",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -5.096778,
+        5.096452,
+        0.096861
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Material.007"
+        ],
+        "name": "Cube.007",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube.005",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        5.066284,
+        -5.020113,
+        0.096861
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Material.007"
+        ],
+        "name": "Cube.004",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube.004",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -5.028776,
+        -5.154089,
+        -0.13392
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Material.007"
+        ],
+        "name": "Cube",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube.001",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.273214,
+        1.129884,
+        0.368403
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        1.659662,
+        2.429016,
+        0.212713
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Material.007"
+        ],
+        "name": "Cube.006",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube.003",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        0.184202,
+        0.184202,
+        0.184202
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.273214,
+        1.129884,
+        0.368403
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -1.341568,
+        2.668664,
+        0.19681
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Material.007"
+        ],
+        "name": "Cube.005",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube.002",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        0.184202,
+        0.184202,
+        0.184202
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.273214,
+        1.129884,
+        0.368403
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.042086,
+        3.810781,
+        0.203708
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Material.007"
+        ],
+        "name": "Cube.003",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        0.184202,
+        0.184202,
+        0.184202
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        4.182577,
+        4.182577,
+        0.237635
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        0.0,
+        0.070454
+      ],
+      "mesh": {
+        "edges": 96,
+        "materials": [
+          "Material.006",
+          "Material.001"
+        ],
+        "name": "Cylinder.002",
+        "polygons": 34,
+        "uvLayers": [],
+        "vertices": 64
+      },
+      "name": "Fountain",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        0.073236
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        8.0,
+        8.0,
+        0.02
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Material.008"
+        ],
+        "name": "Cube.002",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Floor",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        4.0,
+        4.0,
+        0.01
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        2.734375,
+        1.703125,
+        1.96875
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        1.0,
+        1.424349
+      ],
+      "mesh": {
+        "edges": 1005,
+        "materials": [
+          "Material.005",
+          "Material.001",
+          "Material.006"
+        ],
+        "name": "Suzanne",
+        "polygons": 500,
+        "uvLayers": [],
+        "vertices": 507
+      },
+      "name": "Suzanne",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        2.888493,
+        0.544903,
+        0.842252
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -3.408674,
+        -3.455919,
+        0.156111
+      ],
+      "mesh": {
+        "edges": 180,
+        "materials": [
+          "Material.002"
+        ],
+        "name": "Cube.001",
+        "polygons": 90,
+        "uvLayers": [],
+        "vertices": 92
+      },
+      "name": "Gate",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        -0.0,
+        0.717375
+      ],
+      "scale": [
+        0.170077,
+        0.170077,
+        0.170077
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.344062,
+        0.347782,
+        1.585484
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        -2.933134,
+        -2.360097,
+        0.736484
+      ],
+      "mesh": {
+        "edges": 176,
+        "materials": [
+          "Material.001"
+        ],
+        "name": "Cylinder",
+        "polygons": 82,
+        "uvLayers": [],
+        "vertices": 96
+      },
+      "name": "GateBlock",
+      "parent": null,
+      "rotationEuler": [
+        -0.198193,
+        1.579723,
+        0.583097
+      ],
+      "scale": [
+        0.138324,
+        0.138123,
+        1.193326
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "light": {
+        "color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "distance": 29.999983,
+        "energy": 1.0,
+        "kind": "POINT"
+      },
+      "location": [
+        4.076245,
+        1.005454,
+        5.903862
+      ],
+      "name": "Lamp",
+      "parent": null,
+      "rotationEuler": [
+        0.650328,
+        0.055217,
+        1.866391
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "LAMP"
+    },
+    {
+      "camera": {
+        "clipEnd": 100.0,
+        "clipStart": 0.1,
+        "lens": 35.0,
+        "worldForward": [
+          -0.654862,
+          0.610666,
+          -0.445245
+        ],
+        "worldLocation": [
+          7.481132,
+          -6.50764,
+          5.343665
+        ],
+        "worldUp": [
+          -0.31737,
+          0.312469,
+          0.895343
+        ]
+      },
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        7.481132,
+        -6.50764,
+        5.343665
+      ],
+      "name": "Camera",
+      "parent": null,
+      "rotationEuler": [
+        1.109319,
+        0.010817,
+        0.814928
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "CAMERA"
+    }
+  ],
+  "objectsByType": {
+    "CAMERA": 1,
+    "CURVE": 1,
+    "LAMP": 1,
+    "MESH": 12
+  },
+  "scene": "Scene",
+  "schema": "graphysx.archive-blend-inspection/v1",
+  "source": {
+    "bytes": 627124,
+    "path": "E:\\Media\\Datalake\\blenderModel\\Scene1.blend",
+    "sha256": "1B4DD6180BD89805E64BE8540CB4456C4E2C31524FB1D8AE99E953B07E74B9E1"
+  },
+  "world": "World"
+}

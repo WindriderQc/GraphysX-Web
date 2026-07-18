@@ -1,0 +1,28 @@
+{
+  "blenderVersion": [
+    2,
+    79,
+    0
+  ],
+  "export": {
+    "axisForward": "-Z",
+    "axisUp": "Y",
+    "bakeAnimation": false,
+    "bytes": 87836,
+    "includes": [
+      "EMPTY",
+      "CAMERA",
+      "LAMP",
+      "MESH"
+    ],
+    "meshModifiers": true,
+    "path": "C:\\Users\\Yanik\\codes\\GraphysX\\web-prototype\\public\\assets\\maison-explorer\\maison-best.fbx",
+    "sha256": "43CB7E5206F56D71ED6BF7986662B3EB504634616FDDA1ED7BFA8875427F8DB7"
+  },
+  "schema": "graphysx.archive-blend-fbx-export/v1",
+  "source": {
+    "bytes": 576596,
+    "path": "E:\\Media\\Datalake\\blenderModel\\Maison\\maison.blend",
+    "sha256": "8C9E95FDC5DE981BA451F0C05ACA9B94D347FE0DEE701D557F4CEDA595AC9237"
+  }
+}

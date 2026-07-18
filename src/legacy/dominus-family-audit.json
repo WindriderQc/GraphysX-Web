@@ -1,0 +1,3063 @@
+{
+  "generated": "2026-07-17T05:23:36.600Z",
+  "id": "dominus-family-forensic/v1",
+  "verdict": {
+    "authoredCompositionRecoverable": false,
+    "classification": "source asset family only",
+    "censusRecommendation": "Keep Dominus Village / Port at PIPELINE. Do not present a curated port layout as recovered.",
+    "conciseReason": "The archive preserves 65 unique asset meshes and their local model transforms/material references, but no host loader, scene document outside ObjectLibrary, inter-asset transforms, camera, spawn, navigation, water/terrain, or interaction rules."
+  },
+  "scope": {
+    "canonicalRoot": "Yanik C++ BCKUP/Media/Models/Dominus Art",
+    "archiveMirrorRoot": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art",
+    "fullArchiveSweepRequested": true,
+    "fullArchiveRoot": "E:/Media",
+    "workspaceDirectoriesScanned": 604,
+    "workspaceFilesScanned": 7446,
+    "fullArchiveDirectoriesScanned": 18638,
+    "fullArchiveFilesScanned": 194936,
+    "sourceExtensionsSearched": [
+      ".c",
+      ".cc",
+      ".cpp",
+      ".cs",
+      ".h",
+      ".hpp",
+      ".ini",
+      ".sln",
+      ".txt",
+      ".vcproj",
+      ".vcxproj",
+      ".xml"
+    ]
+  },
+  "inventory": {
+    "physicalFilesPerRoot": 187,
+    "extensionCounts": {
+      ".jpg": 56,
+      ".x": 65,
+      ".tga": 34,
+      ".png": 1,
+      ".dat": 30,
+      ".db": 1
+    },
+    "meshFileCount": 65,
+    "logicalUniqueMeshCount": 65,
+    "meshCategories": {
+      "bush": 4,
+      "camp": 4,
+      "character": 8,
+      "grass": 5,
+      "port": 28,
+      "weapon": 6,
+      "tree": 10
+    },
+    "textXCount": 63,
+    "binaryXCount": 2,
+    "binaryXNames": [
+      "port_crateshed.X",
+      "renzokscale.X"
+    ],
+    "exactDuplicateGroupsWithinRoot": [],
+    "textureReferenceSummary": {
+      "textMeshesWithTextureReferences": 63,
+      "textMeshesWithMultipleTextureReferences": 24,
+      "uniqueReferencedTextureFileNames": 83,
+      "missingReferencedTextureFileNames": [],
+      "evidenceBoundary": "Texture references are decoded only from the 63 text X files. The two binary X files require a binary DirectX decoder."
+    },
+    "meshes": [
+      {
+        "name": "bush_01.x",
+        "category": "bush",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/bush_01.x",
+        "bytes": 5869,
+        "sha256": "373FB0495DF59489FB913B45241FD814C8F5EAD98FDF165E3F32C345E964BA79",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "bush1.tga"
+        ]
+      },
+      {
+        "name": "bush_02.x",
+        "category": "bush",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/bush_02.x",
+        "bytes": 5868,
+        "sha256": "E1CC86F699A65AE84005A23188B9106C48F4E33D48A29587D862296748BAFF20",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "bush2.tga"
+        ]
+      },
+      {
+        "name": "bush_03.x",
+        "category": "bush",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/bush_03.x",
+        "bytes": 5869,
+        "sha256": "737B8F4E59222823920D046EF5766E991A2015BB74A3BB5D1BF0455A2F1B7B0A",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "bush3.tga"
+        ]
+      },
+      {
+        "name": "bush_04.x",
+        "category": "bush",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/bush_04.x",
+        "bytes": 6900,
+        "sha256": "DB2235138476610A2F27E1038EAD95480B98207C04046CB8FAAE162F3BFF9FFD",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "plant02_stem.tga"
+        ]
+      },
+      {
+        "name": "camp1_post.x",
+        "category": "camp",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_post.x",
+        "bytes": 238888,
+        "sha256": "8F416044FBE119FF351615E36E6EC8CA1E579DF55F3B2B4E070D2664F29720D3",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 102,
+        "textureReferences": [
+          "worn wood.jpg",
+          "tent canvas.jpg"
+        ]
+      },
+      {
+        "name": "camp1_tent1.x",
+        "category": "camp",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_tent1.x",
+        "bytes": 70297,
+        "sha256": "C1C25414CFD2AE922F4710850954D0EB96DA0714013929399C863C9B22226AE3",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 12,
+        "textureReferences": [
+          "tent canvas.jpg",
+          "WETHWOOD.jpg",
+          "rope.jpg"
+        ]
+      },
+      {
+        "name": "camp1_tent2.x",
+        "category": "camp",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_tent2.x",
+        "bytes": 46938,
+        "sha256": "FCFC4721B3629D92261317E97898A7A120DB0999A99E2A628214AA64AF914970",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 23,
+        "textureReferences": [
+          "worn wood.jpg",
+          "tent canvas.jpg"
+        ]
+      },
+      {
+        "name": "camp1_tent3.x",
+        "category": "camp",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_tent3.x",
+        "bytes": 101815,
+        "sha256": "0853181675EBA1EC4E8F9633448D29482450FEFB6E9B57959F8180A9BC1B6EDC",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 61,
+        "textureReferences": [
+          "worn wood.jpg",
+          "tent canvas.jpg"
+        ]
+      },
+      {
+        "name": "doman_m.x",
+        "category": "character",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/doman_m.x",
+        "bytes": 668015,
+        "sha256": "F7ED6AF03A0335C50D5D2FBBC5FF3434685DA483464B1F14D051D190886FB419",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 49,
+        "textureReferences": [
+          "m_doman.jpg",
+          "m_doman_chestplate.jpg",
+          "m_doman_shoulderarmor.jpg"
+        ]
+      },
+      {
+        "name": "grass_flower01.x",
+        "category": "grass",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/grass_flower01.x",
+        "bytes": 7316,
+        "sha256": "AF4541B0A6994A7F0738B8DA7975EECE070B8B6B6CE1A2DB118BCAF29440856E",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 3,
+        "textureReferences": [
+          "plant01_stem.tga",
+          "plant01_flower_blue.tga"
+        ]
+      },
+      {
+        "name": "grass_flower02.x",
+        "category": "grass",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/grass_flower02.x",
+        "bytes": 7313,
+        "sha256": "0F822DD510AA0D5570E95F0B43F90F6B85A040AB3AF485D77EF191555ECF55E3",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 3,
+        "textureReferences": [
+          "plant01_stem.tga",
+          "plant01_flower_red.tga"
+        ]
+      },
+      {
+        "name": "grass_reed01.x",
+        "category": "grass",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/grass_reed01.x",
+        "bytes": 7476,
+        "sha256": "50E95B0C169202DBD83D61A2F16441148B091A265962A4A76DA92C72BEDFF78A",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "grass01.tga"
+        ]
+      },
+      {
+        "name": "grass_reed02.x",
+        "category": "grass",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/grass_reed02.x",
+        "bytes": 9354,
+        "sha256": "92C7011EEC60DBD7D6CB9C86ABB8FCE0908CDE6461AF439FBCC279BF214AF101",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "grass01.tga"
+        ]
+      },
+      {
+        "name": "grass_reed03.x",
+        "category": "grass",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/grass_reed03.x",
+        "bytes": 5214,
+        "sha256": "F3BA249EAE0805B6E14A31FE13EB2B407DF591DD41336D983420598974C94363",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "grass01.tga"
+        ]
+      },
+      {
+        "name": "ishad_F.X",
+        "category": "character",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/ishad_F.X",
+        "bytes": 1725214,
+        "sha256": "5FD4BE0CCA6BAB10FB188337C07A97AB83DFC248A22E8CFE07D41EED891A044E",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 54,
+        "textureReferences": [
+          "ishad1_f.tga"
+        ]
+      },
+      {
+        "name": "port_const1.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_const1.x",
+        "bytes": 55208,
+        "sha256": "E165EFC859C323A1126DF9157E56B9969EAFA4EDB73C8450D471E0AED6F74719",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 23,
+        "textureReferences": [
+          "WETHWOOD.jpg",
+          "worn wood02.jpg"
+        ]
+      },
+      {
+        "name": "port_const2.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_const2.x",
+        "bytes": 85468,
+        "sha256": "23CD6B3F7B9256E056F1E9E2D37EFF58DEB70F5F00393E35CE071F1EA48C3BA3",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 40,
+        "textureReferences": [
+          "WETHWOOD.jpg",
+          "worn wood02.jpg"
+        ]
+      },
+      {
+        "name": "port_cottage1.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage1.x",
+        "bytes": 22515,
+        "sha256": "9A17F63AB6211A0904F38730A0026079CE76D364537BA3D2BF5D30A9B2F30EB3",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "COTTAGE1.jpg"
+        ]
+      },
+      {
+        "name": "port_cottage2.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage2.x",
+        "bytes": 22840,
+        "sha256": "14EE3DB9753E301F1B614DB016039F4A33D0729AF72D1E0B6C6D326769217E4D",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "HUT03_MA.jpg"
+        ]
+      },
+      {
+        "name": "port_cottage4.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage4.x",
+        "bytes": 34459,
+        "sha256": "C1CF73C939633176CD7593B2D4DF2C4ACD2818D60D5B733BDC97A7FA72335D6F",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "HUT04B_M.jpg"
+        ]
+      },
+      {
+        "name": "port_cottage5.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage5.x",
+        "bytes": 27456,
+        "sha256": "04109523E1160684002942F70C2565320727372F33AFAF11E0916927BBF98258",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "HUT06D_M.jpg"
+        ]
+      },
+      {
+        "name": "port_crateshed.X",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_crateshed.X",
+        "bytes": 15923,
+        "sha256": "4249F3ACA46421BF1C739B1B38A154B4457F37103EFE0DCF790B2246E1C0A6CB",
+        "format": "xof 0303bin 0032",
+        "structurallyDecoded": false,
+        "localFrameTransformRecords": 0,
+        "textureReferences": []
+      },
+      {
+        "name": "port_fishhouse.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_fishhouse.x",
+        "bytes": 45401,
+        "sha256": "254880415EA869D69FB8C17843B637C32380F4C4CEAD469DCD4D7118145E7D7C",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "fishhouse.jpg"
+        ]
+      },
+      {
+        "name": "port_house01.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_house01.x",
+        "bytes": 46606,
+        "sha256": "EE5D0DBA0FAD6080B39D8407A5E786582C535B04A8D4B6A878B3A487855A1406",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 3,
+        "textureReferences": [
+          "house.jpg",
+          "door.jpg"
+        ]
+      },
+      {
+        "name": "port_hut.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut.x",
+        "bytes": 36982,
+        "sha256": "B2B63F19FE4CCFE79361C9F718C5098EBFA23990FC4F7FAE432DEAA18ACEF5BB",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "COTTAGE0.jpg"
+        ]
+      },
+      {
+        "name": "port_hut01.X",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut01.X",
+        "bytes": 41085,
+        "sha256": "9652FE6EFBC1599137F9AAFE0C7121B71936CA572F1770918DABC51DE7F6837A",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "COTTAGE0.jpg"
+        ]
+      },
+      {
+        "name": "port_hut02.X",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut02.X",
+        "bytes": 26050,
+        "sha256": "471255B7595C00DB451A16349BB530D168E0F8265B70008D5A1F65702145A5FE",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "hut02.jpg"
+        ]
+      },
+      {
+        "name": "port_hut03.X",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut03.X",
+        "bytes": 30310,
+        "sha256": "9031821D6EA8CEB7B425B0921E560ABC99F4E1CA5D11144D4AB9AE0965B847CA",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "HUT03_MA.jpg",
+          "hut_floor1.jpg"
+        ]
+      },
+      {
+        "name": "port_hut04.X",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut04.X",
+        "bytes": 44906,
+        "sha256": "3F87CE6DE592B4415C52C4275FDDAD86F2AD63E7F02985525054755A7B88D206",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 3,
+        "textureReferences": [
+          "HUT04B_M.jpg",
+          "hut_floor1.jpg"
+        ]
+      },
+      {
+        "name": "port_hut05.X",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut05.X",
+        "bytes": 35155,
+        "sha256": "B47F906949882D2D212D520AC386FF16F6083D8E5E28BCECDB09AFA5F0004F9E",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "HUT06D_M.jpg",
+          "hut_floor1.jpg"
+        ]
+      },
+      {
+        "name": "port_inn01.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_inn01.x",
+        "bytes": 120648,
+        "sha256": "D1E8E5D195590A059E189C1309B163B8C7D814E575A3FE1D8C77B39B4CC150CD",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 3,
+        "textureReferences": [
+          "floor.jpg",
+          "lower.jpg",
+          "upper.jpg"
+        ]
+      },
+      {
+        "name": "port_lighthouse.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_lighthouse.x",
+        "bytes": 58777,
+        "sha256": "E573BC0832518848CAE110369C8FFAC9FB050935AFD96DE2FAC0B0D12AE75033",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "lighthouse.jpg"
+        ]
+      },
+      {
+        "name": "port_maindocks.X",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_maindocks.X",
+        "bytes": 754526,
+        "sha256": "3E43A6400F85784AF30212BBE2A596F8EF71676AC927959DA7793F5BC4AEBE3C",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "d_ccorner2.jpg",
+          "d_ccorner1.jpg",
+          "d_cmid1.jpg",
+          "d_cmid4.jpg",
+          "d_cmid3.jpg",
+          "d_cmid5.jpg",
+          "d_cmid2.jpg",
+          "d_cdblcorner1.jpg",
+          "d_cdblcorner2.jpg",
+          "d_cdblcorner3.jpg",
+          "d_crate3.jpg",
+          "d_crate.jpg",
+          "barrel.jpg",
+          "d_crate2.jpg",
+          "poles.jpg"
+        ]
+      },
+      {
+        "name": "port_market.X",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_market.X",
+        "bytes": 81986,
+        "sha256": "C5125645C736EA6437C3F4102E1D4C200D08A09A0EC880A01FF0D1B162A68B3F",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "Market.tga"
+        ]
+      },
+      {
+        "name": "port_MiniDock.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_MiniDock.x",
+        "bytes": 84938,
+        "sha256": "E97666BFA781BB8BEDFAC344F38CFD8C2528D8CF39B4E6512D0607FC594C0FA1",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 20,
+        "textureReferences": [
+          "worn wood.jpg"
+        ]
+      },
+      {
+        "name": "port_pub1.X",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_pub1.X",
+        "bytes": 176898,
+        "sha256": "E8FDC42CB4516E23EBF5E34E1EF7C5151A3399DB1B77AD0EB12A12203EA95AEC",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "PUBMAP.jpg"
+        ]
+      },
+      {
+        "name": "port_shed1.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_shed1.x",
+        "bytes": 35547,
+        "sha256": "E4A1C0DD707D075AFC130C431E88CFF95A90148DE7C2C83A580D9AF84B4679FA",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "shed1_1.jpg",
+          "shed1_2.jpg",
+          "shed1_3.jpg",
+          "shed1_0.jpg"
+        ]
+      },
+      {
+        "name": "port_shippiece.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_shippiece.x",
+        "bytes": 55455,
+        "sha256": "8111BA2CB0209D299AD48435B8C181688848731FEB9C79A51126EF8EAE274DC2",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 4,
+        "textureReferences": [
+          "HUT05_MA.jpg"
+        ]
+      },
+      {
+        "name": "port_shipyard.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_shipyard.x",
+        "bytes": 438610,
+        "sha256": "455D16A52FD6E978C4582F1265542347959F94AA65AFA3CFB28D1D48F651F529",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 27,
+        "textureReferences": [
+          "wood_02.tga",
+          "wood_05.tga",
+          "wood_03.tga",
+          "wood_01.tga",
+          "wood_04.tga",
+          "canvas_01.tga",
+          "net_01.tga"
+        ]
+      },
+      {
+        "name": "port_smalldocks.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_smalldocks.x",
+        "bytes": 124889,
+        "sha256": "047975C09DF770133A6A5F32B8ABBD6E57E0087DE50945F3BAC53DCCBA0FF48B",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "d_cmid4.jpg"
+        ]
+      },
+      {
+        "name": "port_sunkship.X",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_sunkship.X",
+        "bytes": 64275,
+        "sha256": "ADC41347B2B27A854FCCC9996D363305F80E53C80BCB04F79C7DEEDBE9A41B4B",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "HUT05_MA.jpg"
+        ]
+      },
+      {
+        "name": "port_weathervain.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_weathervain.x",
+        "bytes": 85697,
+        "sha256": "5CC1F69BF639C7A43D02B102A85B17653E19B66AAE1B4AED120852DA634E2503",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "weathervain.jpg"
+        ]
+      },
+      {
+        "name": "port_windmill.x",
+        "category": "port",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_windmill.x",
+        "bytes": 95067,
+        "sha256": "D4820D404063C1457D73828816F30BCDA0CB63619A59F133BF429A423034232A",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "windmill.jpg"
+        ]
+      },
+      {
+        "name": "renzok_m.x",
+        "category": "character",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/renzok_m.x",
+        "bytes": 715772,
+        "sha256": "8634FC14F218925BDC834CDE3F43CA2C964FB7ABABCD19B988F71734C2D365E5",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 60,
+        "textureReferences": [
+          "renzok1_m.jpg"
+        ]
+      },
+      {
+        "name": "renzok.x",
+        "category": "character",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/renzok.x",
+        "bytes": 715774,
+        "sha256": "859931329DBD575F33758E4276F9F9080CE93A0C0F02ED14F8B71947743A0B57",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 60,
+        "textureReferences": [
+          "renzokdone1.jpg"
+        ]
+      },
+      {
+        "name": "renzok1.x",
+        "category": "character",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/renzok1.x",
+        "bytes": 736418,
+        "sha256": "722961E27C11A94162271412834ED2BC6B562916BC1CA2929EA4F98B4D9DB32C",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 60,
+        "textureReferences": [
+          "renzokdone1.jpg"
+        ]
+      },
+      {
+        "name": "renzokscale.X",
+        "category": "character",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/renzokscale.X",
+        "bytes": 74272,
+        "sha256": "AB97323B533031AC8C32A45ACB705EC3A30A471A70625B6C282C02705A575EC0",
+        "format": "xof 0303bin 0032",
+        "structurallyDecoded": false,
+        "localFrameTransformRecords": 0,
+        "textureReferences": []
+      },
+      {
+        "name": "scale_Renzok.x",
+        "category": "character",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/scale_Renzok.x",
+        "bytes": 170037,
+        "sha256": "4A1B5CBB1AC0AE3C6198971371329F95D857A0C5F1E63B2AC392D17F9FABBF8A",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "renzokdone1.jpg"
+        ]
+      },
+      {
+        "name": "scale_renzok1.x",
+        "category": "character",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/scale_renzok1.x",
+        "bytes": 716291,
+        "sha256": "DFFBEEE79E2135CAAA8C6240CD39139858740BF899871D138DE47147616C2887",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 60,
+        "textureReferences": [
+          "renzokdone1.jpg"
+        ]
+      },
+      {
+        "name": "shield.x",
+        "category": "weapon",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/shield.x",
+        "bytes": 13843,
+        "sha256": "DE69936D87EB941F649667A816462FD08B4C7260C2933D3A2DAF52FA91C20DC8",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "shield.jpg"
+        ]
+      },
+      {
+        "name": "shield1.x",
+        "category": "weapon",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/shield1.x",
+        "bytes": 16285,
+        "sha256": "AE218C3F052B80D215A0A071B1DB702A4FF703C135D04A90FBAD0965A77FD044",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "finishshield.jpg"
+        ]
+      },
+      {
+        "name": "sword.x",
+        "category": "weapon",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/sword.x",
+        "bytes": 20094,
+        "sha256": "F2B4C86D90A829695A8FAE42985B8CBC6CD56B4E28E36A8BDEC858EC5E18561F",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "sword.jpg"
+        ]
+      },
+      {
+        "name": "sword1.x",
+        "category": "weapon",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/sword1.x",
+        "bytes": 24756,
+        "sha256": "7158F37B6EACDAEA84647114CC5F86CEECFC01A0909693A757DC793491DD5C81",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "swordtemp.jpg"
+        ]
+      },
+      {
+        "name": "tree_dead01.x",
+        "category": "tree",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_dead01.x",
+        "bytes": 16568,
+        "sha256": "F410A0C76A5C2B4A034C539FC1785D0AB73F7DADBBDFCC528CA7C9C88C72D702",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "dead2.tga"
+        ]
+      },
+      {
+        "name": "tree_dead02.x",
+        "category": "tree",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_dead02.x",
+        "bytes": 11548,
+        "sha256": "0640BF8BF486C4EA4E7BFDE697A7E8A5B5D8FB1F3D8E7EAF5DE91305965AC368",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 3,
+        "textureReferences": [
+          "tree06_trunk.tga",
+          "tree06_branches.tga"
+        ]
+      },
+      {
+        "name": "tree_dead03.x",
+        "category": "tree",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_dead03.x",
+        "bytes": 10426,
+        "sha256": "D4CD2E7430B8952D2301ACC890E1FFA478A58B0C4FC275C6B19F8E55BD0DA567",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "dead2.png"
+        ]
+      },
+      {
+        "name": "tree_green01.x",
+        "category": "tree",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green01.x",
+        "bytes": 16569,
+        "sha256": "AD7BFD6BFF9436852036601BCE41344175AD25BECCBA3CDBA3728267236F0EB9",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "green1.tga"
+        ]
+      },
+      {
+        "name": "tree_green02.x",
+        "category": "tree",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green02.x",
+        "bytes": 7956,
+        "sha256": "BBEAF85A4DC92AB8C9A42D98841C7AF38D777085EC57A2A1DA4B587E56992433",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "tree05_branches.tga",
+          "tree05_trunk.tga"
+        ]
+      },
+      {
+        "name": "tree_green03.x",
+        "category": "tree",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green03.x",
+        "bytes": 11900,
+        "sha256": "BAF3B64ABBD437EAB2BA494A0F6C145FF96AD8B0DED73B7D52D7825F773ED4DF",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 1,
+        "textureReferences": [
+          "tree08_branches.tga",
+          "tree08_trunk.tga"
+        ]
+      },
+      {
+        "name": "tree_green04.x",
+        "category": "tree",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green04.x",
+        "bytes": 12426,
+        "sha256": "2648EC606F749E372E22ABBB2740C0E807D1FA7C6193A2BA01C004136448249C",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 3,
+        "textureReferences": [
+          "tree07_trunk.tga",
+          "tree07_branches.tga"
+        ]
+      },
+      {
+        "name": "tree_green05.x",
+        "category": "tree",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green05.x",
+        "bytes": 12211,
+        "sha256": "822A5F94FCA86CD9DFF1A01D7F69452673C1D3EF4E901655B0D1AEFA355081D0",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "tree09_bark.tga",
+          "tree09_branches.tga"
+        ]
+      },
+      {
+        "name": "tree_green06.x",
+        "category": "tree",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green06.x",
+        "bytes": 14750,
+        "sha256": "7B145D71C9469B55139BAC89ADFE930269F6324A1DB1BCA2D56952686CDD2D56",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "tree04_branches.tga",
+          "tree04_trunk.tga"
+        ]
+      },
+      {
+        "name": "tree_green07.x",
+        "category": "tree",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green07.x",
+        "bytes": 12090,
+        "sha256": "9AE59729E22DBA59DDEB461452E1DF8C61C72A91F2AB0C4447C9EBB80552119A",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "tree07_branches.tga",
+          "tree07_trunk.tga"
+        ]
+      },
+      {
+        "name": "zokshield.x",
+        "category": "weapon",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/zokshield.x",
+        "bytes": 16388,
+        "sha256": "6F3F8C27868675A7A781F85373CB0A57D435E6F7E0355DE5D17CBF5E18D571E2",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "finishshield.jpg"
+        ]
+      },
+      {
+        "name": "zoksword.x",
+        "category": "weapon",
+        "source": "Yanik C++ BCKUP/Media/Models/Dominus Art/zoksword.x",
+        "bytes": 24861,
+        "sha256": "FFE1319BA2C89B249027EDA845A97F1FABC15A68904475460B72CFEED088874B",
+        "format": "xof 0302txt 0032",
+        "structurallyDecoded": true,
+        "localFrameTransformRecords": 2,
+        "textureReferences": [
+          "swordtemp.jpg"
+        ]
+      }
+    ]
+  },
+  "duplicateCopies": {
+    "canonicalAndMirrorFileCounts": [
+      187,
+      187
+    ],
+    "canonicalAndMirrorDifferences": [],
+    "canonicalAndMirrorByteIdenticalFileCount": 187,
+    "meshCopyRecords": [
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/bush_01.x",
+        "canonicalMesh": "bush_01.x",
+        "bytes": 5869,
+        "sha256": "373FB0495DF59489FB913B45241FD814C8F5EAD98FDF165E3F32C345E964BA79",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/bush_02.x",
+        "canonicalMesh": "bush_02.x",
+        "bytes": 5868,
+        "sha256": "E1CC86F699A65AE84005A23188B9106C48F4E33D48A29587D862296748BAFF20",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/bush_03.x",
+        "canonicalMesh": "bush_03.x",
+        "bytes": 5869,
+        "sha256": "737B8F4E59222823920D046EF5766E991A2015BB74A3BB5D1BF0455A2F1B7B0A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/bush_04.x",
+        "canonicalMesh": "bush_04.x",
+        "bytes": 6900,
+        "sha256": "DB2235138476610A2F27E1038EAD95480B98207C04046CB8FAAE162F3BFF9FFD",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_post.x",
+        "canonicalMesh": "camp1_post.x",
+        "bytes": 238888,
+        "sha256": "8F416044FBE119FF351615E36E6EC8CA1E579DF55F3B2B4E070D2664F29720D3",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_tent1.x",
+        "canonicalMesh": "camp1_tent1.x",
+        "bytes": 70297,
+        "sha256": "C1C25414CFD2AE922F4710850954D0EB96DA0714013929399C863C9B22226AE3",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_tent2.x",
+        "canonicalMesh": "camp1_tent2.x",
+        "bytes": 46938,
+        "sha256": "FCFC4721B3629D92261317E97898A7A120DB0999A99E2A628214AA64AF914970",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_tent3.x",
+        "canonicalMesh": "camp1_tent3.x",
+        "bytes": 101815,
+        "sha256": "0853181675EBA1EC4E8F9633448D29482450FEFB6E9B57959F8180A9BC1B6EDC",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/doman_m.x",
+        "canonicalMesh": "doman_m.x",
+        "bytes": 668015,
+        "sha256": "F7ED6AF03A0335C50D5D2FBBC5FF3434685DA483464B1F14D051D190886FB419",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/grass_flower01.x",
+        "canonicalMesh": "grass_flower01.x",
+        "bytes": 7316,
+        "sha256": "AF4541B0A6994A7F0738B8DA7975EECE070B8B6B6CE1A2DB118BCAF29440856E",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/grass_flower02.x",
+        "canonicalMesh": "grass_flower02.x",
+        "bytes": 7313,
+        "sha256": "0F822DD510AA0D5570E95F0B43F90F6B85A040AB3AF485D77EF191555ECF55E3",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/grass_reed01.x",
+        "canonicalMesh": "grass_reed01.x",
+        "bytes": 7476,
+        "sha256": "50E95B0C169202DBD83D61A2F16441148B091A265962A4A76DA92C72BEDFF78A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/grass_reed02.x",
+        "canonicalMesh": "grass_reed02.x",
+        "bytes": 9354,
+        "sha256": "92C7011EEC60DBD7D6CB9C86ABB8FCE0908CDE6461AF439FBCC279BF214AF101",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/grass_reed03.x",
+        "canonicalMesh": "grass_reed03.x",
+        "bytes": 5214,
+        "sha256": "F3BA249EAE0805B6E14A31FE13EB2B407DF591DD41336D983420598974C94363",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/ishad_F.X",
+        "canonicalMesh": "ishad_F.X",
+        "bytes": 1725214,
+        "sha256": "5FD4BE0CCA6BAB10FB188337C07A97AB83DFC248A22E8CFE07D41EED891A044E",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_const1.x",
+        "canonicalMesh": "port_const1.x",
+        "bytes": 55208,
+        "sha256": "E165EFC859C323A1126DF9157E56B9969EAFA4EDB73C8450D471E0AED6F74719",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_const2.x",
+        "canonicalMesh": "port_const2.x",
+        "bytes": 85468,
+        "sha256": "23CD6B3F7B9256E056F1E9E2D37EFF58DEB70F5F00393E35CE071F1EA48C3BA3",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage1.x",
+        "canonicalMesh": "port_cottage1.x",
+        "bytes": 22515,
+        "sha256": "9A17F63AB6211A0904F38730A0026079CE76D364537BA3D2BF5D30A9B2F30EB3",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage2.x",
+        "canonicalMesh": "port_cottage2.x",
+        "bytes": 22840,
+        "sha256": "14EE3DB9753E301F1B614DB016039F4A33D0729AF72D1E0B6C6D326769217E4D",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage4.x",
+        "canonicalMesh": "port_cottage4.x",
+        "bytes": 34459,
+        "sha256": "C1CF73C939633176CD7593B2D4DF2C4ACD2818D60D5B733BDC97A7FA72335D6F",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage5.x",
+        "canonicalMesh": "port_cottage5.x",
+        "bytes": 27456,
+        "sha256": "04109523E1160684002942F70C2565320727372F33AFAF11E0916927BBF98258",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_crateshed.X",
+        "canonicalMesh": "port_crateshed.X",
+        "bytes": 15923,
+        "sha256": "4249F3ACA46421BF1C739B1B38A154B4457F37103EFE0DCF790B2246E1C0A6CB",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_fishhouse.x",
+        "canonicalMesh": "port_fishhouse.x",
+        "bytes": 45401,
+        "sha256": "254880415EA869D69FB8C17843B637C32380F4C4CEAD469DCD4D7118145E7D7C",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_house01.x",
+        "canonicalMesh": "port_house01.x",
+        "bytes": 46606,
+        "sha256": "EE5D0DBA0FAD6080B39D8407A5E786582C535B04A8D4B6A878B3A487855A1406",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut.x",
+        "canonicalMesh": "port_hut.x",
+        "bytes": 36982,
+        "sha256": "B2B63F19FE4CCFE79361C9F718C5098EBFA23990FC4F7FAE432DEAA18ACEF5BB",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut01.X",
+        "canonicalMesh": "port_hut01.X",
+        "bytes": 41085,
+        "sha256": "9652FE6EFBC1599137F9AAFE0C7121B71936CA572F1770918DABC51DE7F6837A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut02.X",
+        "canonicalMesh": "port_hut02.X",
+        "bytes": 26050,
+        "sha256": "471255B7595C00DB451A16349BB530D168E0F8265B70008D5A1F65702145A5FE",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut03.X",
+        "canonicalMesh": "port_hut03.X",
+        "bytes": 30310,
+        "sha256": "9031821D6EA8CEB7B425B0921E560ABC99F4E1CA5D11144D4AB9AE0965B847CA",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut04.X",
+        "canonicalMesh": "port_hut04.X",
+        "bytes": 44906,
+        "sha256": "3F87CE6DE592B4415C52C4275FDDAD86F2AD63E7F02985525054755A7B88D206",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut05.X",
+        "canonicalMesh": "port_hut05.X",
+        "bytes": 35155,
+        "sha256": "B47F906949882D2D212D520AC386FF16F6083D8E5E28BCECDB09AFA5F0004F9E",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_inn01.x",
+        "canonicalMesh": "port_inn01.x",
+        "bytes": 120648,
+        "sha256": "D1E8E5D195590A059E189C1309B163B8C7D814E575A3FE1D8C77B39B4CC150CD",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_lighthouse.x",
+        "canonicalMesh": "port_lighthouse.x",
+        "bytes": 58777,
+        "sha256": "E573BC0832518848CAE110369C8FFAC9FB050935AFD96DE2FAC0B0D12AE75033",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_maindocks.X",
+        "canonicalMesh": "port_maindocks.X",
+        "bytes": 754526,
+        "sha256": "3E43A6400F85784AF30212BBE2A596F8EF71676AC927959DA7793F5BC4AEBE3C",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_market.X",
+        "canonicalMesh": "port_market.X",
+        "bytes": 81986,
+        "sha256": "C5125645C736EA6437C3F4102E1D4C200D08A09A0EC880A01FF0D1B162A68B3F",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_MiniDock.x",
+        "canonicalMesh": "port_MiniDock.x",
+        "bytes": 84938,
+        "sha256": "E97666BFA781BB8BEDFAC344F38CFD8C2528D8CF39B4E6512D0607FC594C0FA1",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_pub1.X",
+        "canonicalMesh": "port_pub1.X",
+        "bytes": 176898,
+        "sha256": "E8FDC42CB4516E23EBF5E34E1EF7C5151A3399DB1B77AD0EB12A12203EA95AEC",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_shed1.x",
+        "canonicalMesh": "port_shed1.x",
+        "bytes": 35547,
+        "sha256": "E4A1C0DD707D075AFC130C431E88CFF95A90148DE7C2C83A580D9AF84B4679FA",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_shippiece.x",
+        "canonicalMesh": "port_shippiece.x",
+        "bytes": 55455,
+        "sha256": "8111BA2CB0209D299AD48435B8C181688848731FEB9C79A51126EF8EAE274DC2",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_shipyard.x",
+        "canonicalMesh": "port_shipyard.x",
+        "bytes": 438610,
+        "sha256": "455D16A52FD6E978C4582F1265542347959F94AA65AFA3CFB28D1D48F651F529",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_smalldocks.x",
+        "canonicalMesh": "port_smalldocks.x",
+        "bytes": 124889,
+        "sha256": "047975C09DF770133A6A5F32B8ABBD6E57E0087DE50945F3BAC53DCCBA0FF48B",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_sunkship.X",
+        "canonicalMesh": "port_sunkship.X",
+        "bytes": 64275,
+        "sha256": "ADC41347B2B27A854FCCC9996D363305F80E53C80BCB04F79C7DEEDBE9A41B4B",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_weathervain.x",
+        "canonicalMesh": "port_weathervain.x",
+        "bytes": 85697,
+        "sha256": "5CC1F69BF639C7A43D02B102A85B17653E19B66AAE1B4AED120852DA634E2503",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/port_windmill.x",
+        "canonicalMesh": "port_windmill.x",
+        "bytes": 95067,
+        "sha256": "D4820D404063C1457D73828816F30BCDA0CB63619A59F133BF429A423034232A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/renzok.x",
+        "canonicalMesh": "renzok.x",
+        "bytes": 715774,
+        "sha256": "859931329DBD575F33758E4276F9F9080CE93A0C0F02ED14F8B71947743A0B57",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/renzok1.x",
+        "canonicalMesh": "renzok1.x",
+        "bytes": 736418,
+        "sha256": "722961E27C11A94162271412834ED2BC6B562916BC1CA2929EA4F98B4D9DB32C",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/renzokscale.X",
+        "canonicalMesh": "renzokscale.X",
+        "bytes": 74272,
+        "sha256": "AB97323B533031AC8C32A45ACB705EC3A30A471A70625B6C282C02705A575EC0",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/renzok_m.x",
+        "canonicalMesh": "renzok_m.x",
+        "bytes": 715772,
+        "sha256": "8634FC14F218925BDC834CDE3F43CA2C964FB7ABABCD19B988F71734C2D365E5",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/scale_Renzok.x",
+        "canonicalMesh": "scale_Renzok.x",
+        "bytes": 170037,
+        "sha256": "4A1B5CBB1AC0AE3C6198971371329F95D857A0C5F1E63B2AC392D17F9FABBF8A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/scale_renzok1.x",
+        "canonicalMesh": "scale_renzok1.x",
+        "bytes": 716291,
+        "sha256": "DFFBEEE79E2135CAAA8C6240CD39139858740BF899871D138DE47147616C2887",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/shield.x",
+        "canonicalMesh": "shield.x",
+        "bytes": 13843,
+        "sha256": "DE69936D87EB941F649667A816462FD08B4C7260C2933D3A2DAF52FA91C20DC8",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/shield1.x",
+        "canonicalMesh": "shield1.x",
+        "bytes": 16285,
+        "sha256": "AE218C3F052B80D215A0A071B1DB702A4FF703C135D04A90FBAD0965A77FD044",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/sword.x",
+        "canonicalMesh": "sword.x",
+        "bytes": 20094,
+        "sha256": "F2B4C86D90A829695A8FAE42985B8CBC6CD56B4E28E36A8BDEC858EC5E18561F",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/sword1.x",
+        "canonicalMesh": "sword1.x",
+        "bytes": 24756,
+        "sha256": "7158F37B6EACDAEA84647114CC5F86CEECFC01A0909693A757DC793491DD5C81",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_dead01.x",
+        "canonicalMesh": "tree_dead01.x",
+        "bytes": 16568,
+        "sha256": "F410A0C76A5C2B4A034C539FC1785D0AB73F7DADBBDFCC528CA7C9C88C72D702",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_dead02.x",
+        "canonicalMesh": "tree_dead02.x",
+        "bytes": 11548,
+        "sha256": "0640BF8BF486C4EA4E7BFDE697A7E8A5B5D8FB1F3D8E7EAF5DE91305965AC368",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_dead03.x",
+        "canonicalMesh": "tree_dead03.x",
+        "bytes": 10426,
+        "sha256": "D4CD2E7430B8952D2301ACC890E1FFA478A58B0C4FC275C6B19F8E55BD0DA567",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green01.x",
+        "canonicalMesh": "tree_green01.x",
+        "bytes": 16569,
+        "sha256": "AD7BFD6BFF9436852036601BCE41344175AD25BECCBA3CDBA3728267236F0EB9",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green02.x",
+        "canonicalMesh": "tree_green02.x",
+        "bytes": 7956,
+        "sha256": "BBEAF85A4DC92AB8C9A42D98841C7AF38D777085EC57A2A1DA4B587E56992433",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green03.x",
+        "canonicalMesh": "tree_green03.x",
+        "bytes": 11900,
+        "sha256": "BAF3B64ABBD437EAB2BA494A0F6C145FF96AD8B0DED73B7D52D7825F773ED4DF",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green04.x",
+        "canonicalMesh": "tree_green04.x",
+        "bytes": 12426,
+        "sha256": "2648EC606F749E372E22ABBB2740C0E807D1FA7C6193A2BA01C004136448249C",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green05.x",
+        "canonicalMesh": "tree_green05.x",
+        "bytes": 12211,
+        "sha256": "822A5F94FCA86CD9DFF1A01D7F69452673C1D3EF4E901655B0D1AEFA355081D0",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green06.x",
+        "canonicalMesh": "tree_green06.x",
+        "bytes": 14750,
+        "sha256": "7B145D71C9469B55139BAC89ADFE930269F6324A1DB1BCA2D56952686CDD2D56",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green07.x",
+        "canonicalMesh": "tree_green07.x",
+        "bytes": 12090,
+        "sha256": "9AE59729E22DBA59DDEB461452E1DF8C61C72A91F2AB0C4447C9EBB80552119A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/zokshield.x",
+        "canonicalMesh": "zokshield.x",
+        "bytes": 16388,
+        "sha256": "6F3F8C27868675A7A781F85373CB0A57D435E6F7E0355DE5D17CBF5E18D571E2",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "Yanik C++ BCKUP/Media/Models/Dominus Art/zoksword.x",
+        "canonicalMesh": "zoksword.x",
+        "bytes": 24861,
+        "sha256": "FFE1319BA2C89B249027EDA845A97F1FABC15A68904475460B72CFEED088874B",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/bush_01.x",
+        "canonicalMesh": "bush_01.x",
+        "bytes": 5869,
+        "sha256": "373FB0495DF59489FB913B45241FD814C8F5EAD98FDF165E3F32C345E964BA79",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/bush_02.x",
+        "canonicalMesh": "bush_02.x",
+        "bytes": 5868,
+        "sha256": "E1CC86F699A65AE84005A23188B9106C48F4E33D48A29587D862296748BAFF20",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/bush_03.x",
+        "canonicalMesh": "bush_03.x",
+        "bytes": 5869,
+        "sha256": "737B8F4E59222823920D046EF5766E991A2015BB74A3BB5D1BF0455A2F1B7B0A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/bush_04.x",
+        "canonicalMesh": "bush_04.x",
+        "bytes": 6900,
+        "sha256": "DB2235138476610A2F27E1038EAD95480B98207C04046CB8FAAE162F3BFF9FFD",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_post.x",
+        "canonicalMesh": "camp1_post.x",
+        "bytes": 238888,
+        "sha256": "8F416044FBE119FF351615E36E6EC8CA1E579DF55F3B2B4E070D2664F29720D3",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_tent1.x",
+        "canonicalMesh": "camp1_tent1.x",
+        "bytes": 70297,
+        "sha256": "C1C25414CFD2AE922F4710850954D0EB96DA0714013929399C863C9B22226AE3",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_tent2.x",
+        "canonicalMesh": "camp1_tent2.x",
+        "bytes": 46938,
+        "sha256": "FCFC4721B3629D92261317E97898A7A120DB0999A99E2A628214AA64AF914970",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/camp1_tent3.x",
+        "canonicalMesh": "camp1_tent3.x",
+        "bytes": 101815,
+        "sha256": "0853181675EBA1EC4E8F9633448D29482450FEFB6E9B57959F8180A9BC1B6EDC",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/doman_m.x",
+        "canonicalMesh": "doman_m.x",
+        "bytes": 668015,
+        "sha256": "F7ED6AF03A0335C50D5D2FBBC5FF3434685DA483464B1F14D051D190886FB419",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/grass_flower01.x",
+        "canonicalMesh": "grass_flower01.x",
+        "bytes": 7316,
+        "sha256": "AF4541B0A6994A7F0738B8DA7975EECE070B8B6B6CE1A2DB118BCAF29440856E",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/grass_flower02.x",
+        "canonicalMesh": "grass_flower02.x",
+        "bytes": 7313,
+        "sha256": "0F822DD510AA0D5570E95F0B43F90F6B85A040AB3AF485D77EF191555ECF55E3",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/grass_reed01.x",
+        "canonicalMesh": "grass_reed01.x",
+        "bytes": 7476,
+        "sha256": "50E95B0C169202DBD83D61A2F16441148B091A265962A4A76DA92C72BEDFF78A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/grass_reed02.x",
+        "canonicalMesh": "grass_reed02.x",
+        "bytes": 9354,
+        "sha256": "92C7011EEC60DBD7D6CB9C86ABB8FCE0908CDE6461AF439FBCC279BF214AF101",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/grass_reed03.x",
+        "canonicalMesh": "grass_reed03.x",
+        "bytes": 5214,
+        "sha256": "F3BA249EAE0805B6E14A31FE13EB2B407DF591DD41336D983420598974C94363",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/ishad_F.X",
+        "canonicalMesh": "ishad_F.X",
+        "bytes": 1725214,
+        "sha256": "5FD4BE0CCA6BAB10FB188337C07A97AB83DFC248A22E8CFE07D41EED891A044E",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_const1.x",
+        "canonicalMesh": "port_const1.x",
+        "bytes": 55208,
+        "sha256": "E165EFC859C323A1126DF9157E56B9969EAFA4EDB73C8450D471E0AED6F74719",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_const2.x",
+        "canonicalMesh": "port_const2.x",
+        "bytes": 85468,
+        "sha256": "23CD6B3F7B9256E056F1E9E2D37EFF58DEB70F5F00393E35CE071F1EA48C3BA3",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage1.x",
+        "canonicalMesh": "port_cottage1.x",
+        "bytes": 22515,
+        "sha256": "9A17F63AB6211A0904F38730A0026079CE76D364537BA3D2BF5D30A9B2F30EB3",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage2.x",
+        "canonicalMesh": "port_cottage2.x",
+        "bytes": 22840,
+        "sha256": "14EE3DB9753E301F1B614DB016039F4A33D0729AF72D1E0B6C6D326769217E4D",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage4.x",
+        "canonicalMesh": "port_cottage4.x",
+        "bytes": 34459,
+        "sha256": "C1CF73C939633176CD7593B2D4DF2C4ACD2818D60D5B733BDC97A7FA72335D6F",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_cottage5.x",
+        "canonicalMesh": "port_cottage5.x",
+        "bytes": 27456,
+        "sha256": "04109523E1160684002942F70C2565320727372F33AFAF11E0916927BBF98258",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_crateshed.X",
+        "canonicalMesh": "port_crateshed.X",
+        "bytes": 15923,
+        "sha256": "4249F3ACA46421BF1C739B1B38A154B4457F37103EFE0DCF790B2246E1C0A6CB",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_fishhouse.x",
+        "canonicalMesh": "port_fishhouse.x",
+        "bytes": 45401,
+        "sha256": "254880415EA869D69FB8C17843B637C32380F4C4CEAD469DCD4D7118145E7D7C",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_house01.x",
+        "canonicalMesh": "port_house01.x",
+        "bytes": 46606,
+        "sha256": "EE5D0DBA0FAD6080B39D8407A5E786582C535B04A8D4B6A878B3A487855A1406",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut.x",
+        "canonicalMesh": "port_hut.x",
+        "bytes": 36982,
+        "sha256": "B2B63F19FE4CCFE79361C9F718C5098EBFA23990FC4F7FAE432DEAA18ACEF5BB",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut01.X",
+        "canonicalMesh": "port_hut01.X",
+        "bytes": 41085,
+        "sha256": "9652FE6EFBC1599137F9AAFE0C7121B71936CA572F1770918DABC51DE7F6837A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut02.X",
+        "canonicalMesh": "port_hut02.X",
+        "bytes": 26050,
+        "sha256": "471255B7595C00DB451A16349BB530D168E0F8265B70008D5A1F65702145A5FE",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut03.X",
+        "canonicalMesh": "port_hut03.X",
+        "bytes": 30310,
+        "sha256": "9031821D6EA8CEB7B425B0921E560ABC99F4E1CA5D11144D4AB9AE0965B847CA",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut04.X",
+        "canonicalMesh": "port_hut04.X",
+        "bytes": 44906,
+        "sha256": "3F87CE6DE592B4415C52C4275FDDAD86F2AD63E7F02985525054755A7B88D206",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_hut05.X",
+        "canonicalMesh": "port_hut05.X",
+        "bytes": 35155,
+        "sha256": "B47F906949882D2D212D520AC386FF16F6083D8E5E28BCECDB09AFA5F0004F9E",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_inn01.x",
+        "canonicalMesh": "port_inn01.x",
+        "bytes": 120648,
+        "sha256": "D1E8E5D195590A059E189C1309B163B8C7D814E575A3FE1D8C77B39B4CC150CD",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_lighthouse.x",
+        "canonicalMesh": "port_lighthouse.x",
+        "bytes": 58777,
+        "sha256": "E573BC0832518848CAE110369C8FFAC9FB050935AFD96DE2FAC0B0D12AE75033",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_maindocks.X",
+        "canonicalMesh": "port_maindocks.X",
+        "bytes": 754526,
+        "sha256": "3E43A6400F85784AF30212BBE2A596F8EF71676AC927959DA7793F5BC4AEBE3C",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_market.X",
+        "canonicalMesh": "port_market.X",
+        "bytes": 81986,
+        "sha256": "C5125645C736EA6437C3F4102E1D4C200D08A09A0EC880A01FF0D1B162A68B3F",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_MiniDock.x",
+        "canonicalMesh": "port_MiniDock.x",
+        "bytes": 84938,
+        "sha256": "E97666BFA781BB8BEDFAC344F38CFD8C2528D8CF39B4E6512D0607FC594C0FA1",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_pub1.X",
+        "canonicalMesh": "port_pub1.X",
+        "bytes": 176898,
+        "sha256": "E8FDC42CB4516E23EBF5E34E1EF7C5151A3399DB1B77AD0EB12A12203EA95AEC",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_shed1.x",
+        "canonicalMesh": "port_shed1.x",
+        "bytes": 35547,
+        "sha256": "E4A1C0DD707D075AFC130C431E88CFF95A90148DE7C2C83A580D9AF84B4679FA",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_shippiece.x",
+        "canonicalMesh": "port_shippiece.x",
+        "bytes": 55455,
+        "sha256": "8111BA2CB0209D299AD48435B8C181688848731FEB9C79A51126EF8EAE274DC2",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_shipyard.x",
+        "canonicalMesh": "port_shipyard.x",
+        "bytes": 438610,
+        "sha256": "455D16A52FD6E978C4582F1265542347959F94AA65AFA3CFB28D1D48F651F529",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_smalldocks.x",
+        "canonicalMesh": "port_smalldocks.x",
+        "bytes": 124889,
+        "sha256": "047975C09DF770133A6A5F32B8ABBD6E57E0087DE50945F3BAC53DCCBA0FF48B",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_sunkship.X",
+        "canonicalMesh": "port_sunkship.X",
+        "bytes": 64275,
+        "sha256": "ADC41347B2B27A854FCCC9996D363305F80E53C80BCB04F79C7DEEDBE9A41B4B",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_weathervain.x",
+        "canonicalMesh": "port_weathervain.x",
+        "bytes": 85697,
+        "sha256": "5CC1F69BF639C7A43D02B102A85B17653E19B66AAE1B4AED120852DA634E2503",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/port_windmill.x",
+        "canonicalMesh": "port_windmill.x",
+        "bytes": 95067,
+        "sha256": "D4820D404063C1457D73828816F30BCDA0CB63619A59F133BF429A423034232A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/renzok.x",
+        "canonicalMesh": "renzok.x",
+        "bytes": 715774,
+        "sha256": "859931329DBD575F33758E4276F9F9080CE93A0C0F02ED14F8B71947743A0B57",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/renzok1.x",
+        "canonicalMesh": "renzok1.x",
+        "bytes": 736418,
+        "sha256": "722961E27C11A94162271412834ED2BC6B562916BC1CA2929EA4F98B4D9DB32C",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/renzokscale.X",
+        "canonicalMesh": "renzokscale.X",
+        "bytes": 74272,
+        "sha256": "AB97323B533031AC8C32A45ACB705EC3A30A471A70625B6C282C02705A575EC0",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/renzok_m.x",
+        "canonicalMesh": "renzok_m.x",
+        "bytes": 715772,
+        "sha256": "8634FC14F218925BDC834CDE3F43CA2C964FB7ABABCD19B988F71734C2D365E5",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/scale_Renzok.x",
+        "canonicalMesh": "scale_Renzok.x",
+        "bytes": 170037,
+        "sha256": "4A1B5CBB1AC0AE3C6198971371329F95D857A0C5F1E63B2AC392D17F9FABBF8A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/scale_renzok1.x",
+        "canonicalMesh": "scale_renzok1.x",
+        "bytes": 716291,
+        "sha256": "DFFBEEE79E2135CAAA8C6240CD39139858740BF899871D138DE47147616C2887",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/shield.x",
+        "canonicalMesh": "shield.x",
+        "bytes": 13843,
+        "sha256": "DE69936D87EB941F649667A816462FD08B4C7260C2933D3A2DAF52FA91C20DC8",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/shield1.x",
+        "canonicalMesh": "shield1.x",
+        "bytes": 16285,
+        "sha256": "AE218C3F052B80D215A0A071B1DB702A4FF703C135D04A90FBAD0965A77FD044",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/sword.x",
+        "canonicalMesh": "sword.x",
+        "bytes": 20094,
+        "sha256": "F2B4C86D90A829695A8FAE42985B8CBC6CD56B4E28E36A8BDEC858EC5E18561F",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/sword1.x",
+        "canonicalMesh": "sword1.x",
+        "bytes": 24756,
+        "sha256": "7158F37B6EACDAEA84647114CC5F86CEECFC01A0909693A757DC793491DD5C81",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/tree_dead01.x",
+        "canonicalMesh": "tree_dead01.x",
+        "bytes": 16568,
+        "sha256": "F410A0C76A5C2B4A034C539FC1785D0AB73F7DADBBDFCC528CA7C9C88C72D702",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/tree_dead02.x",
+        "canonicalMesh": "tree_dead02.x",
+        "bytes": 11548,
+        "sha256": "0640BF8BF486C4EA4E7BFDE697A7E8A5B5D8FB1F3D8E7EAF5DE91305965AC368",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/tree_dead03.x",
+        "canonicalMesh": "tree_dead03.x",
+        "bytes": 10426,
+        "sha256": "D4CD2E7430B8952D2301ACC890E1FFA478A58B0C4FC275C6B19F8E55BD0DA567",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green01.x",
+        "canonicalMesh": "tree_green01.x",
+        "bytes": 16569,
+        "sha256": "AD7BFD6BFF9436852036601BCE41344175AD25BECCBA3CDBA3728267236F0EB9",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green02.x",
+        "canonicalMesh": "tree_green02.x",
+        "bytes": 7956,
+        "sha256": "BBEAF85A4DC92AB8C9A42D98841C7AF38D777085EC57A2A1DA4B587E56992433",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green03.x",
+        "canonicalMesh": "tree_green03.x",
+        "bytes": 11900,
+        "sha256": "BAF3B64ABBD437EAB2BA494A0F6C145FF96AD8B0DED73B7D52D7825F773ED4DF",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green04.x",
+        "canonicalMesh": "tree_green04.x",
+        "bytes": 12426,
+        "sha256": "2648EC606F749E372E22ABBB2740C0E807D1FA7C6193A2BA01C004136448249C",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green05.x",
+        "canonicalMesh": "tree_green05.x",
+        "bytes": 12211,
+        "sha256": "822A5F94FCA86CD9DFF1A01D7F69452673C1D3EF4E901655B0D1AEFA355081D0",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green06.x",
+        "canonicalMesh": "tree_green06.x",
+        "bytes": 14750,
+        "sha256": "7B145D71C9469B55139BAC89ADFE930269F6324A1DB1BCA2D56952686CDD2D56",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/tree_green07.x",
+        "canonicalMesh": "tree_green07.x",
+        "bytes": 12090,
+        "sha256": "9AE59729E22DBA59DDEB461452E1DF8C61C72A91F2AB0C4447C9EBB80552119A",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/zokshield.x",
+        "canonicalMesh": "zokshield.x",
+        "bytes": 16388,
+        "sha256": "6F3F8C27868675A7A781F85373CB0A57D435E6F7E0355DE5D17CBF5E18D571E2",
+        "byteIdenticalToCanonical": true
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art/zoksword.x",
+        "canonicalMesh": "zoksword.x",
+        "bytes": 24861,
+        "sha256": "FFE1319BA2C89B249027EDA845A97F1FABC15A68904475460B72CFEED088874B",
+        "byteIdenticalToCanonical": true
+      }
+    ],
+    "meshCopyDirectoryRoots": [
+      "Yanik C++ BCKUP/Media/Models/Dominus Art",
+      "E:/Media/Datalake/Codes/Yanik C++ BCKUP/Media/Models/Dominus Art"
+    ],
+    "conclusion": "Two byte-identical physical archive roots contain the same 65 logical meshes; no third mesh copy was found in the full E:/Media basename sweep."
+  },
+  "datCompanions": {
+    "count": 30,
+    "fixedByteLength": 86,
+    "pairedMeshCount": 28,
+    "orphanNames": [
+      "tree_dead1.dat",
+      "tree_green1.dat"
+    ],
+    "uniquePayloadCount": 11,
+    "exactDuplicatePayloadGroups": [
+      [
+        "port_fishhouse.dat",
+        "port_house01.dat",
+        "port_hut01.dat",
+        "port_hut02.dat",
+        "port_hut03.dat",
+        "port_hut04.dat",
+        "port_hut05.dat",
+        "port_lighthouse.dat",
+        "port_market.dat",
+        "port_pub1.dat",
+        "port_shed1.dat",
+        "port_shipyard.dat",
+        "port_sunkship.dat",
+        "port_weathervain.dat",
+        "port_windmill.dat"
+      ],
+      [
+        "tree_dead01.dat",
+        "tree_green04.dat"
+      ],
+      [
+        "tree_dead02.dat",
+        "tree_green02.dat"
+      ],
+      [
+        "tree_dead1.dat",
+        "tree_green1.dat"
+      ],
+      [
+        "tree_green01.dat",
+        "tree_green03.dat",
+        "tree_green05.dat"
+      ]
+    ],
+    "records": [
+      {
+        "name": "port_crateshed.dat",
+        "bytes": 86,
+        "sha256": "A21ECD5395F9643B4FD1E94FF442DDCCFAB81250B49981318547B13F960D4DFB",
+        "pairedMesh": "port_crateshed.X",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_fishhouse.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_fishhouse.x",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_house01.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_house01.x",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_hut01.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_hut01.X",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_hut02.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_hut02.X",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_hut03.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_hut03.X",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_hut04.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_hut04.X",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_hut05.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_hut05.X",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_inn01.dat",
+        "bytes": 86,
+        "sha256": "708A85BB0DE9C7C52C6B9D263AB969C7A22191C1FB3A98931837102A35D8257F",
+        "pairedMesh": "port_inn01.x",
+        "prefixBytes": [
+          1,
+          5
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_lighthouse.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_lighthouse.x",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_maindocks.dat",
+        "bytes": 86,
+        "sha256": "8BC2E60A01C59131E68DFEA6E70660FDC8AE6F76BE98C03338C5ABCCE1A3EDDA",
+        "pairedMesh": "port_maindocks.X",
+        "prefixBytes": [
+          1,
+          5
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_market.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_market.X",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_pub1.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_pub1.X",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_shed1.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_shed1.x",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_shipyard.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_shipyard.x",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_smalldocks.dat",
+        "bytes": 86,
+        "sha256": "70C61D4BBA272284E9BF1294352A9697DA30385D7F2AF32FACEE6D1A08866A6D",
+        "pairedMesh": "port_smalldocks.x",
+        "prefixBytes": [
+          1,
+          5
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_sunkship.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_sunkship.X",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_weathervain.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_weathervain.x",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "port_windmill.dat",
+        "bytes": 86,
+        "sha256": "46F1F2B386B1B17035E0F004595A60C8E7092E60963A2ACAF0BB3E9AC6F6AF12",
+        "pairedMesh": "port_windmill.x",
+        "prefixBytes": [
+          1,
+          4
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "tree_dead01.dat",
+        "bytes": 86,
+        "sha256": "E573EF2C5985C5F5F688C0BF55AF3E70F3B8CC70C5D815829F12A4D1A737F9CD",
+        "pairedMesh": "tree_dead01.x",
+        "prefixBytes": [
+          0,
+          2
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "tree_dead02.dat",
+        "bytes": 86,
+        "sha256": "8568800A01570E8B75CD6AB282BD2BF6D2363B3E2264F9B8E614947A51B0BCB2",
+        "pairedMesh": "tree_dead02.x",
+        "prefixBytes": [
+          0,
+          2
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "tree_dead1.dat",
+        "bytes": 86,
+        "sha256": "2524E490B9A4B58FB93F9919BD5B5A7DCD5ED501B299D502E8D9D2B452770EC7",
+        "pairedMesh": null,
+        "prefixBytes": [
+          0,
+          2
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "tree_green01.dat",
+        "bytes": 86,
+        "sha256": "A60EDFEB4A59EFE520FC20C20F3CAC420955EE7F9FD1F6ABDC47B6BB98866C9B",
+        "pairedMesh": "tree_green01.x",
+        "prefixBytes": [
+          0,
+          2
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "tree_green02.dat",
+        "bytes": 86,
+        "sha256": "8568800A01570E8B75CD6AB282BD2BF6D2363B3E2264F9B8E614947A51B0BCB2",
+        "pairedMesh": "tree_green02.x",
+        "prefixBytes": [
+          0,
+          2
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "tree_green03.dat",
+        "bytes": 86,
+        "sha256": "A60EDFEB4A59EFE520FC20C20F3CAC420955EE7F9FD1F6ABDC47B6BB98866C9B",
+        "pairedMesh": "tree_green03.x",
+        "prefixBytes": [
+          0,
+          2
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "tree_green04.dat",
+        "bytes": 86,
+        "sha256": "E573EF2C5985C5F5F688C0BF55AF3E70F3B8CC70C5D815829F12A4D1A737F9CD",
+        "pairedMesh": "tree_green04.x",
+        "prefixBytes": [
+          0,
+          2
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "tree_green05.dat",
+        "bytes": 86,
+        "sha256": "A60EDFEB4A59EFE520FC20C20F3CAC420955EE7F9FD1F6ABDC47B6BB98866C9B",
+        "pairedMesh": "tree_green05.x",
+        "prefixBytes": [
+          0,
+          2
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "tree_green06.dat",
+        "bytes": 86,
+        "sha256": "691B86103BFFDE7CE4694DE5809D647DE79178CC508CB5A0A1C1D48F331E7D30",
+        "pairedMesh": "tree_green06.x",
+        "prefixBytes": [
+          0,
+          2
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "tree_green07.dat",
+        "bytes": 86,
+        "sha256": "7118B8CA668DF10A674D560493709636CF70E03D1E436C8A4AF78EC6C53BA18A",
+        "pairedMesh": "tree_green07.x",
+        "prefixBytes": [
+          0,
+          2
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      },
+      {
+        "name": "tree_green1.dat",
+        "bytes": 86,
+        "sha256": "2524E490B9A4B58FB93F9919BD5B5A7DCD5ED501B299D502E8D9D2B452770EC7",
+        "pairedMesh": null,
+        "prefixBytes": [
+          0,
+          2
+        ],
+        "trailingFloatCount": 21,
+        "printableStringRuns": []
+      }
+    ],
+    "evidenceBoundary": "Each file is one opaque 86-byte asset-local sidecar (two prefix bytes and 21 float-width values) with no printable path/name/camera text. Repeated default payloads and one-file-per-mesh naming do not evidence a multi-object scene."
+  },
+  "references": {
+    "referenceFiles": [
+      {
+        "path": "Archive/bckup/BallZ2015.bckup/Media/ObjectLibrary.xml",
+        "extension": ".xml",
+        "kind": "object-library-grid",
+        "matchedPortNames": [
+          "port_const1",
+          "port_const2",
+          "port_cottage1",
+          "port_cottage2",
+          "port_cottage4",
+          "port_cottage5",
+          "port_crateshed",
+          "port_fishhouse",
+          "port_house01",
+          "port_hut",
+          "port_hut01",
+          "port_hut02",
+          "port_hut03",
+          "port_hut04",
+          "port_hut05",
+          "port_inn01",
+          "port_lighthouse",
+          "port_maindocks",
+          "port_market",
+          "port_minidock",
+          "port_pub1",
+          "port_shed1",
+          "port_shippiece",
+          "port_shipyard",
+          "port_smalldocks",
+          "port_sunkship",
+          "port_weathervain",
+          "port_windmill"
+        ]
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/BallZ2015/Archive/bckup/BallZ2015.bckup/Media/ObjectLibrary.xml",
+        "extension": ".xml",
+        "kind": "object-library-grid",
+        "matchedPortNames": [
+          "port_const1",
+          "port_const2",
+          "port_cottage1",
+          "port_cottage2",
+          "port_cottage4",
+          "port_cottage5",
+          "port_crateshed",
+          "port_fishhouse",
+          "port_house01",
+          "port_hut",
+          "port_hut01",
+          "port_hut02",
+          "port_hut03",
+          "port_hut04",
+          "port_hut05",
+          "port_inn01",
+          "port_lighthouse",
+          "port_maindocks",
+          "port_market",
+          "port_minidock",
+          "port_pub1",
+          "port_shed1",
+          "port_shippiece",
+          "port_shipyard",
+          "port_smalldocks",
+          "port_sunkship",
+          "port_weathervain",
+          "port_windmill"
+        ]
+      },
+      {
+        "path": "E:/Media/Datalake/dump/BallZ2015/Archive/bckup/BallZ2015.bckup/Media/ObjectLibrary.xml",
+        "extension": ".xml",
+        "kind": "object-library-grid",
+        "matchedPortNames": [
+          "port_const1",
+          "port_const2",
+          "port_cottage1",
+          "port_cottage2",
+          "port_cottage4",
+          "port_cottage5",
+          "port_crateshed",
+          "port_fishhouse",
+          "port_house01",
+          "port_hut",
+          "port_hut01",
+          "port_hut02",
+          "port_hut03",
+          "port_hut04",
+          "port_hut05",
+          "port_inn01",
+          "port_lighthouse",
+          "port_maindocks",
+          "port_market",
+          "port_minidock",
+          "port_pub1",
+          "port_shed1",
+          "port_shippiece",
+          "port_shipyard",
+          "port_smalldocks",
+          "port_sunkship",
+          "port_weathervain",
+          "port_windmill"
+        ]
+      }
+    ],
+    "sourceCodeHits": [],
+    "authoredSceneDocumentsExcludingObjectLibrary": [],
+    "objectLibraryPhysicalCopies": [
+      {
+        "path": "Archive/bckup/BallZ2015.bckup/Media/ObjectLibrary.xml",
+        "extension": ".xml",
+        "kind": "object-library-grid",
+        "matchedPortNames": [
+          "port_const1",
+          "port_const2",
+          "port_cottage1",
+          "port_cottage2",
+          "port_cottage4",
+          "port_cottage5",
+          "port_crateshed",
+          "port_fishhouse",
+          "port_house01",
+          "port_hut",
+          "port_hut01",
+          "port_hut02",
+          "port_hut03",
+          "port_hut04",
+          "port_hut05",
+          "port_inn01",
+          "port_lighthouse",
+          "port_maindocks",
+          "port_market",
+          "port_minidock",
+          "port_pub1",
+          "port_shed1",
+          "port_shippiece",
+          "port_shipyard",
+          "port_smalldocks",
+          "port_sunkship",
+          "port_weathervain",
+          "port_windmill"
+        ]
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/BallZ2015/Archive/bckup/BallZ2015.bckup/Media/ObjectLibrary.xml",
+        "extension": ".xml",
+        "kind": "object-library-grid",
+        "matchedPortNames": [
+          "port_const1",
+          "port_const2",
+          "port_cottage1",
+          "port_cottage2",
+          "port_cottage4",
+          "port_cottage5",
+          "port_crateshed",
+          "port_fishhouse",
+          "port_house01",
+          "port_hut",
+          "port_hut01",
+          "port_hut02",
+          "port_hut03",
+          "port_hut04",
+          "port_hut05",
+          "port_inn01",
+          "port_lighthouse",
+          "port_maindocks",
+          "port_market",
+          "port_minidock",
+          "port_pub1",
+          "port_shed1",
+          "port_shippiece",
+          "port_shipyard",
+          "port_smalldocks",
+          "port_sunkship",
+          "port_weathervain",
+          "port_windmill"
+        ]
+      },
+      {
+        "path": "E:/Media/Datalake/dump/BallZ2015/Archive/bckup/BallZ2015.bckup/Media/ObjectLibrary.xml",
+        "extension": ".xml",
+        "kind": "object-library-grid",
+        "matchedPortNames": [
+          "port_const1",
+          "port_const2",
+          "port_cottage1",
+          "port_cottage2",
+          "port_cottage4",
+          "port_cottage5",
+          "port_crateshed",
+          "port_fishhouse",
+          "port_house01",
+          "port_hut",
+          "port_hut01",
+          "port_hut02",
+          "port_hut03",
+          "port_hut04",
+          "port_hut05",
+          "port_inn01",
+          "port_lighthouse",
+          "port_maindocks",
+          "port_market",
+          "port_minidock",
+          "port_pub1",
+          "port_shed1",
+          "port_shippiece",
+          "port_shipyard",
+          "port_smalldocks",
+          "port_sunkship",
+          "port_weathervain",
+          "port_windmill"
+        ]
+      }
+    ],
+    "objectLibraryCopyHashes": [
+      {
+        "path": "Archive/bckup/BallZ2015.bckup/Media/ObjectLibrary.xml",
+        "bytes": 27486,
+        "sha256": "4BF51E84F92084E8BE2B91214391BFA8839B29BCEB4C942187DD73B2B04AF432"
+      },
+      {
+        "path": "E:/Media/Datalake/Codes/BallZ2015/Archive/bckup/BallZ2015.bckup/Media/ObjectLibrary.xml",
+        "bytes": 27486,
+        "sha256": "4BF51E84F92084E8BE2B91214391BFA8839B29BCEB4C942187DD73B2B04AF432"
+      },
+      {
+        "path": "E:/Media/Datalake/dump/BallZ2015/Archive/bckup/BallZ2015.bckup/Media/ObjectLibrary.xml",
+        "bytes": 27486,
+        "sha256": "4BF51E84F92084E8BE2B91214391BFA8839B29BCEB4C942187DD73B2B04AF432"
+      }
+    ],
+    "objectLibraryLogicalCopyCount": 1
+  },
+  "objectLibraryExclusion": {
+    "source": "Archive/bckup/BallZ2015.bckup/Media/ObjectLibrary.xml",
+    "totalRecords": 61,
+    "dominusBasenameMatches": 41,
+    "portRows": 28,
+    "nonDominusRecords": 20,
+    "allPortRowsHaveZeroRotation": true,
+    "allPortRowsUseScale001": true,
+    "allPortRowsSitAtY0OnFiveUnitXZGrid": true,
+    "authoredHostFieldsPresent": {
+      "camera": false,
+      "navigation": false,
+      "spawn": false,
+      "waterOrTerrain": false
+    },
+    "portPlacements": [
+      {
+        "name": "port_const1",
+        "position": [
+          -20,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_const2",
+        "position": [
+          -25,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_cottage1",
+        "position": [
+          -30,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_cottage2",
+        "position": [
+          -35,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_cottage4",
+        "position": [
+          -45,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_cottage5",
+        "position": [
+          -40,
+          0,
+          5
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_crateshed",
+        "position": [
+          -35,
+          0,
+          5
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_fishhouse",
+        "position": [
+          -30,
+          0,
+          5
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_house01",
+        "position": [
+          -25,
+          0,
+          5
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_hut",
+        "position": [
+          -20,
+          0,
+          5
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_hut01",
+        "position": [
+          -20,
+          0,
+          10
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_hut02",
+        "position": [
+          -25,
+          0,
+          10
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_hut03",
+        "position": [
+          -30,
+          0,
+          10
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_hut04",
+        "position": [
+          -35,
+          0,
+          10
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_hut05",
+        "position": [
+          -40,
+          0,
+          10
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_inn01",
+        "position": [
+          -45,
+          0,
+          10
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_lighthouse",
+        "position": [
+          -45,
+          0,
+          15
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_maindocks",
+        "position": [
+          -70,
+          0,
+          15
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_market",
+        "position": [
+          -35,
+          0,
+          15
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_MiniDock",
+        "position": [
+          -30,
+          0,
+          15
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_pub1",
+        "position": [
+          -25,
+          0,
+          15
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_shed1",
+        "position": [
+          -20,
+          0,
+          15
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_shippiece",
+        "position": [
+          -20,
+          0,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_shipyard",
+        "position": [
+          -25,
+          0,
+          30
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_smalldocks",
+        "position": [
+          -35,
+          0,
+          30
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_sunkship",
+        "position": [
+          -35,
+          0,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_weathervain",
+        "position": [
+          -40,
+          0,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      {
+        "name": "port_windmill",
+        "position": [
+          -45,
+          0,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      }
+    ],
+    "conclusion": "ObjectLibrary is a mixed 61-entry editor/catalog display. Its 28 port props are unrotated, uniformly scaled thumbnails placed on a regular five-unit grid among unrelated objects; this is not an authored village/port layout."
+  },
+  "recoverableWithoutInvention": [
+    "The 65 logical asset meshes as individual props, including each text X file's local frame transforms and embedded texture references.",
+    "An explicitly labeled asset gallery/catalog, with binary X files handled by a capable decoder and all material groups preserved."
+  ],
+  "absentEvidence": [
+    "No historical source loader references the Dominus/port assets.",
+    "No authored scene document outside the excluded ObjectLibrary catalog grid was found.",
+    "No inter-asset placement, camera, spawn, navigation, terrain/water, collision, lighting, sky, or gameplay configuration survived.",
+    "The existing reconstructed port/ring composition is therefore a modern curated prototype, not a recovered scene."
+  ]
+}

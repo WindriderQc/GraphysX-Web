@@ -1,0 +1,28 @@
+{
+  "blenderVersion": [
+    2,
+    79,
+    0
+  ],
+  "export": {
+    "axisForward": "-Z",
+    "axisUp": "Y",
+    "bakeAnimation": false,
+    "bytes": 234476,
+    "includes": [
+      "EMPTY",
+      "CAMERA",
+      "LAMP",
+      "MESH"
+    ],
+    "meshModifiers": true,
+    "path": "C:\\Users\\Yanik\\codes\\GraphysX\\web-prototype\\public\\assets\\ballz-blender-level1\\level1-best.fbx",
+    "sha256": "A7C248041E5E2CCFD0B9455B68535A4F7EF09BD47D9972D3D2BCC718F8C727D6"
+  },
+  "schema": "graphysx.archive-blend-fbx-export/v1",
+  "source": {
+    "bytes": 490292,
+    "path": "E:\\Media\\Datalake\\blenderModel\\Levels\\Level1.blend",
+    "sha256": "0AA62FF04FA06988F7DFF71B429D980B2766A985F1CF6BB13A160278F38B4E9E"
+  }
+}

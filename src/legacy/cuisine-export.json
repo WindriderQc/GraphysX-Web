@@ -1,0 +1,28 @@
+{
+  "blenderVersion": [
+    2,
+    79,
+    0
+  ],
+  "export": {
+    "axisForward": "-Z",
+    "axisUp": "Y",
+    "bakeAnimation": false,
+    "bytes": 1477852,
+    "includes": [
+      "EMPTY",
+      "CAMERA",
+      "LAMP",
+      "MESH"
+    ],
+    "meshModifiers": true,
+    "path": "C:\\Users\\Yanik\\codes\\GraphysX\\web-prototype\\public\\assets\\maison-explorer\\cuisine-best.fbx",
+    "sha256": "24846D8EC083477F87E91F46ED31DA952A575B7F7CD3B234B6D11A4603B5B14E"
+  },
+  "schema": "graphysx.archive-blend-fbx-export/v1",
+  "source": {
+    "bytes": 1131088,
+    "path": "E:\\Media\\Datalake\\blenderModel\\Maison\\Cuisine.blend",
+    "sha256": "C0441E2AC52CC05329A569DC31B056314B9EA5535460EFDDFADBB8B86B966855"
+  }
+}

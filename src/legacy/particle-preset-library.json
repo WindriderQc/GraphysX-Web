@@ -1,0 +1,3312 @@
+{
+  "schema": "graphysx.particle-preset-library/v1",
+  "title": "GraphysX archived TV3D particle preset library",
+  "classification": "engine-fx-feature-not-scene",
+  "sourceDirectory": "Yanik C++ BCKUP/Media/PartSys/resources",
+  "enumEvidence": "Archive/GNet/Deps/Include/TV3D65/{CTVParticleSystem.h,tv_types.h}",
+  "counts": {
+    "compiledFilenames": 19,
+    "uniqueCompiledBinaries": 17,
+    "readablePresets": 16,
+    "readableCompiledPresets": 14,
+    "readableSourceOnlyPresets": 2,
+    "opaqueCompiledPresets": 3,
+    "emitters": 29,
+    "attractors": 1,
+    "uniqueTextureBindings": 6,
+    "missingTextureBindings": 1
+  },
+  "exactAliasGroups": [
+    {
+      "sha256": "99F3AD87ED5D8BD691E21FDEF49DF455B1FD08D78236BC0E5B56CF8E4E460F5E",
+      "bytes": 1594,
+      "aliases": [
+        "explosion1.TVP",
+        "explosion_01.TVP"
+      ]
+    },
+    {
+      "sha256": "2767DFD9428A99C10D18A4853EE8F31D99690FEB6EC142676256C4D0AC35B88A",
+      "bytes": 896,
+      "aliases": [
+        "explosion2.TVP",
+        "explosion_02.TVP"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "name": "Glow2.dds",
+      "status": "present",
+      "bytes": 65664,
+      "sha256": "6DCF8614A1445EC2ABF851DC84BE7725FBD9790995E7313FF0DEDF8557E135B0",
+      "source": "Yanik C++ BCKUP/Media/PartSys/resources/Glow2.dds",
+      "publicUrl": "/assets/particles/archive/Glow2.dds"
+    },
+    {
+      "name": "smokey.dds",
+      "status": "present",
+      "bytes": 87508,
+      "sha256": "C1B60429AF9232522439D623B249236CE8D41EC5D41725B61146309DB7129A75",
+      "source": "Yanik C++ BCKUP/Media/PartSys/resources/smokey.dds",
+      "publicUrl": "/assets/particles/archive/smokey.dds"
+    },
+    {
+      "name": "circle_soft4.dds",
+      "status": "present",
+      "bytes": 87508,
+      "sha256": "C3B35ADFA9A33D0B1898ED7B0E8513105F4A0D2F07436B74CE39B60C490604F8",
+      "source": "Yanik C++ BCKUP/Media/PartSys/resources/circle_soft4.dds",
+      "publicUrl": "/assets/particles/archive/circle_soft4.dds"
+    },
+    {
+      "name": "star1.dds",
+      "status": "present",
+      "bytes": 87508,
+      "sha256": "78A4BFD77231A2307B054A4FC6C8D1A311B462D420552BBD9617EEB9F784AD21",
+      "source": "Yanik C++ BCKUP/Media/PartSys/resources/star1.dds",
+      "publicUrl": "/assets/particles/archive/star1.dds"
+    },
+    {
+      "name": "ring_blur.dds",
+      "status": "present",
+      "bytes": 87508,
+      "sha256": "6D4F79A4ACDE88A9E21F3E2368FFA8E9994B8976BFFF89EAF59FB011114F61AA",
+      "source": "Yanik C++ BCKUP/Media/PartSys/resources/ring_blur.dds",
+      "publicUrl": "/assets/particles/archive/ring_blur.dds"
+    },
+    {
+      "name": "clumpy_blurry.dds",
+      "status": "missing",
+      "bytes": 0,
+      "sha256": null,
+      "source": null,
+      "publicUrl": null
+    }
+  ],
+  "readable": [
+    {
+      "id": "expl1",
+      "label": "Expl1",
+      "category": "explosion",
+      "availability": "readable-source-only",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/expl1.TVPJ",
+        "sha256": "2C8FB894F413169622E0C7848B04D0B771C612D648CE28E690C223F80753CFF6",
+        "bytes": 785
+      },
+      "compiled": null,
+      "textureBindings": [
+        {
+          "name": "clumpy_blurry.dds",
+          "status": "missing",
+          "bytes": 0,
+          "sha256": null,
+          "source": null,
+          "publicUrl": null
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 100,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            1,
+            1,
+            1
+          ],
+          "power": 1,
+          "lifetimeSeconds": 1,
+          "shape": 0,
+          "textureBinding": "F:\\VS.Projects\\Machina\\MachinaClient\\particles\\clumpy_blurry.dds",
+          "textureFile": "clumpy_blurry.dds",
+          "defaultColor": [
+            1,
+            1,
+            0,
+            1
+          ],
+          "generationSpeedMilliseconds": 10,
+          "gravityEnabled": false,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            5,
+            20,
+            5
+          ],
+          "sphereRadius": 6,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                0.05,
+                0.05,
+                0.05
+              ],
+              "color": [
+                1,
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.4,
+              "size": [
+                0.05,
+                0.05,
+                0.05
+              ],
+              "color": [
+                1,
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 0.75,
+              "size": [
+                0.05,
+                0.05,
+                0.05
+              ],
+              "color": [
+                0,
+                0,
+                1,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "explosion_01",
+      "label": "Explosion 01",
+      "category": "explosion",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "located-graphysx-callsite",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/explosion_01.TVPJ",
+        "sha256": "18267D7EECE0D6137C8FAE4811FDEC03DC99EB99899866B744388740F522BBE7",
+        "bytes": 2197
+      },
+      "compiled": {
+        "sha256": "99F3AD87ED5D8BD691E21FDEF49DF455B1FD08D78236BC0E5B56CF8E4E460F5E",
+        "bytes": 1594,
+        "aliases": [
+          "explosion1.TVP",
+          "explosion_01.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "Glow2.dds",
+          "status": "present",
+          "bytes": 65664,
+          "sha256": "6DCF8614A1445EC2ABF851DC84BE7725FBD9790995E7313FF0DEDF8557E135B0",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/Glow2.dds",
+          "publicUrl": "/assets/particles/archive/Glow2.dds"
+        },
+        {
+          "name": "smokey.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "C1B60429AF9232522439D623B249236CE8D41EC5D41725B61146309DB7129A75",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/smokey.dds",
+          "publicUrl": "/assets/particles/archive/smokey.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 10,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            10,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            20,
+            10,
+            20
+          ],
+          "power": 40,
+          "lifetimeSeconds": 2,
+          "shape": 0,
+          "textureBinding": "F:\\VS.Projects\\Machina\\MachinaClient\\textures\\sprites\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            1,
+            1,
+            0.5,
+            1
+          ],
+          "generationSpeedMilliseconds": 10,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            -50,
+            0
+          ],
+          "particleChange": 2,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": false,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                8,
+                8,
+                8
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 1,
+              "size": [
+                4,
+                4,
+                4
+              ],
+              "color": [
+                1,
+                0.75,
+                0,
+                1
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 2,
+              "size": [
+                2,
+                2,
+                2
+              ],
+              "color": [
+                1,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "type": "billboard",
+          "maxParticles": 64,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            5,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            5,
+            5,
+            5
+          ],
+          "power": 10,
+          "lifetimeSeconds": 3,
+          "shape": 1,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            0.75
+          ],
+          "generationSpeedMilliseconds": 10,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            -5,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 3,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 3,
+          "looping": false,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                16,
+                16,
+                16
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 2,
+              "size": [
+                48,
+                48,
+                48
+              ],
+              "color": [
+                0.7,
+                0.5,
+                0,
+                1
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 3,
+              "size": [
+                128,
+                128,
+                128
+              ],
+              "color": [
+                0.1,
+                0.05,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "billboard",
+          "maxParticles": 8,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            -5,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            2,
+            10,
+            2
+          ],
+          "power": 5,
+          "lifetimeSeconds": 4,
+          "shape": 1,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\smokey.dds",
+          "textureFile": "smokey.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 10,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            10,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 1,
+          "alphaTest": false,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 3,
+          "looping": false,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                16,
+                16,
+                16
+              ],
+              "color": [
+                0.25,
+                0.125,
+                0,
+                0.1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 2,
+              "size": [
+                16,
+                16,
+                16
+              ],
+              "color": [
+                0.2,
+                0.2,
+                0.2,
+                0.4
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 4,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0.5,
+                0.5,
+                0.5,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "explosion_02",
+      "label": "Explosion 02",
+      "category": "explosion",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/explosion_02.TVPJ",
+        "sha256": "1038F145D875D5E3CA3251E5DC0C455B2FE086C4DAB850DC2EBD176018F8FD49",
+        "bytes": 904
+      },
+      "compiled": {
+        "sha256": "2767DFD9428A99C10D18A4853EE8F31D99690FEB6EC142676256C4D0AC35B88A",
+        "bytes": 896,
+        "aliases": [
+          "explosion2.TVP",
+          "explosion_02.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "Glow2.dds",
+          "status": "present",
+          "bytes": 65664,
+          "sha256": "6DCF8614A1445EC2ABF851DC84BE7725FBD9790995E7313FF0DEDF8557E135B0",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/Glow2.dds",
+          "publicUrl": "/assets/particles/archive/Glow2.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 64,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            1,
+            1,
+            1
+          ],
+          "power": 25,
+          "lifetimeSeconds": 3,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            0.75
+          ],
+          "generationSpeedMilliseconds": 1,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            -1,
+            0
+          ],
+          "particleChange": 3,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 1,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                8,
+                8,
+                8
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 2,
+              "size": [
+                24,
+                24,
+                24
+              ],
+              "color": [
+                0.3,
+                0.2,
+                0,
+                0.5
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 3,
+              "size": [
+                48,
+                48,
+                48
+              ],
+              "color": [
+                0.05,
+                0.025,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": [
+        {
+          "id": 0,
+          "directional": false,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "attenuation": [
+            0,
+            0,
+            0
+          ],
+          "fieldDirection": [
+            0,
+            1,
+            0
+          ],
+          "repulsionConstant": -2.5,
+          "velocityDependency": 1,
+          "radius": 25
+        }
+      ]
+    },
+    {
+      "id": "explosion_03",
+      "label": "Explosion 03",
+      "category": "explosion",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/explosion_03.TVPJ",
+        "sha256": "028B39301B161A2E2EAE881224297285CCA8E294C5A8A01E18D28EA65923525E",
+        "bytes": 3527
+      },
+      "compiled": {
+        "sha256": "DD492152FE4217B7A32C37D055A6861284C130D86240DFBDFC97D6106276B8FF",
+        "bytes": 2458,
+        "aliases": [
+          "explosion_03.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "Glow2.dds",
+          "status": "present",
+          "bytes": 65664,
+          "sha256": "6DCF8614A1445EC2ABF851DC84BE7725FBD9790995E7313FF0DEDF8557E135B0",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/Glow2.dds",
+          "publicUrl": "/assets/particles/archive/Glow2.dds"
+        },
+        {
+          "name": "smokey.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "C1B60429AF9232522439D623B249236CE8D41EC5D41725B61146309DB7129A75",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/smokey.dds",
+          "publicUrl": "/assets/particles/archive/smokey.dds"
+        },
+        {
+          "name": "circle_soft4.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "C3B35ADFA9A33D0B1898ED7B0E8513105F4A0D2F07436B74CE39B60C490604F8",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/circle_soft4.dds",
+          "publicUrl": "/assets/particles/archive/circle_soft4.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 16,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            10,
+            1,
+            10
+          ],
+          "power": 10,
+          "lifetimeSeconds": 3,
+          "shape": 1,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            0.75
+          ],
+          "generationSpeedMilliseconds": 2,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 3,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 4,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                8,
+                8,
+                8
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 1,
+              "size": [
+                16,
+                16,
+                16
+              ],
+              "color": [
+                0.3,
+                0.2,
+                0,
+                0.5
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 2,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "type": "billboard",
+          "maxParticles": 8,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0.5,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            1,
+            1,
+            1
+          ],
+          "power": 30,
+          "lifetimeSeconds": 3,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\smokey.dds",
+          "textureFile": "smokey.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 2,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            -30,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 0,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                2,
+                2,
+                2
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.1,
+              "size": [
+                1,
+                1,
+                1
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 3,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "billboard",
+          "maxParticles": 16,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            2,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            10,
+            1,
+            10
+          ],
+          "power": 100,
+          "lifetimeSeconds": 3,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 1,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            -50,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 3,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                1,
+                1,
+                1
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.1,
+              "size": [
+                2,
+                2,
+                2
+              ],
+              "color": [
+                1,
+                0.85,
+                0.4,
+                1
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 3,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "billboard",
+          "maxParticles": 16,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            1,
+            1,
+            1
+          ],
+          "power": 10,
+          "lifetimeSeconds": 3,
+          "shape": 1,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 1,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 12,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                48,
+                48,
+                48
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.3,
+              "size": [
+                48,
+                48,
+                48
+              ],
+              "color": [
+                0.75,
+                0.5,
+                0.25,
+                0.25
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 3,
+              "size": [
+                96,
+                96,
+                96
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "billboard",
+          "maxParticles": 1,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            0,
+            0,
+            0
+          ],
+          "power": 0,
+          "lifetimeSeconds": 3,
+          "shape": 0,
+          "textureBinding": "particles\\circle_soft4.dds",
+          "textureFile": "circle_soft4.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 1,
+          "gravityEnabled": false,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 3,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.1,
+              "size": [
+                32,
+                32,
+                32
+              ],
+              "color": [
+                0.75,
+                0.75,
+                1,
+                1
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 1.5,
+              "size": [
+                8,
+                8,
+                8
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "fire1",
+      "label": "Fire1",
+      "category": "fire",
+      "availability": "readable-source-only",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/fire1.TVPJ",
+        "sha256": "7781D0E69B0686AE0157083237E280BC05E80C5BA160085C444350D10BF9FE49",
+        "bytes": 769
+      },
+      "compiled": null,
+      "textureBindings": [
+        {
+          "name": "smokey.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "C1B60429AF9232522439D623B249236CE8D41EC5D41725B61146309DB7129A75",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/smokey.dds",
+          "publicUrl": "/assets/particles/archive/smokey.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 1000,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            1,
+            1,
+            1
+          ],
+          "power": 2,
+          "lifetimeSeconds": 0.75,
+          "shape": 0,
+          "textureBinding": "F:\\VS.Projects\\Machina\\MachinaClient\\particles\\smokey.dds",
+          "textureFile": "smokey.dds",
+          "defaultColor": [
+            1,
+            1,
+            0,
+            1
+          ],
+          "generationSpeedMilliseconds": 1,
+          "gravityEnabled": false,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 1,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            5,
+            20,
+            5
+          ],
+          "sphereRadius": 20,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0.1,
+              "size": [
+                1,
+                1,
+                1
+              ],
+              "color": [
+                0,
+                0,
+                1,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.4,
+              "size": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "color": [
+                0.8,
+                0.6,
+                0.1,
+                1
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 0.75,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "firetrail_01",
+      "label": "Firetrail 01",
+      "category": "fire",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/firetrail_01.TVPJ",
+        "sha256": "C0B6B28A1F5CF98A3FBCB1FE263E52068C3C203F8BB4C975AA55DF404FE31A50",
+        "bytes": 515
+      },
+      "compiled": {
+        "sha256": "92781743DF44895DA0FFB5A9704CF730E4160B2D6AF2B472368B1E7A6477AA0A",
+        "bytes": 592,
+        "aliases": [
+          "firetrail_01.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "Glow2.dds",
+          "status": "present",
+          "bytes": 65664,
+          "sha256": "6DCF8614A1445EC2ABF851DC84BE7725FBD9790995E7313FF0DEDF8557E135B0",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/Glow2.dds",
+          "publicUrl": "/assets/particles/archive/Glow2.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 1000,
+          "defaultSize": 8,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "power": 5,
+          "lifetimeSeconds": 1,
+          "shape": 0,
+          "textureBinding": "F:\\VS.Projects\\Machina\\MachinaClient\\textures\\sprites\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            1,
+            0.5,
+            0,
+            1
+          ],
+          "generationSpeedMilliseconds": 10,
+          "gravityEnabled": false,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": []
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "firetrail_02",
+      "label": "Firetrail 02",
+      "category": "fire",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/firetrail_02.TVPJ",
+        "sha256": "C412A2CD8B4CE67A0D352D05B87D39000091A99AE6BFE9A525176095118F19A8",
+        "bytes": 721
+      },
+      "compiled": {
+        "sha256": "1437DC4C8340B4042A294C381157FAA4D9E167D7A02E41ED703AC702B9B0B01B",
+        "bytes": 704,
+        "aliases": [
+          "firetrail_02.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "Glow2.dds",
+          "status": "present",
+          "bytes": 65664,
+          "sha256": "6DCF8614A1445EC2ABF851DC84BE7725FBD9790995E7313FF0DEDF8557E135B0",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/Glow2.dds",
+          "publicUrl": "/assets/particles/archive/Glow2.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 1000,
+          "defaultSize": 3,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            1,
+            1,
+            1
+          ],
+          "power": 1,
+          "lifetimeSeconds": 1,
+          "shape": 0,
+          "textureBinding": "F:\\VS.Projects\\Machina\\MachinaClient\\textures\\sprites\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            0.75,
+            0.5,
+            0,
+            1
+          ],
+          "generationSpeedMilliseconds": 10,
+          "gravityEnabled": false,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                1.5,
+                1.5,
+                1.5
+              ],
+              "color": [
+                1,
+                0.75,
+                0.5,
+                0.75
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 1,
+              "size": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "color": [
+                0.75,
+                0.25,
+                0,
+                0.1
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "gatling_01",
+      "label": "Gatling 01",
+      "category": "weapon",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/gatling_01.TVPJ",
+        "sha256": "04EDAB4A8DB6FD504C1529F57AE38D255E4C273894F7AB9EDD0C0684FCA49EF5",
+        "bytes": 1966
+      },
+      "compiled": {
+        "sha256": "D74EEC6E69533F7D0FEA63C8A0F9CA5F4C08DDB58FAA1841EACCC03782AD2F1F",
+        "bytes": 1462,
+        "aliases": [
+          "gatling_01.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "circle_soft4.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "C3B35ADFA9A33D0B1898ED7B0E8513105F4A0D2F07436B74CE39B60C490604F8",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/circle_soft4.dds",
+          "publicUrl": "/assets/particles/archive/circle_soft4.dds"
+        },
+        {
+          "name": "Glow2.dds",
+          "status": "present",
+          "bytes": 65664,
+          "sha256": "6DCF8614A1445EC2ABF851DC84BE7725FBD9790995E7313FF0DEDF8557E135B0",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/Glow2.dds",
+          "publicUrl": "/assets/particles/archive/Glow2.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 3,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            1
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            0,
+            0,
+            0
+          ],
+          "power": 0,
+          "lifetimeSeconds": 0.1,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\circle_soft4.dds",
+          "textureFile": "circle_soft4.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 1,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 3,
+          "blending": 1,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                0.45,
+                0.45,
+                0.45
+              ],
+              "color": [
+                1,
+                0.75,
+                0.25,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.1,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                1,
+                0.75,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "type": "billboard",
+          "maxParticles": 1,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            0,
+            0,
+            0
+          ],
+          "power": 0,
+          "lifetimeSeconds": 1,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            0.1,
+            0.1,
+            0.1,
+            1
+          ],
+          "generationSpeedMilliseconds": 1,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 3,
+          "blending": 0,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                0.45,
+                0.45,
+                0.45
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 1,
+              "size": [
+                0.1,
+                0.1,
+                0.1
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "billboard",
+          "maxParticles": 16,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            10
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            1,
+            1,
+            0
+          ],
+          "power": 1,
+          "lifetimeSeconds": 1,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 100,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                0.6,
+                0.6,
+                0.6
+              ],
+              "color": [
+                1,
+                0.75,
+                0.25,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 1,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "hit_01",
+      "label": "Hit 01",
+      "category": "impact",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/hit_01.TVPJ",
+        "sha256": "4CA7C33A64C68AFCB1C4927FE4230533F3D2C2CBE243E988BF5685E127AFE841",
+        "bytes": 1992
+      },
+      "compiled": {
+        "sha256": "87F63B7EC2FCFFCF71E589D00DBFF7DC83FED1E07A8C2112750341C10AE68E8A",
+        "bytes": 1498,
+        "aliases": [
+          "hit_01.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "Glow2.dds",
+          "status": "present",
+          "bytes": 65664,
+          "sha256": "6DCF8614A1445EC2ABF851DC84BE7725FBD9790995E7313FF0DEDF8557E135B0",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/Glow2.dds",
+          "publicUrl": "/assets/particles/archive/Glow2.dds"
+        },
+        {
+          "name": "smokey.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "C1B60429AF9232522439D623B249236CE8D41EC5D41725B61146309DB7129A75",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/smokey.dds",
+          "publicUrl": "/assets/particles/archive/smokey.dds"
+        },
+        {
+          "name": "star1.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "78A4BFD77231A2307B054A4FC6C8D1A311B462D420552BBD9617EEB9F784AD21",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/star1.dds",
+          "publicUrl": "/assets/particles/archive/star1.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 3,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            5,
+            1,
+            5
+          ],
+          "power": 50,
+          "lifetimeSeconds": 1,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 10,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            -250,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                1,
+                1,
+                1
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.125,
+              "size": [
+                2,
+                2,
+                2
+              ],
+              "color": [
+                1,
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 0.5,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "type": "billboard",
+          "maxParticles": 5,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            2,
+            2,
+            2
+          ],
+          "power": 5,
+          "lifetimeSeconds": 1,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\smokey.dds",
+          "textureFile": "smokey.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 5,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            50,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 0,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                4,
+                4,
+                4
+              ],
+              "color": [
+                1,
+                0.85,
+                0.6,
+                0.75
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 1,
+              "size": [
+                8,
+                8,
+                8
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "billboard",
+          "maxParticles": 1,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": false,
+          "randomDirectionFactor": [
+            0,
+            0,
+            0
+          ],
+          "power": 1,
+          "lifetimeSeconds": 1,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\star1.dds",
+          "textureFile": "star1.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 1,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 1,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                8,
+                8,
+                8
+              ],
+              "color": [
+                1,
+                0.9,
+                0.8,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.5,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "lightningball_01",
+      "label": "Lightningball 01",
+      "category": "energy",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/lightningball_01.TVPJ",
+        "sha256": "6522E27B8761CF3F42EDDCE09AF90A6B5784D99CFF8DBF80C757F85F67AF6AB7",
+        "bytes": 903
+      },
+      "compiled": {
+        "sha256": "7828DD91ABE3503338C01BA853BD6F533BB069215EC9DD51F0F7D1D8683C3E0C",
+        "bytes": 852,
+        "aliases": [
+          "lightningball_01.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "star1.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "78A4BFD77231A2307B054A4FC6C8D1A311B462D420552BBD9617EEB9F784AD21",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/star1.dds",
+          "publicUrl": "/assets/particles/archive/star1.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 10,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            1,
+            1,
+            1
+          ],
+          "power": 4,
+          "lifetimeSeconds": 0.5,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\star1.dds",
+          "textureFile": "star1.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 100,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            -5,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": []
+        },
+        {
+          "id": 1,
+          "type": "billboard",
+          "maxParticles": 3,
+          "defaultSize": 6,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            1,
+            1,
+            1
+          ],
+          "power": 6,
+          "lifetimeSeconds": 0.1,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\star1.dds",
+          "textureFile": "star1.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 100,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": []
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "plasmatrail_01",
+      "label": "Plasmatrail 01",
+      "category": "trail",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/plasmatrail_01.TVPJ",
+        "sha256": "67926650E647807A68306C7C5591C2295688538DCE5BA3B674C7EC5054363173",
+        "bytes": 766
+      },
+      "compiled": {
+        "sha256": "90727CA4171BC591CA1CC6AF58062316421FDE56A2359BAC572C4E8453D20D54",
+        "bytes": 760,
+        "aliases": [
+          "plasmatrail_01.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "ring_blur.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "6D4F79A4ACDE88A9E21F3E2368FFA8E9994B8976BFFF89EAF59FB011114F61AA",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/ring_blur.dds",
+          "publicUrl": "/assets/particles/archive/ring_blur.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 1000,
+          "defaultSize": 3,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            0.0125,
+            0.0125,
+            0.0125
+          ],
+          "power": 0,
+          "lifetimeSeconds": 2,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\ring_blur.dds",
+          "textureFile": "ring_blur.dds",
+          "defaultColor": [
+            0.75,
+            0.5,
+            0,
+            1
+          ],
+          "generationSpeedMilliseconds": 5,
+          "gravityEnabled": false,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                1,
+                1,
+                1
+              ],
+              "color": [
+                1,
+                0.75,
+                1,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.25,
+              "size": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "color": [
+                0.1,
+                0,
+                1,
+                0.5
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 2,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "shot2",
+      "label": "Shot2",
+      "category": "weapon",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/shot2.TVPJ",
+        "sha256": "78239819C54D703535EBC27C842033BA4F4BB65E5FF1E6D91878B61BA278C5CA",
+        "bytes": 749
+      },
+      "compiled": {
+        "sha256": "89099B77CF3770281D07888395DAB0B16EE26B75618D786D45FDBB9BFD20CF79",
+        "bytes": 811,
+        "aliases": [
+          "shot2.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "circle_soft4.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "C3B35ADFA9A33D0B1898ED7B0E8513105F4A0D2F07436B74CE39B60C490604F8",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/circle_soft4.dds",
+          "publicUrl": "/assets/particles/archive/circle_soft4.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 100,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            0.001,
+            0.001,
+            0.001
+          ],
+          "power": 1,
+          "lifetimeSeconds": 2,
+          "shape": 0,
+          "textureBinding": "F:\\VS.Projects\\Tools\\particles\\circle_soft4.dds",
+          "textureFile": "circle_soft4.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 200,
+          "gravityEnabled": false,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 1,
+          "alphaTest": false,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                2,
+                2,
+                2
+              ],
+              "color": [
+                1,
+                1,
+                0,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 1,
+              "size": [
+                2,
+                2,
+                2
+              ],
+              "color": [
+                1,
+                1,
+                0,
+                1
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 2,
+              "size": [
+                1,
+                1,
+                1
+              ],
+              "color": [
+                1,
+                0,
+                1,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "shot3",
+      "label": "Shot3",
+      "category": "weapon",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/shot3.TVPJ",
+        "sha256": "61CF1E44FA1E5B2316F8105A0C292F46A04A0159B3D2417040080796E6D1B6EA",
+        "bytes": 765
+      },
+      "compiled": {
+        "sha256": "016E86B9BA8EABF8D4F44A867603A2ED57F32BFCCEDAEC1671102A096DA0BA91",
+        "bytes": 795,
+        "aliases": [
+          "shot3.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "circle_soft4.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "C3B35ADFA9A33D0B1898ED7B0E8513105F4A0D2F07436B74CE39B60C490604F8",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/circle_soft4.dds",
+          "publicUrl": "/assets/particles/archive/circle_soft4.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 100,
+          "defaultSize": 2,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            0.001,
+            0.001,
+            0.001
+          ],
+          "power": 1,
+          "lifetimeSeconds": 1,
+          "shape": 0,
+          "textureBinding": "F:\\VS.Projects\\Shooter\\ShooterWorld\\particles\\circle_soft4.dds",
+          "textureFile": "circle_soft4.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 10,
+          "gravityEnabled": false,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 1,
+          "alphaTest": false,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                2,
+                2,
+                2
+              ],
+              "color": [
+                1,
+                1,
+                0,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.5,
+              "size": [
+                2,
+                2,
+                2
+              ],
+              "color": [
+                1,
+                1,
+                0,
+                1
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 1,
+              "size": [
+                1,
+                1,
+                1
+              ],
+              "color": [
+                1,
+                0,
+                1,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "smartbomb_01",
+      "label": "Smartbomb 01",
+      "category": "area-effect",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/smartbomb_01.TVPJ",
+        "sha256": "3043C3C2CF89B03092D010910C123F3F935D57939A3C73B330BA0E6AC51514D3",
+        "bytes": 1441
+      },
+      "compiled": {
+        "sha256": "B0EBD51E7B0093E24623A25F49F0370D4146404DD7A53CD745664D5F4D05F8B6",
+        "bytes": 1172,
+        "aliases": [
+          "smartbomb_01.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "star1.dds",
+          "status": "present",
+          "bytes": 87508,
+          "sha256": "78A4BFD77231A2307B054A4FC6C8D1A311B462D420552BBD9617EEB9F784AD21",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/star1.dds",
+          "publicUrl": "/assets/particles/archive/star1.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 1,
+          "defaultSize": 3,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            0.25,
+            0.25,
+            0.25
+          ],
+          "power": 0,
+          "lifetimeSeconds": 3,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\star1.dds",
+          "textureFile": "star1.dds",
+          "defaultColor": [
+            0.75,
+            0.5,
+            0,
+            1
+          ],
+          "generationSpeedMilliseconds": 1,
+          "gravityEnabled": false,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.1,
+              "size": [
+                512,
+                512,
+                512
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 1,
+              "size": [
+                512,
+                512,
+                512
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "type": "billboard",
+          "maxParticles": 64,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            0
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            1,
+            1,
+            1
+          ],
+          "power": 200,
+          "lifetimeSeconds": 3,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\star1.dds",
+          "textureFile": "star1.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 1,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 1,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 0.1,
+              "size": [
+                8,
+                8,
+                8
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "id": 2,
+              "timeSeconds": 3,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "smoketrail_01",
+      "label": "Smoketrail 01",
+      "category": "trail",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/smoketrail_01.TVPJ",
+        "sha256": "D5A4A8F5D59882F12C499A604A28CDF6B60A992D90DECC81082D54704918B255",
+        "bytes": 685
+      },
+      "compiled": {
+        "sha256": "8358DFC8AAC9454814FD097B7F6EC199BFF2398B5777F7D15FDEB21C688537AC",
+        "bytes": 704,
+        "aliases": [
+          "smoketrail_01.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "Glow2.dds",
+          "status": "present",
+          "bytes": 65664,
+          "sha256": "6DCF8614A1445EC2ABF851DC84BE7725FBD9790995E7313FF0DEDF8557E135B0",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/Glow2.dds",
+          "publicUrl": "/assets/particles/archive/Glow2.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 1500,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            1
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            0,
+            0,
+            0
+          ],
+          "power": 10,
+          "lifetimeSeconds": 1,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            0.3,
+            0.3,
+            0.3,
+            0.3
+          ],
+          "generationSpeedMilliseconds": 10,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "color": [
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 1,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    },
+    {
+      "id": "trail_01",
+      "label": "Trail 01",
+      "category": "trail",
+      "availability": "readable-compiled",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "source": {
+        "path": "Yanik C++ BCKUP/Media/PartSys/resources/trail_01.TVPJ",
+        "sha256": "124D31878F57FC633CB4EC5A5F2E80140FF915D7B4E4C4303116EFD9F05BBCAE",
+        "bytes": 1306
+      },
+      "compiled": {
+        "sha256": "E372CD5473A4EFDAFB4FDD1FD5A10D7E76C973465B46E621F775947266324E3A",
+        "bytes": 1076,
+        "aliases": [
+          "trail_01.TVP"
+        ]
+      },
+      "textureBindings": [
+        {
+          "name": "Glow2.dds",
+          "status": "present",
+          "bytes": 65664,
+          "sha256": "6DCF8614A1445EC2ABF851DC84BE7725FBD9790995E7313FF0DEDF8557E135B0",
+          "source": "Yanik C++ BCKUP/Media/PartSys/resources/Glow2.dds",
+          "publicUrl": "/assets/particles/archive/Glow2.dds"
+        }
+      ],
+      "emitters": [
+        {
+          "id": 0,
+          "type": "billboard",
+          "maxParticles": 100,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            1
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            0,
+            0,
+            1
+          ],
+          "power": 15,
+          "lifetimeSeconds": 1,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            1,
+            1,
+            1,
+            0.5
+          ],
+          "generationSpeedMilliseconds": 10,
+          "gravityEnabled": false,
+          "gravity": [
+            0,
+            0,
+            0
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 1,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                2,
+                2,
+                2
+              ],
+              "color": [
+                0.75,
+                0.75,
+                1,
+                0.5
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 1,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                0,
+                0.125,
+                1,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "type": "billboard",
+          "maxParticles": 32,
+          "defaultSize": 1,
+          "location": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            0,
+            1
+          ],
+          "directional": true,
+          "randomDirectionFactor": [
+            1,
+            1,
+            0.5
+          ],
+          "power": 1,
+          "lifetimeSeconds": 2,
+          "shape": 0,
+          "textureBinding": "\\\\Storage\\Exchange\\Particles\\Glow2.dds",
+          "textureFile": "Glow2.dds",
+          "defaultColor": [
+            0,
+            1,
+            1,
+            1
+          ],
+          "generationSpeedMilliseconds": 100,
+          "gravityEnabled": true,
+          "gravity": [
+            0,
+            0,
+            20
+          ],
+          "particleChange": 1,
+          "blending": 4,
+          "alphaTest": true,
+          "alphaReference": 0,
+          "depthWrite": false,
+          "boxSize": [
+            0,
+            0,
+            0
+          ],
+          "sphereRadius": 0,
+          "looping": true,
+          "keyframes": [
+            {
+              "id": 0,
+              "timeSeconds": 0,
+              "size": [
+                2,
+                2,
+                2
+              ],
+              "color": [
+                1,
+                0.5,
+                0,
+                1
+              ]
+            },
+            {
+              "id": 1,
+              "timeSeconds": 1,
+              "size": [
+                0,
+                0,
+                0
+              ],
+              "color": [
+                1,
+                1,
+                1,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "attractors": []
+    }
+  ],
+  "opaque": [
+    {
+      "id": "explosion3",
+      "label": "Explosion3",
+      "category": "explosion",
+      "availability": "opaque-compiled-only",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "compiled": {
+        "sha256": "C0BB473ECC02725B3000A0F7D2D8343B48F2543952FB21C008B34F77A354DE45",
+        "bytes": 2708,
+        "aliases": [
+          "explosion3.TVP"
+        ]
+      },
+      "reason": "Compiled TVP survives without a readable TVPJ companion; emitter fields are intentionally not guessed."
+    },
+    {
+      "id": "impact1",
+      "label": "Impact1",
+      "category": "impact",
+      "availability": "opaque-compiled-only",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "compiled": {
+        "sha256": "13EDD41D8E3DFA1385CC5289206672F59A1520708E86241A247B0BE769CBB411",
+        "bytes": 821,
+        "aliases": [
+          "impact1.TVP"
+        ]
+      },
+      "reason": "Compiled TVP survives without a readable TVPJ companion; emitter fields are intentionally not guessed."
+    },
+    {
+      "id": "shot1",
+      "label": "Shot1",
+      "category": "weapon",
+      "availability": "opaque-compiled-only",
+      "runtimeEvidence": "no-graphysx-callsite-located",
+      "compiled": {
+        "sha256": "6E779B070B74276670511B7995D00622BD2E2B2F982885F84411D30FAE18D634",
+        "bytes": 807,
+        "aliases": [
+          "shot1.TVP"
+        ]
+      },
+      "reason": "Compiled TVP survives without a readable TVPJ companion; emitter fields are intentionally not guessed."
+    }
+  ],
+  "fidelityBoundary": {
+    "exact": "TVPJ emitter/attractor fields, compiled/readable hashes, exact aliases and surviving DDS bytes.",
+    "adapted": "Seeded component-random direction, fixed-step integration, batched point sprites, inspection normalization and approximate Three.js blend mapping.",
+    "unavailable": "TV3D private RNG/integrator/blend-state recipes and emitter/particle interpolation implementation."
+  }
+}

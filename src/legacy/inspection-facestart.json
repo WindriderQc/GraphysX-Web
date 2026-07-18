@@ -1,0 +1,161 @@
+{
+  "activeCamera": "Camera",
+  "blenderVersion": [
+    2,
+    79,
+    0
+  ],
+  "images": [
+    {
+      "exists": false,
+      "filepath": "E:\\Media\\Datalake\\blenderModel\\..\\..\\Desktop\\Teen Goblin\\steampunk-kid-front.png",
+      "name": "steampunk-kid-front.png",
+      "packed": false,
+      "size": [
+        0,
+        0
+      ]
+    },
+    {
+      "exists": false,
+      "filepath": "E:\\Media\\Datalake\\blenderModel\\..\\..\\Desktop\\Teen Goblin\\steampunk-kid-side.png",
+      "name": "steampunk-kid-side.png",
+      "packed": false,
+      "size": [
+        0,
+        0
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "alpha": 1.0,
+      "diffuse": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "diffuseIntensity": 0.8,
+      "name": "Material",
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specularIntensity": 0.5,
+      "textures": [
+        {
+          "filepath": null,
+          "image": null,
+          "packed": false,
+          "texture": "Tex"
+        }
+      ]
+    }
+  ],
+  "meshTotals": {
+    "polygons": 48,
+    "vertices": 69
+  },
+  "objectCount": 2,
+  "objects": [
+    {
+      "dimensions": [
+        2.941267,
+        2.412838,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        0.0,
+        8.183591
+      ],
+      "mesh": {
+        "edges": 120,
+        "materials": [],
+        "name": "Plane",
+        "polygons": 48,
+        "uvLayers": [],
+        "vertices": 69
+      },
+      "name": "Plane",
+      "parent": null,
+      "rotationEuler": [
+        1.570796,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "MESH"
+    },
+    {
+      "camera": {
+        "clipEnd": 100.0,
+        "clipStart": 0.1,
+        "lens": 35.0,
+        "worldForward": [
+          -0.651558,
+          0.61417,
+          -0.445271
+        ],
+        "worldLocation": [
+          7.481132,
+          -6.50764,
+          5.343665
+        ],
+        "worldUp": [
+          -0.324013,
+          0.305421,
+          0.895396
+        ]
+      },
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        7.481132,
+        -6.50764,
+        5.343665
+      ],
+      "name": "Camera",
+      "parent": null,
+      "rotationEuler": [
+        1.109319,
+        0.0,
+        0.814928
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "CAMERA"
+    }
+  ],
+  "objectsByType": {
+    "CAMERA": 1,
+    "MESH": 1
+  },
+  "scene": "Scene",
+  "schema": "graphysx.archive-blend-inspection/v1",
+  "source": {
+    "bytes": 495772,
+    "path": "E:\\Media\\Datalake\\blenderModel\\FaceStart.blend",
+    "sha256": "FB96B7493DEEDC16460E5D7D60DEB6FF835DE5A0641D38FA524055AD32E461E9"
+  },
+  "world": "World"
+}

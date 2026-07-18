@@ -1,0 +1,1127 @@
+{
+  "source": "WindriderQc/SBQC/public/data/quakes.csv",
+  "sourceCommit": "42c210f3599c55038efde8fad61d9fe5bf5c0f24",
+  "selection": "top 160 events by magnitude from 8698 valid/source rows",
+  "events": [
+    {
+      "time": "2025-01-05T17:18:45.914Z",
+      "latitude": 12.9949,
+      "longitude": -89.2264,
+      "depthKm": 46,
+      "magnitude": 6.2
+    },
+    {
+      "time": "2025-01-05T17:24:42.885Z",
+      "latitude": -3.7586,
+      "longitude": 151.7531,
+      "depthKm": 10,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-06T00:52:11.514Z",
+      "latitude": -10.734,
+      "longitude": 161.868,
+      "depthKm": 97.196,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-06T09:47:56.872Z",
+      "latitude": 37.2692,
+      "longitude": 21.5571,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-06T15:26:46.849Z",
+      "latitude": 33.4298,
+      "longitude": 87.0306,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-06T16:44:39.772Z",
+      "latitude": 35.8134,
+      "longitude": 142.081,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-06T16:59:50.092Z",
+      "latitude": 28.1592,
+      "longitude": 52.3923,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-06T19:28:39.667Z",
+      "latitude": 28.1251,
+      "longitude": 52.4035,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-06T21:20:45.820Z",
+      "latitude": -17.9111,
+      "longitude": 167.9443,
+      "depthKm": 35,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-07T01:05:16.716Z",
+      "latitude": 28.5733,
+      "longitude": 87.375,
+      "depthKm": 10,
+      "magnitude": 7.1
+    },
+    {
+      "time": "2025-01-07T01:09:13.529Z",
+      "latitude": 28.7537,
+      "longitude": 87.1968,
+      "depthKm": 10,
+      "magnitude": 5.4
+    },
+    {
+      "time": "2025-01-07T01:10:54.880Z",
+      "latitude": 28.8057,
+      "longitude": 87.1343,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-07T01:13:27.197Z",
+      "latitude": 28.4421,
+      "longitude": 87.4659,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-07T01:14:42.239Z",
+      "latitude": 28.5282,
+      "longitude": 87.356,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-07T01:24:25.911Z",
+      "latitude": 28.4845,
+      "longitude": 87.4575,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-07T01:31:59.676Z",
+      "latitude": 28.8053,
+      "longitude": 87.608,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-07T01:37:13.647Z",
+      "latitude": 28.7969,
+      "longitude": 87.2321,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-07T01:43:49.062Z",
+      "latitude": 28.3885,
+      "longitude": 87.2633,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-07T02:14:28.496Z",
+      "latitude": 33.4365,
+      "longitude": 87.154,
+      "depthKm": 10.975,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-07T04:15:30.187Z",
+      "latitude": -17.6376,
+      "longitude": -176.843,
+      "depthKm": 370.004,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-07T08:25:52.992Z",
+      "latitude": 8.9514,
+      "longitude": 39.9514,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-07T08:31:32.423Z",
+      "latitude": 31.6482,
+      "longitude": 138.3252,
+      "depthKm": 375.978,
+      "magnitude": 5.6
+    },
+    {
+      "time": "2025-01-07T09:06:56.835Z",
+      "latitude": -19.0501,
+      "longitude": -173.1429,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-07T16:38:59.524Z",
+      "latitude": -37.6508,
+      "longitude": 77.9555,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-07T16:44:13.388Z",
+      "latitude": -37.5114,
+      "longitude": 77.8848,
+      "depthKm": 14.62,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-07T17:23:48.611Z",
+      "latitude": 24.2827,
+      "longitude": 142.0996,
+      "depthKm": 534.482,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-07T17:52:21.667Z",
+      "latitude": -8.2744,
+      "longitude": 119.3299,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-08T00:53:27.774Z",
+      "latitude": 8.9711,
+      "longitude": 40.068,
+      "depthKm": 10,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-08T03:51:21.676Z",
+      "latitude": 28.4359,
+      "longitude": 87.3648,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-08T07:44:22.997Z",
+      "latitude": 34.7767,
+      "longitude": 97.4386,
+      "depthKm": 10,
+      "magnitude": 5.7
+    },
+    {
+      "time": "2025-01-08T14:16:01.276Z",
+      "latitude": 53.2102,
+      "longitude": -34.9607,
+      "depthKm": 14.743,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-08T21:31:26.488Z",
+      "latitude": -59.8769,
+      "longitude": -61.4639,
+      "depthKm": 10,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-08T22:07:42.085Z",
+      "latitude": 9.1968,
+      "longitude": 40.1478,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-09T10:52:34.448Z",
+      "latitude": -53.6228,
+      "longitude": 139.6238,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-09T16:31:45.323Z",
+      "latitude": 13.599,
+      "longitude": -89.7339,
+      "depthKm": 95,
+      "magnitude": 5.8
+    },
+    {
+      "time": "2025-01-10T01:34:39.509Z",
+      "latitude": -19.7318,
+      "longitude": -175.1239,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-10T08:14:31.688Z",
+      "latitude": 5.9161,
+      "longitude": -77.4676,
+      "depthKm": 10,
+      "magnitude": 5.6
+    },
+    {
+      "time": "2025-01-10T14:31:33.877Z",
+      "latitude": -35.8785,
+      "longitude": -102.8521,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-11T00:19:00.755Z",
+      "latitude": 9.2627,
+      "longitude": 40.1665,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-11T02:52:45.178Z",
+      "latitude": -32.0369,
+      "longitude": 138.7396,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-11T03:33:38.729Z",
+      "latitude": 15.8515,
+      "longitude": -92.3265,
+      "depthKm": 204.068,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-11T07:51:49.299Z",
+      "latitude": 13.7311,
+      "longitude": 145.0762,
+      "depthKm": 99.185,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-11T15:19:44.301Z",
+      "latitude": 8.9888,
+      "longitude": 40.3597,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-11T20:13:28.437Z",
+      "latitude": -16.2385,
+      "longitude": -173.1676,
+      "depthKm": 35,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-11T20:21:16.299Z",
+      "latitude": -32.4427,
+      "longitude": -177.8914,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-12T08:32:50.219Z",
+      "latitude": 18.5928,
+      "longitude": -103.2404,
+      "depthKm": 39,
+      "magnitude": 6.2
+    },
+    {
+      "time": "2025-01-12T10:46:33.659Z",
+      "latitude": 18.7088,
+      "longitude": -103.2117,
+      "depthKm": 66.215,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-12T15:03:57.239Z",
+      "latitude": -17.8504,
+      "longitude": -178.4485,
+      "depthKm": 608.249,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-12T19:49:15.327Z",
+      "latitude": 8.857,
+      "longitude": 39.903,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-12T22:21:10.383Z",
+      "latitude": 28.273,
+      "longitude": 142.147,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-13T00:19:47.789Z",
+      "latitude": 6.6922,
+      "longitude": 123.8707,
+      "depthKm": 544.738,
+      "magnitude": 5.4
+    },
+    {
+      "time": "2025-01-13T02:20:53.853Z",
+      "latitude": -2.2896,
+      "longitude": -79.8333,
+      "depthKm": 82.652,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-13T07:08:05.633Z",
+      "latitude": -6.2073,
+      "longitude": 147.0196,
+      "depthKm": 82.174,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-13T11:41:08.345Z",
+      "latitude": 5.446,
+      "longitude": 125.1913,
+      "depthKm": 20.152,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-13T11:47:08.141Z",
+      "latitude": -7.5829,
+      "longitude": 127.6268,
+      "depthKm": 138.933,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-13T12:19:32.300Z",
+      "latitude": 31.8525,
+      "longitude": 131.53,
+      "depthKm": 39,
+      "magnitude": 6.8
+    },
+    {
+      "time": "2025-01-13T12:24:06.394Z",
+      "latitude": 7.1085,
+      "longitude": -35.1915,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-13T12:54:35.705Z",
+      "latitude": -2.7892,
+      "longitude": 139.5266,
+      "depthKm": 34.022,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-13T12:57:38.151Z",
+      "latitude": 28.5007,
+      "longitude": 87.4667,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-13T12:58:22.340Z",
+      "latitude": 28.525,
+      "longitude": 87.4439,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-13T16:14:57.255Z",
+      "latitude": 32.0119,
+      "longitude": 131.7181,
+      "depthKm": 40.319,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-13T17:52:08.992Z",
+      "latitude": -31.5501,
+      "longitude": 57.9047,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-14T04:12:22.044Z",
+      "latitude": -16.2905,
+      "longitude": -175.4253,
+      "depthKm": 322.588,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-14T08:05:21.537Z",
+      "latitude": 64.6751,
+      "longitude": -17.4925,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-14T14:09:23.276Z",
+      "latitude": -4.4955,
+      "longitude": -105.0641,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-14T14:55:56.802Z",
+      "latitude": 8.8181,
+      "longitude": 40.0164,
+      "depthKm": 10,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-14T16:16:58.337Z",
+      "latitude": -8.8399,
+      "longitude": 118.6339,
+      "depthKm": 11.772,
+      "magnitude": 4.9
+    },
+    {
+      "time": "2025-01-14T17:12:39.509Z",
+      "latitude": 31.7088,
+      "longitude": 131.8103,
+      "depthKm": 37.94,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-14T19:02:04.454Z",
+      "latitude": 7.2649,
+      "longitude": -35.4565,
+      "depthKm": 10,
+      "magnitude": 5.6
+    },
+    {
+      "time": "2025-01-14T19:40:24.723Z",
+      "latitude": -5.0573,
+      "longitude": 149.6962,
+      "depthKm": 391.805,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-15T02:08:41.039Z",
+      "latitude": -2.8196,
+      "longitude": 141.4749,
+      "depthKm": 26.993,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-15T04:20:48.770Z",
+      "latitude": -30.4172,
+      "longitude": -178.142,
+      "depthKm": 55.443,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-15T07:32:21.504Z",
+      "latitude": -17.4025,
+      "longitude": 168.1387,
+      "depthKm": 76.576,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-15T12:06:36.363Z",
+      "latitude": -55.7407,
+      "longitude": -29.371,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-15T21:37:01.783Z",
+      "latitude": -10.9571,
+      "longitude": 165.9879,
+      "depthKm": 48.106,
+      "magnitude": 5.7
+    },
+    {
+      "time": "2025-01-16T13:27:32.835Z",
+      "latitude": -20.859,
+      "longitude": 169.2535,
+      "depthKm": 30.562,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-17T01:10:20.894Z",
+      "latitude": -24.9547,
+      "longitude": -14.0354,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-17T01:10:39.950Z",
+      "latitude": -6.9961,
+      "longitude": 154.9462,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-17T08:52:00.007Z",
+      "latitude": -39.049,
+      "longitude": 46.3528,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-17T08:55:52.080Z",
+      "latitude": 8.4942,
+      "longitude": 125.8032,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-17T18:21:56.964Z",
+      "latitude": -6.983,
+      "longitude": 154.9752,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-18T04:41:51.836Z",
+      "latitude": -34.5369,
+      "longitude": -177.7881,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-18T08:37:46.156Z",
+      "latitude": 0.0554,
+      "longitude": 126.7219,
+      "depthKm": 57.984,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-18T19:31:29.157Z",
+      "latitude": 24.8753,
+      "longitude": 123.4066,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-18T19:44:17.981Z",
+      "latitude": 24.9402,
+      "longitude": 123.4562,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-18T23:15:38.268Z",
+      "latitude": -58.5842,
+      "longitude": 158.4779,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-20T05:57:17.075Z",
+      "latitude": 10.3092,
+      "longitude": 91.7575,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-20T08:38:43.517Z",
+      "latitude": -11.3327,
+      "longitude": 165.8206,
+      "depthKm": 35,
+      "magnitude": 5.6
+    },
+    {
+      "time": "2025-01-20T10:43:02.069Z",
+      "latitude": 13.9717,
+      "longitude": 120.6437,
+      "depthKm": 136.164,
+      "magnitude": 5.4
+    },
+    {
+      "time": "2025-01-20T11:20:37.163Z",
+      "latitude": 7.4395,
+      "longitude": 91.6679,
+      "depthKm": 10,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-20T14:46:13.061Z",
+      "latitude": -23.9012,
+      "longitude": -111.7931,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-20T14:49:37.698Z",
+      "latitude": -23.8013,
+      "longitude": -112.0219,
+      "depthKm": 10,
+      "magnitude": 5.4
+    },
+    {
+      "time": "2025-01-20T16:17:26.768Z",
+      "latitude": 23.1678,
+      "longitude": 120.5468,
+      "depthKm": 16,
+      "magnitude": 6
+    },
+    {
+      "time": "2025-01-20T16:26:24.700Z",
+      "latitude": 23.134,
+      "longitude": 120.4374,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-20T21:03:12.174Z",
+      "latitude": 28.4295,
+      "longitude": 87.4664,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-21T05:13:36.168Z",
+      "latitude": -27.8015,
+      "longitude": -13.1545,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-21T05:36:11.541Z",
+      "latitude": -27.484,
+      "longitude": -13.3293,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-21T05:47:51.148Z",
+      "latitude": 13.4344,
+      "longitude": 144.3969,
+      "depthKm": 137.242,
+      "magnitude": 5.5
+    },
+    {
+      "time": "2025-01-21T06:05:14.352Z",
+      "latitude": -27.4829,
+      "longitude": -13.4632,
+      "depthKm": 10,
+      "magnitude": 5.5
+    },
+    {
+      "time": "2025-01-21T11:15:30.546Z",
+      "latitude": -3.7368,
+      "longitude": 151.5823,
+      "depthKm": 10,
+      "magnitude": 5.5
+    },
+    {
+      "time": "2025-01-21T11:55:04.853Z",
+      "latitude": 52.6777,
+      "longitude": -166.6143,
+      "depthKm": 17.822,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-21T13:40:18.062Z",
+      "latitude": 23.3572,
+      "longitude": -108.2196,
+      "depthKm": 10,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-21T18:48:21.736Z",
+      "latitude": 21.4057,
+      "longitude": 121.0111,
+      "depthKm": 11.338,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-21T20:00:51.944Z",
+      "latitude": -3.0273,
+      "longitude": 148.4775,
+      "depthKm": 10,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-21T20:38:43.890Z",
+      "latitude": 39.4549,
+      "longitude": 26.2835,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-21T21:44:48.870Z",
+      "latitude": 9.1415,
+      "longitude": 40.0752,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-22T09:47:50.927Z",
+      "latitude": -20.7618,
+      "longitude": 168.5595,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-22T18:26:08.476Z",
+      "latitude": -42.1,
+      "longitude": 88.2908,
+      "depthKm": 10,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-22T23:39:46.079Z",
+      "latitude": 10.131,
+      "longitude": 125.1803,
+      "depthKm": 9,
+      "magnitude": 5.7
+    },
+    {
+      "time": "2025-01-23T03:41:09.640Z",
+      "latitude": 7.6743,
+      "longitude": 122.0595,
+      "depthKm": 10,
+      "magnitude": 5.4
+    },
+    {
+      "time": "2025-01-23T11:14:03.975Z",
+      "latitude": -12.8369,
+      "longitude": 168.919,
+      "depthKm": 621.413,
+      "magnitude": 5.6
+    },
+    {
+      "time": "2025-01-23T19:23:36.273Z",
+      "latitude": 24.6223,
+      "longitude": 95.093,
+      "depthKm": 117.542,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-24T16:19:04.914Z",
+      "latitude": -18.1024,
+      "longitude": -69.411,
+      "depthKm": 126.858,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-24T18:26:51.855Z",
+      "latitude": -3.9254,
+      "longitude": 150.7678,
+      "depthKm": 10,
+      "magnitude": 5.7
+    },
+    {
+      "time": "2025-01-25T11:49:17.147Z",
+      "latitude": 23.2059,
+      "longitude": 120.4598,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-25T23:38:52.817Z",
+      "latitude": 23.1043,
+      "longitude": 120.4278,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-26T06:13:37.104Z",
+      "latitude": -17.7298,
+      "longitude": 168.1157,
+      "depthKm": 39.109,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-26T11:24:03.017Z",
+      "latitude": -59.5687,
+      "longitude": -26.4695,
+      "depthKm": 115.248,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-26T13:37:33.048Z",
+      "latitude": 53.174,
+      "longitude": 159.9854,
+      "depthKm": 69.822,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-26T21:22:39.176Z",
+      "latitude": -7.3754,
+      "longitude": 156.0364,
+      "depthKm": 35,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-26T22:39:13.242Z",
+      "latitude": 53.1631,
+      "longitude": -167.1982,
+      "depthKm": 59,
+      "magnitude": 5.6
+    },
+    {
+      "time": "2025-01-27T00:18:49.228Z",
+      "latitude": 22.6832,
+      "longitude": 121.1171,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-27T06:55:03.771Z",
+      "latitude": -17.7488,
+      "longitude": 168.0791,
+      "depthKm": 35,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-27T14:51:22.666Z",
+      "latitude": 17.9803,
+      "longitude": 145.9636,
+      "depthKm": 134.085,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-28T00:29:10.279Z",
+      "latitude": -41.1149,
+      "longitude": -90.5806,
+      "depthKm": 10,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-28T00:59:47.957Z",
+      "latitude": -41.1967,
+      "longitude": -90.2695,
+      "depthKm": 10,
+      "magnitude": 5.7
+    },
+    {
+      "time": "2025-01-28T05:09:28.200Z",
+      "latitude": -14.395,
+      "longitude": -76.4099,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-28T06:52:34.959Z",
+      "latitude": -28.1647,
+      "longitude": -175.9982,
+      "depthKm": 10,
+      "magnitude": 5.8
+    },
+    {
+      "time": "2025-01-28T10:23:35.781Z",
+      "latitude": -30.3455,
+      "longitude": -177.9954,
+      "depthKm": 66.882,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-28T10:26:33.262Z",
+      "latitude": -40.5905,
+      "longitude": 175.7885,
+      "depthKm": 44.778,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-28T14:53:34.573Z",
+      "latitude": 0.4607,
+      "longitude": 121.1882,
+      "depthKm": 99.303,
+      "magnitude": 5.5
+    },
+    {
+      "time": "2025-01-28T21:06:32.751Z",
+      "latitude": -18.1857,
+      "longitude": -174.0233,
+      "depthKm": 78.076,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-29T00:50:41.029Z",
+      "latitude": -4.006,
+      "longitude": 121.8356,
+      "depthKm": 9.222,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-29T01:32:59.222Z",
+      "latitude": -53.4247,
+      "longitude": -41.4854,
+      "depthKm": 10,
+      "magnitude": 5.6
+    },
+    {
+      "time": "2025-01-30T02:11:53.871Z",
+      "latitude": 23.1725,
+      "longitude": 120.5796,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-01-30T02:18:24.310Z",
+      "latitude": -2.6097,
+      "longitude": 126.8607,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-01-30T04:40:08.488Z",
+      "latitude": 62.9564,
+      "longitude": -156.323,
+      "depthKm": 10.4,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-01-31T09:04:51.145Z",
+      "latitude": 0.5358,
+      "longitude": -25.1724,
+      "depthKm": 10,
+      "magnitude": 5.3
+    },
+    {
+      "time": "2025-01-31T11:03:42.669Z",
+      "latitude": 3.1766,
+      "longitude": 97.0339,
+      "depthKm": 68.595,
+      "magnitude": 5.8
+    },
+    {
+      "time": "2025-01-31T12:04:10.653Z",
+      "latitude": -10.4918,
+      "longitude": 163.3161,
+      "depthKm": 10,
+      "magnitude": 5.4
+    },
+    {
+      "time": "2025-01-31T23:02:29.151Z",
+      "latitude": -0.8239,
+      "longitude": -78.1491,
+      "depthKm": 10,
+      "magnitude": 5.5
+    },
+    {
+      "time": "2025-02-01T00:40:16.828Z",
+      "latitude": -8.6877,
+      "longitude": 110.3241,
+      "depthKm": 71.576,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-02-01T06:49:23.200Z",
+      "latitude": -9.0925,
+      "longitude": 158.6813,
+      "depthKm": 9.985,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-02-01T11:05:50.805Z",
+      "latitude": -0.8503,
+      "longitude": -78.126,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-02-01T12:43:25.136Z",
+      "latitude": -23.1732,
+      "longitude": 171.393,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-02-01T13:52:26.140Z",
+      "latitude": -23.6189,
+      "longitude": -176.8231,
+      "depthKm": 191.89,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-02-02T07:37:21.271Z",
+      "latitude": -4.6321,
+      "longitude": 127.0349,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-02-02T13:54:16.715Z",
+      "latitude": -30.7109,
+      "longitude": -71.4793,
+      "depthKm": 43.185,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-02-02T15:43:11.981Z",
+      "latitude": 10.2743,
+      "longitude": 125.4967,
+      "depthKm": 123.151,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-02-03T06:36:04.293Z",
+      "latitude": 65.4395,
+      "longitude": -169.0918,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-02-03T09:29:43.374Z",
+      "latitude": 36.6485,
+      "longitude": 25.6354,
+      "depthKm": 10,
+      "magnitude": 5
+    },
+    {
+      "time": "2025-02-03T10:31:54.175Z",
+      "latitude": -20.4457,
+      "longitude": -174.7603,
+      "depthKm": 8.407,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-02-03T12:17:41.001Z",
+      "latitude": 36.665,
+      "longitude": 25.6875,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-02-03T13:02:18.534Z",
+      "latitude": -22.8411,
+      "longitude": 171.3094,
+      "depthKm": 10,
+      "magnitude": 5.5
+    },
+    {
+      "time": "2025-02-03T19:15:00.680Z",
+      "latitude": 28.7013,
+      "longitude": 130.9469,
+      "depthKm": 35.999,
+      "magnitude": 5.4
+    },
+    {
+      "time": "2025-02-03T21:35:50.862Z",
+      "latitude": 2.9875,
+      "longitude": 128.1873,
+      "depthKm": 101,
+      "magnitude": 5.9
+    },
+    {
+      "time": "2025-02-04T01:40:33.545Z",
+      "latitude": -38.94,
+      "longitude": -92.496,
+      "depthKm": 10,
+      "magnitude": 5.7
+    },
+    {
+      "time": "2025-02-04T02:46:06.292Z",
+      "latitude": 36.5816,
+      "longitude": 25.636,
+      "depthKm": 10,
+      "magnitude": 5.1
+    },
+    {
+      "time": "2025-02-04T09:36:46.018Z",
+      "latitude": -5.5488,
+      "longitude": 151.8717,
+      "depthKm": 58.08,
+      "magnitude": 5.2
+    },
+    {
+      "time": "2025-02-04T13:04:13.366Z",
+      "latitude": 36.4572,
+      "longitude": 25.5722,
+      "depthKm": 10,
+      "magnitude": 5.3
+    }
+  ]
+}

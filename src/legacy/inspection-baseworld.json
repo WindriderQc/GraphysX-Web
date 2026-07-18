@@ -1,0 +1,256 @@
+{
+  "activeCamera": "Camera",
+  "blenderVersion": [
+    2,
+    79,
+    0
+  ],
+  "images": [],
+  "materials": [
+    {
+      "alpha": 1.0,
+      "diffuse": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "diffuseIntensity": 0.8,
+      "name": "Material",
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specularIntensity": 0.5,
+      "textures": [
+        {
+          "filepath": null,
+          "image": null,
+          "packed": false,
+          "texture": "Tex"
+        }
+      ]
+    }
+  ],
+  "meshTotals": {
+    "polygons": 45,
+    "vertices": 49
+  },
+  "objectCount": 5,
+  "objects": [
+    {
+      "dimensions": [
+        0.026879,
+        1.497566,
+        0.244578
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.680252,
+        0.02999,
+        0.077031
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [],
+        "name": "Cube.001",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube.001",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        0.036664,
+        0.036664,
+        0.036664
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.299232,
+        0.299232,
+        0.299232
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.004904,
+        0.001589,
+        0.182968
+      ],
+      "mesh": {
+        "edges": 64,
+        "materials": [],
+        "name": "Cone",
+        "polygons": 33,
+        "uvLayers": [],
+        "vertices": 33
+      },
+      "name": "Cone",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        0.149616,
+        0.149616,
+        0.149616
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        1.432635,
+        1.51371,
+        0.078756
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mesh": {
+        "edges": 12,
+        "materials": [
+          "Material"
+        ],
+        "name": "Cube",
+        "polygons": 6,
+        "uvLayers": [],
+        "vertices": 8
+      },
+      "name": "Cube",
+      "parent": null,
+      "rotationEuler": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        -0.716317,
+        0.756855,
+        0.039378
+      ],
+      "type": "MESH"
+    },
+    {
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "light": {
+        "color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "distance": 29.999983,
+        "energy": 1.0,
+        "kind": "POINT"
+      },
+      "location": [
+        4.076245,
+        1.005454,
+        5.903862
+      ],
+      "name": "Lamp",
+      "parent": null,
+      "rotationEuler": [
+        0.650328,
+        0.055217,
+        1.866391
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "LAMP"
+    },
+    {
+      "camera": {
+        "clipEnd": 100.0,
+        "clipStart": 0.1,
+        "lens": 35.0,
+        "worldForward": [
+          -0.654862,
+          0.610666,
+          -0.445245
+        ],
+        "worldLocation": [
+          7.481132,
+          -6.50764,
+          5.343665
+        ],
+        "worldUp": [
+          -0.31737,
+          0.312469,
+          0.895343
+        ]
+      },
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "hidden": false,
+      "layers": [
+        0
+      ],
+      "location": [
+        7.481132,
+        -6.50764,
+        5.343665
+      ],
+      "name": "Camera",
+      "parent": null,
+      "rotationEuler": [
+        1.109319,
+        0.010817,
+        0.814928
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "CAMERA"
+    }
+  ],
+  "objectsByType": {
+    "CAMERA": 1,
+    "LAMP": 1,
+    "MESH": 3
+  },
+  "scene": "Scene",
+  "schema": "graphysx.archive-blend-inspection/v1",
+  "source": {
+    "bytes": 459752,
+    "path": "E:\\Media\\Datalake\\blenderModel\\BaseWorld.blend",
+    "sha256": "FD4F454A181424767297739AA6CECE519BC1BCBB4A0F8735E4DA5633E85F6E9A"
+  },
+  "world": "World"
+}

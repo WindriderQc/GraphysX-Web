@@ -1,0 +1,84 @@
+name: Deploy GraphysX Web
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: graphysx-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production release
+        run: npm run build
+
+      - name: Package release
+        run: tar -czf "graphysx-${GITHUB_SHA}.tgz" -C dist .
+
+      - name: Upload release
+        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: graphysx-${{ github.sha }}.tgz
+          target: /var/www/html/graphysx/incoming
+          overwrite: true
+          timeout: 120s
+          command_timeout: 30m
+
+      - name: Activate release
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            set -eu
+            base=/var/www/html/graphysx
+            sha='${{ github.sha }}'
+            case "$sha" in
+              *[!0-9a-f]*|'') echo 'Invalid release SHA' >&2; exit 1 ;;
+            esac
+            archive="$base/incoming/graphysx-$sha.tgz"
+            releases="$base/releases"
+            staging="$releases/.staging-$sha"
+            release="$releases/$sha"
+            test -f "$archive"
+            mkdir -p "$releases"
+            rm -rf -- "$staging"
+            mkdir -p "$staging"
+            tar -xzf "$archive" -C "$staging"
+            test -f "$staging/index.html"
+            rm -rf -- "$release"
+            mv -- "$staging" "$release"
+            ln -sfn "releases/$sha" "$base/current.next"
+            mv -Tf "$base/current.next" "$base/current"
+            rm -f -- "$archive"
+            find "$releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\0' \
+              | sort -z -nr \
+              | tail -z -n +3 \
+              | cut -z -d ' ' -f 2- \
+              | xargs -0r rm -rf --
