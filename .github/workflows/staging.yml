@@ -8,10 +8,17 @@ name: Staging (UGBrutal)
 # and `npm run serve:staging` running as a background service on that box.
 # See ops/README-staging.md.
 
+# Manual only. This deliberately does NOT trigger on push: without a registered runner
+# every push queued a job that could never start, waited 24h and failed — pure noise.
+# Day-to-day prototyping on UGBrutal does not need this at all; `npm run dev -- --host`
+# serves the app on the LAN with hot-reload, and `npm run serve:staging` serves a real
+# production build. Register a runner and enable a push trigger only if unattended
+# staging deploys ever become worth the setup.
+#
+# SECURITY: this repository is public. Never add a `pull_request:` trigger here while a
+# self-hosted runner is registered — a fork's PR would then execute arbitrary code on
+# UGBrutal.
 on:
-  push:
-    branches:
-      - "**"
   workflow_dispatch:
 
 permissions:
