@@ -1888,6 +1888,10 @@ export class RaceScene {
     return this.agentWorld?.exportDefinition() ?? null;
   }
 
+  exportAgentWorldDocument(): AgentWorldDefinition | null {
+    return this.agentWorld?.exportDocument() ?? null;
+  }
+
   saveAgentWorld(name: string): AgentWorldResult<string> {
     const result = this.agentWorld?.save(name) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
     this.afterAgentWorldMutation(result.ok);

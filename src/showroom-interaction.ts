@@ -79,6 +79,9 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
           transform: { position: [round(hit.point.x), round(hit.point.y) + 9, round(hit.point.z)] },
           material: { color: pickColor(dropCount), roughness: 0.28, metalness: 0.35, emissive: "#08222b", emissiveIntensity: 0.4 },
           physics: { mode: "dynamic", mass: 1.1, material: "ball", restitution: 0.52 },
+          // Playing in a scene is not authoring it: these balls exist for the visit and are
+          // dropped by `exportDocument()`, so the showroom never accumulates them.
+          ephemeral: true,
           tags: ["showroom", "dropped"],
         });
         if (result.ok) {

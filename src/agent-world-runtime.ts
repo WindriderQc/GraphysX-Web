@@ -263,6 +263,12 @@ export type AgentWorldEntityDefinition = {
   visible?: boolean;
   castShadow?: boolean;
   receiveShadow?: boolean;
+  /**
+   * Session-only: this entity exists while the scene is being lived in, and is dropped by
+   * `exportDocument()`. A ball you threw is ephemeral; a ball you placed in the editor is
+   * not. Defaults to false, so authored content persists unless it says otherwise.
+   */
+  ephemeral?: boolean;
   tags?: string[];
   behaviors?: AgentWorldBehavior[];
   interactions?: AgentWorldInteraction[];
@@ -276,6 +282,8 @@ export type AgentWorldEntityPatch = {
   visible?: boolean;
   castShadow?: boolean;
   receiveShadow?: boolean;
+  /** Promote a thrown object into the document, or demote an authored one to session-only. */
+  ephemeral?: boolean;
   tags?: string[];
   intensity?: number;
   distance?: number;
@@ -350,6 +358,8 @@ export type AgentWorldEntityState = {
   visible: boolean;
   castShadow: boolean;
   receiveShadow: boolean;
+  /** True when this entity is session-only and will not survive a save or a reload. */
+  ephemeral: boolean;
   tags: string[];
   behaviors: Array<{ id: string; type: AgentWorldBehavior["type"] }>;
   interactions: Array<{ id: string; label: string; type: AgentWorldInteraction["type"]; targetIds: string[]; impulse?: AgentWorldVector3; relativePoint?: AgentWorldVector3 }>;
@@ -483,7 +493,10 @@ export type GraphysXAgentWorldApi = {
   observe(query?: AgentWorldQuery): AgentWorldObservation | null;
   pause(paused: boolean): AgentWorldResult<boolean>;
   step(seconds?: number): AgentWorldResult<number>;
+  /** Full runtime snapshot, ephemeral entities included. */
   export(): AgentWorldDefinition | null;
+  /** The persistable document: authored content only, session spawns dropped. */
+  exportDocument(): AgentWorldDefinition | null;
   save(name: string): AgentWorldResult<string>;
   load(nameOrDefinition: string | AgentWorldDefinition): AgentWorldResult<AgentWorldState>;
 };
@@ -506,6 +519,7 @@ type ResolvedEntity = {
   visible: boolean;
   castShadow: boolean;
   receiveShadow: boolean;
+  ephemeral: boolean;
   tags: string[];
   behaviors: Array<AgentWorldBehavior & { id: string }>;
   interactions: Array<AgentWorldInteraction & { id: string; label: string }>;
@@ -921,6 +935,11 @@ export class AgentWorldRuntime {
     return query ? { ...state, matches: this.query(query) } : state;
   }
 
+  /**
+   * Full-fidelity export, ephemeral entities included. This is the *runtime* snapshot:
+   * `transaction()` and `undo()` depend on it round-tripping everything, otherwise undoing
+   * an edit would quietly delete every ball anyone had thrown.
+   */
   exportDefinition(): AgentWorldDefinition {
     return {
       schema: GRAPHYSX_AGENT_WORLD_SCHEMA,
@@ -931,10 +950,37 @@ export class AgentWorldRuntime {
     };
   }
 
+  /**
+   * The persistable document: what the scene *is*, minus what merely happened in it.
+   *
+   * Living in a scene and authoring one are different acts. Balls dropped on the showroom
+   * floor, objects an inhabitant spawned mid-session — those are session state, and saving
+   * them would mean a scene silently accumulates every visit's debris. Editor changes are
+   * authoring and persist; everything marked `ephemeral` is dropped here.
+   */
+  exportDocument(): AgentWorldDefinition {
+    // Children of an ephemeral entity cannot outlive their parent, so they go too.
+    const dropped = new Set<string>();
+    for (const { definition } of this.entities.values()) {
+      if (definition.ephemeral) dropped.add(definition.id);
+    }
+    for (const id of [...dropped]) for (const descendant of this.descendantIds(id)) dropped.add(descendant);
+    return {
+      schema: GRAPHYSX_AGENT_WORLD_SCHEMA,
+      id: this.definition.id,
+      label: this.definition.label,
+      environment: deepClone(this.environment),
+      entities: [...this.entities.values()]
+        .filter(({ definition }) => !dropped.has(definition.id))
+        .map(({ definition }) => serializeEntity(definition))
+    };
+  }
+
   save(name: string): AgentWorldResult<string> {
     const safeName = name.trim();
     if (!safeName) return this.failure("Snapshot name cannot be empty");
-    const definition = this.exportDefinition();
+    // Saving is an authoring act, so it stores the document rather than the live runtime.
+    const definition = this.exportDocument();
     this.savedWorlds.set(safeName, deepClone(definition));
     try {
       window.localStorage.setItem(`graphysx.agent-world.v2.${safeName}`, JSON.stringify(definition));
@@ -1085,6 +1131,7 @@ export class AgentWorldRuntime {
     if (patch.visible !== undefined) definition.visible = patch.visible;
     if (patch.castShadow !== undefined) definition.castShadow = patch.castShadow;
     if (patch.receiveShadow !== undefined) definition.receiveShadow = patch.receiveShadow;
+    if (patch.ephemeral !== undefined) definition.ephemeral = patch.ephemeral;
     if (patch.tags) definition.tags = uniqueStrings(patch.tags);
     if (patch.intensity !== undefined) definition.intensity = clamp(patch.intensity, 0, 100);
     if (patch.distance !== undefined) definition.distance = clamp(patch.distance, 0, 1000);
@@ -1416,6 +1463,7 @@ export class AgentWorldRuntime {
       visible: source.visible ?? true,
       castShadow: source.castShadow ?? true,
       receiveShadow: source.receiveShadow ?? true,
+      ephemeral: source.ephemeral ?? false,
       tags: uniqueStrings(source.tags ?? []),
       behaviors,
       interactions
@@ -1462,6 +1510,7 @@ export class AgentWorldRuntime {
       visible: runtime.object.visible,
       castShadow: runtime.definition.castShadow,
       receiveShadow: runtime.definition.receiveShadow,
+      ephemeral: runtime.definition.ephemeral,
       tags: [...runtime.definition.tags],
       behaviors: runtime.definition.behaviors.map((behavior) => ({ id: behavior.id, type: behavior.type })),
       interactions: runtime.definition.interactions.map((interaction) => ({
@@ -1964,6 +2013,8 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     visible: definition.visible,
     castShadow: definition.castShadow,
     receiveShadow: definition.receiveShadow,
+    // Only emitted when true, so ordinary authored documents stay unchanged.
+    ...(definition.ephemeral ? { ephemeral: true } : {}),
     tags: [...definition.tags],
     behaviors: deepClone(definition.behaviors),
     interactions: deepClone(definition.interactions)

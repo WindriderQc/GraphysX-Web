@@ -8,7 +8,7 @@ export const GRAPHYSX_AGENT_TOOL_EVENT_SCHEMA = "graphysx.agent-tool-event/v1" a
 const TOOL_PATHS = [
   "open", "demo", "state", "assets", "textures", "skies", "emitters", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select",
   "attachBehavior", "detachBehavior", "interact", "prefabs", "spawnPrefab", "starters", "loadStarter",
-  "transaction", "commit", "history", "undo", "query", "observe", "pause", "step", "export", "save", "load",
+  "transaction", "commit", "history", "undo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
   "levels.tiles", "levels.tileSemantics", "levels.active", "levels.list", "levels.get", "levels.create", "levels.remove",
   "levels.open", "levels.region", "levels.patch", "levels.fill", "levels.resize", "levels.transaction", "levels.undo",
   "levels.importAscii", "levels.exportAscii", "levels.play"
@@ -23,6 +23,8 @@ const MUTATING_TOOLS = new Set<string>([
 
 const TOOL_SUMMARIES: Record<string, string> = {
   state: "Read the complete serializable 3D world state.",
+  export: "Export the full runtime snapshot, including session-only entities.",
+  exportDocument: "Export the persistable scene document: authored content only, without session-only spawns.",
   textures: "Discover stable archive texture IDs and their intended visual uses.",
   skies: "List the per-scene skybox sets recovered from the archive.",
   emitters: "List the archive particle-emitter presets, with provenance, budgets and keyframe ramps, for spawning `emitter` entities.",
@@ -35,7 +37,6 @@ const TOOL_SUMMARIES: Record<string, string> = {
   commit: "Apply an actor-attributed, revision-guarded change set.",
   query: "Find entities by ID, type, tag, label, or world-space radius.",
   observe: "Read world state with optional query matches.",
-  export: "Return the complete portable v2 world definition.",
   "levels.region": "Read a bounded region of a named semantic level.",
   "levels.transaction": "Apply multiple named-level edits atomically."
 };

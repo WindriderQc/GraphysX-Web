@@ -3353,6 +3353,7 @@ export class PrototypeApp {
       pauseAgentWorld: (paused: boolean) => this.raceScene.pauseAgentWorld(paused),
       stepAgentWorld: (seconds = 1 / 60) => this.raceScene.stepAgentWorld(seconds),
       exportAgentWorld: () => this.raceScene.exportAgentWorld(),
+      exportAgentWorldDocument: () => this.raceScene.exportAgentWorldDocument(),
       saveAgentWorld: (name: string) => this.raceScene.saveAgentWorld(name),
       loadAgentWorld: (nameOrDefinition: string | AgentWorldDefinition) => {
         this.ensureAgentWorldStudio();
@@ -3474,6 +3475,7 @@ export class PrototypeApp {
       pause: debugApi.pauseAgentWorld,
       step: debugApi.stepAgentWorld,
       export: debugApi.exportAgentWorld,
+      exportDocument: debugApi.exportAgentWorldDocument,
       save: debugApi.saveAgentWorld,
       load: debugApi.loadAgentWorld
     } satisfies GraphysXAgentWorldApi;

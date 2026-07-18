@@ -128,6 +128,7 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
     pause: (paused) => runtime.setPaused(paused),
     step: (seconds) => runtime.step(seconds),
     export: () => runtime.exportDefinition(),
+    exportDocument: () => runtime.exportDocument(),
     save: (name) => runtime.save(name),
     load: (nameOrDefinition) => runtime.load(nameOrDefinition),
   } satisfies GraphysXAgentWorldApi;
