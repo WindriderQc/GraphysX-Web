@@ -8,6 +8,12 @@ export type AgentWorldSkyDescriptor = {
   description: string;
   /** Longest cube-face edge in pixels, so scenes can avoid upscaling a low-res set. */
   resolution: number;
+  /**
+   * Approximate horizon colour of the set. Distance fog is tinted with this so terrain
+   * fades into the sky it sits under instead of ending at a hard plane edge. Fog does not
+   * fight a skybox — fog of the *wrong colour* does.
+   */
+  horizonColor: string;
   source: "GraphysX archive";
 };
 
@@ -26,6 +32,7 @@ export const GRAPHYSX_AGENT_WORLD_SKIES = [
     extension: "jpg",
     description: "Bright daylight sky with soft cloud banding. The default showroom sky.",
     resolution: 512,
+    horizonColor: "#aec8dc",
     source: "GraphysX archive"
   },
   {
@@ -35,6 +42,7 @@ export const GRAPHYSX_AGENT_WORLD_SKIES = [
     extension: "jpg",
     description: "Warm hazy valley horizon with distant terrain silhouettes.",
     resolution: 512,
+    horizonColor: "#9dab92",
     source: "GraphysX archive"
   },
   {
@@ -44,6 +52,7 @@ export const GRAPHYSX_AGENT_WORLD_SKIES = [
     extension: "jpg",
     description: "Stylised high-contrast cloudscape from the GraphysX demo sets.",
     resolution: 256,
+    horizonColor: "#a3b8c6",
     source: "GraphysX archive"
   },
   {
@@ -53,6 +62,7 @@ export const GRAPHYSX_AGENT_WORLD_SKIES = [
     extension: "jpg",
     description: "Pale overcast winter dome, low contrast and cool in tone.",
     resolution: 256,
+    horizonColor: "#c6d0d7",
     source: "GraphysX archive"
   },
   {
@@ -62,6 +72,7 @@ export const GRAPHYSX_AGENT_WORLD_SKIES = [
     extension: "jpg",
     description: "Deep night sky with a faint horizon glow.",
     resolution: 512,
+    horizonColor: "#1d2a38",
     source: "GraphysX archive"
   },
   {
@@ -71,6 +82,7 @@ export const GRAPHYSX_AGENT_WORLD_SKIES = [
     extension: "bmp",
     description: "Dense starfield. Highest fidelity set, but 18 MB of uncompressed BMP — prefer Clear Night unless the stars are the subject.",
     resolution: 1024,
+    horizonColor: "#0c1320",
     source: "GraphysX archive"
   }
 ] as const satisfies readonly AgentWorldSkyDescriptor[];

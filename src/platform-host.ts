@@ -203,7 +203,7 @@ export class PlatformHost {
 
     const cached = this.skyCache.get(descriptor.id);
     if (cached) {
-      this.setSkyTexture(cached, token);
+      this.setSkyTexture(cached, descriptor.horizonColor, token);
       return;
     }
     new CubeTextureLoader().load(
@@ -212,22 +212,24 @@ export class PlatformHost {
         texture.colorSpace = SRGBColorSpace;
         const oriented = orientArchiveCubeTexture(texture);
         this.skyCache.set(descriptor.id, oriented);
-        this.setSkyTexture(oriented, token);
+        this.setSkyTexture(oriented, descriptor.horizonColor, token);
       },
       undefined,
       () => console.warn(`Could not load sky "${descriptor.id}" from ${descriptor.basePath}`),
     );
   }
 
-  private setSkyTexture(texture: CubeTexture, token: number): void {
+  private setSkyTexture(texture: CubeTexture, horizonColor: string, token: number): void {
     if (this.disposed || token !== this.skyToken) return;
     this.scene.background = texture;
     // Light the scene from the sky it actually sits under.
     const pmrem = new PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromCubemap(texture).texture;
     pmrem.dispose();
-    // A sky reads as open space; distance fog would fight it.
-    this.scene.fog = null;
+    // Keep distance fog, tinted to the sky's horizon, so ground fades into the skyline
+    // instead of ending at a hard plane edge. Dropping the fog here was a mistake: fog
+    // does not fight a skybox, fog of the wrong colour does.
+    this.scene.fog = new Fog(horizonColor, 38, 138);
   }
 
   private tick(): void {
