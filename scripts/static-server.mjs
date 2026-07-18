@@ -1,6 +1,5 @@
 import http from "node:http";
-import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 // Dependency-free static file server with SPA fallback. Used by scripts/verify.mjs to
@@ -91,19 +90,28 @@ export function startStaticServer({ root, resolveRoot, port = 4188, host = "127.
       return;
     }
 
-    res.writeHead(200, {
-      "content-type": MIME[path.extname(file).toLowerCase()] || "application/octet-stream",
-      "cache-control": "no-store",
-    });
-
-    // Stream with explicit lifecycle handling. Without this, a read error or a client
-    // that goes away mid-transfer surfaces as an unhandled 'error' event and the peer
-    // sees ERR_CONNECTION_RESET — which showed up as an intermittent smoke failure on
-    // the largest chunk. A flaky gate is worse than no gate, so this is not cosmetic.
-    const stream = createReadStream(file);
-    stream.on("error", () => res.destroy());
-    res.on("close", () => stream.destroy());
-    stream.pipe(res);
+    // Buffer the file and send it with an explicit Content-Length rather than streaming.
+    //
+    // Streaming without a Content-Length means chunked transfer encoding, and any hiccup
+    // part-way through a large response reaches the browser as ERR_CONNECTION_RESET. That
+    // showed up as an intermittent "failed to fetch dynamically imported module" on the
+    // 1.4 MB prototype-app chunk, which failed whichever smoke happened to request it —
+    // so the same root cause looked like unrelated flakiness in three different tests.
+    // An earlier attempt added stream error handling, which reduced it but did not remove
+    // it. Deterministic framing does. These files are a few MB at most and this serves
+    // localhost, so buffering costs nothing that matters.
+    try {
+      const body = await readFile(file);
+      res.writeHead(200, {
+        "content-type": MIME[path.extname(file).toLowerCase()] || "application/octet-stream",
+        "content-length": body.length,
+        "cache-control": "no-store",
+      });
+      res.end(body);
+    } catch {
+      if (!res.headersSent) res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      res.end("Read failed");
+    }
   });
 
   // Headless Chromium opens many keep-alive connections and can leave one idle while it
