@@ -1,6 +1,6 @@
 import {
   AdditiveBlending,
-  Blending,
+  type Blending,
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,

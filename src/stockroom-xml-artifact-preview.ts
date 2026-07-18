@@ -9,8 +9,8 @@ import {
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   StockroomXmlArtifactEnvironment,
-  StockroomXmlArtifactEnvironmentState,
-  StockroomXmlArtifactId
+  type StockroomXmlArtifactEnvironmentState,
+  type StockroomXmlArtifactId
 } from "./stockroom-xml-artifact-environment";
 
 function requireElement<T extends Element>(selector: string): T {

@@ -1,5 +1,3 @@
-import "./styles.css";
-
 const root = document.querySelector<HTMLDivElement>("#app");
 
 if (!root) {
@@ -11,7 +9,9 @@ const mode = params.get("host");
 
 if (mode === "legacy") {
   // The archive-revival player on race-scene, kept as a reference fallback only.
-  void import("./prototype-app").then(({ PrototypeApp }) => new PrototypeApp(root));
+  // `styles.css` is entirely prototype-app selectors, so it loads with this route rather
+  // than blocking first paint on the default one.
+  void Promise.all([import("./styles.css"), import("./prototype-app")]).then(([, { PrototypeApp }]) => new PrototypeApp(root));
 } else {
   // Default product: the clean PlatformHost. No param → welcome showroom; `?host=editor`
   // (or `standalone`) opens straight into the Scene Editor on the demo world.

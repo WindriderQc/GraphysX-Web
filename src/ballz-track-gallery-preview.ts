@@ -14,11 +14,11 @@ import {
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   BALLZ_TRACK_GALLERY_ASSET_IDS,
-  BallzTrackGalleryAssetId,
-  BallzTrackGalleryCameraProfile,
+  type BallzTrackGalleryAssetId,
+  type BallzTrackGalleryCameraProfile,
   BallzTrackGalleryEnvironment,
-  BallzTrackGalleryEnvironmentState,
-  BallzTrackGalleryMaterialMode
+  type BallzTrackGalleryEnvironmentState,
+  type BallzTrackGalleryMaterialMode
 } from "./ballz-track-gallery-environment";
 
 function requireElement<T extends Element>(selector: string): T {

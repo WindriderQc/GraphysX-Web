@@ -1,13 +1,13 @@
 import {
   CUBZ_TVA_CLIPS,
   CUBZ_TVA_FIDELITY,
-  CubzOpenSample,
-  CubzPlaybackDirection,
-  CubzQuaternion,
-  CubzRotationSample,
-  CubzRotationSelection,
+  type CubzOpenSample,
+  type CubzPlaybackDirection,
+  type CubzQuaternion,
+  type CubzRotationSample,
+  type CubzRotationSelection,
   CubzTvaPlayback,
-  CubzTvaPlaybackSample,
+  type CubzTvaPlaybackSample,
   createCubzOpenPlayback,
   createCubzRotationPlayback
 } from "./cubz-tva-animation";

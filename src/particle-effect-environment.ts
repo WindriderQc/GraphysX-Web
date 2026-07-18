@@ -1,6 +1,6 @@
 import {
   AdditiveBlending,
-  Blending,
+  type Blending,
   Color,
   Group,
   Mesh,

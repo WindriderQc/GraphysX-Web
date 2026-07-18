@@ -3,7 +3,7 @@ import {
   Box3,
   Box3Helper,
   BufferGeometry,
-  ColorRepresentation,
+  type ColorRepresentation,
   DirectionalLight,
   DoubleSide,
   EdgesGeometry,

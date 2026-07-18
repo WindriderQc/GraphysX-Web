@@ -14,12 +14,12 @@ import {
   WebGLRenderer
 } from "three";
 import {
-  CubxActorClickIndex,
-  CubxActorClipFamily,
+  type CubxActorClickIndex,
+  type CubxActorClipFamily,
   CubxActorLineageEnvironment,
-  CubxActorLineageState,
-  CubxActorPairIndex,
-  CubxActorPlaybackDirection
+  type CubxActorLineageState,
+  type CubxActorPairIndex,
+  type CubxActorPlaybackDirection
 } from "./cubx-actor-lineage-environment";
 
 type InspectorSnapshot = {

@@ -20,7 +20,9 @@ import {
 } from "./agent-world-runtime";
 import { createAgentWorldApi } from "./agent-world-api";
 import { createGraphysXAgentToolBridge, type GraphysXAgentToolBridge } from "./agent-world-bridge";
-import { PlatformEditor } from "./platform-editor";
+// Type-only: the editor module (and the ~348 KB TransformControls gizmo stack it pulls in)
+// is loaded on demand, so the showroom front door never pays for chrome it keeps hidden.
+import type { PlatformEditor } from "./platform-editor";
 
 export interface PlatformHostOptions {
   /** Initial world to render. Defaults to the built-in demonstration world. */
@@ -51,9 +53,15 @@ export class PlatformHost {
   readonly api: GraphysXAgentWorldApi;
   /** The discoverable agent tool bridge over the same API. */
   readonly bridge: GraphysXAgentToolBridge;
-  /** The human editing layer (null when constructed with `interactive: false`). */
-  readonly editor: PlatformEditor | null;
+  /**
+   * The human editing layer. Null until it has been loaded — it is created eagerly when
+   * the host starts with the editor visible, and lazily on {@link enterEditor} otherwise.
+   * Await {@link editorReady} if you need it deterministically.
+   */
+  editor: PlatformEditor | null = null;
 
+  private editorLoad: Promise<PlatformEditor | null> | null = null;
+  private readonly interactive: boolean;
   private readonly controls: OrbitControls;
   private readonly clock = new Clock();
   private readonly onResize = () => this.resize();
@@ -98,19 +106,10 @@ export class PlatformHost {
     this.api = createAgentWorldApi(this.world);
     this.bridge = createGraphysXAgentToolBridge(this.api);
 
-    this.editor = options.interactive === false
-      ? null
-      : new PlatformEditor({
-          renderer: this.renderer,
-          scene: this.scene,
-          camera: this.camera,
-          orbit: this.controls,
-          world: this.world,
-          api: this.api,
-          container: this.container,
-          onEnvironmentChanged: () => this.applyEnvironment(),
-        });
-    if (this.editor && options.editorVisible === false) this.editor.setVisible(false);
+    // Interactive hosts that start with the editor showing need it immediately; the
+    // showroom starts hidden and defers the load until the visitor enters the editor.
+    this.interactive = options.interactive !== false;
+    if (this.interactive && options.editorVisible !== false) void this.editorReady();
 
     window.addEventListener("resize", this.onResize);
     this.resize();
@@ -122,10 +121,34 @@ export class PlatformHost {
     return this.frame;
   }
 
+  /**
+   * Load the human editing layer if it isn't loaded yet. Resolves to null on a host
+   * constructed with `interactive: false`. Safe to call repeatedly — one load is shared.
+   */
+  editorReady(): Promise<PlatformEditor | null> {
+    if (!this.interactive) return Promise.resolve(null);
+    this.editorLoad ??= import("./platform-editor").then(({ PlatformEditor }) => {
+      if (this.disposed) return null;
+      this.editor = new PlatformEditor({
+        renderer: this.renderer,
+        scene: this.scene,
+        camera: this.camera,
+        orbit: this.controls,
+        world: this.world,
+        api: this.api,
+        container: this.container,
+        onEnvironmentChanged: () => this.applyEnvironment(),
+      });
+      return this.editor;
+    });
+    return this.editorLoad;
+  }
+
   /** Reveal the editor and stop the showroom's idle orbit. */
-  enterEditor(): void {
+  async enterEditor(): Promise<void> {
     this.controls.autoRotate = false;
-    this.editor?.setVisible(true);
+    const editor = await this.editorReady();
+    editor?.setVisible(true);
   }
 
   /** Re-read background/fog from the runtime's environment (call after env edits). */

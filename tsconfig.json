@@ -9,6 +9,11 @@
     "allowImportingTsExtensions": false,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // Type-only imports must say so. This is what keeps the platform's `import type
+    // { MapEditorTile } from "./race-scene"` edges erased at build time — without it,
+    // dropping the `type` keyword would silently pull the race-scene monolith onto the
+    // default bundle with a green build.
+    "verbatimModuleSyntax": true,
     "noEmit": true,
     "strict": true,
     "noUnusedLocals": true,
