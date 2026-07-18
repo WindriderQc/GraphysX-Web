@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    # Pushes to main are verified by the `verify` job in deploy.yml, which gates the
+    # production release on this same workflow. Skipping main here avoids a duplicate run.
+    branches-ignore:
+      - main
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, build, headless smokes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for headless smokes
+        run: npx playwright install --with-deps chromium
+
+      # Typecheck + production build, then drive the built output through every product
+      # route in a real browser: default showroom, ?host=standalone (agent API + editor),
+      # and ?host=legacy. Fails on any console or page error.
+      - name: Verify release
+        run: npm run verify
+
+      - name: Upload smoke screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verify-screenshots-${{ github.sha }}
+          path: output/verify
+          if-no-files-found: warn
+          retention-days: 7

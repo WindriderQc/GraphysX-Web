@@ -1,7 +1,11 @@
 import { chromium } from "playwright";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
 
 const EXE = process.env.SMOKE_CHROMIUM || undefined;
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
+const ART = process.env.SMOKE_ARTIFACTS || path.resolve("output/smoke");
+mkdirSync(ART, { recursive: true });
 
 const consoleErrors = [];
 const pageErrors = [];
@@ -40,16 +44,18 @@ try {
   // so this is intentionally movement-based, not distance-thresholded).
   out.autoOrbiting = out.framesAdvanced > 0 && out.camMoved > 0.004;
 
-  await page.screenshot({ path: "/tmp/smoke-showroom.png", fullPage: false });
+  await page.screenshot({ path: path.join(ART, "showroom.png"), fullPage: false });
 
   await page.click(".gx-welcome button");
-  await page.waitForTimeout(500);
+  // The editor module is loaded on demand, so wait for it to mount rather than guessing.
+  await page.waitForSelector(".gx-ed-toolbar", { timeout: 15000 });
+  await page.waitForTimeout(200);
   out.editorVisibleAfterEnter = await page.evaluate(() => {
     const t = document.querySelector(".gx-ed-toolbar");
     return !!t && getComputedStyle(t).display !== "none";
   });
   out.welcomeGone = (await page.$(".gx-welcome")) === null;
-  await page.screenshot({ path: "/tmp/smoke-showroom-editor.png", fullPage: false });
+  await page.screenshot({ path: path.join(ART, "showroom-editor.png"), fullPage: false });
 } catch (e) {
   out.fatal = String(e);
 }

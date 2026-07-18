@@ -1,0 +1,74 @@
+name: Staging (UGBrutal)
+
+# Test deploy on the UGBrutal box (192.168.2.12). Every branch push builds, verifies, and
+# publishes to the LAN staging host at http://192.168.2.12:8099 — so a change can be seen
+# running on a real release before main ships it to production.
+#
+# Requires a self-hosted runner on UGBrutal with the labels [self-hosted, ugbrutal],
+# and `npm run serve:staging` running as a background service on that box.
+# See ops/README-staging.md.
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: graphysx-staging
+  cancel-in-progress: true
+
+jobs:
+  staging:
+    name: Build, verify, publish to LAN staging
+    runs-on: [self-hosted, ugbrutal]
+
+    env:
+      STAGING_ROOT: C:\graphysx-staging
+      STAGING_PORT: "8099"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for headless smokes
+        run: npx playwright install chromium
+
+      # Same gate as production CI: typecheck, build, and smoke every product route.
+      - name: Verify release
+        run: npm run verify
+
+      - name: Publish release to staging host
+        shell: pwsh
+        run: |
+          $sha = "${{ github.sha }}"
+          $releases = Join-Path $env:STAGING_ROOT "releases"
+          $target = Join-Path $releases $sha
+          New-Item -ItemType Directory -Force -Path $releases | Out-Null
+          if (Test-Path $target) { Remove-Item -Recurse -Force $target }
+          Copy-Item -Recurse -Force dist $target
+          # Flip the pointer last: the staging server re-reads it per request, so the
+          # switch to the new release is atomic and needs no restart.
+          Set-Content -Path (Join-Path $env:STAGING_ROOT "current.txt") -Value $sha -NoNewline
+          # Keep the two most recent releases.
+          Get-ChildItem $releases -Directory |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -Skip 2 |
+            Remove-Item -Recurse -Force
+
+      # Prove the published release actually serves, not just that it built.
+      - name: Smoke the live staging URL
+        run: npm run verify -- --base http://127.0.0.1:8099/
+
+      - name: Summary
+        shell: pwsh
+        run: |
+          "### Staging updated" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "Commit ``${{ github.sha }}`` is live at <http://192.168.2.12:8099/>" |
+            Out-File -Append $env:GITHUB_STEP_SUMMARY

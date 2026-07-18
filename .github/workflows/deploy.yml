@@ -14,7 +14,13 @@ permissions:
   contents: read
 
 jobs:
+  # Production is gated: typecheck, build, and the headless smokes across every product
+  # route must pass before anything is shipped to graphysx.specialblend.ca.
+  verify:
+    uses: ./.github/workflows/ci.yml
+
   deploy:
+    needs: verify
     runs-on: ubuntu-latest
 
     steps:

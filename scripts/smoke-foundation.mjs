@@ -1,9 +1,13 @@
 import { chromium } from "playwright";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
 
 // Point SMOKE_CHROMIUM at a Chromium binary if Playwright's own browser isn't installed;
 // otherwise leave unset and Playwright uses its managed build.
 const EXE = process.env.SMOKE_CHROMIUM || undefined;
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
+const ART = process.env.SMOKE_ARTIFACTS || path.resolve("output/smoke");
+mkdirSync(ART, { recursive: true });
 
 const consoleErrors = [];
 const pageErrors = [];
@@ -25,7 +29,7 @@ try {
   out.homeCardCount = await page.$$eval(".destination-card", (els) => els.length);
   out.homeModeIds = await page.$$eval(".destination-card", (els) => els.map((e) => e.getAttribute("data-mode-id") || e.getAttribute("data-world-family")));
   out.mentionsBallZ = (await page.textContent(".home-destinations").catch(() => "")).toLowerCase().includes("ballz");
-  await page.screenshot({ path: "/tmp/smoke-home.png", fullPage: false });
+  await page.screenshot({ path: path.join(ART, "legacy-home.png"), fullPage: false });
 
   // Open the Scene Editor (world-api-lab) via the generic data-mode-id dispatch.
   await page.click('.destination-card[data-mode-id="world-api-lab"]');
@@ -41,7 +45,7 @@ try {
       entityCount: state && Array.isArray(state.entities) ? state.entities.length : null,
     };
   });
-  await page.screenshot({ path: "/tmp/smoke-editor.png", fullPage: false });
+  await page.screenshot({ path: path.join(ART, "legacy-editor.png"), fullPage: false });
 } catch (e) {
   out.fatal = String(e);
 }
@@ -50,4 +54,13 @@ out.consoleErrors = consoleErrors;
 out.pageErrors = pageErrors;
 console.log(JSON.stringify(out, null, 2));
 await browser.close();
-process.exit(out.fatal || pageErrors.length ? 1 : 0);
+
+// The legacy route must still boot to the platform home (one destination card, no archive
+// framing) with the agent runtime live — otherwise this smoke passes on a blank page.
+const ok =
+  out.homeCardCount === 1 &&
+  !out.mentionsBallZ &&
+  !!out.editorState &&
+  out.editorState.hasGlobal &&
+  out.editorState.hasBridge;
+process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);

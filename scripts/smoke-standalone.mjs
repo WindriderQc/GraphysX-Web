@@ -1,7 +1,11 @@
 import { chromium } from "playwright";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
 
 const EXE = process.env.SMOKE_CHROMIUM || undefined;
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
+const ART = process.env.SMOKE_ARTIFACTS || path.resolve("output/smoke");
+mkdirSync(ART, { recursive: true });
 
 const consoleErrors = [];
 const pageErrors = [];
@@ -15,6 +19,8 @@ const out = {};
 try {
   await page.goto(BASE + "?host=standalone", { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: 20000 });
+  // The editor layer is a lazy import on this route too.
+  await page.waitForSelector(".gx-ed-toolbar", { timeout: 20000 });
   await page.waitForTimeout(500);
 
   out.hasCanvas = (await page.$("canvas")) !== null;
@@ -77,7 +83,7 @@ try {
     };
   });
   await page.waitForTimeout(500);
-  await page.screenshot({ path: "/tmp/smoke-standalone.png", fullPage: false });
+  await page.screenshot({ path: path.join(ART, "standalone.png"), fullPage: false });
 } catch (e) {
   out.fatal = String(e);
 }
