@@ -177,6 +177,51 @@ the authenticated, session-scoped relay — roadmap, not v1. Say so; don't fake 
   the monolithic archive shell does not ship.
 - Raw archives, evidence ledgers, restoration QA matrices, per-scene fidelity work.
 
+### 8.1 Reality check — what §8 describes vs. what ships today
+
+*Added 2026-07-18 after an inventory audit. §8 above is the **v1 target**, not current state.
+Tenet §11 is "honesty over theatre," so the gap is recorded rather than implied.*
+
+The decisive test for "graduated" is whether a capability is expressible in the
+`graphysx.agent-world/v2` model — reachable by the editor *and* the agent API. A behavior
+locked inside a legacy environment module (`?host=legacy` only) has **not** graduated.
+
+| §8 claim | Actual status |
+| --- | --- |
+| Welcome showroom as front door | **Ships.** |
+| Agent World API + 47-tool bridge | **Ships.** |
+| Save / load / export / import (v2 JSON + legacy XML) | **Real, API-only.** No UI on the default host. |
+| Scene Editor: outliner, gizmo, create/delete, pause/step | **Ships.** |
+| Scene Editor: inspector, materials/textures, behaviors, interactions, tags, undo, JSON Workbench | **Not on the default host.** That list describes the *legacy* prototype-app panel. |
+| Simulation systems (particles + ≥1 Nature-of-Code system) as editor entities | **None graduated.** Particles, flocking, force fields, DNA/evolutionary entities all exist — but only inside legacy modules (`particle-effect-environment.ts`, `nature-lab.ts`). Zero are v2 entities. |
+| Curated vocabulary: assets, models, textures, prefabs | **Partial.** 5 mesh assets + 11 textures + 5 prefabs reachable from v2, against ~120 MB vendored. Prefabs exist in the API but are absent from the editor UI. |
+| Browse Scenes + Games & Apps | **Not implemented.** |
+| 2D overlay capability in the scene model | **Does not exist** in any form. No layer concept in `AgentWorldDefinition`. |
+| Live local interaction (human + in-browser agent, one scene) | **Ships.** |
+| Atomic static-release deploy | **Ships**, now gated on CI (`ci.yml` → `deploy.yml`), with staging on UGBrutal. |
+
+Related corrections elsewhere in this spec:
+
+- **§3 pillar 3 ("behavior is first-class, not decoration")** — the six shipped behaviors
+  (spin, bob, orbit, pulse, look-at, follow-spline) are precisely decoration. No simulation
+  behavior exists in v2 yet. The pillar is the intent; it is not yet earned.
+- **§4 scene model** — of the listed simulation systems, only spline followers are real.
+- **§5 showroom** — the terrain is procedural sine displacement mounted as *host decoration*,
+  not a heightmap and not a v2 entity (invisible to `api.state()`, not selectable). There is
+  no water anywhere in the repo, reflective or otherwise. Click-to-focus is not implemented.
+- **§5 CubX navigator** — the showroom's CubX is eight plain boxes with a spin behavior, an
+  homage rather than the recovered assembly. There is no side menu or scene browser.
+- **§6 skyboxes** — 21 MB of correctly-oriented cube maps ship and are unreachable from the
+  default route; v2 `environment.background` is a single color string. The "sky ownership is
+  scoped" tenet (§11) currently has no v2 mechanism to be scoped *with*.
+
+**Highest-value next graduations** (from the audit, in order): particle emitter as a v2 entity
+type — the 16-preset library is already decoded, curated and vendored, so only a runtime is
+missing; flocking as a v2 behavior (§14 phase 4, implementation already exists in
+`nature-lab.ts`); a real heightmap-backed `terrain` entity, which also makes the showroom
+honest; `skybox` in `environment`; then the editor inspector, without which graduated
+vocabulary stays invisible to humans and pillar 2 (parity) is broken in the human direction.
+
 ## 9. Repo roles
 
 | Repo | Role | Deploys? |
