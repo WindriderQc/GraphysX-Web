@@ -33,6 +33,8 @@ export interface PlatformHostOptions {
   editorVisible?: boolean;
   /** Idle screensaver orbit (stops on first user interaction). Default false. */
   autoOrbit?: boolean;
+  /** Called when the visitor leaves the editor, so the host page can restore the welcome. */
+  onExitEditor?: () => void;
 }
 
 /**
@@ -62,6 +64,8 @@ export class PlatformHost {
 
   private editorLoad: Promise<PlatformEditor | null> | null = null;
   private readonly interactive: boolean;
+  private readonly autoOrbit: boolean;
+  private readonly onExitEditor?: () => void;
   private readonly controls: OrbitControls;
   private readonly clock = new Clock();
   private readonly onResize = () => this.resize();
@@ -109,6 +113,8 @@ export class PlatformHost {
     // Interactive hosts that start with the editor showing need it immediately; the
     // showroom starts hidden and defers the load until the visitor enters the editor.
     this.interactive = options.interactive !== false;
+    this.autoOrbit = options.autoOrbit === true;
+    this.onExitEditor = options.onExitEditor;
     if (this.interactive && options.editorVisible !== false) void this.editorReady();
 
     window.addEventListener("resize", this.onResize);
@@ -138,6 +144,8 @@ export class PlatformHost {
         api: this.api,
         container: this.container,
         onEnvironmentChanged: () => this.applyEnvironment(),
+        // Only offer a way out when there is a showroom to go back to.
+        onExit: this.autoOrbit ? () => this.exitEditor() : undefined,
       });
       return this.editor;
     });
@@ -149,6 +157,13 @@ export class PlatformHost {
     this.controls.autoRotate = false;
     const editor = await this.editorReady();
     editor?.setVisible(true);
+  }
+
+  /** Hide the editor and hand control back to the showroom. */
+  exitEditor(): void {
+    this.editor?.setVisible(false);
+    this.controls.autoRotate = this.autoOrbit;
+    this.onExitEditor?.();
   }
 
   /** Re-read background/fog from the runtime's environment (call after env edits). */

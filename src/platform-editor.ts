@@ -14,6 +14,8 @@ export interface PlatformEditorDeps {
   container: HTMLElement;
   /** Called after the world is replaced/cleared so the host can re-read env (sky/fog). */
   onEnvironmentChanged?: () => void;
+  /** Leave the editor and return to the showroom. Omit to hide the exit control. */
+  onExit?: () => void;
 }
 
 const round = (n: number): number => Math.round(n * 1000) / 1000;
@@ -40,6 +42,7 @@ export class PlatformEditor {
   private readonly panel: HTMLElement;
   private readonly outliner: HTMLElement;
   private readonly readout: HTMLElement;
+  private readonly inspector: HTMLElement;
 
   constructor(private readonly deps: PlatformEditorDeps) {
     this.gizmo = new TransformControls(deps.camera, deps.renderer.domElement);
@@ -76,6 +79,7 @@ export class PlatformEditor {
     this.panel = ui.panel;
     this.outliner = ui.outliner;
     this.readout = ui.readout;
+    this.inspector = ui.inspector;
     deps.container.append(ui.style, ui.toolbar, ui.panel);
     this.refresh();
   }
@@ -223,6 +227,7 @@ export class PlatformEditor {
     this.readout.textContent = this.selectedId
       ? `${this.selectedId} · ${this.gizmo.getMode()} · ${this.gizmo.space}`
       : `${entities.length} entities · rev ${state?.revision ?? 0} · click to select`;
+    this.renderInspector(entities.find((entity) => entity.id === this.selectedId) ?? null);
     this.outliner.replaceChildren(
       ...entities.map((entity) => {
         const row = document.createElement("button");
@@ -234,7 +239,68 @@ export class PlatformEditor {
     );
   }
 
-  private buildUi(): { style: HTMLStyleElement; toolbar: HTMLElement; panel: HTMLElement; outliner: HTMLElement; readout: HTMLElement } {
+  /**
+   * Per-selection editing: material colour, physics mode, and living behaviours. Every
+   * control is an ordinary `api.update` / `api.attachBehavior` call, so a human edit and
+   * an agent edit land in the same revision history.
+   */
+  private renderInspector(
+    entity: { id: string; type: string; material?: { color?: string } | null; physics?: { mode?: string } | null } | null,
+  ): void {
+    if (!entity) {
+      const empty = document.createElement("div");
+      empty.className = "gx-ed-empty";
+      empty.textContent = "Nothing selected — click an object, or add one from the library below.";
+      this.inspector.replaceChildren(empty);
+      return;
+    }
+
+    const colour = document.createElement("input");
+    colour.type = "color";
+    colour.value = /^#[0-9a-f]{6}$/i.test(entity.material?.color ?? "") ? entity.material!.color! : "#8ad9ff";
+    colour.addEventListener("input", () => {
+      this.deps.api.update(entity.id, { material: { color: colour.value } });
+    });
+
+    const physics = document.createElement("select");
+    for (const mode of ["static", "dynamic", "kinematic"] as const) {
+      const option = document.createElement("option");
+      option.value = mode;
+      option.textContent = mode;
+      physics.append(option);
+    }
+    physics.value = entity.physics?.mode ?? "static";
+    physics.addEventListener("change", () => {
+      this.deps.api.update(entity.id, { physics: { mode: physics.value as "static" | "dynamic" | "kinematic", mass: 1 } });
+      this.refresh();
+    });
+
+    const behaviours = document.createElement("div");
+    behaviours.className = "gx-ed-grid";
+    behaviours.append(
+      this.chip("+ Spin", () => { this.deps.api.attachBehavior(entity.id, { type: "spin", axis: "y", speedDegrees: 45 }); this.refresh(); }),
+      this.chip("+ Bob", () => { this.deps.api.attachBehavior(entity.id, { type: "bob", axis: "y", amplitude: 0.6, frequencyHz: 0.4 }); this.refresh(); }),
+      this.chip("+ Pulse", () => { this.deps.api.attachBehavior(entity.id, { type: "pulse", minimumScale: 0.85, maximumScale: 1.25, frequencyHz: 0.5 }); this.refresh(); }),
+      this.chip("No texture", () => { this.deps.api.update(entity.id, { material: { texture: null } }); this.refresh(); }),
+    );
+
+    this.inspector.replaceChildren(
+      this.field("Colour", colour),
+      this.field("Physics", physics),
+      behaviours,
+    );
+  }
+
+  private field(label: string, control: HTMLElement): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "gx-ed-field";
+    const name = document.createElement("span");
+    name.textContent = label;
+    row.append(name, control);
+    return row;
+  }
+
+  private buildUi(): { style: HTMLStyleElement; toolbar: HTMLElement; panel: HTMLElement; outliner: HTMLElement; readout: HTMLElement; inspector: HTMLElement } {
     const style = document.createElement("style");
     style.textContent = `
       .gx-ed-toolbar,.gx-ed-panel{position:fixed;z-index:20;font:12px/1.4 system-ui,sans-serif;color:#dbeff5;user-select:none}
@@ -249,10 +315,24 @@ export class PlatformEditor {
       .gx-ed-row{text-align:left;background:#0b2029;color:#cfe7ee;border:1px solid #143440;border-radius:7px;padding:5px 8px;cursor:pointer;font:11px/1.3 system-ui,sans-serif}
       .gx-ed-row--active{background:#2b7d93;border-color:#39a9c4;color:#fff}
       .gx-ed-sep{width:1px;height:20px;background:#1d4351;margin:0 2px}
+      .gx-ed-panel{overflow-y:auto}
+      .gx-ed-grid{display:flex;flex-wrap:wrap;gap:4px}
+      .gx-ed-chip{background:#0b2029;color:#cfe7ee;border:1px solid #143440;border-radius:6px;padding:4px 7px;cursor:pointer;font:10.5px/1.2 system-ui,sans-serif}
+      .gx-ed-chip:hover{background:#164256}
+      .gx-ed-field{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:11px;color:#9fd2df}
+      .gx-ed-field select,.gx-ed-field input{background:#0e2833;color:#dbeff5;border:1px solid #1d4351;border-radius:6px;padding:3px 5px;font:inherit;max-width:132px}
+      .gx-ed-field input[type=color]{padding:1px;width:40px;height:22px;cursor:pointer}
+      .gx-ed-empty{font-size:11px;color:#5f8b98;font-style:italic}
+      .gx-ed-exit{background:#14313d;border-color:#2b6478}
     `;
 
     const toolbar = document.createElement("div");
     toolbar.className = "gx-ed-toolbar";
+    if (this.deps.onExit) {
+      const exit = this.toolButton("← Showroom", () => this.deps.onExit?.());
+      exit.classList.add("gx-ed-exit");
+      toolbar.append(exit, this.sep());
+    }
     const modeButtons: Record<TransformControlsMode, HTMLButtonElement> = {
       translate: this.toolButton("Move (W)", () => this.setMode("translate")),
       rotate: this.toolButton("Rotate (E)", () => this.setMode("rotate")),
@@ -297,7 +377,12 @@ export class PlatformEditor {
       pauseButton.textContent = paused ? "Play" : "Pause";
       pauseButton.classList.toggle("gx-ed-on", paused);
     });
-    toolbar.append(pauseButton, this.toolButton("Step", () => { this.deps.api.step(); this.refresh(); }));
+    toolbar.append(
+      pauseButton,
+      this.toolButton("Step", () => { this.deps.api.step(); this.refresh(); }),
+      this.sep(),
+      this.toolButton("Undo", () => { this.deps.api.undo(); this.select(null); }),
+    );
     syncModeButtons();
 
     const panel = document.createElement("div");
@@ -312,9 +397,92 @@ export class PlatformEditor {
     listTitle.textContent = "Outliner";
     const outliner = document.createElement("div");
     outliner.className = "gx-ed-list";
-    panel.append(title, readout, listTitle, outliner);
 
-    return { style, toolbar, panel, outliner, readout };
+    // Inspector — rendered per selection in refresh().
+    const inspectorTitle = document.createElement("div");
+    inspectorTitle.className = "gx-ed-title";
+    inspectorTitle.textContent = "Inspector";
+    const inspector = document.createElement("div");
+    inspector.className = "gx-ed-section";
+
+    panel.append(title, readout, inspectorTitle, inspector, ...this.buildLibrary(), listTitle, outliner);
+
+    return { style, toolbar, panel, outliner, readout, inspector };
+  }
+
+  /**
+   * The curated vocabulary the API already exposes — prefabs, mesh assets, and textures.
+   * Every chip is an ordinary API call, so a human picking from the library produces the
+   * same revision an agent would.
+   */
+  private buildLibrary(): HTMLElement[] {
+    const out: HTMLElement[] = [];
+
+    const section = (label: string, chips: HTMLElement[]): void => {
+      if (!chips.length) return;
+      const heading = document.createElement("div");
+      heading.className = "gx-ed-title";
+      heading.textContent = label;
+      const grid = document.createElement("div");
+      grid.className = "gx-ed-grid";
+      grid.append(...chips);
+      out.push(heading, grid);
+    };
+
+    section(
+      "Prefabs",
+      this.deps.api.prefabs().map((prefab) =>
+        this.chip(prefab.label ?? prefab.id, () => {
+          this.addCounter += 1;
+          const result = this.deps.api.spawnPrefab(prefab.id as Parameters<GraphysXAgentWorldApi["spawnPrefab"]>[0], {
+            idPrefix: `edit-${prefab.id}-${this.addCounter}`,
+            position: [round(((this.addCounter % 4) - 1.5) * 4), 0, round((Math.floor(this.addCounter / 4) % 4 - 1.5) * 4)],
+          });
+          if (result.ok) this.refresh();
+        }),
+      ),
+    );
+
+    section(
+      "Models",
+      this.deps.api.assets().map((asset) =>
+        this.chip(asset.label ?? asset.id, () => {
+          this.addCounter += 1;
+          const id = `edit-model-${this.addCounter}`;
+          const result = this.deps.api.spawn({
+            id,
+            type: "model",
+            asset: { id: asset.id } as never,
+            transform: { position: [round(((this.addCounter % 4) - 1.5) * 3), 0, round((Math.floor(this.addCounter / 4) % 4 - 1.5) * 3)] },
+          });
+          if (result.ok) this.select(id);
+        }),
+      ),
+    );
+
+    section(
+      "Textures",
+      this.deps.api.textures().map((texture) =>
+        this.chip(texture.label ?? texture.id, () => {
+          if (!this.selectedId) return;
+          this.deps.api.update(this.selectedId, {
+            material: { texture: { id: texture.id as never, repeat: texture.defaultRepeat } },
+          });
+          this.refresh();
+        }),
+      ),
+    );
+
+    return out;
+  }
+
+  private chip(label: string, onClick: () => void): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "gx-ed-chip";
+    button.textContent = label;
+    button.addEventListener("click", onClick);
+    return button;
   }
 
   private toolButton(label: string, onClick: () => void): HTMLButtonElement {

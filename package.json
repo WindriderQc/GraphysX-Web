@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "verify": "node scripts/verify.mjs",
     "smoke:showroom": "node scripts/smoke-showroom.mjs",
+    "smoke:editor": "node scripts/smoke-editor.mjs",
     "smoke:standalone": "node scripts/smoke-standalone.mjs",
     "smoke:foundation": "node scripts/smoke-foundation.mjs",
     "serve:staging": "node scripts/staging-server.mjs",

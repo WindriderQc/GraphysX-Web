@@ -26,6 +26,9 @@ if (mode === "legacy") {
     const host = new PlatformHost(root, {
       autoOrbit: !editorFirst,
       editorVisible: editorFirst,
+      // Leaving the editor restores the welcome overlay, so the showroom is a place you
+      // can come back to rather than a one-way door.
+      onExitEditor: editorFirst ? undefined : () => mountWelcome(root, () => void host.enterEditor()),
     });
     Object.assign(window, {
       __GRAPHYSX_HOST__: host,
@@ -36,7 +39,7 @@ if (mode === "legacy") {
       composeShowroom(host.api);
       host.applyEnvironment();
       mountShowroomEnvironment(host.scene, host.renderer);
-      mountWelcome(root, () => host.enterEditor());
+      mountWelcome(root, () => void host.enterEditor());
     }
   });
 }
