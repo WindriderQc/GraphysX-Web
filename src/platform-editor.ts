@@ -10,6 +10,8 @@ import type {
   AgentWorldPhysicsMode,
   GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
+import type { AgentLevelState, GraphysXAgentLevelApi } from "./agent-level-library";
+import type { MapEditorTile } from "./race-scene";
 
 export interface PlatformEditorDeps {
   renderer: WebGLRenderer;
@@ -55,6 +57,47 @@ const TYPE_GLYPHS: Record<AgentWorldEntityType, string> = {
   "point-light": "✦",
 };
 
+/** Paint one cell at a time, or drag a rectangle and hand it to `levels.fill`. */
+type LevelTool = "paint" | "fill";
+
+/**
+ * Colour + ink per tile id, so a BallZ grid reads as a map rather than a wall of letters.
+ * This is presentation only — the glyphs themselves come from the level API's own ASCII
+ * legend (`exportAscii().legend`) so the palette can never drift from the data format.
+ */
+const LEVEL_TILE_COLORS: Record<MapEditorTile, { fill: string; ink: string }> = {
+  floor: { fill: "#122c37", ink: "#4d7f92" },
+  wall: { fill: "#6f93a4", ink: "#08202b" },
+  start: { fill: "#46d47f", ink: "#06251a" },
+  ring: { fill: "#f4c33c", ink: "#3a2a00" },
+  half: { fill: "#43b7f0", ink: "#04222f" },
+  finish: { fill: "#f06fa8", ink: "#360f22" },
+  hazard: { fill: "#f08a3c", ink: "#33180a" },
+  fire: { fill: "#ef5350", ink: "#3a0c0c" },
+  ice: { fill: "#9be8f5", ink: "#0b2f38" },
+};
+
+/** `fill`/`resize` refuse these — the level model allows at most one of each. */
+const LEVEL_SINGLETONS: ReadonlySet<MapEditorTile> = new Set<MapEditorTile>(["start", "half", "finish"]);
+
+/** Live element references for the levels workbench, resolved once when the shell is built. */
+interface LevelsWorkbenchUi {
+  panel: HTMLElement;
+  meta: HTMLElement;
+  list: HTMLElement;
+  canvas: HTMLElement;
+  palette: HTMLElement;
+  status: HTMLElement;
+  ascii: HTMLTextAreaElement;
+  importId: HTMLInputElement;
+  newId: HTMLInputElement;
+  newWidth: HTMLInputElement;
+  newHeight: HTMLInputElement;
+  resizeWidth: HTMLInputElement;
+  resizeHeight: HTMLInputElement;
+  toolButtons: Map<LevelTool, HTMLButtonElement>;
+}
+
 /** Entity types the runtime refuses to give a rigid body (see `resolvePhysics`). */
 const PHYSICS_FORBIDDEN_TYPES = new Set<AgentWorldEntityType>([
   "group",
@@ -94,7 +137,25 @@ export class PlatformEditor {
    */
   private readonly physicsExtras = new Map<string, { friction?: number; restitution?: number }>();
 
-  /** Toolbar, scene-tree rail, inspector rail, library drawer — hidden/shown together. */
+  // ---- levels workbench state (all of it view state; tiles live only in `api.levels`) ----
+  private levelsOpen = false;
+  private levelId = "";
+  private levelTile: MapEditorTile = "wall";
+  private levelTool: LevelTool = "paint";
+  /** Cell elements indexed `y * width + x`, so a drag can repaint one cell without a rebuild. */
+  private levelCells: HTMLElement[] = [];
+  private levelPainting = false;
+  private levelAnchor: { x: number; y: number } | null = null;
+  private levelCursor: { x: number; y: number } | null = null;
+  private levelMarked: HTMLElement[] = [];
+  /** Glyphs are read back from the API's own ASCII legend rather than restated here. */
+  private levelLegend: Readonly<Record<MapEditorTile, string>> | null = null;
+  /** True once the ASCII textarea holds a hand-edited draft rather than a plain export. */
+  private levelAsciiDirty = false;
+  private levelUi!: LevelsWorkbenchUi;
+  private levelsButton!: HTMLButtonElement;
+
+  /** Toolbar, scene-tree rail, inspector rail, library drawer, levels workbench. */
   private readonly roots: HTMLElement[];
   private readonly outliner: HTMLElement;
   private readonly readout: HTMLElement;
@@ -132,9 +193,11 @@ export class PlatformEditor {
     dom.addEventListener("pointerdown", this.onPointerDown);
     dom.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("keydown", this.onKeyDown);
+    // A paint/fill stroke has to end even if the pointer leaves the grid.
+    window.addEventListener("pointerup", this.onLevelPointerUp);
 
     const ui = this.buildUi();
-    this.roots = [ui.toolbar, ui.panel, ui.rightRail, ui.drawer];
+    this.roots = [ui.toolbar, ui.panel, ui.rightRail, ui.drawer, ui.workbench];
     this.outliner = ui.outliner;
     this.readout = ui.readout;
     this.treeCount = ui.treeCount;
@@ -142,6 +205,7 @@ export class PlatformEditor {
     this.libraryChips = ui.libraryChips;
     deps.container.append(ui.style, ...this.roots);
     this.renderLibrary();
+    this.setLevelTool(this.levelTool);
     this.refresh();
   }
 
@@ -160,6 +224,8 @@ export class PlatformEditor {
       this.gizmo.detach();
       this.selectedObject = null;
       this.selectedId = null;
+      // Leaving the editor closes the workbench, so re-entering lands on the scene.
+      this.setLevelsOpen(false);
     }
   }
 
@@ -655,6 +721,7 @@ export class PlatformEditor {
     panel: HTMLElement;
     rightRail: HTMLElement;
     drawer: HTMLElement;
+    workbench: HTMLElement;
     outliner: HTMLElement;
     readout: HTMLElement;
     treeCount: HTMLElement;
@@ -667,12 +734,14 @@ export class PlatformEditor {
     const tree = this.buildSceneTree();
     const right = this.buildInspectorRail();
     const drawer = this.buildLibraryDrawer();
+    this.levelUi = this.buildLevelsWorkbench();
     return {
       style,
       toolbar,
       panel: tree.panel,
       rightRail: right.panel,
       drawer: drawer.panel,
+      workbench: this.levelUi.panel,
       outliner: tree.outliner,
       readout: right.readout,
       treeCount: tree.count,
@@ -729,6 +798,9 @@ export class PlatformEditor {
       this.toolButton("Load", () => this.loadScene()),
       this.toolButton("Export", () => this.exportScene()),
     ]));
+
+    this.levelsButton = this.toolButton("Levels", () => this.setLevelsOpen(!this.levelsOpen), "Open the BallZ level workbench");
+    toolbar.append(this.group([this.levelsButton]));
 
     const starter = document.createElement("select");
     const placeholder = document.createElement("option");
@@ -915,6 +987,588 @@ export class PlatformEditor {
     URL.revokeObjectURL(url);
   }
 
+  // ------------------------------------------------------------------ levels
+
+  /** Shorthand for the level sub-API — the workbench never touches tiles any other way. */
+  private get levels(): GraphysXAgentLevelApi {
+    return this.deps.api.levels;
+  }
+
+  /**
+   * The BallZ level-authoring surface: a level list, a paintable grid, a tile palette keyed
+   * to the API's own ASCII legend, fill/resize/undo tools, and an ASCII import/export panel.
+   *
+   * It is an overlay you can close — the 3D viewport is still the main event — and it owns
+   * no tile data of its own. Every edit is an `api.levels.*` call whose result is read back
+   * and re-rendered, so a human stroke and an agent transaction share one revision history.
+   */
+  private buildLevelsWorkbench(): LevelsWorkbenchUi {
+    const panel = document.createElement("div");
+    panel.className = "gx-ed-workbench";
+
+    const head = document.createElement("div");
+    head.className = "gx-ed-head";
+    const title = document.createElement("span");
+    title.className = "gx-ed-title";
+    title.textContent = "Levels";
+    const meta = document.createElement("span");
+    meta.className = "gx-lv-meta";
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "gx-ed-collapse";
+    close.textContent = "✕ Close";
+    close.title = "Close the level workbench and return to the scene";
+    close.addEventListener("click", () => this.setLevelsOpen(false));
+    head.append(title, meta, close);
+
+    // ---- left column: the level library ----
+    const side = document.createElement("div");
+    side.className = "gx-lv-side";
+    const list = document.createElement("div");
+    list.className = "gx-lv-list";
+
+    const newId = this.textInput("level-id");
+    const newWidth = this.numberInput(12, 1, 1);
+    const newHeight = this.numberInput(12, 1, 1);
+    newWidth.title = "Width";
+    newHeight.title = "Height";
+    const newRow = document.createElement("div");
+    newRow.className = "gx-lv-form";
+    newRow.append(newWidth, this.times(), newHeight, this.chip("+ New", () => this.createLevel()));
+
+    const actions = document.createElement("div");
+    actions.className = "gx-ed-grid";
+    actions.append(
+      this.chip("Duplicate", () => this.duplicateLevel(), "Copy the active level under a new id"),
+      this.chip("Delete", () => this.deleteLevel(), "Remove the active level"),
+    );
+    side.append(this.subhead("Library"), list, this.subhead("New level"), newId, newRow, actions);
+
+    // ---- centre column: tools, palette, grid ----
+    const main = document.createElement("div");
+    main.className = "gx-lv-main";
+
+    const toolButtons = new Map<LevelTool, HTMLButtonElement>();
+    const tools = document.createElement("div");
+    tools.className = "gx-lv-tools";
+    for (const [tool, label, hint] of [
+      ["paint", "Paint", "Click or drag to paint single cells"],
+      ["fill", "Rect fill", "Drag a rectangle, release to fill it"],
+    ] as ReadonlyArray<[LevelTool, string, string]>) {
+      const button = this.chip(label, () => this.setLevelTool(tool), hint);
+      toolButtons.set(tool, button);
+      tools.append(button);
+    }
+    const resizeWidth = this.numberInput(12, 1, 1);
+    const resizeHeight = this.numberInput(12, 1, 1);
+    resizeWidth.title = "New width";
+    resizeHeight.title = "New height";
+    tools.append(
+      this.chip("Undo", () => this.undoLevel(), "Undo the last level edit"),
+      this.spacer(),
+      this.tinyLabel("Resize"),
+      resizeWidth,
+      this.times(),
+      resizeHeight,
+      this.chip("Apply", () => this.resizeLevel(), "Resize the level, keeping the top-left content"),
+    );
+
+    const palette = document.createElement("div");
+    palette.className = "gx-lv-palette";
+
+    const canvas = document.createElement("div");
+    canvas.className = "gx-lv-canvas";
+    canvas.addEventListener("pointerdown", this.onLevelPointerDown);
+    canvas.addEventListener("pointerover", this.onLevelPointerOver);
+    main.append(tools, palette, canvas);
+
+    // ---- right column: ASCII ----
+    const asciiColumn = document.createElement("div");
+    asciiColumn.className = "gx-lv-ascii";
+    const ascii = document.createElement("textarea");
+    ascii.className = "gx-lv-text";
+    ascii.spellcheck = false;
+    ascii.setAttribute("aria-label", "Level ASCII");
+    // Once a human has typed in here it is their draft, and no edit elsewhere may overwrite it.
+    ascii.addEventListener("input", () => { this.levelAsciiDirty = true; });
+    const importId = this.textInput("import as id…");
+    const asciiActions = document.createElement("div");
+    asciiActions.className = "gx-ed-grid";
+    asciiActions.append(
+      this.chip("Export", () => this.exportLevelAscii(), "Re-read the active level as ASCII"),
+      this.chip("Import", () => this.importLevelAscii(), "Create a level from the ASCII above"),
+    );
+    asciiColumn.append(this.subhead("ASCII"), ascii, importId, asciiActions);
+
+    const body = document.createElement("div");
+    body.className = "gx-lv-body";
+    body.append(side, main, asciiColumn);
+
+    const status = document.createElement("div");
+    status.className = "gx-lv-status";
+
+    panel.append(head, body, status);
+    return {
+      panel, meta, list, canvas, palette, status, ascii, importId,
+      newId, newWidth, newHeight, resizeWidth, resizeHeight, toolButtons,
+    };
+  }
+
+  private setLevelsOpen(open: boolean): void {
+    this.levelsOpen = open;
+    this.levelUi.panel.classList.toggle("gx-ed-workbench--open", open);
+    this.levelsButton.classList.toggle("gx-ed-on", open);
+    if (!open) return;
+    // Palette glyphs come from the API legend, which needs a level to read, so build it here.
+    this.renderLevelPalette();
+    this.renderLevels();
+    if (!this.levelUi.ascii.value) this.exportLevelAscii();
+  }
+
+  private setLevelTool(tool: LevelTool): void {
+    this.levelTool = tool;
+    for (const [id, button] of this.levelUi.toolButtons) button.classList.toggle("gx-ed-chip--on", id === tool);
+  }
+
+  /** One swatch per tile id: its colour, its ASCII glyph, its name, and its semantics. */
+  private renderLevelPalette(): void {
+    const legend = this.levelGlyphs();
+    this.levelUi.palette.replaceChildren(...this.levels.tiles.map((tile) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "gx-lv-swatch" + (tile === this.levelTile ? " gx-lv-swatch--on" : "");
+      button.title = `${tile} (${legend[tile]}) — ${this.levels.tileSemantics[tile]}`;
+      const glyph = document.createElement("span");
+      glyph.className = "gx-lv-swatch-glyph";
+      const colours = LEVEL_TILE_COLORS[tile];
+      glyph.style.background = colours.fill;
+      glyph.style.color = colours.ink;
+      glyph.textContent = legend[tile];
+      const name = document.createElement("span");
+      name.textContent = tile;
+      button.append(glyph, name);
+      button.addEventListener("click", () => {
+        this.levelTile = tile;
+        this.renderLevelPalette();
+      });
+      return button;
+    }));
+  }
+
+  /** The authoritative tile→symbol map, straight from `exportAscii`. */
+  private levelGlyphs(): Readonly<Record<MapEditorTile, string>> {
+    if (this.levelLegend) return this.levelLegend;
+    const id = this.levelId || this.levels.active()?.id || this.levels.list()[0]?.id;
+    const exported = id ? this.levels.exportAscii(id) : null;
+    if (exported?.ok && exported.value) this.levelLegend = exported.value.legend;
+    return this.levelLegend ?? (Object.fromEntries(this.levels.tiles.map((tile) => [tile, tile[0]!.toUpperCase()])) as Record<MapEditorTile, string>);
+  }
+
+  /** Re-read the library and repaint the list, header and grid. Never assumes; always reads. */
+  private renderLevels(): void {
+    const summaries = this.levels.list();
+    if (!summaries.some((summary) => summary.id === this.levelId)) {
+      this.levelId = this.levels.active()?.id ?? summaries[0]?.id ?? "";
+    }
+    this.levelUi.list.replaceChildren(...summaries.map((summary) => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "gx-lv-row" + (summary.id === this.levelId ? " gx-lv-row--active" : "");
+      row.title = `${summary.id} — ${summary.width}×${summary.height}, revision ${summary.revision}`;
+      // Rows key on id, not label: ids are what the API takes and what an agent reports,
+      // and a duplicate/import legitimately shares its source's label.
+      const name = document.createElement("span");
+      name.className = "gx-lv-row-id";
+      name.textContent = summary.id;
+      const dims = document.createElement("span");
+      dims.className = "gx-lv-row-dim";
+      dims.textContent = `${summary.width}×${summary.height}`;
+      row.append(name, dims);
+      row.addEventListener("click", () => this.selectLevel(summary.id));
+      return row;
+    }));
+
+    const level = this.levelId ? this.levels.get(this.levelId) : null;
+    this.updateLevelMeta(level);
+    if (level) {
+      this.levelUi.resizeWidth.value = String(level.width);
+      this.levelUi.resizeHeight.value = String(level.height);
+      this.levelUi.importId.placeholder = `${level.id}-import`;
+    }
+    this.renderLevelGrid(level);
+  }
+
+  private updateLevelMeta(level: AgentLevelState | null = this.levels.get(this.levelId)): void {
+    this.levelUi.meta.textContent = level
+      ? `${level.id} · ${level.label} · ${level.width}×${level.height} · rev ${level.revision}`
+      : "No level selected";
+  }
+
+  /**
+   * The grid itself. Cells are sized to fit the viewport so a 64×64 level is still legible,
+   * and the canvas scrolls when it cannot shrink further. Row/column gutters carry indices
+   * so a coordinate reported by an agent can be found by eye.
+   */
+  private renderLevelGrid(level: AgentLevelState | null): void {
+    this.levelCells = [];
+    this.levelMarked = [];
+    if (!level) {
+      const empty = document.createElement("div");
+      empty.className = "gx-ed-empty";
+      empty.textContent = "No level in the library.";
+      this.levelUi.canvas.replaceChildren(empty);
+      return;
+    }
+
+    const glyphs = this.levelGlyphs();
+    const canvas = this.levelUi.canvas;
+    // Budget: the index gutter, the canvas padding + border, and the 1px gap per track.
+    const gutter = 20;
+    const chrome = gutter + 14;
+    const available = { width: canvas.clientWidth || 560, height: canvas.clientHeight || 360 };
+    const cell = Math.max(9, Math.min(44,
+      Math.floor((available.width - chrome - level.width) / level.width),
+      Math.floor((available.height - chrome - level.height) / level.height),
+    ));
+    const grid = document.createElement("div");
+    grid.className = "gx-lv-grid";
+    grid.style.setProperty("--gx-cell", `${cell}px`);
+    grid.style.setProperty("--gx-gutter", `${gutter}px`);
+    grid.style.gridTemplateColumns = `var(--gx-gutter) repeat(${level.width}, var(--gx-cell))`;
+    grid.style.gridTemplateRows = `var(--gx-gutter) repeat(${level.height}, var(--gx-cell))`;
+    // Indices crowd out the cells below ~15px, so thin them to every fifth column/row.
+    const labelled = (index: number): boolean => cell >= 15 || index % 5 === 0;
+
+    const corner = document.createElement("div");
+    corner.className = "gx-lv-axis gx-lv-axis--corner";
+    corner.textContent = "y\\x";
+    grid.append(corner);
+    for (let x = 0; x < level.width; x += 1) {
+      const head = document.createElement("div");
+      head.className = "gx-lv-axis";
+      head.textContent = labelled(x) ? String(x) : "";
+      grid.append(head);
+    }
+    for (let y = 0; y < level.height; y += 1) {
+      const rowHead = document.createElement("div");
+      rowHead.className = "gx-lv-axis";
+      rowHead.textContent = labelled(y) ? String(y) : "";
+      grid.append(rowHead);
+      for (let x = 0; x < level.width; x += 1) {
+        const tile = level.tiles[y * level.width + x]!;
+        const element = document.createElement("div");
+        element.className = "gx-lv-cell";
+        element.dataset.x = String(x);
+        element.dataset.y = String(y);
+        this.paintCellView(element, tile, glyphs);
+        element.title = `${x},${y} — ${tile}`;
+        this.levelCells[y * level.width + x] = element;
+        grid.append(element);
+      }
+    }
+    canvas.replaceChildren(grid);
+  }
+
+  private paintCellView(element: HTMLElement, tile: MapEditorTile, glyphs: Readonly<Record<MapEditorTile, string>>): void {
+    const colours = LEVEL_TILE_COLORS[tile];
+    element.style.background = colours.fill;
+    element.style.color = colours.ink;
+    element.textContent = glyphs[tile];
+  }
+
+  private readonly onLevelPointerDown = (event: PointerEvent): void => {
+    const cell = this.levelCellAt(event);
+    if (!cell) return;
+    event.preventDefault();
+    this.levelCursor = cell;
+    if (this.levelTool === "paint") {
+      this.levelPainting = true;
+      this.paintLevelCell(cell.x, cell.y);
+      return;
+    }
+    this.levelAnchor = cell;
+    this.markLevelRect(cell, cell);
+  };
+
+  private readonly onLevelPointerOver = (event: PointerEvent): void => {
+    if (!(event.buttons & 1)) return;
+    const cell = this.levelCellAt(event);
+    if (!cell) return;
+    this.levelCursor = cell;
+    if (this.levelPainting) this.paintLevelCell(cell.x, cell.y);
+    else if (this.levelAnchor) this.markLevelRect(this.levelAnchor, cell);
+  };
+
+  private readonly onLevelPointerUp = (): void => {
+    this.levelPainting = false;
+    const anchor = this.levelAnchor;
+    const cursor = this.levelCursor;
+    this.levelAnchor = null;
+    this.clearLevelMarks();
+    if (anchor && cursor) this.fillLevelRect(anchor, cursor);
+  };
+
+  private levelCellAt(event: PointerEvent): { x: number; y: number } | null {
+    const target = event.target as HTMLElement | null;
+    const cell = target?.closest<HTMLElement>(".gx-lv-cell");
+    if (!cell) return null;
+    return { x: Number(cell.dataset.x), y: Number(cell.dataset.y) };
+  }
+
+  /**
+   * One cell, one `levels.patch`. Painting a singleton gate moves it, which changes a second
+   * cell, so that case re-reads the whole grid; an ordinary tile only repaints its own cell
+   * so dragging across a 64-wide level does not rebuild four thousand nodes per step.
+   */
+  private paintLevelCell(x: number, y: number): void {
+    const level = this.levels.get(this.levelId);
+    if (!level || level.tiles[y * level.width + x] === this.levelTile) return;
+    const result = this.levels.patch(this.levelId, [{ x, y, tile: this.levelTile }]);
+    if (!result.ok) {
+      this.levelMessage(result.error ?? "Could not paint that cell", true);
+      return;
+    }
+    if (LEVEL_SINGLETONS.has(this.levelTile)) {
+      this.renderLevels();
+    } else {
+      const element = this.levelCells[y * level.width + x];
+      if (element) {
+        this.paintCellView(element, this.levelTile, this.levelGlyphs());
+        element.title = `${x},${y} — ${this.levelTile}`;
+      }
+      this.updateLevelMeta();
+    }
+    this.syncLevelAscii();
+    this.levelMessage(`Painted ${this.levelTile} at ${x},${y} · rev ${result.revision}`);
+  }
+
+  private fillLevelRect(a: { x: number; y: number }, b: { x: number; y: number }): void {
+    const rect = {
+      x: Math.min(a.x, b.x),
+      y: Math.min(a.y, b.y),
+      width: Math.abs(a.x - b.x) + 1,
+      height: Math.abs(a.y - b.y) + 1,
+    };
+    const result = this.levels.fill(this.levelId, rect, this.levelTile);
+    if (!result.ok) {
+      this.levelMessage(result.error ?? "Fill failed", true);
+      return;
+    }
+    this.renderLevels();
+    this.syncLevelAscii();
+    this.levelMessage(`Filled ${rect.width}×${rect.height} at ${rect.x},${rect.y} with ${this.levelTile} · rev ${result.revision}`);
+  }
+
+  private markLevelRect(a: { x: number; y: number }, b: { x: number; y: number }): void {
+    this.clearLevelMarks();
+    const level = this.levels.get(this.levelId);
+    if (!level) return;
+    for (let y = Math.min(a.y, b.y); y <= Math.max(a.y, b.y); y += 1) {
+      for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x += 1) {
+        const element = this.levelCells[y * level.width + x];
+        if (!element) continue;
+        element.classList.add("gx-lv-cell--marked");
+        this.levelMarked.push(element);
+      }
+    }
+  }
+
+  private clearLevelMarks(): void {
+    for (const element of this.levelMarked) element.classList.remove("gx-lv-cell--marked");
+    this.levelMarked = [];
+  }
+
+  private selectLevel(id: string): void {
+    // `open()` is a validated read on this host, so it is the honest way to confirm the id
+    // exists before the workbench points itself at it.
+    const result = this.levels.open(id);
+    if (!result.ok) {
+      this.levelMessage(result.error ?? `Unknown level: ${id}`, true);
+      return;
+    }
+    this.levelId = id;
+    this.renderLevels();
+    this.exportLevelAscii();
+  }
+
+  private createLevel(): void {
+    const id = this.levelUi.newId.value.trim() || this.uniqueLevelId("level");
+    const result = this.levels.create({
+      id,
+      width: Number(this.levelUi.newWidth.value) || 0,
+      height: Number(this.levelUi.newHeight.value) || 0,
+    });
+    if (!result.ok || !result.value) {
+      this.levelMessage(result.error ?? "Could not create that level", true);
+      return;
+    }
+    this.levelUi.newId.value = "";
+    this.levelId = result.value.id;
+    this.renderLevels();
+    this.exportLevelAscii();
+    this.levelMessage(`Created ${result.value.id} (${result.value.width}×${result.value.height})`);
+  }
+
+  /** Duplicate is export → import: the same round trip the ASCII panel offers, one click. */
+  private duplicateLevel(): void {
+    const source = this.levels.get(this.levelId);
+    const exported = this.levels.exportAscii(this.levelId);
+    if (!source || !exported.ok || !exported.value) {
+      this.levelMessage(exported.error ?? "Nothing to duplicate", true);
+      return;
+    }
+    const result = this.levels.importAscii({
+      id: this.uniqueLevelId(`${source.id}-copy`),
+      label: `${source.label} copy`,
+      cellSize: source.cellSize,
+      rows: exported.value.rows,
+    });
+    if (!result.ok || !result.value) {
+      this.levelMessage(result.error ?? "Duplicate failed", true);
+      return;
+    }
+    this.levelId = result.value.id;
+    this.renderLevels();
+    this.exportLevelAscii();
+    this.levelMessage(`Duplicated as ${result.value.id}`);
+  }
+
+  private deleteLevel(): void {
+    const result = this.levels.remove(this.levelId);
+    if (!result.ok) {
+      this.levelMessage(result.error ?? "Could not delete that level", true);
+      return;
+    }
+    this.levelId = "";
+    this.renderLevels();
+    this.exportLevelAscii();
+    this.levelMessage(`Removed ${result.value}`);
+  }
+
+  private resizeLevel(): void {
+    const width = Number(this.levelUi.resizeWidth.value) || 0;
+    const height = Number(this.levelUi.resizeHeight.value) || 0;
+    const result = this.levels.resize(this.levelId, width, height, "floor");
+    if (!result.ok) {
+      this.levelMessage(result.error ?? "Resize failed", true);
+      this.renderLevels();
+      return;
+    }
+    this.renderLevels();
+    this.syncLevelAscii();
+    this.levelMessage(`Resized to ${width}×${height} · rev ${result.revision}`);
+  }
+
+  private undoLevel(): void {
+    const result = this.levels.undo(this.levelId);
+    if (!result.ok) {
+      this.levelMessage(result.error ?? "Nothing to undo", true);
+      return;
+    }
+    this.renderLevels();
+    this.syncLevelAscii();
+    this.levelMessage(`Undid the last edit · rev ${result.revision}`);
+  }
+
+  private exportLevelAscii(announce = true): void {
+    const result = this.levels.exportAscii(this.levelId);
+    if (!result.ok || !result.value) {
+      this.levelUi.ascii.value = "";
+      if (announce) this.levelMessage(result.error ?? "Nothing to export", true);
+      return;
+    }
+    this.levelLegend = result.value.legend;
+    this.levelUi.ascii.value = result.value.rows.join("\n");
+    this.levelAsciiDirty = false;
+    if (announce) this.levelMessage(`Exported ${result.value.id} — ${result.value.width}×${result.value.height}`);
+  }
+
+  /**
+   * Keep the ASCII view honest after a grid edit. An untouched panel simply re-exports, so
+   * it never shows a level that no longer exists; a hand-edited draft is left alone and the
+   * Export button remains the way to discard it.
+   */
+  private syncLevelAscii(): void {
+    if (this.levelAsciiDirty) return;
+    this.exportLevelAscii(false);
+  }
+
+  /**
+   * Import creates a *new* level (the library keys on id), so the round trip is
+   * export → import → identical grid under a fresh id. Label and cellSize ride along from
+   * the source level, which is why an export/import cycle loses nothing but the id.
+   */
+  private importLevelAscii(): void {
+    const rows = this.levelUi.ascii.value.split(/\r?\n/).map((row) => row.trimEnd());
+    while (rows.length && rows[rows.length - 1] === "") rows.pop();
+    const source = this.levels.get(this.levelId);
+    const id = this.levelUi.importId.value.trim() || this.uniqueLevelId(`${this.levelId || "level"}-import`);
+    const result = this.levels.importAscii({
+      id,
+      label: source?.label,
+      cellSize: source?.cellSize,
+      rows,
+    });
+    if (!result.ok || !result.value) {
+      this.levelMessage(result.error ?? "Import failed", true);
+      return;
+    }
+    this.levelUi.importId.value = "";
+    this.levelId = result.value.id;
+    this.renderLevels();
+    this.levelMessage(`Imported ${result.value.id} — ${result.value.width}×${result.value.height} · rev ${result.revision}`);
+  }
+
+  private uniqueLevelId(base: string): string {
+    const taken = new Set(this.levels.list().map((summary) => summary.id));
+    if (!taken.has(base)) return base;
+    for (let index = 2; index < 999; index += 1) {
+      const candidate = `${base}-${index}`;
+      if (!taken.has(candidate)) return candidate;
+    }
+    return `${base}-${Date.now()}`;
+  }
+
+  /** Failures surface here, in the workbench, rather than only in the console. */
+  private levelMessage(message: string, isError = false): void {
+    this.levelUi.status.textContent = message;
+    this.levelUi.status.classList.toggle("gx-lv-status--error", isError);
+  }
+
+  private textInput(placeholder: string): HTMLInputElement {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = placeholder;
+    return input;
+  }
+
+  private subhead(text: string): HTMLElement {
+    const element = document.createElement("span");
+    element.className = "gx-ed-title";
+    element.textContent = text;
+    return element;
+  }
+
+  private tinyLabel(text: string): HTMLElement {
+    const element = document.createElement("span");
+    element.className = "gx-lv-tiny";
+    element.textContent = text;
+    return element;
+  }
+
+  private times(): HTMLElement {
+    const element = document.createElement("span");
+    element.className = "gx-lv-tiny";
+    element.textContent = "×";
+    return element;
+  }
+
+  private spacer(): HTMLElement {
+    const element = document.createElement("span");
+    element.className = "gx-lv-spacer";
+    return element;
+  }
+
   // ----------------------------------------------------------------- library
 
   /**
@@ -1025,6 +1679,7 @@ export class PlatformEditor {
     dom.removeEventListener("pointerdown", this.onPointerDown);
     dom.removeEventListener("pointerup", this.onPointerUp);
     window.removeEventListener("keydown", this.onKeyDown);
+    window.removeEventListener("pointerup", this.onLevelPointerUp);
     this.gizmo.detach();
     this.gizmo.dispose();
     for (const root of this.roots) root.remove();
@@ -1041,7 +1696,7 @@ const readVector = (row: { inputs: HTMLInputElement[] }): [number, number, numbe
  * property, so the rails, drawer and toolbar cannot drift apart.
  */
 const EDITOR_CSS = `
-.gx-ed-toolbar,.gx-ed-panel{
+.gx-ed-toolbar,.gx-ed-panel,.gx-ed-workbench{
   --gx-panel:rgba(8,20,28,.88);
   --gx-raise:rgba(16,38,49,.9);
   --gx-border:#1b3b49;
@@ -1060,7 +1715,7 @@ const EDITOR_CSS = `
   border:1px solid var(--gx-border);border-radius:var(--gx-radius);
   box-shadow:0 10px 34px rgba(0,10,16,.42);
 }
-.gx-ed-toolbar *,.gx-ed-panel *{box-sizing:border-box}
+.gx-ed-toolbar *,.gx-ed-panel *,.gx-ed-workbench *{box-sizing:border-box}
 
 /* ---- top bar ---- */
 .gx-ed-toolbar{top:var(--gx-s4);left:var(--gx-s4);right:var(--gx-s4);display:flex;flex-wrap:wrap;align-items:center;gap:var(--gx-s3);padding:var(--gx-s2) var(--gx-s3);user-select:none}
@@ -1086,14 +1741,17 @@ const EDITOR_CSS = `
 .gx-ed-readout{font-size:11px;color:var(--gx-muted);word-break:break-all;flex:none}
 
 /* ---- inputs (one look, everywhere) ---- */
-.gx-ed-panel input,.gx-ed-panel select{background:var(--gx-field);color:var(--gx-text);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:4px 6px;font:11px/1.3 system-ui,sans-serif;min-width:0}
-.gx-ed-panel input:hover,.gx-ed-panel select:hover{border-color:var(--gx-accent-deep)}
-.gx-ed-panel input:focus,.gx-ed-panel select:focus,.gx-ed-panel button:focus-visible{outline:none;border-color:var(--gx-accent);box-shadow:0 0 0 2px rgba(55,182,211,.24)}
+.gx-ed-panel input,.gx-ed-panel select,.gx-ed-workbench input,.gx-ed-workbench textarea{background:var(--gx-field);color:var(--gx-text);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:4px 6px;font:11px/1.3 system-ui,sans-serif;min-width:0}
+.gx-ed-panel input:hover,.gx-ed-panel select:hover,.gx-ed-workbench input:hover,.gx-ed-workbench textarea:hover{border-color:var(--gx-accent-deep)}
+.gx-ed-panel input:focus,.gx-ed-panel select:focus,.gx-ed-panel button:focus-visible,
+.gx-ed-workbench input:focus,.gx-ed-workbench textarea:focus,.gx-ed-workbench button:focus-visible{outline:none;border-color:var(--gx-accent);box-shadow:0 0 0 2px rgba(55,182,211,.24)}
 .gx-ed-panel input[type=color]{padding:1px;width:44px;height:22px;cursor:pointer;flex:none}
 /* Spinners steal a third of a narrow numeric field and clip the value. */
-.gx-ed-panel input[type=number]{-moz-appearance:textfield;text-align:right}
+.gx-ed-panel input[type=number],.gx-ed-workbench input[type=number]{-moz-appearance:textfield;text-align:right}
 .gx-ed-panel input[type=number]::-webkit-outer-spin-button,
-.gx-ed-panel input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.gx-ed-panel input[type=number]::-webkit-inner-spin-button,
+.gx-ed-workbench input[type=number]::-webkit-outer-spin-button,
+.gx-ed-workbench input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .gx-ed-panel input[type=range]{accent-color:var(--gx-accent);padding:0;border:none;background:none;width:100%;cursor:pointer}
 .gx-ed-filter{width:100%;flex:none;padding:5px 8px}
 .gx-ed-filter--inline{width:auto;flex:1 1 120px;min-width:90px}
@@ -1152,6 +1810,53 @@ const EDITOR_CSS = `
 .gx-ed-chip{background:var(--gx-field);color:#c6e2ea;border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:5px 9px;cursor:pointer;font:10.5px/1.2 system-ui,sans-serif}
 .gx-ed-chip:hover{background:var(--gx-raise);border-color:var(--gx-accent);color:#fff}
 .gx-ed-chip:focus-visible{outline:none;border-color:var(--gx-accent);box-shadow:0 0 0 2px rgba(55,182,211,.24)}
+.gx-ed-chip--on{background:var(--gx-accent-deep);border-color:var(--gx-accent);color:#fff}
+
+/* ---- levels workbench ---- */
+/* An overlay, not a fourth rail: it fills the working area under the toolbar and closes
+   with one click, so the 3D viewport is never permanently squeezed. */
+.gx-ed-workbench{display:none;flex-direction:column;gap:var(--gx-s3);padding:var(--gx-s3);top:60px;left:var(--gx-s4);right:var(--gx-s4);bottom:var(--gx-s4);z-index:24}
+.gx-ed-workbench--open{display:flex}
+.gx-lv-meta{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gx-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gx-lv-body{display:flex;gap:var(--gx-s3);flex:1 1 auto;min-height:0}
+.gx-lv-side{flex:0 0 190px;display:flex;flex-direction:column;gap:var(--gx-s2);min-height:0}
+.gx-lv-main{flex:1 1 auto;display:flex;flex-direction:column;gap:var(--gx-s2);min-width:0;min-height:0}
+.gx-lv-ascii{flex:0 0 232px;display:flex;flex-direction:column;gap:var(--gx-s2);min-height:0}
+
+.gx-lv-list{flex:1 1 auto;min-height:60px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding-right:2px}
+.gx-lv-row{display:flex;align-items:center;gap:var(--gx-s2);text-align:left;width:100%;background:transparent;color:#c6e2ea;border:1px solid transparent;border-radius:var(--gx-radius-sm);padding:4px 6px;cursor:pointer;font:11px/1.3 system-ui,sans-serif}
+.gx-lv-row:hover{background:var(--gx-raise);border-color:var(--gx-border)}
+.gx-lv-row--active{background:var(--gx-accent-deep);border-color:var(--gx-accent);color:#fff;font-weight:600}
+.gx-lv-row-id{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gx-lv-row-dim{flex:none;font:9.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gx-muted)}
+.gx-lv-row--active .gx-lv-row-dim{color:#cdeef7}
+.gx-lv-form{display:flex;align-items:center;gap:var(--gx-s1)}
+.gx-lv-form input{flex:1 1 auto;width:100%;min-width:0}
+.gx-lv-form .gx-ed-chip{flex:none;white-space:nowrap}
+.gx-lv-tiny{flex:none;font-size:10px;color:var(--gx-muted)}
+.gx-lv-spacer{flex:1 1 auto}
+
+.gx-lv-tools{display:flex;align-items:center;flex-wrap:wrap;gap:var(--gx-s1);flex:none}
+.gx-lv-tools input[type=number]{width:52px}
+.gx-lv-palette{display:flex;flex-wrap:wrap;gap:var(--gx-s1);flex:none}
+.gx-lv-swatch{display:flex;align-items:center;gap:var(--gx-s2);background:var(--gx-field);color:#c6e2ea;border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:3px 8px 3px 3px;cursor:pointer;font:10.5px/1.2 system-ui,sans-serif}
+.gx-lv-swatch:hover{background:var(--gx-raise);border-color:var(--gx-accent)}
+.gx-lv-swatch--on{background:var(--gx-accent-deep);border-color:var(--gx-accent);color:#fff}
+.gx-lv-swatch-glyph{flex:none;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:4px;font:700 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace}
+
+/* A flex canvas with an auto-margin grid centres small levels without clipping the
+   top-left of a big one the way justify-content:center would. */
+.gx-lv-canvas{flex:1 1 auto;min-height:0;overflow:auto;display:flex;background:rgba(4,14,20,.45);border:1px solid var(--gx-border-soft);border-radius:var(--gx-radius-sm);padding:var(--gx-s2)}
+.gx-lv-grid{display:grid;gap:1px;width:max-content;height:max-content;margin:auto;user-select:none;touch-action:none}
+.gx-lv-axis{display:flex;align-items:center;justify-content:center;overflow:hidden;font:9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gx-muted)}
+.gx-lv-axis--corner{font-size:8px;opacity:.75}
+.gx-lv-cell{width:var(--gx-cell);height:var(--gx-cell);display:flex;align-items:center;justify-content:center;border-radius:2px;cursor:crosshair;font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden}
+.gx-lv-cell:hover{box-shadow:inset 0 0 0 1px var(--gx-accent)}
+.gx-lv-cell--marked{box-shadow:inset 0 0 0 2px var(--gx-accent)}
+
+.gx-lv-text{flex:1 1 auto;min-height:0;resize:none;white-space:pre;overflow:auto;font:12px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace !important;letter-spacing:.09em}
+.gx-lv-status{flex:none;font:11px/1.4 system-ui,sans-serif;color:var(--gx-muted);border-top:1px solid var(--gx-border-soft);padding-top:var(--gx-s2);min-height:16px;word-break:break-word}
+.gx-lv-status--error{color:#ff9fb0}
 
 @media (max-width:1080px){
   .gx-ed-panel--left{width:200px}

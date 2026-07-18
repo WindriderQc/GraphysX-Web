@@ -12,6 +12,7 @@
     "smoke:showroom": "node scripts/smoke-showroom.mjs",
     "smoke:editor": "node scripts/smoke-editor.mjs",
     "smoke:standalone": "node scripts/smoke-standalone.mjs",
+    "smoke:levels": "node scripts/smoke-levels.mjs",
     "smoke:foundation": "node scripts/smoke-foundation.mjs",
     "serve:staging": "node scripts/staging-server.mjs",
     "agent:stdio": "node tools/graphysx-agent-stdio.mjs --stdio",
