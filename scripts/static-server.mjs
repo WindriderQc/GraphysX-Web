@@ -95,8 +95,23 @@ export function startStaticServer({ root, resolveRoot, port = 4188, host = "127.
       "content-type": MIME[path.extname(file).toLowerCase()] || "application/octet-stream",
       "cache-control": "no-store",
     });
-    createReadStream(file).pipe(res);
+
+    // Stream with explicit lifecycle handling. Without this, a read error or a client
+    // that goes away mid-transfer surfaces as an unhandled 'error' event and the peer
+    // sees ERR_CONNECTION_RESET — which showed up as an intermittent smoke failure on
+    // the largest chunk. A flaky gate is worse than no gate, so this is not cosmetic.
+    const stream = createReadStream(file);
+    stream.on("error", () => res.destroy());
+    res.on("close", () => stream.destroy());
+    stream.pipe(res);
   });
+
+  // Headless Chromium opens many keep-alive connections and can leave one idle while it
+  // parses a multi-megabyte chunk. Node's 5s default would close it underneath the browser
+  // mid-page-load, producing a spurious connection reset.
+  server.keepAliveTimeout = 72_000;
+  server.headersTimeout = 75_000;
+  server.requestTimeout = 0;
 
   return new Promise((resolve, reject) => {
     server.once("error", reject);

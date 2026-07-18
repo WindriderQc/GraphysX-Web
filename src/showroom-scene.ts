@@ -28,6 +28,33 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     tags: ["showroom", "cubx"],
   }));
 
+  // `emitter` is ordinary v2 vocabulary now, so these braziers are selectable, editable and
+  // exported like any other entity. They are placed clear of the trees so they read from the wide
+  // welcome framing. The `ember-smoke` preset is deliberately *not* used here: it is faithful
+  // dark soot on alpha blending, which over bright terrain reads as a smudge rather than a
+  // plume. It stays in the library for scenes with a sky behind it.
+  const braziers: AgentWorldEntityDefinition[] = [-3.4, 3.4].flatMap((x, index) => [
+    {
+      id: `showroom-brazier-${index}`,
+      type: "emitter",
+      label: `Brazier ${index + 1}`,
+      transform: { position: [x, 0.1, 8.5] },
+      // The archive ramp burns blue at the base up through amber. Read literally at showroom
+      // distance the blue dominates and scatters, so this *instance* carries a warm tint
+      // override — the preset itself keeps the archive colours.
+      emitter: { preset: "campfire", sizeScale: 5.5, volumeScale: 1.2, speed: 3.6, maxParticles: 180, color: "#ff9436" },
+      tags: ["showroom", "effect"],
+    },
+    {
+      id: `showroom-brazier-glow-${index}`,
+      type: "emitter",
+      label: `Brazier Glow ${index + 1}`,
+      transform: { position: [x, 0.3, 8.5] },
+      emitter: { preset: "firetrail", sizeScale: 3.6, speed: 2.4, spread: 1.6, color: "#ff8a2a", maxParticles: 70 },
+      tags: ["showroom", "effect"],
+    },
+  ]);
+
   // The showroom is a v2 scene with the flat grid hidden — the host renders the sky/terrain/sun.
   api.create({
     schema: GRAPHYSX_AGENT_WORLD_SCHEMA,
@@ -42,6 +69,29 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     },
     entities: [
       { id: "fill-light", type: "ambient-light", intensity: 0.5, material: { color: "#cfe9ff" } },
+      ...braziers,
+      {
+        id: "showroom-cubx-core",
+        type: "emitter",
+        label: "CubX Core",
+        parentId: CLUSTER,
+        // A cyan crown burning off the top of the rotating assembly. It sits above the cubes
+        // rather than inside them — the cubes are opaque, so a centred emitter is simply hidden.
+        transform: { position: [0, 1.5, 0] },
+        emitter: { preset: "firetrail", sizeScale: 5, speed: 2.2, spread: 2.5, color: "#5fe0ff", maxParticles: 110 },
+        tags: ["showroom", "effect"],
+      },
+      {
+        id: "showroom-cubx-spark",
+        type: "emitter",
+        label: "CubX Halo",
+        parentId: CLUSTER,
+        // Co-located with the crown for the same reason: emitted from the centre, the stars
+        // spend their first frames occluded by the cubes and read as a streak.
+        transform: { position: [0, 1.5, 0] },
+        emitter: { preset: "energy-orb", sizeScale: 4.5, speed: 3.4, spread: 3, maxParticles: 30, rate: 55 },
+        tags: ["showroom", "effect"],
+      },
       {
         id: CLUSTER,
         type: "group",
@@ -60,33 +110,4 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
   api.spawnPrefab("luminous-tree", { position: [-6, 0, 6] });
   api.spawnPrefab("luminous-tree", { position: [7, 0, 5] });
   api.spawnPrefab("luminous-tree", { position: [-11, 0, 2] });
-}
-
-/**
- * A lightweight welcome overlay for the showroom front door. Mostly non-interactive so the
- * scene reads through it; the single call to action reveals the editor.
- */
-export function mountWelcome(container: HTMLElement, onEnter: () => void): () => void {
-  const style = document.createElement("style");
-  style.textContent = `
-    .gx-welcome{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;pointer-events:none;font-family:system-ui,sans-serif;text-align:center;background:radial-gradient(120% 90% at 50% 28%,rgba(3,12,20,0) 42%,rgba(3,12,20,.6) 100%)}
-    .gx-welcome h1{margin:0;font-size:clamp(36px,7vw,74px);letter-spacing:.06em;font-weight:800;color:#eafaff;text-shadow:0 4px 44px rgba(70,220,235,.4)}
-    .gx-welcome p{margin:0;max-width:560px;color:#a9d6e2;font-size:15px;line-height:1.55;padding:0 18px}
-    .gx-welcome .gx-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;pointer-events:auto}
-    .gx-welcome button{background:linear-gradient(180deg,#2fb6d0,#1d7f96);color:#fff;border:1px solid #4fd0e6;border-radius:12px;padding:12px 24px;font:600 15px system-ui,sans-serif;cursor:pointer;box-shadow:0 8px 30px rgba(30,127,150,.42)}
-    .gx-welcome button:hover{filter:brightness(1.08)}
-    .gx-welcome .gx-hint{color:#6fb9cc;font-size:12px;pointer-events:none}
-  `;
-  const overlay = document.createElement("div");
-  overlay.className = "gx-welcome";
-  overlay.innerHTML = `
-    <h1>GRAPHYSX WEB</h1>
-    <p>A browser engine for 3D + physics scenes that humans and AI agents create and inhabit together. This welcome scene is composed from the same vocabulary you build with.</p>
-    <div class="gx-actions"><button type="button">Enter Scene Editor</button></div>
-    <div class="gx-hint">drag to look around · scroll to zoom</div>
-  `;
-  const dispose = () => { overlay.remove(); style.remove(); };
-  overlay.querySelector("button")?.addEventListener("click", () => { onEnter(); dispose(); });
-  container.append(style, overlay);
-  return dispose;
 }

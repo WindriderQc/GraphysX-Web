@@ -193,7 +193,7 @@ locked inside a legacy environment module (`?host=legacy` only) has **not** grad
 | Save / load / export / import (v2 JSON + legacy XML) | **Real, API-only.** No UI on the default host. |
 | Scene Editor: outliner, gizmo, create/delete, pause/step | **Ships.** |
 | Scene Editor: inspector, materials/textures, behaviors, interactions, tags, undo, JSON Workbench | **Not on the default host.** That list describes the *legacy* prototype-app panel. |
-| Simulation systems (particles + ≥1 Nature-of-Code system) as editor entities | **None graduated.** Particles, flocking, force fields, DNA/evolutionary entities all exist — but only inside legacy modules (`particle-effect-environment.ts`, `nature-lab.ts`). Zero are v2 entities. |
+| Simulation systems (particles + ≥1 Nature-of-Code system) as editor entities | **Particles graduated; Nature-of-Code has not.** `emitter` is a v2 entity type (`agent-world-particles.ts`) with 8 presets derived from the decoded TV3D archive library, spawnable from the editor's Effects palette and via `api.emitters()`, budgeted at 600 particles/emitter. Flocking, force fields and DNA/evolutionary entities are still legacy-only in `nature-lab.ts`. |
 | Curated vocabulary: assets, models, textures, prefabs | **Partial.** 5 mesh assets + 11 textures + 5 prefabs reachable from v2, against ~120 MB vendored. Prefabs exist in the API but are absent from the editor UI. |
 | Browse Scenes + Games & Apps | **Not implemented.** |
 | 2D overlay capability in the scene model | **Does not exist** in any form. No layer concept in `AgentWorldDefinition`. |
@@ -203,9 +203,11 @@ locked inside a legacy environment module (`?host=legacy` only) has **not** grad
 Related corrections elsewhere in this spec:
 
 - **§3 pillar 3 ("behavior is first-class, not decoration")** — the six shipped behaviors
-  (spin, bob, orbit, pulse, look-at, follow-spline) are precisely decoration. No simulation
-  behavior exists in v2 yet. The pillar is the intent; it is not yet earned.
-- **§4 scene model** — of the listed simulation systems, only spline followers are real.
+  (spin, bob, orbit, pulse, look-at, follow-spline) are decoration. Particle emitters are now
+  a genuine simulation entity, so the pillar is partly earned; a *steering/flocking* behavior
+  is still the missing proof.
+- **§4 scene model** — of the listed simulation systems, spline followers and
+  particles/emitters are real. Force fields, flocking, crowds and evolutionary entities are not.
 - **§5 showroom** — the terrain is procedural sine displacement mounted as *host decoration*,
   not a heightmap and not a v2 entity (invisible to `api.state()`, not selectable). There is
   no water anywhere in the repo, reflective or otherwise. Click-to-focus is not implemented.
@@ -215,12 +217,16 @@ Related corrections elsewhere in this spec:
   default route; v2 `environment.background` is a single color string. The "sky ownership is
   scoped" tenet (§11) currently has no v2 mechanism to be scoped *with*.
 
-**Highest-value next graduations** (from the audit, in order): particle emitter as a v2 entity
-type — the 16-preset library is already decoded, curated and vendored, so only a runtime is
-missing; flocking as a v2 behavior (§14 phase 4, implementation already exists in
-`nature-lab.ts`); a real heightmap-backed `terrain` entity, which also makes the showroom
-honest; `skybox` in `environment`; then the editor inspector, without which graduated
-vocabulary stays invisible to humans and pillar 2 (parity) is broken in the human direction.
+**Graduated since this audit:** `skybox` in `environment` (six archive sets, per-scene) and
+the particle `emitter` entity type (eight archive-derived presets). The editor also gained an
+inspector, a prefab/model/texture/effects palette, and an exit path.
+
+**Highest-value next graduations** (in order): flocking as a v2 behavior (§14 phase 4,
+implementation already exists in `nature-lab.ts`) — the missing proof of pillar 3; a real
+heightmap-backed `terrain` entity, which also makes the showroom honest (today's terrain is
+procedural sine noise mounted as host decoration); a force-field behavior, which composes with
+both particles and flocking; then map-editor UI on the default host (its data model already
+graduated into `agent-level-library.ts` and is reachable via `api.levels`).
 
 ## 9. Repo roles
 

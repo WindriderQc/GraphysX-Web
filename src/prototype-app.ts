@@ -73,6 +73,7 @@ import {
 } from "./agent-world-runtime";
 import { GRAPHYSX_AGENT_WORLD_ASSETS } from "./agent-world-assets";
 import { GRAPHYSX_AGENT_WORLD_SKIES } from "./agent-world-skies";
+import { GRAPHYSX_AGENT_WORLD_EMITTERS } from "./agent-world-particles";
 import {
   GRAPHYSX_AGENT_WORLD_TEXTURES,
   type AgentWorldTextureId
@@ -3446,6 +3447,7 @@ export class PrototypeApp {
       assets: () => GRAPHYSX_AGENT_WORLD_ASSETS,
       textures: () => GRAPHYSX_AGENT_WORLD_TEXTURES,
       skies: () => GRAPHYSX_AGENT_WORLD_SKIES,
+      emitters: () => GRAPHYSX_AGENT_WORLD_EMITTERS,
       importLegacyXml: debugApi.importLegacyAgentWorldXml,
       open: debugApi.openAgentWorldStudio,
       demo: debugApi.loadAgentWorldDemo,

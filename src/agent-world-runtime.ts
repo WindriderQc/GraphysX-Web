@@ -78,6 +78,14 @@ import {
   type AgentWorldSkyDescriptor,
   type AgentWorldSkyId
 } from "./agent-world-skies";
+import {
+  AgentWorldParticleSystem,
+  GRAPHYSX_AGENT_WORLD_EMITTERS,
+  resolveAgentWorldEmitter,
+  type AgentWorldEmitter,
+  type AgentWorldEmitterDescriptor,
+  type ResolvedAgentWorldEmitter
+} from "./agent-world-particles";
 
 export const GRAPHYSX_AGENT_WORLD_SCHEMA = "graphysx.agent-world/v2" as const;
 export const GRAPHYSX_AGENT_WORLD_STATE_SCHEMA = "graphysx.agent-world-state/v2" as const;
@@ -96,6 +104,7 @@ export type AgentWorldEntityType =
   | "plane"
   | "spline"
   | "model"
+  | "emitter"
   | "ambient-light"
   | "directional-light"
   | "point-light";
@@ -245,6 +254,8 @@ export type AgentWorldEntityDefinition = {
   };
   path?: AgentWorldSplinePath;
   asset?: AgentWorldModelAsset;
+  /** Particle emitter configuration. Only valid on `emitter` entities. */
+  emitter?: AgentWorldEmitter;
   agent?: AgentWorldAgentProfile;
   physics?: AgentWorldPhysics;
   intensity?: number;
@@ -270,6 +281,8 @@ export type AgentWorldEntityPatch = {
   distance?: number;
   physics?: Partial<AgentWorldPhysics> | null;
   agent?: AgentWorldAgentProfile;
+  /** Patch the emitter of an `emitter` entity. Merged over the current configuration. */
+  emitter?: AgentWorldEmitter;
   interactions?: AgentWorldInteraction[];
 };
 
@@ -351,6 +364,7 @@ export type AgentWorldEntityState = {
   path: { pointCount: number; closed: boolean } | null;
   asset: ({ status: "loading" | "ready" | "error"; error?: string } & ResolvedAgentWorldModelAsset) | null;
   agent: Required<AgentWorldAgentProfile> | null;
+  emitter: (ResolvedAgentWorldEmitter & { liveParticles: number }) | null;
 };
 
 export type AgentWorldInteractionReceipt = {
@@ -437,6 +451,8 @@ export type GraphysXAgentWorldApi = {
   textures(): readonly AgentWorldTextureDescriptor[];
   /** The curated per-scene skybox sets recovered from the archive. */
   skies(): readonly AgentWorldSkyDescriptor[];
+  /** The curated particle-emitter presets decoded from the TV3D archive library. */
+  emitters(): readonly AgentWorldEmitterDescriptor[];
   importLegacyXml(xml: string, options?: { id?: string; label?: string }): AgentWorldResult<{
     state: AgentWorldState;
     sourceEntityCount: number;
@@ -483,6 +499,7 @@ type ResolvedEntity = {
   path: Required<AgentWorldSplinePath> | null;
   asset: ResolvedAgentWorldModelAsset | null;
   agent: Required<AgentWorldAgentProfile> | null;
+  emitter: ResolvedAgentWorldEmitter | null;
   physics: ResolvedAgentWorldPhysics | null;
   intensity: number;
   distance: number;
@@ -563,6 +580,8 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "texture.list",
   "environment.sky",
   "sky.list",
+  "entity.emitter",
+  "emitter.list",
   "physics.rigid-body",
   "spline.path",
   "behavior.follow-spline",
@@ -670,6 +689,11 @@ export class AgentWorldRuntime {
 
   listSkies(): readonly AgentWorldSkyDescriptor[] {
     return deepClone(GRAPHYSX_AGENT_WORLD_SKIES);
+  }
+
+  /** The archive particle-emitter presets, as scene vocabulary. */
+  listEmitters(): readonly AgentWorldEmitterDescriptor[] {
+    return deepClone(GRAPHYSX_AGENT_WORLD_EMITTERS) as AgentWorldEmitterDescriptor[];
   }
 
   listAssets(): readonly AgentWorldAssetDescriptor[] {
@@ -1073,6 +1097,10 @@ export class AgentWorldRuntime {
       if (definition.type !== "agent") throw new Error("Only agent entities accept an agent profile");
       definition.agent = resolveAgentProfile(patch.agent, definition.agent ?? undefined);
     }
+    if (patch.emitter !== undefined) {
+      if (definition.type !== "emitter") throw new Error("Only emitter entities accept an emitter configuration");
+      definition.emitter = resolveAgentWorldEmitter(patch.emitter, definition.emitter ?? undefined);
+    }
     if (patch.interactions) definition.interactions = this.resolveInteractions(patch.interactions);
     this.applyResolvedEntity(runtime);
     if (patch.transform || patch.physics !== undefined || patch.parentId !== undefined) this.rebuildPhysicsBody(runtime);
@@ -1269,6 +1297,11 @@ export class AgentWorldRuntime {
     for (const runtime of this.entities.values()) {
       if (runtime.definition.physics?.mode === "dynamic" && runtime.body) syncBodyToObject(runtime.body, runtime.object);
     }
+    // Emitters tick inside updateSimulation, so they inherit pause/step for free.
+    for (const runtime of this.entities.values()) {
+      const particles = findParticleSystem(runtime.object);
+      if (particles) particles.update(deltaSeconds);
+    }
     for (const runtime of this.entities.values()) {
       for (const behavior of runtime.definition.behaviors) {
         if (behavior.type === "look-at") {
@@ -1323,6 +1356,8 @@ export class AgentWorldRuntime {
   private applyResolvedEntity(runtime: RuntimeEntity): void {
     const { definition, object } = runtime;
     object.visible = definition.visible;
+    const particles = findParticleSystem(object);
+    if (particles && definition.emitter) particles.configure(definition.emitter);
     object.position.set(...definition.transform.position);
     object.rotation.set(...definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3);
     object.scale.set(...definition.transform.scale);
@@ -1359,6 +1394,9 @@ export class AgentWorldRuntime {
     if (source.type !== "model" && source.asset) throw new Error("Only model entities accept an asset");
     const agent = source.type === "agent" ? resolveAgentProfile(source.agent) : null;
     if (source.type !== "agent" && source.agent) throw new Error("Only agent entities accept an agent profile");
+    const emitter = source.type === "emitter" ? resolveAgentWorldEmitter(source.emitter) : null;
+    if (source.type !== "emitter" && source.emitter) throw new Error("Only emitter entities accept an emitter configuration");
+    if (source.type === "emitter" && source.physics) throw new Error("Emitter entities do not take a rigid body");
     const physics = source.physics ? resolvePhysics(source.physics, source.type, source.parentId ?? null, behaviors) : null;
     return {
       id,
@@ -1371,6 +1409,7 @@ export class AgentWorldRuntime {
       path,
       asset,
       agent,
+      emitter,
       physics,
       intensity: clamp(source.intensity ?? 1, 0, 100),
       distance: clamp(source.distance ?? 0, 0, 1000),
@@ -1445,7 +1484,10 @@ export class AgentWorldRuntime {
       } : null,
       path: runtime.definition.path ? { pointCount: runtime.definition.path.points.length, closed: runtime.definition.path.closed } : null,
       asset: runtime.assetState ? deepClone(runtime.assetState) : null,
-      agent: runtime.definition.agent ? deepClone(runtime.definition.agent) : null
+      agent: runtime.definition.agent ? deepClone(runtime.definition.agent) : null,
+      emitter: runtime.definition.emitter
+        ? { ...deepClone(runtime.definition.emitter), liveParticles: findParticleSystem(runtime.object)?.activeCount ?? 0 }
+        : null
     };
   }
 
@@ -1496,6 +1538,13 @@ function createEntityObject(definition: ResolvedEntity): Object3D {
   if (definition.type === "group") return new Group();
   if (definition.type === "agent") return createAgentAvatar(definition);
   if (definition.type === "model") return new Group();
+  if (definition.type === "emitter") {
+    const system = new AgentWorldParticleSystem(definition.emitter ?? resolveAgentWorldEmitter(undefined));
+    // The update loop finds the system here; the Points object is the entity object itself, so
+    // particles inherit the entity transform.
+    system.points.userData.graphysxParticleSystem = system;
+    return system.points;
+  }
   if (definition.type === "spline" && definition.path) {
     const curve = createSplineCurve(definition.path);
     const geometry = new BufferGeometry().setFromPoints(curve.getPoints(Math.max(24, definition.path.points.length * 16)));
@@ -1886,7 +1935,7 @@ function validateInteraction(interaction: AgentWorldInteraction, entities: Map<s
 }
 
 function isEntityType(value: unknown): value is AgentWorldEntityType {
-  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "ambient-light", "directional-light", "point-light"].includes(String(value));
+  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "ambient-light", "directional-light", "point-light"].includes(String(value));
 }
 
 function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition {
@@ -1908,6 +1957,7 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
       }
     } : {}),
     ...(definition.agent ? { agent: deepClone(definition.agent) } : {}),
+    ...(definition.emitter ? { emitter: deepClone(definition.emitter) } : {}),
     ...(definition.physics ? { physics: deepClone(definition.physics) } : {}),
     intensity: definition.intensity,
     distance: definition.distance,
@@ -1940,9 +1990,19 @@ function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function findParticleSystem(object: Object3D): AgentWorldParticleSystem | null {
+  const system = object.userData.graphysxParticleSystem;
+  return system instanceof AgentWorldParticleSystem ? system : null;
+}
+
 function disposeObjectTree(root: Object3D): void {
   root.userData.graphysxDisposed = true;
   root.traverse((child) => {
+    const particles = findParticleSystem(child);
+    if (particles) {
+      particles.dispose();
+      return;
+    }
     if (!(child instanceof Mesh) && !(child instanceof Line)) return;
     child.geometry?.dispose();
     const materials = Array.isArray(child.material) ? child.material : [child.material];

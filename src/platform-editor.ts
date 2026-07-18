@@ -499,6 +499,28 @@ export class PlatformEditor {
       ),
     );
 
+    // Particle emitters are a first-class v2 entity type, so a human picks a preset here the
+    // same way an agent calls api.spawn({ type: "emitter", emitter: { preset } }).
+    section(
+      "Effects",
+      this.deps.api.emitters().map((emitter) =>
+        this.chip(emitter.label, () => {
+          this.addCounter += 1;
+          const id = `edit-emitter-${this.addCounter}`;
+          const result = this.deps.api.spawn({
+            id,
+            type: "emitter",
+            label: emitter.label,
+            transform: { position: [0, 0, 0] },
+            emitter: { preset: emitter.id },
+            tags: ["effect", emitter.category],
+          });
+          if (result.ok) this.select(id);
+          else this.refresh();
+        }, `${emitter.description}\n\nArchive: ${emitter.provenance.presetRecord} (emitter ${emitter.provenance.emitterIndex}) — ${emitter.provenance.textureFile}`),
+      ),
+    );
+
     section(
       "Textures",
       this.deps.api.textures().map((texture) =>
@@ -515,11 +537,12 @@ export class PlatformEditor {
     return out;
   }
 
-  private chip(label: string, onClick: () => void): HTMLButtonElement {
+  private chip(label: string, onClick: () => void, title?: string): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "gx-ed-chip";
     button.textContent = label;
+    if (title) button.title = title;
     button.addEventListener("click", onClick);
     return button;
   }
