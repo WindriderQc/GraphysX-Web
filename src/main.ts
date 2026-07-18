@@ -22,7 +22,8 @@ if (mode === "legacy") {
     import("./platform-host"),
     import("./showroom-scene"),
     import("./showroom-environment"),
-  ]).then(([{ PlatformHost }, { composeShowroom, mountWelcome }, { mountShowroomEnvironment }]) => {
+    import("./showroom-welcome"),
+  ]).then(([{ PlatformHost }, { composeShowroom }, { mountShowroomEnvironment }, { mountWelcome }]) => {
     const host = new PlatformHost(root, {
       autoOrbit: !editorFirst,
       editorVisible: editorFirst,
