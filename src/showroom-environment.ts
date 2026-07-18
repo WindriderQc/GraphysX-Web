@@ -1,30 +1,26 @@
 import {
-  CanvasTexture,
   DirectionalLight,
   Group,
   HemisphereLight,
   Mesh,
   MeshStandardMaterial,
   PlaneGeometry,
-  SRGBColorSpace,
   type Scene,
-  type Texture,
   type WebGLRenderer,
 } from "three";
 
 /**
- * Host-level environment dressing for the welcome showroom: a gradient sky, a warm sun with
- * soft shadows, and gentle heightmap terrain (flattened near the center so composed objects
- * stay grounded). This is deliberately *host* decoration around the v2 scene — the editable
- * world stays clean; the sky/terrain/sun are the "stage". Evolutive: water/reflection next.
+ * Host-level environment dressing for the welcome showroom: a warm sun and gentle rolling
+ * terrain (flattened near the center so composed objects stay grounded). This is deliberately
+ * *host* decoration around the v2 scene — the editable world stays clean.
+ *
+ * The sky is NOT set here. It is `environment.sky` in the v2 scene, so it is selectable,
+ * serialisable, and editable like any other scene property — the host must not fight it by
+ * assigning `scene.background` behind the runtime's back.
  */
 export function mountShowroomEnvironment(scene: Scene, _renderer: WebGLRenderer): () => void {
   const group = new Group();
   group.name = "ShowroomEnvironment";
-
-  const sky = makeGradientSky();
-  const previousBackground = scene.background;
-  scene.background = sky;
 
   // Warm key light. Shadows are intentionally OFF: nothing in the composed showroom opts
   // into castShadow, so a per-frame shadow map would be pure cost for zero visual gain.
@@ -33,7 +29,7 @@ export function mountShowroomEnvironment(scene: Scene, _renderer: WebGLRenderer)
   sun.position.set(26, 36, 18);
   group.add(sun);
 
-  const hemi = new HemisphereLight("#bfe4ff", "#233524", 0.45);
+  const hemi = new HemisphereLight("#cfe6ff", "#4a5340", 0.5);
   group.add(hemi);
 
   const terrain = makeTerrain();
@@ -43,30 +39,9 @@ export function mountShowroomEnvironment(scene: Scene, _renderer: WebGLRenderer)
 
   return () => {
     scene.remove(group);
-    scene.background = previousBackground;
     terrain.geometry.dispose();
     terrain.material.dispose();
-    sky.dispose();
   };
-}
-
-function makeGradientSky(): Texture {
-  const canvas = document.createElement("canvas");
-  canvas.width = 4;
-  canvas.height = 256;
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-    gradient.addColorStop(0, "#08131f");
-    gradient.addColorStop(0.55, "#123246");
-    gradient.addColorStop(0.82, "#2f6274");
-    gradient.addColorStop(1, "#8fb9b7");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 4, 256);
-  }
-  const texture = new CanvasTexture(canvas);
-  texture.colorSpace = SRGBColorSpace;
-  return texture;
 }
 
 function makeTerrain(): Mesh<PlaneGeometry, MeshStandardMaterial> {
@@ -87,7 +62,8 @@ function makeTerrain(): Mesh<PlaneGeometry, MeshStandardMaterial> {
   geometry.rotateX(-Math.PI / 2);
   geometry.computeVertexNormals();
 
-  const material = new MeshStandardMaterial({ color: "#1c3a3a", roughness: 0.98, metalness: 0.02 });
+  // Mossy ground that sits under the Lost Valley sky rather than reading as a dark void.
+  const material = new MeshStandardMaterial({ color: "#5c6b4a", roughness: 0.94, metalness: 0.02 });
   const mesh = new Mesh(geometry, material);
   mesh.position.y = -0.08;
   mesh.name = "ShowroomTerrain";

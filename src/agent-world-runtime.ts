@@ -72,6 +72,12 @@ import {
   type AgentWorldTextureDescriptor,
   type AgentWorldTextureId
 } from "./agent-world-textures";
+import {
+  GRAPHYSX_AGENT_WORLD_SKIES,
+  resolveAgentWorldSky,
+  type AgentWorldSkyDescriptor,
+  type AgentWorldSkyId
+} from "./agent-world-skies";
 
 export const GRAPHYSX_AGENT_WORLD_SCHEMA = "graphysx.agent-world/v2" as const;
 export const GRAPHYSX_AGENT_WORLD_STATE_SCHEMA = "graphysx.agent-world-state/v2" as const;
@@ -269,6 +275,11 @@ export type AgentWorldEntityPatch = {
 
 export type AgentWorldEnvironment = {
   background: string;
+  /**
+   * Per-scene skybox selection, or null for the flat background colour. Scoped to the
+   * scene by design — there is deliberately no global sky (see PRODUCT_SPEC section 11).
+   */
+  sky: AgentWorldSkyId | null;
   ground: {
     visible: boolean;
     size: number;
@@ -424,6 +435,8 @@ export type GraphysXAgentWorldApi = {
   readonly levels: GraphysXAgentLevelApi;
   assets(): readonly AgentWorldAssetDescriptor[];
   textures(): readonly AgentWorldTextureDescriptor[];
+  /** The curated per-scene skybox sets recovered from the archive. */
+  skies(): readonly AgentWorldSkyDescriptor[];
   importLegacyXml(xml: string, options?: { id?: string; label?: string }): AgentWorldResult<{
     state: AgentWorldState;
     sourceEntityCount: number;
@@ -526,6 +539,7 @@ const DEFAULT_GEOMETRY = {
 
 const DEFAULT_ENVIRONMENT: AgentWorldEnvironment = {
   background: "#07141d",
+  sky: null,
   ground: {
     visible: true,
     size: 36,
@@ -547,6 +561,8 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "asset.list",
   "material.texture",
   "texture.list",
+  "environment.sky",
+  "sky.list",
   "physics.rigid-body",
   "spline.path",
   "behavior.follow-spline",
@@ -650,6 +666,10 @@ export class AgentWorldRuntime {
 
   getEnvironment(): AgentWorldEnvironment {
     return deepClone(this.environment);
+  }
+
+  listSkies(): readonly AgentWorldSkyDescriptor[] {
+    return deepClone(GRAPHYSX_AGENT_WORLD_SKIES);
   }
 
   listAssets(): readonly AgentWorldAssetDescriptor[] {
@@ -1671,8 +1691,13 @@ function resolveTexture(source: AgentWorldTexture | null): AgentWorldTexture | n
 }
 
 function resolveEnvironment(source?: AgentWorldDefinition["environment"]): AgentWorldEnvironment {
+  const sky = source?.sky ?? DEFAULT_ENVIRONMENT.sky;
+  if (sky !== null && !resolveAgentWorldSky(sky)) {
+    throw new Error(`Unknown sky: ${sky}. Use one of ${GRAPHYSX_AGENT_WORLD_SKIES.map((s) => s.id).join(", ")}`);
+  }
   return {
     background: source?.background ?? DEFAULT_ENVIRONMENT.background,
+    sky,
     ground: { ...DEFAULT_ENVIRONMENT.ground, ...(source?.ground ?? {}) },
     physics: {
       gravity: sanitizeVector(source?.physics?.gravity ?? DEFAULT_ENVIRONMENT.physics.gravity, -1000, 1000, "physics.gravity")

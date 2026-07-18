@@ -72,6 +72,7 @@ import {
   type GraphysXAgentWorldApi
 } from "./agent-world-runtime";
 import { GRAPHYSX_AGENT_WORLD_ASSETS } from "./agent-world-assets";
+import { GRAPHYSX_AGENT_WORLD_SKIES } from "./agent-world-skies";
 import {
   GRAPHYSX_AGENT_WORLD_TEXTURES,
   type AgentWorldTextureId
@@ -3444,6 +3445,7 @@ export class PrototypeApp {
       levels: levelApi,
       assets: () => GRAPHYSX_AGENT_WORLD_ASSETS,
       textures: () => GRAPHYSX_AGENT_WORLD_TEXTURES,
+      skies: () => GRAPHYSX_AGENT_WORLD_SKIES,
       importLegacyXml: debugApi.importLegacyAgentWorldXml,
       open: debugApi.openAgentWorldStudio,
       demo: debugApi.loadAgentWorldDemo,

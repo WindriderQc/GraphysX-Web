@@ -405,9 +405,48 @@ export class PlatformEditor {
     const inspector = document.createElement("div");
     inspector.className = "gx-ed-section";
 
-    panel.append(title, readout, inspectorTitle, inspector, ...this.buildLibrary(), listTitle, outliner);
+    panel.append(title, readout, inspectorTitle, inspector, ...this.buildEnvironment(), ...this.buildLibrary(), listTitle, outliner);
 
     return { style, toolbar, panel, outliner, readout, inspector };
+  }
+
+  /** Scene-scoped environment: the recovered skybox sets, selectable per scene. */
+  private buildEnvironment(): HTMLElement[] {
+    const heading = document.createElement("div");
+    heading.className = "gx-ed-title";
+    heading.textContent = "Environment";
+
+    const select = document.createElement("select");
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "No sky (flat colour)";
+    select.append(none);
+    for (const sky of this.deps.api.skies()) {
+      const option = document.createElement("option");
+      option.value = sky.id;
+      option.textContent = sky.label;
+      option.title = sky.description;
+      select.append(option);
+    }
+    select.value = this.deps.world.getEnvironment().sky ?? "";
+    select.addEventListener("change", () => this.setSky(select.value || null));
+
+    return [heading, this.field("Sky", select)];
+  }
+
+  /**
+   * Environment is part of the scene definition rather than a mutable field, so changing
+   * the sky is an export → patch → load round trip. Entities survive; selection does not.
+   */
+  private setSky(skyId: string | null): void {
+    const definition = this.deps.api.export();
+    if (!definition) return;
+    this.deps.api.load({
+      ...definition,
+      environment: { ...definition.environment, sky: skyId as never },
+    });
+    this.deps.onEnvironmentChanged?.();
+    this.select(null);
   }
 
   /**

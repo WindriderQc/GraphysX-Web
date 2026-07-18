@@ -35,6 +35,9 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     label: "GraphysX Showroom",
     environment: {
       background: "#0a1c28",
+      // A recovered TV3D skybox, selected per scene. It also lights the scene: the host
+      // builds an IBL probe from the same cube map, so objects reflect the sky they sit under.
+      sky: "lostvalley",
       ground: { visible: false, size: 60, color: "#123039", grid: false, gridColor: "#2a7d8f" },
     },
     entities: [

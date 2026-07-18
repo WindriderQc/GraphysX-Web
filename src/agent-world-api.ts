@@ -76,6 +76,7 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
     levels,
     assets: () => GRAPHYSX_AGENT_WORLD_ASSETS,
     textures: () => GRAPHYSX_AGENT_WORLD_TEXTURES,
+    skies: () => runtime.listSkies(),
     importLegacyXml: (xml, options) => {
       try {
         const conversion = convertLegacyGraphysXXml(xml, options);

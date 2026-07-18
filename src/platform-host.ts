@@ -2,7 +2,10 @@ import {
   ACESFilmicToneMapping,
   Clock,
   Color,
+  CubeTexture,
+  CubeTextureLoader,
   Fog,
+  Texture,
   PCFSoftShadowMap,
   PerspectiveCamera,
   PMREMGenerator,
@@ -20,6 +23,7 @@ import {
 } from "./agent-world-runtime";
 import { createAgentWorldApi } from "./agent-world-api";
 import { createGraphysXAgentToolBridge, type GraphysXAgentToolBridge } from "./agent-world-bridge";
+import { archiveSkyboxUrls, orientArchiveCubeTexture } from "./archive-skybox";
 // Type-only: the editor module (and the ~348 KB TransformControls gizmo stack it pulls in)
 // is loaded on demand, so the showroom front door never pays for chrome it keeps hidden.
 import type { PlatformEditor } from "./platform-editor";
@@ -63,6 +67,9 @@ export class PlatformHost {
   editor: PlatformEditor | null = null;
 
   private editorLoad: Promise<PlatformEditor | null> | null = null;
+  private readonly skyCache = new Map<string, CubeTexture>();
+  private skyToken = 0;
+  private roomEnvironment: Texture | null = null;
   private readonly interactive: boolean;
   private readonly autoOrbit: boolean;
   private readonly onExitEditor?: () => void;
@@ -98,7 +105,8 @@ export class PlatformHost {
     // Neutral image-based lighting so PBR materials read well without any archive
     // skybox assets. The world still brings its own scene lights.
     const pmrem = new PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.roomEnvironment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environment = this.roomEnvironment;
     pmrem.dispose();
 
     this.world = new AgentWorldRuntime(options.world ?? GRAPHYSX_AGENT_DEMO_WORLD);
@@ -166,11 +174,60 @@ export class PlatformHost {
     this.onExitEditor?.();
   }
 
-  /** Re-read background/fog from the runtime's environment (call after env edits). */
+  /** Re-read background/sky/fog from the runtime's environment (call after env edits). */
   applyEnvironment(): void {
     const environment = this.world.getEnvironment();
     this.scene.background = new Color(environment.background);
     this.scene.fog = new Fog(environment.background, 34, 130);
+    this.applySky(environment.sky);
+  }
+
+  /**
+   * Resolve `environment.sky` to a cube map. The archive's TV3D sets use a left-handed
+   * face order with quarter-turned poles, so the recovered `archive-skybox` conversion
+   * does the orienting — re-deriving that would be a genuine waste.
+   *
+   * Loading is async and cached per set; a scene that switches back to no sky (or swaps
+   * mid-load) is protected by the token check, so a slow load can never overwrite a newer
+   * selection.
+   */
+  private applySky(skyId: string | null): void {
+    this.skyToken += 1;
+    const token = this.skyToken;
+    if (!skyId) {
+      this.scene.environment = this.roomEnvironment;
+      return;
+    }
+    const descriptor = this.world.listSkies().find((sky) => sky.id === skyId);
+    if (!descriptor) return;
+
+    const cached = this.skyCache.get(descriptor.id);
+    if (cached) {
+      this.setSkyTexture(cached, token);
+      return;
+    }
+    new CubeTextureLoader().load(
+      archiveSkyboxUrls(descriptor.basePath, descriptor.extension),
+      (texture) => {
+        texture.colorSpace = SRGBColorSpace;
+        const oriented = orientArchiveCubeTexture(texture);
+        this.skyCache.set(descriptor.id, oriented);
+        this.setSkyTexture(oriented, token);
+      },
+      undefined,
+      () => console.warn(`Could not load sky "${descriptor.id}" from ${descriptor.basePath}`),
+    );
+  }
+
+  private setSkyTexture(texture: CubeTexture, token: number): void {
+    if (this.disposed || token !== this.skyToken) return;
+    this.scene.background = texture;
+    // Light the scene from the sky it actually sits under.
+    const pmrem = new PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromCubemap(texture).texture;
+    pmrem.dispose();
+    // A sky reads as open space; distance fog would fight it.
+    this.scene.fog = null;
   }
 
   private tick(): void {
