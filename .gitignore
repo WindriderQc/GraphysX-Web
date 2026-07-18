@@ -2,6 +2,8 @@ node_modules/
 dist/
 output/
 .playwright-cli/
+# Local scene-store data: scenes are content, not source.
+.graphysx-store/
 *.log
 .env
 .env.*
