@@ -39,6 +39,11 @@ export interface PlatformHostOptions {
   autoOrbit?: boolean;
   /** Called when the visitor leaves the editor, so the host page can restore the welcome. */
   onExitEditor?: () => void;
+  /**
+   * Initial camera framing. The default is a wide overview suited to the demo world; a
+   * composed scene like the showroom wants its own, tighter framing.
+   */
+  framing?: { position: [number, number, number]; target: [number, number, number] };
 }
 
 /**
@@ -90,12 +95,12 @@ export class PlatformHost {
     this.container.append(this.renderer.domElement);
 
     this.camera = new PerspectiveCamera(55, 1, 0.1, 260);
-    this.camera.position.set(0, 24, 34);
+    this.camera.position.set(...(options.framing?.position ?? [0, 24, 34]));
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    this.controls.target.set(0, 3, 0);
+    this.controls.target.set(...(options.framing?.target ?? [0, 3, 0]));
     this.controls.autoRotate = options.autoOrbit === true;
     this.controls.autoRotateSpeed = 0.6;
     this.controls.addEventListener("start", () => {

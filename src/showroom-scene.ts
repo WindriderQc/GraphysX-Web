@@ -55,6 +55,41 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     },
   ]);
 
+  // A kinetic centrepiece: a static plinth carrying a stack of dynamic blocks, flanked by two
+  // heavy spheres. Every one of these carries its own `apply-impulse` interaction, so clicking
+  // it is an ordinary `api.interact()` call rather than a special case in the host — a visitor
+  // and an agent nudge this stack exactly the same way. This is the showroom earning the word
+  // "physics" instead of asserting it.
+  const STACK_Y = 0.62;
+  const stack: AgentWorldEntityDefinition[] = [
+    // rows of 3, then 2, then 1 — a pyramid that topples legibly.
+    ...[-1.15, 0, 1.15].map((x, i) => ({ x, y: STACK_Y + 0.45, i })),
+    ...[-0.58, 0.58].map((x, i) => ({ x, y: STACK_Y + 1.35, i: i + 3 })),
+    { x: 0, y: STACK_Y + 2.25, i: 5 },
+  ].map(({ x, y, i }): AgentWorldEntityDefinition => ({
+    id: `showroom-block-${i}`,
+    type: "box",
+    label: `Kinetic Block ${i + 1}`,
+    geometry: { width: 0.86, height: 0.86, depth: 0.86 },
+    transform: { position: [x, y, 2.6] },
+    material: { color: "#8ce8ff", emissive: "#0d4d61", emissiveIntensity: 0.55, roughness: 0.22, metalness: 0.6 },
+    physics: { mode: "dynamic", mass: 0.9, material: "default" },
+    interactions: [{ id: `nudge-${i}`, type: "apply-impulse", targetIds: [`showroom-block-${i}`], impulse: [0, 2.6, -3.4] }],
+    tags: ["showroom", "kinetic"],
+  }));
+
+  const orbs: AgentWorldEntityDefinition[] = [-2.9, 2.9].map((x, i): AgentWorldEntityDefinition => ({
+    id: `showroom-orb-${i}`,
+    type: "sphere",
+    label: `Kinetic Orb ${i + 1}`,
+    geometry: { radius: 0.52 },
+    transform: { position: [x, STACK_Y + 0.52, 3.4] },
+    material: { color: i === 0 ? "#ffb457" : "#ff8f7a", emissive: "#3a1405", emissiveIntensity: 0.5, roughness: 0.24, metalness: 0.5 },
+    physics: { mode: "dynamic", mass: 1.4, material: "ball", restitution: 0.55 },
+    interactions: [{ id: `nudge-orb-${i}`, type: "apply-impulse", targetIds: [`showroom-orb-${i}`], impulse: [i === 0 ? 3.2 : -3.2, 3.4, -1.6] }],
+    tags: ["showroom", "kinetic"],
+  }));
+
   // The showroom is a v2 scene with the flat grid hidden — the host renders the sky/terrain/sun.
   api.create({
     schema: GRAPHYSX_AGENT_WORLD_SCHEMA,
@@ -101,6 +136,18 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
         tags: ["showroom", "cubx"],
       },
       ...cubes,
+      {
+        id: "showroom-plinth",
+        type: "box",
+        label: "Plinth",
+        geometry: { width: 6.2, height: 0.62, depth: 3.4 },
+        transform: { position: [0, 0.31, 2.8] },
+        material: { color: "#20404a", roughness: 0.85, metalness: 0.12 },
+        physics: { mode: "static", material: "default" },
+        tags: ["showroom", "kinetic"],
+      },
+      ...stack,
+      ...orbs,
     ],
   });
 

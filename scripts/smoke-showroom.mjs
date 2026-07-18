@@ -46,6 +46,57 @@ try {
 
   await page.screenshot({ path: path.join(ART, "showroom.png"), fullPage: false });
 
+  // Interactive physics: clicking a kinetic body fires its apply-impulse interaction, and
+  // clicking the ground drops a dynamic sphere. Both go through the ordinary agent API.
+  const entityPos = (id) => page.evaluate((entityId) => {
+    const e = window.__GRAPHYSX__.state().entities.find((x) => x.id === entityId);
+    return e ? e.position ?? e.transform?.position ?? null : null;
+  }, id);
+  const screenOf = (id) => page.evaluate((entityId) => {
+    const host = window.__GRAPHYSX_HOST__;
+    const obj = host.world.getEntityObject(entityId);
+    if (!obj) return null;
+    const v = obj.getWorldPosition(new (obj.position.constructor)());
+    v.project(host.camera);
+    const rect = host.renderer.domElement.getBoundingClientRect();
+    return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((-v.y + 1) / 2) * rect.height };
+  }, id);
+
+  const blockBefore = await entityPos("showroom-block-5");
+  const blockAt = await screenOf("showroom-block-5");
+  if (blockAt) await page.mouse.click(blockAt.x, blockAt.y);
+  // Wait for the body to actually move rather than guessing a duration. Headless software
+  // GL runs the frame loop at a few fps, so a fixed timeout races the physics step — this
+  // is a wait on the condition being asserted, not a weaker assertion.
+  await page
+    .waitForFunction(
+      (a) => {
+        const e = window.__GRAPHYSX__.state().entities.find((x) => x.id === a.id);
+        const p = e && (e.position ?? e.transform?.position);
+        return !!p && Math.hypot(p[0] - a.b[0], p[1] - a.b[1], p[2] - a.b[2]) > 0.15;
+      },
+      { id: "showroom-block-5", b: blockBefore },
+      { timeout: 20000 },
+    )
+    .catch(() => {});
+  const blockAfter = await entityPos("showroom-block-5");
+  out.impulseMoved = blockBefore && blockAfter
+    ? Number(Math.hypot(blockAfter[0] - blockBefore[0], blockAfter[1] - blockBefore[1], blockAfter[2] - blockBefore[2]).toFixed(3))
+    : 0;
+
+  const countBefore = await page.evaluate(() => window.__GRAPHYSX__.state().entities.length);
+  await page.mouse.click(300, 630);
+  await page
+    .waitForFunction(
+      () => window.__GRAPHYSX__.state().entities.some((e) => e.id.startsWith("showroom-drop-")),
+      null,
+      { timeout: 20000 },
+    )
+    .catch(() => {});
+  out.ballDropped = await page.evaluate(() =>
+    window.__GRAPHYSX__.state().entities.some((e) => e.id.startsWith("showroom-drop-")));
+  out.spawnedOne = (await page.evaluate(() => window.__GRAPHYSX__.state().entities.length)) === countBefore + 1;
+
   await page.click(".gx-welcome button");
   // The editor module is loaded on demand, so wait for it to mount rather than guessing.
   await page.waitForSelector(".gx-ed-toolbar", { timeout: 15000 });
@@ -70,6 +121,9 @@ const ok =
   out.editorHiddenInitially &&
   out.entityCount > 15 &&
   out.autoOrbiting &&
+  out.impulseMoved > 0.15 &&
+  out.ballDropped &&
+  out.spawnedOne &&
   out.editorVisibleAfterEnter &&
   out.welcomeGone;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);

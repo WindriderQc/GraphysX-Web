@@ -33,7 +33,7 @@ export function mountWelcome(container: HTMLElement, onEnter: () => void): () =>
       <h1>GRAPHYSX WEB</h1>
       <p>A browser engine for 3D + physics scenes that humans and AI agents create and inhabit together — composed from the same vocabulary you build with.</p>
       <div class="gx-actions"><button type="button">Enter Scene Editor</button></div>
-      <div class="gx-hint">drag to look around · scroll to zoom</div>
+      <div class="gx-hint">click the stack to knock it over · click the ground to drop a ball · drag to look around</div>
     </div>
   `;
   const dispose = () => { overlay.remove(); style.remove(); };
