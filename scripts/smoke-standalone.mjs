@@ -70,6 +70,8 @@ try {
   out.editor = await page.evaluate(() => {
     const hasToolbar = !!document.querySelector(".gx-ed-toolbar");
     const hasPanel = !!document.querySelector(".gx-ed-panel");
+    // The editor shell is three surfaces now: scene-tree rail, inspector rail, library drawer.
+    const panelCount = document.querySelectorAll(".gx-ed-panel").length;
     const before = window.__GRAPHYSX__.state().entities.length;
     const addBox = [...document.querySelectorAll(".gx-ed-toolbar button")].find((b) => b.textContent.includes("Box"));
     if (addBox) addBox.click();
@@ -77,6 +79,7 @@ try {
     return {
       hasToolbar,
       hasPanel,
+      panelCount,
       rowCount: document.querySelectorAll(".gx-ed-row").length,
       entitiesBefore: before,
       entitiesAfter: after,
@@ -93,5 +96,5 @@ out.pageErrors = pageErrors;
 console.log(JSON.stringify(out, null, 2));
 await browser.close();
 const apiOk = out.api && out.api.spawnOk && out.api.entitiesAfter > out.api.entitiesBefore && out.api.levelCreateOk && out.api.toolCount > 0;
-const editorOk = out.editor && out.editor.hasToolbar && out.editor.hasPanel && out.editor.entitiesAfter > out.editor.entitiesBefore && out.editor.rowCount > 0;
+const editorOk = out.editor && out.editor.hasToolbar && out.editor.hasPanel && out.editor.panelCount === 3 && out.editor.entitiesAfter > out.editor.entitiesBefore && out.editor.rowCount > 0;
 process.exit(out.fatal || pageErrors.length || !out.loopRunning || !apiOk || !editorOk ? 1 : 0);
