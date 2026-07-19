@@ -145,6 +145,8 @@ export class PlatformEditor {
   // ---- levels workbench state (all of it view state; tiles live only in `api.levels`) ----
   private levelsOpen = false;
   private levelId = "";
+  private readonly unsubscribeEvents: () => void;
+  private refreshQueued = false;
   /** The Environment sky dropdown, held so `refresh()` can re-read the world into it. */
   private skySelect: HTMLSelectElement | null = null;
   private levelTile: MapEditorTile = "wall";
@@ -200,6 +202,26 @@ export class PlatformEditor {
     dom.addEventListener("pointerdown", this.onPointerDown);
     dom.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("keydown", this.onKeyDown);
+
+    // The outliner and inspector must reflect the world, not just this panel's own actions.
+    // Before this, every editor control called refresh() itself, so the UI was correct after a
+    // HUMAN edit and stale after everything else: an agent spawn, api.load, a stored scene, or
+    // levels.play() left the scene tree showing whatever it last rendered. It was visibly wrong
+    // -- the viewport showing a played level while the tree still listed the demo world at rev 0
+    // -- because the runtime owns the scene graph and this panel does not.
+    //
+    // Coalesced onto one animation frame: a transaction or a spawn burst emits many events, and
+    // rebuilding the DOM per event would rebuild it dozens of times for one logical change.
+    this.unsubscribeEvents = deps.world.subscribeEvents((event) => {
+      if (event.type === "trigger.enter" || event.type === "trigger.exit") return;
+      if (this.refreshQueued) return;
+      this.refreshQueued = true;
+      requestAnimationFrame(() => {
+        this.refreshQueued = false;
+        // "auto" so a rebuild never swallows an edit a focused field is still committing.
+        this.refresh();
+      });
+    });
     // A paint/fill stroke has to end even if the pointer leaves the grid.
     window.addEventListener("pointerup", this.onLevelPointerUp);
 
@@ -1593,6 +1615,9 @@ export class PlatformEditor {
     // never reaching the viewport, just pointing the other way.
     this.refresh("force");
     this.setLevelsOpen(false);
+    // The play layer (arrow keys + HUD) is NOT mounted here. PlatformHost mounts it whenever a
+    // world containing a player ball loads, so an agent calling levels.play() gets exactly the
+    // same playable result as this button — the parity rule, applied to gameplay too.
   }
 
   private levelMessage(message: string, isError = false): void {
@@ -1805,6 +1830,7 @@ export class PlatformEditor {
     dom.removeEventListener("pointerup", this.onPointerUp);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("pointerup", this.onLevelPointerUp);
+    this.unsubscribeEvents();
     this.gizmo.detach();
     this.gizmo.dispose();
     for (const root of this.roots) root.remove();

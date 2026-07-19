@@ -23,6 +23,7 @@ import {
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
 import { createAgentWorldApi } from "./agent-world-api";
+import { mountBallzPlay } from "./ballz-play";
 import { createGraphysXAgentToolBridge, type GraphysXAgentToolBridge } from "./agent-world-bridge";
 import { archiveSkyboxUrls, orientArchiveCubeTexture } from "./archive-skybox";
 // Type-only: the editor module (and the ~348 KB TransformControls gizmo stack it pulls in)
@@ -85,6 +86,8 @@ export class PlatformHost {
   private frame = 0;
   private disposed = false;
   private readonly unsubscribeEvents: () => void;
+  /** Teardown for the active play layer (arrow keys + HUD), when a playable world is loaded. */
+  private playLayer: (() => void) | null = null;
   private focusMove: {
     fromPosition: Vector3;
     toPosition: Vector3;
@@ -149,7 +152,9 @@ export class PlatformHost {
     // Subscribing to `world.loaded` fixes it for every caller at once rather than asking each
     // one to remember. Push-based, so it costs nothing per frame.
     this.unsubscribeEvents = this.world.subscribeEvents((event) => {
-      if (event.type === "world.loaded") this.applyEnvironment();
+      if (event.type !== "world.loaded") return;
+      this.applyEnvironment();
+      this.remountPlayLayer();
     });
 
     // Full human/agent parity: the same validated API + discoverable bridge the
@@ -328,6 +333,19 @@ export class PlatformHost {
     this.scene.fog = new Fog(horizonColor, 38, 138);
   }
 
+  /**
+   * Mount the play layer when the loaded world contains something to play, drop it when it does
+   * not. Keyed on a `player`-tagged entity rather than on "was levels.play() called", so the
+   * human Play button, an agent's api.levels.play(), and a stored scene loaded from the browser
+   * all behave identically — a level is playable because of what it contains, not how it arrived.
+   */
+  private remountPlayLayer(): void {
+    this.playLayer?.();
+    this.playLayer = null;
+    if (this.api.query({ tag: "player" }).length === 0) return;
+    this.playLayer = mountBallzPlay(this.api, this.container);
+  }
+
   private tick(): void {
     if (this.disposed) return;
     const delta = this.clock.getDelta();
@@ -377,6 +395,7 @@ export class PlatformHost {
     this.disposed = true;
     this.renderer.setAnimationLoop(null);
     this.unsubscribeEvents();
+    this.playLayer?.();
     window.removeEventListener("resize", this.onResize);
     this.editor?.dispose();
     this.bridge.dispose();

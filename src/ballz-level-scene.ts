@@ -1,6 +1,7 @@
 import {
   GRAPHYSX_AGENT_WORLD_SCHEMA,
   type AgentWorldEntityDefinition,
+  type AgentWorldVector3,
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
 import type { AgentLevelState } from "./agent-level-library";
@@ -71,6 +72,18 @@ const PALETTE = {
  * cannot squeeze between two diagonal walls, which is what makes a grid level readable.
  */
 const BALL_RADIUS_RATIO = 0.18;
+
+/**
+ * The ball's steering set. Exported so the input binding maps a key to an interaction id
+ * rather than re-deriving a direction vector — one definition of "north", not two.
+ * Magnitudes scale with `cellSize`, so a coarser grid pushes proportionally harder.
+ */
+export const PUSH_DIRECTIONS = [
+  { id: "push-north", label: "Push north", vector: [0, 0, -1] as const, key: "ArrowUp" },
+  { id: "push-south", label: "Push south", vector: [0, 0, 1] as const, key: "ArrowDown" },
+  { id: "push-west", label: "Push west", vector: [-1, 0, 0] as const, key: "ArrowLeft" },
+  { id: "push-east", label: "Push east", vector: [1, 0, 0] as const, key: "ArrowRight" },
+] as const;
 
 export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelState): BallzLevelComposition {
   const { width, height, cellSize, tiles } = level;
@@ -264,6 +277,18 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
       geometry: { radius: cellSize * BALL_RADIUS_RATIO },
       material: PALETTE.ball,
       physics: { mode: "dynamic", material: "ball", mass: 1.6 },
+      // Steering lives ON the ball, as four ordinary `apply-impulse` interactions. There is no
+      // impulse call in the public API — impulses exist only as an entity's interaction — so
+      // this is not a workaround, it is the only way to push anything, and it means the control
+      // scheme is scene data: it serialises, an agent can fire it with `api.interact`, and a
+      // human's arrow key and an agent's call are literally the same operation.
+      interactions: PUSH_DIRECTIONS.map(({ id, label, vector }) => ({
+        id,
+        label,
+        type: "apply-impulse" as const,
+        targetIds: ["ballz-ball"],
+        impulse: vector.map((axis) => axis * cellSize) as AgentWorldVector3,
+      })),
       tags: ["ballz", "ball", "player"],
     });
   }

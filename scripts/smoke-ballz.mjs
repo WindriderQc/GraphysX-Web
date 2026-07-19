@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { SMOKE_TIMEOUT, applySmokeTimeout } from "./smoke-timeout.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -26,6 +27,7 @@ mkdirSync(ART, { recursive: true });
 
 const browser = await chromium.launch({ executablePath: EXECUTABLE });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+applySmokeTimeout(page);
 
 const consoleErrors = [];
 const pageErrors = [];
@@ -38,7 +40,7 @@ const out = {};
 
 try {
   await page.goto(`${BASE}?host=standalone`, { waitUntil: "load" });
-  await page.waitForFunction(() => !!window.__GRAPHYSX__, null, { timeout: 30000 });
+  await page.waitForFunction(() => !!window.__GRAPHYSX__, null, { timeout: SMOKE_TIMEOUT });
 
   out.play = await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
@@ -159,6 +161,49 @@ try {
     };
   });
 
+  // --- Is it actually PLAYABLE? --------------------------------------------------------
+  // The level materialising is not the same claim as a person being able to play it. Steering
+  // lives on the ball as `apply-impulse` interactions, so this asserts the whole chain: a real
+  // arrow keydown -> api.interact -> impulse -> the ball is somewhere else.
+  out.control = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    api.levels.play("smoke-ballz");
+    api.pause(true);
+    for (let i = 0; i < 120; i += 1) api.step(1 / 60);
+    const before = api.query({ ids: ["ballz-ball"] })[0].position;
+    return { before: before.map((v) => Number(v.toFixed(3))) };
+  });
+  // A genuine key event on the page, not a direct api.interact — that is the point.
+  await page.keyboard.press("ArrowUp");
+  out.control.after = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    for (let i = 0; i < 90; i += 1) api.step(1 / 60);
+    return api.query({ ids: ["ballz-ball"] })[0].position.map((v) => Number(v.toFixed(3)));
+  });
+  // ArrowUp pushes north (-z), so z must decrease.
+  out.control.movedNorth = out.control.after[2] < out.control.before[2] - 0.25;
+  // Presence is not visibility. The HUD first shipped at bottom-centre, where it was in the DOM,
+  // correctly styled, and completely hidden behind the editor's Library panel — a `page.$` check
+  // passed the whole time. Hit-test the status line's own centre instead.
+  out.hudVisible = await page.evaluate(() => {
+    const status = document.querySelector(".gx-bz-status");
+    if (!status) return { present: false };
+    const box = status.getBoundingClientRect();
+    if (box.width === 0 || box.height === 0) return { present: true, sized: false };
+    const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+    return {
+      present: true,
+      sized: true,
+      // The HUD is pointer-events:none, so the hit lands on whatever is *behind* it. What
+      // matters is that nothing opaque is stacked in front — a panel would report itself.
+      occludedBy: hit && hit.closest(".gx-ed-workbench, .gx-ed-panel, .gx-ed-library")
+        ? String(hit.className)
+        : null,
+      text: status.textContent,
+    };
+  });
+  out.hudText = out.hudVisible?.text ?? null;
+
   await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
     // Re-materialise so the screenshot shows an uncollected, un-teleported level.
@@ -166,6 +211,24 @@ try {
     api.pause(false);
   });
   await page.waitForTimeout(600);
+
+  // --- Does the human's scene tree reflect an API-driven world? ------------------------
+  // Everything above went through the API rather than an editor control, which used to leave
+  // the outliner showing whatever it last rendered — the viewport displaying a played level
+  // while the tree still listed the demo world at rev 0. The panel must track the runtime.
+  out.outliner = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll(".gx-ed-panel, .gx-ed-tree")]
+      .map((el) => el.textContent ?? "")
+      .join(" ");
+    const readout = document.querySelector(".gx-ed-readout")?.textContent ?? "";
+    return {
+      // Demo-world entities that must NOT still be listed after a level replaced the world.
+      showsDemoWorld: /orbiter-\d|luminous|halo/.test(rows),
+      showsLevel: /ballz-/.test(rows),
+      readout,
+      agreesOnCount: readout.includes(String(window.__GRAPHYSX__.state().entities.length)),
+    };
+  });
   await page.screenshot({ path: path.join(ART, "ballz-level.png") });
 } catch (error) {
   out.fatal = String(error);
@@ -190,6 +253,15 @@ const ok =
   out.finish?.didNotResist === true &&
   out.ring?.collected === true &&
   out.roundTrip?.survived === true &&
-  out.roundTrip?.stillTrigger === true;
+  out.roundTrip?.stillTrigger === true &&
+  out.control?.movedNorth === true &&
+  out.hudVisible?.present === true &&
+  out.hudVisible?.sized === true &&
+  out.hudVisible?.occludedBy === null &&
+  /rings/.test(out.hudText ?? "") &&
+  out.outliner?.showsLevel === true &&
+  out.outliner?.showsDemoWorld === false &&
+  out.outliner?.agreesOnCount === true;
 
 process.exit(out.fatal || pageErrors.length || consoleErrors.length || !ok ? 1 : 0);
+
