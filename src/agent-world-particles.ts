@@ -9,6 +9,7 @@ import {
   ShaderMaterial,
   Texture,
   Vector2,
+  Vector3,
   type WebGLRenderer
 } from "three";
 
@@ -782,6 +783,16 @@ const FRAGMENT_SHADER = /* glsl */ `
 export class AgentWorldParticleSystem {
   readonly points: Points;
 
+  /**
+   * Set by the runtime's force-field pass immediately before each `update()`, and cleared
+   * when no field reaches this emitter. Sampled per *live* particle in **entity-local** space
+   * — the runtime's closure owns the local↔world conversion. A plume caught in a flow field
+   * is the payoff, and it is why `affectsParticles` is opt-in: this hook runs once per live
+   * particle per step, and a dense emitter has thousands.
+   */
+  externalAcceleration: ((position: Vector3, velocity: Vector3, out: Vector3) => void) | null = null;
+  private readonly externalScratch = { position: new Vector3(), velocity: new Vector3(), out: new Vector3() };
+
   private descriptor: AgentWorldEmitterDescriptor;
   private config: ResolvedAgentWorldEmitter;
   private readonly geometry: BufferGeometry;
@@ -916,6 +927,17 @@ export class AgentWorldParticleSystem {
       this.velocities[offset] += gravity[0] * deltaSeconds;
       this.velocities[offset + 1] += gravity[1] * deltaSeconds;
       this.velocities[offset + 2] += gravity[2] * deltaSeconds;
+      if (this.externalAcceleration) {
+        // A force field adds to particle velocity right next to emitter gravity — same
+        // integrator, same units, so a flow field and a downdraft compose linearly.
+        const { position, velocity, out } = this.externalScratch;
+        position.set(this.positions[offset], this.positions[offset + 1], this.positions[offset + 2]);
+        velocity.set(this.velocities[offset], this.velocities[offset + 1], this.velocities[offset + 2]);
+        this.externalAcceleration(position, velocity, out);
+        this.velocities[offset] += out.x * deltaSeconds;
+        this.velocities[offset + 1] += out.y * deltaSeconds;
+        this.velocities[offset + 2] += out.z * deltaSeconds;
+      }
       this.positions[offset] += this.velocities[offset] * deltaSeconds;
       this.positions[offset + 1] += this.velocities[offset + 1] * deltaSeconds;
       this.positions[offset + 2] += this.velocities[offset + 2] * deltaSeconds;

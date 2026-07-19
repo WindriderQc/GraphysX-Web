@@ -401,6 +401,19 @@ gx.spawn({
 
 `reflection` re-renders the scene from the mirrored camera every frame it is visible — a real second scene pass. It is an opt-out flag rather than a host setting precisely so the cost is a scene-authoring decision: `gx.update("lake", { water: { reflection: false } })` swaps in a single lit plane with the same ripple normals. `reflectionResolution` defaults to 256 and is capped at 1024.
 
+## Flocks and force fields
+
+`flock` is a self-steering population — Reynolds separation/alignment/cohesion in one instanced draw call, capped at 240 members, with `sphere` or `box` bounds. `gx.flocks()` lists the presets; `state()` reports live `memberCount` / `leadPosition` / `averageSpeed` so a stalled flock is visible without watching it.
+
+`force-field` is the one entity that acts on *other* entities rather than itself. `gx.forceFields()` lists five presets across four kinds — `attractor` (inverse-square gravity, mass-independent), `flow` (a smooth animated vector field), `drag` (speed² resistance inside a volume), and `vortex` (tangential swirl).
+
+```js
+gx.spawn({ id: "well", type: "force-field", transform: { position: [0, 4, 0] },
+  forceField: { kind: "attractor", strength: 50, radius: 14, affectsBodies: true, affectsFlocks: true } });
+```
+
+A field pushes dynamic rigid bodies, flock members, and (opt-in via `affectsParticles`) live particles inside its `sphere`/`box`/`infinite` region — `affectsTags` narrows it to tagged entities. It never takes a `physics` field of its own. `state().forceField` reports `affectedCount` and `peakAcceleration` from the last step, so a present-but-inert field (wrong radius, wrong tags) is distinguishable from a working one.
+
 ## Collaboration commits
 
 Use `commit()` when multiple agents may edit the same world. `expectedRevision` is an optimistic concurrency guard: a stale observation is rejected without changing entities, revision, or accepted commit history.
@@ -432,6 +445,7 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `textures()` | Discover stable semantic textures, previews, descriptions, and repeat defaults. |
 | `skies()`, `emitters()` | Discover the per-scene archive skybox sets and the archive particle-emitter presets. |
 | `heightmaps()` | Discover the curated terrain heightmaps, with archive provenance, for `terrain` entities. |
+| `flocks()`, `forceFields()` | Discover the Nature-of-Code simulation presets: self-steering boid flocks and force fields (attractor/flow/drag/vortex). |
 | `importLegacyXml(xml, options?)` | Migrate archived GraphysX `Object3D` XML into a validated v2 world with warnings. |
 | `create(definition)`, `clear(id?, label?)` | Replace the current world from a complete v2 definition. |
 | `spawn(entity)`, `update(id, patch)`, `remove(id)` | Perform a single entity edit. |
@@ -452,7 +466,7 @@ Every mutating method returns `{ ok, revision, value?, error? }`. Entity IDs are
 
 ## Scene vocabulary
 
-Entity types: `group`, `agent`, `box`, `sphere`, `icosahedron`, `cylinder`, `cone`, `torus`, `plane`, `spline`, `model`, `emitter`, `terrain`, `water`, `ambient-light`, `directional-light`, and `point-light`.
+Entity types: `group`, `agent`, `box`, `sphere`, `icosahedron`, `cylinder`, `cone`, `torus`, `plane`, `spline`, `model`, `emitter`, `terrain`, `water`, `flock`, `force-field`, `ambient-light`, `directional-light`, and `point-light`.
 
 Behaviors: `spin`, `bob`, `orbit`, `pulse`, `look-at`, and `follow-spline`. Interaction types: `toggle-visibility` and `apply-impulse`.
 

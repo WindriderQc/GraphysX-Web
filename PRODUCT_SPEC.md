@@ -189,12 +189,12 @@ locked inside a legacy environment module (`?host=legacy` only) has **not** grad
 | §8 claim | Actual status |
 | --- | --- |
 | Welcome showroom as front door | **Ships.** |
-| Agent World API + 47-tool bridge | **Ships.** |
+| Agent World API + discoverable tool bridge | **Ships.** (Tool count grows as vocabulary graduates; the manifest is the source of truth, not a number pinned here.) |
 | Save / load / export / import (v2 JSON + legacy XML) | **Real, API-only.** No UI on the default host. |
 | Scene Editor: outliner, gizmo, create/delete, pause/step | **Ships.** |
 | Scene Editor: inspector, materials/textures, behaviors, interactions, tags, undo, JSON Workbench | **Not on the default host.** That list describes the *legacy* prototype-app panel. |
-| Simulation systems (particles + ≥1 Nature-of-Code system) as editor entities | **Ships.** `emitter` is a v2 entity type (`agent-world-particles.ts`) with 8 presets derived from the decoded TV3D archive library, spawnable from the editor's Effects palette and via `api.emitters()`, budgeted at 600 particles/emitter. `flock` (`agent-world-flock.ts`) is now a v2 entity type too, with 3 presets, an editor Life palette and `api.flocks()`. Force fields and DNA/evolutionary entities are still legacy-only in `nature-lab.ts`. |
-| Curated vocabulary: assets, models, textures, prefabs | **Partial.** 5 mesh assets + 11 textures + 5 prefabs reachable from v2, against ~120 MB vendored. Prefabs exist in the API but are absent from the editor UI. |
+| Simulation systems (particles + ≥1 Nature-of-Code system) as editor entities | **Ships.** `emitter` is a v2 entity type (`agent-world-particles.ts`) with 8 presets derived from the decoded TV3D archive library, spawnable from the editor's Effects palette and via `api.emitters()`, budgeted at 600 particles/emitter. `flock` (`agent-world-flock.ts`) and now `force-field` (`agent-world-force-field.ts`) are v2 entity types too, both in the editor's Life palette with `api.flocks()` / `api.forceFields()`. Force fields graduate the second Nature-of-Code system — the forces-garden attractor/flow/drag/vortex from the p5 `sAll` sketches — and act *on* rigid bodies, particle emitters and flocks. DNA/evolutionary entities are still legacy-only in `nature-lab.ts`. |
+| Curated vocabulary: assets, models, textures, prefabs | **Partial.** 63 mesh assets + 11 textures + 5 prefabs reachable from v2. Prefabs exist in the API but are absent from the editor UI. |
 | Browse Scenes + Games & Apps | **Games & Playgrounds ships** on the front door (`games-shelf.ts`): it lists the level library, every row is `api.levels.play(id)`, and playing switches the host to `play` mode and returns to the showroom on exit. **Browse Scenes is real but not on the front door** — the scene browser mounts only when a scene store answers, and the production deploy is static, so no button advertises it there. |
 | 2D overlay capability in the scene model | **Does not exist** in any form. No layer concept in `AgentWorldDefinition`. |
 | Live local interaction (human + in-browser agent, one scene) | **Ships.** |
@@ -212,8 +212,15 @@ Related corrections elsewhere in this spec:
   inside `updateSimulation` so it inherits pause/step, and reported in `state()` with live
   `memberCount` / `leadPosition` / `averageSpeed` so a stalled flock is visible to an agent.
   Two flocks fly in the showroom and are asserted to move and to survive export→load.
-- **§4 scene model** — of the listed simulation systems, spline followers, particles/emitters
-  and flocking are real. Force fields, crowds and evolutionary entities are not.
+- **§4 scene model** — of the listed simulation systems, spline followers, particles/emitters,
+  flocking and now **force fields** are real. Crowds and evolutionary entities are not. Force
+  fields are the one system that is an entity *for identity* but a runtime pass *for effect*:
+  the `force-field` entity carries position/radius/lifetime and serialises like anything else,
+  while the actual pushing is a pass over other entities in `updateSimulation`, immediately
+  before the cannon step, applying `a·mass` to dynamic bodies and an `externalAcceleration`
+  hook to flocks and emitters. Measured ~0.52 ms/step for one attractor over 200 dynamic
+  bodies + a 240-member flock (particles opt-out, the default); ~1.24 ms/step with a
+  1500-particle emitter added to the pass.
 - **§5 showroom** — ~~the terrain is procedural sine displacement mounted as *host decoration*~~
   **Corrected.** Terrain and water are now v2 entity types (`agent-world-terrain.ts`,
   `agent-world-water.ts`), and the showroom's ground is an ordinary `terrain` entity on a

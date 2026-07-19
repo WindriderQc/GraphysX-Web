@@ -13,6 +13,7 @@ import {
   IcosahedronGeometry,
   Line,
   LineBasicMaterial,
+  Matrix4,
   Mesh,
   MeshPhongMaterial,
   MeshStandardMaterial,
@@ -106,6 +107,16 @@ import {
   type ResolvedAgentWorldFlock
 } from "./agent-world-flock";
 import {
+  AgentWorldForceFieldVisual,
+  GRAPHYSX_AGENT_WORLD_FORCE_FIELDS,
+  findForceFieldVisual,
+  resolveAgentWorldForceField,
+  sampleForceFieldAcceleration,
+  type AgentWorldForceField,
+  type AgentWorldForceFieldDescriptor,
+  type ResolvedAgentWorldForceField
+} from "./agent-world-force-field";
+import {
   AgentWorldWaterSurface,
   findWaterSurface,
   resolveAgentWorldWater,
@@ -134,6 +145,7 @@ export type AgentWorldEntityType =
   | "terrain"
   | "water"
   | "flock"
+  | "force-field"
   | "ambient-light"
   | "directional-light"
   | "point-light";
@@ -302,6 +314,12 @@ export type AgentWorldEntityDefinition = {
   water?: AgentWorldWater;
   /** Boid flocking configuration. Only valid on `flock` entities. */
   flock?: AgentWorldFlock;
+  /**
+   * Force field configuration. Only valid on `force-field` entities. Unlike every other
+   * field here, this one describes what the entity does to *other* entities — see the module
+   * header of `agent-world-force-field.ts` for why that is still an entity type.
+   */
+  forceField?: AgentWorldForceField;
   agent?: AgentWorldAgentProfile;
   physics?: AgentWorldPhysics;
   intensity?: number;
@@ -343,6 +361,8 @@ export type AgentWorldEntityPatch = {
   water?: AgentWorldWater;
   /** Patch the flock of a `flock` entity. Merged over the current configuration. */
   flock?: AgentWorldFlock;
+  /** Patch the field of a `force-field` entity. Merged over the current configuration. */
+  forceField?: AgentWorldForceField;
   interactions?: AgentWorldInteraction[];
 };
 
@@ -441,6 +461,20 @@ export type AgentWorldEntityState = {
    * only on screen, so an agent (or a smoke test) can tell "present" from "alive".
    */
   flock: (ResolvedAgentWorldFlock & { memberCount: number; leadPosition: AgentWorldVector3; averageSpeed: number }) | null;
+  /**
+   * Force field configuration plus live readings, for the same reason the flock reports
+   * `averageSpeed`: a field that is present, enabled, and silently affecting nothing — wrong
+   * radius, wrong tag filter, every target static — is indistinguishable from a working one
+   * unless the runtime says how many things it actually pushed on the last step.
+   */
+  forceField: (ResolvedAgentWorldForceField & {
+    /** Bodies + flocks + emitters the last step's force pass actually applied a non-zero acceleration to. */
+    affectedCount: number;
+    /** Largest |a| applied on the last step, world units per second squared. */
+    peakAcceleration: number;
+    /** Line segments the visualiser is drawing. 0 when `visualize` is off. */
+    visualVectors: number;
+  }) | null;
 };
 
 export type AgentWorldInteractionReceipt = {
@@ -509,6 +543,7 @@ export type AgentWorldStreamEventType =
   | "entity.updated"
   | "entity.removed"
   | "world.loaded"
+  | "environment.changed"
   | "commit.applied";
 
 export type AgentWorldEventPage = {
@@ -574,6 +609,8 @@ export type GraphysXAgentWorldApi = {
   heightmaps(): readonly AgentWorldHeightmapDescriptor[];
   /** The curated boid-flock presets recovered from the Nature-of-Code sketches. */
   flocks(): readonly AgentWorldFlockDescriptor[];
+  /** The curated force-field presets recovered from the same Nature-of-Code sketches. */
+  forceFields(): readonly AgentWorldForceFieldDescriptor[];
   importLegacyXml(xml: string, options?: { id?: string; label?: string }): AgentWorldResult<{
     state: AgentWorldState;
     sourceEntityCount: number;
@@ -632,6 +669,7 @@ type ResolvedEntity = {
   terrain: ResolvedAgentWorldTerrain | null;
   water: ResolvedAgentWorldWater | null;
   flock: ResolvedAgentWorldFlock | null;
+  forceField: ResolvedAgentWorldForceField | null;
   physics: ResolvedAgentWorldPhysics | null;
   intensity: number;
   distance: number;
@@ -723,6 +761,9 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "entity.flock",
   "flock.list",
   "simulation.flocking",
+  "entity.force-field",
+  "force-field.list",
+  "simulation.force-fields",
   "physics.rigid-body",
   "spline.path",
   "behavior.follow-spline",
@@ -822,6 +863,27 @@ export class AgentWorldRuntime {
   private prefabSequence = 0;
   private commitSequence = 0;
   private groundBody: Body | null = null;
+  /**
+   * What each force field touched on the last completed step, keyed by field id. Written by
+   * {@link applyForceFields} and read only by `state()`, so a field that is present but inert
+   * is distinguishable from one that is working — the flock's `averageSpeed` lesson applied to
+   * a system whose whole job is invisible.
+   */
+  private readonly forceFieldReadings = new Map<string, { affected: Set<string>; peak: number }>();
+  /** Allocation-free scratch for the per-step force pass. Owned here so the hot loop never allocates. */
+  private readonly forceFieldScratch = {
+    localPoint: new Vector3(),
+    localVelocity: new Vector3(),
+    localAcceleration: new Vector3(),
+    worldA: new Vector3(),
+    worldB: new Vector3(),
+    worldPoint: new Vector3(),
+    worldVelocity: new Vector3(),
+    worldAcceleration: new Vector3(),
+    hookWorldPoint: new Vector3(),
+    hookWorldVelocity: new Vector3(),
+    hookWorldAcceleration: new Vector3()
+  };
 
   constructor(definition: AgentWorldDefinition = GRAPHYSX_AGENT_DEMO_WORLD) {
     this.group.name = "GraphysXAgentWorldV2";
@@ -854,6 +916,11 @@ export class AgentWorldRuntime {
   /** The boid-flock presets graduated from the Nature-of-Code sketches, as scene vocabulary. */
   listFlocks(): readonly AgentWorldFlockDescriptor[] {
     return deepClone(GRAPHYSX_AGENT_WORLD_FLOCKS) as AgentWorldFlockDescriptor[];
+  }
+
+  /** The force-field presets graduated from the Nature-of-Code sketches, as scene vocabulary. */
+  listForceFields(): readonly AgentWorldForceFieldDescriptor[] {
+    return deepClone(GRAPHYSX_AGENT_WORLD_FORCE_FIELDS) as AgentWorldForceFieldDescriptor[];
   }
 
   listAssets(): readonly AgentWorldAssetDescriptor[] {
@@ -1313,6 +1380,11 @@ export class AgentWorldRuntime {
       definition.flock = resolveAgentWorldFlock(patch.flock, definition.flock ?? undefined);
       findFlockSystem(runtime.object)?.configure(definition.flock);
     }
+    if (patch.forceField !== undefined) {
+      if (definition.type !== "force-field") throw new Error("Only force-field entities accept a force field configuration");
+      definition.forceField = resolveAgentWorldForceField(patch.forceField, definition.forceField ?? undefined);
+      findForceFieldVisual(runtime.object)?.configure(definition.forceField);
+    }
     if (patch.interactions) definition.interactions = this.resolveInteractions(patch.interactions);
     this.applyResolvedEntity(runtime);
     // A terrain patch reshapes the ground, so the collider has to be rebuilt with it —
@@ -1404,6 +1476,14 @@ export class AgentWorldRuntime {
   private setEnvironmentInternal(environment: AgentWorldDefinition["environment"]): void {
     this.environment = resolveEnvironment(environment);
     this.buildEnvironment();
+    // The runtime owns the ground mesh and gravity — `buildEnvironment` just updated both.
+    // But `background`, `fog` and `sky` are applied by the *host*, off the runtime's scene
+    // graph, and the host only re-reads them on `world.loaded`. Without this, an agent's
+    // `api.transaction([{ op: "set-environment", ... }])` changed the stored environment and
+    // the ground, while the rendered sky and background silently stayed on the old values —
+    // the same write-only parity gap that `world.loaded` closed for `create`/`load`, reopened
+    // by a different entry point. Emitting here lets the host re-apply for every caller.
+    this.emit("environment.changed", [], { sky: this.environment.sky, background: this.environment.background });
   }
 
   private loadDefinition(source: AgentWorldDefinition): void {
@@ -1526,6 +1606,9 @@ export class AgentWorldRuntime {
       const mode = runtime.definition.physics?.mode;
       if ((mode === "kinematic" || mode === "trigger") && runtime.body) syncObjectToBody(runtime.object, runtime.body);
     }
+    // Fields act before the solver: a force applied after the step would not be integrated
+    // until the next one, which is a one-frame lag that shows up as jitter on a fast attractor.
+    this.applyForceFields();
     if (deltaSeconds > 0) this.physicsWorld.step(1 / 60, deltaSeconds, 4);
     for (const runtime of this.entities.values()) {
       if (runtime.definition.physics?.mode === "dynamic" && runtime.body) syncBodyToObject(runtime.body, runtime.object);
@@ -1541,6 +1624,8 @@ export class AgentWorldRuntime {
       if (water) water.update(deltaSeconds);
       const flock = findFlockSystem(runtime.object);
       if (flock) flock.update(deltaSeconds);
+      const field = findForceFieldVisual(runtime.object);
+      if (field) field.update(deltaSeconds);
     }
     for (const runtime of this.entities.values()) {
       for (const behavior of runtime.definition.behaviors) {
@@ -1549,6 +1634,136 @@ export class AgentWorldRuntime {
           if (target) runtime.object.lookAt(target.object.getWorldPosition(new Vector3()));
         }
       }
+    }
+  }
+
+  /**
+   * The force-field pass: the one place in the runtime that can see rigid bodies, particle
+   * systems and flocks at once, which is exactly why the coupling lives here rather than
+   * inside `agent-world-force-field.ts`.
+   *
+   * It runs once per simulation step, immediately before the cannon step, and does three
+   * things:
+   *
+   *  1. applies `a · mass` to every eligible **dynamic** body — static, kinematic and trigger
+   *     bodies are left alone, because a field that shoved the ground would be a bug;
+   *  2. installs (or clears) the per-step `externalAcceleration` hook on every flock and
+   *     emitter, so those systems pick the field up inside their own integrator without
+   *     either module having to know force fields exist;
+   *  3. records what each field actually touched, so `state().forceField` can distinguish a
+   *     working field from a present-but-inert one.
+   *
+   * Everything is sampled in the **field's** local space, so a rotated, scaled or parented
+   * field is exactly as correct as an unrotated one at the origin — the box region of a
+   * tilted drag volume really is tilted. The local↔world conversion uses two `applyMatrix4`
+   * calls and a subtraction rather than a normal matrix, because that handles non-uniform
+   * scale without a special case.
+   */
+  private applyForceFields(): void {
+    const fields = [...this.entities.values()].filter(
+      (runtime) => runtime.definition.type === "force-field" && runtime.definition.forceField?.enabled,
+    );
+    this.forceFieldReadings.clear();
+    // Clear last step's hooks unconditionally, so removing or disabling the last field really
+    // does stop the pushing. This is the shape of bug this codebase keeps finding: state that
+    // is written on the way in and never unwritten on the way out.
+    for (const runtime of this.entities.values()) {
+      const flock = findFlockSystem(runtime.object);
+      if (flock) flock.externalAcceleration = null;
+      const particles = findParticleSystem(runtime.object);
+      if (particles) particles.externalAcceleration = null;
+    }
+    if (fields.length === 0) return;
+
+    for (const field of fields) {
+      field.object.updateWorldMatrix(true, false);
+      this.forceFieldReadings.set(field.definition.id, { affected: new Set<string>(), peak: 0 });
+    }
+    const inverses = new Map<string, Matrix4>();
+    for (const field of fields) inverses.set(field.definition.id, new Matrix4().copy(field.object.matrixWorld).invert());
+
+    const scratch = this.forceFieldScratch;
+    const elapsed = this.elapsedSeconds;
+
+    /**
+     * Sum every field of a given channel that reaches `worldPoint` into `outWorld`, in world
+     * space. `channel` selects which of the three `affects*` flags gates a field, so bodies,
+     * flocks and particles share one path and differ only in the flag they read.
+     */
+    const accumulate = (
+      targetId: string,
+      targetTags: string[],
+      channel: "affectsBodies" | "affectsFlocks" | "affectsParticles",
+      worldPoint: Vector3,
+      worldVelocity: Vector3,
+      outWorld: Vector3,
+    ): void => {
+      outWorld.set(0, 0, 0);
+      for (const field of fields) {
+        const config = field.definition.forceField!;
+        if (!config[channel]) continue;
+        if (config.affectsTags.length > 0 && !config.affectsTags.some((tag) => targetTags.includes(tag))) continue;
+        const inverse = inverses.get(field.definition.id)!;
+        // World → field-local, for both the point and the velocity direction.
+        scratch.localPoint.copy(worldPoint).applyMatrix4(inverse);
+        scratch.localVelocity.copy(worldPoint).add(worldVelocity).applyMatrix4(inverse).sub(scratch.localPoint);
+        const influence = sampleForceFieldAcceleration(config, scratch.localPoint, scratch.localVelocity, elapsed, scratch.localAcceleration);
+        if (influence <= 0 || scratch.localAcceleration.lengthSq() < 1e-12) continue;
+        // Field-local → world, same trick in the other direction.
+        scratch.worldA.copy(scratch.localPoint).applyMatrix4(field.object.matrixWorld);
+        scratch.worldB.copy(scratch.localPoint).add(scratch.localAcceleration).applyMatrix4(field.object.matrixWorld).sub(scratch.worldA);
+        outWorld.add(scratch.worldB);
+        const reading = this.forceFieldReadings.get(field.definition.id)!;
+        reading.affected.add(targetId);
+        reading.peak = Math.max(reading.peak, scratch.worldB.length());
+      }
+    };
+
+    const anyBodies = fields.some((field) => field.definition.forceField!.affectsBodies);
+    const anyFlocks = fields.some((field) => field.definition.forceField!.affectsFlocks);
+    const anyParticles = fields.some((field) => field.definition.forceField!.affectsParticles);
+
+    for (const runtime of this.entities.values()) {
+      const definition = runtime.definition;
+      if (definition.type === "force-field") continue;
+
+      // 1. Dynamic rigid bodies.
+      if (anyBodies && runtime.body && definition.physics?.mode === "dynamic") {
+        scratch.worldPoint.set(runtime.body.position.x, runtime.body.position.y, runtime.body.position.z);
+        scratch.worldVelocity.set(runtime.body.velocity.x, runtime.body.velocity.y, runtime.body.velocity.z);
+        accumulate(definition.id, definition.tags, "affectsBodies", scratch.worldPoint, scratch.worldVelocity, scratch.worldAcceleration);
+        if (scratch.worldAcceleration.lengthSq() > 1e-12) {
+          // F = m·a. Applying an acceleration rather than a force is the whole reason a heavy
+          // crate and a light ball fall into an attractor together — the p5 original got there
+          // by dividing the force back out by mass on the way in.
+          const mass = runtime.body.mass || 1;
+          runtime.body.applyForce(
+            new Vec3(scratch.worldAcceleration.x * mass, scratch.worldAcceleration.y * mass, scratch.worldAcceleration.z * mass),
+          );
+          // A body asleep in a field would ignore it forever; a field arriving is exactly the
+          // kind of event that should wake it.
+          if (runtime.body.sleepState === Body.SLEEPING) runtime.body.wakeUp();
+        }
+      }
+
+      // 2. Flocks and emitters, via the per-step hook installed on the system. The consumer's
+      //    own world matrix is captured once here rather than per member/particle.
+      const flock = findFlockSystem(runtime.object);
+      const particles = findParticleSystem(runtime.object);
+      if ((!flock || !anyFlocks) && (!particles || !anyParticles)) continue;
+      const channel = flock ? "affectsFlocks" : "affectsParticles";
+      runtime.object.updateWorldMatrix(true, false);
+      const toWorld = new Matrix4().copy(runtime.object.matrixWorld);
+      const toLocal = new Matrix4().copy(toWorld).invert();
+      const hook = (localPosition: Vector3, localVelocity: Vector3, out: Vector3): void => {
+        // Consumer-local → world, sample every field, back to consumer-local.
+        scratch.hookWorldPoint.copy(localPosition).applyMatrix4(toWorld);
+        scratch.hookWorldVelocity.copy(localPosition).add(localVelocity).applyMatrix4(toWorld).sub(scratch.hookWorldPoint);
+        accumulate(definition.id, definition.tags, channel, scratch.hookWorldPoint, scratch.hookWorldVelocity, scratch.hookWorldAcceleration);
+        out.copy(scratch.hookWorldPoint).add(scratch.hookWorldAcceleration).applyMatrix4(toLocal).sub(localPosition);
+      };
+      if (flock && anyFlocks) flock.externalAcceleration = hook;
+      if (particles && anyParticles) particles.externalAcceleration = hook;
     }
   }
 
@@ -1721,6 +1936,8 @@ export class AgentWorldRuntime {
     if (water && definition.water) water.configure(definition.water);
     const flock = findFlockSystem(object);
     if (flock && definition.flock) flock.configure(definition.flock);
+    const field = findForceFieldVisual(object);
+    if (field && definition.forceField) field.configure(definition.forceField);
     object.position.set(...definition.transform.position);
     object.rotation.set(...definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3);
     object.scale.set(...definition.transform.scale);
@@ -1775,6 +1992,11 @@ export class AgentWorldRuntime {
     // Members are steered, not simulated as rigid bodies — a collider on the flock entity
     // would describe a box the members do not live in.
     if (source.type === "flock" && source.physics) throw new Error("Flock entities do not take a rigid body");
+    const forceField = source.type === "force-field" ? resolveAgentWorldForceField(source.forceField) : null;
+    if (source.type !== "force-field" && source.forceField) throw new Error("Only force-field entities accept a force field configuration");
+    // A field acts on bodies; giving it one would let it act on itself, and a self-attracting
+    // attractor is a divide-by-zero with a scene graph attached.
+    if (source.type === "force-field" && source.physics) throw new Error("Force field entities do not take a rigid body");
     // Terrain always carries its own static Heightfield collider, built from the same height
     // array as the mesh. Accepting a physics field would let a scene ask for a box or a
     // dynamic body and quietly get neither.
@@ -1797,6 +2019,7 @@ export class AgentWorldRuntime {
       terrain,
       water,
       flock,
+      forceField,
       physics,
       intensity: clamp(source.intensity ?? 1, 0, 100),
       distance: clamp(source.distance ?? 0, 0, 1000),
@@ -1889,7 +2112,25 @@ export class AgentWorldRuntime {
         : null,
       terrain: runtime.definition.terrain ? terrainStateOf(runtime) : null,
       water: runtime.definition.water ? deepClone(runtime.definition.water) : null,
-      flock: runtime.definition.flock ? flockStateOf(runtime) : null
+      flock: runtime.definition.flock ? flockStateOf(runtime) : null,
+      forceField: runtime.definition.forceField ? this.forceFieldStateOf(runtime) : null
+    };
+  }
+
+  /**
+   * Force-field state: the resolved config plus the live readings from the last step. The
+   * readings are what make an inert field visible — `affectedCount: 0` on an enabled field
+   * means the radius, tag filter or target set is wrong, which `state()` could not otherwise
+   * tell from a field that is working perfectly.
+   */
+  private forceFieldStateOf(runtime: RuntimeEntity): NonNullable<AgentWorldEntityState["forceField"]> {
+    const reading = this.forceFieldReadings.get(runtime.definition.id);
+    const visual = findForceFieldVisual(runtime.object);
+    return {
+      ...deepClone(runtime.definition.forceField!),
+      affectedCount: reading?.affected.size ?? 0,
+      peakAcceleration: Number((reading?.peak ?? 0).toFixed(3)),
+      visualVectors: visual?.visualVectorCount ?? 0
     };
   }
 
@@ -1969,6 +2210,13 @@ function createEntityObject(definition: ResolvedEntity): Object3D {
     // Found by the update loop and `configure` exactly the way emitters and water are.
     system.object.userData.graphysxFlockSystem = system;
     return system.object;
+  }
+  if (definition.type === "force-field") {
+    const visual = new AgentWorldForceFieldVisual(definition.forceField ?? resolveAgentWorldForceField(undefined));
+    // Found by the update loop and `configure` exactly the way emitters, water and flocks are
+    // — but this one is only the drawing; the force pass reads `definition.forceField`.
+    visual.object.userData.graphysxForceFieldVisual = visual;
+    return visual.object;
   }
   if (definition.type === "spline" && definition.path) {
     const curve = createSplineCurve(definition.path);
@@ -2250,7 +2498,7 @@ function resolvePhysics(
 ): ResolvedAgentWorldPhysics {
   if (!source || !["static", "dynamic", "kinematic", "trigger"].includes(source.mode)) throw new Error(`Unsupported physics mode: ${String(source?.mode)}`);
   // Terrain owns a heightfield collider it builds itself; water deliberately has none.
-  if (["group", "spline", "emitter", "terrain", "water", "flock", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
+  if (["group", "spline", "emitter", "terrain", "water", "flock", "force-field", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
   if (entityType === "plane" && source.mode === "dynamic") throw new Error("Plane physics can only be static or kinematic");
   if (parentId) throw new Error("Physics entities must be spawned at the world root");
   // A trigger never responds to contact, so a behavior moving it cannot fight the solver.
@@ -2467,7 +2715,7 @@ function validateInteraction(interaction: AgentWorldInteraction, entities: Map<s
 }
 
 function isEntityType(value: unknown): value is AgentWorldEntityType {
-  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "ambient-light", "directional-light", "point-light"].includes(String(value));
+  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "force-field", "ambient-light", "directional-light", "point-light"].includes(String(value));
 }
 
 function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition {
@@ -2495,6 +2743,7 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     ...(definition.terrain ? { terrain: deepClone(definition.terrain) } : {}),
     ...(definition.water ? { water: deepClone(definition.water) } : {}),
     ...(definition.flock ? { flock: deepClone(definition.flock) } : {}),
+    ...(definition.forceField ? { forceField: deepClone(definition.forceField) } : {}),
     ...(definition.physics ? { physics: deepClone(definition.physics) } : {}),
     intensity: definition.intensity,
     distance: definition.distance,
@@ -2550,6 +2799,11 @@ function disposeObjectTree(root: Object3D): void {
     const flock = findFlockSystem(child);
     if (flock) {
       flock.dispose();
+      return;
+    }
+    const field = findForceFieldVisual(child);
+    if (field) {
+      field.dispose();
       return;
     }
     if (!(child instanceof Mesh) && !(child instanceof Line)) return;

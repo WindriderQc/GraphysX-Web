@@ -76,6 +76,7 @@ import { GRAPHYSX_AGENT_WORLD_SKIES } from "./agent-world-skies";
 import { GRAPHYSX_AGENT_WORLD_EMITTERS } from "./agent-world-particles";
 import { GRAPHYSX_AGENT_WORLD_HEIGHTMAPS } from "./agent-world-terrain";
 import { GRAPHYSX_AGENT_WORLD_FLOCKS } from "./agent-world-flock";
+import { GRAPHYSX_AGENT_WORLD_FORCE_FIELDS } from "./agent-world-force-field";
 import {
   GRAPHYSX_AGENT_WORLD_TEXTURES,
   type AgentWorldTextureId
@@ -3454,6 +3455,7 @@ export class PrototypeApp {
       emitters: () => GRAPHYSX_AGENT_WORLD_EMITTERS,
       heightmaps: () => GRAPHYSX_AGENT_WORLD_HEIGHTMAPS,
       flocks: () => GRAPHYSX_AGENT_WORLD_FLOCKS,
+      forceFields: () => GRAPHYSX_AGENT_WORLD_FORCE_FIELDS,
       importLegacyXml: debugApi.importLegacyAgentWorldXml,
       open: debugApi.openAgentWorldStudio,
       demo: debugApi.loadAgentWorldDemo,

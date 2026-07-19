@@ -57,6 +57,7 @@ const TYPE_GLYPHS: Record<AgentWorldEntityType, string> = {
   terrain: "⛰",
   water: "≈",
   flock: "⋙",
+  "force-field": "❋",
   "ambient-light": "○",
   "directional-light": "☀",
   "point-light": "✦",
@@ -108,6 +109,7 @@ const PHYSICS_FORBIDDEN_TYPES = new Set<AgentWorldEntityType>([
   "group",
   "spline",
   "emitter",
+  "force-field",
   "ambient-light",
   "directional-light",
   "point-light",
@@ -1771,7 +1773,7 @@ export class PlatformEditor {
       // Simulation vocabulary rather than props: a flock is a population that steers itself,
       // so the chip places one entity and the scene gains N members that behave. Same call an
       // agent makes — api.spawn({ type: "flock", flock: { preset } }).
-      return this.deps.api.flocks().map((flock) =>
+      const flocks = this.deps.api.flocks().map((flock) =>
         this.chip(flock.label, () => {
           this.addCounter += 1;
           const id = `edit-flock-${this.addCounter}`;
@@ -1787,6 +1789,28 @@ export class PlatformEditor {
           else this.refresh();
         }, `${flock.description}\n\n${flock.defaults.count} members, one instanced draw call.\nSource: ${flock.provenance.sourceRepo}/${flock.provenance.sourcePath}\n${flock.provenance.note}`),
       );
+      // Force fields live in the same tab because they are the other half of the same lesson:
+      // a flock is a population that steers itself, a field is the thing that steers the rest.
+      // The chip places one field entity; the scene's existing bodies, flocks and emitters
+      // start responding to it. Same call an agent makes —
+      // api.spawn({ type: "force-field", forceField: { preset } }).
+      const fields = this.deps.api.forceFields().map((field) =>
+        this.chip(field.label, () => {
+          this.addCounter += 1;
+          const id = `edit-force-field-${this.addCounter}`;
+          const result = this.deps.api.spawn({
+            id,
+            type: "force-field",
+            label: field.label,
+            transform: { position: [0, field.defaults.kind === "attractor" || field.defaults.kind === "vortex" ? 4 : 3, 0] },
+            forceField: { preset: field.id },
+            tags: ["life", "force-field"],
+          });
+          if (result.ok) this.select(id);
+          else this.refresh();
+        }, `${field.description}\n\nActs on other entities, not itself.\nSource: ${field.provenance.sourceRepo}/${field.provenance.sourcePath}\n${field.provenance.note}`),
+      );
+      return [...flocks, ...fields];
     }
     return this.deps.api.textures().map((texture) =>
       this.chip(texture.label ?? texture.id, () => {

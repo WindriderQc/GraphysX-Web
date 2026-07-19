@@ -360,6 +360,14 @@ const UP = new Vector3(0, 1, 0);
  */
 export class AgentWorldFlockSystem {
   readonly object = new Group();
+  /**
+   * Set by the runtime's force-field pass immediately before each `update()`, and cleared
+   * when no field reaches this flock. Sampled per member in **entity-local** space — the
+   * runtime's closure owns the local↔world conversion, because only it knows where the
+   * fields are. Kept as a plain hook rather than a list of fields so this module never has
+   * to know that force fields exist.
+   */
+  externalAcceleration: ((position: Vector3, velocity: Vector3, out: Vector3) => void) | null = null;
   private config: ResolvedAgentWorldFlock;
   private mesh!: InstancedMesh;
   private trails: LineSegments | null = null;
@@ -377,6 +385,7 @@ export class AgentWorldFlockSystem {
     diff: new Vector3(),
     normal: new Vector3(),
     desired: new Vector3(),
+    external: new Vector3(),
   };
   private accelerations: Vector3[] = [];
 
@@ -602,6 +611,18 @@ export class AgentWorldFlockSystem {
             );
           }
         }
+      }
+      // Force fields land here, as one more term in the steering sum rather than as a
+      // post-hoc nudge to the velocity. That matters: added to the acceleration it is subject
+      // to the same speed clamp as everything else, so a strong field bends the murmuration
+      // instead of tearing individual members out of it.
+      if (this.externalAcceleration) {
+        const external = this.scratch.external;
+        this.externalAcceleration(position, this.velocities[index], external);
+        // On a shell, anything radial is cancelled a few lines later by the snap-back;
+        // projecting first keeps the field's in-plane part intact instead of throwing it away.
+        if (onSphere) external.projectOnPlane(normal);
+        acceleration.add(external);
       }
     }
 

@@ -18,6 +18,7 @@
     "probe:water-cost": "node scripts/probe-water-cost.mjs",
     "smoke:scene-store": "node scripts/smoke-scene-store.mjs",
     "smoke:triggers": "node scripts/smoke-triggers.mjs",
+    "smoke:roundtrip": "node scripts/smoke-roundtrip.mjs",
     "serve:staging": "node scripts/staging-server.mjs",
     "serve:scenes": "node server/scene-store.mjs",
     "scene": "node tools/graphysx-scene-agent.mjs",
