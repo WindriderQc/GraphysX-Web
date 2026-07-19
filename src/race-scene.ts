@@ -203,6 +203,7 @@ import {
   type AgentWorldCommand,
   type AgentWorldCommitReceipt,
   type AgentWorldCommitSummary,
+  type AgentWorldEventPage,
   type AgentWorldDefinition,
   type AgentWorldEntityDefinition,
   type AgentWorldEntityPatch,
@@ -1882,6 +1883,10 @@ export class RaceScene {
 
   observeAgentWorld(query?: AgentWorldQuery): ReturnType<AgentWorldRuntime["observe"]> | null {
     return this.agentWorld?.observe(query) ?? null;
+  }
+
+  readAgentWorldEvents(since?: number): AgentWorldEventPage {
+    return this.agentWorld?.readEvents(since) ?? { events: [], sequence: 0, dropped: false };
   }
 
   exportAgentWorld(): AgentWorldDefinition | null {

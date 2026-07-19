@@ -8,7 +8,7 @@ export const GRAPHYSX_AGENT_TOOL_EVENT_SCHEMA = "graphysx.agent-tool-event/v1" a
 const TOOL_PATHS = [
   "open", "demo", "state", "assets", "textures", "skies", "emitters", "heightmaps", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select",
   "attachBehavior", "detachBehavior", "interact", "prefabs", "spawnPrefab", "starters", "loadStarter",
-  "transaction", "commit", "history", "undo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
+  "transaction", "commit", "history", "events", "undo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
   "levels.tiles", "levels.tileSemantics", "levels.active", "levels.list", "levels.get", "levels.create", "levels.remove",
   "levels.open", "levels.region", "levels.patch", "levels.fill", "levels.resize", "levels.transaction", "levels.undo",
   "levels.importAscii", "levels.exportAscii", "levels.play"
@@ -172,3 +172,4 @@ export function createGraphysXAgentToolBridge(api: GraphysXAgentWorldApi): Graph
     }
   };
 }
+

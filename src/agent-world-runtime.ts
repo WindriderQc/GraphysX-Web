@@ -483,6 +483,47 @@ export type AgentWorldCommitSummary = {
   timeSeconds: number;
 };
 
+/**
+ * One thing that happened, addressed by a monotonic sequence number.
+ *
+ * Distinct from the `recentEvents` telemetry ring, which is a human-readable tail for the
+ * editor and is deliberately tiny. This is the machine-facing stream: typed payloads,
+ * gap-detectable, and the substrate both the rules layer and a remote relay read from.
+ * Without it a consumer polling `state()` can only diff whole worlds and can never know
+ * whether it missed something.
+ */
+export type AgentWorldStreamEvent = {
+  sequence: number;
+  type: AgentWorldStreamEventType;
+  /** Simulation time, so replay and physics agree even when wall-clock does not. */
+  atSeconds: number;
+  /** Entities this event concerns, so a consumer can filter without parsing a message. */
+  entityIds: string[];
+  data: Record<string, unknown>;
+};
+
+export type AgentWorldStreamEventType =
+  | "trigger.enter"
+  | "trigger.exit"
+  | "entity.spawned"
+  | "entity.updated"
+  | "entity.removed"
+  | "world.loaded"
+  | "commit.applied";
+
+export type AgentWorldEventPage = {
+  events: AgentWorldStreamEvent[];
+  /** Highest sequence issued so far; pass it back as `since` to continue. */
+  sequence: number;
+  /**
+   * True when the requested `since` had already fallen out of the buffer, so events were
+   * missed. A consumer that sees this must resynchronise from `state()` rather than
+   * assuming it has a complete picture — silently returning a partial list is how a rules
+   * layer loses a lap and nobody finds out for a week.
+   */
+  dropped: boolean;
+};
+
 export type AgentWorldCommitReceipt = {
   commit: AgentWorldCommitSummary;
   outputs: unknown[];
@@ -557,6 +598,11 @@ export type GraphysXAgentWorldApi = {
   transaction(commands: AgentWorldCommand[]): AgentWorldResult<unknown[]>;
   commit(changeSet: AgentWorldChangeSet): AgentWorldResult<AgentWorldCommitReceipt>;
   history(sinceRevision?: number): AgentWorldCommitSummary[];
+  /**
+   * The typed event stream since a sequence number. The substrate for a rules layer and for
+   * a relay sending deltas instead of whole documents.
+   */
+  events(since?: number): AgentWorldEventPage;
   undo(): AgentWorldResult<AgentWorldState>;
   select(ids: string[]): string[];
   query(query?: AgentWorldQuery): AgentWorldEntityState[];
@@ -757,6 +803,13 @@ export class AgentWorldRuntime {
   private readonly commits: AgentWorldCommitSummary[] = [];
   /** Trigger id → ids currently inside it, so each crossing fires once rather than per frame. */
   private readonly triggerOccupants = new Map<string, Set<string>>();
+  /**
+   * The machine-facing event stream. 512 is chosen to comfortably outlast a slow consumer
+   * polling a few times a second; overflow is reported through `dropped` rather than hidden.
+   */
+  private readonly stream: AgentWorldStreamEvent[] = [];
+  private readonly streamListeners = new Set<(event: AgentWorldStreamEvent) => void>();
+  private streamSequence = 0;
   private definition: AgentWorldDefinition = deepClone(GRAPHYSX_AGENT_DEMO_WORLD);
   private environment: AgentWorldEnvironment = deepClone(DEFAULT_ENVIRONMENT);
   private selectedIds: string[] = [];
@@ -963,6 +1016,7 @@ export class AgentWorldRuntime {
       };
       this.commits.push(summary);
       if (this.commits.length > 80) this.commits.shift();
+      this.emit("commit.applied", [], { commitId: id, actor: actor.id, intent, revision: this.revision });
       this.recordEvent("collaboration.committed", `${actor.label}: ${intent}`, actor.id);
       return this.success({ commit: deepClone(summary), outputs: result.value ?? [] });
     } catch (error) {
@@ -1195,6 +1249,9 @@ export class AgentWorldRuntime {
     this.applyResolvedEntity(runtime);
     this.rebuildPhysicsBody(runtime);
     if (definition.asset) this.startModelLoad(runtime);
+    // Carries the type so a relay can decide whether it needs the whole definition, and an
+    // ephemeral flag so a consumer knows this one is session state and not worth persisting.
+    this.emit("entity.spawned", [definition.id], { type: definition.type, ephemeral: definition.ephemeral });
     return definition.id;
   }
 
@@ -1263,6 +1320,9 @@ export class AgentWorldRuntime {
     if (patch.transform || patch.physics !== undefined || patch.parentId !== undefined || patch.terrain !== undefined) {
       this.rebuildPhysicsBody(runtime);
     }
+    // The changed field names, not the values: a relay reads them to decide what to send,
+    // and shipping the values here would duplicate state that `query()` already answers.
+    this.emit("entity.updated", [id], { fields: Object.keys(patch) });
   }
 
   private removeInternal(id: string): void {
@@ -1281,6 +1341,9 @@ export class AgentWorldRuntime {
     disposeObjectTree(runtime.object);
     this.entities.delete(id);
     this.selectedIds = this.selectedIds.filter((selectedId) => selectedId !== id && !ids.includes(selectedId));
+    // Descendants go with the parent, so the event names all of them — a consumer that only
+    // heard about the root would leave orphans on screen.
+    this.emit("entity.removed", [id, ...ids], { rootId: id });
   }
 
   private attachBehaviorInternal(id: string, behavior: AgentWorldBehavior): string {
@@ -1377,6 +1440,10 @@ export class AgentWorldRuntime {
       for (const interaction of runtime.definition.interactions) validateInteraction(interaction, this.entities);
     }
     this.updateSimulation(0);
+    // A wholesale replacement invalidates any incremental picture a consumer was keeping,
+    // whether it came from a load, a rollback or an undo. Saying so is cheaper than every
+    // consumer inferring it from a storm of spawn events.
+    this.emit("world.loaded", [], { worldId: this.definition.id, entityCount: this.entities.size });
   }
 
   private buildEnvironment(): void {
@@ -1544,6 +1611,7 @@ export class AgentWorldRuntime {
         current.add(moverId);
         if (previous.has(moverId)) continue;
         this.recordEvent("trigger.enter", `${triggerId} <- ${moverId}`);
+        this.emit("trigger.enter", [triggerId, moverId], { triggerId, entityId: moverId });
         // A trigger's interactions are its response to being crossed. This is what lets a
         // gate light up, a pickup vanish, or a launcher fire without any external agent in
         // the loop — the first in-world cause-and-effect the vocabulary has had.
@@ -1558,7 +1626,9 @@ export class AgentWorldRuntime {
       }
 
       for (const moverId of previous) {
-        if (!current.has(moverId)) this.recordEvent("trigger.exit", `${triggerId} -> ${moverId}`);
+        if (current.has(moverId)) continue;
+        this.recordEvent("trigger.exit", `${triggerId} -> ${moverId}`);
+        this.emit("trigger.exit", [triggerId, moverId], { triggerId, entityId: moverId });
       }
       this.triggerOccupants.set(triggerId, current);
     }
@@ -1566,6 +1636,47 @@ export class AgentWorldRuntime {
     for (const triggerId of [...this.triggerOccupants.keys()]) {
       if (!triggers.some((trigger) => trigger.definition.id === triggerId)) this.triggerOccupants.delete(triggerId);
     }
+  }
+
+  private emit(type: AgentWorldStreamEventType, entityIds: string[], data: Record<string, unknown> = {}): void {
+    const event: AgentWorldStreamEvent = {
+      sequence: ++this.streamSequence,
+      type,
+      atSeconds: Number(this.elapsedSeconds.toFixed(3)),
+      entityIds,
+      data,
+    };
+    this.stream.push(event);
+    if (this.stream.length > 512) this.stream.shift();
+    for (const listener of this.streamListeners) {
+      try {
+        listener(event);
+      } catch {
+        // A broken consumer must not take the simulation down with it.
+      }
+    }
+  }
+
+  /**
+   * Everything that happened after `since`. Pull-based by default because the interesting
+   * consumers — a rules layer, a relay, an agent on another machine — are not in this call
+   * stack and cannot be handed a callback.
+   */
+  readEvents(since = 0): AgentWorldEventPage {
+    const from = Number.isFinite(since) ? Math.max(0, Math.floor(since)) : 0;
+    const oldest = this.stream.length > 0 ? this.stream[0].sequence : this.streamSequence + 1;
+    return {
+      events: this.stream.filter((event) => event.sequence > from).map((event) => deepClone(event)),
+      sequence: this.streamSequence,
+      // Asking for events older than the buffer holds means some are gone for good.
+      dropped: from > 0 && from < oldest - 1,
+    };
+  }
+
+  /** Push, for consumers that are in-process. Returns an unsubscribe. */
+  subscribeEvents(listener: (event: AgentWorldStreamEvent) => void): () => void {
+    this.streamListeners.add(listener);
+    return () => this.streamListeners.delete(listener);
   }
 
   /** Ids currently inside a trigger. Empty for anything that is not one. */

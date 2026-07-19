@@ -111,6 +111,35 @@ try {
     };
   });
 
+  // The event stream is the substrate the rules layer and the relay both read from, so it
+  // is asserted on the same flow rather than in isolation: same gate, same ball.
+  out.stream = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const all = api.events(0);
+    const crossings = all.events.filter((event) => event.type.startsWith("trigger."));
+    const enter = crossings.find((event) => event.type === "trigger.enter");
+
+    // Reading from a sequence returns only what came after it.
+    const tail = enter ? api.events(enter.sequence) : { events: [] };
+
+    return {
+      sequence: all.sequence,
+      dropped: all.dropped,
+      monotonic: all.events.every((event, index) => index === 0 || event.sequence > all.events[index - 1].sequence),
+      enterPayload: enter ? { type: enter.type, entityIds: enter.entityIds, data: enter.data, hasTime: typeof enter.atSeconds === "number" } : null,
+      tailExcludesEnter: !tail.events.some((event) => event.sequence === enter?.sequence),
+      sawSpawns: all.events.some((event) => event.type === "entity.spawned"),
+      sawWorldLoaded: all.events.some((event) => event.type === "world.loaded"),
+      // Asking for a sequence older than the buffer must report the gap rather than
+      // quietly returning a partial list — a rules layer that silently loses a lap is worse
+      // than one that knows it has to resynchronise.
+      reportsGap: (() => {
+        for (let index = 0; index < 700; index += 1) api.spawn({ id: `filler-${index}`, type: "box", visible: false });
+        return api.events(1).dropped === true;
+      })(),
+    };
+  });
+
   const r = out.result ?? {};
   out.enteredGate = Boolean(r.occupiedAt) && r.occupiedAt.occupants.includes("ball");
   out.firedEnterEvent = (r.allEvents ?? []).some((event) => event.startsWith("trigger.enter") && event.includes("ball"));
@@ -141,5 +170,14 @@ const ok =
   out.passedThrough &&
   out.occupancyCleared &&
   out.movingGateAccepted &&
-  out.staticStillRefuses;
+  out.staticStillRefuses &&
+  out.stream?.monotonic &&
+  out.stream?.dropped === false &&
+  out.stream?.enterPayload?.entityIds?.includes("ball") &&
+  out.stream?.enterPayload?.data?.triggerId === "gate" &&
+  out.stream?.enterPayload?.hasTime &&
+  out.stream?.tailExcludesEnter &&
+  out.stream?.sawSpawns &&
+  out.stream?.sawWorldLoaded &&
+  out.stream?.reportsGap;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
