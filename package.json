@@ -14,6 +14,8 @@
     "smoke:standalone": "node scripts/smoke-standalone.mjs",
     "smoke:levels": "node scripts/smoke-levels.mjs",
     "smoke:foundation": "node scripts/smoke-foundation.mjs",
+    "probe:terrain": "node scripts/probe-terrain-rest.mjs",
+    "probe:water-cost": "node scripts/probe-water-cost.mjs",
     "smoke:scene-store": "node scripts/smoke-scene-store.mjs",
     "serve:staging": "node scripts/staging-server.mjs",
     "serve:scenes": "node server/scene-store.mjs",

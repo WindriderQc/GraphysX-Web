@@ -29,12 +29,13 @@ export interface PlatformEditorDeps {
 
 const round = (n: number): number => Math.round(n * 1000) / 1000;
 
-type LibraryTab = "prefabs" | "models" | "effects" | "textures";
+type LibraryTab = "prefabs" | "models" | "effects" | "terrain" | "textures";
 
 const LIBRARY_TABS: ReadonlyArray<{ id: LibraryTab; label: string }> = [
   { id: "prefabs", label: "Prefabs" },
   { id: "models", label: "Models" },
   { id: "effects", label: "Effects" },
+  { id: "terrain", label: "Terrain" },
   { id: "textures", label: "Textures" },
 ];
 
@@ -52,6 +53,8 @@ const TYPE_GLYPHS: Record<AgentWorldEntityType, string> = {
   spline: "∿",
   model: "⬡",
   emitter: "✷",
+  terrain: "⛰",
+  water: "≈",
   "ambient-light": "○",
   "directional-light": "☀",
   "point-light": "✦",
@@ -1637,6 +1640,45 @@ export class PlatformEditor {
           else this.refresh();
         }, `${emitter.description}\n\nArchive: ${emitter.provenance.presetRecord} (emitter ${emitter.provenance.emitterIndex}) — ${emitter.provenance.textureFile}`),
       );
+    }
+    if (tab === "terrain") {
+      // Landform vocabulary: one chip per curated heightmap, plus water. Terrain spawns with
+      // its static heightfield collider already attached, so a scene built here is one you
+      // can stand on immediately rather than one that needs a floor added under it.
+      const heightmaps = this.deps.api.heightmaps().map((heightmap) =>
+        this.chip(heightmap.label, () => {
+          this.addCounter += 1;
+          const id = `edit-terrain-${this.addCounter}`;
+          const result = this.deps.api.spawn({
+            id,
+            type: "terrain",
+            label: `${heightmap.label} Terrain`,
+            terrain: { heightmap: heightmap.id, size: 120, segments: 96, heightScale: 7 },
+            material: { color: "#6c7d55", roughness: 0.95, metalness: 0.02 },
+            castShadow: false,
+            tags: ["terrain"],
+          });
+          if (result.ok) this.select(id);
+          else this.refresh();
+        }, heightmap.provenance
+          ? `${heightmap.description}\n\nArchive: ${heightmap.provenance.sourcePath} (${heightmap.provenance.nativeSize.join("×")} @ ${heightmap.provenance.bitsPerPixel}bpp)\nsha256 ${heightmap.provenance.sourceSha256.slice(0, 16)}…\nResampled to ${heightmap.samples}² — ${heightmap.provenance.note}`
+          : `${heightmap.description}\n\nGenerated, not archive data.`),
+      );
+      const water = this.chip("Water (reflective)", () => {
+        this.addCounter += 1;
+        const id = `edit-water-${this.addCounter}`;
+        const result = this.deps.api.spawn({
+          id,
+          type: "water",
+          label: "Water",
+          transform: { position: [0, 0.2, 0] },
+          water: { size: 60, reflection: true, reflectionResolution: 256 },
+          tags: ["water"],
+        });
+        if (result.ok) this.select(id);
+        else this.refresh();
+      }, "A reflecting water surface.\n\nCosts one extra scene pass per frame while visible. Turn `water.reflection` off in the inspector to fall back to a single lit plane with the same ripple normals.");
+      return [...heightmaps, water];
     }
     return this.deps.api.textures().map((texture) =>
       this.chip(texture.label ?? texture.id, () => {

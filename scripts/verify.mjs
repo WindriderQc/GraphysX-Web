@@ -16,7 +16,11 @@ import { startStaticServer } from "./static-server.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ARTIFACTS = path.join(ROOT, "output", "verify");
-const PORT = Number(process.env.VERIFY_PORT || 4188);
+// Default to an ephemeral port. A fixed port makes back-to-back runs race the previous
+// run's socket sitting in TIME_WAIT, which surfaced as EADDRINUSE or as a smoke failing to
+// reach the server — flakiness that looks like a product bug but is purely the harness
+// colliding with itself. Set VERIFY_PORT to pin it when you need a stable URL.
+const PORT = Number(process.env.VERIFY_PORT || 0);
 
 const argv = process.argv.slice(2);
 const noBuild = argv.includes("--no-build");

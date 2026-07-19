@@ -365,6 +365,42 @@ gx.spawnPrefab("luminous-tree", {
 
 Available prefabs: `luminous-tree`, `signal-beacon`, `portal-arch`, `orbital-sculpture`, and `habitat-pod`. Each expands to ordinary stable-ID v2 entities; agents can query, update, reparent, animate, or remove every generated part afterward.
 
+## Terrain and water
+
+`terrain` is heightmap-backed ground that **carries its own static collider**, so objects land on it. It takes no `physics` field — the collider is implied by the entity, and a cannon-es `Heightfield` is built from the same height array as the mesh, so what you see and what you land on cannot drift apart.
+
+```js
+gx.spawn({
+  id: "ground",
+  type: "terrain",
+  terrain: {
+    heightmap: "highlands",   // gx.heightmaps() lists these with archive provenance
+    size: 150,
+    segments: 96,             // mesh and collider resolution; capped at 160
+    heightScale: 11,
+    heightOffset: -7,
+    flattenRadius: 16,        // level pad at the local origin for placing built content
+    flattenFalloff: 16,
+    flattenHeight: 0
+  }
+});
+```
+
+Pass `heights` instead of `heightmap` to supply an inline field — any array of 0..1 values whose length is a perfect square. `state()` reports the resolved configuration plus the achieved `minimumHeight`/`maximumHeight` and `colliderVertices`, so an agent can answer "where is the ground here?" without raycasting.
+
+`water` is a reflecting surface, with deliberately no collider — you look at it and fall through it.
+
+```js
+gx.spawn({
+  id: "lake",
+  type: "water",
+  transform: { position: [0, -0.45, 0] },
+  water: { size: 150, reflection: true, reflectionResolution: 256, rippleScale: 9 }
+});
+```
+
+`reflection` re-renders the scene from the mirrored camera every frame it is visible — a real second scene pass. It is an opt-out flag rather than a host setting precisely so the cost is a scene-authoring decision: `gx.update("lake", { water: { reflection: false } })` swaps in a single lit plane with the same ripple normals. `reflectionResolution` defaults to 256 and is capped at 1024.
+
 ## Collaboration commits
 
 Use `commit()` when multiple agents may edit the same world. `expectedRevision` is an optimistic concurrency guard: a stale observation is rejected without changing entities, revision, or accepted commit history.
@@ -394,6 +430,8 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `open()`, `demo()` | Open the studio or restore the built-in API-created demonstration. |
 | `assets()` | Discover recovered complex models that can be spawned by stable asset ID. |
 | `textures()` | Discover stable semantic textures, previews, descriptions, and repeat defaults. |
+| `skies()`, `emitters()` | Discover the per-scene archive skybox sets and the archive particle-emitter presets. |
+| `heightmaps()` | Discover the curated terrain heightmaps, with archive provenance, for `terrain` entities. |
 | `importLegacyXml(xml, options?)` | Migrate archived GraphysX `Object3D` XML into a validated v2 world with warnings. |
 | `create(definition)`, `clear(id?, label?)` | Replace the current world from a complete v2 definition. |
 | `spawn(entity)`, `update(id, patch)`, `remove(id)` | Perform a single entity edit. |
@@ -414,7 +452,7 @@ Every mutating method returns `{ ok, revision, value?, error? }`. Entity IDs are
 
 ## Scene vocabulary
 
-Entity types: `group`, `agent`, `box`, `sphere`, `icosahedron`, `cylinder`, `cone`, `torus`, `plane`, `spline`, `model`, `ambient-light`, `directional-light`, and `point-light`.
+Entity types: `group`, `agent`, `box`, `sphere`, `icosahedron`, `cylinder`, `cone`, `torus`, `plane`, `spline`, `model`, `emitter`, `terrain`, `water`, `ambient-light`, `directional-light`, and `point-light`.
 
 Behaviors: `spin`, `bob`, `orbit`, `pulse`, `look-at`, and `follow-spline`. Interaction types: `toggle-visibility` and `apply-impulse`.
 

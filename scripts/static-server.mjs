@@ -121,12 +121,35 @@ export function startStaticServer({ root, resolveRoot, port = 4188, host = "127.
   server.headersTimeout = 75_000;
   server.requestTimeout = 0;
 
+  // A malformed or half-open client connection makes Node destroy the socket by default,
+  // which reaches the browser as an RST. When that lands on a dynamic `import()` the page
+  // dies with "Failed to fetch dynamically imported module" — and unlike a navigation,
+  // Chromium does not retry a module fetch, so a single stray reset fails whichever smoke
+  // happened to be running. Answer politely and close instead of destroying.
+  server.on("clientError", (_error, socket) => {
+    if (socket.writable) socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+    else socket.destroy();
+  });
+
+  // Chromium opens a burst of parallel connections when it discovers a module graph. The
+  // default accept backlog can overflow under that burst on a loaded machine, and an
+  // overflowed backlog is refused at the TCP level — which is what ERR_CONNECTION_RESET and
+  // ERR_CONNECTION_TIMED_OUT on a 4 KB file actually were.
+  server.on("connection", (socket) => {
+    socket.setNoDelay(true);
+    // Never let a socket-level error bubble as an uncaught exception and take the run down.
+    socket.on("error", () => {});
+  });
+
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, host, () => {
+    server.listen({ port, host, backlog: 1024 }, () => {
+      // Report the port actually bound, so callers can pass 0 and get an ephemeral one.
+      const bound = server.address()?.port ?? port;
       resolve({
         server,
-        url: `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}/`,
+        port: bound,
+        url: `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${bound}/`,
         close: () => new Promise((done) => server.close(() => done())),
       });
     });

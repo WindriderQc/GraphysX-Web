@@ -97,6 +97,55 @@ try {
     window.__GRAPHYSX__.state().entities.some((e) => e.id.startsWith("showroom-drop-")));
   out.spawnedOne = (await page.evaluate(() => window.__GRAPHYSX__.state().entities.length)) === countBefore + 1;
 
+  // The ground is a `terrain` entity in the scene, not host decoration, and it carries a
+  // static heightfield collider.
+  out.terrain = await page.evaluate(() => {
+    const t = window.__GRAPHYSX__.state().entities.find((e) => e.type === "terrain");
+    if (!t) return null;
+    return {
+      id: t.id,
+      hasCollider: !!t.physics && t.physics.mode === "static",
+      heightmap: t.terrain.heightmap,
+      minimumHeight: t.terrain.minimumHeight,
+      maximumHeight: t.terrain.maximumHeight,
+      colliderVertices: t.terrain.colliderVertices,
+    };
+  });
+
+  // Water is a scene entity too, and its reflection is an entity flag rather than a host
+  // setting — so the cost is something a scene author can see and turn off.
+  out.water = await page.evaluate(() => {
+    const w = window.__GRAPHYSX__.state().entities.find((e) => e.type === "water");
+    return w ? { id: w.id, reflection: w.water.reflection, resolution: w.water.reflectionResolution } : null;
+  });
+
+  // THE regression guard. Terrain used to be sine-displaced host decoration with NO
+  // collider: the flat ground plane was hidden and nothing replaced its physics, so a ball
+  // dropped in the showroom fell to y=-12 and kept going, forever. The old assertion only
+  // checked that the entity existed, which is exactly why that shipped. Assert instead that
+  // the ball STOPS — settles at a height on the terrain and stays there.
+  out.ballRest = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const id = api.state().entities.map((e) => e.id).filter((i) => i.startsWith("showroom-drop-")).pop();
+    if (!id) return null;
+    const read = () => api.state().entities.find((e) => e.id === id) ?? null;
+    const spawnY = read().position[1];
+    // Settle deterministically through the public `step()` rather than waiting on frames:
+    // headless software GL runs the loop at a few fps, so wall-clock waiting would measure
+    // frame rate instead of physics. This is the same integrator the render loop drives.
+    for (let i = 0; i < 24; i += 1) api.step(0.5);
+    const settledY = read().position[1];
+    for (let i = 0; i < 8; i += 1) api.step(0.5);
+    const entity = read();
+    return {
+      spawnY: Number(spawnY.toFixed(3)),
+      settledY: Number(settledY.toFixed(3)),
+      finalY: Number(entity.position[1].toFixed(3)),
+      driftAfterSettle: Number(Math.abs(entity.position[1] - settledY).toFixed(3)),
+      velocityY: entity.physics ? entity.physics.linearVelocity[1] : null,
+    };
+  });
+
   await page.click(".gx-welcome button");
   // The editor module is loaded on demand, so wait for it to mount rather than guessing.
   await page.waitForSelector(".gx-ed-toolbar", { timeout: 15000 });
@@ -111,6 +160,24 @@ try {
   out.fatal = String(e);
 }
 
+// The ball must come to REST on the terrain, not merely exist:
+//  - it fell (it was dropped from above and ended lower),
+//  - it is no longer moving vertically,
+//  - it stopped moving and stayed stopped over a further 4 simulated seconds, and
+//  - it is resting within the terrain's own height range rather than somewhere below it.
+// Without a collider all four of these fail hard: the old behaviour was y ≈ -1000, vy ≈ -90.
+const rest = out.ballRest;
+const terrain = out.terrain;
+const ballCameToRest =
+  !!rest &&
+  !!terrain &&
+  rest.finalY < rest.spawnY &&
+  Math.abs(rest.velocityY) < 1 &&
+  rest.driftAfterSettle < 1 &&
+  rest.finalY > terrain.minimumHeight - 1 &&
+  rest.finalY < terrain.maximumHeight + 3;
+
+out.ballCameToRest = ballCameToRest;
 out.consoleErrors = consoleErrors;
 out.pageErrors = pageErrors;
 console.log(JSON.stringify(out, null, 2));
@@ -124,6 +191,12 @@ const ok =
   out.impulseMoved > 0.15 &&
   out.ballDropped &&
   out.spawnedOne &&
+  ballCameToRest &&
+  !!terrain &&
+  terrain.hasCollider &&
+  terrain.colliderVertices > 1000 &&
+  !!out.water &&
   out.editorVisibleAfterEnter &&
   out.welcomeGone;
+
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);

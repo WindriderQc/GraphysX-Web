@@ -86,6 +86,23 @@ import {
   type AgentWorldEmitterDescriptor,
   type ResolvedAgentWorldEmitter
 } from "./agent-world-particles";
+import {
+  GRAPHYSX_AGENT_WORLD_HEIGHTMAPS,
+  createTerrainGeometry,
+  createTerrainHeightfield,
+  resolveAgentWorldTerrain,
+  sampleTerrainHeights,
+  type AgentWorldHeightmapDescriptor,
+  type AgentWorldTerrain,
+  type ResolvedAgentWorldTerrain
+} from "./agent-world-terrain";
+import {
+  AgentWorldWaterSurface,
+  findWaterSurface,
+  resolveAgentWorldWater,
+  type AgentWorldWater,
+  type ResolvedAgentWorldWater
+} from "./agent-world-water";
 
 export const GRAPHYSX_AGENT_WORLD_SCHEMA = "graphysx.agent-world/v2" as const;
 export const GRAPHYSX_AGENT_WORLD_STATE_SCHEMA = "graphysx.agent-world-state/v2" as const;
@@ -105,6 +122,8 @@ export type AgentWorldEntityType =
   | "spline"
   | "model"
   | "emitter"
+  | "terrain"
+  | "water"
   | "ambient-light"
   | "directional-light"
   | "point-light";
@@ -256,6 +275,10 @@ export type AgentWorldEntityDefinition = {
   asset?: AgentWorldModelAsset;
   /** Particle emitter configuration. Only valid on `emitter` entities. */
   emitter?: AgentWorldEmitter;
+  /** Heightmap-backed terrain configuration. Only valid on `terrain` entities. */
+  terrain?: AgentWorldTerrain;
+  /** Reflective water configuration. Only valid on `water` entities. */
+  water?: AgentWorldWater;
   agent?: AgentWorldAgentProfile;
   physics?: AgentWorldPhysics;
   intensity?: number;
@@ -291,6 +314,10 @@ export type AgentWorldEntityPatch = {
   agent?: AgentWorldAgentProfile;
   /** Patch the emitter of an `emitter` entity. Merged over the current configuration. */
   emitter?: AgentWorldEmitter;
+  /** Patch the terrain of a `terrain` entity. Merged over the current configuration. */
+  terrain?: AgentWorldTerrain;
+  /** Patch the water of a `water` entity. Merged over the current configuration. */
+  water?: AgentWorldWater;
   interactions?: AgentWorldInteraction[];
 };
 
@@ -375,6 +402,9 @@ export type AgentWorldEntityState = {
   asset: ({ status: "loading" | "ready" | "error"; error?: string } & ResolvedAgentWorldModelAsset) | null;
   agent: Required<AgentWorldAgentProfile> | null;
   emitter: (ResolvedAgentWorldEmitter & { liveParticles: number }) | null;
+  /** Terrain configuration plus the derived collider facts an agent needs to place things. */
+  terrain: (ResolvedAgentWorldTerrain & { minimumHeight: number; maximumHeight: number; colliderVertices: number }) | null;
+  water: ResolvedAgentWorldWater | null;
 };
 
 export type AgentWorldInteractionReceipt = {
@@ -463,6 +493,8 @@ export type GraphysXAgentWorldApi = {
   skies(): readonly AgentWorldSkyDescriptor[];
   /** The curated particle-emitter presets decoded from the TV3D archive library. */
   emitters(): readonly AgentWorldEmitterDescriptor[];
+  /** The curated heightmaps, with provenance, for spawning `terrain` entities. */
+  heightmaps(): readonly AgentWorldHeightmapDescriptor[];
   importLegacyXml(xml: string, options?: { id?: string; label?: string }): AgentWorldResult<{
     state: AgentWorldState;
     sourceEntityCount: number;
@@ -513,6 +545,8 @@ type ResolvedEntity = {
   asset: ResolvedAgentWorldModelAsset | null;
   agent: Required<AgentWorldAgentProfile> | null;
   emitter: ResolvedAgentWorldEmitter | null;
+  terrain: ResolvedAgentWorldTerrain | null;
+  water: ResolvedAgentWorldWater | null;
   physics: ResolvedAgentWorldPhysics | null;
   intensity: number;
   distance: number;
@@ -596,6 +630,11 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "sky.list",
   "entity.emitter",
   "emitter.list",
+  "entity.terrain",
+  "heightmap.list",
+  "terrain.collider",
+  "entity.water",
+  "water.reflection",
   "physics.rigid-body",
   "spline.path",
   "behavior.follow-spline",
@@ -708,6 +747,11 @@ export class AgentWorldRuntime {
   /** The archive particle-emitter presets, as scene vocabulary. */
   listEmitters(): readonly AgentWorldEmitterDescriptor[] {
     return deepClone(GRAPHYSX_AGENT_WORLD_EMITTERS) as AgentWorldEmitterDescriptor[];
+  }
+
+  /** The curated heightmaps recovered from the archive, as terrain vocabulary. */
+  listHeightmaps(): readonly AgentWorldHeightmapDescriptor[] {
+    return deepClone(GRAPHYSX_AGENT_WORLD_HEIGHTMAPS) as AgentWorldHeightmapDescriptor[];
   }
 
   listAssets(): readonly AgentWorldAssetDescriptor[] {
@@ -1148,9 +1192,23 @@ export class AgentWorldRuntime {
       if (definition.type !== "emitter") throw new Error("Only emitter entities accept an emitter configuration");
       definition.emitter = resolveAgentWorldEmitter(patch.emitter, definition.emitter ?? undefined);
     }
+    if (patch.terrain !== undefined) {
+      if (definition.type !== "terrain") throw new Error("Only terrain entities accept a terrain configuration");
+      definition.terrain = resolveAgentWorldTerrain(patch.terrain, definition.terrain ?? undefined);
+      rebuildTerrainMesh(runtime);
+    }
+    if (patch.water !== undefined) {
+      if (definition.type !== "water") throw new Error("Only water entities accept a water configuration");
+      definition.water = resolveAgentWorldWater(patch.water, definition.water ?? undefined);
+      findWaterSurface(runtime.object)?.configure(definition.water);
+    }
     if (patch.interactions) definition.interactions = this.resolveInteractions(patch.interactions);
     this.applyResolvedEntity(runtime);
-    if (patch.transform || patch.physics !== undefined || patch.parentId !== undefined) this.rebuildPhysicsBody(runtime);
+    // A terrain patch reshapes the ground, so the collider has to be rebuilt with it —
+    // otherwise the mesh moves and things keep landing on the old landform.
+    if (patch.transform || patch.physics !== undefined || patch.parentId !== undefined || patch.terrain !== undefined) {
+      this.rebuildPhysicsBody(runtime);
+    }
   }
 
   private removeInternal(id: string): void {
@@ -1344,10 +1402,12 @@ export class AgentWorldRuntime {
     for (const runtime of this.entities.values()) {
       if (runtime.definition.physics?.mode === "dynamic" && runtime.body) syncBodyToObject(runtime.body, runtime.object);
     }
-    // Emitters tick inside updateSimulation, so they inherit pause/step for free.
+    // Emitters and water tick inside updateSimulation, so they inherit pause/step for free.
     for (const runtime of this.entities.values()) {
       const particles = findParticleSystem(runtime.object);
       if (particles) particles.update(deltaSeconds);
+      const water = findWaterSurface(runtime.object);
+      if (water) water.update(deltaSeconds);
     }
     for (const runtime of this.entities.values()) {
       for (const behavior of runtime.definition.behaviors) {
@@ -1380,7 +1440,13 @@ export class AgentWorldRuntime {
 
   private rebuildPhysicsBody(runtime: RuntimeEntity): void {
     if (runtime.body) this.physicsWorld.removeBody(runtime.body);
-    runtime.body = runtime.definition.physics ? createPhysicsBody(runtime.definition) : null;
+    // Terrain is the one type whose collider is implied by the entity rather than requested
+    // through `physics` — a terrain you can fall through is not terrain.
+    runtime.body = runtime.definition.type === "terrain"
+      ? createTerrainBody(runtime.definition, runtime.object)
+      : runtime.definition.physics
+        ? createPhysicsBody(runtime.definition)
+        : null;
     if (runtime.body) this.physicsWorld.addBody(runtime.body);
   }
 
@@ -1405,6 +1471,8 @@ export class AgentWorldRuntime {
     object.visible = definition.visible;
     const particles = findParticleSystem(object);
     if (particles && definition.emitter) particles.configure(definition.emitter);
+    const water = findWaterSurface(object);
+    if (water && definition.water) water.configure(definition.water);
     object.position.set(...definition.transform.position);
     object.rotation.set(...definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3);
     object.scale.set(...definition.transform.scale);
@@ -1412,7 +1480,9 @@ export class AgentWorldRuntime {
       if (child instanceof Mesh) {
         child.castShadow = definition.castShadow;
         child.receiveShadow = definition.receiveShadow;
-        if (child.material instanceof MeshStandardMaterial) {
+        // A water surface configures its own material from the `water` field; the generic
+        // entity material pass would overwrite the normal map and roughness it just set.
+        if (child.material instanceof MeshStandardMaterial && child.userData.graphysxWaterMaterialLocked !== true) {
           applyMaterial(child.material, child.userData.graphysxAgentAccent === true
             ? { ...definition.material, color: "#ffffff", emissive: definition.material.color, emissiveIntensity: 1.15, texture: null }
             : definition.material);
@@ -1444,6 +1514,19 @@ export class AgentWorldRuntime {
     const emitter = source.type === "emitter" ? resolveAgentWorldEmitter(source.emitter) : null;
     if (source.type !== "emitter" && source.emitter) throw new Error("Only emitter entities accept an emitter configuration");
     if (source.type === "emitter" && source.physics) throw new Error("Emitter entities do not take a rigid body");
+    const terrain = source.type === "terrain" ? resolveAgentWorldTerrain(source.terrain) : null;
+    if (source.type !== "terrain" && source.terrain) throw new Error("Only terrain entities accept a terrain configuration");
+    const water = source.type === "water" ? resolveAgentWorldWater(source.water) : null;
+    if (source.type !== "water" && source.water) throw new Error("Only water entities accept a water configuration");
+    // Water is a surface you look at and fall through, not a body you land on. A collider
+    // here would be a lie about what the entity does.
+    if (source.type === "water" && source.physics) throw new Error("Water entities do not take a rigid body");
+    // Terrain always carries its own static Heightfield collider, built from the same height
+    // array as the mesh. Accepting a physics field would let a scene ask for a box or a
+    // dynamic body and quietly get neither.
+    if (source.type === "terrain" && source.physics) {
+      throw new Error("Terrain entities carry their own static heightfield collider; remove the physics field");
+    }
     const physics = source.physics ? resolvePhysics(source.physics, source.type, source.parentId ?? null, behaviors) : null;
     return {
       id,
@@ -1457,6 +1540,8 @@ export class AgentWorldRuntime {
       asset,
       agent,
       emitter,
+      terrain,
+      water,
       physics,
       intensity: clamp(source.intensity ?? 1, 0, 100),
       distance: clamp(source.distance ?? 0, 0, 1000),
@@ -1523,20 +1608,31 @@ export class AgentWorldRuntime {
           ...(interaction.relativePoint ? { relativePoint: [...interaction.relativePoint] as AgentWorldVector3 } : {})
         } : {})
       })),
-      physics: runtime.definition.physics && runtime.body ? {
+      // Terrain's collider is implied rather than requested, so report it here anyway —
+      // an agent asking "can I land on this?" must be able to see the answer in state().
+      physics: runtime.body ? (runtime.definition.physics ? {
         mode: runtime.definition.physics.mode,
         mass: runtime.definition.physics.mass,
         material: runtime.definition.physics.material,
         linearVelocity: roundCannonVector(runtime.body.velocity),
         angularVelocity: roundCannonVector(runtime.body.angularVelocity),
         sleeping: runtime.body.sleepState === Body.SLEEPING
-      } : null,
+      } : {
+        mode: "static" as AgentWorldPhysicsMode,
+        mass: 0,
+        material: "ground" as AgentWorldPhysicsMaterial,
+        linearVelocity: [0, 0, 0] as AgentWorldVector3,
+        angularVelocity: [0, 0, 0] as AgentWorldVector3,
+        sleeping: false
+      }) : null,
       path: runtime.definition.path ? { pointCount: runtime.definition.path.points.length, closed: runtime.definition.path.closed } : null,
       asset: runtime.assetState ? deepClone(runtime.assetState) : null,
       agent: runtime.definition.agent ? deepClone(runtime.definition.agent) : null,
       emitter: runtime.definition.emitter
         ? { ...deepClone(runtime.definition.emitter), liveParticles: findParticleSystem(runtime.object)?.activeCount ?? 0 }
-        : null
+        : null,
+      terrain: runtime.definition.terrain ? terrainStateOf(runtime) : null,
+      water: runtime.definition.water ? deepClone(runtime.definition.water) : null
     };
   }
 
@@ -1593,6 +1689,23 @@ function createEntityObject(definition: ResolvedEntity): Object3D {
     // particles inherit the entity transform.
     system.points.userData.graphysxParticleSystem = system;
     return system.points;
+  }
+  if (definition.type === "terrain") {
+    const terrain = definition.terrain ?? resolveAgentWorldTerrain(undefined);
+    const heights = sampleTerrainHeights(terrain);
+    const material = new MeshStandardMaterial();
+    applyMaterial(material, definition.material);
+    const mesh = new Mesh(createTerrainGeometry(terrain, heights), material);
+    // The collider is built from this same array, so cache it on the object rather than
+    // resampling the field a second time when the body is made.
+    mesh.userData.graphysxTerrainHeights = heights;
+    return mesh;
+  }
+  if (definition.type === "water") {
+    const surface = new AgentWorldWaterSurface(definition.water ?? resolveAgentWorldWater(undefined));
+    // The update loop and `configure` find the surface here, the same way emitters are found.
+    surface.object.userData.graphysxWaterSurface = surface;
+    return surface.object;
   }
   if (definition.type === "spline" && definition.path) {
     const curve = createSplineCurve(definition.path);
@@ -1848,7 +1961,8 @@ function resolvePhysics(
   behaviors: AgentWorldBehavior[]
 ): ResolvedAgentWorldPhysics {
   if (!source || !["static", "dynamic", "kinematic"].includes(source.mode)) throw new Error(`Unsupported physics mode: ${String(source?.mode)}`);
-  if (["group", "spline", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
+  // Terrain owns a heightfield collider it builds itself; water deliberately has none.
+  if (["group", "spline", "emitter", "terrain", "water", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
   if (entityType === "plane" && source.mode === "dynamic") throw new Error("Plane physics can only be static or kinematic");
   if (parentId) throw new Error("Physics entities must be spawned at the world root");
   if (source.mode !== "kinematic" && behaviors.some(isMotionBehavior)) throw new Error("Transform behaviors require kinematic physics");
@@ -1922,11 +2036,67 @@ function createPhysicsBody(definition: ResolvedEntity): Body {
   return body;
 }
 
+/**
+ * The static heightfield collider for a terrain entity.
+ *
+ * Heights come off the mesh object rather than being resampled, so the collider is provably
+ * the surface that was drawn. Terrain is always static and always uses the `ground` friction
+ * preset — a rolling ball should slow on soil, not skate.
+ */
+function createTerrainBody(definition: ResolvedEntity, object: Object3D): Body | null {
+  const terrain = definition.terrain;
+  if (!terrain) return null;
+  const cached = object.userData.graphysxTerrainHeights;
+  const heights = cached instanceof Float32Array ? cached : sampleTerrainHeights(terrain);
+  const { shape, offset, orientation } = createTerrainHeightfield(terrain, heights);
+  const material = new CannonMaterial({ friction: 0.45, restitution: 0.05 });
+  material.name = `graphysx-${definition.id}-terrain`;
+  const body = new Body({ mass: 0, material, type: Body.STATIC });
+  body.addShape(shape, offset, orientation);
+  body.position.set(...definition.transform.position);
+  body.quaternion.setFromEuler(...definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3);
+  body.updateMassProperties();
+  return body;
+}
+
 function syncObjectToBody(object: Object3D, body: Body): void {
   body.position.set(object.position.x, object.position.y, object.position.z);
   body.quaternion.set(object.quaternion.x, object.quaternion.y, object.quaternion.z, object.quaternion.w);
   body.aabbNeedsUpdate = true;
   body.wakeUp();
+}
+
+/**
+ * Terrain as an agent sees it: the configuration, plus the derived facts that answer
+ * "where is the ground here?" without needing to raycast — the achieved height range and
+ * the collider's vertex count, so the cost is visible too.
+ */
+function terrainStateOf(runtime: RuntimeEntity): NonNullable<AgentWorldEntityState["terrain"]> {
+  const terrain = runtime.definition.terrain!;
+  const cached = runtime.object.userData.graphysxTerrainHeights;
+  const heights = cached instanceof Float32Array ? cached : sampleTerrainHeights(terrain);
+  let minimumHeight = Infinity;
+  let maximumHeight = -Infinity;
+  for (const height of heights) {
+    if (height < minimumHeight) minimumHeight = height;
+    if (height > maximumHeight) maximumHeight = height;
+  }
+  return {
+    ...deepClone(terrain),
+    minimumHeight: Number(minimumHeight.toFixed(3)),
+    maximumHeight: Number(maximumHeight.toFixed(3)),
+    colliderVertices: heights.length
+  };
+}
+
+/** Re-displace a terrain mesh in place after its configuration was patched. */
+function rebuildTerrainMesh(runtime: RuntimeEntity): void {
+  const terrain = runtime.definition.terrain;
+  if (!terrain || !(runtime.object instanceof Mesh)) return;
+  const heights = sampleTerrainHeights(terrain);
+  runtime.object.geometry.dispose();
+  runtime.object.geometry = createTerrainGeometry(terrain, heights);
+  runtime.object.userData.graphysxTerrainHeights = heights;
 }
 
 function syncBodyToObject(body: Body, object: Object3D): void {
@@ -1984,7 +2154,7 @@ function validateInteraction(interaction: AgentWorldInteraction, entities: Map<s
 }
 
 function isEntityType(value: unknown): value is AgentWorldEntityType {
-  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "ambient-light", "directional-light", "point-light"].includes(String(value));
+  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "ambient-light", "directional-light", "point-light"].includes(String(value));
 }
 
 function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition {
@@ -2007,6 +2177,10 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     } : {}),
     ...(definition.agent ? { agent: deepClone(definition.agent) } : {}),
     ...(definition.emitter ? { emitter: deepClone(definition.emitter) } : {}),
+    // Inline heights round-trip as-is; a registry-backed terrain exports only the id, so a
+    // scene file stays small and keeps naming its provenance rather than inlining a copy.
+    ...(definition.terrain ? { terrain: deepClone(definition.terrain) } : {}),
+    ...(definition.water ? { water: deepClone(definition.water) } : {}),
     ...(definition.physics ? { physics: deepClone(definition.physics) } : {}),
     intensity: definition.intensity,
     distance: definition.distance,
@@ -2052,6 +2226,11 @@ function disposeObjectTree(root: Object3D): void {
     const particles = findParticleSystem(child);
     if (particles) {
       particles.dispose();
+      return;
+    }
+    const water = findWaterSurface(child);
+    if (water) {
+      water.dispose();
       return;
     }
     if (!(child instanceof Mesh) && !(child instanceof Line)) return;

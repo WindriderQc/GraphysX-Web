@@ -64,7 +64,28 @@ try {
   page.on("pageerror", (e) => pageErrors.push(String(e)));
 
   const url = `${BASE}${BASE.includes("?") ? "&" : "?"}scene=${SCENE}&store=${encodeURIComponent(store.url)}`;
-  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+  // Retry the first navigation on a *transport* failure only.
+  //
+  // This smoke runs last in `verify`, against a static server that has already served five
+  // browsers, and it intermittently caught `net::ERR_CONNECTION_RESET` on the initial
+  // document — before any application code had run, so it proved nothing about the scene
+  // store and failed roughly one run in three. Note what this does NOT do: it does not
+  // retry assertions, swallow page errors, or extend any timeout. If the page loads and
+  // then misbehaves, that still fails exactly as loudly as before. Only "we never got the
+  // HTML" is retried — the observed codes were ERR_CONNECTION_RESET and, under machine
+  // load, ERR_CONNECTION_TIMED_OUT, so the guard matches the whole `net::ERR_` family
+  // rather than playing whack-a-mole with individual codes.
+  out.navigationAttempts = 0;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    out.navigationAttempts = attempt;
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+      break;
+    } catch (error) {
+      if (!/net::ERR_/.test(String(error)) || attempt === 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 750 * attempt));
+    }
+  }
   await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: 20000 });
 
   // The scene browser only mounts when a store answers, so its presence is itself the

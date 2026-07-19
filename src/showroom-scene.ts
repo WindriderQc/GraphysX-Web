@@ -104,6 +104,65 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     },
     entities: [
       { id: "fill-light", type: "ambient-light", intensity: 0.5, material: { color: "#cfe9ff" } },
+      // The ground. This used to be sine-displaced host decoration with no collider, so
+      // anything dropped on it fell through the world forever. It is now an ordinary
+      // `terrain` entity on a recovered archive heightmap, carrying a static cannon-es
+      // heightfield — selectable, editable, exportable, and something you land on.
+      //
+      // `highlands` is the pick: rolling upland ridges read at showroom framing, where the
+      // canyon field fragments into noise and the basin puts its low ground off-camera.
+      // The centre is levelled into a pad at y=0 so the plinth, block stack, braziers and
+      // trees all sit on flat ground; past r=18 the landform returns over a 20-unit blend.
+      // Scale/offset are chosen against the water level below: they put roughly a third of
+      // the visible field under water, which opens a lake in the mid-distance instead of
+      // either a puddle or a flood.
+      {
+        id: "showroom-terrain",
+        type: "terrain",
+        label: "Showroom Terrain",
+        terrain: {
+          heightmap: "highlands",
+          size: 150,
+          segments: 96,
+          heightScale: 11,
+          heightOffset: -7,
+          flattenRadius: 16,
+          flattenFalloff: 16,
+          flattenHeight: 0,
+        },
+        transform: { position: [0, 0, 0] },
+        material: { color: "#6f8052", roughness: 0.96, metalness: 0.02, emissive: "#0e1609", emissiveIntensity: 0.2 },
+        castShadow: false,
+        tags: ["showroom", "terrain"],
+      },
+      // A water *level*, not a pond: one plane over the whole terrain footprint, so every
+      // low-lying part of the landform floods and the shoreline is wherever the terrain
+      // crosses y=-1.6. That is why it reads as landscape rather than as a blue rectangle.
+      //
+      // Reflection is on here because mirrored sky over water is the showroom's whole point,
+      // but it is an ordinary entity flag, not a host setting:
+      // `api.update("showroom-water", { water: { reflection: false } })` drops the extra
+      // scene pass at runtime. The target is 256², not the library's 512² — distortion hides
+      // render-target resolution better than almost any other effect.
+      {
+        id: "showroom-water",
+        type: "water",
+        label: "Reflecting Lake",
+        transform: { position: [0, -0.45, 0] },
+        water: {
+          size: 150,
+          color: "#15455a",
+          sunColor: "#ffeccd",
+          sunDirection: [0.52, 0.66, 0.32],
+          distortionScale: 6,
+          rippleScale: 9,
+          flowSpeed: 0.5,
+          opacity: 0.95,
+          reflection: true,
+          reflectionResolution: 256,
+        },
+        tags: ["showroom", "water"],
+      },
       ...braziers,
       {
         id: "showroom-cubx-core",

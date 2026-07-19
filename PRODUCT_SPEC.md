@@ -208,25 +208,36 @@ Related corrections elsewhere in this spec:
   is still the missing proof.
 - **§4 scene model** — of the listed simulation systems, spline followers and
   particles/emitters are real. Force fields, flocking, crowds and evolutionary entities are not.
-- **§5 showroom** — the terrain is procedural sine displacement mounted as *host decoration*,
-  not a heightmap and not a v2 entity (invisible to `api.state()`, not selectable). There is
-  no water anywhere in the repo, reflective or otherwise. Click-to-focus is not implemented.
+- **§5 showroom** — ~~the terrain is procedural sine displacement mounted as *host decoration*~~
+  **Corrected.** Terrain and water are now v2 entity types (`agent-world-terrain.ts`,
+  `agent-world-water.ts`), and the showroom's ground is an ordinary `terrain` entity on a
+  recovered archive heightmap. The old host terrain was not merely dishonest, it was broken:
+  the flat ground plane was hidden and nothing replaced its collider, so anything dropped in
+  the showroom fell through the world forever. Terrain now carries a static cannon-es
+  `Heightfield`, and `scripts/smoke-showroom.mjs` asserts a dropped sphere comes to *rest*
+  rather than merely existing. Click-to-focus is still not implemented.
 - **§5 CubX navigator** — the showroom's CubX is eight plain boxes with a spin behavior, an
   homage rather than the recovered assembly. There is no side menu or scene browser.
 - **§6 skyboxes** — 21 MB of correctly-oriented cube maps ship and are unreachable from the
   default route; v2 `environment.background` is a single color string. The "sky ownership is
   scoped" tenet (§11) currently has no v2 mechanism to be scoped *with*.
 
-**Graduated since this audit:** `skybox` in `environment` (six archive sets, per-scene) and
-the particle `emitter` entity type (eight archive-derived presets). The editor also gained an
-inspector, a prefab/model/texture/effects palette, and an exit path.
+**Graduated since this audit:** `skybox` in `environment` (six archive sets, per-scene); the
+particle `emitter` entity type (eight archive-derived presets); and the `terrain` and `water`
+entity types. Terrain is heightmap-backed with a static heightfield collider and five curated
+fields — three decoded from workshop BMPs by `scripts/vendor-heightmaps.mjs` with source path,
+SHA-256 and native dimensions recorded, the recovered CarX field, and one procedural fallback
+labelled as such. Water is `three/examples/jsm/objects/Water.js` with a procedurally
+synthesised normal map, and its planar reflection is an opt-out flag on the entity at a
+budgeted 256² target. Both are reachable from `api.spawn`, listed by `api.heightmaps()`,
+placeable from the editor's Terrain palette, and survive export→load. The editor also gained an
+inspector, a prefab/model/texture/effects/terrain palette, and an exit path.
 
 **Highest-value next graduations** (in order): flocking as a v2 behavior (§14 phase 4,
-implementation already exists in `nature-lab.ts`) — the missing proof of pillar 3; a real
-heightmap-backed `terrain` entity, which also makes the showroom honest (today's terrain is
-procedural sine noise mounted as host decoration); a force-field behavior, which composes with
-both particles and flocking; then map-editor UI on the default host (its data model already
-graduated into `agent-level-library.ts` and is reachable via `api.levels`).
+implementation already exists in `nature-lab.ts`) — the missing proof of pillar 3; a force-field
+behavior, which composes with both particles and flocking; then map-editor UI on the default
+host (its data model already graduated into `agent-level-library.ts` and is reachable via
+`api.levels`).
 
 ## 9. Repo roles
 

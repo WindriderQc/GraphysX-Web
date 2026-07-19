@@ -32,11 +32,11 @@ try {
   out.hasExitButton = await page.$$eval(".gx-ed-toolbar button", (els) =>
     els.some((e) => (e.textContent ?? "").includes("Showroom")));
 
-  // The library is tabbed now: only the active tab renders, so walk all four and record
+  // The library is tabbed now: only the active tab renders, so walk all five and record
   // each tab's chip count. Every tab must carry content, and the vocabulary as a whole
   // must stay as large as it was when the palette was one flat list.
   out.tabChips = {};
-  for (const tab of ["Prefabs", "Models", "Effects", "Textures"]) {
+  for (const tab of ["Prefabs", "Models", "Effects", "Terrain", "Textures"]) {
     await page.click(`.gx-ed-tab:text-is("${tab}")`);
     await page.waitForTimeout(120);
     out.tabChips[tab] = await page.$$eval(".gx-ed-chip", (els) => els.length);
@@ -60,6 +60,50 @@ try {
   await page.waitForTimeout(300);
   out.emitterRate = await page.evaluate(() =>
     window.__GRAPHYSX__.state().entities.find((e) => e.id.startsWith("edit-emitter-"))?.emitter?.rate ?? null);
+
+  // Terrain and water are ordinary v2 entities a human can place. Terrain must arrive with
+  // its static heightfield collider already attached — a terrain you can place but fall
+  // through is the exact bug this palette entry exists to make impossible.
+  await page.click('.gx-ed-tab:text-is("Terrain")');
+  await page.click('.gx-ed-chip:text-is("Canyon")');
+  await page.waitForTimeout(500);
+  out.terrainSpawned = await page.evaluate(() => {
+    const t = window.__GRAPHYSX__.state().entities.find((e) => e.id.startsWith("edit-terrain-"));
+    if (!t) return null;
+    return {
+      type: t.type,
+      heightmap: t.terrain?.heightmap ?? null,
+      colliderMode: t.physics?.mode ?? null,
+      colliderVertices: t.terrain?.colliderVertices ?? 0,
+    };
+  });
+  await page.click('.gx-ed-tab:text-is("Terrain")');
+  await page.click('.gx-ed-chip:text-is("Water (reflective)")');
+  await page.waitForTimeout(500);
+  out.waterSpawned = await page.evaluate(() => {
+    const w = window.__GRAPHYSX__.state().entities.find((e) => e.id.startsWith("edit-water-"));
+    return w ? { type: w.type, reflection: w.water?.reflection ?? null } : null;
+  });
+  // Both must survive an export/reload round trip, or they are decoration rather than
+  // scene vocabulary.
+  out.terrainRoundTrip = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const doc = api.exportDocument();
+    const terrain = doc.entities.find((e) => e.id.startsWith("edit-terrain-"));
+    const water = doc.entities.find((e) => e.id.startsWith("edit-water-"));
+    if (!terrain || !water) return { exported: false };
+    const reloaded = api.load(doc);
+    if (!reloaded.ok) return { exported: true, reloaded: false, error: reloaded.error };
+    const after = api.state().entities.find((e) => e.id === terrain.id);
+    const waterAfter = api.state().entities.find((e) => e.id === water.id);
+    return {
+      exported: true,
+      reloaded: true,
+      heightmap: after?.terrain?.heightmap ?? null,
+      colliderMode: after?.physics?.mode ?? null,
+      waterReflection: waterAfter?.water?.reflection ?? null,
+    };
+  });
 
   // Spawn a recovered mesh asset from the Models tab.
   const before = await page.evaluate(() => window.__GRAPHYSX__.state().entities.length);
@@ -136,6 +180,16 @@ const ok =
   out.emitterSections?.includes("Emitter") &&
   out.emitterPhysicsControls === 0 &&
   out.emitterRate === 77 &&
+  out.terrainSpawned?.type === "terrain" &&
+  out.terrainSpawned?.heightmap === "canyon" &&
+  out.terrainSpawned?.colliderMode === "static" &&
+  out.terrainSpawned?.colliderVertices > 1000 &&
+  out.waterSpawned?.type === "water" &&
+  out.waterSpawned?.reflection === true &&
+  out.terrainRoundTrip?.reloaded === true &&
+  out.terrainRoundTrip?.heightmap === "canyon" &&
+  out.terrainRoundTrip?.colliderMode === "static" &&
+  out.terrainRoundTrip?.waterReflection === true &&
   out.modelSpawned &&
   out.spawnedType === "model" &&
   out.selectedInInspector?.startsWith("edit-model-") &&

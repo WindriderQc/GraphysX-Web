@@ -1,4 +1,4 @@
-import { Raycaster, Vector2, type Camera, type Object3D, type Scene, type WebGLRenderer } from "three";
+import { Raycaster, Vector2, type Camera, type Scene, type WebGLRenderer } from "three";
 import type { AgentWorldRuntime, GraphysXAgentWorldApi } from "./agent-world-runtime";
 
 export interface ShowroomInteractionDeps {
@@ -34,12 +34,13 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
   let dropCount = 0;
   let down: { x: number; y: number } | null = null;
 
-  const isTerrain = (object: Object3D): boolean => {
-    for (let node: Object3D | null = object; node; node = node.parent) {
-      if (node.name === "ShowroomTerrain") return true;
-    }
-    return false;
-  };
+  /**
+   * Ground is now a `terrain` entity rather than a host mesh, so this asks the scene which
+   * entities are terrain instead of matching an object name the host used to own. Resolved
+   * per click — a terrain entity can be added, removed or reshaped at any time by a human
+   * or an agent, and a cached id set would go stale the moment it was.
+   */
+  const terrainIds = (): Set<string> => new Set(api.query({ type: "terrain" }).map((entity) => entity.id));
 
   const onPointerDown = (event: PointerEvent): void => {
     down = { x: event.clientX, y: event.clientY };
@@ -56,6 +57,7 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
     ndc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
 
+    const terrain = terrainIds();
     for (const hit of raycaster.intersectObjects(scene.children, true)) {
       const entityId = world.findEntityId(hit.object);
       if (entityId && world.findInteractiveEntityId(hit.object)) {
@@ -66,8 +68,8 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
       // Anything else is scenery: keep walking the ray to the ground behind it rather than
       // swallowing the click. Stopping at the first non-interactive entity made clicking a
       // tree do nothing at all, which reads as an unresponsive scene.
-      if (entityId) continue;
-      if (isTerrain(hit.object)) {
+      if (entityId && !terrain.has(entityId)) continue;
+      if (entityId && terrain.has(entityId)) {
         dropCount += 1;
         const id = `showroom-drop-${dropCount}`;
         const result = api.spawn({

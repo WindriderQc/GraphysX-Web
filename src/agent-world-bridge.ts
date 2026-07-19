@@ -6,7 +6,7 @@ export const GRAPHYSX_AGENT_TOOL_RESPONSE_SCHEMA = "graphysx.agent-tool-response
 export const GRAPHYSX_AGENT_TOOL_EVENT_SCHEMA = "graphysx.agent-tool-event/v1" as const;
 
 const TOOL_PATHS = [
-  "open", "demo", "state", "assets", "textures", "skies", "emitters", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select",
+  "open", "demo", "state", "assets", "textures", "skies", "emitters", "heightmaps", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select",
   "attachBehavior", "detachBehavior", "interact", "prefabs", "spawnPrefab", "starters", "loadStarter",
   "transaction", "commit", "history", "undo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
   "levels.tiles", "levels.tileSemantics", "levels.active", "levels.list", "levels.get", "levels.create", "levels.remove",
@@ -28,6 +28,7 @@ const TOOL_SUMMARIES: Record<string, string> = {
   textures: "Discover stable archive texture IDs and their intended visual uses.",
   skies: "List the per-scene skybox sets recovered from the archive.",
   emitters: "List the archive particle-emitter presets, with provenance, budgets and keyframe ramps, for spawning `emitter` entities.",
+  heightmaps: "List the curated heightmaps, with archive provenance, for spawning `terrain` entities. Terrain carries a static heightfield collider, so objects land on it.",
   importLegacyXml: "Convert an archived GraphysX XML scene into the validated v2 world contract.",
   create: "Replace the active world with a complete v2 definition.",
   spawn: "Create one typed 3D entity.",

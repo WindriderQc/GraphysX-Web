@@ -1,21 +1,17 @@
-import {
-  DirectionalLight,
-  Group,
-  HemisphereLight,
-  Mesh,
-  MeshStandardMaterial,
-  PlaneGeometry,
-  type Scene,
-  type WebGLRenderer,
-} from "three";
+import { DirectionalLight, Group, HemisphereLight, type Scene, type WebGLRenderer } from "three";
 
 /**
- * Host-level environment dressing for the welcome showroom: a warm sun and gentle rolling
- * terrain (flattened near the center so composed objects stay grounded). This is deliberately
- * *host* decoration around the v2 scene — the editable world stays clean.
+ * Host-level *lighting* for the welcome showroom: a warm key sun and a sky/ground fill.
  *
- * The sky is NOT set here. It is `environment.sky` in the v2 scene, so it is selectable,
- * serialisable, and editable like any other scene property — the host must not fight it by
+ * Terrain used to live here too — procedural sine displacement mounted as host decoration,
+ * with no collider. That was a real bug, not just an honesty problem: the flat ground plane
+ * was hidden and nothing replaced its physics, so anything dropped in the showroom fell
+ * through the world and kept going. Terrain is now an ordinary `terrain` entity in the v2
+ * scene (see `showroom-scene.ts`), carrying a static cannon-es heightfield collider — so the
+ * scene owns its ground, and it is selectable, editable, serialisable and landable-on.
+ *
+ * The sky is NOT set here either. It is `environment.sky` in the v2 scene, so it is
+ * selectable and serialisable like any other scene property — the host must not fight it by
  * assigning `scene.background` behind the runtime's back.
  */
 export function mountShowroomEnvironment(scene: Scene, _renderer: WebGLRenderer): () => void {
@@ -32,45 +28,9 @@ export function mountShowroomEnvironment(scene: Scene, _renderer: WebGLRenderer)
   const hemi = new HemisphereLight("#cfe6ff", "#4a5340", 0.5);
   group.add(hemi);
 
-  const terrain = makeTerrain();
-  group.add(terrain);
-
   scene.add(group);
 
   return () => {
     scene.remove(group);
-    terrain.geometry.dispose();
-    terrain.material.dispose();
   };
-}
-
-function makeTerrain(): Mesh<PlaneGeometry, MeshStandardMaterial> {
-  const size = 130;
-  const segments = 96;
-  const geometry = new PlaneGeometry(size, size, segments, segments);
-  const position = geometry.attributes.position;
-  const flatRadius = 14;
-  const outerRadius = 34;
-  for (let i = 0; i < position.count; i += 1) {
-    const x = position.getX(i);
-    const y = position.getY(i); // world Z after the rotation below
-    const distance = Math.hypot(x, y);
-    const rolling = Math.sin(x * 0.12) * Math.cos(y * 0.1) + 0.5 * Math.sin(x * 0.05 + y * 0.07);
-    const t = smoothstep(flatRadius, outerRadius, distance);
-    position.setZ(i, rolling * 1.7 * t);
-  }
-  geometry.rotateX(-Math.PI / 2);
-  geometry.computeVertexNormals();
-
-  // Mossy ground that sits under the Lost Valley sky rather than reading as a dark void.
-  const material = new MeshStandardMaterial({ color: "#5c6b4a", roughness: 0.94, metalness: 0.02 });
-  const mesh = new Mesh(geometry, material);
-  mesh.position.y = -0.08;
-  mesh.name = "ShowroomTerrain";
-  return mesh;
-}
-
-function smoothstep(edge0: number, edge1: number, x: number): number {
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
 }
