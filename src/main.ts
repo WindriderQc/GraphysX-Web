@@ -71,28 +71,32 @@ if (mode === "legacy") {
       mountWelcome(root, enterEditor);
     }
 
-    if (storeScene) {
-      // Loaded after the showroom composes so there is always something on screen: if the
-      // store is down or the scene is missing, you get the showroom and an error in the
-      // console rather than an empty world.
-      void import("./scene-store-client").then(({ createSceneStoreClient, connectSceneStore }) => {
+    // Mounted after the showroom composes so there is always something on screen, and only
+    // when a store actually answers: the production deploy is static with no store behind
+    // it, and a permanently offline panel on the front door would be noise.
+    void Promise.all([import("./scene-store-client"), import("./scene-browser")]).then(
+      async ([{ createSceneStoreClient }, { mountSceneBrowser }]) => {
         const client = createSceneStoreClient(storeUrl);
-        const session = connectSceneStore({
+        try {
+          await client.list();
+        } catch {
+          if (storeScene) console.warn(`[graphysx] no scene store at ${storeUrl}; staying in the showroom`);
+          return;
+        }
+        const browser = mountSceneBrowser(root, {
           api: host.api,
           client,
-          name: storeScene,
-          onPulled: (record) => {
+          initialScene: storeScene,
+          actor: "browser",
+          onSceneOpened: () => {
+            // A stored scene replaces the showroom, so hand the pointer back and re-apply
+            // the environment the incoming document asked for.
             interaction?.setEnabled(true);
             host.applyEnvironment();
-            console.info(`[graphysx] pulled scene "${record.name}" at revision ${record.revision}`);
           },
-          onError: (error) => console.warn("[graphysx] scene store poll failed:", error),
         });
-        Object.assign(window, { __GRAPHYSX_SCENE_STORE__: { client, session } });
-        void session.pull().catch((error) => {
-          console.warn(`[graphysx] could not open scene "${storeScene}":`, error);
-        });
-      });
-    }
+        Object.assign(window, { __GRAPHYSX_SCENE_BROWSER__: browser, __GRAPHYSX_SCENE_STORE__: { client, browser } });
+      },
+    );
   });
 }

@@ -67,6 +67,15 @@ try {
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: 20000 });
 
+  // The scene browser only mounts when a store answers, so its presence is itself the
+  // assertion that discovery worked.
+  await page.waitForSelector(".gx-sb", { timeout: 20000 }).catch(() => {});
+  out.browserMounted = (await page.$(".gx-sb")) !== null;
+  out.browserOnline = await page.evaluate(() =>
+    document.querySelector(".gx-sb-dot")?.getAttribute("data-online") === "true");
+  out.browserListsScene = await page.evaluate((name) =>
+    !!document.querySelector(`.gx-sb-row[data-scene="${name}"]`), SCENE);
+
   // The stored world replaces the showroom once the pull lands.
   await page
     .waitForFunction(() => window.__GRAPHYSX__.state()?.world.id === "smoke-scene", null, { timeout: 20000 })
@@ -77,19 +86,24 @@ try {
   await page.screenshot({ path: path.join(ART, "scene-store.png"), fullPage: false });
 
   // --- the actual milestone: an outside agent changes what is on screen ---------
-  const edit = await editScene(store.url, SCENE, [
-    {
-      op: "spawn",
-      entity: {
-        id: "hermes-cube",
-        type: "box",
-        label: "Hermes cube",
-        transform: { position: [1.6, 3.2, 0] },
-        material: { color: "#ff5470" },
-        physics: { mode: "dynamic", mass: 1.1 },
+  const edit = await editScene(
+    store.url,
+    SCENE,
+    [
+      {
+        op: "spawn",
+        entity: {
+          id: "hermes-cube",
+          type: "box",
+          label: "Hermes cube",
+          transform: { position: [1.6, 3.2, 0] },
+          material: { color: "#ff5470" },
+          physics: { mode: "dynamic", mass: 1.1 },
+        },
       },
-    },
-  ]);
+    ],
+    { actor: "hermes", intent: "added a red cube" },
+  );
   out.agentRevision = edit.revision;
   out.agentSpawnedId = edit.outputs[0]?.id ?? null;
 
@@ -101,7 +115,14 @@ try {
     window.__GRAPHYSX__.state().entities.some((e) => e.id === "hermes-cube"));
 
   // The tab adopted the agent's revision rather than re-pulling forever.
-  out.sessionRevision = await page.evaluate(() => window.__GRAPHYSX_SCENE_STORE__?.session.revision() ?? null);
+  out.sessionRevision = await page.evaluate(() => window.__GRAPHYSX_SCENE_BROWSER__?.session()?.revision() ?? null);
+
+  // The change is attributed on screen: who did it, not just that something happened.
+  out.liveAnnouncement = await page.evaluate(() => {
+    const banner = document.querySelector(".gx-sb-live");
+    return banner && !banner.hasAttribute("hidden") ? banner.textContent.replace(/\s+/g, " ").trim() : null;
+  });
+  out.announcesActor = typeof out.liveAnnouncement === "string" && out.liveAnnouncement.includes("hermes");
 
   await page.screenshot({ path: path.join(ART, "scene-store-after-agent.png"), fullPage: false });
 
@@ -134,8 +155,9 @@ try {
     };
   });
 
-  // Pushing the tab's scene must store the document, not the debris.
-  await page.evaluate(() => window.__GRAPHYSX_SCENE_STORE__.session.push());
+  // Saving from the panel must store the document, not the debris.
+  await page.click(".gx-sb-foot [data-action=save]");
+  await page.waitForFunction(() => /Saved/.test(document.querySelector(".gx-sb-status")?.textContent ?? ""), null, { timeout: 20000 }).catch(() => {});
   const pushed = await openScene(store.url, SCENE);
   out.pushedEntities = pushed.definition.entities.map((e) => e.id);
   out.thrownBallNotStored = !out.pushedEntities.includes("thrown-ball");
@@ -154,6 +176,21 @@ try {
     .catch(() => {});
   out.thrownBallGoneAfterReload = await page.evaluate(() =>
     !window.__GRAPHYSX__.state().entities.some((e) => e.id === "thrown-ball"));
+
+  // Switching scenes from the panel is the other half of what it is for.
+  await putScene(store.url, "second-scene", { ...seedDefinition, id: "second-scene", label: "Second scene" }, undefined, {
+    actor: "hermes",
+    intent: "created a second scene",
+  });
+  await page.waitForFunction(() => !!document.querySelector('.gx-sb-row[data-scene="second-scene"]'), null, { timeout: 20000 }).catch(() => {});
+  out.secondSceneListed = await page.evaluate(() => !!document.querySelector('.gx-sb-row[data-scene="second-scene"]'));
+  await page.click('.gx-sb-row[data-scene="second-scene"]');
+  await page
+    .waitForFunction(() => window.__GRAPHYSX__.state()?.world.id === "second-scene", null, { timeout: 20000 })
+    .catch(() => {});
+  out.switchedScene = await page.evaluate(() => window.__GRAPHYSX__.state()?.world.id === "second-scene");
+
+  await page.screenshot({ path: path.join(ART, "scene-browser.png"), fullPage: false });
 } catch (e) {
   out.fatal = String(e);
 } finally {
@@ -183,5 +220,11 @@ const ok =
   out.livedSpawn?.flagged &&
   out.thrownBallNotStored &&
   out.ephemeralWriteRejected &&
-  out.thrownBallGoneAfterReload;
+  out.thrownBallGoneAfterReload &&
+  out.browserMounted &&
+  out.browserOnline &&
+  out.browserListsScene &&
+  out.announcesActor &&
+  out.secondSceneListed &&
+  out.switchedScene;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);

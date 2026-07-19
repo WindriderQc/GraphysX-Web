@@ -105,6 +105,8 @@ export function createSceneStore({ dir = DEFAULT_DIR } = {}) {
           name: record.name,
           revision: record.revision,
           updatedAt: record.updatedAt,
+          actor: record.actor ?? null,
+          intent: record.intent ?? null,
           label: record.definition?.label ?? null,
           entityCount: Array.isArray(record.definition?.entities) ? record.definition.entities.length : 0,
         });
@@ -123,9 +125,10 @@ export function createSceneStore({ dir = DEFAULT_DIR } = {}) {
      * fine for a first upload or a deliberate overwrite, wrong for an agent editing a
      * scene a human is also touching. Hermes should always send it.
      */
-    async put(name, definition, expectedRevision) {
+    async put(name, definition, expectedRevision, { actor = null, intent = null } = {}) {
       assertName(name);
       assertDefinition(definition);
+      if (actor !== null && !NAME_PATTERN.test(actor)) throw new Error(`Invalid actor id: ${actor}`);
       await ready;
       return queueWrite(name, async () => {
         const current = await readRecord(dir, name);
@@ -146,10 +149,21 @@ export function createSceneStore({ dir = DEFAULT_DIR } = {}) {
           name,
           revision: currentRevision + 1,
           updatedAt: new Date().toISOString(),
+          // Who last touched this and why. With one human and one agent this is a nicety;
+          // with Hermes, OpenClaw and AgentX sharing a scene it is how you tell them apart.
+          actor,
+          intent: typeof intent === "string" && intent.trim() ? intent.trim().slice(0, 240) : null,
           definition,
         };
         await writeRecord(dir, name, record);
-        return { name, revision: record.revision, updatedAt: record.updatedAt, created: current === null };
+        return {
+          name,
+          revision: record.revision,
+          updatedAt: record.updatedAt,
+          actor: record.actor,
+          intent: record.intent,
+          created: current === null,
+        };
       });
     },
   };
@@ -217,7 +231,13 @@ export function createSceneStoreServer({ dir } = {}) {
           assertName(name);
           const record = await store.get(name);
           if (!record) return send(response, 404, { error: `Unknown scene: ${name}` });
-          return send(response, 200, { name, revision: record.revision, updatedAt: record.updatedAt });
+          return send(response, 200, {
+            name,
+            revision: record.revision,
+            updatedAt: record.updatedAt,
+            actor: record.actor ?? null,
+            intent: record.intent ?? null,
+          });
         }
 
         if (sceneMatch) {
@@ -236,7 +256,10 @@ export function createSceneStoreServer({ dir } = {}) {
             // `curl -d @scene.json` works without ceremony.
             const definition = body?.definition ?? body;
             const expectedRevision = body?.expectedRevision;
-            const result = await store.put(name, definition, expectedRevision);
+            const result = await store.put(name, definition, expectedRevision, {
+              actor: body?.actor ?? null,
+              intent: body?.intent ?? null,
+            });
             return send(response, result.created ? 201 : 200, result);
           }
         }

@@ -53,11 +53,11 @@ export function openScene(baseUrl, name) {
   return api(baseUrl, `/scenes/${encodeURIComponent(name)}`);
 }
 
-export function putScene(baseUrl, name, definition, expectedRevision) {
+export function putScene(baseUrl, name, definition, expectedRevision, { actor = null, intent = null } = {}) {
   return api(baseUrl, `/scenes/${encodeURIComponent(name)}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ definition, expectedRevision }),
+    body: JSON.stringify({ definition, expectedRevision, actor, intent }),
   });
 }
 
@@ -147,17 +147,34 @@ export function applyCommands(definition, commands) {
   return { definition: next, outputs };
 }
 
+/** A short human sentence for the change, used when the caller does not supply an intent. */
+function describe(commands, outputs) {
+  if (commands.length === 1) {
+    const [command] = commands;
+    if (command.op === "spawn") return `added ${command.entity.label ?? command.entity.type} ${outputs[0]?.id ?? ""}`.trim();
+    if (command.op === "remove") return `removed ${outputs[0]?.ids?.join(", ") ?? command.id}`;
+    if (command.op === "update") return `changed ${command.id}`;
+    if (command.op === "set-environment") return "changed the environment";
+  }
+  return `applied ${commands.length} changes`;
+}
+
 /**
  * Read, apply, write — retrying from a fresh read when someone else got there first.
  * This is the whole agent write path.
  */
-export async function editScene(baseUrl, name, commands, { retries = DEFAULT_RETRIES } = {}) {
+export async function editScene(baseUrl, name, commands, { retries = DEFAULT_RETRIES, actor = "agent", intent = null } = {}) {
   let attempt = 0;
   for (;;) {
     const record = await openScene(baseUrl, name);
     const { definition, outputs } = applyCommands(record.definition, commands);
     try {
-      const result = await putScene(baseUrl, name, definition, record.revision);
+      // Attribution is what makes a shared scene legible: the browser shows "hermes added a
+      // red cube", not "revision 14".
+      const result = await putScene(baseUrl, name, definition, record.revision, {
+        actor,
+        intent: intent ?? describe(commands, outputs),
+      });
       return { ...result, outputs };
     } catch (error) {
       if (error.status === 409 && attempt < retries) {
@@ -209,6 +226,8 @@ async function main(argv) {
   const { flags, positional } = parseFlags(argv);
   const [command, ...rest] = positional;
   const baseUrl = flags.store ?? process.env.GRAPHYSX_STORE_URL ?? "http://localhost:8788";
+  // Hermes, OpenClaw and AgentX each pass their own id, so a shared scene stays legible.
+  const edit = { actor: flags.actor ?? process.env.GRAPHYSX_ACTOR ?? "agent", intent: flags.intent ?? null };
 
   if (!command || command === "help") {
     console.log(USAGE);
@@ -245,7 +264,7 @@ async function main(argv) {
     } catch {
       throw new SceneAgentError("commands must be valid JSON");
     }
-    const result = await editScene(baseUrl, name, Array.isArray(commands) ? commands : [commands]);
+    const result = await editScene(baseUrl, name, Array.isArray(commands) ? commands : [commands], edit);
     console.log(JSON.stringify(result, null, 2));
     return;
   }
@@ -258,7 +277,7 @@ async function main(argv) {
     if (flags.color) entity.material = { color: flags.color };
     if (flags.mass) entity.physics = { mode: "dynamic", mass: Number(flags.mass) };
     if (flags.radius) entity.geometry = { radius: Number(flags.radius) };
-    const result = await editScene(baseUrl, name, [{ op: "spawn", entity }]);
+    const result = await editScene(baseUrl, name, [{ op: "spawn", entity }], edit);
     console.log(`spawned ${result.outputs[0].id} in "${name}" → revision ${result.revision}`);
     return;
   }
@@ -266,7 +285,7 @@ async function main(argv) {
   if (command === "remove") {
     const id = rest[1];
     if (!id) throw new SceneAgentError("remove requires an entity id");
-    const result = await editScene(baseUrl, name, [{ op: "remove", id }]);
+    const result = await editScene(baseUrl, name, [{ op: "remove", id }], edit);
     console.log(`removed ${result.outputs[0].ids.join(", ")} from "${name}" → revision ${result.revision}`);
     return;
   }
@@ -276,7 +295,7 @@ async function main(argv) {
     const { readFile } = await import("node:fs/promises");
     const definition = JSON.parse(await readFile(flags.from, "utf8"));
     // Intentionally unguarded: seeding is how a scene comes into existence.
-    const result = await putScene(baseUrl, name, definition.definition ?? definition);
+    const result = await putScene(baseUrl, name, definition.definition ?? definition, undefined, edit);
     console.log(`seeded "${name}" → revision ${result.revision}`);
     return;
   }

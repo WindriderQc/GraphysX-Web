@@ -22,20 +22,35 @@ store other than `http://localhost:8788`.
 The showroom still composes first, so if the store is down or the scene is missing you get
 the normal welcome scene and a console warning rather than an empty world.
 
+## The scene browser
+
+When a store answers, a panel mounts in the top-right listing every stored scene with its
+object count, revision and who last touched it. Click a row to open that scene, **Save to
+store** to push what you have, **Revert** to take the store's copy back.
+
+It only mounts when the store actually responds — the production deploy is static with no
+store behind it, and a permanently offline panel on the front door would be noise.
+
+When someone else writes to the scene you are standing in, the panel says who and what:
+
+> **hermes** added a red cube · rev 2
+
+That line is the reason attribution exists. With Hermes, OpenClaw and AgentX sharing a
+scene, "revision 14" tells you nothing; the actor does.
+
+A save that collides with an agent's write reports the conflict in those terms — *someone
+else changed this scene* — rather than a generic failure.
+
 ## Putting a scene in the store
 
-From a tab that has one open (console):
-
-```js
-__GRAPHYSX_SCENE_STORE__.session.push()      // push what is on screen
-__GRAPHYSX_SCENE_STORE__.session.pull()      // discard local, take the store's copy
-```
-
-Or from a file:
+Use **Save to store** in the panel, or from a file:
 
 ```bash
 npm run scene -- seed welcome --from my-scene.json
 ```
+
+The panel's API is also on `window.__GRAPHYSX_SCENE_BROWSER__` (`open`, `save`, `refresh`,
+`session()`) for driving it from the console.
 
 ## The agent surface
 
@@ -43,18 +58,24 @@ npm run scene -- seed welcome --from my-scene.json
 
 ```bash
 npm run scene -- list
-npm run scene -- spawn welcome --type box --id hermes-cube --at 1.6,6,0 --color '#ff5470' --mass 1.1
-npm run scene -- remove welcome hermes-cube
-npm run scene -- edit welcome '[{"op":"spawn","entity":{"type":"sphere","id":"ball","physics":{"mode":"dynamic","mass":1}}}]'
+npm run scene -- spawn welcome --type box --id hermes-cube --at 1.6,6,0 --color '#ff5470' --mass 1.1 --actor hermes
+npm run scene -- remove welcome hermes-cube --actor hermes
+npm run scene -- edit welcome '[{"op":"spawn","entity":{"type":"sphere","id":"ball","physics":{"mode":"dynamic","mass":1}}}]' --actor hermes --intent 'dropped a ball'
 ```
 
 ```js
 import { editScene } from "./tools/graphysx-scene-agent.mjs";
 
-await editScene("http://localhost:8788", "welcome", [
-  { op: "spawn", entity: { id: "panel", type: "box", transform: { position: [0, 2, 0] } } },
-]);
+await editScene(
+  "http://localhost:8788",
+  "welcome",
+  [{ op: "spawn", entity: { id: "panel", type: "box", transform: { position: [0, 2, 0] } } }],
+  { actor: "hermes", intent: "added a status panel" },
+);
 ```
+
+Pass `actor` (and optionally `intent`) on every write — it is what the browser puts on
+screen. Without it, writes show up as `agent`.
 
 `edit` is the real agent entry point: raw `AgentWorldCommand` JSON, which an LLM can emit
 directly. Supported ops are `spawn`, `update`, `remove`, `set-environment` — the subset that
