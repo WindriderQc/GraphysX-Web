@@ -176,6 +176,37 @@ try {
   out.closed = await page.evaluate(() => getComputedStyle(document.querySelector(".gx-ed-workbench")).display === "none");
   out.toolbarStillThere = (await page.$(".gx-ed-toolbar")) !== null;
   await page.screenshot({ path: path.join(ART, "levels-closed.png"), fullPage: false });
+
+  // ---- Play: the human half of levels.play() ----
+  // Deliberately LAST, so the assertions above exercise exactly the flow they always did — an
+  // earlier placement reopened the panel mid-sequence and broke the close assertion.
+  //
+  // The agent path is covered by smoke-ballz.mjs. What is asserted here is that a *human*
+  // control reaches the same API and produces the same scene: real entities, and the workbench
+  // getting out of the way so the result is actually visible.
+  await page.click('.gx-ed-toolbar button:text-is("Levels")');
+  await page.waitForTimeout(300);
+  out.playButtonExists = (await page.$(".gx-lv-play")) !== null;
+  await page.click(".gx-lv-play");
+  await page.waitForTimeout(500);
+  out.played = await page.evaluate(() => {
+    const ballz = window.__GRAPHYSX__.query({ tag: "ballz" });
+    return {
+      entities: ballz.length,
+      // The active level here was resized to 44x30 and filled, so it has no start tile and
+      // honestly spawns no ball. Asserting the floor proves materialisation without assuming
+      // a layout this smoke never authored.
+      hasFloor: ballz.some((entity) => entity.id === "ballz-floor"),
+      workbenchClosed: getComputedStyle(document.querySelector(".gx-ed-workbench")).display === "none",
+      // The inspector must agree with the world it is inspecting. A materialised level carries
+      // a sky, so a dropdown still reading "No sky" over a visibly-skied viewport is a real
+      // (if quiet) parity failure, and it regressed once already.
+      skyDropdownAgrees:
+        (document.querySelector(".gx-ed-panel select")?.value ?? null) ===
+        (window.__GRAPHYSX__.state()?.environment?.sky ?? ""),
+    };
+  });
+  await page.screenshot({ path: path.join(ART, "levels-played.png"), fullPage: false });
 } catch (e) {
   out.fatal = String(e);
 }
@@ -215,6 +246,11 @@ const ok =
   out.bigGridFits &&
   out.errorShown?.length === 1 &&
   out.badImportRejected &&
+  out.playButtonExists &&
+  out.played?.entities > 0 &&
+  out.played?.hasFloor &&
+  out.played?.workbenchClosed &&
+  out.played?.skyDropdownAgrees &&
   out.closed &&
   out.toolbarStillThere;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);

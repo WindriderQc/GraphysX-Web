@@ -145,6 +145,8 @@ export class PlatformEditor {
   // ---- levels workbench state (all of it view state; tiles live only in `api.levels`) ----
   private levelsOpen = false;
   private levelId = "";
+  /** The Environment sky dropdown, held so `refresh()` can re-read the world into it. */
+  private skySelect: HTMLSelectElement | null = null;
   private levelTile: MapEditorTile = "wall";
   private levelTool: LevelTool = "paint";
   /** Cell elements indexed `y * width + x`, so a drag can repaint one cell without a rebuild. */
@@ -370,6 +372,12 @@ export class PlatformEditor {
     this.readout.textContent = this.selectedId
       ? `${this.selectedId} · ${this.gizmo.getMode()} · rev ${state?.revision ?? 0}`
       : `${entities.length} entities · rev ${state?.revision ?? 0} · click to select`;
+
+    // Read the world's sky back into the dropdown. Skipped while it has focus, so re-syncing
+    // never yanks the list out from under someone mid-selection.
+    if (this.skySelect && document.activeElement !== this.skySelect) {
+      this.skySelect.value = state?.environment?.sky ?? "";
+    }
 
     const selected = entities.find((entity) => entity.id === this.selectedId) ?? null;
     // Rebuilding while an inspector *field* has focus would swallow the edit that is still
@@ -951,6 +959,12 @@ export class PlatformEditor {
     }
     select.value = this.deps.world.getEnvironment().sky ?? "";
     select.addEventListener("change", () => this.setSky(select.value || null));
+    // Held so `refresh()` can re-sync it. This panel is built exactly once, at construction,
+    // which made the control write-only: it pushed a sky into the world and then never read one
+    // back, so it went stale the moment anything *else* set the sky — a starter, a stored scene,
+    // an agent's `api.create`, or `levels.play()`. The dropdown would read "No sky" over a
+    // viewport plainly rendering one.
+    this.skySelect = select;
     return this.section("Environment", [this.field("Sky", select)]);
   }
 
@@ -1029,7 +1043,21 @@ export class PlatformEditor {
     close.textContent = "✕ Close";
     close.title = "Close the level workbench and return to the scene";
     close.addEventListener("click", () => this.setLevelsOpen(false));
-    head.append(title, meta, close);
+    // Play is the workbench's primary action, so it sits in the head rather than among the
+    // ASCII utilities. Until this existed, `levels.play()` was reachable from the agent API and
+    // the tool bridge but from no human control at all — the exact inverse of the parity gap
+    // fixed in `PlatformHost` (an agent could author a sky the viewport ignored; a human could
+    // author a level only an agent could run). Both directions have to work or neither claim does.
+    const play = document.createElement("button");
+    play.type = "button";
+    // Deliberately NOT `gx-ed-collapse`: the levels smoke closes the panel via
+    // `.gx-ed-workbench .gx-ed-collapse`, and sharing the class would silently make that click
+    // land on Play instead — a passing test asserting the wrong thing.
+    play.className = "gx-lv-play";
+    play.textContent = "▶ Play";
+    play.title = "Materialise this level into the scene as ordinary entities";
+    play.addEventListener("click", () => this.playLevel());
+    head.append(title, meta, play, close);
 
     // ---- left column: the level library ----
     const side = document.createElement("div");
@@ -1540,6 +1568,33 @@ export class PlatformEditor {
   }
 
   /** Failures surface here, in the workbench, rather than only in the console. */
+  /**
+   * Materialise the active level into the scene. Deliberately the same `api.levels.play(id)` an
+   * agent calls — this button adds no privileged path, it just makes the existing one reachable.
+   *
+   * The workbench closes on success because the result IS the scene: a played level is ordinary
+   * entities in the scene tree, not a separate play mode, so leaving a full-width panel over the
+   * viewport would hide the only evidence that it worked.
+   */
+  private playLevel(): void {
+    const result = this.levels.play(this.levelId);
+    if (!result.ok) {
+      this.levelMessage(result.error ?? "Could not play that level", true);
+      return;
+    }
+    // The world was replaced, so the environment changed with it — same notification
+    // `loadStarter` sends, which is what re-reads background/sky/fog on the host.
+    this.deps.onEnvironmentChanged?.();
+    this.select(null);
+    // `force`, not `auto`: play replaces the entire world, including its environment, and the
+    // Environment panel reads the sky only when it is rebuilt. An `auto` refresh may decline to
+    // rebuild and leave the dropdown reading "No sky" over a viewport that is plainly showing
+    // one — the inspector disagreeing with the world is the same class of bug as an agent's sky
+    // never reaching the viewport, just pointing the other way.
+    this.refresh("force");
+    this.setLevelsOpen(false);
+  }
+
   private levelMessage(message: string, isError = false): void {
     this.levelUi.status.textContent = message;
     this.levelUi.status.classList.toggle("gx-lv-status--error", isError);
@@ -1874,6 +1929,11 @@ const EDITOR_CSS = `
 .gx-ed-tab:hover{color:var(--gx-text);background:var(--gx-raise)}
 .gx-ed-tab--on{background:var(--gx-accent-deep);color:#fff}
 .gx-ed-collapse{margin-left:auto;flex:none;background:var(--gx-field);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);color:var(--gx-muted);cursor:pointer;font:10px/1 system-ui,sans-serif;padding:6px 9px}
+/* Play is the workbench's primary action, so it reads as one. It carries the auto margin and the
+   close button then sits directly beside it, rather than the two splitting the free space. */
+.gx-lv-play{margin-left:auto;flex:none;border-radius:var(--gx-radius-sm);cursor:pointer;font:10px/1 system-ui,sans-serif;padding:6px 11px;color:#0c1f1a;background:linear-gradient(180deg,#5fe0b4,#2fae86);border:1px solid #6ff0c4;font-weight:700}
+.gx-lv-play:hover{background:linear-gradient(180deg,#72e9c1,#38bd93)}
+.gx-lv-play + .gx-ed-collapse{margin-left:6px}
 .gx-ed-collapse:hover{color:var(--gx-text);border-color:var(--gx-accent-deep)}
 .gx-ed-grid{display:flex;flex-wrap:wrap;gap:var(--gx-s1)}
 .gx-ed-grid--drawer{overflow-y:auto;align-content:flex-start;flex:1 1 auto;min-height:0;padding-right:2px}
