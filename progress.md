@@ -47,3 +47,52 @@ Original prompt: "lets go then, lets make this happen!!"
 - **First-load payload cut 823.4 KB → 747.7 KB** (measured over the wire, default route). `PlatformEditor` (and the TransformControls gizmo stack) is now a dynamic import loaded on `enterEditor()` — the showroom front door no longer downloads chrome it keeps hidden; `styles.css` (47 KB, 100% prototype-app selectors, zero `gx-` classes) moved onto the `?host=legacy` branch. Correction to an audit claim: the old 340 KB "TransformControls" chunk was mostly three.js's renderer half, not gizmo code — it is still required and merely renamed. The residual ~550 KB is three.js itself.
 - **Decoupling made an invariant.** `verbatimModuleSyntax` is on, so the two type-only `race-scene` edges cannot silently become runtime imports. 20 legacy modules needed `type` keywords added; zero platform modules did.
 - **Ops gap found and fixed in config: production serves uncompressed and uncached.** Verified against live: `Content-Encoding` empty, `Cache-Control` absent, so every visitor downloads ~750 KB raw every time. `ops/nginx/graphysx.specialblend.ca` now enables gzip and adds `immutable` caching for content-hashed `/assets/`, plus `no-cache` on the shell so a deploy is picked up immediately. **Not yet applied** — needs a deliberate re-run of `ops/install-nginx.sh` on the release server (infra step, not automated from here).
+
+## 2026-07-19 — `shadows-r1`: the showroom gets shadows, and a commit-hygiene incident
+
+- **Shadows landed — the deferral had simply expired.** Turning them off in `showroom-r2` was the
+  right call at the time: nothing in the composed scene opted into `castShadow`, so a per-frame
+  2048² map was pure cost. That stopped being true once the kinetic stack, trees, CubX assembly and
+  flock arrived. The change is much smaller than the backlog implied, because the plumbing was
+  already there: the runtime applies `castShadow`/`receiveShadow` to every `Mesh` in
+  `applyResolvedEntity` (both defaulting to `true`), and `PlatformHost` has enabled
+  `PCFSoftShadowMap` since `host-r1`. The only thing missing was that the showroom's host sun never
+  opted in. One flag plus a shadow-camera setup in `showroom-environment.ts`.
+- **The frustum is sized to the composition, not the world.** Props sit within ~±22 in x/z and the
+  murmuration within ±13, so ±26 covers every caster at ~2.5 cm/texel. Stretching it over the full
+  150-unit terrain would have spent 3× the texel footprint shadowing distant ground the fog already
+  hides. Low sun → grazing incidence → the terrain is exactly the geometry that acnes worst, so the
+  bias is mostly `normalBias` (0.03); a large constant bias would have peter-panned the stack's
+  small boxes instead.
+- **Which objects take part is not a host setting.** `castShadow`/`receiveShadow` are per-entity v2
+  fields, so an agent or the inspector can pull anything out of the shadow pass with an ordinary
+  `api.update`. The rig owns the light and the quality of its map, nothing else. Terrain receives
+  but does not cast (`showroom-scene.ts` already set that).
+- **Found while wiring it: reflective water was doubling the shadow cost.** `Water.js` renders the
+  scene a second time each frame for its mirror pass, and with `shadowMap.autoUpdate` on, three
+  rebuilds the entire shadow map for that nested pass — for a byte-identical result, since a shadow
+  map is computed in light space and does not depend on the camera sampling it. `PlatformHost` now
+  sets `autoUpdate = false` and arms `needsUpdate` once per frame in `tick()`; the mirror pass reuses
+  what the main pass just rendered.
+- **Verified by looking, not by asserting.** Three `npm run verify` runs with gaps; the last two were
+  9/9 green. Screenshots inspected: long raking tree shadows, contact shadows under the plinth and
+  stack, no acne on the terrain, frustum cutoff hidden by fog. One suspicion chased down rather than
+  waved off — the murmuration renders as near-black silhouettes, which looked like a shadow
+  regression. It is not: the `starlings` preset authors them dark (`color 2d3a46`, `emissive 0b1219`
+  @ 0.25), confirmed by inspecting the live material in the browser. Shadow maps only darken surfaces
+  facing *toward* the light, so backlit birds were always going to be silhouettes.
+- **Two false alarms recorded so the next session doesn't re-chase them.** (1) `foundation` failed on
+  the first run and passed on both reruns — the documented Chromium teardown contention, not a
+  regression. (2) `scene-store` failed once with `EPERM ... rename '<tmp>' -> 'smoke-scene.json'` and
+  passed on both reruns. That is a **real latent bug, not just flakiness**: `server/scene-store.mjs`
+  does write-temp-then-`rename` for atomicity, and on Windows `rename` over an existing target throws
+  `EPERM` whenever a scanner or indexer momentarily holds the file. It needs a bounded retry. Left
+  unfixed here because it is outside this change and the file belongs to no session right now.
+- **Commit-hygiene incident — the `git add -A` hazard fired again.** A concurrent session committed
+  while this work was in the tree and swept `src/platform-host.ts` (+10) and
+  `src/showroom-environment.ts` (+40) into `218d86c` *"feat(physics): trigger volumes"*, a commit
+  about something else entirely. The shadow work is in `main` and functional, but its history is
+  misleading. **Not rewritten**: `218d86c` was already pushed to a public repo with CI, and another
+  session is actively committing on the same branch — rewriting shared history there would be
+  destructive for a cosmetic gain. Recording it here is the honest remedy. The rule in the handoff is
+  now twice-proven: **stage by explicit path, never `git add -A`.**

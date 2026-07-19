@@ -356,9 +356,19 @@ Foundation before flourish. Each phase is shippable and course-correctable.
    adds the host-level stage — a gradient sky, a warm sun, and gentle heightmap terrain (flat near
    center so objects stay grounded). Idle screensaver orbit + a welcome overlay whose "Enter Scene
    Editor" reveals the editor (the hidden editor is now interaction-gated so showroom clicks aren't
-   hijacked). Shadows deliberately deferred (no casters yet → pure cost). Verified: 59 entities,
-   auto-orbit, enter-editor, zero errors. Evolutive — water/reflection, richer CubX, click-to-focus,
-   and opt-in shadows still to come.
+   hijacked). ~~Shadows deliberately deferred (no casters yet → pure cost).~~ **Shadows landed.**
+   The deferral was correct while nothing opted into `castShadow`; the kinetic stack, trees, CubX
+   assembly and flock are casters now, so the same low sun that lays the lake's glitter path also
+   throws the raking shadows that seat the props on the ground. The key light casts at 2048², with
+   the ortho frustum sized to the *composition* (±26, ~2.5 cm/texel) rather than to the 150-unit
+   terrain, whose far reaches are fogged out anyway. Which objects take part is not a host setting:
+   `castShadow`/`receiveShadow` are per-entity v2 fields the runtime applies to every mesh, so an
+   agent or the inspector can pull anything out of the shadow pass with an ordinary `api.update` —
+   the terrain receives but does not cast. `PlatformHost` also moved shadow updates off `autoUpdate`
+   onto one arm-per-frame in `tick()`, because reflective water renders the scene a second time each
+   frame and was rebuilding the whole shadow map for a byte-identical, camera-independent result.
+   Verified: 59 entities, auto-orbit, enter-editor, zero errors. Evolutive — water/reflection,
+   richer CubX, click-to-focus.
 4. **Living behaviors** — graduate flocking + tree-DNA from `nature-lab` into reusable
    on-platform scene behaviors (they exist and need polish).
 5. **First on-platform game** — one new, elegant BallZ-inspired level authored as a v2 scene,
