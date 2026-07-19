@@ -18,6 +18,7 @@ import type { MapEditorTile } from "./race-scene";
 import { GRAPHYSX_AGENT_WORLD_ASSETS } from "./agent-world-assets";
 import { GRAPHYSX_AGENT_WORLD_TEXTURES } from "./agent-world-textures";
 import { convertLegacyGraphysXXml } from "./agent-world-legacy-xml";
+import { composeBallzLevel } from "./ballz-level-scene";
 
 /**
  * Build the full `window.__GRAPHYSX__` public API (`GraphysXAgentWorldApi`) directly
@@ -60,11 +61,28 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
     undo: (id) => library.undo(id),
     importAscii: (source) => library.importAscii(source),
     exportAscii: (id) => library.exportAscii(id),
-    play: (_id) => ({
-      ok: false,
-      revision: 0,
-      error: "Playable levels are rebuilt on the platform; not available in the standalone host yet.",
-    }),
+    // Materialises the authored grid into the live scene. This was a hardcoded failure for
+    // as long as nothing could turn a grid into entities; `ballz-level-scene.ts` now does,
+    // built on the `trigger` volumes that make a ring or a finish gate expressible at all.
+    //
+    // It deliberately REPLACES the world rather than opening a separate play surface. A
+    // materialised level is an ordinary v2 scene — selectable, editable, exportable — which
+    // is the whole invariant: there is no second runtime holding game state. The caller keeps
+    // the level data, so re-playing re-materialises from the grid.
+    play: (id) => {
+      const level = library.get(id);
+      if (!level) return { ok: false, revision: 0, error: `Unknown level: ${id}` };
+      // Returns the level, per the shared `GraphysXAgentLevelApi` contract. Nothing is lost:
+      // the materialised entity ids are deterministic (`ballz-ball`, `ballz-finish-gate`) and
+      // every entity is tagged `ballz`, so a caller discovers the result with an ordinary
+      // `api.query({ tags: ["ballz"] })` rather than needing a bespoke return shape.
+      try {
+        composeBallzLevel(api, level);
+        return { ok: true, revision: level.revision, value: level };
+      } catch (error) {
+        return { ok: false, revision: level.revision, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
   } satisfies GraphysXAgentLevelApi;
 
   const api = {
