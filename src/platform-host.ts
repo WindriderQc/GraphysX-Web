@@ -56,6 +56,11 @@ export interface PlatformHostOptions {
   /** Called when the visitor leaves the editor, so the host page can restore the welcome. */
   onExitEditor?: () => void;
   /**
+   * Called when the visitor leaves play. A level replaces the world, so "back" cannot simply
+   * mean un-hiding chrome — the page has to decide what to show instead, usually the showroom.
+   */
+  onExitPlay?: () => void;
+  /**
    * Initial camera framing. The default is a wide overview suited to the demo world; a
    * composed scene like the showroom wants its own, tighter framing.
    */
@@ -94,6 +99,7 @@ export class PlatformHost {
   private readonly interactive: boolean;
   private readonly autoOrbit: boolean;
   private readonly onExitEditor?: () => void;
+  private readonly onExitPlay?: () => void;
   private readonly controls: OrbitControls;
   private readonly clock = new Clock();
   private readonly onResize = () => this.resize();
@@ -198,6 +204,7 @@ export class PlatformHost {
     this.interactive = options.interactive !== false;
     this.autoOrbit = options.autoOrbit === true;
     this.onExitEditor = options.onExitEditor;
+    this.onExitPlay = options.onExitPlay;
     // The route decides the opening surface: the showroom opens on `scene`, the editor routes
     // open on `editor`. Set directly rather than through setMode, which would early-return on
     // the initial value and skip the editor load.
@@ -420,6 +427,7 @@ export class PlatformHost {
   exitPlay(): void {
     if (this.currentMode !== "play") return;
     this.setMode(this.modeBeforePlay);
+    this.onExitPlay?.();
   }
 
   private tick(): void {

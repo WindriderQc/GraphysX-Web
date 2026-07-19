@@ -9,7 +9,11 @@
  * This is DOM chrome, not scene vocabulary, so it lives apart from `showroom-scene.ts`.
  * Class names are load-bearing: the headless smokes select `.gx-welcome` and its button.
  */
-export function mountWelcome(container: HTMLElement, onEnter: () => void): () => void {
+export function mountWelcome(
+  container: HTMLElement,
+  onEnter: () => void,
+  onGames?: () => void,
+): () => void {
   const style = document.createElement("style");
   style.textContent = `
     .gx-welcome{position:fixed;inset:0;z-index:30;pointer-events:none;font-family:system-ui,sans-serif;display:flex;align-items:flex-end;justify-content:flex-start;padding:clamp(20px,4vw,54px)}
@@ -20,6 +24,7 @@ export function mountWelcome(container: HTMLElement, onEnter: () => void): () =>
     .gx-welcome .gx-actions{display:flex;gap:12px;flex-wrap:wrap;pointer-events:auto}
     .gx-welcome button{background:linear-gradient(180deg,#2fb6d0,#1d7f96);color:#fff;border:1px solid #4fd0e6;border-radius:12px;padding:12px 24px;font:600 15px system-ui,sans-serif;cursor:pointer;box-shadow:0 8px 30px rgba(30,127,150,.42)}
     .gx-welcome button:hover{filter:brightness(1.08)}
+    .gx-welcome .gx-go-games{background:linear-gradient(180deg,#2f9e7f,#1d6f5a);border-color:#5fe0b4;box-shadow:0 8px 30px rgba(29,111,90,.42)}
     .gx-welcome .gx-hint{color:#7fc2d3;font-size:12px;text-shadow:0 1px 10px rgba(3,12,20,.8)}
     @media (max-width:640px){
       .gx-welcome{justify-content:center;align-items:flex-end}
@@ -32,12 +37,22 @@ export function mountWelcome(container: HTMLElement, onEnter: () => void): () =>
     <div class="gx-welcome-card">
       <h1>GRAPHYSX WEB</h1>
       <p>A browser engine for 3D + physics scenes that humans and AI agents create and inhabit together — composed from the same vocabulary you build with.</p>
-      <div class="gx-actions"><button type="button">Enter Scene Editor</button></div>
+      <div class="gx-actions"><button type="button" class="gx-go-editor">Enter Scene Editor</button></div>
       <div class="gx-hint">click the stack to knock it over · click the ground to drop a ball · drag to look around</div>
     </div>
   `;
   const dispose = () => { overlay.remove(); style.remove(); };
-  overlay.querySelector("button")?.addEventListener("click", () => { onEnter(); dispose(); });
+  overlay.querySelector(".gx-go-editor")?.addEventListener("click", () => { onEnter(); dispose(); });
+  // The second destination from §5. Added only when a caller supplies it, so the button can
+  // never be a dead control — the front door should not advertise a room that is not there.
+  if (onGames) {
+    const games = document.createElement("button");
+    games.type = "button";
+    games.className = "gx-go-games";
+    games.textContent = "Games & Playgrounds";
+    games.addEventListener("click", () => { onGames(); dispose(); });
+    overlay.querySelector(".gx-actions")?.append(games);
+  }
   container.append(style, overlay);
   return dispose;
 }

@@ -48,6 +48,33 @@ if (mode === "legacy") {
       interaction?.setEnabled(false);
       void host.enterEditor();
     };
+    // Rebuild the front door from scratch. Playing a level REPLACES the world, so coming back
+    // cannot just mean un-hiding chrome — the showroom's entities are gone and its host-mounted
+    // set was torn down with them. Recomposing is the honest "back", and it is cheap because the
+    // showroom is ordinary API calls rather than a retained scene.
+    const restoreShowroom = (): void => {
+      composeShowroom(host.api);
+      host.applyEnvironment();
+      showroomEnvironment?.();
+      showroomEnvironment = mountShowroomEnvironment(host.scene, host.renderer);
+      interaction?.setEnabled(true);
+      mountWelcome(root, enterEditor, openGames);
+    };
+    const openGames = (): void => {
+      interaction?.setEnabled(false);
+      void import("./games-shelf").then(({ mountGamesShelf }) => {
+        mountGamesShelf(root, {
+          api: host.api,
+          // The level is already materialised by the time this fires; the host has switched to
+          // play mode on its own. All that is left is taking the showroom's set down so a
+          // course is not sitting inside the showroom's hills.
+          onPlay: () => {
+            showroomEnvironment?.();
+            showroomEnvironment = null;
+          },
+        });
+      });
+    };
     const host = new PlatformHost(root, {
       autoOrbit: !editorFirst,
       editorVisible: editorFirst,
@@ -64,8 +91,11 @@ if (mode === "legacy") {
         ? undefined
         : () => {
             interaction?.setEnabled(true);
-            mountWelcome(root, enterEditor);
+            mountWelcome(root, enterEditor, openGames);
           },
+      // Leaving a game returns to the front door rather than to a chrome-less view of the level
+      // you just finished, which would be a dead end with no way onward.
+      onExitPlay: editorFirst ? undefined : () => restoreShowroom(),
     });
     Object.assign(window, {
       __GRAPHYSX_HOST__: host,
@@ -86,7 +116,7 @@ if (mode === "legacy") {
         // easing; the interaction layer only decides what is worth looking at.
         focusOn: (point, radius) => host.focusOn(point, radius),
       });
-      mountWelcome(root, enterEditor);
+      mountWelcome(root, enterEditor, openGames);
     }
 
     // Mounted after the showroom composes so there is always something on screen, and only
