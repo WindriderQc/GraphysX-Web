@@ -331,3 +331,76 @@ unrelated routes are this; structural and reproducible failures are real.
 
 **Still open:** Browse Scenes has no front-door route while production has no store. Camera framing
 after materialising is the host default. The §14.5 shader pass is not done.
+
+## 2026-07-19 — `forces-r1`: force fields graduated + a write-only-state round-trip sweep
+
+- **Force fields graduated** (`agent-world-force-field.ts`) — the second Nature-of-Code system,
+  after flocking. `force-field` is a v2 entity type with four kinds and five presets: `attractor`
+  (p5 `attractor.js`, inverse-square, distance-clamped, mass-independent acceleration so a heavy
+  crate and a light ball arrive together), `flow` (the forces-garden `flowAngle` field, carried
+  over from `nature-lab.ts` unchanged bar a `scale` coefficient), `drag` (p5 `liquid.js`,
+  magnitude = c·speed², inverse of velocity, inside a volume), and `vortex` (the sphere-flock
+  swirl term, straightened around a world axis — the one kind with no p5 original, recorded as an
+  extension). `path.js` deliberately not graduated: it is the existing `follow-spline` behavior.
+- **Entity for identity, runtime pass for effect** — the honest answer to "entity or field?".
+  Unlike a flock (whose object *is* the simulation), a force field's own `Object3D` is a
+  visualiser only; deleting the gizmo changes no physics. So the entity carries the identity
+  (position, radius, lifetime, serialisation, undo, tree place) while the *effect* is a pass in
+  `updateSimulation`, run immediately before the cannon step — the one place that sees rigid
+  bodies, particle emitters and flocks at once. It applies `a·mass` to dynamic bodies (asleep
+  ones woken), and installs a per-step `externalAcceleration` hook on flocks (`agent-world-flock.ts`)
+  and emitters (`agent-world-particles.ts`) so neither module has to know force fields exist.
+  Everything is sampled in the field's local space, so a rotated/scaled/parented field is exactly
+  as correct as one at the origin. `state().forceField` reports `affectedCount` / `peakAcceleration`
+  / `visualVectors` so a present-but-inert field (wrong radius, wrong tag filter) is distinguishable
+  from a working one — the flock's `averageSpeed` lesson applied to a system whose job is invisible.
+- **Budget (pillar 5):** measured ~0.52 ms/step for one attractor over 200 dynamic bodies + a
+  240-member flock (particles opt-out, the default); ~1.24 ms/step with a 1500-particle emitter
+  added to the pass. `affectsParticles` is off by default on every preset except `flow-garden`,
+  because that is the one channel that samples thousands of points per step.
+- Threaded through both `GraphysXAgentWorldApi` implementations (`agent-world-api.ts` **and**
+  `prototype-app.ts`), the type union, `resolveEntity` (+guards: no rigid body on a field), the
+  patch path, `createEntityObject`, `applyResolvedEntity`, `serializeEntity`, disposal,
+  capabilities (`entity.force-field` / `force-field.list` / `simulation.force-fields`), and the
+  editor's **Life** palette next to the flock.
+- **A write-only-state round-trip sweep** (`scripts/smoke-roundtrip.mjs`, wired into `verify.mjs`
+  and `npm run smoke:roundtrip`). For 63 settable properties across the v2 entity + environment
+  schema it sets the value through the public API, then reads it back through **four** paths —
+  `state()`, `exportDocument()`, a full reload from that export, and where observable the live
+  three.js / cannon object — and asserts the world genuinely changed, not merely that the value
+  was stored. 35 checks are object-verified (castShadow/receiveShadow on the actual mesh, transform
+  on `object.position`, material on `mesh.material`, physics velocity off the cannon body, terrain
+  `colliderVertices`, flock `averageSpeed`, the field actually pulling a probe body, ground mesh
+  size/colour, gravity from a dropped body's acceleration). 28 round-trip through storage only, and
+  the honest inventory of what is *not* object-observable (tags/label metadata, `body.mass`, the
+  async sky texture, water's internal material colour) is recorded rather than skipped.
+- **Bug found and fixed by the sweep:** an agent's `api.transaction([{ op: "set-environment" }])`
+  updated the runtime's stored environment (and ground + gravity, which live in the runtime's own
+  graph) but the host never re-read `background`/`fog`/`sky` — those live on `host.scene` and were
+  only refreshed on `world.loaded`. Exactly the parity gap `world.loaded` closed for `create`/`load`,
+  reopened by a different entry point: an agent set a new sky, `state()` and the document agreed it
+  was selected, and the viewport kept the old one. Fixed at the source with a new `environment.changed`
+  stream event that the host subscribes to (`agent-world-runtime.ts` + `platform-host.ts`). The
+  sweep's object read of `host.scene.background` now passes.
+- Two apparent failures the sweep flagged were harness mistakes, not product bugs, and are recorded:
+  `geometry.radialSegments` is a per-primitive detail knob (a torus maps it to floor(n/2) radial +
+  n tubular), so it is object-verified on a cylinder where it maps 1:1 and state-only on the torus;
+  and the measured effective gravity sits a hair under the configured value because a cannon body
+  carries a small default `linearDamping`, so that check asserts "close to new, clearly not old".
+
+## 2026-07-19 — `play-framing`: a level opens framed
+
+- **Play inherited whatever framing the previous surface left.** From the showroom that was its
+  off-axis overview, tuned for the showroom composition, so a level opened at a coincidental angle —
+  a large one overflowed the frame, a small one sat lost in it, and the ball was never the subject.
+- **`frameOnPlay` eases the camera onto the level centre from one fixed game angle**, reusing the
+  existing `focusMove` so it inherits the cubic ease. A *fixed* direction is the point: every level
+  opens the same way, so the control scheme (up = away) always matches what the player sees.
+- **Framed on `ballz-floor`, not the world's bounding box.** The floor slab is exactly the play
+  footprint; the world also holds the terrain pad and the hills beyond it, and fitting those would
+  pull the camera back until the maze was a detail. The host already reads the `player` tag to know
+  it is in a game, so reading the floor is the same tier of knowledge rather than a new dependency.
+- `smoke-games` asserts the orbit pivot lands on the level centre (near origin for a centred course,
+  distinct from the showroom target) and that the ease has settled. `output/verify/games-playing.png`
+  now shows the whole maze square in frame with all rings and the ball visible — the last named rough
+  edge in the play loop, closed.
