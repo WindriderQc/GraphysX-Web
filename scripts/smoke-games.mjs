@@ -126,6 +126,8 @@ try {
       rowCount: rows.length,
       // Curated starters are the gallery; at least the physics sketchbook should be listed.
       hasPhysics: rows.some((r) => r.dataset.starterId === "physics-sketchbook"),
+      // The Living Systems showcase — the graduated vocabulary in one scene.
+      hasLiving: rows.some((r) => r.dataset.starterId === "living-systems"),
       firstMeta: rows[0]?.querySelector(".gx-browse-meta")?.textContent ?? "",
       welcomeGone: !document.querySelector(".gx-welcome"),
     };
@@ -183,6 +185,7 @@ const ok =
   out.returned?.levelEntities === 0 &&
   out.browse?.rowCount > 0 &&
   out.browse?.hasPhysics === true &&
+  out.browse?.hasLiving === true &&
   /entities/.test(out.browse?.firstMeta ?? "") &&
   out.browse?.welcomeGone === true &&
   out.opened?.mode === "editor" &&

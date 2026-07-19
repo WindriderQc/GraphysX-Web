@@ -10,7 +10,7 @@ import {
   type AgentWorldPrefabOptions
 } from "./agent-world-prefabs";
 
-export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook";
+export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook" | "living-systems";
 
 export type AgentWorldStarterDescriptor = {
   id: AgentWorldStarterId;
@@ -26,6 +26,13 @@ export type AgentWorldStarterOptions = {
 };
 
 export const GRAPHYSX_AGENT_WORLD_STARTERS: readonly AgentWorldStarterDescriptor[] = [
+  {
+    id: "living-systems",
+    label: "Living Systems",
+    summary: "The graduated vocabulary in one scene: terrain and a reflecting lake under a sky, a starling flock, a whirlpool force field, particle braziers, and a 2D overlay.",
+    prefabCount: 0,
+    entityCount: 9
+  },
   {
     id: "prefab-plaza",
     label: "Prefab Plaza",
@@ -81,6 +88,7 @@ export function instantiateAgentWorldStarter(
 }
 
 function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition, "environment" | "entities"> {
+  if (starterId === "living-systems") return livingSystems();
   if (starterId === "physics-sketchbook") return physicsSketchbook();
   if (starterId === "prefab-plaza") {
     return {
@@ -184,6 +192,77 @@ function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition,
         palette: { primary: "#64d6bd", secondary: "#9be8ce", accent: "#ffd69a" }
       })
     ]
+  };
+}
+
+/**
+ * A single scene that shows what has graduated into the runtime: a heightmap `terrain` with its
+ * collider, a reflecting `water` plane, a self-steering `flock`, a `force-field` the flock and
+ * particles bend around, particle `emitter`s, a per-scene sky, and a 2D `overlay`. Everything
+ * here is ordinary v2 vocabulary an agent can spawn — the point is that the headline systems
+ * compose in one place, not that this scene is special.
+ */
+function livingSystems(): Pick<AgentWorldDefinition, "environment" | "entities"> {
+  return {
+    environment: {
+      background: "#0b1c26",
+      sky: "lostvalley",
+      // The 2D layer, on a real scene: a soft cinematic frame over the 3D view.
+      overlay: "vignette",
+      // Terrain brings the ground and its collider, so the flat grid would only z-fight it.
+      ground: { visible: false, size: 60, color: "#123039", grid: false, gridColor: "#2a7d8f" },
+    },
+    entities: [
+      ...starterLights("living", "#bcd8e6", "#ffe6bd", [-24, 26, -20]),
+      {
+        id: "living-terrain", label: "Highland Terrain", type: "terrain",
+        terrain: { heightmap: "highlands", size: 130, segments: 96, heightScale: 14, heightOffset: -8, flattenRadius: 10, flattenFalloff: 14, flattenHeight: 0 },
+        transform: { position: [0, 0, 0] },
+        material: { color: "#5f7148", roughness: 0.96, metalness: 0.02 },
+        castShadow: false, tags: ["terrain", "living"],
+      },
+      {
+        id: "living-water", label: "Reflecting Lake", type: "water",
+        transform: { position: [0, -1.4, 0] },
+        water: { size: 130, color: "#0f4a66", reflection: true, reflectionResolution: 256 },
+        tags: ["water", "living"],
+      },
+      {
+        // The steering half of the Nature-of-Code lesson: a population that flocks.
+        id: "living-flock", label: "Starling Murmuration", type: "flock",
+        transform: { position: [0, 11, -6] },
+        flock: { preset: "starlings", count: 70 },
+        tags: ["life", "flock", "living"],
+      },
+      {
+        // The other half: the field the flock and the braziers bend around.
+        id: "living-vortex", label: "Whirlpool Field", type: "force-field",
+        transform: { position: [0, 5, 0] },
+        forceField: { preset: "whirlpool" },
+        tags: ["life", "force-field", "living"],
+      },
+      {
+        id: "living-brazier-west", label: "West Brazier", type: "emitter",
+        transform: { position: [-6.5, 1.4, 3] },
+        emitter: { preset: "campfire" },
+        tags: ["effect", "living"],
+      },
+      {
+        id: "living-brazier-east", label: "East Brazier", type: "emitter",
+        transform: { position: [6.5, 1.4, 3] },
+        emitter: { preset: "campfire" },
+        tags: ["effect", "living"],
+      },
+      {
+        // A kinetic centrepiece so the vortex has something to read against, and the eye lands.
+        id: "living-core", label: "Kinetic Core", type: "icosahedron",
+        transform: { position: [0, 3.2, 0], scale: [1.5, 1.5, 1.5] },
+        material: { color: "#ff9a6a", emissive: "#7a2410", emissiveIntensity: 1.2, metalness: 0.4, roughness: 0.3 },
+        physics: { mode: "kinematic" },
+        behaviors: [{ type: "spin", axis: "y", speedDegrees: 32 }, { type: "bob", amplitude: 0.5, frequencyHz: 0.28 }],
+        castShadow: true, tags: ["focus", "living"],
+      },
+    ],
   };
 }
 
