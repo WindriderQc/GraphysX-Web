@@ -282,3 +282,19 @@ with the HUD shown in play, restored with the HUD gone after exit — and captur
 **Still open:** `scene` mode is currently only the showroom; Browse Scenes and a Games & Apps shelf
 are still the missing front-door routes (§8.1). Camera framing after materialising is the host
 default. No shader pass.
+
+### Amendment to the harness finding above
+
+The other session landed two fixes for the same flakiness from a different angle: `f7c7124` gave the
+smokes one shared deadline (their evidence: a run failed `waitForSelector` while Playwright's own log
+said "locator resolved to visible" — the element was there, the clock ran out), and `2fdcab0` closes
+smoke browsers on every exit path rather than only the happy one, which is very likely what was
+leaving Chromium fleets alive and loading the box in the first place.
+
+That is a better root cause than the one recorded above, and it probably explains the connection
+resets rather than competing with them: an overloaded machine with several orphaned browser fleets
+both expires deadlines and drops sockets. My `ERR_CONNECTION_RESET` observation was real and
+reproducible, but treating it as *the* cause was reading one symptom as the whole. Flakiness has
+still been seen since both fixes landed, so it is reduced rather than closed — keep re-running a red
+run before believing it, and keep the discriminator: uniform, network-shaped failures across
+unrelated routes are this; structural and reproducible failures are real.
