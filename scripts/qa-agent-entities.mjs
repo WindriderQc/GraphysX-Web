@@ -1,10 +1,42 @@
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
+import { startStaticServer } from "./static-server.mjs";
 
-const url = process.env.GRAPHYSX_URL ?? "http://127.0.0.1:4177/";
+// The agent entity contract, driven against the route that actually ships.
+//
+// This is the sole survivor of fourteen `qa:*` scripts. The other thirteen navigated to `/`
+// and blocked on `window.__GRAPHYSX_DEBUG__` / `window.render_game_to_text` — globals only
+// the legacy archive previews define — so they hung until Playwright timed out, against
+// hardcoded ports nothing bound. They were deleted rather than left wired up looking like
+// coverage. See the report in git history; `npm run verify` is the real gate.
+//
+// What survived is worth keeping because it is the only check that drives complex models,
+// splines and rigid bodies together through the public `window.__GRAPHYSX__` API: catalog
+// lookup, mesh payload loading, static/kinematic/dynamic physics, deterministic stepping,
+// validation failures, and the export/save/load round trip.
+//
+//   npm run qa                 build-free: serves the existing dist/
+//   GRAPHYSX_URL=... npm run qa   drive an already-running server instead
+//
+// Requires a dist/ (run `npm run build` first) unless GRAPHYSX_URL is set.
+
 const outputDir = path.resolve("output/playwright/agent-entities");
 fs.mkdirSync(outputDir, { recursive: true });
+
+const externalUrl = process.env.GRAPHYSX_URL;
+let server = null;
+if (!externalUrl) {
+  const dist = path.resolve("dist");
+  if (!fs.existsSync(path.join(dist, "index.html"))) {
+    console.error("No dist/ to serve. Run `npm run build` first, or set GRAPHYSX_URL.");
+    process.exit(1);
+  }
+  // Ephemeral port: a fixed one races the previous run's socket in TIME_WAIT.
+  server = await startStaticServer({ root: dist, port: 0 });
+}
+// `?host=editor` opens the Scene Editor directly, which is where the agent API lives.
+const url = (externalUrl ?? server.url).replace(/\/$/, "") + "/?host=editor";
 
 const browser = await chromium.launch({ headless: true, args: ["--use-gl=angle", "--use-angle=swiftshader"] });
 const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
@@ -13,6 +45,7 @@ page.on("console", (message) => { if (message.type() === "error") errors.push({ 
 page.on("pageerror", (error) => errors.push({ type: "page", text: String(error) }));
 
 const result = { url, assertions: [], states: {}, errors };
+let failure = null;
 const assert = (condition, message) => {
   result.assertions.push({ pass: Boolean(condition), message });
   if (!condition) throw new Error(message);
@@ -22,11 +55,18 @@ const queryOne = async (id) => (await api("query", { ids: [id] }))[0];
 
 try {
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => window.__GRAPHYSX__ && window.render_game_to_text && window.advanceTime);
+  // The shipping route defines `__GRAPHYSX__` and nothing else; the old wait also required
+  // `render_game_to_text` and `advanceTime`, which is why this script used to hang forever.
+  await page.waitForFunction(() => window.__GRAPHYSX__, null, { timeout: 30000 });
 
   const catalog = await api("assets");
-  assert(catalog.length === 5 && catalog.every((asset) => asset.format === "graphysx-mesh-json"), "Agents discover five ready-to-use recovered complex models");
-  assert(catalog.some((asset) => asset.id === "zoksword") && catalog.some((asset) => asset.id === "port-cottage"), "Asset catalog exposes stable semantic ids for a prop and a building");
+  // The catalog is generated from the meshes on disk (5 hand-written entries became 63), so
+  // asserting an exact count just rots again. Assert the contract instead: it is non-empty,
+  // uniformly loadable, and still publishes the stable ids this check spawns below.
+  assert(catalog.length > 0 && catalog.every((asset) => asset.format === "graphysx-mesh-json"),
+    "Agents discover a non-empty catalog of uniformly loadable recovered models");
+  assert(["zoksword", "zokshield", "port-cottage"].every((id) => catalog.some((asset) => asset.id === id)),
+    "Asset catalog exposes stable semantic ids for the props and building this check authors");
   assert(await api("open"), "Agent World Studio opens through the public API");
 
   const created = await api("create", {
@@ -86,7 +126,7 @@ try {
   await page.waitForFunction(() => {
     const models = window.__GRAPHYSX__.query({ type: "model" });
     return models.length === 3 && models.every((model) => model.asset?.status === "ready");
-  });
+  }, null, { timeout: 30000 });
   const models = await api("query", { type: "model" });
   assert(models.every((model) => model.asset.status === "ready"), "Recovered complex model payloads load into the authored world");
   assert(["static", "kinematic", "dynamic"].every((mode) => models.some((model) => model.physics.mode === mode)), "Complex models support static, dynamic, and mesh-controlled kinematic physics");
@@ -129,17 +169,28 @@ try {
   assert((await api("save", "qa-archive-entities")).ok, "Mixed entity world saves through the existing snapshot API");
   assert((await api("clear", "qa-empty", "QA Empty")).ok, "Mixed world clears through the existing API");
   assert((await api("load", "qa-archive-entities")).ok, "Mixed entity world reloads from the same snapshot contract");
-  await page.waitForFunction(() => window.__GRAPHYSX__.query({ type: "model" }).every((model) => model.asset?.status === "ready"));
+  await page.waitForFunction(() => window.__GRAPHYSX__.query({ type: "model" }).every((model) => model.asset?.status === "ready"), null, { timeout: 30000 });
 
-  const textState = JSON.parse(await page.evaluate(() => window.render_game_to_text()));
-  assert(textState.agentWorld.entityCount === 9, "render_game_to_text exposes the same mixed entity world to agents");
-  result.states.final = await api("state");
+  // Was asserted through `render_game_to_text`, which the shipping route does not define.
+  // `state()` is the same fact on the surface that actually ships.
+  const state = await api("state");
+  assert(state.entities.length === 9, "Reloaded world exposes the same mixed entity set through the public state API");
+  result.states.final = state;
   await page.screenshot({ path: path.join(outputDir, "archive-entity-playground.png"), fullPage: true });
   assert(errors.length === 0, "Agent entity playground has no browser console or page errors");
+} catch (error) {
+  failure = error;
 } finally {
   result.states.final ??= await api("state").catch(() => null);
   fs.writeFileSync(path.join(outputDir, "results.json"), JSON.stringify(result, null, 2));
   await browser.close();
+  if (server) await server.close();
 }
 
-console.log(JSON.stringify({ assertions: result.assertions.length, errors: errors.length, outputDir }, null, 2));
+const failed = result.assertions.filter((a) => !a.pass);
+console.log(JSON.stringify({ url, assertions: result.assertions.length, failed: failed.length, errors: errors.length, outputDir }, null, 2));
+if (failure) {
+  console.error(`\nFAIL: ${failure.message}`);
+  if (errors.length) console.error(errors.map((e) => `  ${e.type}: ${e.text}`).join("\n"));
+  process.exit(1);
+}

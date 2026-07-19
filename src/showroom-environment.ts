@@ -13,15 +13,16 @@ import { DirectionalLight, Group, HemisphereLight, type Scene, type WebGLRendere
  * The sky is NOT set here either. It is `environment.sky` in the v2 scene, so it is
  * selectable and serialisable like any other scene property — the host must not fight it by
  * assigning `scene.background` behind the runtime's back.
+ *
+ * The key sun casts shadows. Which objects *take part* is not decided here: `castShadow` and
+ * `receiveShadow` are per-entity v2 fields the runtime applies to every mesh, so an agent or
+ * the inspector can pull any object out of the shadow pass with an ordinary `api.update`.
+ * This rig only owns the light and the quality of its map.
  */
 export function mountShowroomEnvironment(scene: Scene, _renderer: WebGLRenderer): () => void {
   const group = new Group();
   group.name = "ShowroomEnvironment";
 
-  // Warm key light. Shadows are intentionally OFF: nothing in the composed showroom opts
-  // into castShadow, so a per-frame shadow map would be pure cost for zero visual gain.
-  // Real shadows return in a fidelity pass once casters opt in.
-  //
   // The sun is deliberately placed roughly *opposite the camera in azimuth* and fairly low.
   // It used to sit behind the viewer at (26, 36, 18), which lit everything flatly in the face
   // and — the part that mattered — put the lake's specular path off-screen behind the camera,
@@ -30,6 +31,37 @@ export function mountShowroomEnvironment(scene: Scene, _renderer: WebGLRenderer)
   // `showroom-scene.ts` keeps `water.sunDirection` matched to this vector.
   const sun = new DirectionalLight("#ffe9c2", 2.6);
   sun.position.set(-30, 28, -35);
+
+  // Shadows were off while the showroom had no casters — a per-frame shadow map would have
+  // been pure cost. It has casters now (the kinetic stack, the trees, the CubX assembly, the
+  // murmuration), and the same low sun that lays the glitter path also throws long raking
+  // shadows, which is what finally seats the props on the ground instead of floating them.
+  sun.castShadow = true;
+
+  // The frustum is sized to the *composition*, not to the terrain. Props live within about
+  // ±22 in x/z and the murmuration within ±13, so ±26 covers every caster with margin; at
+  // 2048² that is ~2.5 cm per texel. Stretching it over the full 150-unit terrain instead
+  // would cost 3x the texel footprint to shadow distant ground that is fogged out anyway.
+  sun.shadow.mapSize.set(2048, 2048);
+  const extent = 26;
+  sun.shadow.camera.left = -extent;
+  sun.shadow.camera.right = extent;
+  sun.shadow.camera.top = extent;
+  sun.shadow.camera.bottom = -extent;
+  // The light sits ~55 units out; near/far bracket the casters rather than spanning the
+  // whole world, so the depth buffer spends its precision where the shadows actually are.
+  sun.shadow.camera.near = 5;
+  sun.shadow.camera.far = 120;
+  // A low sun grazes the terrain, which is exactly the geometry that acnes worst. normalBias
+  // offsets along the surface normal, so it fixes sloped ground without the peter-panning a
+  // large constant bias would give the stack's small boxes.
+  sun.shadow.normalBias = 0.03;
+  sun.shadow.bias = -0.0004;
+
+  // three reads the light's direction from `target.matrixWorld`. The default target sits at
+  // the origin and works only while it is never moved; adding it to the group makes the
+  // aim explicit and survives anyone repositioning the rig later.
+  group.add(sun.target);
   group.add(sun);
 
   // Backlighting needs a fill or the camera-facing side of everything goes to mud. Warmer

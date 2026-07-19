@@ -175,7 +175,18 @@ export type AgentWorldSplinePath = {
   tension?: number;
 };
 
-export type AgentWorldPhysicsMode = "static" | "dynamic" | "kinematic";
+/**
+ * `trigger` is a region that notices rather than resists: it takes part in collision
+ * detection but not collision response, so bodies pass through while the world records
+ * `trigger.enter` and `trigger.exit` events naming the trigger and what crossed it.
+ *
+ * This is the primitive the archive's race worlds are missing. Their geometry ports as
+ * ordinary entities; what has no expression in v2 is "the ball reached the checkpoint".
+ * A trigger is deliberately only the *observation* — it fires an event and, if the entity
+ * carries interactions, runs them. Deciding what a crossing means (a lap, a pickup, a win)
+ * belongs to a rules layer above this, not to the shape itself.
+ */
+export type AgentWorldPhysicsMode = "static" | "dynamic" | "kinematic" | "trigger";
 export type AgentWorldPhysicsMaterial = "default" | "wall" | "finish" | "ground" | "ball" | "human";
 export type AgentWorldPhysics = {
   mode: AgentWorldPhysicsMode;
@@ -401,6 +412,11 @@ export type AgentWorldEntityState = {
   receiveShadow: boolean;
   /** True when this entity is session-only and will not survive a save or a reload. */
   ephemeral: boolean;
+  /**
+   * For a `trigger`, the ids currently inside it. Absent on everything else. Lets an agent
+   * poll "is anything on the finish pad" without replaying the event log.
+   */
+  occupants?: string[];
   tags: string[];
   behaviors: Array<{ id: string; type: AgentWorldBehavior["type"] }>;
   interactions: Array<{ id: string; label: string; type: AgentWorldInteraction["type"]; targetIds: string[]; impulse?: AgentWorldVector3; relativePoint?: AgentWorldVector3 }>;
@@ -739,6 +755,8 @@ export class AgentWorldRuntime {
   private readonly history: AgentWorldDefinition[] = [];
   private readonly events: AgentWorldEvent[] = [];
   private readonly commits: AgentWorldCommitSummary[] = [];
+  /** Trigger id → ids currently inside it, so each crossing fires once rather than per frame. */
+  private readonly triggerOccupants = new Map<string, Set<string>>();
   private definition: AgentWorldDefinition = deepClone(GRAPHYSX_AGENT_DEMO_WORLD);
   private environment: AgentWorldEnvironment = deepClone(DEFAULT_ENVIRONMENT);
   private selectedIds: string[] = [];
@@ -1268,7 +1286,11 @@ export class AgentWorldRuntime {
   private attachBehaviorInternal(id: string, behavior: AgentWorldBehavior): string {
     const runtime = this.requireEntity(id);
     validateBehavior(behavior, this.entities);
-    if (runtime.definition.physics && runtime.definition.physics.mode !== "kinematic" && isMotionBehavior(behavior)) {
+    if (
+      runtime.definition.physics
+      && !["kinematic", "trigger"].includes(runtime.definition.physics.mode)
+      && isMotionBehavior(behavior)
+    ) {
       throw new Error("Transform behaviors require kinematic physics");
     }
     const behaviorId = behavior.id?.trim() || `behavior-${String(++this.behaviorSequence).padStart(3, "0")}`;
@@ -1432,12 +1454,16 @@ export class AgentWorldRuntime {
       }
     }
     for (const runtime of this.entities.values()) {
-      if (runtime.definition.physics?.mode === "kinematic" && runtime.body) syncObjectToBody(runtime.object, runtime.body);
+      // Triggers follow their transform for the same reason kinematic bodies do: a gate that
+      // bobs or rides a spline has to carry its detection volume with it.
+      const mode = runtime.definition.physics?.mode;
+      if ((mode === "kinematic" || mode === "trigger") && runtime.body) syncObjectToBody(runtime.object, runtime.body);
     }
     if (deltaSeconds > 0) this.physicsWorld.step(1 / 60, deltaSeconds, 4);
     for (const runtime of this.entities.values()) {
       if (runtime.definition.physics?.mode === "dynamic" && runtime.body) syncBodyToObject(runtime.body, runtime.object);
     }
+    this.updateTriggers();
     // Emitters, water and flocks tick inside updateSimulation, so they inherit pause/step for
     // free — `api.pause(true)` freezes the murmuration, and `api.step(dt)` advances it one
     // deterministic slice, exactly as it does a rigid body.
@@ -1476,6 +1502,75 @@ export class AgentWorldRuntime {
       const nextWorldPoint = spline.object.localToWorld(curve.getPointAt(nextProgress));
       runtime.object.lookAt(nextWorldPoint);
     }
+  }
+
+  /**
+   * Turns overlap into enter/exit events.
+   *
+   * Deliberately computed here from body AABBs rather than read off cannon's contact list.
+   * A trigger body is excluded from contact *resolution*, and depending on it also appearing
+   * in the solver's reported contacts would tie the vocabulary to an implementation detail
+   * of the physics engine. An AABB test is coarse — a checkpoint fires slightly before a
+   * ball touches its visible surface — but it is predictable, survives pause/step exactly,
+   * and is the same approximation the archive's gates used.
+   *
+   * Occupancy is diffed rather than reported raw so a ball resting inside a trigger fires
+   * `trigger.enter` once, not sixty times a second.
+   */
+  private updateTriggers(): void {
+    const triggers = [...this.entities.values()].filter((runtime) => runtime.definition.physics?.mode === "trigger" && runtime.body);
+    if (triggers.length === 0) {
+      // A world can lose its last trigger; leaving stale occupancy would replay exits later.
+      if (this.triggerOccupants.size > 0) this.triggerOccupants.clear();
+      return;
+    }
+    // Anything that can move through a trigger. Static scenery cannot cross anything, and a
+    // trigger overlapping another trigger is not a crossing worth reporting.
+    const movers = [...this.entities.values()].filter((runtime) => {
+      const mode = runtime.definition.physics?.mode;
+      return runtime.body && (mode === "dynamic" || mode === "kinematic");
+    });
+
+    for (const trigger of triggers) {
+      const triggerId = trigger.definition.id;
+      trigger.body!.updateAABB();
+      const previous = this.triggerOccupants.get(triggerId) ?? new Set<string>();
+      const current = new Set<string>();
+
+      for (const mover of movers) {
+        mover.body!.updateAABB();
+        if (!trigger.body!.aabb.overlaps(mover.body!.aabb)) continue;
+        const moverId = mover.definition.id;
+        current.add(moverId);
+        if (previous.has(moverId)) continue;
+        this.recordEvent("trigger.enter", `${triggerId} <- ${moverId}`);
+        // A trigger's interactions are its response to being crossed. This is what lets a
+        // gate light up, a pickup vanish, or a launcher fire without any external agent in
+        // the loop — the first in-world cause-and-effect the vocabulary has had.
+        if (trigger.definition.interactions.length > 0) {
+          try {
+            this.interactInternal(triggerId);
+          } catch (error) {
+            // One malformed trigger must not stop the simulation for everything else.
+            this.recordEvent("trigger.rejected", `${triggerId}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      }
+
+      for (const moverId of previous) {
+        if (!current.has(moverId)) this.recordEvent("trigger.exit", `${triggerId} -> ${moverId}`);
+      }
+      this.triggerOccupants.set(triggerId, current);
+    }
+
+    for (const triggerId of [...this.triggerOccupants.keys()]) {
+      if (!triggers.some((trigger) => trigger.definition.id === triggerId)) this.triggerOccupants.delete(triggerId);
+    }
+  }
+
+  /** Ids currently inside a trigger. Empty for anything that is not one. */
+  triggerOccupantIds(id: string): string[] {
+    return [...(this.triggerOccupants.get(id) ?? [])];
   }
 
   private rebuildPhysicsBody(runtime: RuntimeEntity): void {
@@ -1645,6 +1740,7 @@ export class AgentWorldRuntime {
       castShadow: runtime.definition.castShadow,
       receiveShadow: runtime.definition.receiveShadow,
       ephemeral: runtime.definition.ephemeral,
+      ...(runtime.definition.physics?.mode === "trigger" ? { occupants: this.triggerOccupantIds(id) } : {}),
       tags: [...runtime.definition.tags],
       behaviors: runtime.definition.behaviors.map((behavior) => ({ id: behavior.id, type: behavior.type })),
       interactions: runtime.definition.interactions.map((interaction) => ({
@@ -2016,12 +2112,16 @@ function resolvePhysics(
   parentId: string | null,
   behaviors: AgentWorldBehavior[]
 ): ResolvedAgentWorldPhysics {
-  if (!source || !["static", "dynamic", "kinematic"].includes(source.mode)) throw new Error(`Unsupported physics mode: ${String(source?.mode)}`);
+  if (!source || !["static", "dynamic", "kinematic", "trigger"].includes(source.mode)) throw new Error(`Unsupported physics mode: ${String(source?.mode)}`);
   // Terrain owns a heightfield collider it builds itself; water deliberately has none.
   if (["group", "spline", "emitter", "terrain", "water", "flock", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
   if (entityType === "plane" && source.mode === "dynamic") throw new Error("Plane physics can only be static or kinematic");
   if (parentId) throw new Error("Physics entities must be spawned at the world root");
-  if (source.mode !== "kinematic" && behaviors.some(isMotionBehavior)) throw new Error("Transform behaviors require kinematic physics");
+  // A trigger never responds to contact, so a behavior moving it cannot fight the solver.
+  // Letting a checkpoint bob or orbit is the whole point of a moving gate.
+  if (source.mode !== "kinematic" && source.mode !== "trigger" && behaviors.some(isMotionBehavior)) {
+    throw new Error("Transform behaviors require kinematic physics");
+  }
   const material = source.material ?? "default";
   const presets: Record<AgentWorldPhysicsMaterial, { friction: number; restitution: number }> = {
     default: { friction: 0.18, restitution: 0.28 },
@@ -2057,7 +2157,13 @@ function createPhysicsBody(definition: ResolvedEntity): Body {
     mass: physics.mass,
     material,
     linearDamping: physics.mode === "dynamic" ? 0.08 : 0,
-    angularDamping: physics.mode === "dynamic" ? 0.08 : 0
+    angularDamping: physics.mode === "dynamic" ? 0.08 : 0,
+    // A trigger is detected but never resolved: contacts are reported and then discarded,
+    // so a ball rolls through a checkpoint instead of bouncing off it.
+    isTrigger: physics.mode === "trigger",
+    // Triggers must keep testing contacts even when nothing has moved for a while, and a
+    // sleeping body stops generating them — a checkpoint that nods off stops counting.
+    ...(physics.mode === "trigger" ? { type: Body.KINEMATIC, allowSleep: false } : {})
   });
   const scale = definition.transform.scale.map((value) => Math.abs(value)) as AgentWorldVector3;
   const geometry = definition.geometry;

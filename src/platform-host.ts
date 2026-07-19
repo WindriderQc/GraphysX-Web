@@ -101,6 +101,13 @@ export class PlatformHost {
     this.renderer.toneMappingExposure = 1.08;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
+    // Drive shadow updates from the frame loop rather than from every `render()` call.
+    // A reflective water entity renders the scene a second time each frame for its mirror
+    // pass, and with autoUpdate on, three rebuilds the whole shadow map for that pass too —
+    // twice the shadow cost for a byte-identical result, since a shadow map is computed in
+    // light space and does not depend on the camera it will be sampled from. `tick()` arms
+    // it once per frame instead, so the mirror pass reuses what the main pass just rendered.
+    this.renderer.shadowMap.autoUpdate = false;
     this.container.append(this.renderer.domElement);
 
     this.camera = new PerspectiveCamera(55, 1, 0.1, 260);
@@ -313,6 +320,9 @@ export class PlatformHost {
     if (!this.editor?.isTransforming()) this.world.update(delta);
     this.advanceFocus(delta);
     this.controls.update();
+    // Arm one shadow rebuild per frame (see `autoUpdate = false` in the constructor). The
+    // first `render()` below consumes it; any nested pass a scene entity triggers reuses it.
+    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.render(this.scene, this.camera);
     this.frame += 1;
   }

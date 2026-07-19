@@ -34,6 +34,7 @@ const SMOKES = [
   { name: "levels", script: "scripts/smoke-levels.mjs", covers: "levels workbench: paint, fill, ASCII round trip, undo, create" },
   { name: "foundation", script: "scripts/smoke-foundation.mjs", covers: "?host=legacy: archive player still boots" },
   { name: "scene-store", script: "scripts/smoke-scene-store.mjs", covers: "?scene=: stored scene loads, outside agent edits land in the tab" },
+  { name: "triggers", script: "scripts/smoke-triggers.mjs", covers: "trigger volumes: enter/exit events, interactions fire, no collision response" },
 ];
 
 function run(command, args, label) {
@@ -110,3 +111,4 @@ if (failed.length) {
   process.exit(1);
 }
 console.log(`\nAll ${results.length} checks passed. Screenshots: ${ARTIFACTS}`);
+
