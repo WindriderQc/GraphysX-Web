@@ -250,6 +250,15 @@ particles and flocking; tree-DNA / evolutionary entities (§14 phase 4, still le
 map-editor UI on the default host (its data model already graduated into
 `agent-level-library.ts` and is reachable via `api.levels`).
 
+**Update (`levels-r1`):** the level *data* model was already graduated; what was missing was that
+nothing could turn a grid into a scene. `levels.play()` now materialises one (§14 phase 5), so the
+remaining map-editor gap is specifically the **human** half — there is no Play control in the
+workbench, only the agent API and the bridge. Two render defects were found and fixed on the way,
+both of which had been passing a green gate: `castShadow` on a v2 directional light only affected a
+±5 box at the origin, and an environment authored by an *agent* was stored but never applied to the
+viewport, while the same edit from the *human* inspector was — a direct, silent violation of
+pillar §3.2 ("the editor and the agent API produce the identical revision").
+
 **Known defect, not addressed here:** the `terrain` heightfield collider and its visual mesh
 disagree near the edge of a `flattenRadius` pad by roughly one cell. A dynamic body that lands
 inside the pad rests correctly, but one that lands within about a cell of the rim is deflected
@@ -371,7 +380,23 @@ Foundation before flourish. Each phase is shippable and course-correctable.
    richer CubX, click-to-focus.
 4. **Living behaviors** — graduate flocking + tree-DNA from `nature-lab` into reusable
    on-platform scene behaviors (they exist and need polish).
-5. **First on-platform game** — one new, elegant BallZ-inspired level authored as a v2 scene,
-   to the BallZ18 aesthetic bar, with a shader pass — **rebuilt on the platform, not ported.**
-   (Note: a true 2048 "Clear Sky" set is not in this repo; `clearblue` is 512 px. A high-res
-   sky would be a deliberate workshop→curate→import, not a pointer.)
+5. **First on-platform game** *(started — `levels-r1`)* — one new, elegant BallZ-inspired level
+   authored as a v2 scene, to the BallZ18 aesthetic bar, with a shader pass — **rebuilt on the
+   platform, not ported.** (Note: a true 2048 "Clear Sky" set is not in this repo; `clearblue`
+   is 512 px — confirmed by eye, it reads muddy brown at play angles. A high-res sky would be a
+   deliberate workshop→curate→import, not a pointer.)
+
+   **Landed:** `src/ballz-level-scene.ts` materialises an authored ASCII grid into a playable v2
+   scene, so `levels.play()` is no longer a hardcoded failure. Floor, walls, hazards, start pad
+   and ball are entities; rings, gates and fire tiles are `trigger` volumes, which is why this
+   was not buildable before Phase 4's triggers. It emits one `api.create`, so a materialised
+   level is an ordinary editable scene rather than a separate play mode — the invariant holds.
+   Verified by `scripts/smoke-ballz.mjs` against behaviour, not entity counts: the ball rests at
+   its own radius on the floor, rests *on top of* a wall rather than tunnelling through it, and
+   crossing the gate fires `trigger.enter` exactly once.
+
+   **Not yet, and not hidden:** no shader pass. No Play button in the Levels workbench — play is
+   reachable from the agent API and the tool bridge but not from the human UI, which is the exact
+   inverse of the parity gap it just fixed. Camera framing after materialising is the host default
+   rather than fitted to the level. Ice tiles model low friction but not the tile's attraction.
+   This is a level that runs, not yet a game that ships.

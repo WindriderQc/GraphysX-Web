@@ -96,3 +96,95 @@ Original prompt: "lets go then, lets make this happen!!"
   session is actively committing on the same branch — rewriting shared history there would be
   destructive for a cosmetic gain. Recording it here is the honest remedy. The rule in the handoff is
   now twice-proven: **stage by explicit path, never `git add -A`.**
+
+## 2026-07-19 — `levels-r1`: an authored grid becomes a playable scene
+
+- **`levels.play()` stopped being a lie.** Since the clean-host rewrite it returned a hardcoded
+  failure — *"Playable levels are rebuilt on the platform; not available in the standalone host
+  yet"* — and an audit of `src/` confirmed why: **no code anywhere turned a grid into entities.**
+  `agent-level-library.ts` is pure data, the workbench edits it through `api.levels.*`, and the only
+  grid→3D materialiser in the repo was `race-scene.ts:7153`, which mutates the three.js scene graph
+  directly and produces inspection geometry with no physics, no collision and no ball. So the
+  workbench could author a layout nothing could ever run. `src/ballz-level-scene.ts` closes it.
+- **A rebuild, not a port.** The legacy materialiser's *tile vocabulary* is worth keeping, so the
+  palette carries across with its source lines cited; the mechanism is rewritten on v2. The whole
+  module emits one `api.create` payload, which means a materialised level is an **ordinary scene** —
+  selectable, inspectable, exportable, undoable. There is no second runtime holding game state, and
+  the screenshot shows all 31 entities in the scene tree.
+- **This could not have been built before trigger volumes.** A ring that notices the ball, a finish
+  gate that fires once, a fire tile that launches — those are the gameplay verbs, and they arrived
+  in `218d86c` a few hours earlier. A ring "collects" by toggling its own visibility, which needs no
+  bespoke collection state and survives export→load because visibility is an ordinary entity field.
+- **Deviations named, not silently applied.** Ice uses the `finish` physics preset (friction 0.16)
+  because v2 has no ice material, and the tile's *attraction* is simply not modelled. Fire launches
+  the ball **by id**, because a trigger's interactions fire its own set and carry no reference to
+  whatever crossed it — a documented limit of the primitive rather than something worked around.
+- **`scripts/smoke-ballz.mjs` asserts behaviour, not entity counts.** The ball comes to rest at
+  0.468 — its exact radius on a floor top at y=0 — and rests at 2.08 on a wall (1.612 + 0.468),
+  proving a wall *stops* it rather than being decoration it tunnels through. Crossing the gate fires
+  `trigger.enter` exactly once and the ball ends up on the floor beneath it, so the trigger is
+  proven not to resist. Driven by gravity plus `pause` + fixed `step`, never wall-clock — there is
+  no impulse in the public API, impulses exist only as an entity's `apply-impulse` interaction.
+- **Two of my own test bugs, worth recording because both produced *passing-looking* data.**
+  `AgentWorldEntityState` exposes a **flat** `position`; writes use `transform.position` but reads
+  do not. And `AgentWorldQuery` takes `tag?: string`, singular — a `{ tags: [...] }` filter is
+  silently ignored and returns the entire world, so `query({tags:["collectible"]})[0]` cheerfully
+  returned the ball. An assertion against the wrong entity is worse than a failing one.
+
+### Three render defects found by looking at the result, not at the gate
+
+- **`castShadow` on a v2 directional light was very nearly a no-op.** three defaults a directional
+  light's shadow camera to a ±5 orthographic box, so a light that opted in cast only inside a 10×10
+  window at the origin — most of the demo world, every starter and every level received nothing,
+  while the flag read as honoured. Now ±38 at 2048² with `normalBias`. Deliberately generous rather
+  than fitted to scene bounds: bounds change on every spawn, and a refitting frustum would make
+  shadow quality flicker while an agent builds. Larger worlds still clip — a documented limit.
+- **An agent-authored environment was stored but never rendered — the core invariant failing
+  quietly.** `applyEnvironment()` was reachable from exactly three places: construction, the
+  editor's own `onEnvironmentChanged`, and two manual calls in `main.ts`. A *human* picking a sky in
+  the inspector saw it applied. An *agent* doing the identical thing through `api.create` /
+  `api.load` / `levels.play()` got the sky written into the document, the inspector agreeing it was
+  selected, and the viewport still showing the old one. `PlatformHost` now subscribes to
+  `world.loaded` and re-applies, fixing every caller at once instead of asking each to remember.
+- **A materialised level rendered flat**, which is what exposed the two above. With no sky the host
+  falls back to a neutral `RoomEnvironment` IBL that lights every surface from every direction, and
+  an enclosed arena under it loses its shadows to ambient. Levels now carry `sky: "lostvalley"` with
+  a much lower fill — measured against all six sets, `clearblue` is 512 px and reads muddy brown at
+  play angles. An ordinary per-scene field, so a level can be re-skied from the inspector.
+
+**Still open on this path:** there is no Play button in the Levels workbench yet — `levels.play()` is
+reachable from the agent API and the bridge, not from the human UI, which is the exact inverse of the
+gap it just fixed. Camera framing after materialising is the host default rather than fitted to the
+level. Neither is hidden behind a green gate; both are listed here.
+
+
+### Gate finding: the verify harness resets connections, and it is NOT the product
+
+`npm run verify` reported **8 of 8 smokes failing**, three separate times, interleaved with fully
+green runs of the same `dist/`. That is the shape of a catastrophic regression, so it was chased
+rather than waved off — the opposite mistake is recorded above in `vocabulary-r1`, where a genuinely
+flaky gate was twice dismissed as noise.
+
+**It is the harness.** Isolated to a single smoke against a single hand-started server, it
+reproduces: run 1 green, run 2 fails with `net::ERR_CONNECTION_RESET` and a `waitForFunction`
+timeout — the page never finishes loading its module graph, so every assertion after it is
+meaningless. Ruled out along the way:
+
+- **Not the product.** It fails `foundation` (`?host=legacy`) and `scene-store` identically to the
+  rest — routes this session never touched — and the ballz assertions are byte-identical across
+  every green run (`restY 0.468`, wall `2.08`).
+- **Not the served files.** `curl` pulled the whole dist including every 3 MB skybox face and the
+  3.2 MB village chunk at 200/full-length in single-digit milliseconds, against the very server the
+  smoke then failed on.
+- **Not socket exhaustion.** 19 TIME_WAIT against a 64511-port dynamic range.
+- **Not concurrency** (an earlier draft of this entry blamed a concurrent `verify` from the other
+  session and was wrong — it reproduces with one smoke and one server on an otherwise idle box).
+
+`scripts/static-server.mjs` is already hardened against the two previously-found causes: explicit
+`Content-Length` (no chunked framing), 72 s `keepAliveTimeout`, a polite `clientError` handler, a
+1024 accept backlog, and swallowed socket errors. Something below that is still resetting
+intermittently. **Left unfixed and unhidden**: it is a harness bug in a file the other session is
+active in, and the honest state is that `npm run verify` currently needs re-running to trust a red
+result. A red run whose failures are network-shaped and uniform across unrelated routes is this bug;
+a red run that is structural and reproducible is real. CI runs on a clean runner and still gates
+production, so a deploy is not exposed to it.
