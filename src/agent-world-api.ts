@@ -79,6 +79,7 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
     skies: () => runtime.listSkies(),
     emitters: () => runtime.listEmitters(),
     heightmaps: () => runtime.listHeightmaps(),
+    flocks: () => runtime.listFlocks(),
     importLegacyXml: (xml, options) => {
       try {
         const conversion = convertLegacyGraphysXXml(xml, options);

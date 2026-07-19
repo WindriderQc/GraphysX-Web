@@ -63,6 +63,33 @@ export type AgentWorldWater = {
   flowSpeed?: number;
   /** Surface opacity. Below 1 the terrain under the water shows through at the shoreline. */
   opacity?: number;
+  /**
+   * Fresnel reflectance at normal incidence (F0).
+   *
+   * `Water.js` hard-codes `rf0 = 0.3`. Real water is about **0.02** — 0.3 is the F0 of a
+   * dielectric like polished stone, which is exactly why untuned `Water` reads as wet rock
+   * from a low camera: over-reflective at every angle, so the pale horizon it mirrors wins
+   * everywhere instead of only at grazing incidence. The default here is the physical value.
+   * This is a correction, not a cheat — the Fresnel curve is unchanged, only the constant it
+   * is built on.
+   */
+  reflectance?: number;
+  /**
+   * How strongly the surface pulls toward {@link color} with view distance, 0..1.
+   *
+   * Light travelling to a far part of the surface and back passes through more water and more
+   * air than light from the near shore, so distant water loses reflected detail into its own
+   * body colour. `Water.js` models no such attenuation, which leaves a distant lake as a crisp
+   * mirror of the skyline. Ramped over {@link tintDistance}.
+   */
+  tintStrength?: number;
+  /** World distance at which {@link tintStrength} reaches full. */
+  tintDistance?: number;
+  /**
+   * Sun specular strength. `Water.js` uses 2.0; the glint path is the single strongest "this
+   * is a liquid" cue there is, so it is worth being able to push.
+   */
+  specularStrength?: number;
   /** Planar reflection. Off by default cost-wise is a lie, so this defaults ON but is opt-out. */
   reflection?: boolean;
   /** Reflection render-target edge in pixels. */
@@ -78,6 +105,10 @@ export type ResolvedAgentWorldWater = {
   rippleScale: number;
   flowSpeed: number;
   opacity: number;
+  reflectance: number;
+  tintStrength: number;
+  tintDistance: number;
+  specularStrength: number;
   reflection: boolean;
   reflectionResolution: number;
 };
@@ -94,6 +125,10 @@ const DEFAULT_WATER: ResolvedAgentWorldWater = {
   rippleScale: 7,
   flowSpeed: 0.6,
   opacity: 0.92,
+  reflectance: 0.02,
+  tintStrength: 0.55,
+  tintDistance: 90,
+  specularStrength: 3.6,
   reflection: true,
   reflectionResolution: 256,
 };
@@ -119,6 +154,10 @@ export function resolveAgentWorldWater(
     rippleScale: clamp(input.rippleScale ?? base.rippleScale, 0.05, 200),
     flowSpeed: clamp(input.flowSpeed ?? base.flowSpeed, 0, 20),
     opacity: clamp(input.opacity ?? base.opacity, 0.05, 1),
+    reflectance: clamp(input.reflectance ?? base.reflectance, 0, 1),
+    tintStrength: clamp(input.tintStrength ?? base.tintStrength, 0, 1),
+    tintDistance: clamp(input.tintDistance ?? base.tintDistance, 1, 4000),
+    specularStrength: clamp(input.specularStrength ?? base.specularStrength, 0, 40),
     reflection: input.reflection ?? base.reflection,
     reflectionResolution: Math.round(
       clamp(input.reflectionResolution ?? base.reflectionResolution, 32, AGENT_WORLD_WATER_MAX_REFLECTION_RESOLUTION),
@@ -207,6 +246,54 @@ function waterNormalsTexture(): CanvasTexture {
 }
 
 /**
+ * Make `Water.js` behave like water rather than like polished stone.
+ *
+ * Three edits to the stock fragment shader, applied before first compile (the material has
+ * not been used yet, so no `needsUpdate` dance and no recompile cost):
+ *
+ * 1. **`rf0` becomes a uniform.** The library hard-codes Fresnel F0 at `0.3`. Water's actual
+ *    F0 is ~0.02; 0.3 belongs to a mineral. At the showroom's low camera the whole surface
+ *    sits near grazing incidence where Fresnel is high anyway, and a 15x-too-large base term
+ *    pushes it to a full mirror of the pale horizon — the "wet rock" everyone sees. The
+ *    Fresnel expression is untouched; only the constant is corrected.
+ * 2. **The `vec3( 0.1 )` ambient lift comes out.** It is a flat grey added to every reflected
+ *    fragment, and grey added to a body of water is precisely the wrong direction.
+ * 3. **A distance tint toward `waterColor`.** Light returning from far across a lake has
+ *    travelled through much more water and air than light from the near shore, so it loses
+ *    reflected detail into the body colour. The stock shader models no attenuation at all,
+ *    which is what leaves distant water a crisp mirror of the skyline.
+ *
+ * The specular strength is a plain uniform swap in the `sunLight()` call.
+ *
+ * String-replacing a library shader is a real coupling, so each `replace` is asserted: if a
+ * three.js upgrade changes these lines, this throws loudly at build-scene time rather than
+ * silently rendering the old look.
+ */
+function patchWaterShader(water: Water, config: ResolvedAgentWorldWater): void {
+  const material = water.material;
+  material.uniforms.rf0 = { value: config.reflectance };
+  material.uniforms.tintStrength = { value: config.tintStrength };
+  material.uniforms.tintDistance = { value: config.tintDistance };
+  material.uniforms.specularStrength = { value: config.specularStrength };
+
+  const edits: Array<[string, string]> = [
+    ["uniform vec3 waterColor;", "uniform vec3 waterColor;\nuniform float rf0;\nuniform float tintStrength;\nuniform float tintDistance;\nuniform float specularStrength;"],
+    ["sunLight( surfaceNormal, eyeDirection, 100.0, 2.0, 0.5, diffuseLight, specularLight );", "sunLight( surfaceNormal, eyeDirection, 100.0, specularStrength, 0.5, diffuseLight, specularLight );"],
+    ["float rf0 = 0.3;", ""],
+    ["vec3( 0.1 ) + reflectionSample * 0.9", "reflectionSample * 0.9"],
+    ["vec3 outgoingLight = albedo;", "vec3 outgoingLight = mix( albedo, waterColor, tintStrength * clamp( distance / tintDistance, 0.0, 1.0 ) );"],
+  ];
+  let source = material.fragmentShader;
+  for (const [find, replacement] of edits) {
+    if (!source.includes(find)) {
+      throw new Error(`Water.js shader no longer contains "${find}" — the GraphysX water patch needs revisiting`);
+    }
+    source = source.replace(find, replacement);
+  }
+  material.fragmentShader = source;
+}
+
+/**
  * The water surface as a scene object.
  *
  * The surface mesh lives inside a {@link Group} on purpose. `Water` derives its mirror plane
@@ -251,6 +338,7 @@ export class AgentWorldWaterSurface {
       water.rotation.x = -Math.PI / 2;
       water.material.transparent = config.opacity < 1;
       water.material.uniforms.size.value = config.rippleScale;
+      patchWaterShader(water, config);
       return water;
     }
     // No-reflection fallback: one ordinary lit plane with the same ripple normals.
@@ -280,7 +368,7 @@ export class AgentWorldWaterSurface {
     const mesh = new Mesh(geometry, material);
     mesh.rotation.x = -Math.PI / 2;
     // The entity material pass must not stomp the surface it just configured.
-    mesh.userData.graphysxWaterMaterialLocked = true;
+    mesh.userData.graphysxMaterialLocked = true;
     return mesh;
   }
 
@@ -305,6 +393,12 @@ export class AgentWorldWaterSurface {
       uniforms.sunDirection.value.copy(new Vector3(...config.sunDirection).normalize());
       uniforms.distortionScale.value = config.distortionScale;
       uniforms.size.value = config.rippleScale;
+      // The look controls are plain uniforms, so an agent or the inspector can dial the water
+      // in live without paying for a shader recompile or a surface rebuild.
+      uniforms.rf0.value = config.reflectance;
+      uniforms.tintStrength.value = config.tintStrength;
+      uniforms.tintDistance.value = config.tintDistance;
+      uniforms.specularStrength.value = config.specularStrength;
     } else {
       this.surface.material.color.set(config.color);
     }

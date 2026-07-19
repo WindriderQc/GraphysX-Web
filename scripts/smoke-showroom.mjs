@@ -84,8 +84,23 @@ try {
     ? Number(Math.hypot(blockAfter[0] - blockBefore[0], blockAfter[1] - blockBefore[1], blockAfter[2] - blockBefore[2]).toFixed(3))
     : 0;
 
+  // Where to click for bare ground. This used to be the hardcoded pixel (300, 630), which
+  // silently stopped being ground the moment the showroom was recomposed — a foreground tree
+  // moved under it, and the click focused the camera instead of dropping a ball. Project a
+  // known-clear *world* point on the terrain's level stage instead, so the test follows the
+  // scene rather than a screenshot of it.
+  const groundAt = await page.evaluate(() => {
+    const host = window.__GRAPHYSX_HOST__;
+    // Well inside the terrain's 12-unit level stage, clear of the plinth and the braziers,
+    // so the dropped ball lands on flat ground rather than near the rim of the blend.
+    const v = new host.camera.position.constructor(0, 0, 6.5);
+    v.project(host.camera);
+    const rect = host.renderer.domElement.getBoundingClientRect();
+    return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((-v.y + 1) / 2) * rect.height };
+  });
+  out.groundAt = { x: Math.round(groundAt.x), y: Math.round(groundAt.y) };
   const countBefore = await page.evaluate(() => window.__GRAPHYSX__.state().entities.length);
-  await page.mouse.click(300, 630);
+  await page.mouse.click(groundAt.x, groundAt.y);
   await page
     .waitForFunction(
       () => window.__GRAPHYSX__.state().entities.some((e) => e.id.startsWith("showroom-drop-")),
@@ -133,7 +148,7 @@ try {
     // Settle deterministically through the public `step()` rather than waiting on frames:
     // headless software GL runs the loop at a few fps, so wall-clock waiting would measure
     // frame rate instead of physics. This is the same integrator the render loop drives.
-    for (let i = 0; i < 24; i += 1) api.step(0.5);
+    for (let i = 0; i < 40; i += 1) api.step(0.5);
     const settledY = read().position[1];
     for (let i = 0; i < 8; i += 1) api.step(0.5);
     const entity = read();
@@ -143,6 +158,96 @@ try {
       finalY: Number(entity.position[1].toFixed(3)),
       driftAfterSettle: Number(Math.abs(entity.position[1] - settledY).toFixed(3)),
       velocityY: entity.physics ? entity.physics.linearVelocity[1] : null,
+    };
+  });
+
+  // Flocking is the graduated Nature-of-Code system (PRODUCT_SPEC §3 pillar 3). Assert it is
+  // a real *simulation*, not a prop: the entity exists, it has members, and those members
+  // MOVE. Movement is measured through `api.step()` rather than by waiting on frames —
+  // headless software GL runs the loop at a few fps, so wall-clock waiting would measure the
+  // frame rate instead of the simulation.
+  out.flocks = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const before = api.state().entities.filter((e) => e.type === "flock");
+    const leads = new Map(before.map((e) => [e.id, e.flock.leadPosition]));
+    for (let i = 0; i < 20; i += 1) api.step(0.05);
+    return api.state().entities
+      .filter((e) => e.type === "flock")
+      .map((e) => {
+        const was = leads.get(e.id);
+        const now = e.flock.leadPosition;
+        return {
+          id: e.id,
+          bounds: e.flock.bounds,
+          preset: e.flock.preset,
+          memberCount: e.flock.memberCount,
+          averageSpeed: e.flock.averageSpeed,
+          leadMoved: Number(Math.hypot(now[0] - was[0], now[1] - was[1], now[2] - was[2]).toFixed(4)),
+        };
+      });
+  });
+
+  // PRODUCT_SPEC §5: "Clicking focuses the camera (the recovered CubX behavior)." Clicking a
+  // piece of non-interactive scenery must ease the orbit pivot onto it. The CubX cube is the
+  // subject because it is unambiguously scenery — no interaction, not terrain — and reliably
+  // on screen.
+  const targetBefore = await page.evaluate(() => window.__GRAPHYSX_HOST__.orbitTarget.toArray());
+  const cubeAt = await screenOf("showroom-cubx-cube-7");
+  if (cubeAt) await page.mouse.click(cubeAt.x, cubeAt.y);
+  await page
+    .waitForFunction(
+      (before) => {
+        const host = window.__GRAPHYSX_HOST__;
+        const t = host.orbitTarget.toArray();
+        return !host.focusing && Math.hypot(t[0] - before[0], t[1] - before[1], t[2] - before[2]) > 0.75;
+      },
+      targetBefore,
+      { timeout: 20000 },
+    )
+    .catch(() => {});
+  const targetAfter = await page.evaluate(() => window.__GRAPHYSX_HOST__.orbitTarget.toArray());
+  out.focus = {
+    before: targetBefore.map((n) => Number(n.toFixed(3))),
+    after: targetAfter.map((n) => Number(n.toFixed(3))),
+    targetMoved: Number(
+      Math.hypot(
+        targetAfter[0] - targetBefore[0],
+        targetAfter[1] - targetBefore[1],
+        targetAfter[2] - targetBefore[2],
+      ).toFixed(3),
+    ),
+    // The idle orbit must resume around the NEW subject once the move lands, or focusing
+    // would quietly kill the screensaver.
+    orbitRearmed: await page.evaluate(() => window.__GRAPHYSX_HOST__.autoRotating),
+  };
+
+  // A flock has to survive being written out and read back, or it is a runtime toy rather
+  // than scene vocabulary. Round-trip the *document* (the persistable form, ephemeral spawns
+  // dropped) and assert the flock comes back with its population intact and still flying.
+  out.flockRoundTrip = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const document = api.exportDocument();
+    const exported = document.entities.filter((e) => e.type === "flock");
+    const loaded = api.load(document);
+    if (!loaded.ok) return { ok: false, error: loaded.error };
+    const after = api.state().entities.filter((e) => e.type === "flock");
+    const leads = new Map(after.map((e) => [e.id, e.flock.leadPosition]));
+    for (let i = 0; i < 20; i += 1) api.step(0.05);
+    const moved = api.state().entities
+      .filter((e) => e.type === "flock")
+      .map((e) => {
+        const was = leads.get(e.id);
+        const now = e.flock.leadPosition;
+        return Math.hypot(now[0] - was[0], now[1] - was[1], now[2] - was[2]);
+      });
+    return {
+      ok: true,
+      exportedCount: exported.length,
+      // The `flock` field must be in the serialised document, not just in live state.
+      exportedCarriesConfig: exported.every((e) => !!e.flock && typeof e.flock.count === "number"),
+      reloadedCount: after.length,
+      reloadedMembers: after.map((e) => e.flock.memberCount),
+      stillMoving: moved.every((d) => d > 0.05),
     };
   });
 
@@ -178,6 +283,31 @@ const ballCameToRest =
   rest.finalY < terrain.maximumHeight + 3;
 
 out.ballCameToRest = ballCameToRest;
+
+// Flocking must be present, populated, MOVING, and persistable. Any one of those failing
+// turns the graduated system back into decoration, which is the exact claim PRODUCT_SPEC
+// §8.1 records as unearned.
+const flocks = out.flocks ?? [];
+const roundTrip = out.flockRoundTrip;
+const flockingIsLive =
+  flocks.length >= 2 &&
+  flocks.every((f) => f.memberCount > 20 && f.leadMoved > 0.05 && f.averageSpeed > 0.05) &&
+  // Both bounds modes are exercised: the recovered sphere constraint and the box volume.
+  new Set(flocks.map((f) => f.bounds)).size === 2 &&
+  !!roundTrip &&
+  roundTrip.ok === true &&
+  roundTrip.exportedCount === flocks.length &&
+  roundTrip.exportedCarriesConfig === true &&
+  roundTrip.reloadedCount === flocks.length &&
+  roundTrip.reloadedMembers.every((n) => n > 20) &&
+  roundTrip.stillMoving === true;
+out.flockingIsLive = flockingIsLive;
+
+// Click-to-focus: the orbit pivot measurably moved onto the clicked subject, and the idle
+// orbit came back afterwards so the showroom keeps showing itself off.
+const focusWorks = !!out.focus && out.focus.targetMoved > 0.75 && out.focus.orbitRearmed === true;
+out.focusWorks = focusWorks;
+
 out.consoleErrors = consoleErrors;
 out.pageErrors = pageErrors;
 console.log(JSON.stringify(out, null, 2));
@@ -196,6 +326,8 @@ const ok =
   terrain.hasCollider &&
   terrain.colliderVertices > 1000 &&
   !!out.water &&
+  flockingIsLive &&
+  focusWorks &&
   out.editorVisibleAfterEnter &&
   out.welcomeGone;
 

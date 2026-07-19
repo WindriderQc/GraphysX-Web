@@ -193,7 +193,7 @@ locked inside a legacy environment module (`?host=legacy` only) has **not** grad
 | Save / load / export / import (v2 JSON + legacy XML) | **Real, API-only.** No UI on the default host. |
 | Scene Editor: outliner, gizmo, create/delete, pause/step | **Ships.** |
 | Scene Editor: inspector, materials/textures, behaviors, interactions, tags, undo, JSON Workbench | **Not on the default host.** That list describes the *legacy* prototype-app panel. |
-| Simulation systems (particles + ≥1 Nature-of-Code system) as editor entities | **Particles graduated; Nature-of-Code has not.** `emitter` is a v2 entity type (`agent-world-particles.ts`) with 8 presets derived from the decoded TV3D archive library, spawnable from the editor's Effects palette and via `api.emitters()`, budgeted at 600 particles/emitter. Flocking, force fields and DNA/evolutionary entities are still legacy-only in `nature-lab.ts`. |
+| Simulation systems (particles + ≥1 Nature-of-Code system) as editor entities | **Ships.** `emitter` is a v2 entity type (`agent-world-particles.ts`) with 8 presets derived from the decoded TV3D archive library, spawnable from the editor's Effects palette and via `api.emitters()`, budgeted at 600 particles/emitter. `flock` (`agent-world-flock.ts`) is now a v2 entity type too, with 3 presets, an editor Life palette and `api.flocks()`. Force fields and DNA/evolutionary entities are still legacy-only in `nature-lab.ts`. |
 | Curated vocabulary: assets, models, textures, prefabs | **Partial.** 5 mesh assets + 11 textures + 5 prefabs reachable from v2, against ~120 MB vendored. Prefabs exist in the API but are absent from the editor UI. |
 | Browse Scenes + Games & Apps | **Not implemented.** |
 | 2D overlay capability in the scene model | **Does not exist** in any form. No layer concept in `AgentWorldDefinition`. |
@@ -202,12 +202,18 @@ locked inside a legacy environment module (`?host=legacy` only) has **not** grad
 
 Related corrections elsewhere in this spec:
 
-- **§3 pillar 3 ("behavior is first-class, not decoration")** — the six shipped behaviors
-  (spin, bob, orbit, pulse, look-at, follow-spline) are decoration. Particle emitters are now
-  a genuine simulation entity, so the pillar is partly earned; a *steering/flocking* behavior
-  is still the missing proof.
-- **§4 scene model** — of the listed simulation systems, spline followers and
-  particles/emitters are real. Force fields, flocking, crowds and evolutionary entities are not.
+- **§3 pillar 3 ("behavior is first-class, not decoration")** — ~~the six shipped behaviors
+  are decoration and a *steering/flocking* behavior is the missing proof.~~ **Earned.** The six
+  transform behaviors (spin, bob, orbit, pulse, look-at, follow-spline) remain decoration, but
+  particle emitters and now **flocking** are genuine simulation entities. `flock` graduates the
+  Reynolds separation/alignment/cohesion steering from the p5 `Nature of Code/flock` sketches
+  and the 3D adaptation from `nature-lab.ts` — both `sphere` (the recovered sphere-tangent
+  constraint) and `box` bounds, instanced in one draw call, capped at 240 members, ticked
+  inside `updateSimulation` so it inherits pause/step, and reported in `state()` with live
+  `memberCount` / `leadPosition` / `averageSpeed` so a stalled flock is visible to an agent.
+  Two flocks fly in the showroom and are asserted to move and to survive export→load.
+- **§4 scene model** — of the listed simulation systems, spline followers, particles/emitters
+  and flocking are real. Force fields, crowds and evolutionary entities are not.
 - **§5 showroom** — ~~the terrain is procedural sine displacement mounted as *host decoration*~~
   **Corrected.** Terrain and water are now v2 entity types (`agent-world-terrain.ts`,
   `agent-world-water.ts`), and the showroom's ground is an ordinary `terrain` entity on a
@@ -215,7 +221,13 @@ Related corrections elsewhere in this spec:
   the flat ground plane was hidden and nothing replaced its collider, so anything dropped in
   the showroom fell through the world forever. Terrain now carries a static cannon-es
   `Heightfield`, and `scripts/smoke-showroom.mjs` asserts a dropped sphere comes to *rest*
-  rather than merely existing. Click-to-focus is still not implemented.
+  rather than merely existing. ~~Click-to-focus is still not implemented.~~ **Implemented.** Clicking non-interactive scenery
+  eases both the orbit pivot and the camera position onto the clicked subject's bounding sphere
+  over 1.5 s (cubic in-out, distance derived from subject size, viewing direction preserved),
+  then re-arms the idle orbit around the new subject. Water and emitters are pointer
+  pass-through — a 150-unit plane and a `Points` cloud with a one-metre raycast threshold are
+  not click targets. `Water.js`'s hard-coded Fresnel F0 of 0.3 was also corrected to water's
+  actual ~0.02, which is what stopped the lake reading as wet rock at grazing incidence.
 - **§5 CubX navigator** — the showroom's CubX is eight plain boxes with a spin behavior, an
   homage rather than the recovered assembly. There is no side menu or scene browser.
 - **§6 skyboxes** — 21 MB of correctly-oriented cube maps ship and are unreachable from the
@@ -233,11 +245,16 @@ budgeted 256² target. Both are reachable from `api.spawn`, listed by `api.heigh
 placeable from the editor's Terrain palette, and survive export→load. The editor also gained an
 inspector, a prefab/model/texture/effects/terrain palette, and an exit path.
 
-**Highest-value next graduations** (in order): flocking as a v2 behavior (§14 phase 4,
-implementation already exists in `nature-lab.ts`) — the missing proof of pillar 3; a force-field
-behavior, which composes with both particles and flocking; then map-editor UI on the default
-host (its data model already graduated into `agent-level-library.ts` and is reachable via
-`api.levels`).
+**Highest-value next graduations** (in order): a force-field behavior, which composes with both
+particles and flocking; tree-DNA / evolutionary entities (§14 phase 4, still legacy-only); then
+map-editor UI on the default host (its data model already graduated into
+`agent-level-library.ts` and is reachable via `api.levels`).
+
+**Known defect, not addressed here:** the `terrain` heightfield collider and its visual mesh
+disagree near the edge of a `flattenRadius` pad by roughly one cell. A dynamic body that lands
+inside the pad rests correctly, but one that lands within about a cell of the rim is deflected
+down the landform instead of onto flat ground. Measurable with a radial drop sweep; the
+showroom works around it by keeping props and the ball-drop test point well inside the pad.
 
 ## 9. Repo roles
 

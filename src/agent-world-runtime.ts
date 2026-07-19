@@ -97,6 +97,15 @@ import {
   type ResolvedAgentWorldTerrain
 } from "./agent-world-terrain";
 import {
+  AgentWorldFlockSystem,
+  GRAPHYSX_AGENT_WORLD_FLOCKS,
+  findFlockSystem,
+  resolveAgentWorldFlock,
+  type AgentWorldFlock,
+  type AgentWorldFlockDescriptor,
+  type ResolvedAgentWorldFlock
+} from "./agent-world-flock";
+import {
   AgentWorldWaterSurface,
   findWaterSurface,
   resolveAgentWorldWater,
@@ -124,6 +133,7 @@ export type AgentWorldEntityType =
   | "emitter"
   | "terrain"
   | "water"
+  | "flock"
   | "ambient-light"
   | "directional-light"
   | "point-light";
@@ -279,6 +289,8 @@ export type AgentWorldEntityDefinition = {
   terrain?: AgentWorldTerrain;
   /** Reflective water configuration. Only valid on `water` entities. */
   water?: AgentWorldWater;
+  /** Boid flocking configuration. Only valid on `flock` entities. */
+  flock?: AgentWorldFlock;
   agent?: AgentWorldAgentProfile;
   physics?: AgentWorldPhysics;
   intensity?: number;
@@ -318,6 +330,8 @@ export type AgentWorldEntityPatch = {
   terrain?: AgentWorldTerrain;
   /** Patch the water of a `water` entity. Merged over the current configuration. */
   water?: AgentWorldWater;
+  /** Patch the flock of a `flock` entity. Merged over the current configuration. */
+  flock?: AgentWorldFlock;
   interactions?: AgentWorldInteraction[];
 };
 
@@ -405,6 +419,12 @@ export type AgentWorldEntityState = {
   /** Terrain configuration plus the derived collider facts an agent needs to place things. */
   terrain: (ResolvedAgentWorldTerrain & { minimumHeight: number; maximumHeight: number; colliderVertices: number }) | null;
   water: ResolvedAgentWorldWater | null;
+  /**
+   * Flock configuration plus live readings. `leadPosition` and `averageSpeed` are what make
+   * the simulation *observable*: a flock that has stalled is visible in `state()` rather than
+   * only on screen, so an agent (or a smoke test) can tell "present" from "alive".
+   */
+  flock: (ResolvedAgentWorldFlock & { memberCount: number; leadPosition: AgentWorldVector3; averageSpeed: number }) | null;
 };
 
 export type AgentWorldInteractionReceipt = {
@@ -495,6 +515,8 @@ export type GraphysXAgentWorldApi = {
   emitters(): readonly AgentWorldEmitterDescriptor[];
   /** The curated heightmaps, with provenance, for spawning `terrain` entities. */
   heightmaps(): readonly AgentWorldHeightmapDescriptor[];
+  /** The curated boid-flock presets recovered from the Nature-of-Code sketches. */
+  flocks(): readonly AgentWorldFlockDescriptor[];
   importLegacyXml(xml: string, options?: { id?: string; label?: string }): AgentWorldResult<{
     state: AgentWorldState;
     sourceEntityCount: number;
@@ -547,6 +569,7 @@ type ResolvedEntity = {
   emitter: ResolvedAgentWorldEmitter | null;
   terrain: ResolvedAgentWorldTerrain | null;
   water: ResolvedAgentWorldWater | null;
+  flock: ResolvedAgentWorldFlock | null;
   physics: ResolvedAgentWorldPhysics | null;
   intensity: number;
   distance: number;
@@ -635,6 +658,9 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "terrain.collider",
   "entity.water",
   "water.reflection",
+  "entity.flock",
+  "flock.list",
+  "simulation.flocking",
   "physics.rigid-body",
   "spline.path",
   "behavior.follow-spline",
@@ -752,6 +778,11 @@ export class AgentWorldRuntime {
   /** The curated heightmaps recovered from the archive, as terrain vocabulary. */
   listHeightmaps(): readonly AgentWorldHeightmapDescriptor[] {
     return deepClone(GRAPHYSX_AGENT_WORLD_HEIGHTMAPS) as AgentWorldHeightmapDescriptor[];
+  }
+
+  /** The boid-flock presets graduated from the Nature-of-Code sketches, as scene vocabulary. */
+  listFlocks(): readonly AgentWorldFlockDescriptor[] {
+    return deepClone(GRAPHYSX_AGENT_WORLD_FLOCKS) as AgentWorldFlockDescriptor[];
   }
 
   listAssets(): readonly AgentWorldAssetDescriptor[] {
@@ -1202,6 +1233,11 @@ export class AgentWorldRuntime {
       definition.water = resolveAgentWorldWater(patch.water, definition.water ?? undefined);
       findWaterSurface(runtime.object)?.configure(definition.water);
     }
+    if (patch.flock !== undefined) {
+      if (definition.type !== "flock") throw new Error("Only flock entities accept a flock configuration");
+      definition.flock = resolveAgentWorldFlock(patch.flock, definition.flock ?? undefined);
+      findFlockSystem(runtime.object)?.configure(definition.flock);
+    }
     if (patch.interactions) definition.interactions = this.resolveInteractions(patch.interactions);
     this.applyResolvedEntity(runtime);
     // A terrain patch reshapes the ground, so the collider has to be rebuilt with it —
@@ -1402,12 +1438,16 @@ export class AgentWorldRuntime {
     for (const runtime of this.entities.values()) {
       if (runtime.definition.physics?.mode === "dynamic" && runtime.body) syncBodyToObject(runtime.body, runtime.object);
     }
-    // Emitters and water tick inside updateSimulation, so they inherit pause/step for free.
+    // Emitters, water and flocks tick inside updateSimulation, so they inherit pause/step for
+    // free — `api.pause(true)` freezes the murmuration, and `api.step(dt)` advances it one
+    // deterministic slice, exactly as it does a rigid body.
     for (const runtime of this.entities.values()) {
       const particles = findParticleSystem(runtime.object);
       if (particles) particles.update(deltaSeconds);
       const water = findWaterSurface(runtime.object);
       if (water) water.update(deltaSeconds);
+      const flock = findFlockSystem(runtime.object);
+      if (flock) flock.update(deltaSeconds);
     }
     for (const runtime of this.entities.values()) {
       for (const behavior of runtime.definition.behaviors) {
@@ -1473,6 +1513,8 @@ export class AgentWorldRuntime {
     if (particles && definition.emitter) particles.configure(definition.emitter);
     const water = findWaterSurface(object);
     if (water && definition.water) water.configure(definition.water);
+    const flock = findFlockSystem(object);
+    if (flock && definition.flock) flock.configure(definition.flock);
     object.position.set(...definition.transform.position);
     object.rotation.set(...definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3);
     object.scale.set(...definition.transform.scale);
@@ -1480,9 +1522,10 @@ export class AgentWorldRuntime {
       if (child instanceof Mesh) {
         child.castShadow = definition.castShadow;
         child.receiveShadow = definition.receiveShadow;
-        // A water surface configures its own material from the `water` field; the generic
-        // entity material pass would overwrite the normal map and roughness it just set.
-        if (child.material instanceof MeshStandardMaterial && child.userData.graphysxWaterMaterialLocked !== true) {
+        // Some entity types own their own material, configured from their own field: water
+        // from `water`, flock members from `flock.color`/`flock.emissive`. The generic entity
+        // material pass would overwrite exactly what they just set, so they opt out.
+        if (child.material instanceof MeshStandardMaterial && child.userData.graphysxMaterialLocked !== true) {
           applyMaterial(child.material, child.userData.graphysxAgentAccent === true
             ? { ...definition.material, color: "#ffffff", emissive: definition.material.color, emissiveIntensity: 1.15, texture: null }
             : definition.material);
@@ -1521,6 +1564,11 @@ export class AgentWorldRuntime {
     // Water is a surface you look at and fall through, not a body you land on. A collider
     // here would be a lie about what the entity does.
     if (source.type === "water" && source.physics) throw new Error("Water entities do not take a rigid body");
+    const flock = source.type === "flock" ? resolveAgentWorldFlock(source.flock) : null;
+    if (source.type !== "flock" && source.flock) throw new Error("Only flock entities accept a flock configuration");
+    // Members are steered, not simulated as rigid bodies — a collider on the flock entity
+    // would describe a box the members do not live in.
+    if (source.type === "flock" && source.physics) throw new Error("Flock entities do not take a rigid body");
     // Terrain always carries its own static Heightfield collider, built from the same height
     // array as the mesh. Accepting a physics field would let a scene ask for a box or a
     // dynamic body and quietly get neither.
@@ -1542,6 +1590,7 @@ export class AgentWorldRuntime {
       emitter,
       terrain,
       water,
+      flock,
       physics,
       intensity: clamp(source.intensity ?? 1, 0, 100),
       distance: clamp(source.distance ?? 0, 0, 1000),
@@ -1632,7 +1681,8 @@ export class AgentWorldRuntime {
         ? { ...deepClone(runtime.definition.emitter), liveParticles: findParticleSystem(runtime.object)?.activeCount ?? 0 }
         : null,
       terrain: runtime.definition.terrain ? terrainStateOf(runtime) : null,
-      water: runtime.definition.water ? deepClone(runtime.definition.water) : null
+      water: runtime.definition.water ? deepClone(runtime.definition.water) : null,
+      flock: runtime.definition.flock ? flockStateOf(runtime) : null
     };
   }
 
@@ -1706,6 +1756,12 @@ function createEntityObject(definition: ResolvedEntity): Object3D {
     // The update loop and `configure` find the surface here, the same way emitters are found.
     surface.object.userData.graphysxWaterSurface = surface;
     return surface.object;
+  }
+  if (definition.type === "flock") {
+    const system = new AgentWorldFlockSystem(definition.flock ?? resolveAgentWorldFlock(undefined));
+    // Found by the update loop and `configure` exactly the way emitters and water are.
+    system.object.userData.graphysxFlockSystem = system;
+    return system.object;
   }
   if (definition.type === "spline" && definition.path) {
     const curve = createSplineCurve(definition.path);
@@ -1962,7 +2018,7 @@ function resolvePhysics(
 ): ResolvedAgentWorldPhysics {
   if (!source || !["static", "dynamic", "kinematic"].includes(source.mode)) throw new Error(`Unsupported physics mode: ${String(source?.mode)}`);
   // Terrain owns a heightfield collider it builds itself; water deliberately has none.
-  if (["group", "spline", "emitter", "terrain", "water", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
+  if (["group", "spline", "emitter", "terrain", "water", "flock", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
   if (entityType === "plane" && source.mode === "dynamic") throw new Error("Plane physics can only be static or kinematic");
   if (parentId) throw new Error("Physics entities must be spawned at the world root");
   if (source.mode !== "kinematic" && behaviors.some(isMotionBehavior)) throw new Error("Transform behaviors require kinematic physics");
@@ -2071,6 +2127,21 @@ function syncObjectToBody(object: Object3D, body: Body): void {
  * "where is the ground here?" without needing to raycast — the achieved height range and
  * the collider's vertex count, so the cost is visible too.
  */
+/**
+ * Flock state is configuration plus a live reading. Reporting only the configuration would
+ * make a frozen flock indistinguishable from a flying one in `state()`, which is the same
+ * mistake the old terrain entity made about its missing collider.
+ */
+function flockStateOf(runtime: RuntimeEntity): NonNullable<AgentWorldEntityState["flock"]> {
+  const system = findFlockSystem(runtime.object);
+  return {
+    ...deepClone(runtime.definition.flock!),
+    memberCount: system?.memberCount ?? 0,
+    leadPosition: system?.leadPosition ?? [0, 0, 0],
+    averageSpeed: system?.averageSpeed ?? 0
+  };
+}
+
 function terrainStateOf(runtime: RuntimeEntity): NonNullable<AgentWorldEntityState["terrain"]> {
   const terrain = runtime.definition.terrain!;
   const cached = runtime.object.userData.graphysxTerrainHeights;
@@ -2154,7 +2225,7 @@ function validateInteraction(interaction: AgentWorldInteraction, entities: Map<s
 }
 
 function isEntityType(value: unknown): value is AgentWorldEntityType {
-  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "ambient-light", "directional-light", "point-light"].includes(String(value));
+  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "ambient-light", "directional-light", "point-light"].includes(String(value));
 }
 
 function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition {
@@ -2181,6 +2252,7 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     // scene file stays small and keeps naming its provenance rather than inlining a copy.
     ...(definition.terrain ? { terrain: deepClone(definition.terrain) } : {}),
     ...(definition.water ? { water: deepClone(definition.water) } : {}),
+    ...(definition.flock ? { flock: deepClone(definition.flock) } : {}),
     ...(definition.physics ? { physics: deepClone(definition.physics) } : {}),
     intensity: definition.intensity,
     distance: definition.distance,
@@ -2231,6 +2303,11 @@ function disposeObjectTree(root: Object3D): void {
     const water = findWaterSurface(child);
     if (water) {
       water.dispose();
+      return;
+    }
+    const flock = findFlockSystem(child);
+    if (flock) {
+      flock.dispose();
       return;
     }
     if (!(child instanceof Mesh) && !(child instanceof Line)) return;

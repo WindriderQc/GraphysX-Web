@@ -1,4 +1,4 @@
-import { Raycaster, Vector2, type Camera, type Scene, type WebGLRenderer } from "three";
+import { Box3, Raycaster, Sphere, Vector2, Vector3, type Camera, type Scene, type WebGLRenderer } from "three";
 import type { AgentWorldRuntime, GraphysXAgentWorldApi } from "./agent-world-runtime";
 
 export interface ShowroomInteractionDeps {
@@ -7,6 +7,11 @@ export interface ShowroomInteractionDeps {
   scene: Scene;
   world: AgentWorldRuntime;
   api: GraphysXAgentWorldApi;
+  /**
+   * Ease the camera onto a point. Supplied by the host, which owns the camera and the orbit
+   * controls — this module decides *what* to look at, never how the camera is driven.
+   */
+  focusOn?: (point: Vector3, subjectRadius: number) => void;
 }
 
 /** Dropped spheres are recycled past this many, so a visitor cannot grind the sim down. */
@@ -20,13 +25,31 @@ const MAX_DROPPED = 24;
  * vocabulary carried on the entity, not a special case in the host — so anything a visitor
  * does here is something an agent could do, and vice versa.
  *
+ * Clicking anything else — a tree, an arch, a sculpture, the CubX assembly — focuses the
+ * camera on it, the behaviour PRODUCT_SPEC §5 has promised since day one. Scenery clicks used
+ * to fall *through* to the ground and drop a ball behind the thing you clicked, which was a
+ * stopgap for the scenery having no response of its own. Now it has one.
+ *
  * Disabled while the editor is open, so the editor's own picking and gizmo own the pointer.
  */
 export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
   setEnabled: (enabled: boolean) => void;
   dispose: () => void;
 } {
-  const { renderer, camera, scene, world, api } = deps;
+  const { renderer, camera, scene, world, api, focusOn } = deps;
+
+  /** Climb `parentId` to the outermost entity, so a prefab frames as one object. */
+  const rootEntityId = (id: string): string => {
+    let current = id;
+    // Bounded so a malformed parent cycle can never hang a click.
+    for (let hop = 0; hop < 16; hop += 1) {
+      const parent = api.query({ ids: [current] })[0]?.parentId;
+      if (!parent) return current;
+      current = parent;
+    }
+    return current;
+  };
+
   const raycaster = new Raycaster();
   const ndc = new Vector2();
   const dropped: string[] = [];
@@ -41,6 +64,21 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
    * or an agent, and a cached id set would go stale the moment it was.
    */
   const terrainIds = (): Set<string> => new Set(api.query({ type: "terrain" }).map((entity) => entity.id));
+
+  /**
+   * Entities the pointer passes straight through.
+   *
+   * **Water**: a 150-unit surface with no collider. Focusing on it would frame a plane the
+   * size of the world, and dropping a ball on it would drop a ball *through* it, so the click
+   * belongs to whatever is under the water.
+   *
+   * **Emitters**: you cannot grab smoke. Three's `Raycaster` gives `Points` a one-unit hit
+   * threshold, so a brazier's plume is a metre-thick invisible wall of click targets standing
+   * in front of the ground behind it — which is exactly how a click aimed at bare ground
+   * ended up focusing the camera on a campfire.
+   */
+  const passThroughIds = (): Set<string> =>
+    new Set([...api.query({ type: "water" }), ...api.query({ type: "emitter" })].map((entity) => entity.id));
 
   const onPointerDown = (event: PointerEvent): void => {
     down = { x: event.clientX, y: event.clientY };
@@ -58,17 +96,27 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
     raycaster.setFromCamera(ndc, camera);
 
     const terrain = terrainIds();
+    const passThrough = passThroughIds();
     for (const hit of raycaster.intersectObjects(scene.children, true)) {
       const entityId = world.findEntityId(hit.object);
+      if (entityId && passThrough.has(entityId)) continue;
       if (entityId && world.findInteractiveEntityId(hit.object)) {
         // Interactive bodies carry their own impulse.
         api.interact(entityId);
         return;
       }
-      // Anything else is scenery: keep walking the ray to the ground behind it rather than
-      // swallowing the click. Stopping at the first non-interactive entity made clicking a
-      // tree do nothing at all, which reads as an unresponsive scene.
-      if (entityId && !terrain.has(entityId)) continue;
+      // Scenery: focus the camera on it. A prefab is many entities under one root, so climb
+      // to the root first — clicking a tree's canopy should frame the tree, not the canopy.
+      if (entityId && !terrain.has(entityId)) {
+        if (!focusOn) continue;
+        const rootId = rootEntityId(entityId);
+        const object = world.getEntityObject(rootId) ?? hit.object;
+        const bounds = new Box3().setFromObject(object).getBoundingSphere(new Sphere());
+        // A degenerate bound (a light marker, an empty group) still deserves a sane framing.
+        const radius = Number.isFinite(bounds.radius) && bounds.radius > 0.05 ? bounds.radius : 1.5;
+        focusOn(bounds.center.clone(), radius);
+        return;
+      }
       if (entityId && terrain.has(entityId)) {
         dropCount += 1;
         const id = `showroom-drop-${dropCount}`;
@@ -77,10 +125,13 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
           type: "sphere",
           label: `Dropped Ball ${dropCount}`,
           geometry: { radius: 0.42 },
-          // Spawned above the click so it visibly falls and settles.
-          transform: { position: [round(hit.point.x), round(hit.point.y) + 9, round(hit.point.z)] },
+          // Spawned above the click so it visibly falls and settles. Six metres, not nine,
+          // and a calmer restitution: from nine at 0.52 a ball bounced clear off the terrain's
+          // level stage and rolled into the lake basin every time, which is a poor answer to
+          // "click the ground to drop a ball" — you want it to land where you pointed.
+          transform: { position: [round(hit.point.x), round(hit.point.y) + 6, round(hit.point.z)] },
           material: { color: pickColor(dropCount), roughness: 0.28, metalness: 0.35, emissive: "#08222b", emissiveIntensity: 0.4 },
-          physics: { mode: "dynamic", mass: 1.1, material: "ball", restitution: 0.52 },
+          physics: { mode: "dynamic", mass: 1.1, material: "ball", restitution: 0.34 },
           // Playing in a scene is not authoring it: these balls exist for the visit and are
           // dropped by `exportDocument()`, so the showroom never accumulates them.
           ephemeral: true,

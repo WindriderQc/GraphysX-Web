@@ -29,13 +29,14 @@ export interface PlatformEditorDeps {
 
 const round = (n: number): number => Math.round(n * 1000) / 1000;
 
-type LibraryTab = "prefabs" | "models" | "effects" | "terrain" | "textures";
+type LibraryTab = "prefabs" | "models" | "effects" | "terrain" | "life" | "textures";
 
 const LIBRARY_TABS: ReadonlyArray<{ id: LibraryTab; label: string }> = [
   { id: "prefabs", label: "Prefabs" },
   { id: "models", label: "Models" },
   { id: "effects", label: "Effects" },
   { id: "terrain", label: "Terrain" },
+  { id: "life", label: "Life" },
   { id: "textures", label: "Textures" },
 ];
 
@@ -55,6 +56,7 @@ const TYPE_GLYPHS: Record<AgentWorldEntityType, string> = {
   emitter: "✷",
   terrain: "⛰",
   water: "≈",
+  flock: "⋙",
   "ambient-light": "○",
   "directional-light": "☀",
   "point-light": "✦",
@@ -215,6 +217,11 @@ export class PlatformEditor {
   /** The host skips simulation while the gizmo is being dragged. */
   isTransforming(): boolean {
     return this.gizmo.dragging;
+  }
+
+  /** True while the editor chrome owns the pointer. */
+  isVisible(): boolean {
+    return this.enabled;
   }
 
   /** Show or hide the editor chrome (the showroom starts with it hidden). Hiding also
@@ -1679,6 +1686,27 @@ export class PlatformEditor {
         else this.refresh();
       }, "A reflecting water surface.\n\nCosts one extra scene pass per frame while visible. Turn `water.reflection` off in the inspector to fall back to a single lit plane with the same ripple normals.");
       return [...heightmaps, water];
+    }
+    if (tab === "life") {
+      // Simulation vocabulary rather than props: a flock is a population that steers itself,
+      // so the chip places one entity and the scene gains N members that behave. Same call an
+      // agent makes — api.spawn({ type: "flock", flock: { preset } }).
+      return this.deps.api.flocks().map((flock) =>
+        this.chip(flock.label, () => {
+          this.addCounter += 1;
+          const id = `edit-flock-${this.addCounter}`;
+          const result = this.deps.api.spawn({
+            id,
+            type: "flock",
+            label: flock.label,
+            transform: { position: [0, flock.defaults.bounds === "box" ? 8 : 0, 0] },
+            flock: { preset: flock.id },
+            tags: ["life", "flock"],
+          });
+          if (result.ok) this.select(id);
+          else this.refresh();
+        }, `${flock.description}\n\n${flock.defaults.count} members, one instanced draw call.\nSource: ${flock.provenance.sourceRepo}/${flock.provenance.sourcePath}\n${flock.provenance.note}`),
+      );
     }
     return this.deps.api.textures().map((texture) =>
       this.chip(texture.label ?? texture.id, () => {

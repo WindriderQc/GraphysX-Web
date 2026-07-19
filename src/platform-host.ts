@@ -11,6 +11,7 @@ import {
   PMREMGenerator,
   Scene,
   SRGBColorSpace,
+  Vector3,
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -83,6 +84,14 @@ export class PlatformHost {
   private readonly onResize = () => this.resize();
   private frame = 0;
   private disposed = false;
+  private focusMove: {
+    fromPosition: Vector3;
+    toPosition: Vector3;
+    fromTarget: Vector3;
+    toTarget: Vector3;
+    elapsed: number;
+    duration: number;
+  } | null = null;
 
   constructor(private readonly container: HTMLElement, options: PlatformHostOptions = {}) {
     this.renderer = new WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
@@ -105,6 +114,9 @@ export class PlatformHost {
     this.controls.autoRotateSpeed = 0.6;
     this.controls.addEventListener("start", () => {
       this.controls.autoRotate = false;
+      // A grab is the visitor taking the camera back; abandon any move in flight rather than
+      // fighting them for it.
+      this.focusMove = null;
     });
 
     // Neutral image-based lighting so PBR materials read well without any archive
@@ -179,6 +191,63 @@ export class PlatformHost {
     this.onExitEditor?.();
   }
 
+  /** The camera's current orbit pivot. Exposed so callers can tell that a focus landed. */
+  get orbitTarget(): Vector3 {
+    return this.controls.target.clone();
+  }
+
+  /** True while a {@link focusOn} move is still easing. */
+  get focusing(): boolean {
+    return this.focusMove !== null;
+  }
+
+  /** True while the idle screensaver orbit is running. */
+  get autoRotating(): boolean {
+    return this.controls.autoRotate;
+  }
+
+  /**
+   * Ease the camera onto a point in the world — PRODUCT_SPEC §5's "clicking focuses the
+   * camera (the recovered CubX behavior)".
+   *
+   * Both the orbit pivot *and* the camera position are interpolated, because moving only the
+   * pivot swings the world past the viewer in a way that reads as a glitch rather than as a
+   * camera move. The new position keeps the visitor's current viewing direction — the camera
+   * dollies along the line it is already on rather than teleporting to a canonical angle, so
+   * a focus never disorients them about which way they are facing. Distance is derived from
+   * the subject's own size so a tree and a terrain ridge both end up filling a similar amount
+   * of frame.
+   *
+   * Easing is a cubic in-out over {@link duration}: slow out, quick through the middle, slow
+   * in. Constant-velocity interpolation is what makes a camera move read as mechanical.
+   *
+   * The idle orbit is suspended for the move and re-armed at the end, so the screensaver
+   * resumes circling the *new* subject. That is the whole point of the feature — click a
+   * thing and the showroom starts showing you that thing.
+   */
+  focusOn(point: Vector3, subjectRadius = 2, duration = 1.5): void {
+    const target = point.clone();
+    const distance = Math.min(46, Math.max(5.5, subjectRadius * 3.4 + 3));
+    const direction = this.camera.position.clone().sub(this.controls.target);
+    if (direction.lengthSq() < 1e-6) direction.set(0, 0.45, 1);
+    direction.normalize();
+    // Never dive below a shallow rake: the showroom's ground is a heightfield, and a focus
+    // that ends underneath it shows the visitor the inside of a hill.
+    if (direction.y < 0.18) direction.y = 0.18;
+    direction.normalize();
+    const toPosition = target.clone().addScaledVector(direction, distance);
+    toPosition.y = Math.max(toPosition.y, target.y + 1.2);
+    this.controls.autoRotate = false;
+    this.focusMove = {
+      fromPosition: this.camera.position.clone(),
+      toPosition,
+      fromTarget: this.controls.target.clone(),
+      toTarget: target,
+      elapsed: 0,
+      duration: Math.max(0.15, duration),
+    };
+  }
+
   /** Re-read background/sky/fog from the runtime's environment (call after env edits). */
   applyEnvironment(): void {
     const environment = this.world.getEnvironment();
@@ -242,9 +311,32 @@ export class PlatformHost {
     const delta = this.clock.getDelta();
     // Freeze simulation while the gizmo is dragging (matches the reference behavior).
     if (!this.editor?.isTransforming()) this.world.update(delta);
+    this.advanceFocus(delta);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this.frame += 1;
+  }
+
+  /**
+   * Drive one frame of the focus move, ahead of `controls.update()` so orbit damping smooths
+   * the hand-off instead of being overwritten by it.
+   *
+   * Headless software GL runs this loop at a few fps, so the move is advanced by elapsed
+   * *time*, not by frame count — at 3 fps it still completes in 1.5 seconds rather than
+   * taking half a minute.
+   */
+  private advanceFocus(delta: number): void {
+    const move = this.focusMove;
+    if (!move) return;
+    move.elapsed += delta;
+    const t = Math.min(1, move.elapsed / move.duration);
+    const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    this.camera.position.lerpVectors(move.fromPosition, move.toPosition, eased);
+    this.controls.target.lerpVectors(move.fromTarget, move.toTarget, eased);
+    if (t >= 1) {
+      this.focusMove = null;
+      this.controls.autoRotate = this.autoOrbit && !this.editor?.isVisible();
+    }
   }
 
   private resize(): void {

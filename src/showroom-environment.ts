@@ -21,11 +21,20 @@ export function mountShowroomEnvironment(scene: Scene, _renderer: WebGLRenderer)
   // Warm key light. Shadows are intentionally OFF: nothing in the composed showroom opts
   // into castShadow, so a per-frame shadow map would be pure cost for zero visual gain.
   // Real shadows return in a fidelity pass once casters opt in.
-  const sun = new DirectionalLight("#fff1d6", 2.2);
-  sun.position.set(26, 36, 18);
+  //
+  // The sun is deliberately placed roughly *opposite the camera in azimuth* and fairly low.
+  // It used to sit behind the viewer at (26, 36, 18), which lit everything flatly in the face
+  // and — the part that mattered — put the lake's specular path off-screen behind the camera,
+  // leaving the water with no glint at all. Ahead-and-left instead gives warm rim light down
+  // the edges of the props and lays the sun's glitter path across the lake toward the viewer.
+  // `showroom-scene.ts` keeps `water.sunDirection` matched to this vector.
+  const sun = new DirectionalLight("#ffe9c2", 2.6);
+  sun.position.set(-30, 28, -35);
   group.add(sun);
 
-  const hemi = new HemisphereLight("#cfe6ff", "#4a5340", 0.5);
+  // Backlighting needs a fill or the camera-facing side of everything goes to mud. Warmer
+  // ground bounce than before, to sit under the low sun rather than fight it.
+  const hemi = new HemisphereLight("#d6e9ff", "#5c5b40", 0.75);
   group.add(hemi);
 
   scene.add(group);
