@@ -84,6 +84,7 @@ export class PlatformHost {
   private readonly onResize = () => this.resize();
   private frame = 0;
   private disposed = false;
+  private readonly unsubscribeEvents: () => void;
   private focusMove: {
     fromPosition: Vector3;
     toPosition: Vector3;
@@ -136,6 +137,20 @@ export class PlatformHost {
     this.world = new AgentWorldRuntime(options.world ?? GRAPHYSX_AGENT_DEMO_WORLD);
     this.scene.add(this.world.group);
     this.applyEnvironment();
+
+    // Parity gap, closed at the source. `applyEnvironment()` was reachable from exactly three
+    // places: construction, the editor's own `onEnvironmentChanged` callback, and two manual
+    // calls in `main.ts`. So a HUMAN picking a sky in the inspector saw it applied, while an
+    // AGENT doing the identical thing through `api.create` / `api.load` / `levels.play()` had
+    // its environment stored in the runtime and silently never rendered — the sky was in the
+    // document, the inspector agreed it was selected, and the viewport showed the old one.
+    // That is exactly the invariant this product is built on, failing quietly.
+    //
+    // Subscribing to `world.loaded` fixes it for every caller at once rather than asking each
+    // one to remember. Push-based, so it costs nothing per frame.
+    this.unsubscribeEvents = this.world.subscribeEvents((event) => {
+      if (event.type === "world.loaded") this.applyEnvironment();
+    });
 
     // Full human/agent parity: the same validated API + discoverable bridge the
     // legacy race-scene path exposed, now sourced straight from the runtime.
@@ -361,6 +376,7 @@ export class PlatformHost {
     if (this.disposed) return;
     this.disposed = true;
     this.renderer.setAnimationLoop(null);
+    this.unsubscribeEvents();
     window.removeEventListener("resize", this.onResize);
     this.editor?.dispose();
     this.bridge.dispose();

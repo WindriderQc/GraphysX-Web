@@ -281,6 +281,15 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
     label: level.label,
     environment: {
       background: "#0d1a24",
+      // The sky is not decoration here, it is the lighting fix. Without one, `PlatformHost`
+      // falls back to a neutral RoomEnvironment IBL that lights every surface from every
+      // direction, and an enclosed arena under it renders almost perfectly flat — wall
+      // shadows disappear into the ambient. A sky replaces that probe with a directional
+      // one, which is what lets the raking shadows read. Measured against all six sets:
+      // `clearblue` is a 512 px set that reads as muddy brown at play angles; `lostvalley`
+      // gives the strongest ground-to-sky contrast. It is an ordinary per-scene field, so a
+      // level can be re-skied from the inspector or by `api.update` without touching this.
+      sky: "lostvalley",
       // The level brings its own floor slab, so the runtime's flat grid would z-fight it.
       ground: { visible: false, size: 60, color: "#123039", grid: false, gridColor: "#2a7d8f" },
       // Warm key + cool fill, angled so walls cast readable shadows down the grid rather
@@ -293,7 +302,7 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
         type: "directional-light",
         label: "Key Light",
         transform: { position: [-width * cellSize * 0.4, Math.max(18, width * cellSize * 0.7), -height * cellSize * 0.35] },
-        intensity: 2.4,
+        intensity: 3.1,
         material: { color: "#ffeccd" },
         castShadow: true,
         tags: ["ballz", "lighting"],
@@ -302,7 +311,9 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
         id: "ballz-fill",
         type: "ambient-light",
         label: "Fill",
-        intensity: 0.55,
+        // Deliberately low. The sky probe above already supplies most of the ambient, and a
+        // heavier fill here was what washed the cast shadows out to nothing.
+        intensity: 0.14,
         material: { color: "#9fc4d8" },
         tags: ["ballz", "lighting"],
       },

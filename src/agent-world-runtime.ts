@@ -1976,7 +1976,32 @@ function createEntityObject(definition: ResolvedEntity): Object3D {
     return new Line(geometry, new LineBasicMaterial({ color: definition.material.color, transparent: definition.material.opacity < 1, opacity: definition.material.opacity }));
   }
   if (definition.type === "ambient-light") return new AmbientLight(definition.material.color, definition.intensity);
-  if (definition.type === "directional-light") return new DirectionalLight(definition.material.color, definition.intensity);
+  if (definition.type === "directional-light") {
+    const light = new DirectionalLight(definition.material.color, definition.intensity);
+    // `castShadow` on a v2 directional light was very nearly a no-op. three defaults a
+    // directional light's shadow camera to a ±5 orthographic box with far=500, so a light
+    // that opted in only cast inside a 10×10 window at the origin — everything beyond it,
+    // including most of the demo world and every materialised level, silently received
+    // nothing. The flag looked honoured and wasn't.
+    //
+    // Sized generously rather than fitted to the scene bounds on purpose: the bounds change
+    // on every spawn, and refitting the frustum per edit would make shadow quality flicker
+    // while an agent builds. ±38 covers the demo world, the starters and a full 64-cell
+    // level at the default 2.6 cell size; larger worlds still clip, which is a documented
+    // limit rather than a hidden one.
+    light.shadow.mapSize.set(2048, 2048);
+    light.shadow.camera.left = -38;
+    light.shadow.camera.right = 38;
+    light.shadow.camera.top = 38;
+    light.shadow.camera.bottom = -38;
+    light.shadow.camera.near = 0.5;
+    light.shadow.camera.far = 260;
+    // Offsetting along the normal rather than a large constant bias keeps small props from
+    // detaching from their own shadows.
+    light.shadow.normalBias = 0.03;
+    light.shadow.bias = -0.0004;
+    return light;
+  }
   if (definition.type === "point-light") {
     const group = new Group();
     const light = new PointLight(definition.material.color, definition.intensity, definition.distance);
