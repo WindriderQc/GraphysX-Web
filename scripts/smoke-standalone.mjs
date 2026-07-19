@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { SMOKE_TIMEOUT, applySmokeTimeout } from "./smoke-timeout.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -12,15 +13,16 @@ const pageErrors = [];
 
 const browser = await chromium.launch({ executablePath: EXE, headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage();
+applySmokeTimeout(page);
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
 page.on("pageerror", (e) => pageErrors.push(String(e)));
 
 const out = {};
 try {
-  await page.goto(BASE + "?host=standalone", { waitUntil: "domcontentloaded", timeout: 30000 });
-  await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: 20000 });
+  await page.goto(BASE + "?host=standalone", { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: SMOKE_TIMEOUT });
   // The editor layer is a lazy import on this route too.
-  await page.waitForSelector(".gx-ed-toolbar", { timeout: 20000 });
+  await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
   await page.waitForTimeout(500);
 
   out.hasCanvas = (await page.$("canvas")) !== null;
@@ -98,3 +100,4 @@ await browser.close();
 const apiOk = out.api && out.api.spawnOk && out.api.entitiesAfter > out.api.entitiesBefore && out.api.levelCreateOk && out.api.toolCount > 0;
 const editorOk = out.editor && out.editor.hasToolbar && out.editor.hasPanel && out.editor.panelCount === 3 && out.editor.entitiesAfter > out.editor.entitiesBefore && out.editor.rowCount > 0;
 process.exit(out.fatal || pageErrors.length || !out.loopRunning || !apiOk || !editorOk ? 1 : 0);
+

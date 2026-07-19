@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { SMOKE_TIMEOUT, applySmokeTimeout } from "./smoke-timeout.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -18,6 +19,7 @@ const consoleErrors = [];
 const pageErrors = [];
 const browser = await chromium.launch({ executablePath: EXE, headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage();
+applySmokeTimeout(page);
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
 page.on("pageerror", (e) => pageErrors.push(String(e)));
 
@@ -29,9 +31,9 @@ const tileAt = (level, x, y) => level.tiles[y * level.width + x];
 
 const out = {};
 try {
-  await page.goto(BASE + "?host=standalone", { waitUntil: "domcontentloaded", timeout: 30000 });
-  await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: 20000 });
-  await page.waitForSelector(".gx-ed-toolbar", { timeout: 20000 });
+  await page.goto(BASE + "?host=standalone", { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: SMOKE_TIMEOUT });
+  await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
 
   // The workbench is opened from the top bar and is closable — it must not be a fourth
   // permanent rail fighting the viewport.
@@ -40,7 +42,7 @@ try {
     return !!panel && getComputedStyle(panel).display === "none";
   });
   await page.click('.gx-ed-toolbar button:has-text("Levels")');
-  await page.waitForSelector(".gx-ed-workbench--open", { timeout: 10000 });
+  await page.waitForSelector(".gx-ed-workbench--open", { timeout: SMOKE_TIMEOUT });
   await page.waitForTimeout(250);
 
   // The editor shell's existing surfaces are untouched: still exactly three .gx-ed-panel.
@@ -254,3 +256,4 @@ const ok =
   out.closed &&
   out.toolbarStillThere;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
+

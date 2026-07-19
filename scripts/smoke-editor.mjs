@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { SMOKE_TIMEOUT, applySmokeTimeout } from "./smoke-timeout.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -17,18 +18,19 @@ const consoleErrors = [];
 const pageErrors = [];
 const browser = await chromium.launch({ executablePath: EXE, headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage();
+applySmokeTimeout(page);
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
 page.on("pageerror", (e) => pageErrors.push(String(e)));
 
 const out = {};
 try {
-  await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 30000 });
-  await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: 20000 });
-  await page.waitForSelector(".gx-welcome", { timeout: 15000 });
+  await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: SMOKE_TIMEOUT });
+  await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
   await page.click(".gx-welcome button");
-  await page.waitForSelector(".gx-ed-toolbar", { timeout: 15000 });
+  await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
 
-  await page.waitForSelector(".gx-ed-panel--drawer", { timeout: 15000 });
+  await page.waitForSelector(".gx-ed-panel--drawer", { timeout: SMOKE_TIMEOUT });
   out.hasExitButton = await page.$$eval(".gx-ed-toolbar button", (els) =>
     els.some((e) => (e.textContent ?? "").includes("Showroom")));
 
@@ -202,3 +204,4 @@ const ok =
   out.welcomeBack &&
   out.editorHiddenAgain;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
+

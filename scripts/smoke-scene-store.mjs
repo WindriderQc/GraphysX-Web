@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { SMOKE_TIMEOUT, applySmokeTimeout } from "./smoke-timeout.mjs";
 import { mkdirSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -60,6 +61,7 @@ try {
   // --- browser opens the stored scene ------------------------------------------
   browser = await chromium.launch({ executablePath: EXE, headless: true, args: ["--no-sandbox"] });
   const page = await browser.newPage();
+applySmokeTimeout(page);
   page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
   page.on("pageerror", (e) => pageErrors.push(String(e)));
 
@@ -79,18 +81,18 @@ try {
   for (let attempt = 1; attempt <= 4; attempt += 1) {
     out.navigationAttempts = attempt;
     try {
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
       break;
     } catch (error) {
       if (!/net::ERR_/.test(String(error)) || attempt === 4) throw error;
       await new Promise((resolve) => setTimeout(resolve, 750 * attempt));
     }
   }
-  await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: 20000 });
+  await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: SMOKE_TIMEOUT });
 
   // The scene browser only mounts when a store answers, so its presence is itself the
   // assertion that discovery worked.
-  await page.waitForSelector(".gx-sb", { timeout: 20000 }).catch(() => {});
+  await page.waitForSelector(".gx-sb", { timeout: SMOKE_TIMEOUT }).catch(() => {});
   out.browserMounted = (await page.$(".gx-sb")) !== null;
   out.browserOnline = await page.evaluate(() =>
     document.querySelector(".gx-sb-dot")?.getAttribute("data-online") === "true");
@@ -99,7 +101,7 @@ try {
 
   // The stored world replaces the showroom once the pull lands.
   await page
-    .waitForFunction(() => window.__GRAPHYSX__.state()?.world.id === "smoke-scene", null, { timeout: 20000 })
+    .waitForFunction(() => window.__GRAPHYSX__.state()?.world.id === "smoke-scene", null, { timeout: SMOKE_TIMEOUT })
     .catch(() => {});
   out.storedSceneLoaded = await page.evaluate(() => window.__GRAPHYSX__.state()?.world.id === "smoke-scene");
   out.loadedEntities = await page.evaluate(() => window.__GRAPHYSX__.state().entities.length);
@@ -130,7 +132,7 @@ try {
 
   // No push channel at milestone A — the page polls every 2s, so this waits for the poll.
   await page
-    .waitForFunction(() => window.__GRAPHYSX__.state().entities.some((e) => e.id === "hermes-cube"), null, { timeout: 20000 })
+    .waitForFunction(() => window.__GRAPHYSX__.state().entities.some((e) => e.id === "hermes-cube"), null, { timeout: SMOKE_TIMEOUT })
     .catch(() => {});
   out.agentChangeVisible = await page.evaluate(() =>
     window.__GRAPHYSX__.state().entities.some((e) => e.id === "hermes-cube"));
@@ -150,7 +152,7 @@ try {
   // --- removal propagates too ---------------------------------------------------
   await editScene(store.url, SCENE, [{ op: "remove", id: "hermes-cube" }]);
   await page
-    .waitForFunction(() => !window.__GRAPHYSX__.state().entities.some((e) => e.id === "hermes-cube"), null, { timeout: 20000 })
+    .waitForFunction(() => !window.__GRAPHYSX__.state().entities.some((e) => e.id === "hermes-cube"), null, { timeout: SMOKE_TIMEOUT })
     .catch(() => {});
   out.agentRemovalVisible = await page.evaluate(() =>
     !window.__GRAPHYSX__.state().entities.some((e) => e.id === "hermes-cube"));
@@ -178,7 +180,7 @@ try {
 
   // Saving from the panel must store the document, not the debris.
   await page.click(".gx-sb-foot [data-action=save]");
-  await page.waitForFunction(() => /Saved/.test(document.querySelector(".gx-sb-status")?.textContent ?? ""), null, { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => /Saved/.test(document.querySelector(".gx-sb-status")?.textContent ?? ""), null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
   const pushed = await openScene(store.url, SCENE);
   out.pushedEntities = pushed.definition.entities.map((e) => e.id);
   out.thrownBallNotStored = !out.pushedEntities.includes("thrown-ball");
@@ -193,7 +195,7 @@ try {
   // The lived spawn does not survive the reload that a remote change triggers.
   await editScene(store.url, SCENE, [{ op: "spawn", entity: { id: "later-cube", type: "box" } }]);
   await page
-    .waitForFunction(() => window.__GRAPHYSX__.state().entities.some((e) => e.id === "later-cube"), null, { timeout: 20000 })
+    .waitForFunction(() => window.__GRAPHYSX__.state().entities.some((e) => e.id === "later-cube"), null, { timeout: SMOKE_TIMEOUT })
     .catch(() => {});
   out.thrownBallGoneAfterReload = await page.evaluate(() =>
     !window.__GRAPHYSX__.state().entities.some((e) => e.id === "thrown-ball"));
@@ -203,11 +205,11 @@ try {
     actor: "hermes",
     intent: "created a second scene",
   });
-  await page.waitForFunction(() => !!document.querySelector('.gx-sb-row[data-scene="second-scene"]'), null, { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => !!document.querySelector('.gx-sb-row[data-scene="second-scene"]'), null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
   out.secondSceneListed = await page.evaluate(() => !!document.querySelector('.gx-sb-row[data-scene="second-scene"]'));
   await page.click('.gx-sb-row[data-scene="second-scene"]');
   await page
-    .waitForFunction(() => window.__GRAPHYSX__.state()?.world.id === "second-scene", null, { timeout: 20000 })
+    .waitForFunction(() => window.__GRAPHYSX__.state()?.world.id === "second-scene", null, { timeout: SMOKE_TIMEOUT })
     .catch(() => {});
   out.switchedScene = await page.evaluate(() => window.__GRAPHYSX__.state()?.world.id === "second-scene");
 
@@ -249,3 +251,4 @@ const ok =
   out.secondSceneListed &&
   out.switchedScene;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
+

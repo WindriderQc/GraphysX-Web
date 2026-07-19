@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { SMOKE_TIMEOUT, applySmokeTimeout } from "./smoke-timeout.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -14,16 +15,17 @@ const pageErrors = [];
 
 const browser = await chromium.launch({ executablePath: EXE, headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage();
+applySmokeTimeout(page);
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
 page.on("pageerror", (e) => pageErrors.push(String(e)));
 
 const out = {};
 try {
   // The legacy race-scene player now lives behind ?host=legacy (default is the clean host).
-  await page.goto(BASE + "?host=legacy", { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.goto(BASE + "?host=legacy", { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
 
   // Home: platform framing present, archive groups gone.
-  await page.waitForSelector('.destination-card[data-mode-id="world-api-lab"]', { timeout: 20000 });
+  await page.waitForSelector('.destination-card[data-mode-id="world-api-lab"]', { timeout: SMOKE_TIMEOUT });
   out.title = (await page.textContent(".panel h1, .panel .title, h1").catch(() => "")) || "";
   out.version = (await page.textContent(".version-badge").catch(() => "")) || "";
   out.homeCardCount = await page.$$eval(".destination-card", (els) => els.length);
@@ -64,3 +66,4 @@ const ok =
   out.editorState.hasGlobal &&
   out.editorState.hasBridge;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
+

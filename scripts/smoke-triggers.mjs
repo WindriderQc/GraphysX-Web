@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { SMOKE_TIMEOUT, applySmokeTimeout } from "./smoke-timeout.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -18,12 +19,13 @@ const out = {};
 
 const browser = await chromium.launch({ executablePath: EXE, headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage();
+applySmokeTimeout(page);
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
 page.on("pageerror", (e) => pageErrors.push(String(e)));
 
 try {
-  await page.goto(`${BASE}?host=standalone`, { waitUntil: "domcontentloaded", timeout: 30000 });
-  await page.waitForFunction(() => !!window.__GRAPHYSX__, { timeout: 20000 });
+  await page.goto(`${BASE}?host=standalone`, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !!window.__GRAPHYSX__, { timeout: SMOKE_TIMEOUT });
 
   out.result = await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
@@ -181,3 +183,4 @@ const ok =
   out.stream?.sawWorldLoaded &&
   out.stream?.reportsGap;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
+

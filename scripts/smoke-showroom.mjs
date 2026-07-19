@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { SMOKE_TIMEOUT, applySmokeTimeout } from "./smoke-timeout.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -12,15 +13,16 @@ const pageErrors = [];
 
 const browser = await chromium.launch({ executablePath: EXE, headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage();
+applySmokeTimeout(page);
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
 page.on("pageerror", (e) => pageErrors.push(String(e)));
 
 const out = {};
 try {
   // Default route = the clean host booting the welcome showroom.
-  await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 30000 });
-  await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: 20000 });
-  await page.waitForSelector(".gx-welcome", { timeout: 15000 });
+  await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: SMOKE_TIMEOUT });
+  await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
   await page.waitForTimeout(700);
 
   out.welcomePresent = (await page.$(".gx-welcome")) !== null;
@@ -76,7 +78,7 @@ try {
         return !!p && Math.hypot(p[0] - a.b[0], p[1] - a.b[1], p[2] - a.b[2]) > 0.15;
       },
       { id: "showroom-block-5", b: blockBefore },
-      { timeout: 20000 },
+      { timeout: SMOKE_TIMEOUT },
     )
     .catch(() => {});
   const blockAfter = await entityPos("showroom-block-5");
@@ -105,7 +107,7 @@ try {
     .waitForFunction(
       () => window.__GRAPHYSX__.state().entities.some((e) => e.id.startsWith("showroom-drop-")),
       null,
-      { timeout: 20000 },
+      { timeout: SMOKE_TIMEOUT },
     )
     .catch(() => {});
   out.ballDropped = await page.evaluate(() =>
@@ -202,7 +204,7 @@ try {
         return !host.focusing && Math.hypot(t[0] - before[0], t[1] - before[1], t[2] - before[2]) > 0.75;
       },
       targetBefore,
-      { timeout: 20000 },
+      { timeout: SMOKE_TIMEOUT },
     )
     .catch(() => {});
   const targetAfter = await page.evaluate(() => window.__GRAPHYSX_HOST__.orbitTarget.toArray());
@@ -253,7 +255,7 @@ try {
 
   await page.click(".gx-welcome button");
   // The editor module is loaded on demand, so wait for it to mount rather than guessing.
-  await page.waitForSelector(".gx-ed-toolbar", { timeout: 15000 });
+  await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
   await page.waitForTimeout(200);
   out.editorVisibleAfterEnter = await page.evaluate(() => {
     const t = document.querySelector(".gx-ed-toolbar");
@@ -332,3 +334,4 @@ const ok =
   out.welcomeGone;
 
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
+
