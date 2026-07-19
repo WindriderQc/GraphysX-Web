@@ -22,21 +22,26 @@ export type AgentWorldModelAsset = {
   fitSize?: number;
 };
 
+/** Broad grouping so an agent can ask for "a tree" without knowing archive file names. */
+export type AgentWorldAssetCategory = "vegetation" | "port" | "camp" | "character" | "prop";
+
 export type AgentWorldAssetDescriptor = {
   id: string;
   label: string;
+  category: AgentWorldAssetCategory;
   format: AgentWorldModelFormat;
   url: string;
   source: string;
 };
 
-export const GRAPHYSX_AGENT_WORLD_ASSETS: readonly AgentWorldAssetDescriptor[] = [
-  { id: "zoksword", label: "Zok Sword", format: "graphysx-mesh-json", url: "/assets/dominus-gallery/meshes/zoksword.json", source: "Dominus Art/zoksword.x" },
-  { id: "zokshield", label: "Zok Shield", format: "graphysx-mesh-json", url: "/assets/dominus-gallery/meshes/zokshield.json", source: "Dominus Art/zokshield.x" },
-  { id: "port-cottage", label: "Port Cottage", format: "graphysx-mesh-json", url: "/assets/dominus-gallery/meshes/port_cottage1.json", source: "Dominus Art/port_cottage1.x" },
-  { id: "port-lighthouse", label: "Port Lighthouse", format: "graphysx-mesh-json", url: "/assets/dominus-gallery/meshes/port_lighthouse.json", source: "Dominus Art/port_lighthouse.x" },
-  { id: "port-windmill", label: "Port Windmill", format: "graphysx-mesh-json", url: "/assets/dominus-gallery/meshes/port_windmill.json", source: "Dominus Art/port_windmill.x" }
-] as const;
+/**
+ * Generated from the meshes on disk by scripts/build-asset-catalog.mjs. It was five
+ * hand-written entries while 63 converted meshes sat unreferenced in public/assets — an
+ * asset an agent cannot discover may as well not exist.
+ */
+import { GRAPHYSX_AGENT_WORLD_ASSET_CATALOG } from "./agent-world-asset-catalog";
+
+export const GRAPHYSX_AGENT_WORLD_ASSETS = GRAPHYSX_AGENT_WORLD_ASSET_CATALOG;
 
 type Tuple3 = [number, number, number];
 type PayloadMaterial = {
