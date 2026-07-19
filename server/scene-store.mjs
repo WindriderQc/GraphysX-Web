@@ -279,6 +279,14 @@ export function createSceneStoreServer({ dir } = {}) {
 
 export async function startSceneStore({ port = DEFAULT_PORT, dir } = {}) {
   const { server, store } = createSceneStoreServer({ dir });
+  // Node closes idle keep-alive sockets after 5s by default, but `fetch` (undici) pools and
+  // reuses them — so a client that pauses longer than that between calls picks a socket the
+  // server has already closed and fails with a bare "fetch failed". That is what made the
+  // scene-store smoke fail after its browser phase: seeding worked, the page loaded, and the
+  // next agent call died on a stale socket. Outliving any realistic client pause fixes it.
+  server.keepAliveTimeout = 72_000;
+  server.headersTimeout = 75_000;
+
   await new Promise((resolveListen, rejectListen) => {
     server.once("error", rejectListen);
     server.listen(port, () => resolveListen(undefined));
@@ -287,7 +295,12 @@ export async function startSceneStore({ port = DEFAULT_PORT, dir } = {}) {
   const actualPort = typeof address === "object" && address ? address.port : port;
   return {
     port: actualPort,
-    url: `http://localhost:${actualPort}`,
+    // 127.0.0.1 rather than localhost: on Windows, Node's fetch resolves localhost to ::1
+    // first, and whether that reaches a listener bound to the IPv4 any-address is a coin
+    // flip. It surfaced as an intermittent "scene store unreachable" against a store that
+    // was demonstrably listening. The server still binds every interface, so a LAN client
+    // reaching it by hostname is unaffected.
+    url: `http://127.0.0.1:${actualPort}`,
     store,
     async close() {
       await new Promise((resolveClose) => server.close(() => resolveClose(undefined)));

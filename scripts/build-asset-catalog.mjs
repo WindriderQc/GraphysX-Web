@@ -80,22 +80,39 @@ function idOf(file, stem) {
   return PINNED_IDS[file] ?? stem.replace(/_/g, "-");
 }
 
-const files = (await readdir(MESH_DIR)).filter((file) => file.endsWith(".json")).sort();
+/**
+ * The catalog as data. Exported so port tools can ask what actually exists rather than
+ * assuming — an archive placement table happily references meshes that were never
+ * converted, and a scene referencing a missing asset fails to load at runtime.
+ */
+export async function buildAssetCatalog() {
+  const files = (await readdir(MESH_DIR)).filter((file) => file.endsWith(".json")).sort();
+  const entries = files.map((file) => {
+    const stem = file.slice(0, -5);
+    return {
+      id: idOf(file, stem),
+      label: labelOf(stem),
+      category: categoryOf(file),
+      format: "graphysx-mesh-json",
+      url: `${URL_PREFIX}/${file}`,
+      source: `Dominus Art/${stem}.x`,
+    };
+  });
+  const duplicates = entries.map((entry) => entry.id).filter((id, index, all) => all.indexOf(id) !== index);
+  if (duplicates.length > 0) throw new Error(`Duplicate asset ids: ${duplicates.join(", ")}`);
+  return entries;
+}
 
-const entries = files.map((file) => {
-  const stem = file.slice(0, -5);
-  return {
-    id: idOf(file, stem),
-    label: labelOf(stem),
-    category: categoryOf(file),
-    format: "graphysx-mesh-json",
-    url: `${URL_PREFIX}/${file}`,
-    source: `Dominus Art/${stem}.x`,
-  };
-});
+/** Archive catalog id (underscored) → published asset id. */
+export function publishedAssetId(catalogId) {
+  return PINNED_IDS[`${catalogId}.json`] ?? catalogId.replace(/_/g, "-");
+}
 
-const duplicates = entries.map((entry) => entry.id).filter((id, index, all) => all.indexOf(id) !== index);
-if (duplicates.length > 0) throw new Error(`Duplicate asset ids: ${duplicates.join(", ")}`);
+// Writing the TS file only happens when this is run directly.
+if (!process.argv[1] || !process.argv[1].endsWith("build-asset-catalog.mjs")) {
+  // Imported as a library — nothing to do.
+} else {
+const entries = await buildAssetCatalog();
 
 const body = entries
   .map((entry) => `  { id: ${JSON.stringify(entry.id)}, label: ${JSON.stringify(entry.label)}, category: ${JSON.stringify(entry.category)}, format: "graphysx-mesh-json", url: ${JSON.stringify(entry.url)}, source: ${JSON.stringify(entry.source)} }`)
@@ -117,4 +134,5 @@ await writeFile(OUT, source, "utf8");
 console.log(`wrote ${entries.length} assets to ${OUT}`);
 for (const category of [...new Set(entries.map((entry) => entry.category))].sort()) {
   console.log(`  ${category}: ${entries.filter((entry) => entry.category === category).length}`);
+}
 }

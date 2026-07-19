@@ -20,6 +20,13 @@ export type AgentWorldModelAsset = {
   format?: AgentWorldModelFormat;
   /** Uniformly fits the recovered source model inside this many world units. */
   fitSize?: number;
+  /**
+   * Cutout transparency: discard texels below this alpha, 0..1. Foliage in the archive is
+   * flat quads with an alpha-keyed leaf texture, and without a cutout you get the texture's
+   * magenta transparency key rendered as a solid slab instead of leaves. Omitted (or 0)
+   * leaves the material fully opaque, which is right for everything solid.
+   */
+  alphaTest?: number;
 };
 
 /** Broad grouping so an agent can ask for "a tree" without knowing archive file names. */
@@ -65,7 +72,7 @@ type AssetPayload = {
   meshes: PayloadMesh[];
 };
 
-export type ResolvedAgentWorldModelAsset = Required<Pick<AgentWorldModelAsset, "format" | "fitSize">> & {
+export type ResolvedAgentWorldModelAsset = Required<Pick<AgentWorldModelAsset, "format" | "fitSize" | "alphaTest">> & {
   id: string | null;
   url: string;
 };
@@ -83,7 +90,9 @@ export function resolveAgentWorldModelAsset(source?: AgentWorldModelAsset): Reso
   if (!url) throw new Error("A model entity requires a loadable asset URL");
   const fitSize = source.fitSize ?? 4;
   if (!Number.isFinite(fitSize) || fitSize <= 0 || fitSize > 1000) throw new Error("asset.fitSize must be between 0 and 1000");
-  return { id, url, format, fitSize };
+  const alphaTest = source.alphaTest ?? 0;
+  if (!Number.isFinite(alphaTest) || alphaTest < 0 || alphaTest > 1) throw new Error("asset.alphaTest must be between 0 and 1");
+  return { id, url, format, fitSize, alphaTest };
 }
 
 export async function loadAgentWorldModel(target: Group, asset: ResolvedAgentWorldModelAsset): Promise<void> {
@@ -130,7 +139,11 @@ export async function loadAgentWorldModel(target: Group, asset: ResolvedAgentWor
         emissive: tupleColor(sourceMaterial.emissive, 0x000000),
         shininess: Math.max(0, Math.min(100, sourceMaterial.specularPower ?? 18)),
         side: DoubleSide,
-        map: textureUrl ? textures.get(textureUrl) ?? null : null
+        map: textureUrl ? textures.get(textureUrl) ?? null : null,
+        // `transparent` stays false on purpose: an alpha-tested cutout is opaque as far as
+        // sorting and depth are concerned, which is what keeps overlapping leaf quads from
+        // flickering against each other.
+        alphaTest: asset.alphaTest
       });
       return material;
     });

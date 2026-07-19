@@ -1,0 +1,1656 @@
+{
+  "schema": "graphysx.agent-world/v2",
+  "id": "dominus-village",
+  "label": "Dominus Village",
+  "environment": {
+    "background": "#8fb6d6",
+    "sky": "clearblue",
+    "ground": {
+      "visible": true,
+      "size": 130,
+      "color": "#6f7d55",
+      "grid": false,
+      "gridColor": "#59684a"
+    },
+    "physics": {
+      "gravity": [
+        0,
+        -9.82,
+        0
+      ]
+    }
+  },
+  "entities": [
+    {
+      "id": "village-sun",
+      "label": "Afternoon Sun",
+      "type": "directional-light",
+      "intensity": 2.1,
+      "transform": {
+        "position": [
+          -28,
+          40,
+          26
+        ]
+      },
+      "material": {
+        "color": "#fff2d8"
+      },
+      "castShadow": true
+    },
+    {
+      "id": "village-fill",
+      "label": "Sky Fill",
+      "type": "ambient-light",
+      "intensity": 0.85,
+      "material": {
+        "color": "#cfe4ff"
+      }
+    },
+    {
+      "id": "port-maindocks",
+      "label": "port maindocks",
+      "type": "model",
+      "transform": {
+        "position": [
+          0,
+          14.358,
+          26
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-maindocks",
+        "fitSize": 162.207
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 129.7656,
+        "height": 162.207,
+        "depth": 129.7656
+      }
+    },
+    {
+      "id": "port-smalldocks",
+      "label": "port smalldocks",
+      "type": "model",
+      "transform": {
+        "position": [
+          15,
+          6.064,
+          27
+        ],
+        "rotationDegrees": [
+          0,
+          11.46,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-smalldocks",
+        "fitSize": 31.86
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 25.488,
+        "height": 31.86,
+        "depth": 25.488
+      }
+    },
+    {
+      "id": "port-minidock",
+      "label": "port minidock",
+      "type": "model",
+      "transform": {
+        "position": [
+          -15,
+          0.803,
+          26.5
+        ],
+        "rotationDegrees": [
+          0,
+          -8.59,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-minidock",
+        "fitSize": 4.028
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 3.2224,
+        "height": 4.028,
+        "depth": 3.2224
+      }
+    },
+    {
+      "id": "port-lighthouse",
+      "label": "port lighthouse",
+      "type": "model",
+      "transform": {
+        "position": [
+          31,
+          13.297,
+          30
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-lighthouse",
+        "fitSize": 26.355
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 21.084000000000003,
+        "height": 26.355,
+        "depth": 21.084000000000003
+      }
+    },
+    {
+      "id": "port-sunkship",
+      "label": "port sunkship",
+      "type": "model",
+      "transform": {
+        "position": [
+          -27,
+          4.135,
+          34
+        ],
+        "rotationDegrees": [
+          0,
+          51.57,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-sunkship",
+        "fitSize": 18.906
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "port-shippiece",
+      "label": "port shippiece",
+      "type": "model",
+      "transform": {
+        "position": [
+          23,
+          4.368,
+          36
+        ],
+        "rotationDegrees": [
+          0,
+          -22.92,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-shippiece",
+        "fitSize": 20.004
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "port-shipyard",
+      "label": "port shipyard",
+      "type": "model",
+      "transform": {
+        "position": [
+          -8,
+          6.226,
+          31
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-shipyard",
+        "fitSize": 50.812
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 40.6496,
+        "height": 50.812,
+        "depth": 40.6496
+      }
+    },
+    {
+      "id": "port-cottage",
+      "label": "port cottage1",
+      "type": "model",
+      "transform": {
+        "position": [
+          -18,
+          7.63,
+          10
+        ],
+        "rotationDegrees": [
+          0,
+          22.92,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-cottage",
+        "fitSize": 25.781
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 20.6248,
+        "height": 25.781,
+        "depth": 20.6248
+      }
+    },
+    {
+      "id": "port-cottage2",
+      "label": "port cottage2",
+      "type": "model",
+      "transform": {
+        "position": [
+          -6,
+          2.644,
+          12
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-cottage2",
+        "fitSize": 5.063
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 4.0504,
+        "height": 5.063,
+        "depth": 4.0504
+      }
+    },
+    {
+      "id": "port-cottage4",
+      "label": "port cottage4",
+      "type": "model",
+      "transform": {
+        "position": [
+          6,
+          2.376,
+          12
+        ],
+        "rotationDegrees": [
+          0,
+          -11.46,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-cottage4",
+        "fitSize": 7.114
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 5.6912,
+        "height": 7.114,
+        "depth": 5.6912
+      }
+    },
+    {
+      "id": "port-cottage5",
+      "label": "port cottage5",
+      "type": "model",
+      "transform": {
+        "position": [
+          18,
+          3.112,
+          10
+        ],
+        "rotationDegrees": [
+          0,
+          -28.65,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-cottage5",
+        "fitSize": 9.9
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 7.920000000000001,
+        "height": 9.9,
+        "depth": 7.920000000000001
+      }
+    },
+    {
+      "id": "port-inn01",
+      "label": "port inn01",
+      "type": "model",
+      "transform": {
+        "position": [
+          -13,
+          5.389,
+          -2
+        ],
+        "rotationDegrees": [
+          0,
+          40.11,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-inn01",
+        "fitSize": 11.7
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 9.36,
+        "height": 11.7,
+        "depth": 9.36
+      }
+    },
+    {
+      "id": "port-pub1",
+      "label": "port pub1",
+      "type": "model",
+      "transform": {
+        "position": [
+          0,
+          5.181,
+          -5
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-pub1",
+        "fitSize": 15.556
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 12.4448,
+        "height": 15.556,
+        "depth": 12.4448
+      }
+    },
+    {
+      "id": "port-market",
+      "label": "port market",
+      "type": "model",
+      "transform": {
+        "position": [
+          13,
+          4.469,
+          -2
+        ],
+        "rotationDegrees": [
+          0,
+          -40.11,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-market",
+        "fitSize": 20.004
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 16.003200000000003,
+        "height": 20.004,
+        "depth": 16.003200000000003
+      }
+    },
+    {
+      "id": "port-fishhouse",
+      "label": "port fishhouse",
+      "type": "model",
+      "transform": {
+        "position": [
+          -23,
+          3.719,
+          3
+        ],
+        "rotationDegrees": [
+          0,
+          68.75,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-fishhouse",
+        "fitSize": 9.695
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 7.756,
+        "height": 9.695,
+        "depth": 7.756
+      }
+    },
+    {
+      "id": "port-shed1",
+      "label": "port shed1",
+      "type": "model",
+      "transform": {
+        "position": [
+          23,
+          0.82,
+          3
+        ],
+        "rotationDegrees": [
+          0,
+          -68.75,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-shed1",
+        "fitSize": 2.367
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 1.8936000000000002,
+        "height": 2.367,
+        "depth": 1.8936000000000002
+      }
+    },
+    {
+      "id": "port-const1",
+      "label": "port const1",
+      "type": "model",
+      "transform": {
+        "position": [
+          -28,
+          3.858,
+          -9
+        ],
+        "rotationDegrees": [
+          0,
+          28.65,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-const1",
+        "fitSize": 10.014
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 8.0112,
+        "height": 10.014,
+        "depth": 8.0112
+      }
+    },
+    {
+      "id": "port-const2",
+      "label": "port const2",
+      "type": "model",
+      "transform": {
+        "position": [
+          28,
+          4.398,
+          -9
+        ],
+        "rotationDegrees": [
+          0,
+          -28.65,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-const2",
+        "fitSize": 12.497
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 9.9976,
+        "height": 12.497,
+        "depth": 9.9976
+      }
+    },
+    {
+      "id": "port-windmill",
+      "label": "port windmill",
+      "type": "model",
+      "transform": {
+        "position": [
+          -33,
+          14.846,
+          -17
+        ],
+        "rotationDegrees": [
+          0,
+          51.57,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-windmill",
+        "fitSize": 29.451
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 23.5608,
+        "height": 29.451,
+        "depth": 23.5608
+      }
+    },
+    {
+      "id": "port-weathervain",
+      "label": "port weathervain",
+      "type": "model",
+      "transform": {
+        "position": [
+          0,
+          7.756,
+          -13
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-weathervain",
+        "fitSize": 19.143
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "port-hut",
+      "label": "port hut",
+      "type": "model",
+      "transform": {
+        "position": [
+          -20,
+          4.491,
+          -21
+        ],
+        "rotationDegrees": [
+          0,
+          34.38,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-hut",
+        "fitSize": 10.43
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 8.344,
+        "height": 10.43,
+        "depth": 8.344
+      }
+    },
+    {
+      "id": "port-hut01",
+      "label": "port hut01",
+      "type": "model",
+      "transform": {
+        "position": [
+          -10,
+          2.3,
+          -23
+        ],
+        "rotationDegrees": [
+          0,
+          11.46,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-hut01",
+        "fitSize": 5.201
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 4.1608,
+        "height": 5.201,
+        "depth": 4.1608
+      }
+    },
+    {
+      "id": "port-hut02",
+      "label": "port hut02",
+      "type": "model",
+      "transform": {
+        "position": [
+          0,
+          3.045,
+          -24
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-hut02",
+        "fitSize": 10.041
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 8.0328,
+        "height": 10.041,
+        "depth": 8.0328
+      }
+    },
+    {
+      "id": "port-hut03",
+      "label": "port hut03",
+      "type": "model",
+      "transform": {
+        "position": [
+          10,
+          3.45,
+          -23
+        ],
+        "rotationDegrees": [
+          0,
+          -11.46,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-hut03",
+        "fitSize": 6.678
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 5.3424000000000005,
+        "height": 6.678,
+        "depth": 5.3424000000000005
+      }
+    },
+    {
+      "id": "port-hut04",
+      "label": "port hut04",
+      "type": "model",
+      "transform": {
+        "position": [
+          20,
+          3.271,
+          -21
+        ],
+        "rotationDegrees": [
+          0,
+          -34.38,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-hut04",
+        "fitSize": 9.935
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 7.948,
+        "height": 9.935,
+        "depth": 7.948
+      }
+    },
+    {
+      "id": "port-hut05",
+      "label": "port hut05",
+      "type": "model",
+      "transform": {
+        "position": [
+          27,
+          4.478,
+          -17
+        ],
+        "rotationDegrees": [
+          0,
+          -57.3,
+          0
+        ]
+      },
+      "asset": {
+        "id": "port-hut05",
+        "fitSize": 13.46
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true,
+      "physics": {
+        "mode": "static",
+        "material": "wall"
+      },
+      "geometry": {
+        "width": 10.768,
+        "height": 13.46,
+        "depth": 10.768
+      }
+    },
+    {
+      "id": "camp1-tent1",
+      "label": "camp1 tent1",
+      "type": "model",
+      "transform": {
+        "position": [
+          -9,
+          3.331,
+          -32
+        ],
+        "rotationDegrees": [
+          0,
+          22.92,
+          0
+        ]
+      },
+      "asset": {
+        "id": "camp1-tent1",
+        "fitSize": 10.694
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "camp1-tent2",
+      "label": "camp1 tent2",
+      "type": "model",
+      "transform": {
+        "position": [
+          0,
+          1.901,
+          -34
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "camp1-tent2",
+        "fitSize": 5.231
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "camp1-tent3",
+      "label": "camp1 tent3",
+      "type": "model",
+      "transform": {
+        "position": [
+          9,
+          2.05,
+          -32
+        ],
+        "rotationDegrees": [
+          0,
+          -22.92,
+          0
+        ]
+      },
+      "asset": {
+        "id": "camp1-tent3",
+        "fitSize": 9.982
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "camp1-post",
+      "label": "camp1 post",
+      "type": "model",
+      "transform": {
+        "position": [
+          0,
+          1.536,
+          -29
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "camp1-post",
+        "fitSize": 4.085
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-green01",
+      "label": "tree green01",
+      "type": "model",
+      "transform": {
+        "position": [
+          -30,
+          8.431,
+          16
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-green01",
+        "fitSize": 16.623,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-green02",
+      "label": "tree green02",
+      "type": "model",
+      "transform": {
+        "position": [
+          -24,
+          5.061,
+          19
+        ],
+        "rotationDegrees": [
+          0,
+          57.3,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-green02",
+        "fitSize": 9.881,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-green03",
+      "label": "tree green03",
+      "type": "model",
+      "transform": {
+        "position": [
+          26,
+          9.279,
+          17
+        ],
+        "rotationDegrees": [
+          0,
+          114.59,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-green03",
+        "fitSize": 18.318,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-green04",
+      "label": "tree green04",
+      "type": "model",
+      "transform": {
+        "position": [
+          32,
+          8.827,
+          12
+        ],
+        "rotationDegrees": [
+          0,
+          171.89,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-green04",
+        "fitSize": 17.415,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-green05",
+      "label": "tree green05",
+      "type": "model",
+      "transform": {
+        "position": [
+          -35,
+          9.792,
+          -2
+        ],
+        "rotationDegrees": [
+          0,
+          229.18,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-green05",
+        "fitSize": 19.344,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-green06",
+      "label": "tree green06",
+      "type": "model",
+      "transform": {
+        "position": [
+          35,
+          10.839,
+          -3
+        ],
+        "rotationDegrees": [
+          0,
+          286.48,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-green06",
+        "fitSize": 21.438,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-green07",
+      "label": "tree green07",
+      "type": "model",
+      "transform": {
+        "position": [
+          -30,
+          7.602,
+          -26
+        ],
+        "rotationDegrees": [
+          0,
+          343.77,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-green07",
+        "fitSize": 15.216,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-green01-2",
+      "label": "tree green01",
+      "type": "model",
+      "transform": {
+        "position": [
+          30,
+          8.431,
+          -27
+        ],
+        "rotationDegrees": [
+          0,
+          85.94,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-green01",
+        "fitSize": 16.623,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-green03-2",
+      "label": "tree green03",
+      "type": "model",
+      "transform": {
+        "position": [
+          -16,
+          9.279,
+          18
+        ],
+        "rotationDegrees": [
+          0,
+          143.24,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-green03",
+        "fitSize": 18.318,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-dead01",
+      "label": "tree dead01",
+      "type": "model",
+      "transform": {
+        "position": [
+          36,
+          12.202,
+          -22
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-dead01",
+        "fitSize": 24.163,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-dead02",
+      "label": "tree dead02",
+      "type": "model",
+      "transform": {
+        "position": [
+          -37,
+          6.827,
+          -12
+        ],
+        "rotationDegrees": [
+          0,
+          57.3,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-dead02",
+        "fitSize": 13.415,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tree-dead03",
+      "label": "tree dead03",
+      "type": "model",
+      "transform": {
+        "position": [
+          15,
+          7.367,
+          18
+        ],
+        "rotationDegrees": [
+          0,
+          114.59,
+          0
+        ]
+      },
+      "asset": {
+        "id": "tree-dead03",
+        "fitSize": 14.495,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "bush-01",
+      "label": "bush 01",
+      "type": "model",
+      "transform": {
+        "position": [
+          -9,
+          1.243,
+          6
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "bush-01",
+        "fitSize": 3.198,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "bush-02",
+      "label": "bush 02",
+      "type": "model",
+      "transform": {
+        "position": [
+          9,
+          1.213,
+          6
+        ],
+        "rotationDegrees": [
+          0,
+          57.3,
+          0
+        ]
+      },
+      "asset": {
+        "id": "bush-02",
+        "fitSize": 3.115,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "bush-03",
+      "label": "bush 03",
+      "type": "model",
+      "transform": {
+        "position": [
+          -18,
+          1.139,
+          -8
+        ],
+        "rotationDegrees": [
+          0,
+          114.59,
+          0
+        ]
+      },
+      "asset": {
+        "id": "bush-03",
+        "fitSize": 2.905,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "bush-04",
+      "label": "bush 04",
+      "type": "model",
+      "transform": {
+        "position": [
+          18,
+          1.721,
+          -8
+        ],
+        "rotationDegrees": [
+          0,
+          171.89,
+          0
+        ]
+      },
+      "asset": {
+        "id": "bush-04",
+        "fitSize": 3.201,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "grass-reed01",
+      "label": "grass reed01",
+      "type": "model",
+      "transform": {
+        "position": [
+          -4,
+          0.965,
+          20
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "grass-reed01",
+        "fitSize": 1.69,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": false,
+      "receiveShadow": true
+    },
+    {
+      "id": "grass-reed02",
+      "label": "grass reed02",
+      "type": "model",
+      "transform": {
+        "position": [
+          4,
+          1.095,
+          20
+        ],
+        "rotationDegrees": [
+          0,
+          57.3,
+          0
+        ]
+      },
+      "asset": {
+        "id": "grass-reed02",
+        "fitSize": 1.95,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": false,
+      "receiveShadow": true
+    },
+    {
+      "id": "grass-reed03",
+      "label": "grass reed03",
+      "type": "model",
+      "transform": {
+        "position": [
+          0,
+          1.013,
+          17
+        ],
+        "rotationDegrees": [
+          0,
+          114.59,
+          0
+        ]
+      },
+      "asset": {
+        "id": "grass-reed03",
+        "fitSize": 1.786,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": false,
+      "receiveShadow": true
+    },
+    {
+      "id": "grass-flower01",
+      "label": "grass flower01",
+      "type": "model",
+      "transform": {
+        "position": [
+          -7,
+          1.102,
+          -17
+        ],
+        "rotationDegrees": [
+          0,
+          0,
+          0
+        ]
+      },
+      "asset": {
+        "id": "grass-flower01",
+        "fitSize": 1.963,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": false,
+      "receiveShadow": true
+    },
+    {
+      "id": "grass-flower02",
+      "label": "grass flower02",
+      "type": "model",
+      "transform": {
+        "position": [
+          7,
+          1.112,
+          -17
+        ],
+        "rotationDegrees": [
+          0,
+          57.3,
+          0
+        ]
+      },
+      "asset": {
+        "id": "grass-flower02",
+        "fitSize": 1.984,
+        "alphaTest": 0.45
+      },
+      "tags": [
+        "dominus",
+        "village"
+      ],
+      "castShadow": false,
+      "receiveShadow": true
+    }
+  ]
+}
