@@ -267,6 +267,48 @@ try {
   });
   // The same world back in the editor, for comparison against ballz-play.png above.
   await page.screenshot({ path: path.join(ART, "ballz-level.png") });
+
+  // --- Winning the level: rings THEN finish, and not before -----------------------------
+  // The win rule has to be real, not a "reached the finish" rubber stamp: crossing the finish
+  // with rings still out must NOT win, and collecting them all then returning must. Driven with
+  // real teleports + steps; the win itself is judged by the play layer's own 200 ms poll, so
+  // each check waits for a poll cycle rather than reading a promise back synchronously.
+  await page.evaluate(() => { window.__GRAPHYSX__.levels.play("smoke-ballz"); window.__GRAPHYSX__.pause(true); });
+  await page.waitForTimeout(120);
+
+  // Negative: hit the finish while the ring is still uncollected.
+  await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const g = api.query({ ids: ["ballz-finish-gate"] })[0].position;
+    api.update("ballz-ball", { transform: { position: [g[0], g[1], g[2]] } });
+    for (let i = 0; i < 30; i += 1) api.step(1 / 60);
+  });
+  await page.waitForTimeout(320);
+  out.wonWithRingsOut = (await page.$(".gx-bz-win")) !== null;
+
+  // Now collect every ring, then return to the finish.
+  await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    for (const ring of api.query({ tag: "collectible" })) {
+      const [rx, ry, rz] = ring.position;
+      api.update("ballz-ball", { transform: { position: [rx, ry, rz] } });
+      for (let i = 0; i < 24; i += 1) api.step(1 / 60);
+    }
+    const g = api.query({ ids: ["ballz-finish-gate"] })[0].position;
+    api.update("ballz-ball", { transform: { position: [g[0], g[1], g[2]] } });
+    for (let i = 0; i < 30; i += 1) api.step(1 / 60);
+  });
+  await page.waitForTimeout(420);
+  out.win = await page.evaluate(() => {
+    const panel = document.querySelector(".gx-bz-win");
+    return {
+      shown: !!panel,
+      title: panel?.querySelector(".gx-bz-win-title")?.textContent ?? "",
+      hasReplay: !!panel?.querySelector(".gx-bz-win-again"),
+      hudGone: !document.querySelector(".gx-bz-hud"),
+    };
+  });
+  await page.screenshot({ path: path.join(ART, "ballz-win.png") });
 } catch (error) {
   out.fatal = String(error);
 }
@@ -306,7 +348,12 @@ const ok =
   out.hudResetOnReplay === true &&
   out.afterExit?.mode === "editor" &&
   out.afterExit?.toolbarShown === true &&
-  out.afterExit?.hudGone === true;
+  out.afterExit?.hudGone === true &&
+  out.wonWithRingsOut === false &&
+  out.win?.shown === true &&
+  /Complete/.test(out.win?.title ?? "") &&
+  out.win?.hasReplay === true &&
+  out.win?.hudGone === true;
 
 process.exit(out.fatal || pageErrors.length || consoleErrors.length || !ok ? 1 : 0);
 
