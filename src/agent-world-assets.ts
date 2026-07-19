@@ -1,5 +1,6 @@
 import {
   BufferGeometry,
+  CanvasTexture,
   Color,
   DoubleSide,
   Float32BufferAttribute,
@@ -21,12 +22,21 @@ export type AgentWorldModelAsset = {
   /** Uniformly fits the recovered source model inside this many world units. */
   fitSize?: number;
   /**
-   * Cutout transparency: discard texels below this alpha, 0..1. Foliage in the archive is
-   * flat quads with an alpha-keyed leaf texture, and without a cutout you get the texture's
-   * magenta transparency key rendered as a solid slab instead of leaves. Omitted (or 0)
-   * leaves the material fully opaque, which is right for everything solid.
+   * Cutout transparency: discard texels below this alpha, 0..1. Omitted (or 0) leaves the
+   * material fully opaque, which is right for everything solid.
    */
   alphaTest?: number;
+  /**
+   * Colour key, as `#rrggbb`. Texels matching it become transparent.
+   *
+   * The archive's textures predate alpha channels: foliage is flat quads painted with a
+   * key colour — magenta, conventionally — that the original engine punched out at load.
+   * The recovered PNGs carry that key as ordinary opaque pixels, so without this a tree
+   * renders as a magenta slab. Keying is done once at load, and pairs with `alphaTest`.
+   */
+  colorKey?: string;
+  /** How far a texel may drift from `colorKey` and still be keyed out, 0..1. */
+  colorKeyTolerance?: number;
 };
 
 /** Broad grouping so an agent can ask for "a tree" without knowing archive file names. */
@@ -72,10 +82,64 @@ type AssetPayload = {
   meshes: PayloadMesh[];
 };
 
-export type ResolvedAgentWorldModelAsset = Required<Pick<AgentWorldModelAsset, "format" | "fitSize" | "alphaTest">> & {
+export type ResolvedAgentWorldModelAsset = Required<
+  Pick<AgentWorldModelAsset, "format" | "fitSize" | "alphaTest" | "colorKeyTolerance">
+> & {
   id: string | null;
   url: string;
+  colorKey: string | null;
 };
+
+/**
+ * Punches a key colour out of a texture, the way the engine these assets were authored for
+ * did it at load time.
+ *
+ * The hex is parsed by hand rather than through `Color`, which would apply an sRGB→linear
+ * conversion and then compare against raw bytes that never had one — the key would miss.
+ * Distance is euclidean across RGB so a texture that was resaved through a lossy codec, and
+ * whose key colour therefore drifted a little, still keys out cleanly.
+ */
+async function loadColorKeyedTexture(url: string, colorKey: string, tolerance: number): Promise<Texture> {
+  const image = await new Promise<HTMLImageElement>((resolveImage, rejectImage) => {
+    const element = new Image();
+    element.onload = () => resolveImage(element);
+    element.onerror = () => rejectImage(new Error(`Texture request failed: ${url}`));
+    element.src = url;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("A 2D canvas context is required to apply a colour key");
+  context.drawImage(image, 0, 0);
+
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+  const keyRed = Number.parseInt(colorKey.slice(1, 3), 16);
+  const keyGreen = Number.parseInt(colorKey.slice(3, 5), 16);
+  const keyBlue = Number.parseInt(colorKey.slice(5, 7), 16);
+  const limit = tolerance * 255 * Math.SQRT2 * Math.SQRT2; // 0..1 → 0..510, a usable span
+
+  for (let index = 0; index < pixels.data.length; index += 4) {
+    const red = pixels.data[index] - keyRed;
+    const green = pixels.data[index + 1] - keyGreen;
+    const blue = pixels.data[index + 2] - keyBlue;
+    if (Math.sqrt(red * red + green * green + blue * blue) <= limit) {
+      pixels.data[index + 3] = 0;
+      // Zero the colour too. A transparent-but-magenta texel still bleeds its hue into
+      // neighbours under bilinear filtering and mipmapping, which reads as a magenta halo
+      // around every leaf.
+      pixels.data[index] = 0;
+      pixels.data[index + 1] = 0;
+      pixels.data[index + 2] = 0;
+    }
+  }
+  context.putImageData(pixels, 0, 0);
+
+  const texture = new CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
 
 export function resolveAgentWorldModelAsset(source?: AgentWorldModelAsset): ResolvedAgentWorldModelAsset {
   if (!source || (!source.id?.trim() && !source.url?.trim())) {
@@ -92,7 +156,13 @@ export function resolveAgentWorldModelAsset(source?: AgentWorldModelAsset): Reso
   if (!Number.isFinite(fitSize) || fitSize <= 0 || fitSize > 1000) throw new Error("asset.fitSize must be between 0 and 1000");
   const alphaTest = source.alphaTest ?? 0;
   if (!Number.isFinite(alphaTest) || alphaTest < 0 || alphaTest > 1) throw new Error("asset.alphaTest must be between 0 and 1");
-  return { id, url, format, fitSize, alphaTest };
+  const colorKey = source.colorKey?.trim() || null;
+  if (colorKey && !/^#[0-9a-fA-F]{6}$/.test(colorKey)) throw new Error(`asset.colorKey must be #rrggbb: ${colorKey}`);
+  const colorKeyTolerance = source.colorKeyTolerance ?? 0.15;
+  if (!Number.isFinite(colorKeyTolerance) || colorKeyTolerance < 0 || colorKeyTolerance > 1) {
+    throw new Error("asset.colorKeyTolerance must be between 0 and 1");
+  }
+  return { id, url, format, fitSize, alphaTest, colorKey, colorKeyTolerance };
 }
 
 export async function loadAgentWorldModel(target: Group, asset: ResolvedAgentWorldModelAsset): Promise<void> {
@@ -107,7 +177,9 @@ export async function loadAgentWorldModel(target: Group, asset: ResolvedAgentWor
     .filter((url): url is string => Boolean(url))))];
   const textures = new Map<string, Texture>();
   await Promise.all(textureUrls.map(async (url) => {
-    const texture = await textureLoader.loadAsync(url);
+    const texture = asset.colorKey
+      ? await loadColorKeyedTexture(url, asset.colorKey, asset.colorKeyTolerance)
+      : await textureLoader.loadAsync(url);
     texture.colorSpace = SRGBColorSpace;
     texture.wrapS = RepeatWrapping;
     texture.wrapT = RepeatWrapping;

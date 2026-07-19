@@ -76,6 +76,9 @@ const DOMINUS_LAYOUT = [
   ["fish1", -6, 33, 0.6], ["fish2", 5, 34, -1.2], ["fish3", 12, 32, 2.2],
 ];
 
+/** race-scene.ts:5178 — the same set the archive treated as cut-out foliage. */
+const FOLIAGE = /tree|bush|grass|flower|reed/;
+
 const degrees = (radians) => Number(((radians * 180) / Math.PI).toFixed(2));
 const round = (value) => Number(value.toFixed(3));
 
@@ -147,12 +150,12 @@ for (const [catalogId, x, z, rotationY, scaleOverride, solid] of DOMINUS_LAYOUT)
       position: [x, groundY, z],
       rotationDegrees: [0, degrees(rotationY), 0],
     },
-    // Foliage is alpha-keyed quads; without the cutout the leaf texture's transparency key
-    // renders as a solid magenta slab. race-scene.ts:5186 used the same 0.45 threshold.
+    // Foliage is flat quads painted with a magenta key colour — these textures predate
+    // alpha channels, so the key is punched out at load and then cut with alphaTest.
     asset: {
       id: assetIdFor(catalogId),
       fitSize,
-      ...(/tree|bush|grass|flower|reed/.test(catalogId) ? { alphaTest: 0.45 } : {}),
+      ...(FOLIAGE.test(catalogId) ? { colorKey: "#ff00ff", colorKeyTolerance: 0.2, alphaTest: 0.45 } : {}),
     },
     tags: ["dominus", "village"],
     // Grass is trodden on, not lit from below; matching the archive's shadow choices.

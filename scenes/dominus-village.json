@@ -1083,6 +1083,8 @@
       "asset": {
         "id": "tree-green01",
         "fitSize": 16.623,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1111,6 +1113,8 @@
       "asset": {
         "id": "tree-green02",
         "fitSize": 9.881,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1139,6 +1143,8 @@
       "asset": {
         "id": "tree-green03",
         "fitSize": 18.318,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1167,6 +1173,8 @@
       "asset": {
         "id": "tree-green04",
         "fitSize": 17.415,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1195,6 +1203,8 @@
       "asset": {
         "id": "tree-green05",
         "fitSize": 19.344,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1223,6 +1233,8 @@
       "asset": {
         "id": "tree-green06",
         "fitSize": 21.438,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1251,6 +1263,8 @@
       "asset": {
         "id": "tree-green07",
         "fitSize": 15.216,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1279,6 +1293,8 @@
       "asset": {
         "id": "tree-green01",
         "fitSize": 16.623,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1307,6 +1323,8 @@
       "asset": {
         "id": "tree-green03",
         "fitSize": 18.318,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1335,6 +1353,8 @@
       "asset": {
         "id": "tree-dead01",
         "fitSize": 24.163,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1363,6 +1383,8 @@
       "asset": {
         "id": "tree-dead02",
         "fitSize": 13.415,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1391,6 +1413,8 @@
       "asset": {
         "id": "tree-dead03",
         "fitSize": 14.495,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1419,6 +1443,8 @@
       "asset": {
         "id": "bush-01",
         "fitSize": 3.198,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1447,6 +1473,8 @@
       "asset": {
         "id": "bush-02",
         "fitSize": 3.115,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1475,6 +1503,8 @@
       "asset": {
         "id": "bush-03",
         "fitSize": 2.905,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1503,6 +1533,8 @@
       "asset": {
         "id": "bush-04",
         "fitSize": 3.201,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1531,6 +1563,8 @@
       "asset": {
         "id": "grass-reed01",
         "fitSize": 1.69,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1559,6 +1593,8 @@
       "asset": {
         "id": "grass-reed02",
         "fitSize": 1.95,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1587,6 +1623,8 @@
       "asset": {
         "id": "grass-reed03",
         "fitSize": 1.786,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1615,6 +1653,8 @@
       "asset": {
         "id": "grass-flower01",
         "fitSize": 1.963,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
@@ -1643,6 +1683,8 @@
       "asset": {
         "id": "grass-flower02",
         "fitSize": 1.984,
+        "colorKey": "#ff00ff",
+        "colorKeyTolerance": 0.2,
         "alphaTest": 0.45
       },
       "tags": [
