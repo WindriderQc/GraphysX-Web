@@ -248,3 +248,37 @@ landing in one history. It is about every surface reading the same world back.
 
 **Still open:** camera framing after materialising is the host default rather than fitted to the
 level. No shader pass. Ice models low friction but not the tile's attraction.
+
+## 2026-07-19 — `modes-r1`: editing, viewing and playing are three surfaces
+
+- **Playing was happening inside the editor.** The screenshot made it obvious: a game HUD sitting
+  between a scene tree and a library palette, with the same chrome around a level you were playing
+  as around a scene you were authoring. `PlatformMode` makes them exclusive — `scene` (the world
+  alone: showroom, Browse Scenes), `editor` (authoring chrome), `play` (controls, HUD, a way back).
+- **Each mode owns a definite answer for every piece of chrome.** That is the whole point: the bug
+  it replaces existed because nothing was responsible for saying "playing means the authoring chrome
+  is gone", so a HUD was simply added on top of whatever was already there.
+- **Entering play is keyed on the world containing a `player` entity, not on who asked.** The human
+  Play button, an agent's `levels.play()`, and a stored scene therefore land on the same surface —
+  the same rule that fixed the earlier parity bugs, applied to gameplay.
+- **Play is a place you can leave.** The HUD carries an exit returning to whichever mode you came
+  from. Without it a page reload was the only way out, which makes a mode feel like a trap.
+
+### Two bugs this surfaced, both found in the screenshot rather than the gate
+
+- **A race between the mode and the editor's dynamic import.** The editor constructs visible and knew
+  nothing about modes, so a level played before the chunk resolved had the authoring chrome pop in
+  on top of the running game. It now applies whatever the mode is *when the load resolves*, and
+  `setMode` re-checks on the other side too.
+- **Replaying a level did not reset the HUD.** `setMode` early-returns when the mode has not changed,
+  so the previous run's play layer stayed mounted and a brand new level opened reading
+  `1 / 1 rings · FINISH`. A newly loaded world now always gets a fresh layer. Asserted directly:
+  after a re-materialise the HUD must read `0 / 1` and must not say FINISH.
+
+`scripts/smoke-ballz.mjs` asserts the surfaces are genuinely distinct — toolbar and panels hidden
+with the HUD shown in play, restored with the HUD gone after exit — and captures both, so
+`output/verify/ballz-play.png` and `ballz-level.png` are a side-by-side of the two surfaces.
+
+**Still open:** `scene` mode is currently only the showroom; Browse Scenes and a Games & Apps shelf
+are still the missing front-door routes (§8.1). Camera framing after materialising is the host
+default. No shader pass.
