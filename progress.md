@@ -298,3 +298,36 @@ reproducible, but treating it as *the* cause was reading one symptom as the whol
 still been seen since both fixes landed, so it is reduced rather than closed — keep re-running a red
 run before believing it, and keep the discriminator: uniform, network-shaped failures across
 unrelated routes are this; structural and reproducible failures are real.
+
+## 2026-07-19 — `front-door-r1`: Games & Playgrounds, and a way back out
+
+- **Two of the three surfaces existed; only one was reachable.** A playable level could be got at
+  solely by opening the editor, opening the Levels workbench and pressing Play — so playing was a
+  side door off authoring, which is the confusion `modes-r1` was supposed to end. The showroom now
+  offers a second destination and the loop closes: showroom → Games & Playgrounds → a level you are
+  playing → back to the showroom.
+- **The shelf is a list, not a launcher framework.** Every row is `api.levels.play(id)`, the same
+  call the workbench button and an agent make, and rows are read from the level library rather than
+  a curated manifest — so anything a person or an agent authors appears with no second registration
+  step. Rows state what they contain, and a layout with **no start tile says so** instead of
+  offering a game that cannot begin.
+- **One hand-authored course is seeded on first visit**, so the shelf does not open on the bare
+  11×11 fallback. It goes in through `importAscii` like any painted level, lands in the same
+  library, and can be opened and edited afterwards — deliberately not a special built-in. Seeding is
+  skipped when it already exists, so a visitor who edits it keeps their version.
+- **The return leg needed the real work.** Playing *replaces* the world, so "back" cannot mean
+  un-hiding chrome: the showroom's entities are gone and its host-mounted set went with them.
+  `PlatformHost` gained `onExitPlay` and `main.ts` recomposes the showroom from scratch — cheap,
+  because the showroom is ordinary API calls rather than a retained scene. Without it you land in a
+  chrome-less view of the level you just finished, with no way onward and nothing to notice it.
+- **The Games button is added only when a caller supplies a handler**, so it cannot become a dead
+  control. **Browse Scenes is deliberately still absent from the front door**: the scene browser
+  mounts only when a scene store answers and the production deploy is static, so a button there
+  would advertise a room that is not present. That is a gap, and it is named rather than papered
+  over with a control that does nothing.
+- `scripts/smoke-games.mjs` drives the whole loop and asserts the return specifically — showroom
+  entities restored, level entities gone, HUD gone, welcome back — because that is the leg with no
+  other witness.
+
+**Still open:** Browse Scenes has no front-door route while production has no store. Camera framing
+after materialising is the host default. The §14.5 shader pass is not done.
