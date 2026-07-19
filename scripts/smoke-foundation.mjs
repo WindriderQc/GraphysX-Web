@@ -1,5 +1,4 @@
-import { chromium } from "playwright";
-import { SMOKE_TIMEOUT, applySmokeTimeout } from "./smoke-timeout.mjs";
+import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -13,7 +12,7 @@ mkdirSync(ART, { recursive: true });
 const consoleErrors = [];
 const pageErrors = [];
 
-const browser = await chromium.launch({ executablePath: EXE, headless: true, args: ["--no-sandbox"] });
+const browser = await launchSmokeBrowser();
 const page = await browser.newPage();
 applySmokeTimeout(page);
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
@@ -66,4 +65,5 @@ const ok =
   out.editorState.hasGlobal &&
   out.editorState.hasBridge;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
+
 

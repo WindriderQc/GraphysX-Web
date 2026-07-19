@@ -1,5 +1,4 @@
-import { chromium } from "playwright";
-import { SMOKE_TIMEOUT, applySmokeTimeout } from "./smoke-timeout.mjs";
+import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -25,7 +24,7 @@ const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
 const ART = process.env.SMOKE_ARTIFACTS || "output/smoke";
 mkdirSync(ART, { recursive: true });
 
-const browser = await chromium.launch({ executablePath: EXECUTABLE });
+const browser = await launchSmokeBrowser();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 applySmokeTimeout(page);
 
@@ -212,6 +211,39 @@ try {
   });
   await page.waitForTimeout(600);
 
+  // --- Are playing and editing actually different surfaces? ----------------------------
+  // The route booted into the editor; materialising a playable level must switch the host to
+  // `play` and take the authoring chrome away. Before modes existed, a game HUD sat between a
+  // scene tree and a library palette and the two read as the same screen.
+  out.modes = await page.evaluate(() => {
+    const host = window.__GRAPHYSX_HOST__;
+    const shown = (selector) => {
+      const el = document.querySelector(selector);
+      return !!el && getComputedStyle(el).display !== "none" && el.getBoundingClientRect().height > 0;
+    };
+    return {
+      mode: host.mode,
+      toolbarShown: shown(".gx-ed-toolbar"),
+      panelShown: shown(".gx-ed-panel"),
+      hudShown: shown(".gx-bz-hud"),
+    };
+  });
+
+  // Play mode as the visitor sees it: the level, a HUD, and no authoring chrome at all.
+  await page.screenshot({ path: path.join(ART, "ballz-play.png") });
+
+  // …and play is a place you can leave, back to where you came from.
+  await page.click(".gx-bz-exit");
+  await page.waitForTimeout(400);
+  out.afterExit = await page.evaluate(() => {
+    const host = window.__GRAPHYSX_HOST__;
+    const shown = (selector) => {
+      const el = document.querySelector(selector);
+      return !!el && getComputedStyle(el).display !== "none" && el.getBoundingClientRect().height > 0;
+    };
+    return { mode: host.mode, toolbarShown: shown(".gx-ed-toolbar"), hudGone: !document.querySelector(".gx-bz-hud") };
+  });
+
   // --- Does the human's scene tree reflect an API-driven world? ------------------------
   // Everything above went through the API rather than an editor control, which used to leave
   // the outliner showing whatever it last rendered — the viewport displaying a played level
@@ -229,6 +261,7 @@ try {
       agreesOnCount: readout.includes(String(window.__GRAPHYSX__.state().entities.length)),
     };
   });
+  // The same world back in the editor, for comparison against ballz-play.png above.
   await page.screenshot({ path: path.join(ART, "ballz-level.png") });
 } catch (error) {
   out.fatal = String(error);
@@ -261,7 +294,15 @@ const ok =
   /rings/.test(out.hudText ?? "") &&
   out.outliner?.showsLevel === true &&
   out.outliner?.showsDemoWorld === false &&
-  out.outliner?.agreesOnCount === true;
+  out.outliner?.agreesOnCount === true &&
+  out.modes?.mode === "play" &&
+  out.modes?.toolbarShown === false &&
+  out.modes?.panelShown === false &&
+  out.modes?.hudShown === true &&
+  out.afterExit?.mode === "editor" &&
+  out.afterExit?.toolbarShown === true &&
+  out.afterExit?.hudGone === true;
 
 process.exit(out.fatal || pageErrors.length || consoleErrors.length || !ok ? 1 : 0);
+
 
