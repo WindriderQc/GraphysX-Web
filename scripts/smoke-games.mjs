@@ -38,10 +38,11 @@ try {
   await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: SMOKE_TIMEOUT });
   await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
 
-  // ---- the front door offers more than one destination ----
+  // ---- the front door offers §5's three destinations ----
   out.frontDoor = {
     editorButton: (await page.$(".gx-welcome .gx-go-editor")) !== null,
     gamesButton: (await page.$(".gx-welcome .gx-go-games")) !== null,
+    browseButton: (await page.$(".gx-welcome .gx-go-browse")) !== null,
     mode: await page.evaluate(() => window.__GRAPHYSX_HOST__.mode),
   };
 
@@ -113,6 +114,42 @@ try {
     levelEntities: window.__GRAPHYSX__.query({ tag: "ballz" }).length,
   }));
   await page.screenshot({ path: path.join(ART, "games-returned.png"), fullPage: false });
+
+  // ---- Browse Scenes: the third destination, back at the front door ----
+  // Loading a curated scene must open it in the EDITOR (Browse is "load a scene to work on it"),
+  // not play mode — the distinction the mode split exists to preserve.
+  await page.click(".gx-welcome .gx-go-browse");
+  await page.waitForSelector(".gx-browse", { timeout: SMOKE_TIMEOUT });
+  out.browse = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll(".gx-browse-row")];
+    return {
+      rowCount: rows.length,
+      // Curated starters are the gallery; at least the physics sketchbook should be listed.
+      hasPhysics: rows.some((r) => r.dataset.starterId === "physics-sketchbook"),
+      firstMeta: rows[0]?.querySelector(".gx-browse-meta")?.textContent ?? "",
+      welcomeGone: !document.querySelector(".gx-welcome"),
+    };
+  });
+  await page.screenshot({ path: path.join(ART, "browse-scenes.png"), fullPage: false });
+
+  await page.click('.gx-browse-row[data-starter-id="physics-sketchbook"]');
+  await page.waitForTimeout(700);
+  out.opened = await page.evaluate(() => {
+    const host = window.__GRAPHYSX_HOST__;
+    const shown = (sel) => {
+      const el = document.querySelector(sel);
+      return !!el && getComputedStyle(el).display !== "none" && el.getBoundingClientRect().height > 0;
+    };
+    return {
+      mode: host.mode,
+      // Loaded scene, not play, not the showroom.
+      toolbarShown: shown(".gx-ed-toolbar"),
+      browseGone: (document.querySelector(".gx-browse")) === null,
+      hasSketchbookEntity: window.__GRAPHYSX__.query({ ids: ["ramp-ball"] }).length === 1,
+      showroomEntities: window.__GRAPHYSX__.query({ tag: "showroom" }).length,
+    };
+  });
+  await page.screenshot({ path: path.join(ART, "browse-opened.png"), fullPage: false });
 } catch (e) {
   out.fatal = String(e);
 }
@@ -125,6 +162,7 @@ await browser.close();
 const ok =
   out.frontDoor?.editorButton === true &&
   out.frontDoor?.gamesButton === true &&
+  out.frontDoor?.browseButton === true &&
   out.frontDoor?.mode === "scene" &&
   out.shelf?.rowCount > 0 &&
   out.shelf?.hasFirstCourse === true &&
@@ -142,6 +180,15 @@ const ok =
   out.returned?.welcomeBack === true &&
   out.returned?.hudGone === true &&
   out.returned?.showroomEntities > 0 &&
-  out.returned?.levelEntities === 0;
+  out.returned?.levelEntities === 0 &&
+  out.browse?.rowCount > 0 &&
+  out.browse?.hasPhysics === true &&
+  /entities/.test(out.browse?.firstMeta ?? "") &&
+  out.browse?.welcomeGone === true &&
+  out.opened?.mode === "editor" &&
+  out.opened?.toolbarShown === true &&
+  out.opened?.browseGone === true &&
+  out.opened?.hasSketchbookEntity === true &&
+  out.opened?.showroomEntities === 0;
 
 process.exit(out.fatal || pageErrors.length || consoleErrors.length || !ok ? 1 : 0);

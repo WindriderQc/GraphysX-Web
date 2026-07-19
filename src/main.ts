@@ -58,7 +58,7 @@ if (mode === "legacy") {
       showroomEnvironment?.();
       showroomEnvironment = mountShowroomEnvironment(host.scene, host.renderer);
       interaction?.setEnabled(true);
-      mountWelcome(root, enterEditor, openGames);
+      mountWelcome(root, enterEditor, openGames, openBrowse);
     };
     const openGames = (): void => {
       interaction?.setEnabled(false);
@@ -71,6 +71,21 @@ if (mode === "legacy") {
           onPlay: () => {
             showroomEnvironment?.();
             showroomEnvironment = null;
+          },
+        });
+      });
+    };
+    const openBrowse = (): void => {
+      interaction?.setEnabled(false);
+      void import("./browse-shelf").then(({ mountBrowseShelf }) => {
+        mountBrowseShelf(root, {
+          api: host.api,
+          // A starter replaces the world, so take the showroom's host-mounted set down with it,
+          // then open the loaded scene in the editor — Browse is "load a scene to work on it".
+          onOpen: () => {
+            showroomEnvironment?.();
+            showroomEnvironment = null;
+            void host.enterEditor();
           },
         });
       });
@@ -91,7 +106,7 @@ if (mode === "legacy") {
         ? undefined
         : () => {
             interaction?.setEnabled(true);
-            mountWelcome(root, enterEditor, openGames);
+            mountWelcome(root, enterEditor, openGames, openBrowse);
           },
       // Leaving a game returns to the front door rather than to a chrome-less view of the level
       // you just finished, which would be a dead end with no way onward.
@@ -116,7 +131,7 @@ if (mode === "legacy") {
         // easing; the interaction layer only decides what is worth looking at.
         focusOn: (point, radius) => host.focusOn(point, radius),
       });
-      mountWelcome(root, enterEditor, openGames);
+      mountWelcome(root, enterEditor, openGames, openBrowse);
     }
 
     // Mounted after the showroom composes so there is always something on screen, and only

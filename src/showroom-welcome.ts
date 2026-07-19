@@ -13,6 +13,7 @@ export function mountWelcome(
   container: HTMLElement,
   onEnter: () => void,
   onGames?: () => void,
+  onBrowse?: () => void,
 ): () => void {
   const style = document.createElement("style");
   style.textContent = `
@@ -25,6 +26,7 @@ export function mountWelcome(
     .gx-welcome button{background:linear-gradient(180deg,#2fb6d0,#1d7f96);color:#fff;border:1px solid #4fd0e6;border-radius:12px;padding:12px 24px;font:600 15px system-ui,sans-serif;cursor:pointer;box-shadow:0 8px 30px rgba(30,127,150,.42)}
     .gx-welcome button:hover{filter:brightness(1.08)}
     .gx-welcome .gx-go-games{background:linear-gradient(180deg,#2f9e7f,#1d6f5a);border-color:#5fe0b4;box-shadow:0 8px 30px rgba(29,111,90,.42)}
+    .gx-welcome .gx-go-browse{background:linear-gradient(180deg,#5a6fb0,#3a4a80);border-color:#8fa0e0;box-shadow:0 8px 30px rgba(58,74,128,.42)}
     .gx-welcome .gx-hint{color:#7fc2d3;font-size:12px;text-shadow:0 1px 10px rgba(3,12,20,.8)}
     @media (max-width:640px){
       .gx-welcome{justify-content:center;align-items:flex-end}
@@ -52,6 +54,15 @@ export function mountWelcome(
     games.textContent = "Games & Playgrounds";
     games.addEventListener("click", () => { onGames(); dispose(); });
     overlay.querySelector(".gx-actions")?.append(games);
+  }
+  // §5's third destination. Same rule: added only when wired, so it is never a dead button.
+  if (onBrowse) {
+    const browse = document.createElement("button");
+    browse.type = "button";
+    browse.className = "gx-go-browse";
+    browse.textContent = "Browse Scenes";
+    browse.addEventListener("click", () => { onBrowse(); dispose(); });
+    overlay.querySelector(".gx-actions")?.append(browse);
   }
   container.append(style, overlay);
   return dispose;
