@@ -226,8 +226,12 @@ try {
       toolbarShown: shown(".gx-ed-toolbar"),
       panelShown: shown(".gx-ed-panel"),
       hudShown: shown(".gx-bz-hud"),
+      // The level was just re-materialised, so the HUD must describe THIS level rather than
+      // carrying the previous run's tally. A replay opening on "1 / 1 rings · FINISH" is stale.
+      statusText: document.querySelector(".gx-bz-status")?.textContent ?? "",
     };
   });
+  out.hudResetOnReplay = out.modes.statusText.includes("0 / 1") && !out.modes.statusText.includes("FINISH");
 
   // Play mode as the visitor sees it: the level, a HUD, and no authoring chrome at all.
   await page.screenshot({ path: path.join(ART, "ballz-play.png") });
@@ -299,6 +303,7 @@ const ok =
   out.modes?.toolbarShown === false &&
   out.modes?.panelShown === false &&
   out.modes?.hudShown === true &&
+  out.hudResetOnReplay === true &&
   out.afterExit?.mode === "editor" &&
   out.afterExit?.toolbarShown === true &&
   out.afterExit?.hudGone === true;

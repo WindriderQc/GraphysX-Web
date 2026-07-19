@@ -16,7 +16,11 @@ import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
  * richer — laps, scoring, failure — belongs in a real rules layer above the runtime, and the
  * spec's tenet is that a playground is not a game until that is deliberate.
  */
-export function mountBallzPlay(api: GraphysXAgentWorldApi, container: HTMLElement): () => void {
+export function mountBallzPlay(
+  api: GraphysXAgentWorldApi,
+  container: HTMLElement,
+  onExit?: () => void,
+): () => void {
   const ballId = "ballz-ball";
   const ball = api.query({ ids: [ballId] })[0];
   // A level with no start tile has no ball, and is a layout rather than something to play.
@@ -42,6 +46,16 @@ export function mountBallzPlay(api: GraphysXAgentWorldApi, container: HTMLElemen
   hint.className = "gx-bz-hint";
   hint.textContent = "arrow keys to roll";
   hud.append(status, hint);
+  // Play is a place you can leave. Without this the only way out of a game is a page reload,
+  // which is the sort of dead end that makes a mode feel like a trap rather than a surface.
+  if (onExit) {
+    const exit = document.createElement("button");
+    exit.type = "button";
+    exit.className = "gx-bz-exit";
+    exit.textContent = "✕ Exit play";
+    exit.addEventListener("click", () => onExit());
+    hud.append(exit);
+  }
   container.append(hud);
 
   const render = (): void => {
@@ -100,13 +114,20 @@ function injectStyleOnce(): void {
 }
 
 const BALLZ_PLAY_CSS = `
-/* Top-centre, not bottom-centre: the editor's Library panel occupies the bottom middle of the
-   viewport, and a HUD placed there is in the DOM, styled, and completely invisible behind it.
-   The offset clears the editor toolbar; with no editor mounted it simply sits near the top. */
-.gx-bz-hud{position:absolute;left:50%;top:70px;transform:translateX(-50%);z-index:6;
+/* Top-centre, not bottom-centre. This first shipped at the bottom, where the editor's Library
+   panel covered it completely — in the DOM, correctly styled, and invisible. Play mode now
+   hides the authoring chrome outright, so there is nothing left to dodge, but the top is still
+   the right place for a HUD and a bottom-centre one would break again the moment anything is
+   docked there. */
+.gx-bz-hud{position:absolute;left:50%;top:22px;transform:translateX(-50%);z-index:6;
   display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;
   font:12px/1.2 system-ui,sans-serif;text-shadow:0 1px 3px rgba(0,0,0,.75)}
 .gx-bz-status{color:#eaf6ff;letter-spacing:.08em;font-weight:600}
 .gx-bz-status--won{color:#5fe0b4}
 .gx-bz-hint{color:rgba(234,246,255,.55);font-size:10px;letter-spacing:.06em}
+/* The HUD is pointer-events:none so it never eats a click meant for the scene; the one
+   interactive child opts back in. */
+.gx-bz-exit{pointer-events:auto;margin-top:4px;background:rgba(10,22,30,.72);border:1px solid rgba(120,240,208,.4);
+  border-radius:4px;color:#bff3ff;cursor:pointer;font:10px/1 system-ui,sans-serif;padding:5px 9px}
+.gx-bz-exit:hover{background:rgba(18,40,52,.86);border-color:#78f0d0}
 `;

@@ -30,6 +30,20 @@ import { archiveSkyboxUrls, orientArchiveCubeTexture } from "./archive-skybox";
 // is loaded on demand, so the showroom front door never pays for chrome it keeps hidden.
 import type { PlatformEditor } from "./platform-editor";
 
+/**
+ * The three surfaces a scene can be shown on. They are deliberately exclusive: the same world
+ * is being rendered, but what surrounds it says what the visitor is here to do.
+ *
+ * - `scene`  — the world on its own. No editor chrome, no HUD. The showroom and Browse Scenes.
+ * - `editor` — authoring. Toolbar, scene tree, inspector, library.
+ * - `play`   — a game or playground. Controls and a HUD, no authoring chrome, and a way back.
+ *
+ * Before this existed, playing happened *inside* the editor: a game HUD sat between a scene
+ * tree and a library palette, so editing and playing looked identical. A mode is the smallest
+ * thing that keeps them apart, and it stays in the host because the host owns the chrome.
+ */
+export type PlatformMode = "scene" | "editor" | "play";
+
 export interface PlatformHostOptions {
   /** Initial world to render. Defaults to the built-in demonstration world. */
   world?: AgentWorldDefinition;
@@ -88,6 +102,9 @@ export class PlatformHost {
   private readonly unsubscribeEvents: () => void;
   /** Teardown for the active play layer (arrow keys + HUD), when a playable world is loaded. */
   private playLayer: (() => void) | null = null;
+  private currentMode: PlatformMode = "scene";
+  /** Where to return when play ends — you came from somewhere, and should go back to it. */
+  private modeBeforePlay: PlatformMode = "scene";
   private focusMove: {
     fromPosition: Vector3;
     toPosition: Vector3;
@@ -154,7 +171,21 @@ export class PlatformHost {
     this.unsubscribeEvents = this.world.subscribeEvents((event) => {
       if (event.type !== "world.loaded") return;
       this.applyEnvironment();
-      this.remountPlayLayer();
+      // A world that contains something to play IS a game, however it arrived — the human Play
+      // button, an agent's levels.play(), or a stored scene. Keying on content rather than on
+      // the caller is what keeps those three identical.
+      if (this.api.query({ tag: "player" }).length > 0) {
+        const alreadyPlaying = this.currentMode === "play";
+        this.setMode("play");
+        // A newly loaded world needs a FRESH play layer. setMode early-returns when the mode
+        // has not changed, so replaying a level kept the previous HUD alive and its ring count
+        // carried across — a brand new level opening on "1 / 1 rings · FINISH".
+        if (alreadyPlaying) this.remountPlayLayer();
+      } else if (this.currentMode === "play") {
+        // The world was replaced by something with nothing to play. Leaving the play surface up
+        // over a scene with no ball would be a mode lying about what it contains.
+        this.setMode(this.modeBeforePlay);
+      }
     });
 
     // Full human/agent parity: the same validated API + discoverable bridge the
@@ -167,7 +198,14 @@ export class PlatformHost {
     this.interactive = options.interactive !== false;
     this.autoOrbit = options.autoOrbit === true;
     this.onExitEditor = options.onExitEditor;
-    if (this.interactive && options.editorVisible !== false) void this.editorReady();
+    // The route decides the opening surface: the showroom opens on `scene`, the editor routes
+    // open on `editor`. Set directly rather than through setMode, which would early-return on
+    // the initial value and skip the editor load.
+    if (this.interactive && options.editorVisible !== false) {
+      this.currentMode = "editor";
+      this.modeBeforePlay = "editor";
+      void this.editorReady();
+    }
 
     window.addEventListener("resize", this.onResize);
     this.resize();
@@ -199,6 +237,11 @@ export class PlatformHost {
         // Only offer a way out when there is a showroom to go back to.
         onExit: this.autoOrbit ? () => this.exitEditor() : undefined,
       });
+      // The editor arrives via a dynamic import, so the mode can move on while it is in flight.
+      // A level played before the chunk resolved would otherwise have the authoring chrome pop
+      // in on top of the running game — the editor constructs visible and knew nothing about
+      // modes. Apply whatever the mode is *now*, not what it was when the load started.
+      this.editor.setVisible(this.currentMode === "editor");
       return this.editor;
     });
     return this.editorLoad;
@@ -206,15 +249,13 @@ export class PlatformHost {
 
   /** Reveal the editor and stop the showroom's idle orbit. */
   async enterEditor(): Promise<void> {
-    this.controls.autoRotate = false;
-    const editor = await this.editorReady();
-    editor?.setVisible(true);
+    this.setMode("editor");
+    await this.editorReady();
   }
 
   /** Hide the editor and hand control back to the showroom. */
   exitEditor(): void {
-    this.editor?.setVisible(false);
-    this.controls.autoRotate = this.autoOrbit;
+    this.setMode("scene");
     this.onExitEditor?.();
   }
 
@@ -339,11 +380,46 @@ export class PlatformHost {
    * human Play button, an agent's api.levels.play(), and a stored scene loaded from the browser
    * all behave identically — a level is playable because of what it contains, not how it arrived.
    */
-  private remountPlayLayer(): void {
+  /** The surface currently shown. */
+  get mode(): PlatformMode {
+    return this.currentMode;
+  }
+
+  /**
+   * Switch surfaces. Each mode owns a definite answer for every piece of chrome, so modes
+   * cannot half-apply — the bug this replaces was a HUD mounted on top of the editor because
+   * nothing was responsible for saying "playing means the authoring chrome is gone".
+   */
+  setMode(mode: PlatformMode): void {
+    if (this.disposed || mode === this.currentMode) return;
+    if (mode === "play") this.modeBeforePlay = this.currentMode;
+    this.currentMode = mode;
+
+    // Idle orbit is a screensaver for an unattended scene; it fights both authoring and play.
+    this.controls.autoRotate = this.autoOrbit && mode === "scene";
+
+    // Re-check the mode when the load resolves rather than assuming it still wants the editor:
+    // the same race, from the other direction.
+    if (mode === "editor") void this.editorReady().then((editor) => editor?.setVisible(this.currentMode === "editor"));
+    else this.editor?.setVisible(false);
+
     this.playLayer?.();
     this.playLayer = null;
-    if (this.api.query({ tag: "player" }).length === 0) return;
-    this.playLayer = mountBallzPlay(this.api, this.container);
+    if (mode === "play") this.remountPlayLayer();
+  }
+
+  /** Tear down and rebuild the play layer against whatever world is loaded right now. */
+  private remountPlayLayer(): void {
+    this.playLayer?.();
+    this.playLayer = this.currentMode === "play"
+      ? mountBallzPlay(this.api, this.container, () => this.exitPlay())
+      : null;
+  }
+
+  /** Leave play and go back where you came from. */
+  exitPlay(): void {
+    if (this.currentMode !== "play") return;
+    this.setMode(this.modeBeforePlay);
   }
 
   private tick(): void {
