@@ -426,3 +426,32 @@ after materialising is the host default. The §14.5 shader pass is not done.
 
 **The game-loop ensemble is now complete:** front door → Games shelf → framed play with a HUD →
 win panel → back to the showroom, every step an ordinary API call.
+
+## 2026-07-19 — `overlay-r1`: the 2D layer exists now
+
+- **The single biggest v1 gap, closed.** §8.1 called the 2D overlay "does not exist in any form. No
+  layer concept in `AgentWorldDefinition`", and §13 hangs part of "v1 done" on "a 2D overlay renders
+  over the 3D view." It ships now, graduated exactly the way skyboxes and emitters were: a small
+  registry, a scene-serialisable field, reachable from the API and the editor.
+- **`environment.overlay`** is the layer — off by default (a 2D layer must earn its frame budget,
+  §4), one of three hand-written Canvas2D sketches (`agent-world-overlay.ts`): vignette, starfield,
+  scanlines. New sketches inspired by the archive p5 work, not ports — labelled as such. p5 itself
+  stays opt-in behind this (§4 keeps it optional; it is 900 KB).
+- **The rule that shaped it (§5): never a second `requestAnimationFrame`.** The sketches do not run
+  themselves — `PlatformHost` calls `draw(dt)` from its single `tick()`, in the same frame that
+  renders the 3D scene, so the layers advance together by construction. `smoke-overlay.mjs` proves
+  it the only way that actually holds: over an interval an active overlay advances by *exactly* as
+  many frames as the 3D scene (`frameDelta === overlayDelta`). A second loop would drift; a shared
+  one cannot.
+- **Threaded minimally.** `overlay` is one optional field on `AgentWorldEnvironment`, validated in
+  `resolveEnvironment`, carried by `environment.changed`, round-tripping through export→load like
+  `sky`. It needed *no new API method* — it is set through an ordinary `api.load` — which kept the
+  blast radius to the environment resolver. The editor gained a "2D overlay" dropdown beside Sky,
+  synced on `refresh()` so it cannot go stale (the write-only-dropdown bug, not repeated).
+- Verified: off by default draws nothing, one shared loop, real pixels over the 3D view (vignette
+  darkens the corners while the centre stays transparent so the scene reads through), clears when
+  turned off, survives export→load. `output/verify/overlay-vignette.png`.
+
+**Deliberately deferred, named not hidden:** p5-to-texture (a 2D sketch mapped onto an in-world
+surface), and multi-layer stacks — §4 lists both as "can also"/optional, and one overlay per scene
+is the honest MVP of the layer concept.
