@@ -455,3 +455,29 @@ win panel → back to the showroom, every step an ordinary API call.
 **Deliberately deferred, named not hidden:** p5-to-texture (a 2D sketch mapped onto an in-world
 surface), and multi-layer stacks — §4 lists both as "can also"/optional, and one overlay per scene
 is the honest MVP of the layer concept.
+
+## 2026-07-19 — `browse-r1`: the front door's third destination
+
+- **§5 wants three destinations off the showroom; the third is now live.** Scene Editor and Games
+  were there; **Browse Scenes** was missing because the store-backed browser only mounts when a
+  scene store answers, and production is static. `browse-shelf.ts` adds the always-available half: a
+  gallery of the curated starter scenes (`api.starters()` — real, complete v2 scenes an agent loads
+  the same way), so "load an existing 3D scene" needs no server.
+- **Browse opens a scene in the *editor*, Games enters *play*.** That is the distinction the mode
+  split exists to keep — "load a scene to work on it" versus "play a level." Two focused shelves
+  rather than one parameterised one, so each row's copy stays honest to what clicking it does.
+- **Same no-dead-controls rule:** the Browse button is added only when a handler is wired. The
+  store-backed `scene-browser.ts` still serves *saved* scenes when a store is reachable; this is the
+  gallery of what ships in the static bundle.
+- `smoke-games.mjs` now drives all three destinations and asserts Browse opens a curated scene into
+  the editor (physics-sketchbook's `ramp-ball` present, showroom torn down, toolbar shown) —
+  `output/verify/browse-scenes.png`, `browse-opened.png`.
+
+**Milestone — §13 "v1 done" is essentially met.** Opens into the showroom ✓; reads as a
+create-and-inhabit engine ✓; navigates to editor, games and a scene gallery ✓; a scene with physics
+✓, a particle system ✓, and living Nature-of-Code behaviours (flock + force fields) ✓; a 2D overlay
+over the 3D view ✓; an agent acts in the same scene a human is in ✓; save/load/export ✓; honest,
+product-scoped version text ✓; no archive-player menu as a competing front door ✓; and a game
+rebuilt on the platform, played to a win ✓. Remaining spec items (DNA/evolutionary entities, crowds,
+the recovered CubX assembly, audio, a ballz shader pass, high-res skies) are enrichments beyond the
+v1 bar, not gaps in it.
