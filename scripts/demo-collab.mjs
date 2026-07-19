@@ -135,10 +135,13 @@ try {
   });
   note("5 arrives", `visible: ${result.agentChangeVisible}, panel says: "${result.announcement}"`);
 
-  // --- 6. the honest part: what the human was doing did not survive --------------
+  // --- 6. the point of the relay: the human's work survives -----------------------
+  // Milestone A reloaded the whole document on every remote change, so this was false and
+  // the ball ceased to exist because someone else lit a campfire. The relay sends the
+  // commands instead, so only what the agent named actually changes.
   result.humanBallAfter = await page.evaluate(() =>
     window.__GRAPHYSX__.state().entities.some((entity) => entity.id === "human-ball"));
-  note("6 limit", `human's thrown ball still there after the agent's edit: ${result.humanBallAfter}`);
+  note("6 survives", `human's thrown ball still there after the agent's edit: ${result.humanBallAfter}`);
 
   // --- 7. the document stayed clean ---------------------------------------------
   const stored = await openScene(store.url, "village");

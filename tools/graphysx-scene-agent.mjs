@@ -69,113 +69,31 @@ function vector(value, label) {
 }
 
 /**
- * Applies one command to a definition in place. Kept narrow and loud: an agent sending a
- * malformed command should get a clear error here rather than a scene that fails to load
- * in the browser twenty seconds later.
+ * Document semantics live in server/scene-commands.mjs — the store arbitrates what a
+ * change means, and this tool is a client of that rather than a second implementation of
+ * it. Re-exported so existing callers keep working.
  */
-function applyCommand(definition, command) {
-  const entities = definition.entities;
+export { applyCommands } from "../server/scene-commands.mjs";
 
-  if (command.op === "spawn") {
-    const entity = command.entity;
-    if (!entity || typeof entity !== "object") throw new SceneAgentError("spawn requires an entity");
-    if (!entity.type) throw new SceneAgentError("spawn requires an entity type");
-    // Editing the store is authoring, so everything written here persists by definition.
-    // Throwing something into a scene someone is living in is a live-channel act and has
-    // no document to land in — that arrives with milestone B.
-    if (entity.ephemeral) {
-      throw new SceneAgentError("Cannot store a session-only entity: the scene store holds authored content, not session state");
-    }
-    if (entity.id !== undefined && !ID_PATTERN.test(entity.id)) throw new SceneAgentError(`Invalid entity id: ${entity.id}`);
-    const id = entity.id ?? `agent-${Math.abs(hashString(JSON.stringify(entity) + entities.length)).toString(36).slice(0, 8)}`;
-    if (entities.some((existing) => existing.id === id)) throw new SceneAgentError(`Entity id already exists: ${id}`);
-    entities.push({ ...entity, id });
-    return { op: "spawn", id };
-  }
-
-  if (command.op === "update") {
-    const index = entities.findIndex((entity) => entity.id === command.id);
-    if (index === -1) throw new SceneAgentError(`Unknown entity: ${command.id}`);
-    const current = entities[index];
-    const patch = command.patch ?? {};
-    // Merge one level deep for the nested groups an agent actually patches; a shallow
-    // spread would silently drop the rest of a transform when only `position` is sent.
-    entities[index] = {
-      ...current,
-      ...patch,
-      transform: patch.transform ? { ...current.transform, ...patch.transform } : current.transform,
-      material: patch.material ? { ...current.material, ...patch.material } : current.material,
-      physics: patch.physics === null ? undefined : patch.physics ? { ...current.physics, ...patch.physics } : current.physics,
-    };
-    return { op: "update", id: command.id };
-  }
-
-  if (command.op === "remove") {
-    const index = entities.findIndex((entity) => entity.id === command.id);
-    if (index === -1) throw new SceneAgentError(`Unknown entity: ${command.id}`);
-    // Children would otherwise dangle onto a parent that no longer exists.
-    const removed = [command.id];
-    for (let pass = 0; pass < entities.length; pass += 1) {
-      for (const entity of entities) {
-        if (entity.parentId && removed.includes(entity.parentId) && !removed.includes(entity.id)) removed.push(entity.id);
-      }
-    }
-    definition.entities = entities.filter((entity) => !removed.includes(entity.id));
-    return { op: "remove", ids: removed };
-  }
-
-  if (command.op === "set-environment") {
-    definition.environment = { ...definition.environment, ...command.environment };
-    return { op: "set-environment" };
-  }
-
-  throw new SceneAgentError(`Unsupported command for document editing: ${command.op}`);
-}
-
-function hashString(value) {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) hash = (Math.imul(31, hash) + value.charCodeAt(index)) | 0;
-  return hash;
-}
-
-export function applyCommands(definition, commands) {
-  if (!Array.isArray(commands) || commands.length === 0) throw new SceneAgentError("At least one command is required");
-  const next = structuredClone(definition);
-  if (next.schema !== WORLD_SCHEMA) throw new SceneAgentError(`Scene schema must be ${WORLD_SCHEMA}`);
-  if (!Array.isArray(next.entities)) throw new SceneAgentError("Scene entities must be an array");
-  const outputs = commands.map((command) => applyCommand(next, command));
-  return { definition: next, outputs };
-}
-
-/** A short human sentence for the change, used when the caller does not supply an intent. */
-function describe(commands, outputs) {
-  if (commands.length === 1) {
-    const [command] = commands;
-    if (command.op === "spawn") return `added ${command.entity.label ?? command.entity.type} ${outputs[0]?.id ?? ""}`.trim();
-    if (command.op === "remove") return `removed ${outputs[0]?.ids?.join(", ") ?? command.id}`;
-    if (command.op === "update") return `changed ${command.id}`;
-    if (command.op === "set-environment") return "changed the environment";
-  }
-  return `applied ${commands.length} changes`;
-}
 
 /**
  * Read, apply, write — retrying from a fresh read when someone else got there first.
  * This is the whole agent write path.
  */
 export async function editScene(baseUrl, name, commands, { retries = DEFAULT_RETRIES, actor = "agent", intent = null } = {}) {
+  const list = Array.isArray(commands) ? commands : [commands];
   let attempt = 0;
   for (;;) {
     const record = await openScene(baseUrl, name);
-    const { definition, outputs } = applyCommands(record.definition, commands);
     try {
-      // Attribution is what makes a shared scene legible: the browser shows "hermes added a
-      // red cube", not "revision 14".
-      const result = await putScene(baseUrl, name, definition, record.revision, {
-        actor,
-        intent: intent ?? describe(commands, outputs),
+      // Post the commands, not the resulting document. The store applies them and
+      // broadcasts them to everyone watching, so a human in the scene keeps whatever they
+      // were doing instead of having their world reloaded underneath them.
+      return await api(baseUrl, `/scenes/${encodeURIComponent(name)}/changes`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ commands: list, actor, intent, expectedRevision: record.revision }),
       });
-      return { ...result, outputs };
     } catch (error) {
       if (error.status === 409 && attempt < retries) {
         attempt += 1;
@@ -309,3 +227,4 @@ if (process.argv[1] && process.argv[1].endsWith("graphysx-scene-agent.mjs")) {
     process.exitCode = 1;
   });
 }
+

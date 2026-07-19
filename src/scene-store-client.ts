@@ -173,11 +173,21 @@ export type SceneStoreSessionOptions = {
  * and the agent are not expected to be acting in the same second; the live channel is what
  * fixes it, and this is the thing that proves the loop is worth building.
  */
+/** A change broadcast by the relay: commands to apply, or a flag saying reload instead. */
+export type SceneStoreDelta = SceneStoreAttribution & {
+  name: string;
+  revision: number;
+  parentRevision: number | null;
+  commands?: unknown[];
+  replaced?: boolean;
+};
+
 export function connectSceneStore(options: SceneStoreSessionOptions): SceneStoreSession {
   const { api, client, name, actor = "browser", pollMs = 2000, onPulled, onError, onOnlineChange } = options;
   let loadedRevision: number | null = null;
   let loadedAttribution: SceneStoreAttribution = { actor: null, intent: null };
   let timer: number | null = null;
+  let source: EventSource | null = null;
   let stopped = false;
   let online: boolean | null = null;
   // Guards against a poll landing on top of an in-flight pull or push and re-loading a
@@ -235,7 +245,66 @@ export function connectSceneStore(options: SceneStoreSessionOptions): SceneStore
     }
   };
 
+  /**
+   * Apply a relay delta to the live world.
+   *
+   * The reason milestone B exists: `api.transaction(commands)` changes only what the
+   * command names, so everything else survives — a ball mid-flight, physics state, the
+   * entity you were dragging. Reloading the document, which is what polling did, threw all
+   * of that away every time anyone else touched the scene.
+   */
+  const applyDelta = (delta: SceneStoreDelta): void => {
+    // A whole-document write, or a delta that does not follow from what we have. Neither
+    // can be applied as commands, so fall back to the blunt path rather than guessing.
+    if (delta.replaced || !Array.isArray(delta.commands) || (loadedRevision !== null && delta.parentRevision !== loadedRevision)) {
+      void pull(true).catch((error) => onError?.(error));
+      return;
+    }
+    const result = api.transaction(delta.commands as Parameters<typeof api.transaction>[0]);
+    if (!result.ok) {
+      // Our world disagrees with the store's. Resync rather than drift silently.
+      onError?.(new Error(`Could not apply delta ${delta.revision}: ${result.error ?? "rejected"}`));
+      void pull(true).catch((error) => onError?.(error));
+      return;
+    }
+    loadedRevision = delta.revision;
+    loadedAttribution = { actor: delta.actor ?? null, intent: delta.intent ?? null };
+    onPulled?.(
+      { schema: SCENE_STORE_SCHEMA, name, revision: delta.revision, updatedAt: new Date().toISOString(), actor: delta.actor ?? null, intent: delta.intent ?? null, definition: api.exportDocument()! },
+      true,
+    );
+  };
+
+  const listen = (): void => {
+    if (typeof EventSource === "undefined") return;
+    // EventSource reconnects on its own and replays Last-Event-ID, so a dropped connection
+    // resumes from the last delta rather than reloading the world.
+    source = new EventSource(`${client.baseUrl}/scenes/${encodeURIComponent(name)}/stream`);
+    source.addEventListener("hello", (event) => {
+      const hello = JSON.parse((event as MessageEvent<string>).data) as { revision: number; mustReload?: boolean };
+      setOnline(true);
+      // Behind by more than the relay can bridge, or joining fresh: take the document.
+      if (hello.mustReload || loadedRevision === null || hello.revision !== loadedRevision) {
+        void pull(true).catch((error) => onError?.(error));
+      }
+    });
+    source.onmessage = (event) => {
+      try {
+        applyDelta(JSON.parse(event.data) as SceneStoreDelta);
+      } catch (error) {
+        onError?.(error);
+      }
+    };
+    source.onerror = () => {
+      // EventSource retries by itself; the poll below is the safety net if it cannot.
+      setOnline(false);
+    };
+  };
+
+  listen();
   if (pollMs > 0) {
+    // Kept as a backstop, not the primary path: if the stream is blocked by a proxy or the
+    // browser has no EventSource, the session still converges — just bluntly.
     timer = window.setInterval(() => void tick(), pollMs);
   }
 
@@ -249,6 +318,8 @@ export function connectSceneStore(options: SceneStoreSessionOptions): SceneStore
       stopped = true;
       if (timer !== null) window.clearInterval(timer);
       timer = null;
+      source?.close();
+      source = null;
     },
   };
 }

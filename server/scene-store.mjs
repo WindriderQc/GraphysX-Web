@@ -16,6 +16,7 @@ import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyCommands, describeCommands } from "./scene-commands.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..");
@@ -201,8 +202,76 @@ async function readJsonBody(request, limitBytes = 8 * 1024 * 1024) {
   }
 }
 
+/**
+ * The relay: everyone watching a scene, and the recent deltas they may have missed.
+ *
+ * Milestone B. Until now a remote change was noticed by polling a revision and then
+ * *reloading the whole document*, which discarded everything the person watching was doing
+ * — a thrown ball died every time an agent moved a crate. That is turn-taking, not
+ * collaboration. Broadcasting the commands instead lets each client apply the same change
+ * to its live world and keep the rest.
+ *
+ * Server-Sent Events rather than WebSockets: it is a few lines on node:http with no
+ * dependency, needs no upgrade block in nginx, and EventSource reconnects on its own with
+ * Last-Event-ID — which is exactly the resume-from-a-sequence-number shape the runtime's
+ * event stream already uses. The traffic is deltas down and commands up over ordinary POST,
+ * so the half of WebSockets we would use is the half SSE already gives us.
+ */
+function createRelay() {
+  /** scene name → set of open response streams. */
+  const subscribers = new Map();
+  /** scene name → recent deltas, so a reconnecting client can catch up rather than reload. */
+  const backlog = new Map();
+  const BACKLOG = 128;
+
+  return {
+    subscribe(name, response) {
+      const set = subscribers.get(name) ?? new Set();
+      set.add(response);
+      subscribers.set(name, set);
+      return () => {
+        set.delete(response);
+        if (set.size === 0) subscribers.delete(name);
+      };
+    },
+
+    /** Deltas after `sinceRevision`, or null when the gap is too old to bridge. */
+    catchUp(name, sinceRevision) {
+      const entries = backlog.get(name) ?? [];
+      if (entries.length === 0) return [];
+      const oldest = entries[0].revision;
+      // The client is further behind than we can prove; it must reload rather than be told
+      // a partial story.
+      if (sinceRevision + 1 < oldest) return null;
+      return entries.filter((entry) => entry.revision > sinceRevision);
+    },
+
+    publish(name, delta) {
+      const entries = backlog.get(name) ?? [];
+      entries.push(delta);
+      while (entries.length > BACKLOG) entries.shift();
+      backlog.set(name, entries);
+
+      const payload = `id: ${delta.revision}\ndata: ${JSON.stringify(delta)}\n\n`;
+      for (const response of subscribers.get(name) ?? []) {
+        // A dead socket must not take the write path down with it.
+        try {
+          response.write(payload);
+        } catch {
+          // The 'close' handler will unsubscribe it.
+        }
+      }
+    },
+
+    subscriberCount(name) {
+      return subscribers.get(name)?.size ?? 0;
+    },
+  };
+}
+
 export function createSceneStoreServer({ dir } = {}) {
   const store = createSceneStore({ dir });
+  const relay = createRelay();
 
   const server = createServer((request, response) => {
     void (async () => {
@@ -223,6 +292,92 @@ export function createSceneStoreServer({ dir } = {}) {
 
         const sceneMatch = /^\/scenes\/([^/]+)$/.exec(path);
         const revisionMatch = /^\/scenes\/([^/]+)\/revision$/.exec(path);
+        const streamMatch = /^\/scenes\/([^/]+)\/stream$/.exec(path);
+        const changesMatch = /^\/scenes\/([^/]+)\/changes$/.exec(path);
+
+        // --- the live feed --------------------------------------------------------
+        if (streamMatch && request.method === "GET") {
+          const name = decodeURIComponent(streamMatch[1]);
+          assertName(name);
+          const record = await store.get(name);
+          if (!record) return send(response, 404, { error: `Unknown scene: ${name}` });
+
+          // EventSource replays its last id on reconnect; honour it so a dropped
+          // connection resumes rather than forcing a reload.
+          const lastEventId = Number(request.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0);
+          const missed = Number.isFinite(lastEventId) && lastEventId > 0 ? relay.catchUp(name, lastEventId) : [];
+
+          response.writeHead(200, {
+            "content-type": "text/event-stream; charset=utf-8",
+            "cache-control": "no-store",
+            connection: "keep-alive",
+            // Proxies that buffer will hold events until the buffer fills, which turns a
+            // live feed into a batch one. nginx honours this.
+            "x-accel-buffering": "no",
+            "access-control-allow-origin": "*",
+          });
+
+          // The client needs to know where it stands before any delta arrives, and whether
+          // catching up was even possible.
+          response.write(`event: hello\ndata: ${JSON.stringify({
+            name,
+            revision: record.revision,
+            resumed: missed !== null && lastEventId > 0,
+            mustReload: missed === null,
+          })}\n\n`);
+          for (const delta of missed ?? []) response.write(`id: ${delta.revision}\ndata: ${JSON.stringify(delta)}\n\n`);
+
+          // Idle connections get closed by intermediaries; a comment line is a no-op that
+          // keeps them open without being delivered as an event.
+          const heartbeat = setInterval(() => {
+            try {
+              response.write(": ping\n\n");
+            } catch {
+              // Cleanup happens on close.
+            }
+          }, 25000);
+          const unsubscribe = relay.subscribe(name, response);
+          request.on("close", () => {
+            clearInterval(heartbeat);
+            unsubscribe();
+          });
+          return undefined;
+        }
+
+        // --- commands in, delta out ------------------------------------------------
+        if (changesMatch && request.method === "POST") {
+          const name = decodeURIComponent(changesMatch[1]);
+          assertName(name);
+          const body = await readJsonBody(request);
+          const record = await store.get(name);
+          if (!record) return send(response, 404, { error: `Unknown scene: ${name}` });
+          if (body?.expectedRevision !== undefined && body.expectedRevision !== record.revision) {
+            return send(response, 409, {
+              error: `Revision conflict: expected ${body.expectedRevision}, current ${record.revision}`,
+              revision: record.revision,
+            });
+          }
+
+          const commands = Array.isArray(body?.commands) ? body.commands : [body?.commands];
+          const { definition, outputs } = applyCommands(record.definition, commands);
+          const actor = body?.actor ?? null;
+          const intent = body?.intent ?? describeCommands(commands, outputs);
+          const written = await store.put(name, definition, record.revision, { actor, intent });
+
+          // The delta, not the document. This is the whole point of milestone B: a client
+          // applies these commands to its live world and keeps everything else — the ball
+          // it just threw, the physics mid-flight, where it was looking.
+          relay.publish(name, {
+            name,
+            revision: written.revision,
+            parentRevision: record.revision,
+            actor,
+            intent: written.intent,
+            commands,
+            outputs,
+          });
+          return send(response, 200, { ...written, outputs, subscribers: relay.subscriberCount(name) });
+        }
 
         // A deliberately tiny endpoint: the browser polls this every couple of seconds
         // and only pulls the whole document when the number actually moves.
@@ -259,6 +414,17 @@ export function createSceneStoreServer({ dir } = {}) {
             const result = await store.put(name, definition, expectedRevision, {
               actor: body?.actor ?? null,
               intent: body?.intent ?? null,
+            });
+            // A whole-document write cannot be expressed as commands, so subscribers are
+            // told to reload rather than handed a delta they cannot apply. Honest, and rare
+            // — this is the seed/import path, not the editing one.
+            relay.publish(name, {
+              name,
+              revision: result.revision,
+              parentRevision: expectedRevision ?? null,
+              actor: result.actor,
+              intent: result.intent,
+              replaced: true,
             });
             return send(response, result.created ? 201 : 200, result);
           }
