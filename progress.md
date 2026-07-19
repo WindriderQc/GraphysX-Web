@@ -152,10 +152,26 @@ Original prompt: "lets go then, lets make this happen!!"
   a much lower fill — measured against all six sets, `clearblue` is 512 px and reads muddy brown at
   play angles. An ordinary per-scene field, so a level can be re-skied from the inspector.
 
-**Still open on this path:** there is no Play button in the Levels workbench yet — `levels.play()` is
-reachable from the agent API and the bridge, not from the human UI, which is the exact inverse of the
-gap it just fixed. Camera framing after materialising is the host default rather than fitted to the
-level. Neither is hidden behind a green gate; both are listed here.
+**Closed straight after:** the Levels workbench now has a **Play** button, calling the same
+`api.levels.play(id)` an agent calls — no privileged path, just a reachable one. Driving it turned up
+a third parity bug of the same family: the Environment **sky dropdown was write-only**. It is built
+exactly once, at panel construction, so it pushed a sky into the world and never read one back — it
+went stale the moment anything *else* set the sky (a starter, a stored scene, an agent `api.create`,
+or play), leaving the inspector reading "No sky" over a viewport plainly rendering one. `refresh()`
+now re-syncs it, skipped while it has focus so a re-sync cannot yank the list out from under a
+selection in progress. Covered by a `skyDropdownAgrees` assertion in `smoke-levels.mjs`.
+
+**A self-inflicted bug worth recording**, because it argues for the strict-assertion rule: inserting
+the Play button silently deleted the Close button's click handler (it was inside the edit's replaced
+region). Nothing about the UI *looked* wrong — the button was still there, still styled, still
+hit-testable. The existing smoke caught it within one run purely because it asserts the panel
+actually closes rather than that a close button exists. The new Play assertions were then placed
+**last** in that smoke, so the original sequence keeps exercising exactly what it always did; an
+earlier placement reopened the panel mid-flow and broke the close assertion.
+
+**Still open on this path:** camera framing after materialising is the host default rather than
+fitted to the level — play a 44x30 level and the floor slab fills the viewport. No shader pass. Ice
+models low friction but not the tile'"'"'s attraction. None of it is hidden behind a green gate.
 
 
 ### Gate finding: the verify harness resets connections, and it is NOT the product

@@ -251,13 +251,22 @@ map-editor UI on the default host (its data model already graduated into
 `agent-level-library.ts` and is reachable via `api.levels`).
 
 **Update (`levels-r1`):** the level *data* model was already graduated; what was missing was that
-nothing could turn a grid into a scene. `levels.play()` now materialises one (§14 phase 5), so the
-remaining map-editor gap is specifically the **human** half — there is no Play control in the
-workbench, only the agent API and the bridge. Two render defects were found and fixed on the way,
-both of which had been passing a green gate: `castShadow` on a v2 directional light only affected a
-±5 box at the origin, and an environment authored by an *agent* was stored but never applied to the
-viewport, while the same edit from the *human* inspector was — a direct, silent violation of
-pillar §3.2 ("the editor and the agent API produce the identical revision").
+nothing could turn a grid into a scene. `levels.play()` now materialises one (§14 phase 5), and the
+workbench has a Play button, so the map-editor is reachable from both sides — **this line item is
+done.** Three defects were found and fixed on the way, all of which had been passing a green gate,
+and all three are the same bug wearing different hats — a surface that writes state without ever
+reading it back:
+
+- `castShadow` on a v2 directional light only affected a ±5 box at the origin, so the flag read as
+  honoured while casting nothing.
+- An environment authored by an *agent* was stored but never applied to the viewport, while the
+  identical edit from the *human* inspector was.
+- The inspector's own sky dropdown was write-only, so it went stale the moment anything other than
+  itself set the sky — reading "No sky" over a viewport plainly rendering one.
+
+The middle two are direct, silent violations of pillar §3.2 ("the editor and the agent API produce
+the identical revision"). Parity is not only about *commits* landing in one history; it is about
+both surfaces reading the same world back.
 
 **Known defect, not addressed here:** the `terrain` heightfield collider and its visual mesh
 disagree near the edge of a `flattenRadius` pad by roughly one cell. A dynamic body that lands
@@ -395,8 +404,11 @@ Foundation before flourish. Each phase is shippable and course-correctable.
    its own radius on the floor, rests *on top of* a wall rather than tunnelling through it, and
    crossing the gate fires `trigger.enter` exactly once.
 
-   **Not yet, and not hidden:** no shader pass. No Play button in the Levels workbench — play is
-   reachable from the agent API and the tool bridge but not from the human UI, which is the exact
-   inverse of the parity gap it just fixed. Camera framing after materialising is the host default
-   rather than fitted to the level. Ice tiles model low friction but not the tile's attraction.
-   This is a level that runs, not yet a game that ships.
+   The Levels workbench has a **Play** button, calling the same `api.levels.play(id)` an agent
+   calls — so the level tool is now reachable from both sides, which is the parity claim rather
+   than a convenience.
+
+   **Not yet, and not hidden:** no shader pass. Camera framing after materialising is the host
+   default rather than fitted to the level — play a 44×30 level and the floor slab fills the
+   viewport. Ice tiles model low friction but not the tile's attraction. This is a level that
+   runs, not yet a game that ships.
