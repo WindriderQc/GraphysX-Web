@@ -204,3 +204,47 @@ active in, and the honest state is that `npm run verify` currently needs re-runn
 result. A red run whose failures are network-shaped and uniform across unrelated routes is this bug;
 a red run that is structural and reproducible is real. CI runs on a clean runner and still gates
 production, so a deploy is not exposed to it.
+
+## 2026-07-19 — `levels-r2`: a level you can actually play
+
+- **A level that renders but cannot be controlled is a diorama.** `levels-r1` materialised a grid
+  into a physically real scene; nothing could move the ball. Two things close the loop: steering and
+  feedback.
+- **Steering lives ON the ball**, as four `apply-impulse` interactions. There is no impulse call in
+  the public API — impulses exist *only* as an entity's interaction — so this is not a workaround,
+  it is the only way to push anything. The consequence is the good part: the control scheme is scene
+  data. It serialises, and a human's arrow key and an agent's `api.interact` are literally the same
+  operation. Arrow keys rather than WASD, because the editor already binds W/E/R to gizmo modes.
+- **`src/ballz-play.ts` is deliberately not a game engine.** It holds no scene state — rings collect
+  themselves through their own trigger interaction and this layer only *observes* it. Delete the file
+  and the level still simulates correctly, which is the test for whether a host layer has quietly
+  become the product. Rules stop at a status line; laps, scoring and failure belong in a real rules
+  layer, and §11 says a playground is not a game until that is deliberate.
+- **Mounted by `PlatformHost` on `world.loaded`, keyed on a `player`-tagged entity — not by the Play
+  button.** Keying on what the world *contains* rather than how it arrived means the human button, an
+  agent's `levels.play()`, and a stored scene all produce the same playable result. Mounting it in
+  the button would have handed agents a level nobody could control — the same parity asymmetry this
+  session already fixed twice, and the first version of this change had exactly that bug.
+
+### Two more defects found by looking at the screenshot, not the gate
+
+- **The HUD was invisible.** It shipped at bottom-centre, where it sat in the DOM, correctly styled,
+  and completely hidden behind the editor's Library panel. The assertion was `page.$(".gx-bz-hud")`
+  — presence, not visibility — and it passed the whole time. Moved to top-centre; the smoke now
+  hit-tests the status line's own centre and fails if anything opaque is stacked in front.
+- **The editor's outliner never tracked API-driven change.** Every editor control called `refresh()`
+  itself, so the panel was correct after a *human* edit and stale after everything else — an agent
+  spawn, `api.load`, a stored scene, `levels.play()`. It was plainly visible once looked at: the
+  viewport rendering a played level while the scene tree still listed the demo world at rev 0.
+  `PlatformEditor` now subscribes to the runtime's event stream, coalesced onto one animation frame
+  so a spawn burst rebuilds the DOM once rather than per event. Asserted in `smoke-ballz.mjs`: after
+  an entirely API-driven sequence the tree shows `ballz-` entities, shows no demo-world entities, and
+  its entity count agrees with `api.state()`.
+
+**This is the fourth instance of one bug this session** — a surface that writes state without ever
+reading it back. `castShadow` claimed without casting; an agent's sky stored but never applied; the
+inspector's own dropdown never re-read; and now the outliner. Parity is not only about commits
+landing in one history. It is about every surface reading the same world back.
+
+**Still open:** camera framing after materialising is the host default rather than fitted to the
+level. No shader pass. Ice models low friction but not the tile's attraction.
