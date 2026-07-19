@@ -404,3 +404,25 @@ after materialising is the host default. The §14.5 shader pass is not done.
   distinct from the showroom target) and that the ease has settled. `output/verify/games-playing.png`
   now shows the whole maze square in frame with all rings and the ball visible — the last named rough
   edge in the play loop, closed.
+
+## 2026-07-19 — `win-state`: the game loop closes
+
+- **The finish was a rubber stamp.** It appended "FINISH" to the HUD the instant the gate fired,
+  regardless of rings — displayed, not earned. The level is now won only by collecting every ring
+  and *then* reaching the finish. Crossing it early does not count, which is what makes the rings
+  matter rather than being scenery you can ignore.
+- **Collection is a `Set` of ring ids in the play layer**, so rolling back through a ring already
+  taken cannot inflate the tally the way the old raw counter did — monotonic and unique by
+  construction. This is *rules* state, not scene state: the runtime deliberately refuses to judge
+  what a crossing means, and the play layer is the layer that does. The scene stays self-sufficient
+  — rings still hide via their own trigger interaction, so deleting `ballz-play.ts` leaves a level
+  that still simulates, just without a scorekeeper.
+- **A completion panel** replaces the HUD on a win — "✓ Level Complete", with **Play again** (which
+  re-materialises the same level) and **Back to games**. No caller threads the level id: the panel
+  recovers it from the world id (`composeBallzLevel` names the world `ballz-level-<id>`), reading
+  what it needs out of the scene it stands in.
+- `smoke-ballz` proves the rule both ways — finish-with-rings-out does not win, rings-then-finish
+  does — judged by the play layer's own poll, captured as `output/verify/ballz-win.png`.
+
+**The game-loop ensemble is now complete:** front door → Games shelf → framed play with a HUD →
+win panel → back to the showroom, every step an ordinary API call.
