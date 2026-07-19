@@ -65,7 +65,7 @@ try {
 
   // ---- play it ----
   await page.click('.gx-shelf-row[data-level-id="first-course"]');
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(1400);
   out.playing = {
     mode: await page.evaluate(() => window.__GRAPHYSX_HOST__.mode),
     hudShown: await shown(".gx-bz-hud"),
@@ -77,6 +77,20 @@ try {
     // would mean the world was added to rather than replaced.
     showroomEntities: await page.evaluate(() => window.__GRAPHYSX__.query({ tag: "showroom" }).length),
   };
+
+  // Play frames the level rather than inheriting the showroom's off-axis overview: the orbit
+  // pivot should be on the level centre (near the origin for a centred course), not the
+  // showroom target of [-0.5, 3.4, -5], and the ease should have settled.
+  out.framing = await page.evaluate(() => {
+    const host = window.__GRAPHYSX_HOST__;
+    const t = host.orbitTarget;
+    return { targetX: t.x, targetY: t.y, targetZ: t.z, settled: !host.focusing };
+  });
+  out.framedOnLevel =
+    out.framing.settled &&
+    Math.abs(out.framing.targetX) < 3 &&
+    Math.abs(out.framing.targetZ) < 3 &&
+    Math.abs(out.framing.targetY - 3.4) > 0.5;
 
   // The level is playable, not just displayed. One real key event is enough here — the physics
   // of it is smoke-ballz's job.
@@ -123,6 +137,7 @@ const ok =
   out.playing?.levelEntities > 20 &&
   out.playing?.showroomEntities === 0 &&
   out.ballResponds === true &&
+  out.framedOnLevel === true &&
   out.returned?.mode === "scene" &&
   out.returned?.welcomeBack === true &&
   out.returned?.hudGone === true &&

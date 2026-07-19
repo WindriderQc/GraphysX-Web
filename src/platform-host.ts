@@ -175,6 +175,14 @@ export class PlatformHost {
     // Subscribing to `world.loaded` fixes it for every caller at once rather than asking each
     // one to remember. Push-based, so it costs nothing per frame.
     this.unsubscribeEvents = this.world.subscribeEvents((event) => {
+      // `environment.changed` is the same fix for a second entry point: an agent editing the
+      // environment through `api.transaction([{ op: "set-environment" }])` never emits
+      // `world.loaded`, so without this its new sky/background would be stored and never
+      // rendered — exactly the parity gap the comment above describes.
+      if (event.type === "environment.changed") {
+        this.applyEnvironment();
+        return;
+      }
       if (event.type !== "world.loaded") return;
       this.applyEnvironment();
       // A world that contains something to play IS a game, however it arrived — the human Play
@@ -421,6 +429,50 @@ export class PlatformHost {
     this.playLayer = this.currentMode === "play"
       ? mountBallzPlay(this.api, this.container, () => this.exitPlay())
       : null;
+    if (this.currentMode === "play") this.frameOnPlay();
+  }
+
+  /**
+   * Frame the camera on the whole level when play begins.
+   *
+   * Until now play inherited whatever framing the previous surface left — the showroom's
+   * off-axis overview, tuned for the showroom composition — so a level was seen at a
+   * coincidental angle: a big one overflowed, a small one sat lost in the frame, and the ball
+   * was never the subject. A game wants a deliberate, repeatable view of the board.
+   *
+   * Framed on `ballz-floor` rather than the world's bounding box on purpose. The floor slab is
+   * exactly the play footprint; the world also contains the terrain pad and the hills beyond
+   * it, and fitting those would pull the camera back until the maze was a detail. The host
+   * already reads the `player` tag to know it is in a game, so reading the floor is the same
+   * tier of knowledge, not a new dependency.
+   */
+  private frameOnPlay(): void {
+    const floor = this.api.query({ ids: ["ballz-floor"] })[0];
+    if (!floor) return;
+    const center = new Vector3(...floor.position);
+    const span = Math.max(floor.geometry.width, floor.geometry.depth);
+
+    // Distance that fits `span` across the narrower (vertical) field of view, with margin so
+    // the walls at the rim are not flush against the frame edge. The board foreshortens along
+    // the view direction, so fitting the vertical extent covers the horizontal one too.
+    const vfov = (this.camera.fov * Math.PI) / 180;
+    const distance = (span * 0.5) / Math.tan(vfov / 2) * 1.25;
+
+    // One consistent game angle: from +z and well above, looking down the board. A fixed
+    // direction is the point — every level opens the same way, so the control scheme (up = away)
+    // always matches what the player sees.
+    const direction = new Vector3(0, 0.82, 0.9).normalize();
+    const toPosition = center.clone().addScaledVector(direction, distance);
+
+    this.controls.autoRotate = false;
+    this.focusMove = {
+      fromPosition: this.camera.position.clone(),
+      toPosition,
+      fromTarget: this.controls.target.clone(),
+      toTarget: center,
+      elapsed: 0,
+      duration: 0.9,
+    };
   }
 
   /** Leave play and go back where you came from. */
