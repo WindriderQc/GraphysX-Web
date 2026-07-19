@@ -79,8 +79,8 @@ export const GRAPHYSX_AGENT_WORLD_SKIES = [
     id: "nightsky",
     label: "Night Sky (high-res)",
     basePath: "/assets/sky/nightsky",
-    extension: "bmp",
-    description: "Dense starfield. Highest fidelity set, but 18 MB of uncompressed BMP — prefer Clear Night unless the stars are the subject.",
+    extension: "jpg",
+    description: "Dense starfield at 1024². The highest-fidelity night set — pick this when the stars are the subject, Clear Night when they are only a backdrop.",
     resolution: 1024,
     horizonColor: "#0c1320",
     source: "GraphysX archive"

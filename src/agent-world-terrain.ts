@@ -291,12 +291,37 @@ function sourceField(terrain: ResolvedAgentWorldTerrain): DecodedField {
  * (row-major, row 0 at the far/-Z edge). The mesh and the collider are built from this one
  * array, so what you see and what you land on cannot drift apart.
  */
+/**
+ * Where the flatten blend actually starts, once the pad is discretised onto the grid.
+ *
+ * The naive reading — blend from `flattenRadius` — flattens each *vertex* by its own
+ * distance from the origin. But nothing ever stands on a vertex: content rests on the
+ * bilinear *cell* between four of them. A cell that straddles `flattenRadius` has flat
+ * inner corners and an un-flattened outer one, so it ramps, and the pad is really only
+ * level out to the last grid ring strictly inside the radius. On the showroom terrain
+ * (`size` 150, `segments` 96 → a 1.5625-unit cell, `flattenRadius` 12) that put the first
+ * sloping ground at r≈10.2 rather than 12 — and because a cannon-es sphere has no rolling
+ * resistance, a gradient of 0.004 is enough to send a dropped ball rolling off the pad and
+ * down the landform instead of coming to rest. That is the whole of the long-standing
+ * "collider disagrees with the mesh near the flatten rim" defect: the two agree exactly,
+ * they were simply both describing a pad that stops short of its stated radius.
+ *
+ * A point of the disc is at most one cell diagonal from the corners of the cell it lands
+ * in, so pushing the blend out by `cell * √2` guarantees every cell the disc touches has
+ * all four corners flattened — i.e. `flattenRadius` becomes a promise the surface keeps.
+ * The falloff length is unchanged, so the landform returns over the same distance.
+ */
+function flattenInnerEdge(terrain: ResolvedAgentWorldTerrain): number {
+  return terrain.flattenRadius + (terrain.size / terrain.segments) * Math.SQRT2;
+}
+
 export function sampleTerrainHeights(terrain: ResolvedAgentWorldTerrain): Float32Array {
   const field = sourceField(terrain);
   const stride = terrain.segments + 1;
   const out = new Float32Array(stride * stride);
   const half = terrain.size / 2;
   const step = terrain.size / terrain.segments;
+  const flattenEdge = flattenInnerEdge(terrain);
 
   for (let row = 0; row < stride; row += 1) {
     // v runs 0..1 across the field the same way `applyHeightmap` read it: north edge first.
@@ -310,7 +335,7 @@ export function sampleTerrainHeights(terrain: ResolvedAgentWorldTerrain): Float3
         const distance = Math.hypot(x, z);
         // 0 inside the disc, 1 past the falloff — so built content sits on a level pad and
         // the landform returns smoothly rather than at a visible seam.
-        const blend = smoothstep(terrain.flattenRadius, terrain.flattenRadius + terrain.flattenFalloff, distance);
+        const blend = smoothstep(flattenEdge, flattenEdge + terrain.flattenFalloff, distance);
         height = terrain.flattenHeight + (height - terrain.flattenHeight) * blend;
       }
       out[row * stride + column] = height;
@@ -353,11 +378,26 @@ export function createTerrainGeometry(terrain: ResolvedAgentWorldTerrain, height
 /**
  * The static collider, as a cannon-es {@link CannonHeightfield}.
  *
- * Heightfield data is `data[xIndex][yIndex]` with the height on the shape's local +Z, so it
- * needs the same -90° X rotation the mesh geometry gets. Under that rotation local
- * (x, y, z) maps to world (x, z, -y), which means the shape's y index runs *backwards*
- * along world Z relative to the mesh's row index — hence the `segments - yIndex` read. Get
- * this wrong and the collider is the terrain mirrored, which looks fine and lands wrong.
+ * Heightfield data is `data[xIndex][yIndex]` with the height on the shape's local +Z, so the
+ * shape has to be rotated to stand the field up in Y. The obvious rotation is the -90° about
+ * X that the mesh geometry gets, which maps local (x, y, z) to world (x, z, -y) and needs a
+ * `segments - yIndex` read because the shape's y index then runs backwards along world Z.
+ * That places every *sample* correctly — and is still wrong, subtly, in between them.
+ *
+ * Both surfaces triangulate each quad, and each picks a diagonal. `PlaneGeometry` splits on
+ * b–d (the north-east/south-west diagonal, in mesh row/column order); cannon splits its
+ * pillars on the (xi, yi+1)–(xi+1, yi) diagonal. Those are the *same* diagonal in index
+ * space — but the single-axis flip mirrors one index and turns it into the opposite one in
+ * world space. So the collider was consistently the other triangulation of the same corner
+ * heights: identical at every vertex, and up to 0.35 units out mid-quad on the showroom
+ * field, which is a step you can feel and cannot see.
+ *
+ * Mapping the shape's x index along world Z and its y index along world X instead — a plain
+ * transpose, `data[row][column]` — reverses the handedness a second time and lands the two
+ * diagonals on top of each other. Measured max |collider - mesh| over the whole showroom
+ * terrain goes from 0.349 to 0.000. Get the orientation wrong and the collider is the
+ * terrain mirrored, which looks fine and lands wrong, so it is worth re-deriving rather than
+ * adjusting: local x → world Z, local y → world X, local z (height) → world Y.
  */
 export function createTerrainHeightfield(
   terrain: ResolvedAgentWorldTerrain,
@@ -369,16 +409,16 @@ export function createTerrainHeightfield(
   for (let xIndex = 0; xIndex < stride; xIndex += 1) {
     const column = new Array<number>(stride);
     for (let yIndex = 0; yIndex < stride; yIndex += 1) {
-      column[yIndex] = heights[(terrain.segments - yIndex) * stride + xIndex];
+      column[yIndex] = heights[xIndex * stride + yIndex];
     }
     data.push(column);
   }
   const orientation = new CannonQuaternion();
-  orientation.setFromEuler(-Math.PI / 2, 0, 0);
+  orientation.setFromEuler(-Math.PI / 2, 0, -Math.PI / 2);
   return {
     shape: new CannonHeightfield(data, { elementSize }),
     // The shape's origin is its first sample, so shift it to centre the field on the entity.
-    offset: new Vec3(-terrain.size / 2, 0, terrain.size / 2),
+    offset: new Vec3(-terrain.size / 2, 0, -terrain.size / 2),
     orientation,
   };
 }
@@ -396,7 +436,10 @@ export function terrainHeightAt(
   const v = (z + half) / terrain.size;
   let height = bilinear(field, u, v) * terrain.heightScale + terrain.heightOffset;
   if (terrain.flattenRadius > 0) {
-    const blend = smoothstep(terrain.flattenRadius, terrain.flattenRadius + terrain.flattenFalloff, Math.hypot(x, z));
+    // Same discretised pad edge the mesh and collider use, so a placement query agrees with
+    // what a body will actually rest on across the whole disc.
+    const flattenEdge = flattenInnerEdge(terrain);
+    const blend = smoothstep(flattenEdge, flattenEdge + terrain.flattenFalloff, Math.hypot(x, z));
     height = terrain.flattenHeight + (height - terrain.flattenHeight) * blend;
   }
   return height;

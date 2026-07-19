@@ -65,6 +65,28 @@ reflective water, flocking (entity type, 0.228 ms/step for 116 members); showroo
 kinetic physics, click-to-drop, click-to-focus; CI gating production; scene store + scene
 browser; trigger volumes; typed event stream; asset split (`dist` 140 MB → ~65 MB).
 
+**Terrain pad + collider correctness.** Two defects behind the old "collider disagrees with
+the mesh near the flatten rim" entry, both fixed in `agent-world-terrain.ts`:
+
+- `flattenRadius` was applied *per vertex*, so the cell straddling the radius had flat inner
+  corners and an un-flattened outer one and therefore ramped. The pad was level only out to
+  the last grid ring inside the radius — r≈10.2, not 12, on the showroom field. The blend now
+  starts one cell diagonal further out, so `flattenRadius` is a guarantee.
+- The collider was the *opposite triangulation* of the same corner heights. `PlaneGeometry`
+  and cannon split each quad on the same diagonal in index space, but the old single-axis
+  index flip mirrored one axis and turned it into the other diagonal in world space — exact at
+  every vertex, up to 0.35 units out mid-quad. Mapping the shape's x index along world Z (a
+  plain transpose) lands them on top of each other: max |collider − mesh| 0.349 → 0.000.
+
+`npm run probe:terrain` is now a radial sweep (20 radii × 8 bearings, isolated terrain, rest
+asserted on position *and* velocity) rather than one drop. Run it after touching terrain.
+
+**`nightsky` BMP → JPEG.** 18.00 MB → 1.18 MB via `scripts/vendor-sky-jpeg.mjs`; product
+asset payload 44.2 MB → 27.3 MB, `dist` 66 MB → 49 MB. Encoded at quality **1.0** on purpose:
+Chromium only uses 4:4:4 chroma at 1.0, and below it 4:2:0 averages each 2×2 chroma block,
+which greys out the one- and two-pixel coloured stars this set is made of (max channel error
+44/255 at q0.98 vs 5/255 at q1.0). The extra 0.79 MB buys that back.
+
 ## Remaining, in priority order
 
 1. **Shadows.** Disabled back when nothing cast them; there are casters now (kinetic
@@ -73,17 +95,24 @@ browser; trigger volumes; typed event stream; asset split (`dist` 140 MB → ~65
    not ported. Every prerequisite now exists: the level workbench authors the layout,
    terrain gives ground with a collider, physics/emitters/flock/triggers are vocabulary.
    Highest-value remaining feature.
-3. **Convert `nightsky` BMP → JPEG.** 19 MB of uncompressed BMP is ~43% of the remaining
-   product asset payload, for one sky. Likely recovers ~18 MB with no vocabulary loss.
-4. Force fields (composes with particles + flock), evolutionary/DNA entities, crowds
+3. Force fields (composes with particles + flock), evolutionary/DNA entities, crowds
    (welded inside `race-scene.ts`), 2D overlay layer (no layer concept exists at all),
    CubX recovered geometry (still 8 plain boxes), audio (19 sounds upstream, 4 vendored).
 
 ## Known defects — recorded, not hidden
 
-- **Terrain collider vs visual mesh disagree by ~1 cell near the flatten rim.** Radial
-  sweep: `r<=10.5` rests, `r>=11` slides off. A session was fixing this — check before
-  touching `agent-world-terrain.ts`.
+- **Spheres landing within ~0.1 units of a heightfield cell seam get a lateral kick.**
+  cannon-es builds each terrain cell as two closed triangular prisms and runs sphere-vs-convex
+  against each. A sphere that penetrates on landing catches the *rim edge* of the neighbouring
+  prism, which returns a tilted normal instead of the flat face normal, and the resulting
+  impulse starts it rolling — permanently, because a cannon sphere has no rolling resistance.
+  Reproduced on a **perfectly flat** heightfield, so it is not a height-data problem. Scales
+  with penetration per step: dropping from 6 m at `dt=1/60` drifts up to 25 units; at
+  `dt=1/240` the same drop drifts 0.05. Not fixed — the cure is either patching cannon's
+  narrowphase or halving the fixed timestep, and `Trimesh` is not an escape (cannon has no
+  box/convex-vs-Trimesh narrowphase, so kinetic stacks would fall through). After the pad fix
+  below it no longer shows up inside the showroom pad, but it is why `probe:terrain` reports
+  drift outside it.
 - **Water reads grey at grazing angles.** three's `Water.js` hard-codes Fresnel
   `rf0 = 0.3`; real water is ~0.02. Patched to a uniform, but a low camera still mirrors a
   pale sky.
