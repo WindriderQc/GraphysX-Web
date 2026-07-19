@@ -151,6 +151,7 @@ export class PlatformEditor {
   private refreshQueued = false;
   /** The Environment sky dropdown, held so `refresh()` can re-read the world into it. */
   private skySelect: HTMLSelectElement | null = null;
+  private overlaySelect: HTMLSelectElement | null = null;
   private levelTile: MapEditorTile = "wall";
   private levelTool: LevelTool = "paint";
   /** Cell elements indexed `y * width + x`, so a drag can repaint one cell without a rebuild. */
@@ -401,6 +402,9 @@ export class PlatformEditor {
     // never yanks the list out from under someone mid-selection.
     if (this.skySelect && document.activeElement !== this.skySelect) {
       this.skySelect.value = state?.environment?.sky ?? "";
+    }
+    if (this.overlaySelect && document.activeElement !== this.overlaySelect) {
+      this.overlaySelect.value = state?.environment?.overlay ?? "";
     }
 
     const selected = entities.find((entity) => entity.id === this.selectedId) ?? null;
@@ -989,7 +993,25 @@ export class PlatformEditor {
     // an agent's `api.create`, or `levels.play()`. The dropdown would read "No sky" over a
     // viewport plainly rendering one.
     this.skySelect = select;
-    return this.section("Environment", [this.field("Sky", select)]);
+
+    // The 2D overlay, alongside the sky: both are scene-declared layers the host renders.
+    const overlay = document.createElement("select");
+    const overlayNone = document.createElement("option");
+    overlayNone.value = "";
+    overlayNone.textContent = "No overlay";
+    overlay.append(overlayNone);
+    for (const descriptor of this.deps.world.listOverlays()) {
+      const option = document.createElement("option");
+      option.value = descriptor.id;
+      option.textContent = descriptor.label;
+      option.title = descriptor.description;
+      overlay.append(option);
+    }
+    overlay.value = this.deps.world.getEnvironment().overlay ?? "";
+    overlay.addEventListener("change", () => this.setOverlay(overlay.value || null));
+    this.overlaySelect = overlay;
+
+    return this.section("Environment", [this.field("Sky", select), this.field("2D overlay", overlay)]);
   }
 
   /**
@@ -1002,6 +1024,17 @@ export class PlatformEditor {
     this.deps.api.load({
       ...definition,
       environment: { ...definition.environment, sky: skyId as never },
+    });
+    this.deps.onEnvironmentChanged?.();
+    this.select(null);
+  }
+
+  private setOverlay(overlayId: string | null): void {
+    const definition = this.deps.api.export();
+    if (!definition) return;
+    this.deps.api.load({
+      ...definition,
+      environment: { ...definition.environment, overlay: overlayId as never },
     });
     this.deps.onEnvironmentChanged?.();
     this.select(null);

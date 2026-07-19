@@ -1,3 +1,5 @@
+import { GRAPHYSX_AGENT_WORLD_OVERLAYS, isOverlayId, type AgentWorldOverlayDescriptor, type AgentWorldOverlayId } from "./agent-world-overlay";
+
 import {
   AmbientLight,
   BoxGeometry,
@@ -373,6 +375,12 @@ export type AgentWorldEnvironment = {
    * scene by design — there is deliberately no global sky (see PRODUCT_SPEC section 11).
    */
   sky: AgentWorldSkyId | null;
+  /**
+   * Per-scene generative 2D overlay, or null for none. Like `sky`, it is scene data the host
+   * renders rather than a global setting — and off by default, because a 2D layer must earn its
+   * frame budget (§4). The host draws it in the one shared loop; there is never a second rAF.
+   */
+  overlay: AgentWorldOverlayId | null;
   ground: {
     visible: boolean;
     size: number;
@@ -728,6 +736,7 @@ const DEFAULT_GEOMETRY = {
 const DEFAULT_ENVIRONMENT: AgentWorldEnvironment = {
   background: "#07141d",
   sky: null,
+  overlay: null,
   ground: {
     visible: true,
     size: 36,
@@ -897,6 +906,11 @@ export class AgentWorldRuntime {
 
   getEnvironment(): AgentWorldEnvironment {
     return deepClone(this.environment);
+  }
+
+  /** The generative 2D overlays a scene can select. Off (null) is always also valid. */
+  listOverlays(): readonly AgentWorldOverlayDescriptor[] {
+    return GRAPHYSX_AGENT_WORLD_OVERLAYS;
   }
 
   listSkies(): readonly AgentWorldSkyDescriptor[] {
@@ -1483,7 +1497,7 @@ export class AgentWorldRuntime {
     // the ground, while the rendered sky and background silently stayed on the old values —
     // the same write-only parity gap that `world.loaded` closed for `create`/`load`, reopened
     // by a different entry point. Emitting here lets the host re-apply for every caller.
-    this.emit("environment.changed", [], { sky: this.environment.sky, background: this.environment.background });
+    this.emit("environment.changed", [], { sky: this.environment.sky, overlay: this.environment.overlay, background: this.environment.background });
   }
 
   private loadDefinition(source: AgentWorldDefinition): void {
@@ -2442,9 +2456,14 @@ function resolveEnvironment(source?: AgentWorldDefinition["environment"]): Agent
   if (sky !== null && !resolveAgentWorldSky(sky)) {
     throw new Error(`Unknown sky: ${sky}. Use one of ${GRAPHYSX_AGENT_WORLD_SKIES.map((s) => s.id).join(", ")}`);
   }
+  const overlay = source?.overlay ?? DEFAULT_ENVIRONMENT.overlay;
+  if (overlay !== null && !isOverlayId(overlay)) {
+    throw new Error(`Unknown overlay: ${overlay}. Use one of ${GRAPHYSX_AGENT_WORLD_OVERLAYS.map((o) => o.id).join(", ")}`);
+  }
   return {
     background: source?.background ?? DEFAULT_ENVIRONMENT.background,
     sky,
+    overlay,
     ground: { ...DEFAULT_ENVIRONMENT.ground, ...(source?.ground ?? {}) },
     physics: {
       gravity: sanitizeVector(source?.physics?.gravity ?? DEFAULT_ENVIRONMENT.physics.gravity, -1000, 1000, "physics.gravity")

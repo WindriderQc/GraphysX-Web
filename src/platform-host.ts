@@ -24,6 +24,7 @@ import {
 } from "./agent-world-runtime";
 import { createAgentWorldApi } from "./agent-world-api";
 import { mountBallzPlay } from "./ballz-play";
+import { createOverlaySketch, type AgentWorldOverlayId, type OverlaySketch } from "./agent-world-overlay";
 import { createGraphysXAgentToolBridge, type GraphysXAgentToolBridge } from "./agent-world-bridge";
 import { archiveSkyboxUrls, orientArchiveCubeTexture } from "./archive-skybox";
 // Type-only: the editor module (and the ~348 KB TransformControls gizmo stack it pulls in)
@@ -108,6 +109,17 @@ export class PlatformHost {
   private readonly unsubscribeEvents: () => void;
   /** Teardown for the active play layer (arrow keys + HUD), when a playable world is loaded. */
   private playLayer: (() => void) | null = null;
+  // The generative 2D overlay: a canvas over the WebGL canvas, drawn in the SAME tick() as the
+  // 3D scene. There is deliberately no second animation loop (§5).
+  private readonly overlayCanvas: HTMLCanvasElement;
+  private readonly overlayCtx: CanvasRenderingContext2D | null;
+  private overlaySketch: OverlaySketch | null = null;
+  private overlayId: AgentWorldOverlayId | null = null;
+  private overlayElapsed = 0;
+  private overlayWidth = 0;
+  private overlayHeight = 0;
+  /** Frames the overlay has drawn — smoke proves this tracks frameCount, i.e. one shared loop. */
+  private overlayFrame = 0;
   private currentMode: PlatformMode = "scene";
   /** Where to return when play ends — you came from somewhere, and should go back to it. */
   private modeBeforePlay: PlatformMode = "scene";
@@ -136,6 +148,17 @@ export class PlatformHost {
     // it once per frame instead, so the mirror pass reuses what the main pass just rendered.
     this.renderer.shadowMap.autoUpdate = false;
     this.container.append(this.renderer.domElement);
+
+    // The 2D overlay canvas sits directly over the 3D canvas. pointer-events:none so it never
+    // intercepts a click meant for the scene; z-index below the DOM chrome (HUD is z 6+).
+    this.overlayCanvas = document.createElement("canvas");
+    this.overlayCanvas.className = "gx-overlay-canvas";
+    Object.assign(this.overlayCanvas.style, {
+      position: "absolute", left: "0", top: "0", width: "100%", height: "100%",
+      pointerEvents: "none", zIndex: "1",
+    });
+    this.overlayCtx = this.overlayCanvas.getContext("2d");
+    this.container.append(this.overlayCanvas);
 
     this.camera = new PerspectiveCamera(55, 1, 0.1, 260);
     this.camera.position.set(...(options.framing?.position ?? [0, 24, 34]));
@@ -230,6 +253,17 @@ export class PlatformHost {
   /** Frames rendered since construction (used by smoke tests to prove the loop runs). */
   get frameCount(): number {
     return this.frame;
+  }
+
+  /** Frames the 2D overlay has drawn. Tracks frameCount when an overlay is active — the proof
+   *  that the 2D layer runs in the single shared loop rather than a second one. */
+  get overlayFrameCount(): number {
+    return this.overlayFrame;
+  }
+
+  /** The active overlay id, or null. */
+  get activeOverlay(): AgentWorldOverlayId | null {
+    return this.overlayId;
   }
 
   /**
@@ -337,6 +371,17 @@ export class PlatformHost {
     this.scene.background = new Color(environment.background);
     this.scene.fog = new Fog(environment.background, 34, 130);
     this.applySky(environment.sky);
+    this.applyOverlay(environment.overlay);
+  }
+
+  /** Mount the scene's 2D overlay sketch, or clear the canvas when the scene asks for none. */
+  private applyOverlay(overlay: AgentWorldOverlayId | null): void {
+    if (overlay === this.overlayId) return;
+    this.overlayId = overlay;
+    this.overlaySketch = overlay ? createOverlaySketch(overlay) : null;
+    this.overlayElapsed = 0;
+    // A removed overlay must leave nothing behind; a new one starts from a clean frame.
+    if (this.overlayCtx) this.overlayCtx.clearRect(0, 0, this.overlayWidth, this.overlayHeight);
   }
 
   /**
@@ -493,6 +538,13 @@ export class PlatformHost {
     // first `render()` below consumes it; any nested pass a scene entity triggers reuses it.
     this.renderer.shadowMap.needsUpdate = true;
     this.renderer.render(this.scene, this.camera);
+    // The 2D layer draws in THIS frame, right after the 3D render — one shared loop, never a
+    // second rAF. It is the last thing composited, so it sits over the scene.
+    if (this.overlaySketch && this.overlayCtx && this.overlayWidth > 0) {
+      this.overlayElapsed += delta;
+      this.overlaySketch.draw(this.overlayCtx, delta, this.overlayElapsed, this.overlayWidth, this.overlayHeight);
+      this.overlayFrame += 1;
+    }
     this.frame += 1;
   }
 
@@ -524,6 +576,17 @@ export class PlatformHost {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height || 1;
     this.camera.updateProjectionMatrix();
+    // Match the overlay buffer to the viewport at device resolution, then scale the context so
+    // sketches draw in CSS pixels and stay crisp on hi-dpi. A resize reseeds size-derived state.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.overlayCanvas.width = Math.round(width * dpr);
+    this.overlayCanvas.height = Math.round(height * dpr);
+    this.overlayWidth = width;
+    this.overlayHeight = height;
+    if (this.overlayCtx) {
+      this.overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.overlayCtx.clearRect(0, 0, width, height);
+    }
   }
 
   dispose(): void {
@@ -532,6 +595,7 @@ export class PlatformHost {
     this.renderer.setAnimationLoop(null);
     this.unsubscribeEvents();
     this.playLayer?.();
+    this.overlayCanvas.remove();
     window.removeEventListener("resize", this.onResize);
     this.editor?.dispose();
     this.bridge.dispose();
