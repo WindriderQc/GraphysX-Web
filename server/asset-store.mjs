@@ -372,9 +372,12 @@ async function streamFile(response, absolutePath, { cache } = {}) {
   response.writeHead(200, {
     "content-type": mimeFor(absolutePath),
     "content-length": info.size,
-    // Stored asset files never change under an id (a re-import gets a new id), so let the
-    // browser keep them; datalake previews pass cache:"no-store" since the source can move.
-    "cache-control": cache ?? "public, max-age=86400",
+    // `no-cache`, not a long max-age: remove-then-reimport legitimately reuses a freed id
+    // at the same URL, and a day-long cache served the OLD payload to the runtime (found
+    // the hard way — a re-imported model kept rendering without its baked textures). The
+    // store has no ETags, so "revalidate" means refetch; on a LAN store that is the right
+    // trade against silently stale geometry.
+    "cache-control": cache ?? "no-cache",
     "access-control-allow-origin": "*",
   });
   const stream = createReadStream(absolutePath);

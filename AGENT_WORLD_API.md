@@ -107,7 +107,56 @@ gx.spawn({
 });
 ```
 
-Stable texture IDs are `checker`, `green-grid`, `abstract-cubes`, `two-way`, `eroded-metal`, `rusted-metal`, `marble`, `wood-floor`, `worn-wood`, `earth`, and `spheres`.
+Stable texture IDs are `checker`, `green-grid`, `abstract-cubes`, `two-way`, `eroded-metal`, `rusted-metal`, `marble`, `wood-floor`, `worn-wood`, `earth`, and `spheres`. When an asset store is running, `textures()` and `assets()` also list everything imported through the media library (below) under `category: "imported"`, usable by the same `{ id }` reference.
+
+## Media library: import your own textures, models, and sounds
+
+`media` is the runtime import path. It is backed by the same store server that holds shared
+scenes (`npm run serve:scenes`, port 8788), which also fronts a configurable **datalake** —
+a local media folder (`GRAPHYSX_DATALAKE_DIR`, default `E:\Media\Datalake`) browsable and
+importable at runtime. No rebuild, no registry edit: an import is immediately listed by
+`assets()`/`textures()`, resolvable from scene documents, and visible in the editor's
+library (Media tab, plus Textures/Models for its kind).
+
+Unlike the rest of the surface, `media` methods that talk to the store are **async**.
+Offline (no store answering), `status().online` is `false` and the library holds built-ins only.
+
+```js
+const gx = window.__GRAPHYSX__;
+
+gx.media.status();                     // { online, storeUrl, datalake, count }
+await gx.media.browse("StockRoom");    // one folder level: { folders, files }
+await gx.media.import("StockRoom/Grass.jpg");          // copy + register a texture
+await gx.media.import("StockRoom/Airplane/airplane.3ds"); // convert + register a model
+await gx.media.refresh();              // re-pull the manifest (idempotent)
+gx.media.list("texture");              // local mirror of the store manifest
+
+// an import is ordinary vocabulary immediately:
+gx.update("floor", { material: { texture: { id: "grass" } } });
+gx.spawn({ id: "plane-1", type: "model", asset: { id: "airplane", fitSize: 8 } });
+```
+
+An imported image also doubles as a landform: `media.terrainHeights(id, samples?)` decodes
+it into a normalized `{ samples, heights }` grid (luminance, min→0 max→1, default 129²)
+that goes straight into a terrain entity's inline `terrain.heights` — the landform then
+travels with the document instead of referencing the store. The editor exposes this as the
+⛰ action on Media-tab texture cards.
+
+```js
+const grid = await gx.media.terrainHeights("height");   // an imported heightmap JPG
+gx.spawn({ id: "hills", type: "terrain", terrain: { heights: grid.value.heights, size: 120, heightScale: 9 } });
+```
+
+Textures and sounds are copied server-side as-is (PNG/JPG/GIF/BMP/WebP load directly; DDS
+is stored but needs converting before it can be applied). Foreign model formats —
+**OBJ, GLTF, GLB, FBX, STL, 3DS** — are fetched into the browser, converted with three.js
+loaders to the runtime's one model format (`graphysx-mesh-json`), textures baked to PNG
+files alongside, and uploaded. `.tvm`/`.x` still need the offline workshop tooling.
+`media.register({ fileName, kind, data })` stores raw data directly (the editor's drag-drop
+upload uses it); `media.remove(id)` deletes an import from the store and the registries.
+
+Imported media lives in the store (`.graphysx-store/assets/`), not in the static bundle —
+production deploys without a store simply do not list it.
 
 ## Primitives, agents, archive models, splines, and physics
 
@@ -517,6 +566,7 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `open()`, `demo()` | Open the studio or restore the built-in API-created demonstration. |
 | `assets()` | Discover recovered complex models that can be spawned by stable asset ID. |
 | `textures()` | Discover stable semantic textures, previews, descriptions, and repeat defaults. |
+| `media.*` | Runtime imports from the local asset store: `status()`, `list(kind?)`, async `refresh()`, `browse(path?)`, `import(path, options?)`, `register(options)`, `remove(id)`. |
 | `skies()`, `emitters()` | Discover the per-scene archive skybox sets and the archive particle-emitter presets. |
 | `heightmaps()` | Discover the curated terrain heightmaps, with archive provenance, for `terrain` entities. |
 | `flocks()`, `forceFields()` | Discover the Nature-of-Code simulation presets: self-steering boid flocks and force fields (attractor/flow/drag/vortex). |

@@ -40,7 +40,9 @@ try {
   for (const tab of ["Prefabs", "Models", "Effects", "Terrain", "Textures"]) {
     await page.click(`.gx-ed-tab:text-is("${tab}")`);
     await page.waitForTimeout(120);
-    out.tabChips[tab] = await page.$$eval(".gx-ed-chip", (els) => els.length);
+    // Two chip kinds since the palette gained thumbnails: flat chips and thumb cards are
+    // both one-click spawn/apply controls, so both count as library content.
+    out.tabChips[tab] = await page.$$eval(".gx-ed-chip, .gx-ed-thumb", (els) => els.length);
   }
   out.prefabCount = Object.values(out.tabChips).reduce((a, b) => a + b, 0);
   out.everyTabPopulated = Object.values(out.tabChips).every((n) => n > 0);
@@ -133,7 +135,8 @@ try {
 
   // Apply an archive texture from the Textures tab, then attach a living behaviour.
   await page.click('.gx-ed-tab:text-is("Textures")');
-  await page.click('.gx-ed-chip:text-is("Checker")');
+  // Textures render as thumb cards now; the label is a child span rather than the button text.
+  await page.click('.gx-ed-thumb:has(.gx-ed-thumb-label:text-is("Checker"))');
   await page.waitForTimeout(400);
   out.textureApplied = (await findSpawned())?.material?.texture?.id ?? null;
 

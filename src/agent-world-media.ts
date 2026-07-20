@@ -109,6 +109,16 @@ export type GraphysXAgentMediaApi = {
   register(options: AgentMediaRegisterOptions): Promise<AgentWorldResult<AgentWorldMediaDescriptor>>;
   /** Remove an imported asset from the store and the registries. */
   remove(id: string): Promise<AgentWorldResult<string>>;
+  /**
+   * Decode an imported image into a normalized heights grid for `terrain.heights`.
+   *
+   * The bridge between "I imported a heightmap JPG" and a landform: the runtime already
+   * accepts an inline `heights` array (up to 513²) on terrain entities, so no registry is
+   * involved — the caller passes the result straight to `spawn`. Luminance is stretched
+   * min→0, max→1 because archive heightmaps rarely span the full byte range and a 0.3–0.6
+   * band otherwise yields a nearly flat field at any heightScale.
+   */
+  terrainHeights(id: string, samples?: number): Promise<AgentWorldResult<{ samples: number; heights: number[] }>>;
 };
 
 /** Model formats convertible in-browser. `.tvm`/`.x` need the offline workshop tooling. */
@@ -125,8 +135,18 @@ type MediaState = {
   records: AgentWorldMediaDescriptor[];
 };
 
+/**
+ * `?store=` is honoured at module load, not only via {@link configureAgentWorldMedia}:
+ * main.ts configures inside an async store-probe, and an agent (or a smoke) calling
+ * `api.media.refresh()` right after boot would race it and talk to the default port —
+ * which on a dev box can be a DIFFERENT, live store. The URL param is synchronous truth.
+ */
+const initialStoreParam = typeof window !== "undefined"
+  ? new URLSearchParams(window.location.search).get("store")
+  : null;
+
 const state: MediaState = {
-  baseUrl: DEFAULT_STORE_URL,
+  baseUrl: (initialStoreParam ?? DEFAULT_STORE_URL).replace(/\/+$/, ""),
   online: false,
   datalake: null,
   records: [],
@@ -305,6 +325,57 @@ async function remove(id: string): Promise<AgentWorldResult<string>> {
   }
 }
 
+async function terrainHeights(id: string, samples = 129): Promise<AgentWorldResult<{ samples: number; heights: number[] }>> {
+  try {
+    if (!Number.isInteger(samples) || samples < 2 || samples > 513) {
+      throw new Error("samples must be an integer between 2 and 513 (the runtime's terrain.heights limit)");
+    }
+    const record = state.records.find((candidate) => candidate.id === id);
+    if (!record) throw new Error(`Unknown media asset: ${id} (refresh() first?)`);
+    if (record.kind !== "texture") throw new Error(`${id} is a ${record.kind}, not an image`);
+
+    const image = await new Promise<HTMLImageElement>((resolveImage, rejectImage) => {
+      const element = new Image();
+      // The store sends `access-control-allow-origin: *`; anonymous keeps the canvas clean.
+      element.crossOrigin = "anonymous";
+      element.onload = () => resolveImage(element);
+      element.onerror = () => rejectImage(new Error(`Image request failed: ${record.url}`));
+      element.src = record.url;
+    });
+
+    // Let the canvas do the resampling: drawing the full bitmap into a samples×samples
+    // surface is a box filter over each cell, which is exactly the smoothing a collider
+    // grid wants (per-pixel point sampling of a 1222px scan aliases into spikes).
+    const canvas = document.createElement("canvas");
+    canvas.width = samples;
+    canvas.height = samples;
+    const draw = canvas.getContext("2d", { willReadFrequently: true });
+    if (!draw) throw new Error("A 2D canvas context is required to decode a heightmap");
+    draw.drawImage(image, 0, 0, samples, samples);
+    const pixels = draw.getImageData(0, 0, samples, samples).data;
+
+    const heights = new Array<number>(samples * samples);
+    let minimum = Infinity;
+    let maximum = -Infinity;
+    for (let index = 0; index < heights.length; index += 1) {
+      const offset = index * 4;
+      const luminance = 0.2126 * pixels[offset]! + 0.7152 * pixels[offset + 1]! + 0.0722 * pixels[offset + 2]!;
+      heights[index] = luminance;
+      if (luminance < minimum) minimum = luminance;
+      if (luminance > maximum) maximum = luminance;
+    }
+    const span = maximum - minimum;
+    for (let index = 0; index < heights.length; index += 1) {
+      // A flat image is honest flat ground, not a divide-by-zero.
+      const value = span > 0.0001 ? (heights[index]! - minimum) / span : 0;
+      heights[index] = Math.round(value * 10000) / 10000;
+    }
+    return ok({ samples, heights });
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 const mediaApi: GraphysXAgentMediaApi = {
   schema: GRAPHYSX_AGENT_MEDIA_SCHEMA,
   status: () => ({
@@ -319,6 +390,7 @@ const mediaApi: GraphysXAgentMediaApi = {
   import: importPath,
   register,
   remove,
+  terrainHeights,
 };
 
 /** One media library per tab — both API implementations hand out the same object. */
@@ -386,6 +458,22 @@ async function convertDatalakeModel(path: string, options: AgentMediaImportOptio
     if (/^(https?:|data:|blob:)/i.test(url)) return url;
     return fileUrl(url.replace(/^\.?\//, ""));
   });
+  // Loaders return their scene before the textures they queued have arrived; baking then
+  // would read empty images and quietly produce colour-only materials. Track whether the
+  // manager started anything so the bake can wait for it (bounded — a dead texture URL
+  // must not wedge an import).
+  let managerStarted = false;
+  manager.onStart = () => { managerStarted = true; };
+  const waitForResources = async (): Promise<void> => {
+    if (!managerStarted) return;
+    await new Promise<void>((resolveWait) => {
+      const timer = window.setTimeout(() => resolveWait(), 15000);
+      manager.onLoad = () => {
+        window.clearTimeout(timer);
+        resolveWait();
+      };
+    });
+  };
 
   const response = await fetch(`${state.baseUrl}/datalake/file?path=${encodeURIComponent(path)}`);
   if (!response.ok) throw new Error(`Could not read ${path} from the datalake (${response.status})`);
@@ -416,6 +504,7 @@ async function convertDatalakeModel(path: string, options: AgentMediaImportOptio
     throw new Error(`No browser converter for ${extension} — convert offline and import the JSON.`);
   }
 
+  await waitForResources();
   const payload = await bakeObjectToPayload(root, { flipUvV, warnings, label, source: `Datalake/${path}` });
   return { payload, label, slug, warnings };
 }
@@ -453,12 +542,15 @@ async function bakeObjectToPayload(
 
     const positionAttribute = geometry.getAttribute("position");
     if (!positionAttribute || positionAttribute.count < 3) continue;
+    // 4 decimals: sub-0.1mm at metre scale, and it keeps a raw-scan STL's JSON from
+    // ballooning with 17-digit doubles (measured 62 MB → ~24 MB on the octopus scan).
+    const trim = (value: number): number => Math.round(value * 10000) / 10000;
     const positions: number[] = new Array(positionAttribute.count * 3);
     for (let index = 0; index < positionAttribute.count; index += 1) {
-      const x = positionAttribute.getX(index);
-      const y = positionAttribute.getY(index);
+      const x = trim(positionAttribute.getX(index));
+      const y = trim(positionAttribute.getY(index));
       // Right-handed → the archive's left-handed convention (see convertDatalakeModel).
-      const z = -positionAttribute.getZ(index);
+      const z = trim(-positionAttribute.getZ(index));
       positions[index * 3] = x;
       positions[index * 3 + 1] = y;
       positions[index * 3 + 2] = z;
@@ -475,8 +567,8 @@ async function bakeObjectToPayload(
     if (uvAttribute && uvAttribute.count === positionAttribute.count) {
       uvs = new Array(uvAttribute.count * 2);
       for (let index = 0; index < uvAttribute.count; index += 1) {
-        uvs[index * 2] = uvAttribute.getX(index);
-        uvs[index * 2 + 1] = context.flipUvV ? 1 - uvAttribute.getY(index) : uvAttribute.getY(index);
+        uvs[index * 2] = trim(uvAttribute.getX(index));
+        uvs[index * 2 + 1] = trim(context.flipUvV ? 1 - uvAttribute.getY(index) : uvAttribute.getY(index));
       }
     }
 

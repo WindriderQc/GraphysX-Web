@@ -27,7 +27,8 @@ which is why they are legacy-only and unreachable from the editor and the agent 
 | `src/platform-host.ts` | Renderer, camera, OrbitControls, ONE animation loop. Zero race-scene dependency. |
 | `src/agent-world-runtime.ts` | The v2 runtime: entities, cannon-es physics, behaviours, deterministic `update(dt)`. |
 | `src/agent-world-api.ts` **and** `src/prototype-app.ts` | **Both** implement `GraphysXAgentWorldApi`. A new API method must be added to both or the build breaks. |
-| `src/platform-editor.ts` | Top bar, left scene tree, right inspector, bottom tabbed library, Levels workbench. |
+| `src/platform-editor.ts` | Top bar, left scene tree, right inspector, bottom tabbed library, Levels workbench, media import dialog. |
+| `server/asset-store.mjs` + `src/agent-world-media.ts` | Runtime media imports: datalake browse/import/upload on the store server; browser side converts foreign models to `graphysx-mesh-json` and registers imports into the curated registries (`api.media.*`). |
 
 `verbatimModuleSyntax` is on specifically so the two remaining type-only `race-scene`
 edges cannot silently become runtime imports and drag the 1.4 MB monolith onto the
@@ -86,7 +87,9 @@ reflective water, flocking (entity type, 0.228 ms/step for 116 members), **force
 (4 kinds / 5 presets, entity for identity + runtime pass for effect), a **2D overlay layer**
 (`environment.overlay`, 3 Canvas2D sketches, drawn in the one shared `tick()`); showroom with
 kinetic physics, click-to-drop, click-to-focus, **shadows**; CI gating production; scene store
-+ scene browser; trigger volumes; typed event stream; asset split (`dist` 140 MB → ~65 MB).
++ scene browser; trigger volumes; typed event stream; asset split (`dist` 140 MB → ~65 MB);
+**media library** (`media-r1`) — runtime imports from the datalake through the store server,
+in-browser model conversion, editor Media tab + import dialog, `api.media.*` on both impls.
 
 **The three front-door destinations (§5) are all live.** Showroom → **Games & Playgrounds**
 (`games-shelf.ts`, every row `api.levels.play(id)`) → framed play with a HUD → **win panel** →

@@ -2232,6 +2232,9 @@ ${formula.provenance.note}`),
     cards.push(bar);
 
     for (const record of media.list()) {
+      // Bakes produced during model conversion are plumbing the model references by URL,
+      // not things a person places — showing six "airplane map" cards per import is noise.
+      if (record.category === "model-texture") continue;
       cards.push(this.mediaCard(record));
     }
     if (!media.list().length && status.online) {
@@ -2293,7 +2296,39 @@ ${formula.provenance.note}`),
       void this.deps.api.media.remove(record.id).then(() => this.renderLibrary());
     });
     card.append(remove);
+    if (record.kind === "texture") {
+      // Any imported image doubles as a landform: decode to a heights grid and spawn a
+      // terrain entity with the array INLINE — same `terrain.heights` an agent would send,
+      // so the landform travels with the document instead of referencing the store.
+      const terrain = document.createElement("span");
+      terrain.className = "gx-ed-x gx-md-terrain";
+      terrain.textContent = "⛰";
+      terrain.title = `Spawn terrain using ${record.label} as a heightmap`;
+      terrain.addEventListener("click", (clickEvent) => {
+        clickEvent.stopPropagation();
+        void this.spawnTerrainFromMedia(record);
+      });
+      card.append(terrain);
+    }
     return card;
+  }
+
+  private async spawnTerrainFromMedia(record: AgentWorldMediaDescriptor): Promise<void> {
+    const decoded = await this.deps.api.media.terrainHeights(record.id);
+    if (!decoded.ok || !decoded.value) return;
+    this.addCounter += 1;
+    const id = `edit-terrain-${this.addCounter}`;
+    const result = this.deps.api.spawn({
+      id,
+      type: "terrain",
+      label: `${record.label} Terrain`,
+      terrain: { heights: decoded.value.heights, size: 120, segments: 96, heightScale: 7 },
+      material: { color: "#6c7d55", roughness: 0.95, metalness: 0.02 },
+      castShadow: false,
+      tags: ["terrain", "imported"],
+    });
+    if (result.ok) this.select(id);
+    else this.refresh("force");
   }
 
   private toggleMediaPreview(url: string): void {
@@ -2802,6 +2837,8 @@ const EDITOR_CSS = `
 .gx-ed-thumb-glyph{width:76px;height:52px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--gx-accent);background:rgba(4,18,26,.8);border-radius:4px}
 .gx-ed-thumb-label{max-width:78px;font:10px/1.25 system-ui,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gx-md-x{position:absolute;top:2px;right:2px;z-index:1}
+.gx-md-terrain{position:absolute;top:2px;left:2px;z-index:1;font-size:11px}
+.gx-md-terrain:hover{background:var(--gx-accent-deep);border-color:var(--gx-accent);color:#fff}
 .gx-md-bar{display:flex;align-items:center;gap:var(--gx-s2);flex-wrap:wrap;width:100%;flex:none}
 
 /* ---- media import dialog ---- */

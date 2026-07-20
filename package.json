@@ -20,6 +20,7 @@
     "smoke:triggers": "node scripts/smoke-triggers.mjs",
     "smoke:roundtrip": "node scripts/smoke-roundtrip.mjs",
     "smoke:rules": "node scripts/smoke-rules.mjs",
+    "smoke:media": "node scripts/smoke-media.mjs",
     "serve:staging": "node scripts/staging-server.mjs",
     "serve:scenes": "node server/scene-store.mjs",
     "scene": "node tools/graphysx-scene-agent.mjs",

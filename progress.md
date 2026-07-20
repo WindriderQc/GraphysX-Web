@@ -840,3 +840,14 @@ ring collects by calling `toggle-visibility` **on itself** and toggle is not ide
 back through a collected ring makes it reappear. That trade-off was taken knowingly when the win
 state landed (it keeps the scene self-sufficient without the play layer); the spiral course is where
 the bill arrived. A fix is in flight in its own session.
+
+### media-r1 addendum: imported images are landforms too
+
+- **`api.media.terrainHeights(id, samples?)`** decodes any imported image into a normalized
+  heights grid (luminance, stretched min→0 max→1 because archive heightmaps rarely span the full
+  byte range; canvas-resampled so a 1222px scan box-filters instead of aliasing into collider
+  spikes). It feeds terrain's existing inline `heights` field — no registry involved, the
+  landform travels with the document, and `heightmap` nulls on export exactly as that contract
+  promises. The editor's Media tab exposes it as a ⛰ action on texture cards. Driven against the
+  real `StockRoom/Heightmaps/HEIGHT.JPG`: 129² grid, full 0–1 range, 9409-vertex collider,
+  document round-trip green. The `media` smoke now asserts decode → spawn → terrain state.
