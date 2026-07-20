@@ -524,3 +524,64 @@ v1 bar, not gaps in it.
   copy, worth reaching for again.
 - Final state after their rules work landed: **all 14 checks green**, including their new `rules`
   smoke.
+
+## 2026-07-19 — `archive-r1`: the nostalgia starts coming back
+
+Two agents worked recovered material in parallel on disjoint files while the lead integrated.
+
+### Landed: two recovered BallZ arenas (`archive-ballz-levels.ts`)
+
+- The 2015 StockRoom ASCII arenas — **Level 1's T course** and **Level 2's Z maze** — rebuilt as
+  ordinary grid levels (`importAscii` → `composeBallzLevel`), so they are playable from the Games
+  shelf and editable in the workbench. Level 2 ships at **100% authored cells**: its perimeter was
+  already closed in the source, so not one cell is invented. Level 1 needed a containment frame
+  because the archive's own boundary is *incomplete* (26 open perimeter cells — an engine that let
+  you roll off the slab), and the frame is declared rather than hidden.
+- **Honesty as data, not prose:** each level carries `faithful` / `inferred` /
+  `deliberatelyAbsent` lists plus a machine-readable `deviations[]`. The real gameplay changes are
+  named: the archive's finish and halfway are *lines* across the arena defined by post pairs and a
+  grid gives one cell each; rings were a 10-second **bonus** and are now **required**; the handling
+  is the platform's, not the archive's.
+- **`ARCHIVE_BALLZ_NOT_REVIVED` records what was deliberately NOT revived and why** — five records,
+  including Level 3, whose void-and-catwalk mechanic a grid cannot express (mapping its platforms to
+  floor would preserve the drawing and delete the game), and the slide/track meshes, whose own audit
+  says "no gameplay, spawn, physics or objectives are inferred". The record with the *strongest*
+  provenance in the whole set (Suzanne 1, bytes in-repo with SHA) is among the ones skipped: 1,319
+  of its 1,600 cells are empty floor. Playable is not the same as worth playing.
+- Seeded on every platform-host route rather than only when the shelf opens, and published on
+  `window.__GRAPHYSX_ARCHIVE__` — provenance is a feature (§11) and the platform is agent-native
+  (§7), so what was recovered *and what was skipped* are discoverable.
+- **The smoke was converted from a spawned vite dev server to the built output.** It needed dev only
+  while the module was unbundled seed content; adding a vite-spawning smoke to a gate with known
+  contention would have invited flakiness. It asserts behaviour, not validity: the ball rests at
+  exactly its radius, a ball fired at 40 u/s into all four corners stays on the slab, a flood fill
+  reaches all 22 objectives, and the level is *completed for real* through the rules layer with the
+  finish proven not to count early. 13/13 green.
+
+### Built and verified, NOT yet integrated: the vehicle garage
+
+`archive-vehicles-scene.ts` + a vendored mesh pipeline are complete and pass their own harness (all
+three models resolve, exact mesh/triangle counts, each resting on its plinth, the Impreza's seven
+decoded textures). **Deliberately left unwired** rather than half-integrated at the end of a long
+session: it needs the vehicle meshes registered in the asset catalog (production currently prunes
+them out of `dist/`), the scene wired to a front-door row, and its bespoke harness smoke converted
+to the standard dist-driven pattern the way the levels smoke was. Next session's first job.
+
+### A real defect found in shared code, recorded not fixed
+
+`loadAgentWorldModel` (`agent-world-assets.ts:228-234`) sets `position` and `scale` on the **same**
+node. three composes T·R·S, so the recentring translation is applied in unscaled units while the
+geometry is scaled: the model lands displaced from its entity origin by ~`center · (1 − scale)`.
+Measured: a track mesh whose bounds centre sits 9.7 units above its base rendered **9.16 units
+below** where it was placed. This affects essentially every `model` entity, since the default
+`fitSize` is 4. **Not fixed here on purpose** — it changes the position of every model in every
+existing scene, and some scenes may visually compensate for it, so it needs per-scene before/after
+screenshots rather than a rushed edit. Spawned as its own task with both candidate fixes and the
+regression assertion that would have caught it.
+
+### The lesson that keeps repeating
+
+"The recovered material lives upstream in the workshop" has now been **wrong three times** — CubX,
+the BallZ arenas, and the vehicles were all already decoded *in this repo*, merely un-graduated. The
+workshop is also simply present at `C:\Users\Yanik\codes\GraphysX`, so nothing is blocked. Check the
+filesystem before believing a repo-roles table.
