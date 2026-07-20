@@ -252,10 +252,11 @@ budgeted 256² target. Both are reachable from `api.spawn`, listed by `api.heigh
 placeable from the editor's Terrain palette, and survive export→load. The editor also gained an
 inspector, a prefab/model/texture/effects/terrain palette, and an exit path.
 
-**Highest-value next graduations** (in order): a force-field behavior, which composes with both
-particles and flocking; tree-DNA / evolutionary entities (§14 phase 4, still legacy-only); then
-map-editor UI on the default host (its data model already graduated into
-`agent-level-library.ts` and is reachable via `api.levels`).
+**Highest-value next graduations** (in order): ~~a force-field behavior~~ **done** (`forces-r1`);
+~~map-editor UI on the default host~~ **done** (`levels-r1`, see below). What remains at the head
+of this list is **tree-DNA / evolutionary entities** (§14 phase 4, still legacy-only in
+`nature-lab.ts`) — the third Nature-of-Code system — then **crowds**, still welded inside
+`race-scene.ts`.
 
 **Update (`levels-r1`):** the level *data* model was already graduated; what was missing was that
 nothing could turn a grid into a scene. `levels.play()` now materialises one (§14 phase 5), and the
@@ -275,11 +276,15 @@ The middle two are direct, silent violations of pillar §3.2 ("the editor and th
 the identical revision"). Parity is not only about *commits* landing in one history; it is about
 both surfaces reading the same world back.
 
-**Known defect, not addressed here:** the `terrain` heightfield collider and its visual mesh
-disagree near the edge of a `flattenRadius` pad by roughly one cell. A dynamic body that lands
-inside the pad rests correctly, but one that lands within about a cell of the rim is deflected
-down the landform instead of onto flat ground. Measurable with a radial drop sweep; the
-showroom works around it by keeping props and the ball-drop test point well inside the pad.
+~~**Known defect, not addressed here:** the `terrain` heightfield collider and its visual mesh
+disagree near the edge of a `flattenRadius` pad by roughly one cell.~~ **Fixed.** Two separate
+defects wore that one description: `flattenRadius` was applied per *vertex*, so the cell
+straddling the radius ramped (the pad was level only to the last grid ring inside it), and the
+collider was the *opposite triangulation* of the same corner heights — exact at every vertex, up
+to 0.35 units out mid-quad. Max |collider − mesh| is now 0.349 → 0.000. `npm run probe:terrain`
+is a radial sweep (20 radii × 8 bearings, rest asserted on position *and* velocity) rather than
+one drop; run it after touching terrain. The residual drift it still reports *outside* the pad is
+the cannon narrowphase seam-kick recorded in the handoff, not a height-data problem.
 
 ## 9. Repo roles
 

@@ -61,9 +61,28 @@ Clean `PlatformHost`; full agent API + tool bridge; rebuilt editor (scene tree, 
 inspector, tabbed library, Save/Load/Export); ASCII/grid level workbench with lossless
 round-trip; graduated vocabulary — skyboxes (6 archive sets), particle emitters (8
 archive-derived presets), heightmap terrain with a cannon-es `Heightfield` collider,
-reflective water, flocking (entity type, 0.228 ms/step for 116 members); showroom with
-kinetic physics, click-to-drop, click-to-focus; CI gating production; scene store + scene
-browser; trigger volumes; typed event stream; asset split (`dist` 140 MB → ~65 MB).
+reflective water, flocking (entity type, 0.228 ms/step for 116 members), **force fields**
+(4 kinds / 5 presets, entity for identity + runtime pass for effect), a **2D overlay layer**
+(`environment.overlay`, 3 Canvas2D sketches, drawn in the one shared `tick()`); showroom with
+kinetic physics, click-to-drop, click-to-focus, **shadows**; CI gating production; scene store
++ scene browser; trigger volumes; typed event stream; asset split (`dist` 140 MB → ~65 MB).
+
+**The three front-door destinations (§5) are all live.** Showroom → **Games & Playgrounds**
+(`games-shelf.ts`, every row `api.levels.play(id)`) → framed play with a HUD → **win panel** →
+back to the showroom. **Browse Scenes** (`browse-shelf.ts`) is the third: a gallery of curated
+starters (`api.starters()`) that open in the *editor* — Browse loads a scene to work on, Games
+enters play. No store required for either.
+
+**§13 "v1 done" is essentially met** — see the milestone note at the end of `progress.md`. The
+one game rebuilt *on* the platform (BallZ, `ballz-play.ts`) is won by collecting every ring and
+*then* reaching the finish; crossing early does not count.
+
+**Round-trip sweep** (`scripts/smoke-roundtrip.mjs`, in `verify.mjs`). 63 settable properties
+set through the public API and read back through four paths — `state()`, `exportDocument()`, a
+reload from that export, and where observable the live three.js/cannon object. It exists because
+the same bug kept recurring in different clothes: **a surface that writes state without ever
+reading it back**. Four instances found and fixed that way. Run it after adding any settable
+field, and prefer an object-verified check over a storage round-trip where one is possible.
 
 **Terrain pad + collider correctness.** Two defects behind the old "collider disagrees with
 the mesh near the flatten rim" entry, both fixed in `agent-world-terrain.ts`:
@@ -89,15 +108,23 @@ which greys out the one- and two-pixel coloured stars this set is made of (max c
 
 ## Remaining, in priority order
 
-1. **Shadows.** Disabled back when nothing cast them; there are casters now (kinetic
-   stack, trees, flock). Best visual-per-effort left. Terrain must `receiveShadow`.
-2. **BallZ level (Phase 5).** §13 hangs "v1 done" on one game rebuilt *on* the platform,
-   not ported. Every prerequisite now exists: the level workbench authors the layout,
-   terrain gives ground with a collider, physics/emitters/flock/triggers are vocabulary.
-   Highest-value remaining feature.
-3. Force fields (composes with particles + flock), evolutionary/DNA entities, crowds
-   (welded inside `race-scene.ts`), 2D overlay layer (no layer concept exists at all),
-   CubX recovered geometry (still 8 plain boxes), audio (19 sounds upstream, 4 vendored).
+The v1 bar is met, so what follows are **enrichments beyond it**, not gaps in it. Nothing
+here blocks a release; pick by value rather than by order.
+
+1. **`server/scene-store.mjs:89` needs a bounded retry on `rename`.** The only known *bug*
+   in this list. It does write-temp-then-`rename` for atomicity, and on Windows `rename` over
+   an existing target throws `EPERM` whenever a scanner or indexer momentarily holds the file.
+   It has surfaced as an intermittent `scene-store` smoke failure and has been misread as
+   Chromium teardown flake — it is not. Small, real, and currently owned by nobody.
+2. **Evolutionary / DNA entities** (§14 phase 4) — still legacy-only in `nature-lab.ts`. The
+   third Nature-of-Code system after flocking and force fields, and the last one with a real
+   recovered implementation to adapt.
+3. **Crowds** — welded inside `race-scene.ts`; needs extracting behind a v2 interface.
+4. **Prefabs are in the API but absent from the editor UI** — the one place v2 vocabulary is
+   reachable by an agent and not by a human, which inverts the usual gap.
+5. Audio (19 sounds upstream, 4 vendored); CubX recovered geometry (still 8 plain boxes);
+   the §14.5 BallZ shader pass; high-res skies; p5-to-texture and multi-layer overlay stacks
+   (both named as deferred in `overlay-r1`, both optional in §4).
 
 ## Known defects — recorded, not hidden
 
