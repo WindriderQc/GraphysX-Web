@@ -1,4 +1,11 @@
 import {
+  ARCHIVE_PLAYGROUNDS,
+  ARCHIVE_PLAYGROUNDS_NOT_REVIVED,
+  archivePlaygroundBrowseRows,
+  buildArchivePlayground,
+  composeArchivePlayground,
+} from "./archive-playgrounds";
+import {
   ARCHIVE_BALLZ_LEVELS,
   ARCHIVE_BALLZ_NOT_REVIVED,
   seedArchiveBallzLevels,
@@ -90,6 +97,14 @@ if (mode === "legacy") {
           // as a composed row. main.ts supplies it because framing needs the host, which the
           // shelf deliberately does not have.
           composed: [
+            // The recovered Nature Lab playgrounds. They open in the editor like any browsed
+            // scene, so their simulation vocabulary is selectable and editable.
+            ...archivePlaygroundBrowseRows(host.api, () => {
+              showroomEnvironment?.();
+              showroomEnvironment = null;
+              host.applyEnvironment();
+              void host.enterEditor();
+            }),
             {
               id: "archive-garage",
               label: "Archive Garage",
@@ -155,6 +170,10 @@ if (mode === "legacy") {
       __GRAPHYSX_ARCHIVE__: {
         levels: ARCHIVE_BALLZ_LEVELS,
         notRevived: ARCHIVE_BALLZ_NOT_REVIVED,
+        playgrounds: ARCHIVE_PLAYGROUNDS,
+        playgroundsNotRevived: ARCHIVE_PLAYGROUNDS_NOT_REVIVED,
+        buildPlayground: buildArchivePlayground,
+        composePlayground: composeArchivePlayground,
         toPlatformRows,
         seed: seedArchiveBallzLevels,
       },
