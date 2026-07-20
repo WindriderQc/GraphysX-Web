@@ -1,22 +1,24 @@
 import { PUSH_DIRECTIONS } from "./ballz-level-scene";
-import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import { describeRun, formatClock, type GraphysXAgentWorldApi } from "./agent-world-runtime";
 
 /**
- * The thin play layer over a materialised level: arrow keys push the ball, a HUD reads the
- * runtime's event stream to say what is happening, and a completion panel when the level is won.
+ * The thin play layer over a materialised level: arrow keys push the ball, a HUD that renders
+ * the run, and a completion panel when the level is won.
  *
- * Deliberately thin, and deliberately not a game engine. It holds no *scene* state — the ball's
- * steering is four `apply-impulse` interactions that live on the ball itself, and a ring hides
- * itself through its own trigger interaction, so a key press and a collection are ordinary API
- * operations an agent could make too. What this layer owns is *rules* state: which rings have
- * been collected, and whether the finish has been reached with the set complete. That is exactly
- * the layer the runtime deliberately refuses to be — "what a crossing *means* (a lap, a win) sits
- * above the scene", per `ballz-level-scene.ts`. Delete this file and the level still simulates
- * correctly; it simply stops keeping score.
+ * **This file used to own the rules and no longer does.** It held the win condition in
+ * TypeScript and found the pieces by string-matching entity ids — `startsWith("ballz-ring-")`
+ * for a pickup, `=== "ballz-finish-gate"` for the goal — so "collect everything, then reach
+ * the end" was expressible by exactly one world, was invisible to `export()` and the store,
+ * and no agent could read or change it. That is the private code path the invariant forbids,
+ * and it is now a `rules` block in the scene document judged by `agent-world-rules.ts`.
  *
- * The win rule is intentionally forgiving-but-real: collect every ring, then reach the finish.
- * Crossing the finish with rings still out does not win — you have to come back to it — which is
- * what makes the rings matter rather than being scenery you can ignore.
+ * What is left here is genuinely a *view*: it reads `api.rules.status()` and draws it. The
+ * consequence worth noting is that this file no longer knows what BallZ is. Point it at any
+ * scene carrying a rules block and a steerable subject and the HUD is correct, which is what
+ * makes the World 1 / Great Slide ports a scene each rather than a play layer each.
+ *
+ * It still owns no scene state: the ball's steering is four `apply-impulse` interactions on
+ * the ball itself, so a key press is an ordinary API call an agent could make too.
  */
 export function mountBallzPlay(
   api: GraphysXAgentWorldApi,
@@ -33,14 +35,12 @@ export function mountBallzPlay(
   // route would otherwise get a correct but invisible HUD.
   injectStyleOnce();
 
-  const totalRings = api.query({ tag: "collectible" }).length;
-  const hasFinish = api.query({ ids: ["ballz-finish-gate"] }).length > 0;
-  // A Set, not a counter: rolling back through a ring you already took must not inflate the
-  // tally, and the raw event count would. Collection is monotonic and unique by construction.
-  const collectedRings = new Set<string>();
-  let won = false;
-  // Only events after mount matter; replaying the level's construction would count nothing.
-  let since = api.events().sequence;
+  // The run is armed by the runtime when the scene loads, so there is nothing to start here
+  // and — importantly — no second cursor into the event stream. This layer never reads
+  // `events()` at all now, which is what removed its ability to disagree with the runtime
+  // about whether you had won.
+  const initial = api.rules.status();
+  let won = initial?.phase === "complete";
 
   const hud = document.createElement("div");
   hud.className = "gx-bz-hud";
@@ -48,7 +48,7 @@ export function mountBallzPlay(
   status.className = "gx-bz-status";
   const hint = document.createElement("div");
   hint.className = "gx-bz-hint";
-  hint.textContent = totalRings > 0 ? "collect the rings, then reach the finish" : "arrow keys to roll";
+  hint.textContent = (initial?.collectibleCount ?? 0) > 0 ? "collect the rings, then reach the finish" : "arrow keys to roll";
   hud.append(status, hint);
   // Play is a place you can leave. Without this the only way out of a game is a page reload,
   // which is the sort of dead end that makes a mode feel like a trap rather than a surface.
@@ -63,12 +63,20 @@ export function mountBallzPlay(
   container.append(hud);
 
   const renderHud = (): void => {
-    const parts: string[] = [];
-    if (totalRings > 0) parts.push(`${collectedRings.size} / ${totalRings} rings`);
-    // Only when every ring is in do we tell the player the finish is now live — before that,
-    // announcing the finish would invite them to run straight at a gate that will not count.
-    if (totalRings > 0 && collectedRings.size >= totalRings && !won) parts.push("finish is open");
-    status.textContent = parts.join("  ·  ") || "roll the ball";
+    const run = api.rules.status();
+    if (!run) {
+      status.textContent = "roll the ball";
+      return;
+    }
+    const parts = [describeRun(run)];
+    // Only when the lap's requirements are met do we say the finish is live — announcing it
+    // earlier invites a run straight at a gate that will not count.
+    const ringsIn = run.collected.length >= run.collectibleCount;
+    const gatesIn = run.checkpointIndex >= run.checkpointCount;
+    if (run.phase === "running" && ringsIn && gatesIn && (run.collectibleCount > 0 || run.checkpointCount > 0)) {
+      parts.push("finish is open");
+    }
+    status.textContent = parts.join("  ·  ");
   };
   renderHud();
 
@@ -86,32 +94,24 @@ export function mountBallzPlay(
   };
   window.addEventListener("keydown", onKeyDown);
 
-  // Poll the stream rather than subscribing: this is HUD text, and reading a few events every
-  // 200 ms costs nothing next to a frame, while a per-event subscription would re-render the
-  // DOM inside the simulation tick.
+  // Poll the *run*, not the stream. 200 ms is a HUD refresh rate, and the run it reads is
+  // advanced inside the simulation tick — so unlike the old cursor-into-`events()` version,
+  // a slow or backgrounded tab cannot cause this layer to miss a crossing. The worst a lagging
+  // poll costs now is a late repaint; it can no longer lose a ring.
   const poll = window.setInterval(() => {
     if (won) return;
-    const page = api.events(since);
-    since = page.sequence;
-    let changed = false;
-    for (const event of page.events) {
-      if (event.type !== "trigger.enter") continue;
-      const triggerId = String(event.data?.triggerId ?? "");
-      if (triggerId.startsWith("ballz-ring-")) {
-        if (!collectedRings.has(triggerId)) { collectedRings.add(triggerId); changed = true; }
-      } else if (triggerId === "ballz-finish-gate" && hasFinish) {
-        // The win is judged at the moment of crossing, against the rings collected *by then*.
-        // Cross early and it simply does not fire; the finish stays a place you return to.
-        if (collectedRings.size >= totalRings) { win(); return; }
-      }
+    const run = api.rules.status();
+    if (run?.phase === "complete") {
+      win(run.collectibleCount, run.elapsedSeconds, run.desynced);
+      return;
     }
-    if (changed) renderHud();
+    renderHud();
   }, 200);
 
-  function win(): void {
+  function win(totalRings: number, seconds: number, desynced: boolean): void {
     won = true;
     hud.remove();
-    container.append(buildWinPanel(api, totalRings, onExit));
+    container.append(buildWinPanel(api, totalRings, seconds, desynced, onExit));
   }
 
   return () => {
@@ -130,6 +130,8 @@ export function mountBallzPlay(
 function buildWinPanel(
   api: GraphysXAgentWorldApi,
   totalRings: number,
+  seconds: number,
+  desynced: boolean,
   onExit?: () => void,
 ): HTMLElement {
   const panel = document.createElement("div");
@@ -141,7 +143,10 @@ function buildWinPanel(
 
   const sub = document.createElement("div");
   sub.className = "gx-bz-win-sub";
-  sub.textContent = totalRings > 0 ? `all ${totalRings} rings · finish reached` : "finish reached";
+  const summary = totalRings > 0 ? `all ${totalRings} rings · ${formatClock(seconds)}` : `finish reached · ${formatClock(seconds)}`;
+  // A time whose evidence had a gap in it is shown, and labelled. Honesty over theatre: the
+  // run is still won, but this is not a number to put on a board.
+  sub.textContent = desynced ? `${summary} · time unverified (stream gap)` : summary;
 
   const actions = document.createElement("div");
   actions.className = "gx-bz-win-actions";

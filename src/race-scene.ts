@@ -204,6 +204,8 @@ import {
   type AgentWorldCommitReceipt,
   type AgentWorldCommitSummary,
   type AgentWorldEventPage,
+  type AgentWorldRulesDefinition,
+  type AgentWorldRunStatus,
   type AgentWorldDefinition,
   type AgentWorldEntityDefinition,
   type AgentWorldEntityPatch,
@@ -1887,6 +1889,28 @@ export class RaceScene {
 
   readAgentWorldEvents(since?: number): AgentWorldEventPage {
     return this.agentWorld?.readEvents(since) ?? { events: [], sequence: 0, dropped: false };
+  }
+
+  // The rules layer reaches the legacy host the same way everything else does: this class
+  // holds the identical `AgentWorldRuntime` the standalone host does, so parity here is four
+  // delegates rather than a second evaluator. A rules block authored on either host is the
+  // same document field, judged by the same reducer.
+  getAgentWorldRules(): AgentWorldRulesDefinition | null {
+    return this.agentWorld?.getRules() ?? null;
+  }
+
+  setAgentWorldRules(rules: AgentWorldRulesDefinition | null): AgentWorldResult<AgentWorldRunStatus | null> {
+    const result = this.agentWorld?.setRules(rules) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
+    this.afterAgentWorldMutation(result.ok);
+    return result;
+  }
+
+  agentWorldRunStatus(): AgentWorldRunStatus | null {
+    return this.agentWorld?.runStatus() ?? null;
+  }
+
+  resetAgentWorldRun(): AgentWorldResult<AgentWorldRunStatus | null> {
+    return this.agentWorld?.resetRun() ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
   }
 
   exportAgentWorld(): AgentWorldDefinition | null {

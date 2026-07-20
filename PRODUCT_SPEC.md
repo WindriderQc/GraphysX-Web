@@ -420,6 +420,54 @@ Foundation before flourish. Each phase is shippable and course-correctable.
    calls — so the level tool is now reachable from both sides, which is the parity claim rather
    than a convenience.
 
+   **Update (`rules-r1`):** the rule loop that the archive ports were waiting on. A `rules` block
+   — spawn point, ordered checkpoints, lap counting, elapsed timer, finish condition — is now an
+   optional top-level key on `graphysx.agent-world/v2`, consumed from the `trigger.enter` stream
+   by a pure reducer in `src/agent-world-rules.ts` and reachable as `api.rules.*`. This is what
+   unblocks World 1, Map 1, Great Slide, Level1 2011 and Skybox Spiral: their geometry already
+   ports free from `src/legacy/`, and only the rule loop was missing.
+
+   Two decisions, made deliberately:
+
+   - **Rules live in the document, not beside it.** The deciding argument was not portability but
+     the store: `server/scene-store.mjs` versions, revision-guards and SSE-broadcasts exactly one
+     thing, the v2 document. Rules kept as a sibling `graphysx.agent-level/v1` would have needed
+     their own revision counter, conflict guard and broadcast channel before a human and an agent
+     could share a course — the shared-scene property would silently not have applied to the half
+     of the scene that decides who won. Cost was low: `validateWorldDefinition` is allowlist-free,
+     so only the three sites that *rebuild* the document literal had to learn to carry the key.
+   - **`dropped` is honoured, asymmetrically.** A gap in the event stream is recoverable for
+     pickups (a collected ring hides itself, so the scene still knows) and not recoverable for
+     laps or gate progress (nothing but the history recorded those). So the run rebuilds what it
+     can, keeps what it cannot — those can only ever be *under*-counted — and marks itself
+     `desynced` permanently with a `resyncs` tally. The completion panel shows the time and
+     labels it unverified. Honesty over theatre: still a win, not a leaderboard time.
+
+   **What this removed is the point.** `ballz-play.ts` was already a rules layer, in TypeScript,
+   discovering its pieces by string-matching entity ids (`startsWith("ballz-ring-")`,
+   `=== "ballz-finish-gate"`). That is precisely the private code path the invariant forbids: no
+   other world could express "collect these, then reach that", and the rule was invisible to
+   `export()`, to the store, and to every agent. It is now a HUD that renders
+   `api.rules.status()` and no longer knows what BallZ is — which is what makes the remaining
+   ports a scene each rather than a play layer each.
+
+   Verified by `scripts/smoke-rules.mjs` against behaviour: a subject teleported through volumes
+   under `pause`/`step` proves that cutting the course does not bank a lap, that gate 2 before
+   gate 1 is a no-op, that two laps means two laps, that the clock is simulation time and freezes
+   on completion, that the block survives export→load, that an unknown gate id is rejected at
+   author time, and that a forced 512-entry overflow surfaces as `desynced` with the pickups
+   rebuilt from the scene.
+
+   Two defects were found by review and by driving, not by the type checker: a tag-resolved
+   collectible set matched *any* non-structural trigger, so every fire tile in a level counted as
+   a ring; and `armRun` started with an empty collected set, so `rules.reset()` on a played course
+   produced a run demanding rings that were already hidden and could never be crossed again — an
+   unwinnable course produced by the reset button.
+
+   **Not yet:** no per-scene camera, so a course still frames with the host default. `timer` only
+   measures and expires; there is no best-time persistence, which needs a store-side concept that
+   does not exist. The five archive ports are unblocked, not done.
+
    **Not yet, and not hidden:** no shader pass. Camera framing after materialising is the host
    default rather than fitted to the level — play a 44×30 level and the floor slab fills the
    viewport. Ice tiles model low friction but not the tile's attraction. This is a level that

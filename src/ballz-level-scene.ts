@@ -1,6 +1,8 @@
 import {
+  GRAPHYSX_AGENT_RULES_SCHEMA,
   GRAPHYSX_AGENT_WORLD_SCHEMA,
   type AgentWorldEntityDefinition,
+  type AgentWorldRulesDefinition,
   type AgentWorldVector3,
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
@@ -566,10 +568,45 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
     deviations.push("Fire tiles launch the ball by id, because a trigger's interactions do not name the entity that crossed it.");
   }
 
+  // --- The rules the level plays by ------------------------------------------------------
+  // Emitted as scene data, not as code. Before this, `ballz-play.ts` held the win condition
+  // in TypeScript and discovered it by string-matching entity ids (`startsWith("ballz-ring-")`,
+  // `=== "ballz-finish-gate"`) — which is precisely the private code path the invariant
+  // forbids: no other world could express "collect these, then reach that", and the rule was
+  // invisible to `export()`, to the store, and to any agent.
+  //
+  // The same rule as data is portable. A halfway gate becomes an *ordered checkpoint*, which
+  // is also the thing that makes this generalise past BallZ: a course with four gates and
+  // three laps is the same block with a longer array, which is what the World 1 / Great Slide
+  // ports need and could not have said before.
+  const rules: AgentWorldRulesDefinition | undefined =
+    finishId || ringIds.length > 0
+      ? {
+          schema: GRAPHYSX_AGENT_RULES_SCHEMA,
+          // Only the player's crossings count. Without this, a ball knocked through a gate by
+          // a fire jet would bank a lap for whatever else happened to be drifting through.
+          ...(spawnPosition ? { subjectId: "ballz-ball", spawn: { entityId: "ballz-ball", position: spawnPosition } } : {}),
+          // The halfway gate is the one ordered checkpoint a BallZ grid can express. Crossing
+          // the finish without it does not count, which is what stops a level being won by
+          // rolling straight from the start pad to the goal past everything else.
+          ...(halfId ? { checkpoints: [{ triggerId: halfId, label: "Halfway" }] } : {}),
+          // Tag-resolved rather than an id list: the tag is already on every ring, and a
+          // level edited after materialising (an agent spawning another ring) stays correct
+          // because the set resolves when the run arms.
+          ...(ringIds.length > 0 ? { collectibles: { tag: "collectible", requiredToFinish: true } } : {}),
+          ...(finishId ? { finish: { triggerId: finishId } } : {}),
+          laps: 1,
+        }
+      : undefined;
+  if (!rules) {
+    deviations.push("Level has no finish gate and no rings, so it carries no rules block and cannot be won.");
+  }
+
   api.create({
     schema: GRAPHYSX_AGENT_WORLD_SCHEMA,
     id: `ballz-level-${level.id}`,
     label: level.label,
+    ...(rules ? { rules } : {}),
     environment: {
       background: "#0d1a24",
       // The sky is not decoration here, it is the lighting fix. Without one, `PlatformHost`

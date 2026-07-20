@@ -337,7 +337,11 @@ const ok =
   out.hudVisible?.present === true &&
   out.hudVisible?.sized === true &&
   out.hudVisible?.occludedBy === null &&
-  /rings/.test(out.hudText ?? "") &&
+  // The HUD is rendered by the generic rules layer now, so it names what it counts
+  // ("collected") rather than what BallZ happens to call them ("rings"). The assertion that
+  // matters is unchanged: the tally is on screen and labelled, not a bare fraction.
+  /collected/.test(out.hudText ?? "") &&
+  /\d+:\d\d/.test(out.hudText ?? "") &&
   out.outliner?.showsLevel === true &&
   out.outliner?.showsDemoWorld === false &&
   out.outliner?.agreesOnCount === true &&

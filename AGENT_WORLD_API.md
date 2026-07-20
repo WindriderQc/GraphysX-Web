@@ -414,6 +414,80 @@ gx.spawn({ id: "well", type: "force-field", transform: { position: [0, 4, 0] },
 
 A field pushes dynamic rigid bodies, flock members, and (opt-in via `affectsParticles`) live particles inside its `sphere`/`box`/`infinite` region — `affectsTags` narrows it to tagged entities. It never takes a `physics` field of its own. `state().forceField` reports `affectedCount` and `peakAcceleration` from the last step, so a present-but-inert field (wrong radius, wrong tags) is distinguishable from a working one.
 
+## Rules: what a crossing means
+
+A `trigger` volume reports that something entered it and deliberately says nothing about what
+that meant. The `rules` block on the scene document says: a spawn point, ordered checkpoints,
+laps, an elapsed clock, and a finish condition.
+
+It lives **in** the document — `graphysx.agent-world/v2` gained one optional top-level key, not
+a sibling schema. So a course's win condition travels through `export()`, `save()`, the scene
+store and its SSE broadcast on exactly the same path as its geometry, and an agent edits it
+with an ordinary write instead of a second protocol.
+
+```js
+gx.create({
+  schema: "graphysx.agent-world/v2",
+  id: "course", label: "Course",
+  entities: [ /* … gates as physics.mode: "trigger" … */ ],
+  rules: {
+    schema: "graphysx.agent-rules/v1",
+    subjectId: "ball",                                  // whose crossings count
+    spawn: { entityId: "ball", position: [0, 1, 0] },
+    checkpoints: [{ triggerId: "cp-1" }, { triggerId: "cp-2" }],  // ordered
+    collectibles: { tag: "pickup", requiredToFinish: true },      // order-free
+    finish: { triggerId: "finish" },
+    laps: 2,
+  },
+});
+
+gx.rules.status();   // → the live run
+gx.rules.get();      // → the block (scene data)
+gx.rules.set(block); // → install/replace; validates every id, arms a fresh run
+gx.rules.reset();    // → re-arm and put the subject back on its spawn
+```
+
+Crossings only count in order: gate 2 before gate 1 is a no-op, and the finish banks a lap only
+once the lap's gates and required pickups are in. Cutting the course simply never completes it.
+A run's clock is **simulation** time, so `pause()` freezes it and `step()` advances it exactly
+as much as it stepped; a finished run's time stops rather than drifting upward.
+
+`status()` returns:
+
+| Field | Meaning |
+| --- | --- |
+| `phase` | `idle` · `running` · `complete` · `expired` |
+| `lap` / `laps` | Laps banked, laps required. |
+| `checkpointIndex` / `checkpointCount`, `nextCheckpointId` | Progress through this lap's ordered gates. |
+| `collected` / `collectibleIds` / `collectibleCount` | Pickups taken, and the set resolved at arm time. |
+| `elapsedSeconds`, `outcome` | Simulation-time clock; `complete` or `timeout`. |
+| `sequence` | The event cursor the run is holding. |
+| `desynced`, `resyncs` | Whether the run's evidence had a gap in it. See below. |
+
+### `dropped` is honoured, and what that costs
+
+The evaluator polls `events(since)` rather than subscribing, so it can miss events — and
+`api.events()` reports exactly that with `dropped: true` when the requested sequence has aged
+out of the 512-entry ring. This is not hypothetical: `step(30)` runs 1800 substeps in one call
+and a busy course can overflow the buffer inside it.
+
+What a gap costs is asymmetric, and the run treats it that way:
+
+- **Pickups are recovered.** A collected item hides itself through its own `toggle-visibility`
+  interaction, so "which are gone" is a fact about the *world*. The set is rebuilt from the
+  scene, exactly.
+- **Laps and gate progress are not.** Nothing in world state records that you crossed gate 3.
+  They are kept as-is — a gap can only ever *under*-count them — and the run is marked
+  `desynced` permanently, with a `resyncs` tally.
+
+A desynced run is still a run; its **time is not a time to put on a leaderboard**, and both the
+status object and the BallZ completion panel say so rather than leaving the caller to guess.
+The flag is sticky: later clean pages do not launder it back to trustworthy.
+
+Reading the run is also strictly better than reading the stream yourself. `status()` is
+advanced inside the simulation tick, so a slow consumer polling it gets a late repaint, never a
+lost lap.
+
 ## Collaboration commits
 
 Use `commit()` when multiple agents may edit the same world. `expectedRevision` is an optimistic concurrency guard: a stale observation is rejected without changing entities, revision, or accepted commit history.
@@ -457,6 +531,9 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `commit(changeSet)`, `history(sinceRevision?)` | Apply actor-aware revision-guarded edits and inspect accepted collaboration history. |
 | `select(ids)` | Share stable entity selection with viewport picking, the outliner, inspector, and transform gizmo. |
 | `query(filter)`, `observe(filter?)`, `state()` | Read entities or a complete serializable world state. |
+| `events(since?)` | Read the typed, sequence-numbered event stream. Honour `dropped`: it means resync from `state()`. |
+| `rules.get()`, `rules.set(block)` | Read or install the scene's rules block — spawn, ordered checkpoints, laps, timer, finish. |
+| `rules.status()`, `rules.reset()` | Read the live run, or re-arm it and return the subject to its spawn. |
 | `pause(boolean)`, `step(seconds)` | Control deterministic simulation time. |
 | `undo()` | Restore the definition before the most recent successful edit. |
 | `export()`, `save(name)`, `load(nameOrDefinition)` | Move worlds between JSON, memory, and local browser storage. |

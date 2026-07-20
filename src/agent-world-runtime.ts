@@ -1,4 +1,26 @@
 import { GRAPHYSX_AGENT_WORLD_OVERLAYS, isOverlayId, type AgentWorldOverlayDescriptor, type AgentWorldOverlayId } from "./agent-world-overlay";
+import {
+  GRAPHYSX_AGENT_RULES_CAPABILITIES,
+  advanceRun,
+  armRun,
+  validateRules,
+  type AgentWorldRulesDefinition,
+  type AgentWorldRulesSnapshot,
+  type AgentWorldRunStatus,
+} from "./agent-world-rules";
+// Re-exported so a consumer that already imports the runtime's vocabulary does not have to
+// know the rules layer lives in its own module — `AgentWorldDefinition` and the rules block
+// that hangs off it should arrive from the same place.
+export {
+  GRAPHYSX_AGENT_RULES_SCHEMA,
+  GRAPHYSX_AGENT_RUN_SCHEMA,
+  describeRun,
+  formatClock,
+  type AgentWorldCheckpointRule,
+  type AgentWorldRulesDefinition,
+  type AgentWorldRunPhase,
+  type AgentWorldRunStatus,
+} from "./agent-world-rules";
 
 import {
   AmbientLight,
@@ -402,6 +424,15 @@ export type AgentWorldDefinition = {
     physics?: Partial<AgentWorldEnvironment["physics"]>;
   };
   entities: AgentWorldEntityDefinition[];
+  /**
+   * What a crossing *means*: spawn, ordered checkpoints, laps, clock, finish condition.
+   *
+   * In the document rather than beside it, so a course's win condition travels through
+   * export/save/store/SSE on exactly the same path as its geometry — see the decision record
+   * at the head of `agent-world-rules.ts`. Optional and absent by default: a scene with no
+   * rules block serialises byte-identically to one authored before this existed.
+   */
+  rules?: AgentWorldRulesDefinition;
 };
 
 export type AgentWorldCommand =
@@ -648,6 +679,18 @@ export type GraphysXAgentWorldApi = {
    * a relay sending deltas instead of whole documents.
    */
   events(since?: number): AgentWorldEventPage;
+  /**
+   * The rules layer. `get`/`set` are scene data and round-trip; `status`/`reset` are the live
+   * run and do not. A scene with no rules block answers `null` rather than an empty run — the
+   * difference between "this course has no win condition" and "you have not won yet" matters
+   * to anything rendering it.
+   */
+  rules: {
+    get(): AgentWorldRulesDefinition | null;
+    set(rules: AgentWorldRulesDefinition | null): AgentWorldResult<AgentWorldRunStatus | null>;
+    status(): AgentWorldRunStatus | null;
+    reset(): AgentWorldResult<AgentWorldRunStatus | null>;
+  };
   undo(): AgentWorldResult<AgentWorldState>;
   select(ids: string[]): string[];
   query(query?: AgentWorldQuery): AgentWorldEntityState[];
@@ -796,6 +839,8 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "snapshot.export",
   "snapshot.save",
   "snapshot.load",
+  "events.stream",
+  ...GRAPHYSX_AGENT_RULES_CAPABILITIES,
   ...GRAPHYSX_AGENT_LEVEL_CAPABILITIES
 ] as const;
 
@@ -860,6 +905,15 @@ export class AgentWorldRuntime {
   private readonly stream: AgentWorldStreamEvent[] = [];
   private readonly streamListeners = new Set<(event: AgentWorldStreamEvent) => void>();
   private streamSequence = 0;
+  /**
+   * The rules layer's own state. `rules` is scene data (it round-trips); `run` is *session*
+   * state and deliberately does not — a saved course carries its win condition, never a
+   * half-finished attempt at it. Same distinction the store already draws between authoring
+   * a scene and living in one.
+   */
+  private rules: AgentWorldRulesDefinition | null = null;
+  private run: AgentWorldRunStatus | null = null;
+  private rulesCursor = 0;
   private definition: AgentWorldDefinition = deepClone(GRAPHYSX_AGENT_DEMO_WORLD);
   private environment: AgentWorldEnvironment = deepClone(DEFAULT_ENVIRONMENT);
   private selectedIds: string[] = [];
@@ -1174,7 +1228,8 @@ export class AgentWorldRuntime {
       id: this.definition.id,
       label: this.definition.label,
       environment: deepClone(this.environment),
-      entities: [...this.entities.values()].map(({ definition }) => serializeEntity(definition))
+      entities: [...this.entities.values()].map(({ definition }) => serializeEntity(definition)),
+      ...(this.rules ? { rules: deepClone(this.rules) } : {})
     };
   }
 
@@ -1200,7 +1255,10 @@ export class AgentWorldRuntime {
       environment: deepClone(this.environment),
       entities: [...this.entities.values()]
         .filter(({ definition }) => !dropped.has(definition.id))
-        .map(({ definition }) => serializeEntity(definition))
+        .map(({ definition }) => serializeEntity(definition)),
+      // The rules go with the document, not with the run. What persists is "this course is
+      // three laps and needs every ring"; what does not is "you are on lap two".
+      ...(this.rules ? { rules: deepClone(this.rules) } : {})
     };
   }
 
@@ -1538,6 +1596,123 @@ export class AgentWorldRuntime {
     // whether it came from a load, a rollback or an undo. Saying so is cheaper than every
     // consumer inferring it from a storm of spawn events.
     this.emit("world.loaded", [], { worldId: this.definition.id, entityCount: this.entities.size });
+    // Armed *after* the emit, deliberately. `world.loaded` idles a run — that is how an
+    // external consumer learns its course was replaced underneath it — so arming first would
+    // have the runtime's own evaluator immediately read that event and idle the run it had
+    // just started. Arming last puts the cursor past it.
+    this.applyRules(source.rules ?? null);
+  }
+
+  /**
+   * Install a rules block and arm a fresh run against it. Validation runs against the entity
+   * ids that actually exist, which is why this is called at the end of a load rather than
+   * alongside `validateWorldDefinition` — a checkpoint can only be checked once the gate it
+   * names has been spawned.
+   */
+  private applyRules(rules: AgentWorldRulesDefinition | null): void {
+    if (!rules) {
+      this.rules = null;
+      this.run = null;
+      this.definition.rules = undefined;
+      this.rulesCursor = this.streamSequence;
+      return;
+    }
+    validateRules(rules, new Set(this.entities.keys()));
+    this.rules = deepClone(rules);
+    this.definition.rules = deepClone(rules);
+    this.rulesCursor = this.streamSequence;
+    this.run = armRun(this.rules, this.rulesSnapshot(), this.rulesCursor);
+    this.recordEvent("rules.armed", `${this.run.checkpointCount} checkpoints · ${this.run.collectibleCount} collectibles · ${this.run.laps} lap(s)`);
+  }
+
+  /**
+   * The world facts the evaluator is allowed to see. Deliberately narrow: id, visibility and
+   * tags are everything a resync needs, and handing it the whole entity state would invite a
+   * rules layer that reads positions and quietly becomes a second physics engine.
+   */
+  private rulesSnapshot(): AgentWorldRulesSnapshot {
+    return {
+      nowSeconds: this.elapsedSeconds,
+      entities: [...this.entities.values()].map(({ definition }) => ({
+        id: definition.id,
+        visible: definition.visible !== false,
+        tags: definition.tags ?? []
+      }))
+    };
+  }
+
+  /**
+   * Drive the run one slice, from inside the simulation so it inherits pause/step.
+   *
+   * It polls `readEvents(cursor)` — its own buffer, through the same public path an
+   * out-of-process agent uses — rather than subscribing. That looks redundant for an
+   * in-process consumer and is the point: `step(30)` runs 1800 substeps in a single call and
+   * a busy course overflows the 512-entry ring inside it, so the `dropped` branch is live
+   * code on the real path instead of a limb only a test can reach.
+   */
+  private updateRules(): void {
+    if (!this.rules || !this.run) return;
+    const page = this.readEvents(this.rulesCursor);
+    this.rulesCursor = page.sequence;
+    const before = this.run;
+    this.run = advanceRun(before, this.rules, page, this.rulesSnapshot());
+    if (this.run.resyncs > before.resyncs) {
+      this.recordEvent("rules.resync", `stream gap at ${before.sequence}; collectibles rebuilt from the scene, lap and gate counts kept and flagged`);
+    }
+    if (this.run.phase !== before.phase && (this.run.phase === "complete" || this.run.phase === "expired")) {
+      this.recordEvent("rules.finished", `${this.run.outcome} in ${this.run.elapsedSeconds.toFixed(2)}s${this.run.desynced ? " (desynced)" : ""}`);
+    }
+  }
+
+  /** The live rules block, or null. */
+  getRules(): AgentWorldRulesDefinition | null {
+    return this.rules ? deepClone(this.rules) : null;
+  }
+
+  /** Install or clear a rules block on the live scene, arming a fresh run. */
+  setRules(rules: AgentWorldRulesDefinition | null): AgentWorldResult<AgentWorldRunStatus | null> {
+    try {
+      this.applyRules(rules);
+    } catch (error) {
+      return this.failure(error instanceof Error ? error.message : String(error));
+    }
+    this.definition.rules = this.rules ?? undefined;
+    return this.success(this.run ? deepClone(this.run) : null);
+  }
+
+  /** The current run, or null when the scene declares no rules. */
+  runStatus(): AgentWorldRunStatus | null {
+    return this.run ? deepClone(this.run) : null;
+  }
+
+  /**
+   * Re-arm the run without reloading the scene, and put the subject back on the spawn point.
+   *
+   * Note what this does *not* do: it does not restore collected rings, because a ring hides
+   * itself and un-hiding it is an ordinary scene edit the caller can make. Keeping the reset
+   * to "clock, laps, gates, and where the subject stands" is what stops it becoming a
+   * bespoke save-state system living inside the runtime.
+   */
+  resetRun(): AgentWorldResult<AgentWorldRunStatus | null> {
+    if (!this.rules) return this.failure("This scene declares no rules");
+    const spawn = this.rules.spawn;
+    if (spawn) {
+      const subject = this.entities.get(spawn.entityId);
+      if (subject) {
+        const position = spawn.position ?? subject.definition.transform.position;
+        subject.object.position.set(...position);
+        if (subject.body) {
+          subject.body.position.set(...position);
+          subject.body.velocity.setZero();
+          subject.body.angularVelocity.setZero();
+          subject.body.wakeUp();
+        }
+      }
+    }
+    this.rulesCursor = this.streamSequence;
+    this.run = armRun(this.rules, this.rulesSnapshot(), this.rulesCursor);
+    this.recordEvent("rules.reset", spawn?.entityId ?? "clock only");
+    return this.success(deepClone(this.run));
   }
 
   private buildEnvironment(): void {
@@ -1649,6 +1824,8 @@ export class AgentWorldRuntime {
         }
       }
     }
+    // Last, so the rules see the crossings this slice produced rather than last slice's.
+    this.updateRules();
   }
 
   /**

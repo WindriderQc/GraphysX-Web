@@ -143,6 +143,12 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
     commit: (changeSet) => runtime.commit(changeSet),
     history: (sinceRevision) => runtime.getCommitHistory(sinceRevision),
     events: (since) => runtime.readEvents(since),
+    rules: {
+      get: () => runtime.getRules(),
+      set: (rules) => runtime.setRules(rules),
+      status: () => runtime.runStatus(),
+      reset: () => runtime.resetRun(),
+    },
     undo: () => runtime.undo(),
     select: (ids) => runtime.select(ids),
     query: (query) => runtime.query(query),
