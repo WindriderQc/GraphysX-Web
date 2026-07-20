@@ -489,6 +489,13 @@ export async function startSceneStore({ port = DEFAULT_PORT, dir } = {}) {
     url: `http://127.0.0.1:${actualPort}`,
     store,
     async close() {
+      // A bare server.close() waits for every open connection to end on its own: the
+      // caller's own undici keep-alive socket (idle for up to the 72s keepAliveTimeout
+      // above — in-process smokes sat through it every run), and any SSE stream a wedged
+      // tab never closed, which waits forever. That tail is part of how a verify hung for
+      // 9.5 hours. Closing is a decision, not a negotiation: sever everything, then close.
+      server.closeIdleConnections?.();
+      server.closeAllConnections?.();
       await new Promise((resolveClose) => server.close(() => resolveClose(undefined)));
     },
   };
