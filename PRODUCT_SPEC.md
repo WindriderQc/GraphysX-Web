@@ -193,8 +193,8 @@ locked inside a legacy environment module (`?host=legacy` only) has **not** grad
 | Save / load / export / import (v2 JSON + legacy XML) | **Real, API-only.** No UI on the default host. |
 | Scene Editor: outliner, gizmo, create/delete, pause/step | **Ships.** |
 | Scene Editor: inspector, materials/textures, behaviors, interactions, tags, undo, JSON Workbench | **Not on the default host.** That list describes the *legacy* prototype-app panel. |
-| Simulation systems (particles + ≥1 Nature-of-Code system) as editor entities | **Ships.** `emitter` is a v2 entity type (`agent-world-particles.ts`) with 8 presets derived from the decoded TV3D archive library, spawnable from the editor's Effects palette and via `api.emitters()`, budgeted at 600 particles/emitter. `flock` (`agent-world-flock.ts`) and now `force-field` (`agent-world-force-field.ts`) are v2 entity types too, both in the editor's Life palette with `api.flocks()` / `api.forceFields()`. Force fields graduate the second Nature-of-Code system — the forces-garden attractor/flow/drag/vortex from the p5 `sAll` sketches — and act *on* rigid bodies, particle emitters and flocks. DNA/evolutionary entities are still legacy-only in `nature-lab.ts`. |
-| Curated vocabulary: assets, models, textures, prefabs | **Partial.** 63 mesh assets + 11 textures + prefabs reachable from v2. ~~Prefabs exist in the API but are absent from the editor UI~~ — corrected: the editor's library has a Prefabs tab (the default tab), and each chip calls the same `spawnPrefab` an agent calls. |
+| Simulation systems (particles + ≥1 Nature-of-Code system) as editor entities | **Ships.** `emitter` is a v2 entity type (`agent-world-particles.ts`) with 8 presets derived from the decoded TV3D archive library, spawnable from the editor's Effects palette and via `api.emitters()`, budgeted at 600 particles/emitter. `flock` (`agent-world-flock.ts`) and now `force-field` (`agent-world-force-field.ts`) are v2 entity types too, both in the editor's Life palette with `api.flocks()` / `api.forceFields()`. Force fields graduate the second Nature-of-Code system — the forces-garden attractor/flow/drag/vortex from the p5 `sAll` sketches — and act *on* rigid bodies, particle emitters and flocks. A fourth, `formula-field` (`agent-world-formula.ts`), graduates the recovered Math Game — `Formulas::moleculesUpdate`'s PARABOLA/SLOPE and the `moleculesCreate` molecule grid — as an instanced field whose coefficients are ordinary scene data, editable in the inspector and via `api.update`. It affords the archive's full 10,000 molecules where a flock caps at 240, because a formula has no neighbour test. DNA/evolutionary entities are still legacy-only in `nature-lab.ts`. |
+| Curated vocabulary: assets, models, textures, prefabs | **Partial.** 66 mesh assets (including the three recovered vehicles under a `vehicle` category) + 17 textures + prefabs (including the recovered `cubx-assembly`) reachable from v2. ~~Prefabs exist in the API but are absent from the editor UI~~ — corrected: the editor's library has a Prefabs tab (the default tab), and each chip calls the same `spawnPrefab` an agent calls. |
 | Browse Scenes + Games & Apps | **Both ship on the front door.** **Games & Playgrounds** (`games-shelf.ts`): lists the level library, every row is `api.levels.play(id)`, playing switches the host to `play` mode and returns to the showroom on exit — with a win state (`ballz-play.ts`) and framed camera. **Browse Scenes** (`browse-shelf.ts`): a gallery of the curated starter scenes (`api.starters()`), each row opening the scene in the *editor* (Browse loads a scene to work on it; Games enters play). No store required. The store-backed scene browser (`scene-browser.ts`) remains the path for *saved* scenes once a store is reachable. §5's three destinations are all live. |
 | 2D overlay capability in the scene model | **Ships.** `environment.overlay` is a scene-serialisable field (`agent-world-overlay.ts`): a generative Canvas2D layer the host draws over the 3D view, off by default, three sketches (vignette/starfield/scanlines), reachable from `api` (via `environment`) and an editor dropdown. Drawn in the single shared `tick()` — `smoke-overlay.mjs` asserts the overlay advances one frame per 3D frame (never a second rAF). DOM chrome (HUD/menus) was already the default 2D path; this adds the generative layer §4 wanted. p5-to-texture and multi-layer stacks remain future. |
 | Live local interaction (human + in-browser agent, one scene) | **Ships.** |
@@ -252,6 +252,39 @@ Related corrections elsewhere in this spec:
 - **§6 skyboxes** — 21 MB of correctly-oriented cube maps ship and are unreachable from the
   default route; v2 `environment.background` is a single color string. The "sky ownership is
   scoped" tenet (§11) currently has no v2 mechanism to be scoped *with*.
+
+### 8.2 The archive revival wave (2026-07-19 → 20)
+
+Ten recovered surfaces were rebuilt on the platform in one arc. All are reachable from the front
+door, all are ordinary v2 scenes, none is a port — the legacy `*-environment.ts` modules mutate the
+three.js scene graph directly and were read only as evidence.
+
+| Revived | As | Notes |
+| --- | --- | --- |
+| CubX assembly | `cubx-assembly` prefab | 8 corner cubes + 12 edge struts from the decoded `CubXOpen.tva` hierarchy. Click proxies deliberately absent: the audit records that click-index → BoxNN → actor orderings disagree in the source. |
+| BallZ Level 1 + Level 2 | ASCII grid levels | Level 2 ships at 100% authored cells. Five further records are recorded as **not** revived, with reasons. |
+| Impreza · Cobra · Piste Ovale | `model` entities, Archive Garage | No drivable vehicle: wheel joints are not v2 vocabulary, so it would only be a textured box. |
+| Flock Planet · Forces & Flow Garden | composed scenes | Their constants had already graduated — the scenes address them by preset id, so the smoke re-derives fidelity from the shipped registry. |
+| Voie Lactée | composed scene | No sun, no heliocentric orbits, no scale compression — the record supports none of them, and the agent refused to invent them. |
+| Math Game | `formula-field` + a composed screen | The A/B/C/M/X slider panel is deliberately absent: the coefficients are already editable in the inspector and via `api.update`, which *is* the platform's answer to it. |
+| Maison | composed massing model | A prior verdict overturned on evidence — the record is 24 meshes / 216 vertices, 20 of them 8-vertex boxes, so a v2 `box` is what those objects already were. |
+
+Every one carries `faithful` / `inferred` / `deliberatelyAbsent` lists and a machine-readable
+`deviations[]`, and each module also records what it considered and **refused**, with reasons.
+Provenance is discoverable at runtime on `window.__GRAPHYSX_ARCHIVE__` (§7, §11).
+
+**A correction worth keeping.** "The recovered material lives upstream in the workshop" was assumed
+and was wrong **five times running** — CubX, the BallZ arenas, the vehicles, the Nature Lab and the
+Voie Lactée were all already decoded *inside this repo*, merely un-graduated. The workshop is also
+simply present on the same machine. Nothing was ever blocked; check the filesystem before believing
+a repo-roles table.
+
+**A production trap this wave exposed, four times.** `scripts/product-assets.mjs` derives the release
+manifest from the registries, so any file under `public/` that no registry claims is pruned out of
+`dist/` — rendering perfectly under `vite dev`, which serves all of `public/`, and 404-ing in
+production. It caught the vehicle meshes, the planet maps, the Math board, and four of six BallZ
+level-style textures. Each was fixed by claiming the asset; a build guard that fails when a product
+module references an unshipped URL is the standing fix and is queued.
 
 **Graduated since this audit:** `skybox` in `environment` (six archive sets, per-scene); the
 particle `emitter` entity type (eight archive-derived presets); and the `terrain` and `water`
