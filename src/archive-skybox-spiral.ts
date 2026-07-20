@@ -54,7 +54,7 @@ const PALETTE = {
 } as const;
 
 /** Verbatim from the race definition. */
-const TRACK: Array<{ id: string; position: AgentWorldVector3; size: AgentWorldVector3; material: keyof typeof PALETTE }> = [
+const TRACK: Array<{ id: string; position: AgentWorldVector3; size: AgentWorldVector3; material: "marble" | "grid" }> = [
   { id: "spiral-start", position: [0, 0.05, 14], size: [12, 0.14, 18], material: "marble" },
   { id: "spiral-mid", position: [4.2, 0.08, 0], size: [12, 0.14, 18], material: "grid" },
   { id: "spiral-end", position: [-2.7, 0.11, -15], size: [13, 0.14, 19], material: "marble" },
