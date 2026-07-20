@@ -44,6 +44,7 @@ const LIBRARY_TABS: ReadonlyArray<{ id: LibraryTab; label: string }> = [
 /** One glyph per entity type so a scene tree row is scannable without reading the id. */
 const TYPE_GLYPHS: Record<AgentWorldEntityType, string> = {
   group: "▤",
+  "formula-field": "∫",
   agent: "☻",
   box: "▧",
   sphere: "●",
@@ -1948,7 +1949,28 @@ export class PlatformEditor {
           else this.refresh();
         }, `${field.description}\n\nActs on other entities, not itself.\nSource: ${field.provenance.sourceRepo}/${field.provenance.sourcePath}\n${field.provenance.note}`),
       );
-      return [...flocks, ...fields];
+      // The recovered Math Game, as vocabulary rather than a legacy screen: one chip per
+      // formula preset, spawning a `formula-field` entity whose A/B/C/M/X live in the document.
+      const formulas = this.deps.api.formulas().map((formula) =>
+        this.chip(formula.label, () => {
+          this.addCounter += 1;
+          const id = `edit-formula-${this.addCounter}`;
+          const result = this.deps.api.spawn({
+            id,
+            type: "formula-field",
+            label: formula.label,
+            transform: { position: [0, 0, 0] },
+            formula: { preset: formula.id },
+            tags: ["life", "formula"],
+          });
+          if (result.ok) this.select(id);
+          else this.refresh();
+        }, `${formula.description}
+
+Archive: ${formula.provenance.sourcePath}
+${formula.provenance.note}`),
+      );
+      return [...flocks, ...fields, ...formulas];
     }
     return this.deps.api.textures().map((texture) =>
       this.chip(texture.label ?? texture.id, () => {

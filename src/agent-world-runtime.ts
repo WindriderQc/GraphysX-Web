@@ -1,3 +1,12 @@
+import {
+  AgentWorldFormulaField,
+  GRAPHYSX_AGENT_WORLD_FORMULAS,
+  findFormulaField,
+  resolveAgentWorldFormula,
+  type AgentWorldFormula,
+  type AgentWorldFormulaDescriptor,
+  type ResolvedAgentWorldFormula,
+} from "./agent-world-formula";
 import { GRAPHYSX_AGENT_WORLD_OVERLAYS, isOverlayId, type AgentWorldOverlayDescriptor, type AgentWorldOverlayId } from "./agent-world-overlay";
 import {
   GRAPHYSX_AGENT_RULES_CAPABILITIES,
@@ -170,6 +179,7 @@ export type AgentWorldEntityType =
   | "water"
   | "flock"
   | "force-field"
+  | "formula-field"
   | "ambient-light"
   | "directional-light"
   | "point-light";
@@ -338,6 +348,8 @@ export type AgentWorldEntityDefinition = {
   water?: AgentWorldWater;
   /** Boid flocking configuration. Only valid on `flock` entities. */
   flock?: AgentWorldFlock;
+  /** Recovered Math Game molecule field. Only valid on `formula-field` entities. */
+  formula?: AgentWorldFormula;
   /**
    * Force field configuration. Only valid on `force-field` entities. Unlike every other
    * field here, this one describes what the entity does to *other* entities — see the module
@@ -393,6 +405,8 @@ export type AgentWorldEntityPatch = {
   water?: AgentWorldWater;
   /** Patch the flock of a `flock` entity. Merged over the current configuration. */
   flock?: AgentWorldFlock;
+  /** Patch the formula of a `formula-field` entity. Replaces the configuration. */
+  formula?: AgentWorldFormula;
   /** Patch the field of a `force-field` entity. Merged over the current configuration. */
   forceField?: AgentWorldForceField;
   interactions?: AgentWorldInteraction[];
@@ -528,6 +542,11 @@ export type AgentWorldEntityState = {
    * only on screen, so an agent (or a smoke test) can tell "present" from "alive".
    */
   flock: (ResolvedAgentWorldFlock & { memberCount: number; leadPosition: AgentWorldVector3; averageSpeed: number }) | null;
+  /**
+   * Formula field configuration plus the derived surface, so an agent can read the curve it
+   * produced without re-implementing the archive maths.
+   */
+  formula: (ResolvedAgentWorldFormula & { moleculeCount: number; minHeight: number; maxHeight: number }) | null;
   /**
    * Force field configuration plus live readings, for the same reason the flock reports
    * `averageSpeed`: a field that is present, enabled, and silently affecting nothing — wrong
@@ -678,6 +697,8 @@ export type GraphysXAgentWorldApi = {
   flocks(): readonly AgentWorldFlockDescriptor[];
   /** The curated force-field presets recovered from the same Nature-of-Code sketches. */
   forceFields(): readonly AgentWorldForceFieldDescriptor[];
+  /** The recovered Math Game formula presets (Scene3D/Formulas.cpp). */
+  formulas(): readonly AgentWorldFormulaDescriptor[];
   importLegacyXml(xml: string, options?: { id?: string; label?: string }): AgentWorldResult<{
     state: AgentWorldState;
     sourceEntityCount: number;
@@ -749,6 +770,7 @@ type ResolvedEntity = {
   water: ResolvedAgentWorldWater | null;
   flock: ResolvedAgentWorldFlock | null;
   forceField: ResolvedAgentWorldForceField | null;
+  formula: ResolvedAgentWorldFormula | null;
   physics: ResolvedAgentWorldPhysics | null;
   intensity: number;
   distance: number;
@@ -1012,6 +1034,11 @@ export class AgentWorldRuntime {
   }
 
   /** The boid-flock presets graduated from the Nature-of-Code sketches, as scene vocabulary. */
+  /** The recovered Math Game formula presets. */
+  listFormulas(): readonly AgentWorldFormulaDescriptor[] {
+    return deepClone(GRAPHYSX_AGENT_WORLD_FORMULAS) as AgentWorldFormulaDescriptor[];
+  }
+
   listFlocks(): readonly AgentWorldFlockDescriptor[] {
     return deepClone(GRAPHYSX_AGENT_WORLD_FLOCKS) as AgentWorldFlockDescriptor[];
   }
@@ -1467,6 +1494,11 @@ export class AgentWorldRuntime {
     if (patch.emitter !== undefined) {
       if (definition.type !== "emitter") throw new Error("Only emitter entities accept an emitter configuration");
       definition.emitter = resolveAgentWorldEmitter(patch.emitter, definition.emitter ?? undefined);
+    }
+    if (patch.formula !== undefined) {
+      if (definition.type !== "formula-field") throw new Error("Only formula-field entities accept a formula configuration");
+      definition.formula = resolveAgentWorldFormula(patch.formula);
+      findFormulaField(runtime.object)?.configure(definition.formula);
     }
     if (patch.terrain !== undefined) {
       if (definition.type !== "terrain") throw new Error("Only terrain entities accept a terrain configuration");
@@ -2158,6 +2190,8 @@ export class AgentWorldRuntime {
     if (water && definition.water) water.configure(definition.water);
     const flock = findFlockSystem(object);
     if (flock && definition.flock) flock.configure(definition.flock);
+    const formula = findFormulaField(object);
+    if (formula && definition.formula) formula.configure(definition.formula);
     const field = findForceFieldVisual(object);
     if (field && definition.forceField) field.configure(definition.forceField);
     object.position.set(...definition.transform.position);
@@ -2215,6 +2249,11 @@ export class AgentWorldRuntime {
     // Members are steered, not simulated as rigid bodies — a collider on the flock entity
     // would describe a box the members do not live in.
     if (source.type === "flock" && source.physics) throw new Error("Flock entities do not take a rigid body");
+    const formula = source.type === "formula-field" ? resolveAgentWorldFormula(source.formula) : null;
+    if (source.type !== "formula-field" && source.formula) throw new Error("Only formula-field entities accept a formula configuration");
+    // The field is a plotted surface, not matter: a collider would describe a box its
+    // molecules do not live in, exactly as for a flock.
+    if (source.type === "formula-field" && source.physics) throw new Error("Formula-field entities do not take a rigid body");
     const forceField = source.type === "force-field" ? resolveAgentWorldForceField(source.forceField) : null;
     if (source.type !== "force-field" && source.forceField) throw new Error("Only force-field entities accept a force field configuration");
     // A field acts on bodies; giving it one would let it act on itself, and a self-attracting
@@ -2228,6 +2267,7 @@ export class AgentWorldRuntime {
     }
     const physics = source.physics ? resolvePhysics(source.physics, source.type, source.parentId ?? null, behaviors) : null;
     return {
+      formula,
       id,
       label: source.label?.trim() || id,
       type: source.type,
@@ -2282,7 +2322,14 @@ export class AgentWorldRuntime {
   private getEntityState(id: string): AgentWorldEntityState {
     const runtime = this.requireEntity(id);
     const worldPosition = runtime.object.getWorldPosition(new Vector3());
+    // The derived surface travels with the config, so an agent reading state() sees the
+    // curve the archive maths produced rather than having to re-evaluate it.
+    const formulaField = findFormulaField(runtime.object);
+    const formulaState = runtime.definition.formula && formulaField
+      ? { ...runtime.definition.formula, ...formulaField.describe() }
+      : null;
     return {
+      formula: formulaState,
       id,
       label: runtime.definition.label,
       type: runtime.definition.type,
@@ -2429,6 +2476,12 @@ function createEntityObject(definition: ResolvedEntity): Object3D {
     // The update loop and `configure` find the surface here, the same way emitters are found.
     surface.object.userData.graphysxWaterSurface = surface;
     return surface.object;
+  }
+  if (definition.type === "formula-field") {
+    const field = new AgentWorldFormulaField(definition.formula ?? resolveAgentWorldFormula(undefined));
+    // Found by `configure` and disposal the same way emitters, water and flocks are.
+    field.object.userData.graphysxFormulaField = field;
+    return field.object;
   }
   if (definition.type === "flock") {
     const system = new AgentWorldFlockSystem(definition.flock ?? resolveAgentWorldFlock(undefined));
@@ -2743,7 +2796,7 @@ function resolvePhysics(
 ): ResolvedAgentWorldPhysics {
   if (!source || !["static", "dynamic", "kinematic", "trigger"].includes(source.mode)) throw new Error(`Unsupported physics mode: ${String(source?.mode)}`);
   // Terrain owns a heightfield collider it builds itself; water deliberately has none.
-  if (["group", "spline", "emitter", "terrain", "water", "flock", "force-field", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
+  if (["group", "spline", "emitter", "terrain", "water", "flock", "force-field", "formula-field", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
   if (entityType === "plane" && source.mode === "dynamic") throw new Error("Plane physics can only be static or kinematic");
   if (parentId) throw new Error("Physics entities must be spawned at the world root");
   // A trigger never responds to contact, so a behavior moving it cannot fight the solver.
@@ -2960,11 +3013,14 @@ function validateInteraction(interaction: AgentWorldInteraction, entities: Map<s
 }
 
 function isEntityType(value: unknown): value is AgentWorldEntityType {
-  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "force-field", "ambient-light", "directional-light", "point-light"].includes(String(value));
+  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "force-field", "formula-field", "ambient-light", "directional-light", "point-light"].includes(String(value));
 }
 
 function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition {
   return {
+    // Carried explicitly: a formula field that does not serialise would round-trip into an
+    // empty plot, which is the failure the write-only-state sweep exists to catch.
+    ...(definition.formula ? { formula: deepClone(definition.formula) } : {}),
     id: definition.id,
     label: definition.label,
     type: definition.type,
