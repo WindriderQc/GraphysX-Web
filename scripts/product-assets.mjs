@@ -30,6 +30,12 @@ async function assetLiterals(relSource, key) {
   return [...src.matchAll(rx)].map((m) => decodeURIComponent(m[1]));
 }
 
+/** Every `/assets/...` string literal in a module, whatever key holds it. */
+async function anyAssetLiterals(relSource) {
+  const src = await readFile(path.join(ROOT, relSource), "utf8");
+  return [...src.matchAll(/"(\/assets\/[^"]*)"/g)].map((m) => decodeURIComponent(m[1]));
+}
+
 async function filesUnder(relDir) {
   const abs = path.join(PUBLIC, relDir.replace(/^\//, ""));
   const entries = await readdir(abs, { withFileTypes: true });
@@ -63,6 +69,11 @@ export async function productAssetManifest() {
 
   // Curated textures the editor palette offers.
   for (const url of await assetLiterals("src/agent-world-textures.ts", "url")) wanted.add(url);
+  // The BallZ level styles reference their surfaces by raw URL rather than by registry id, so
+  // nothing else claims them and the manifest would prune four of the six — shipping levels whose
+  // floors and walls 404 in production while looking perfect in dev. Derived from the module so
+  // adding a style cannot silently drop its textures.
+  for (const url of await anyAssetLiterals("src/classic-level-style.ts")) wanted.add(url);
 
   // Every mesh in the generated catalog, plus the textures each mesh's materials name.
   // The mesh JSON carries absolute `textureUrl`s, so this cannot drift from the meshes.
