@@ -879,3 +879,41 @@ the bill arrived. A fix is in flight in its own session.
   reject. The `media` smoke grew a WAV fixture and a sound block (import → `sounds()` →
   spawn → patch round-trip → document → host layer tracking; playback itself stays
   gesture-gated, so "tracked" is the honest headless assertion).
+
+## 2026-07-20 — `dna-r1`: the Living Forest genome, built but not yet threaded
+
+- **`src/agent-world-dna.ts` graduates §14 phase 4's remaining item.** `dna-tree` grows a forest
+  from a seeded genome, carrying the growth rule, leaf-fall motion, hue rule, grove layout, both
+  slider ranges and the PRNG verbatim from `nature-lab.ts::buildLivingForest`.
+- **The recovered genome is COLOUR ONLY.** `baseHue` drifts with generation; the *form* is seeded
+  once and never mutates — the archive's own lesson text says "leaf color mutates between
+  generations". Structural mutation is therefore labelled **inferred**, not faithful, because an
+  evolving tree whose silhouette never changes is evolutionary in name only. `mutationRate: 0`
+  reproduces record-exact behaviour, so the departure is switchable off.
+- **There is no fitness function in the record and none was invented.** Selection was a human
+  pressing "next generation" (`performForestAction` is literally `this.generation += 1`), so what
+  ships is the *mechanism*: `generation` is ordinary scene data an inspector or `api.update` moves.
+  The archive's auto-advance timer is **deliberately absent** — a timer that mutates the generation
+  makes it runtime state that cannot survive export→load.
+- **The budget answers the earlier Living Forest rejection.** `archive-playgrounds.ts` rejected it
+  because "the recursion *is* the study" and depth-6 × 13 trees is thousands of entities. Two
+  `InstancedMesh` draw calls and a 4000-segment cap resolve that: the recovered grove measures
+  2596/1465 and fits untruncated. Growth is breadth-first so a cap drops outermost twigs across the
+  whole forest rather than amputating limbs — an over-budget 64-tree depth-8 genome still leaves
+  every tree a trunk. Note this is **not** an L-system primitive; it solves this recursion, not
+  arbitrary rewrite grammars, and a real L-system remains unbuilt.
+- **Determinism is load-bearing and asserted as such:** two systems from one config produce
+  byte-identical 41,536-float buffers, export→load regrows identically, and 240 fixed steps land on
+  the same frame after a round trip. 88 checks green in Node.
+
+**Deliberately NOT threaded, and deliberately without a screenshot.** Threading touches
+`agent-world-runtime.ts` and `agent-world-api.ts`, which another session is editing right now. The
+module carries an exact 20-point integration map, and it has no screenshot because the type cannot
+reach a browser until step 3 of that map lands — building a showcase scene first would mean shipping
+something unseen, which the progress log repeatedly shows is exactly how lighting, scale and sky
+defects survive. **Next session: thread it, then screenshot immediately.** Composition note from the
+author: the archive trunk is 0.78, so `archive-grove` is short trees over a wide plot and will want
+`single-specimen` or a raised `trunkLength` to read as a subject — it was not silently rescaled.
+
+**Still blocked from pushing:** `spiral` remains red (`collectedAfterRings 16` / `hiddenRings 12`).
+Twelve commits are held behind that one ring-toggle fix, which is in flight in its own session.
