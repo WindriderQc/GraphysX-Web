@@ -16,14 +16,30 @@ import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
  * copy honest to what clicking it does.
  */
 
+/**
+ * A curated scene that is *composed* rather than loaded from a starter definition — the recovered
+ * archive scenes are built by a function that spawns their entities, so they cannot be a static
+ * starter object. Supplied by the caller rather than imported here, which keeps this shelf from
+ * having to know what a garage is.
+ */
+export type ComposedSceneEntry = {
+  id: string;
+  label: string;
+  summary: string;
+  meta: string;
+  open: () => void | Promise<void>;
+};
+
 export type BrowseShelfOptions = {
   api: GraphysXAgentWorldApi;
   /** Called after a starter is loaded, so the caller can take the showroom down and open the editor. */
   onOpen?: (starterId: string) => void;
+  /** Composed archive scenes, listed above the starters because they are the recovered ones. */
+  composed?: readonly ComposedSceneEntry[];
 };
 
 export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOptions): () => void {
-  const { api, onOpen } = options;
+  const { api, onOpen, composed = [] } = options;
   injectStyleOnce();
 
   const overlay = document.createElement("div");
@@ -49,6 +65,33 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
 
   const list = document.createElement("div");
   list.className = "gx-browse-list";
+
+  // Recovered scenes first — they are the reason someone opens this shelf.
+  for (const scene of composed) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "gx-browse-row";
+    row.dataset.sceneId = scene.id;
+
+    const name = document.createElement("span");
+    name.className = "gx-browse-name";
+    name.textContent = scene.label;
+
+    const summary = document.createElement("span");
+    summary.className = "gx-browse-summary";
+    summary.textContent = scene.summary;
+
+    const meta = document.createElement("span");
+    meta.className = "gx-browse-meta";
+    meta.textContent = scene.meta;
+
+    row.append(name, summary, meta);
+    row.addEventListener("click", () => {
+      dispose();
+      void scene.open();
+    });
+    list.append(row);
+  }
 
   for (const starter of api.starters()) {
     const row = document.createElement("button");

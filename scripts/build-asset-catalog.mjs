@@ -9,11 +9,12 @@
 //
 // Writes src/agent-world-asset-catalog.ts. Commit the result; the build does not run this.
 
-import { readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const VEHICLE_DIR = resolve(ROOT, "public", "assets", "vehicles");
 const MESH_DIR = join(ROOT, "public", "assets", "dominus-gallery", "meshes");
 const OUT = join(ROOT, "src", "agent-world-asset-catalog.ts");
 const URL_PREFIX = "/assets/dominus-gallery/meshes";
@@ -98,6 +99,24 @@ export async function buildAssetCatalog() {
       source: `Dominus Art/${stem}.x`,
     };
   });
+  // The recovered vehicles are vendored separately from the Dominus meshes but are ordinary
+  // `graphysx-mesh-json` payloads, so they register the same way. Registration is what makes
+  // them ship: `scripts/product-assets.mjs` derives the release manifest from this catalog, so
+  // an unregistered mesh — and every texture it references — is pruned out of `dist/` and 404s
+  // in production while working perfectly in dev. Label and source come from each payload's own
+  // provenance block rather than being retyped here.
+  for (const file of (await readdir(VEHICLE_DIR)).filter((name) => name.endsWith(".json")).sort()) {
+    const payload = JSON.parse(await readFile(join(VEHICLE_DIR, file), "utf8"));
+    const archiveSource = payload.provenance?.archiveSource ?? "";
+    entries.push({
+      id: file.slice(0, -5),
+      label: labelOf(file.slice(0, -5).replace(/^archive-/, "")),
+      category: "vehicle",
+      format: "graphysx-mesh-json",
+      url: `/assets/vehicles/${file}`,
+      source: archiveSource,
+    });
+  }
   const duplicates = entries.map((entry) => entry.id).filter((id, index, all) => all.indexOf(id) !== index);
   if (duplicates.length > 0) throw new Error(`Duplicate asset ids: ${duplicates.join(", ")}`);
   return entries;

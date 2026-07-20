@@ -86,6 +86,25 @@ if (mode === "legacy") {
       void import("./browse-shelf").then(({ mountBrowseShelf }) => {
         mountBrowseShelf(root, {
           api: host.api,
+          // The recovered vehicle garage is composed, not a starter definition, so it comes in
+          // as a composed row. main.ts supplies it because framing needs the host, which the
+          // shelf deliberately does not have.
+          composed: [
+            {
+              id: "archive-garage",
+              label: "Archive Garage",
+              summary: "The recovered Impreza and Cobra on turntables, with the Piste Ovale as a table model.",
+              meta: "25 entities  ·  3 recovered meshes",
+              open: async () => {
+                const { composeArchiveVehicles, frameArchiveVehicles } = await import("./archive-vehicles-scene");
+                showroomEnvironment?.();
+                showroomEnvironment = null;
+                composeArchiveVehicles(host.api);
+                host.applyEnvironment();
+                frameArchiveVehicles(host);
+              },
+            },
+          ],
           // A starter replaces the world, so take the showroom's host-mounted set down with it,
           // then open the loaded scene in the editor — Browse is "load a scene to work on it".
           onOpen: () => {

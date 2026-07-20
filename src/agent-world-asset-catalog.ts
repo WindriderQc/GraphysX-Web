@@ -68,5 +68,8 @@ export const GRAPHYSX_AGENT_WORLD_ASSET_CATALOG: readonly AgentWorldAssetDescrip
   { id: "tree-green06", label: "Tree Green 06", category: "vegetation", format: "graphysx-mesh-json", url: "/assets/dominus-gallery/meshes/tree_green06.json", source: "Dominus Art/tree_green06.x" },
   { id: "tree-green07", label: "Tree Green 07", category: "vegetation", format: "graphysx-mesh-json", url: "/assets/dominus-gallery/meshes/tree_green07.json", source: "Dominus Art/tree_green07.x" },
   { id: "zokshield", label: "Zok Shield", category: "prop", format: "graphysx-mesh-json", url: "/assets/dominus-gallery/meshes/zokshield.json", source: "Dominus Art/zokshield.x" },
-  { id: "zoksword", label: "Zok Sword", category: "prop", format: "graphysx-mesh-json", url: "/assets/dominus-gallery/meshes/zoksword.json", source: "Dominus Art/zoksword.x" }
+  { id: "zoksword", label: "Zok Sword", category: "prop", format: "graphysx-mesh-json", url: "/assets/dominus-gallery/meshes/zoksword.json", source: "Dominus Art/zoksword.x" },
+  { id: "archive-cobra", label: "Cobra", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-cobra.json", source: "Yanik C++ BCKUP/Media/Models/cars/Low_Cobra.3DS" },
+  { id: "archive-impreza", label: "Impreza", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-impreza.json", source: "Yanik C++ BCKUP/Media/Models/cars/impreza.3ds" },
+  { id: "archive-piste-ovale", label: "Piste-ovale", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-piste-ovale.json", source: "AtmelCubx/PisteOvale.tvm" }
 ] as const;
