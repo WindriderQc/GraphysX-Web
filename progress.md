@@ -695,3 +695,37 @@ vehicle garage, and two Nature Lab playgrounds — plus the CubX assembly earlie
 **A field note worth passing on:** `flock.leadPosition` in `state()` is reported in the flock's own
 **local** space while every other entity's `position` is a world position. It is the one field that
 does not carry a parent transform, and it has now cost two people a failing assertion.
+
+## 2026-07-20 — `math-r1`: the Math Game becomes vocabulary
+
+- **`formula-field` is a v2 entity type.** The recovered Math Game (`Scene3D/MathGameScreen.cpp`,
+  `Formulas.cpp`) was trapped in `race-scene.ts` on the `?host=legacy` route — reachable by neither
+  the editor nor an agent, so by §8.1's own test it had not graduated. Now a human drags its
+  coefficients in the inspector and an agent sets them with `api.update`, both landing in the same
+  revision.
+- **Faithful:** the formulas verbatim from `Formulas::moleculesUpdate` (PARABOLA `y = a·x² + b·x + c`,
+  SLOPE `y = m·x + b`, evaluated at `x + xOffset`); the display mapping
+  `clamp(2.2 + value·0.34, 0.1, 7.4)` that keeps a steep curve on the board; the molecule field from
+  `moleculesCreate` (lane grid at 0.13 spacing, blue→red along z, the archive's full 100×100
+  available as the `archive-molecules` preset); and the A/B/C/M/X control set with its recovered
+  −5..5 range. **Inferred:** material response only. Verified before writing a line of runtime code
+  by reproducing the legacy `getMathSurfaceY` output at seven sample points.
+- **Why it can afford 10,000 where a flock caps at 240:** there is no neighbour test. Every
+  molecule's height is a pure function of its own x, so the field is one instanced draw call that
+  rebuilds only when the config actually changes — a static field costs nothing per frame.
+  §11 holds: it visualises, it does not score.
+
+### Two bugs that only driving it could find
+
+- **`isEntityType` is a separate array from the TypeScript union.** Adding `"formula-field"` to the
+  union left the runtime guard rejecting it, so `api.spawn` failed with *"Unsupported entity type"*
+  while typecheck and build were both green. The handoff's checklist says "resolveEntity **(+guards)**"
+  and this is why.
+- **The patch path was missing**, so `api.update(id, { formula })` silently did nothing: the
+  coefficient reverted to the preset default on round-trip. Found by asserting the value **came
+  back** (`roundTripA: 3.5`) rather than that the call returned `ok` — the write-only-state class of
+  bug this project keeps rediscovering, now on its fifth instance.
+
+**Gate: 17/17 green**, verified at the committed HEAD in a throwaway worktree because a concurrent
+agent's in-flight file had the shared tree failing typecheck. That trick has now paid for itself
+twice.
