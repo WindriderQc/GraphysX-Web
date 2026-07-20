@@ -246,13 +246,6 @@ if (mode === "legacy") {
           if (storeScene) console.warn(`[graphysx] no scene store at ${storeUrl}; staying in the showroom`);
           return;
         }
-        // The same server fronts the media library. Pull its manifest now so imported
-        // textures/models are registered before anyone opens the editor's library — the
-        // refresh is idempotent and the editor re-pulls on demand anyway.
-        void import("./agent-world-media").then(({ configureAgentWorldMedia }) => {
-          configureAgentWorldMedia(storeUrl);
-          void host.api.media.refresh();
-        });
         const browser = mountSceneBrowser(root, {
           api: host.api,
           client,

@@ -108,10 +108,16 @@ synthetic-only, and the chrome has quietly forked. Ordered by impact-per-effort:
 ## Horizon 4 — Platform depth
 
 In spec order, all pre-existing commitments:
-- **Prefabs in the editor UI** — the one place agents out-reach humans today.
-- **Evolutionary / DNA entities** — the spec's named "highest-value next graduation"
-  (legacy-only in `nature-lab.ts`).
-- **Crowds** — extract from `race-scene.ts` behind a v2 interface.
+- ~~Prefabs in the editor UI~~ — done; the Prefabs tab is the library's default tab.
+- **Evolutionary / DNA entities** — graduate the `nature-lab.ts` forest the way flock did.
+  Grounded caveat: the legacy "evolution" is a generation counter driving leaf-hue drift —
+  there is no genome, inheritance, or selection. A v2 `forest` entity either keeps that
+  honestly (a colour-family lineage) or grows a real genome; that design decision is the
+  only non-mechanical part.
+- **Crowds** — the term maps to the NPC population system in `race-scene.ts` (~210 lines:
+  wandering humans, hunting zombies, infection, squash-on-contact). Harder than the other
+  graduations because it leans on the race scene's physics, player and audio; the v2 shape
+  needs a target concept before the port is honest.
 - **Best-time persistence** — needs a store-side concept that doesn't exist yet; design
   it with the auth question in view, not before it.
 - **Milestones B/C** — live deltas beyond whole-document reload, then the authenticated
