@@ -3,12 +3,9 @@ import {
   type AgentWorldEntityDefinition,
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
+import { instantiateAgentWorldPrefab } from "./agent-world-prefabs";
 
 const CLUSTER = "showroom-cubx";
-const CORNERS: ReadonlyArray<[number, number, number]> = [
-  [-1, -1, -1], [1, -1, -1], [-1, 1, -1], [1, 1, -1],
-  [-1, -1, 1], [1, -1, 1], [-1, 1, 1], [1, 1, 1],
-];
 
 /**
  * Compose the evolutive welcome showroom entirely from platform vocabulary — the same
@@ -18,15 +15,22 @@ const CORNERS: ReadonlyArray<[number, number, number]> = [
  * bespoke host code, so the showroom stays editable and on-model.
  */
 export function composeShowroom(api: GraphysXAgentWorldApi): void {
-  const cubes = CORNERS.map((corner, index): AgentWorldEntityDefinition => ({
-    id: `${CLUSTER}-cube-${index}`,
-    type: "box",
-    parentId: CLUSTER,
-    geometry: { width: 1, height: 1, depth: 1 },
-    transform: { position: [corner[0] * 0.85, corner[1] * 0.85, corner[2] * 0.85] },
-    material: { color: "#41d3e8", emissive: "#0b4f63", emissiveIntensity: 0.7, roughness: 0.25, metalness: 0.55 },
+  // The centrepiece was eight floating boxes — an homage, as §8.1 said. It is now the actual
+  // recovered assembly: the `cubx-assembly` prefab, eight corner cubes joined by twelve edge
+  // struts, re-authored from the decoded `CubXOpen.tva` hierarchy. Nested under the spinning
+  // CLUSTER group so the existing rotation, swarm and crown emitters keep working unchanged.
+  //
+  // The palette is a declared departure: the recovered StdMat is untextured grey, which
+  // disappears against the terrain at showroom framing, so the showroom tints it to the cyan it
+  // has always read as. The prefab's own defaults stay faithful to the record.
+  const cubxParts = instantiateAgentWorldPrefab("cubx-assembly", {
+    idPrefix: "showroom-cubx-frame",
+    palette: { primary: "#41d3e8", secondary: "#2ba6bd", emissive: "#0b4f63" },
     tags: ["showroom", "cubx"],
-  }));
+  });
+  const cubes: AgentWorldEntityDefinition[] = cubxParts.map((part, index) =>
+    index === 0 ? { ...part, parentId: CLUSTER } : part,
+  );
 
   // `emitter` is ordinary v2 vocabulary now, so these braziers are selectable, editable and
   // exported like any other entity. They are placed clear of the trees so they read from the wide

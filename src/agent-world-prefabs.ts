@@ -4,6 +4,7 @@ import type {
 } from "./agent-world-runtime";
 
 export type AgentWorldPrefabId =
+  | "cubx-assembly"
   | "luminous-tree"
   | "signal-beacon"
   | "portal-arch"
@@ -35,6 +36,16 @@ export type AgentWorldPrefabDescriptor = {
 };
 
 export const GRAPHYSX_AGENT_WORLD_PREFABS: readonly AgentWorldPrefabDescriptor[] = [
+  {
+    id: "cubx-assembly",
+    label: "CubX Assembly",
+    summary: "The recovered 2008 CubX frame: eight corner cubes joined by twelve edge struts.",
+    entityCount: 21,
+    // The recovered StdMat is untextured grey — diffuse 0.8, ambient 0.1, specular 0.2/power 20,
+    // emissive 0. These defaults carry that; a scene that wants the showroom's cyan passes a
+    // palette override, which is a departure it declares rather than one baked into the record.
+    defaultPalette: { primary: "#cccccc", secondary: "#a8b0b5", accent: "#e8eef0", emissive: "#1a1f22" }
+  },
   {
     id: "luminous-tree",
     label: "Luminous Tree",
@@ -101,6 +112,57 @@ export function instantiateAgentWorldPrefab(
   };
 
   switch (prefabId) {
+    case "cubx-assembly": {
+      // The recovered CubX assembly, re-authored as v2 primitives.
+      //
+      // Source: `src/legacy/cubx-actor-lineage.json` (decoded `CubXOpen.tva` hierarchy) and
+      // `cubx-actor-inspection-geometry.json`. The record is in TV3D units where the cube module
+      // is 25; dividing by 25 gives the clean 1-unit module used here, so corner cubes sit on
+      // ±1 and every strut spans exactly the 1-unit gap between two neighbours.
+      //
+      // FAITHFUL: the part count and topology (8 corner cubes + 12 edge struts), the 25³ cube
+      // module, the strut proportions (≈6-radius over a 25 length → 0.24 over 1), and the
+      // untextured grey StdMat.
+      // INFERRED: exact pivot offsets. The archive's boxes carry a local centre of [0, 12.5, 0]
+      // and its struts sit on asymmetric world offsets; this places both symmetrically about the
+      // assembly centre instead, which reads identically and keeps the prefab centred on its
+      // own origin the way every other prefab is.
+      // DELIBERATELY ABSENT: the eight `CubXBtn` click proxies and any click-index → BoxNN →
+      // actor mapping. The audit's own `mappingAssessment` records that those three orderings
+      // disagree in the source and warns against inventing one, so this ships the unambiguous
+      // *shape* and leaves the semantics to whatever binds interactions later.
+      const corners: AgentWorldVector3[] = [
+        [-1, -1, -1], [1, -1, -1], [-1, 1, -1], [1, 1, -1],
+        [-1, -1, 1], [1, -1, 1], [-1, 1, 1], [1, 1, 1]
+      ];
+      // The twelve edges of the cube: one axis at the midpoint, the other two on a corner.
+      const struts: Array<{ position: AgentWorldVector3; rotationDegrees: AgentWorldVector3 }> = [];
+      for (const a of [-1, 1]) {
+        for (const b of [-1, 1]) {
+          // Cylinders stand on Y by default, so X- and Z-aligned edges are rotated onto their axis.
+          struts.push({ position: [0, a, b], rotationDegrees: [0, 0, 90] });
+          struts.push({ position: [a, 0, b], rotationDegrees: [0, 0, 0] });
+          struts.push({ position: [a, b, 0], rotationDegrees: [90, 0, 0] });
+        }
+      }
+      return [
+        root,
+        ...corners.map((corner, index): AgentWorldEntityDefinition => ({
+          id: `${prefix}:cube-${index + 1}`, label: `Corner Cube ${index + 1}`, type: "box", parentId: prefix,
+          geometry: { width: 1, height: 1, depth: 1 },
+          transform: { position: corner },
+          material: { color: palette.primary, emissive: palette.emissive, emissiveIntensity: 0.35, roughness: 0.35, metalness: 0.12 },
+          tags: partTags
+        })),
+        ...struts.map((strut, index): AgentWorldEntityDefinition => ({
+          id: `${prefix}:strut-${index + 1}`, label: `Edge Strut ${index + 1}`, type: "cylinder", parentId: prefix,
+          geometry: { radius: 0.24, height: 1, radialSegments: 12 },
+          transform: { position: strut.position, rotationDegrees: strut.rotationDegrees },
+          material: { color: palette.secondary, emissive: palette.emissive, emissiveIntensity: 0.25, roughness: 0.42, metalness: 0.2 },
+          tags: partTags
+        }))
+      ];
+    }
     case "luminous-tree":
       return [
         root,
