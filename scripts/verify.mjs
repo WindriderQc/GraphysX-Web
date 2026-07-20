@@ -25,7 +25,12 @@ const PORT = Number(process.env.VERIFY_PORT || 0);
 const LOCK_PATH = path.join(ROOT, "output", ".verify.lock");
 // Generous enough that a slow-but-working run is never killed, tight enough that a wedged
 // one is noticed the same day. The whole suite normally finishes well inside these.
-const SMOKE_DEADLINE_MS = Number(process.env.VERIFY_SMOKE_TIMEOUT_MS || 5 * 60 * 1000);
+// The deadline exists to catch wedged smokes (two verify parents were once found alive
+// 9.5 hours after launch), not to enforce performance. It must clear the slowest smoke on
+// the slowest hardware: the editor smoke takes ~80-120s locally but took 346s on the LAST
+// GREEN CI run (4-core swiftshader ubuntu runner) — a 5-minute deadline failed CI on a
+// smoke that was making steady progress, and the zero-output kill was misread as a hang.
+const SMOKE_DEADLINE_MS = Number(process.env.VERIFY_SMOKE_TIMEOUT_MS || 10 * 60 * 1000);
 const BUILD_DEADLINE_MS = Number(process.env.VERIFY_BUILD_TIMEOUT_MS || 10 * 60 * 1000);
 
 const argv = process.argv.slice(2);
