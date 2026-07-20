@@ -623,3 +623,38 @@ filesystem before believing a repo-roles table.
   commit (`0bc3f26 feat(envelope)`). Functionally fine — it is in `main` and the build is green —
   but it is now the *third* instance. Stage by explicit path; it does not protect you from someone
   else staging broadly.
+
+## envelope-r1 — the scene decides how far you can see
+
+- **`environment.envelope`** — `{ fogNear, fogFar, cameraFar }` or `null` for the host defaults —
+  landed as scene vocabulary, consumed by `PlatformHost` the way `sky` already was, editable from a
+  new Envelope row (checkbox = "host default" as a real state), swept by the roundtrip smoke with
+  live-object reads off `scene.fog` and `camera.far`. This is what the four mesh-world ports were
+  blocked on: bounds of 56–1135 units against fog pinned 34–130 and a far plane of 260.
+- **The model recentring defect is fixed**, with the placement question answered by evidence rather
+  than screenshots: `tools/port-dominus-village.mjs` computes every entity position *assuming* the
+  loader centres a model on its bounds ("lifting by half of it puts the model's base on the
+  ground") — the semantic the old code violated and the fix delivers. The showroom, prefabs and
+  starters contain zero `model` entities; the garage loads at native span with centred bounds. So
+  the only shipped model scene assumed the fixed behaviour all along, and production had been
+  rendering it displaced.
+- **`marker: false`** on point lights keeps the light and drops the lightbulb; serialises only when
+  false, so existing documents are byte-identical.
+- **The scene-store hang has a mechanism now**, not just a symptom: `close()` was a bare
+  `server.close()`, which waits for the smoke's own undici keep-alive socket (up to the 72 s
+  `keepAliveTimeout`, every run) and for any SSE stream a wedged tab never closed (forever) —
+  compounding with an unbounded `browser.close()` under Chromium teardown contention. Fixed by
+  severing connections before closing, alongside the bounded `EPERM` rename retry.
+- **The cancelled-gate gap is closed at the root**: `deploy.yml` never cancelled anything — the
+  *called* `ci.yml` did, its own concurrency group killing the previous main push's verify job
+  mid-run. Four consecutive pushes deployed nothing while production sat a day behind.
+  `cancel-in-progress` is now `github.ref != 'refs/heads/main'`: PR gates still cancel, main
+  gates run to completion.
+- **Gate evidence**: full verify in a throwaway worktree at `0bc3f26` — 14/15 with a concurrent
+  `--no-build` verify running in the main tree (the CPU-contention condition HANDOFF warns
+  about); the one red, `foundation`, passed cleanly in isolation on a quiet machine with zero
+  console/page errors. CI runs the same gate on the push that carried these commits.
+- **A staging lesson, third instance, refined**: explicit-path staging swept another session's
+  uncommitted one-line edit into `0bc3f26`, because their hunk sat in the same file I had edited.
+  Explicit paths are not enough in a shared tree — `git diff` the file for foreign hunks before
+  staging it, or stage by hunk.
