@@ -1,4 +1,11 @@
 import {
+  ARCHIVE_BUILDINGS,
+  ARCHIVE_BUILDINGS_NOT_REVIVED,
+  archiveBuildingBrowseRows,
+  buildArchiveBuilding,
+  composeArchiveBuilding,
+} from "./archive-buildings";
+import {
   ARCHIVE_MATH_NOT_REVIVED,
   ARCHIVE_MATH_SCENES,
   archiveMathBrowseRows,
@@ -132,6 +139,13 @@ if (mode === "legacy") {
             // The recovered Voie Lactee vignette. Same shape as the playgrounds: it opens in the
             // editor like any browsed scene.
             // The recovered Math Game screen, built on the `formula-field` entity type.
+            // The recovered Maison massing model.
+            ...archiveBuildingBrowseRows(host.api, () => {
+              showroomEnvironment?.();
+              showroomEnvironment = null;
+              host.applyEnvironment();
+              void host.enterEditor();
+            }),
             ...archiveMathBrowseRows(host.api, () => {
               showroomEnvironment?.();
               showroomEnvironment = null;
@@ -215,6 +229,10 @@ if (mode === "legacy") {
       __GRAPHYSX_ARCHIVE__: {
         levels: ARCHIVE_BALLZ_LEVELS,
         notRevived: ARCHIVE_BALLZ_NOT_REVIVED,
+        buildings: ARCHIVE_BUILDINGS,
+        buildingsNotRevived: ARCHIVE_BUILDINGS_NOT_REVIVED,
+        buildBuilding: buildArchiveBuilding,
+        composeBuilding: composeArchiveBuilding,
         math: ARCHIVE_MATH_SCENES,
         mathNotRevived: ARCHIVE_MATH_NOT_REVIVED,
         buildMathLab: buildArchiveMathLab,

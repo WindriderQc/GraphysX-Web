@@ -56,6 +56,8 @@ const SMOKES = [
   { name: "vehicles", script: "scripts/smoke-vehicles.mjs", covers: "Archive Garage: recovered meshes register, ship in dist, and resolve" },
   { name: "playgrounds", script: "scripts/smoke-playgrounds.mjs", covers: "Nature Lab playgrounds: preset fidelity, fields do work, mass-independent attraction" },
   { name: "milkyway", script: "scripts/smoke-milkyway.mjs", covers: "Voie Lactee: recovered radii and rates, retrograde Moon, textures fetch 200" },
+  { name: "buildings", script: "scripts/smoke-buildings.mjs", covers: "Maison massing model: archive transforms exact, recovered lamps, storey toggle" },
+  { name: "media", script: "scripts/smoke-media.mjs", covers: "media library: datalake browse/import, in-browser OBJ conversion, editor Media tab + dialog" },
 ];
 
 // Every child is tracked so a signal can take its whole tree down with it. An untracked
