@@ -15,8 +15,9 @@ import {
   type GraphysXAgentLevelApi,
 } from "./agent-level-library";
 import type { MapEditorTile } from "./race-scene";
-import { GRAPHYSX_AGENT_WORLD_ASSETS } from "./agent-world-assets";
-import { GRAPHYSX_AGENT_WORLD_TEXTURES } from "./agent-world-textures";
+import { allAgentWorldAssets } from "./agent-world-assets";
+import { allAgentWorldTextures } from "./agent-world-textures";
+import { getAgentWorldMediaApi } from "./agent-world-media";
 import { convertLegacyGraphysXXml } from "./agent-world-legacy-xml";
 import { composeBallzLevel } from "./ballz-level-scene";
 
@@ -92,8 +93,11 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
     version: "2.0" as const,
     capabilities: GRAPHYSX_AGENT_CAPABILITIES,
     levels,
-    assets: () => GRAPHYSX_AGENT_WORLD_ASSETS,
-    textures: () => GRAPHYSX_AGENT_WORLD_TEXTURES,
+    media: getAgentWorldMediaApi(),
+    // Merged views: curated vocabulary plus whatever the media library has registered,
+    // so an import is discoverable through the same call an agent already makes.
+    assets: () => allAgentWorldAssets(),
+    textures: () => allAgentWorldTextures(),
     skies: () => runtime.listSkies(),
     emitters: () => runtime.listEmitters(),
     heightmaps: () => runtime.listHeightmaps(),

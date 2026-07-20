@@ -71,7 +71,8 @@ import {
   type AgentWorldTexture,
   type GraphysXAgentWorldApi
 } from "./agent-world-runtime";
-import { GRAPHYSX_AGENT_WORLD_ASSETS } from "./agent-world-assets";
+import { GRAPHYSX_AGENT_WORLD_ASSETS, allAgentWorldAssets } from "./agent-world-assets";
+import { getAgentWorldMediaApi } from "./agent-world-media";
 import { GRAPHYSX_AGENT_WORLD_SKIES } from "./agent-world-skies";
 import { GRAPHYSX_AGENT_WORLD_EMITTERS } from "./agent-world-particles";
 import { GRAPHYSX_AGENT_WORLD_HEIGHTMAPS } from "./agent-world-terrain";
@@ -80,6 +81,7 @@ import { GRAPHYSX_AGENT_WORLD_FORCE_FIELDS } from "./agent-world-force-field";
 import { GRAPHYSX_AGENT_WORLD_FORMULAS } from "./agent-world-formula";
 import {
   GRAPHYSX_AGENT_WORLD_TEXTURES,
+  allAgentWorldTextures,
   type AgentWorldTextureId
 } from "./agent-world-textures";
 import {
@@ -3454,8 +3456,9 @@ export class PrototypeApp {
       version: "2.0" as const,
       capabilities: GRAPHYSX_AGENT_CAPABILITIES,
       levels: levelApi,
-      assets: () => GRAPHYSX_AGENT_WORLD_ASSETS,
-      textures: () => GRAPHYSX_AGENT_WORLD_TEXTURES,
+      media: getAgentWorldMediaApi(),
+      assets: () => allAgentWorldAssets(),
+      textures: () => allAgentWorldTextures(),
       skies: () => GRAPHYSX_AGENT_WORLD_SKIES,
       emitters: () => GRAPHYSX_AGENT_WORLD_EMITTERS,
       heightmaps: () => GRAPHYSX_AGENT_WORLD_HEIGHTMAPS,

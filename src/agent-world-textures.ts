@@ -1,4 +1,4 @@
-export type AgentWorldTextureCategory = "pattern" | "surface" | "nature" | "science";
+export type AgentWorldTextureCategory = "pattern" | "surface" | "nature" | "science" | "imported";
 
 export type AgentWorldTextureDescriptor = {
   id: string;
@@ -7,7 +7,8 @@ export type AgentWorldTextureDescriptor = {
   category: AgentWorldTextureCategory;
   description: string;
   defaultRepeat: [number, number];
-  source: "GraphysX archive" | "BallZ archive" | "SBQC archive";
+  /** Provenance. Curated entries name their archive; runtime imports name their datalake path. */
+  source: string;
 };
 
 /**
@@ -166,8 +167,39 @@ export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
   }
 ] as const satisfies readonly AgentWorldTextureDescriptor[];
 
-export type AgentWorldTextureId = (typeof GRAPHYSX_AGENT_WORLD_TEXTURES)[number]["id"];
+/**
+ * Curated ids keep autocomplete; the `string & {}` arm admits runtime-imported ids
+ * (media library textures registered while a store is running) without erasing the
+ * literal union from tooling.
+ */
+export type AgentWorldTextureId = (typeof GRAPHYSX_AGENT_WORLD_TEXTURES)[number]["id"] | (string & {});
+
+/**
+ * Textures registered at runtime by the media library (agent-world-media.ts). Kept apart
+ * from the curated array so the build-time asset manifest, which scrapes THAT array's
+ * `url:` literals, never tries to ship a file that only exists in a local asset store.
+ */
+const DYNAMIC_TEXTURES: AgentWorldTextureDescriptor[] = [];
+
+/** Replace the imported set (idempotent — a manifest refresh re-registers everything). */
+export function registerAgentWorldTextures(descriptors: readonly AgentWorldTextureDescriptor[]): void {
+  const curated = new Set<string>(GRAPHYSX_AGENT_WORLD_TEXTURES.map((texture) => texture.id));
+  DYNAMIC_TEXTURES.length = 0;
+  for (const descriptor of descriptors) {
+    if (curated.has(descriptor.id)) continue; // a curated id always wins
+    DYNAMIC_TEXTURES.push(descriptor);
+  }
+}
+
+/** Everything usable right now: the curated vocabulary plus any store-backed imports. */
+export function allAgentWorldTextures(): readonly AgentWorldTextureDescriptor[] {
+  return DYNAMIC_TEXTURES.length ? [...GRAPHYSX_AGENT_WORLD_TEXTURES, ...DYNAMIC_TEXTURES] : GRAPHYSX_AGENT_WORLD_TEXTURES;
+}
 
 export function findAgentWorldTexture(id: string): AgentWorldTextureDescriptor | null {
-  return GRAPHYSX_AGENT_WORLD_TEXTURES.find((texture) => texture.id === id) ?? null;
+  return (
+    GRAPHYSX_AGENT_WORLD_TEXTURES.find((texture) => texture.id === id)
+    ?? DYNAMIC_TEXTURES.find((texture) => texture.id === id)
+    ?? null
+  );
 }

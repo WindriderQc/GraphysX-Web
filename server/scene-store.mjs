@@ -18,6 +18,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyCommands, describeCommands } from "./scene-commands.mjs";
+import { createAssetStore, handleAssetRequest } from "./asset-store.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..");
@@ -200,7 +201,7 @@ function send(response, status, payload) {
     // browser client is always cross-origin. This is a LAN tool with no auth — put it
     // behind the same boundary you'd put any other AgentX service, not on the internet.
     "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET, PUT, OPTIONS",
+    "access-control-allow-methods": "GET, PUT, POST, DELETE, OPTIONS",
     "access-control-allow-headers": "content-type",
   });
   response.end(body);
@@ -289,8 +290,12 @@ function createRelay() {
   };
 }
 
-export function createSceneStoreServer({ dir } = {}) {
+export function createSceneStoreServer({ dir, assetDir, datalakeDir } = {}) {
   const store = createSceneStore({ dir });
+  const assets = createAssetStore({
+    ...(assetDir !== undefined ? { dir: assetDir } : {}),
+    ...(datalakeDir !== undefined ? { datalakeDir } : {}),
+  });
   const relay = createRelay();
 
   const server = createServer((request, response) => {
@@ -303,8 +308,19 @@ export function createSceneStoreServer({ dir } = {}) {
 
         if (path === "/health" && request.method === "GET") {
           const scenes = await store.list();
-          return send(response, 200, { ok: true, schema: SCENE_STORE_SCHEMA, dir: store.dir, sceneCount: scenes.length });
+          return send(response, 200, {
+            ok: true,
+            schema: SCENE_STORE_SCHEMA,
+            dir: store.dir,
+            sceneCount: scenes.length,
+            assetCount: await assets.count(),
+            datalake: assets.datalakeDir ?? null,
+          });
         }
+
+        // Media routes (/assets/*, /datalake/*) live in asset-store.mjs; everything the
+        // asset handler does not claim falls through to the scene routes below.
+        if (await handleAssetRequest(assets, request, response, url, path)) return undefined;
 
         if (path === "/scenes" && request.method === "GET") {
           return send(response, 200, { schema: SCENE_STORE_SCHEMA, scenes: await store.list() });
@@ -460,11 +476,11 @@ export function createSceneStoreServer({ dir } = {}) {
     })();
   });
 
-  return { server, store };
+  return { server, store, assets };
 }
 
-export async function startSceneStore({ port = DEFAULT_PORT, dir } = {}) {
-  const { server, store } = createSceneStoreServer({ dir });
+export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, datalakeDir } = {}) {
+  const { server, store, assets } = createSceneStoreServer({ dir, assetDir, datalakeDir });
   // Node closes idle keep-alive sockets after 5s by default, but `fetch` (undici) pools and
   // reuses them — so a client that pauses longer than that between calls picks a socket the
   // server has already closed and fails with a bare "fetch failed". That is what made the
@@ -481,6 +497,7 @@ export async function startSceneStore({ port = DEFAULT_PORT, dir } = {}) {
   const actualPort = typeof address === "object" && address ? address.port : port;
   return {
     port: actualPort,
+    assets,
     // 127.0.0.1 rather than localhost: on Windows, Node's fetch resolves localhost to ::1
     // first, and whether that reaches a listener bound to the IPv4 any-address is a coin
     // flip. It surfaced as an intermittent "scene store unreachable" against a store that
@@ -506,10 +523,12 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   const dir = DEFAULT_DIR;
   const existed = existsSync(dir);
   startSceneStore({ port: DEFAULT_PORT, dir })
-    .then(({ url }) => {
+    .then(({ url, assets }) => {
       console.log(`graphysx scene store listening on ${url}`);
-      console.log(`  scenes: ${dir}${existed ? "" : " (created)"}`);
-      console.log(`  try:    curl ${url}/scenes`);
+      console.log(`  scenes:   ${dir}${existed ? "" : " (created)"}`);
+      console.log(`  assets:   ${assets.dir}`);
+      console.log(`  datalake: ${assets.datalakeDir ?? "not configured (set GRAPHYSX_DATALAKE_DIR)"}`);
+      console.log(`  try:      curl ${url}/scenes`);
     })
     .catch((error) => {
       console.error(`scene store failed to start: ${error instanceof Error ? error.message : String(error)}`);

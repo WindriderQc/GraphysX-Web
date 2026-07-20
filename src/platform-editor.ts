@@ -1,4 +1,4 @@
-import { MathUtils, Object3D, Raycaster, Vector2, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer } from "three";
+import { Box3, MathUtils, Object3D, Raycaster, Vector2, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls, type TransformControlsMode } from "three/examples/jsm/controls/TransformControls.js";
 import type { AgentWorldRuntime } from "./agent-world-runtime";
@@ -12,6 +12,7 @@ import type {
   GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
 import type { AgentLevelState, GraphysXAgentLevelApi } from "./agent-level-library";
+import type { AgentMediaFileEntry, AgentMediaListing, AgentWorldMediaDescriptor } from "./agent-world-media";
 import type { MapEditorTile } from "./race-scene";
 
 export interface PlatformEditorDeps {
@@ -30,7 +31,7 @@ export interface PlatformEditorDeps {
 
 const round = (n: number): number => Math.round(n * 1000) / 1000;
 
-type LibraryTab = "prefabs" | "models" | "effects" | "terrain" | "life" | "textures";
+type LibraryTab = "prefabs" | "models" | "effects" | "terrain" | "life" | "textures" | "media";
 
 const LIBRARY_TABS: ReadonlyArray<{ id: LibraryTab; label: string }> = [
   { id: "prefabs", label: "Prefabs" },
@@ -39,6 +40,24 @@ const LIBRARY_TABS: ReadonlyArray<{ id: LibraryTab; label: string }> = [
   { id: "terrain", label: "Terrain" },
   { id: "life", label: "Life" },
   { id: "textures", label: "Textures" },
+  { id: "media", label: "Media" },
+];
+
+/** Gizmo snap increments the toolbar offers; the middle set is the construction default. */
+const SNAP_STEPS = [
+  { id: "fine", label: "0.1", translate: 0.1, rotateDegrees: 5, scale: 0.05 },
+  { id: "default", label: "0.25", translate: 0.25, rotateDegrees: 15, scale: 0.1 },
+  { id: "coarse", label: "1.0", translate: 1, rotateDegrees: 45, scale: 0.25 },
+] as const;
+
+/** Keyboard map, rendered by the help overlay so the list can never drift from the code. */
+const SHORTCUTS: ReadonlyArray<[string, string]> = [
+  ["W / E / R", "Move / Rotate / Scale gizmo"],
+  ["F", "Frame the selection"],
+  ["Ctrl+D", "Duplicate the selection"],
+  ["Ctrl+Z", "Undo the last edit"],
+  ["Del / Backspace", "Delete the selection"],
+  ["Esc", "Close a panel, else deselect"],
 ];
 
 /** One glyph per entity type so a scene tree row is scannable without reading the id. */
@@ -139,6 +158,26 @@ export class PlatformEditor {
   private libraryTab: LibraryTab = "prefabs";
   private libraryFilter = "";
   private treeFilter = "";
+  // ---- gizmo settings surfaced in the toolbar (previously hardcoded) ----
+  private snapEnabled = true;
+  private snapStep: (typeof SNAP_STEPS)[number] = SNAP_STEPS[1];
+  private gizmoSpace: "world" | "local" = "world";
+  // ---- media import dialog state ----
+  private mediaDialogOpen = false;
+  private mediaPath = "";
+  private mediaListing: AgentMediaListing | null = null;
+  private readonly mediaSelection = new Set<string>();
+  private mediaBusy = false;
+  private mediaDialog!: HTMLElement;
+  private mediaCrumb!: HTMLElement;
+  private mediaFolders!: HTMLElement;
+  private mediaFiles!: HTMLElement;
+  private mediaStatus!: HTMLElement;
+  private mediaImportButton!: HTMLButtonElement;
+  /** One shared preview player, so two sound previews never overlap. */
+  private mediaAudio: HTMLAudioElement | null = null;
+  private helpOverlay: HTMLElement | null = null;
+  private toolbarStatus!: HTMLElement;
   /**
    * Friction/restitution are accepted by `update()` but are not reported back on
    * `AgentWorldEntityState.physics`, so the inspector remembers what the human set
@@ -184,10 +223,8 @@ export class PlatformEditor {
   constructor(private readonly deps: PlatformEditorDeps) {
     this.gizmo = new TransformControls(deps.camera, deps.renderer.domElement);
     this.gizmo.setMode("translate");
-    this.gizmo.setSpace("world");
-    this.gizmo.setTranslationSnap(0.25);
-    this.gizmo.setRotationSnap(MathUtils.degToRad(15));
-    this.gizmo.setScaleSnap(0.1);
+    this.gizmo.setSpace(this.gizmoSpace);
+    this.applySnap();
     this.gizmo.setSize(0.82);
     this.gizmo.setColors("#ff6f61", "#63e08e", "#5aa9ff", "#fff2a8");
     deps.scene.add(this.gizmo.getHelper());
@@ -238,7 +275,8 @@ export class PlatformEditor {
     window.addEventListener("pointerup", this.onLevelPointerUp);
 
     const ui = this.buildUi();
-    this.roots = [ui.toolbar, ui.panel, ui.rightRail, ui.drawer, ui.workbench];
+    this.mediaDialog = this.buildMediaDialog();
+    this.roots = [ui.toolbar, ui.panel, ui.rightRail, ui.drawer, ui.workbench, this.mediaDialog];
     this.outliner = ui.outliner;
     this.readout = ui.readout;
     this.treeCount = ui.treeCount;
@@ -272,6 +310,10 @@ export class PlatformEditor {
       this.selectedId = null;
       // Leaving the editor closes the workbench, so re-entering lands on the scene.
       this.setLevelsOpen(false);
+      this.setMediaDialogOpen(false);
+      this.stopMediaPreview();
+      this.helpOverlay?.remove();
+      this.helpOverlay = null;
     }
   }
 
@@ -347,10 +389,32 @@ export class PlatformEditor {
     if (!this.enabled) return;
     const target = event.target as HTMLElement | null;
     if (target && (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
-    switch (event.key.toLowerCase()) {
+    const key = event.key.toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && key === "d") {
+      // Before the browser bookmarks the editor.
+      event.preventDefault();
+      this.duplicateSelected();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && key === "z") {
+      event.preventDefault();
+      this.deps.api.undo();
+      this.select(null);
+      return;
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    switch (key) {
       case "w": this.setMode("translate"); break;
       case "e": this.setMode("rotate"); break;
       case "r": this.setMode("scale"); break;
+      case "f": this.focusSelection(); break;
+      case "escape":
+        // Most-modal first: the import dialog, then the workbench, then the selection.
+        if (this.mediaDialogOpen) this.setMediaDialogOpen(false);
+        else if (this.helpOverlay) { this.helpOverlay.remove(); this.helpOverlay = null; }
+        else if (this.levelsOpen) this.setLevelsOpen(false);
+        else this.select(null);
+        break;
       case "delete":
       case "backspace":
         if (this.selectedId) this.removeSelected();
@@ -358,6 +422,51 @@ export class PlatformEditor {
       default: return;
     }
   };
+
+  /**
+   * Frame the selection: put the orbit target on the entity and dolly the camera to a
+   * distance where the whole object reads. The camera keeps its viewing direction — F is
+   * "bring it to me", not "teleport me somewhere new".
+   */
+  private focusSelection(): void {
+    const object = this.selectedObject;
+    if (!object) return;
+    const bounds = new Box3().setFromObject(object);
+    if (bounds.isEmpty()) return;
+    const center = bounds.getCenter(new Vector3());
+    const radius = Math.max(bounds.getSize(new Vector3()).length() / 2, 0.5);
+    const { camera, orbit } = this.deps;
+    const direction = camera.position.clone().sub(orbit.target).normalize();
+    orbit.target.copy(center);
+    camera.position.copy(center.clone().add(direction.multiplyScalar(radius * 3)));
+    orbit.update();
+  }
+
+  /**
+   * Duplicate through the document, not the scene graph: read the entity's authored
+   * definition out of `export()` and spawn it under a fresh id, one step to the side.
+   * Children stay with the original — cloning a subtree is a different feature.
+   */
+  private duplicateSelected(): void {
+    const id = this.selectedId;
+    if (!id) return;
+    const definition = this.deps.api.export();
+    const source = definition?.entities.find((entity) => entity.id === id);
+    if (!source) return;
+    this.addCounter += 1;
+    const cloneId = `${id}-copy-${this.addCounter}`;
+    const position = source.transform?.position ?? [0, 0, 0];
+    const result = this.deps.api.spawn({
+      ...structuredClone(source),
+      id: cloneId,
+      transform: {
+        ...source.transform,
+        position: [round((position[0] ?? 0) + this.snapStep.translate * 4), position[1] ?? 0, position[2] ?? 0],
+      },
+    });
+    if (result.ok) this.select(cloneId);
+    else this.refresh("force");
+  }
 
   private setMode(mode: TransformControlsMode): void {
     this.gizmo.setMode(mode);
@@ -414,6 +523,10 @@ export class PlatformEditor {
     this.readout.textContent = this.selectedId
       ? `${this.selectedId} · ${this.gizmo.getMode()} · rev ${state?.revision ?? 0}`
       : `${entities.length} entities · rev ${state?.revision ?? 0} · click to select`;
+    // The at-a-glance line: what the world is, not what is selected (the readout has that).
+    this.toolbarStatus.textContent = state
+      ? `${entities.length} entities · rev ${state.revision} · t ${state.elapsedSeconds.toFixed(0)}s${state.paused ? " · paused" : ""}`
+      : "no world";
 
     // Read the world's sky back into the dropdown. Skipped while it has focus, so re-syncing
     // never yanks the list out from under someone mid-selection.
@@ -472,7 +585,17 @@ export class PlatformEditor {
         const type = document.createElement("span");
         type.className = "gx-ed-row-type";
         type.textContent = entity.type;
-        row.append(glyph, name, type);
+        // A span, not a nested button (invalid HTML inside the row button). Toggling
+        // visibility is an ordinary `update`, so agents see the change like any other.
+        const eye = document.createElement("span");
+        eye.className = "gx-ed-eye" + (entity.visible ? "" : " gx-ed-eye--off");
+        eye.textContent = entity.visible ? "●" : "○";
+        eye.title = entity.visible ? "Hide (visible: false)" : "Show (visible: true)";
+        eye.addEventListener("click", (clickEvent) => {
+          clickEvent.stopPropagation();
+          this.deps.api.update(entity.id, { visible: !entity.visible });
+        });
+        row.append(glyph, name, type, eye);
         row.addEventListener("click", () => this.select(entity.id));
         return row;
       }),
@@ -847,10 +970,40 @@ export class PlatformEditor {
     this.gizmo.addEventListener("change", syncModeButtons);
     toolbar.append(this.group([modeButtons.translate, modeButtons.rotate, modeButtons.scale]));
 
+    // Gizmo settings, surfaced instead of hardcoded: snapping was always-on at fixed
+    // increments and the reference frame was world-only, with no way to see either.
+    const snapToggle = this.toolButton("Snap", () => {
+      this.snapEnabled = !this.snapEnabled;
+      this.applySnap();
+      snapToggle.classList.toggle("gx-ed-on", this.snapEnabled);
+    }, "Toggle gizmo snapping");
+    snapToggle.classList.toggle("gx-ed-on", this.snapEnabled);
+    const snapSelect = document.createElement("select");
+    for (const step of SNAP_STEPS) {
+      const option = document.createElement("option");
+      option.value = step.id;
+      option.textContent = step.label;
+      option.title = `move ${step.translate} · rotate ${step.rotateDegrees}° · scale ${step.scale}`;
+      snapSelect.append(option);
+    }
+    snapSelect.value = this.snapStep.id;
+    snapSelect.title = "Snap increment (rotation and scale steps follow it)";
+    snapSelect.addEventListener("change", () => {
+      this.snapStep = SNAP_STEPS.find((step) => step.id === snapSelect.value) ?? SNAP_STEPS[1];
+      this.applySnap();
+    });
+    const spaceToggle = this.toolButton("World", () => {
+      this.gizmoSpace = this.gizmoSpace === "world" ? "local" : "world";
+      this.gizmo.setSpace(this.gizmoSpace);
+      spaceToggle.textContent = this.gizmoSpace === "world" ? "World" : "Local";
+    }, "Gizmo reference frame: world axes, or the entity's own");
+    toolbar.append(this.group([snapToggle, snapSelect, spaceToggle]));
+
     toolbar.append(this.group([
       this.toolButton("+ Box", () => this.addPrimitive("box")),
       this.toolButton("+ Sphere", () => this.addPrimitive("sphere")),
       this.toolButton("+ Light", () => this.addPrimitive("point-light")),
+      this.toolButton("Duplicate", () => this.duplicateSelected(), "Duplicate selection (Ctrl+D)"),
       this.toolButton("Delete", () => this.removeSelected(), "Delete selection (Del)"),
     ]));
 
@@ -893,8 +1046,68 @@ export class PlatformEditor {
     });
     toolbar.append(this.group([starter]));
 
+    // The live readout and help sit at the far right, out of the action groups' way.
+    const status = document.createElement("span");
+    status.className = "gx-ed-status";
+    this.toolbarStatus = status;
+    const help = this.toolButton("?", () => this.toggleHelp(), "Keyboard shortcuts");
+    help.classList.add("gx-ed-help");
+    const tail = this.group([status, help]);
+    tail.classList.add("gx-ed-group--tail");
+    toolbar.append(tail);
+
     syncModeButtons();
     return toolbar;
+  }
+
+  private applySnap(): void {
+    if (this.snapEnabled) {
+      this.gizmo.setTranslationSnap(this.snapStep.translate);
+      this.gizmo.setRotationSnap(MathUtils.degToRad(this.snapStep.rotateDegrees));
+      this.gizmo.setScaleSnap(this.snapStep.scale);
+    } else {
+      this.gizmo.setTranslationSnap(null);
+      this.gizmo.setRotationSnap(null);
+      this.gizmo.setScaleSnap(null);
+    }
+  }
+
+  /** The shortcut card, rendered from the same table the key handler implements. */
+  private toggleHelp(): void {
+    if (this.helpOverlay) {
+      this.helpOverlay.remove();
+      this.helpOverlay = null;
+      return;
+    }
+    const card = document.createElement("div");
+    card.className = "gx-ed-panel gx-ed-helpcard";
+    const head = document.createElement("div");
+    head.className = "gx-ed-head";
+    const title = document.createElement("span");
+    title.className = "gx-ed-title";
+    title.textContent = "Shortcuts";
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "gx-ed-collapse";
+    close.textContent = "✕";
+    close.addEventListener("click", () => this.toggleHelp());
+    head.append(title, close);
+    const rows = SHORTCUTS.map(([keys, what]) => {
+      const row = document.createElement("div");
+      row.className = "gx-ed-helprow";
+      const key = document.createElement("kbd");
+      key.textContent = keys;
+      const description = document.createElement("span");
+      description.textContent = what;
+      row.append(key, description);
+      return row;
+    });
+    const hint = document.createElement("div");
+    hint.className = "gx-ed-hint";
+    hint.textContent = "Click an object to select it. Every control is an API call — agents editing this scene land in the same history.";
+    card.append(head, ...rows, hint);
+    this.deps.container.append(card);
+    this.helpOverlay = card;
   }
 
   private buildSceneTree(): { panel: HTMLElement; outliner: HTMLElement; count: HTMLElement } {
@@ -1821,7 +2034,7 @@ export class PlatformEditor {
     this.libraryChips.replaceChildren(...chips);
   }
 
-  private libraryChipsFor(tab: LibraryTab): HTMLButtonElement[] {
+  private libraryChipsFor(tab: LibraryTab): HTMLElement[] {
     if (tab === "prefabs") {
       return this.deps.api.prefabs().map((prefab) =>
         this.chip(prefab.label ?? prefab.id, () => {
@@ -1972,14 +2185,372 @@ ${formula.provenance.note}`),
       );
       return [...flocks, ...fields, ...formulas];
     }
+    if (tab === "media") return this.mediaLibraryCards();
+    // Textures render as swatches, not text: a texture's name says almost nothing about
+    // what it looks like, and the image IS the affordance.
     return this.deps.api.textures().map((texture) =>
-      this.chip(texture.label ?? texture.id, () => {
-        if (!this.selectedId) return;
-        this.patchEntity(this.selectedId, {
-          material: { texture: { id: texture.id as never, repeat: texture.defaultRepeat } },
-        }, "force");
-      }, "Applies to the current selection."),
+      this.thumbCard({
+        label: texture.label ?? texture.id,
+        imageUrl: texture.url,
+        title: `${texture.description}\n\nSource: ${texture.source}\nClick to apply to the current selection.`,
+        onClick: () => {
+          if (!this.selectedId) return;
+          this.patchEntity(this.selectedId, {
+            material: { texture: { id: texture.id as never, repeat: texture.defaultRepeat } },
+          }, "force");
+        },
+      }),
     );
+  }
+
+  // ------------------------------------------------------------------- media
+
+  /**
+   * The Media tab: everything imported through the asset store, plus the way in. The
+   * store is the same server that holds shared scenes, so "offline" here is the same
+   * honest state the scene browser gates on — built-ins still work, imports need it.
+   */
+  private mediaLibraryCards(): HTMLElement[] {
+    const media = this.deps.api.media;
+    const status = media.status();
+    const cards: HTMLElement[] = [];
+
+    const bar = document.createElement("div");
+    bar.className = "gx-md-bar";
+    const note = document.createElement("span");
+    note.className = "gx-ed-hint";
+    note.textContent = status.online
+      ? `${status.count} imported · datalake: ${status.datalake ?? "not configured"}`
+      : "Asset store offline — run `npm run serve:scenes` to import media.";
+    bar.append(
+      this.chip("⤓ Import from Datalake…", () => this.setMediaDialogOpen(true), "Browse the datalake folders and import textures, models and sounds"),
+      this.chip("↻ Refresh", () => {
+        void media.refresh().then(() => this.renderLibrary());
+      }, "Re-read the asset store manifest"),
+      note,
+    );
+    cards.push(bar);
+
+    for (const record of media.list()) {
+      cards.push(this.mediaCard(record));
+    }
+    if (!media.list().length && status.online) {
+      const empty = document.createElement("div");
+      empty.className = "gx-ed-hint";
+      empty.textContent = "Nothing imported yet. Import from the datalake, or drop files onto the import dialog.";
+      cards.push(empty);
+    }
+    return cards;
+  }
+
+  private mediaCard(record: AgentWorldMediaDescriptor): HTMLElement {
+    const glyphs: Record<string, string> = { texture: "▦", model: "⬡", sound: "♪", file: "▤" };
+    const applyTitle = {
+      texture: "Click to apply to the current selection.",
+      model: "Click to spawn as a model entity.",
+      sound: "Click to preview.",
+      file: "Stored file (referenced by other assets).",
+    }[record.kind] ?? "";
+    const card = this.thumbCard({
+      label: record.label,
+      imageUrl: record.kind === "texture" ? record.url : undefined,
+      glyph: glyphs[record.kind] ?? "▤",
+      title: `${record.label} — ${record.kind}\n${record.source}\n${formatBytes(record.bytes)}\n\n${applyTitle}`,
+      onClick: () => {
+        if (record.kind === "texture") {
+          if (!this.selectedId) return;
+          this.patchEntity(this.selectedId, {
+            material: { texture: { id: record.id as never } },
+          }, "force");
+          return;
+        }
+        if (record.kind === "model" && record.format === "graphysx-mesh-json") {
+          this.addCounter += 1;
+          const id = `edit-model-${this.addCounter}`;
+          const result = this.deps.api.spawn({
+            id,
+            type: "model",
+            label: record.label,
+            asset: { id: record.id } as never,
+            transform: { position: [round(((this.addCounter % 4) - 1.5) * 3), 0, round((Math.floor(this.addCounter / 4) % 4 - 1.5) * 3)] },
+            tags: ["imported"],
+          });
+          if (result.ok) this.select(id);
+          return;
+        }
+        if (record.kind === "sound") {
+          this.toggleMediaPreview(record.url);
+        }
+      },
+    });
+    // Removal stays on the card rather than in a mode: one ×, with the API doing the work.
+    const remove = document.createElement("span");
+    remove.className = "gx-ed-x gx-md-x";
+    remove.textContent = "×";
+    remove.title = `Remove ${record.id} from the library`;
+    remove.addEventListener("click", (clickEvent) => {
+      clickEvent.stopPropagation();
+      void this.deps.api.media.remove(record.id).then(() => this.renderLibrary());
+    });
+    card.append(remove);
+    return card;
+  }
+
+  private toggleMediaPreview(url: string): void {
+    if (this.mediaAudio && !this.mediaAudio.paused && this.mediaAudio.src === url) {
+      this.stopMediaPreview();
+      return;
+    }
+    this.stopMediaPreview();
+    this.mediaAudio = new Audio(url);
+    void this.mediaAudio.play().catch(() => undefined);
+  }
+
+  private stopMediaPreview(): void {
+    this.mediaAudio?.pause();
+    this.mediaAudio = null;
+  }
+
+  /** A library card with a visual: image thumb when there is one, a glyph otherwise. */
+  private thumbCard(options: {
+    label: string;
+    imageUrl?: string;
+    glyph?: string;
+    title?: string;
+    onClick: () => void;
+  }): HTMLElement {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "gx-ed-thumb";
+    if (options.title) card.title = options.title;
+    if (options.imageUrl) {
+      const image = document.createElement("img");
+      image.src = options.imageUrl;
+      image.loading = "lazy";
+      image.alt = "";
+      card.append(image);
+    } else {
+      const glyph = document.createElement("span");
+      glyph.className = "gx-ed-thumb-glyph";
+      glyph.textContent = options.glyph ?? "▤";
+      card.append(glyph);
+    }
+    const label = document.createElement("span");
+    label.className = "gx-ed-thumb-label";
+    label.textContent = options.label;
+    card.append(label);
+    card.addEventListener("click", options.onClick);
+    return card;
+  }
+
+  // ----------------------------------------------------- media import dialog
+
+  /**
+   * The datalake browser: folders on the left, a selectable file grid on the right,
+   * import at the bottom. Selection is multi — the point of a 700-file Stockroom is
+   * importing a dozen textures in one pass, not twelve dialog round trips. Dropping
+   * local files anywhere on the dialog uploads them, covering media that is not in
+   * the datalake at all.
+   */
+  private buildMediaDialog(): HTMLElement {
+    const panel = document.createElement("div");
+    panel.className = "gx-ed-workbench gx-md-dialog";
+
+    const head = document.createElement("div");
+    head.className = "gx-ed-head";
+    const title = document.createElement("span");
+    title.className = "gx-ed-title";
+    title.textContent = "Import media";
+    const crumb = document.createElement("span");
+    crumb.className = "gx-lv-meta";
+    this.mediaCrumb = crumb;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "gx-ed-collapse";
+    close.textContent = "✕ Close";
+    close.addEventListener("click", () => this.setMediaDialogOpen(false));
+    head.append(title, crumb, close);
+
+    const folders = document.createElement("div");
+    folders.className = "gx-md-folders";
+    this.mediaFolders = folders;
+
+    const files = document.createElement("div");
+    files.className = "gx-md-files";
+    this.mediaFiles = files;
+
+    const body = document.createElement("div");
+    body.className = "gx-lv-body";
+    const side = document.createElement("div");
+    side.className = "gx-lv-side";
+    side.append(this.subhead("Folders"), folders);
+    const main = document.createElement("div");
+    main.className = "gx-lv-main";
+    main.append(this.subhead("Files"), files);
+    body.append(side, main);
+
+    const importButton = document.createElement("button");
+    importButton.type = "button";
+    importButton.className = "gx-lv-play";
+    importButton.textContent = "⤓ Import selected";
+    importButton.addEventListener("click", () => void this.runMediaImport());
+    this.mediaImportButton = importButton;
+
+    const status = document.createElement("div");
+    status.className = "gx-lv-status";
+    this.mediaStatus = status;
+
+    const foot = document.createElement("div");
+    foot.className = "gx-md-foot";
+    const hint = document.createElement("span");
+    hint.className = "gx-ed-hint";
+    hint.textContent = "Click files to select. Textures and sounds copy as-is; OBJ/GLTF/GLB/FBX/STL/3DS convert in the browser. You can also drop files here to upload them.";
+    foot.append(hint, importButton);
+
+    panel.append(head, body, foot, status);
+
+    // Drag-drop upload: local files that never lived in the datalake.
+    panel.addEventListener("dragover", (dragEvent) => {
+      dragEvent.preventDefault();
+    });
+    panel.addEventListener("drop", (dropEvent) => {
+      dropEvent.preventDefault();
+      const files = [...(dropEvent.dataTransfer?.files ?? [])];
+      if (files.length) void this.uploadDroppedFiles(files);
+    });
+    return panel;
+  }
+
+  private setMediaDialogOpen(open: boolean): void {
+    this.mediaDialogOpen = open;
+    this.mediaDialog.classList.toggle("gx-ed-workbench--open", open);
+    if (!open) return;
+    this.mediaSelection.clear();
+    void this.loadMediaListing(this.mediaPath);
+  }
+
+  private async loadMediaListing(path: string): Promise<void> {
+    this.mediaStatusLine("Reading the datalake…");
+    const result = await this.deps.api.media.browse(path);
+    if (!result.ok || !result.value) {
+      this.mediaStatusLine(result.error ?? "The datalake did not answer.", true);
+      this.mediaFolders.replaceChildren();
+      this.mediaFiles.replaceChildren();
+      return;
+    }
+    this.mediaPath = result.value.path;
+    this.mediaListing = result.value;
+    this.renderMediaDialog();
+    this.mediaStatusLine(`${result.value.files.length} files · ${result.value.folders.length} folders`);
+  }
+
+  private renderMediaDialog(): void {
+    const listing = this.mediaListing;
+    if (!listing) return;
+    this.mediaCrumb.textContent = `${listing.root}/${listing.path}`.replace(/\/+$/, "");
+
+    const rows: HTMLElement[] = [];
+    if (listing.path) {
+      const parent = listing.path.includes("/") ? listing.path.slice(0, listing.path.lastIndexOf("/")) : "";
+      rows.push(this.mediaFolderRow("⬆ up", parent));
+    }
+    for (const folder of listing.folders) rows.push(this.mediaFolderRow(`▸ ${folder.name}`, folder.path));
+    this.mediaFolders.replaceChildren(...rows);
+
+    this.mediaFiles.replaceChildren(...listing.files.map((file) => this.mediaFileCard(file)));
+    this.syncMediaImportButton();
+  }
+
+  private mediaFolderRow(label: string, path: string): HTMLElement {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "gx-lv-row";
+    const name = document.createElement("span");
+    name.className = "gx-lv-row-id";
+    name.textContent = label;
+    row.append(name);
+    row.addEventListener("click", () => void this.loadMediaListing(path));
+    return row;
+  }
+
+  private mediaFileCard(file: AgentMediaFileEntry): HTMLElement {
+    const isImage = file.kind === "texture";
+    const storeUrl = this.deps.api.media.status().storeUrl;
+    const card = this.thumbCard({
+      label: file.name,
+      imageUrl: isImage && storeUrl ? `${storeUrl}/datalake/file?path=${encodeURIComponent(file.path)}` : undefined,
+      glyph: file.kind === "model" ? "⬡" : file.kind === "sound" ? "♪" : "▤",
+      title: `${file.path}\n${formatBytes(file.bytes)} · ${file.kind}${file.convertible ? " (converts in-browser)" : ""}${file.usable ? "" : `\nNot directly usable — ${file.extension} needs offline conversion.`}`,
+      onClick: () => {
+        if (!file.usable) return;
+        if (this.mediaSelection.has(file.path)) this.mediaSelection.delete(file.path);
+        else this.mediaSelection.add(file.path);
+        card.classList.toggle("gx-ed-thumb--on", this.mediaSelection.has(file.path));
+        this.syncMediaImportButton();
+      },
+    });
+    if (!file.usable) card.classList.add("gx-ed-thumb--disabled");
+    if (this.mediaSelection.has(file.path)) card.classList.add("gx-ed-thumb--on");
+    return card;
+  }
+
+  private syncMediaImportButton(): void {
+    const count = this.mediaSelection.size;
+    this.mediaImportButton.textContent = count ? `⤓ Import ${count} file${count === 1 ? "" : "s"}` : "⤓ Import selected";
+    this.mediaImportButton.disabled = count === 0 || this.mediaBusy;
+  }
+
+  /** Sequential on purpose: model conversion is heavy, and progress should read truthfully. */
+  private async runMediaImport(): Promise<void> {
+    if (this.mediaBusy || !this.mediaSelection.size) return;
+    this.mediaBusy = true;
+    this.syncMediaImportButton();
+    const paths = [...this.mediaSelection];
+    const failures: string[] = [];
+    for (let index = 0; index < paths.length; index += 1) {
+      const path = paths[index]!;
+      this.mediaStatusLine(`Importing ${index + 1}/${paths.length}: ${path}…`);
+      const result = await this.deps.api.media.import(path);
+      if (!result.ok) failures.push(`${path}: ${result.error ?? "failed"}`);
+      else this.mediaSelection.delete(path);
+    }
+    this.mediaBusy = false;
+    this.renderMediaDialog();
+    this.renderLibrary();
+    this.mediaStatusLine(
+      failures.length
+        ? `Imported ${paths.length - failures.length}/${paths.length} — ${failures.join(" · ")}`
+        : `Imported ${paths.length} file${paths.length === 1 ? "" : "s"} — they are in the Media tab (textures also in Textures, models in Models).`,
+      failures.length > 0,
+    );
+  }
+
+  private async uploadDroppedFiles(files: File[]): Promise<void> {
+    const media = this.deps.api.media;
+    const failures: string[] = [];
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index]!;
+      this.mediaStatusLine(`Uploading ${index + 1}/${files.length}: ${file.name}…`);
+      const result = await media.register({
+        fileName: file.name,
+        kind: /\.(png|jpe?g|gif|bmp|webp|dds)$/i.test(file.name) ? "texture"
+          : /\.(wav|mp3|ogg|mid|flac)$/i.test(file.name) ? "sound"
+          : /\.json$/i.test(file.name) ? "model" : "file",
+        source: `Upload/${file.name}`,
+        data: file,
+      });
+      if (!result.ok) failures.push(`${file.name}: ${result.error ?? "failed"}`);
+    }
+    this.renderLibrary();
+    this.mediaStatusLine(
+      failures.length ? `Uploaded ${files.length - failures.length}/${files.length} — ${failures.join(" · ")}` : `Uploaded ${files.length} file${files.length === 1 ? "" : "s"}.`,
+      failures.length > 0,
+    );
+  }
+
+  private mediaStatusLine(message: string, isError = false): void {
+    this.mediaStatus.textContent = message;
+    this.mediaStatus.classList.toggle("gx-lv-status--error", isError);
   }
 
   private chip(label: string, onClick: () => void, title?: string): HTMLButtonElement {
@@ -2015,10 +2586,21 @@ ${formula.provenance.note}`),
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("pointerup", this.onLevelPointerUp);
     this.unsubscribeEvents();
+    this.stopMediaPreview();
+    this.helpOverlay?.remove();
+    this.helpOverlay = null;
     this.gizmo.detach();
     this.gizmo.dispose();
     for (const root of this.roots) root.remove();
   }
+}
+
+/** "476.3 KB" out of 476279 — for media tooltips and the import dialog. */
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "?";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const readVector = (row: { inputs: HTMLInputElement[] }): [number, number, number] => {
@@ -2198,9 +2780,42 @@ const EDITOR_CSS = `
 .gx-lv-status{flex:none;font:11px/1.4 system-ui,sans-serif;color:var(--gx-muted);border-top:1px solid var(--gx-border-soft);padding-top:var(--gx-s2);min-height:16px;word-break:break-word}
 .gx-lv-status--error{color:#ff9fb0}
 
+/* ---- toolbar tail: live status + help ---- */
+.gx-ed-group--tail{margin-left:auto;border-left:none !important;padding-left:0 !important}
+.gx-ed-status{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gx-muted);white-space:nowrap}
+.gx-ed-help{min-width:28px;font-weight:700}
+.gx-ed-helpcard{top:60px;right:calc(296px + 2 * var(--gx-s4));width:280px;z-index:26}
+.gx-ed-helprow{display:flex;align-items:center;gap:var(--gx-s3);font-size:11px}
+.gx-ed-helprow kbd{flex:0 0 108px;background:var(--gx-field);border:1px solid var(--gx-border);border-radius:4px;padding:3px 6px;font:600 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gx-accent);text-align:center}
+
+/* ---- scene tree visibility toggle ---- */
+.gx-ed-eye{flex:none;width:16px;text-align:center;color:var(--gx-accent);opacity:.65;cursor:pointer;border-radius:4px}
+.gx-ed-eye:hover{opacity:1;background:rgba(55,182,211,.18)}
+.gx-ed-eye--off{color:var(--gx-muted);opacity:.5}
+
+/* ---- library thumbnails (textures + media) ---- */
+.gx-ed-thumb{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;width:86px;background:var(--gx-field);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:4px;cursor:pointer;color:#c6e2ea}
+.gx-ed-thumb:hover{background:var(--gx-raise);border-color:var(--gx-accent);color:#fff}
+.gx-ed-thumb--on{border-color:var(--gx-accent);box-shadow:0 0 0 2px rgba(55,182,211,.35)}
+.gx-ed-thumb--disabled{opacity:.4;cursor:not-allowed}
+.gx-ed-thumb img{width:76px;height:52px;object-fit:cover;border-radius:4px;background:#04121a;pointer-events:none}
+.gx-ed-thumb-glyph{width:76px;height:52px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--gx-accent);background:rgba(4,18,26,.8);border-radius:4px}
+.gx-ed-thumb-label{max-width:78px;font:10px/1.25 system-ui,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gx-md-x{position:absolute;top:2px;right:2px;z-index:1}
+.gx-md-bar{display:flex;align-items:center;gap:var(--gx-s2);flex-wrap:wrap;width:100%;flex:none}
+
+/* ---- media import dialog ---- */
+.gx-md-dialog{z-index:26}
+.gx-md-folders{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding-right:2px}
+.gx-md-files{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-wrap:wrap;gap:var(--gx-s2);align-content:flex-start;padding:var(--gx-s2);background:rgba(4,14,20,.45);border:1px solid var(--gx-border-soft);border-radius:var(--gx-radius-sm)}
+.gx-md-foot{display:flex;align-items:center;gap:var(--gx-s3);flex:none}
+.gx-md-foot .gx-ed-hint{flex:1 1 auto}
+.gx-md-foot .gx-lv-play:disabled{opacity:.45;cursor:not-allowed}
+
 @media (max-width:1080px){
   .gx-ed-panel--left{width:200px}
   .gx-ed-panel--right{width:250px}
   .gx-ed-panel--drawer{left:224px;right:274px}
+  .gx-ed-status{display:none}
 }
 `;

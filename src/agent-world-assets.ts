@@ -40,7 +40,7 @@ export type AgentWorldModelAsset = {
 };
 
 /** Broad grouping so an agent can ask for "a tree" without knowing archive file names. */
-export type AgentWorldAssetCategory = "vegetation" | "port" | "camp" | "character" | "prop" | "vehicle";
+export type AgentWorldAssetCategory = "vegetation" | "port" | "camp" | "character" | "prop" | "vehicle" | "imported";
 
 export type AgentWorldAssetDescriptor = {
   id: string;
@@ -59,6 +59,29 @@ export type AgentWorldAssetDescriptor = {
 import { GRAPHYSX_AGENT_WORLD_ASSET_CATALOG } from "./agent-world-asset-catalog";
 
 export const GRAPHYSX_AGENT_WORLD_ASSETS = GRAPHYSX_AGENT_WORLD_ASSET_CATALOG;
+
+/**
+ * Models registered at runtime by the media library (agent-world-media.ts) — meshes
+ * converted in the browser and stored on a local asset store. Separate from the
+ * generated catalog so the release manifest, which scrapes the catalog file, never
+ * claims a file that only a store can serve.
+ */
+const DYNAMIC_ASSETS: AgentWorldAssetDescriptor[] = [];
+
+/** Replace the imported set (idempotent — a manifest refresh re-registers everything). */
+export function registerAgentWorldAssets(descriptors: readonly AgentWorldAssetDescriptor[]): void {
+  const catalog = new Set<string>(GRAPHYSX_AGENT_WORLD_ASSETS.map((asset) => asset.id));
+  DYNAMIC_ASSETS.length = 0;
+  for (const descriptor of descriptors) {
+    if (catalog.has(descriptor.id)) continue; // a vendored id always wins
+    DYNAMIC_ASSETS.push(descriptor);
+  }
+}
+
+/** Everything spawnable right now: the vendored catalog plus any store-backed imports. */
+export function allAgentWorldAssets(): readonly AgentWorldAssetDescriptor[] {
+  return DYNAMIC_ASSETS.length ? [...GRAPHYSX_AGENT_WORLD_ASSETS, ...DYNAMIC_ASSETS] : GRAPHYSX_AGENT_WORLD_ASSETS;
+}
 
 type Tuple3 = [number, number, number];
 type PayloadMaterial = {
@@ -146,7 +169,7 @@ export function resolveAgentWorldModelAsset(source?: AgentWorldModelAsset): Reso
     throw new Error("A model entity requires asset.id or asset.url");
   }
   const id = source.id?.trim() || null;
-  const catalogAsset = id ? GRAPHYSX_AGENT_WORLD_ASSETS.find((candidate) => candidate.id === id) : null;
+  const catalogAsset = id ? allAgentWorldAssets().find((candidate) => candidate.id === id) : null;
   if (id && !catalogAsset && !source.url?.trim()) throw new Error(`Unknown model asset: ${id}`);
   const format = source.format ?? catalogAsset?.format ?? "graphysx-mesh-json";
   if (format !== "graphysx-mesh-json") throw new Error(`Unsupported model format: ${String(format)}`);

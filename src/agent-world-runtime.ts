@@ -156,6 +156,9 @@ import {
   type AgentWorldWater,
   type ResolvedAgentWorldWater
 } from "./agent-world-water";
+// Type-only on purpose: the media library imports runtime types back, and a value
+// import here would make that a real cycle instead of an erased one.
+import type { GraphysXAgentMediaApi } from "./agent-world-media";
 
 export const GRAPHYSX_AGENT_WORLD_SCHEMA = "graphysx.agent-world/v2" as const;
 export const GRAPHYSX_AGENT_WORLD_STATE_SCHEMA = "graphysx.agent-world-state/v2" as const;
@@ -685,6 +688,13 @@ export type GraphysXAgentWorldApi = {
   readonly version: "2.0";
   readonly capabilities: readonly string[];
   readonly levels: GraphysXAgentLevelApi;
+  /**
+   * The media library: runtime imports from the local asset store (datalake browse,
+   * import, upload). Store-backed and async, unlike the curated lists below — offline
+   * it reports `status().online === false` and the library holds built-ins only.
+   */
+  readonly media: GraphysXAgentMediaApi;
+  /** Curated catalog plus any media-library imports registered this session. */
   assets(): readonly AgentWorldAssetDescriptor[];
   textures(): readonly AgentWorldTextureDescriptor[];
   /** The curated per-scene skybox sets recovered from the archive. */
