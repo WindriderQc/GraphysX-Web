@@ -221,6 +221,10 @@ export class PlatformEditor {
     // rebuilding the DOM per event would rebuild it dozens of times for one logical change.
     this.unsubscribeEvents = deps.world.subscribeEvents((event) => {
       if (event.type === "trigger.enter" || event.type === "trigger.exit") return;
+      // The DOM refresh below is rAF-coalesced, but the gizmo cannot wait a frame: a world
+      // replacement destroys its attached object, and TransformControls warns (and a
+      // rollback throws) on the very next render. Re-sync it synchronously.
+      if (event.type === "world.loaded") this.syncGizmo();
       if (this.refreshQueued) return;
       this.refreshQueued = true;
       requestAnimationFrame(() => {
@@ -396,6 +400,14 @@ export class PlatformEditor {
    * would destroy the button the user is mid-click on when a field commits on blur.
    */
   private refresh(inspector: "auto" | "skip" | "force" = "auto"): void {
+    // Re-sync the gizmo against the live graph before anything else. Every world
+    // replacement (api.load, levels.play, an agent's create, a rejected-transaction
+    // rollback) destroys the object the gizmo is attached to; refresh() rebuilt the DOM
+    // but left that stale attachment, so TransformControls warned every frame ("must be
+    // a part of the scene graph") and a rollback in that state threw uncaught. syncGizmo
+    // detaches when the entity is gone and re-attaches when the same id was rebuilt as a
+    // new object — so a selection now survives a reload instead of wedging it.
+    this.syncGizmo();
     const state = this.deps.api.state();
     const entities = state?.entities ?? [];
     this.readout.textContent = this.selectedId
