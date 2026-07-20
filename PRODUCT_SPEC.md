@@ -235,8 +235,20 @@ Related corrections elsewhere in this spec:
   pass-through — a 150-unit plane and a `Points` cloud with a one-metre raycast threshold are
   not click targets. `Water.js`'s hard-coded Fresnel F0 of 0.3 was also corrected to water's
   actual ~0.02, which is what stopped the lake reading as wet rock at grazing incidence.
-- **§5 CubX navigator** — the showroom's CubX is eight plain boxes with a spin behavior, an
-  homage rather than the recovered assembly. There is no side menu or scene browser.
+- **§5 CubX navigator** — ~~the showroom's CubX is eight plain boxes with a spin behavior, an
+  homage rather than the recovered assembly. There is no side menu or scene browser.~~
+  **Corrected.** The recovered assembly was never archive-blocked — it is decoded in
+  `src/legacy/cubx-actor-lineage.json` + `cubx-actor-inspection-geometry.json`, merely
+  un-graduated. `cubx-assembly` is now a **prefab** (eight corner cubes joined by twelve edge
+  struts, re-authored from the decoded `CubXOpen.tva` hierarchy at the archive's 25-unit module),
+  so it is vocabulary in the editor palette and `api.spawnPrefab`, not showroom decoration.
+  Faithful: topology, module size, strut proportions, the untextured grey StdMat as the default
+  palette. Inferred: exact pivot offsets (placed symmetrically rather than replicating TV3D's
+  asymmetric ones). Deliberately absent: the eight `CubXBtn` click proxies and any click-index →
+  BoxNN → actor mapping — the audit's own `mappingAssessment` records that those orderings
+  disagree in the source and warns against inventing one, so the unambiguous *shape* ships and
+  the semantics are left to whatever binds interactions later. **Scene browser now ships**
+  (`browse-shelf.ts`); a spatial side menu on the assembly itself is still future.
 - **§6 skyboxes** — 21 MB of correctly-oriented cube maps ship and are unreachable from the
   default route; v2 `environment.background` is a single color string. The "sky ownership is
   scoped" tenet (§11) currently has no v2 mechanism to be scoped *with*.

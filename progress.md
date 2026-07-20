@@ -481,3 +481,46 @@ product-scoped version text ✓; no archive-player menu as a competing front doo
 rebuilt on the platform, played to a win ✓. Remaining spec items (DNA/evolutionary entities, crowds,
 the recovered CubX assembly, audio, a ballz shader pass, high-res skies) are enrichments beyond the
 v1 bar, not gaps in it.
+
+## 2026-07-19 — `cubx-r1`: the recovered assembly, graduated
+
+- **It was never archive-blocked — just un-graduated.** §8.1 called the showroom's CubX "eight
+  plain boxes… an homage rather than the recovered assembly", which read like a workshop→curate→
+  import was owed. It was not: the assembly is fully decoded *in this repo*, in
+  `src/legacy/cubx-actor-lineage.json` (hierarchy, world matrices, 23 mesh records) and
+  `cubx-actor-inspection-geometry.json` (the actual vertex arrays). Worth remembering as a lesson —
+  the ledger said "recovered material lives upstream" and the recovered material was already here.
+- **`cubx-assembly` is a prefab, not showroom decoration.** Eight corner cubes joined by twelve
+  edge struts, re-authored from the decoded `CubXOpen.tva` hierarchy. The record is in TV3D units
+  where the cube module is 25; ÷25 gives the 1-unit module used here, so cubes sit on ±1 and each
+  strut spans exactly the gap between two neighbours. Being a prefab makes it *vocabulary* — it
+  appears in the editor's Prefabs palette and `api.spawnPrefab` like any other.
+- **Labelled honestly, three ways.** FAITHFUL: part count and topology, the 25³ module, the strut
+  proportions, the untextured grey StdMat as the default palette. INFERRED: exact pivot offsets —
+  the archive's boxes carry a local centre of `[0, 12.5, 0]` and its struts sit on asymmetric world
+  offsets; this places both symmetrically about the centre, which reads identically and keeps the
+  prefab centred on its own origin like every other prefab. DELIBERATELY ABSENT: the eight
+  `CubXBtn` click proxies and any click-index → BoxNN → actor mapping, because the audit's own
+  `mappingAssessment` records that those three orderings **disagree in the source** and warns
+  against inventing one. The unambiguous *shape* ships; the semantics wait for a real binding.
+- The showroom nests it under the existing spinning cluster, so the rotation, the orbital swarm and
+  the crown emitters keep working unchanged. Its cyan tint is a **declared** palette override — the
+  recovered grey vanishes against the terrain at showroom framing — while the prefab's own defaults
+  stay faithful to the record.
+
+### The smoke caught a real consequence, and two process notes
+
+- **`focusWorks` went false** and it was not a flake: the click-to-focus test clicks a scenery
+  entity by id, and turning the placeholder cubes into a prefab renamed them
+  (`showroom-cubx-cube-7` → `showroom-cubx-frame:cube-8`). The lookup returned nothing, so no click
+  was issued. Retargeted; the assertion is unchanged and still demands a >0.75 focus move with the
+  idle orbit re-armed. Exactly the kind of silent breakage a "does the element exist" test misses
+  and a "did the behaviour happen" test catches.
+- **A concurrent session's in-flight refactor briefly made the whole gate red** — 11/11 failing,
+  all from eight typecheck errors in one file mid-rewrite. The discriminator that mattered: every
+  error was in *their* file, none in mine, and their breakage was **uncommitted**, so a commit of
+  only my paths pushed a clean tree. Verified by checking HEAD out into a throwaway `git worktree`
+  and running the gate there — a way to prove a commit is sound without touching anyone's working
+  copy, worth reaching for again.
+- Final state after their rules work landed: **all 14 checks green**, including their new `rules`
+  smoke.
