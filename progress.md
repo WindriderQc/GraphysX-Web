@@ -729,3 +729,114 @@ does not carry a parent transform, and it has now cost two people a failing asse
 **Gate: 17/17 green**, verified at the committed HEAD in a throwaway worktree because a concurrent
 agent's in-flight file had the shared tree failing typecheck. That trick has now paid for itself
 twice.
+
+## 2026-07-20 — `media-r1`: the library gets a runtime import path
+
+- **The datalake is reachable from inside the product.** Until now the asset library was two
+  build-time arrays: adding one texture meant offline conversion, regenerating a source file, and
+  a rebuild — so 251 MB of recovered media (`E:\Media\Datalake`, StockRoom and friends: ~750 files,
+  359 PNGs, 64 TVMs, cubemap skies, heightmaps, sounds) sat unreachable. The store server now
+  fronts an **asset store** (`server/asset-store.mjs`, mounted into `scene-store.mjs`, same port):
+  browse the datalake (`GRAPHYSX_DATALAKE_DIR`), import files into `.graphysx-store/assets/` with
+  a persisted manifest, accept raw uploads, serve the binaries with CORS. Path traversal is
+  refused by prefix check; manifest writes ride the same atomic-rename-with-EPERM-retry the scene
+  store earned the hard way.
+- **`api.media.*` on both API implementations** (the invariant held: `agent-world-api.ts` AND
+  `prototype-app.ts`). `status/list` are sync mirrors; `refresh/browse/import/register/remove`
+  are async store calls. A refresh registers every import into the SAME registries the curated
+  vocabulary lives in — so `textures()`/`assets()` list them, `texture: { id }` / `asset: { id }`
+  resolve them from scene documents, and the editor library shows them. The curated arrays stay
+  untouched, which keeps `product-assets.mjs`'s release-manifest scrape honest: imports live on
+  the store, never in `dist/`.
+- **Foreign models convert IN THE BROWSER.** OBJ/GLTF/GLB/FBX/STL/3DS are fetched from the
+  datalake, parsed with three's own loaders, and baked to `graphysx-mesh-json` — the runtime keeps
+  exactly one model format and the server stays a dependency-free file store that never parses
+  geometry. Two sign conventions are deliberate: Z is negated (and winding reversed) because
+  `loadAgentWorldModel` applies the TV3D left-handed flip, and GLTF's `flipY:false` UV convention
+  gets V inverted. Texture maps the loaders resolve (a 3DS naming its BMPs, rewritten through the
+  store's datalake endpoint by a `LoadingManager` URL modifier) are re-encoded to PNG and stored
+  as their own library files — the airplane.3ds comes through with all six of its BMPs. Positions
+  trim to 4 decimals (a raw-scan STL went 62 MB → ~24 MB). `.tvm`/`.x` stay offline-decode.
+- **The editor grew the human half**: a **Media** tab (thumbnails, apply/spawn/preview per kind,
+  per-card remove) and an **Import media** dialog — folder navigation, multi-select file grid
+  with image thumbnails, per-file convertibility flags, sequential import with truthful progress,
+  and drag-drop upload for files that never lived in the datalake. Textures tab upgraded from
+  text chips to swatches (the image IS the affordance).
+- **Editor usability pass in the same breath**: snapping surfaced (toggle + 0.1/0.25/1.0 steps —
+  it was hardcoded always-on), gizmo World/Local space toggle, **Duplicate** (Ctrl+D, through the
+  document not the scene graph), **F** frames the selection, Ctrl+Z undo, Esc closes
+  most-modal-first, per-row visibility dots in the scene tree (an ordinary `update({visible})`),
+  a live toolbar status readout (entities · rev · sim time · paused), and a `?` shortcuts card
+  rendered from the same table the key handler implements.
+
+### Found while driving it
+
+- **A day-long cache header served a stale model.** Stored asset files were sent with
+  `max-age=86400` on the theory that an id's content never changes — but remove-then-reimport
+  legitimately frees and reuses an id at the same URL, and the runtime kept rendering the OLD
+  payload (no baked textures) while the store held the new one. Asset files now go out `no-cache`;
+  the store has no ETags, so revalidate means refetch, which is the right trade on a LAN store
+  against silently stale geometry. The hour lost here was misdiagnosed twice (as a bake-timing
+  race, then as a register failure) before an instrumented fetch trace showed six successful
+  uploads feeding a payload the browser refused to re-read.
+- **`?store=` is honoured by the media module at load, not only via main.ts's async probe.** The
+  smoke called `media.refresh()` right after boot and raced the probe's `configureAgentWorldMedia`,
+  landing on the default port — where the dev box's REAL store answered, so the smoke read ten of
+  yesterday's imports instead of its one fixture. Synchronous truth from the URL param fixed it;
+  the race was only visible because a second live store existed to catch the miss.
+- **Smoke #18: `media`** (`scripts/smoke-media.mjs`) — builds its own two-file datalake in a temp
+  dir (CI must not know about `E:\`), asserts the server path (browse, import, traversal refusal,
+  serving), the API path (refresh→register→apply texture, OBJ→convert→spawn→`asset.status:
+  "ready"`), and the GUI path (Media tab cards, dialog listing, click-select, import button,
+  status line) in one flow.
+
+## 2026-07-20 — `archive-r2`: Math screen, Voie Lactée, Maison
+
+Three more revivals, integrated by the lead from parallel agents.
+
+- **Math Game screen** (`archive-math-lab.ts`) — `formula-field` graduated the *system*; this
+  rebuilds the *screen* from `buildMathLabPreview`: the instrument board at its recovered
+  15 × 7 / (0, 3.7, −8.4), the 2-unit grid across ±6, the three axes at their recovered colours,
+  and surface curves sampled every 1.5 in z with z = 0 highlighted. §11 holds: the A/B/C/M/X slider
+  panel is deliberately absent because the coefficients are already editable in the inspector and
+  through `api.update` — that *is* the platform's answer to it — and there is no scoring loop.
+- **Voie Lactée** (`archive-milkyway.ts`) — the agent **refused three things the brief assumed**,
+  correctly: there is no sun, no barycentre and no heliocentric orbit in the record (the Moon's is
+  the only orbit in twenty years of this material), and no scale compression is needed because the
+  archive is already a 74-unit vignette. Giving Mars and Venus orbits would have shipped a solar
+  system under the name of a record whose census entry exists to say it is not one.
+- **Maison** (`archive-buildings.ts`) — **a prior verdict overturned on evidence.**
+  `archive-playgrounds.ts` had grouped `maison-explorer` with the mesh galleries "whose whole
+  content is geometry this vocabulary cannot author". True of every other candidate on that list;
+  false here — the record is 24 meshes totalling 216 vertices, 20 of them exactly 8-vertex boxes.
+  It is a Blender *massing model*, and a v2 `box` is what those objects already were. The module
+  imports the inspection JSON directly so there is no transcription to drift.
+
+### The asset-registration trap, three times in one day
+
+Vehicles, then the planet maps, then the Math board: each shipped in `public/` from the beginning,
+each unregistered, and therefore each **pruned out of `dist/` by the release manifest** — working
+perfectly in dev and 404-ing in production. It is systemic enough that it wants a guard (a check
+that every URL referenced by a shipped scene is claimed by a registry), not vigilance.
+
+### Field notes from the agents, worth keeping
+
+- **`state()` mixes reference frames.** `position` is a *world* position from `getWorldPosition()`,
+  while `rotationDegrees` and `scale` are *local*, all rounded. A correctly-grounded house reported
+  as floating 0.33 units and cost three false failures. Separately, `flock.leadPosition` is in the
+  flock's own local space while every other entity's position is world.
+- **`toggle-visibility` flips the flag on its target only.** Children of a hidden group keep
+  reporting `visible: true` even though three.js hides the subtree — assert on the group.
+- **Unverified, surfaced not chased:** `arena.mat`'s locked SHA-256 in
+  `arena-archive-environment.ts` reportedly does not reproduce from the committed blob under any
+  line-ending interpretation, and that const block's `faces: 44` / `dimensions: [40,2,40]` disagree
+  with the OBJ (42 face records, Y span 2.047). Both are surfaced in the legacy UI.
+
+### Gate
+
+17 of 19 green. `media` fails only under contention and passes alone. **`spiral` is a genuine
+failure and is why nothing is pushed:** `collectedAfterRings = 16` but `hiddenRings = 12`, because a
+ring collects by calling `toggle-visibility` **on itself** and toggle is not idempotent — rolling
+back through a collected ring makes it reappear. That trade-off was taken knowingly when the win
+state landed (it keeps the scene self-sufficient without the play layer); the spiral course is where
+the bill arrived. A fix is in flight in its own session.
