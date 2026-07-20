@@ -658,3 +658,40 @@ filesystem before believing a repo-roles table.
   uncommitted one-line edit into `0bc3f26`, because their hunk sat in the same file I had edited.
   Explicit paths are not enough in a shared tree — `git diff` the file for foreign hunks before
   staging it, or stage by hunk.
+
+## 2026-07-20 — `playgrounds-r1`: the Nature Lab comes back
+
+- **Flock Planet** and the **Forces & Flow Garden**, rebuilt from recovered `nature-lab` material as
+  ordinary v2 scenes, reachable from Browse Scenes. The front door now lists nine scenes with the
+  three recovered ones first.
+- **Why these two:** their constants had *already* graduated. The `orbital-swarm` flock preset's
+  provenance cites nature-lab's count 60 / radius 5.25 / maxForce 0.58 carried over unchanged, and
+  `gravity-well` / `flow-garden` cite `attractor.js` / `flowfield.js` with the same lineage. For
+  their central systems these scenes **are** the recovered numbers, addressed by preset id — so the
+  smoke re-derives fidelity from the shipped registry rather than trusting a literal typed into the
+  scene, which is a much stronger check.
+- **Forces Garden ships with world gravity at zero** — faithful and load-bearing: the p5 sketch has
+  no gravity, so the attractor is the only force. Six mass probes spanning a 2.45 mass range settle
+  onto one orbit with a spread of **0.0007 units**. That mass-independence is the study's actual
+  lesson, asserted as behaviour rather than as entity counts.
+- **What was NOT revived is recorded as data beside what was** — seven candidates with verdicts.
+  Physics Lab, because v2 has no constraint vocabulary and three of its four exhibits are joints (a
+  pendulum on a `bob` behavior is a *picture* of a pendulum). Living Forest, because the recursion
+  *is* the study and it needs an L-system primitive — a platform feature, not a scene. Six gallery
+  modes, because their own records refuse to infer a composition, and rebuilding them would invent
+  exactly what the archivists were careful not to. Voie Lactée is the near miss: it becomes an
+  excellent scene the moment four textures are registered.
+- **Three defects only screenshots caught**, all fixed: `nightsky` — recommended by its own
+  descriptor "when the stars are the subject" — has a horizon silhouette and near-black down face,
+  so a body at the origin sat against dark ground; one key light over a dark floor cast hard black
+  ellipses that read as holes in it; and the mist clumped at the nozzle because of `energy-orb`'s
+  archived 0.5 s lifetime, not its velocity. None of these are findable from assertions.
+- The smoke now **joins the gate's server** instead of standing up a second one — two static servers
+  in one run is precisely the multi-fleet contention that produces false reds.
+
+**Gate: 15/15 green.** Four archive revivals have now landed in a day — two BallZ arenas, the
+vehicle garage, and two Nature Lab playgrounds — plus the CubX assembly earlier.
+
+**A field note worth passing on:** `flock.leadPosition` in `state()` is reported in the flock's own
+**local** space while every other entity's `position` is a world position. It is the one field that
+does not carry a parent transform, and it has now cost two people a failing assertion.
