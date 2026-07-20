@@ -17,17 +17,17 @@ export function mountWelcome(
 ): () => void {
   const style = document.createElement("style");
   style.textContent = `
-    .gx-welcome{position:fixed;inset:0;z-index:30;pointer-events:none;font-family:system-ui,sans-serif;display:flex;align-items:flex-end;justify-content:flex-start;padding:clamp(20px,4vw,54px)}
+    .gx-welcome{position:fixed;inset:0;z-index:30;pointer-events:none;font-family:var(--gx-font);display:flex;align-items:flex-end;justify-content:flex-start;padding:clamp(20px,4vw,54px)}
     .gx-welcome::before{content:"";position:absolute;inset:auto 0 0 0;height:46%;background:linear-gradient(180deg,rgba(3,12,20,0),rgba(3,12,20,.7));pointer-events:none}
     .gx-welcome-card{position:relative;max-width:430px;display:flex;flex-direction:column;align-items:flex-start;gap:13px;text-align:left}
-    .gx-welcome h1{margin:0;font-size:clamp(27px,4.2vw,44px);letter-spacing:.05em;font-weight:800;color:#eafaff;line-height:1.05;text-shadow:0 4px 38px rgba(70,220,235,.38)}
-    .gx-welcome p{margin:0;color:#b3dae5;font-size:14.5px;line-height:1.55;text-shadow:0 1px 12px rgba(3,12,20,.7)}
+    .gx-welcome h1{margin:0;font-size:clamp(27px,4.2vw,44px);letter-spacing:.05em;font-weight:800;color:var(--gx-ink);line-height:1.05;text-shadow:0 4px 38px rgba(70,220,235,.38)}
+    .gx-welcome p{margin:0;color:var(--gx-ink-soft);font-size:14.5px;line-height:1.55;text-shadow:0 1px 12px rgba(3,12,20,.7)}
     .gx-welcome .gx-actions{display:flex;gap:12px;flex-wrap:wrap;pointer-events:auto}
-    .gx-welcome button{background:linear-gradient(180deg,#2fb6d0,#1d7f96);color:#fff;border:1px solid #4fd0e6;border-radius:12px;padding:12px 24px;font:600 15px system-ui,sans-serif;cursor:pointer;box-shadow:0 8px 30px rgba(30,127,150,.42)}
+    .gx-welcome button{background:linear-gradient(180deg,var(--gx-accent-deep),#1d7f96);color:#fff;border:1px solid var(--gx-accent-edge);border-radius:12px;padding:12px 24px;font:600 15px var(--gx-font);cursor:pointer;box-shadow:0 8px 30px rgba(30,127,150,.42)}
     .gx-welcome button:hover{filter:brightness(1.08)}
-    .gx-welcome .gx-go-games{background:linear-gradient(180deg,#2f9e7f,#1d6f5a);border-color:#5fe0b4;box-shadow:0 8px 30px rgba(29,111,90,.42)}
-    .gx-welcome .gx-go-browse{background:linear-gradient(180deg,#5a6fb0,#3a4a80);border-color:#8fa0e0;box-shadow:0 8px 30px rgba(58,74,128,.42)}
-    .gx-welcome .gx-hint{color:#7fc2d3;font-size:12px;text-shadow:0 1px 10px rgba(3,12,20,.8)}
+    .gx-welcome .gx-go-games{background:linear-gradient(180deg,#2f9e7f,#1d6f5a);border-color:var(--gx-life);box-shadow:0 8px 30px rgba(29,111,90,.42)}
+    .gx-welcome .gx-go-browse{background:linear-gradient(180deg,#5a6fb0,#3a4a80);border-color:var(--gx-violet);box-shadow:0 8px 30px rgba(58,74,128,.42)}
+    .gx-welcome .gx-hint{color:var(--gx-ink-faint);font-size:12px;text-shadow:0 1px 10px rgba(3,12,20,.8)}
     @media (max-width:640px){
       .gx-welcome{justify-content:center;align-items:flex-end}
       .gx-welcome-card{align-items:center;text-align:center}

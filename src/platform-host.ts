@@ -27,6 +27,7 @@ import { mountBallzPlay } from "./ballz-play";
 import { createOverlaySketch, type AgentWorldOverlayId, type OverlaySketch } from "./agent-world-overlay";
 import { createGraphysXAgentToolBridge, type GraphysXAgentToolBridge } from "./agent-world-bridge";
 import { archiveSkyboxUrls, orientArchiveCubeTexture } from "./archive-skybox";
+import { installPlatformTheme } from "./platform-theme";
 // Type-only: the editor module (and the ~348 KB TransformControls gizmo stack it pulls in)
 // is loaded on demand, so the showroom front door never pays for chrome it keeps hidden.
 import type { PlatformEditor } from "./platform-editor";
@@ -133,6 +134,9 @@ export class PlatformHost {
   } | null = null;
 
   constructor(private readonly container: HTMLElement, options: PlatformHostOptions = {}) {
+    // Tokens + brand font for every DOM module this host mounts. Idempotent, so the host
+    // is the one place that guarantees it rather than each overlay hoping another did.
+    installPlatformTheme();
     this.renderer = new WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = SRGBColorSpace;

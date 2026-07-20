@@ -277,13 +277,13 @@ const BROWSER_CSS = `
   --gx-raise:rgba(16,38,49,.9);
   --gx-border:#1b3b49;
   --gx-border-soft:#153040;
-  --gx-accent:#37b6d3;
+  --gx-accent:var(--gx-accent-deep,#37b6d3);
   --gx-accent-deep:#1c6a80;
   --gx-text:#dbeff5;
   --gx-muted:#7fb0c0;
   --gx-field:#0b222c;
   position:fixed;top:12px;right:12px;z-index:25;width:264px;box-sizing:border-box;
-  font:12px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:var(--gx-text);
+  font:12px/1.45 var(--gx-font);color:var(--gx-text);
   background:var(--gx-panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   border:1px solid var(--gx-border);border-radius:8px;box-shadow:0 10px 34px rgba(0,10,16,.42);
   overflow:hidden;

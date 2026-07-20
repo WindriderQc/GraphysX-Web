@@ -151,23 +151,23 @@ function injectStyleOnce(): void {
 
 const BROWSE_CSS = `
 .gx-browse{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
-  background:rgba(3,12,20,.62);font-family:system-ui,sans-serif;padding:24px}
+  background:var(--gx-scrim);font-family:var(--gx-font);padding:24px}
 .gx-browse-card{width:min(560px,100%);max-height:80vh;display:flex;flex-direction:column;gap:12px;
   background:rgba(9,22,31,.96);border:1px solid rgba(79,208,230,.34);border-radius:14px;
   padding:20px 22px;box-shadow:0 18px 60px rgba(0,0,0,.5)}
 .gx-browse-head{display:flex;align-items:center;gap:12px}
-.gx-browse-head h2{margin:0;flex:1;font-size:19px;letter-spacing:.04em;color:#eafaff;font-weight:700}
+.gx-browse-head h2{margin:0;flex:1;font-size:19px;letter-spacing:.04em;color:var(--gx-ink);font-weight:700}
 .gx-browse-close{background:transparent;border:1px solid rgba(120,240,208,.3);border-radius:6px;
-  color:#9fd6e4;cursor:pointer;font:12px/1 system-ui,sans-serif;padding:6px 9px}
-.gx-browse-close:hover{border-color:#78f0d0;color:#eafaff}
+  color:#9fd6e4;cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px}
+.gx-browse-close:hover{border-color:var(--gx-accent);color:var(--gx-ink)}
 .gx-browse-blurb{margin:0;color:#8fb9c7;font-size:12.5px;line-height:1.5}
 .gx-browse-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto}
 .gx-browse-row{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
   background:rgba(16,38,50,.8);border:1px solid rgba(79,208,230,.2);border-radius:10px;
   padding:12px 15px;cursor:pointer;color:inherit}
-.gx-browse-row:hover{background:rgba(24,56,72,.92);border-color:#4fd0e6}
+.gx-browse-row:hover{background:rgba(24,56,72,.92);border-color:var(--gx-accent-edge)}
 .gx-browse-row--error{border-color:#f95f4c}
-.gx-browse-name{color:#eafaff;font-size:14px;font-weight:600}
+.gx-browse-name{color:var(--gx-ink);font-size:14px;font-weight:600}
 .gx-browse-summary{color:#a7cad6;font-size:12px;line-height:1.4}
 .gx-browse-meta{color:#7fa9b9;font-size:11px;letter-spacing:.03em;margin-top:2px}
 `;
