@@ -1,10 +1,18 @@
 import {
+  ARCHIVE_MILKYWAY_NOT_REVIVED,
+  ARCHIVE_MILKYWAY_SCENES,
+  archiveMilkyWayBrowseRows,
+  buildArchiveMilkyWay,
+  composeArchiveMilkyWay,
+} from "./archive-milkyway";
+import {
   ARCHIVE_PLAYGROUNDS,
   ARCHIVE_PLAYGROUNDS_NOT_REVIVED,
   archivePlaygroundBrowseRows,
   buildArchivePlayground,
   composeArchivePlayground,
 } from "./archive-playgrounds";
+import { composeSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from "./archive-skybox-spiral";
 import {
   ARCHIVE_BALLZ_LEVELS,
   ARCHIVE_BALLZ_NOT_REVIVED,
@@ -78,6 +86,21 @@ if (mode === "legacy") {
       void import("./games-shelf").then(({ mountGamesShelf }) => {
         mountGamesShelf(root, {
           api: host.api,
+          // Archive courses composed as whole scenes rather than grid levels. Same deal as
+          // the garage row in Browse: main.ts supplies them because composing needs the host.
+          composed: [
+            {
+              id: "archive-skybox-spiral",
+              label: "Skybox Spiral",
+              meta: "archive course  ·  16 rings  ·  moving parts  ·  lostvalley sky",
+              play: () => {
+                showroomEnvironment?.();
+                showroomEnvironment = null;
+                composeSkyboxSpiral(host.api);
+                host.applyEnvironment();
+              },
+            },
+          ],
           // The level is already materialised by the time this fires; the host has switched to
           // play mode on its own. All that is left is taking the showroom's set down so a
           // course is not sitting inside the showroom's hills.
@@ -99,6 +122,14 @@ if (mode === "legacy") {
           composed: [
             // The recovered Nature Lab playgrounds. They open in the editor like any browsed
             // scene, so their simulation vocabulary is selectable and editable.
+            // The recovered Voie Lactee vignette. Same shape as the playgrounds: it opens in the
+            // editor like any browsed scene.
+            ...archiveMilkyWayBrowseRows(host.api, () => {
+              showroomEnvironment?.();
+              showroomEnvironment = null;
+              host.applyEnvironment();
+              void host.enterEditor();
+            }),
             ...archivePlaygroundBrowseRows(host.api, () => {
               showroomEnvironment?.();
               showroomEnvironment = null;
@@ -170,10 +201,18 @@ if (mode === "legacy") {
       __GRAPHYSX_ARCHIVE__: {
         levels: ARCHIVE_BALLZ_LEVELS,
         notRevived: ARCHIVE_BALLZ_NOT_REVIVED,
+        milkyway: ARCHIVE_MILKYWAY_SCENES,
+        milkywayNotRevived: ARCHIVE_MILKYWAY_NOT_REVIVED,
+        buildMilkyWay: buildArchiveMilkyWay,
+        composeMilkyWay: composeArchiveMilkyWay,
         playgrounds: ARCHIVE_PLAYGROUNDS,
         playgroundsNotRevived: ARCHIVE_PLAYGROUNDS_NOT_REVIVED,
         buildPlayground: buildArchivePlayground,
         composePlayground: composeArchivePlayground,
+        // The first §14.5 course port. Published so an agent (and the smoke) can compose
+        // it directly, with its provenance beside it.
+        composeSkyboxSpiral: () => composeSkyboxSpiral(host.api),
+        skyboxSpiralProvenance: SKYBOX_SPIRAL_PROVENANCE,
         toPlatformRows,
         seed: seedArchiveBallzLevels,
       },
@@ -207,6 +246,13 @@ if (mode === "legacy") {
           if (storeScene) console.warn(`[graphysx] no scene store at ${storeUrl}; staying in the showroom`);
           return;
         }
+        // The same server fronts the media library. Pull its manifest now so imported
+        // textures/models are registered before anyone opens the editor's library — the
+        // refresh is idempotent and the editor re-pulls on demand anyway.
+        void import("./agent-world-media").then(({ configureAgentWorldMedia }) => {
+          configureAgentWorldMedia(storeUrl);
+          void host.api.media.refresh();
+        });
         const browser = mountSceneBrowser(root, {
           api: host.api,
           client,
