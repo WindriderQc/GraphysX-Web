@@ -106,6 +106,56 @@ export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
     source: "SBQC archive"
   },
   {
+    // The recovered Voie Lactée bodies. They shipped in `public/` from the beginning and were
+    // unreachable from v2 because nothing registered them — the same trap the vehicle meshes
+    // were in, and the reason that archive scene could not be rebuilt: four of its five bodies
+    // ARE their textures. Registering them makes them discoverable through `api.textures()` and
+    // keeps them in the release manifest, which prunes anything the registries do not claim.
+    id: "moon",
+    label: "Moon",
+    url: "/assets/archives/milky-way/moon.jpg",
+    category: "nature",
+    description: "Lunar surface map recovered from the Voie Lactée solar-system study.",
+    defaultRepeat: [1, 1],
+    source: "GraphysX archive"
+  },
+  {
+    id: "mars",
+    label: "Mars",
+    url: "/assets/archives/milky-way/mars.jpg",
+    category: "nature",
+    description: "Martian surface map recovered from the Voie Lactée solar-system study.",
+    defaultRepeat: [1, 1],
+    source: "GraphysX archive"
+  },
+  {
+    id: "venus",
+    label: "Venus",
+    url: "/assets/archives/milky-way/venus.jpg",
+    category: "nature",
+    description: "Venusian cloud-deck map recovered from the Voie Lactée solar-system study.",
+    defaultRepeat: [1, 1],
+    source: "GraphysX archive"
+  },
+  {
+    id: "earth-clouds",
+    label: "Earth Clouds",
+    url: "/assets/archives/milky-way/earth-clouds.jpg",
+    category: "nature",
+    description: "Cloud layer for Earth, meant as a translucent shell over the surface map.",
+    defaultRepeat: [1, 1],
+    source: "GraphysX archive"
+  },
+  {
+    id: "earth-surface",
+    label: "Earth Surface",
+    url: "/assets/archives/milky-way/earthgood.jpg",
+    category: "nature",
+    description: "The Voie Lactée study's own Earth map, paired with the cloud shell above.",
+    defaultRepeat: [1, 1],
+    source: "GraphysX archive"
+  },
+  {
     id: "spheres",
     label: "3D Spheres",
     url: "/assets/textures/suzanne1/3D_Spheres.jpg",
