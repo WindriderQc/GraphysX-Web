@@ -374,6 +374,8 @@ export class AgentWorldFlockSystem {
   private positions: Vector3[] = [];
   private velocities: Vector3[] = [];
   private trailHistory: Vector3[][] = [];
+  /** Shared write cursor into every member's ring buffer — all members advance in lockstep. */
+  private trailCursor = 0;
   private elapsed = 0;
   private readonly dummy = new Object3D();
   // Scratch vectors, allocated once. The recovered code did the same — a boid loop that
@@ -473,6 +475,10 @@ export class AgentWorldFlockSystem {
       this.trailHistory = this.positions.map((position) =>
         Array.from({ length: config.trailLength }, () => position.clone()),
       );
+      // Seeding every slot with the member's current position is what makes the ring buffer
+      // correct on frame one: the trail is "full" from the start, just collapsed onto a point,
+      // so the segment count — and therefore the draw range — never has to grow in.
+      this.trailCursor = 0;
       const array = new Float32Array(count * (config.trailLength - 1) * 2 * 3);
       const attribute = new Float32BufferAttribute(array, 3);
       attribute.setUsage(DynamicDrawUsage);
@@ -493,6 +499,7 @@ export class AgentWorldFlockSystem {
       this.object.add(this.trails);
     } else {
       this.trailHistory = [];
+      this.trailCursor = 0;
     }
     this.writeInstances();
   }
@@ -675,22 +682,38 @@ export class AgentWorldFlockSystem {
     if (!this.trails) return;
     const attribute = this.trails.geometry.getAttribute("position");
     const array = attribute.array as Float32Array;
+    // A ring buffer over the slots `build()` already preallocated, rather than the
+    // `push(clone()) / shift()` this used to be. That pair cost one discarded Vector3 *and*
+    // one O(trailLength) reindex per member per frame — 40 of each every frame on the
+    // showroom's CubX swarm alone — to express something that is just "overwrite the oldest
+    // sample". Here the write is a `copy()` into the cursor slot and the cursor advances
+    // modulo the length: no allocation, no reindex, steady state.
+    const length = this.config.trailLength;
+    const cursor = this.trailCursor;
+    // Having written the newest sample at `cursor`, the oldest is the slot after it — and
+    // that is also where the next frame writes, which is why the two are the same value.
+    const oldest = (cursor + 1) % length;
     let offset = 0;
     for (let index = 0; index < this.trailHistory.length; index += 1) {
       const history = this.trailHistory[index];
-      history.push(this.positions[index].clone());
-      if (history.length > this.config.trailLength) history.shift();
-      for (let point = 1; point < history.length; point += 1) {
-        const previous = history[point - 1];
-        const current = history[point];
+      history[cursor].copy(this.positions[index]);
+      // Walk from the oldest sample forward, wrapping — segment order has to follow the
+      // trail, not the slot order. Emitting slots as laid out would produce one segment per
+      // member that leaps across the swarm at wherever the cursor happens to sit.
+      let previous = history[oldest];
+      for (let step = 1; step < length; step += 1) {
+        const slot = oldest + step >= length ? oldest + step - length : oldest + step;
+        const current = history[slot];
         array[offset++] = previous.x;
         array[offset++] = previous.y;
         array[offset++] = previous.z;
         array[offset++] = current.x;
         array[offset++] = current.y;
         array[offset++] = current.z;
+        previous = current;
       }
     }
+    this.trailCursor = oldest;
     attribute.needsUpdate = true;
     this.trails.geometry.setDrawRange(0, offset / 3);
   }
