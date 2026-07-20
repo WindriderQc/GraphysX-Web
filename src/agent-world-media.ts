@@ -24,6 +24,10 @@ import {
   type AgentWorldAssetDescriptor,
 } from "./agent-world-assets";
 import {
+  registerAgentWorldSounds,
+  type AgentWorldSoundDescriptor,
+} from "./agent-world-sounds";
+import {
   registerAgentWorldTextures,
   type AgentWorldTextureDescriptor,
 } from "./agent-world-textures";
@@ -190,7 +194,18 @@ function registerRecords(records: AgentWorldMediaDescriptor[]): void {
 
   const textures: AgentWorldTextureDescriptor[] = [];
   const models: AgentWorldAssetDescriptor[] = [];
+  const sounds: AgentWorldSoundDescriptor[] = [];
   for (const record of records) {
+    if (record.kind === "sound") {
+      sounds.push({
+        id: record.id,
+        label: record.label,
+        url: record.url,
+        category: "imported",
+        description: typeof record.meta?.description === "string" ? record.meta.description : `Imported from ${record.source}.`,
+        source: record.source,
+      });
+    }
     if (record.kind === "texture" && LOADABLE_TEXTURE_EXTENSIONS.has(extensionOf(record.file))) {
       const repeat = Array.isArray(record.meta?.defaultRepeat) ? record.meta.defaultRepeat as [number, number] : [1, 1] as [number, number];
       textures.push({
@@ -216,6 +231,7 @@ function registerRecords(records: AgentWorldMediaDescriptor[]): void {
   }
   registerAgentWorldTextures(textures);
   registerAgentWorldAssets(models);
+  registerAgentWorldSounds(sounds);
 }
 
 function ok<T>(value: T): AgentWorldResult<T> {

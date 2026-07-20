@@ -16,6 +16,7 @@ import {
 } from "./agent-level-library";
 import type { MapEditorTile } from "./race-scene";
 import { allAgentWorldAssets } from "./agent-world-assets";
+import { allAgentWorldSounds } from "./agent-world-sounds";
 import { allAgentWorldTextures } from "./agent-world-textures";
 import { getAgentWorldMediaApi } from "./agent-world-media";
 import { convertLegacyGraphysXXml } from "./agent-world-legacy-xml";
@@ -98,6 +99,7 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
     // so an import is discoverable through the same call an agent already makes.
     assets: () => allAgentWorldAssets(),
     textures: () => allAgentWorldTextures(),
+    sounds: () => allAgentWorldSounds(),
     skies: () => runtime.listSkies(),
     emitters: () => runtime.listEmitters(),
     heightmaps: () => runtime.listHeightmaps(),

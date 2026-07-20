@@ -73,6 +73,7 @@ import {
 } from "./agent-world-runtime";
 import { GRAPHYSX_AGENT_WORLD_ASSETS, allAgentWorldAssets } from "./agent-world-assets";
 import { getAgentWorldMediaApi } from "./agent-world-media";
+import { allAgentWorldSounds } from "./agent-world-sounds";
 import { GRAPHYSX_AGENT_WORLD_SKIES } from "./agent-world-skies";
 import { GRAPHYSX_AGENT_WORLD_EMITTERS } from "./agent-world-particles";
 import { GRAPHYSX_AGENT_WORLD_HEIGHTMAPS } from "./agent-world-terrain";
@@ -3459,6 +3460,7 @@ export class PrototypeApp {
       media: getAgentWorldMediaApi(),
       assets: () => allAgentWorldAssets(),
       textures: () => allAgentWorldTextures(),
+      sounds: () => allAgentWorldSounds(),
       skies: () => GRAPHYSX_AGENT_WORLD_SKIES,
       emitters: () => GRAPHYSX_AGENT_WORLD_EMITTERS,
       heightmaps: () => GRAPHYSX_AGENT_WORLD_HEIGHTMAPS,

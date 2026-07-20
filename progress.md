@@ -851,3 +851,31 @@ the bill arrived. A fix is in flight in its own session.
   promises. The editor's Media tab exposes it as a ⛰ action on texture cards. Driven against the
   real `StockRoom/Heightmaps/HEIGHT.JPG`: 129² grid, full 0–1 range, 9409-vertex collider,
   document round-trip green. The `media` smoke now asserts decode → spawn → terrain state.
+
+## 2026-07-20 — `audio-r1`: scenes can make noise
+
+- **`sound` is a v2 entity type** — the enrichment HANDOFF listed as "Audio (19 sounds
+  upstream, 4 vendored)" is now vocabulary. A placed source with
+  `sound: { source, volume, loop, autoplay, positional, refDistance }` in the document, a
+  selectable wireframe marker (reusing the point-light marker flag, so `marker:false` hides
+  the glyph without silencing it), no rigid body, threaded through every seam the entity
+  checklist names — including both API implementations (`sounds()`) and the editor
+  (♪ chips in Effects, a Sound inspector section, media sound cards place-on-click with a
+  ▶ corner preview).
+- **Entity for identity, host pass for effect** — the same split force fields and the 2D
+  overlay use, because audio needs exactly what the runtime must not know about: the
+  camera's `AudioListener` and the gesture-gated `AudioContext`. `agent-world-audio.ts`
+  reconciles sound entities event-driven (a boolean check per frame when idle), attaches
+  `PositionalAudio` to the entity's own object so parents and behaviours carry the sound,
+  mutes hidden entities, defers autoplay until the first click resumes the context, and
+  treats a failed decode as a silent entity rather than a crashed layer.
+- **The four archive samples finally ship.** `agent-world-sounds.ts` registers coin/jump/
+  ready-beep/go-beep (the samples with surviving callsites) and `product-assets.mjs` now
+  scrapes the module — until this, all four 404'd in production because nothing claimed
+  them. Media-library sound imports join the same registry on refresh, so
+  `StockRoom/Sounds/*.wav` is one import away from being scene ambience.
+- Driven live before gating: curated + imported sources both spawn, decode, and PLAY
+  (`playingCount: 2`), patch and document round-trips hold, physics and wrong-type guards
+  reject. The `media` smoke grew a WAV fixture and a sound block (import → `sounds()` →
+  spawn → patch round-trip → document → host layer tracking; playback itself stays
+  gesture-gated, so "tracked" is the honest headless assertion).

@@ -22,6 +22,26 @@ const PNG_BYTES = Buffer.from(
   "base64",
 );
 
+/** A 16-sample 8kHz mono PCM WAV — the smallest thing AudioLoader will decode. */
+function tinyWav() {
+  const sampleCount = 16;
+  const buffer = Buffer.alloc(44 + sampleCount * 2);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + sampleCount * 2, 4);
+  buffer.write("WAVEfmt ", 8);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);   // PCM
+  buffer.writeUInt16LE(1, 22);   // mono
+  buffer.writeUInt32LE(8000, 24);
+  buffer.writeUInt32LE(16000, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(sampleCount * 2, 40);
+  for (let i = 0; i < sampleCount; i += 1) buffer.writeInt16LE(Math.round(Math.sin(i / 2) * 8000), 44 + i * 2);
+  return buffer;
+}
+
 /** A unit tetrahedron: the smallest OBJ that converts to real, closed geometry. */
 const OBJ_TEXT = `# smoke tetrahedron
 v 0 0 0
@@ -49,6 +69,7 @@ try {
   await mkdir(path.join(datalakeDir, "Textures"), { recursive: true });
   await writeFile(path.join(datalakeDir, "smoke-tetra.obj"), OBJ_TEXT, "utf8");
   await writeFile(path.join(datalakeDir, "Textures", "smoke-teal.png"), PNG_BYTES);
+  await writeFile(path.join(datalakeDir, "smoke-blip.wav"), tinyWav());
 
   store = await startSceneStore({
     port: 0,
@@ -142,6 +163,33 @@ try {
     };
   });
 
+  // Sound: import a WAV, see it in api.sounds(), place it as a `sound` entity, and prove
+  // config + document round-trips plus the host audio layer tracking it. Playback itself
+  // is gesture-gated by the browser, so "tracked" is the honest headless assertion.
+  out.sound = await page.evaluate(async () => {
+    const api = window.__GRAPHYSX__;
+    const host = window.__GRAPHYSX_HOST__;
+    const imported = await api.media.import("smoke-blip.wav");
+    if (!imported.ok || !imported.value) return { ok: false, error: imported.error ?? null };
+    const listed = api.sounds().some((s) => s.id === "smoke-blip");
+    const spawn = api.spawn({ id: "smoke-sound", type: "sound", sound: { source: "smoke-blip", volume: 0.4 }, transform: { position: [1, 1, 1] } });
+    host.audio.sync();
+    const patch = api.update("smoke-sound", { sound: { volume: 0.7, loop: false } });
+    const state = api.state().entities.find((e) => e.id === "smoke-sound")?.sound ?? null;
+    const doc = api.exportDocument().entities.find((e) => e.id === "smoke-sound")?.sound ?? null;
+    const physicsRejected = !api.spawn({ id: "bad-sound", type: "sound", sound: { source: "smoke-blip" }, physics: { mode: "dynamic" } }).ok;
+    return {
+      ok: true,
+      listed,
+      spawnOk: spawn.ok,
+      patchOk: patch.ok,
+      state,
+      docCarriesSound: !!doc && doc.volume === 0.7 && doc.loop === false,
+      tracked: host.audio.trackedCount,
+      physicsRejected,
+    };
+  });
+
   // Foreign-format model: fetched from the datalake, converted in-browser, uploaded,
   // registered, spawnable, and its payload actually loads (asset.status → ready).
   out.modelImport = await page.evaluate(async () => {
@@ -230,6 +278,15 @@ const ok =
   out.terrain?.length === 33 * 33 &&
   out.terrain?.spawnOk &&
   out.terrain?.hasTerrain &&
+  out.sound?.ok &&
+  out.sound?.listed &&
+  out.sound?.spawnOk &&
+  out.sound?.patchOk &&
+  out.sound?.state?.volume === 0.7 &&
+  out.sound?.state?.loop === false &&
+  out.sound?.docCarriesSound &&
+  out.sound?.tracked === 1 &&
+  out.sound?.physicsRejected &&
   out.modelImport?.ok &&
   out.modelImport?.format === "graphysx-mesh-json" &&
   out.modelImport?.spawnOk &&

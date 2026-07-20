@@ -156,6 +156,12 @@ import {
   type AgentWorldWater,
   type ResolvedAgentWorldWater
 } from "./agent-world-water";
+import {
+  resolveAgentWorldSound,
+  type AgentWorldSound,
+  type AgentWorldSoundDescriptor,
+  type ResolvedAgentWorldSound
+} from "./agent-world-sounds";
 // Type-only on purpose: the media library imports runtime types back, and a value
 // import here would make that a real cycle instead of an erased one.
 import type { GraphysXAgentMediaApi } from "./agent-world-media";
@@ -183,6 +189,7 @@ export type AgentWorldEntityType =
   | "flock"
   | "force-field"
   | "formula-field"
+  | "sound"
   | "ambient-light"
   | "directional-light"
   | "point-light";
@@ -345,6 +352,13 @@ export type AgentWorldEntityDefinition = {
   asset?: AgentWorldModelAsset;
   /** Particle emitter configuration. Only valid on `emitter` entities. */
   emitter?: AgentWorldEmitter;
+  /**
+   * Placed sound source. Only valid on `sound` entities. The runtime keeps the config and
+   * a selectable marker; playback is a host pass (agent-world-audio.ts), because audio
+   * needs the camera's listener and a user gesture — same entity-for-identity split as
+   * force fields.
+   */
+  sound?: AgentWorldSound;
   /** Heightmap-backed terrain configuration. Only valid on `terrain` entities. */
   terrain?: AgentWorldTerrain;
   /** Reflective water configuration. Only valid on `water` entities. */
@@ -402,6 +416,8 @@ export type AgentWorldEntityPatch = {
   agent?: AgentWorldAgentProfile;
   /** Patch the emitter of an `emitter` entity. Merged over the current configuration. */
   emitter?: AgentWorldEmitter;
+  /** Patch the sound of a `sound` entity. Merged over the current configuration. */
+  sound?: AgentWorldSound;
   /** Patch the terrain of a `terrain` entity. Merged over the current configuration. */
   terrain?: AgentWorldTerrain;
   /** Patch the water of a `water` entity. Merged over the current configuration. */
@@ -536,6 +552,7 @@ export type AgentWorldEntityState = {
   asset: ({ status: "loading" | "ready" | "error"; error?: string } & ResolvedAgentWorldModelAsset) | null;
   agent: Required<AgentWorldAgentProfile> | null;
   emitter: (ResolvedAgentWorldEmitter & { liveParticles: number }) | null;
+  sound: ResolvedAgentWorldSound | null;
   /** Terrain configuration plus the derived collider facts an agent needs to place things. */
   terrain: (ResolvedAgentWorldTerrain & { minimumHeight: number; maximumHeight: number; colliderVertices: number }) | null;
   water: ResolvedAgentWorldWater | null;
@@ -701,6 +718,8 @@ export type GraphysXAgentWorldApi = {
   skies(): readonly AgentWorldSkyDescriptor[];
   /** The curated particle-emitter presets decoded from the TV3D archive library. */
   emitters(): readonly AgentWorldEmitterDescriptor[];
+  /** The archive sound samples plus any media-library imports, for `sound` entities. */
+  sounds(): readonly AgentWorldSoundDescriptor[];
   /** The curated heightmaps, with provenance, for spawning `terrain` entities. */
   heightmaps(): readonly AgentWorldHeightmapDescriptor[];
   /** The curated boid-flock presets recovered from the Nature-of-Code sketches. */
@@ -776,6 +795,7 @@ type ResolvedEntity = {
   asset: ResolvedAgentWorldModelAsset | null;
   agent: Required<AgentWorldAgentProfile> | null;
   emitter: ResolvedAgentWorldEmitter | null;
+  sound: ResolvedAgentWorldSound | null;
   terrain: ResolvedAgentWorldTerrain | null;
   water: ResolvedAgentWorldWater | null;
   flock: ResolvedAgentWorldFlock | null;
@@ -867,6 +887,8 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "sky.list",
   "entity.emitter",
   "emitter.list",
+  "entity.sound",
+  "sound.list",
   "entity.terrain",
   "heightmap.list",
   "terrain.collider",
@@ -1504,6 +1526,10 @@ export class AgentWorldRuntime {
     if (patch.emitter !== undefined) {
       if (definition.type !== "emitter") throw new Error("Only emitter entities accept an emitter configuration");
       definition.emitter = resolveAgentWorldEmitter(patch.emitter, definition.emitter ?? undefined);
+    }
+    if (patch.sound !== undefined) {
+      if (definition.type !== "sound") throw new Error("Only sound entities accept a sound configuration");
+      definition.sound = resolveAgentWorldSound(patch.sound, definition.sound ?? undefined);
     }
     if (patch.formula !== undefined) {
       if (definition.type !== "formula-field") throw new Error("Only formula-field entities accept a formula configuration");
@@ -2247,6 +2273,10 @@ export class AgentWorldRuntime {
     const emitter = source.type === "emitter" ? resolveAgentWorldEmitter(source.emitter) : null;
     if (source.type !== "emitter" && source.emitter) throw new Error("Only emitter entities accept an emitter configuration");
     if (source.type === "emitter" && source.physics) throw new Error("Emitter entities do not take a rigid body");
+    const sound = source.type === "sound" ? resolveAgentWorldSound(source.sound) : null;
+    if (source.type !== "sound" && source.sound) throw new Error("Only sound entities accept a sound configuration");
+    // A sound source is a point in space, not matter — same reasoning as an emitter.
+    if (source.type === "sound" && source.physics) throw new Error("Sound entities do not take a rigid body");
     const terrain = source.type === "terrain" ? resolveAgentWorldTerrain(source.terrain) : null;
     if (source.type !== "terrain" && source.terrain) throw new Error("Only terrain entities accept a terrain configuration");
     const water = source.type === "water" ? resolveAgentWorldWater(source.water) : null;
@@ -2289,6 +2319,7 @@ export class AgentWorldRuntime {
       asset,
       agent,
       emitter,
+      sound,
       terrain,
       water,
       flock,
@@ -2392,6 +2423,7 @@ export class AgentWorldRuntime {
       emitter: runtime.definition.emitter
         ? { ...deepClone(runtime.definition.emitter), liveParticles: findParticleSystem(runtime.object)?.activeCount ?? 0 }
         : null,
+      sound: runtime.definition.sound ? deepClone(runtime.definition.sound) : null,
       terrain: runtime.definition.terrain ? terrainStateOf(runtime) : null,
       water: runtime.definition.water ? deepClone(runtime.definition.water) : null,
       flock: runtime.definition.flock ? flockStateOf(runtime) : null,
@@ -2469,6 +2501,21 @@ function createEntityObject(definition: ResolvedEntity): Object3D {
     // particles inherit the entity transform.
     system.points.userData.graphysxParticleSystem = system;
     return system.points;
+  }
+  if (definition.type === "sound") {
+    // A speaker glyph the author can find and select, exactly the point-light marker's
+    // trick: the audio itself is host-side, so without a marker a placed sound would be
+    // invisible AND intangible. `agentLightMarker` so `marker:false` hides the glyph
+    // while the sound keeps playing.
+    const group = new Group();
+    const marker = new Mesh(
+      new SphereGeometry(0.16, 12, 8),
+      new MeshStandardMaterial({ color: definition.material.color, emissive: definition.material.color, emissiveIntensity: 0.7, wireframe: true })
+    );
+    marker.userData.agentLightMarker = true;
+    marker.visible = definition.marker;
+    group.add(marker);
+    return group;
   }
   if (definition.type === "terrain") {
     const terrain = definition.terrain ?? resolveAgentWorldTerrain(undefined);
@@ -2806,7 +2853,7 @@ function resolvePhysics(
 ): ResolvedAgentWorldPhysics {
   if (!source || !["static", "dynamic", "kinematic", "trigger"].includes(source.mode)) throw new Error(`Unsupported physics mode: ${String(source?.mode)}`);
   // Terrain owns a heightfield collider it builds itself; water deliberately has none.
-  if (["group", "spline", "emitter", "terrain", "water", "flock", "force-field", "formula-field", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
+  if (["group", "spline", "emitter", "sound", "terrain", "water", "flock", "force-field", "formula-field", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
   if (entityType === "plane" && source.mode === "dynamic") throw new Error("Plane physics can only be static or kinematic");
   if (parentId) throw new Error("Physics entities must be spawned at the world root");
   // A trigger never responds to contact, so a behavior moving it cannot fight the solver.
@@ -3023,7 +3070,7 @@ function validateInteraction(interaction: AgentWorldInteraction, entities: Map<s
 }
 
 function isEntityType(value: unknown): value is AgentWorldEntityType {
-  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "force-field", "formula-field", "ambient-light", "directional-light", "point-light"].includes(String(value));
+  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "force-field", "formula-field", "sound", "ambient-light", "directional-light", "point-light"].includes(String(value));
 }
 
 function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition {
@@ -3049,6 +3096,7 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     } : {}),
     ...(definition.agent ? { agent: deepClone(definition.agent) } : {}),
     ...(definition.emitter ? { emitter: deepClone(definition.emitter) } : {}),
+    ...(definition.sound ? { sound: deepClone(definition.sound) } : {}),
     // Inline heights round-trip as-is; a registry-backed terrain exports only the id, so a
     // scene file stays small and keeps naming its provenance rather than inlining a copy.
     ...(definition.terrain ? { terrain: deepClone(definition.terrain) } : {}),

@@ -69,6 +69,9 @@ export async function productAssetManifest() {
 
   // Curated textures the editor palette offers.
   for (const url of await assetLiterals("src/agent-world-textures.ts", "url")) wanted.add(url);
+  // The archive sound samples `sound` entities reference by id. Until this line they
+  // 404'd in production — nothing claimed them, so the manifest pruned all four.
+  for (const url of await assetLiterals("src/agent-world-sounds.ts", "url")) wanted.add(url);
   // The BallZ level styles reference their surfaces by raw URL rather than by registry id, so
   // nothing else claims them and the manifest would prune four of the six — shipping levels whose
   // floors and walls 404 in production while looking perfect in dev. Derived from the module so

@@ -23,6 +23,7 @@ import {
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
 import { createAgentWorldApi } from "./agent-world-api";
+import { AgentWorldAudioLayer } from "./agent-world-audio";
 import { mountBallzPlay } from "./ballz-play";
 import { createOverlaySketch, type AgentWorldOverlayId, type OverlaySketch } from "./agent-world-overlay";
 import { createGraphysXAgentToolBridge, type GraphysXAgentToolBridge } from "./agent-world-bridge";
@@ -108,6 +109,12 @@ export class PlatformHost {
   private frame = 0;
   private disposed = false;
   private readonly unsubscribeEvents: () => void;
+  /**
+   * The audio half of `sound` entities: the runtime keeps a placed marker + config, this
+   * layer plays it (the camera's listener and the gesture-gated AudioContext live here).
+   * Synced in the one shared tick; event-driven, so it is a boolean check per frame.
+   */
+  readonly audio: AgentWorldAudioLayer;
   /** Teardown for the active play layer (arrow keys + HUD), when a playable world is loaded. */
   private playLayer: (() => void) | null = null;
   // The generative 2D overlay: a canvas over the WebGL canvas, drawn in the SAME tick() as the
@@ -189,6 +196,7 @@ export class PlatformHost {
 
     this.world = new AgentWorldRuntime(options.world ?? GRAPHYSX_AGENT_DEMO_WORLD);
     this.scene.add(this.world.group);
+    this.audio = new AgentWorldAudioLayer(this.camera, this.world);
     this.applyEnvironment();
 
     // Parity gap, closed at the source. `applyEnvironment()` was reachable from exactly three
@@ -547,6 +555,7 @@ export class PlatformHost {
     const delta = this.clock.getDelta();
     // Freeze simulation while the gizmo is dragging (matches the reference behavior).
     if (!this.editor?.isTransforming()) this.world.update(delta);
+    this.audio.sync();
     this.advanceFocus(delta);
     this.controls.update();
     // Arm one shadow rebuild per frame (see `autoUpdate = false` in the constructor). The
@@ -609,6 +618,7 @@ export class PlatformHost {
     this.disposed = true;
     this.renderer.setAnimationLoop(null);
     this.unsubscribeEvents();
+    this.audio.dispose();
     this.playLayer?.();
     this.overlayCanvas.remove();
     window.removeEventListener("resize", this.onResize);

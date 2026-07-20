@@ -64,6 +64,7 @@ const SHORTCUTS: ReadonlyArray<[string, string]> = [
 const TYPE_GLYPHS: Record<AgentWorldEntityType, string> = {
   group: "▤",
   "formula-field": "∫",
+  sound: "♪",
   agent: "☻",
   box: "▧",
   sphere: "●",
@@ -130,6 +131,7 @@ const PHYSICS_FORBIDDEN_TYPES = new Set<AgentWorldEntityType>([
   "group",
   "spline",
   "emitter",
+  "sound",
   "force-field",
   "ambient-light",
   "directional-light",
@@ -643,6 +645,7 @@ export class PlatformEditor {
 
     const sections: HTMLElement[] = [header, this.transformSection(entity), this.materialSection(entity), this.physicsSection(entity), this.behaviourSection(entity)];
     if (entity.type === "emitter") sections.push(this.emitterSection(entity));
+    if (entity.type === "sound") sections.push(this.soundSection(entity));
     this.inspector.replaceChildren(...sections);
   }
 
@@ -809,6 +812,67 @@ export class PlatformEditor {
     const fields = [this.field("Preset", preset)];
     if (resolved) fields.push(this.field("Rate", rate), this.field("Size", sizeScale));
     return this.section("Emitter", fields);
+  }
+
+  private soundSection(entity: AgentWorldEntityState): HTMLElement {
+    const resolved = entity.sound;
+    const sources = this.deps.api.sounds();
+    const source = document.createElement("select");
+    for (const descriptor of sources) {
+      const option = document.createElement("option");
+      option.value = descriptor.id;
+      option.textContent = descriptor.label;
+      option.title = descriptor.description;
+      source.append(option);
+    }
+    // A document can name a source the registry does not know yet (an import on another
+    // machine); show it rather than silently snapping to the first option.
+    if (resolved && !sources.some((descriptor) => descriptor.id === resolved.source)) {
+      const option = document.createElement("option");
+      option.value = resolved.source;
+      option.textContent = resolved.source;
+      source.append(option);
+    }
+    if (resolved) source.value = resolved.source;
+
+    const volume = this.sliderInput(resolved?.volume ?? 0.8, 0, 1, 0.01, (value) => {
+      this.patchEntity(entity.id, { sound: { volume: value } as never });
+    });
+    const loop = document.createElement("input");
+    loop.type = "checkbox";
+    loop.checked = resolved?.loop ?? true;
+    const autoplay = document.createElement("input");
+    autoplay.type = "checkbox";
+    autoplay.title = "Play whenever the scene is open (starts after the first click — browser policy)";
+    autoplay.checked = resolved?.autoplay ?? true;
+    const positional = document.createElement("input");
+    positional.type = "checkbox";
+    positional.title = "Attenuate and pan with distance from the camera";
+    positional.checked = resolved?.positional ?? true;
+    const refDistance = this.numberInput(resolved?.refDistance ?? 8, 1, 1);
+    refDistance.title = "Distance where positional volume starts to fall off (world units)";
+
+    const commit = (): void => {
+      this.patchEntity(entity.id, {
+        sound: {
+          source: source.value,
+          loop: loop.checked,
+          autoplay: autoplay.checked,
+          positional: positional.checked,
+          ...(refDistance.value === "" ? {} : { refDistance: Number(refDistance.value) }),
+        } as never,
+      });
+    };
+    for (const input of [source, loop, autoplay, positional, refDistance]) input.addEventListener("change", commit);
+
+    return this.section("Sound", [
+      this.field("Source", source),
+      this.field("Volume", volume),
+      this.field("Loop", loop),
+      this.field("Autoplay", autoplay),
+      this.field("Positional", positional),
+      this.field("Falloff", refDistance),
+    ]);
   }
 
   // ------------------------------------------------------------------ widgets
@@ -2065,7 +2129,7 @@ export class PlatformEditor {
     if (tab === "effects") {
       // Particle emitters are a first-class v2 entity type, so a human picks a preset here the
       // same way an agent calls api.spawn({ type: "emitter", emitter: { preset } }).
-      return this.deps.api.emitters().map((emitter) =>
+      const emitters = this.deps.api.emitters().map((emitter) =>
         this.chip(emitter.label, () => {
           this.addCounter += 1;
           const id = `edit-emitter-${this.addCounter}`;
@@ -2081,6 +2145,25 @@ export class PlatformEditor {
           else this.refresh();
         }, `${emitter.description}\n\nArchive: ${emitter.provenance.presetRecord} (emitter ${emitter.provenance.emitterIndex}) — ${emitter.provenance.textureFile}`),
       );
+      // Sounds share the tab: an effect you hear. Same call an agent makes —
+      // api.spawn({ type: "sound", sound: { source } }).
+      const sounds = this.deps.api.sounds().map((sound) =>
+        this.chip(`♪ ${sound.label}`, () => {
+          this.addCounter += 1;
+          const id = `edit-sound-${this.addCounter}`;
+          const result = this.deps.api.spawn({
+            id,
+            type: "sound",
+            label: sound.label,
+            transform: { position: [0, 2, 0] },
+            sound: { source: sound.id },
+            tags: ["effect", "sound"],
+          });
+          if (result.ok) this.select(id);
+          else this.refresh();
+        }, `${sound.description}\n\nSource: ${sound.source}\nSpawns a placed, looping sound source. Audio starts after the first click (browser policy).`),
+      );
+      return [...emitters, ...sounds];
     }
     if (tab === "terrain") {
       // Landform vocabulary: one chip per curated heightmap, plus water. Terrain spawns with
@@ -2251,7 +2334,7 @@ ${formula.provenance.note}`),
     const applyTitle = {
       texture: "Click to apply to the current selection.",
       model: "Click to spawn as a model entity.",
-      sound: "Click to preview.",
+      sound: "Click to place in the scene as a sound entity; ▶ previews.",
       file: "Stored file (referenced by other assets).",
     }[record.kind] ?? "";
     const card = this.thumbCard({
@@ -2282,10 +2365,33 @@ ${formula.provenance.note}`),
           return;
         }
         if (record.kind === "sound") {
-          this.toggleMediaPreview(record.url);
+          // Placing, not previewing: the card's primary action makes scene content, the
+          // same convention as textures (apply) and models (spawn). ▶ below previews.
+          this.addCounter += 1;
+          const id = `edit-sound-${this.addCounter}`;
+          const result = this.deps.api.spawn({
+            id,
+            type: "sound",
+            label: record.label,
+            transform: { position: [0, 2, 0] },
+            sound: { source: record.id },
+            tags: ["effect", "sound", "imported"],
+          });
+          if (result.ok) this.select(id);
         }
       },
     });
+    if (record.kind === "sound") {
+      const preview = document.createElement("span");
+      preview.className = "gx-ed-x gx-md-terrain";
+      preview.textContent = "▶";
+      preview.title = `Preview ${record.label}`;
+      preview.addEventListener("click", (clickEvent) => {
+        clickEvent.stopPropagation();
+        this.toggleMediaPreview(record.url);
+      });
+      card.append(preview);
+    }
     // Removal stays on the card rather than in a mode: one ×, with the API doing the work.
     const remove = document.createElement("span");
     remove.className = "gx-ed-x gx-md-x";

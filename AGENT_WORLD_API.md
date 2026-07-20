@@ -568,6 +568,7 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `textures()` | Discover stable semantic textures, previews, descriptions, and repeat defaults. |
 | `media.*` | Runtime imports from the local asset store: `status()`, `list(kind?)`, async `refresh()`, `browse(path?)`, `import(path, options?)`, `register(options)`, `remove(id)`. |
 | `skies()`, `emitters()` | Discover the per-scene archive skybox sets and the archive particle-emitter presets. |
+| `sounds()` | Discover the archive sound samples plus media-library imports, for `sound` entities. |
 | `heightmaps()` | Discover the curated terrain heightmaps, with archive provenance, for `terrain` entities. |
 | `flocks()`, `forceFields()` | Discover the Nature-of-Code simulation presets: self-steering boid flocks and force fields (attractor/flow/drag/vortex). |
 | `importLegacyXml(xml, options?)` | Migrate archived GraphysX `Object3D` XML into a validated v2 world with warnings. |
@@ -593,7 +594,14 @@ Every mutating method returns `{ ok, revision, value?, error? }`. Entity IDs are
 
 ## Scene vocabulary
 
-Entity types: `group`, `agent`, `box`, `sphere`, `icosahedron`, `cylinder`, `cone`, `torus`, `plane`, `spline`, `model`, `emitter`, `terrain`, `water`, `flock`, `force-field`, `ambient-light`, `directional-light`, and `point-light`.
+Entity types: `group`, `agent`, `box`, `sphere`, `icosahedron`, `cylinder`, `cone`, `torus`, `plane`, `spline`, `model`, `emitter`, `sound`, `terrain`, `water`, `flock`, `force-field`, `formula-field`, `ambient-light`, `directional-light`, and `point-light`.
+
+A `sound` entity is a placed audio source: `sound: { source, volume?, loop?, autoplay?, positional?, refDistance? }`, where `source` is a sound id (`sounds()`) or URL. The runtime keeps a selectable wireframe marker (`marker: false` hides it, like a point light's bulb) and the config in the document; the host plays it through the camera's audio listener — positionally attenuated by default, starting after the visitor's first click (browser autoplay policy). A hidden sound entity is muted, no rigid body is accepted, and imports from the media library are usable the moment `media.refresh()` lands.
+
+```js
+gx.spawn({ id: "ambience", type: "sound", transform: { position: [0, 2, 0] },
+  sound: { source: "coin", volume: 0.5, refDistance: 12 } });
+```
 
 The environment block carries `background`, `sky` (per-scene skybox), `overlay` (generative 2D layer), `envelope`, `ground`, and `physics.gravity`. `envelope` is the scene's viewing envelope — `{ fogNear, fogFar, cameraFar }` in world units, or `null` (the default) for the host values: fog 34–130 and camera far 260, tuned to showroom-sized scenes. A world larger than a few dozen units should declare one; the recovered archive worlds span 56–1135 units, and without an envelope the host's fog wall and far plane swallow them.
 
