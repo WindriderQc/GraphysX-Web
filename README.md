@@ -7,10 +7,11 @@ discoverable tool bridge.
 
 Live application: <https://graphysx.specialblend.ca>
 
-> **Status: in transition.** This repository currently still bundles the full
-> archive-revival player it was branched from. The product direction — reducing the
-> deployed app to the creation platform plus a few showcase worlds — is defined in
-> **[PRODUCT_SPEC.md](PRODUCT_SPEC.md)**. Read that first.
+> **Status: v1 met, deployed.** The site opens into the platform showroom; a human and
+> an agent edit the same live scene through one runtime; a game rebuilt on-platform plays
+> to a win. The legacy archive player survives behind `?host=legacy` as a reference
+> fallback. What the product is: **[PRODUCT_SPEC.md](PRODUCT_SPEC.md)**. Where it stands
+> and what's next: **[ROADMAP.md](ROADMAP.md)**.
 
 The complete historical source and restoration record lives in the workshop repo,
 [WindriderQc/GraphysX](https://github.com/WindriderQc/GraphysX). That repo is local-dev
@@ -27,6 +28,13 @@ Production build (static release written to `dist/`):
 
 ```bash
 npm run build
+```
+
+The release gate — typecheck, build, and every headless smoke against the built `dist/`
+(the same gate CI runs before deploying):
+
+```bash
+npm run verify
 ```
 
 ## Agent interaction

@@ -122,7 +122,8 @@ here blocks a release; pick by value rather than by order.
 3. **Crowds** — welded inside `race-scene.ts`; needs extracting behind a v2 interface.
 4. **Prefabs are in the API but absent from the editor UI** — the one place v2 vocabulary is
    reachable by an agent and not by a human, which inverts the usual gap.
-5. Audio (19 sounds upstream, 4 vendored); CubX recovered geometry (still 8 plain boxes);
+5. Audio (19 sounds upstream, 4 vendored); ~~CubX recovered geometry (still 8 plain
+   boxes)~~ — done, `cubx-r1` graduated the recovered assembly into a prefab;
    the §14.5 BallZ shader pass; high-res skies; p5-to-texture and multi-layer overlay stacks
    (both named as deferred in `overlay-r1`, both optional in §4).
 

@@ -351,8 +351,9 @@ reorganizes the archive or the Datalake.
    restoration cadence (`revival-...-rNN`).
 7. **Remote presence / auth relay** — future authenticated session-scoped relay for remote
    humans and externally-hosted agents joining a specific live scene. Out of v1.
-8. **Ops TODO (carried)** — point DNS for `graphysx.specialblend.ca` → `103.54.59.80`, then
-   run the staged one-time nginx/TLS installer.
+8. **Ops TODO (carried)** — ~~point DNS for `graphysx.specialblend.ca` → `103.54.59.80`,
+   then run the staged one-time nginx/TLS installer~~. Done and retracted in
+   `progress.md`: DNS resolves, TLS is active, deploys go out on push to `main`.
 
 ## 13. What "v1 done" means
 
