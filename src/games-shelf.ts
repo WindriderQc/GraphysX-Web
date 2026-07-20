@@ -43,14 +43,28 @@ const FIRST_COURSE = {
   ],
 };
 
+/**
+ * A course composed as a whole scene rather than a grid level — the archive ports. The
+ * shelf stays a list: a composed row's `play` does its own `api.create`, and the host
+ * enters play mode the same way it does for a materialised level, keyed on content.
+ */
+export type GamesShelfComposedRow = {
+  id: string;
+  label: string;
+  meta: string;
+  play: () => void | Promise<void>;
+};
+
 export type GamesShelfOptions = {
   api: GraphysXAgentWorldApi;
+  /** Archive courses and other composed playables, listed above the level library. */
+  composed?: GamesShelfComposedRow[];
   /** Called after a level is materialised, so the caller can take the showroom down with it. */
   onPlay?: (levelId: string) => void;
 };
 
 export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptions): () => void {
-  const { api, onPlay } = options;
+  const { api, composed, onPlay } = options;
   injectStyleOnce();
 
   // Seed once. A returning visitor who edited or deleted this course keeps their version —
@@ -80,6 +94,26 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
 
   const list = document.createElement("div");
   list.className = "gx-shelf-list";
+
+  for (const course of composed ?? []) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "gx-shelf-row";
+    row.dataset.courseId = course.id;
+    const name = document.createElement("span");
+    name.className = "gx-shelf-name";
+    name.textContent = course.label;
+    const meta = document.createElement("span");
+    meta.className = "gx-shelf-meta";
+    meta.textContent = course.meta;
+    row.append(name, meta);
+    row.addEventListener("click", () => {
+      void course.play();
+      dispose();
+      onPlay?.(course.id);
+    });
+    list.append(row);
+  }
 
   // Read the library rather than a curated manifest: anything a person or an agent authors
   // shows up here without a second registration step.
