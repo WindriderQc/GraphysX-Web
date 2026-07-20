@@ -485,3 +485,31 @@ Foundation before flourish. Each phase is shippable and course-correctable.
    default rather than fitted to the level — play a 44×30 level and the floor slab fills the
    viewport. Ice tiles model low friction but not the tile's attraction. This is a level that
    runs, not yet a game that ships.
+
+   **Update (`envelope-r1`):** the scene envelope the mesh ports were waiting on, plus the two
+   shared-file defects the vehicle garage worked around. `environment.envelope` — `{ fogNear,
+   fogFar, cameraFar }`, or `null` for the host defaults — is now scene vocabulary, consumed by
+   `PlatformHost` exactly the way `sky` already was. The deciding fact: the host pinned fog at
+   34–130 and the far plane at 260, tuned to the ~36-unit showroom, while the four remaining
+   recovered worlds span 56, 81, 527 and 1135 units — the largest could not be *rendered*, let
+   alone framed. The editor gains an Envelope row (checkbox = "host default" as a real state,
+   not zeros), so the vocabulary does not repeat the prefabs inversion of being agent-reachable
+   and human-invisible. Swept by `smoke-roundtrip.mjs` with live-object reads (`scene.fog`,
+   `camera.far`) — the exact write-only shape that sweep exists to catch.
+
+   With it, two defects stopped being worked around:
+
+   - **`loadAgentWorldModel` recentring** (`agent-world-assets.ts`): position and scale were set
+     on the same node, so the recentring translation ran in unscaled units — every model whose
+     `fitSize` differed from its native span landed off its anchor by ~`center · (1 − scale)`,
+     measured at 9.16 units on a track mesh. The offset now goes through the same factors the
+     vertices do (`p = −S·center`). This *changes the resting position of compensated scenes by
+     design*; the gate's screenshots are the before/after evidence.
+   - **Point-light markers** are now scene-decided: `marker: false` keeps the light and removes
+     the lightbulb. Default stays true — the marker is how an author finds an invisible thing —
+     and it serialises only when false, so existing documents are byte-identical.
+
+   Also landed: the `server/scene-store.mjs` rename now has a bounded retry (5 attempts, backed
+   off) on `EPERM`/`EACCES`/`EBUSY` — the Windows scanner-hold bug that surfaced for months as
+   an intermittent `scene-store` smoke failure and was repeatedly misread as Chromium teardown
+   flake.

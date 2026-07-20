@@ -207,6 +207,15 @@ try {
       const o = objectOf("pl1");
       check("intensity", "light", 2.5, { state: s.intensity, object: o && o.isLight ? o.intensity : undefined }, { before: before.intensity });
       check("distance", "light", 25, { state: s.distance, object: o && o.isPointLight ? o.distance : undefined }, { before: before.distance });
+      // The origin marker sphere: `marker:false` is how a composed scene keeps the light
+      // without the lightbulb. Object-observable (a Mesh child of the light group), and
+      // left false through the reload section so the only-when-false serialization is
+      // exercised too.
+      api.update("pl1", { marker: false });
+      const s2 = stateOf("pl1");
+      let markerMesh = null;
+      o && o.traverse((child) => { if (!markerMesh && child.userData && child.userData.agentLightMarker) markerMesh = child; });
+      check("light.marker(false)", "light", false, { state: s2.marker, object: markerMesh ? markerMesh.visible : undefined }, { before: s.marker });
     }
 
     // ================= TAGS / label / ephemeral =================
@@ -381,6 +390,26 @@ try {
         check("environment.sky", "environment", skyId, { state: skyState }, { before: before.sky, objectUnavailable: "sky resolves to an async-loaded CubeTexture on host.scene; render path covered by showroom/foundation smokes" });
         api.transaction([{ op: "set-environment", environment: { sky: null } }]);
       }
+
+      // Envelope: fog distances and the camera far plane are applied by the HOST
+      // (scene.fog, camera.far) — exactly the write-only shape this sweep exists for.
+      // A stored envelope that never reached the renderer would pass state/export and
+      // fail the world. Left set through the reload section below so it also proves
+      // document survival.
+      api.transaction([{ op: "set-environment", environment: { envelope: { fogNear: 60, fogFar: 900, cameraFar: 1400 } } }]);
+      const env2 = api.state().environment.envelope || {};
+      check("environment.envelope.fogNear", "environment", 60, {
+        state: env2.fogNear,
+        object: host.scene.fog ? host.scene.fog.near : undefined,
+      }, { before: before.envelope ? before.envelope.fogNear : null });
+      check("environment.envelope.fogFar", "environment", 900, {
+        state: env2.fogFar,
+        object: host.scene.fog ? host.scene.fog.far : undefined,
+      }, { before: before.envelope ? before.envelope.fogFar : null });
+      check("environment.envelope.cameraFar", "environment", 1400, {
+        state: env2.cameraFar,
+        object: host.camera.far,
+      }, { before: before.envelope ? before.envelope.cameraFar : null, note: "default far is 260; asserting the projection actually widened" });
     }
 
     // ================= PERSISTENCE: export -> reload -> re-read =================
@@ -400,7 +429,7 @@ try {
       box1: (e) => e.material.color,
       geo1: (e) => e.geometry.width,
       geo2: (e) => e.geometry.tube,
-      pl1: (e) => e.intensity,
+      pl1: (e) => [e.intensity, e.marker],
       em1: (e) => e.emitter.rate,
       terr1: (e) => e.terrain.heightScale,
       wat1: (e) => e.water.color,
@@ -415,7 +444,8 @@ try {
       reloadDiffs.push({ id, before: b, after: a, survived });
     }
     const envAfter = api.state().environment;
-    const envSurvived = eq(beforeEnv.ground.size, envAfter.ground.size) && eq(beforeEnv.background, envAfter.background);
+    const envSurvived = eq(beforeEnv.ground.size, envAfter.ground.size) && eq(beforeEnv.background, envAfter.background)
+      && eq(beforeEnv.envelope ? beforeEnv.envelope.fogFar : null, envAfter.envelope ? envAfter.envelope.fogFar : null);
 
     // Also confirm every entity's exported form carried its config block (export read path).
     const exportCoverage = ["em1", "terr1", "wat1", "flk1", "ff1"].map((id) => {

@@ -6,6 +6,7 @@ import type {
   AgentWorldEntityPatch,
   AgentWorldEntityState,
   AgentWorldEntityType,
+  AgentWorldEnvelope,
   AgentWorldMaterial,
   AgentWorldPhysicsMode,
   GraphysXAgentWorldApi,
@@ -152,6 +153,9 @@ export class PlatformEditor {
   /** The Environment sky dropdown, held so `refresh()` can re-read the world into it. */
   private skySelect: HTMLSelectElement | null = null;
   private overlaySelect: HTMLSelectElement | null = null;
+  /** Envelope controls, held for the same reason as `skySelect` — see that comment. */
+  private envelopeToggle: HTMLInputElement | null = null;
+  private envelopeInputs: HTMLInputElement[] = [];
   private levelTile: MapEditorTile = "wall";
   private levelTool: LevelTool = "paint";
   /** Cell elements indexed `y * width + x`, so a drag can repaint one cell without a rebuild. */
@@ -405,6 +409,17 @@ export class PlatformEditor {
     }
     if (this.overlaySelect && document.activeElement !== this.overlaySelect) {
       this.overlaySelect.value = state?.environment?.overlay ?? "";
+    }
+    const envelopeFocused = document.activeElement === this.envelopeToggle
+      || this.envelopeInputs.includes(document.activeElement as HTMLInputElement);
+    if (this.envelopeToggle && !envelopeFocused) {
+      const envelope = state?.environment?.envelope ?? null;
+      this.envelopeToggle.checked = !!envelope;
+      const values = envelope ? [envelope.fogNear, envelope.fogFar, envelope.cameraFar] : [null, null, null];
+      this.envelopeInputs.forEach((input, index) => {
+        input.value = values[index] === null ? "" : String(values[index]);
+        input.disabled = !envelope;
+      });
     }
 
     const selected = entities.find((entity) => entity.id === this.selectedId) ?? null;
@@ -1011,7 +1026,74 @@ export class PlatformEditor {
     overlay.addEventListener("change", () => this.setOverlay(overlay.value || null));
     this.overlaySelect = overlay;
 
-    return this.section("Environment", [this.field("Sky", select), this.field("2D overlay", overlay)]);
+    // The viewing envelope, third of the scene-declared layers the host renders. Unchecked
+    // means "host default" (fog 34–130, camera far 260) — a real state, not zeros, so it is
+    // a checkbox plus three distances rather than inputs pretending the defaults are scene
+    // data. Without this row the envelope would repeat the prefabs inversion: reachable by
+    // an agent, invisible to a human.
+    const envelopeToggle = document.createElement("input");
+    envelopeToggle.type = "checkbox";
+    envelopeToggle.title = "Scene-specific fog distances and camera far plane";
+    const makeDistance = (title: string) => {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.step = "1";
+      input.title = title;
+      input.placeholder = "—";
+      input.disabled = true;
+      input.style.width = "4.5em";
+      return input;
+    };
+    const fogNear = makeDistance("Fog start (world units)");
+    const fogFar = makeDistance("Fog end (world units)");
+    const cameraFar = makeDistance("Camera far plane (world units)");
+    const applyEnvelope = () => {
+      if (!envelopeToggle.checked) {
+        this.setEnvelope(null);
+        return;
+      }
+      const next = { fogNear: Number(fogNear.value), fogFar: Number(fogFar.value), cameraFar: Number(cameraFar.value) };
+      // A trio mid-edit can be incoherent (far <= near, empty field). Hold until it
+      // validates rather than pushing a document the runtime would reject.
+      if (![next.fogNear, next.fogFar, next.cameraFar].every((value) => Number.isFinite(value) && value >= 0)) return;
+      if (fogNear.value === "" || fogFar.value === "" || cameraFar.value === "") return;
+      if (next.fogFar <= next.fogNear || next.cameraFar <= next.fogNear) return;
+      this.setEnvelope(next);
+    };
+    envelopeToggle.addEventListener("change", () => {
+      for (const input of [fogNear, fogFar, cameraFar]) input.disabled = !envelopeToggle.checked;
+      if (envelopeToggle.checked && fogNear.value === "") {
+        // Seed custom with the host defaults, so it starts from what the visitor is seeing.
+        fogNear.value = "34";
+        fogFar.value = "130";
+        cameraFar.value = "260";
+      }
+      applyEnvelope();
+    });
+    for (const input of [fogNear, fogFar, cameraFar]) input.addEventListener("change", applyEnvelope);
+    this.envelopeToggle = envelopeToggle;
+    this.envelopeInputs = [fogNear, fogFar, cameraFar];
+    const currentEnvelope = this.deps.world.getEnvironment().envelope;
+    if (currentEnvelope) {
+      envelopeToggle.checked = true;
+      const values = [currentEnvelope.fogNear, currentEnvelope.fogFar, currentEnvelope.cameraFar];
+      this.envelopeInputs.forEach((input, index) => {
+        input.value = String(values[index]);
+        input.disabled = false;
+      });
+    }
+    const envelopeWrap = document.createElement("div");
+    envelopeWrap.style.display = "flex";
+    envelopeWrap.style.alignItems = "center";
+    envelopeWrap.style.gap = "4px";
+    envelopeWrap.append(envelopeToggle, fogNear, fogFar, cameraFar);
+
+    return this.section("Environment", [
+      this.field("Sky", select),
+      this.field("2D overlay", overlay),
+      this.field("Envelope", envelopeWrap),
+    ]);
   }
 
   /**
@@ -1035,6 +1117,17 @@ export class PlatformEditor {
     this.deps.api.load({
       ...definition,
       environment: { ...definition.environment, overlay: overlayId as never },
+    });
+    this.deps.onEnvironmentChanged?.();
+    this.select(null);
+  }
+
+  private setEnvelope(envelope: AgentWorldEnvelope | null): void {
+    const definition = this.deps.api.export();
+    if (!definition) return;
+    this.deps.api.load({
+      ...definition,
+      environment: { ...definition.environment, envelope: envelope as never },
     });
     this.deps.onEnvironmentChanged?.();
     this.select(null);

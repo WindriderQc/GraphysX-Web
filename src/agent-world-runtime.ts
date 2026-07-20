@@ -348,6 +348,12 @@ export type AgentWorldEntityDefinition = {
   physics?: AgentWorldPhysics;
   intensity?: number;
   distance?: number;
+  /**
+   * Point lights only: whether to draw the small emissive sphere at the light's origin.
+   * Defaults to true — the marker is how an author finds an invisible thing to select —
+   * but a composed scene lighting a showpiece wants the light, not the lightbulb.
+   */
+  marker?: boolean;
   visible?: boolean;
   castShadow?: boolean;
   receiveShadow?: boolean;
@@ -375,6 +381,8 @@ export type AgentWorldEntityPatch = {
   tags?: string[];
   intensity?: number;
   distance?: number;
+  /** Point lights only: show or hide the origin marker sphere. */
+  marker?: boolean;
   physics?: Partial<AgentWorldPhysics> | null;
   agent?: AgentWorldAgentProfile;
   /** Patch the emitter of an `emitter` entity. Merged over the current configuration. */
@@ -390,6 +398,18 @@ export type AgentWorldEntityPatch = {
   interactions?: AgentWorldInteraction[];
 };
 
+/**
+ * The scene's viewing envelope: fog distances and the camera far plane, in world units.
+ * Fog always takes the scene's background (or sky-horizon) colour; the envelope decides
+ * only where it starts and ends.
+ */
+export type AgentWorldEnvelope = {
+  fogNear: number;
+  fogFar: number;
+  /** Keep a margin beyond `fogFar` so geometry is fully fogged before it is clipped. */
+  cameraFar: number;
+};
+
 export type AgentWorldEnvironment = {
   background: string;
   /**
@@ -397,6 +417,13 @@ export type AgentWorldEnvironment = {
    * scene by design — there is deliberately no global sky (see PRODUCT_SPEC section 11).
    */
   sky: AgentWorldSkyId | null;
+  /**
+   * Per-scene viewing envelope, or null for the host defaults (fog 34–130, camera far
+   * 260 — tuned to the ~36-unit showroom). Scene data like `sky`, because a pinned host
+   * value breaks real content: the recovered archive worlds span 56 to 1135 units, and
+   * the largest cannot be rendered at all inside the default far plane.
+   */
+  envelope: AgentWorldEnvelope | null;
   /**
    * Per-scene generative 2D overlay, or null for none. Like `sky`, it is scene data the host
    * renders rather than a global setting — and off by default, because a 2D layer must earn its
@@ -466,6 +493,7 @@ export type AgentWorldEntityState = {
   geometry: Required<NonNullable<AgentWorldEntityDefinition["geometry"]>>;
   intensity: number;
   distance: number;
+  marker: boolean;
   visible: boolean;
   castShadow: boolean;
   receiveShadow: boolean;
@@ -724,6 +752,7 @@ type ResolvedEntity = {
   physics: ResolvedAgentWorldPhysics | null;
   intensity: number;
   distance: number;
+  marker: boolean;
   visible: boolean;
   castShadow: boolean;
   receiveShadow: boolean;
@@ -779,6 +808,7 @@ const DEFAULT_GEOMETRY = {
 const DEFAULT_ENVIRONMENT: AgentWorldEnvironment = {
   background: "#07141d",
   sky: null,
+  envelope: null,
   overlay: null,
   ground: {
     visible: true,
@@ -1424,6 +1454,7 @@ export class AgentWorldRuntime {
     if (patch.tags) definition.tags = uniqueStrings(patch.tags);
     if (patch.intensity !== undefined) definition.intensity = clamp(patch.intensity, 0, 100);
     if (patch.distance !== undefined) definition.distance = clamp(patch.distance, 0, 1000);
+    if (patch.marker !== undefined) definition.marker = patch.marker === true;
     if (patch.physics !== undefined) {
       definition.physics = patch.physics === null
         ? null
@@ -1555,7 +1586,7 @@ export class AgentWorldRuntime {
     // the ground, while the rendered sky and background silently stayed on the old values —
     // the same write-only parity gap that `world.loaded` closed for `create`/`load`, reopened
     // by a different entry point. Emitting here lets the host re-apply for every caller.
-    this.emit("environment.changed", [], { sky: this.environment.sky, overlay: this.environment.overlay, background: this.environment.background });
+    this.emit("environment.changed", [], { sky: this.environment.sky, overlay: this.environment.overlay, background: this.environment.background, envelope: this.environment.envelope });
   }
 
   private loadDefinition(source: AgentWorldDefinition): void {
@@ -2151,6 +2182,7 @@ export class AgentWorldRuntime {
         if (child instanceof PointLight) child.distance = definition.distance;
         if (child instanceof DirectionalLight) child.castShadow = definition.castShadow;
       }
+      if (child.userData.agentLightMarker === true) child.visible = definition.marker;
     });
   }
 
@@ -2214,6 +2246,7 @@ export class AgentWorldRuntime {
       physics,
       intensity: clamp(source.intensity ?? 1, 0, 100),
       distance: clamp(source.distance ?? 0, 0, 1000),
+      marker: source.marker ?? true,
       visible: source.visible ?? true,
       castShadow: source.castShadow ?? true,
       receiveShadow: source.receiveShadow ?? true,
@@ -2261,6 +2294,7 @@ export class AgentWorldRuntime {
       geometry: deepClone(runtime.definition.geometry),
       intensity: runtime.definition.intensity,
       distance: runtime.definition.distance,
+      marker: runtime.definition.marker,
       visible: runtime.object.visible,
       castShadow: runtime.definition.castShadow,
       receiveShadow: runtime.definition.receiveShadow,
@@ -2449,6 +2483,8 @@ function createEntityObject(definition: ResolvedEntity): Object3D {
       new MeshStandardMaterial({ color: definition.material.color, emissive: definition.material.emissive, emissiveIntensity: Math.max(1, definition.material.emissiveIntensity) })
     );
     marker.userData.agentLightMarker = true;
+    // Kept in the graph even when hidden, so a patch can toggle it without a rebuild.
+    marker.visible = definition.marker;
     group.add(light, marker);
     return group;
   }
@@ -2640,12 +2676,25 @@ function resolveEnvironment(source?: AgentWorldDefinition["environment"]): Agent
   return {
     background: source?.background ?? DEFAULT_ENVIRONMENT.background,
     sky,
+    envelope: resolveEnvelope(source?.envelope),
     overlay,
     ground: { ...DEFAULT_ENVIRONMENT.ground, ...(source?.ground ?? {}) },
     physics: {
       gravity: sanitizeVector(source?.physics?.gravity ?? DEFAULT_ENVIRONMENT.physics.gravity, -1000, 1000, "physics.gravity")
     }
   };
+}
+
+function resolveEnvelope(source: AgentWorldEnvironment["envelope"] | undefined): AgentWorldEnvelope | null {
+  if (source === null || source === undefined) return DEFAULT_ENVIRONMENT.envelope;
+  if (typeof source !== "object") throw new Error("environment.envelope must be an object or null");
+  const entries = [["fogNear", source.fogNear], ["fogFar", source.fogFar], ["cameraFar", source.cameraFar]] as const;
+  for (const [label, value] of entries) {
+    if (!Number.isFinite(value) || value < 0 || value > 100000) throw new Error(`envelope.${label} must be a finite number between 0 and 100000`);
+  }
+  if (source.fogFar <= source.fogNear) throw new Error("envelope.fogFar must be greater than envelope.fogNear");
+  if (source.cameraFar <= source.fogNear) throw new Error("envelope.cameraFar must be greater than envelope.fogNear");
+  return { fogNear: source.fogNear, fogFar: source.fogFar, cameraFar: source.cameraFar };
 }
 
 function mergeTransform(base: AgentWorldTransform, patch: Partial<AgentWorldTransform>): AgentWorldTransform {
@@ -2943,6 +2992,8 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     ...(definition.physics ? { physics: deepClone(definition.physics) } : {}),
     intensity: definition.intensity,
     distance: definition.distance,
+    // Only emitted when false, so ordinary authored documents stay unchanged.
+    ...(definition.marker === false ? { marker: false } : {}),
     visible: definition.visible,
     castShadow: definition.castShadow,
     receiveShadow: definition.receiveShadow,

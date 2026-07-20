@@ -545,6 +545,10 @@ Every mutating method returns `{ ok, revision, value?, error? }`. Entity IDs are
 
 Entity types: `group`, `agent`, `box`, `sphere`, `icosahedron`, `cylinder`, `cone`, `torus`, `plane`, `spline`, `model`, `emitter`, `terrain`, `water`, `flock`, `force-field`, `ambient-light`, `directional-light`, and `point-light`.
 
+The environment block carries `background`, `sky` (per-scene skybox), `overlay` (generative 2D layer), `envelope`, `ground`, and `physics.gravity`. `envelope` is the scene's viewing envelope — `{ fogNear, fogFar, cameraFar }` in world units, or `null` (the default) for the host values: fog 34–130 and camera far 260, tuned to showroom-sized scenes. A world larger than a few dozen units should declare one; the recovered archive worlds span 56–1135 units, and without an envelope the host's fog wall and far plane swallow them.
+
+Point lights draw a small emissive marker sphere at their origin so an invisible thing can be found and selected. `marker: false` on the entity — at spawn or via `update` — removes the lightbulb and keeps the light, which is what a composed scene lighting a showpiece wants.
+
 Behaviors: `spin`, `bob`, `orbit`, `pulse`, `look-at`, and `follow-spline`. Interaction types: `toggle-visibility` and `apply-impulse`.
 
 Queries can filter by `ids`, `type`, `tag`, case-insensitive `labelIncludes`, or a world-space `within: { center, radius }` test. Transactions and collaborative commits accept `spawn`, `spawn-prefab`, `update`, `remove`, `attach-behavior`, `detach-behavior`, `interact`, `set-environment`, and `select` commands.

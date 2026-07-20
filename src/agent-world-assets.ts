@@ -40,7 +40,7 @@ export type AgentWorldModelAsset = {
 };
 
 /** Broad grouping so an agent can ask for "a tree" without knowing archive file names. */
-export type AgentWorldAssetCategory = "vegetation" | "port" | "camp" | "character" | "prop";
+export type AgentWorldAssetCategory = "vegetation" | "port" | "camp" | "character" | "prop" | "vehicle";
 
 export type AgentWorldAssetDescriptor = {
   id: string;
@@ -228,9 +228,15 @@ export async function loadAgentWorldModel(target: Group, asset: ResolvedAgentWor
   if (bounds) {
     const center = bounds.min.map((value, axis) => (value + bounds.max[axis]) / 2) as Tuple3;
     const maximumSpan = Math.max(...bounds.size, 0.0001);
-    sourceRoot.position.set(-center[0], -center[1], -center[2]);
     const scale = asset.fitSize / maximumSpan;
     sourceRoot.scale.set(scale, scale, -scale);
+    // Three composes an object's matrix T·R·S — position is applied after, and is NOT
+    // scaled. Setting position = -center alongside a scale therefore recentred by the
+    // UNSCALED offset, so any model whose fitSize differed from its native span landed
+    // off its anchor (and the Z flip mirrored that error's sign). The offset has to go
+    // through the same factors the vertices do: world = S·v + p, and p = -S·center puts
+    // the bounds centre exactly on the group origin at every fitSize.
+    sourceRoot.position.set(-center[0] * scale, -center[1] * scale, center[2] * scale);
   }
   target.add(sourceRoot);
 }

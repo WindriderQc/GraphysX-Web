@@ -12,7 +12,8 @@
 // Zero dependencies on purpose: this has to be trivial to run on the AgentX box.
 
 import { createServer } from "node:http";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -81,12 +82,31 @@ async function readRecord(dir, name) {
   }
 }
 
-/** Write to a sibling temp file then rename, so a crash mid-write cannot truncate a scene. */
+/**
+ * Write to a sibling temp file then rename, so a crash mid-write cannot truncate a scene.
+ * On Windows, rename over an existing target throws EPERM whenever a scanner or indexer
+ * momentarily holds the file, so the rename gets a bounded retry — the hold is measured
+ * in milliseconds, and failing the write over it turned a passing smoke red for months.
+ */
+const RENAME_ATTEMPTS = 5;
+const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+
 async function writeRecord(dir, name, record) {
   const target = scenePath(dir, name);
   const temporary = `${target}.${process.pid}.tmp`;
   await writeFile(temporary, `${JSON.stringify(record, null, 2)}\n`, "utf8");
-  await rename(temporary, target);
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await rename(temporary, target);
+      return;
+    } catch (error) {
+      if (attempt >= RENAME_ATTEMPTS || !RENAME_RETRY_CODES.has(error?.code)) {
+        await rm(temporary, { force: true }).catch(() => undefined);
+        throw error;
+      }
+      await delay(20 * attempt);
+    }
+  }
 }
 
 export function createSceneStore({ dir = DEFAULT_DIR } = {}) {

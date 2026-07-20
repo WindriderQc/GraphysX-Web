@@ -365,11 +365,20 @@ export class PlatformHost {
     };
   }
 
-  /** Re-read background/sky/fog from the runtime's environment (call after env edits). */
+  /** Re-read background/sky/fog/envelope from the runtime's environment (call after env edits). */
   applyEnvironment(): void {
     const environment = this.world.getEnvironment();
     this.scene.background = new Color(environment.background);
-    this.scene.fog = new Fog(environment.background, 34, 130);
+    // The scene's envelope wins over the host defaults, which are tuned to the ~36-unit
+    // showroom. The recovered archive worlds span 56–1135 units; without this a ported
+    // world is fogged out or clipped by a far plane it never chose.
+    const envelope = environment.envelope;
+    this.scene.fog = new Fog(environment.background, envelope?.fogNear ?? 34, envelope?.fogFar ?? 130);
+    const cameraFar = envelope?.cameraFar ?? 260;
+    if (this.camera.far !== cameraFar) {
+      this.camera.far = cameraFar;
+      this.camera.updateProjectionMatrix();
+    }
     this.applySky(environment.sky);
     this.applyOverlay(environment.overlay);
   }
@@ -430,8 +439,10 @@ export class PlatformHost {
     pmrem.dispose();
     // Keep distance fog, tinted to the sky's horizon, so ground fades into the skyline
     // instead of ending at a hard plane edge. Dropping the fog here was a mistake: fog
-    // does not fight a skybox, fog of the wrong colour does.
-    this.scene.fog = new Fog(horizonColor, 38, 138);
+    // does not fight a skybox, fog of the wrong colour does. The sky-path defaults sit
+    // slightly deeper than the flat-background pair; a scene envelope overrides both.
+    const envelope = this.world.getEnvironment().envelope;
+    this.scene.fog = new Fog(horizonColor, envelope?.fogNear ?? 38, envelope?.fogFar ?? 138);
   }
 
   /**
