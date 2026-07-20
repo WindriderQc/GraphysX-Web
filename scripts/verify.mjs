@@ -3,6 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startStaticServer } from "./static-server.mjs";
+import { acquireVerifyLock, installSignalCleanup, withDeadline } from "./verify-guard.mjs";
 
 // One command that proves a release is shippable: typecheck, build, then drive the
 // built output in a real headless browser through every product route.
@@ -21,6 +22,11 @@ const ARTIFACTS = path.join(ROOT, "output", "verify");
 // reach the server — flakiness that looks like a product bug but is purely the harness
 // colliding with itself. Set VERIFY_PORT to pin it when you need a stable URL.
 const PORT = Number(process.env.VERIFY_PORT || 0);
+const LOCK_PATH = path.join(ROOT, "output", ".verify.lock");
+// Generous enough that a slow-but-working run is never killed, tight enough that a wedged
+// one is noticed the same day. The whole suite normally finishes well inside these.
+const SMOKE_DEADLINE_MS = Number(process.env.VERIFY_SMOKE_TIMEOUT_MS || 5 * 60 * 1000);
+const BUILD_DEADLINE_MS = Number(process.env.VERIFY_BUILD_TIMEOUT_MS || 10 * 60 * 1000);
 
 const argv = process.argv.slice(2);
 const noBuild = argv.includes("--no-build");
@@ -40,41 +46,70 @@ const SMOKES = [
   { name: "ballz", script: "scripts/smoke-ballz.mjs", covers: "levels.play(): grid materialises, ball rests, walls stop it, gate + ring fire" },
   { name: "games", script: "scripts/smoke-games.mjs", covers: "front door: showroom -> Games shelf -> playing a level -> back" },
   { name: "overlay", script: "scripts/smoke-overlay.mjs", covers: "2D overlay layer: off by default, one shared loop, draws over 3D, round-trips" },
+  { name: "archive-levels", script: "scripts/smoke-archive-levels.mjs", covers: "recovered BallZ arenas: census fidelity, containment, reachable, completable" },
 ];
 
-function run(command, args, label) {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, {
-      cwd: ROOT,
-      shell: process.platform === "win32",
-      stdio: "inherit",
-      env: { ...process.env },
-    });
+// Every child is tracked so a signal can take its whole tree down with it. An untracked
+// child is an orphaned Chromium waiting to happen.
+const children = new Set();
+
+function spawnTracked(command, args, options, label, deadlineMs) {
+  const child = spawn(command, args, options);
+  children.add(child);
+  const { timedOut, clear } = withDeadline(child, deadlineMs, label);
+  const finished = new Promise((resolve) => {
     child.on("close", (code) => resolve({ label, code: code ?? 1 }));
     child.on("error", (err) => {
       console.error(`${label}: ${err.message}`);
       resolve({ label, code: 1 });
     });
   });
+  // Whichever lands first wins: a real exit, or the deadline killing the tree.
+  return Promise.race([finished, timedOut]).finally(() => {
+    clear();
+    children.delete(child);
+  });
+}
+
+function run(command, args, label) {
+  return spawnTracked(
+    command,
+    args,
+    { cwd: ROOT, shell: process.platform === "win32", stdio: "inherit", env: { ...process.env } },
+    label,
+    BUILD_DEADLINE_MS,
+  );
 }
 
 function runSmoke(smoke, base) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, [smoke.script], {
-      cwd: ROOT,
-      stdio: "inherit",
-      env: { ...process.env, SMOKE_BASE: base, SMOKE_ARTIFACTS: ARTIFACTS },
-    });
-    child.on("close", (code) => resolve({ label: smoke.name, code: code ?? 1 }));
-    child.on("error", (err) => {
-      console.error(`${smoke.name}: ${err.message}`);
-      resolve({ label: smoke.name, code: 1 });
-    });
-  });
+  return spawnTracked(
+    process.execPath,
+    [smoke.script],
+    { cwd: ROOT, stdio: "inherit", env: { ...process.env, SMOKE_BASE: base, SMOKE_ARTIFACTS: ARTIFACTS } },
+    smoke.name,
+    SMOKE_DEADLINE_MS,
+  );
 }
 
 const results = [];
 let server = null;
+
+// Refuse to run alongside another verify. Held for the whole run and released in `finally`,
+// including on a signal.
+let releaseLock;
+try {
+  // The lock lives beside the artifacts, so its directory has to exist before the artifacts
+  // step that would otherwise create it.
+  await mkdir(path.dirname(LOCK_PATH), { recursive: true });
+  releaseLock = await acquireVerifyLock(LOCK_PATH, { force: argv.includes("--force-lock") });
+} catch (error) {
+  if (error.code === "EVERIFYLOCKED") {
+    console.error(`\n${error.message}`);
+    process.exit(1);
+  }
+  throw error;
+}
+installSignalCleanup(() => [...children], releaseLock);
 
 try {
   await rm(ARTIFACTS, { recursive: true, force: true });
@@ -106,6 +141,7 @@ try {
   }
 } finally {
   if (server) await server.close();
+  await releaseLock();
 }
 
 const failed = results.filter((r) => r.code !== 0);

@@ -1,3 +1,9 @@
+import {
+  ARCHIVE_BALLZ_LEVELS,
+  ARCHIVE_BALLZ_NOT_REVIVED,
+  seedArchiveBallzLevels,
+  toPlatformRows,
+} from "./archive-ballz-levels";
 const root = document.querySelector<HTMLDivElement>("#app");
 
 if (!root) {
@@ -116,6 +122,23 @@ if (mode === "legacy") {
       __GRAPHYSX_HOST__: host,
       __GRAPHYSX__: host.api,
       __GRAPHYSX_AGENT_BRIDGE__: host.bridge,
+    });
+
+    // Seed the recovered archive levels into the level library on every platform-host route,
+    // not just when the Games shelf opens: they are content the whole app should know about, so
+    // an agent on ?host=standalone finds them exactly as a visitor browsing Games does. The seed
+    // is idempotent and never overwrites a level a visitor has edited.
+    seedArchiveBallzLevels(host.api);
+    // Provenance is a feature (§11) and the platform is agent-native (§7): what was recovered,
+    // what was faithful vs inferred, and what was deliberately NOT revived are all discoverable
+    // rather than buried in a source comment. An agent can read why a record was skipped.
+    Object.assign(window, {
+      __GRAPHYSX_ARCHIVE__: {
+        levels: ARCHIVE_BALLZ_LEVELS,
+        notRevived: ARCHIVE_BALLZ_NOT_REVIVED,
+        toPlatformRows,
+        seed: seedArchiveBallzLevels,
+      },
     });
     if (!editorFirst) {
       composeShowroom(host.api);
