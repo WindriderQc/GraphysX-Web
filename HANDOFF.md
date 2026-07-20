@@ -44,9 +44,30 @@ the editor palette. Follow how `emitter`, `terrain`, `water` and `flock` did it.
 **built** output. Same gate CI runs before a production deploy. Screenshots land in
 `output/verify/` — for any visual change, actually look at them.
 
+- **Never run two verifies at once — the gate now refuses to.** A run software-rasterises
+  WebGL (Playwright launches Chromium with `--use-angle=swiftshader-webgl`), so every 3D
+  smoke renders on the CPU. Measured: **one** run took ~70% of a 16-core box — 113
+  CPU-seconds in a 10-second window. Two do not go twice as fast, they starve the machine,
+  including whatever browser someone is using to look at the product. `scripts/verify-guard.mjs`
+  holds a lock in `output/.verify.lock`; a second run exits 1 with a message. Override with
+  `npm run verify -- --force-lock` only when you are certain the holder is dead.
+- **If the app freezes while you work, check for a running gate before suspecting the app.**
+  A whole session was spent hunting a "lag" that was a concurrent verify. The tell: the
+  freeze is a *total* stall — camera, animation, everything resumes together — and a CPU
+  profile shows V8 getting a fraction of the samples it is owed, with `(idle)` on top. That
+  is the OS descheduling the tab, not the product. The showroom's median frame is 13.3 ms.
+- **Runs used to be able to hang forever.** `runSmoke` awaited `close` with nothing bounding
+  it, so a wedged smoke wedged the run: two verify parents were found alive **9.5 and 7.7
+  hours** after launch, still holding Chromium trees. There are now deadlines (5 min/smoke,
+  10 min/build, `VERIFY_SMOKE_TIMEOUT_MS` / `VERIFY_BUILD_TIMEOUT_MS`) and signal cleanup, so
+  Ctrl-C kills the tree instead of orphaning it. **The one caught hanging was `scene-store`** —
+  the same smoke as the `EPERM` entry below. It does not only fail intermittently, it can hang.
 - **Run it 2–3 times with ~20 second gaps.** Back-to-back runs cause Chromium teardown
   contention and produce false failures. Measured: 2/4 fail with no gap, 0/4 with a gap.
   Do not "fix" a product because of this.
+- **`dist/` is shared, and the lock does not cover it.** A verify racing a bare `npm run
+  build` from another session fails with `ENOTEMPTY: dist\assets` — observed. The lock stops
+  two *verifies*; nothing stops a build alongside one.
 - **Never weaken an assertion to make it pass.** Three real bugs were caught only because
   strict assertions were kept: objects falling through the world, dead clicks on scenery,
   and a console error on every production page load.
