@@ -157,6 +157,18 @@ export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
     source: "GraphysX archive"
   },
   {
+    // The Math Game's own backdrop panel. On disk since the beginning and unregistered, which
+    // means the release manifest would have pruned it and the board would have 404'd in
+    // production while working in dev — the same trap the vehicle meshes were in.
+    id: "electronic-board",
+    label: "Electronic Board",
+    url: "/assets/textures/archive/ElectronicBoard_fullsize.jpg",
+    category: "science",
+    description: "Instrument-panel backdrop recovered from the Math Game screen.",
+    defaultRepeat: [1, 1],
+    source: "GraphysX archive"
+  },
+  {
     id: "spheres",
     label: "3D Spheres",
     url: "/assets/textures/suzanne1/3D_Spheres.jpg",

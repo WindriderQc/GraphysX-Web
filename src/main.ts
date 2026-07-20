@@ -1,4 +1,11 @@
 import {
+  ARCHIVE_MATH_NOT_REVIVED,
+  ARCHIVE_MATH_SCENES,
+  archiveMathBrowseRows,
+  buildArchiveMathLab,
+  composeArchiveMathLab,
+} from "./archive-math-lab";
+import {
   ARCHIVE_MILKYWAY_NOT_REVIVED,
   ARCHIVE_MILKYWAY_SCENES,
   archiveMilkyWayBrowseRows,
@@ -124,6 +131,13 @@ if (mode === "legacy") {
             // scene, so their simulation vocabulary is selectable and editable.
             // The recovered Voie Lactee vignette. Same shape as the playgrounds: it opens in the
             // editor like any browsed scene.
+            // The recovered Math Game screen, built on the `formula-field` entity type.
+            ...archiveMathBrowseRows(host.api, () => {
+              showroomEnvironment?.();
+              showroomEnvironment = null;
+              host.applyEnvironment();
+              void host.enterEditor();
+            }),
             ...archiveMilkyWayBrowseRows(host.api, () => {
               showroomEnvironment?.();
               showroomEnvironment = null;
@@ -201,6 +215,10 @@ if (mode === "legacy") {
       __GRAPHYSX_ARCHIVE__: {
         levels: ARCHIVE_BALLZ_LEVELS,
         notRevived: ARCHIVE_BALLZ_NOT_REVIVED,
+        math: ARCHIVE_MATH_SCENES,
+        mathNotRevived: ARCHIVE_MATH_NOT_REVIVED,
+        buildMathLab: buildArchiveMathLab,
+        composeMathLab: composeArchiveMathLab,
         milkyway: ARCHIVE_MILKYWAY_SCENES,
         milkywayNotRevived: ARCHIVE_MILKYWAY_NOT_REVIVED,
         buildMilkyWay: buildArchiveMilkyWay,
