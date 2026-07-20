@@ -585,3 +585,41 @@ regression assertion that would have caught it.
 the BallZ arenas, and the vehicles were all already decoded *in this repo*, merely un-graduated. The
 workshop is also simply present at `C:\Users\Yanik\codes\GraphysX`, so nothing is blocked. Check the
 filesystem before believing a repo-roles table.
+
+## 2026-07-20 — `vehicles-r1`: the Impreza reaches the front door
+
+- **Archive Garage ships**, reachable from Browse Scenes: the recovered Impreza in its WRC livery
+  and the Cobra on lit turntables, the Piste Ovale as a table model. Twenty-five entities, all v2
+  vocabulary, all three meshes resolving. Fourth confirmation that "recovered material lives
+  upstream" is wrong — the cars were decoded in `src/legacy/cars-catalog.json` all along, reachable
+  only from `?host=legacy`, which builds three.js objects by hand. By §8.1's test, un-graduated.
+- **The step that actually mattered was registration, and it was nearly missed.**
+  `scripts/product-assets.mjs` derives the release manifest from the asset catalog, so an
+  unregistered mesh — *and every texture it references* — is pruned out of `dist/`. The garage
+  rendered perfectly in dev and would have **404'd in production**. Registering the three meshes
+  makes them ship, and the manifest follows `textureUrl` out of each payload so the five car
+  textures ship with them. Verified by listing `dist/` rather than trusting the build.
+- `vehicle` is a new asset category rather than reusing `prop` — a car is not a prop, and the
+  catalog is what agents discover through `api.assets()`.
+- **Browse Scenes gained composed rows.** A recovered scene is built by a function that spawns
+  entities, so it cannot be a static starter object. `main.ts` supplies the row because framing
+  needs the host, which the shelf deliberately does not have — that keeps the shelf from having to
+  know what a garage is.
+- **The smoke was moved off the agent's bespoke vite harness** (its own config, html entry and
+  mount module, all deleted) onto the real front-door path. The harness *could not have caught the
+  pruning bug*: it never fetched from `dist`. The replacement asserts on 4xx responses and on
+  `asset.status`, because a model that silently fails to load still exists as an entity — exactly
+  the false pass an entity-count assertion waves through.
+- **Not done, and named:** no drivable vehicle. Wheel joints and articulation are not v2
+  vocabulary, so a "drivable car" here could only be a textured box.
+
+### Two process notes
+
+- **`roundtrip` failed in the full gate and passed alone.** A background verify was running
+  concurrently — the documented two-fleet contention, not a regression. Confirmed by isolation
+  before blaming it, which is the rule that keeps a real red run from hiding in the noise.
+- **The `git add -A` hazard fired again, in the opposite direction.** My uncommitted one-line
+  `vehicle` category addition to `agent-world-assets.ts` was swept into another session's unrelated
+  commit (`0bc3f26 feat(envelope)`). Functionally fine — it is in `main` and the build is green —
+  but it is now the *third* instance. Stage by explicit path; it does not protect you from someone
+  else staging broadly.
