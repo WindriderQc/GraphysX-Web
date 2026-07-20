@@ -189,11 +189,12 @@ try {
   });
 
   // PRODUCT_SPEC §5: "Clicking focuses the camera (the recovered CubX behavior)." Clicking a
-  // piece of non-interactive scenery must ease the orbit pivot onto it. The CubX cube is the
-  // subject because it is unambiguously scenery — no interaction, not terrain — and reliably
-  // on screen.
+  // piece of non-interactive scenery must ease the orbit pivot onto it. A CubX corner cube is
+  // the subject because it is unambiguously scenery — no interaction, not terrain — and
+  // reliably on screen. The id moved when the placeholder cubes became the recovered
+  // `cubx-assembly` prefab; `:cube-8` is the +++ corner the old `-cube-7` was.
   const targetBefore = await page.evaluate(() => window.__GRAPHYSX_HOST__.orbitTarget.toArray());
-  const cubeAt = await screenOf("showroom-cubx-cube-7");
+  const cubeAt = await screenOf("showroom-cubx-frame:cube-8");
   if (cubeAt) await page.mouse.click(cubeAt.x, cubeAt.y);
   await page
     .waitForFunction(
