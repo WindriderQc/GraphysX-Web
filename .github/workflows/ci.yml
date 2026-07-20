@@ -14,7 +14,13 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # On a PR branch, a newer push makes the old gate moot — cancel it. On main this
+  # workflow is the deploy gate (called from deploy.yml), and a push must never cancel
+  # the in-flight gate of the previous push: that gate is the only thing that would have
+  # surfaced a broken main, and rapid pushes were killing it before it could go red.
+  # Observed: four consecutive main pushes, zero completed gates, production stuck on a
+  # commit from the day before while everyone believed newer work had shipped.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   verify:
