@@ -458,6 +458,22 @@ export type AgentWorldEnvelope = {
   cameraFar: number;
 };
 
+/**
+ * The scene's post-processing request. Bloom is the whole vocabulary for now: it is the
+ * pass the archive aesthetic actually needs — emissive rings, gates and beacons that
+ * glow instead of merely being bright (§14.5's "no shader pass" gap).
+ */
+export type AgentWorldPost = {
+  bloom: {
+    /** How strongly bright surfaces spill light, 0–3. The showpiece range is 0.4–1.0. */
+    strength: number;
+    /** Luminance below which nothing blooms, 0–1. Keep high so only emissives glow. */
+    threshold: number;
+    /** Spread of the glow, 0–1. */
+    radius: number;
+  };
+};
+
 export type AgentWorldEnvironment = {
   background: string;
   /**
@@ -472,6 +488,12 @@ export type AgentWorldEnvironment = {
    * the largest cannot be rendered at all inside the default far plane.
    */
   envelope: AgentWorldEnvelope | null;
+  /**
+   * Per-scene post-processing, or null for the bare renderer. Same contract as `overlay`:
+   * a pass must earn its frame budget (§4), so null means no composer even exists and
+   * costs nothing — only a scene that asks pays for what it asked for.
+   */
+  post: AgentWorldPost | null;
   /**
    * Per-scene generative 2D overlay, or null for none. Like `sky`, it is scene data the host
    * renders rather than a global setting — and off by default, because a 2D layer must earn its
@@ -884,6 +906,7 @@ const DEFAULT_ENVIRONMENT: AgentWorldEnvironment = {
   background: "#07141d",
   sky: null,
   envelope: null,
+  post: null,
   overlay: null,
   ground: {
     visible: true,
@@ -1689,7 +1712,7 @@ export class AgentWorldRuntime {
     // the ground, while the rendered sky and background silently stayed on the old values —
     // the same write-only parity gap that `world.loaded` closed for `create`/`load`, reopened
     // by a different entry point. Emitting here lets the host re-apply for every caller.
-    this.emit("environment.changed", [], { sky: this.environment.sky, overlay: this.environment.overlay, background: this.environment.background, envelope: this.environment.envelope });
+    this.emit("environment.changed", [], { sky: this.environment.sky, overlay: this.environment.overlay, background: this.environment.background, envelope: this.environment.envelope, post: this.environment.post });
   }
 
   private loadDefinition(source: AgentWorldDefinition): void {
@@ -2846,12 +2869,27 @@ function resolveEnvironment(source?: AgentWorldDefinition["environment"]): Agent
     background: source?.background ?? DEFAULT_ENVIRONMENT.background,
     sky,
     envelope: resolveEnvelope(source?.envelope),
+    post: resolvePost(source?.post),
     overlay,
     ground: { ...DEFAULT_ENVIRONMENT.ground, ...(source?.ground ?? {}) },
     physics: {
       gravity: sanitizeVector(source?.physics?.gravity ?? DEFAULT_ENVIRONMENT.physics.gravity, -1000, 1000, "physics.gravity")
     }
   };
+}
+
+function resolvePost(source: AgentWorldEnvironment["post"] | undefined): AgentWorldPost | null {
+  if (source === null || source === undefined) return DEFAULT_ENVIRONMENT.post;
+  if (typeof source !== "object" || typeof source.bloom !== "object" || source.bloom === null) {
+    throw new Error("environment.post must be { bloom } or null");
+  }
+  const entries = [["strength", source.bloom.strength, 0, 3], ["threshold", source.bloom.threshold, 0, 1], ["radius", source.bloom.radius, 0, 1]] as const;
+  for (const [label, value, minimum, maximum] of entries) {
+    if (!Number.isFinite(value) || value < minimum || value > maximum) {
+      throw new Error(`post.bloom.${label} must be a finite number between ${minimum} and ${maximum}`);
+    }
+  }
+  return { bloom: { strength: source.bloom.strength, threshold: source.bloom.threshold, radius: source.bloom.radius } };
 }
 
 function resolveEnvelope(source: AgentWorldEnvironment["envelope"] | undefined): AgentWorldEnvelope | null {

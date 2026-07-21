@@ -425,6 +425,24 @@ try {
         state: env2.cameraFar,
         object: host.camera.far,
       }, { before: before.envelope ? before.envelope.cameraFar : null, note: "default far is 260; asserting the projection actually widened" });
+
+      // Post/bloom: applied by the HOST as an EffectComposer that only exists while the
+      // scene asks. Object-observable both ways — the composer appears with real pass
+      // parameters, and clearing post tears it down again (a leaked composer would tax
+      // every scene that never asked for it).
+      api.transaction([{ op: "set-environment", environment: { post: { bloom: { strength: 0.8, threshold: 0.55, radius: 0.3 } } } }]);
+      const post2 = api.state().environment.post || {};
+      check("environment.post.bloom.strength", "environment", 0.8, {
+        state: post2.bloom ? post2.bloom.strength : undefined,
+        object: host.bloomPass ? host.bloomPass.strength : undefined,
+      }, { before: before.post ? before.post.bloom.strength : null });
+      check("environment.post.bloom.threshold", "environment", 0.55, {
+        state: post2.bloom ? post2.bloom.threshold : undefined,
+        object: host.bloomPass ? host.bloomPass.threshold : undefined,
+      }, { before: before.post ? before.post.bloom.threshold : null });
+      check("environment.post composer exists", "environment", true, { object: !!host.composer }, { before: false });
+      api.transaction([{ op: "set-environment", environment: { post: null } }]);
+      check("environment.post composer torn down", "environment", true, { object: !host.composer }, { before: false, note: "null means no composer exists at all — the bare renderer path" });
     }
 
     // ================= PERSISTENCE: export -> reload -> re-read =================

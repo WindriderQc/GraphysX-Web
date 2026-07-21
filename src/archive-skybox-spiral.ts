@@ -309,6 +309,10 @@ function buildDefinition(): AgentWorldDefinition {
       sky: "lostvalley",
       // 27×52 sits inside the host defaults; the course floats in its sky, so no ground.
       envelope: null,
+      // The course's rings, gates and beacons are all emissive — bloom is what turns
+      // "bright" into "glowing", which is the §14.5 shader pass this aesthetic was
+      // waiting on. Threshold high so only the emissives spill.
+      post: { bloom: { strength: 0.65, threshold: 0.6, radius: 0.4 } },
       ground: { visible: false, size: 36, color: "#0b1730", grid: false, gridColor: "#1d6f8a" },
     },
     entities,

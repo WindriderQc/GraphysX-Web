@@ -7,6 +7,7 @@ import type {
   AgentWorldEntityState,
   AgentWorldEntityType,
   AgentWorldEnvelope,
+  AgentWorldPost,
   AgentWorldMaterial,
   AgentWorldPhysicsMode,
   GraphysXAgentWorldApi,
@@ -195,12 +196,14 @@ export class PlatformEditor {
   private refreshQueued = false;
   /** The Environment sky dropdown, held so `refresh()` can re-read the world into it. */
   private skySelect: HTMLSelectElement | null = null;
-  private overlaySelect: HTMLSelectElement | null = null;
   /** Joined sky ids the dropdown was last built from, so it only rebuilds when they change. */
   private skyOptionSignature = "";
+  private overlaySelect: HTMLSelectElement | null = null;
   /** Envelope controls, held for the same reason as `skySelect` — see that comment. */
   private envelopeToggle: HTMLInputElement | null = null;
   private envelopeInputs: HTMLInputElement[] = [];
+  private postToggle: HTMLInputElement | null = null;
+  private postInputs: HTMLInputElement[] = [];
   private levelTile: MapEditorTile = "wall";
   private levelTool: LevelTool = "paint";
   /** Cell elements indexed `y * width + x`, so a drag can repaint one cell without a rebuild. */
@@ -536,14 +539,25 @@ export class PlatformEditor {
     // Read the world's sky back into the dropdown. Skipped while it has focus, so re-syncing
     // never yanks the list out from under someone mid-selection.
     if (this.skySelect && document.activeElement !== this.skySelect) {
+      this.syncSkyOptions();
       this.skySelect.value = state?.environment?.sky ?? "";
     }
     if (this.overlaySelect && document.activeElement !== this.overlaySelect) {
-      this.syncSkyOptions();
       this.overlaySelect.value = state?.environment?.overlay ?? "";
     }
     const envelopeFocused = document.activeElement === this.envelopeToggle
       || this.envelopeInputs.includes(document.activeElement as HTMLInputElement);
+    const postFocused = document.activeElement === this.postToggle
+      || this.postInputs.includes(document.activeElement as HTMLInputElement);
+    if (this.postToggle && !postFocused) {
+      const post = state?.environment?.post ?? null;
+      this.postToggle.checked = !!post;
+      const postValues = post ? [post.bloom.strength, post.bloom.threshold, post.bloom.radius] : [null, null, null];
+      this.postInputs.forEach((input, index) => {
+        input.value = postValues[index] === null ? "" : String(postValues[index]);
+        input.disabled = !post;
+      });
+    }
     if (this.envelopeToggle && !envelopeFocused) {
       const envelope = state?.environment?.envelope ?? null;
       this.envelopeToggle.checked = !!envelope;
@@ -1322,6 +1336,9 @@ export class PlatformEditor {
     // an agent's `api.create`, or `levels.play()`. The dropdown would read "No sky" over a
     // viewport plainly rendering one.
     this.skySelect = select;
+    // Assigned first: the option list comes from the live registry, not a snapshot.
+    this.syncSkyOptions();
+    select.value = this.deps.world.getEnvironment().sky ?? "";
 
     // The 2D overlay, alongside the sky: both are scene-declared layers the host renders.
     const overlay = document.createElement("select");
@@ -1336,9 +1353,6 @@ export class PlatformEditor {
       option.title = descriptor.description;
       overlay.append(option);
     }
-    // Assigned first: the option list comes from the live registry, not a snapshot.
-    this.syncSkyOptions();
-    select.value = this.deps.world.getEnvironment().sky ?? "";
     overlay.value = this.deps.world.getEnvironment().overlay ?? "";
     overlay.addEventListener("change", () => this.setOverlay(overlay.value || null));
     this.overlaySelect = overlay;
@@ -1406,10 +1420,63 @@ export class PlatformEditor {
     envelopeWrap.style.gap = "4px";
     envelopeWrap.append(envelopeToggle, fogNear, fogFar, cameraFar);
 
+    // Post/bloom, same contract as the envelope row: unchecked is the bare renderer (a
+    // real state — no composer exists), checked is strength / threshold / radius.
+    const postToggle = document.createElement("input");
+    postToggle.type = "checkbox";
+    postToggle.title = "Scene bloom pass (strength, threshold, radius)";
+    const makeRatio = (title: string) => {
+      const input = makeDistance(title);
+      input.step = "0.05";
+      input.max = "3";
+      return input;
+    };
+    const bloomStrength = makeRatio("Bloom strength (0–3)");
+    const bloomThreshold = makeRatio("Bloom threshold (0–1): luminance below this never blooms");
+    const bloomRadius = makeRatio("Bloom radius (0–1)");
+    const applyPost = () => {
+      if (!postToggle.checked) {
+        this.setPost(null);
+        return;
+      }
+      const next = { strength: Number(bloomStrength.value), threshold: Number(bloomThreshold.value), radius: Number(bloomRadius.value) };
+      if (bloomStrength.value === "" || bloomThreshold.value === "" || bloomRadius.value === "") return;
+      if (!(next.strength >= 0 && next.strength <= 3 && next.threshold >= 0 && next.threshold <= 1 && next.radius >= 0 && next.radius <= 1)) return;
+      this.setPost({ bloom: next });
+    };
+    postToggle.addEventListener("change", () => {
+      for (const input of [bloomStrength, bloomThreshold, bloomRadius]) input.disabled = !postToggle.checked;
+      if (postToggle.checked && bloomStrength.value === "") {
+        // The Spiral's tuning — proven values, and only emissives glow at this threshold.
+        bloomStrength.value = "0.65";
+        bloomThreshold.value = "0.6";
+        bloomRadius.value = "0.4";
+      }
+      applyPost();
+    });
+    for (const input of [bloomStrength, bloomThreshold, bloomRadius]) input.addEventListener("change", applyPost);
+    this.postToggle = postToggle;
+    this.postInputs = [bloomStrength, bloomThreshold, bloomRadius];
+    const currentPost = this.deps.world.getEnvironment().post;
+    if (currentPost) {
+      postToggle.checked = true;
+      const values = [currentPost.bloom.strength, currentPost.bloom.threshold, currentPost.bloom.radius];
+      this.postInputs.forEach((input, index) => {
+        input.value = String(values[index]);
+        input.disabled = false;
+      });
+    }
+    const postWrap = document.createElement("div");
+    postWrap.style.display = "flex";
+    postWrap.style.alignItems = "center";
+    postWrap.style.gap = "4px";
+    postWrap.append(postToggle, bloomStrength, bloomThreshold, bloomRadius);
+
     return this.section("Environment", [
       this.field("Sky", select),
       this.field("2D overlay", overlay),
       this.field("Envelope", envelopeWrap),
+      this.field("Bloom", postWrap),
     ]);
   }
 
@@ -1445,6 +1512,17 @@ export class PlatformEditor {
     this.deps.api.load({
       ...definition,
       environment: { ...definition.environment, envelope: envelope as never },
+    });
+    this.deps.onEnvironmentChanged?.();
+    this.select(null);
+  }
+
+  private setPost(post: AgentWorldPost | null): void {
+    const definition = this.deps.api.export();
+    if (!definition) return;
+    this.deps.api.load({
+      ...definition,
+      environment: { ...definition.environment, post: post as never },
     });
     this.deps.onEnvironmentChanged?.();
     this.select(null);

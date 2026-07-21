@@ -11,15 +11,21 @@ import {
   PMREMGenerator,
   Scene,
   SRGBColorSpace,
+  Vector2,
   Vector3,
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import {
   AgentWorldRuntime,
   GRAPHYSX_AGENT_DEMO_WORLD,
   type AgentWorldDefinition,
+  type AgentWorldPost,
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
 import { createAgentWorldApi } from "./agent-world-api";
@@ -107,6 +113,9 @@ export class PlatformHost {
   private readonly controls: OrbitControls;
   private readonly clock = new Clock();
   private readonly onResize = () => this.resize();
+  /** Post stack — exists only while the scene's `environment.post` asks for one. */
+  private composer: EffectComposer | null = null;
+  private bloomPass: UnrealBloomPass | null = null;
   private frame = 0;
   private disposed = false;
   private readonly unsubscribeEvents: () => void;
@@ -393,7 +402,42 @@ export class PlatformHost {
       this.camera.updateProjectionMatrix();
     }
     this.applySky(environment.sky);
+    this.applyPost(environment.post);
     this.applyOverlay(environment.overlay);
+  }
+
+  /**
+   * Build, retune, or drop the post stack to match `environment.post`. Null tears the
+   * composer down entirely — the bare-renderer path stays byte-identical to what it always
+   * was, so a scene that never asks pays nothing (§4's frame-budget rule, applied to
+   * shader passes).
+   */
+  private applyPost(post: AgentWorldPost | null): void {
+    if (!post) {
+      if (this.composer) {
+        this.composer.dispose();
+        this.composer = null;
+        this.bloomPass = null;
+      }
+      return;
+    }
+    if (!this.composer) {
+      const size = this.renderer.getSize(new Vector2());
+      this.composer = new EffectComposer(this.renderer);
+      this.composer.setPixelRatio(this.renderer.getPixelRatio());
+      this.composer.setSize(size.x, size.y);
+      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      this.bloomPass = new UnrealBloomPass(size.clone(), post.bloom.strength, post.bloom.radius, post.bloom.threshold);
+      this.composer.addPass(this.bloomPass);
+      // Tone mapping + sRGB conversion move here once a composer owns the frame; without
+      // this pass the composed output is linear and reads washed out.
+      this.composer.addPass(new OutputPass());
+    }
+    if (this.bloomPass) {
+      this.bloomPass.strength = post.bloom.strength;
+      this.bloomPass.radius = post.bloom.radius;
+      this.bloomPass.threshold = post.bloom.threshold;
+    }
   }
 
   /** Mount the scene's 2D overlay sketch, or clear the canvas when the scene asks for none. */
@@ -577,7 +621,10 @@ export class PlatformHost {
     // Arm one shadow rebuild per frame (see `autoUpdate = false` in the constructor). The
     // first `render()` below consumes it; any nested pass a scene entity triggers reuses it.
     this.renderer.shadowMap.needsUpdate = true;
-    this.renderer.render(this.scene, this.camera);
+    // One render call either way — the composer's RenderPass is the same scene/camera
+    // draw, followed by the passes the scene opted into.
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
     // The 2D layer draws in THIS frame, right after the 3D render — one shared loop, never a
     // second rAF. It is the last thing composited, so it sits over the scene.
     if (this.overlaySketch && this.overlayCtx && this.overlayWidth > 0) {
@@ -614,6 +661,7 @@ export class PlatformHost {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
     this.renderer.setSize(width, height, false);
+    this.composer?.setSize(width, height);
     this.camera.aspect = width / height || 1;
     this.camera.updateProjectionMatrix();
     // Match the overlay buffer to the viewport at device resolution, then scale the context so
@@ -641,6 +689,7 @@ export class PlatformHost {
     this.editor?.dispose();
     this.bridge.dispose();
     this.controls.dispose();
+    this.composer?.dispose();
     this.scene.remove(this.world.group);
     this.world.dispose();
     this.renderer.dispose();
