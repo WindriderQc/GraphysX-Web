@@ -135,15 +135,16 @@ which greys out the one- and two-pixel coloured stars this set is made of (max c
 The v1 bar is met, so what follows are **enrichments beyond it**, not gaps in it. Nothing
 here blocks a release; pick by value rather than by order.
 
-1. **`server/scene-store.mjs:89` needs a bounded retry on `rename`.** The only known *bug*
-   in this list. It does write-temp-then-`rename` for atomicity, and on Windows `rename` over
-   an existing target throws `EPERM` whenever a scanner or indexer momentarily holds the file.
-   It has surfaced as an intermittent `scene-store` smoke failure and has been misread as
-   Chromium teardown flake — it is not. Small, real, and currently owned by nobody.
-2. **Evolutionary / DNA entities** (§14 phase 4) — still legacy-only in `nature-lab.ts`. The
-   third Nature-of-Code system after flocking and force fields, and the last one with a real
-   recovered implementation to adapt.
-3. **Crowds** — welded inside `race-scene.ts`; needs extracting behind a v2 interface.
+1. ~~**`server/scene-store.mjs:89` needs a bounded retry on `rename`.**~~ **Done** — and it
+   had been done for a while without this list noticing. The retry landed as a drive-by inside
+   `0bc3f26` (`feat(envelope)`), an unrelated commit — which is exactly how a fixed bug stays
+   on a backlog: nobody greps the register when they fix something in passing. Five attempts,
+   `EPERM`/`EACCES`/`EBUSY`, backoff, temp cleaned up (`scene-store.mjs:92`). **Every entry in
+   this list is now checked against HEAD — three of them were already fixed when checked.**
+2. ~~**Evolutionary / DNA entities** (§14 phase 4)~~ — **Done**: `dna-r2` threaded `dna-tree`
+   through all twenty integration points and screenshotted it. This entry stayed stale for a
+   full session after the work shipped.
+3. ~~**Crowds** — welded inside `race-scene.ts`~~ — **Done**, `crowd-r1`; see the note below.
 4. ~~Prefabs are in the API but absent from the editor UI~~ — done: the library's Prefabs
    tab (the default tab) spawns through the same `spawnPrefab` an agent calls.
 5. Audio (19 sounds upstream, 4 vendored); ~~CubX recovered geometry (still 8 plain

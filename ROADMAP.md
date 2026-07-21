@@ -36,13 +36,16 @@ longer reachable from any served page.
 
 ## Defect register (real bugs, not wishes)
 
-1. **`server/scene-store.mjs:89`** — atomic `rename` needs a bounded retry; Windows
-   `EPERM` under contention. The only long-standing known bug; owned by nobody.
-2. **`agent-world-assets.ts` model recentring** — `loadAgentWorldModel` mis-places any
-   model whose `fitSize` differs from its native span (T·R·S order). Affects every
-   default-`fitSize` model; the garage works around it by loading at native span.
-3. **Point lights always render a marker sphere** — debug affordance leaking into
-   composed scenes; needs an opt-out (or default-off outside the editor).
+1. ~~**`server/scene-store.mjs:89`** — atomic `rename` needs a bounded retry~~ — **fixed** in
+   `0bc3f26`, a drive-by inside an unrelated commit. Verified against HEAD 2026-07-21.
+2. ~~**`agent-world-assets.ts` model recentring**~~ — **fixed**: the offset now goes through
+   the same factors the vertices do (`p = -S·center`), with the T·R·S reasoning recorded
+   inline at `agent-world-assets.ts:256`. Verified against HEAD 2026-07-21.
+3. ~~**Point lights always render a marker sphere**~~ — **fixed**: `marker?: boolean` on the
+   definition and the patch path, default true, serialised only when false. Verified at HEAD.
+
+   **All three of the above were already fixed when checked on 2026-07-21 — none had been
+   struck off. Verify a register entry against HEAD before spending a session on it.**
 4. **Runtime rollback with an attached gizmo** raises an uncaught error — gated in the
    UI, not fixed at source.
 5. **Sphere/heightfield cell-seam kick** (cannon-es narrowphase) and **water grey at
@@ -114,10 +117,15 @@ In spec order, all pre-existing commitments:
   there is no genome, inheritance, or selection. A v2 `forest` entity either keeps that
   honestly (a colour-family lineage) or grows a real genome; that design decision is the
   only non-mechanical part.
-- **Crowds** — the term maps to the NPC population system in `race-scene.ts` (~210 lines:
-  wandering humans, hunting zombies, infection, squash-on-contact). Harder than the other
-  graduations because it leans on the race scene's physics, player and audio; the v2 shape
-  needs a target concept before the port is honest.
+- ~~**Crowds**~~ — **done**, `crowd-r1`. The term mapped to the NPC population in
+  `race-scene.ts` (~207 lines:
+  wandering humans, hunting zombies, infection, squash-on-contact). The target concept this
+  entry asked for: a neutral instanced `crowd` entity owns population, positions and steering
+  (`wander`/`pursue`), while infection and squash stay game concerns expressed through the
+  rules vocabulary — the force-field precedent of entity-for-identity, pass-for-effect. The
+  physics went with it: members were cannon spheres, so spacing was a free side effect of the
+  solver, and an explicit separation pass replaces it — recorded as an adaptation, not a
+  recovery. `setRole` is the seam rules drive to express infection.
 - **Best-time persistence** — needs a store-side concept that doesn't exist yet; design
   it with the auth question in view, not before it.
 - **Milestones B/C** — live deltas beyond whole-document reload, then the authenticated

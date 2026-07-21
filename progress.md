@@ -1223,3 +1223,92 @@ five minutes ago deserves suspicion of your own code before the harness gets bla
 **Not done:** the showroom media pass (ambient sound + an imported-media showpiece), which is
 the natural next step now that both halves exist — an imported sky and a sound that fires
 from scene data are exactly what a front-door demo would show.
+
+## 2026-07-21 — `crowd-r1`: the last legacy system graduates, and the backlog was lying
+
+### Three of the register's bugs were already fixed
+
+Before writing anything, every entry in `ROADMAP.md`'s "Defect register (real bugs, not
+wishes)" was checked against HEAD. **All three were already fixed and none had been struck
+off.** The `scene-store` `rename` retry — described for weeks as "the only long-standing known
+bug; owned by nobody" — landed in `0bc3f26` as a drive-by inside `feat(envelope)`, an unrelated
+commit. The model-recentring bug and the point-light marker opt-out were likewise done. That is
+how a fixed bug survives on a backlog: nobody greps the register when they fix something in
+passing. A session was minutes from re-fixing a solved problem.
+
+The claim is sticky, too — the entry immediately above this one, written the same day by
+another session, still calls `EPERM`-on-`rename` "the one real outstanding bug, still unowned".
+It has a bounded retry at `scene-store.mjs:92`. **Check a register entry against HEAD before
+spending anything on it**; that instruction is now in the handoff, the roadmap and the spec.
+
+The same sweep found `environment.post` (bloom) fully implemented while `ROADMAP.md` still
+listed post-processing as unstarted Horizon 3 work. The first grep for `EffectComposer` returned
+only legacy hits and nearly caused a rebuild of a shipped feature; it was a bad invocation,
+caught only because the runtime already exported an `AgentWorldPost` type. **Two methods before
+believing an absence.**
+
+### The design call: entity for identity, rules for the game
+
+"Crowds" was never a symbol — it is a roadmap label for the NPC population in `race-scene.ts`
+(~207 lines). The roadmap's caveat that "the v2 shape needs a target concept before the port is
+honest" was correct, and a mechanical lift would not have worked: the recovered system is a
+*zombie-infection game mechanic* welded to physics bodies, the player's position, audio cues and
+the race win condition.
+
+What shipped graduates the **population and its steering** only. `setRole`/`getRole`/
+`memberPosition` are the seam a rules pass drives to express infection, so "what contact means"
+stays in the rules vocabulary instead of being hard-coded into core scene vocabulary. This is
+the `force-field` precedent — entity for identity, pass for effect — applied a second time.
+Consequence worth knowing: **nothing calls `setRole` yet.** That half is a seam, not a feature,
+and a reader expecting zombies out of the box will not find them.
+
+### Separation is an adaptation, and it failed the first way it was written
+
+The recovered NPCs never separated. Each was a cannon dynamic sphere, so inter-agent spacing was
+a *free side effect of solver sphere-sphere collisions* — there is no separation rule in
+`updateNpcs` to port. Dropping physics deletes spacing silently.
+
+The first implementation added separation as a steering *aim*, borrowing the flock module's
+1/distance weighting. A Node probe measured it doing **nothing**: min spacing 0.189 with it on
+versus 0.201 with it off. The cause is structural — members move at a fixed speed with a
+rate-limited turn, so a directional push cannot stop two of them converging. What the solver
+actually did was resolve overlap *positionally*, so the fix does too: one relaxation pass moving
+each overlapping pair apart by half the overlap. 0.839 vs 0.201.
+
+It is labelled an adaptation in the module header, the spec and the commit, because the rest of
+the module is faithful and someone will otherwise read this as recovered too.
+
+### `isColor` validates nothing, in three shipped modules
+
+The probe also caught `wanderColor: "not-a-color"` passing validation. `new Color(bad)` does
+**not** throw — three logs a warning and returns an unmodified colour, so the try/catch idiom
+around it accepts every string. The same helper ships today in `agent-world-flock.ts`,
+`agent-world-force-field.ts` and `agent-world-water.ts`: a bad colour passes validation and is
+then silently dropped at render. Fixed here by parsing into two sentinels and comparing; the
+other three are spun out rather than widening this change.
+
+### Gate evidence, and an honest gap
+
+Three full runs. The one real defect was **in the new test, not the feature**: `crd1` was added
+to the post-reload comparison sample but not to the `beforeReload` capture list, so it compared
+`undefined` against a real value and reported the crowd as failing to serialise. It reads
+exactly like a broken `serializeEntity`, and reading how `reloadFailures` is computed — rather
+than trusting the failure's name — is what pointed at the real cause.
+
+After that fix: run 2 was 20/21 (`playgrounds`), run 3 was 20/21 (`media`). Both reds are the
+same transport failure — `net::ERR_CONNECTION_RESET` on a **content-hashed** `/assets/` bundle,
+followed by a `waitForFunction` timeout that is a consequence, not a cause. It lands on a
+different smoke each run and every victim passes in isolation. That is the `net::ERR_*` class
+`HANDOFF.md` already documents with two prior transport-level fixes; it is spun out.
+
+**Not done, and stated rather than implied:** the harness flake was *not* attributed to base
+versus this diff by running the gate at HEAD. The reasoning is strong — the failures land on
+smokes that never touch `crowd`, on asset transport — but it is reasoning, not measurement.
+Attribution needs a separate worktree; `git stash` is wrong here because several sessions share
+this tree. One such session committed `agent-world-runtime.ts` and `prototype-app.ts`
+mid-session; both changesets survived because both staged by explicit path.
+
+Two process errors worth recording, because either would have produced a confident false
+report: `npm run verify | tail -60` returns **tail's** exit code, which was 0 while the gate was
+reporting three failures; and that same pipe truncated away every failure detail, costing an
+isolation run per smoke to recover. Redirect to a file and read the summary text.
