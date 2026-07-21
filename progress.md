@@ -1312,3 +1312,66 @@ Two process errors worth recording, because either would have produced a confide
 report: `npm run verify | tail -60` returns **tail's** exit code, which was 0 while the gate was
 reporting three failures; and that same pipe truncated away every failure detail, costing an
 isolation run per smoke to recover. Redirect to a file and read the summary text.
+
+## 2026-07-21 — `showroom-r2`: the front door makes a sound
+
+- **A chime ring in the showroom.** A torus trigger volume on the block stack's flight path
+  whose interaction is `play-sound "coin"`: knock the stack, the blocks fly through it, it
+  chimes. This is `play-sound` demonstrated as *scene vocabulary* on the front door — the
+  showroom's response to being crossed lives in the document, not in host code — and it is
+  literally the BallZ ring the sample was recovered from, which closes that loop.
+- A trigger has no collision response, so the ring never deflects the block that sounds it,
+  and the welcome hint now names it so the behaviour is discoverable rather than a secret.
+
+### Two halves of the brief deliberately NOT built
+
+- **No imported-media showpiece.** Imported media lives in the asset store and **production
+  has no store**, so an imported texture, model or sky on the front door would 404 in
+  production — exactly the asset-registration trap this log records biting three times in a
+  single day. The smoke now asserts the ring's sound is a *curated* one (`source ===
+  "BallZ 2015 archive"`), so a later edit cannot quietly reintroduce it. The import pipeline
+  is demonstrated where it actually works: the editor's Media tab and import dialog.
+- **No ambient sound.** All four shipping samples are short effect blips — coin, jump, and two
+  countdown beeps. None of them is ambience, and looping a coin chime would be worse than
+  silence. Recorded rather than faked, the same way `archive-milkyway` refused to invent
+  orbits that were not in the record. A genuine ambient bed needs a vendored loop that does
+  not exist yet.
+
+### The assertion that could not see the bug
+
+The ring shipped in its first draft with `rotationDegrees: [90, 0, 0]`, which lays a torus
+**flat** like a horizontal hoop. A torus is authored in the XY plane with its hole along Z —
+which is the exact axis the blocks travel — so the correct answer was no rotation at all.
+
+**Every assertion passed in both versions.** A torus's collider is an axis-aligned box
+(`[diameter, tube*2, diameter]`), so `trigger.enter` and `interaction.sound` fired identically
+whether the ring stood up or lay flat; the flat one simply read as an edge-on line that nothing
+passed through. Only the screenshot could tell them apart. This is the sharpest case yet for
+the rule this log keeps restating: photograph the thing, because a green assertion is evidence
+about the collider, not about what a visitor sees.
+
+### Headless measurement lies about this scene, three ways
+
+All three produced confident false readings before being caught:
+
+- **The scene was still loading** when a baseline event sequence was captured — 109
+  `entity.spawned` events and two `world.loaded` arrived *after* it, so the interactions were
+  fired at entities that were then replaced. Wait for the entity count to go stable, not for a
+  guessed duration.
+- **rAF advances ~0.3s of simulation per 2.5s of wall clock** here: 92 entities with terrain
+  and water under software WebGL. Real-time waiting measures the renderer, not the simulation,
+  and reports zero crossings for a ring that works. Step deterministically with `api.step()`.
+- **The first play of a sound needs ~600ms** to fetch and decode (`coin.wav` is 419 KB), so a
+  1200ms settle read zero one-shots for audio that fires correctly at 3500ms.
+
+Verified after fixing all three: six blocks knocked → **6 trigger crossings → 6
+`interaction.sound` events → 6 actual overlapping one-shots**. That last number is also the
+evidence for `audio-r2`'s decision not to key one-shots by entity id — six chimes at once, none
+evicting another.
+
+### Gate
+
+Full `npm run verify`: **all 22 checks passed** (20 smokes + typecheck + build — the array grew again mid-session, `world1` landed while this was in flight). `showroom` grew a `chimeRing` block: the entity is present and a trigger, its interaction is
+`play-sound` on a curated sound, and knocking the stack produces at least one crossing and one
+sound event — stepped deterministically, with the reason written beside it so the next person
+does not "fix" it back into a real-time wait.

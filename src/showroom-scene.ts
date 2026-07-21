@@ -150,6 +150,35 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     tags: ["showroom", "kinetic"],
   }));
 
+  // The chime ring: knock a block and it sounds as it passes through.
+  //
+  // This is the `play-sound` archetype on the front door — a trigger volume whose response
+  // to being crossed is a sound named by the document, so the showroom demonstrates audio
+  // as *scene vocabulary* rather than as host code that happens to play a file. It is the
+  // BallZ ring, which is where the sample comes from, closing the loop on the archive.
+  //
+  // A trigger has no collision response, so it never deflects the block that sounds it, and
+  // `coin` is one of the four curated samples that actually ship in the release manifest —
+  // an imported sound here would 404 in production, which has no asset store.
+  const chimeRing: AgentWorldEntityDefinition = {
+    id: "showroom-chime-ring",
+    type: "torus",
+    label: "Chime Ring",
+    geometry: { radius: 1.05, tube: 0.09 },
+    // On the blocks' flight path: they start at z=2.6 and are impulsed toward -Z. NO
+    // rotation is deliberate — a torus is authored in the XY plane with its hole along Z,
+    // which is exactly the axis the blocks travel, so they fly *through* it. Standing it
+    // up with a 90° X turn (tried first) lays it flat instead, where it reads as an
+    // edge-on line and nothing passes through the hole. The trigger fired either way,
+    // because a torus collider is an axis-aligned box — the assertions could not tell the
+    // two apart, only the screenshot could.
+    transform: { position: [0, 1.45, 0.5] },
+    material: { color: "#ffe6a3", emissive: "#6b4a10", emissiveIntensity: 0.85, roughness: 0.3, metalness: 0.4 },
+    physics: { mode: "trigger" },
+    interactions: [{ id: "ring-chime", type: "play-sound", sound: "coin", volume: 0.55 }],
+    tags: ["showroom", "audio"],
+  };
+
   const orbs: AgentWorldEntityDefinition[] = [-2.9, 2.9].map((x, i): AgentWorldEntityDefinition => ({
     id: `showroom-orb-${i}`,
     type: "sphere",
@@ -306,6 +335,7 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
       },
       ...stack,
       ...orbs,
+      chimeRing,
       ...flocks,
     ],
   });

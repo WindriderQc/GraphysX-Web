@@ -36,6 +36,29 @@ try {
     const p = h.camera.position;
     return { x: p.x, z: p.z, frame: h.frameCount };
   });
+  // The front door plays an entry move on load. It has to be waited out before the idle orbit
+  // is measured: the check below infers auto-orbit from ANY camera drift, so probing during
+  // the intro would pass while proving nothing about the orbit. Assert the intro separately
+  // rather than disabling it — both are real front-door behaviour.
+  const introStart = await probeCam();
+  await page.waitForFunction(() => window.__GRAPHYSX_HOST__.introPlaying === false, null, { timeout: 20000 });
+  const introEnd = await probeCam();
+  out.introMoved = Math.hypot(introEnd.x - introStart.x, introEnd.z - introStart.z);
+  // The move must land on the authored framing, not merely stop somewhere, and the exposure
+  // must return to full — an intro that leaves the scene dimmed is a bug, not a flourish.
+  // `introMoved` is recorded but NOT asserted: page setup outlasts the 2.6s move, so the
+  // start of it is not observable from here and the number is the tail only. Completion is
+  // asserted through `introCompleted` instead, which cannot be confused with "no intro ran".
+  out.introLanded = await page.evaluate(() => {
+    const h = window.__GRAPHYSX_HOST__;
+    const p = h.camera.position;
+    return {
+      completed: h.introCompleted === true,
+      exposure: h.renderer.toneMappingExposure,
+      framed: Math.hypot(p.x - 9, p.y - 12, p.z - 22) < 1.5,
+    };
+  });
+
   const a = await probeCam();
   await page.waitForTimeout(1500);
   const b = await probeCam();
@@ -84,6 +107,31 @@ try {
   out.impulseMoved = blockBefore && blockAfter
     ? Number(Math.hypot(blockAfter[0] - blockBefore[0], blockAfter[1] - blockBefore[1], blockAfter[2] - blockBefore[2]).toFixed(3))
     : 0;
+
+  // The chime ring: knocking the stack must actually sound it, from scene data alone.
+  // Stepped deterministically rather than waited on — the headless rAF loop advances only
+  // ~0.3s of sim per 2.5s of wall clock on this 92-entity scene under software WebGL, so
+  // real-time waiting measures the renderer, not the simulation, and reports a false zero.
+  out.chimeRing = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const ring = api.state().entities.find((e) => e.id === "showroom-chime-ring");
+    if (!ring) return { present: false };
+    const before = api.events().sequence;
+    for (let i = 0; i < 6; i += 1) api.interact(`showroom-block-${i}`);
+    for (let t = 0; t < 150; t += 1) api.step(1 / 60);
+    const events = api.events({ since: before }).events;
+    return {
+      present: true,
+      mode: ring.physics?.mode ?? null,
+      sound: ring.interactions?.[0]?.sound ?? null,
+      type: ring.interactions?.[0]?.type ?? null,
+      // A curated sound, not an imported one: production has no asset store, so an import
+      // here would 404 exactly the way the thrice-repeated asset-registration trap did.
+      soundIsCurated: api.sounds().some((s) => s.id === ring.interactions?.[0]?.sound && s.source === "BallZ 2015 archive"),
+      triggerEnters: events.filter((e) => e.type === "trigger.enter").length,
+      soundsFired: events.filter((e) => e.type === "interaction.sound").length,
+    };
+  });
 
   // Where to click for bare ground. This used to be the hardcoded pixel (300, 630), which
   // silently stopped being ground the moment the showroom was recomposed — a foreground tree
@@ -320,7 +368,18 @@ const ok =
   out.editorHiddenInitially &&
   out.entityCount > 15 &&
   out.autoOrbiting &&
+  // The entry move ran, landed on the authored framing, and restored full exposure.
+  out.introLanded?.completed === true &&
+  out.introLanded?.framed === true &&
+  out.introLanded?.exposure > 1.0 &&
   out.impulseMoved > 0.15 &&
+  out.chimeRing?.present &&
+  out.chimeRing?.mode === "trigger" &&
+  out.chimeRing?.type === "play-sound" &&
+  out.chimeRing?.sound === "coin" &&
+  out.chimeRing?.soundIsCurated &&
+  out.chimeRing?.triggerEnters >= 1 &&
+  out.chimeRing?.soundsFired >= 1 &&
   out.ballDropped &&
   out.spawnedOne &&
   ballCameToRest &&
