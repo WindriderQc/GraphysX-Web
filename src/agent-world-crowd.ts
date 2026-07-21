@@ -454,7 +454,12 @@ export class AgentWorldCrowdSystem {
     const size = config.memberSize;
     // The recovered body, proportioned off `memberSize` rather than pinned at the archive's
     // absolute numbers: torso 0.24/0.3 × 0.62 and head r=0.2 against an overall height of 0.82.
-    const torsoGeometry = new CylinderGeometry(size * 0.29, size * 0.37, size * 0.76, 12);
+    // Proportioned so the torso's BOTTOM lands exactly on y=0 (see `writeInstances`): a
+    // half-height of 0.36 placed at 0.36. The first cut placed a 0.38 half-height at 0.44 and
+    // every member hovered 0.05 above the ground — invisible in any assertion, obvious the
+    // moment it was photographed. The head is also wider than the torso's top (0.24 vs 0.22)
+    // so it reads as a head on shoulders rather than a ball sunk into a neck.
+    const torsoGeometry = new CylinderGeometry(size * 0.22, size * 0.34, size * 0.72, 12);
     const headGeometry = new SphereGeometry(size * 0.24, 14, 10);
     const material = (): MeshStandardMaterial =>
       new MeshStandardMaterial({ roughness: 0.62, metalness: 0.08, emissiveIntensity: config.emissiveIntensity });
@@ -698,11 +703,12 @@ export class AgentWorldCrowdSystem {
       this.dummy.rotation.set(0, Math.atan2(heading.x, heading.z), 0);
       this.dummy.scale.setScalar(1);
 
-      this.dummy.position.set(position.x, size * 0.44, position.z);
+      // Torso centre = half its height, so the feet sit on the entity's ground plane.
+      this.dummy.position.set(position.x, size * 0.36, position.z);
       this.dummy.updateMatrix();
       this.torso.setMatrixAt(index, this.dummy.matrix);
 
-      this.dummy.position.set(position.x, size * 0.96, position.z);
+      this.dummy.position.set(position.x, size * 0.78, position.z);
       this.dummy.updateMatrix();
       this.head.setMatrixAt(index, this.dummy.matrix);
     }
