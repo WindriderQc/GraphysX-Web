@@ -64,20 +64,39 @@ try {
       if (o.userData && o.userData.agentLightMarker && markerVisible === null) markerVisible = o.visible;
     });
 
+    // --- scenery must not collect ----------------------------------------------------
+    // Triggers respond to ANY mover, so a mover whose AABB sweeps a ring's box genuinely
+    // collects it — the rotator at its legacy height toggled rings 7, 8 and 12 every
+    // rotation. After 210 steps of movers moving, the only collected ring must be ring 1:
+    // the authored spawn sits inside its box, so the resting ball crossed it at settle.
+    const hiddenAfterSettle = api.query({ tag: "collectible" }).filter((r) => r.visible === false).length;
+
     // --- finishing early must not count ----------------------------------------------
+    // Park OUTSIDE every trigger volume between crossings. Parking at the spawn re-enters
+    // ring 1's box (0.5 units away) on every pull-back, and toggle-visibility genuinely
+    // toggles — the rules layer dedupes collection, but visibility flips back on. A rolling
+    // ball crosses each ring once; the harness must too.
+    const PARK = [0, 0.6, 24.5];
     const teleport = (position) => {
       api.update("spiral-ball", { transform: { position } });
       api.step(1 / 60);
-      api.update("spiral-ball", { transform: { position: [0, 0.6, 18.5] } });
+      api.update("spiral-ball", { transform: { position: PARK } });
       api.step(1 / 60);
     };
     teleport([0, 0.6, 21]);
     const earlyPhase = api.rules.status().phase;
 
     // --- complete it for real: rings, then halfway, then finish -----------------------
-    for (const ring of rings) teleport([ring.position[0], ring.position[1], ring.position[2]]);
+    // Skip rings already collected (ring 1, crossed at settle): a rolling ball crosses each
+    // ring once, and a second crossing genuinely toggles it back into existence.
+    for (const ring of rings) {
+      if (api.query({ ids: [ring.id] })[0].visible === false) continue;
+      teleport([ring.position[0], ring.position[1], ring.position[2]]);
+    }
     const afterRings = api.rules.status();
-    teleport([-2.7, 0.6, -22]);
+    // Probe the halfway gate near its west end: the gate spans x -9.2..3.8, and probing at
+    // the authored centre [-2.7, ...] grazes ring 10's box half a unit behind the gate.
+    teleport([-8, 0.6, -22]);
     const afterHalf = api.rules.status();
     teleport([0, 0.6, 21]);
     const finalStatus = api.rules.status();
@@ -99,6 +118,7 @@ try {
       accentMarkerState: accent?.marker ?? null,
       markerVisible,
       earlyPhase,
+      hiddenAfterSettle,
       collectedAfterRings: afterRings.collected.length,
       checkpointAfterHalf: afterHalf.checkpointIndex,
       finalPhase: finalStatus.phase,
@@ -136,6 +156,7 @@ const ok =
   r.accentMarkerState === false &&
   r.markerVisible === false &&
   r.earlyPhase === "running" &&
+  r.hiddenAfterSettle === 1 &&
   r.collectedAfterRings === 16 &&
   r.checkpointAfterHalf === 1 &&
   r.finalPhase === "complete" &&

@@ -19,6 +19,9 @@
  * - Ring heights: the legacy rings float on a flying line (y 1.5–2.1). The v2 ball rolls,
  *   so every ring is lowered to rolling height and stood upright — a hoop you roll through,
  *   the same adaptation the BallZ arenas made.
+ * - The sky-rotator rides at 1.6, 0.25 above its legacy height: lowering the rings put
+ *   their tops inside the bar's swept AABB, and a trigger's interactions fire for any
+ *   mover, so the grazing bar collected rings 7, 8 and 12 on every rotation.
  * - The spawn steps 2.5 units north of the legacy start so the run does not begin standing
  *   inside its own finish trigger.
  * - Glass curbs along each slab's exposed edges: the legacy racer respawned a fallen ball;
@@ -86,7 +89,7 @@ export const SKYBOX_SPIRAL_SCENE_ID = "archive-skybox-spiral";
 export const SKYBOX_SPIRAL_PROVENANCE = {
   source: "race-definitions.ts skybox-spiral (legacy authored course)",
   faithful: "slab/rail/scenery/mover/ring placement, palette, sky, start/halfway/finish lines",
-  adapted: "pistons as closed-spline kinematics; rotator as spin; rings at rolling height; spawn 2.5 north of the finish line; containment curbs",
+  adapted: "pistons as closed-spline kinematics; rotator as spin, raised 0.25 clear of the lowered rings; rings at rolling height; spawn 2.5 north of the finish line; containment curbs",
   absent: "atmosphere day/night cycle; champion ghost",
 } as const;
 
@@ -180,11 +183,18 @@ function buildDefinition(): AgentWorldDefinition {
       },
     );
   }
+  // The rotator rides 0.25 above its legacy height (1.35). The legacy bar swept the flying
+  // line the rings floated on; this port lowered the rings to rolling height, and at 1.35
+  // the bar's AABB grazes the tops of rings 7, 8 and 12 (bar bottom 1.20, ring top 1.27).
+  // Triggers respond to ANY mover — that is what lets the rules smoke drive a kinematic
+  // subject — so a grazing bar genuinely collects rings, toggling them in and out of
+  // existence every rotation. Raising the bar restores the legacy relationship: scenery
+  // sweeping the sky line, never touching the course.
   entities.push({
     id: "sky-rotator",
     type: "box",
     label: "sky rotator",
-    transform: { position: [2.4, 1.35, -13] },
+    transform: { position: [2.4, 1.6, -13] },
     geometry: { width: 9.4, height: 0.3, depth: 0.3 },
     material: { ...PALETTE.danger },
     physics: { mode: "kinematic" },
