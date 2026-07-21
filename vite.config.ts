@@ -44,7 +44,8 @@ export default defineConfig(({ command }) => {
     publicDir: prune ? false : "public",
     plugins: prune ? [productAssets()] : [],
     server: {
-      port: 4173
+      // PORT lets a second checkout/session run its own dev server beside the default one.
+      port: Number(process.env.PORT ?? 4173)
     }
   };
 });
