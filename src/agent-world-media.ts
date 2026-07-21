@@ -261,9 +261,9 @@ async function browse(path = ""): Promise<AgentWorldResult<AgentMediaListing>> {
     );
     const files = payload.files.map((file) => ({
       ...file,
-      convertible: CONVERTIBLE_MODEL_EXTENSIONS.has(file.extension),
+      convertible: CONVERTIBLE_MODEL_EXTENSIONS.has(file.extension) || file.extension === ".dds",
       usable:
-        (file.kind === "texture" && LOADABLE_TEXTURE_EXTENSIONS.has(file.extension))
+        (file.kind === "texture" && (LOADABLE_TEXTURE_EXTENSIONS.has(file.extension) || file.extension === ".dds"))
         || (file.kind === "model" && CONVERTIBLE_MODEL_EXTENSIONS.has(file.extension))
         || file.kind === "sound",
     }));
@@ -297,6 +297,35 @@ async function register(options: AgentMediaRegisterOptions): Promise<AgentWorldR
 async function importPath(path: string, options: AgentMediaImportOptions = {}): Promise<AgentWorldResult<AgentWorldMediaDescriptor>> {
   const extension = extensionOf(path);
   try {
+    // DDS is a GPU container the runtime's TextureLoader cannot decode, so imports
+    // convert it here: CPU-decode the DXT blocks, re-encode PNG, store that. The
+    // archive's sky faces and detail maps become ordinary textures on the way in.
+    if (extension === ".dds") {
+      const fileName = path.split("/").pop() ?? path;
+      const response = await fetch(`${state.baseUrl}/datalake/file?path=${encodeURIComponent(path)}`);
+      if (!response.ok) throw new Error(`Could not read ${path} from the datalake (${response.status})`);
+      const { decodeDds } = await import("./dds-decode");
+      const decoded = decodeDds(await response.arrayBuffer());
+      const canvas = document.createElement("canvas");
+      canvas.width = decoded.width;
+      canvas.height = decoded.height;
+      const draw = canvas.getContext("2d");
+      if (!draw) throw new Error("A 2D canvas context is required to convert DDS");
+      // Copy-construct: TS types ImageData's backing store as a plain ArrayBuffer.
+      draw.putImageData(new ImageData(new Uint8ClampedArray(decoded.pixels), decoded.width, decoded.height), 0, 0);
+      const blob = await new Promise<Blob | null>((resolveBlob) => canvas.toBlob(resolveBlob, "image/png"));
+      if (!blob) throw new Error("PNG encoding failed");
+      return register({
+        fileName: fileName.replace(/\.dds$/i, ".png"),
+        kind: "texture",
+        id: options.id,
+        label: options.label,
+        category: options.category ?? "imported",
+        source: `Datalake/${path} (DXT decoded)`,
+        defaultRepeat: options.defaultRepeat,
+        data: blob,
+      });
+    }
     // Foreign mesh formats take the conversion path: fetch the bytes, parse with three's
     // loaders, upload the runtime's own format. Everything else is a server-side copy.
     if (CONVERTIBLE_MODEL_EXTENSIONS.has(extension)) {

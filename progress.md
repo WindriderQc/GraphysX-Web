@@ -917,3 +917,16 @@ author: the archive trunk is 0.78, so `archive-grove` is short trees over a wide
 
 **Still blocked from pushing:** `spiral` remains red (`collectedAfterRings 16` / `hiddenRings 12`).
 Twelve commits are held behind that one ring-toggle fix, which is in flight in its own session.
+
+### media-r1 addendum 2: DDS decodes on the way in, and folders import in one click
+
+- **`.dds` imports convert to PNG in-browser** (`src/dds-decode.ts`): a ~150-line CPU DXT1/
+  DXT3/DXT5 + uncompressed-masks reader, deliberately not three's DDSLoader — that hands back
+  still-compressed mipmaps for the GPU, exactly what a PNG re-encode cannot use. Top mip only;
+  an import wants the image, not the pyramid. Driven against the real
+  `StockRoom/Sky/Clouds_PosX.dds` (512² sky face, plausible cloud pixels, applies as an
+  ordinary texture) and gated with a hand-packed one-block DXT1 fixture asserting the decoded
+  pixels are exactly the encoded red.
+- **"Select all" in the import dialog** toggles every importable file in the folder — a
+  141-file Stockroom sweep is now two clicks (select all, import), with the same sequential
+  truthful progress line.

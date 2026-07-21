@@ -42,6 +42,23 @@ function tinyWav() {
   return buffer;
 }
 
+/** A 4×4 solid-red DXT1 DDS — one block, hand-packed, to prove the in-browser decode. */
+function tinyDds() {
+  const buffer = Buffer.alloc(128 + 8);
+  buffer.write("DDS ", 0);
+  buffer.writeUInt32LE(124, 4);                      // header size
+  buffer.writeUInt32LE(0x1007, 8);                   // caps|height|width|pixelformat
+  buffer.writeUInt32LE(4, 12);                       // height
+  buffer.writeUInt32LE(4, 16);                       // width
+  buffer.writeUInt32LE(32, 76);                      // pixel format size
+  buffer.writeUInt32LE(0x4, 80);                     // FOURCC flag
+  buffer.write("DXT1", 84);
+  buffer.writeUInt16LE(0xf800, 128);                 // c0 = pure red (c0 > c1 → opaque)
+  buffer.writeUInt16LE(0x0000, 130);                 // c1 = black
+  buffer.writeUInt32LE(0, 132);                      // all texels use c0
+  return buffer;
+}
+
 /** A unit tetrahedron: the smallest OBJ that converts to real, closed geometry. */
 const OBJ_TEXT = `# smoke tetrahedron
 v 0 0 0
@@ -70,6 +87,7 @@ try {
   await writeFile(path.join(datalakeDir, "smoke-tetra.obj"), OBJ_TEXT, "utf8");
   await writeFile(path.join(datalakeDir, "Textures", "smoke-teal.png"), PNG_BYTES);
   await writeFile(path.join(datalakeDir, "smoke-blip.wav"), tinyWav());
+  await writeFile(path.join(datalakeDir, "Textures", "smoke-red.dds"), tinyDds());
 
   store = await startSceneStore({
     port: 0,
@@ -160,6 +178,34 @@ try {
       length: decoded.value.heights.length,
       spawnOk: spawn.ok,
       hasTerrain: !!entity?.terrain,
+    };
+  });
+
+  // DDS converts to PNG on the way in: decode the DXT block in-browser, store the PNG,
+  // register it as an ordinary texture, and prove the pixels survived (solid red).
+  out.dds = await page.evaluate(async () => {
+    const api = window.__GRAPHYSX__;
+    const imported = await api.media.import("Textures/smoke-red.dds");
+    if (!imported.ok || !imported.value) return { ok: false, error: imported.error ?? null };
+    const image = await new Promise((resolveImage, rejectImage) => {
+      const element = new Image();
+      element.crossOrigin = "anonymous";
+      element.onload = () => resolveImage(element);
+      element.onerror = () => rejectImage(new Error("stored PNG failed to load"));
+      element.src = imported.value.url;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const draw = canvas.getContext("2d");
+    draw.drawImage(image, 0, 0);
+    const pixel = draw.getImageData(1, 1, 1, 1).data;
+    return {
+      ok: true,
+      file: imported.value.file,
+      dims: [image.width, image.height],
+      pixel: [...pixel],
+      registered: api.textures().some((t) => t.id === imported.value.id),
     };
   });
 
@@ -278,6 +324,13 @@ const ok =
   out.terrain?.length === 33 * 33 &&
   out.terrain?.spawnOk &&
   out.terrain?.hasTerrain &&
+  out.dds?.ok &&
+  out.dds?.file === "smoke-red.png" &&
+  out.dds?.dims?.[0] === 4 &&
+  out.dds?.pixel?.[0] === 255 &&
+  out.dds?.pixel?.[1] === 0 &&
+  out.dds?.pixel?.[3] === 255 &&
+  out.dds?.registered &&
   out.sound?.ok &&
   out.sound?.listed &&
   out.sound?.spawnOk &&

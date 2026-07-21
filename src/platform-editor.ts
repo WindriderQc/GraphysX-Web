@@ -2541,12 +2541,26 @@ ${formula.provenance.note}`),
     status.className = "gx-lv-status";
     this.mediaStatus = status;
 
+    // Bulk selection: a 141-file Stockroom folder should be one click, not 141.
+    const selectAll = document.createElement("button");
+    selectAll.type = "button";
+    selectAll.className = "gx-ed-chip";
+    selectAll.textContent = "Select all";
+    selectAll.title = "Toggle every importable file in this folder";
+    selectAll.addEventListener("click", () => {
+      const usable = (this.mediaListing?.files ?? []).filter((file) => file.usable);
+      const allSelected = usable.length > 0 && usable.every((file) => this.mediaSelection.has(file.path));
+      this.mediaSelection.clear();
+      if (!allSelected) for (const file of usable) this.mediaSelection.add(file.path);
+      this.renderMediaDialog();
+    });
+
     const foot = document.createElement("div");
     foot.className = "gx-md-foot";
     const hint = document.createElement("span");
     hint.className = "gx-ed-hint";
-    hint.textContent = "Click files to select. Textures and sounds copy as-is; OBJ/GLTF/GLB/FBX/STL/3DS convert in the browser. You can also drop files here to upload them.";
-    foot.append(hint, importButton);
+    hint.textContent = "Click files to select. Textures and sounds copy as-is; OBJ/GLTF/GLB/FBX/STL/3DS and DDS convert in the browser. You can also drop files here to upload them.";
+    foot.append(hint, selectAll, importButton);
 
     panel.append(head, body, foot, status);
 
