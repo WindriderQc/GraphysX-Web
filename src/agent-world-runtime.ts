@@ -7,6 +7,16 @@ import {
   type AgentWorldFormulaDescriptor,
   type ResolvedAgentWorldFormula,
 } from "./agent-world-formula";
+import {
+  AgentWorldDnaSystem,
+  GRAPHYSX_AGENT_WORLD_DNA,
+  findDnaSystem,
+  resolveAgentWorldDna,
+  type AgentWorldDna,
+  type AgentWorldDnaDescriptor,
+  type AgentWorldDnaReadout,
+  type ResolvedAgentWorldDna,
+} from "./agent-world-dna";
 import { GRAPHYSX_AGENT_WORLD_OVERLAYS, isOverlayId, type AgentWorldOverlayDescriptor, type AgentWorldOverlayId } from "./agent-world-overlay";
 import {
   GRAPHYSX_AGENT_RULES_CAPABILITIES,
@@ -189,6 +199,7 @@ export type AgentWorldEntityType =
   | "flock"
   | "force-field"
   | "formula-field"
+  | "dna-tree"
   | "sound"
   | "ambient-light"
   | "directional-light"
@@ -367,6 +378,8 @@ export type AgentWorldEntityDefinition = {
   flock?: AgentWorldFlock;
   /** Recovered Math Game molecule field. Only valid on `formula-field` entities. */
   formula?: AgentWorldFormula;
+  /** Recovered Living Forest genome. Only valid on `dna-tree` entities. */
+  dna?: AgentWorldDna;
   /**
    * Force field configuration. Only valid on `force-field` entities. Unlike every other
    * field here, this one describes what the entity does to *other* entities — see the module
@@ -426,6 +439,8 @@ export type AgentWorldEntityPatch = {
   flock?: AgentWorldFlock;
   /** Patch the formula of a `formula-field` entity. Replaces the configuration. */
   formula?: AgentWorldFormula;
+  /** Patch the dna of a `dna-tree` entity. Merged over the current configuration. */
+  dna?: AgentWorldDna;
   /** Patch the field of a `force-field` entity. Merged over the current configuration. */
   forceField?: AgentWorldForceField;
   interactions?: AgentWorldInteraction[];
@@ -567,6 +582,11 @@ export type AgentWorldEntityState = {
    * produced without re-implementing the archive maths.
    */
   formula: (ResolvedAgentWorldFormula & { moleculeCount: number; minHeight: number; maxHeight: number }) | null;
+  /**
+   * DNA configuration plus the live readout — expressed genome, per-tree hues, growth and
+   * season phase — so an agent can read what evolution produced without replaying it.
+   */
+  dna: (ResolvedAgentWorldDna & AgentWorldDnaReadout) | null;
   /**
    * Force field configuration plus live readings, for the same reason the flock reports
    * `averageSpeed`: a field that is present, enabled, and silently affecting nothing — wrong
@@ -728,6 +748,8 @@ export type GraphysXAgentWorldApi = {
   forceFields(): readonly AgentWorldForceFieldDescriptor[];
   /** The recovered Math Game formula presets (Scene3D/Formulas.cpp). */
   formulas(): readonly AgentWorldFormulaDescriptor[];
+  /** The recovered Living Forest genome presets (nature-lab.ts). */
+  dna(): readonly AgentWorldDnaDescriptor[];
   importLegacyXml(xml: string, options?: { id?: string; label?: string }): AgentWorldResult<{
     state: AgentWorldState;
     sourceEntityCount: number;
@@ -801,6 +823,7 @@ type ResolvedEntity = {
   flock: ResolvedAgentWorldFlock | null;
   forceField: ResolvedAgentWorldForceField | null;
   formula: ResolvedAgentWorldFormula | null;
+  dna: ResolvedAgentWorldDna | null;
   physics: ResolvedAgentWorldPhysics | null;
   intensity: number;
   distance: number;
@@ -1069,6 +1092,11 @@ export class AgentWorldRuntime {
   /** The recovered Math Game formula presets. */
   listFormulas(): readonly AgentWorldFormulaDescriptor[] {
     return deepClone(GRAPHYSX_AGENT_WORLD_FORMULAS) as AgentWorldFormulaDescriptor[];
+  }
+
+  /** The recovered Living Forest genome presets. */
+  listDna(): readonly AgentWorldDnaDescriptor[] {
+    return deepClone(GRAPHYSX_AGENT_WORLD_DNA) as AgentWorldDnaDescriptor[];
   }
 
   listFlocks(): readonly AgentWorldFlockDescriptor[] {
@@ -1536,6 +1564,13 @@ export class AgentWorldRuntime {
       definition.formula = resolveAgentWorldFormula(patch.formula);
       findFormulaField(runtime.object)?.configure(definition.formula);
     }
+    if (patch.dna !== undefined) {
+      if (definition.type !== "dna-tree") throw new Error("Only dna-tree entities accept a dna configuration");
+      // Merged over the current configuration: `{ dna: { generation: 4 } }` keeps the genome
+      // it was already expressing — advancing the generation IS the evolution mechanism.
+      definition.dna = resolveAgentWorldDna(patch.dna, definition.dna ?? undefined);
+      findDnaSystem(runtime.object)?.configure(definition.dna);
+    }
     if (patch.terrain !== undefined) {
       if (definition.type !== "terrain") throw new Error("Only terrain entities accept a terrain configuration");
       definition.terrain = resolveAgentWorldTerrain(patch.terrain, definition.terrain ?? undefined);
@@ -1914,6 +1949,9 @@ export class AgentWorldRuntime {
       if (flock) flock.update(deltaSeconds);
       const field = findForceFieldVisual(runtime.object);
       if (field) field.update(deltaSeconds);
+      // Growth and the seasonal leaf fall inherit pause/step exactly as the flock does.
+      const dna = findDnaSystem(runtime.object);
+      if (dna) dna.update(deltaSeconds);
     }
     for (const runtime of this.entities.values()) {
       for (const behavior of runtime.definition.behaviors) {
@@ -2228,6 +2266,8 @@ export class AgentWorldRuntime {
     if (flock && definition.flock) flock.configure(definition.flock);
     const formula = findFormulaField(object);
     if (formula && definition.formula) formula.configure(definition.formula);
+    const dnaSystem = findDnaSystem(object);
+    if (dnaSystem && definition.dna) dnaSystem.configure(definition.dna);
     const field = findForceFieldVisual(object);
     if (field && definition.forceField) field.configure(definition.forceField);
     object.position.set(...definition.transform.position);
@@ -2294,6 +2334,11 @@ export class AgentWorldRuntime {
     // The field is a plotted surface, not matter: a collider would describe a box its
     // molecules do not live in, exactly as for a flock.
     if (source.type === "formula-field" && source.physics) throw new Error("Formula-field entities do not take a rigid body");
+    const dna = source.type === "dna-tree" ? resolveAgentWorldDna(source.dna) : null;
+    if (source.type !== "dna-tree" && source.dna) throw new Error("Only dna-tree entities accept a dna configuration");
+    // The forest is instanced growth, not matter — a collider would describe a box the
+    // branches do not live in, exactly as for a flock or a formula field.
+    if (source.type === "dna-tree" && source.physics) throw new Error("Dna-tree entities do not take a rigid body");
     const forceField = source.type === "force-field" ? resolveAgentWorldForceField(source.forceField) : null;
     if (source.type !== "force-field" && source.forceField) throw new Error("Only force-field entities accept a force field configuration");
     // A field acts on bodies; giving it one would let it act on itself, and a self-attracting
@@ -2308,6 +2353,7 @@ export class AgentWorldRuntime {
     const physics = source.physics ? resolvePhysics(source.physics, source.type, source.parentId ?? null, behaviors) : null;
     return {
       formula,
+      dna,
       id,
       label: source.label?.trim() || id,
       type: source.type,
@@ -2369,8 +2415,13 @@ export class AgentWorldRuntime {
     const formulaState = runtime.definition.formula && formulaField
       ? { ...runtime.definition.formula, ...formulaField.describe() }
       : null;
+    const dnaSystem = findDnaSystem(runtime.object);
+    const dnaState = runtime.definition.dna && dnaSystem
+      ? { ...runtime.definition.dna, ...dnaSystem.describe() }
+      : null;
     return {
       formula: formulaState,
+      dna: dnaState,
       id,
       label: runtime.definition.label,
       type: runtime.definition.type,
@@ -2539,6 +2590,12 @@ function createEntityObject(definition: ResolvedEntity): Object3D {
     // Found by `configure` and disposal the same way emitters, water and flocks are.
     field.object.userData.graphysxFormulaField = field;
     return field.object;
+  }
+  if (definition.type === "dna-tree") {
+    const system = new AgentWorldDnaSystem(definition.dna ?? resolveAgentWorldDna(undefined));
+    // Found by the update loop, `configure` and disposal the same way flocks are.
+    system.object.userData.graphysxDnaSystem = system;
+    return system.object;
   }
   if (definition.type === "flock") {
     const system = new AgentWorldFlockSystem(definition.flock ?? resolveAgentWorldFlock(undefined));
@@ -2853,7 +2910,7 @@ function resolvePhysics(
 ): ResolvedAgentWorldPhysics {
   if (!source || !["static", "dynamic", "kinematic", "trigger"].includes(source.mode)) throw new Error(`Unsupported physics mode: ${String(source?.mode)}`);
   // Terrain owns a heightfield collider it builds itself; water deliberately has none.
-  if (["group", "spline", "emitter", "sound", "terrain", "water", "flock", "force-field", "formula-field", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
+  if (["group", "spline", "emitter", "sound", "terrain", "water", "flock", "force-field", "formula-field", "dna-tree", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
   if (entityType === "plane" && source.mode === "dynamic") throw new Error("Plane physics can only be static or kinematic");
   if (parentId) throw new Error("Physics entities must be spawned at the world root");
   // A trigger never responds to contact, so a behavior moving it cannot fight the solver.
@@ -3070,7 +3127,7 @@ function validateInteraction(interaction: AgentWorldInteraction, entities: Map<s
 }
 
 function isEntityType(value: unknown): value is AgentWorldEntityType {
-  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "force-field", "formula-field", "sound", "ambient-light", "directional-light", "point-light"].includes(String(value));
+  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "force-field", "formula-field", "dna-tree", "sound", "ambient-light", "directional-light", "point-light"].includes(String(value));
 }
 
 function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition {
@@ -3078,6 +3135,8 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     // Carried explicitly: a formula field that does not serialise would round-trip into an
     // empty plot, which is the failure the write-only-state sweep exists to catch.
     ...(definition.formula ? { formula: deepClone(definition.formula) } : {}),
+    // Same reason: a dna-tree without its genome would round-trip into the default grove.
+    ...(definition.dna ? { dna: deepClone(definition.dna) } : {}),
     id: definition.id,
     label: definition.label,
     type: definition.type,
@@ -3160,6 +3219,11 @@ function disposeObjectTree(root: Object3D): void {
     const flock = findFlockSystem(child);
     if (flock) {
       flock.dispose();
+      return;
+    }
+    const dna = findDnaSystem(child);
+    if (dna) {
+      dna.dispose();
       return;
     }
     const field = findForceFieldVisual(child);

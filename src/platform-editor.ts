@@ -64,6 +64,7 @@ const SHORTCUTS: ReadonlyArray<[string, string]> = [
 const TYPE_GLYPHS: Record<AgentWorldEntityType, string> = {
   group: "▤",
   "formula-field": "∫",
+  "dna-tree": "♣",
   sound: "♪",
   agent: "☻",
   box: "▧",
@@ -2266,7 +2267,29 @@ export class PlatformEditor {
 Archive: ${formula.provenance.sourcePath}
 ${formula.provenance.note}`),
       );
-      return [...flocks, ...fields, ...formulas];
+      // The recovered Living Forest, one chip per genome preset. Advancing `dna.generation`
+      // in the inspector IS the evolution mechanism — same call an agent makes,
+      // api.update(id, { dna: { generation: n + 1 } }).
+      const dnaPresets = this.deps.api.dna().map((preset) =>
+        this.chip(preset.label, () => {
+          this.addCounter += 1;
+          const id = `edit-dna-${this.addCounter}`;
+          const result = this.deps.api.spawn({
+            id,
+            type: "dna-tree",
+            label: preset.label,
+            transform: { position: [0, 0, 0] },
+            dna: { preset: preset.id },
+            tags: ["life", "dna"],
+          });
+          if (result.ok) this.select(id);
+          else this.refresh();
+        }, `${preset.description}
+
+Archive: ${preset.provenance.sourcePath}
+${preset.provenance.note}`),
+      );
+      return [...flocks, ...fields, ...formulas, ...dnaPresets];
     }
     if (tab === "media") return this.mediaLibraryCards();
     // Textures render as swatches, not text: a texture's name says almost nothing about

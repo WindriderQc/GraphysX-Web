@@ -112,6 +112,7 @@ try {
         { id: "wat1", type: "water", transform: { position: [-8, 0.2, -8] }, water: { size: 20, reflection: false } },
         { id: "flk1", type: "flock", transform: { position: [0, 8, 0] }, flock: { preset: "starlings", count: 30 } },
         { id: "ff1", type: "force-field", transform: { position: [0, 4, 0] }, forceField: { preset: "gravity-well" } },
+        { id: "dna1", type: "dna-tree", transform: { position: [12, 0, -12] }, dna: { preset: "single-specimen" } },
       ],
     });
 
@@ -302,6 +303,20 @@ try {
       api.pause(false);
     }
 
+    // ================= DNA (the newly threaded Living Forest) =================
+    {
+      const before = stateOf("dna1").dna;
+      // The evolution mechanism is the patch path, and it takes the two-arg MERGE form:
+      // advancing the generation must keep the genome the preset was already expressing.
+      api.update("dna1", { dna: { generation: 3, trees: 2 } });
+      const s = stateOf("dna1").dna;
+      check("dna.generation", "dna", 3, { state: s.generation }, { before: before.generation });
+      check("dna.trees", "dna", 2, { state: s.trees, object: s.treeCount }, { before: before.trees, note: `treeCount=${s.treeCount}` });
+      check("dna.keepsGenome", "dna", 1.6, { state: s.genome.trunkLength }, { before: before.genome.trunkLength, note: "single-specimen founder trunk; a replace-form patch would reset it to 0.78" });
+      // The derived reading proving the forest actually grew instanced geometry.
+      check("dna.segmentCount>0", "dna", true, { object: s.segmentCount > 0 }, { before: false, note: `segmentCount=${s.segmentCount}, leafCount=${s.leafCount}` });
+    }
+
     // ================= FORCE FIELD (the newly graduated system) =================
     {
       const before = stateOf("ff1").forceField;
@@ -417,7 +432,7 @@ try {
     // fresh runtime. This is the fourth read path, and it is where a value that was applied to
     // the live object but dropped on serialize would surface.
     const beforeReload = {};
-    for (const id of ["box1", "geo1", "geo2", "pl1", "em1", "terr1", "wat1", "flk1", "ff1"]) {
+    for (const id of ["box1", "geo1", "geo2", "pl1", "em1", "terr1", "wat1", "flk1", "ff1", "dna1"]) {
       beforeReload[id] = api.query({ ids: [id] })[0];
     }
     const beforeEnv = api.state().environment;
@@ -435,6 +450,7 @@ try {
       wat1: (e) => e.water.color,
       flk1: (e) => e.flock.count,
       ff1: (e) => e.forceField.strength,
+      dna1: (e) => [e.dna.generation, e.dna.genome.trunkLength],
     };
     for (const [id, pick] of Object.entries(sample)) {
       const after = api.query({ ids: [id] })[0];
@@ -448,9 +464,9 @@ try {
       && eq(beforeEnv.envelope ? beforeEnv.envelope.fogFar : null, envAfter.envelope ? envAfter.envelope.fogFar : null);
 
     // Also confirm every entity's exported form carried its config block (export read path).
-    const exportCoverage = ["em1", "terr1", "wat1", "flk1", "ff1"].map((id) => {
+    const exportCoverage = ["em1", "terr1", "wat1", "flk1", "ff1", "dna1"].map((id) => {
       const e = exportOf(id, doc);
-      const key = { em1: "emitter", terr1: "terrain", wat1: "water", flk1: "flock", ff1: "forceField" }[id];
+      const key = { em1: "emitter", terr1: "terrain", wat1: "water", flk1: "flock", ff1: "forceField", dna1: "dna" }[id];
       return { id, key, present: !!(e && e[key]) };
     });
 

@@ -80,6 +80,7 @@ import { GRAPHYSX_AGENT_WORLD_HEIGHTMAPS } from "./agent-world-terrain";
 import { GRAPHYSX_AGENT_WORLD_FLOCKS } from "./agent-world-flock";
 import { GRAPHYSX_AGENT_WORLD_FORCE_FIELDS } from "./agent-world-force-field";
 import { GRAPHYSX_AGENT_WORLD_FORMULAS } from "./agent-world-formula";
+import { GRAPHYSX_AGENT_WORLD_DNA } from "./agent-world-dna";
 import {
   GRAPHYSX_AGENT_WORLD_TEXTURES,
   allAgentWorldTextures,
@@ -3467,6 +3468,7 @@ export class PrototypeApp {
       flocks: () => GRAPHYSX_AGENT_WORLD_FLOCKS,
       forceFields: () => GRAPHYSX_AGENT_WORLD_FORCE_FIELDS,
       formulas: () => GRAPHYSX_AGENT_WORLD_FORMULAS,
+      dna: () => GRAPHYSX_AGENT_WORLD_DNA,
       importLegacyXml: debugApi.importLegacyAgentWorldXml,
       open: debugApi.openAgentWorldStudio,
       demo: debugApi.loadAgentWorldDemo,
