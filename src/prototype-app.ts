@@ -78,6 +78,7 @@ import { allAgentWorldSkies } from "./agent-world-skies";
 import { GRAPHYSX_AGENT_WORLD_EMITTERS } from "./agent-world-particles";
 import { GRAPHYSX_AGENT_WORLD_HEIGHTMAPS } from "./agent-world-terrain";
 import { GRAPHYSX_AGENT_WORLD_FLOCKS } from "./agent-world-flock";
+import { GRAPHYSX_AGENT_WORLD_CROWDS } from "./agent-world-crowd";
 import { GRAPHYSX_AGENT_WORLD_FORCE_FIELDS } from "./agent-world-force-field";
 import { GRAPHYSX_AGENT_WORLD_FORMULAS } from "./agent-world-formula";
 import { GRAPHYSX_AGENT_WORLD_DNA } from "./agent-world-dna";
@@ -3468,6 +3469,7 @@ export class PrototypeApp {
       emitters: () => GRAPHYSX_AGENT_WORLD_EMITTERS,
       heightmaps: () => GRAPHYSX_AGENT_WORLD_HEIGHTMAPS,
       flocks: () => GRAPHYSX_AGENT_WORLD_FLOCKS,
+      crowds: () => GRAPHYSX_AGENT_WORLD_CROWDS,
       forceFields: () => GRAPHYSX_AGENT_WORLD_FORCE_FIELDS,
       formulas: () => GRAPHYSX_AGENT_WORLD_FORMULAS,
       dna: () => GRAPHYSX_AGENT_WORLD_DNA,

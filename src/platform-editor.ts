@@ -66,6 +66,7 @@ const TYPE_GLYPHS: Record<AgentWorldEntityType, string> = {
   group: "▤",
   "formula-field": "∫",
   "dna-tree": "♣",
+  crowd: "☗",
   sound: "♪",
   agent: "☻",
   box: "▧",
@@ -2329,6 +2330,25 @@ export class PlatformEditor {
           else this.refresh();
         }, `${flock.description}\n\n${flock.defaults.count} members, one instanced draw call.\nSource: ${flock.provenance.sourceRepo}/${flock.provenance.sourcePath}\n${flock.provenance.note}`),
       );
+      // Crowds sit beside flocks because they are the same idea on the ground: a population
+      // that steers itself, placed as one entity. Spawned at y=0 rather than in the air —
+      // members walk a plot, they do not fly a volume.
+      const crowds = this.deps.api.crowds().map((crowd) =>
+        this.chip(crowd.label, () => {
+          this.addCounter += 1;
+          const id = `edit-crowd-${this.addCounter}`;
+          const result = this.deps.api.spawn({
+            id,
+            type: "crowd",
+            label: crowd.label,
+            transform: { position: [0, 0, 0] },
+            crowd: { preset: crowd.id },
+            tags: ["life", "crowd"],
+          });
+          if (result.ok) this.select(id);
+          else this.refresh();
+        }, `${crowd.description}\n\n${crowd.defaults.count} members (${crowd.defaults.pursuers} pursuing), two instanced draw calls.\nSource: ${crowd.provenance.sourceRepo}/${crowd.provenance.sourcePath}\n${crowd.provenance.note}`),
+      );
       // Force fields live in the same tab because they are the other half of the same lesson:
       // a flock is a population that steers itself, a field is the thing that steers the rest.
       // The chip places one field entity; the scene's existing bodies, flocks and emitters
@@ -2393,7 +2413,7 @@ ${formula.provenance.note}`),
 Archive: ${preset.provenance.sourcePath}
 ${preset.provenance.note}`),
       );
-      return [...flocks, ...fields, ...formulas, ...dnaPresets];
+      return [...flocks, ...crowds, ...fields, ...formulas, ...dnaPresets];
     }
     if (tab === "media") return this.mediaLibraryCards();
     // Textures render as swatches, not text: a texture's name says almost nothing about

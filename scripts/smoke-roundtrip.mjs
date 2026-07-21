@@ -113,6 +113,7 @@ try {
         { id: "flk1", type: "flock", transform: { position: [0, 8, 0] }, flock: { preset: "starlings", count: 30 } },
         { id: "ff1", type: "force-field", transform: { position: [0, 4, 0] }, forceField: { preset: "gravity-well" } },
         { id: "dna1", type: "dna-tree", transform: { position: [12, 0, -12] }, dna: { preset: "single-specimen" } },
+        { id: "crd1", type: "crowd", transform: { position: [-12, 0, 12] }, crowd: { preset: "pursuit", count: 24 } },
       ],
     });
 
@@ -303,6 +304,32 @@ try {
       api.pause(false);
     }
 
+    // ================= CROWD =================
+    {
+      const before = stateOf("crd1").crowd;
+      api.update("crd1", { crowd: { count: 40, speed: 2.4 } });
+      const s = stateOf("crd1").crowd;
+      check("crowd.count", "crowd", 40, { state: s.count, object: s.memberCount }, { before: before.count, note: `memberCount=${s.memberCount}` });
+      check("crowd.speed", "crowd", 2.4, { state: s.speed }, { before: before.speed });
+      // The merge-form patch trap that bit formula-field and dna-tree: patching only `count`
+      // must not reset the rest of the crowd to base defaults. `pursuitSpeedRatio` came from
+      // the "pursuit" preset, so a replace-form patch would silently snap it back.
+      check("crowd.keepsPreset", "crowd", before.pursuitSpeedRatio, { state: s.pursuitSpeedRatio }, { before: before.pursuitSpeedRatio, note: "merge-form patch" });
+      // The crowd must actually walk — the same "present vs alive" reading flocks report.
+      api.pause(true);
+      const start = stateOf("crd1").crowd.leadPosition;
+      for (let i = 0; i < 60; i++) api.step(1 / 60);
+      const moved = stateOf("crd1").crowd.leadPosition;
+      const walked = Math.hypot(moved[0] - start[0], moved[2] - start[2]);
+      check("crowd.leadPosition moves", "crowd", true, { object: walked > 0.1 }, { before: false, note: `walked=${walked.toFixed(3)}` });
+      // Members are confined to the plot, and the plot is entity-local — a crowd spawned at
+      // x=-12 must not have members wandering back to the origin.
+      const s2 = stateOf("crd1").crowd;
+      const inside = Math.abs(moved[0]) <= s2.size[0] + 1e-6 && Math.abs(moved[2]) <= s2.size[1] + 1e-6;
+      check("crowd.staysInPlot", "crowd", true, { object: inside }, { before: false, note: `lead=${moved[0].toFixed(2)},${moved[2].toFixed(2)} plot=${s2.size}` });
+      api.pause(false);
+    }
+
     // ================= DNA (the newly threaded Living Forest) =================
     {
       const before = stateOf("dna1").dna;
@@ -450,7 +477,7 @@ try {
     // fresh runtime. This is the fourth read path, and it is where a value that was applied to
     // the live object but dropped on serialize would surface.
     const beforeReload = {};
-    for (const id of ["box1", "geo1", "geo2", "pl1", "em1", "terr1", "wat1", "flk1", "ff1", "dna1"]) {
+    for (const id of ["box1", "geo1", "geo2", "pl1", "em1", "terr1", "wat1", "flk1", "ff1", "dna1", "crd1"]) {
       beforeReload[id] = api.query({ ids: [id] })[0];
     }
     const beforeEnv = api.state().environment;
@@ -469,6 +496,7 @@ try {
       flk1: (e) => e.flock.count,
       ff1: (e) => e.forceField.strength,
       dna1: (e) => [e.dna.generation, e.dna.genome.trunkLength],
+      crd1: (e) => [e.crowd.count, e.crowd.pursuers, e.crowd.seed],
     };
     for (const [id, pick] of Object.entries(sample)) {
       const after = api.query({ ids: [id] })[0];
@@ -482,9 +510,9 @@ try {
       && eq(beforeEnv.envelope ? beforeEnv.envelope.fogFar : null, envAfter.envelope ? envAfter.envelope.fogFar : null);
 
     // Also confirm every entity's exported form carried its config block (export read path).
-    const exportCoverage = ["em1", "terr1", "wat1", "flk1", "ff1", "dna1"].map((id) => {
+    const exportCoverage = ["em1", "terr1", "wat1", "flk1", "ff1", "dna1", "crd1"].map((id) => {
       const e = exportOf(id, doc);
-      const key = { em1: "emitter", terr1: "terrain", wat1: "water", flk1: "flock", ff1: "forceField", dna1: "dna" }[id];
+      const key = { em1: "emitter", terr1: "terrain", wat1: "water", flk1: "flock", ff1: "forceField", dna1: "dna", crd1: "crowd" }[id];
       return { id, key, present: !!(e && e[key]) };
     });
 

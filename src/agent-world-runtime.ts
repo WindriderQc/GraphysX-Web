@@ -150,6 +150,15 @@ import {
   type ResolvedAgentWorldFlock
 } from "./agent-world-flock";
 import {
+  AgentWorldCrowdSystem,
+  GRAPHYSX_AGENT_WORLD_CROWDS,
+  findCrowdSystem,
+  resolveAgentWorldCrowd,
+  type AgentWorldCrowd,
+  type AgentWorldCrowdDescriptor,
+  type ResolvedAgentWorldCrowd
+} from "./agent-world-crowd";
+import {
   AgentWorldForceFieldVisual,
   GRAPHYSX_AGENT_WORLD_FORCE_FIELDS,
   findForceFieldVisual,
@@ -197,6 +206,7 @@ export type AgentWorldEntityType =
   | "terrain"
   | "water"
   | "flock"
+  | "crowd"
   | "force-field"
   | "formula-field"
   | "dna-tree"
@@ -409,6 +419,8 @@ export type AgentWorldEntityDefinition = {
   water?: AgentWorldWater;
   /** Boid flocking configuration. Only valid on `flock` entities. */
   flock?: AgentWorldFlock;
+  /** Ground crowd configuration. Only valid on `crowd` entities. */
+  crowd?: AgentWorldCrowd;
   /** Recovered Math Game molecule field. Only valid on `formula-field` entities. */
   formula?: AgentWorldFormula;
   /** Recovered Living Forest genome. Only valid on `dna-tree` entities. */
@@ -470,6 +482,8 @@ export type AgentWorldEntityPatch = {
   water?: AgentWorldWater;
   /** Patch the flock of a `flock` entity. Merged over the current configuration. */
   flock?: AgentWorldFlock;
+  /** Patch the crowd of a `crowd` entity. Merged over the current configuration. */
+  crowd?: AgentWorldCrowd;
   /** Patch the formula of a `formula-field` entity. Replaces the configuration. */
   formula?: AgentWorldFormula;
   /** Patch the dna of a `dna-tree` entity. Merged over the current configuration. */
@@ -632,6 +646,13 @@ export type AgentWorldEntityState = {
    * only on screen, so an agent (or a smoke test) can tell "present" from "alive".
    */
   flock: (ResolvedAgentWorldFlock & { memberCount: number; leadPosition: AgentWorldVector3; averageSpeed: number }) | null;
+  /**
+   * Crowd configuration plus live readings, for the reason the flock reports them: a crowd
+   * that has stopped walking must be distinguishable from one that is walking. `pursuerCount`
+   * is reported separately from the configured `pursuers` on purpose — rules convert roles at
+   * runtime, so the live count is the truth and the config is only where it started.
+   */
+  crowd: (ResolvedAgentWorldCrowd & { memberCount: number; pursuerCount: number; leadPosition: AgentWorldVector3; averageSpeed: number }) | null;
   /**
    * Formula field configuration plus the derived surface, so an agent can read the curve it
    * produced without re-implementing the archive maths.
@@ -803,6 +824,8 @@ export type GraphysXAgentWorldApi = {
   heightmaps(): readonly AgentWorldHeightmapDescriptor[];
   /** The curated boid-flock presets recovered from the Nature-of-Code sketches. */
   flocks(): readonly AgentWorldFlockDescriptor[];
+  /** The curated crowd presets adapted from the race scene's NPC population. */
+  crowds(): readonly AgentWorldCrowdDescriptor[];
   /** The curated force-field presets recovered from the same Nature-of-Code sketches. */
   forceFields(): readonly AgentWorldForceFieldDescriptor[];
   /** The recovered Math Game formula presets (Scene3D/Formulas.cpp). */
@@ -880,6 +903,7 @@ type ResolvedEntity = {
   terrain: ResolvedAgentWorldTerrain | null;
   water: ResolvedAgentWorldWater | null;
   flock: ResolvedAgentWorldFlock | null;
+  crowd: ResolvedAgentWorldCrowd | null;
   forceField: ResolvedAgentWorldForceField | null;
   formula: ResolvedAgentWorldFormula | null;
   dna: ResolvedAgentWorldDna | null;
@@ -980,6 +1004,9 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "entity.flock",
   "flock.list",
   "simulation.flocking",
+  "entity.crowd",
+  "crowd.list",
+  "simulation.crowd",
   "entity.force-field",
   "force-field.list",
   "simulation.force-fields",
@@ -1162,6 +1189,11 @@ export class AgentWorldRuntime {
 
   listFlocks(): readonly AgentWorldFlockDescriptor[] {
     return deepClone(GRAPHYSX_AGENT_WORLD_FLOCKS) as AgentWorldFlockDescriptor[];
+  }
+
+  /** The crowd presets adapted from the race scene's NPC population. */
+  listCrowds(): readonly AgentWorldCrowdDescriptor[] {
+    return deepClone(GRAPHYSX_AGENT_WORLD_CROWDS) as AgentWorldCrowdDescriptor[];
   }
 
   /** The force-field presets graduated from the Nature-of-Code sketches, as scene vocabulary. */
@@ -1647,6 +1679,14 @@ export class AgentWorldRuntime {
       definition.flock = resolveAgentWorldFlock(patch.flock, definition.flock ?? undefined);
       findFlockSystem(runtime.object)?.configure(definition.flock);
     }
+    if (patch.crowd !== undefined) {
+      if (definition.type !== "crowd") throw new Error("Only crowd entities accept a crowd configuration");
+      // Merged over the current configuration, so `{ crowd: { speed: 2 } }` keeps the plot
+      // size and seed it was already walking — the same trap `formula-field` and `dna-tree`
+      // hit, where a replace-form patch silently reset the whole population.
+      definition.crowd = resolveAgentWorldCrowd(patch.crowd, definition.crowd ?? undefined);
+      findCrowdSystem(runtime.object)?.configure(definition.crowd);
+    }
     if (patch.forceField !== undefined) {
       if (definition.type !== "force-field") throw new Error("Only force-field entities accept a force field configuration");
       definition.forceField = resolveAgentWorldForceField(patch.forceField, definition.forceField ?? undefined);
@@ -2039,6 +2079,10 @@ export class AgentWorldRuntime {
       if (water) water.update(deltaSeconds);
       const flock = findFlockSystem(runtime.object);
       if (flock) flock.update(deltaSeconds);
+      // The crowd walks inside the simulation step for the same reason: pause freezes it and
+      // step advances it one deterministic slice.
+      const crowd = findCrowdSystem(runtime.object);
+      if (crowd) crowd.update(deltaSeconds);
       const field = findForceFieldVisual(runtime.object);
       if (field) field.update(deltaSeconds);
       // Growth and the seasonal leaf fall inherit pause/step exactly as the flock does.
@@ -2090,6 +2134,8 @@ export class AgentWorldRuntime {
     for (const runtime of this.entities.values()) {
       const flock = findFlockSystem(runtime.object);
       if (flock) flock.externalAcceleration = null;
+      const crowd = findCrowdSystem(runtime.object);
+      if (crowd) crowd.externalAcceleration = null;
       const particles = findParticleSystem(runtime.object);
       if (particles) particles.externalAcceleration = null;
     }
@@ -2166,12 +2212,20 @@ export class AgentWorldRuntime {
         }
       }
 
-      // 2. Flocks and emitters, via the per-step hook installed on the system. The consumer's
-      //    own world matrix is captured once here rather than per member/particle.
+      // 2. Flocks, crowds and emitters, via the per-step hook installed on the system. The
+      //    consumer's own world matrix is captured once here rather than per member/particle.
+      //
+      //    Crowds ride the `affectsFlocks` channel rather than getting a fourth flag. The flag
+      //    is really "steered populations, as opposed to rigid bodies and particles", and a
+      //    crowd is one of those — it is steered by the same kind of integrator and takes the
+      //    same `externalAcceleration` hook. A separate `affectsCrowds` would be a schema
+      //    change to every serialised force field to express a distinction nothing makes.
       const flock = findFlockSystem(runtime.object);
+      const crowd = findCrowdSystem(runtime.object);
       const particles = findParticleSystem(runtime.object);
-      if ((!flock || !anyFlocks) && (!particles || !anyParticles)) continue;
-      const channel = flock ? "affectsFlocks" : "affectsParticles";
+      const steered = flock ?? crowd;
+      if ((!steered || !anyFlocks) && (!particles || !anyParticles)) continue;
+      const channel = steered ? "affectsFlocks" : "affectsParticles";
       runtime.object.updateWorldMatrix(true, false);
       const toWorld = new Matrix4().copy(runtime.object.matrixWorld);
       const toLocal = new Matrix4().copy(toWorld).invert();
@@ -2182,7 +2236,7 @@ export class AgentWorldRuntime {
         accumulate(definition.id, definition.tags, channel, scratch.hookWorldPoint, scratch.hookWorldVelocity, scratch.hookWorldAcceleration);
         out.copy(scratch.hookWorldPoint).add(scratch.hookWorldAcceleration).applyMatrix4(toLocal).sub(localPosition);
       };
-      if (flock && anyFlocks) flock.externalAcceleration = hook;
+      if (steered && anyFlocks) steered.externalAcceleration = hook;
       if (particles && anyParticles) particles.externalAcceleration = hook;
     }
   }
@@ -2356,6 +2410,8 @@ export class AgentWorldRuntime {
     if (water && definition.water) water.configure(definition.water);
     const flock = findFlockSystem(object);
     if (flock && definition.flock) flock.configure(definition.flock);
+    const crowd = findCrowdSystem(object);
+    if (crowd && definition.crowd) crowd.configure(definition.crowd);
     const formula = findFormulaField(object);
     if (formula && definition.formula) formula.configure(definition.formula);
     const dnaSystem = findDnaSystem(object);
@@ -2421,6 +2477,13 @@ export class AgentWorldRuntime {
     // Members are steered, not simulated as rigid bodies — a collider on the flock entity
     // would describe a box the members do not live in.
     if (source.type === "flock" && source.physics) throw new Error("Flock entities do not take a rigid body");
+    const crowd = source.type === "crowd" ? resolveAgentWorldCrowd(source.crowd) : null;
+    if (source.type !== "crowd" && source.crowd) throw new Error("Only crowd entities accept a crowd configuration");
+    // Members are steered and spaced by the crowd's own separation pass, not by the solver —
+    // a collider on the crowd entity would describe a box the members do not live in, exactly
+    // as for a flock. This is also the deliberate line where the recovered NPCs stop being
+    // rigid bodies; see the header of agent-world-crowd.ts.
+    if (source.type === "crowd" && source.physics) throw new Error("Crowd entities do not take a rigid body");
     const formula = source.type === "formula-field" ? resolveAgentWorldFormula(source.formula) : null;
     if (source.type !== "formula-field" && source.formula) throw new Error("Only formula-field entities accept a formula configuration");
     // The field is a plotted surface, not matter: a collider would describe a box its
@@ -2461,6 +2524,7 @@ export class AgentWorldRuntime {
       terrain,
       water,
       flock,
+      crowd,
       forceField,
       physics,
       intensity: clamp(source.intensity ?? 1, 0, 100),
@@ -2586,6 +2650,7 @@ export class AgentWorldRuntime {
       terrain: runtime.definition.terrain ? terrainStateOf(runtime) : null,
       water: runtime.definition.water ? deepClone(runtime.definition.water) : null,
       flock: runtime.definition.flock ? flockStateOf(runtime) : null,
+      crowd: runtime.definition.crowd ? crowdStateOf(runtime) : null,
       forceField: runtime.definition.forceField ? this.forceFieldStateOf(runtime) : null
     };
   }
@@ -2709,6 +2774,12 @@ function createEntityObject(definition: ResolvedEntity): Object3D {
     const system = new AgentWorldFlockSystem(definition.flock ?? resolveAgentWorldFlock(undefined));
     // Found by the update loop and `configure` exactly the way emitters and water are.
     system.object.userData.graphysxFlockSystem = system;
+    return system.object;
+  }
+  if (definition.type === "crowd") {
+    const system = new AgentWorldCrowdSystem(definition.crowd ?? resolveAgentWorldCrowd(undefined));
+    // Found by the update loop, `configure` and disposal the same way flocks are.
+    system.object.userData.graphysxCrowdSystem = system;
     return system.object;
   }
   if (definition.type === "force-field") {
@@ -3035,7 +3106,7 @@ function resolvePhysics(
 ): ResolvedAgentWorldPhysics {
   if (!source || !["static", "dynamic", "kinematic", "trigger"].includes(source.mode)) throw new Error(`Unsupported physics mode: ${String(source?.mode)}`);
   // Terrain owns a heightfield collider it builds itself; water deliberately has none.
-  if (["group", "spline", "emitter", "sound", "terrain", "water", "flock", "force-field", "formula-field", "dna-tree", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
+  if (["group", "spline", "emitter", "sound", "terrain", "water", "flock", "crowd", "force-field", "formula-field", "dna-tree", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
   if (entityType === "plane" && source.mode === "dynamic") throw new Error("Plane physics can only be static or kinematic");
   if (parentId) throw new Error("Physics entities must be spawned at the world root");
   // A trigger never responds to contact, so a behavior moving it cannot fight the solver.
@@ -3169,6 +3240,24 @@ function flockStateOf(runtime: RuntimeEntity): NonNullable<AgentWorldEntityState
   };
 }
 
+/**
+ * Crowd state is configuration plus a live reading, for the reason flock state is. The extra
+ * field over flock is `pursuerCount`: rules convert roles at runtime through
+ * `AgentWorldCrowdSystem.setRole`, so the configured `pursuers` is only where the crowd
+ * started and the live count is what it has become. Reporting only the config would make an
+ * entire crowd converted by a rule look untouched.
+ */
+function crowdStateOf(runtime: RuntimeEntity): NonNullable<AgentWorldEntityState["crowd"]> {
+  const system = findCrowdSystem(runtime.object);
+  return {
+    ...deepClone(runtime.definition.crowd!),
+    memberCount: system?.memberCount ?? 0,
+    pursuerCount: system?.pursuerCount ?? 0,
+    leadPosition: system?.leadPosition ?? [0, 0, 0],
+    averageSpeed: system?.averageSpeed ?? 0
+  };
+}
+
 function terrainStateOf(runtime: RuntimeEntity): NonNullable<AgentWorldEntityState["terrain"]> {
   const terrain = runtime.definition.terrain!;
   const cached = runtime.object.userData.graphysxTerrainHeights;
@@ -3277,7 +3366,7 @@ function validateInteraction(interaction: AgentWorldInteraction, entities: Map<s
 }
 
 function isEntityType(value: unknown): value is AgentWorldEntityType {
-  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "force-field", "formula-field", "dna-tree", "sound", "ambient-light", "directional-light", "point-light"].includes(String(value));
+  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "crowd", "force-field", "formula-field", "dna-tree", "sound", "ambient-light", "directional-light", "point-light"].includes(String(value));
 }
 
 function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition {
@@ -3311,6 +3400,7 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     ...(definition.terrain ? { terrain: deepClone(definition.terrain) } : {}),
     ...(definition.water ? { water: deepClone(definition.water) } : {}),
     ...(definition.flock ? { flock: deepClone(definition.flock) } : {}),
+    ...(definition.crowd ? { crowd: deepClone(definition.crowd) } : {}),
     ...(definition.forceField ? { forceField: deepClone(definition.forceField) } : {}),
     ...(definition.physics ? { physics: deepClone(definition.physics) } : {}),
     intensity: definition.intensity,
@@ -3369,6 +3459,11 @@ function disposeObjectTree(root: Object3D): void {
     const flock = findFlockSystem(child);
     if (flock) {
       flock.dispose();
+      return;
+    }
+    const crowd = findCrowdSystem(child);
+    if (crowd) {
+      crowd.dispose();
       return;
     }
     const dna = findDnaSystem(child);
