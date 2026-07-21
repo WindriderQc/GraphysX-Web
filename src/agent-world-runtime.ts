@@ -117,7 +117,7 @@ import {
   type AgentWorldTextureId
 } from "./agent-world-textures";
 import {
-  GRAPHYSX_AGENT_WORLD_SKIES,
+  allAgentWorldSkies,
   resolveAgentWorldSky,
   type AgentWorldSkyDescriptor,
   type AgentWorldSkyId
@@ -1075,7 +1075,7 @@ export class AgentWorldRuntime {
   }
 
   listSkies(): readonly AgentWorldSkyDescriptor[] {
-    return deepClone(GRAPHYSX_AGENT_WORLD_SKIES);
+    return deepClone(allAgentWorldSkies());
   }
 
   /** The archive particle-emitter presets, as scene vocabulary. */
@@ -2834,7 +2834,9 @@ function resolveTexture(source: AgentWorldTexture | null): AgentWorldTexture | n
 function resolveEnvironment(source?: AgentWorldDefinition["environment"]): AgentWorldEnvironment {
   const sky = source?.sky ?? DEFAULT_ENVIRONMENT.sky;
   if (sky !== null && !resolveAgentWorldSky(sky)) {
-    throw new Error(`Unknown sky: ${sky}. Use one of ${GRAPHYSX_AGENT_WORLD_SKIES.map((s) => s.id).join(", ")}`);
+    // Lists imports too: with a store running, "use one of <curated six>" would be a lie
+    // that sends the reader looking for a typo in an id that is genuinely registered.
+    throw new Error(`Unknown sky: ${sky}. Use one of ${allAgentWorldSkies().map((s) => s.id).join(", ")}`);
   }
   const overlay = source?.overlay ?? DEFAULT_ENVIRONMENT.overlay;
   if (overlay !== null && !isOverlayId(overlay)) {

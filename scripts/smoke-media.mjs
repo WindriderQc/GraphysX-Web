@@ -89,6 +89,22 @@ try {
   await writeFile(path.join(datalakeDir, "smoke-blip.wav"), tinyWav());
   await writeFile(path.join(datalakeDir, "Textures", "smoke-red.dds"), tinyDds());
 
+  // Two sky sets, because the datalake genuinely holds two naming conventions and they
+  // do NOT map the same way: a directional folder (the TV3D archive sets, where `left`
+  // is +X) and loose axial files (the `Clouds_*.dds` set, already named by WebGL axis).
+  // Mixed case is deliberate — the real datalake ships `Back.jpg` next to `back.bmp`.
+  await mkdir(path.join(datalakeDir, "Sky", "SmokeDome"), { recursive: true });
+  for (const face of ["Left", "Right", "Up", "Down", "Front", "Back"]) {
+    await writeFile(path.join(datalakeDir, "Sky", "SmokeDome", `${face}.png`), PNG_BYTES);
+  }
+  // A Thumbs.db alongside them: every real sky folder has one and it must not be mistaken
+  // for a face or block the match.
+  await writeFile(path.join(datalakeDir, "Sky", "SmokeDome", "Thumbs.db"), Buffer.from([0, 1, 2, 3]));
+  await mkdir(path.join(datalakeDir, "Sky", "Axial"), { recursive: true });
+  for (const face of ["PosX", "NegX", "PosY", "NegY", "PosZ", "NegZ"]) {
+    await writeFile(path.join(datalakeDir, "Sky", "Axial", `Puffs_${face}.dds`), tinyDds());
+  }
+
   store = await startSceneStore({
     port: 0,
     dir: path.join(storeDir, "scenes"),
@@ -288,6 +304,73 @@ try {
   out.guiImportedListed = await page.evaluate(() =>
     window.__GRAPHYSX__.media.list("model").filter((m) => m.id.startsWith("smoke-tetra")).length >= 2);
 
+  // --- imported cubemap sky sets --------------------------------------------------
+  out.sky = await page.evaluate(async () => {
+    const api = window.__GRAPHYSX__;
+    const curatedCount = api.skies().length;
+
+    const directional = await api.media.importSky("Sky/SmokeDome");
+    const axial = await api.media.importSky("Sky/Axial");
+    if (!directional.ok || !axial.ok) {
+      return { importOk: false, error: directional.error ?? axial.error };
+    }
+
+    // The set is selectable as ordinary scene vocabulary, exactly like a curated id.
+    const def = api.export();
+    const loaded = api.load({ ...def, environment: { ...def.environment, sky: directional.value.id } });
+    const applied = api.state().environment.sky;
+
+    // ...and survives export -> load, the path a stored scene actually takes.
+    const exported = api.export();
+    const reloaded = api.load(exported);
+
+    // An id that was never imported must still be refused: widening the registry must
+    // not have turned the sky field into "anything goes".
+    let rejected = false;
+    try {
+      const bad = api.load({ ...def, environment: { ...def.environment, sky: "not-a-real-sky" } });
+      rejected = !bad.ok;
+    } catch { rejected = true; }
+
+    return {
+      importOk: true,
+      curatedCount,
+      id: directional.value.id,
+      label: directional.value.label,
+      axialId: axial.value.id,
+      // The TV3D swap: slot 0 (+X) must come from the file named `left`, and slot 1 (-X)
+      // from `right`. Getting this backwards yields a sky that only looks wrong once you
+      // turn around, which is exactly the kind of defect a screenshot misses.
+      slot0FromLeft: /left/i.test(directional.value.faceUrls[0]),
+      slot1FromRight: /right/i.test(directional.value.faceUrls[1]),
+      // The axial set maps straight through with NO swap — a different mapping, same API.
+      axialSlot0FromPosX: /posx/i.test(axial.value.faceUrls[0]),
+      axialSlot1FromNegX: /negx/i.test(axial.value.faceUrls[1]),
+      faceCount: directional.value.faceUrls.length,
+      // DDS faces convert on the way in, so an axial set is PNG by the time it is a sky.
+      axialConverted: axial.value.faceUrls.every((u) => u.endsWith(".png")),
+      // Imports carry no `basePath` — the field the release manifest scrapes. This is the
+      // structural reason a store-only sky cannot leak into `dist/`.
+      hasNoBasePath: directional.value.basePath === undefined,
+      horizonSampled: /^#[0-9a-f]{6}$/i.test(directional.value.horizonColor),
+      registered: api.skies().some((s) => s.id === directional.value.id),
+      curatedIntact: api.skies().filter((s) => s.source === "GraphysX archive").length === curatedCount,
+      loadOk: loaded.ok,
+      applied,
+      reloadOk: reloaded.ok,
+      reloadedSky: api.state().environment.sky,
+      rejected,
+    };
+  });
+
+  // The human half: an imported set must appear in the editor's Sky dropdown, which is
+  // built once at construction and would otherwise never show it.
+  out.skyInDropdown = await page.evaluate(() => {
+    const select = [...document.querySelectorAll("select")]
+      .find((s) => [...s.options].some((o) => o.textContent === "No sky (flat colour)"));
+    return select ? [...select.options].map((o) => o.value) : null;
+  });
+
   await page.screenshot({ path: path.join(ART, "media-library.png"), fullPage: false });
 } catch (e) {
   out.fatal = String(e);
@@ -351,5 +434,24 @@ const ok =
   out.dialogFiles?.includes("smoke-tetra.obj") &&
   out.guiImport?.selected &&
   typeof out.guiImportStatus === "string" && out.guiImportStatus.startsWith("Imported") &&
-  out.guiImportedListed;
+  out.guiImportedListed &&
+  out.sky?.importOk &&
+  out.sky?.id === "smokedome" &&
+  out.sky?.axialId === "puffs" &&
+  out.sky?.faceCount === 6 &&
+  out.sky?.slot0FromLeft &&
+  out.sky?.slot1FromRight &&
+  out.sky?.axialSlot0FromPosX &&
+  out.sky?.axialSlot1FromNegX &&
+  out.sky?.axialConverted &&
+  out.sky?.hasNoBasePath &&
+  out.sky?.horizonSampled &&
+  out.sky?.registered &&
+  out.sky?.curatedIntact &&
+  out.sky?.loadOk &&
+  out.sky?.applied === "smokedome" &&
+  out.sky?.reloadOk &&
+  out.sky?.reloadedSky === "smokedome" &&
+  out.sky?.rejected &&
+  out.skyInDropdown?.includes("smokedome");
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);

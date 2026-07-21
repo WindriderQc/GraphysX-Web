@@ -980,3 +980,118 @@ Full verify in a throwaway worktree at the spiral-fix commit: 19/20, the one red
 passed in isolation — the documented contention pattern, confirmed before believing it. The
 concurrent session's push carried the fix out with the whole archive-revival backlog. A second
 full worktree run gates the dna threading commit before its push.
+
+## 2026-07-21 — `sky-r1`: the sky vocabulary opens to imports
+
+- **`api.media.importSky(folder)` turns a datalake folder of six cube faces into a sky set**
+  usable through `environment.sky`, registered into the SAME lookup the curated sets use.
+  Follows the dynamic-registry pattern the other media kinds already use (`DYNAMIC_SKIES` +
+  `registerAgentWorldSkies` + `allAgentWorldSkies`, curated id always wins), so
+  `resolveAgentWorldSky` gained a dynamic arm and the runtime's existing `environment.sky`
+  validation started accepting imports without being touched. An unknown id is still refused,
+  and the error now lists imports too — with a store running, "use one of <the curated six>"
+  was a lie that sends the reader hunting a typo in an id that is genuinely registered.
+- **The brief's premise was wrong and is worth recording.** `StockRoom/Sky`'s six folders
+  (ClearBlue/ClearNight/LostValley/NightSky/SkyX/Winter) are *already* the curated vocabulary
+  — the same six ids, already vendored under `public/assets/sky/`. Importing them adds
+  nothing. The only un-curated set in there is the one the brief did not mention: the loose
+  `Clouds_*.dds` files at the folder root. So the value here is the mechanism, and `Clouds` is
+  its one honest proof case — conveniently also the DDS case.
+- **Two on-disk conventions, and they do NOT map the same way.** A *directional* set
+  (`left/right/up/down/front/back`) applies the archive's left/right axis swap, which is what
+  `archiveSkyboxUrls` has always done for curated sets; an *axial* set (`*_PosX`..`*_NegZ`) is
+  already named by WebGL axis and maps straight through. Matching is case-insensitive (the
+  real datalake ships `Back.jpg` beside `back.bmp` and `Back.JPG`) and ignores `Thumbs.db`. A
+  folder missing any of the six is refused up front rather than registering a sky that would
+  fail later inside `CubeTextureLoader`.
+- **Imports are structurally incapable of leaking into the release manifest.** Curated sets
+  carry `basePath` + `extension`; imported sets carry an explicit six-URL face tuple, because
+  the store re-slugs filenames and the datalake's names are inconsistent anyway.
+  `scripts/product-assets.mjs` scrapes `basePath:` literals out of `agent-world-skies.ts` — an
+  imported set has no such field and never appears in that file, so the guarantee does not
+  depend on anyone remembering it. The smoke asserts `basePath === undefined` for imports.
+- **Faces are stored as ordinary texture records** tagged with set metadata, so a sky costs the
+  asset store no new kind, a single face is still applicable as a plain image, and an
+  interrupted import leaves usable textures rather than a half-registered sky.
+- **The host's sky cache was keyed by id, which is a stale-serve waiting to happen.** The asset
+  store reuses a freed id (`uniqueId`), so remove-then-reimport legitimately puts different
+  pixels behind the same sky id — and an id-keyed `Map<string, CubeTexture>` would then render
+  the old cubemap for the life of the tab. This is the in-memory instance of the exact defect
+  `media-r1` paid for at the HTTP layer with `max-age=86400`. Now keyed on the joined face
+  URLs. Also `setCrossOrigin("anonymous")`: store-served faces are cross-origin, and
+  `orientArchiveCubeTexture` rotates the poles through a 2D canvas, which a tainted canvas
+  refuses.
+- **Both API implementations, and the human half.** `media` is one module singleton, so
+  `importSky` reached both surfaces for free; `skies()` did *not* — `prototype-app.ts` read the
+  curated array directly, so the legacy host would never have seen an import. Fixed. The
+  editor's Sky dropdown is built exactly once at construction, which would have made an
+  imported set agent-visible and human-invisible at the same desk; it now repopulates from the
+  live registry, guarded by an id signature because `refresh()` runs constantly and a
+  `<select>` rebuilt every frame cannot be clicked. The `sky: skyId as never` cast that existed
+  only to silence the old static union is gone.
+
+### Driven live before gating
+
+`media.importSky("StockRoom/Sky")` against the real datalake: axial convention detected, six
+DDS faces CPU-decoded to PNG, horizon sampled `#51618a`, registered as `clouds`, applied
+through `environment.sky`, rendered, and the editor dropdown read "Clouds". It survived a fresh
+page load — the set came back from the manifest via `refresh()`, not from the import call.
+Screenshots in `output/sky-shoot/`.
+
+### Defects found in my own work while driving it
+
+- **A comment that was simply false.** I justified duplicating the face-URL builder with "this
+  module is imported by the runtime, which stays renderer-free". The runtime imports three at
+  line 44. Duplication deleted, real builder imported, drift risk gone.
+- **The horizon tint was write-only.** The first cut sampled it *after* registration and
+  returned a patched copy, so `api.skies()` would have held a different tint than the call
+  returned, and it would have reset on reload. It is sampled before the import now, so it rides
+  in the face metadata and persists. Precisely the class `smoke-roundtrip` exists to catch,
+  reintroduced by hand in a new place.
+- **Two "pole" screenshots that never looked at a pole.** `controls.update()` re-derives the
+  camera from its target every frame in the host's one loop, so a bare `camera.lookAt` is
+  overwritten before the next paint — four camera poses produced identical images. Aim through
+  `controls.target` instead. This nearly became "the poles look fine" recorded from evidence of
+  nothing.
+- **Mis-staged another session's work.** Staged `platform-host.ts` hunks by numbers from a stale
+  listing after changing the differ's context width, which pulled in the bloom session's
+  `EffectComposer` imports. Caught by grepping the staged diff for foreign markers.
+
+### Not verified, and not claimed
+
+**Whether the TV3D pole quarter-turn is correct for an *axially*-named set is unknown.** Both
+pole views of `Clouds` render continuously with no visible seam, but its pole faces are a
+near-radial cloud glow, in which a wrong 90° rotation would be close to invisible. The
+directional mapping IS asserted in the smoke (slot 0 comes from `left`, slot 1 from `right`),
+and the axial *slot* mapping is asserted too — but the *rotation* is not. A set with
+directional detail at its poles would settle it.
+
+### Gate
+
+`media` (#19) grew a sky block covering both conventions in one flow: import → register →
+`environment.sky` → export/load round trip → a bad id still refused → curated set intact →
+`basePath` absent → DDS faces converted → the editor dropdown listing both imports. Full
+`npm run verify`: **all 21 checks passed** (19 smokes + typecheck + build). The first run
+reported `FAIL archive-levels`; it passes alone with every assertion green and passed on the
+clean re-run — the documented contention pattern, confirmed rather than assumed. Note the first
+run's exit code was misread as success because the command was piped into `tail`, so the `0`
+belonged to `tail`; the summary line, not the exit status, is what to read.
+
+**Bookkeeping for whoever is next.** The SMOKES array is **19** entries and `media` is #19 —
+the handoff brief says #21 and the `media-r1` entry says #18. Count the array; never quote a
+remembered number. And the working tree is currently shared with a **bloom/post-processing**
+session whose uncommitted work sits in four of the files this workstream touches
+(`agent-world-runtime.ts`, `platform-host.ts`, `platform-editor.ts`, plus `smoke-roundtrip.mjs`
+and `archive-skybox-spiral.ts`, which are entirely theirs). This commit was staged hunk by hunk
+and checked two ways: a grep for foreign markers in the staged diff, and a standalone `tsc`
+over the extracted index, so it is self-consistent on its own rather than only inside a tree
+that also contains their work.
+
+**Not done:** `play-sound` interactions and the showroom media pass. The interaction seams are
+mapped. The highest-risk one is that `interactInternal` handles `toggle-visibility` and then
+*falls through* to apply-impulse with no guard — though adding a union member makes that a type
+error rather than a silent misfire, so the build catches it. Two design conclusions worth
+carrying: the runtime must emit an event for `agent-world-audio.ts` to play (the runtime cannot
+own audio — the `AudioListener` and the gesture-gated context are host-only, the same split
+sound entities already use), and `targetIds` should become optional for `play-sound`
+specifically, so a BallZ ring can chime *itself* without naming a target.

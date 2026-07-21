@@ -196,6 +196,8 @@ export class PlatformEditor {
   /** The Environment sky dropdown, held so `refresh()` can re-read the world into it. */
   private skySelect: HTMLSelectElement | null = null;
   private overlaySelect: HTMLSelectElement | null = null;
+  /** Joined sky ids the dropdown was last built from, so it only rebuilds when they change. */
+  private skyOptionSignature = "";
   /** Envelope controls, held for the same reason as `skySelect` — see that comment. */
   private envelopeToggle: HTMLInputElement | null = null;
   private envelopeInputs: HTMLInputElement[] = [];
@@ -537,6 +539,7 @@ export class PlatformEditor {
       this.skySelect.value = state?.environment?.sky ?? "";
     }
     if (this.overlaySelect && document.activeElement !== this.overlaySelect) {
+      this.syncSkyOptions();
       this.overlaySelect.value = state?.environment?.overlay ?? "";
     }
     const envelopeFocused = document.activeElement === this.envelopeToggle
@@ -1277,21 +1280,41 @@ export class PlatformEditor {
     return { panel, chips };
   }
 
-  /** Scene-scoped environment: the recovered skybox sets, selectable per scene. */
-  private buildEnvironment(): HTMLElement {
-    const select = document.createElement("select");
+  /**
+   * Repopulate the sky list from the live registry.
+   *
+   * The vocabulary is no longer fixed at construction: importing a cube set through the
+   * media library registers a new sky mid-session, and this panel is built exactly once,
+   * so without this the set would be selectable by an agent and invisible to the human at
+   * the same desk. Guarded by an id signature because `refresh()` runs constantly — a
+   * select rebuilt every frame cannot be clicked.
+   */
+  private syncSkyOptions(): void {
+    if (!this.skySelect) return;
+    const skies = this.deps.api.skies();
+    const signature = skies.map((sky) => sky.id).join("|");
+    if (signature === this.skyOptionSignature) return;
+    this.skyOptionSignature = signature;
+
+    const previous = this.skySelect.value;
+    this.skySelect.replaceChildren();
     const none = document.createElement("option");
     none.value = "";
     none.textContent = "No sky (flat colour)";
-    select.append(none);
-    for (const sky of this.deps.api.skies()) {
+    this.skySelect.append(none);
+    for (const sky of skies) {
       const option = document.createElement("option");
       option.value = sky.id;
       option.textContent = sky.label;
       option.title = sky.description;
-      select.append(option);
+      this.skySelect.append(option);
     }
-    select.value = this.deps.world.getEnvironment().sky ?? "";
+    this.skySelect.value = previous;
+  }
+
+  /** Scene-scoped environment: the recovered skybox sets, selectable per scene. */
+  private buildEnvironment(): HTMLElement {
+    const select = document.createElement("select");
     select.addEventListener("change", () => this.setSky(select.value || null));
     // Held so `refresh()` can re-sync it. This panel is built exactly once, at construction,
     // which made the control write-only: it pushed a sky into the world and then never read one
@@ -1313,6 +1336,9 @@ export class PlatformEditor {
       option.title = descriptor.description;
       overlay.append(option);
     }
+    // Assigned first: the option list comes from the live registry, not a snapshot.
+    this.syncSkyOptions();
+    select.value = this.deps.world.getEnvironment().sky ?? "";
     overlay.value = this.deps.world.getEnvironment().overlay ?? "";
     overlay.addEventListener("change", () => this.setOverlay(overlay.value || null));
     this.overlaySelect = overlay;
@@ -1396,7 +1422,7 @@ export class PlatformEditor {
     if (!definition) return;
     this.deps.api.load({
       ...definition,
-      environment: { ...definition.environment, sky: skyId as never },
+      environment: { ...definition.environment, sky: skyId },
     });
     this.deps.onEnvironmentChanged?.();
     this.select(null);

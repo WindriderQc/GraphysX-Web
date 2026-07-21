@@ -27,7 +27,8 @@ import { AgentWorldAudioLayer } from "./agent-world-audio";
 import { mountBallzPlay } from "./ballz-play";
 import { createOverlaySketch, type AgentWorldOverlayId, type OverlaySketch } from "./agent-world-overlay";
 import { createGraphysXAgentToolBridge, type GraphysXAgentToolBridge } from "./agent-world-bridge";
-import { archiveSkyboxUrls, orientArchiveCubeTexture } from "./archive-skybox";
+import { orientArchiveCubeTexture } from "./archive-skybox";
+import { agentWorldSkyFaceUrls } from "./agent-world-skies";
 import { installPlatformTheme } from "./platform-theme";
 // Type-only: the editor module (and the ~348 KB TransformControls gizmo stack it pulls in)
 // is loaded on demand, so the showroom front door never pays for chrome it keeps hidden.
@@ -424,21 +425,36 @@ export class PlatformHost {
     const descriptor = this.world.listSkies().find((sky) => sky.id === skyId);
     if (!descriptor) return;
 
-    const cached = this.skyCache.get(descriptor.id);
+    const faceUrls = agentWorldSkyFaceUrls(descriptor);
+    // Key on the FACES, not the id. An imported set lives in the asset store, which
+    // reuses an id as soon as one is freed (asset-store.mjs `uniqueId`), so a
+    // remove-then-reimport legitimately puts different pixels behind the same sky id —
+    // and an id-keyed cache would then render the old cubemap for the life of the tab.
+    // That is the same stale-serve `media-r1` already paid for once at the HTTP layer;
+    // this is the in-memory instance of it.
+    const cacheKey = faceUrls.join("|");
+    const cached = this.skyCache.get(cacheKey);
     if (cached) {
       this.setSkyTexture(cached, descriptor.horizonColor, token);
       return;
     }
-    new CubeTextureLoader().load(
-      archiveSkyboxUrls(descriptor.basePath, descriptor.extension),
+    const loader = new CubeTextureLoader();
+    // Imported faces are served cross-origin from the asset store (a different port),
+    // and `orientArchiveCubeTexture` rotates the poles through a 2D canvas — without
+    // this the canvas is tainted and orienting throws. The store already sends
+    // `access-control-allow-origin: *`, so anonymous is all that is missing. Harmless
+    // for the same-origin curated sets.
+    loader.setCrossOrigin("anonymous");
+    loader.load(
+      faceUrls,
       (texture) => {
         texture.colorSpace = SRGBColorSpace;
         const oriented = orientArchiveCubeTexture(texture);
-        this.skyCache.set(descriptor.id, oriented);
+        this.skyCache.set(cacheKey, oriented);
         this.setSkyTexture(oriented, descriptor.horizonColor, token);
       },
       undefined,
-      () => console.warn(`Could not load sky "${descriptor.id}" from ${descriptor.basePath}`),
+      () => console.warn(`Could not load sky "${descriptor.id}" from ${faceUrls[0]}`),
     );
   }
 

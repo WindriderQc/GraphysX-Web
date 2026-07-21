@@ -31,6 +31,11 @@ import {
   registerAgentWorldTextures,
   type AgentWorldTextureDescriptor,
 } from "./agent-world-textures";
+import {
+  registerAgentWorldSkies,
+  resolveAgentWorldSky,
+  type AgentWorldSkyDescriptor,
+} from "./agent-world-skies";
 
 export const GRAPHYSX_AGENT_MEDIA_SCHEMA = "graphysx.agent-media/v1";
 
@@ -83,6 +88,20 @@ export type AgentMediaImportOptions = {
   category?: string;
   /** Textures only: the tiling the library should suggest, default [1, 1]. */
   defaultRepeat?: [number, number];
+  /**
+   * Extra record metadata, persisted verbatim by the store. Sky-set imports use it to
+   * tag each face with the set it belongs to and which cube slot it fills, which is what
+   * lets six independent texture records be reassembled into one sky on refresh.
+   */
+  meta?: Record<string, unknown>;
+};
+
+export type AgentMediaSkyImportOptions = {
+  /** Sky id used in `environment.sky`. Defaults to a slug of the folder or file prefix. */
+  id?: string;
+  label?: string;
+  /** Fog tint. Omit to sample it from the front face — usually the better answer. */
+  horizonColor?: string;
 };
 
 export type AgentMediaRegisterOptions = AgentMediaImportOptions & {
@@ -109,6 +128,16 @@ export type GraphysXAgentMediaApi = {
    * browser, and uploaded. Resolves to the registered descriptor.
    */
   import(path: string, options?: AgentMediaImportOptions): Promise<AgentWorldResult<AgentWorldMediaDescriptor>>;
+  /**
+   * Import a folder of six cube faces as a sky set usable via `environment.sky`.
+   *
+   * Accepts both datalake conventions (`left/right/up/down/front/back` folders and loose
+   * `*_PosX..*_NegZ` files, DDS included) and registers the result into the same lookup
+   * the curated skies use — so `environment: { sky: "clouds" }` works exactly like
+   * `sky: "clearblue"`. The faces are stored as ordinary textures; only the metadata
+   * makes them a sky, which is why they can never leak into the static release manifest.
+   */
+  importSky(folderPath: string, options?: AgentMediaSkyImportOptions): Promise<AgentWorldResult<AgentWorldSkyDescriptor>>;
   /** Store raw data (drag-dropped file, generated payload) as a library asset. */
   register(options: AgentMediaRegisterOptions): Promise<AgentWorldResult<AgentWorldMediaDescriptor>>;
   /** Remove an imported asset from the store and the registries. */
@@ -124,6 +153,65 @@ export type GraphysXAgentMediaApi = {
    */
   terrainHeights(id: string, samples?: number): Promise<AgentWorldResult<{ samples: number; heights: number[] }>>;
 };
+
+/**
+ * The six cube slots, in three's order: +X, -X, +Y, -Y, +Z, -Z.
+ *
+ * A datalake sky folder names its faces one of two ways, and they are NOT the same
+ * mapping — getting this wrong yields a sky that looks fine until you turn around:
+ *
+ * - **Directional** (`left/right/up/down/front/back`, the TV3D archive folders). These
+ *   use the opposite left/right convention, so `left` is +X and `right` is -X. That swap
+ *   is the one `archiveSkyboxUrls` has always applied for the curated sets.
+ * - **Axial** (`_PosX/_NegX/...`, the loose `Clouds_*.dds` set). These are already named
+ *   by WebGL axis, so they map straight through with no swap.
+ *
+ * Matching is case-insensitive because the same datalake ships `Back.jpg`, `back.bmp`
+ * and `Back.JPG`.
+ */
+const SKY_FACE_SLOTS = [
+  { slot: 0, axis: "PosX", directional: "left" },
+  { slot: 1, axis: "NegX", directional: "right" },
+  { slot: 2, axis: "PosY", directional: "up" },
+  { slot: 3, axis: "NegY", directional: "down" },
+  { slot: 4, axis: "PosZ", directional: "front" },
+  { slot: 5, axis: "NegZ", directional: "back" },
+] as const;
+
+/** Image extensions a sky face may arrive as (DDS converts to PNG on the way in). */
+const SKY_FACE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".bmp", ".webp", ".dds"]);
+
+export type AgentMediaSkyFaceMatch = { slot: number; name: string; path: string };
+
+/**
+ * Work out which files in a folder listing form a cube set, and under what convention.
+ *
+ * Returns null unless all six slots are filled: five faces is not a sky, and registering
+ * a partial set would fail deep inside `CubeTextureLoader` with "did not load all six
+ * cube faces" long after the user clicked import.
+ */
+export function matchAgentWorldSkyFaces(
+  files: readonly { name: string; path: string; extension: string }[],
+): { convention: "directional" | "axial"; faces: AgentMediaSkyFaceMatch[] } | null {
+  const candidates = files.filter((file) => SKY_FACE_EXTENSIONS.has(file.extension.toLowerCase()));
+  for (const convention of ["directional", "axial"] as const) {
+    const faces: AgentMediaSkyFaceMatch[] = [];
+    for (const entry of SKY_FACE_SLOTS) {
+      const token = (convention === "axial" ? entry.axis : entry.directional).toLowerCase();
+      // Match on the stem so `Clouds_PosX.dds` and `Back.jpg` both resolve, and anchor
+      // the directional match to the END of the stem: a set whose files are named
+      // `SkyLeft`/`SkyRight` still works, while `frontier.jpg` does not steal `front`.
+      const hit = candidates.find((file) => {
+        const stem = file.name.replace(/\.[^.]+$/, "").toLowerCase();
+        return convention === "axial" ? stem.endsWith(token) : stem === token || stem.endsWith(`_${token}`) || stem.endsWith(`-${token}`);
+      });
+      if (!hit) break;
+      faces.push({ slot: entry.slot, name: hit.name, path: hit.path });
+    }
+    if (faces.length === 6) return { convention, faces };
+  }
+  return null;
+}
 
 /** Model formats convertible in-browser. `.tvm`/`.x` need the offline workshop tooling. */
 export const CONVERTIBLE_MODEL_EXTENSIONS = new Set([".obj", ".gltf", ".glb", ".fbx", ".stl", ".3ds"]);
@@ -232,6 +320,49 @@ function registerRecords(records: AgentWorldMediaDescriptor[]): void {
   registerAgentWorldTextures(textures);
   registerAgentWorldAssets(models);
   registerAgentWorldSounds(sounds);
+  registerAgentWorldSkies(skySetsFrom(records));
+}
+
+/**
+ * Reassemble sky sets out of their six tagged face records.
+ *
+ * Faces are stored as ordinary textures — that is deliberate, so a set costs the store no
+ * new asset kind and a single face can still be applied to a mesh like any other image.
+ * A set only becomes a sky when all six slots are present; an interrupted import leaves
+ * usable textures and no half-registered sky.
+ */
+function skySetsFrom(records: readonly AgentWorldMediaDescriptor[]): AgentWorldSkyDescriptor[] {
+  const grouped = new Map<string, { label: string; source: string; horizonColor: string; faces: string[] }>();
+  for (const record of records) {
+    const setId = record.meta?.skySet;
+    const slot = record.meta?.skySlot;
+    if (typeof setId !== "string" || typeof slot !== "number" || slot < 0 || slot > 5) continue;
+    const entry = grouped.get(setId) ?? {
+      label: typeof record.meta?.skySetLabel === "string" ? record.meta.skySetLabel : setId,
+      source: typeof record.meta?.skySource === "string" ? `Datalake/${record.meta.skySource}` : record.source,
+      horizonColor: typeof record.meta?.skyHorizonColor === "string" ? record.meta.skyHorizonColor : "#8c98a4",
+      faces: [],
+    };
+    entry.faces[slot] = record.url;
+    grouped.set(setId, entry);
+  }
+
+  const skies: AgentWorldSkyDescriptor[] = [];
+  for (const [id, entry] of grouped) {
+    if (entry.faces.length !== 6 || entry.faces.some((url) => !url)) continue;
+    skies.push({
+      id,
+      label: entry.label,
+      description: `Imported cube set from ${entry.source}.`,
+      // Honest rather than guessed: the manifest records no pixel dimensions, and the
+      // field exists so a scene can avoid upscaling a low-res set. 0 reads as unknown.
+      resolution: 0,
+      horizonColor: entry.horizonColor,
+      source: entry.source,
+      faceUrls: entry.faces as [string, string, string, string, string, string],
+    });
+  }
+  return skies;
 }
 
 function ok<T>(value: T): AgentWorldResult<T> {
@@ -280,7 +411,7 @@ async function register(options: AgentMediaRegisterOptions): Promise<AgentWorldR
     if (options.label) query.set("label", options.label);
     if (options.category) query.set("category", options.category);
     if (options.source) query.set("source", options.source);
-    const meta: Record<string, unknown> = {};
+    const meta: Record<string, unknown> = { ...(options.meta ?? {}) };
     if (options.defaultRepeat) meta.defaultRepeat = options.defaultRepeat;
     if (Object.keys(meta).length) query.set("meta", JSON.stringify(meta));
     const record = await storeFetch<AgentWorldMediaDescriptor>(`/assets/upload?${query.toString()}`, {
@@ -323,6 +454,7 @@ async function importPath(path: string, options: AgentMediaImportOptions = {}): 
         category: options.category ?? "imported",
         source: `Datalake/${path} (DXT decoded)`,
         defaultRepeat: options.defaultRepeat,
+        meta: options.meta,
         data: blob,
       });
     }
@@ -340,7 +472,7 @@ async function importPath(path: string, options: AgentMediaImportOptions = {}): 
         data: JSON.stringify(converted.payload),
       });
     }
-    const meta: Record<string, unknown> = {};
+    const meta: Record<string, unknown> = { ...(options.meta ?? {}) };
     if (options.defaultRepeat) meta.defaultRepeat = options.defaultRepeat;
     const record = await storeFetch<AgentWorldMediaDescriptor>("/assets/import", {
       method: "POST",
@@ -355,6 +487,122 @@ async function importPath(path: string, options: AgentMediaImportOptions = {}): 
     });
     await refresh();
     return ok({ ...record, url: absoluteUrl(record.url) });
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Average the horizon band of a loaded face into a fog tint.
+ *
+ * Not cosmetic: the host tints distance fog with `horizonColor`, and the curated sets all
+ * carry a hand-picked one. An imported set defaulting to grey would fade terrain into a
+ * colour the sky does not contain — "fog does not fight a skybox, fog of the wrong colour
+ * does". Sampling the bottom third of a side face is where the horizon actually sits.
+ */
+async function sampleHorizonColor(datalakePath: string): Promise<string> {
+  const size = 32;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const draw = canvas.getContext("2d");
+  if (!draw) throw new Error("A 2D canvas context is required to sample a sky horizon");
+
+  const fileUrl = `${state.baseUrl}/datalake/file?path=${encodeURIComponent(datalakePath)}`;
+  if (extensionOf(datalakePath) === ".dds") {
+    // The same CPU decode the import path uses — an Image cannot read a DXT container.
+    const response = await fetch(fileUrl);
+    if (!response.ok) throw new Error(`Could not read ${datalakePath} (${response.status})`);
+    const { decodeDds } = await import("./dds-decode");
+    const decoded = decodeDds(await response.arrayBuffer());
+    const source = document.createElement("canvas");
+    source.width = decoded.width;
+    source.height = decoded.height;
+    const sourceDraw = source.getContext("2d");
+    if (!sourceDraw) throw new Error("A 2D canvas context is required to sample a sky horizon");
+    sourceDraw.putImageData(new ImageData(new Uint8ClampedArray(decoded.pixels), decoded.width, decoded.height), 0, 0);
+    draw.drawImage(source, 0, 0, size, size);
+  } else {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    await new Promise<void>((resolveImage, rejectImage) => {
+      image.onload = () => resolveImage();
+      image.onerror = () => rejectImage(new Error(`Could not read sky face ${datalakePath}`));
+      image.src = fileUrl;
+    });
+    draw.drawImage(image, 0, 0, size, size);
+  }
+
+  const band = draw.getImageData(0, Math.floor(size * 0.66), size, Math.ceil(size / 3)).data;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  const pixels = band.length / 4;
+  for (let index = 0; index < band.length; index += 4) {
+    r += band[index];
+    g += band[index + 1];
+    b += band[index + 2];
+  }
+  const channel = (total: number) => Math.round(total / pixels).toString(16).padStart(2, "0");
+  return `#${channel(r)}${channel(g)}${channel(b)}`;
+}
+
+async function importSky(
+  folderPath: string,
+  options: AgentMediaSkyImportOptions = {},
+): Promise<AgentWorldResult<AgentWorldSkyDescriptor>> {
+  try {
+    const listing = await browse(folderPath);
+    if (!listing.ok || !listing.value) throw new Error(listing.error ?? `Could not browse ${folderPath}`);
+    const match = matchAgentWorldSkyFaces(listing.value.files);
+    if (!match) {
+      throw new Error(
+        `No cube set in ${folderPath || "the datalake root"}: expected six faces named left/right/up/down/front/back or *_PosX.._NegZ`,
+      );
+    }
+
+    // An axial set is usually loose files sharing a prefix (`Clouds_PosX.dds`), so the
+    // prefix is the set's real name; a directional set lives in its own folder, so the
+    // folder is. Both beat "sky" as a default id.
+    const axialPrefix = match.convention === "axial"
+      ? match.faces[0].name.replace(/\.[^.]+$/, "").replace(/[_-]?posx$/i, "")
+      : "";
+    const folderName = folderPath.split("/").filter(Boolean).pop() ?? "sky";
+    const setName = options.label ?? (axialPrefix || folderName);
+    const setId = options.id ?? (setName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "sky");
+
+    // Sampled from +Z (front), the face a level camera actually looks at, and sampled
+    // BEFORE the import so it can ride along in the face metadata. Computing it after
+    // registration instead would leave `api.skies()` holding a different tint than the
+    // value this call returns, and it would reset to the default on the next reload —
+    // the write-without-reading-back defect the roundtrip sweep exists to catch.
+    // A sampling failure must not sink an otherwise good import.
+    const horizonColor = options.horizonColor
+      ?? await sampleHorizonColor(match.faces[4].path).catch(() => "#8c98a4");
+
+    // Faces import through the ordinary path, so DDS still CPU-decodes to PNG and every
+    // face becomes a perfectly ordinary texture record. What makes them a sky is the
+    // meta tag, which `registerRecords` reassembles on the next refresh.
+    for (const face of match.faces) {
+      const imported = await importPath(face.path, {
+        id: `${setId}-sky-${face.slot}`,
+        label: `${setName} ${face.name}`,
+        category: "sky",
+        meta: {
+          skySet: setId,
+          skySetLabel: setName,
+          skySlot: face.slot,
+          skySource: folderPath,
+          skyHorizonColor: horizonColor,
+        },
+      });
+      if (!imported.ok || !imported.value) throw new Error(imported.error ?? `Could not import sky face ${face.path}`);
+    }
+
+    await refresh();
+    const descriptor = resolveAgentWorldSky(setId);
+    if (!descriptor) throw new Error(`Sky ${setId} imported but did not register`);
+    return ok(descriptor);
   } catch (error) {
     return fail(error);
   }
@@ -433,6 +681,7 @@ const mediaApi: GraphysXAgentMediaApi = {
   refresh,
   browse,
   import: importPath,
+  importSky,
   register,
   remove,
   terrainHeights,

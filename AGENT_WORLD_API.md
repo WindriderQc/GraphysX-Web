@@ -147,6 +147,30 @@ const grid = await gx.media.terrainHeights("height");   // an imported heightmap
 gx.spawn({ id: "hills", type: "terrain", terrain: { heights: grid.value.heights, size: 120, heightScale: 9 } });
 ```
 
+A folder of six cube faces imports as a **sky set**, usable through `environment.sky`
+exactly like a curated one:
+
+```js
+await gx.media.importSky("StockRoom/Sky/ClearBlue");  // -> { id: "clearblue", ... }
+await gx.media.importSky("StockRoom/Sky");            // loose Clouds_*.dds -> id "clouds"
+gx.load({ ...gx.export(), environment: { ...gx.export().environment, sky: "clouds" } });
+```
+
+Both datalake conventions are accepted, and they do **not** map the same way: a
+directional set (`left/right/up/down/front/back`, the TV3D archive folders) applies the
+archive's left/right axis swap, while an axial set (`*_PosX` … `*_NegZ`, DDS included) is
+already named by WebGL axis and maps straight through. Matching is case-insensitive and
+ignores `Thumbs.db`; a folder missing any of the six faces is refused outright rather than
+registering a sky that would fail later inside the cube loader. DDS faces CPU-decode to
+PNG on the way in, and the fog tint (`horizonColor`) is sampled from the front face unless
+you pass one — fog of the wrong colour is what fights a skybox.
+
+Faces are stored as ordinary texture records tagged with set metadata, so a sky costs the
+store no new asset kind, and an imported set carries explicit face URLs instead of the
+`basePath` the release manifest scrapes — it is therefore *structurally* unable to leak
+into a production bundle. `id` defaults to a slug of the folder (or the shared file prefix
+for a loose set); pass `{ id, label, horizonColor }` to override.
+
 Textures and sounds are copied server-side as-is (PNG/JPG/GIF/BMP/WebP load directly; DDS
 is stored but needs converting before it can be applied). Foreign model formats —
 **OBJ, GLTF, GLB, FBX, STL, 3DS** — are fetched into the browser, converted with three.js
@@ -566,8 +590,8 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `open()`, `demo()` | Open the studio or restore the built-in API-created demonstration. |
 | `assets()` | Discover recovered complex models that can be spawned by stable asset ID. |
 | `textures()` | Discover stable semantic textures, previews, descriptions, and repeat defaults. |
-| `media.*` | Runtime imports from the local asset store: `status()`, `list(kind?)`, async `refresh()`, `browse(path?)`, `import(path, options?)`, `register(options)`, `remove(id)`. |
-| `skies()`, `emitters()` | Discover the per-scene archive skybox sets and the archive particle-emitter presets. |
+| `media.*` | Runtime imports from the local asset store: `status()`, `list(kind?)`, async `refresh()`, `browse(path?)`, `import(path, options?)`, `importSky(folder, options?)`, `register(options)`, `remove(id)`. |
+| `skies()`, `emitters()` | Discover the per-scene skybox sets (curated archive sets plus any imported through `media.importSky`) and the archive particle-emitter presets. |
 | `sounds()` | Discover the archive sound samples plus media-library imports, for `sound` entities. |
 | `heightmaps()` | Discover the curated terrain heightmaps, with archive provenance, for `terrain` entities. |
 | `flocks()`, `forceFields()` | Discover the Nature-of-Code simulation presets: self-steering boid flocks and force fields (attractor/flow/drag/vortex). |

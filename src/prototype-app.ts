@@ -74,7 +74,7 @@ import {
 import { GRAPHYSX_AGENT_WORLD_ASSETS, allAgentWorldAssets } from "./agent-world-assets";
 import { getAgentWorldMediaApi } from "./agent-world-media";
 import { allAgentWorldSounds } from "./agent-world-sounds";
-import { GRAPHYSX_AGENT_WORLD_SKIES } from "./agent-world-skies";
+import { allAgentWorldSkies } from "./agent-world-skies";
 import { GRAPHYSX_AGENT_WORLD_EMITTERS } from "./agent-world-particles";
 import { GRAPHYSX_AGENT_WORLD_HEIGHTMAPS } from "./agent-world-terrain";
 import { GRAPHYSX_AGENT_WORLD_FLOCKS } from "./agent-world-flock";
@@ -3462,7 +3462,9 @@ export class PrototypeApp {
       assets: () => allAgentWorldAssets(),
       textures: () => allAgentWorldTextures(),
       sounds: () => allAgentWorldSounds(),
-      skies: () => GRAPHYSX_AGENT_WORLD_SKIES,
+      // Imports included, same as the v2 surface: a sky set registered through the media
+      // library is vocabulary, not a second-class citizen of whichever host is asking.
+      skies: () => allAgentWorldSkies(),
       emitters: () => GRAPHYSX_AGENT_WORLD_EMITTERS,
       heightmaps: () => GRAPHYSX_AGENT_WORLD_HEIGHTMAPS,
       flocks: () => GRAPHYSX_AGENT_WORLD_FLOCKS,
