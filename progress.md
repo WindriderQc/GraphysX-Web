@@ -1095,3 +1095,30 @@ carrying: the runtime must emit an event for `agent-world-audio.ts` to play (the
 own audio — the `AudioListener` and the gesture-gated context are host-only, the same split
 sound entities already use), and `targetIds` should become optional for `play-sound`
 specifically, so a BallZ ring can chime *itself* without naming a target.
+
+## 2026-07-21 — the revival wave is live
+
+- **Gate 19/19 green; everything shipped.** The 14 held commits reached `origin/main` (a concurrent
+  session pushed the shared branch, carrying them with its own), CI is green, and the deploy ran.
+- **Verified against the running system, not the build.** `smoke-vehicles` driven at
+  `https://graphysx.specialblend.ca/` passes: the Archive Garage is reachable from the production
+  front door, 25 entities, all three recovered meshes `ready`, **zero 4xx**. Spot-checked live:
+  `/assets/vehicles/archive-impreza.json`, `/assets/archives/milky-way/mars.jpg` and
+  `/assets/textures/classic/Checkerboard.png` all 200 — that last one is the exact texture the
+  release manifest was pruning, so the trap is confirmed fixed in production rather than in theory.
+- **`spiral` is fixed** (`hiddenRings` 16/16) and `dna-tree` was threaded by a concurrent session
+  (`dna-r2`), so both items this session was blocked on have landed.
+- **The two gate failures on the first run were contention, and the isolation rule caught it.**
+  `roundtrip` and `spiral` failed together, both passed alone, and a re-run after a gap was clean.
+  Worth restating because it cuts both ways: earlier in this arc a *genuine* spiral failure was
+  correctly held back on exactly the same evidence pattern, distinguished only by reproducing alone.
+
+**What is live from this arc:** the recovered CubX assembly · two BallZ arenas · the Impreza,
+Cobra and Piste Ovale in the Archive Garage · Flock Planet and the Forces & Flow Garden · the Voie
+Lactée · the Math Game as both an entity type and a screen · the Maison massing model · the 2D
+overlay layer · shadows · the win state · Browse Scenes and Games & Playgrounds on the front door.
+
+**Still open:** crowds/populations (the last unbuilt Nature-of-Code system), high-res skies, a real
+L-system primitive (the DNA module solved *its* recursion by instancing; that does not generalise to
+rewrite grammars), and the asset-URL build guard, which is still in flight and remains the standing
+fix for a trap that fired four times in one day.
