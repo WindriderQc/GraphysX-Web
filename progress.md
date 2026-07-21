@@ -930,3 +930,53 @@ Twelve commits are held behind that one ring-toggle fix, which is in flight in i
 - **"Select all" in the import dialog** toggles every importable file in the folder — a
   141-file Stockroom sweep is now two clicks (select all, import), with the same sequential
   truthful progress line.
+
+## 2026-07-21 — `spiral-r1` + `dna-r2`: the gate goes green, the backlog ships, the forest is real
+
+### The spiral fix — three causes stacked, one of them a real scene bug
+
+`collectedAfterRings 16 / hiddenRings 12` was not one defect:
+
+- **The sky-rotator was collecting rings.** The port lowered the rings from the legacy flying
+  line (y 1.5–2.1) to rolling height but left the rotator verbatim at 1.35 — where the spinning
+  bar's swept AABB grazes the tops of rings 7, 8 and 12 by centimetres (bar bottom 1.20, ring
+  top 1.27). Triggers respond to ANY mover — *deliberately*: the rules smoke drives a kinematic
+  subject and says so in a comment, so gating interactions to dynamic bodies (tried first)
+  broke `rules` and was reverted. The scene fix is the honest one: the bar rides at 1.6,
+  recorded as an adaptation beside the ring-lowering that caused it. Found by dumping
+  `trigger.enter` events: `spiral-ring-12 <- sky-rotator @0.383` names the culprit outright.
+- **The harness parked inside ring 1's box** (the in-flight park fix, carried) and **crossed
+  ring 1 twice** — once legitimately at settle (the authored spawn sits inside its box), once
+  in the collection loop — and its halfway probe at the gate's centre grazed ring 10's box half
+  a unit behind the gate. A rolling ball crosses each ring once; the harness now does too, and
+  a new assertion pins `hiddenAfterSettle === 1` so scenery collecting anything is a red.
+
+### The deploy pipeline was broken at `npm ci`, and had been for a day
+
+Every main push since `math-r1` deployed **nothing**: CI's npm 10 refuses the lock with
+"Missing: @emnapi/core@1.11.2" while npm 11 locally calls the same file complete —
+`@napi-rs/wasm-runtime` declares the pair as peers, npm 10 wants top-level lock entries for
+them, npm 11's resolver doesn't write them. `npx npm@10 install --package-lock-only` plus an
+npm 10 `ci --dry-run` to prove it. The failure mode rhymes with the cancelled-gate gap
+`envelope-r1` closed: the gate being green locally means nothing if the deploy in front of it
+dies in second fifteen. Check `gh run list` after pushing, not just the local gate.
+
+### `dna-tree` is threaded, and the forest was looked at
+
+All twenty points of the integration map, including the two that bit `formula-field`: the
+`isEntityType` guard array beside the union, and the patch path — in the two-arg **merge**
+form, `{ dna: { generation: 4 } }` keeps the genome, and the roundtrip smoke now proves it
+(`dna.keepsGenome` pins the single-specimen trunk at 1.6, exactly the value a replace-form
+patch would reset). `dna()` is on BOTH API implementations; growth ticks inside
+`updateSimulation` so pause/step freeze and advance it; the editor grew a ♣ glyph and one
+Life-palette chip per genome preset. Screenshotted immediately (`output/dna-shoot/`): the
+specimen reads as a subject, the grove is short trees over a wide plot exactly as its author
+recorded, the per-tree hue families are visible across the row, trees grounded, nothing
+floating, no sky or lighting defects. The composition note held word for word.
+
+### Gate evidence
+
+Full verify in a throwaway worktree at the spiral-fix commit: 19/20, the one red (`games`)
+passed in isolation — the documented contention pattern, confirmed before believing it. The
+concurrent session's push carried the fix out with the whole archive-revival backlog. A second
+full worktree run gates the dna threading commit before its push.
