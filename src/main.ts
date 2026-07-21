@@ -225,6 +225,11 @@ if (mode === "legacy") {
       // aimed slightly past the CubX assembly so the flock and the shoreline occupy the upper
       // two thirds instead of a flat horizon band.
       framing: editorFirst ? undefined : { position: [9, 12, 22], target: [-0.5, 3.4, -5] },
+      // The entry move belongs to the front door only: arriving in the editor or via a
+      // screenshot harness should put you where you asked to be, immediately. `?intro=0`
+      // opts out, which is how smoke-showroom measures the idle orbit without an intro
+      // moving the camera underneath its probe.
+      intro: !editorFirst && new URLSearchParams(window.location.search).get("intro") !== "0",
       // Leaving the editor restores the welcome overlay and hands the pointer back to the
       // showroom, so it is a place you can come back to rather than a one-way door.
       onExitEditor: editorFirst

@@ -75,6 +75,18 @@ export interface PlatformHostOptions {
    * composed scene like the showroom wants its own, tighter framing.
    */
   framing?: { position: [number, number, number]; target: [number, number, number] };
+  /**
+   * Play an entry move on load: the camera eases from a wider, higher pose onto `framing`
+   * while the exposure comes up from dark. Default false — only the front door asks for it,
+   * and anything that loads straight into work (the editor, a level, a screenshot harness)
+   * would be fighting it.
+   *
+   * Deliberately built on the same `focusMove` click-to-focus uses, so it inherits the two
+   * behaviours that matter: a cubic in-out easing rather than a mechanical constant velocity,
+   * and abandonment the instant the visitor grabs the camera. An intro you cannot interrupt
+   * is a splash screen.
+   */
+  intro?: boolean;
 }
 
 /**
@@ -141,6 +153,12 @@ export class PlatformHost {
   private currentMode: PlatformMode = "scene";
   /** Where to return when play ends — you came from somewhere, and should go back to it. */
   private modeBeforePlay: PlatformMode = "scene";
+  /**
+   * Entry move state. Only the exposure ramp lives here — the camera half is an ordinary
+   * `focusMove`, so there is exactly one camera-move code path rather than two that can
+   * disagree. `null` once the intro is done or was never asked for.
+   */
+  private intro: { elapsed: number; duration: number; fromExposure: number; toExposure: number } | null = null;
   private focusMove: {
     fromPosition: Vector3;
     toPosition: Vector3;
@@ -190,11 +208,17 @@ export class PlatformHost {
     this.controls.target.set(...(options.framing?.target ?? [0, 3, 0]));
     this.controls.autoRotate = options.autoOrbit === true;
     this.controls.autoRotateSpeed = 0.6;
+    if (options.intro === true) this.beginIntro();
     this.controls.addEventListener("start", () => {
       this.controls.autoRotate = false;
       // A grab is the visitor taking the camera back; abandon any move in flight rather than
       // fighting them for it.
       this.focusMove = null;
+      // Explicitly, rather than inferring it from `focusMove` having gone null: the camera
+      // move and the exposure ramp share a duration, and `advanceFocus` runs first, so on the
+      // final frame an inferring intro would see null and call its own completion an
+      // interruption. It did — the ramp finished but never recorded that it had.
+      this.cancelIntro();
     });
 
     // Neutral image-based lighting so PBR materials read well without any archive
@@ -385,6 +409,84 @@ export class PlatformHost {
       elapsed: 0,
       duration: Math.max(0.15, duration),
     };
+  }
+
+  /** True while the entry move is still playing. Goes false when it lands or is interrupted. */
+  get introPlaying(): boolean {
+    return this.intro !== null;
+  }
+
+  /**
+   * True once an entry move has run to completion. Distinct from `!introPlaying`, which is
+   * also true when no intro was ever requested — a smoke needs to tell "the intro finished"
+   * from "there was never an intro", and measuring camera movement from page load cannot:
+   * by the time a harness has finished its setup the 2.6s move is already over.
+   */
+  get introCompleted(): boolean {
+    return this.introDone;
+  }
+  private introDone = false;
+
+  /**
+   * The front-door entry move: pull back and up from the authored framing, then ease onto it
+   * while the exposure comes up from near-dark.
+   *
+   * The start pose is derived from the framing rather than hard-coded, so a scene that chooses
+   * its own framing gets an intro composed for *it* — the alternative is a fixed start pose
+   * that flies through the ground in a scene framed tighter than the showroom's.
+   */
+  private beginIntro(): void {
+    const target = this.controls.target.clone();
+    const offset = this.camera.position.clone().sub(target);
+    // Start wider and higher, looking at the same point. 1.7x out and 1.35x up reads as
+    // "arriving at" the scene; much more and the opening frame is an empty horizon.
+    const start = target.clone().add(offset.clone().multiplyScalar(1.7));
+    start.y = target.y + offset.y * 1.35 + 6;
+    this.camera.position.copy(start);
+
+    const toExposure = this.renderer.toneMappingExposure;
+    this.renderer.toneMappingExposure = toExposure * 0.22;
+    this.intro = { elapsed: 0, duration: 2.6, fromExposure: toExposure * 0.22, toExposure };
+
+    // The camera half is a plain focusMove, which also means a visitor grabbing the camera
+    // cancels it through the existing "start" handler with no extra wiring.
+    this.controls.autoRotate = false;
+    this.focusMove = {
+      fromPosition: start,
+      toPosition: target.clone().add(offset),
+      fromTarget: target.clone(),
+      toTarget: target,
+      elapsed: 0,
+      duration: 2.6,
+    };
+  }
+
+  /**
+   * Abandon the entry move and restore full exposure immediately. A visitor who grabbed the
+   * camera has skipped the intro; leaving the scene dimmed after that would be a bug rather
+   * than a flourish. `introDone` stays false — the intro was skipped, not completed.
+   */
+  private cancelIntro(): void {
+    if (!this.intro) return;
+    this.renderer.toneMappingExposure = this.intro.toExposure;
+    this.intro = null;
+  }
+
+  /** Advance the exposure ramp on its own timer. Interruption is signalled by `cancelIntro`. */
+  private updateIntro(delta: number): void {
+    const intro = this.intro;
+    if (!intro) return;
+    intro.elapsed += delta;
+    const t = Math.min(1, intro.elapsed / intro.duration);
+    // Quadratic ease-out: the lights come up quickly and settle, rather than staying dark for
+    // half the move and then snapping.
+    const eased = 1 - Math.pow(1 - t, 2);
+    this.renderer.toneMappingExposure = intro.fromExposure + (intro.toExposure - intro.fromExposure) * eased;
+    if (t >= 1) {
+      this.renderer.toneMappingExposure = intro.toExposure;
+      this.intro = null;
+      this.introDone = true;
+    }
   }
 
   /** Re-read background/sky/fog/envelope from the runtime's environment (call after env edits). */
@@ -617,6 +719,9 @@ export class PlatformHost {
     if (!this.editor?.isTransforming()) this.world.update(delta);
     this.audio.sync();
     this.advanceFocus(delta);
+    // After advanceFocus, so an intro whose camera move landed (or was grabbed away) this
+    // frame settles the exposure in the same frame rather than a frame late.
+    this.updateIntro(delta);
     this.controls.update();
     // Arm one shadow rebuild per frame (see `autoUpdate = false` in the constructor). The
     // first `render()` below consumes it; any nested pass a scene entity triggers reuses it.
