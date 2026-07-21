@@ -1122,3 +1122,104 @@ overlay layer · shadows · the win state · Browse Scenes and Games & Playgroun
 L-system primitive (the DNA module solved *its* recursion by instancing; that does not generalise to
 rewrite grammars), and the asset-URL build guard, which is still in flight and remains the standing
 fix for a trap that fired four times in one day.
+
+## 2026-07-21 — `audio-r2`: sounds fire from scene data
+
+- **`play-sound` is the third interaction type.** `{ type: "play-sound", sound, volume?,
+  positional?, refDistance?, targetIds? }` on any entity, so a click or a trigger crossing
+  sounds a source named by the document. A BallZ ring can now chime because the scene says
+  so rather than because play-layer code says so — which was the point: the vocabulary, not
+  a special case wired into one game.
+- **`targetIds` is optional here and on no other type.** The overwhelmingly common case is a
+  pickup or gate sounding at its own position, and making it name itself as its own target
+  would be ceremony. Empty resolves to the entity carrying the interaction; naming targets
+  plays one overlapping one-shot at each. The other two types stay exactly as strict, and the
+  smoke asserts that explicitly (`toggle-visibility` and `apply-impulse` with an empty
+  `targetIds` are still rejected) so this could not quietly become a general loosening.
+- **The runtime still does not touch audio.** It validates and emits `interaction.sound`;
+  `agent-world-audio.ts`, which already subscribed to the event stream for entity
+  reconciliation, turns that into a one-shot. Same entity-for-identity /
+  host-pass-for-effect split as `sound` entities and force fields, for the same reason —
+  the `AudioListener` and the gesture-gated `AudioContext` are exactly what the runtime must
+  not know about. `interactInternal` returns before the target walk, because a sound is the
+  one interaction that reports on its targets without mutating them.
+- **One-shots are deliberately NOT tracked in the entity map.** That map is one node per
+  entity id, and ten rings collected in a second must produce ten overlapping chimes — a
+  keyed map cannot express that, the eleventh would evict the tenth mid-decay. Nodes
+  self-detach on `onEnded`, or a ring chimed 200 times leaves 200 parented dead nodes.
+- **The source resolves at PLAY time, not at validation** — matching how a model's asset id
+  resolves when the loader runs. A document may reference an imported sound before
+  `media.refresh()` has landed, so the smoke fires an interaction using the *imported*
+  fixture sound rather than only the curated four.
+- Threaded through every seam the entity/interaction checklist names: the union, validation,
+  `interactInternal`, `resolveInteractions` normalisation (defaults are materialised into
+  the stored form, so volume reads back instead of being write-only), the **explicit**
+  `getEntityState` projection, the structural `AgentWorldEntityState.interactions` type, the
+  receipt, the capability manifest (`interaction.sound`), the stream-event union, and the
+  editor's interaction row + type dropdown + sound field.
+
+### Driven live before gating
+
+Real browser, real gesture (the autoplay policy means a click is load-bearing): two clicked
+interactions produced `oneShotCount` +2 — actual playback, not merely an accepted document —
+and a ball dropped through a trigger volume produced `firedByTrigger: 1`. Self-targeting
+resolved to `["chime"]`, an aimed one to `["bell"]`, visibility was untouched by both,
+document round-trip carried the sound and its normalised volume, and the guards rejected a
+missing source and an out-of-range volume.
+
+### Field notes on a tree with three sessions in it
+
+- **A build failure that was not real.** `npm run build` failed on
+  `src/agent-world-crowd.ts` — an untracked file a *third* session was writing at that
+  moment (Crowds, next on the handoff's remaining list). Re-running passed with the file
+  byte-identical: the build had read it **mid-write** (build started ~09:02:30, the file's
+  write completed 09:02:32). Before "fixing" a compile error in a file you do not own, check
+  whether you simply compiled someone's half-written save.
+- **The base moved mid-session.** The bloom session committed `aad0305` on top of this
+  workstream's `97ddb19` while it was in progress; both survived intact, which is the
+  evidence that the hunk-by-hunk staging in `sky-r1` actually worked rather than merely
+  appearing to.
+- Because of the above, the gate for this change was run in a throwaway `git worktree` at
+  HEAD with only this diff applied — the main tree cannot be trusted to build while another
+  session is mid-write in it.
+- Corrected a comment in `archive-playgrounds.ts` asserting that `toggle-visibility` and
+  `apply-impulse` "are the only interaction types". True when written, false as of this
+  change; the flock-count reasoning it supports still holds and is restated.
+
+### Gate
+
+`media` (#19) grew a `play-sound` block: state projection, self-targeting, aimed targeting,
+receipt shape, no-mutation, document round trip, all four guards, and a trigger crossing
+emitting `interaction.sound`. **Playback itself is not asserted headlessly** — it is
+gesture-gated, so the honest assertion is that the event fired and the layer accepted it,
+the same reasoning the sound-entity block uses for `tracked` rather than `playing`. Audible
+playback was confirmed interactively instead.
+
+**Final: all 21 checks passed** — but it took four runs to get an honest answer, and the
+detour is the most useful thing in this entry.
+
+- Run A failed `games` + `archive-levels`; run C failed `showroom` + `scene-store`. Different
+  smokes each time, every one passing alone.
+- **The cause: `verify`'s lock is per-CHECKOUT, so running in a worktree defeats it.** Another
+  session was running the gate in the main tree the whole time; the two runs starved each
+  other on a 16-core box (the handoff already measures one run at ~70% of it). Moving to a
+  worktree to isolate from concurrent *edits* is exactly what disabled the guard against
+  concurrent *runs*. Checking machine-wide for `node.*verify|smoke` processes — not just for
+  the lock file — is the check that actually tells you. With the machine quiet, the identical
+  code went 21/21.
+- **Run B was NOT contention, and nearly got dismissed as more of it.** `media` failed because
+  an assertion of mine was racy: it read the editor's Sky dropdown synchronously, but the
+  dropdown repopulates inside the editor's `refresh()` tick, so it lands a frame later. It had
+  passed twice before failing. Now it waits for the condition with a timeout — still hard
+  (`skyDropdownFound` is its own check), just no longer dependent on which side of a frame
+  boundary the evaluate lands — and was confirmed with three consecutive clean runs.
+
+The rule that falls out, worth more than the fix: **wandering failures mean contention; a
+failure that stays in the same smoke across runs is probably real.** And a smoke you wrote
+five minutes ago deserves suspicion of your own code before the harness gets blamed. Note
+`scene-store` appearing in that list is independently unsurprising — it is the known
+`EPERM`-on-`rename` defect the handoff lists as the one real outstanding bug, still unowned.
+
+**Not done:** the showroom media pass (ambient sound + an imported-media showpiece), which is
+the natural next step now that both halves exist — an imported sky and a sound that fires
+from scene data are exactly what a front-door demo would show.

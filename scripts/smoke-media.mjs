@@ -252,6 +252,89 @@ try {
     };
   });
 
+  // play-sound interactions: a sound fired from scene data, by a click and by a trigger
+  // crossing. Uses the IMPORTED sound, so this also proves an interaction resolves a
+  // media-library id rather than only the curated four.
+  out.playSound = await page.evaluate(async () => {
+    const api = window.__GRAPHYSX__;
+    const host = window.__GRAPHYSX_HOST__;
+
+    const loaded = api.load({
+      schema: "graphysx.agent-world/v2",
+      id: "smoke-play-sound",
+      label: "Play sound smoke",
+      entities: [
+        // No targetIds: the common case is a pickup sounding at itself.
+        { id: "chime", type: "box", transform: { position: [0, 1, 0] },
+          interactions: [{ id: "ring", type: "play-sound", sound: "smoke-blip", volume: 0.6 }] },
+        { id: "bell", type: "box", transform: { position: [4, 1, 0] } },
+        { id: "aimed", type: "box", transform: { position: [-4, 1, 0] },
+          interactions: [{ id: "at-bell", type: "play-sound", sound: "smoke-blip", targetIds: ["bell"] }] },
+      ],
+      environment: {},
+    });
+    if (!loaded.ok) return { ok: false, error: loaded.error };
+
+    const projected = api.state().entities.find((e) => e.id === "chime").interactions[0];
+    const receipt = api.interact("chime");
+    const aimed = api.interact("aimed");
+
+    const doc = api.export().entities.find((e) => e.id === "chime").interactions[0];
+    const reloaded = api.load(api.export());
+
+    // The guards must hold, and the OTHER types must not have been loosened by making
+    // targetIds optional for this one.
+    const rejectsMissingSource = !api.spawn({ id: "b1", type: "box", interactions: [{ type: "play-sound" }] }).ok;
+    const rejectsBadVolume = !api.spawn({ id: "b2", type: "box", interactions: [{ type: "play-sound", sound: "smoke-blip", volume: 5 }] }).ok;
+    const toggleStillNeedsTarget = !api.spawn({ id: "b3", type: "box", interactions: [{ type: "toggle-visibility", targetIds: [] }] }).ok;
+    const impulseStillNeedsTarget = !api.spawn({ id: "b4", type: "box", interactions: [{ type: "apply-impulse", targetIds: [], impulse: [0, 1, 0] }] }).ok;
+
+    // A trigger volume firing a sound — the BallZ ring, from scene data, no play layer.
+    const triggerLoad = api.load({
+      schema: "graphysx.agent-world/v2",
+      id: "smoke-play-sound-trigger",
+      label: "Trigger sound smoke",
+      entities: [
+        { id: "ring", type: "box", transform: { position: [0, 1, 0], scale: [2, 2, 2] }, physics: { mode: "trigger" },
+          interactions: [{ id: "ding", type: "play-sound", sound: "smoke-blip" }] },
+        { id: "ball", type: "sphere", transform: { position: [0, 6, 0] }, physics: { mode: "dynamic", mass: 1 } },
+      ],
+      environment: {},
+    });
+    const beforeTrigger = api.events().sequence;
+    for (let i = 0; i < 180; i += 1) api.step(1 / 60);
+    const soundEvents = api.events({ since: beforeTrigger }).events.filter((e) => e.type === "interaction.sound");
+
+    return {
+      ok: true,
+      // The state projection is explicit, so a missing field here is a real regression.
+      projectedSound: projected.sound,
+      projectedVolume: projected.volume,
+      projectedRefDistance: projected.refDistance,
+      selfTargeted: projected.targetIds.length === 0,
+      interactOk: receipt.ok,
+      receiptType: receipt.value?.type,
+      receiptSound: receipt.value?.sound,
+      // Empty targetIds resolves to the entity carrying the interaction.
+      receiptTargets: receipt.value?.targets.map((t) => t.id) ?? [],
+      aimedTargets: aimed.value?.targets.map((t) => t.id) ?? [],
+      // A sound changes nothing in the world; a receipt reports it without mutating.
+      visibilityUntouched: api.state().entities.every((e) => e.visible === true),
+      docCarries: doc.type === "play-sound" && doc.sound === "smoke-blip" && doc.volume === 0.6,
+      reloadOk: reloaded.ok,
+      rejectsMissingSource,
+      rejectsBadVolume,
+      toggleStillNeedsTarget,
+      impulseStillNeedsTarget,
+      triggerLoadOk: triggerLoad.ok,
+      firedByTrigger: soundEvents.length,
+      // Playback itself stays gesture-gated, so "the host layer has a one-shot path and
+      // the context is locked" is the honest headless assertion — the same reasoning the
+      // sound-entity block uses for `tracked` rather than `playing`.
+      oneShotCountIsNumber: typeof host.audio.oneShotCount === "number",
+    };
+  });
+
   // Foreign-format model: fetched from the datalake, converted in-browser, uploaded,
   // registered, spawnable, and its payload actually loads (asset.status → ready).
   out.modelImport = await page.evaluate(async () => {
@@ -365,6 +448,21 @@ try {
 
   // The human half: an imported set must appear in the editor's Sky dropdown, which is
   // built once at construction and would otherwise never show it.
+  //
+  // WAITED FOR, not read once: the dropdown repopulates inside the editor's `refresh()`
+  // tick, so it lands on the next frame rather than synchronously with the import. Reading
+  // it immediately is a race that won twice and then failed a gate — the assertion is still
+  // hard (it must appear, within the timeout), it just no longer depends on which side of a
+  // frame boundary the evaluate lands.
+  const skyDropdownFound = await page
+    .waitForFunction(() => {
+      const select = [...document.querySelectorAll("select")]
+        .find((s) => [...s.options].some((o) => o.textContent === "No sky (flat colour)"));
+      return Boolean(select && [...select.options].some((o) => o.value === "smokedome"));
+    }, null, { timeout: 10000 })
+    .then(() => true)
+    .catch(() => false);
+  out.skyDropdownFound = skyDropdownFound;
   out.skyInDropdown = await page.evaluate(() => {
     const select = [...document.querySelectorAll("select")]
       .find((s) => [...s.options].some((o) => o.textContent === "No sky (flat colour)"));
@@ -453,5 +551,27 @@ const ok =
   out.sky?.reloadOk &&
   out.sky?.reloadedSky === "smokedome" &&
   out.sky?.rejected &&
-  out.skyInDropdown?.includes("smokedome");
+  out.skyDropdownFound &&
+  out.skyInDropdown?.includes("smokedome") &&
+  out.playSound?.ok &&
+  out.playSound?.projectedSound === "smoke-blip" &&
+  out.playSound?.projectedVolume === 0.6 &&
+  out.playSound?.projectedRefDistance === 8 &&
+  out.playSound?.selfTargeted &&
+  out.playSound?.interactOk &&
+  out.playSound?.receiptType === "play-sound" &&
+  out.playSound?.receiptSound === "smoke-blip" &&
+  out.playSound?.receiptTargets?.length === 1 &&
+  out.playSound?.receiptTargets?.[0] === "chime" &&
+  out.playSound?.aimedTargets?.[0] === "bell" &&
+  out.playSound?.visibilityUntouched &&
+  out.playSound?.docCarries &&
+  out.playSound?.reloadOk &&
+  out.playSound?.rejectsMissingSource &&
+  out.playSound?.rejectsBadVolume &&
+  out.playSound?.toggleStillNeedsTarget &&
+  out.playSound?.impulseStillNeedsTarget &&
+  out.playSound?.triggerLoadOk &&
+  out.playSound?.firedByTrigger >= 1 &&
+  out.playSound?.oneShotCountIsNumber;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);

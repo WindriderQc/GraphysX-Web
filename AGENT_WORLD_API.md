@@ -341,7 +341,18 @@ gx.levels.importAscii({
 
 ## Simple interactions
 
-Entities can expose a labeled `toggle-visibility` or `apply-impulse` interaction. A person clicking the 3D object, its accessible Studio control, and an agent calling `interact()` all use the same atomic runtime path. Impulse targets must be dynamic rigid bodies, and receipts expose their resulting velocity.
+Entities can expose a labeled `toggle-visibility`, `apply-impulse` or `play-sound` interaction. A person clicking the 3D object, its accessible Studio control, and an agent calling `interact()` all use the same atomic runtime path. Impulse targets must be dynamic rigid bodies, and receipts expose their resulting velocity.
+
+`play-sound` fires a sound from scene data — `{ type: "play-sound", sound, volume?, positional?, refDistance?, targetIds? }`, where `sound` is a sound id (`sounds()`, curated or imported) or a URL. It is the one type where **`targetIds` may be omitted**: the common case is a pickup or gate sounding at its own position, and empty means "at the entity carrying the interaction" rather than "nowhere". Naming targets plays one overlapping one-shot at each. Put one on a trigger volume and a ring chimes when something crosses it, with no play-layer code in the loop:
+
+```js
+gx.spawn({
+  id: "ring-3", type: "torus", physics: { mode: "trigger" },
+  interactions: [{ id: "chime", type: "play-sound", sound: "coin" }]
+});
+```
+
+The runtime does not play audio — it validates the request and emits an `interaction.sound` event that the host's audio layer turns into a one-shot, the same entity-for-identity / host-pass-for-effect split `sound` entities use. Consequences worth knowing: playback needs the visitor's first click (browser autoplay policy), an unresolvable source is silent rather than an error, and the source is resolved at **play** time, so a document may reference an imported sound before `media.refresh()` has run.
 
 ```js
 gx.loadStarter("glow-garden");
@@ -631,7 +642,7 @@ The environment block carries `background`, `sky` (per-scene skybox), `overlay` 
 
 Point lights draw a small emissive marker sphere at their origin so an invisible thing can be found and selected. `marker: false` on the entity — at spawn or via `update` — removes the lightbulb and keeps the light, which is what a composed scene lighting a showpiece wants.
 
-Behaviors: `spin`, `bob`, `orbit`, `pulse`, `look-at`, and `follow-spline`. Interaction types: `toggle-visibility` and `apply-impulse`.
+Behaviors: `spin`, `bob`, `orbit`, `pulse`, `look-at`, and `follow-spline`. Interaction types: `toggle-visibility`, `apply-impulse` and `play-sound`.
 
 Queries can filter by `ids`, `type`, `tag`, case-insensitive `labelIncludes`, or a world-space `within: { center, radius }` test. Transactions and collaborative commits accept `spawn`, `spawn-prefab`, `update`, `remove`, `attach-behavior`, `detach-behavior`, `interact`, `set-environment`, and `select` commands.
 

@@ -783,7 +783,7 @@ export const ARCHIVE_PLAYGROUNDS: readonly ArchivePlayground[] = [
       deliberatelyAbsent: [
         "The 900-point `NatureStarfield` — see the deviation record; the `clearnight` skybox stands in.",
         "The three isolation lessons (separation-only, alignment-only, cohesion-only, driven by `effectiveFlockWeights` zeroing the other two). A scene is a scene, not a lesson player; the weights are ordinary editable fields on the flock entity, so the lesson can be performed by hand or by an agent in one `api.update` call.",
-        "`addFlockBoids` — the archive grew the population by 12 per click up to a capacity of 216. The platform cap is 240 and the count is an editable field, but `toggle-visibility` and `apply-impulse` are the only interaction types, so no click can change a count. Recorded rather than faked with hidden pre-spawned members.",
+        "`addFlockBoids` — the archive grew the population by 12 per click up to a capacity of 216. The platform cap is 240 and the count is an editable field, but no interaction type changes a numeric field — `toggle-visibility`, `apply-impulse` and `play-sound` flip visibility, push a body, and sound a source respectively — so no click can change a count. Recorded rather than faked with hidden pre-spawned members.",
         "The per-instance colour jitter (HSL 0.48 + rnd*0.12) and per-instance scale ramp (0.82 + (i%7)*0.035). The flock entity carries one colour for the population; a shipped preset does not expose per-member variation.",
       ],
     },

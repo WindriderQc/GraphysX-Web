@@ -30,6 +30,8 @@ export class AgentWorldAudioLayer {
   private readonly resumeContext: () => void;
   private dirty = true;
   private disposed = false;
+  /** One-shot nodes actually started, cumulative. Smokes read this. */
+  private oneShots = 0;
 
   constructor(camera: Camera, private readonly world: AgentWorldRuntime) {
     camera.add(this.listener);
@@ -42,6 +44,9 @@ export class AgentWorldAudioLayer {
       ) {
         this.dirty = true;
       }
+      // A `play-sound` interaction fired. The runtime only ever says "this happened" —
+      // turning that into audible air is this layer's job, same as for sound entities.
+      if (event.type === "interaction.sound") this.playOneShot(event.data);
     });
     // Autoplay policy: the context starts suspended and only a gesture may resume it.
     // One capturing listener on window covers every entry surface (showroom click,
@@ -61,6 +66,15 @@ export class AgentWorldAudioLayer {
   /** How many sound entities currently have an audio node. Smokes read this. */
   get trackedCount(): number {
     return this.tracked.size;
+  }
+
+  /**
+   * How many `play-sound` one-shots have been started since boot. Cumulative on purpose:
+   * a one-shot is over in a fraction of a second, so an instantaneous count would race
+   * any assertion that tried to read it.
+   */
+  get oneShotCount(): number {
+    return this.oneShots;
   }
 
   /** How many nodes are actually playing right now. */
@@ -89,6 +103,58 @@ export class AgentWorldAudioLayer {
       this.release(entry);
       this.tracked.delete(id);
     }
+  }
+
+  /**
+   * Play a fire-and-forget sound for a `play-sound` interaction.
+   *
+   * Deliberately NOT tracked in `this.tracked`: that map is the reconciliation of sound
+   * *entities*, one node per entity id, and a one-shot has no entity to belong to. Ten
+   * rings collected in a second must produce ten overlapping chimes, which a keyed map
+   * cannot express — the eleventh would evict the tenth mid-decay.
+   *
+   * Silent-not-crashed on every failure path, matching the entity layer: an unresolvable
+   * source, a locked AudioContext (the visitor has not clicked yet), or a failed decode
+   * all mean no sound, never a broken frame.
+   */
+  private playOneShot(data: Record<string, unknown>): void {
+    if (this.disposed) return;
+    const source = typeof data.sound === "string" ? data.sound : "";
+    const url = agentWorldSoundUrl(source);
+    if (!url) return;
+    if (this.listener.context.state !== "running") return;
+
+    const positional = data.positional !== false;
+    const volume = typeof data.volume === "number" ? data.volume : 0.8;
+    const refDistance = typeof data.refDistance === "number" ? data.refDistance : 8;
+    const targetIds = Array.isArray(data.targetIds) ? data.targetIds.filter((t): t is string => typeof t === "string") : [];
+
+    void this.bufferFor(url).then((buffer) => {
+      if (this.disposed) return;
+      // One node per target, so a sound aimed at three gates is heard at three places.
+      for (const targetId of targetIds.length ? targetIds : [null]) {
+        const object = targetId ? this.world.getEntityObject(targetId) : null;
+        const node = positional && object ? new PositionalAudio(this.listener) : new ThreeAudio(this.listener);
+        node.setBuffer(buffer);
+        node.setLoop(false);
+        node.setVolume(volume);
+        if (node instanceof PositionalAudio) {
+          node.setRefDistance(refDistance);
+          object?.add(node);
+        }
+        // Detach on completion or the scene graph accumulates dead nodes for the life of
+        // the session — a ring chimed 200 times would leave 200 of them parented.
+        node.onEnded = () => {
+          node.isPlaying = false;
+          node.removeFromParent();
+          node.disconnect();
+        };
+        node.play();
+        this.oneShots += 1;
+      }
+    }).catch(() => {
+      // Same contract as a sound entity with a bad source: silence, not a crashed layer.
+    });
   }
 
   private reconcile(id: string, config: ResolvedAgentWorldSound, visible: boolean): void {

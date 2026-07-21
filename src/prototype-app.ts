@@ -4568,10 +4568,14 @@ export class PrototypeApp {
         if (!definition) throw new Error(`Unknown entity: ${id}`);
         const type = agentAuthorValue(studio, "edit", "interaction-type") as AgentWorldInteraction["type"];
         const targetIds = agentAuthorValue(studio, "edit", "interaction-targets").split(",").map((target) => target.trim()).filter(Boolean);
-        const label = agentAuthorValue(studio, "edit", "interaction-label").trim() || (type === "apply-impulse" ? "Apply impulse" : "Toggle visibility");
+        const defaultLabels = { "apply-impulse": "Apply impulse", "play-sound": "Play sound", "toggle-visibility": "Toggle visibility" } as const;
+        const label = agentAuthorValue(studio, "edit", "interaction-label").trim() || defaultLabels[type] || "Toggle visibility";
         const interaction: AgentWorldInteraction = type === "apply-impulse"
           ? { type, label, targetIds, impulse: agentAuthorVector(studio, "edit", "interaction-impulse", [0, 5, 0]) }
-          : { type: "toggle-visibility", label, targetIds };
+          : type === "play-sound"
+            // No targets is legal and is the common case: the entity sounds at itself.
+            ? { type, label, targetIds, sound: agentAuthorValue(studio, "edit", "interaction-sound").trim() || "coin" }
+            : { type: "toggle-visibility", label, targetIds };
         const result = this.raceScene.updateAgentWorldEntity(id, { interactions: [...(definition.interactions ?? []), interaction] });
         this.finishAgentWorldAuthoring(result, result.ok ? `Added ${type} interaction to ${id}.` : undefined);
         return;
@@ -4793,7 +4797,7 @@ gx.commit({
       ["scale", "Scale", "R"]
     ] as const).map(([mode, label, key]) => `<button class="${transformTool.mode === mode ? "is-selected" : ""}" data-agent-transform-mode="${mode}"><span>${label}</span><small>${key}</small></button>`).join("");
     const behaviorButtons = selectedState?.behaviors.map((behavior) => `<button data-agent-authoring-action="detach-behavior" data-entity-id="${escapeHtml(selectedState.id)}" data-behavior-id="${escapeHtml(behavior.id)}"><span>${escapeHtml(behavior.type)}</span><small>remove ${escapeHtml(behavior.id)}</small></button>`).join("") ?? "";
-    const interactionRows = (selectedDefinition?.interactions ?? []).map((interaction) => `<span class="agent-friendly-interaction-row"><span><b>${escapeHtml(interaction.label ?? interaction.id ?? interaction.type)}</b><small>${escapeHtml(interaction.type)} · ${interaction.targetIds.map(escapeHtml).join(", ")}${interaction.type === "apply-impulse" ? ` · impulse ${interaction.impulse.join("/")}` : ""}</small></span><button data-agent-authoring-action="remove-interaction" data-entity-id="${escapeHtml(selectedState?.id ?? "")}" data-interaction-id="${escapeHtml(interaction.id ?? "")}">Remove</button></span>`).join("");
+    const interactionRows = (selectedDefinition?.interactions ?? []).map((interaction) => `<span class="agent-friendly-interaction-row"><span><b>${escapeHtml(interaction.label ?? interaction.id ?? interaction.type)}</b><small>${escapeHtml(interaction.type)} · ${(interaction.targetIds ?? []).map(escapeHtml).join(", ") || "itself"}${interaction.type === "apply-impulse" ? ` · impulse ${interaction.impulse.join("/")}` : ""}${interaction.type === "play-sound" ? ` · ♪ ${escapeHtml(interaction.sound)}` : ""}</small></span><button data-agent-authoring-action="remove-interaction" data-entity-id="${escapeHtml(selectedState?.id ?? "")}" data-interaction-id="${escapeHtml(interaction.id ?? "")}">Remove</button></span>`).join("");
     const selectedAgentEditor = selectedState?.agent ? `<fieldset class="agent-identity-editor"><legend>Agent Identity <small>visible semantic participant</small></legend><label><span>Role</span><input data-agent-edit-field="agent-role" value="${escapeHtml(selectedState.agent.role)}"></label><label><span>Status</span><input data-agent-edit-field="agent-status" value="${escapeHtml(selectedState.agent.status)}"></label><label><span>Perception radius</span><input type="number" min="0" step="0.5" data-agent-edit-field="agent-perception" value="${selectedState.agent.perceptionRadius}"></label><label class="agent-wide-field"><span>Capabilities <small>comma separated</small></span><input data-agent-edit-field="agent-capabilities" value="${escapeHtml(selectedState.agent.capabilities.join(", "))}"></label></fieldset>` : "";
     const selectedEditor = selectedState && selectedDefinition ? `
       <div class="agent-entity-inspector" data-selected-entity="${escapeHtml(selectedState.id)}">
@@ -4827,9 +4831,10 @@ gx.commit({
           <span><b>Interactions</b><small>the same clickable actions humans and agents invoke</small></span>
           <div class="agent-friendly-interaction-list">${interactionRows || "<small>No interactions yet.</small>"}</div>
           <div class="agent-form-grid">
-            <label><span>Action</span><select data-agent-edit-field="interaction-type"><option value="toggle-visibility">Toggle visibility</option><option value="apply-impulse">Apply physics impulse</option></select></label>
+            <label><span>Action</span><select data-agent-edit-field="interaction-type"><option value="toggle-visibility">Toggle visibility</option><option value="apply-impulse">Apply physics impulse</option><option value="play-sound">Play a sound</option></select></label>
             <label><span>Label</span><input data-agent-edit-field="interaction-label" placeholder="Launch the ball"></label>
-            <label><span>Target IDs <small>comma separated</small></span><input data-agent-edit-field="interaction-targets" placeholder="ball-1, marker-2"></label>
+            <label><span>Target IDs <small>comma separated, blank = itself</small></span><input data-agent-edit-field="interaction-targets" placeholder="ball-1, marker-2"></label>
+            <label><span>Sound <small>play-sound only</small></span><input data-agent-edit-field="interaction-sound" placeholder="coin"></label>
           </div>
           ${agentVectorEditor("edit", "interaction-impulse", [0, 5, 0], "Impulse vector")}
           <button data-agent-authoring-action="add-interaction" data-entity-id="${escapeHtml(selectedState.id)}">Add Interaction</button>

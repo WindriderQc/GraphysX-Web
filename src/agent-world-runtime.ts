@@ -342,7 +342,40 @@ export type AgentWorldApplyImpulseInteraction = {
   relativePoint?: AgentWorldVector3;
 };
 
-export type AgentWorldInteraction = AgentWorldToggleVisibilityInteraction | AgentWorldApplyImpulseInteraction;
+/**
+ * Fire a sound from scene data. The third interaction type, and the one that lets a BallZ
+ * ring chime because the document says so rather than because play-layer code says so.
+ *
+ * `targetIds` is OPTIONAL here and on no other type: the overwhelmingly common case is a
+ * pickup or gate sounding at its own position, and forcing it to name itself as its own
+ * target would be ceremony. Empty means "at the entity carrying the interaction"; naming
+ * targets plays one one-shot at each of them.
+ *
+ * The runtime does not play anything — it records the request and emits `interaction.sound`.
+ * Audio needs the camera's `AudioListener` and a gesture-resumed `AudioContext`, neither of
+ * which the runtime may know about, so `agent-world-audio.ts` is what actually makes air
+ * move. Same entity-for-identity / host-pass-for-effect split `sound` entities already use.
+ */
+export type AgentWorldPlaySoundInteraction = {
+  id?: string;
+  label?: string;
+  type: "play-sound";
+  /** Where to play. Omit or leave empty to sound at the entity carrying the interaction. */
+  targetIds?: string[];
+  /** A sound id (curated or imported, see `sounds()`) or a direct URL. */
+  sound: string;
+  /** 0..1, default 0.8. */
+  volume?: number;
+  /** Attenuate and pan with distance from the camera. Default true. */
+  positional?: boolean;
+  /** Distance at which positional volume starts to fall off, world units. Default 8. */
+  refDistance?: number;
+};
+
+export type AgentWorldInteraction =
+  | AgentWorldToggleVisibilityInteraction
+  | AgentWorldApplyImpulseInteraction
+  | AgentWorldPlaySoundInteraction;
 
 export type AgentWorldEntityDefinition = {
   id?: string;
@@ -576,7 +609,7 @@ export type AgentWorldEntityState = {
   occupants?: string[];
   tags: string[];
   behaviors: Array<{ id: string; type: AgentWorldBehavior["type"] }>;
-  interactions: Array<{ id: string; label: string; type: AgentWorldInteraction["type"]; targetIds: string[]; impulse?: AgentWorldVector3; relativePoint?: AgentWorldVector3 }>;
+  interactions: Array<{ id: string; label: string; type: AgentWorldInteraction["type"]; targetIds: string[]; impulse?: AgentWorldVector3; relativePoint?: AgentWorldVector3; sound?: string; volume?: number; positional?: boolean; refDistance?: number }>;
   physics: {
     mode: AgentWorldPhysicsMode;
     mass: number;
@@ -631,6 +664,8 @@ export type AgentWorldInteractionReceipt = {
   label: string;
   type: AgentWorldInteraction["type"];
   targets: Array<{ id: string; visible: boolean; linearVelocity?: AgentWorldVector3 }>;
+  /** `play-sound` only: the source that was requested (a sound id or URL). */
+  sound?: string;
 };
 
 export type AgentWorldEvent = {
@@ -692,7 +727,9 @@ export type AgentWorldStreamEventType =
   | "entity.removed"
   | "world.loaded"
   | "environment.changed"
-  | "commit.applied";
+  | "commit.applied"
+  /** A `play-sound` interaction fired; the host's audio layer turns it into a one-shot. */
+  | "interaction.sound";
 
 export type AgentWorldEventPage = {
   events: AgentWorldStreamEvent[];
@@ -953,6 +990,7 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "behavior.detach",
   "interaction.trigger",
   "interaction.impulse",
+  "interaction.sound",
   "prefab.list",
   "prefab.spawn",
   "starter.list",
@@ -1679,6 +1717,37 @@ export class AgentWorldRuntime {
       throw new Error(interactionId ? `Unknown interaction on ${id}: ${interactionId}` : `Entity has no interactions: ${id}`);
     }
     validateInteraction(interaction, this.entities);
+
+    // Sound is handled before the target walk below, because it is the one type that does
+    // not mutate its targets — it only names where to sound. Emitting rather than playing
+    // keeps the runtime deterministic and audio-free; the host layer is the effect.
+    if (interaction.type === "play-sound") {
+      const soundTargets = interaction.targetIds?.length ? interaction.targetIds : [id];
+      for (const targetId of soundTargets) this.requireEntity(targetId);
+      this.emit("interaction.sound", soundTargets, {
+        sourceId: id,
+        interactionId: interaction.id,
+        sound: interaction.sound,
+        targetIds: soundTargets,
+        volume: interaction.volume ?? 0.8,
+        positional: interaction.positional ?? true,
+        refDistance: interaction.refDistance ?? 8,
+      });
+      return {
+        sourceId: id,
+        interactionId: interaction.id,
+        label: interaction.label,
+        type: interaction.type,
+        // Visibility is reported unchanged: a receipt says what happened, and what
+        // happened here is a sound, not a state change.
+        targets: soundTargets.map((targetId) => ({
+          id: targetId,
+          visible: this.requireEntity(targetId).definition.visible,
+        })),
+        sound: interaction.sound,
+      };
+    }
+
     const targets = interaction.targetIds.map((targetId) => {
       const target = this.requireEntity(targetId);
       if (interaction.type === "toggle-visibility") {
@@ -2416,10 +2485,18 @@ export class AgentWorldRuntime {
         ...deepClone(interaction),
         id,
         label: interaction.label?.trim() || id,
-        targetIds: uniqueStrings(interaction.targetIds),
+        targetIds: uniqueStrings(interaction.targetIds ?? []),
         ...(interaction.type === "apply-impulse" ? {
           impulse: sanitizeVector(interaction.impulse, -100000, 100000, "interaction.impulse"),
           ...(interaction.relativePoint ? { relativePoint: sanitizeVector(interaction.relativePoint, -10000, 10000, "interaction.relativePoint") } : {})
+        } : {}),
+        // Normalised so the stored form always carries them: an interaction that reads
+        // back without its volume would be the write-only-state defect again.
+        ...(interaction.type === "play-sound" ? {
+          sound: interaction.sound.trim(),
+          volume: interaction.volume ?? 0.8,
+          positional: interaction.positional ?? true,
+          refDistance: interaction.refDistance ?? 8,
         } : {})
       };
     });
@@ -2468,10 +2545,18 @@ export class AgentWorldRuntime {
         id: interaction.id,
         label: interaction.label,
         type: interaction.type,
-        targetIds: [...interaction.targetIds],
+        targetIds: [...(interaction.targetIds ?? [])],
         ...(interaction.type === "apply-impulse" ? {
           impulse: [...interaction.impulse] as AgentWorldVector3,
           ...(interaction.relativePoint ? { relativePoint: [...interaction.relativePoint] as AgentWorldVector3 } : {})
+        } : {}),
+        // This projection is explicit, not a clone — a field omitted here is invisible to
+        // `state()` and `query()` even though it round-trips through the document fine.
+        ...(interaction.type === "play-sound" ? {
+          sound: interaction.sound,
+          volume: interaction.volume,
+          positional: interaction.positional,
+          refDistance: interaction.refDistance,
         } : {})
       })),
       // Terrain's collider is implied rather than requested, so report it here anyway —
@@ -3150,10 +3235,18 @@ function validateBehavior(behavior: AgentWorldBehavior, entities: Map<string, Ru
 }
 
 function validateInteraction(interaction: AgentWorldInteraction, entities: Map<string, RuntimeEntity>, allowUnresolvedTargets = false): void {
-  if (!interaction || !["toggle-visibility", "apply-impulse"].includes(interaction.type)) throw new Error(`Unsupported interaction: ${String(interaction?.type)}`);
-  if (!Array.isArray(interaction.targetIds) || interaction.targetIds.length === 0) throw new Error(`${interaction.type} requires at least one target id`);
-  if (interaction.targetIds.length > 32) throw new Error("An interaction can target at most 32 entities");
-  for (const targetId of interaction.targetIds) {
+  if (!interaction || !["toggle-visibility", "apply-impulse", "play-sound"].includes(interaction.type)) throw new Error(`Unsupported interaction: ${String(interaction?.type)}`);
+  // `play-sound` is the one type that may name no targets — it then sounds at its own
+  // entity. The requirement stays exactly as strict for the other two, which have nothing
+  // to act on without a target.
+  const targetIds = interaction.targetIds ?? [];
+  if (interaction.type === "play-sound") {
+    if (!Array.isArray(targetIds)) throw new Error("interaction.targetIds must be an array of entity ids");
+  } else if (!Array.isArray(targetIds) || targetIds.length === 0) {
+    throw new Error(`${interaction.type} requires at least one target id`);
+  }
+  if (targetIds.length > 32) throw new Error("An interaction can target at most 32 entities");
+  for (const targetId of targetIds) {
     if (typeof targetId !== "string") throw new Error("Interaction target ids must be strings");
     validateStableId(targetId, "interaction target id");
     if (!allowUnresolvedTargets && !entities.has(targetId)) throw new Error(`Unknown interaction target: ${targetId}`);
@@ -3162,6 +3255,23 @@ function validateInteraction(interaction: AgentWorldInteraction, entities: Map<s
   if (interaction.type === "apply-impulse") {
     sanitizeVector(interaction.impulse, -100000, 100000, "interaction.impulse");
     if (interaction.relativePoint) sanitizeVector(interaction.relativePoint, -10000, 10000, "interaction.relativePoint");
+  }
+  if (interaction.type === "play-sound") {
+    // The source is NOT resolved against the registry here, deliberately: a document may
+    // reference an imported sound before `media.refresh()` has run, exactly as a model's
+    // asset id resolves when the loader runs rather than at spawn.
+    if (typeof interaction.sound !== "string" || !interaction.sound.trim()) {
+      throw new Error("play-sound requires interaction.sound (a sound id or URL)");
+    }
+    if (interaction.volume !== undefined && (!Number.isFinite(interaction.volume) || interaction.volume < 0 || interaction.volume > 1)) {
+      throw new Error("interaction.volume must be between 0 and 1");
+    }
+    if (
+      interaction.refDistance !== undefined
+      && (!Number.isFinite(interaction.refDistance) || interaction.refDistance <= 0 || interaction.refDistance > 1000)
+    ) {
+      throw new Error("interaction.refDistance must be between 0 and 1000 world units");
+    }
   }
   if ((interaction.label?.trim().length ?? 0) > 80) throw new Error("Interaction label must be 80 characters or fewer");
 }
