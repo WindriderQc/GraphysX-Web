@@ -1,0 +1,149 @@
+// GENERATES public/assets/worlds/world1-*.json + src/archive-world1-manifest.ts
+//
+// World 1 is the first true MESH world port (§14.5): six decoded objects in one shared
+// coordinate space (src/legacy/world1-level.json — terrain, core, elevator, finish,
+// hole-1, hole-2). Visuals ship as graphysx-mesh-json payloads at native span, like the
+// vehicles. Collision cannot be a heightfield — the course descends THROUGH two stacked
+// hole rings over the same footprint — so this script derives it from the same data the
+// visuals use: every near-horizontal triangle (normal.y > 0.65) of terrain+core votes
+// its centroid into a 2-unit x/z cell; per-cell y values cluster (split on gaps > 2.5u);
+// each cluster becomes one thin static slab. Multi-level cells get multiple slabs, which
+// is exactly what lets a ball rest above a hole on one level and fall to the next.
+//
+// What this is NOT: steep faces do not become walls in r1 (the scene adds perimeter
+// rails and a catch floor instead, and says so), and slabs are per-cell rather than
+// merged. Both are recorded as inference in the manifest notes.
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const SOURCE = join(ROOT, "src", "legacy", "world1-level.json");
+const OUT_DIR = join(ROOT, "public", "assets", "worlds");
+const MANIFEST = join(ROOT, "src", "archive-world1-manifest.ts");
+
+const raw = readFileSync(SOURCE);
+const sha256 = createHash("sha256").update(raw).digest("hex");
+const level = JSON.parse(raw.toString("utf8"));
+
+const CELL = 2;
+const WALKABLE_NORMAL_Y = 0.65;
+const CLUSTER_GAP = 2.5;
+const SLAB_THICKNESS = 0.4;
+
+function boundsOf(positions) {
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < positions.length; i += 3) {
+    for (let axis = 0; axis < 3; axis++) {
+      const value = positions[i + axis];
+      if (value < min[axis]) min[axis] = value;
+      if (value > max[axis]) max[axis] = value;
+    }
+  }
+  return { min, max, size: max.map((value, axis) => value - min[axis]) };
+}
+
+mkdirSync(OUT_DIR, { recursive: true });
+const records = [];
+
+for (const object of level.objects) {
+  const id = `world1-${object.role}`;
+  const bounds = boundsOf(object.positions);
+  const payload = {
+    meshes: [{ name: object.source, positions: object.positions, uvs: object.uvs ?? null, indices: object.indices }],
+    bounds,
+    provenance: { source: `src/legacy/world1-level.json :: ${object.source}`, sha256 },
+  };
+  const json = JSON.stringify(payload);
+  writeFileSync(join(OUT_DIR, `${id}.json`), json);
+  records.push({
+    id,
+    role: object.role,
+    url: `/assets/worlds/${id}.json`,
+    nativeFitSize: Math.max(...bounds.size),
+    bounds,
+    triangles: object.indices.length / 3,
+    source: object.source,
+  });
+  console.log(`${id}: ${object.indices.length / 3} tris, span ${bounds.size.map((v) => v.toFixed(1)).join(" x ")} (${(json.length / 1024).toFixed(0)} KB)`);
+}
+
+// ---- collision slabs from walkable triangles of terrain + core -------------------------
+const cells = new Map();
+for (const object of level.objects) {
+  if (object.role !== "terrain" && object.role !== "core") continue;
+  const p = object.positions;
+  for (let i = 0; i < object.indices.length; i += 3) {
+    const [a, b, c] = [object.indices[i] * 3, object.indices[i + 1] * 3, object.indices[i + 2] * 3];
+    const [abx, aby, abz] = [p[b] - p[a], p[b + 1] - p[a + 1], p[b + 2] - p[a + 2]];
+    const [acx, acy, acz] = [p[c] - p[a], p[c + 1] - p[a + 1], p[c + 2] - p[a + 2]];
+    const nx = aby * acz - abz * acy;
+    const ny = abz * acx - abx * acz;
+    const nz = abx * acy - aby * acx;
+    const length = Math.hypot(nx, ny, nz) || 1;
+    if (Math.abs(ny / length) < WALKABLE_NORMAL_Y) continue;
+    const cx = (p[a] + p[b] + p[c]) / 3;
+    const cy = (p[a + 1] + p[b + 1] + p[c + 1]) / 3;
+    const cz = (p[a + 2] + p[b + 2] + p[c + 2]) / 3;
+    const key = `${Math.round(cx / CELL)}:${Math.round(cz / CELL)}`;
+    const bucket = cells.get(key) ?? [];
+    bucket.push({ x: cx, y: cy, z: cz });
+    cells.set(key, bucket);
+  }
+}
+
+const slabs = [];
+for (const [key, votes] of cells) {
+  votes.sort((a, b) => a.y - b.y);
+  const [kx, kz] = key.split(":").map(Number);
+  let cluster = [votes[0]];
+  const flush = () => {
+    const y = cluster.reduce((sum, v) => sum + v.y, 0) / cluster.length;
+    slabs.push({ x: kx * CELL, y: Math.round(y * 100) / 100, z: kz * CELL });
+    cluster = [];
+  };
+  for (let i = 1; i < votes.length; i++) {
+    if (votes[i].y - votes[i - 1].y > CLUSTER_GAP) flush();
+    cluster.push(votes[i]);
+  }
+  flush();
+}
+slabs.sort((a, b) => a.x - b.x || a.z - b.z || a.y - b.y);
+console.log(`collision: ${cells.size} cells -> ${slabs.length} slabs`);
+
+const banner = `// GENERATED by scripts/vendor-world1.mjs — do not edit by hand.
+//
+// World 1 mesh records + the collision slabs derived from its own walkable triangles.
+// Meshes are FAITHFUL (decoded geometry at native span, sha256 of the source recorded).
+// Slabs are INFERRED collision: near-horizontal triangles voted into ${CELL}u cells,
+// y-clustered so stacked levels (the hole descents) each carry their own slab. Steep
+// faces are NOT walls here — the scene adds containment and says so.
+`;
+
+writeFileSync(
+  MANIFEST,
+  `${banner}
+export type ArchiveWorld1MeshRecord = {
+  id: string;
+  role: string;
+  url: string;
+  /** Passing this as fitSize reproduces archive scale 1:1. */
+  nativeFitSize: number;
+  bounds: { min: number[]; max: number[]; size: number[] };
+  triangles: number;
+  source: string;
+};
+
+export const ARCHIVE_WORLD1_SHA256 = ${JSON.stringify(sha256)};
+
+export const ARCHIVE_WORLD1_MESHES: readonly ArchiveWorld1MeshRecord[] = ${JSON.stringify(records, null, 2)};
+
+/** Thin static boxes (${CELL} x ${SLAB_THICKNESS} x ${CELL}) at each walkable surface level. */
+export const ARCHIVE_WORLD1_SLABS: ReadonlyArray<{ x: number; y: number; z: number }> = ${JSON.stringify(slabs)};
+
+export const ARCHIVE_WORLD1_SLAB_SIZE = { width: ${CELL}, height: ${SLAB_THICKNESS}, depth: ${CELL} } as const;
+`,
+);
+console.log(`manifest: ${MANIFEST}`);

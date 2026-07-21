@@ -125,6 +125,19 @@ if (mode === "legacy") {
                 host.applyEnvironment();
               },
             },
+            {
+              id: "archive-world1",
+              label: "World 1",
+              meta: "recovered mesh world  ·  descend through both holes  ·  bloom + envelope",
+              play: async () => {
+                const { composeArchiveWorld1, frameArchiveWorld1 } = await import("./archive-world1-scene");
+                showroomEnvironment?.();
+                showroomEnvironment = null;
+                composeArchiveWorld1(host.api);
+                host.applyEnvironment();
+                frameArchiveWorld1(host);
+              },
+            },
           ],
           // The level is already materialised by the time this fires; the host has switched to
           // play mode on its own. All that is left is taking the showroom's set down so a
@@ -261,6 +274,12 @@ if (mode === "legacy") {
         // The first §14.5 course port. Published so an agent (and the smoke) can compose
         // it directly, with its provenance beside it.
         composeSkyboxSpiral: () => composeSkyboxSpiral(host.api),
+        // World 1 — the first true mesh-world port. Lazy, so the manifest's slab table
+        // stays off the boot path until someone actually opens the world.
+        composeArchiveWorld1: () => import("./archive-world1-scene").then(({ composeArchiveWorld1, WORLD1_PROVENANCE }) => {
+          const result = composeArchiveWorld1(host.api);
+          return { ...result, provenance: WORLD1_PROVENANCE };
+        }),
         skyboxSpiralProvenance: SKYBOX_SPIRAL_PROVENANCE,
         toPlatformRows,
         seed: seedArchiveBallzLevels,

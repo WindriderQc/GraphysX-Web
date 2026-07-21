@@ -90,6 +90,11 @@ export async function productAssetManifest() {
     }
   }
 
+  // The World 1 mesh assembly: its records live in the generated port manifest rather
+  // than the asset catalog (they are a world, not palette vocabulary), so the release
+  // manifest scrapes that module the same way it scrapes the level styles.
+  for (const url of await anyAssetLiterals("src/archive-world1-manifest.ts")) wanted.add(url);
+
   for (const url of LEGACY_BOOT_ASSETS) wanted.add(url);
 
   // Fail loudly rather than shipping a release with a hole in the vocabulary.
