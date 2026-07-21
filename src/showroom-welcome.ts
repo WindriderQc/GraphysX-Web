@@ -28,6 +28,29 @@ export function mountWelcome(
     .gx-welcome .gx-go-games{background:linear-gradient(180deg,#2f9e7f,#1d6f5a);border-color:var(--gx-life);box-shadow:0 8px 30px rgba(29,111,90,.42)}
     .gx-welcome .gx-go-browse{background:linear-gradient(180deg,#5a6fb0,#3a4a80);border-color:var(--gx-violet);box-shadow:0 8px 30px rgba(58,74,128,.42)}
     .gx-welcome .gx-hint{color:var(--gx-ink-faint);font-size:12px;text-shadow:0 1px 10px rgba(3,12,20,.8)}
+    /*
+     * The title treatment, staged against the host's 2.6s entry move: each line rises and
+     * fades in slightly after the one above it, so the card assembles while the camera is
+     * still settling rather than being fully present over a moving shot.
+     *
+     * Staggered with a delay per child rather than one animation on the card, because the
+     * point is the cascade -- a card that fades in as a block reads as a loading state.
+     * The last line lands at 1.5s, comfortably before the camera stops at 2.6s, so the
+     * visitor is never waiting on chrome.
+     */
+    @keyframes gx-welcome-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+    .gx-welcome-card > *{animation:gx-welcome-rise .72s cubic-bezier(.22,.68,.32,1) both}
+    .gx-welcome-card > h1{animation-delay:.28s}
+    .gx-welcome-card > p{animation-delay:.55s}
+    .gx-welcome-card > .gx-actions{animation-delay:.82s}
+    .gx-welcome-card > .gx-hint{animation-delay:1.05s}
+    /*
+     * Anyone who has asked the OS for less motion gets the card immediately and unanimated.
+     * A decorative entrance is exactly the kind of thing this setting exists to suppress.
+     */
+    @media (prefers-reduced-motion:reduce){
+      .gx-welcome-card > *{animation:none}
+    }
     @media (max-width:640px){
       .gx-welcome{justify-content:center;align-items:flex-end}
       .gx-welcome-card{align-items:center;text-align:center}
