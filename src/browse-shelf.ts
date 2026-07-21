@@ -36,10 +36,12 @@ export type BrowseShelfOptions = {
   onOpen?: (starterId: string) => void;
   /** Composed archive scenes, listed above the starters because they are the recovered ones. */
   composed?: readonly ComposedSceneEntry[];
+  /** Called when the ✕ dismisses the shelf without opening, so the caller can restore the front door. */
+  onClose?: () => void;
 };
 
 export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOptions): () => void {
-  const { api, onOpen, composed = [] } = options;
+  const { api, onOpen, composed = [], onClose } = options;
   injectStyleOnce();
 
   const overlay = document.createElement("div");
@@ -135,7 +137,10 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
   const dispose = (): void => {
     overlay.remove();
   };
-  close.addEventListener("click", () => dispose());
+  close.addEventListener("click", () => {
+    dispose();
+    onClose?.();
+  });
   return dispose;
 }
 

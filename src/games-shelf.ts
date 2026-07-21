@@ -61,10 +61,12 @@ export type GamesShelfOptions = {
   composed?: GamesShelfComposedRow[];
   /** Called after a level is materialised, so the caller can take the showroom down with it. */
   onPlay?: (levelId: string) => void;
+  /** Called when the ✕ dismisses the shelf without playing, so the caller can restore the front door. */
+  onClose?: () => void;
 };
 
 export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptions): () => void {
-  const { api, composed, onPlay } = options;
+  const { api, composed, onPlay, onClose } = options;
   injectStyleOnce();
 
   // Seed once. A returning visitor who edited or deleted this course keeps their version —
@@ -161,7 +163,10 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   const dispose = (): void => {
     overlay.remove();
   };
-  close.addEventListener("click", () => dispose());
+  close.addEventListener("click", () => {
+    dispose();
+    onClose?.();
+  });
   return dispose;
 }
 

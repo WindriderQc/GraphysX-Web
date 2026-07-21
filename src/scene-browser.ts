@@ -33,6 +33,8 @@ export type SceneBrowserOptions = {
   actor?: string;
   /** Called when a scene is opened, so the host can hand the pointer back to the scene. */
   onSceneOpened?: (record: SceneStoreRecord) => void;
+  /** Called after Close detaches from a scene, so the host can bring the front door back. */
+  onSceneClosed?: () => void;
 };
 
 export type SceneBrowser = {
@@ -40,11 +42,18 @@ export type SceneBrowser = {
   session(): SceneStoreSession | null;
   open(name: string): Promise<void>;
   save(): Promise<void>;
+  /** Store what is on screen under a new name. Create-only: an existing name is refused. */
+  saveAs(name: string): Promise<void>;
+  /** Detach from the open scene without saving. The store keeps its copy. */
+  close(): void;
   refresh(): Promise<void>;
   dispose(): void;
 };
 
 const REFRESH_MS = 4000;
+
+/** Mirrors the store's assertName — reject locally so the user gets a sentence, not a 400. */
+const NAME_RULE = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/;
 
 function timeAgo(iso: string): string {
   const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -62,7 +71,7 @@ function escapeHtml(value: string): string {
 }
 
 export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserOptions): SceneBrowser {
-  const { api, client, actor = "browser", onSceneOpened } = options;
+  const { api, client, actor = "browser", onSceneOpened, onSceneClosed } = options;
 
   const style = document.createElement("style");
   style.textContent = BROWSER_CSS;
@@ -81,9 +90,16 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
       <ul class="gx-sb-list" data-role="list"></ul>
       <div class="gx-sb-live" data-role="live" hidden></div>
       <footer class="gx-sb-foot">
-        <button type="button" data-action="save">Save to store</button>
+        <button type="button" data-action="save">Save</button>
+        <button type="button" data-action="save-as" title="Store what is on screen as a new named scene">Save as…</button>
         <button type="button" data-action="revert" title="Discard local changes and reload the stored scene">Revert</button>
+        <button type="button" data-action="close" title="Stop editing this scene and return to the front door — the store keeps its copy">✕</button>
       </footer>
+      <form class="gx-sb-saveas" data-role="saveas" hidden>
+        <input data-role="saveas-name" type="text" placeholder="scene-name" spellcheck="false" autocomplete="off" maxlength="80" />
+        <button type="submit">Store</button>
+        <button type="button" data-action="saveas-cancel" title="Cancel">✕</button>
+      </form>
       <p class="gx-sb-status" data-role="status"></p>
     </div>
   `;
@@ -93,6 +109,11 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
   const status = panel.querySelector<HTMLParagraphElement>("[data-role=status]")!;
   const dot = panel.querySelector<HTMLSpanElement>("[data-role=dot]")!;
   const saveButton = panel.querySelector<HTMLButtonElement>("[data-action=save]")!;
+  const revertButton = panel.querySelector<HTMLButtonElement>("[data-action=revert]")!;
+  const closeButton = panel.querySelector<HTMLButtonElement>("[data-action=close]")!;
+  const saveAsForm = panel.querySelector<HTMLFormElement>("[data-role=saveas]")!;
+  const saveAsName = panel.querySelector<HTMLInputElement>("[data-role=saveas-name]")!;
+  const storeHost = client.baseUrl.replace(/^https?:\/\//, "");
 
   let session: SceneStoreSession | null = null;
   let scenes: SceneStoreSummary[] = [];
@@ -127,10 +148,21 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     liveTimer = window.setTimeout(() => { live.hidden = true; }, 9000);
   };
 
+  /** Save/Revert only make sense with a scene open; say why instead of erroring later. */
+  const syncFooter = (): void => {
+    const openName = session?.name ?? null;
+    saveButton.disabled = openName === null;
+    saveButton.title = openName === null
+      ? "No stored scene open — Save as… stores what is on screen under a new name"
+      : `Save what is on screen to “${openName}”`;
+    revertButton.disabled = openName === null;
+    closeButton.disabled = openName === null;
+  };
+
   const render = (): void => {
     const activeName = session?.name ?? null;
     if (scenes.length === 0) {
-      list.innerHTML = `<li class="gx-sb-empty">No scenes stored yet — open one in the editor and press Save.</li>`;
+      list.innerHTML = `<li class="gx-sb-empty">Nothing stored yet. <strong>Save as…</strong> stores what is on screen as a named scene at <code>${escapeHtml(storeHost)}</code> — no need to load anything first.</li>`;
       return;
     }
     list.innerHTML = scenes
@@ -193,11 +225,14 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error), "error");
     }
+    syncFooter();
   };
 
   const save = async (): Promise<void> => {
     if (!session) {
-      setStatus("Open a scene before saving", "error");
+      // Reachable through the returned API only — the button is disabled in this state.
+      // Saving something new is a naming problem, not an error: hand over to Save as….
+      openSaveAs();
       return;
     }
     saveButton.disabled = true;
@@ -221,6 +256,70 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     }
   };
 
+  const suggestName = (): string => {
+    if (session) return `${session.name}-copy`;
+    const id = api.exportDocument()?.id;
+    return typeof id === "string" && NAME_RULE.test(id) ? id : "my-scene";
+  };
+
+  const openSaveAs = (): void => {
+    saveAsForm.hidden = false;
+    saveAsName.value = suggestName();
+    saveAsName.focus();
+    saveAsName.select();
+  };
+
+  const closeSaveAs = (): void => {
+    saveAsForm.hidden = true;
+  };
+
+  const saveAs = async (rawName: string): Promise<void> => {
+    const name = rawName.trim().toLowerCase().replace(/\s+/g, "-");
+    if (!NAME_RULE.test(name)) {
+      setStatus("Start with a letter or digit; then letters, digits, dots, dashes", "error");
+      return;
+    }
+    const definition = api.exportDocument();
+    if (!definition) {
+      setStatus("Nothing on screen to store yet", "error");
+      return;
+    }
+    setStatus(`Storing ${name}…`, "busy");
+    try {
+      // expectedRevision 0 makes this create-only: a name that already exists comes back
+      // as a 409 instead of being overwritten by a scene that merely shares its name.
+      await client.put(name, definition, 0, { actor, intent: "created from the browser" });
+      closeSaveAs();
+      await refresh();
+      // Bind the session to what we just stored, so Save and the live stream now target it.
+      await open(name);
+      setStatus(`Stored as ${name} · rev 1`);
+    } catch (error) {
+      setStatus(
+        error instanceof SceneStoreError && error.isConflict
+          ? `“${name}” already exists — pick another name, or open it and press Save`
+          : error instanceof Error ? error.message : String(error),
+        "error",
+      );
+    }
+  };
+
+  /**
+   * The way back out. Opening a scene tears the front door down; without this, the only
+   * exit was reloading the tab. Detaches the session — the store keeps its copy, and any
+   * unsaved local edits stay on screen for the host to replace or keep.
+   */
+  const close = (): void => {
+    if (!session) return;
+    session.stop();
+    session = null;
+    closeSaveAs();
+    render();
+    syncFooter();
+    setStatus(`Store: ${storeHost}`);
+    onSceneClosed?.();
+  };
+
   const revert = async (): Promise<void> => {
     if (!session) return;
     setStatus("Reloading…", "busy");
@@ -241,13 +340,25 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     }
     const action = target.closest<HTMLButtonElement>("[data-action]")?.dataset.action;
     if (action === "save") void save();
+    if (action === "save-as") openSaveAs();
+    if (action === "saveas-cancel") closeSaveAs();
     if (action === "revert") void revert();
+    if (action === "close") close();
     if (action === "collapse") panel.classList.toggle("gx-sb-collapsed");
+  });
+
+  saveAsForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void saveAs(saveAsName.value);
+  });
+  saveAsName.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSaveAs();
   });
 
   container.append(style, panel);
   setOnline(true);
-  setStatus("");
+  setStatus(`Store: ${storeHost}`);
+  syncFooter();
   void refresh();
   if (options.initialScene) void open(options.initialScene);
   refreshTimer = window.setInterval(() => void refresh(), REFRESH_MS);
@@ -257,6 +368,8 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     session: () => session,
     open,
     save,
+    saveAs,
+    close,
     refresh,
     dispose() {
       if (disposed) return;
@@ -306,6 +419,8 @@ const BROWSER_CSS = `
 .gx-sb-meta{grid-column:1;color:var(--gx-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gx-sb-when{grid-row:1;grid-column:2;color:var(--gx-muted);font-size:11px;white-space:nowrap}
 .gx-sb-empty{color:var(--gx-muted);padding:10px 8px;line-height:1.5}
+.gx-sb-empty strong{color:var(--gx-text)}
+.gx-sb-empty code{font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--gx-text)}
 
 .gx-sb-live{margin:0 5px;padding:7px 9px;border-radius:6px;background:rgba(55,182,211,.1);border:1px solid var(--gx-accent-deep);color:var(--gx-text);font-size:11.5px;line-height:1.45}
 .gx-sb-actor{font-weight:700;color:var(--gx-accent)}
@@ -320,6 +435,12 @@ const BROWSER_CSS = `
 .gx-sb-foot button{flex:1;background:var(--gx-field);color:var(--gx-text);border:1px solid var(--gx-border);border-radius:6px;padding:6px 8px;font:inherit;cursor:pointer}
 .gx-sb-foot button:hover:not(:disabled){background:var(--gx-raise);border-color:var(--gx-accent-deep)}
 .gx-sb-foot button:disabled{opacity:.5;cursor:default}
+.gx-sb-foot [data-action=close]{flex:none;padding:6px 9px}
+.gx-sb-saveas{display:flex;gap:6px;margin:0;padding:6px 5px 0}
+.gx-sb-saveas input{flex:1;min-width:0;background:var(--gx-field);border:1px solid var(--gx-border);border-radius:6px;color:var(--gx-text);font:inherit;padding:6px 8px}
+.gx-sb-saveas input:focus{outline:none;border-color:var(--gx-accent)}
+.gx-sb-saveas button{flex:none;background:var(--gx-field);color:var(--gx-text);border:1px solid var(--gx-border);border-radius:6px;padding:6px 9px;font:inherit;cursor:pointer}
+.gx-sb-saveas button:hover{background:var(--gx-raise);border-color:var(--gx-accent-deep)}
 .gx-sb-status{margin:0;padding:0 10px 9px;min-height:15px;color:var(--gx-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gx-sb-status[data-tone=error]{color:#f0938b}
 .gx-sb-status[data-tone=busy]{color:var(--gx-accent)}

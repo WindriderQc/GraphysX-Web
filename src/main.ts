@@ -88,10 +88,21 @@ if (mode === "legacy") {
     // set was torn down with them. Recomposing is the honest "back", and it is cheap because the
     // showroom is ordinary API calls rather than a retained scene.
     const restoreShowroom = (): void => {
+      // Callers can reach here with a welcome card already up (exitEditor mounts one);
+      // recomposing must not stack a second card on top of it.
+      document.querySelector(".gx-welcome")?.remove();
       composeShowroom(host.api);
       host.applyEnvironment();
       showroomEnvironment?.();
       showroomEnvironment = mountShowroomEnvironment(host.scene, host.renderer);
+      interaction?.setEnabled(true);
+      mountWelcome(root, enterEditor, openGames, openBrowse);
+    };
+    // Chrome only — for backing out of an overlay that never touched the world. The welcome
+    // card disposes itself the moment a destination is clicked, so whoever dismisses that
+    // destination must put it back or the front door is a dead end.
+    const remountFrontDoor = (): void => {
+      document.querySelector(".gx-welcome")?.remove();
       interaction?.setEnabled(true);
       mountWelcome(root, enterEditor, openGames, openBrowse);
     };
@@ -122,6 +133,7 @@ if (mode === "legacy") {
             showroomEnvironment?.();
             showroomEnvironment = null;
           },
+          onClose: remountFrontDoor,
         });
       });
     };
@@ -186,6 +198,7 @@ if (mode === "legacy") {
             showroomEnvironment = null;
             void host.enterEditor();
           },
+          onClose: remountFrontDoor,
         });
       });
     };
@@ -304,6 +317,16 @@ if (mode === "legacy") {
             document.querySelector(".gx-welcome")?.remove();
             interaction?.setEnabled(true);
             host.applyEnvironment();
+          },
+          // Closing a stored scene is "back to the front door" — the exit that opening
+          // took away. The standalone editor routes keep their world; the tab has simply
+          // stopped following the store.
+          onSceneClosed: () => {
+            if (editorFirst) return;
+            // Hides the editor if it was up; its exit callback mounts a welcome card,
+            // which restoreShowroom replaces along with the world.
+            host.exitEditor();
+            restoreShowroom();
           },
         });
         Object.assign(window, { __GRAPHYSX_SCENE_BROWSER__: browser, __GRAPHYSX_SCENE_STORE__: { client, browser } });
