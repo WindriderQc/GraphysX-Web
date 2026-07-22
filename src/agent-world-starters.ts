@@ -28,10 +28,10 @@ export type AgentWorldStarterOptions = {
 export const GRAPHYSX_AGENT_WORLD_STARTERS: readonly AgentWorldStarterDescriptor[] = [
   {
     id: "archive-great-slide",
-    label: "Great Slide: Collider Proof",
-    summary: "Faithful recovered BallZ SlideLarge geometry as a static trimesh; material, scale, lighting, ball, and catch basin are modern proof staging—not a recovered game ruleset.",
+    label: "Great Slide: Gravity Run",
+    summary: "Exact recovered BallZ SlideLarge geometry with a modern two-gate gravity run. The mesh is faithful; scale, material, spawn, checkpoints, lighting, and gameplay are explicit adaptations.",
     prefabCount: 0,
-    entityCount: 5
+    entityCount: 10
   },
   {
     id: "living-systems",
@@ -90,11 +90,12 @@ export function instantiateAgentWorldStarter(
     id: options.id?.trim() || `graphysx-${starterId}`,
     label: options.label?.trim() || descriptor.label,
     environment: base.environment,
-    entities: base.entities
+    entities: base.entities,
+    ...(base.rules ? { rules: base.rules } : {})
   };
 }
 
-function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition, "environment" | "entities"> {
+function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition, "environment" | "entities" | "rules"> {
   if (starterId === "archive-great-slide") return archiveGreatSlide();
   if (starterId === "living-systems") return livingSystems();
   if (starterId === "physics-sketchbook") return physicsSketchbook();
@@ -209,14 +210,17 @@ function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition,
  * lighting, scale, and staging are modern presentation. `fitSize` uses the source's longest span
  * at 1:10 scale, making the collider large enough to read while preserving every proportion.
  */
-function archiveGreatSlide(): Pick<AgentWorldDefinition, "environment" | "entities"> {
+function archiveGreatSlide(): Pick<AgentWorldDefinition, "environment" | "entities" | "rules"> {
+  const spawn: [number, number, number] = [20, 8, 0];
   return {
     environment: {
       background: "#071622",
       sky: "lostvalley",
+      overlay: "vignette",
       ground: { visible: false, size: 80, color: "#0c2530", grid: false, gridColor: "#4fa9b5" },
       physics: { gravity: [0, -9.81, 0] },
-      envelope: { fogNear: 70, fogFar: 180, cameraFar: 360 }
+      envelope: { fogNear: 70, fogFar: 180, cameraFar: 360 },
+      post: { bloom: { strength: 0.48, threshold: 0.62, radius: 0.35 } }
     },
     entities: [
       ...starterLights("great-slide", "#b8d9e8", "#fff0c7", [-24, 32, 18]),
@@ -229,22 +233,72 @@ function archiveGreatSlide(): Pick<AgentWorldDefinition, "environment" | "entiti
         tags: ["archive", "ballz-2011", "scene-native-collider", "collider:trimesh"]
       },
       {
-        id: "great-slide-ball", label: "Slide Test Ball", type: "sphere",
-        transform: { position: [20, 8, 0] }, geometry: { radius: 0.72, radialSegments: 32 },
+        id: "great-slide-ball", label: "Gravity Run Ball", type: "sphere",
+        transform: { position: spawn }, geometry: { radius: 0.72, radialSegments: 32 },
         material: { color: "#ff8b5c", emissive: "#6d1d0b", emissiveIntensity: 0.32, roughness: 0.24, metalness: 0.12 },
-        physics: { mode: "dynamic", mass: 1.2, material: "ball", linearVelocity: [-3.5, 0, 0] },
+        physics: { mode: "dynamic", mass: 1.2, material: "ball", linearVelocity: [-2.4, 0, 0] },
+        interactions: [
+          { id: "push-north", label: "Steer north", type: "apply-impulse", targetIds: ["great-slide-ball"], impulse: [0, 0, -2.2] },
+          { id: "push-south", label: "Steer south", type: "apply-impulse", targetIds: ["great-slide-ball"], impulse: [0, 0, 2.2] },
+          { id: "push-west", label: "Accelerate downhill", type: "apply-impulse", targetIds: ["great-slide-ball"], impulse: [-2.2, 0, 0] },
+          { id: "push-east", label: "Brake uphill", type: "apply-impulse", targetIds: ["great-slide-ball"], impulse: [2.2, 0, 0] }
+        ],
         castShadow: true,
-        tags: ["archive", "physics:dynamic", "agent-observable", "proof:trimesh"]
+        tags: ["archive", "physics:dynamic", "agent-observable", "player", "game:great-slide"]
+      },
+      {
+        id: "great-slide-checkpoint-upper", label: "Upper Checkpoint", type: "box",
+        transform: { position: [10, 4.2, 0] }, geometry: { width: 0.45, height: 4.8, depth: 15.4 },
+        material: { color: "#63d9ff", emissive: "#248eb5", emissiveIntensity: 0.72, opacity: 0.2, roughness: 0.18 },
+        physics: { mode: "trigger" }, castShadow: false,
+        tags: ["archive", "adapted-gameplay", "checkpoint", "game:great-slide"]
+      },
+      {
+        id: "great-slide-checkpoint-lower", label: "Lower Checkpoint", type: "box",
+        transform: { position: [-8, -0.7, 0] }, geometry: { width: 0.45, height: 4.8, depth: 15.4 },
+        material: { color: "#9f8cff", emissive: "#5942b8", emissiveIntensity: 0.72, opacity: 0.2, roughness: 0.18 },
+        physics: { mode: "trigger" }, castShadow: false,
+        tags: ["archive", "adapted-gameplay", "checkpoint", "game:great-slide"]
+      },
+      {
+        id: "great-slide-finish", label: "Runout Finish", type: "box",
+        transform: { position: [-22, -3.4, 0] }, geometry: { width: 0.55, height: 4.8, depth: 15.4 },
+        material: { color: "#78f0d0", emissive: "#2fae8b", emissiveIntensity: 0.85, opacity: 0.25, roughness: 0.16 },
+        physics: { mode: "trigger" }, castShadow: false,
+        tags: ["archive", "adapted-gameplay", "finish", "game:great-slide"]
+      },
+      {
+        id: "great-slide-finish-beacon", label: "Finish Beacon", type: "emitter",
+        transform: { position: [-22, -2.9, 0] },
+        emitter: { preset: "firetrail", sizeScale: 1.8, speed: 1.9, spread: 1.2, maxParticles: 48, color: "#78f0d0" },
+        tags: ["archive", "adapted-presentation", "finish", "game:great-slide"]
       },
       {
         id: "great-slide-catch", label: "Lower Catch Basin", type: "box",
-        transform: { position: [-18, -9.1, 0] }, geometry: { width: 25, height: 0.6, depth: 22 },
+        transform: { position: [-25, -9.1, 0] }, geometry: { width: 34, height: 0.6, depth: 22 },
         material: { color: "#102a35", roughness: 0.9, metalness: 0.02 },
         physics: { mode: "static", material: "ground" },
-        receiveShadow: true,
+        visible: false, receiveShadow: true, castShadow: false,
         tags: ["staging", "safety-floor", "physics:static"]
+      },
+      {
+        id: "great-slide-playfield", label: "Play Framing", type: "box",
+        transform: { position: [0, 0, 0] }, geometry: { width: 58, height: 12, depth: 18 },
+        material: { color: "#071622", opacity: 0.01 }, visible: false, castShadow: false,
+        tags: ["playfield", "framing", "game:great-slide"]
       }
-    ]
+    ],
+    rules: {
+      schema: "graphysx.agent-rules/v1",
+      subjectId: "great-slide-ball",
+      spawn: { entityId: "great-slide-ball", position: spawn },
+      checkpoints: [
+        { triggerId: "great-slide-checkpoint-upper", label: "Upper gate" },
+        { triggerId: "great-slide-checkpoint-lower", label: "Lower gate" }
+      ],
+      finish: { triggerId: "great-slide-finish" },
+      laps: 1
+    }
   };
 }
 

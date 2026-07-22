@@ -9,6 +9,9 @@ Reality check**, the honest status table) and `progress.md` first. §8 describes
 A browser 3D scene engine where humans and AI agents co-author **one validated scene**.
 The editor and `window.__GRAPHYSX__` are two interfaces over the same runtime.
 Deploys to <https://graphysx.specialblend.ca> on push to `main`, gated by `npm run verify`.
+After the atomic activation, production must serve a matching `release.json` and pass the focused
+Great Slide browser canary. A failed canary makes the workflow red and atomically restores the
+validated previous release; screenshots/results remain attached to the workflow run.
 
 ## The invariant that matters most
 

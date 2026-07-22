@@ -129,6 +129,10 @@ try {
   }, null, { timeout: SMOKE_TIMEOUT });
   out.browse = await page.evaluate(() => {
     const rows = [...document.querySelectorAll(".gx-browse-row")];
+    const featuredRows = rows.filter((row) => row.dataset.starterId === "archive-great-slide");
+    const featured = featuredRows[0];
+    const cardRect = document.querySelector(".gx-browse-card")?.getBoundingClientRect();
+    const featuredRect = featured?.getBoundingClientRect();
     return {
       rowCount: rows.length,
       // Curated starters are the gallery; at least the physics sketchbook should be listed.
@@ -141,6 +145,11 @@ try {
         const image = row.querySelector("img.gx-shelf-thumb");
         return image?.complete && image.naturalWidth > 0;
       }).length,
+      greatSlideCount: featuredRows.length,
+      featuredAboveFold: Boolean(cardRect && featuredRect
+        && featuredRect.top >= cardRect.top && featuredRect.bottom <= cardRect.bottom),
+      featuredBadges: [...(featured?.querySelectorAll(".gx-browse-badge") ?? [])].map((badge) => badge.textContent),
+      featuredSummary: featured?.querySelector(".gx-browse-summary")?.textContent ?? "",
       welcomeGone: !document.querySelector(".gx-welcome"),
     };
   });
@@ -164,6 +173,33 @@ try {
     };
   });
   await page.screenshot({ path: path.join(ART, "browse-opened.png"), fullPage: false });
+
+  // The featured recovery must remain useful on the phone-sized front door: its fidelity
+  // disclosure used to disappear below the fold, which made the most important caveat
+  // effectively desktop-only.
+  const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  applySmokeTimeout(mobile);
+  mobile.on("console", (m) => { if (m.type() === "error") consoleErrors.push(`mobile: ${m.text()}`); });
+  mobile.on("pageerror", (e) => pageErrors.push(`mobile: ${String(e)}`));
+  await mobile.goto(BASE, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
+  await mobile.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
+  await mobile.click(".gx-welcome .gx-go-browse");
+  await mobile.waitForSelector('.gx-browse-row[data-starter-id="archive-great-slide"]', { timeout: SMOKE_TIMEOUT });
+  out.mobileBrowse = await mobile.evaluate(() => {
+    const featured = document.querySelector('.gx-browse-row[data-starter-id="archive-great-slide"]');
+    const summary = featured?.querySelector(".gx-browse-summary");
+    const card = document.querySelector(".gx-browse-card");
+    const featuredRect = featured?.getBoundingClientRect();
+    const cardRect = card?.getBoundingClientRect();
+    return {
+      noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth,
+      summaryVisible: Boolean(summary && getComputedStyle(summary).display !== "none" && summary.getBoundingClientRect().height > 0),
+      featuredStartsAboveFold: Boolean(featuredRect && cardRect && featuredRect.top >= cardRect.top && featuredRect.top < window.innerHeight),
+      badgeCount: featured?.querySelectorAll(".gx-browse-badge").length ?? 0,
+    };
+  });
+  await mobile.screenshot({ path: path.join(ART, "browse-mobile.png"), fullPage: false });
+  await mobile.close();
 } catch (e) {
   out.fatal = String(e);
 }
@@ -203,7 +239,15 @@ const ok =
   /entities/.test(out.browse?.firstMeta ?? "") &&
   out.browse?.previewCount === out.browse?.rowCount &&
   out.browse?.previewLoaded === out.browse?.rowCount &&
+  out.browse?.greatSlideCount === 1 &&
+  out.browse?.featuredAboveFold === true &&
+  out.browse?.featuredBadges?.length === 3 &&
+  /mesh is faithful/.test(out.browse?.featuredSummary ?? "") &&
   out.browse?.welcomeGone === true &&
+  out.mobileBrowse?.noHorizontalOverflow === true &&
+  out.mobileBrowse?.summaryVisible === true &&
+  out.mobileBrowse?.featuredStartsAboveFold === true &&
+  out.mobileBrowse?.badgeCount === 3 &&
   out.opened?.mode === "editor" &&
   out.opened?.toolbarShown === true &&
   out.opened?.browseGone === true &&

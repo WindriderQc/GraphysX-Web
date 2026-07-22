@@ -10,6 +10,7 @@
 // response is cheap and it means the whole feature is one server with no connection state.
 
 import type { AgentWorldDefinition, GraphysXAgentWorldApi } from "./agent-world-runtime";
+import { resolveSceneStoreToken } from "./scene-store-auth";
 
 export const SCENE_STORE_SCHEMA = "graphysx.scene-store/v1";
 
@@ -111,26 +112,16 @@ async function request<T>(baseUrl: string, path: string, token: string | null, i
 
 export type SceneStoreClientOptions = {
   /**
-   * Token for a store started with GRAPHYSX_STORE_TOKEN. Omitted, the client picks up
-   * `?storeToken=` from the page URL — the same channel `?scene=` and `?store=` already
-   * ride, so main.ts needs no new wiring. Explicit null disables the pickup.
+   * Token for a store started with GRAPHYSX_STORE_TOKEN. Omitted, the client consumes a
+   * one-time `#storeToken=` fragment and remembers it for this browser tab. Explicit null
+   * disables the browser-state lookup.
    */
   token?: string | null;
 };
 
-/** The page URL is a config surface this module already shares with main.ts. */
-function tokenFromLocation(): string | null {
-  if (typeof window === "undefined" || !window.location) return null;
-  try {
-    return new URLSearchParams(window.location.search).get("storeToken") || null;
-  } catch {
-    return null;
-  }
-}
-
 export function createSceneStoreClient(baseUrl: string, options: SceneStoreClientOptions = {}): SceneStoreClient {
   const root = baseUrl.replace(/\/+$/, "");
-  const token = options.token !== undefined ? options.token || null : tokenFromLocation();
+  const token = options.token !== undefined ? options.token?.trim() || null : resolveSceneStoreToken(root);
   return {
     baseUrl: root,
     token,
@@ -306,13 +297,9 @@ export function connectSceneStore(options: SceneStoreSessionOptions): SceneStore
   const listen = (): void => {
     if (typeof EventSource === "undefined") return;
     // EventSource reconnects on its own and replays Last-Event-ID, so a dropped connection
-    // resumes from the last delta rather than reloading the world.
-    //
-    // The token rides the query string here because EventSource cannot set headers — the
-    // one place the store accepts `?token=`. That does put it in URL-shaped places (proxy
-    // logs, server access logs); the stream is read-only either way.
+    // resumes from the last delta rather than reloading the world. Scene reads, including
+    // this stream, are deliberately public, so never put the write/datalake token in its URL.
     const streamUrl = new URL(`${client.baseUrl}/scenes/${encodeURIComponent(name)}/stream`, window.location.href);
-    if (client.token) streamUrl.searchParams.set("token", client.token);
     source = new EventSource(streamUrl.toString());
     source.addEventListener("hello", (event) => {
       const hello = JSON.parse((event as MessageEvent<string>).data) as { revision: number; mustReload?: boolean };

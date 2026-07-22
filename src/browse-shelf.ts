@@ -33,6 +33,8 @@ export type ComposedSceneEntry = {
 
 export type BrowseShelfOptions = {
   api: GraphysXAgentWorldApi;
+  /** One editorial spotlight above the scrolling gallery; scene data remains unchanged. */
+  featuredStarter?: { id: string; eyebrow: string; badges: readonly string[] };
   /** Called after a starter is loaded, so the caller can take the showroom down and open the editor. */
   onOpen?: (starterId: string) => void;
   /** Composed archive scenes, listed above the starters because they are the recovered ones. */
@@ -42,7 +44,7 @@ export type BrowseShelfOptions = {
 };
 
 export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOptions): () => void {
-  const { api, onOpen, composed = [], onClose } = options;
+  const { api, featuredStarter, onOpen, composed = [], onClose } = options;
   injectStyleOnce();
 
   const overlay = document.createElement("div");
@@ -68,6 +70,58 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
 
   const list = document.createElement("div");
   list.className = "gx-browse-list";
+
+  const starters = api.starters();
+  const featured = featuredStarter
+    ? starters.find((starter) => starter.id === featuredStarter.id)
+    : undefined;
+  let featuredRow: HTMLButtonElement | null = null;
+
+  if (featured && featuredStarter) {
+    featuredRow = document.createElement("button");
+    featuredRow.type = "button";
+    featuredRow.className = "gx-browse-row gx-browse-row--featured";
+    featuredRow.dataset.starterId = featured.id;
+
+    const visual = document.createElement("span");
+    visual.className = "gx-shelf-visual gx-browse-featured-visual";
+    visual.append(createSceneThumbnail(featured.id, featured.label));
+
+    const copy = document.createElement("span");
+    copy.className = "gx-shelf-copy gx-browse-featured-copy";
+    const eyebrow = document.createElement("span");
+    eyebrow.className = "gx-browse-eyebrow";
+    eyebrow.textContent = featuredStarter.eyebrow;
+    const name = document.createElement("span");
+    name.className = "gx-browse-name";
+    name.textContent = featured.label;
+    const badges = document.createElement("span");
+    badges.className = "gx-browse-badges";
+    for (const label of featuredStarter.badges) {
+      const badge = document.createElement("span");
+      badge.className = "gx-browse-badge";
+      badge.textContent = label;
+      badges.append(badge);
+    }
+    const summary = document.createElement("span");
+    summary.className = "gx-browse-summary";
+    summary.textContent = featured.summary;
+    const meta = document.createElement("span");
+    meta.className = "gx-browse-meta";
+    meta.textContent = `${featured.entityCount} entities  ·  open in editor`;
+    copy.append(eyebrow, name, badges, summary, meta);
+    featuredRow.append(visual, copy);
+    featuredRow.addEventListener("click", () => {
+      const result = api.loadStarter(featured.id);
+      if (!result.ok) {
+        summary.textContent = result.error ?? "Could not open that scene";
+        featuredRow?.classList.add("gx-browse-row--error");
+        return;
+      }
+      dispose();
+      onOpen?.(featured.id);
+    });
+  }
 
   // Recovered scenes first — they are the reason someone opens this shelf.
   for (const scene of composed) {
@@ -104,7 +158,8 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     list.append(row);
   }
 
-  for (const starter of api.starters()) {
+  for (const starter of starters) {
+    if (starter.id === featured?.id) continue;
     const row = document.createElement("button");
     row.type = "button";
     row.className = "gx-browse-row";
@@ -147,7 +202,9 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     list.append(row);
   }
 
-  card.append(head, blurb, list);
+  card.append(head, blurb);
+  if (featuredRow) card.append(featuredRow);
+  card.append(list);
   overlay.append(card);
   container.append(overlay);
 
@@ -190,10 +247,25 @@ ${SHELF_THUMBNAIL_CSS}
   background:rgba(16,38,50,.8);border:1px solid rgba(79,208,230,.2);border-radius:10px;
   padding:7px;cursor:pointer;color:inherit;min-width:0}
 .gx-browse-row:hover{background:rgba(24,56,72,.92);border-color:var(--gx-accent-edge)}
+.gx-browse-row:focus-visible{outline:2px solid var(--gx-accent);outline-offset:2px}
 .gx-browse-row--error{border-color:#f95f4c}
 .gx-browse-name{color:var(--gx-ink);font-size:14px;font-weight:600}
 .gx-browse-summary{color:var(--gx-ink-soft);font-size:12px;line-height:1.4}
 .gx-browse-meta{color:var(--gx-ink-faint);font-size:11px;letter-spacing:.03em;margin-top:2px}
+.gx-browse-row--featured{display:grid;grid-template-columns:minmax(250px,.92fr) minmax(0,1.08fr);gap:16px;
+  padding:9px;background:linear-gradient(120deg,rgba(18,48,62,.96),rgba(12,30,42,.9));
+  border-color:rgba(120,240,208,.48);box-shadow:0 10px 34px rgba(0,0,0,.2)}
+.gx-browse-row--featured:hover{transform:translateY(-1px);box-shadow:0 14px 38px rgba(0,0,0,.28)}
+.gx-browse-featured-copy{align-self:center;gap:7px;padding:6px 10px 6px 0}
+.gx-browse-featured-visual .gx-shelf-thumb{aspect-ratio:16/7.6}
+.gx-browse-eyebrow{color:var(--gx-life);font-size:9px;font-weight:750;letter-spacing:.18em}
+.gx-browse-row--featured .gx-browse-name{font-size:18px;letter-spacing:.015em}
+.gx-browse-badges{display:flex;flex-wrap:wrap;gap:6px}
+.gx-browse-badge{padding:3px 7px;border:1px solid rgba(79,208,230,.3);border-radius:999px;
+  background:rgba(79,208,230,.08);color:var(--gx-accent);font-size:9px;font-weight:650;letter-spacing:.05em}
 @media (max-width:640px){.gx-browse{padding:12px}.gx-browse-card{padding:16px;max-height:92vh}
-  .gx-browse-list{grid-template-columns:1fr}.gx-browse-summary{display:none}}
+  .gx-browse-list{grid-template-columns:1fr}.gx-browse-summary{display:none}
+  .gx-browse-row--featured{grid-template-columns:1fr;gap:8px}.gx-browse-featured-copy{padding:2px 4px 5px}
+  .gx-browse-row--featured .gx-browse-summary{display:block}}
+@media (prefers-reduced-motion:reduce){.gx-browse-row--featured:hover{transform:none}}
 `;

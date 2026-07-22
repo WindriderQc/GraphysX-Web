@@ -39,7 +39,7 @@ try {
   out.entityCount = probe.entityCount;
 
   // Agent parity: drive the full public API + bridge exactly as an agent would.
-  out.api = await page.evaluate(() => {
+  out.api = await page.evaluate(async () => {
     const gx = window.__GRAPHYSX__;
     const bridge = window.__GRAPHYSX_AGENT_BRIDGE__;
     const before = gx.state().entities.length;
@@ -55,6 +55,10 @@ try {
     // Manifest parity: the bridge must describe every callable path on the API — no drift.
     const parity = bridge && typeof bridge.audit === "function" ? bridge.audit() : null;
     const levelCreate = gx.levels.create({ id: "smoke-level", label: "Smoke Level", width: 8, height: 8 });
+    const map1Asset = gx.assets().find((asset) => asset.id === "archive-map1") ?? null;
+    const map1Response = map1Asset ? await fetch(map1Asset.url) : null;
+    const map1Payload = map1Response?.ok ? await map1Response.json() : null;
+    const map1Mesh = map1Payload?.meshes?.[0];
     return {
       hasGlobal: typeof gx === "object" && gx !== null,
       hasBridge: typeof bridge === "object" && bridge !== null,
@@ -69,6 +73,13 @@ try {
       parityExtra: parity ? parity.extra : null,
       levelCreateOk: !!(levelCreate && levelCreate.ok),
       levelCount: gx.levels.list().length,
+      map1: {
+        listed: Boolean(map1Asset),
+        status: map1Response?.status ?? null,
+        vertices: Array.isArray(map1Mesh?.positions) ? map1Mesh.positions.length / 3 : null,
+        triangles: Array.isArray(map1Mesh?.indices) ? map1Mesh.indices.length / 3 : null,
+        exact: map1Payload?.provenance?.fidelity?.exact ?? null,
+      },
     };
   });
   // Human editor layer: DOM present, and a toolbar action mutates the shared world.
@@ -100,7 +111,9 @@ out.consoleErrors = consoleErrors;
 out.pageErrors = pageErrors;
 console.log(JSON.stringify(out, null, 2));
 await browser.close();
-const apiOk = out.api && out.api.spawnOk && out.api.entitiesAfter > out.api.entitiesBefore && out.api.levelCreateOk && out.api.toolCount > 0;
+const apiOk = out.api && out.api.spawnOk && out.api.entitiesAfter > out.api.entitiesBefore && out.api.levelCreateOk && out.api.toolCount > 0 &&
+  out.api.map1?.listed && out.api.map1?.status === 200 && out.api.map1?.vertices === 699 && out.api.map1?.triangles === 1456 &&
+  /positions/.test(out.api.map1?.exact ?? "");
 const parityOk = out.api && Array.isArray(out.api.parityMissing) && out.api.parityMissing.length === 0 && out.api.parityExtra.length === 0;
 if (!parityOk) console.log("bridge parity drift:", JSON.stringify({ missing: out.api?.parityMissing, extra: out.api?.parityExtra }));
 const editorOk = out.editor && out.editor.hasToolbar && out.editor.hasPanel && out.editor.panelCount === 3 && out.editor.entitiesAfter > out.editor.entitiesBefore && out.editor.rowCount > 0;

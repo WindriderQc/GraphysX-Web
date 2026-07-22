@@ -719,30 +719,30 @@ export class PlatformHost {
   }
 
   /**
-   * Frame the camera on the whole level when play begins.
+   * Frame the camera on the authored play footprint when play begins.
    *
-   * Until now play inherited whatever framing the previous surface left — the showroom's
-   * off-axis overview, tuned for the showroom composition — so a level was seen at a
-   * coincidental angle: a big one overflowed, a small one sat lost in the frame, and the ball
-   * was never the subject. A game wants a deliberate, repeatable view of the board.
-   *
-   * Framed on `ballz-floor` rather than the world's bounding box on purpose. The floor slab is
-   * exactly the play footprint; the world also contains the terrain pad and the hills beyond
-   * it, and fitting those would pull the camera back until the maze was a detail. The host
-   * already reads the `player` tag to know it is in a game, so reading the floor is the same
-   * tier of knowledge, not a new dependency.
+   * Grid levels already expose `ballz-floor`. Composed games do not: World 1, Skybox Spiral,
+   * and Great Slide have entirely different geometry, so hard-coding the grid slab left them
+   * at the showroom camera. A hidden ordinary box tagged `playfield` is the scene-native answer:
+   * its centre and width/depth describe what should fit, without teaching the host any course
+   * ids or waiting for async model bounds. Existing grid levels remain the fallback.
    */
   private frameOnPlay(): void {
-    const floor = this.api.query({ ids: ["ballz-floor"] })[0];
+    const floor = this.api.query({ tag: "playfield" })[0] ?? this.api.query({ ids: ["ballz-floor"] })[0];
     if (!floor) return;
     const center = new Vector3(...floor.position);
-    const span = Math.max(floor.geometry.width, floor.geometry.depth);
+    const width = floor.geometry.width * floor.scale[0];
+    const depth = floor.geometry.depth * floor.scale[2];
 
-    // Distance that fits `span` across the narrower (vertical) field of view, with margin so
-    // the walls at the rim are not flush against the frame edge. The board foreshortens along
-    // the view direction, so fitting the vertical extent covers the horizontal one too.
+    // Fit each authored axis against the field of view it actually occupies. The previous
+    // single-span calculation fit a 58×18 slide's width into the *vertical* FOV, shrinking the
+    // course to a strip in the middle of a widescreen view.
     const vfov = (this.camera.fov * Math.PI) / 180;
-    const distance = (span * 0.5) / Math.tan(vfov / 2) * 1.25;
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
+    const distance = Math.max(
+      (width * 0.5) / Math.tan(hfov / 2),
+      (depth * 0.5) / Math.tan(vfov / 2),
+    ) * 1.18;
 
     // One consistent game angle: from +z and well above, looking down the board. A fixed
     // direction is the point — every level opens the same way, so the control scheme (up = away)

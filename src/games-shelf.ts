@@ -116,10 +116,27 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
     meta.textContent = course.meta;
     copy.append(name, meta);
     row.append(visual, copy);
-    row.addEventListener("click", () => {
-      void course.play();
-      dispose();
-      onPlay?.(course.id);
+    row.addEventListener("click", async () => {
+      if (row.disabled) return;
+      row.disabled = true;
+      row.classList.add("gx-shelf-row--busy");
+      const originalMeta = meta.textContent;
+      meta.textContent = "Loading course…";
+      try {
+        await course.play();
+        dispose();
+        onPlay?.(course.id);
+      } catch (error) {
+        meta.textContent = error instanceof Error ? error.message : String(error);
+        row.classList.add("gx-shelf-row--error");
+        row.disabled = false;
+      } finally {
+        row.classList.remove("gx-shelf-row--busy");
+        if (row.isConnected && !row.classList.contains("gx-shelf-row--error")) {
+          meta.textContent = originalMeta;
+          row.disabled = false;
+        }
+      }
     });
     list.append(row);
   }
@@ -215,6 +232,8 @@ ${SHELF_THUMBNAIL_CSS}
   padding:7px;cursor:pointer;color:inherit;min-width:0}
 .gx-shelf-row:hover{background:rgba(24,56,72,.92);border-color:var(--gx-accent-edge)}
 .gx-shelf-row--error{border-color:#f95f4c}
+.gx-shelf-row--busy{cursor:progress;opacity:.72}
+.gx-shelf-row:focus-visible{outline:2px solid var(--gx-accent);outline-offset:2px}
 .gx-shelf-name{color:var(--gx-ink);font-size:14px;font-weight:600}
 .gx-shelf-meta{color:var(--gx-ink-faint);font-size:11.5px;letter-spacing:.03em}
 @media (max-width:640px){.gx-shelf{padding:12px}.gx-shelf-card{padding:16px;max-height:92vh}

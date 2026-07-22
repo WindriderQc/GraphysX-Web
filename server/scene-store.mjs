@@ -71,18 +71,13 @@ export function createStoreGuard({
       return headers;
     },
 
-    /**
-     * `Authorization: Bearer <token>`, or `x-graphysx-token` for clients that cannot set
-     * the former, or — only where the route opts in (the SSE stream, because EventSource
-     * cannot set headers at all) — `?token=`. Always true when no token is configured.
-     */
-    authorized(request, url, { allowQueryToken = false } = {}) {
+    /** `Authorization: Bearer <token>` or `x-graphysx-token`. Always true in open mode. */
+    authorized(request) {
       if (!expected) return true;
       const header = request.headers.authorization;
       let presented = null;
       if (typeof header === "string" && /^bearer\s/i.test(header)) presented = header.replace(/^bearer\s+/i, "").trim();
       else if (typeof request.headers["x-graphysx-token"] === "string") presented = request.headers["x-graphysx-token"].trim();
-      else if (allowQueryToken) presented = url.searchParams.get("token");
       if (!presented) return false;
       return timingSafeEqual(createHash("sha256").update(presented).digest(), expected);
     },
@@ -405,9 +400,7 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, orig
         if (streamMatch && request.method === "GET") {
           const name = decodeURIComponent(streamMatch[1]);
           assertName(name);
-          // The stream is a read and reads stay open — but this route is the one place
-          // `?token=` is understood (EventSource cannot set headers), so a client that
-          // sends it anyway is not wrong, just early.
+          // The stream is a scene read and stays open even when writes are token-protected.
           const record = await store.get(name);
           if (!record) return send(response, 404, { error: `Unknown scene: ${name}` }, cors);
 
@@ -455,7 +448,7 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, orig
 
         // --- commands in, delta out ------------------------------------------------
         if (changesMatch && request.method === "POST") {
-          if (!guard.authorized(request, url)) return unauthorized();
+          if (!guard.authorized(request)) return unauthorized();
           const name = decodeURIComponent(changesMatch[1]);
           assertName(name);
           const body = await readJsonBody(request);
@@ -516,7 +509,7 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, orig
           }
 
           if (request.method === "PUT") {
-            if (!guard.authorized(request, url)) return unauthorized();
+            if (!guard.authorized(request)) return unauthorized();
             const body = await readJsonBody(request);
             // Accept either {definition, expectedRevision} or a bare definition, so
             // `curl -d @scene.json` works without ceremony.

@@ -402,7 +402,7 @@ export async function handleAssetRequest(store, request, response, url, path, gu
   const method = request.method ?? "GET";
   const cors = guard?.corsHeaders(request);
   const denied = () => {
-    if (!guard || guard.authorized(request, url)) return false;
+    if (!guard || guard.authorized(request)) return false;
     sendJson(response, 401, { error: "This store requires a token (Authorization: Bearer <GRAPHYSX_STORE_TOKEN>)" }, cors);
     return true;
   };

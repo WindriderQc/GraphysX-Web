@@ -39,6 +39,8 @@ import {
   type AgentWorldVector3,
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
+import { Vector3 } from "three";
+import type { PlatformHost } from "./platform-host";
 
 const BALL_RADIUS = 0.42;
 /** Ring centres sit at the rolling ball's own centre: slab top (0.18) + radius. */
@@ -322,4 +324,13 @@ function buildDefinition(): AgentWorldDefinition {
 /** Compose the course into the live world. One `api.create`, like every composed scene. */
 export function composeSkyboxSpiral(api: GraphysXAgentWorldApi) {
   return api.create(buildDefinition());
+}
+
+/**
+ * The authored course spans roughly 27 × 52 units. Give it a deliberate high three-quarter
+ * view instead of inheriting the showroom's close, off-axis composition camera.
+ */
+export function frameSkyboxSpiral(host: PlatformHost): void {
+  host.camera.position.set(25, 25, 38);
+  host.focusOn(new Vector3(0, 0.4, -2), 27, 1.05);
 }

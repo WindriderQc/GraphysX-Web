@@ -83,6 +83,10 @@ try {
     return { asset: slide?.asset ?? null, collider: slide?.physics?.collider ?? null };
   });
 
+  // Great Slide now carries a complete rules/player contract, so loading it correctly selects
+  // the play surface. This smoke's next assertions exercise the authoring inspector; enter that
+  // surface explicitly instead of relying on the starter being a non-game scene.
+  await page.evaluate(async () => window.__GRAPHYSX_HOST__.enterEditor());
   await page.click('.gx-ed-row[title^="great-slide-terrain —"]');
   out.editor = await page.evaluate(() => {
     const fields = [...document.querySelectorAll(".gx-ed-field")];

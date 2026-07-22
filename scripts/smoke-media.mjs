@@ -14,6 +14,8 @@ import { startSceneStore } from "../server/scene-store.mjs";
 const EXE = process.env.SMOKE_CHROMIUM || undefined;
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
 const ART = process.env.SMOKE_ARTIFACTS || path.resolve("output/smoke");
+const STORE_TOKEN = "smoke-media-token-8c41";
+const STORE_HEADERS = { "x-graphysx-token": STORE_TOKEN };
 mkdirSync(ART, { recursive: true });
 
 /** 1×1 opaque teal PNG. Small is the point — the pixel value is never asserted. */
@@ -73,6 +75,7 @@ f 2 3 4
 
 const consoleErrors = [];
 const pageErrors = [];
+const tokenRequestLeaks = [];
 const out = {};
 
 let store = null;
@@ -106,10 +109,11 @@ try {
   }
 
   store = await startSceneStore({
-    port: 0,
+    port: Number(process.env.SMOKE_STORE_PORT ?? 0),
     dir: path.join(storeDir, "scenes"),
     assetDir: path.join(storeDir, "assets"),
     datalakeDir,
+    token: STORE_TOKEN,
   });
   out.storeUrl = store.url;
 
@@ -118,16 +122,16 @@ try {
   out.healthAssets = health.assetCount;
   out.healthDatalake = typeof health.datalake === "string";
 
-  const rootListing = await fetch(`${store.url}/datalake`).then((r) => r.json());
+  const rootListing = await fetch(`${store.url}/datalake`, { headers: STORE_HEADERS }).then((r) => r.json());
   out.rootFolders = rootListing.folders.map((f) => f.name);
   out.rootFiles = rootListing.files.map((f) => `${f.name}:${f.kind}`);
 
   // Path traversal must be refused, not resolved.
-  out.traversalRejected = await fetch(`${store.url}/datalake?path=..%2F..%2Fsecrets`).then((r) => r.status === 400);
+  out.traversalRejected = await fetch(`${store.url}/datalake?path=..%2F..%2Fsecrets`, { headers: STORE_HEADERS }).then((r) => r.status === 400);
 
   const imported = await fetch(`${store.url}/assets/import`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...STORE_HEADERS, "content-type": "application/json" },
     body: JSON.stringify({ path: "Textures/smoke-teal.png" }),
   }).then((r) => r.json());
   out.importedId = imported.id;
@@ -142,8 +146,11 @@ try {
   applySmokeTimeout(page);
   page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
   page.on("pageerror", (e) => pageErrors.push(String(e)));
+  page.on("request", (request) => {
+    if (request.url().includes(STORE_TOKEN)) tokenRequestLeaks.push(request.url());
+  });
 
-  const url = `${BASE}${BASE.includes("?") ? "&" : "?"}host=editor&store=${encodeURIComponent(store.url)}`;
+  const url = `${BASE}${BASE.includes("?") ? "&" : "?"}host=editor&store=${encodeURIComponent(store.url)}#storeToken=${encodeURIComponent(STORE_TOKEN)}`;
   out.navigationAttempts = 0;
   for (let attempt = 1; attempt <= 4; attempt += 1) {
     out.navigationAttempts = attempt;
@@ -156,6 +163,7 @@ try {
     }
   }
   await page.waitForFunction(() => !!window.__GRAPHYSX__, { timeout: SMOKE_TIMEOUT });
+  out.tokenScrubbed = !new URL(page.url()).hash.includes("storeToken");
 
   // The manifest pull registers the server-side import into the texture registry.
   out.refresh = await page.evaluate(async () => {
@@ -471,7 +479,7 @@ try {
 
   await page.screenshot({ path: path.join(ART, "media-library.png"), fullPage: false });
 } catch (e) {
-  out.fatal = String(e);
+  out.fatal = e instanceof Error ? e.stack ?? String(e) : String(e);
 } finally {
   if (browser) await browser.close();
   if (store) await store.close();
@@ -481,9 +489,12 @@ try {
 
 out.consoleErrors = consoleErrors;
 out.pageErrors = pageErrors;
+out.tokenRequestLeaks = tokenRequestLeaks;
 console.log(JSON.stringify(out, null, 2));
 
 const ok =
+  out.tokenScrubbed &&
+  out.tokenRequestLeaks.length === 0 &&
   out.healthAssets === 0 &&
   out.healthDatalake &&
   out.rootFolders?.includes("Textures") &&
@@ -574,4 +585,4 @@ const ok =
   out.playSound?.triggerLoadOk &&
   out.playSound?.firedByTrigger >= 1 &&
   out.playSound?.oneShotCountIsNumber;
-process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
+process.exit(out.fatal || consoleErrors.length || pageErrors.length || !ok ? 1 : 0);
