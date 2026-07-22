@@ -330,6 +330,38 @@ try {
       api.pause(false);
     }
 
+    // ================= BAD COLOUR REJECTION =================
+    // three's `Color` does not throw on garbage, so the old try/catch isColor in
+    // flock/force-field/water accepted ANY string and the bad value was silently dropped at
+    // render — a validation surface that validated nothing. These assert the validators now
+    // actually reject; without them the fix regresses silently the next time someone
+    // "simplifies" the sentinel comparison back to a try/catch.
+    {
+      const rejects = (id, patch) => {
+        try {
+          const result = api.update(id, patch);
+          return result && result.ok === false;
+        } catch {
+          return true;
+        }
+      };
+      check("flock.color rejects garbage", "validation", true, { object: rejects("flk1", { flock: { color: "not-a-color" } }) }, { before: false });
+      check("forceField.color rejects garbage", "validation", true, { object: rejects("ff1", { forceField: { color: "not-a-color" } }) }, { before: false });
+      check("water.color rejects garbage", "validation", true, { object: rejects("wat1", { water: { color: "not-a-color" } }) }, { before: false });
+      check("water.sunColor rejects garbage", "validation", true, { object: rejects("wat1", { water: { sunColor: "not-a-color" } }) }, { before: false });
+      // And a real colour still passes — a validator that rejects everything would also
+      // satisfy the four checks above.
+      const accepted = (() => {
+        try {
+          const result = api.update("flk1", { flock: { color: "#ffaa00" } });
+          return !result || result.ok !== false;
+        } catch {
+          return false;
+        }
+      })();
+      check("flock.color still accepts a real colour", "validation", true, { object: accepted && stateOf("flk1").flock.color === "#ffaa00" }, { before: false });
+    }
+
     // ================= DNA (the newly threaded Living Forest) =================
     {
       const before = stateOf("dna1").dna;

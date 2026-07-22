@@ -165,14 +165,20 @@ export function resolveAgentWorldWater(
   };
 }
 
+/**
+ * Three's `Color` does NOT throw on an unparseable string — it logs a warning and hands back
+ * an unmodified colour, so the try/catch idiom this replaced accepted any string at all and
+ * the bad value was then silently dropped at render time. Two-sentinel parse-and-compare is
+ * the check that actually works; same validator as agent-world-crowd.ts, where the failure
+ * was first measured.
+ */
 function isColor(value: unknown): boolean {
-  if (typeof value !== "string") return false;
-  try {
-    new Color(value);
-    return true;
-  } catch {
-    return false;
-  }
+  if (typeof value !== "string" || !value.trim()) return false;
+  const black = new Color(0x000000);
+  const white = new Color(0xffffff);
+  black.set(value);
+  white.set(value);
+  return black.equals(white);
 }
 
 let sharedNormals: CanvasTexture | null = null;
