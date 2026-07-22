@@ -197,9 +197,24 @@ gx.spawn({
   id: "archive-cottage",
   type: "model",
   asset: { id: "port-cottage", fitSize: 5.5 },
-  geometry: { width: 5, height: 4, depth: 4 }, // physics box
+  geometry: { width: 5, height: 4, depth: 4 }, // default/auto physics box
   transform: { position: [-4, 2, 0] },
   physics: { mode: "static", material: "wall" }
+});
+
+gx.spawn({
+  id: "exact-slide",
+  type: "model",
+  asset: { id: "archive-slide-large", fitSize: 52.7337 },
+  physics: { mode: "static", material: "ground", collider: "trimesh" }
+});
+
+gx.spawn({
+  id: "moving-model",
+  type: "model",
+  asset: { id: "archive-slide-large", fitSize: 3 },
+  transform: { position: [0, 12, 0] },
+  physics: { mode: "dynamic", mass: 1, collider: "convex-hull" }
 });
 
 gx.spawn({
@@ -217,7 +232,27 @@ gx.spawn({
 });
 ```
 
-Physics modes are `static`, `dynamic`, and `kinematic`, for primitives and complex models alike. Model rigid bodies use the agent-supplied `geometry.width/height/depth` as a predictable box collider. Materials are `default`, `wall`, `finish`, `ground`, `ball`, and `human`; friction and restitution can be overridden per entity. Set world gravity with `environment.physics.gravity`. Physics is real rigid-body simulation, and `query()`/`state()` report current velocity and sleep state. Physics entities stay at the world root so their transform has one unambiguous coordinate space.
+Physics modes are `static`, `dynamic`, `kinematic`, and `trigger`. The default
+`physics.collider: "auto"` preserves the predictable primitive collider inferred from the entity
+type; for a model, that is the agent-supplied `geometry.width/height/depth` box. A model may instead
+request its fitted asset geometry with `collider: "trimesh"` or `"convex-hull"`. Trimeshes are
+static-only; use a convex hull for dynamic, kinematic, or trigger models. The scene document names
+the policy and asset—not duplicate raw vertices—and the collider is created as soon as geometry JSON
+is validated, without waiting for presentation textures.
+
+`query()`/`state()` report `physics.collider` with `requested`, `effective`, `shapeCount`,
+`vertexCount`, and `triangleCount`; `effective: "pending"` means an exact model collider is waiting
+for geometry, while `effective: "error"` carries a terminal validation/load message. Exact intent
+survives export/reload. Model fit/recenter, handedness, and entity scale are applied to the collision
+mesh exactly as they are to the visual mesh. Payloads are
+validated for finite positions and in-range triangle indices. Exact colliders are capped at 100,000
+vertices and 100,000 triangles, and convex hulls at 8,192 input vertices.
+
+Materials are `default`, `wall`, `finish`, `ground`, `ball`, and `human`; friction and restitution
+can be overridden per entity. Set world gravity with `environment.physics.gravity`. Physics is real
+rigid-body simulation, and `query()`/`state()` report current velocity and sleep state. Physics
+entities stay at the world root so their transform has one unambiguous coordinate space. The editor
+shows the model collider policy in its Physics section and forces `static` when `trimesh` is chosen.
 
 An entity with `type: "agent"` is a visible participant with a serializable role, status, perception radius, and semantic capability list. This describes who or what is present in a shared spatial explanation; it does not run arbitrary scripts or create a second AI runtime.
 

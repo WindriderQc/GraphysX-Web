@@ -62,23 +62,19 @@ Close the working set before opening anything new.
    model the vehicles work will make people look at.
 3. Retire the vehicle verify harness once the garage has a real route.
 
-## Horizon 2 — The scene envelope (unblocks the archive ports)
+## Horizon 2 — Archive ports
 
-The four remaining mesh worlds have bounds of 56, 81, 527 and 1135 units. The host pins
-fog at literals (34–130 at `platform-host.ts:372`, 38–138 at `:434`) and the camera far
-plane at 260 (`:163`). Level1 2011 cannot currently be rendered at all, let alone framed.
-The ~20 divergent fog/far literals across the archive previews are the proof this pin
-breaks real content.
+The platform blockers are now gone: `environment.envelope` carries scene-scale fog/camera
+limits, and model entities can author validated static trimesh or moving convex-hull colliders
+from their registered asset geometry. Great Slide is the collider proof: exact recovered
+SlideLarge positions/UVs/indices, a scene-native trimesh, editor control, bridge reachability,
+round-trip persistence, and a deterministic built-output smoke. Its game rules, materials, and
+navigation remain partial; the starter labels its modern staging rather than claiming full fidelity.
 
-1. **Envelope in the document** — optional `environment.envelope` (fog near/far, camera
-   far, suggested framing) consumed by the host exactly the way `sky` already is.
-   Pure scene-data work in the same vein as the rules block. Also closes the spec's
-   open "no per-scene camera" item for courses.
-2. **Mesh colliders** for ported geometry — big enough to be its own effort.
-3. **The five ports** — World 1, Map 1, Great Slide, Level1 2011, Skybox Spiral — each
-   an `api.create` composition with provenance, a smoke, and honest FAITHFUL/INFERRED
-   labels. Rules loop and (after this horizon) envelope and colliders all exist; ASCII
-   path is already proven by the BallZ pack.
+1. ~~**Envelope in the document**~~ — **Done.**
+2. ~~**Mesh colliders for ported geometry**~~ — **Done** in Wave 6; Great Slide guards it.
+3. ~~World 1~~ and ~~Skybox Spiral~~ are reachable ports. **Map 1, a full-fidelity Great Slide
+   game composition, and Level1 2011 remain**, each needing provenance notes and a gameplay smoke.
 
 ## Horizon 3 — The look
 

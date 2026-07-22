@@ -105,12 +105,28 @@ type AssetPayload = {
   meshes: PayloadMesh[];
 };
 
+export type AgentWorldModelCollisionMesh = {
+  /** Flat xyz triples after the asset's fit/recentre/handedness transform. */
+  vertices: number[];
+  /** Triangle indices into `vertices`. Meshes in one payload are merged with offsets. */
+  indices: number[];
+  vertexCount: number;
+  triangleCount: number;
+};
+
 export type ResolvedAgentWorldModelAsset = Required<
   Pick<AgentWorldModelAsset, "format" | "fitSize" | "alphaTest" | "colorKeyTolerance">
 > & {
   id: string | null;
   url: string;
   colorKey: string | null;
+};
+
+export type AgentWorldModelCollisionRequest = {
+  maxVertices: number;
+  maxTriangles: number;
+  /** Runs as soon as geometry JSON is validated, before presentation textures are fetched. */
+  onReady(mesh: AgentWorldModelCollisionMesh): void;
 };
 
 /**
@@ -188,11 +204,21 @@ export function resolveAgentWorldModelAsset(source?: AgentWorldModelAsset): Reso
   return { id, url, format, fitSize, alphaTest, colorKey, colorKeyTolerance };
 }
 
-export async function loadAgentWorldModel(target: Group, asset: ResolvedAgentWorldModelAsset): Promise<void> {
+export async function loadAgentWorldModel(
+  target: Group,
+  asset: ResolvedAgentWorldModelAsset,
+  collision?: AgentWorldModelCollisionRequest,
+): Promise<void> {
   const response = await fetch(asset.url);
   if (!response.ok) throw new Error(`Model request failed (${response.status}): ${asset.url}`);
   const payload = await response.json() as AssetPayload;
-  validatePayload(payload);
+  validatePayload(payload, collision);
+  const fit = modelFit(payload.bounds, asset.fitSize);
+  if (target.userData.graphysxDisposed) return;
+  // Physics must not wait on presentation assets. A missing/slow texture can make the model
+  // ugly, but it must never leave an already-validated static collision surface absent while
+  // the rest of the world is stepping.
+  if (collision) collision.onReady(collisionMeshFromPayload(payload, fit.scale, fit.offset, fit.mirrorZ));
 
   const textureLoader = new TextureLoader();
   const textureUrls = [...new Set(payload.meshes.flatMap((mesh) => (mesh.materials ?? [])
@@ -247,30 +273,105 @@ export async function loadAgentWorldModel(target: Group, asset: ResolvedAgentWor
     sourceRoot.add(mesh);
   }
 
-  const bounds = payload.bounds;
-  if (bounds) {
-    const center = bounds.min.map((value, axis) => (value + bounds.max[axis]) / 2) as Tuple3;
-    const maximumSpan = Math.max(...bounds.size, 0.0001);
-    const scale = asset.fitSize / maximumSpan;
-    sourceRoot.scale.set(scale, scale, -scale);
+  if (payload.bounds) {
+    sourceRoot.scale.set(fit.scale, fit.scale, -fit.scale);
     // Three composes an object's matrix T·R·S — position is applied after, and is NOT
     // scaled. Setting position = -center alongside a scale therefore recentred by the
     // UNSCALED offset, so any model whose fitSize differed from its native span landed
     // off its anchor (and the Z flip mirrored that error's sign). The offset has to go
     // through the same factors the vertices do: world = S·v + p, and p = -S·center puts
     // the bounds centre exactly on the group origin at every fitSize.
-    sourceRoot.position.set(-center[0] * scale, -center[1] * scale, center[2] * scale);
+    sourceRoot.position.set(...fit.offset);
   }
   target.add(sourceRoot);
 }
 
-function validatePayload(payload: AssetPayload): void {
+/** Fetch only validated collision geometry for an already-rendered `auto` model promoted later. */
+export async function loadAgentWorldCollisionMesh(
+  asset: ResolvedAgentWorldModelAsset,
+  limits: Pick<AgentWorldModelCollisionRequest, "maxVertices" | "maxTriangles">,
+): Promise<AgentWorldModelCollisionMesh> {
+  const response = await fetch(asset.url);
+  if (!response.ok) throw new Error(`Model request failed (${response.status}): ${asset.url}`);
+  const payload = await response.json() as AssetPayload;
+  validatePayload(payload, limits);
+  const fit = modelFit(payload.bounds, asset.fitSize);
+  return collisionMeshFromPayload(payload, fit.scale, fit.offset, fit.mirrorZ);
+}
+
+function validatePayload(payload: AssetPayload, collision?: Pick<AgentWorldModelCollisionRequest, "maxVertices" | "maxTriangles">): void {
   if (!payload || !Array.isArray(payload.meshes) || payload.meshes.length === 0) throw new Error("Model payload contains no meshes");
   if (payload.meshes.length > 256) throw new Error("Model payload exceeds the 256-mesh limit");
+  let totalVertices = 0;
+  let totalTriangles = 0;
   for (const mesh of payload.meshes) {
     if (!Array.isArray(mesh.positions) || mesh.positions.length < 9 || mesh.positions.length % 3 !== 0) throw new Error("Model mesh has invalid positions");
     if (!Array.isArray(mesh.indices) || mesh.indices.length < 3 || mesh.indices.length % 3 !== 0) throw new Error("Model mesh has invalid indices");
+    const vertexCount = mesh.positions.length / 3;
+    for (let index = 0; index < mesh.positions.length; index += 1) {
+      if (!Number.isFinite(mesh.positions[index])) throw new Error(`Model mesh position ${index} is not finite`);
+    }
+    for (let index = 0; index < mesh.indices.length; index += 1) {
+      const value = mesh.indices[index];
+      if (!Number.isInteger(value) || value < 0 || value >= vertexCount) {
+        throw new Error(`Model mesh index ${index} (${String(value)}) is outside 0..${vertexCount - 1}`);
+      }
+    }
+    totalVertices += vertexCount;
+    totalTriangles += mesh.indices.length / 3;
+    if (collision && (totalVertices > collision.maxVertices || totalTriangles > collision.maxTriangles)) {
+      throw new Error(
+        `Model colliders support at most ${collision.maxVertices} vertices and ${collision.maxTriangles} triangles; ` +
+        `this asset has at least ${totalVertices} vertices and ${totalTriangles} triangles`,
+      );
+    }
   }
+}
+
+function modelFit(bounds: AssetPayload["bounds"], fitSize: number): { scale: number; offset: Tuple3; mirrorZ: boolean } {
+  if (!bounds) return { scale: 1, offset: [0, 0, 0], mirrorZ: false };
+  const center = bounds.min.map((value, axis) => (value + bounds.max[axis]) / 2) as Tuple3;
+  const scale = fitSize / Math.max(...bounds.size, 0.0001);
+  return {
+    scale,
+    offset: [-center[0] * scale, -center[1] * scale, center[2] * scale],
+    mirrorZ: true,
+  };
+}
+
+function collisionMeshFromPayload(
+  payload: AssetPayload,
+  scale: number,
+  offset: Tuple3,
+  mirrorZ: boolean,
+): AgentWorldModelCollisionMesh {
+  const vertices: number[] = [];
+  const indices: number[] = [];
+  let vertexOffset = 0;
+  for (const mesh of payload.meshes) {
+    for (let index = 0; index < mesh.positions.length; index += 3) {
+      vertices.push(
+        mesh.positions[index] * scale + offset[0],
+        mesh.positions[index + 1] * scale + offset[1],
+        mesh.positions[index + 2] * (mirrorZ ? -scale : scale) + offset[2],
+      );
+    }
+    for (let index = 0; index < mesh.indices.length; index += 3) {
+      const first = mesh.indices[index] + vertexOffset;
+      const second = mesh.indices[index + 1] + vertexOffset;
+      const third = mesh.indices[index + 2] + vertexOffset;
+      // The asset loader's Z mirror has a negative determinant. Reverse winding so the
+      // authored front face remains the collider's front face after handedness conversion.
+      indices.push(first, mirrorZ ? third : second, mirrorZ ? second : third);
+    }
+    vertexOffset += mesh.positions.length / 3;
+  }
+  return {
+    vertices,
+    indices,
+    vertexCount: vertices.length / 3,
+    triangleCount: indices.length / 3,
+  };
 }
 
 function tupleColor(value: Tuple3 | [number, number, number, number] | undefined, fallback: number): Color {

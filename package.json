@@ -24,6 +24,7 @@
     "smoke:rules": "node scripts/smoke-rules.mjs",
     "smoke:media": "node scripts/smoke-media.mjs",
     "smoke:physics": "node scripts/smoke-physics.mjs",
+    "smoke:mesh-colliders": "node scripts/smoke-mesh-colliders.mjs",
     "smoke:rapier-race": "node scripts/smoke-rapier-race.mjs",
     "smoke:store-auth": "node scripts/smoke-store-auth.mjs",
     "smoke:dna": "node scripts/smoke-dna.mjs",
@@ -33,6 +34,7 @@
     "agent:stdio": "node tools/graphysx-agent-stdio.mjs --stdio",
     "agent:manifest": "node tools/graphysx-agent-stdio.mjs",
     "assets:manifest": "node scripts/product-assets.mjs",
+    "assets:slide-large": "node scripts/vendor-slide-large.mjs && node scripts/build-asset-catalog.mjs",
     "assets:shelf-thumbnails": "node scripts/capture-shelf-thumbnails.mjs",
     "qa": "node scripts/qa-agent-entities.mjs"
   },

@@ -1,9 +1,9 @@
 # GraphysX-Web — Feature & Fix Wave (2026-07-22)
 
-Four waves landed off the peer review, plus one real bug found while verifying. Base: `643e184`
+Six waves landed off the peer review and its follow-ups, plus one real bug found while verifying. Base: `643e184`
 (applied cleanly onto your `78e1fe3`, which only adds `showroom-welcome.ts` — untouched here).
 All changes typecheck (`tsc --noEmit` clean) and build (`vite build` green). Affected smokes were
-run individually against a served `dist` and pass; the two new smokes are registered in the gate.
+run individually against a served `dist` and pass; every new smoke is registered in the gate.
 
 ---
 
@@ -114,6 +114,38 @@ run individually against a served `dist` and pass; the two new smokes are regist
 
 ---
 
+## Wave 6 — Scene-native convex and trimesh colliders
+
+**Files:** `src/physics/rapier-mesh-primitives.ts`, `src/physics/physics-engine.ts`,
+`src/physics/rapier-physics-engine.ts`, `src/agent-world-assets.ts`,
+`src/agent-world-runtime.ts`, `src/platform-editor.ts`, `src/agent-world-starters.ts`,
+`scripts/vendor-slide-large.mjs`, `scripts/smoke-mesh-colliders.mjs`
+
+- Model entities can author `physics.collider: "convex-hull" | "trimesh"`; omitted/`auto`
+  preserves the existing primitive/box behavior. Trimeshes are static-only, while convex hulls
+  support moving models. The engine-neutral physics seam now carries both shapes.
+- Collision vertices come from the registered model payload after the exact same fit, recenter,
+  handedness, and authored scale as the rendered model. Scene documents name the asset and policy
+  instead of embedding raw arrays. State reports requested/effective kind and mesh statistics;
+  exact intent survives export/reload.
+- Payload positions and indices are validated; exact colliders are capped at 100k vertices/100k
+  triangles and convex hull inputs at 8192 vertices. Rapier trimeshes enable internal-edge repair,
+  duplicate merge, and degenerate-triangle removal.
+- The main editor exposes a model collider selector and prevents a trimesh/dynamic mismatch.
+  Existing spawn/update/bridge paths carry the field without a bespoke tool.
+- Recovered `Media/SlideLarge.TVM` geometry (100 vertices, 92 triangles) is deterministically
+  vendored and catalogued as `archive-slide-large`. The new **Great Slide** Browse Scenes starter
+  is a real v2 composition with a static exact trimesh and a live ball descending its concave slope.
+- `smoke-mesh-colliders` proves built-output asset resolution, 13.7-unit slope travel while the
+  ball remains above the slide's lower surface (ruling out free fall), exact 100/92 state,
+  document round-trip, rejection of moving trimeshes, a bridge-spawned dynamic
+  convex hull, finite motion, zero failed responses/errors, and a screenshot.
+- The proposed P3 cleanup was audited before editing: touched-body Sets, vehicle-controller
+  teardown, and gravity copy-by-value were already present in the deployed Rapier code, so no
+  duplicate churn was introduced.
+
+---
+
 ## Bug found & fixed while verifying
 
 **Trigger re-collection under live restitution** (`src/agent-world-runtime.ts`, `updateTriggers`
@@ -136,15 +168,17 @@ still fire (occupancy is real). `smoke-ballz`'s ring-collection assertion caught
 - `probe:rapier-heightfield` — internal-edge seam regression, deterministic and node-only
 - `probe:rapier-materials` — all 36 surface pairs, sleep/wake, and teardown determinism
 - `smoke:rapier-race` — Piste vehicle contact, drive, steering, finite state, screenshot, errors
+- `smoke:mesh-colliders` — Great Slide exact trimesh, dynamic convex hull, rejection + round-trip
 - `smoke:store-auth` — token gate, CORS, tokenless compat (node-only, cheapest in the list)
 - `smoke:dna` — was authored but never registered; now in the gate (node-only, deterministic)
 
 ## Verification run in this session (served `dist`, swiftshader)
 
-Full `npm run verify` completed in 486 seconds: **all 28 checks passed** — typecheck, production
-build, both Rapier probes, all 22 existing browser/node smokes, the new Piste race smoke, store auth,
-and DNA. `standalone` and `overlay` each hit one transient local transport reset; the gate's isolated
-fresh-server retry passed both, with no product assertion failure. Screenshots are in `output/verify`.
+Final `npm run verify` completed in 596 seconds: **all 29 checks passed** — typecheck, production
+build, both Rapier probes, every browser/node smoke, the new mesh-collider proof, Piste race, store
+auth, and DNA. `showroom`, `triggers`, and `rapier-race` each hit one transient first-attempt local
+server timeout; the gate's isolated fresh-server retry passed all three, with no remaining product
+assertion failure. Screenshots are in `output/verify`.
 
 ## Remaining follow-ups
 

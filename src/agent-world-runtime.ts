@@ -85,9 +85,11 @@ import type {
 } from "./physics/physics-engine";
 import {
   GRAPHYSX_AGENT_WORLD_ASSETS,
+  loadAgentWorldCollisionMesh,
   loadAgentWorldModel,
   resolveAgentWorldModelAsset,
   type AgentWorldAssetDescriptor,
+  type AgentWorldModelCollisionMesh,
   type AgentWorldModelAsset,
   type ResolvedAgentWorldModelAsset
 } from "./agent-world-assets";
@@ -266,6 +268,12 @@ export type AgentWorldSplinePath = {
  */
 export type AgentWorldPhysicsMode = "static" | "dynamic" | "kinematic" | "trigger";
 export type AgentWorldPhysicsMaterial = "default" | "wall" | "finish" | "ground" | "ball" | "human";
+/**
+ * `auto` preserves the primitive collider inferred from the entity type. Exact mesh modes
+ * are intentionally model-only: they use the already-authored asset geometry, so scene JSON
+ * names the collision policy without duplicating thousands of vertex values.
+ */
+export type AgentWorldColliderKind = "auto" | "convex-hull" | "trimesh";
 export type AgentWorldPhysics = {
   mode: AgentWorldPhysicsMode;
   mass?: number;
@@ -274,6 +282,8 @@ export type AgentWorldPhysics = {
   restitution?: number;
   linearVelocity?: AgentWorldVector3;
   angularVelocity?: AgentWorldVector3;
+  /** Model entities only. Trimeshes are static; moving models use a convex hull. */
+  collider?: AgentWorldColliderKind;
 };
 
 export type AgentWorldSpinBehavior = {
@@ -632,6 +642,14 @@ export type AgentWorldEntityState = {
     linearVelocity: AgentWorldVector3;
     angularVelocity: AgentWorldVector3;
     sleeping: boolean;
+    collider: {
+      requested: AgentWorldColliderKind | "heightfield";
+      effective: AgentWorldColliderKind | "heightfield" | "pending" | "error";
+      shapeCount: number;
+      vertexCount: number;
+      triangleCount: number;
+      error?: string;
+    };
   } | null;
   path: { pointCount: number; closed: boolean } | null;
   asset: ({ status: "loading" | "ready" | "error"; error?: string } & ResolvedAgentWorldModelAsset) | null;
@@ -747,6 +765,10 @@ export type AgentWorldStreamEventType =
   | "entity.spawned"
   | "entity.updated"
   | "entity.removed"
+  | "asset.collider-ready"
+  | "asset.collider-error"
+  | "asset.ready"
+  | "asset.error"
   | "world.loaded"
   | "environment.changed"
   | "commit.applied"
@@ -926,6 +948,11 @@ type RuntimeEntity = {
   object: Object3D;
   body: PhysicsBodyHandle | null;
   assetState: AgentWorldEntityState["asset"];
+  collisionMesh: AgentWorldModelCollisionMesh | null;
+  colliderStats: { effective: AgentWorldColliderKind | "heightfield" | "pending"; shapeCount: number; vertexCount: number; triangleCount: number } | null;
+  colliderError: string | null;
+  colliderLoading: boolean;
+  colliderLoadVersion: number;
 };
 
 /**
@@ -950,6 +977,7 @@ type ResolvedAgentWorldPhysics = {
   restitution: number;
   linearVelocity: AgentWorldVector3;
   angularVelocity: AgentWorldVector3;
+  collider: AgentWorldColliderKind;
 };
 
 const DEFAULT_TRANSFORM: AgentWorldTransform = {
@@ -1026,6 +1054,8 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "force-field.list",
   "simulation.force-fields",
   "physics.rigid-body",
+  "physics.collider.convex-hull",
+  "physics.collider.trimesh",
   "spline.path",
   "behavior.follow-spline",
   "behavior.attach",
@@ -1633,7 +1663,12 @@ export class AgentWorldRuntime {
       definition,
       object,
       body: null,
-      assetState: definition.asset ? { ...definition.asset, status: "loading" } : null
+      assetState: definition.asset ? { ...definition.asset, status: "loading" } : null,
+      collisionMesh: null,
+      colliderStats: null,
+      colliderError: null,
+      colliderLoading: false,
+      colliderLoadVersion: 0,
     };
     this.entities.set(definition.id, runtime);
     const parent = definition.parentId ? this.entities.get(definition.parentId)?.object : this.worldRoot;
@@ -1682,6 +1717,14 @@ export class AgentWorldRuntime {
       definition.physics = patch.physics === null
         ? null
         : resolvePhysics({ ...(definition.physics ?? { mode: "static" }), ...patch.physics }, definition.type, definition.parentId, definition.behaviors);
+      if (!definition.physics || definition.physics.collider === "auto") {
+        // Invalidate any exact-geometry fetch already in flight and release arrays that an
+        // `auto` model no longer needs. A later promotion refetches geometry deliberately.
+        runtime.colliderLoadVersion += 1;
+        runtime.colliderLoading = false;
+        runtime.colliderError = null;
+        runtime.collisionMesh = null;
+      }
     }
     if (patch.agent !== undefined) {
       if (definition.type !== "agent") throw new Error("Only agent entities accept an agent profile");
@@ -1741,6 +1784,11 @@ export class AgentWorldRuntime {
     // otherwise the mesh moves and things keep landing on the old landform.
     if (patch.transform || patch.physics !== undefined || patch.parentId !== undefined || patch.terrain !== undefined) {
       this.rebuildPhysicsBody(runtime);
+    }
+    // Visual-only models do not retain duplicate collision arrays. If the human/agent later
+    // promotes one from `auto` to an exact collider, fetch just the geometry on demand.
+    if (patch.physics !== undefined && runtime.definition.type === "model" && runtime.definition.physics?.collider !== "auto" && !runtime.collisionMesh) {
+      this.startModelCollisionLoad(runtime);
     }
     // The changed field names, not the values: a relay reads them to decide what to send,
     // and shipping the values here would duplicate state that `query()` already answers.
@@ -2485,27 +2533,97 @@ export class AgentWorldRuntime {
     if (runtime.body) this.physicsWorld.removeBody(runtime.body);
     // Terrain is the one type whose collider is implied by the entity rather than requested
     // through `physics` — a terrain you can fall through is not terrain.
-    const bodyDefinition = runtime.definition.type === "terrain"
-      ? createTerrainBodyDefinition(runtime.definition, runtime.object)
+    const prepared = runtime.definition.type === "terrain"
+      ? createTerrainBody(runtime.definition, runtime.object)
       : runtime.definition.physics
-        ? createPhysicsBodyDefinition(runtime.definition)
+        ? createPhysicsBody(runtime.definition, runtime.collisionMesh)
         : null;
-    runtime.body = bodyDefinition ? this.physicsWorld.createBody(bodyDefinition) : null;
+    runtime.body = prepared ? this.physicsWorld.createBody(prepared.definition) : null;
+    runtime.colliderStats = prepared?.stats ?? null;
+    if (runtime.body || runtime.definition.type === "terrain" || !runtime.definition.physics || runtime.definition.physics.collider === "auto") {
+      runtime.colliderError = null;
+    }
   }
 
   private startModelLoad(runtime: RuntimeEntity): void {
     const asset = runtime.definition.asset;
     if (!asset || !(runtime.object instanceof Group)) return;
-    void loadAgentWorldModel(runtime.object, asset).then(() => {
+    const wantsExactCollider = runtime.definition.physics?.collider !== undefined
+      && runtime.definition.physics.collider !== "auto";
+    runtime.collisionMesh = null;
+    runtime.colliderError = null;
+    runtime.colliderLoading = wantsExactCollider;
+    const colliderLoadVersion = wantsExactCollider
+      ? ++runtime.colliderLoadVersion
+      : runtime.colliderLoadVersion;
+    void loadAgentWorldModel(runtime.object, asset, wantsExactCollider ? {
+      maxVertices: MAX_MODEL_COLLIDER_VERTICES,
+      maxTriangles: MAX_MODEL_COLLIDER_TRIANGLES,
+      onReady: (collisionMesh) => {
+        if (this.entities.get(runtime.definition.id) !== runtime || runtime.object.userData.graphysxDisposed) return;
+        if (runtime.colliderLoadVersion !== colliderLoadVersion || !runtime.definition.physics || runtime.definition.physics.collider === "auto") {
+          if (runtime.colliderLoadVersion === colliderLoadVersion) runtime.colliderLoading = false;
+          return;
+        }
+        runtime.colliderLoading = false;
+        runtime.collisionMesh = collisionMesh;
+        this.rebuildPhysicsBody(runtime);
+        this.emit("asset.collider-ready", [runtime.definition.id], {
+          assetId: asset.id ?? asset.url,
+          vertexCount: collisionMesh.vertexCount,
+          triangleCount: collisionMesh.triangleCount,
+        });
+      },
+    } : undefined).then(() => {
       if (this.entities.get(runtime.definition.id) !== runtime || runtime.object.userData.graphysxDisposed) return;
       runtime.assetState = { ...asset, status: "ready" };
       this.applyResolvedEntity(runtime);
       this.recordEvent("asset.ready", `${runtime.definition.id}: ${asset.id ?? asset.url}`);
+      this.emit("asset.ready", [runtime.definition.id], { assetId: asset.id ?? asset.url });
     }).catch((error: unknown) => {
       if (this.entities.get(runtime.definition.id) !== runtime) return;
       const message = error instanceof Error ? error.message : String(error);
+      const ownsColliderLoad = wantsExactCollider
+        && runtime.colliderLoadVersion === colliderLoadVersion
+        && runtime.definition.physics?.collider !== undefined
+        && runtime.definition.physics?.collider !== "auto";
+      if (ownsColliderLoad) runtime.colliderLoading = false;
       runtime.assetState = { ...asset, status: "error", error: message };
+      if (ownsColliderLoad && !runtime.body) runtime.colliderError = message;
       this.recordEvent("asset.error", `${runtime.definition.id}: ${message}`);
+      this.emit("asset.error", [runtime.definition.id], { assetId: asset.id ?? asset.url, error: message });
+      if (ownsColliderLoad && !runtime.body) {
+        this.emit("asset.collider-error", [runtime.definition.id], { assetId: asset.id ?? asset.url, error: message });
+      }
+    });
+  }
+
+  private startModelCollisionLoad(runtime: RuntimeEntity): void {
+    const asset = runtime.definition.asset;
+    if (!asset || runtime.collisionMesh || runtime.colliderLoading || runtime.definition.physics?.collider === "auto") return;
+    runtime.colliderError = null;
+    runtime.colliderLoading = true;
+    const colliderLoadVersion = ++runtime.colliderLoadVersion;
+    void loadAgentWorldCollisionMesh(asset, {
+      maxVertices: MAX_MODEL_COLLIDER_VERTICES,
+      maxTriangles: MAX_MODEL_COLLIDER_TRIANGLES,
+    }).then((collisionMesh) => {
+      if (this.entities.get(runtime.definition.id) !== runtime || runtime.colliderLoadVersion !== colliderLoadVersion || runtime.definition.physics?.collider === "auto") return;
+      runtime.colliderLoading = false;
+      runtime.collisionMesh = collisionMesh;
+      this.rebuildPhysicsBody(runtime);
+      this.emit("asset.collider-ready", [runtime.definition.id], {
+        assetId: asset.id ?? asset.url,
+        vertexCount: collisionMesh.vertexCount,
+        triangleCount: collisionMesh.triangleCount,
+      });
+    }).catch((error: unknown) => {
+      if (this.entities.get(runtime.definition.id) !== runtime || runtime.colliderLoadVersion !== colliderLoadVersion || runtime.definition.physics?.collider === "auto") return;
+      runtime.colliderLoading = false;
+      const message = error instanceof Error ? error.message : String(error);
+      runtime.colliderError = message;
+      this.recordEvent("collider.error", `${runtime.definition.id}: ${message}`);
+      this.emit("asset.collider-error", [runtime.definition.id], { assetId: asset.id ?? asset.url, error: message });
     });
   }
 
@@ -2703,8 +2821,13 @@ export class AgentWorldRuntime {
           linearVelocity: roundPhysicsVector(this.physicsScratch.linearVelocity),
           angularVelocity: roundPhysicsVector(this.physicsScratch.angularVelocity),
           sleeping: this.physicsWorld.readSleepState(runtime.body) === "sleeping",
+          collider: {
+            requested: runtime.definition.physics.collider,
+            ...(runtime.colliderStats ?? { effective: "pending" as const, shapeCount: 0, vertexCount: 0, triangleCount: 0 }),
+          },
         };
       } else {
+        const terrainStats = runtime.colliderStats ?? { effective: "heightfield" as const, shapeCount: 1, vertexCount: 0, triangleCount: 0 };
         physicsState = {
           mode: "static",
           mass: 0,
@@ -2712,8 +2835,28 @@ export class AgentWorldRuntime {
           linearVelocity: [0, 0, 0],
           angularVelocity: [0, 0, 0],
           sleeping: false,
+          collider: { requested: "heightfield", ...terrainStats },
         };
       }
+    }
+    if (!runtime.body && runtime.definition.physics) {
+      const colliderError = runtime.colliderError;
+      physicsState = {
+        mode: runtime.definition.physics.mode,
+        mass: runtime.definition.physics.mass,
+        material: runtime.definition.physics.material,
+        linearVelocity: [...runtime.definition.physics.linearVelocity],
+        angularVelocity: [...runtime.definition.physics.angularVelocity],
+        sleeping: false,
+        collider: {
+          requested: runtime.definition.physics.collider,
+          effective: colliderError ? "error" : "pending",
+          shapeCount: 0,
+          vertexCount: 0,
+          triangleCount: 0,
+          ...(colliderError ? { error: colliderError } : {}),
+        },
+      };
     }
     return {
       formula: formulaState,
@@ -3264,6 +3407,16 @@ function resolvePhysics(
   // Terrain owns a heightfield collider it builds itself; water deliberately has none.
   if (["group", "spline", "emitter", "sound", "terrain", "water", "flock", "crowd", "force-field", "formula-field", "dna-tree", "ambient-light", "directional-light", "point-light"].includes(entityType)) throw new Error(`Entity type cannot have physics: ${entityType}`);
   if (entityType === "plane" && source.mode === "dynamic") throw new Error("Plane physics can only be static or kinematic");
+  const collider = source.collider ?? "auto";
+  if (!["auto", "convex-hull", "trimesh"].includes(collider)) {
+    throw new Error(`Unsupported physics collider: ${String(collider)}`);
+  }
+  if (collider !== "auto" && entityType !== "model") {
+    throw new Error(`${collider} colliders are only available on model entities`);
+  }
+  if (collider === "trimesh" && source.mode !== "static") {
+    throw new Error("Trimesh colliders must be static; use convex-hull for moving models");
+  }
   if (parentId) throw new Error("Physics entities must be spawned at the world root");
   // A trigger never responds to contact, so a behavior moving it cannot fight the solver.
   // Letting a checkpoint bob or orbit is the whole point of a moving gate.
@@ -3281,7 +3434,8 @@ function resolvePhysics(
     friction: clamp(source.friction ?? PHYSICS_MATERIAL_PRESETS[material].friction, 0, 1),
     restitution: clamp(source.restitution ?? PHYSICS_MATERIAL_PRESETS[material].restitution, 0, 1),
     linearVelocity: sanitizeVector(source.linearVelocity ?? [0, 0, 0], -10000, 10000, "physics.linearVelocity"),
-    angularVelocity: sanitizeVector(source.angularVelocity ?? [0, 0, 0], -10000, 10000, "physics.angularVelocity")
+    angularVelocity: sanitizeVector(source.angularVelocity ?? [0, 0, 0], -10000, 10000, "physics.angularVelocity"),
+    collider,
   };
 }
 
@@ -3289,12 +3443,48 @@ function isMotionBehavior(behavior: AgentWorldBehavior): boolean {
   return ["spin", "bob", "orbit", "pulse", "look-at", "follow-spline"].includes(behavior.type);
 }
 
-function createPhysicsBodyDefinition(definition: ResolvedEntity): PhysicsBodyDefinition {
+type PreparedAgentPhysicsBody = {
+  definition: PhysicsBodyDefinition;
+  stats: NonNullable<RuntimeEntity["colliderStats"]>;
+};
+
+const MAX_CONVEX_HULL_VERTICES = 8_192;
+const MAX_MODEL_COLLIDER_VERTICES = 100_000;
+const MAX_MODEL_COLLIDER_TRIANGLES = 100_000;
+
+function createPhysicsBody(
+  definition: ResolvedEntity,
+  collisionMesh: AgentWorldModelCollisionMesh | null,
+): PreparedAgentPhysicsBody | null {
   const physics = definition.physics!;
   const shapes: PhysicsShapeDefinition[] = [];
   const scale = definition.transform.scale.map((value) => Math.abs(value)) as AgentWorldVector3;
   const geometry = definition.geometry;
-  if (definition.type === "sphere" || definition.type === "icosahedron") {
+  if (physics.collider !== "auto") {
+    if (!collisionMesh) return null;
+    if (collisionMesh.vertexCount > MAX_MODEL_COLLIDER_VERTICES || collisionMesh.triangleCount > MAX_MODEL_COLLIDER_TRIANGLES) {
+      throw new Error(
+        `Model colliders support at most ${MAX_MODEL_COLLIDER_VERTICES} vertices and ` +
+        `${MAX_MODEL_COLLIDER_TRIANGLES} triangles; this asset has ${collisionMesh.vertexCount} vertices and ` +
+        `${collisionMesh.triangleCount} triangles`,
+      );
+    }
+    if (physics.collider === "convex-hull" && collisionMesh.vertexCount > MAX_CONVEX_HULL_VERTICES) {
+      throw new Error(`Convex hull colliders support at most ${MAX_CONVEX_HULL_VERTICES} vertices; use a static trimesh for this model`);
+    }
+    const authoredScale = definition.transform.scale;
+    const vertices = [...collisionMesh.vertices];
+    for (let index = 0; index < vertices.length; index += 3) {
+      vertices[index] *= authoredScale[0];
+      vertices[index + 1] *= authoredScale[1];
+      vertices[index + 2] *= authoredScale[2];
+    }
+    if (physics.collider === "convex-hull") {
+      shapes.push({ kind: "convex", vertices });
+    } else {
+      shapes.push({ kind: "trimesh", vertices, indices: [...collisionMesh.indices] });
+    }
+  } else if (definition.type === "sphere" || definition.type === "icosahedron") {
     shapes.push({ kind: "sphere", radius: Math.max(0.001, geometry.radius * Math.max(...scale)) });
   } else if (definition.type === "cylinder" || definition.type === "cone") {
     const radius = Math.max(0.001, geometry.radius * Math.max(scale[0], scale[2]));
@@ -3322,16 +3512,24 @@ function createPhysicsBodyDefinition(definition: ResolvedEntity): PhysicsBodyDef
     });
   }
   return {
-    mode: physics.mode,
-    mass: physics.mass,
-    material: physicsMaterialDefinition(physics),
-    linearDamping: physics.mode === "dynamic" ? 0.08 : 0,
-    angularDamping: physics.mode === "dynamic" ? 0.08 : 0,
-    allowSleep: physics.mode !== "trigger",
-    transform: transformFromDefinition(definition.transform),
-    shapes,
-    linearVelocity: vectorFromTuple(physics.linearVelocity),
-    angularVelocity: vectorFromTuple(physics.angularVelocity),
+    definition: {
+      mode: physics.mode,
+      mass: physics.mass,
+      material: physicsMaterialDefinition(physics),
+      linearDamping: physics.mode === "dynamic" ? 0.08 : 0,
+      angularDamping: physics.mode === "dynamic" ? 0.08 : 0,
+      allowSleep: physics.mode !== "trigger",
+      transform: transformFromDefinition(definition.transform),
+      shapes,
+      linearVelocity: vectorFromTuple(physics.linearVelocity),
+      angularVelocity: vectorFromTuple(physics.angularVelocity),
+    },
+    stats: {
+      effective: physics.collider,
+      shapeCount: shapes.length,
+      vertexCount: physics.collider === "auto" ? 0 : collisionMesh?.vertexCount ?? 0,
+      triangleCount: physics.collider === "trimesh" ? collisionMesh?.triangleCount ?? 0 : 0,
+    },
   };
 }
 
@@ -3342,18 +3540,26 @@ function createPhysicsBodyDefinition(definition: ResolvedEntity): PhysicsBodyDef
  * the surface that was drawn. Terrain is always static and always uses the `ground` friction
  * preset — a rolling ball should slow on soil, not skate.
  */
-function createTerrainBodyDefinition(definition: ResolvedEntity, object: Object3D): PhysicsBodyDefinition | null {
+function createTerrainBody(definition: ResolvedEntity, object: Object3D): PreparedAgentPhysicsBody | null {
   const terrain = definition.terrain;
   if (!terrain) return null;
   const cached = object.userData.graphysxTerrainHeights;
   const heights = cached instanceof Float32Array ? cached : sampleTerrainHeights(terrain);
   return {
-    mode: "static",
-    transform: transformFromDefinition(definition.transform),
-    shapes: [createTerrainHeightfield(terrain, heights)],
-    material: {
-      id: "ground",
-      ...PHYSICS_MATERIAL_PRESETS.ground,
+    definition: {
+      mode: "static",
+      transform: transformFromDefinition(definition.transform),
+      shapes: [createTerrainHeightfield(terrain, heights)],
+      material: {
+        id: "ground",
+        ...PHYSICS_MATERIAL_PRESETS.ground,
+      },
+    },
+    stats: {
+      effective: "heightfield",
+      shapeCount: 1,
+      vertexCount: heights.length,
+      triangleCount: terrain.segments * terrain.segments * 2,
     },
   };
 }
@@ -3535,7 +3741,7 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     ...(definition.flock ? { flock: deepClone(definition.flock) } : {}),
     ...(definition.crowd ? { crowd: deepClone(definition.crowd) } : {}),
     ...(definition.forceField ? { forceField: deepClone(definition.forceField) } : {}),
-    ...(definition.physics ? { physics: deepClone(definition.physics) } : {}),
+    ...(definition.physics ? { physics: serializePhysics(definition.physics) } : {}),
     intensity: definition.intensity,
     distance: definition.distance,
     // Only emitted when false, so ordinary authored documents stay unchanged.
@@ -3549,6 +3755,11 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     behaviors: deepClone(definition.behaviors),
     interactions: deepClone(definition.interactions)
   };
+}
+
+function serializePhysics(physics: ResolvedAgentWorldPhysics): AgentWorldPhysics {
+  const { collider, ...fields } = deepClone(physics);
+  return collider === "auto" ? fields : { ...fields, collider };
 }
 
 function roundVector(vector: Vector3): AgentWorldVector3 {

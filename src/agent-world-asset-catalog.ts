@@ -71,5 +71,6 @@ export const GRAPHYSX_AGENT_WORLD_ASSET_CATALOG: readonly AgentWorldAssetDescrip
   { id: "zoksword", label: "Zok Sword", category: "prop", format: "graphysx-mesh-json", url: "/assets/dominus-gallery/meshes/zoksword.json", source: "Dominus Art/zoksword.x" },
   { id: "archive-cobra", label: "Cobra", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-cobra.json", source: "Yanik C++ BCKUP/Media/Models/cars/Low_Cobra.3DS" },
   { id: "archive-impreza", label: "Impreza", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-impreza.json", source: "Yanik C++ BCKUP/Media/Models/cars/impreza.3ds" },
-  { id: "archive-piste-ovale", label: "Piste-ovale", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-piste-ovale.json", source: "AtmelCubx/PisteOvale.tvm" }
+  { id: "archive-piste-ovale", label: "Piste Ovale", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-piste-ovale.json", source: "AtmelCubx/PisteOvale.tvm" },
+  { id: "archive-slide-large", label: "Slide Large", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-slide-large.json", source: "Media/SlideLarge.TVM" }
 ] as const;

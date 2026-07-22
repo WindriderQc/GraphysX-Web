@@ -1,5 +1,14 @@
 import type RAPIER_TYPES from "@dimforge/rapier3d-compat";
 import RAPIER from "./rapier-runtime";
+export {
+  createRapierConvexHullColliderDesc,
+  createRapierMeshColliderData,
+  createRapierTrimeshColliderDesc,
+  MAX_RAPIER_CONVEX_HULL_VERTICES,
+  MAX_RAPIER_MESH_TRIANGLES,
+  MAX_RAPIER_MESH_VERTICES,
+  type RapierMeshColliderData,
+} from "./rapier-mesh-primitives";
 
 /**
  * Rapier-specific building blocks for the legacy RaceScene migration.
@@ -14,11 +23,6 @@ export interface RaceVector3 {
   x: number;
   y: number;
   z: number;
-}
-
-export interface RapierMeshColliderData {
-  vertices: Float32Array;
-  indices: Uint32Array;
 }
 
 export interface RapierSegmentCastOptions {
@@ -69,71 +73,6 @@ export interface RapierWheelSample {
   steering: number | null;
   rotation: number | null;
   inContact: boolean;
-}
-
-/** Convert archive mesh arrays once at collider construction time, with useful data errors. */
-export function createRapierMeshColliderData(
-  vertices: readonly number[],
-  indices: readonly number[]
-): RapierMeshColliderData {
-  if (vertices.length === 0 || vertices.length % 3 !== 0) {
-    throw new Error(`Rapier mesh vertices must contain complete xyz triples; received ${vertices.length} values`);
-  }
-  if (indices.length === 0 || indices.length % 3 !== 0) {
-    throw new Error(`Rapier mesh indices must contain complete triangles; received ${indices.length} values`);
-  }
-
-  const vertexCount = vertices.length / 3;
-  const typedVertices = new Float32Array(vertices.length);
-  for (let index = 0; index < vertices.length; index += 1) {
-    const value = vertices[index];
-    if (!Number.isFinite(value)) {
-      throw new Error(`Rapier mesh vertex ${index} is not finite`);
-    }
-    typedVertices[index] = value;
-  }
-
-  const typedIndices = new Uint32Array(indices.length);
-  for (let index = 0; index < indices.length; index += 1) {
-    const value = indices[index];
-    if (!Number.isInteger(value) || value < 0 || value >= vertexCount) {
-      throw new Error(`Rapier mesh index ${index} (${String(value)}) is outside 0..${vertexCount - 1}`);
-    }
-    typedIndices[index] = value;
-  }
-
-  return { vertices: typedVertices, indices: typedIndices };
-}
-
-/**
- * Build a fixed/kinematic race collider from a decoded archive triangle mesh.
- *
- * RaceScene currently uses every trimesh as a non-dynamic environment collider. Internal-edge
- * correction is enabled because the player sphere and ray-cast vehicle cross dense triangle seams.
- */
-export function createRapierTrimeshColliderDesc(
-  vertices: readonly number[],
-  indices: readonly number[],
-  flags: RAPIER.TriMeshFlags =
-    RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES |
-    RAPIER.TriMeshFlags.MERGE_DUPLICATE_VERTICES |
-    RAPIER.TriMeshFlags.DELETE_DEGENERATE_TRIANGLES
-): RAPIER.ColliderDesc {
-  const data = createRapierMeshColliderData(vertices, indices);
-  return RAPIER.ColliderDesc.trimesh(data.vertices, data.indices, flags);
-}
-
-/** Convex hulls are the supported Rapier fallback for any future moving mesh collider. */
-export function createRapierConvexHullColliderDesc(vertices: readonly number[]): RAPIER.ColliderDesc {
-  if (vertices.length === 0 || vertices.length % 3 !== 0) {
-    throw new Error(`Rapier convex-hull vertices must contain complete xyz triples; received ${vertices.length} values`);
-  }
-  const points = new Float32Array(vertices);
-  const desc = RAPIER.ColliderDesc.convexHull(points);
-  if (!desc) {
-    throw new Error("Rapier could not construct a convex hull from the supplied vertices");
-  }
-  return desc;
 }
 
 /**

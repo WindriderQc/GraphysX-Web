@@ -10,7 +10,7 @@ import {
   type AgentWorldPrefabOptions
 } from "./agent-world-prefabs";
 
-export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook" | "living-systems";
+export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook" | "living-systems" | "archive-great-slide";
 
 export type AgentWorldStarterDescriptor = {
   id: AgentWorldStarterId;
@@ -26,6 +26,13 @@ export type AgentWorldStarterOptions = {
 };
 
 export const GRAPHYSX_AGENT_WORLD_STARTERS: readonly AgentWorldStarterDescriptor[] = [
+  {
+    id: "archive-great-slide",
+    label: "Great Slide: Collider Proof",
+    summary: "Faithful recovered BallZ SlideLarge geometry as a static trimesh; material, scale, lighting, ball, and catch basin are modern proof staging—not a recovered game ruleset.",
+    prefabCount: 0,
+    entityCount: 5
+  },
   {
     id: "living-systems",
     label: "Living Systems",
@@ -88,6 +95,7 @@ export function instantiateAgentWorldStarter(
 }
 
 function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition, "environment" | "entities"> {
+  if (starterId === "archive-great-slide") return archiveGreatSlide();
   if (starterId === "living-systems") return livingSystems();
   if (starterId === "physics-sketchbook") return physicsSketchbook();
   if (starterId === "prefab-plaza") {
@@ -191,6 +199,51 @@ function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition,
         idPrefix: "trail-tree-east", position: [10, 0, -6], scale: [0.9, 0.9, 0.9],
         palette: { primary: "#64d6bd", secondary: "#9be8ce", accent: "#ffd69a" }
       })
+    ]
+  };
+}
+
+/**
+ * The archive's BallZ 2011 Level0 terrain, graduated from a RaceScene-only decoded array
+ * into ordinary v2 vocabulary. The recovered vertex/index/UV data is exact; the material,
+ * lighting, scale, and staging are modern presentation. `fitSize` uses the source's longest span
+ * at 1:10 scale, making the collider large enough to read while preserving every proportion.
+ */
+function archiveGreatSlide(): Pick<AgentWorldDefinition, "environment" | "entities"> {
+  return {
+    environment: {
+      background: "#071622",
+      sky: "lostvalley",
+      ground: { visible: false, size: 80, color: "#0c2530", grid: false, gridColor: "#4fa9b5" },
+      physics: { gravity: [0, -9.81, 0] },
+      envelope: { fogNear: 70, fogFar: 180, cameraFar: 360 }
+    },
+    entities: [
+      ...starterLights("great-slide", "#b8d9e8", "#fff0c7", [-24, 32, 18]),
+      {
+        id: "great-slide-terrain", label: "Recovered SlideLarge", type: "model",
+        asset: { id: "archive-slide-large", fitSize: 52.7337 },
+        transform: { position: [0, 0, 0] },
+        physics: { mode: "static", material: "ground", collider: "trimesh" },
+        castShadow: true,
+        tags: ["archive", "ballz-2011", "scene-native-collider", "collider:trimesh"]
+      },
+      {
+        id: "great-slide-ball", label: "Slide Test Ball", type: "sphere",
+        transform: { position: [20, 8, 0] }, geometry: { radius: 0.72, radialSegments: 32 },
+        material: { color: "#ff8b5c", emissive: "#6d1d0b", emissiveIntensity: 0.32, roughness: 0.24, metalness: 0.12 },
+        physics: { mode: "dynamic", mass: 1.2, material: "ball", linearVelocity: [-3.5, 0, 0] },
+        castShadow: true,
+        tags: ["archive", "physics:dynamic", "agent-observable", "proof:trimesh"]
+      },
+      {
+        id: "great-slide-catch", label: "Lower Catch Basin", type: "box",
+        transform: { position: [-18, -9.1, 0] }, geometry: { width: 25, height: 0.6, depth: 22 },
+        material: { color: "#102a35", roughness: 0.9, metalness: 0.02 },
+        physics: { mode: "static", material: "ground" },
+        receiveShadow: true,
+        tags: ["staging", "safety-floor", "physics:static"]
+      }
     ]
   };
 }
