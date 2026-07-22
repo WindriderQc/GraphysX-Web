@@ -19,6 +19,7 @@
 // browser uses. Production static deploys are untouched.
 
 import type { AgentWorldResult } from "./agent-world-runtime";
+import { resolveSceneStoreToken } from "./scene-store-auth";
 import {
   registerAgentWorldAssets,
   type AgentWorldAssetDescriptor,
@@ -222,6 +223,7 @@ const DEFAULT_STORE_URL = "http://localhost:8788";
 
 type MediaState = {
   baseUrl: string;
+  token: string | null;
   online: boolean;
   datalake: string | null;
   records: AgentWorldMediaDescriptor[];
@@ -239,24 +241,46 @@ const initialStoreParam = typeof window !== "undefined"
 
 const state: MediaState = {
   baseUrl: (initialStoreParam ?? DEFAULT_STORE_URL).replace(/\/+$/, ""),
+  token: null,
   online: false,
   datalake: null,
   records: [],
 };
+state.token = resolveSceneStoreToken(state.baseUrl);
 
-/** Point the media library at a specific store (the `?store=` override). */
-export function configureAgentWorldMedia(storeUrl: string): void {
+/** Point the media library at a specific store and its optional write/datalake token. */
+export function configureAgentWorldMedia(storeUrl: string, token?: string | null): void {
   state.baseUrl = storeUrl.replace(/\/+$/, "");
+  state.token = token !== undefined ? token?.trim() || null : resolveSceneStoreToken(state.baseUrl);
 }
 
-async function storeFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function storeRequest(path: string, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  if (state.token && !headers.has("x-graphysx-token")) headers.set("x-graphysx-token", state.token);
   let response: Response;
   try {
-    response = await fetch(`${state.baseUrl}${path}`, { cache: "no-store", ...init });
+    response = await fetch(`${state.baseUrl}${path}`, { cache: "no-store", ...init, headers });
   } catch (error) {
     state.online = false;
     throw new Error(`Asset store unreachable at ${state.baseUrl}: ${error instanceof Error ? error.message : String(error)}`);
   }
+  return response;
+}
+
+async function responseError(response: Response): Promise<Error> {
+  const payload = await response.clone().json().catch(() => null) as { error?: string } | null;
+  return new Error(payload?.error ?? `Asset store responded ${response.status}`);
+}
+
+async function storeFile(path: string): Promise<Response> {
+  const response = await storeRequest(path);
+  if (!response.ok) throw await responseError(response);
+  state.online = true;
+  return response;
+}
+
+async function storeFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await storeRequest(path, init);
   const payload = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
   if (!response.ok) throw new Error(payload?.error ?? `Asset store responded ${response.status}`);
   state.online = true;
@@ -433,8 +457,7 @@ async function importPath(path: string, options: AgentMediaImportOptions = {}): 
     // archive's sky faces and detail maps become ordinary textures on the way in.
     if (extension === ".dds") {
       const fileName = path.split("/").pop() ?? path;
-      const response = await fetch(`${state.baseUrl}/datalake/file?path=${encodeURIComponent(path)}`);
-      if (!response.ok) throw new Error(`Could not read ${path} from the datalake (${response.status})`);
+      const response = await storeFile(`/datalake/file?path=${encodeURIComponent(path)}`);
       const { decodeDds } = await import("./dds-decode");
       const decoded = decodeDds(await response.arrayBuffer());
       const canvas = document.createElement("canvas");
@@ -508,11 +531,9 @@ async function sampleHorizonColor(datalakePath: string): Promise<string> {
   const draw = canvas.getContext("2d");
   if (!draw) throw new Error("A 2D canvas context is required to sample a sky horizon");
 
-  const fileUrl = `${state.baseUrl}/datalake/file?path=${encodeURIComponent(datalakePath)}`;
+  const response = await storeFile(`/datalake/file?path=${encodeURIComponent(datalakePath)}`);
   if (extensionOf(datalakePath) === ".dds") {
     // The same CPU decode the import path uses — an Image cannot read a DXT container.
-    const response = await fetch(fileUrl);
-    if (!response.ok) throw new Error(`Could not read ${datalakePath} (${response.status})`);
     const { decodeDds } = await import("./dds-decode");
     const decoded = decodeDds(await response.arrayBuffer());
     const source = document.createElement("canvas");
@@ -523,14 +544,18 @@ async function sampleHorizonColor(datalakePath: string): Promise<string> {
     sourceDraw.putImageData(new ImageData(new Uint8ClampedArray(decoded.pixels), decoded.width, decoded.height), 0, 0);
     draw.drawImage(source, 0, 0, size, size);
   } else {
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    await new Promise<void>((resolveImage, rejectImage) => {
-      image.onload = () => resolveImage();
-      image.onerror = () => rejectImage(new Error(`Could not read sky face ${datalakePath}`));
-      image.src = fileUrl;
-    });
-    draw.drawImage(image, 0, 0, size, size);
+    const objectUrl = URL.createObjectURL(await response.blob());
+    try {
+      const image = new Image();
+      await new Promise<void>((resolveImage, rejectImage) => {
+        image.onload = () => resolveImage();
+        image.onerror = () => rejectImage(new Error(`Could not decode sky face ${datalakePath}`));
+        image.src = objectUrl;
+      });
+      draw.drawImage(image, 0, 0, size, size);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
   }
 
   const band = draw.getImageData(0, Math.floor(size * 0.66), size, Math.ceil(size / 3)).data;
@@ -769,8 +794,7 @@ async function convertDatalakeModel(path: string, options: AgentMediaImportOptio
     });
   };
 
-  const response = await fetch(`${state.baseUrl}/datalake/file?path=${encodeURIComponent(path)}`);
-  if (!response.ok) throw new Error(`Could not read ${path} from the datalake (${response.status})`);
+  const response = await storeFile(`/datalake/file?path=${encodeURIComponent(path)}`);
   const buffer = await response.arrayBuffer();
 
   let root: import("three").Object3D;
@@ -781,7 +805,9 @@ async function convertDatalakeModel(path: string, options: AgentMediaImportOptio
     warnings.push("OBJ materials (.mtl) are not applied; set colours or a texture after import.");
   } else if (extension === ".glb" || extension === ".gltf") {
     const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
-    const gltf = await new GLTFLoader(manager).parseAsync(buffer, "");
+    const loader = new GLTFLoader(manager);
+    if (state.token) loader.setRequestHeader({ "x-graphysx-token": state.token });
+    const gltf = await loader.parseAsync(buffer, "");
     root = gltf.scene;
     flipUvV = true;
   } else if (extension === ".fbx") {

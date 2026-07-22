@@ -36,8 +36,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The pre-deploy reusable gate proves the build in isolation. This browser is for the
+      # separate post-activation proof against the public hostname.
+      - name: Install Chromium for production smoke
+        run: npx playwright install --with-deps chromium
+
       - name: Build production release
         run: npm run build
+
+      - name: Stamp release identity
+        env:
+          GRAPHYSX_RELEASE_SHA: ${{ github.sha }}
+          GRAPHYSX_RELEASE_RUN_ID: ${{ github.run_id }}
+        run: node scripts/write-release-metadata.mjs
 
       - name: Package release
         run: tar -czf "graphysx-${GITHUB_SHA}.tgz" -C dist .
@@ -72,6 +83,7 @@ jobs:
             releases="$base/releases"
             staging="$releases/.staging-$sha"
             release="$releases/$sha"
+            previous_target="$(readlink "$base/current" 2>/dev/null || true)"
             test -f "$archive"
             mkdir -p "$releases"
             rm -rf -- "$staging"
@@ -82,9 +94,73 @@ jobs:
             mv -- "$staging" "$release"
             ln -sfn "releases/$sha" "$base/current.next"
             mv -Tf "$base/current.next" "$base/current"
+            # Keep a validated rollback pointer before retention removes old releases. The
+            # public smoke below is the authority on whether this activation stays live.
+            previous_sha="${previous_target#releases/}"
+            if test "$previous_target" = "releases/$previous_sha"; then
+              case "$previous_sha" in
+                *[!0-9a-f]*|'') ;;
+                *)
+                  if test -d "$base/$previous_target"; then
+                    # Retention sorts by directory mtime. Mark the actual rollback target as
+                    # recently relevant so a manual older-release activation cannot prune it.
+                    touch -- "$base/$previous_target"
+                    ln -sfn "$previous_target" "$base/previous.next"
+                    mv -Tf "$base/previous.next" "$base/previous"
+                  fi
+                  ;;
+              esac
+            fi
             rm -f -- "$archive"
             find "$releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\0' \
               | sort -z -nr \
               | tail -z -n +3 \
               | cut -z -d ' ' -f 2- \
               | xargs -0r rm -rf --
+
+      - name: Smoke the activated production release
+        id: live-smoke
+        timeout-minutes: 5
+        env:
+          SMOKE_BASE: https://graphysx.specialblend.ca/
+          EXPECTED_RELEASE_SHA: ${{ github.sha }}
+          SMOKE_ARTIFACTS: output/production-smoke
+        run: npm run smoke:live-release
+
+      - name: Roll back a failed production activation
+        if: ${{ failure() && steps.live-smoke.outcome == 'failure' }}
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -eu
+            base=/var/www/html/graphysx
+            target="$(readlink "$base/previous" 2>/dev/null || true)"
+            rollback_sha="${target#releases/}"
+            test "$target" = "releases/$rollback_sha"
+            case "$rollback_sha" in
+              *[!0-9a-f]*|'') echo 'No valid previous release to roll back to' >&2; exit 1 ;;
+            esac
+            test -d "$base/$target"
+            ln -sfn "$target" "$base/current.rollback"
+            mv -Tf "$base/current.rollback" "$base/current"
+            echo "Rolled production back to $rollback_sha"
+
+      - name: Upload production smoke evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: production-smoke-${{ github.sha }}
+          path: output/production-smoke
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Record production verification
+        if: steps.live-smoke.outcome == 'success'
+        run: |
+          echo '### Production verified' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Commit `${{ github.sha }}` is live at <https://graphysx.specialblend.ca/>.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'The revision manifest matched and the Great Slide canary completed.' >> "$GITHUB_STEP_SUMMARY"

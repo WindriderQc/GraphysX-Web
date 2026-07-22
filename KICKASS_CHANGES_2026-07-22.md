@@ -1,6 +1,6 @@
 # GraphysX-Web — Feature & Fix Wave (2026-07-22)
 
-Six waves landed off the peer review and its follow-ups, plus one real bug found while verifying. Base: `643e184`
+Eight waves landed off the peer review and its follow-ups, plus one real bug found while verifying. Base: `643e184`
 (applied cleanly onto your `78e1fe3`, which only adds `showroom-welcome.ts` — untouched here).
 All changes typecheck (`tsc --noEmit` clean) and build (`vite build` green). Affected smokes were
 run individually against a served `dist` and pass; every new smoke is registered in the gate.
@@ -75,16 +75,16 @@ run individually against a served `dist` and pass; every new smoke is registered
 `src/scene-store-client.ts`, `SCENE_STORE.md`, new `scripts/smoke-store-auth.mjs`
 
 - **Opt-in bearer token** via `GRAPHYSX_STORE_TOKEN`. When set, every mutating route (PUT/POST/DELETE)
-  and every `/datalake` route requires it (`Authorization: Bearer`, or `x-graphysx-token`, or
-  `?token=` for the SSE stream only), constant-time compared. Reads stay open. When unset: exactly
+  and every `/datalake` route requires it (`Authorization: Bearer` or `x-graphysx-token`),
+  constant-time compared. Reads stay open. When unset: exactly
   today's behavior + a loud `UNAUTHENTICATED MODE — LAN boundary only` startup warning. **Non-breaking
   by default.**
 - **CORS allowlist** via `GRAPHYSX_STORE_ORIGIN` (comma-separated). Unset → today's `*`. Set → echo
   matching Origin only, `vary: origin`.
 - **Datalake exposure closed:** the hardcoded `E:\Media\Datalake` fallback is removed;
   `GRAPHYSX_DATALAKE_DIR` is the only source, and unconfigured datalake routes return **503**.
-- Node tool and browser client both send the token (the browser client picks up `?storeToken=`
-  with no `main.ts` change). SSE token-in-URL log-leak caveat is documented.
+- Node tool and browser clients both send the token. The browser consumes a one-time
+  `#storeToken=` fragment into tab-scoped sessionStorage and never adds it to the public SSE URL.
 - **New smoke `smoke-store-auth`** (node-only, no browser): 22 checks — 401 on no/wrong token, 2xx
   with token, reads open, preflight, datalake 401→503→200, tokenless compat mode, CORS echo+deny.
   All pass.
@@ -144,6 +144,57 @@ run individually against a served `dist` and pass; every new smoke is registered
   teardown, and gravity copy-by-value were already present in the deployed Rapier code, so no
   duplicate churn was introduced.
 
+## Wave 7 — Great Slide game + composed-play parity
+
+**Files:** `src/agent-world-starters.ts`, `src/ballz-play.ts`, `src/platform-host.ts`,
+`src/main.ts`, `src/games-shelf.ts`, `src/browse-shelf.ts`, `src/archive-skybox-spiral.ts`,
+new `scripts/smoke-great-slide.mjs`, `scripts/smoke-games.mjs`
+
+- **Great Slide is now a game, not a collider diorama.** The exact recovered SlideLarge mesh
+  carries an adapted two-gate gravity run, finish, scene-native rules, player controls, bloom,
+  results, replay, and return. It is the first Games row and the featured Browse card.
+- **The fidelity boundary is visible.** The card calls out exact mesh/static trimesh/modern run
+  and states that scale, material, spawn, checkpoints, lighting, and gameplay are adaptations.
+  The same disclosure remains visible at a 390px phone viewport.
+- **Composed games reached play parity.** The play layer resolves its subject from the rules
+  document rather than hard-coding `ballz-ball`, so Great Slide, Skybox Spiral, and World 1 get
+  the same HUD, keyboard input, results, best time, replay, and return contract as grid levels.
+- **Replay is a real reset.** Composed games reload their pristine exported scene, including
+  hidden pickups and rules. Exact model colliders pause simulation until their asynchronous
+  trimesh is ready, preventing gravity from outrunning the floor.
+- **Launch failure is transactional.** If a composed course or exact asset rejects after world
+  replacement, the showroom is restored behind the still-actionable Games shelf; no mixed
+  environment, orphan HUD, paused runtime, or dead-end chrome survives. The smoke aborts the
+  SlideLarge request deliberately and guards the rollback.
+- **Framing is scene-native.** A hidden `playfield` footprint gives composed games deliberate
+  camera framing; wide courses now fit against horizontal FOV instead of shrinking against the
+  vertical axis.
+- **Agent-native game inspection shipped.** `render_game_to_text()` projects mode, world, rules,
+  and player state; `advanceTime(ms)` advances deterministic simulation for browser drivers.
+- New `smoke-great-slide` proves Games discovery, exact 100/92 collider readiness, real keyboard
+  control of `great-slide-ball`, both ordered checkpoints, completion, results, replay with the
+  collider rebuilt, showroom return, and zero browser/network errors. `smoke-games` now guards
+  the featured desktop and mobile Browse presentation.
+- **Map 1 asset groundwork is explicit.** Its recovered mesh is now deterministically vendored
+  and catalogued (699 vertices/1456 triangles, exact positions/UVs/indices/bounds; inferred
+  material). The standalone smoke fetches and verifies it. The game composition remains roadmap.
+
+## Wave 8 — Revision-aware production activation
+
+**Files:** `.github/workflows/deploy.yml`, new `scripts/write-release-metadata.mjs`, new
+`scripts/smoke-live-release.mjs`, `package.json`, `HANDOFF.md`
+
+- Production artifacts now contain `release.json` with the exact Git SHA and Actions run id.
+- After the atomic symlink activation, CI polls the public hostname until that exact SHA is
+  authoritative, then runs the focused Great Slide canary against the live site. A healthy old
+  release can no longer make a new deployment look green.
+- The canary covers the public front door, code-split shelves, thumbnail and recovered mesh assets,
+  exact Rapier trimesh, controls, rules, results, replay, and return. Evidence is retained for 14 days.
+- Activation records a validated pointer to the prior release. If the exact-revision canary fails,
+  the workflow stays red and atomically flips `current` back to that known release.
+- Local acceptance covered both paths: a mismatched SHA failed before browser launch; a matching
+  manifest completed the full Great Slide canary with zero failed responses/console/page errors.
+
 ---
 
 ## Bug found & fixed while verifying
@@ -169,16 +220,16 @@ still fire (occupancy is real). `smoke-ballz`'s ring-collection assertion caught
 - `probe:rapier-materials` — all 36 surface pairs, sleep/wake, and teardown determinism
 - `smoke:rapier-race` — Piste vehicle contact, drive, steering, finite state, screenshot, errors
 - `smoke:mesh-colliders` — Great Slide exact trimesh, dynamic convex hull, rejection + round-trip
+- `smoke:great-slide` — Games launch, exact-collider gate, subject controls, results, replay + return
 - `smoke:store-auth` — token gate, CORS, tokenless compat (node-only, cheapest in the list)
 - `smoke:dna` — was authored but never registered; now in the gate (node-only, deterministic)
 
 ## Verification run in this session (served `dist`, swiftshader)
 
-Final `npm run verify` completed in 596 seconds: **all 29 checks passed** — typecheck, production
-build, both Rapier probes, every browser/node smoke, the new mesh-collider proof, Piste race, store
-auth, and DNA. `showroom`, `triggers`, and `rapier-race` each hit one transient first-attempt local
-server timeout; the gate's isolated fresh-server retry passed all three, with no remaining product
-assertion failure. Screenshots are in `output/verify`.
+Latest full `npm run verify`: **all 30 checks passed** — typecheck, production build, both Rapier
+probes, every browser/node smoke, Great Slide's complete play/replay proof, Piste race, store auth,
+and DNA. `overlay` hit one transient first-attempt local-server reset; the gate's isolated fresh-
+server retry passed it, with no product assertion failure. Screenshots are in `output/verify`.
 
 ## Remaining follow-ups
 

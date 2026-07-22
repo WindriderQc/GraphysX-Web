@@ -17,8 +17,8 @@ npm run dev              # then open http://localhost:5173/?scene=welcome
 ```
 
 `?scene=<name>` opens a stored scene and polls it every 2s. `?store=<url>` points at a
-store other than `http://localhost:8788`. `?storeToken=<token>` is how the page presents
-the token when the store requires one (see Auth below).
+store other than `http://localhost:8788`. A one-time `#storeToken=<token>` fragment gives
+the tab a token when the store requires one (see Auth below).
 
 The showroom still composes first, so if the store is down or the scene is missing you get
 the normal welcome scene and a console warning rather than an empty world.
@@ -139,15 +139,14 @@ it in this mode.
 asset GETs stay open in both modes — a stored scene is the shareable artifact. The datalake
 is personal media, so even listing it is guarded.
 
-Three ways to present the token, checked in this order:
+Two HTTP headers present the token:
 
 - `Authorization: Bearer <token>` — what `tools/graphysx-scene-agent.mjs` sends when the
   same env var is set on the client side.
-- `x-graphysx-token: <token>` — what the browser client sends (pass `?storeToken=<token>`
-  in the page URL, or hand `{ token }` to `createSceneStoreClient`).
-- `?token=<token>` — accepted **only** on `/scenes/:name/stream`, because EventSource
-  cannot set headers. Tokens in URLs end up in proxy and access logs; the stream is
-  read-only either way, so the leak costs a read credential, not a write one.
+- `x-graphysx-token: <token>` — what the browser clients send. Bootstrap a tab with
+  `#storeToken=<token>`, or hand `{ token }` to `createSceneStoreClient`. The fragment is
+  never sent in HTTP or Referer headers; the app moves it into tab-scoped sessionStorage
+  and scrubs it from the visible URL. The public scene event stream receives no token.
 
 A missing or wrong token gets a `401` with a JSON error body. Comparison is constant-time.
 

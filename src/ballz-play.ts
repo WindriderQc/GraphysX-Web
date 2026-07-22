@@ -1,5 +1,5 @@
 import { PUSH_DIRECTIONS } from "./ballz-level-scene";
-import { describeRun, formatClock, type GraphysXAgentWorldApi } from "./agent-world-runtime";
+import { describeRun, formatClock, type AgentWorldDefinition, type GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { ARCHIVE_BALLZ_LEVELS } from "./archive-ballz-levels";
 import {
   LevelRecordStore,
@@ -33,10 +33,24 @@ export function mountBallzPlay(
   container: HTMLElement,
   onExit?: () => void,
 ): () => void {
-  const ballId = "ballz-ball";
-  const ball = api.query({ ids: [ballId] })[0];
-  // A level with no start tile has no ball, and is a layout rather than something to play.
-  if (!ball) return () => {};
+  const rules = api.rules.get();
+  const players = api.query({ tag: "player" });
+  // Rules are the authority: composed courses deliberately use their own subject ids
+  // (`spiral-ball`, `world1-ball`, `great-slide-ball`). The old hard-coded `ballz-ball`
+  // made every non-grid game enter play mode with no HUD and no controls. A single player
+  // is a safe fallback for a rules-light playground; multiple players need an explicit subject.
+  const subjectId = rules?.subjectId ?? rules?.spawn?.entityId ?? (players.length === 1 ? players[0]?.id : null);
+  const ball = subjectId ? api.query({ ids: [subjectId] })[0] : null;
+  // A level with no controllable subject is a layout rather than something to play.
+  if (!ball || !subjectId) return () => {};
+  const ballId = subjectId;
+  // A composed replay reloads the pristine scene so hidden pickups, transforms, velocities,
+  // and rules all restart together. Grid levels retain their existing library-backed replay.
+  // `world.loaded` mounts this view before the runtime arms the rules block (deliberately: the
+  // load event idles the previous run first). Capture on the next microtask so replay includes
+  // the just-loaded rules as well as the pristine entity visibility/transforms.
+  let pristineDefinition: AgentWorldDefinition | null = null;
+  queueMicrotask(() => { pristineDefinition = api.export(); });
 
   // Self-injecting, so playing works on any route. The editor's stylesheet is loaded lazily and
   // only when someone opens the editor — an agent that calls `levels.play()` on the showroom
@@ -52,12 +66,15 @@ export function mountBallzPlay(
 
   const hud = document.createElement("div");
   hud.className = "gx-bz-hud";
+  const course = document.createElement("div");
+  course.className = "gx-bz-course";
+  course.textContent = api.state()?.world.label ?? "GraphysX Run";
   const status = document.createElement("div");
   status.className = "gx-bz-status";
   const hint = document.createElement("div");
   hint.className = "gx-bz-hint";
   hint.textContent = (initial?.collectibleCount ?? 0) > 0 ? "collect the rings, then reach the finish" : "arrow keys to roll";
-  hud.append(status, hint);
+  hud.append(course, status, hint);
   // Play is a place you can leave. Without this the only way out of a game is a page reload,
   // which is the sort of dead end that makes a mode feel like a trap rather than a surface.
   if (onExit) {
@@ -119,7 +136,15 @@ export function mountBallzPlay(
   function win(totalRings: number, seconds: number, desynced: boolean): void {
     won = true;
     hud.remove();
-    container.append(buildWinPanel(api, totalRings, seconds, desynced, onExit));
+    const worldId = api.state()?.world.id ?? "";
+    const levelId = worldId.startsWith("ballz-level-") ? worldId.slice("ballz-level-".length) : null;
+    const replayDefinition = pristineDefinition;
+    const replay = levelId
+      ? () => { api.levels.play(levelId); }
+      : replayDefinition
+        ? () => { void reloadPristineScene(api, replayDefinition); }
+        : undefined;
+    container.append(buildWinPanel(api, totalRings, seconds, desynced, onExit, replay));
   }
 
   return () => {
@@ -141,13 +166,14 @@ function buildWinPanel(
   seconds: number,
   desynced: boolean,
   onExit?: () => void,
+  onReplay?: () => void,
 ): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "gx-bz-win";
 
   const title = document.createElement("div");
   title.className = "gx-bz-win-title";
-  title.textContent = "✓ Level Complete";
+  title.textContent = `✓ ${api.state()?.world.label ?? "Run"} Complete`;
 
   const sub = document.createElement("div");
   sub.className = "gx-bz-win-sub";
@@ -161,29 +187,30 @@ function buildWinPanel(
 
   const worldId = api.state()?.world.id ?? "";
   const levelId = worldId.startsWith("ballz-level-") ? worldId.slice("ballz-level-".length) : null;
+  const recordId = levelId ?? (worldId || null);
 
   // The scoreboard finally drawn (ROADMAP Horizon 3 §6): time, medal, best, delta-to-best, fed
   // from the rules run this panel already renders plus the level record store. A desynced run
   // is summarised but never recorded — an unverified time must not become a stored best.
-  if (levelId) {
+  if (recordId) {
     const store = new LevelRecordStore();
     const elapsedMs = Math.round(seconds * 1000);
-    const referenceMs = archiveReferenceMs(levelId);
+    const referenceMs = archiveReferenceMs(recordId);
     const finish = desynced
-      ? store.summarize(levelId, elapsedMs, referenceMs)
-      : store.registerFinish(levelId, elapsedMs, referenceMs);
+      ? store.summarize(recordId, elapsedMs, referenceMs)
+      : store.registerFinish(recordId, elapsedMs, referenceMs);
     panel.append(title, sub, buildScoreRow(finish), actions);
   } else {
     panel.append(title, sub, actions);
   }
-  if (levelId) {
+  if (onReplay) {
     const again = document.createElement("button");
     again.type = "button";
     again.className = "gx-bz-win-btn gx-bz-win-again";
     again.textContent = "↻ Play again";
-    // Re-materialising fires world.loaded, which tears down this whole play layer and mounts a
-    // fresh one — so the panel does not need to reset anything, it just replays the level.
-    again.addEventListener("click", () => api.levels.play(levelId));
+    // Re-materialising/reloading fires world.loaded, which tears down this whole play layer and
+    // mounts a fresh one — so the panel does not need a second reset path.
+    again.addEventListener("click", onReplay);
     actions.append(again);
   }
 
@@ -252,6 +279,38 @@ function archiveReferenceMs(levelId: string): number | null {
   return typeof value === "number" && value > 0 ? value : null;
 }
 
+/** Reload a composed course without letting gravity outrun an async exact model collider. */
+async function reloadPristineScene(api: GraphysXAgentWorldApi, definition: AgentWorldDefinition): Promise<void> {
+  const exactModelIds = definition.entities
+    .filter((entity) => entity.type === "model" && entity.physics?.collider && entity.physics.collider !== "auto")
+    .map((entity) => entity.id)
+    .filter((id): id is string => Boolean(id));
+  if (exactModelIds.length > 0) api.pause(true);
+  const loaded = api.load(definition);
+  if (!loaded.ok) {
+    api.pause(false);
+    console.error(loaded.error ?? "Could not replay course");
+    return;
+  }
+  if (exactModelIds.length === 0) return;
+
+  const deadline = performance.now() + 20_000;
+  try {
+    while (performance.now() < deadline) {
+      const models = exactModelIds.map((id) => api.query({ ids: [id] })[0]);
+      const failed = models.find((entity) => entity?.asset?.status === "error" || entity?.physics?.collider?.error);
+      if (failed) throw new Error(failed.asset?.error ?? failed.physics?.collider?.error ?? "Exact collider failed to load");
+      if (models.every((entity) => entity?.asset?.status === "ready" && entity.physics?.collider?.effective !== "auto")) return;
+      await new Promise((resolve) => window.setTimeout(resolve, 40));
+    }
+    throw new Error("Timed out while rebuilding the course collider");
+  } catch (error) {
+    console.error(error);
+  } finally {
+    api.pause(false);
+  }
+}
+
 const STYLE_ID = "gx-ballz-play-css";
 
 function injectStyleOnce(): void {
@@ -268,10 +327,13 @@ const BALLZ_PLAY_CSS = `
    hides the authoring chrome outright, so there is nothing left to dodge, but the top is still
    the right place for a HUD and a bottom-centre one would break again the moment anything is
    docked there. */
-.gx-bz-hud{position:absolute;left:50%;top:22px;transform:translateX(-50%);z-index:6;
-  display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;
-  font:12px/1.2 var(--gx-font);text-shadow:0 1px 3px rgba(0,0,0,.75)}
-.gx-bz-status{color:var(--gx-ink);letter-spacing:.08em;font-weight:600}
+.gx-bz-hud{position:absolute;left:50%;top:18px;transform:translateX(-50%);z-index:6;
+  display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;min-width:270px;
+  padding:10px 18px 9px;background:linear-gradient(180deg,rgba(7,22,31,.88),rgba(7,22,31,.66));
+  border:1px solid rgba(79,208,230,.28);border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.25);
+  backdrop-filter:blur(10px);font:12px/1.2 var(--gx-font);text-shadow:0 1px 3px rgba(0,0,0,.75)}
+.gx-bz-course{color:var(--gx-accent);font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase}
+.gx-bz-status{color:var(--gx-ink);letter-spacing:.08em;font-size:13px;font-weight:650}
 .gx-bz-hint{color:var(--gx-ink-faint);font-size:10px;letter-spacing:.06em}
 /* The HUD is pointer-events:none so it never eats a click meant for the scene; the one
    interactive child opts back in. */
@@ -302,4 +364,5 @@ const BALLZ_PLAY_CSS = `
 .gx-bz-win-btn:hover{background:rgba(24,56,72,.96);border-color:var(--gx-accent)}
 .gx-bz-win-again{background:linear-gradient(180deg,#2f9e7f,var(--gx-accent-fill));border-color:var(--gx-life);color:var(--gx-ink)}
 .gx-bz-win-again:hover{filter:brightness(1.08)}
+@media (max-width:640px){.gx-bz-hud{top:10px;min-width:230px;padding:8px 12px}.gx-bz-status{font-size:11px}}
 `;

@@ -13,7 +13,6 @@ const BROWSE_IDS = [
   "archive-flock-planet",
   "archive-forces-garden",
   "archive-garage",
-  "archive-great-slide",
   "living-systems",
   "prefab-plaza",
   "glow-garden",
@@ -21,7 +20,7 @@ const BROWSE_IDS = [
   "signal-trail",
   "physics-sketchbook",
 ];
-const GAME_IDS = ["archive-skybox-spiral", "archive-world1"];
+const GAME_IDS = ["archive-great-slide", "archive-skybox-spiral", "archive-world1"];
 const requestedIds = new Set((process.env.SHELF_THUMBNAIL_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean));
 const shouldCapture = (id) => requestedIds.size === 0 || requestedIds.has(id);
 

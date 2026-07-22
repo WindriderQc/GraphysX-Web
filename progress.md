@@ -1419,3 +1419,46 @@ does not "fix" it back into a real-time wait.
 - Final release gate: `npm run verify` passed all 29 checks in 596 seconds. The gate's isolated
   retry recovered first-attempt local server timeouts in showroom, triggers, and Rapier race;
   every final result was green, including the new mesh-collider smoke.
+
+## 2026-07-22 — Great Slide Gravity Run and composed-play parity
+
+- **The largest visible archive follow-up is playable.** Great Slide is the first Games row and
+  an above-fold Browse feature. Its exact 100-vertex/92-triangle recovered SlideLarge mesh is the
+  course for a modern two-checkpoint gravity run with live controls, HUD, finish, results, best
+  time, replay, and return. The Browse card explicitly separates faithful mesh from adapted scale,
+  material, spawn, checkpoints, lighting, and gameplay.
+- **Composed games no longer fall through the play layer.** `ballz-play.ts` resolves the controlled
+  subject from `rules.subjectId`/spawn/player rather than hard-coding `ballz-ball`; Great Slide,
+  Skybox Spiral, and World 1 therefore share the grid games' keyboard/HUD/results contract.
+  Composed replay restores a pristine scene document and waits for exact colliders before resuming.
+  Composed launch is transactional too: an intentionally aborted SlideLarge request restores the
+  showroom behind the open error-bearing shelf, clears the partial game/HUD, and resumes the host.
+- **Presentation pass.** A scene-native hidden `playfield` footprint frames wide courses using both
+  horizontal and vertical FOV. The Great Slide catch basin is invisible, gate/finish markers are
+  legible, and the glass HUD/results treatment stays clear over the recovered sky. The featured
+  card has no horizontal overflow at 390×844 and keeps its complete fidelity disclosure visible.
+- **Deterministic browser hooks.** The product route exposes `render_game_to_text()` and
+  `advanceTime(ms)` for synchronized visual/state inspection. The web-game harness observed a live
+  Great Slide run at `[16.284, 5.371, 0]` with finite velocity and no errors.
+- **Evidence.** New `smoke-great-slide` passed discovery → exact collider ready → real ArrowLeft
+  input → two gates → complete → results → replay → showroom return. Focused `games`, `ballz`,
+  `world1`, `spiral`, and `mesh-colliders` smokes passed. Final `npm run verify`: **all 30 checks
+  passed**; `overlay` recovered one transient isolated-server reset on the built-in fresh-server
+  retry, with no product assertion failure. Screenshots: `output/verify/great-slide-gameplay.png`,
+  `output/verify/great-slide-gravity-run.png`, `output/verify/browse-mobile.png`.
+- **Map 1 groundwork.** The recovered Map1.TVM payload is now a catalogued scene-native model
+  asset (699 vertices/1456 triangles) with exact geometry provenance and an inferred material.
+  `smoke-standalone` fetches and validates it; the actual Map 1 game composition remains open.
+
+## 2026-07-22 — Production activation proof and rollback
+
+- The deploy artifact is stamped with `dist/release.json` (`graphysx.release/v1`, exact SHA, run id)
+  before packaging. The post-activation job refuses to continue until the public hostname serves
+  that exact revision, so a cached or still-active prior release cannot satisfy the canary.
+- `smoke:live-release` then runs the focused Great Slide end-to-end proof against production and
+  retains its screenshots/results as a 14-day Actions artifact. This covers nginx/TLS/routing,
+  split chunks, shelf images, the pruned SlideLarge asset, WebGL/Rapier, rules, results, and replay.
+- The activation step records a strictly validated previous-release symlink. A failed live canary
+  makes the workflow red and atomically restores that release; retention keeps current + previous.
+- Local acceptance: exact-SHA mismatch failed before browser launch; exact-SHA match passed the
+  complete Great Slide canary with zero failed responses, console errors, or page errors.

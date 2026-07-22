@@ -26,7 +26,8 @@ import {
   buildArchivePlayground,
   composeArchivePlayground,
 } from "./archive-playgrounds";
-import { composeSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from "./archive-skybox-spiral";
+import { composeSkyboxSpiral, frameSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from "./archive-skybox-spiral";
+import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import {
   ARCHIVE_BALLZ_LEVELS,
   ARCHIVE_BALLZ_NOT_REVIVED,
@@ -52,6 +53,28 @@ const storeUrl = explicitStore ?? "http://localhost:8788";
 // deploy is static with no store behind it, so every visitor would see that error. Probe
 // only when a store was actually asked for, or in dev where one is plausibly running.
 const wantsStore = Boolean(storeScene || explicitStore || import.meta.env.DEV);
+
+/**
+ * Exact model colliders resolve asynchronously from their registered asset. Pause before a game
+ * load and wait for both layers to say ready so neither gravity nor the rules clock can start
+ * while the course is still missing its floor.
+ */
+async function waitForExactCollider(
+  api: GraphysXAgentWorldApi,
+  entityId: string,
+  timeoutMs = 20_000,
+): Promise<void> {
+  const startedAt = performance.now();
+  while (performance.now() - startedAt < timeoutMs) {
+    const entity = api.query({ ids: [entityId] })[0];
+    if (entity?.asset?.status === "ready" && entity.physics?.collider?.effective === "trimesh") return;
+    if (entity?.asset?.status === "error" || entity?.physics?.collider?.error) {
+      throw new Error(entity.asset?.error ?? entity.physics?.collider?.error ?? "Exact collider failed to load");
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 40));
+  }
+  throw new Error(`Timed out waiting for ${entityId}'s exact collider`);
+}
 
 if (mode === "legacy") {
   // The archive-revival player on race-scene, kept as a reference fallback only.
@@ -87,7 +110,7 @@ if (mode === "legacy") {
     // cannot just mean un-hiding chrome — the showroom's entities are gone and its host-mounted
     // set was torn down with them. Recomposing is the honest "back", and it is cheap because the
     // showroom is ordinary API calls rather than a retained scene.
-    const restoreShowroom = (): void => {
+    const restoreShowroom = (showWelcome = true): void => {
       // Callers can reach here with a welcome card already up (exitEditor mounts one);
       // recomposing must not stack a second card on top of it.
       document.querySelector(".gx-welcome")?.remove();
@@ -95,8 +118,22 @@ if (mode === "legacy") {
       host.applyEnvironment();
       showroomEnvironment?.();
       showroomEnvironment = mountShowroomEnvironment(host.scene, host.renderer);
-      interaction?.setEnabled(true);
-      mountWelcome(root, enterEditor, openGames, openBrowse);
+      interaction?.setEnabled(showWelcome);
+      if (showWelcome) mountWelcome(root, enterEditor, openGames, openBrowse);
+    };
+    // A composed course may replace the world before a later asynchronous asset step fails.
+    // Pause across the whole transaction and restore the showroom background (but keep the
+    // Games shelf open with its actionable error) on any rejection.
+    const loadComposedGame = async (load: () => void | Promise<void>): Promise<void> => {
+      host.api.pause(true);
+      try {
+        await load();
+      } catch (error) {
+        restoreShowroom(false);
+        throw error;
+      } finally {
+        host.api.pause(false);
+      }
     };
     // Chrome only — for backing out of an overlay that never touched the world. The welcome
     // card disposes itself the moment a destination is clicked, so whoever dismisses that
@@ -115,28 +152,37 @@ if (mode === "legacy") {
           // the garage row in Browse: main.ts supplies them because composing needs the host.
           composed: [
             {
+              id: "archive-great-slide",
+              label: "Great Slide: Gravity Run",
+              meta: "exact recovered mesh  ·  2 checkpoints  ·  modern adapted gameplay",
+              play: () => loadComposedGame(async () => {
+                  const loaded = host.api.loadStarter("archive-great-slide");
+                  if (!loaded.ok) throw new Error(loaded.error ?? "Could not load Great Slide");
+                  host.applyEnvironment();
+                  await waitForExactCollider(host.api, "great-slide-terrain");
+              }),
+            },
+            {
               id: "archive-skybox-spiral",
               label: "Skybox Spiral",
               meta: "archive course  ·  16 rings  ·  moving parts  ·  lostvalley sky",
-              play: () => {
-                showroomEnvironment?.();
-                showroomEnvironment = null;
-                composeSkyboxSpiral(host.api);
+              play: () => loadComposedGame(() => {
+                const result = composeSkyboxSpiral(host.api);
+                if (!result.ok) throw new Error(result.error ?? "Could not compose Skybox Spiral");
                 host.applyEnvironment();
-              },
+                frameSkyboxSpiral(host);
+              }),
             },
             {
               id: "archive-world1",
               label: "World 1",
               meta: "recovered mesh world  ·  descend through both holes  ·  bloom + envelope",
-              play: async () => {
+              play: () => loadComposedGame(async () => {
                 const { composeArchiveWorld1, frameArchiveWorld1 } = await import("./archive-world1-scene");
-                showroomEnvironment?.();
-                showroomEnvironment = null;
                 composeArchiveWorld1(host.api);
                 host.applyEnvironment();
                 frameArchiveWorld1(host);
-              },
+              }),
             },
           ],
           // The level is already materialised by the time this fires; the host has switched to
@@ -155,6 +201,11 @@ if (mode === "legacy") {
       void import("./browse-shelf").then(({ mountBrowseShelf }) => {
         mountBrowseShelf(root, {
           api: host.api,
+          featuredStarter: {
+            id: "archive-great-slide",
+            eyebrow: "SCENE-NATIVE PHYSICS",
+            badges: ["Exact mesh", "Static trimesh", "Modern gravity run"],
+          },
           // The recovered vehicle garage is composed, not a starter definition, so it comes in
           // as a composed row. main.ts supplies it because framing needs the host, which the
           // shelf deliberately does not have.
@@ -250,6 +301,32 @@ if (mode === "legacy") {
       __GRAPHYSX_HOST__: host,
       __GRAPHYSX__: host.api,
       __GRAPHYSX_AGENT_BRIDGE__: host.bridge,
+      // Deterministic, concise game-facing hooks. The full authoring state remains on the API;
+      // this projection is biased toward what a player or browser driver needs right now.
+      render_game_to_text: () => JSON.stringify({
+        coordinateSystem: "right-handed; +x east, +y up, -z north",
+        mode: host.mode,
+        world: host.api.state()?.world ?? null,
+        paused: host.api.state()?.paused ?? false,
+        run: host.api.rules.status(),
+        players: host.api.query({ tag: "player" }).map((entity) => ({
+          id: entity.id,
+          position: entity.position,
+          velocity: entity.physics?.linearVelocity ?? null,
+        })),
+      }),
+      advanceTime: (milliseconds: number) => {
+        if (!Number.isFinite(milliseconds) || milliseconds < 0) {
+          throw new RangeError("advanceTime requires non-negative milliseconds");
+        }
+        // Zero means zero. Positive sub-frame requests intentionally advance the runtime's
+        // minimum 1/60 quantum, matching the public `api.step()` contract.
+        if (milliseconds === 0) return { ok: true, revision: host.api.state()?.revision ?? 0, value: 0 };
+        // Honour the product pause gate (notably while an exact collider is loading).
+        // Explicit authoring tests can still call `api.step()` when they intend to override it.
+        if (host.api.state()?.paused) return { ok: true, revision: host.api.state()?.revision ?? 0, value: 0 };
+        return host.api.step(milliseconds / 1000);
+      },
     });
 
     // Seed the recovered archive levels into the level library on every platform-host route,
@@ -327,7 +404,7 @@ if (mode === "legacy") {
         // textures/models are registered before anyone opens the editor's library — the
         // refresh is idempotent and the editor re-pulls on demand anyway.
         void import("./agent-world-media").then(({ configureAgentWorldMedia }) => {
-          configureAgentWorldMedia(storeUrl);
+          configureAgentWorldMedia(storeUrl, client.token);
           void host.api.media.refresh();
         });
         const browser = mountSceneBrowser(root, {
