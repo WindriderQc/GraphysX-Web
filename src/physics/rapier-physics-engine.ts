@@ -6,6 +6,10 @@ import type {
   World,
 } from "@dimforge/rapier3d-compat";
 import RAPIER from "./rapier-runtime";
+import {
+  createRapierConvexHullColliderDesc,
+  createRapierTrimeshColliderDesc,
+} from "./rapier-mesh-primitives";
 import type {
   PhysicsAabb,
   PhysicsBodyDefinition,
@@ -97,6 +101,9 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     if (definition.shapes.length === 0) throw new Error("A physics body requires at least one shape");
     if (definition.shapes.some((shape) => shape.kind === "heightfield") && definition.mode !== "static") {
       throw new Error("Heightfield bodies must be static");
+    }
+    if (definition.shapes.some((shape) => shape.kind === "trimesh") && definition.mode !== "static") {
+      throw new Error("Trimesh bodies must be static; use a convex collider for moving geometry");
     }
 
     const material = definition.material
@@ -406,6 +413,28 @@ function prepareShape(source: PhysicsShapeDefinition): PreparedShape {
     );
   }
 
+  if (source.kind === "convex") {
+    const descriptor = createRapierConvexHullColliderDesc(source.vertices);
+    const bounds = meshBounds(source.vertices);
+    return placedShape(
+      descriptor,
+      placement.offset,
+      placement.rotation,
+      bounds,
+      Math.max(0.001, bounds.halfExtents.x * bounds.halfExtents.y * bounds.halfExtents.z * 8),
+    );
+  }
+
+  if (source.kind === "trimesh") {
+    return placedShape(
+      createRapierTrimeshColliderDesc(source.vertices, source.indices),
+      placement.offset,
+      placement.rotation,
+      meshBounds(source.vertices),
+      1,
+    );
+  }
+
   const rows = source.heights.length;
   const columns = source.heights[0]?.length ?? 0;
   if (rows < 2 || columns < 2 || source.heights.some((row) => row.length !== columns)) {
@@ -449,6 +478,38 @@ function prepareShape(source: PhysicsShapeDefinition): PreparedShape {
     },
     1,
   );
+}
+
+function meshBounds(vertices: ArrayLike<number>): Extract<ShapeBounds, { kind: "finite" }> {
+  if (vertices.length < 9 || vertices.length % 3 !== 0) {
+    throw new Error("Mesh collider vertices must contain at least three complete xyz triples");
+  }
+  let minX = MAX_AABB;
+  let minY = MAX_AABB;
+  let minZ = MAX_AABB;
+  let maxX = -MAX_AABB;
+  let maxY = -MAX_AABB;
+  let maxZ = -MAX_AABB;
+  for (let index = 0; index < vertices.length; index += 3) {
+    const x = finite(vertices[index], `Mesh vertex ${index / 3} x`);
+    const y = finite(vertices[index + 1], `Mesh vertex ${index / 3} y`);
+    const z = finite(vertices[index + 2], `Mesh vertex ${index / 3} z`);
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    minZ = Math.min(minZ, z);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+    maxZ = Math.max(maxZ, z);
+  }
+  return {
+    kind: "finite",
+    center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2, z: (minZ + maxZ) / 2 },
+    halfExtents: {
+      x: Math.max(0.001, (maxX - minX) / 2),
+      y: Math.max(0.001, (maxY - minY) / 2),
+      z: Math.max(0.001, (maxZ - minZ) / 2),
+    },
+  };
 }
 
 function placedShape(

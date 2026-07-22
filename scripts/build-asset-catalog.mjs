@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const VEHICLE_DIR = resolve(ROOT, "public", "assets", "vehicles");
+const PORT_DIR = resolve(ROOT, "public", "assets", "ports");
 const MESH_DIR = join(ROOT, "public", "assets", "dominus-gallery", "meshes");
 const OUT = join(ROOT, "src", "agent-world-asset-catalog.ts");
 const URL_PREFIX = "/assets/dominus-gallery/meshes";
@@ -61,7 +62,7 @@ function categoryOf(file) {
 
 function labelOf(stem) {
   return stem
-    .split(/[_\s]+/)
+    .split(/[-_\s]+/)
     .map((part) => {
       // Trailing digits are archive variant numbers: port_hut03 → Port Hut 03.
       const match = /^([a-z]+)(\d+)$/.exec(part);
@@ -115,6 +116,20 @@ export async function buildAssetCatalog() {
       format: "graphysx-mesh-json",
       url: `/assets/vehicles/${file}`,
       source: archiveSource,
+    });
+  }
+  // Recovered level-scale meshes use the same stable payload as vehicles, but live in a
+  // separate namespace because they are scenery/collision surfaces rather than drivable
+  // props. Keeping them catalogued is what makes the release asset manifest retain them.
+  for (const file of (await readdir(PORT_DIR)).filter((name) => name.endsWith(".json")).sort()) {
+    const payload = JSON.parse(await readFile(join(PORT_DIR, file), "utf8"));
+    entries.push({
+      id: file.slice(0, -5),
+      label: labelOf(file.slice(0, -5).replace(/^archive-/, "")),
+      category: "port",
+      format: "graphysx-mesh-json",
+      url: `/assets/ports/${file}`,
+      source: payload.provenance?.archiveSource ?? "",
     });
   }
   const duplicates = entries.map((entry) => entry.id).filter((id, index, all) => all.indexOf(id) !== index);

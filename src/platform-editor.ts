@@ -9,6 +9,7 @@ import type {
   AgentWorldEnvelope,
   AgentWorldPost,
   AgentWorldMaterial,
+  AgentWorldColliderKind,
   AgentWorldPhysicsMode,
   GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
@@ -135,7 +136,13 @@ const PHYSICS_FORBIDDEN_TYPES = new Set<AgentWorldEntityType>([
   "spline",
   "emitter",
   "sound",
+  "terrain",
+  "water",
+  "flock",
+  "crowd",
   "force-field",
+  "formula-field",
+  "dna-tree",
   "ambient-light",
   "directional-light",
   "point-light",
@@ -733,12 +740,17 @@ export class PlatformEditor {
     }
 
     const extras = this.physicsExtras.get(entity.id) ?? {};
+    const requestedCollider = entity.physics?.collider.requested ?? "auto";
     const mode = this.selectInput(["static", "dynamic", "kinematic"], entity.physics?.mode ?? "static");
+    const collider = entity.type === "model"
+      ? this.selectInput(["auto", "convex-hull", "trimesh"], requestedCollider)
+      : null;
     const mass = this.numberInput(entity.physics?.mass ?? 1, 0.1, 0);
     const restitution = this.numberInput(extras.restitution, 0.05, 0);
     const friction = this.numberInput(extras.friction, 0.05, 0);
 
     const commit = (): void => {
+      if (collider?.value === "trimesh" && mode.value !== "static") mode.value = "static";
       const next: { friction?: number; restitution?: number } = {};
       if (restitution.value !== "") next.restitution = Number(restitution.value);
       if (friction.value !== "") next.friction = Number(friction.value);
@@ -747,18 +759,29 @@ export class PlatformEditor {
         physics: {
           mode: mode.value as AgentWorldPhysicsMode,
           mass: mass.value === "" ? 1 : Number(mass.value),
+          ...(collider ? { collider: collider.value as AgentWorldColliderKind } : {}),
           ...next,
         },
       });
     };
-    for (const input of [mode, mass, restitution, friction]) input.addEventListener("change", commit);
+    for (const input of [mode, mass, restitution, friction, ...(collider ? [collider] : [])]) input.addEventListener("change", commit);
 
-    return this.section("Physics", [
+    const fields = [
       this.field("Mode", mode),
       this.field("Mass", mass),
       this.field("Restitution", restitution),
       this.field("Friction", friction),
-    ]);
+    ];
+    if (collider) {
+      fields.splice(1, 0, this.field("Collider", collider));
+      const stats = document.createElement("div");
+      stats.className = "gx-ed-hint";
+      stats.textContent = entity.physics
+        ? `${entity.physics.collider.effective} · ${entity.physics.collider.vertexCount} vertices · ${entity.physics.collider.triangleCount} triangles`
+        : "Exact colliders are built after the model asset is ready.";
+      fields.push(stats);
+    }
+    return this.section("Physics", fields);
   }
 
   private behaviourSection(entity: AgentWorldEntityState): HTMLElement {

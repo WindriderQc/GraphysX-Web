@@ -13,6 +13,7 @@ const BROWSE_IDS = [
   "archive-flock-planet",
   "archive-forces-garden",
   "archive-garage",
+  "archive-great-slide",
   "living-systems",
   "prefab-plaza",
   "glow-garden",
@@ -21,6 +22,8 @@ const BROWSE_IDS = [
   "physics-sketchbook",
 ];
 const GAME_IDS = ["archive-skybox-spiral", "archive-world1"];
+const requestedIds = new Set((process.env.SHELF_THUMBNAIL_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean));
+const shouldCapture = (id) => requestedIds.size === 0 || requestedIds.has(id);
 
 mkdirSync(OUTPUT, { recursive: true });
 const server = await createServer({
@@ -60,12 +63,14 @@ async function capture(id, shelf, selector) {
 
 try {
   for (const id of BROWSE_IDS) {
-    const selector = id.startsWith("archive-")
+    if (!shouldCapture(id)) continue;
+    const selector = id.startsWith("archive-") && id !== "archive-great-slide"
       ? `.gx-browse-row[data-scene-id="${id}"]`
       : `.gx-browse-row[data-starter-id="${id}"]`;
     await capture(id, "browse", selector);
   }
   for (const id of GAME_IDS) {
+    if (!shouldCapture(id)) continue;
     await capture(id, "games", `.gx-shelf-row[data-course-id="${id}"]`);
   }
 } finally {

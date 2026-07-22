@@ -1391,3 +1391,31 @@ does not "fix" it back into a real-time wait.
   vehicle configuration/sampling, and joint descriptors.
 - Verification so far: typecheck green, production build green, built-output foundation smoke
   green with zero console/page errors. Full verify remains the release gate.
+
+## 2026-07-22 — Scene-native mesh colliders and Great Slide
+
+- Extended the engine-neutral physics shape vocabulary and the AgentWorld model contract with
+  `physics.collider: "convex-hull" | "trimesh"`; `auto` remains the compatibility default.
+  Trimeshes are static-only. Dynamic, kinematic, and trigger models use convex hulls.
+- Model collision data is derived at asset load from the same payload and fit/recenter/Z-mirror
+  transform as the visual. Entity scale is applied before collider construction. State exposes requested/effective kind plus
+  shape/vertex/triangle counts; export/reload keeps exact intent.
+- Factored shared Rapier typed-mesh validation and descriptor construction into
+  `src/physics/rapier-mesh-primitives.ts`. RaceScene continues to re-export those helpers while
+  its raycast, joint, and vehicle details stay isolated.
+- Added editor authoring for model collider policy, validation/caps (100k vertices, 100k triangles,
+  8192 convex input vertices), and explicit static-only guidance.
+- Graduated exact recovered `Media/SlideLarge.TVM` geometry from
+  `src/legacy/slide-level.json` into catalogued `archive-slide-large` without inventing geometry.
+  Positions, UVs, indices, and bounds are faithful; only the display material and staging are
+  inferred. The **Great Slide** starter makes it reachable from Browse Scenes.
+- New built-output `smoke-mesh-colliders` passes: asset resolves, static collider reports exact
+  100 vertices / 92 triangles, the ball travels from x=20 to x=6.3 down the slope, export/reload
+  preserves `trimesh`, moving-trimesh authoring is rejected, and a convex model spawned through
+  the bridge falls with finite state. The motion trace also stays above y=1.5 throughout, ruling
+  out the free-fall path to the catch basin. Screenshot visually inspected.
+- P3 audit found the proposed touched-body Set, vehicle-controller teardown, and copied gravity
+  hardening already deployed. They were verified rather than reimplemented.
+- Final release gate: `npm run verify` passed all 29 checks in 596 seconds. The gate's isolated
+  retry recovered first-attempt local server timeouts in showroom, triggers, and Rapier race;
+  every final result was green, including the new mesh-collider smoke.

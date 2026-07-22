@@ -51,6 +51,10 @@ export type PhysicsShapeDefinition = PhysicsShapePlacement & (
   | { kind: "cylinder"; radiusTop: number; radiusBottom: number; height: number; segments?: number }
   /** Infinite plane whose canonical normal is local +Y. */
   | { kind: "plane" }
+  /** Convex hull built from flat xyz triples in the body's local frame. */
+  | { kind: "convex"; vertices: readonly number[] }
+  /** Indexed triangle mesh built from flat xyz triples in the body's local frame. */
+  | { kind: "trimesh"; vertices: readonly number[]; indices: readonly number[] }
   /**
    * Y-up regular grid. `heights[z][x]` starts at local (0, height, 0), then advances
    * by `elementSize` along +X/+Z. Use `offset` to centre the grid around a body.

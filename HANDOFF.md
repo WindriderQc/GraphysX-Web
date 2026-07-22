@@ -91,6 +91,15 @@ kinetic physics, click-to-drop, click-to-focus, **shadows**; CI gating productio
 **media library** (`media-r1`) — runtime imports from the datalake through the store server,
 in-browser model conversion, editor Media tab + import dialog, `api.media.*` on both impls.
 
+**Scene-native model colliders** are now ordinary v2 vocabulary. `physics.collider` accepts
+`auto`, `convex-hull`, or static-only `trimesh`; exact meshes are derived from the same fitted,
+recentered registered asset geometry the visitor sees. The editor exposes the choice, state reports
+effective mesh statistics, and export/reload preserves it. The recovered 100-vertex / 92-triangle
+BallZ SlideLarge is reachable as the **Great Slide** starter and is guarded by
+`smoke-mesh-colliders` (slope motion, bridge-spawned dynamic convex hull, invalid moving-trimesh
+rejection, and round-trip). Shared Rapier mesh construction lives in
+`src/physics/rapier-mesh-primitives.ts`; race-only raycast/vehicle/joint code stays separate.
+
 **The three front-door destinations (§5) are all live.** Showroom → **Games & Playgrounds**
 (`games-shelf.ts`, every row `api.levels.play(id)`) → framed play with a HUD → **win panel** →
 back to the showroom. **Browse Scenes** (`browse-shelf.ts`) is the third: a gallery of curated
