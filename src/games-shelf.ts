@@ -1,4 +1,5 @@
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import { createLevelThumbnail, createSceneThumbnail, SHELF_THUMBNAIL_CSS } from "./shelf-thumbnails";
 
 /**
  * The "Games & Playgrounds" front-door shelf.
@@ -102,13 +103,19 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
     row.type = "button";
     row.className = "gx-shelf-row";
     row.dataset.courseId = course.id;
+    const visual = document.createElement("span");
+    visual.className = "gx-shelf-visual";
+    visual.append(createSceneThumbnail(course.id, course.label));
+    const copy = document.createElement("span");
+    copy.className = "gx-shelf-copy";
     const name = document.createElement("span");
     name.className = "gx-shelf-name";
     name.textContent = course.label;
     const meta = document.createElement("span");
     meta.className = "gx-shelf-meta";
     meta.textContent = course.meta;
-    row.append(name, meta);
+    copy.append(name, meta);
+    row.append(visual, copy);
     row.addEventListener("click", () => {
       void course.play();
       dispose();
@@ -124,6 +131,13 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
     row.type = "button";
     row.className = "gx-shelf-row";
     row.dataset.levelId = summary.id;
+
+    const visual = document.createElement("span");
+    visual.className = "gx-shelf-visual";
+    const level = api.levels.get(summary.id);
+    if (level) visual.append(createLevelThumbnail(level));
+    const copy = document.createElement("span");
+    copy.className = "gx-shelf-copy";
 
     const name = document.createElement("span");
     name.className = "gx-shelf-name";
@@ -142,7 +156,8 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
       playable ? null : "no start — layout only",
     ].filter(Boolean).join("  ·  ");
 
-    row.append(name, meta);
+    copy.append(name, meta);
+    row.append(visual, copy);
     row.addEventListener("click", () => {
       const result = api.levels.play(summary.id);
       if (!result.ok) {
@@ -181,9 +196,10 @@ function injectStyleOnce(): void {
 }
 
 const SHELF_CSS = `
+${SHELF_THUMBNAIL_CSS}
 .gx-shelf{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
   background:var(--gx-scrim);font-family:var(--gx-font);padding:24px}
-.gx-shelf-card{width:min(520px,100%);max-height:80vh;display:flex;flex-direction:column;gap:12px;
+.gx-shelf-card{width:min(900px,100%);max-height:86vh;display:flex;flex-direction:column;gap:12px;
   background:rgba(9,22,31,.96);border:1px solid rgba(79,208,230,.34);border-radius:14px;
   padding:20px 22px;box-shadow:0 18px 60px rgba(0,0,0,.5)}
 .gx-shelf-head{display:flex;align-items:center;gap:12px}
@@ -192,12 +208,15 @@ const SHELF_CSS = `
   color:var(--gx-ink-soft);cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px}
 .gx-shelf-close:hover{border-color:var(--gx-accent);color:var(--gx-ink)}
 .gx-shelf-blurb{margin:0;color:var(--gx-ink-faint);font-size:12.5px;line-height:1.5}
-.gx-shelf-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+.gx-shelf-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;overflow-y:auto;
+  padding:1px 5px 1px 1px}
 .gx-shelf-row{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
   background:rgba(16,38,50,.8);border:1px solid rgba(79,208,230,.2);border-radius:10px;
-  padding:11px 14px;cursor:pointer;color:inherit}
+  padding:7px;cursor:pointer;color:inherit;min-width:0}
 .gx-shelf-row:hover{background:rgba(24,56,72,.92);border-color:var(--gx-accent-edge)}
 .gx-shelf-row--error{border-color:#f95f4c}
 .gx-shelf-name{color:var(--gx-ink);font-size:14px;font-weight:600}
 .gx-shelf-meta{color:var(--gx-ink-faint);font-size:11.5px;letter-spacing:.03em}
+@media (max-width:640px){.gx-shelf{padding:12px}.gx-shelf-card{padding:16px;max-height:92vh}
+  .gx-shelf-list{grid-template-columns:1fr}}
 `;

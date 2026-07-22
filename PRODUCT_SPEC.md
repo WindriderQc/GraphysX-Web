@@ -303,11 +303,11 @@ budgeted 256² target. Both are reachable from `api.spawn`, listed by `api.heigh
 placeable from the editor's Terrain palette, and survive export→load. The editor also gained an
 inspector, a prefab/model/texture/effects/terrain palette, and an exit path.
 
-**Highest-value next graduations** (in order): ~~a force-field behavior~~ **done** (`forces-r1`);
-~~map-editor UI on the default host~~ **done** (`levels-r1`, see below). What remains at the head
-of this list is **tree-DNA / evolutionary entities** (§14 phase 4, still legacy-only in
-`nature-lab.ts`) — the third Nature-of-Code system — then **crowds**, still welded inside
-`race-scene.ts`.
+**Highest-value next graduations** (historical): ~~a force-field behavior~~ **done**
+(`forces-r1`); ~~map-editor UI on the default host~~ **done** (`levels-r1`, see below);
+~~tree-DNA / evolutionary entities~~ **done** (`dna-r2`); ~~crowds~~ **done** (`crowd-r1`).
+All simulation-system families §4 names are now expressible in v2; the current status table
+in §8.1 is authoritative.
 
 **Update (`levels-r1`):** the level *data* model was already graduated; what was missing was that
 nothing could turn a grid into a scene. `levels.play()` now materialises one (§14 phase 5), and the

@@ -30,6 +30,7 @@
     "agent:stdio": "node tools/graphysx-agent-stdio.mjs --stdio",
     "agent:manifest": "node tools/graphysx-agent-stdio.mjs",
     "assets:manifest": "node scripts/product-assets.mjs",
+    "assets:shelf-thumbnails": "node scripts/capture-shelf-thumbnails.mjs",
     "qa": "node scripts/qa-agent-entities.mjs"
   },
   "dependencies": {

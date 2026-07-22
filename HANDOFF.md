@@ -171,8 +171,9 @@ here blocks a release; pick by value rather than by order.
   pale sky.
 - **Ball drop retuned 9 m/0.52 → 6 m/0.34** partly for test stability. Real justification,
   mixed motive.
-- **A runtime rollback raises an uncaught error** when a rejected transaction leaves the
-  gizmo attached to a destroyed object. Gated in the UI, not fixed at source.
+- ~~**A runtime rollback raises an uncaught error** when a rejected transaction leaves the
+  gizmo attached to a destroyed object.~~ **Fixed** in `13aba57`: every `world.loaded`
+  synchronously rebinds or detaches the gizmo, with a second guard before editor render.
 - **`?host=legacy` in a production build shows missing archive textures/meshes.** Deliberate
   — it is a reference fallback, fully intact in `vite dev`, and was costing ~76 MB per push.
 

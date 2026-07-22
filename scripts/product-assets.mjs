@@ -95,6 +95,11 @@ export async function productAssetManifest() {
   // manifest scrapes that module the same way it scrapes the level styles.
   for (const url of await anyAssetLiterals("src/archive-world1-manifest.ts")) wanted.add(url);
 
+  // The front-door galleries are generated release assets rather than runtime vocabulary.
+  // Claim the whole generated directory so `npm run assets:shelf-thumbnails` can add or
+  // refresh a scene without a second hand-maintained filename list.
+  for (const url of await filesUnder("/assets/shelf-thumbnails")) wanted.add(url);
+
   for (const url of LEGACY_BOOT_ASSETS) wanted.add(url);
 
   // Fail loudly rather than shipping a release with a hole in the vocabulary.
