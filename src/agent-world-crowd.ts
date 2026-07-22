@@ -63,6 +63,16 @@ import {
 /** How a member decides where to go. Both are recovered from `updateNpcs`. */
 export type AgentWorldCrowdRole = "wander" | "pursue";
 
+/** See {@link AgentWorldCrowd.conversion}. The archive infection is from/to/0.85/3. */
+export type AgentWorldCrowdConversion = {
+  from: AgentWorldCrowdRole;
+  to: AgentWorldCrowdRole;
+  /** Contact distance in world units. The archive tested `distanceTo < 0.85`. */
+  radius: number;
+  /** Grace period before any conversion may fire. The archive held for 3000 ms. */
+  afterSeconds: number;
+};
+
 export type AgentWorldCrowd = {
   /**
    * Curated preset to start from. Explicit fields below win over the preset's. `null` means
@@ -103,6 +113,19 @@ export type AgentWorldCrowd = {
    * the player's position; a scene engine has no player, so a crowd carries its own focus.
    */
   focus?: [number, number, number];
+  /**
+   * Contact-driven role conversion — the recovered infection, as scene data. `null` (the
+   * default) means roles only ever change through `setRole`; the archive's zombie-hunt is
+   * `{ from: "wander", to: "pursue", radius: 0.85, afterSeconds: 3 }` — a carrier of `to`
+   * within `radius` of a member of `from` converts it, once `afterSeconds` of grace has
+   * elapsed (the archive's 3000 ms hold so the spawn scatter cannot instantly cascade).
+   *
+   * This lives on the crowd rather than in the trigger vocabulary deliberately: per-member
+   * triggers would fight the instanced design, and the contact test needs the members'
+   * positions at integration time. Each conversion is surfaced on the runtime event stream
+   * as `crowd.converted`, so a rules block or an agent can still react to it.
+   */
+  conversion?: AgentWorldCrowdConversion | null;
   /** Member height in world units. The recovered body is 0.82 tall overall. */
   memberSize?: number;
   wanderColor?: string;
@@ -123,6 +146,7 @@ export type ResolvedAgentWorldCrowd = {
   separationDistance: number;
   separation: number;
   focus: [number, number, number];
+  conversion: AgentWorldCrowdConversion | null;
   memberSize: number;
   wanderColor: string;
   pursuerColor: string;
@@ -169,6 +193,7 @@ const BASE_CROWD: ResolvedAgentWorldCrowd = {
   separationDistance: 0.9,
   separation: 1,
   focus: [0, 0, 0],
+  conversion: null,
   memberSize: 0.82,
   wanderColor: "#d9b38c",
   pursuerColor: "#4e9b47",
@@ -215,6 +240,9 @@ export const GRAPHYSX_AGENT_WORLD_CROWDS: readonly AgentWorldCrowdDescriptor[] =
       size: [12, 12],
       speed: 1.6,
       pursuitSpeedRatio: 1.35,
+      // The recovered infection, on by default for THIS preset only: it is what makes
+      // "pursuit" the zombie-hunt mechanic rather than a colour scheme. 0.85 / 3s verbatim.
+      conversion: { from: "wander", to: "pursue", radius: 0.85, afterSeconds: 3 },
       seed: 11,
     },
     provenance: {
@@ -293,6 +321,7 @@ export function resolveAgentWorldCrowd(
     separationDistance: clamp(input.separationDistance ?? start.separationDistance, 0.05, 200),
     separation: clamp(input.separation ?? start.separation, 0, 1),
     focus: focus.map((value) => clamp(value, -10000, 10000)) as [number, number, number],
+    conversion: resolveConversion(input.conversion === undefined ? start.conversion : input.conversion),
     memberSize: clamp(input.memberSize ?? start.memberSize, 0.05, 20),
     wanderColor: input.wanderColor ?? start.wanderColor,
     pursuerColor: input.pursuerColor ?? start.pursuerColor,
@@ -309,6 +338,24 @@ export function resolveAgentWorldCrowd(
  * three understands overwrites both, so they end up equal; one it does not leaves each at its
  * own sentinel.
  */
+function resolveConversion(source: AgentWorldCrowdConversion | null | undefined): AgentWorldCrowdConversion | null {
+  if (source === null || source === undefined) return null;
+  if (typeof source !== "object") throw new Error("crowd.conversion must be an object or null");
+  const roles: AgentWorldCrowdRole[] = ["wander", "pursue"];
+  if (!roles.includes(source.from) || !roles.includes(source.to)) {
+    throw new Error(`crowd.conversion roles must be "wander" or "pursue" (got ${String(source.from)} -> ${String(source.to)})`);
+  }
+  // from === to is not an error a scene should be able to express: it converts nothing but
+  // scans every pair doing it, and it always means a typo rather than an intent.
+  if (source.from === source.to) throw new Error("crowd.conversion.from and .to must differ");
+  return {
+    from: source.from,
+    to: source.to,
+    radius: clamp(source.radius ?? 0.85, 0.05, 50),
+    afterSeconds: clamp(source.afterSeconds ?? 3, 0, 3600),
+  };
+}
+
 function isColor(value: unknown): boolean {
   if (typeof value !== "string" || !value.trim()) return false;
   const black = new Color(0x000000);
@@ -358,6 +405,10 @@ export class AgentWorldCrowdSystem {
   private headings: Vector3[] = [];
   private roles: AgentWorldCrowdRole[] = [];
   private timers: number[] = [];
+  /** Simulated seconds, for the conversion grace period. Advances only while updating. */
+  private elapsed = 0;
+  /** Member indices converted since the last {@link drainConverted} — the event seam. */
+  private convertedBuffer: number[] = [];
   /**
    * One persistent stream for the whole life of the system, seeded once in {@link build}.
    * Wandering consumes randomness every 0.33 s, so the alternative — reseeding per frame from
@@ -431,6 +482,19 @@ export class AgentWorldCrowdSystem {
     this.head.instanceColor!.needsUpdate = true;
   }
 
+  /**
+   * Member indices converted by the contact rule since the last drain, then clears the
+   * buffer. The runtime calls this once per simulation step and turns the result into
+   * `crowd.converted` stream events — polling `pursuerCount` alone cannot say *which*
+   * members changed or distinguish two conversions from one conversion plus one `setRole`.
+   */
+  drainConverted(): number[] {
+    if (this.convertedBuffer.length === 0) return [];
+    const drained = this.convertedBuffer;
+    this.convertedBuffer = [];
+    return drained;
+  }
+
   /** Read a member's role, or null when the index is out of range. */
   getRole(index: number): AgentWorldCrowdRole | null {
     return this.roles[index] ?? null;
@@ -444,6 +508,10 @@ export class AgentWorldCrowdSystem {
   private build(config: ResolvedAgentWorldCrowd): void {
     const random = seededRandom(config.seed);
     this.random = random;
+    // A rebuild is a fresh population: the grace period restarts, and any undrained
+    // conversion indices would name members that no longer exist.
+    this.elapsed = 0;
+    this.convertedBuffer = [];
     const count = config.count;
     this.positions = [];
     this.headings = [];
@@ -563,6 +631,7 @@ export class AgentWorldCrowdSystem {
     // A long frame (a backgrounded tab, a slow headless step) must not launch the crowd into
     // the next county; clamp the integration step rather than the wall clock.
     const delta = Math.min(deltaSeconds, 0.1);
+    this.elapsed += delta;
     const config = this.config;
     const { diff, target, velocity } = this.scratch;
     const count = this.positions.length;
@@ -636,6 +705,32 @@ export class AgentWorldCrowdSystem {
       const position = this.positions[index];
       position.addScaledVector(heading, this.speedFor(this.roles[index]) * delta);
       position.y = 0;
+    }
+
+    // Contact conversion — the recovered infection, generalised. Runs on the positions the
+    // members actually reached this step, and deliberately BEFORE separation: the separation
+    // pass pushes pairs back out to `separationDistance` (0.9 by default), which is wider
+    // than the archive's 0.85 contact radius — testing after it would mean contact could
+    // almost never be observed, exactly the way testing after the solver resolved would have.
+    // Index order makes it deterministic; a member converted this step immediately counts as
+    // a carrier for later indices, which is also the archive's behaviour (its loop mutated
+    // `kind` in place mid-scan).
+    const conversion = this.config.conversion;
+    if (conversion && this.elapsed >= conversion.afterSeconds) {
+      const radiusSq = conversion.radius * conversion.radius;
+      for (let index = 0; index < count; index += 1) {
+        if (this.roles[index] !== conversion.to) continue;
+        const carrier = this.positions[index];
+        for (let other = 0; other < count; other += 1) {
+          if (this.roles[other] !== conversion.from) continue;
+          const target = this.positions[other];
+          const dx = carrier.x - target.x;
+          const dz = carrier.z - target.z;
+          if (dx * dx + dz * dz >= radiusSq) continue;
+          this.setRole(other, conversion.to);
+          this.convertedBuffer.push(other);
+        }
+      }
     }
 
     // Separation — the adaptation, not the recovery. It runs here, on positions, rather than

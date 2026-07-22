@@ -762,6 +762,7 @@ export type AgentWorldStreamEvent = {
 export type AgentWorldStreamEventType =
   | "trigger.enter"
   | "trigger.exit"
+  | "crowd.converted"
   | "entity.spawned"
   | "entity.updated"
   | "entity.removed"
@@ -2191,7 +2192,20 @@ export class AgentWorldRuntime {
       // The crowd walks inside the simulation step for the same reason: pause freezes it and
       // step advances it one deterministic slice.
       const crowd = findCrowdSystem(runtime.object);
-      if (crowd) crowd.update(deltaSeconds);
+      if (crowd) {
+        crowd.update(deltaSeconds);
+        // The contact-conversion rule reports which members it converted; surfacing that on
+        // the stream is what lets a rules block or an agent react to an infection rather
+        // than inferring it from a pursuerCount delta.
+        const converted = crowd.drainConverted();
+        if (converted.length > 0) {
+          this.emit("crowd.converted", [runtime.definition.id], {
+            entityId: runtime.definition.id,
+            memberIndices: converted,
+            pursuerCount: crowd.pursuerCount,
+          });
+        }
+      }
       const field = findForceFieldVisual(runtime.object);
       if (field) field.update(deltaSeconds);
       // Growth and the seasonal leaf fall inherit pause/step exactly as the flock does.
