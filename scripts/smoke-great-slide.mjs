@@ -153,6 +153,9 @@ try {
     showroomEntities: window.__GRAPHYSX__.query({ tag: "showroom" }).length,
     hudGone: !document.querySelector(".gx-bz-hud"),
   }));
+  // Release the happy-path WebGL context before opening the isolated failure case. SwiftShader
+  // can emit spurious shader validation errors when two full product canvases render at once.
+  await page.close();
 
   // An exact asset can fail after loadStarter has already replaced the world. The launcher must
   // roll that partial game back while keeping the shelf open and actionable.
@@ -163,7 +166,10 @@ try {
   await failurePage.goto(BASE, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await failurePage.waitForSelector(".gx-welcome .gx-go-games", { timeout: SMOKE_TIMEOUT });
   await failurePage.click(".gx-welcome .gx-go-games");
-  await failurePage.click('.gx-shelf-row[data-course-id="archive-great-slide"]');
+  // The intentional asset abort can make Chromium report a pending navigation on a remote
+  // origin even though the button does not navigate. We assert the resulting app state below;
+  // do not let Playwright's unrelated post-click navigation wait mask that evidence.
+  await failurePage.click('.gx-shelf-row[data-course-id="archive-great-slide"]', { noWaitAfter: true });
   await failurePage.waitForSelector('.gx-shelf-row[data-course-id="archive-great-slide"].gx-shelf-row--error', { timeout: SMOKE_TIMEOUT });
   out.failedLaunch = await failurePage.evaluate(() => ({
     mode: window.__GRAPHYSX_HOST__.mode,
