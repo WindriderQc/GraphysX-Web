@@ -72,6 +72,7 @@ type PreparedShape = {
 export class RapierPhysicsEngine implements PhysicsEngine {
   private readonly world: World;
   private readonly bodies = new Map<PhysicsBodyHandle, RapierBodyRecord>();
+  private readonly forcedBodies = new Set<RigidBody>();
   private readonly materials = new Map<string, PhysicsMaterialDefinition>();
   private readonly defaultMaterial: PhysicsMaterialDefinition;
   private readonly allowSleep: boolean;
@@ -166,6 +167,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
   removeBody(handle: PhysicsBodyHandle): void {
     this.assertLive();
     const record = this.recordFor(handle);
+    this.forcedBodies.delete(record.body);
     this.world.removeRigidBody(record.body);
     this.bodies.delete(handle);
   }
@@ -185,6 +187,14 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     let substeps = 0;
     while (this.accumulator >= fixedTimeStep && substeps < maxSubSteps) {
       this.world.step();
+      // Rapier user forces/torques persist until reset, while the engine contract models
+      // applyForce as a one-step input. Reset after every internal step so catch-up frames do
+      // not apply one frame's force two to four times or accumulate it forever.
+      for (const body of this.forcedBodies) {
+        body.resetForces(false);
+        body.resetTorques(false);
+      }
+      this.forcedBodies.clear();
       this.accumulator -= fixedTimeStep;
       substeps += 1;
     }
@@ -247,6 +257,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     } else {
       body.addForce(toRapierVector(force), true);
     }
+    this.forcedBodies.add(body);
   }
 
   applyImpulse(handle: PhysicsBodyHandle, impulse: PhysicsVector3, worldPoint?: PhysicsVector3): void {
@@ -294,6 +305,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
   dispose(): void {
     if (this.disposed) return;
     this.bodies.clear();
+    this.forcedBodies.clear();
     this.materials.clear();
     this.world.free();
     this.accumulator = 0;

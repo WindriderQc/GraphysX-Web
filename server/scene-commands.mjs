@@ -1,4 +1,4 @@
-// Applying commands to a scene *document* — no runtime, no three, no cannon.
+// Applying commands to a scene *document* — no runtime, no Three.js, no physics engine.
 //
 // This lives on the server side of the tree because the store is what arbitrates document
 // semantics: it decides what a change means and what the resulting revision is. The agent

@@ -14,7 +14,7 @@ import path from "node:path";
 // the v2 entity/environment schema it:
 //   1. sets the property through the PUBLIC API (spawn / update / set-environment),
 //   2. reads it back through a DIFFERENT path — state(), exportDocument(), a full reload from
-//      that export, and where the property is observable, the live three.js / cannon object,
+//      that export, and where the property is observable, the live Three.js / physics object,
 //   3. asserts the value round-trips AND that the world genuinely changed (before !== after),
 //      not merely that the value was stored.
 //
@@ -24,7 +24,7 @@ import path from "node:path";
 //
 // Driven through pause/step where motion matters, so assertions are about behaviour, not about
 // how fast the machine ran. Uses `?host=standalone`, which mounts PlatformHost and therefore
-// exposes `window.__GRAPHYSX_HOST__` — that host is how the live three.js Scene and the cannon
+// exposes `window.__GRAPHYSX_HOST__` — that host is how the live Three.js scene and physics
 // bodies (via state()) become reachable for the "actual object" read path.
 
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
@@ -225,7 +225,7 @@ try {
       const before = stateOf("box1");
       api.update("box1", { tags: ["alpha", "beta"], label: "Renamed Box", ephemeral: true });
       const s = stateOf("box1");
-      check("tags", "meta", ["alpha", "beta"], { state: s.tags }, { before: before.tags, objectUnavailable: "tags are metadata with no three.js/cannon representation" });
+      check("tags", "meta", ["alpha", "beta"], { state: s.tags }, { before: before.tags, objectUnavailable: "tags are metadata with no Three.js/physics representation" });
       check("label", "meta", "Renamed Box", { state: s.label }, { before: before.label, objectUnavailable: "label is metadata; object.name is the id, not the label" });
       check("ephemeral", "meta", true, { state: s.ephemeral }, { before: before.ephemeral, objectUnavailable: "ephemeral controls exportDocument inclusion, verified in the persistence phase below" });
       api.update("box1", { ephemeral: false }); // keep it in the document for the reload phase.
@@ -237,9 +237,9 @@ try {
       api.update("box1", { physics: { mode: "dynamic", mass: 5, material: "wall", linearVelocity: [3, 0, 0], angularVelocity: [0, 1, 0] } });
       const s = stateOf("box1").physics;
       check("physics.mode", "physics", "dynamic", { state: s.mode }, { before: before.physics.mode });
-      check("physics.mass", "physics", 5, { state: s.mass }, { before: before.physics.mass, objectUnavailable: "cannon body.mass is not exposed; state() reads it from the definition" });
+      check("physics.mass", "physics", 5, { state: s.mass }, { before: before.physics.mass, objectUnavailable: "rigid-body mass is not exposed; state() reads it from the definition" });
       check("physics.material", "physics", "wall", { state: s.material }, { before: before.physics.material });
-      // linear/angular velocity is read straight off the cannon body in state() — that IS the
+      // linear/angular velocity is read straight off the rigid body in state() — that IS the
       // object read path for physics. Assert the body actually carries it.
       check("physics.linearVelocity", "physics", [3, 0, 0], { object: s.linearVelocity }, { before: before.physics.linearVelocity });
       check("physics.angularVelocity", "physics", [0, 1, 0], { object: s.angularVelocity }, { before: before.physics.angularVelocity });
@@ -405,9 +405,9 @@ try {
       }, { before: before.ground.color });
       check("environment.ground.grid", "environment", true, { state: s.ground.grid, object: !!grid }, { before: before.ground.grid });
       check("environment.physics.gravity(config)", "environment", [0, -4.5, 0], { state: s.physics.gravity }, { before: before.physics.gravity });
-      // gravity is applied to the cannon world in buildEnvironment — assert a dropped body
+      // gravity is applied to the physics world in buildEnvironment — assert a dropped body
       // accelerates at the NEW rate, not the old one. The measured effective g is a hair below
-      // the configured value because a cannon body carries a small default linearDamping, so
+      // the configured value because a rigid body carries a small default linear damping, so
       // this asserts "close to new, clearly not old" rather than exact equality.
       {
         api.spawn({ id: "gdrop", type: "sphere", transform: { position: [0, 40, 0] }, geometry: { radius: 0.3 }, physics: { mode: "dynamic", mass: 1 } });

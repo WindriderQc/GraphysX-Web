@@ -52,6 +52,7 @@ async function filesUnder(relDir) {
 const LEGACY_BOOT_ASSETS = [
   "/assets/textures/sun.jpg",
   "/assets/textures/archive/haze.png",
+  "/assets/textures/archive/Concrete.jpg",
   "/assets/textures/archive/twoway.jpg",
   "/assets/textures/ball/FireArrow800.jpg",
   "/assets/textures/classic/Alien01_B_diff.bmp",

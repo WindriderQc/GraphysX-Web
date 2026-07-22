@@ -24,6 +24,7 @@
     "smoke:rules": "node scripts/smoke-rules.mjs",
     "smoke:media": "node scripts/smoke-media.mjs",
     "smoke:physics": "node scripts/smoke-physics.mjs",
+    "smoke:rapier-race": "node scripts/smoke-rapier-race.mjs",
     "smoke:store-auth": "node scripts/smoke-store-auth.mjs",
     "smoke:dna": "node scripts/smoke-dna.mjs",
     "serve:staging": "node scripts/staging-server.mjs",
@@ -38,7 +39,6 @@
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",
     "@fontsource/space-grotesk": "^5.3.0",
-    "cannon-es": "^0.20.0",
     "three": "^0.179.1"
   },
   "devDependencies": {

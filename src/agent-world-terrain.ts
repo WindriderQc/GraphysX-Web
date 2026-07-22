@@ -25,7 +25,7 @@ import TERRAIN_CARX from "./legacy/terrain-carx.json";
  * 512px bitmap at native density while a scene entity samples a coarse grid across a
  * configurable mesh and would otherwise stair-step.
  *
- * Terrain carries a **static cannon-es `Heightfield` collider**. This is the point of
+ * Terrain carries a **static Rapier heightfield collider**. This is the point of
  * graduating it: the showroom's previous sine-displaced host decoration had no collider at
  * all, so anything dropped on it fell through the world forever.
  */
@@ -300,7 +300,7 @@ function sourceField(terrain: ResolvedAgentWorldTerrain): DecodedField {
  * inner corners and an un-flattened outer one, so it ramps, and the pad is really only
  * level out to the last grid ring strictly inside the radius. On the showroom terrain
  * (`size` 150, `segments` 96 → a 1.5625-unit cell, `flattenRadius` 12) that put the first
- * sloping ground at r≈10.2 rather than 12 — and because a cannon-es sphere has no rolling
+ * sloping ground at r≈10.2 rather than 12 — and because a rigid sphere has no rolling
  * resistance, a gradient of 0.004 is enough to send a dropped ball rolling off the pad and
  * down the landform instead of coming to rest. That is the whole of the long-standing
  * "collider disagrees with the mesh near the flatten rim" defect: the two agree exactly,
@@ -385,8 +385,8 @@ export function createTerrainGeometry(terrain: ResolvedAgentWorldTerrain, height
  * That places every *sample* correctly — and is still wrong, subtly, in between them.
  *
  * Both surfaces triangulate each quad, and each picks a diagonal. `PlaneGeometry` splits on
- * b–d (the north-east/south-west diagonal, in mesh row/column order); cannon splits its
- * pillars on the (xi, yi+1)–(xi+1, yi) diagonal. Those are the *same* diagonal in index
+ * b–d (the north-east/south-west diagonal, in mesh row/column order); the collider splits
+ * cells on the (xi, yi+1)–(xi+1, yi) diagonal. Those are the *same* diagonal in index
  * space — but the single-axis flip mirrors one index and turns it into the opposite one in
  * world space. So the collider was consistently the other triangulation of the same corner
  * heights: identical at every vertex, and up to 0.35 units out mid-quad on the showroom

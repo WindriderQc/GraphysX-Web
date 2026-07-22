@@ -5,7 +5,7 @@
 // Milestone A of the shared-scene ladder. Deliberately document-level: a scene is a
 // whole `graphysx.agent-world/v2` definition plus a revision, and writers do
 // read-modify-write guarded by `expectedRevision`. No runtime runs here — applying a
-// change set needs three + cannon, which are browser-side — so this stays a dumb,
+// change set needs Three.js + the physics runtime, which are browser-side — so this stays a dumb,
 // dependency-free store and the concurrency check is the same optimistic one the
 // runtime already does in-page (agent-world-runtime.ts:835).
 //

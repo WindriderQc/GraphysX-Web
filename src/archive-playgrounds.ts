@@ -924,7 +924,7 @@ export const ARCHIVE_PLAYGROUNDS: readonly ArchivePlayground[] = [
         detail:
           "The archive runs 176 instanced 0.12-radius spheres as a single population. That splits here: an emitter " +
           "pair carries the *mist* (hundreds of cheap points, no rigid bodies), and six rigid probes carry the " +
-          "*law* (real masses, real collision, individually inspectable). A 176-body cannon world is over budget, " +
+          "*law* (real masses, real collision, individually inspectable). A 176-body rigid-body world is over budget, " +
           "and a 0.12-radius rigid body is invisible at any framing that also shows the field.",
       },
       {
@@ -971,7 +971,7 @@ export const ARCHIVE_PLAYGROUNDS: readonly ArchivePlayground[] = [
         detail:
           "Unlike the flock planet, this scene carries no presentation scale: the floor is 24 units and the " +
           "attractor sits at its authored y = 2.55. A root-group scale is not available here because the probes " +
-          "are rigid bodies and a cannon shape does not inherit a parent's scale, so scaling the group would " +
+          "are rigid bodies and a collider does not inherit a render parent's scale, so scaling the group would " +
           "desynchronise the physics from the render. The consequence is honest and visible: at the host's default " +
           "framing the laboratory sits in the middle distance rather than filling the frame.",
       },

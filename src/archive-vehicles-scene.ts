@@ -49,7 +49,7 @@ import { ARCHIVE_VEHICLE_MESHES, archiveVehicleMesh } from "./archive-vehicles-m
  *   model. At native size it would be a 200-unit landscape, not a gallery piece.
  *
  * ## DELIBERATELY ABSENT
- * - **Driving.** `race-scene.ts` drives these with a cannon `RigidVehicle`, four wheel bodies,
+ * - **Driving.** `race-scene.ts` drives these with a physics vehicle controller and four wheels,
  *   stepped steering and a 3.5%-traction adapter it discloses as an adapter. None of that is
  *   v2 vocabulary — the model has no vehicle/joint/articulation concept — so a drivable car
  *   here could only be a box with a texture pretending to be a car. A static gallery that is

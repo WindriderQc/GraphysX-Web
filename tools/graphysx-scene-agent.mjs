@@ -1,7 +1,7 @@
 // The agent-facing surface for the scene store: what Hermes calls.
 //
 // Milestone A applies commands to the *document*, not to a running world. The runtime's
-// own `commit()` needs three + cannon and therefore a browser; here we edit the JSON and
+// own `commit()` needs Three.js + the physics runtime and therefore a browser; here we edit the JSON and
 // let whichever client has the scene open reload it. That trade is what makes this
 // reachable from a Telegram bot on another machine with no browser involved.
 //
@@ -238,4 +238,3 @@ if (process.argv[1] && process.argv[1].endsWith("graphysx-scene-agent.mjs")) {
     process.exitCode = 1;
   });
 }
-

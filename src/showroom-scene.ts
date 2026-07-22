@@ -207,7 +207,7 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
       { id: "fill-light", type: "ambient-light", intensity: 0.5, material: { color: "#cfe9ff" } },
       // The ground. This used to be sine-displaced host decoration with no collider, so
       // anything dropped on it fell through the world forever. It is now an ordinary
-      // `terrain` entity on a recovered archive heightmap, carrying a static cannon-es
+      // `terrain` entity on a recovered archive heightmap, carrying a static Rapier
       // heightfield — selectable, editable, exportable, and something you land on.
       //
       // `highlands` is the pick: rolling upland ridges read at showroom framing, where the

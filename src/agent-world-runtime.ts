@@ -2167,7 +2167,7 @@ export class AgentWorldRuntime {
    * systems and flocks at once, which is exactly why the coupling lives here rather than
    * inside `agent-world-force-field.ts`.
    *
-   * It runs once per simulation step, immediately before the cannon step, and does three
+   * It runs once per simulation step, immediately before the physics step, and does three
    * things:
    *
    *  1. applies `a · mass` to every eligible **dynamic** body — static, kinematic and trigger

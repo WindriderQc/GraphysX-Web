@@ -453,7 +453,7 @@ Available prefabs: `luminous-tree`, `signal-beacon`, `portal-arch`, `orbital-scu
 
 ## Terrain and water
 
-`terrain` is heightmap-backed ground that **carries its own static collider**, so objects land on it. It takes no `physics` field — the collider is implied by the entity, and a cannon-es `Heightfield` is built from the same height array as the mesh, so what you see and what you land on cannot drift apart.
+`terrain` is heightmap-backed ground that **carries its own static collider**, so objects land on it. It takes no `physics` field — the collider is implied by the entity, and a Rapier heightfield is built from the same height array as the mesh, so what you see and what you land on cannot drift apart.
 
 ```js
 gx.spawn({

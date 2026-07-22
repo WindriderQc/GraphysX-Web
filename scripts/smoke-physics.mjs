@@ -6,8 +6,8 @@ import path from "node:path";
 // Physics correctness: the material presets must actually reach the solver.
 //
 // The v2 runtime always *validated* its six surface presets, but for a long time each body
-// minted its own private cannon Material, so no contact pair ever resolved in the world's
-// contact-material table and every collision fell back to cannon's defaults — restitution
+// minted its own private solver material, so no contact pair ever resolved in the world's
+// contact-material table and every collision fell back to the legacy defaults — restitution
 // 0.0, a world where nothing bounces. This smoke is the regression guard for that fix:
 //
 // - **Two identical spheres, two different platforms.** A `ball`-preset sphere dropped on a
@@ -157,7 +157,7 @@ try {
   const apexYB = afterContactB.length ? Math.max(...afterContactB) : NaN;
   const deadRatio = Number.isFinite(apexY) ? (apexY - drop.surfaceY) / drop.dropHeight : 0;
   const bouncyRatio = Number.isFinite(apexYB) ? (apexYB - drop.surfaceY) / drop.dropHeight : 0;
-  // With dead contact materials (cannon's default restitution 0.0) BOTH columns stay near
+  // With dead contact materials (the legacy default restitution 0.0) BOTH columns stay near
   // zero. With the registered pairs, ball×ball (0.68) rebounds past 25% while ball×ground
   // (√(0.68·0.05) ≈ 0.18) stays a thud under 12% — the gap is the proof the *pair* resolves,
   // not some global restitution.

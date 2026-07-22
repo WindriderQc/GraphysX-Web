@@ -49,8 +49,8 @@ longer reachable from any served page.
 4. ~~**Runtime rollback with an attached gizmo** raises an uncaught error~~ — **fixed** in
    `13aba57`: `world.loaded` synchronously rebinds or detaches the gizmo, and refresh guards
    the same invariant before rendering. This was another fixed-but-unstruck register entry.
-5. **Sphere/heightfield cell-seam kick** (cannon-es narrowphase) and **water grey at
-   grazing angles** — known, documented, live with them for now.
+5. ~~**Sphere/heightfield cell-seam kick**~~ — fixed by the Rapier migration and guarded with
+   `FIX_INTERNAL_EDGES`; **water grey at grazing angles** remains documented.
 
 ## Horizon 1 — Land what's in flight, fix what's broken
 
@@ -119,7 +119,7 @@ In spec order, all pre-existing commitments:
   entry asked for: a neutral instanced `crowd` entity owns population, positions and steering
   (`wander`/`pursue`), while infection and squash stay game concerns expressed through the
   rules vocabulary — the force-field precedent of entity-for-identity, pass-for-effect. The
-  physics went with it: members were cannon spheres, so spacing was a free side effect of the
+  physics went with it: members were rigid-body spheres, so spacing was a free side effect of the
   solver, and an explicit separation pass replaces it — recorded as an adaptation, not a
   recovery. `setRole` is the seam rules drive to express infection.
 - **Best-time persistence** — needs a store-side concept that doesn't exist yet; design
@@ -135,7 +135,7 @@ In spec order, all pre-existing commitments:
   either a preview index page or move them workshop-side.
 - **Preview renderer drift** — previews hand-roll renderers with mismatched color
   space/tone mapping; a shared preview bootstrap ends the divergence.
-- **Drop the illusion of Rapier** — `@dimforge/rapier3d-compat` sits in node_modules,
-  imported nowhere; there is one physics engine and it is cannon-es.
+- ~~**Drop the illusion of Rapier**~~ — **done**: Rapier is the runtime physics engine, with
+  heightfields, trimesh/convex colliders, joints, and vehicle control behind the engine boundary.
 - **README refreshed 2026-07-19** — keep it matching the tree; it had said
   "in transition" for a full product generation.

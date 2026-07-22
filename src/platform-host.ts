@@ -109,7 +109,7 @@ const HOST_DEMO_POST: AgentWorldPost = { bloom: { strength: 0.35, radius: 0.4, t
  * Standalone renderer/host for the `graphysx.agent-world/v2` scene model.
  *
  * The {@link AgentWorldRuntime} already owns its Three.js scene-graph (`group`),
- * its cannon-es physics world, behaviors, and deterministic `update(dt)` step.
+ * its Rapier physics world, behaviors, and deterministic `update(dt)` step.
  * This host lends it only the four things `race-scene.ts` used to: a renderer, a
  * camera, orbit controls, and ONE animation loop. It has no dependency on the
  * 388 KB race monolith — this is the clean spine the platform runs on.

@@ -3,7 +3,7 @@
 /**
  * Deterministic Rapier heightfield seam probe.
  *
- * cannon-es can give a falling sphere a lateral kick when it lands close to a
+ * The legacy solver can give a falling sphere a lateral kick when it lands close to a
  * heightfield cell edge. Rapier 0.19 exposes HeightFieldFlags.FIX_INTERNAL_EDGES
  * specifically to correct contact normals at those seams. This probe measures
  * both modes on the same flat 6x6-cell field and the same ordered drop matrix.

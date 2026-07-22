@@ -12,10 +12,10 @@ run individually against a served `dist` and pass; the two new smokes are regist
 **Files:** `src/agent-world-runtime.ts`, new `scripts/smoke-physics.mjs`
 
 - **Contact materials are now live.** Each of the six surface presets (default/wall/finish/
-  ground/ball/human) is a single shared `CannonMaterial`, and the world registers all 21
-  `ContactMaterial` pairs on construction (`registerPhysicsContactMaterials`, ~:3213). Before
+  ground/ball/human) used one shared legacy-solver material, and the world registered all 21
+  contact-material pairs on construction (`registerPhysicsContactMaterials`, ~:3213). Before
   this, every body minted a private material that never entered the world's contact table, so
-  all collisions fell back to cannon's defaults (friction 0.3, **restitution 0.0**) — nothing
+  all collisions fell back to the solver defaults (friction 0.3, **restitution 0.0**) — nothing
   bounced, and the authored presets were inert. `world.defaultContactMaterial` is also set to the
   `default` preset for any unforeseen combo.
 - **Combination rule:** friction = √(fA·fB), **restitution = √(rA·rB)** (geometric mean). I first
@@ -91,6 +91,29 @@ run individually against a served `dist` and pass; the two new smokes are regist
 
 ---
 
+## Wave 5 — Rapier migration (completed follow-up)
+
+**Files:** `src/physics/rapier-runtime.ts`, `src/physics/rapier-physics-engine.ts`,
+`src/physics/rapier-race-primitives.ts`, `src/engine/physics-world.ts`, `src/race-scene.ts`
+
+- AgentWorld now runs on the engine-neutral `PhysicsEngine` seam with Rapier behind opaque body
+  handles. Surface presets preserve geometric-mean behavior through square-root collider
+  coefficients and Rapier's `Multiply` rule; a deterministic 36-pair probe is part of `verify`.
+- Heightfields and archive trimeshes use `FIX_INTERNAL_EDGES`, eliminating the recorded cell-seam
+  kick. Primitive shapes, convex frustums, triggers, kinematics, sleeping, queries, impulses, and
+  teardown all have native Rapier implementations.
+- RaceScene's direct solver objects are gone. Grounding uses support contact normals, chase-camera
+  collision uses filtered segment casts, moving platforms use position-based kinematics, and the
+  physics lab uses spherical/revolute impulse joints.
+- The archived car controller is now Rapier's `DynamicRayCastVehicleController`: one chassis with
+  explicit body-origin centre of mass/inertia, four visual raycast wheels, front steering, rear
+  drive, and defensive controller/body teardown.
+- Adversarial review caught and fixed four subtle parity bugs before the gate: persistent Rapier
+  user forces, fixed-step remainder loss, stale inertia after sphere resizing, and an offset
+  chassis collider shifting the centre of mass. `cannon-es` and its adapter are removed.
+
+---
+
 ## Bug found & fixed while verifying
 
 **Trigger re-collection under live restitution** (`src/agent-world-runtime.ts`, `updateTriggers`
@@ -110,21 +133,22 @@ still fire (occupancy is real). `smoke-ballz`'s ring-collection assertion caught
 ## New gate entries (in `scripts/verify.mjs` + `package.json`)
 
 - `smoke:physics` — contact materials live, pair table differentiates
+- `probe:rapier-heightfield` — internal-edge seam regression, deterministic and node-only
+- `probe:rapier-materials` — all 36 surface pairs, sleep/wake, and teardown determinism
+- `smoke:rapier-race` — Piste vehicle contact, drive, steering, finite state, screenshot, errors
 - `smoke:store-auth` — token gate, CORS, tokenless compat (node-only, cheapest in the list)
 - `smoke:dna` — was authored but never registered; now in the gate (node-only, deterministic)
 
 ## Verification run in this session (served `dist`, swiftshader)
 
-Individually passing: `physics`, `standalone` (parity), `store-auth`, `dna`, `ballz`, `triggers`,
-`rules`, `roundtrip`, `spiral`, `world1`, `archive-levels`, `games`, `showroom`, `editor`,
-`scene-store`. `tsc --noEmit` clean; `vite build` green (227 assets / 44.4 MB).
+Full `npm run verify` completed in 486 seconds: **all 28 checks passed** — typecheck, production
+build, both Rapier probes, all 22 existing browser/node smokes, the new Piste race smoke, store auth,
+and DNA. `standalone` and `overlay` each hit one transient local transport reset; the gate's isolated
+fresh-server retry passed both, with no product assertion failure. Screenshots are in `output/verify`.
 
-## Follow-ups (not done here)
+## Remaining follow-ups
 
-- Run the **full `npm run verify` gate** on your machine once (I stopped it mid-suite on request;
-  the browser smokes are slow on swiftshader but I ran the affected ones by hand).
 - The `environment.post` field already exists in the runtime — a scene-authored bloom flag is wired;
   consider surfacing it in the editor inspector.
-- Rapier migration (peer-review item #2) is still open; the contact-material fix here is
-  engine-agnostic and lands independent of that decision.
-- `_to_delete/graphysx-kickass.tgz` — the delivery bundle; safe to delete (the bridge can't `rm`).
+- `_to_delete/graphysx-kickass.tgz` was the delivery bundle to remove; `_to_delete/` is no longer
+  present in this working tree.
