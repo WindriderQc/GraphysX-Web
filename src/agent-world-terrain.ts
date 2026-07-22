@@ -1,5 +1,5 @@
 import { PlaneGeometry } from "three";
-import { Heightfield as CannonHeightfield, Quaternion as CannonQuaternion, Vec3 } from "cannon-es";
+import type { PhysicsShapeDefinition } from "./physics/physics-engine";
 import HEIGHTMAP_ARCHIVE from "./legacy/heightmaps-archive.json";
 import TERRAIN_CARX from "./legacy/terrain-carx.json";
 
@@ -376,7 +376,7 @@ export function createTerrainGeometry(terrain: ResolvedAgentWorldTerrain, height
 }
 
 /**
- * The static collider, as a cannon-es {@link CannonHeightfield}.
+ * The static collider as an engine-neutral heightfield descriptor.
  *
  * Heightfield data is `data[xIndex][yIndex]` with the height on the shape's local +Z, so the
  * shape has to be rotated to stand the field up in Y. The obvious rotation is the -90° about
@@ -402,7 +402,7 @@ export function createTerrainGeometry(terrain: ResolvedAgentWorldTerrain, height
 export function createTerrainHeightfield(
   terrain: ResolvedAgentWorldTerrain,
   heights: Float32Array,
-): { shape: CannonHeightfield; offset: Vec3; orientation: CannonQuaternion } {
+): PhysicsShapeDefinition {
   const stride = terrain.segments + 1;
   const elementSize = terrain.size / terrain.segments;
   const data: number[][] = [];
@@ -413,13 +413,12 @@ export function createTerrainHeightfield(
     }
     data.push(column);
   }
-  const orientation = new CannonQuaternion();
-  orientation.setFromEuler(-Math.PI / 2, 0, -Math.PI / 2);
   return {
-    shape: new CannonHeightfield(data, { elementSize }),
+    kind: "heightfield",
+    heights: data,
+    elementSize,
     // The shape's origin is its first sample, so shift it to centre the field on the entity.
-    offset: new Vec3(-terrain.size / 2, 0, -terrain.size / 2),
-    orientation,
+    offset: { x: -terrain.size / 2, y: 0, z: -terrain.size / 2 },
   };
 }
 

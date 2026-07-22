@@ -15,6 +15,7 @@
     "smoke:levels": "node scripts/smoke-levels.mjs",
     "smoke:foundation": "node scripts/smoke-foundation.mjs",
     "probe:terrain": "node scripts/probe-terrain-rest.mjs",
+    "probe:rapier-heightfield": "node scripts/probe-rapier-heightfield.mjs",
     "probe:water-cost": "node scripts/probe-water-cost.mjs",
     "smoke:scene-store": "node scripts/smoke-scene-store.mjs",
     "smoke:triggers": "node scripts/smoke-triggers.mjs",
@@ -34,6 +35,7 @@
     "qa": "node scripts/qa-agent-entities.mjs"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "0.19.3",
     "@fontsource/space-grotesk": "^5.3.0",
     "cannon-es": "^0.20.0",
     "three": "^0.179.1"

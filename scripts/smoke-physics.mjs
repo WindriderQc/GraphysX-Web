@@ -169,8 +169,216 @@ try {
     { deadRatio: Number(deadRatio.toFixed(3)), bouncyRatio: Number(bouncyRatio.toFixed(3)) });
   check("the ball's contact behaviour is reported as the 'ball' preset", drop.finalPhysics?.material === "ball", drop.finalPhysics);
 
+  // Preserve the original visual evidence before the characterization worlds replace it.
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(ART, "physics-drop.png") });
+
+  const characterization = await page.evaluate(() => {
+    const gx = window.__GRAPHYSX__;
+    const schema = "graphysx.agent-world/v2";
+    const hiddenGround = { visible: false, grid: false };
+    const stateOf = (id) => gx.query({ ids: [id] })[0] ?? null;
+    const vectorDelta = (left, right) => Math.max(...left.map((value, index) => Math.abs(value - right[index])));
+
+    // Public step() subdivides every duration into 60 Hz slices. These schedules all request
+    // the same two simulated seconds and therefore characterize whether caller batching leaks
+    // into the result. The scene includes a contact, so this covers the solver rather than only
+    // a closed-form free-fall trajectory.
+    const scheduleWorld = {
+      schema,
+      id: "physics-schedule",
+      label: "Physics Schedule Characterization",
+      environment: { ground: hiddenGround, physics: { gravity: [0, -9.81, 0] } },
+      entities: [
+        {
+          id: "schedule-platform",
+          type: "box",
+          geometry: { width: 12, height: 1, depth: 12 },
+          transform: { position: [0, 0.5, 0] },
+          physics: { mode: "static", material: "ground" },
+        },
+        {
+          id: "schedule-ball",
+          type: "sphere",
+          geometry: { radius: 0.5 },
+          transform: { position: [0, 5, 0] },
+          physics: { mode: "dynamic", mass: 1, material: "ball" },
+        },
+      ],
+    };
+    const runSchedule = (slices) => {
+      const loaded = gx.load(scheduleWorld);
+      for (const seconds of slices) gx.step(seconds);
+      const ball = stateOf("schedule-ball");
+      return {
+        loadedOk: !!loaded.ok,
+        elapsed: gx.state()?.elapsedSeconds ?? NaN,
+        position: ball?.position ?? [NaN, NaN, NaN],
+        linearVelocity: ball?.physics?.linearVelocity ?? [NaN, NaN, NaN],
+        sleeping: ball?.physics?.sleeping ?? null,
+      };
+    };
+    const at30Hz = runSchedule(Array.from({ length: 60 }, () => 1 / 30));
+    const at60Hz = runSchedule(Array.from({ length: 120 }, () => 1 / 60));
+    const batched = runSchedule([2]);
+    const scheduleDelta = Math.max(
+      vectorDelta(at30Hz.position, at60Hz.position),
+      vectorDelta(at30Hz.linearVelocity, at60Hz.linearVelocity),
+      vectorDelta(at30Hz.position, batched.position),
+      vectorDelta(at30Hz.linearVelocity, batched.linearVelocity),
+    );
+
+    // There is no honest equivalent 120 Hz schedule on this public API: values below 1/60
+    // are deliberately clamped. Record that contract instead of pretending 120 calls are one
+    // second (they would advance two). A Rapier adapter can preserve or intentionally revise it.
+    const quantumLoaded = gx.load(scheduleWorld);
+    const quantumStep = gx.step(1 / 120);
+    const quantumElapsed = gx.state()?.elapsedSeconds ?? NaN;
+
+    // Sleeping is public state, and an authored apply-impulse interaction is the public wake
+    // operation. No Body/sleepState access is needed for this migration characterization.
+    const sleepWorld = {
+      schema,
+      id: "physics-sleep-wake",
+      label: "Physics Sleep Wake Characterization",
+      environment: { ground: hiddenGround, physics: { gravity: [0, -9.81, 0] } },
+      entities: [
+        {
+          id: "sleep-platform",
+          type: "box",
+          geometry: { width: 8, height: 1, depth: 8 },
+          transform: { position: [0, 0.5, 0] },
+          physics: { mode: "static", material: "ground" },
+        },
+        {
+          id: "sleep-ball",
+          type: "sphere",
+          geometry: { radius: 0.5 },
+          transform: { position: [0, 3, 0] },
+          physics: { mode: "dynamic", mass: 1, material: "ground" },
+          interactions: [{ id: "wake", type: "apply-impulse", targetIds: ["sleep-ball"], impulse: [0, 4, 0] }],
+        },
+      ],
+    };
+    const sleepLoaded = gx.load(sleepWorld);
+    gx.step(8);
+    const settled = stateOf("sleep-ball");
+    const wakeReceipt = gx.interact("sleep-ball", "wake");
+    const justWoken = stateOf("sleep-ball");
+    gx.step(1 / 60);
+    const afterWakeStep = stateOf("sleep-ball");
+
+    // World A leaves a blocking body exactly in the path used by world B. If load/clear does
+    // not tear old bodies out of the shared physics world, B's runner cannot cross x=0.
+    const blockerWorld = {
+      schema,
+      id: "physics-teardown-a",
+      label: "Physics Teardown A",
+      environment: { ground: hiddenGround, physics: { gravity: [0, 0, 0] } },
+      entities: [{
+        id: "old-blocker",
+        type: "box",
+        geometry: { width: 1, height: 4, depth: 4 },
+        transform: { position: [0, 2, 0] },
+        physics: { mode: "static", material: "wall" },
+      }],
+    };
+    const runnerWorld = {
+      schema,
+      id: "physics-teardown-b",
+      label: "Physics Teardown B",
+      environment: { ground: hiddenGround, physics: { gravity: [0, 0, 0] } },
+      entities: [{
+        id: "reload-runner",
+        type: "sphere",
+        geometry: { radius: 0.5 },
+        transform: { position: [-3, 2, 0] },
+        physics: { mode: "dynamic", mass: 1, material: "ball", linearVelocity: [6, 0, 0] },
+      }],
+    };
+    const blockerLoaded = gx.load(blockerWorld);
+    const runnerLoaded = gx.load(runnerWorld);
+    gx.step(1);
+    const firstRun = stateOf("reload-runner");
+    const clearResult = gx.clear("physics-teardown-empty", "Physics Teardown Empty");
+    const emptyCount = gx.query().length;
+    const oldIdsAfterClear = gx.query({ ids: ["old-blocker", "reload-runner"] }).map((entity) => entity.id);
+    const reloaded = gx.load(runnerWorld);
+    gx.step(1);
+    const secondRun = stateOf("reload-runner");
+    const reloadDelta = firstRun && secondRun
+      ? Math.max(vectorDelta(firstRun.position, secondRun.position), vectorDelta(firstRun.physics.linearVelocity, secondRun.physics.linearVelocity))
+      : Infinity;
+
+    return {
+      schedules: { at30Hz, at60Hz, batched, maximumDelta: scheduleDelta },
+      publicQuantum: {
+        loadedOk: !!quantumLoaded.ok,
+        stepOk: !!quantumStep.ok,
+        requestedSeconds: 1 / 120,
+        elapsedSeconds: quantumElapsed,
+      },
+      sleepWake: {
+        loadedOk: !!sleepLoaded.ok,
+        settled: settled ? { y: settled.position[1], sleeping: settled.physics?.sleeping ?? null } : null,
+        wakeOk: !!wakeReceipt.ok,
+        justWoken: justWoken ? { y: justWoken.position[1], sleeping: justWoken.physics?.sleeping ?? null, velocity: justWoken.physics?.linearVelocity ?? null } : null,
+        afterStep: afterWakeStep ? { y: afterWakeStep.position[1], sleeping: afterWakeStep.physics?.sleeping ?? null, velocity: afterWakeStep.physics?.linearVelocity ?? null } : null,
+      },
+      teardownReload: {
+        blockerLoadedOk: !!blockerLoaded.ok,
+        runnerLoadedOk: !!runnerLoaded.ok,
+        firstRun: firstRun ? { position: firstRun.position, velocity: firstRun.physics?.linearVelocity ?? null } : null,
+        clearOk: !!clearResult.ok,
+        emptyCount,
+        oldIdsAfterClear,
+        reloadedOk: !!reloaded.ok,
+        secondRun: secondRun ? { position: secondRun.position, velocity: secondRun.physics?.linearVelocity ?? null } : null,
+        reloadDelta,
+      },
+    };
+  });
+
+  console.log("\n# fixed-step schedule characterization");
+  check("30 Hz, 60 Hz, and one batched call loaded equivalent worlds",
+    characterization.schedules.at30Hz.loadedOk && characterization.schedules.at60Hz.loadedOk && characterization.schedules.batched.loadedOk);
+  check("equivalent public schedules advanced exactly two seconds",
+    [characterization.schedules.at30Hz, characterization.schedules.at60Hz, characterization.schedules.batched]
+      .every((run) => Math.abs(run.elapsed - 2) <= 1e-9),
+    [characterization.schedules.at30Hz.elapsed, characterization.schedules.at60Hz.elapsed, characterization.schedules.batched.elapsed]);
+  check("30 Hz, 60 Hz, and batched schedules produced the same contact outcome",
+    characterization.schedules.maximumDelta <= 1e-6,
+    { maximumDelta: characterization.schedules.maximumDelta, at30Hz: characterization.schedules.at30Hz, at60Hz: characterization.schedules.at60Hz, batched: characterization.schedules.batched });
+  check("sub-60 Hz public step requests clamp to one 60 Hz quantum",
+    characterization.publicQuantum.loadedOk && characterization.publicQuantum.stepOk
+      && Math.abs(characterization.publicQuantum.elapsedSeconds - 1 / 60) <= 0.001,
+    characterization.publicQuantum);
+  console.log("  note  120 Hz equivalence is not expressible: step(1/120) advances 1/60 by public contract");
+
+  console.log("\n# sleep and public wake-up");
+  check("a resting dynamic body entered sleep", characterization.sleepWake.loadedOk && characterization.sleepWake.settled?.sleeping === true, characterization.sleepWake.settled);
+  check("apply-impulse interaction woke the sleeping body",
+    characterization.sleepWake.wakeOk && characterization.sleepWake.justWoken?.sleeping === false
+      && characterization.sleepWake.justWoken.velocity?.[1] > 0,
+    characterization.sleepWake.justWoken);
+  check("the woken body moved on the next public step",
+    characterization.sleepWake.afterStep?.sleeping === false
+      && characterization.sleepWake.afterStep.y > characterization.sleepWake.justWoken.y + 0.01,
+    characterization.sleepWake.afterStep);
+
+  console.log("\n# teardown and reload");
+  check("world replacement removed the old blocking collider",
+    characterization.teardownReload.blockerLoadedOk && characterization.teardownReload.runnerLoadedOk
+      && characterization.teardownReload.firstRun?.position[0] > 1,
+    characterization.teardownReload.firstRun);
+  check("clear removed every prior public entity",
+    characterization.teardownReload.clearOk && characterization.teardownReload.emptyCount === 0
+      && characterization.teardownReload.oldIdsAfterClear.length === 0,
+    { entityCount: characterization.teardownReload.emptyCount, oldIds: characterization.teardownReload.oldIdsAfterClear });
+  check("reloading rebuilt the same clean physics outcome",
+    characterization.teardownReload.reloadedOk && characterization.teardownReload.secondRun?.position[0] > 1
+      && characterization.teardownReload.reloadDelta <= 1e-6,
+    { maximumDelta: characterization.teardownReload.reloadDelta, firstRun: characterization.teardownReload.firstRun, secondRun: characterization.teardownReload.secondRun });
 } catch (error) {
   failures.push(`fatal — ${String(error)}`);
   console.error(error);

@@ -59,7 +59,7 @@ const SMOKES = [
   { name: "milkyway", script: "scripts/smoke-milkyway.mjs", covers: "Voie Lactee: recovered radii and rates, retrograde Moon, textures fetch 200" },
   { name: "buildings", script: "scripts/smoke-buildings.mjs", covers: "Maison massing model: archive transforms exact, recovered lamps, storey toggle" },
   { name: "media", script: "scripts/smoke-media.mjs", covers: "media library: datalake browse/import, in-browser OBJ conversion, editor Media tab + dialog" },
-  { name: "physics", script: "scripts/smoke-physics.mjs", covers: "contact materials live: preset pairs differentiate (bouncy vs dead column), deterministic pause/step drive" },
+  { name: "physics", script: "scripts/smoke-physics.mjs", covers: "physics migration baseline: contacts, fixed-step schedules, sleep/wake, teardown/reload" },
   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
   { name: "dna", script: "scripts/smoke-dna.mjs", covers: "DNA forest: deterministic genome drift, preset fidelity, node-level (no browser)" },
 ];
@@ -138,20 +138,42 @@ try {
     results.push(await run("npx", ["vite", "build"], "build"));
   }
 
+  // Pin the migration's reason for existing into the release gate. This is node-only and
+  // deterministic, so it does not need the static server or contend with browser smokes.
+  if (!externalBase && !results.some((result) => result.code !== 0)) {
+    console.log("\n=== rapier heightfield seam ===");
+    results.push(await run("node", ["scripts/probe-rapier-heightfield.mjs"], "rapier-heightfield"));
+  }
+
   // Only smoke if we have something to smoke.
   const buildFailed = results.some((r) => r.code !== 0);
   if (buildFailed) {
     console.error("\nSkipping smokes — typecheck/build failed.");
   } else {
-    let base = externalBase;
-    if (!base) {
-      server = await startStaticServer({ root: path.join(ROOT, "dist"), port: PORT });
-      base = server.url;
-    }
-    console.log(`\n=== smokes against ${base} ===`);
+    console.log(`\n=== smokes against ${externalBase ?? "isolated local servers"} ===`);
     for (const smoke of SMOKES) {
       console.log(`\n--- ${smoke.name}: ${smoke.covers} ---`);
-      results.push(await runSmoke(smoke, base));
+      let result;
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        let base = externalBase;
+        if (!base) {
+          // A fresh ephemeral server per smoke prevents stale keep-alive sockets from one
+          // Chromium process being inherited as transport flakiness by the next process.
+          server = await startStaticServer({ root: path.join(ROOT, "dist"), port: PORT });
+          base = server.url;
+        }
+        try {
+          result = await runSmoke(smoke, base);
+        } finally {
+          if (server) {
+            await server.close();
+            server = null;
+          }
+        }
+        if (result.code === 0 || attempt === 2) break;
+        console.warn(`\n${smoke.name}: first attempt failed; retrying once on a fresh server.`);
+      }
+      results.push(result);
     }
   }
 } finally {
@@ -167,4 +189,3 @@ if (failed.length) {
   process.exit(1);
 }
 console.log(`\nAll ${results.length} checks passed. Screenshots: ${ARTIFACTS}`);
-
