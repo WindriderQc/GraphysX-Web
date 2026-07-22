@@ -145,6 +145,11 @@ try {
     results.push(await run("node", ["scripts/probe-rapier-heightfield.mjs"], "rapier-heightfield"));
   }
 
+  if (!externalBase && !results.some((result) => result.code !== 0)) {
+    console.log("\n=== rapier material parity ===");
+    results.push(await run("node", ["scripts/probe-rapier-material-parity.mjs"], "rapier-materials"));
+  }
+
   // Only smoke if we have something to smoke.
   const buildFailed = results.some((r) => r.code !== 0);
   if (buildFailed) {

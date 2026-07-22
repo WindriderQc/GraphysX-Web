@@ -16,6 +16,7 @@
     "smoke:foundation": "node scripts/smoke-foundation.mjs",
     "probe:terrain": "node scripts/probe-terrain-rest.mjs",
     "probe:rapier-heightfield": "node scripts/probe-rapier-heightfield.mjs",
+    "probe:rapier-materials": "node scripts/probe-rapier-material-parity.mjs",
     "probe:water-cost": "node scripts/probe-water-cost.mjs",
     "smoke:scene-store": "node scripts/smoke-scene-store.mjs",
     "smoke:triggers": "node scripts/smoke-triggers.mjs",

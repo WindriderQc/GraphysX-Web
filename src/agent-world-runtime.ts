@@ -73,7 +73,7 @@ import {
   TorusGeometry,
   Vector3
 } from "three";
-import { CannonPhysicsEngine } from "./physics/cannon-physics-engine";
+import { RapierPhysicsEngine } from "./physics/rapier-physics-engine";
 import type {
   PhysicsAabb,
   PhysicsBodyDefinition,
@@ -1180,7 +1180,7 @@ export class AgentWorldRuntime {
 
   constructor(
     definition: AgentWorldDefinition = GRAPHYSX_AGENT_DEMO_WORLD,
-    physicsWorld: PhysicsEngine = new CannonPhysicsEngine({
+    physicsWorld: PhysicsEngine = new RapierPhysicsEngine({
       gravity: vectorFromTuple(DEFAULT_ENVIRONMENT.physics.gravity),
       allowSleep: true,
     }),
