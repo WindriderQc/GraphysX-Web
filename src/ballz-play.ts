@@ -1,5 +1,13 @@
 import { PUSH_DIRECTIONS } from "./ballz-level-scene";
 import { describeRun, formatClock, type GraphysXAgentWorldApi } from "./agent-world-runtime";
+import { ARCHIVE_BALLZ_LEVELS } from "./archive-ballz-levels";
+import {
+  LevelRecordStore,
+  formatMedal,
+  formatRaceTime,
+  formatTimeDelta,
+  type LevelFinishSummary,
+} from "./scoreboard";
 
 /**
  * The thin play layer over a materialised level: arrow keys push the ball, a HUD that renders
@@ -153,6 +161,21 @@ function buildWinPanel(
 
   const worldId = api.state()?.world.id ?? "";
   const levelId = worldId.startsWith("ballz-level-") ? worldId.slice("ballz-level-".length) : null;
+
+  // The scoreboard finally drawn (ROADMAP Horizon 3 §6): time, medal, best, delta-to-best, fed
+  // from the rules run this panel already renders plus the level record store. A desynced run
+  // is summarised but never recorded — an unverified time must not become a stored best.
+  if (levelId) {
+    const store = new LevelRecordStore();
+    const elapsedMs = Math.round(seconds * 1000);
+    const referenceMs = archiveReferenceMs(levelId);
+    const finish = desynced
+      ? store.summarize(levelId, elapsedMs, referenceMs)
+      : store.registerFinish(levelId, elapsedMs, referenceMs);
+    panel.append(title, sub, buildScoreRow(finish), actions);
+  } else {
+    panel.append(title, sub, actions);
+  }
   if (levelId) {
     const again = document.createElement("button");
     again.type = "button";
@@ -173,8 +196,60 @@ function buildWinPanel(
     actions.append(back);
   }
 
-  panel.append(title, sub, actions);
   return panel;
+}
+
+/**
+ * The medal/best strip inside the win panel. Built with textContent throughout — the level id
+ * and any stored strings never pass through innerHTML.
+ */
+function buildScoreRow(finish: LevelFinishSummary): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "gx-bz-win-score";
+
+  const stat = (label: string, value: string, extraClass?: string): HTMLElement => {
+    const cell = document.createElement("div");
+    cell.className = "gx-bz-win-stat";
+    const name = document.createElement("span");
+    name.className = "gx-bz-win-stat-label";
+    name.textContent = label;
+    const figure = document.createElement("span");
+    figure.className = `gx-bz-win-stat-value${extraClass ? ` ${extraClass}` : ""}`;
+    figure.textContent = value;
+    cell.append(name, figure);
+    return cell;
+  };
+
+  row.append(stat("time", formatRaceTime(finish.elapsedMs)));
+  // A level with no recovered reference time has no medal scale; showing "—" would read as a
+  // failed run rather than an unscored level, so the medal cell only exists when it can judge.
+  if (finish.medal) row.append(stat("medal", formatMedal(finish.medal), `gx-bz-medal-${finish.medal}`));
+  if (finish.isNewBest) {
+    row.append(stat(
+      "best",
+      finish.previousBestMs === null
+        ? `${formatRaceTime(finish.bestMs)} · first clear`
+        : `${formatRaceTime(finish.bestMs)} · ${formatTimeDelta(finish.elapsedMs - finish.previousBestMs)}`,
+      "gx-bz-win-best",
+    ));
+  } else if (finish.previousBestMs !== null) {
+    row.append(stat("best", `${formatRaceTime(finish.bestMs)} · ${formatTimeDelta(finish.elapsedMs - finish.bestMs)}`));
+  } else {
+    // A desynced first clear: there is no stored best to measure against, and this run's
+    // unverified time never became one, so the cell states the time without inventing a delta.
+    row.append(stat("best", formatRaceTime(finish.bestMs)));
+  }
+  return row;
+}
+
+/**
+ * The archive's recovered `ScoreBest` for a seeded level, when this run is one of them — the
+ * reference the medal scale judges against. Hand-painted levels return null and stay unscored.
+ */
+function archiveReferenceMs(levelId: string): number | null {
+  const level = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === levelId);
+  const value = level?.provenance.levelListFacts["scoreBestMs"];
+  return typeof value === "number" && value > 0 ? value : null;
 }
 
 const STYLE_ID = "gx-ballz-play-css";
@@ -195,27 +270,36 @@ const BALLZ_PLAY_CSS = `
    docked there. */
 .gx-bz-hud{position:absolute;left:50%;top:22px;transform:translateX(-50%);z-index:6;
   display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;
-  font:12px/1.2 system-ui,sans-serif;text-shadow:0 1px 3px rgba(0,0,0,.75)}
-.gx-bz-status{color:#eaf6ff;letter-spacing:.08em;font-weight:600}
-.gx-bz-hint{color:rgba(234,246,255,.55);font-size:10px;letter-spacing:.06em}
+  font:12px/1.2 var(--gx-font);text-shadow:0 1px 3px rgba(0,0,0,.75)}
+.gx-bz-status{color:var(--gx-ink);letter-spacing:.08em;font-weight:600}
+.gx-bz-hint{color:var(--gx-ink-faint);font-size:10px;letter-spacing:.06em}
 /* The HUD is pointer-events:none so it never eats a click meant for the scene; the one
    interactive child opts back in. */
-.gx-bz-exit{pointer-events:auto;margin-top:4px;background:rgba(10,22,30,.72);border:1px solid rgba(120,240,208,.4);
-  border-radius:4px;color:#bff3ff;cursor:pointer;font:10px/1 system-ui,sans-serif;padding:5px 9px}
-.gx-bz-exit:hover{background:rgba(18,40,52,.86);border-color:#78f0d0}
+.gx-bz-exit{pointer-events:auto;margin-top:4px;background:rgba(10,22,30,.72);border:1px solid var(--gx-accent-glow);
+  border-radius:4px;color:var(--gx-ink-soft);cursor:pointer;font:10px/1 var(--gx-font);padding:5px 9px}
+.gx-bz-exit:hover{background:rgba(18,40,52,.86);border-color:var(--gx-accent)}
 /* The completion panel. Centred and modal-feeling but not a full backdrop — the level you just
    beat stays visible behind it, which is the reward. */
 .gx-bz-win{position:absolute;left:50%;top:34%;transform:translate(-50%,-50%);z-index:8;
   display:flex;flex-direction:column;align-items:center;gap:10px;padding:24px 34px;
   background:rgba(9,22,31,.92);border:1px solid rgba(95,224,180,.5);border-radius:16px;
-  box-shadow:0 18px 60px rgba(0,0,0,.5);font-family:system-ui,sans-serif;text-align:center}
-.gx-bz-win-title{color:#5fe0b4;font-size:26px;font-weight:800;letter-spacing:.04em;
+  box-shadow:0 18px 60px rgba(0,0,0,.5);font-family:var(--gx-font);text-align:center}
+.gx-bz-win-title{color:var(--gx-life);font-size:26px;font-weight:800;letter-spacing:.04em;
   text-shadow:0 3px 24px rgba(95,224,180,.4)}
-.gx-bz-win-sub{color:#b3dae5;font-size:13px;letter-spacing:.05em}
+.gx-bz-win-sub{color:var(--gx-ink-soft);font-size:13px;letter-spacing:.05em}
+/* The scoreboard strip: time / medal / best-with-delta, straight from the level record store. */
+.gx-bz-win-score{display:flex;gap:24px;margin-top:2px}
+.gx-bz-win-stat{display:flex;flex-direction:column;gap:3px;align-items:center;min-width:64px}
+.gx-bz-win-stat-label{font:600 9px/1 var(--gx-font);letter-spacing:.16em;text-transform:uppercase;color:var(--gx-ink-faint)}
+.gx-bz-win-stat-value{font:700 15px/1.2 var(--gx-font);color:var(--gx-ink)}
+.gx-bz-win-best{color:var(--gx-life)}
+.gx-bz-medal-gold{color:#f0c46a;text-shadow:0 0 16px rgba(240,196,106,.45)}
+.gx-bz-medal-silver{color:#cdd9e4;text-shadow:0 0 16px rgba(205,217,228,.35)}
+.gx-bz-medal-bronze{color:#d8956b;text-shadow:0 0 16px rgba(216,149,107,.35)}
 .gx-bz-win-actions{display:flex;gap:10px;margin-top:6px}
-.gx-bz-win-btn{cursor:pointer;border-radius:10px;padding:10px 18px;font:600 13px system-ui,sans-serif;
-  background:rgba(16,38,50,.9);border:1px solid rgba(120,240,208,.36);color:#cfeef6}
-.gx-bz-win-btn:hover{background:rgba(24,56,72,.96);border-color:#78f0d0}
-.gx-bz-win-again{background:linear-gradient(180deg,#2f9e7f,#1d6f5a);border-color:#5fe0b4;color:#eafaff}
+.gx-bz-win-btn{cursor:pointer;border-radius:10px;padding:10px 18px;font:600 13px var(--gx-font);
+  background:rgba(16,38,50,.9);border:1px solid var(--gx-accent-ring);color:var(--gx-ink-soft)}
+.gx-bz-win-btn:hover{background:rgba(24,56,72,.96);border-color:var(--gx-accent)}
+.gx-bz-win-again{background:linear-gradient(180deg,#2f9e7f,var(--gx-accent-fill));border-color:var(--gx-life);color:var(--gx-ink)}
 .gx-bz-win-again:hover{filter:brightness(1.08)}
 `;

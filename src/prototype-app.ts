@@ -2699,7 +2699,7 @@ export class PrototypeApp {
     if (state === "physics-lab") {
       this.renderArchiveState(
         "Physics Lab",
-        "Newton-style constraints running live in cannon-es: this is the seed of the joints/hinges/sliders backlog item.",
+        "Newton-style constraints running live in Rapier: this is the seed of the joints/hinges/sliders backlog item.",
         "Next Lab",
         [
           {
@@ -2722,7 +2722,7 @@ export class PrototypeApp {
           }
         ],
         "physics-lab",
-        [this.statCard("Simulation", "cannon-es world stepping live in preview<small>same solver the races use</small>")]
+        [this.statCard("Simulation", "Rapier world stepping live in preview<small>same solver the races use</small>")]
       );
       return;
     }
@@ -3035,6 +3035,7 @@ export class PrototypeApp {
         return this.raceScene.isRacePaused() === paused;
       },
       inputState: () => this.raceScene.getInputState(),
+      vehicleState: () => this.raceScene.getVehicleDebugState(),
       setVirtualInput: (payload: { code: string; down: boolean }): boolean =>
         this.raceScene.setVirtualInput(payload.code, payload.down),
       // Only expose entries that are actually reachable through a player-facing

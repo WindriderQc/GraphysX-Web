@@ -52,6 +52,8 @@ try {
     });
     const after = gx.state().entities.length;
     const manifest = bridge && typeof bridge.manifest === "function" ? bridge.manifest() : null;
+    // Manifest parity: the bridge must describe every callable path on the API — no drift.
+    const parity = bridge && typeof bridge.audit === "function" ? bridge.audit() : null;
     const levelCreate = gx.levels.create({ id: "smoke-level", label: "Smoke Level", width: 8, height: 8 });
     return {
       hasGlobal: typeof gx === "object" && gx !== null,
@@ -63,6 +65,8 @@ try {
       textureCount: gx.textures().length,
       manifestSchema: manifest && manifest.schema,
       toolCount: manifest && Array.isArray(manifest.tools) ? manifest.tools.length : null,
+      parityMissing: parity ? parity.missing : null,
+      parityExtra: parity ? parity.extra : null,
       levelCreateOk: !!(levelCreate && levelCreate.ok),
       levelCount: gx.levels.list().length,
     };
@@ -97,7 +101,9 @@ out.pageErrors = pageErrors;
 console.log(JSON.stringify(out, null, 2));
 await browser.close();
 const apiOk = out.api && out.api.spawnOk && out.api.entitiesAfter > out.api.entitiesBefore && out.api.levelCreateOk && out.api.toolCount > 0;
+const parityOk = out.api && Array.isArray(out.api.parityMissing) && out.api.parityMissing.length === 0 && out.api.parityExtra.length === 0;
+if (!parityOk) console.log("bridge parity drift:", JSON.stringify({ missing: out.api?.parityMissing, extra: out.api?.parityExtra }));
 const editorOk = out.editor && out.editor.hasToolbar && out.editor.hasPanel && out.editor.panelCount === 3 && out.editor.entitiesAfter > out.editor.entitiesBefore && out.editor.rowCount > 0;
-process.exit(out.fatal || pageErrors.length || !out.loopRunning || !apiOk || !editorOk ? 1 : 0);
+process.exit(out.fatal || pageErrors.length || !out.loopRunning || !apiOk || !parityOk || !editorOk ? 1 : 0);
 
 

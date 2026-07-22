@@ -14,7 +14,7 @@
 // Zero dependencies, same as scene-store.mjs, and mounted into the same server so
 // one `npm run serve:scenes` gives you both.
 
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
@@ -27,10 +27,11 @@ export const ASSET_STORE_SCHEMA = "graphysx.asset-store/v1";
 
 const DEFAULT_ASSET_DIR = process.env.GRAPHYSX_ASSET_DIR ?? join(REPO_ROOT, ".graphysx-store", "assets");
 // The datalake is machine-local by nature (it is a folder of recovered personal media,
-// not repo content). The env var is the contract; the E:\ fallback is the convenience
-// for the machine this feature was built for, and quietly absent anywhere else.
-const DEFAULT_DATALAKE = process.env.GRAPHYSX_DATALAKE_DIR
-  ?? (existsSync("E:\\Media\\Datalake") ? "E:\\Media\\Datalake" : null);
+// not repo content). The env var is the whole contract. There used to be an E:\ fallback
+// for the machine this feature was built for — removed, because a store that silently
+// serves a hardcoded path to personal media is exactly the surprise a port-forwarded
+// server must not contain. Unset means the /datalake routes answer 503.
+const DEFAULT_DATALAKE = process.env.GRAPHYSX_DATALAKE_DIR ?? null;
 
 /** Same shape the scene store enforces, so asset ids and scene ids agree. */
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/;
@@ -159,7 +160,9 @@ export function createAssetStore({ dir = DEFAULT_ASSET_DIR, datalakeDir = DEFAUL
    * resolved — `..`, absolute paths and drive changes all fail the prefix check.
    */
   function resolveDatalakePath(relative) {
-    if (!datalakeDir) throw badRequest("No datalake directory is configured on this store", 404);
+    // 503, not 404: the routes exist, the backing directory does not. A clear "not
+    // configured" beats a misleading "not found" when someone wires a new box.
+    if (!datalakeDir) throw badRequest("datalake not configured (set GRAPHYSX_DATALAKE_DIR)", 503);
     const cleaned = String(relative ?? "").replace(/[\\/]+/g, sep).replace(/^[\\/]+|[\\/]+$/g, "");
     const absolute = resolve(datalakeDir, cleaned);
     const root = resolve(datalakeDir);
@@ -350,23 +353,23 @@ async function readJsonBody(request, limitBytes = 8 * 1024 * 1024) {
   }
 }
 
-function sendJson(response, status, payload) {
+function sendJson(response, status, payload, cors = { "access-control-allow-origin": "*" }) {
   const body = `${JSON.stringify(payload, null, 2)}\n`;
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
-    "access-control-allow-origin": "*",
+    ...cors,
     "access-control-allow-methods": "GET, PUT, POST, DELETE, OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-headers": "authorization, x-graphysx-token, content-type",
   });
   response.end(body);
 }
 
-async function streamFile(response, absolutePath, { cache } = {}) {
+async function streamFile(response, absolutePath, { cache, cors } = {}) {
   const info = await stat(absolutePath).catch(() => null);
   if (!info || !info.isFile()) {
-    sendJson(response, 404, { error: `No file at ${basename(absolutePath)}` });
+    sendJson(response, 404, { error: `No file at ${basename(absolutePath)}` }, cors);
     return;
   }
   response.writeHead(200, {
@@ -378,7 +381,7 @@ async function streamFile(response, absolutePath, { cache } = {}) {
     // store has no ETags, so "revalidate" means refetch; on a LAN store that is the right
     // trade against silently stale geometry.
     "cache-control": cache ?? "no-cache",
-    "access-control-allow-origin": "*",
+    ...(cors ?? { "access-control-allow-origin": "*" }),
   });
   const stream = createReadStream(absolutePath);
   stream.on("error", () => response.destroy());
@@ -388,27 +391,41 @@ async function streamFile(response, absolutePath, { cache } = {}) {
 /**
  * Route anything under /assets or /datalake. Returns true when the request was handled,
  * so the scene store's router can fall through for everything else.
+ *
+ * `guard` is the scene store's (createStoreGuard in scene-store.mjs): reads of registered
+ * assets stay open — scenes reference them, and a shareable scene with unshareable
+ * textures would be half a scene — while imports, uploads, deletes and everything under
+ * /datalake require the token whenever one is set. The datalake is personal media, not
+ * scene content, so even *listing* it is guarded.
  */
-export async function handleAssetRequest(store, request, response, url, path) {
+export async function handleAssetRequest(store, request, response, url, path, guard) {
   const method = request.method ?? "GET";
+  const cors = guard?.corsHeaders(request);
+  const denied = () => {
+    if (!guard || guard.authorized(request, url)) return false;
+    sendJson(response, 401, { error: "This store requires a token (Authorization: Bearer <GRAPHYSX_STORE_TOKEN>)" }, cors);
+    return true;
+  };
 
   if (path === "/assets" && method === "GET") {
     sendJson(response, 200, {
       schema: ASSET_STORE_SCHEMA,
       datalake: store.datalakeDir ? basename(resolve(store.datalakeDir)) : null,
       assets: await store.list(),
-    });
+    }, cors);
     return true;
   }
 
   if (path === "/assets/import" && method === "POST") {
+    if (denied()) return true;
     const body = await readJsonBody(request);
     const record = await store.importFromDatalake(body ?? {});
-    sendJson(response, 201, record);
+    sendJson(response, 201, record, cors);
     return true;
   }
 
   if (path === "/assets/upload" && method === "POST") {
+    if (denied()) return true;
     const body = await readRawBody(request);
     let meta;
     const rawMeta = url.searchParams.get("meta");
@@ -428,14 +445,15 @@ export async function handleAssetRequest(store, request, response, url, path) {
       source: url.searchParams.get("source") ?? undefined,
       meta,
     }, body);
-    sendJson(response, 201, record);
+    sendJson(response, 201, record, cors);
     return true;
   }
 
   const removeMatch = /^\/assets\/([^/]+)$/.exec(path);
   if (removeMatch && method === "DELETE") {
+    if (denied()) return true;
     const id = decodeURIComponent(removeMatch[1]);
-    sendJson(response, 200, { removed: await store.remove(id) });
+    sendJson(response, 200, { removed: await store.remove(id) }, cors);
     return true;
   }
 
@@ -443,22 +461,24 @@ export async function handleAssetRequest(store, request, response, url, path) {
   if (fileMatch && method === "GET") {
     const absolute = await store.storedFile(decodeURIComponent(fileMatch[1]), decodeURIComponent(fileMatch[2]));
     if (!absolute) {
-      sendJson(response, 404, { error: "Unknown asset file" });
+      sendJson(response, 404, { error: "Unknown asset file" }, cors);
       return true;
     }
-    await streamFile(response, absolute);
+    await streamFile(response, absolute, { cors });
     return true;
   }
 
   if (path === "/datalake" && method === "GET") {
-    sendJson(response, 200, await store.browse(url.searchParams.get("path") ?? ""));
+    if (denied()) return true;
+    sendJson(response, 200, await store.browse(url.searchParams.get("path") ?? ""), cors);
     return true;
   }
 
   if (path === "/datalake/file" && method === "GET") {
+    if (denied()) return true;
     const relative = url.searchParams.get("path");
     if (!relative) throw badRequest("?path= is required");
-    await streamFile(response, store.datalakeFile(relative), { cache: "no-store" });
+    await streamFile(response, store.datalakeFile(relative), { cache: "no-store", cors });
     return true;
   }
 

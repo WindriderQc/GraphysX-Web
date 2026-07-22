@@ -230,6 +230,10 @@ if (mode === "legacy") {
       // opts out, which is how smoke-showroom measures the idle orbit without an intro
       // moving the camera underneath its probe.
       intro: !editorFirst && new URLSearchParams(window.location.search).get("intro") !== "0",
+      // `?post=bloom` turns the demo post stack on for any route (bloom + SMAA through the
+      // composer). Scenes whose documents carry their own `environment.post` keep their
+      // tuning either way; this is the demo/preview switch, not a scene setting.
+      post: params.get("post") === "bloom",
       // Leaving the editor restores the welcome overlay and hands the pointer back to the
       // showroom, so it is a place you can come back to rather than a one-way door.
       onExitEditor: editorFirst

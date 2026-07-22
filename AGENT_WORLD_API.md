@@ -48,7 +48,9 @@ const unsubscribe = bridge.subscribe((event) => {
 });
 ```
 
-The manifest uses `graphysx.agent-tool-bridge/v1` and describes every callable path, whether it mutates state, positional-array arguments, schemas, coordinate convention, and available transports. `request()` accepts a structured request and always returns a structured success/error response.
+The manifest uses `graphysx.agent-tool-bridge/v1` and describes every callable path on the World API — all 81 of them, `rules.*`, `media.*`, `levels.*`, and the constant contract identifiers included, 38 mutating — whether it mutates state, positional-array arguments, schemas, coordinate convention, and available transports. `request()` accepts a structured request and always returns a structured success/error response.
+
+"Every callable path" is machine-checked, not aspirational: `bridge.audit()` walks the live API and returns `{ missing, extra }` against the manifest. Both empty means full parity; a drift is reported, never thrown.
 
 Same-origin frames and browser integrations can also use `window.postMessage`:
 
@@ -451,7 +453,7 @@ Available prefabs: `luminous-tree`, `signal-beacon`, `portal-arch`, `orbital-scu
 
 ## Terrain and water
 
-`terrain` is heightmap-backed ground that **carries its own static collider**, so objects land on it. It takes no `physics` field — the collider is implied by the entity, and a cannon-es `Heightfield` is built from the same height array as the mesh, so what you see and what you land on cannot drift apart.
+`terrain` is heightmap-backed ground that **carries its own static collider**, so objects land on it. It takes no `physics` field — the collider is implied by the entity, and a Rapier heightfield is built from the same height array as the mesh, so what you see and what you land on cannot drift apart.
 
 ```js
 gx.spawn({
@@ -601,11 +603,13 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `open()`, `demo()` | Open the studio or restore the built-in API-created demonstration. |
 | `assets()` | Discover recovered complex models that can be spawned by stable asset ID. |
 | `textures()` | Discover stable semantic textures, previews, descriptions, and repeat defaults. |
-| `media.*` | Runtime imports from the local asset store: `status()`, `list(kind?)`, async `refresh()`, `browse(path?)`, `import(path, options?)`, `importSky(folder, options?)`, `register(options)`, `remove(id)`. |
+| `media.*` | Runtime imports from the local asset store: `status()`, `list(kind?)`, async `refresh()`, `browse(path?)`, `import(path, options?)`, `importSky(folder, options?)`, `register(options)`, `remove(id)`, `terrainHeights(id, samples?)`. |
 | `skies()`, `emitters()` | Discover the per-scene skybox sets (curated archive sets plus any imported through `media.importSky`) and the archive particle-emitter presets. |
 | `sounds()` | Discover the archive sound samples plus media-library imports, for `sound` entities. |
 | `heightmaps()` | Discover the curated terrain heightmaps, with archive provenance, for `terrain` entities. |
 | `flocks()`, `forceFields()` | Discover the Nature-of-Code simulation presets: self-steering boid flocks and force fields (attractor/flow/drag/vortex). |
+| `crowds()` | Discover the crowd presets adapted from the race scene's NPC population. |
+| `formulas()`, `dna()` | Discover the recovered Math Game formula presets and Living Forest genome presets. |
 | `importLegacyXml(xml, options?)` | Migrate archived GraphysX `Object3D` XML into a validated v2 world with warnings. |
 | `create(definition)`, `clear(id?, label?)` | Replace the current world from a complete v2 definition. |
 | `spawn(entity)`, `update(id, patch)`, `remove(id)` | Perform a single entity edit. |
@@ -622,8 +626,9 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `rules.status()`, `rules.reset()` | Read the live run, or re-arm it and return the subject to its spawn. |
 | `pause(boolean)`, `step(seconds)` | Control deterministic simulation time. |
 | `undo()` | Restore the definition before the most recent successful edit. |
-| `export()`, `save(name)`, `load(nameOrDefinition)` | Move worlds between JSON, memory, and local browser storage. |
+| `export()`, `exportDocument()`, `save(name)`, `load(nameOrDefinition)` | Move worlds between JSON, memory, and local browser storage; `exportDocument()` drops session-only spawns. |
 | `levels.*` | Manage, region-edit, ASCII-import/export, open, and play a persistent library of semantic grid levels. |
+| `schema`, `worldSchema`, `levelSchema`, `version`, `capabilities` | Constant contract identifiers and capability lists — value paths, readable through the bridge like any method. |
 
 Every mutating method returns `{ ok, revision, value?, error? }`. Entity IDs are stable and revisions change only after a successful edit.
 

@@ -59,6 +59,9 @@ try {
       // A row should say what it contains before you commit to it.
       firstCourseMeta: rows.find((row) => row.dataset.levelId === "first-course")
         ?.querySelector(".gx-shelf-meta")?.textContent ?? null,
+      previewCount: rows.filter((row) => row.querySelector(".gx-shelf-thumb")).length,
+      levelPreview: rows.find((row) => row.dataset.levelId === "first-course")
+        ?.querySelector("canvas.gx-shelf-thumb")?.getAttribute("aria-label") ?? null,
       welcomeGone: !document.querySelector(".gx-welcome"),
     };
   });
@@ -120,6 +123,10 @@ try {
   // not play mode — the distinction the mode split exists to preserve.
   await page.click(".gx-welcome .gx-go-browse");
   await page.waitForSelector(".gx-browse", { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => {
+    const images = [...document.querySelectorAll(".gx-browse img.gx-shelf-thumb")];
+    return images.length > 0 && images.every((image) => image.complete && image.naturalWidth > 0);
+  }, null, { timeout: SMOKE_TIMEOUT });
   out.browse = await page.evaluate(() => {
     const rows = [...document.querySelectorAll(".gx-browse-row")];
     return {
@@ -129,6 +136,11 @@ try {
       // The Living Systems showcase — the graduated vocabulary in one scene.
       hasLiving: rows.some((r) => r.dataset.starterId === "living-systems"),
       firstMeta: rows[0]?.querySelector(".gx-browse-meta")?.textContent ?? "",
+      previewCount: rows.filter((row) => row.querySelector("img.gx-shelf-thumb")).length,
+      previewLoaded: rows.filter((row) => {
+        const image = row.querySelector("img.gx-shelf-thumb");
+        return image?.complete && image.naturalWidth > 0;
+      }).length,
       welcomeGone: !document.querySelector(".gx-welcome"),
     };
   });
@@ -169,6 +181,8 @@ const ok =
   out.shelf?.rowCount > 0 &&
   out.shelf?.hasFirstCourse === true &&
   /ring/.test(out.shelf?.firstCourseMeta ?? "") &&
+  out.shelf?.previewCount === out.shelf?.rowCount &&
+  /First Course level preview/.test(out.shelf?.levelPreview ?? "") &&
   out.shelf?.welcomeGone === true &&
   out.playing?.mode === "play" &&
   out.playing?.hudShown === true &&
@@ -187,6 +201,8 @@ const ok =
   out.browse?.hasPhysics === true &&
   out.browse?.hasLiving === true &&
   /entities/.test(out.browse?.firstMeta ?? "") &&
+  out.browse?.previewCount === out.browse?.rowCount &&
+  out.browse?.previewLoaded === out.browse?.rowCount &&
   out.browse?.welcomeGone === true &&
   out.opened?.mode === "editor" &&
   out.opened?.toolbarShown === true &&

@@ -1,7 +1,7 @@
 // The agent-facing surface for the scene store: what Hermes calls.
 //
 // Milestone A applies commands to the *document*, not to a running world. The runtime's
-// own `commit()` needs three + cannon and therefore a browser; here we edit the JSON and
+// own `commit()` needs Three.js + the physics runtime and therefore a browser; here we edit the JSON and
 // let whichever client has the scene open reload it. That trade is what makes this
 // reachable from a Telegram bot on another machine with no browser involved.
 //
@@ -30,9 +30,17 @@ class SceneAgentError extends Error {
 
 async function api(baseUrl, path, init) {
   const root = baseUrl.replace(/\/+$/, "");
+  // Read per call, not at import: a long-lived host (Hermes) can rotate the token without
+  // restarting. Sent on every request, not just writes — a header the store ignores costs
+  // nothing, and a store fronted by something stricter may guard reads too.
+  const token = process.env.GRAPHYSX_STORE_TOKEN?.trim();
+  const headers = {
+    ...(token ? { authorization: `Bearer ${token}` } : {}),
+    ...(init?.headers ?? {}),
+  };
   let response;
   try {
-    response = await fetch(`${root}${path}`, init);
+    response = await fetch(`${root}${path}`, { ...init, headers });
   } catch (error) {
     throw new SceneAgentError(`Scene store unreachable at ${root}: ${error?.message ?? error}`);
   }
@@ -138,6 +146,9 @@ const USAGE = `graphysx scene agent — edit stored scenes from outside the brow
   seed <scene> --from <file>      upload a whole definition (no revision guard)
 
   --store <url>                   scene store base url (default $GRAPHYSX_STORE_URL or http://localhost:8788)
+
+  $GRAPHYSX_STORE_TOKEN           sent as "Authorization: Bearer <token>" on every call;
+                                  required when the store was started with the same var set
 `;
 
 async function main(argv) {
@@ -227,4 +238,3 @@ if (process.argv[1] && process.argv[1].endsWith("graphysx-scene-agent.mjs")) {
     process.exitCode = 1;
   });
 }
-

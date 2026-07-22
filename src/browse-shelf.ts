@@ -1,4 +1,5 @@
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import { createSceneThumbnail, SHELF_THUMBNAIL_CSS } from "./shelf-thumbnails";
 
 /**
  * "Browse Scenes" — §5's third front-door destination, beside Scene Editor and Games.
@@ -75,6 +76,13 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     row.className = "gx-browse-row";
     row.dataset.sceneId = scene.id;
 
+    const visual = document.createElement("span");
+    visual.className = "gx-shelf-visual";
+    visual.append(createSceneThumbnail(scene.id, scene.label));
+
+    const copy = document.createElement("span");
+    copy.className = "gx-shelf-copy";
+
     const name = document.createElement("span");
     name.className = "gx-browse-name";
     name.textContent = scene.label;
@@ -87,7 +95,8 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     meta.className = "gx-browse-meta";
     meta.textContent = scene.meta;
 
-    row.append(name, summary, meta);
+    copy.append(name, summary, meta);
+    row.append(visual, copy);
     row.addEventListener("click", () => {
       dispose();
       void scene.open();
@@ -100,6 +109,13 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     row.type = "button";
     row.className = "gx-browse-row";
     row.dataset.starterId = starter.id;
+
+    const visual = document.createElement("span");
+    visual.className = "gx-shelf-visual";
+    visual.append(createSceneThumbnail(starter.id, starter.label));
+
+    const copy = document.createElement("span");
+    copy.className = "gx-shelf-copy";
 
     const name = document.createElement("span");
     name.className = "gx-browse-name";
@@ -116,7 +132,8 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
       starter.prefabCount > 0 ? `${starter.prefabCount} prefabs` : null,
     ].filter(Boolean).join("  ·  ");
 
-    row.append(name, summary, meta);
+    copy.append(name, summary, meta);
+    row.append(visual, copy);
     row.addEventListener("click", () => {
       const result = api.loadStarter(starter.id);
       if (!result.ok) {
@@ -155,24 +172,28 @@ function injectStyleOnce(): void {
 }
 
 const BROWSE_CSS = `
+${SHELF_THUMBNAIL_CSS}
 .gx-browse{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
   background:var(--gx-scrim);font-family:var(--gx-font);padding:24px}
-.gx-browse-card{width:min(560px,100%);max-height:80vh;display:flex;flex-direction:column;gap:12px;
+.gx-browse-card{width:min(900px,100%);max-height:86vh;display:flex;flex-direction:column;gap:12px;
   background:rgba(9,22,31,.96);border:1px solid rgba(79,208,230,.34);border-radius:14px;
   padding:20px 22px;box-shadow:0 18px 60px rgba(0,0,0,.5)}
 .gx-browse-head{display:flex;align-items:center;gap:12px}
 .gx-browse-head h2{margin:0;flex:1;font-size:19px;letter-spacing:.04em;color:var(--gx-ink);font-weight:700}
 .gx-browse-close{background:transparent;border:1px solid rgba(120,240,208,.3);border-radius:6px;
-  color:#9fd6e4;cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px}
+  color:var(--gx-ink-soft);cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px}
 .gx-browse-close:hover{border-color:var(--gx-accent);color:var(--gx-ink)}
-.gx-browse-blurb{margin:0;color:#8fb9c7;font-size:12.5px;line-height:1.5}
-.gx-browse-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+.gx-browse-blurb{margin:0;color:var(--gx-ink-faint);font-size:12.5px;line-height:1.5}
+.gx-browse-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;overflow-y:auto;
+  padding:1px 5px 1px 1px}
 .gx-browse-row{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
   background:rgba(16,38,50,.8);border:1px solid rgba(79,208,230,.2);border-radius:10px;
-  padding:12px 15px;cursor:pointer;color:inherit}
+  padding:7px;cursor:pointer;color:inherit;min-width:0}
 .gx-browse-row:hover{background:rgba(24,56,72,.92);border-color:var(--gx-accent-edge)}
 .gx-browse-row--error{border-color:#f95f4c}
 .gx-browse-name{color:var(--gx-ink);font-size:14px;font-weight:600}
-.gx-browse-summary{color:#a7cad6;font-size:12px;line-height:1.4}
-.gx-browse-meta{color:#7fa9b9;font-size:11px;letter-spacing:.03em;margin-top:2px}
+.gx-browse-summary{color:var(--gx-ink-soft);font-size:12px;line-height:1.4}
+.gx-browse-meta{color:var(--gx-ink-faint);font-size:11px;letter-spacing:.03em;margin-top:2px}
+@media (max-width:640px){.gx-browse{padding:12px}.gx-browse-card{padding:16px;max-height:92vh}
+  .gx-browse-list{grid-template-columns:1fr}.gx-browse-summary{display:none}}
 `;

@@ -51,6 +51,7 @@ import {
   CylinderGeometry,
   DirectionalLight,
   DoubleSide,
+  Euler,
   GridHelper,
   Group,
   IcosahedronGeometry,
@@ -63,6 +64,7 @@ import {
   Object3D,
   PlaneGeometry,
   PointLight,
+  Quaternion,
   RepeatWrapping,
   SRGBColorSpace,
   SphereGeometry,
@@ -71,17 +73,16 @@ import {
   TorusGeometry,
   Vector3
 } from "three";
-import {
-  Body,
-  Box as CannonBox,
-  Cylinder as CannonCylinder,
-  Material as CannonMaterial,
-  Plane as CannonPlane,
-  Quaternion as CannonQuaternion,
-  Sphere as CannonSphere,
-  Vec3,
-  World as CannonWorld
-} from "cannon-es";
+import { RapierPhysicsEngine } from "./physics/rapier-physics-engine";
+import type {
+  PhysicsAabb,
+  PhysicsBodyDefinition,
+  PhysicsBodyHandle,
+  PhysicsEngine,
+  PhysicsMaterialDefinition,
+  PhysicsShapeDefinition,
+  PhysicsVector3,
+} from "./physics/physics-engine";
 import {
   GRAPHYSX_AGENT_WORLD_ASSETS,
   loadAgentWorldModel,
@@ -923,8 +924,22 @@ type ResolvedEntity = {
 type RuntimeEntity = {
   definition: ResolvedEntity;
   object: Object3D;
-  body: Body | null;
+  body: PhysicsBodyHandle | null;
   assetState: AgentWorldEntityState["asset"];
+};
+
+/**
+ * The cached per-consumer `externalAcceleration` closure for the force-field pass, plus the
+ * mutable state it reads. The closure is created once per entity and reused every step —
+ * only `tags`, `channel` and the two matrices are refreshed — so installing a hook never
+ * allocates after the first frame an entity is steered.
+ */
+type ForceFieldHookState = {
+  tags: string[];
+  channel: "affectsFlocks" | "affectsParticles";
+  toWorld: Matrix4;
+  toLocal: Matrix4;
+  hook: (localPosition: Vector3, localVelocity: Vector3, out: Vector3) => void;
 };
 
 type ResolvedAgentWorldPhysics = {
@@ -1085,7 +1100,7 @@ export class AgentWorldRuntime {
   readonly group = new Group();
   private readonly worldRoot = new Group();
   private readonly environmentRoot = new Group();
-  private readonly physicsWorld = new CannonWorld({ gravity: new Vec3(...DEFAULT_ENVIRONMENT.physics.gravity) });
+  private readonly physicsWorld: PhysicsEngine;
   private readonly entities = new Map<string, RuntimeEntity>();
   private readonly savedWorlds = new Map<string, AgentWorldDefinition>();
   private readonly history: AgentWorldDefinition[] = [];
@@ -1120,7 +1135,7 @@ export class AgentWorldRuntime {
   private interactionSequence = 0;
   private prefabSequence = 0;
   private commitSequence = 0;
-  private groundBody: Body | null = null;
+  private groundBody: PhysicsBodyHandle | null = null;
   /**
    * What each force field touched on the last completed step, keyed by field id. Written by
    * {@link applyForceFields} and read only by `state()`, so a field that is present but inert
@@ -1128,7 +1143,12 @@ export class AgentWorldRuntime {
    * a system whose whole job is invisible.
    */
   private readonly forceFieldReadings = new Map<string, { affected: Set<string>; peak: number }>();
-  /** Allocation-free scratch for the per-step force pass. Owned here so the hot loop never allocates. */
+  /**
+   * Scratch for the per-step force pass. Owned here so the steady-state loop reuses these
+   * instead of allocating: together with {@link forceFieldActive}, {@link forceFieldInverses}
+   * and {@link forceFieldHooks} it makes the pass allocation-free once the scene has settled —
+   * new objects appear only when a field or steered consumer first shows up, never per step.
+   */
   private readonly forceFieldScratch = {
     localPoint: new Vector3(),
     localVelocity: new Vector3(),
@@ -1140,15 +1160,36 @@ export class AgentWorldRuntime {
     worldAcceleration: new Vector3(),
     hookWorldPoint: new Vector3(),
     hookWorldVelocity: new Vector3(),
-    hookWorldAcceleration: new Vector3()
+    hookWorldAcceleration: new Vector3(),
+    force: new Vector3(),
   };
+  /** Caller-owned read buffers keep the adapter boundary allocation-free in the frame loop. */
+  private readonly physicsScratch = {
+    transform: { position: new Vector3(), rotation: new Quaternion() },
+    linearVelocity: new Vector3(),
+    angularVelocity: new Vector3(),
+    triggerAabb: { min: new Vector3(), max: new Vector3() } satisfies PhysicsAabb,
+    moverAabb: { min: new Vector3(), max: new Vector3() } satisfies PhysicsAabb,
+  };
+  /** The enabled fields this step, rebuilt in place each pass rather than spread+filtered. */
+  private readonly forceFieldActive: RuntimeEntity[] = [];
+  /** Field id → cached world→local matrix, refreshed (not reallocated) every step. */
+  private readonly forceFieldInverses = new Map<string, Matrix4>();
+  /** Consumer entity id → its cached hook closure; pruned when the entity disappears. */
+  private readonly forceFieldHooks = new Map<string, ForceFieldHookState>();
 
-  constructor(definition: AgentWorldDefinition = GRAPHYSX_AGENT_DEMO_WORLD) {
+  constructor(
+    definition: AgentWorldDefinition = GRAPHYSX_AGENT_DEMO_WORLD,
+    physicsWorld: PhysicsEngine = new RapierPhysicsEngine({
+      gravity: vectorFromTuple(DEFAULT_ENVIRONMENT.physics.gravity),
+      allowSleep: true,
+    }),
+  ) {
+    this.physicsWorld = physicsWorld;
     this.group.name = "GraphysXAgentWorldV2";
     this.worldRoot.name = "AgentEntities";
     this.environmentRoot.name = "AgentEnvironment";
     this.group.add(this.environmentRoot, this.worldRoot);
-    this.physicsWorld.allowSleep = true;
     this.loadDefinition(definition);
     this.recordEvent("world.created", `Created ${this.definition.label}`);
   }
@@ -1557,6 +1598,8 @@ export class AgentWorldRuntime {
   }
 
   dispose(): void {
+    this.physicsWorld.dispose();
+    this.groundBody = null;
     disposeObjectTree(this.worldRoot);
     disposeObjectTree(this.environmentRoot);
     this.worldRoot.clear();
@@ -1796,11 +1839,18 @@ export class AgentWorldRuntime {
         return { id: targetId, visible: target.definition.visible };
       }
       if (!target.body || target.definition.physics?.mode !== "dynamic") throw new Error(`apply-impulse target must be dynamic: ${targetId}`);
-      const impulse = new Vec3(...interaction.impulse);
-      const relativePoint = interaction.relativePoint ? new Vec3(...interaction.relativePoint) : undefined;
-      target.body.applyImpulse(impulse, relativePoint);
-      target.body.wakeUp();
-      return { id: targetId, visible: target.definition.visible, linearVelocity: roundCannonVector(target.body.velocity) };
+      const impulse = vectorFromTuple(interaction.impulse);
+      let worldPoint: Vector3 | undefined;
+      if (interaction.relativePoint) {
+        this.physicsWorld.readTransform(target.body, this.physicsScratch.transform);
+        worldPoint = this.forceFieldScratch.worldA
+          .copy(this.physicsScratch.transform.position)
+          .add(vectorFromTuple(interaction.relativePoint));
+      }
+      this.physicsWorld.applyImpulse(target.body, impulse, worldPoint);
+      this.physicsWorld.wakeBody(target.body);
+      this.physicsWorld.readLinearVelocity(target.body, this.physicsScratch.linearVelocity);
+      return { id: targetId, visible: target.definition.visible, linearVelocity: roundPhysicsVector(this.physicsScratch.linearVelocity) };
     });
     return {
       sourceId: id,
@@ -1968,10 +2018,12 @@ export class AgentWorldRuntime {
         const position = spawn.position ?? subject.definition.transform.position;
         subject.object.position.set(...position);
         if (subject.body) {
-          subject.body.position.set(...position);
-          subject.body.velocity.setZero();
-          subject.body.angularVelocity.setZero();
-          subject.body.wakeUp();
+          this.physicsScratch.transform.position.set(...position);
+          this.physicsScratch.transform.rotation.copy(subject.object.quaternion);
+          this.physicsWorld.writeTransform(subject.body, this.physicsScratch.transform);
+          this.physicsWorld.writeLinearVelocity(subject.body, ZERO_PHYSICS_VECTOR);
+          this.physicsWorld.writeAngularVelocity(subject.body, ZERO_PHYSICS_VECTOR);
+          this.physicsWorld.wakeBody(subject.body);
         }
       }
     }
@@ -1984,7 +2036,7 @@ export class AgentWorldRuntime {
   private buildEnvironment(): void {
     if (this.groundBody) this.physicsWorld.removeBody(this.groundBody);
     this.groundBody = null;
-    this.physicsWorld.gravity.set(...this.environment.physics.gravity);
+    this.physicsWorld.setGravity(vectorFromTuple(this.environment.physics.gravity));
     disposeObjectTree(this.environmentRoot);
     this.environmentRoot.clear();
     if (!this.environment.ground.visible) return;
@@ -1997,9 +2049,14 @@ export class AgentWorldRuntime {
     ground.name = "AgentWorldGround";
     ground.receiveShadow = true;
     this.environmentRoot.add(ground);
-    this.groundBody = new Body({ mass: 0, shape: new CannonPlane() });
-    this.groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-    this.physicsWorld.addBody(this.groundBody);
+    this.groundBody = this.physicsWorld.createBody({
+      mode: "static",
+      transform: {
+        position: ZERO_PHYSICS_VECTOR,
+        rotation: IDENTITY_PHYSICS_QUATERNION,
+      },
+      shapes: [{ kind: "plane" }],
+    });
     if (this.environment.ground.grid) {
       const grid = new GridHelper(this.environment.ground.size, Math.max(8, Math.round(this.environment.ground.size)), this.environment.ground.gridColor, this.environment.ground.gridColor);
       grid.name = "AgentWorldGrid";
@@ -2059,14 +2116,18 @@ export class AgentWorldRuntime {
       // Triggers follow their transform for the same reason kinematic bodies do: a gate that
       // bobs or rides a spline has to carry its detection volume with it.
       const mode = runtime.definition.physics?.mode;
-      if ((mode === "kinematic" || mode === "trigger") && runtime.body) syncObjectToBody(runtime.object, runtime.body);
+      if ((mode === "kinematic" || mode === "trigger") && runtime.body) {
+        this.physicsWorld.writeTransform(runtime.body, { position: runtime.object.position, rotation: runtime.object.quaternion });
+      }
     }
     // Fields act before the solver: a force applied after the step would not be integrated
     // until the next one, which is a one-frame lag that shows up as jitter on a fast attractor.
     this.applyForceFields();
-    if (deltaSeconds > 0) this.physicsWorld.step(1 / 60, deltaSeconds, 4);
+    if (deltaSeconds > 0) this.physicsWorld.step(deltaSeconds, { fixedTimeStep: 1 / 60, maxSubSteps: 4 });
     for (const runtime of this.entities.values()) {
-      if (runtime.definition.physics?.mode === "dynamic" && runtime.body) syncBodyToObject(runtime.body, runtime.object);
+      if (runtime.definition.physics?.mode === "dynamic" && runtime.body) {
+        this.physicsWorld.readTransform(runtime.body, { position: runtime.object.position, rotation: runtime.object.quaternion });
+      }
     }
     this.updateTriggers();
     // Emitters, water and flocks tick inside updateSimulation, so they inherit pause/step for
@@ -2106,7 +2167,7 @@ export class AgentWorldRuntime {
    * systems and flocks at once, which is exactly why the coupling lives here rather than
    * inside `agent-world-force-field.ts`.
    *
-   * It runs once per simulation step, immediately before the cannon step, and does three
+   * It runs once per simulation step, immediately before the physics step, and does three
    * things:
    *
    *  1. applies `a · mass` to every eligible **dynamic** body — static, kinematic and trigger
@@ -2124,10 +2185,24 @@ export class AgentWorldRuntime {
    * scale without a special case.
    */
   private applyForceFields(): void {
-    const fields = [...this.entities.values()].filter(
-      (runtime) => runtime.definition.type === "force-field" && runtime.definition.forceField?.enabled,
-    );
-    this.forceFieldReadings.clear();
+    const fields = this.forceFieldActive;
+    fields.length = 0;
+    for (const runtime of this.entities.values()) {
+      if (runtime.definition.type === "force-field" && runtime.definition.forceField?.enabled) fields.push(runtime);
+    }
+    // Drop cached readings and inverses for fields that stopped existing (or stopped being
+    // enabled fields), and cached hooks for consumers that left the world — so state() never
+    // reports a ghost field, and a scene reload does not leak last scene's closures.
+    for (const id of this.forceFieldReadings.keys()) {
+      const runtime = this.entities.get(id);
+      if (!runtime || runtime.definition.type !== "force-field" || !runtime.definition.forceField?.enabled) {
+        this.forceFieldReadings.delete(id);
+        this.forceFieldInverses.delete(id);
+      }
+    }
+    for (const id of this.forceFieldHooks.keys()) {
+      if (!this.entities.has(id)) this.forceFieldHooks.delete(id);
+    }
     // Clear last step's hooks unconditionally, so removing or disabling the last field really
     // does stop the pushing. This is the shape of bug this codebase keeps finding: state that
     // is written on the way in and never unwritten on the way out.
@@ -2143,51 +2218,28 @@ export class AgentWorldRuntime {
 
     for (const field of fields) {
       field.object.updateWorldMatrix(true, false);
-      this.forceFieldReadings.set(field.definition.id, { affected: new Set<string>(), peak: 0 });
+      const reading = this.forceFieldReadings.get(field.definition.id);
+      if (reading) {
+        reading.affected.clear();
+        reading.peak = 0;
+      } else {
+        this.forceFieldReadings.set(field.definition.id, { affected: new Set<string>(), peak: 0 });
+      }
+      const inverse = this.forceFieldInverses.get(field.definition.id) ?? new Matrix4();
+      this.forceFieldInverses.set(field.definition.id, inverse.copy(field.object.matrixWorld).invert());
     }
-    const inverses = new Map<string, Matrix4>();
-    for (const field of fields) inverses.set(field.definition.id, new Matrix4().copy(field.object.matrixWorld).invert());
 
     const scratch = this.forceFieldScratch;
-    const elapsed = this.elapsedSeconds;
 
-    /**
-     * Sum every field of a given channel that reaches `worldPoint` into `outWorld`, in world
-     * space. `channel` selects which of the three `affects*` flags gates a field, so bodies,
-     * flocks and particles share one path and differ only in the flag they read.
-     */
-    const accumulate = (
-      targetId: string,
-      targetTags: string[],
-      channel: "affectsBodies" | "affectsFlocks" | "affectsParticles",
-      worldPoint: Vector3,
-      worldVelocity: Vector3,
-      outWorld: Vector3,
-    ): void => {
-      outWorld.set(0, 0, 0);
-      for (const field of fields) {
-        const config = field.definition.forceField!;
-        if (!config[channel]) continue;
-        if (config.affectsTags.length > 0 && !config.affectsTags.some((tag) => targetTags.includes(tag))) continue;
-        const inverse = inverses.get(field.definition.id)!;
-        // World → field-local, for both the point and the velocity direction.
-        scratch.localPoint.copy(worldPoint).applyMatrix4(inverse);
-        scratch.localVelocity.copy(worldPoint).add(worldVelocity).applyMatrix4(inverse).sub(scratch.localPoint);
-        const influence = sampleForceFieldAcceleration(config, scratch.localPoint, scratch.localVelocity, elapsed, scratch.localAcceleration);
-        if (influence <= 0 || scratch.localAcceleration.lengthSq() < 1e-12) continue;
-        // Field-local → world, same trick in the other direction.
-        scratch.worldA.copy(scratch.localPoint).applyMatrix4(field.object.matrixWorld);
-        scratch.worldB.copy(scratch.localPoint).add(scratch.localAcceleration).applyMatrix4(field.object.matrixWorld).sub(scratch.worldA);
-        outWorld.add(scratch.worldB);
-        const reading = this.forceFieldReadings.get(field.definition.id)!;
-        reading.affected.add(targetId);
-        reading.peak = Math.max(reading.peak, scratch.worldB.length());
-      }
-    };
-
-    const anyBodies = fields.some((field) => field.definition.forceField!.affectsBodies);
-    const anyFlocks = fields.some((field) => field.definition.forceField!.affectsFlocks);
-    const anyParticles = fields.some((field) => field.definition.forceField!.affectsParticles);
+    let anyBodies = false;
+    let anyFlocks = false;
+    let anyParticles = false;
+    for (const field of fields) {
+      const config = field.definition.forceField!;
+      if (config.affectsBodies) anyBodies = true;
+      if (config.affectsFlocks) anyFlocks = true;
+      if (config.affectsParticles) anyParticles = true;
+    }
 
     for (const runtime of this.entities.values()) {
       const definition = runtime.definition;
@@ -2195,20 +2247,18 @@ export class AgentWorldRuntime {
 
       // 1. Dynamic rigid bodies.
       if (anyBodies && runtime.body && definition.physics?.mode === "dynamic") {
-        scratch.worldPoint.set(runtime.body.position.x, runtime.body.position.y, runtime.body.position.z);
-        scratch.worldVelocity.set(runtime.body.velocity.x, runtime.body.velocity.y, runtime.body.velocity.z);
-        accumulate(definition.id, definition.tags, "affectsBodies", scratch.worldPoint, scratch.worldVelocity, scratch.worldAcceleration);
+        this.physicsWorld.readTransform(runtime.body, this.physicsScratch.transform);
+        this.physicsWorld.readLinearVelocity(runtime.body, this.physicsScratch.linearVelocity);
+        scratch.worldPoint.copy(this.physicsScratch.transform.position);
+        scratch.worldVelocity.copy(this.physicsScratch.linearVelocity);
+        this.accumulateForceFields(definition.id, definition.tags, "affectsBodies", scratch.worldPoint, scratch.worldVelocity, scratch.worldAcceleration);
         if (scratch.worldAcceleration.lengthSq() > 1e-12) {
           // F = m·a. Applying an acceleration rather than a force is the whole reason a heavy
           // crate and a light ball fall into an attractor together — the p5 original got there
           // by dividing the force back out by mass on the way in.
-          const mass = runtime.body.mass || 1;
-          runtime.body.applyForce(
-            new Vec3(scratch.worldAcceleration.x * mass, scratch.worldAcceleration.y * mass, scratch.worldAcceleration.z * mass),
-          );
-          // A body asleep in a field would ignore it forever; a field arriving is exactly the
-          // kind of event that should wake it.
-          if (runtime.body.sleepState === Body.SLEEPING) runtime.body.wakeUp();
+          const mass = definition.physics.mass || 1;
+          scratch.force.set(scratch.worldAcceleration.x * mass, scratch.worldAcceleration.y * mass, scratch.worldAcceleration.z * mass);
+          this.physicsWorld.applyForce(runtime.body, scratch.force);
         }
       }
 
@@ -2225,19 +2275,71 @@ export class AgentWorldRuntime {
       const particles = findParticleSystem(runtime.object);
       const steered = flock ?? crowd;
       if ((!steered || !anyFlocks) && (!particles || !anyParticles)) continue;
-      const channel = steered ? "affectsFlocks" : "affectsParticles";
       runtime.object.updateWorldMatrix(true, false);
-      const toWorld = new Matrix4().copy(runtime.object.matrixWorld);
-      const toLocal = new Matrix4().copy(toWorld).invert();
-      const hook = (localPosition: Vector3, localVelocity: Vector3, out: Vector3): void => {
-        // Consumer-local → world, sample every field, back to consumer-local.
-        scratch.hookWorldPoint.copy(localPosition).applyMatrix4(toWorld);
-        scratch.hookWorldVelocity.copy(localPosition).add(localVelocity).applyMatrix4(toWorld).sub(scratch.hookWorldPoint);
-        accumulate(definition.id, definition.tags, channel, scratch.hookWorldPoint, scratch.hookWorldVelocity, scratch.hookWorldAcceleration);
-        out.copy(scratch.hookWorldPoint).add(scratch.hookWorldAcceleration).applyMatrix4(toLocal).sub(localPosition);
-      };
-      if (steered && anyFlocks) steered.externalAcceleration = hook;
-      if (particles && anyParticles) particles.externalAcceleration = hook;
+      let hookState = this.forceFieldHooks.get(definition.id);
+      if (!hookState) {
+        const entityId = definition.id;
+        const created: ForceFieldHookState = {
+          tags: definition.tags,
+          channel: steered ? "affectsFlocks" : "affectsParticles",
+          toWorld: new Matrix4(),
+          toLocal: new Matrix4(),
+          hook: (localPosition: Vector3, localVelocity: Vector3, out: Vector3): void => {
+            // Consumer-local → world, sample every field, back to consumer-local. Reads its
+            // matrices and channel off `created` so the closure survives across steps.
+            const hookScratch = this.forceFieldScratch;
+            hookScratch.hookWorldPoint.copy(localPosition).applyMatrix4(created.toWorld);
+            hookScratch.hookWorldVelocity.copy(localPosition).add(localVelocity).applyMatrix4(created.toWorld).sub(hookScratch.hookWorldPoint);
+            this.accumulateForceFields(entityId, created.tags, created.channel, hookScratch.hookWorldPoint, hookScratch.hookWorldVelocity, hookScratch.hookWorldAcceleration);
+            out.copy(hookScratch.hookWorldPoint).add(hookScratch.hookWorldAcceleration).applyMatrix4(created.toLocal).sub(localPosition);
+          }
+        };
+        hookState = created;
+        this.forceFieldHooks.set(entityId, hookState);
+      }
+      hookState.tags = definition.tags;
+      hookState.channel = steered ? "affectsFlocks" : "affectsParticles";
+      hookState.toWorld.copy(runtime.object.matrixWorld);
+      hookState.toLocal.copy(hookState.toWorld).invert();
+      if (steered && anyFlocks) steered.externalAcceleration = hookState.hook;
+      if (particles && anyParticles) particles.externalAcceleration = hookState.hook;
+    }
+  }
+
+  /**
+   * Sum every active field of a given channel that reaches `worldPoint` into `outWorld`, in
+   * world space. `channel` selects which of the three `affects*` flags gates a field, so
+   * bodies, flocks and particles share one path and differ only in the flag they read. A
+   * method rather than a per-step closure inside {@link applyForceFields} so the cached
+   * hooks in {@link forceFieldHooks} can keep calling it across frames.
+   */
+  private accumulateForceFields(
+    targetId: string,
+    targetTags: string[],
+    channel: "affectsBodies" | "affectsFlocks" | "affectsParticles",
+    worldPoint: Vector3,
+    worldVelocity: Vector3,
+    outWorld: Vector3,
+  ): void {
+    const scratch = this.forceFieldScratch;
+    outWorld.set(0, 0, 0);
+    for (const field of this.forceFieldActive) {
+      const config = field.definition.forceField!;
+      if (!config[channel]) continue;
+      if (config.affectsTags.length > 0 && !config.affectsTags.some((tag) => targetTags.includes(tag))) continue;
+      const inverse = this.forceFieldInverses.get(field.definition.id)!;
+      // World → field-local, for both the point and the velocity direction.
+      scratch.localPoint.copy(worldPoint).applyMatrix4(inverse);
+      scratch.localVelocity.copy(worldPoint).add(worldVelocity).applyMatrix4(inverse).sub(scratch.localPoint);
+      const influence = sampleForceFieldAcceleration(config, scratch.localPoint, scratch.localVelocity, this.elapsedSeconds, scratch.localAcceleration);
+      if (influence <= 0 || scratch.localAcceleration.lengthSq() < 1e-12) continue;
+      // Field-local → world, same trick in the other direction.
+      scratch.worldA.copy(scratch.localPoint).applyMatrix4(field.object.matrixWorld);
+      scratch.worldB.copy(scratch.localPoint).add(scratch.localAcceleration).applyMatrix4(field.object.matrixWorld).sub(scratch.worldA);
+      outWorld.add(scratch.worldB);
+      const reading = this.forceFieldReadings.get(field.definition.id)!;
+      reading.affected.add(targetId);
+      reading.peak = Math.max(reading.peak, scratch.worldB.length());
     }
   }
 
@@ -2263,7 +2365,7 @@ export class AgentWorldRuntime {
   /**
    * Turns overlap into enter/exit events.
    *
-   * Deliberately computed here from body AABBs rather than read off cannon's contact list.
+   * Deliberately computed here from body AABBs rather than read off an engine contact list.
    * A trigger body is excluded from contact *resolution*, and depending on it also appearing
    * in the solver's reported contacts would tie the vocabulary to an implementation detail
    * of the physics engine. An AABB test is coarse — a checkpoint fires slightly before a
@@ -2289,13 +2391,13 @@ export class AgentWorldRuntime {
 
     for (const trigger of triggers) {
       const triggerId = trigger.definition.id;
-      trigger.body!.updateAABB();
+      this.physicsWorld.readAabb(trigger.body!, this.physicsScratch.triggerAabb);
       const previous = this.triggerOccupants.get(triggerId) ?? new Set<string>();
       const current = new Set<string>();
 
       for (const mover of movers) {
-        mover.body!.updateAABB();
-        if (!trigger.body!.aabb.overlaps(mover.body!.aabb)) continue;
+        this.physicsWorld.readAabb(mover.body!, this.physicsScratch.moverAabb);
+        if (!physicsAabbsOverlap(this.physicsScratch.triggerAabb, this.physicsScratch.moverAabb)) continue;
         const moverId = mover.definition.id;
         current.add(moverId);
         if (previous.has(moverId)) continue;
@@ -2304,7 +2406,13 @@ export class AgentWorldRuntime {
         // A trigger's interactions are its response to being crossed. This is what lets a
         // gate light up, a pickup vanish, or a launcher fire without any external agent in
         // the loop — the first in-world cause-and-effect the vocabulary has had.
-        if (trigger.definition.interactions.length > 0) {
+        //
+        // A hidden trigger is inert. A collected ring *is* its invisibility (the rules layer
+        // re-derives the collected set from the visibility snapshot), so once restitution went
+        // live a bouncing ball could re-cross a collected ring and toggle it back into the
+        // world — un-collecting it. The enter/exit events still fire (occupancy is real);
+        // only the trigger's own response is suppressed while it is hidden.
+        if (trigger.definition.interactions.length > 0 && trigger.definition.visible !== false) {
           try {
             this.interactInternal(triggerId);
           } catch (error) {
@@ -2377,12 +2485,12 @@ export class AgentWorldRuntime {
     if (runtime.body) this.physicsWorld.removeBody(runtime.body);
     // Terrain is the one type whose collider is implied by the entity rather than requested
     // through `physics` — a terrain you can fall through is not terrain.
-    runtime.body = runtime.definition.type === "terrain"
-      ? createTerrainBody(runtime.definition, runtime.object)
+    const bodyDefinition = runtime.definition.type === "terrain"
+      ? createTerrainBodyDefinition(runtime.definition, runtime.object)
       : runtime.definition.physics
-        ? createPhysicsBody(runtime.definition)
+        ? createPhysicsBodyDefinition(runtime.definition)
         : null;
-    if (runtime.body) this.physicsWorld.addBody(runtime.body);
+    runtime.body = bodyDefinition ? this.physicsWorld.createBody(bodyDefinition) : null;
   }
 
   private startModelLoad(runtime: RuntimeEntity): void {
@@ -2583,6 +2691,30 @@ export class AgentWorldRuntime {
     const dnaState = runtime.definition.dna && dnaSystem
       ? { ...runtime.definition.dna, ...dnaSystem.describe() }
       : null;
+    let physicsState: AgentWorldEntityState["physics"] = null;
+    if (runtime.body) {
+      if (runtime.definition.physics) {
+        this.physicsWorld.readLinearVelocity(runtime.body, this.physicsScratch.linearVelocity);
+        this.physicsWorld.readAngularVelocity(runtime.body, this.physicsScratch.angularVelocity);
+        physicsState = {
+          mode: runtime.definition.physics.mode,
+          mass: runtime.definition.physics.mass,
+          material: runtime.definition.physics.material,
+          linearVelocity: roundPhysicsVector(this.physicsScratch.linearVelocity),
+          angularVelocity: roundPhysicsVector(this.physicsScratch.angularVelocity),
+          sleeping: this.physicsWorld.readSleepState(runtime.body) === "sleeping",
+        };
+      } else {
+        physicsState = {
+          mode: "static",
+          mass: 0,
+          material: "ground",
+          linearVelocity: [0, 0, 0],
+          angularVelocity: [0, 0, 0],
+          sleeping: false,
+        };
+      }
+    }
     return {
       formula: formulaState,
       dna: dnaState,
@@ -2625,21 +2757,7 @@ export class AgentWorldRuntime {
       })),
       // Terrain's collider is implied rather than requested, so report it here anyway —
       // an agent asking "can I land on this?" must be able to see the answer in state().
-      physics: runtime.body ? (runtime.definition.physics ? {
-        mode: runtime.definition.physics.mode,
-        mass: runtime.definition.physics.mass,
-        material: runtime.definition.physics.material,
-        linearVelocity: roundCannonVector(runtime.body.velocity),
-        angularVelocity: roundCannonVector(runtime.body.angularVelocity),
-        sleeping: runtime.body.sleepState === Body.SLEEPING
-      } : {
-        mode: "static" as AgentWorldPhysicsMode,
-        mass: 0,
-        material: "ground" as AgentWorldPhysicsMaterial,
-        linearVelocity: [0, 0, 0] as AgentWorldVector3,
-        angularVelocity: [0, 0, 0] as AgentWorldVector3,
-        sleeping: false
-      }) : null,
+      physics: physicsState,
       path: runtime.definition.path ? { pointCount: runtime.definition.path.points.length, closed: runtime.definition.path.closed } : null,
       asset: runtime.assetState ? deepClone(runtime.assetState) : null,
       agent: runtime.definition.agent ? deepClone(runtime.definition.agent) : null,
@@ -3098,6 +3216,44 @@ function createSplineCurve(path: Required<AgentWorldSplinePath>): CatmullRomCurv
   return new CatmullRomCurve3(path.points.map((point) => new Vector3(...point)), path.closed, "catmullrom", path.tension);
 }
 
+/** The six surface presets exposed by the engine-neutral scene vocabulary. */
+const PHYSICS_MATERIAL_PRESETS: Record<AgentWorldPhysicsMaterial, { friction: number; restitution: number }> = {
+  default: { friction: 0.18, restitution: 0.28 },
+  wall: { friction: 0.32, restitution: 0.08 },
+  finish: { friction: 0.16, restitution: 0.2 },
+  ground: { friction: 0.45, restitution: 0.05 },
+  ball: { friction: 0.12, restitution: 0.68 },
+  human: { friction: 0.5, restitution: 0.02 }
+};
+
+const ZERO_PHYSICS_VECTOR = Object.freeze({ x: 0, y: 0, z: 0 });
+const IDENTITY_PHYSICS_QUATERNION = Object.freeze({ x: 0, y: 0, z: 0, w: 1 });
+
+function physicsMaterialDefinition(physics: ResolvedAgentWorldPhysics): PhysicsMaterialDefinition {
+  const preset = PHYSICS_MATERIAL_PRESETS[physics.material];
+  const isPreset = physics.friction === preset.friction && physics.restitution === preset.restitution;
+  return {
+    // Overrides are distinct named surfaces so the adapter can safely share native material
+    // instances while honoring the authored coefficients in actual solver contacts.
+    id: isPreset ? physics.material : `${physics.material}@${physics.friction}:${physics.restitution}`,
+    friction: physics.friction,
+    restitution: physics.restitution,
+  };
+}
+
+function transformFromDefinition(transform: AgentWorldTransform): PhysicsBodyDefinition["transform"] {
+  const rotation = transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3;
+  const quaternion = new Quaternion().setFromEuler(new Euler(...rotation));
+  return {
+    position: vectorFromTuple(transform.position),
+    rotation: quaternion,
+  };
+}
+
+function vectorFromTuple(value: AgentWorldVector3): PhysicsVector3 {
+  return { x: value[0], y: value[1], z: value[2] };
+}
+
 function resolvePhysics(
   source: AgentWorldPhysics,
   entityType: AgentWorldEntityType,
@@ -3115,23 +3271,15 @@ function resolvePhysics(
     throw new Error("Transform behaviors require kinematic physics");
   }
   const material = source.material ?? "default";
-  const presets: Record<AgentWorldPhysicsMaterial, { friction: number; restitution: number }> = {
-    default: { friction: 0.18, restitution: 0.28 },
-    wall: { friction: 0.32, restitution: 0.08 },
-    finish: { friction: 0.16, restitution: 0.2 },
-    ground: { friction: 0.45, restitution: 0.05 },
-    ball: { friction: 0.12, restitution: 0.68 },
-    human: { friction: 0.5, restitution: 0.02 }
-  };
-  if (!(material in presets)) throw new Error(`Unsupported physics material: ${String(material)}`);
+  if (!(material in PHYSICS_MATERIAL_PRESETS)) throw new Error(`Unsupported physics material: ${String(material)}`);
   const requestedMass = source.mass ?? 1;
   if (!Number.isFinite(requestedMass) || requestedMass < 0 || requestedMass > 100000) throw new Error("Physics mass must be between 0 and 100000");
   return {
     mode: source.mode,
     mass: source.mode === "dynamic" ? Math.max(0.001, requestedMass) : 0,
     material,
-    friction: clamp(source.friction ?? presets[material].friction, 0, 1),
-    restitution: clamp(source.restitution ?? presets[material].restitution, 0, 1),
+    friction: clamp(source.friction ?? PHYSICS_MATERIAL_PRESETS[material].friction, 0, 1),
+    restitution: clamp(source.restitution ?? PHYSICS_MATERIAL_PRESETS[material].restitution, 0, 1),
     linearVelocity: sanitizeVector(source.linearVelocity ?? [0, 0, 0], -10000, 10000, "physics.linearVelocity"),
     angularVelocity: sanitizeVector(source.angularVelocity ?? [0, 0, 0], -10000, 10000, "physics.angularVelocity")
   };
@@ -3141,53 +3289,50 @@ function isMotionBehavior(behavior: AgentWorldBehavior): boolean {
   return ["spin", "bob", "orbit", "pulse", "look-at", "follow-spline"].includes(behavior.type);
 }
 
-function createPhysicsBody(definition: ResolvedEntity): Body {
+function createPhysicsBodyDefinition(definition: ResolvedEntity): PhysicsBodyDefinition {
   const physics = definition.physics!;
-  const material = new CannonMaterial({ friction: physics.friction, restitution: physics.restitution });
-  material.name = `graphysx-${definition.id}-${physics.material}`;
-  const body = new Body({
-    mass: physics.mass,
-    material,
-    linearDamping: physics.mode === "dynamic" ? 0.08 : 0,
-    angularDamping: physics.mode === "dynamic" ? 0.08 : 0,
-    // A trigger is detected but never resolved: contacts are reported and then discarded,
-    // so a ball rolls through a checkpoint instead of bouncing off it.
-    isTrigger: physics.mode === "trigger",
-    // Triggers must keep testing contacts even when nothing has moved for a while, and a
-    // sleeping body stops generating them — a checkpoint that nods off stops counting.
-    ...(physics.mode === "trigger" ? { type: Body.KINEMATIC, allowSleep: false } : {})
-  });
+  const shapes: PhysicsShapeDefinition[] = [];
   const scale = definition.transform.scale.map((value) => Math.abs(value)) as AgentWorldVector3;
   const geometry = definition.geometry;
-  const shapeOrientation = new CannonQuaternion();
-  shapeOrientation.setFromEuler(-Math.PI / 2, 0, 0);
   if (definition.type === "sphere" || definition.type === "icosahedron") {
-    body.addShape(new CannonSphere(Math.max(0.001, geometry.radius * Math.max(...scale))));
+    shapes.push({ kind: "sphere", radius: Math.max(0.001, geometry.radius * Math.max(...scale)) });
   } else if (definition.type === "cylinder" || definition.type === "cone") {
     const radius = Math.max(0.001, geometry.radius * Math.max(scale[0], scale[2]));
-    const height = Math.max(0.001, geometry.height * scale[1]);
-    body.addShape(new CannonCylinder(definition.type === "cone" ? 0.001 : radius, radius, height, Math.max(6, geometry.radialSegments)), new Vec3(), shapeOrientation);
+    shapes.push({
+      kind: "cylinder",
+      radiusTop: definition.type === "cone" ? 0 : radius,
+      radiusBottom: radius,
+      height: Math.max(0.001, geometry.height * scale[1]),
+      segments: Math.max(6, geometry.radialSegments),
+    });
   } else if (definition.type === "plane") {
-    body.addShape(new CannonPlane(), new Vec3(), shapeOrientation);
+    shapes.push({ kind: "plane" });
   } else {
     const torusDiameter = (geometry.radius + geometry.tube) * 2;
     const dimensions = definition.type === "torus"
       ? [torusDiameter, geometry.tube * 2, torusDiameter] as AgentWorldVector3
       : [geometry.width, geometry.height, geometry.depth] as AgentWorldVector3;
-    body.addShape(new CannonBox(new Vec3(
-      Math.max(0.001, dimensions[0] * scale[0] / 2),
-      Math.max(0.001, dimensions[1] * scale[1] / 2),
-      Math.max(0.001, dimensions[2] * scale[2] / 2)
-    )));
+    shapes.push({
+      kind: "box",
+      halfExtents: {
+        x: Math.max(0.001, dimensions[0] * scale[0] / 2),
+        y: Math.max(0.001, dimensions[1] * scale[1] / 2),
+        z: Math.max(0.001, dimensions[2] * scale[2] / 2),
+      },
+    });
   }
-  body.position.set(...definition.transform.position);
-  body.quaternion.setFromEuler(...definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3);
-  body.velocity.set(...physics.linearVelocity);
-  body.angularVelocity.set(...physics.angularVelocity);
-  if (physics.mode === "kinematic") body.type = Body.KINEMATIC;
-  if (physics.mode === "static") body.type = Body.STATIC;
-  body.updateMassProperties();
-  return body;
+  return {
+    mode: physics.mode,
+    mass: physics.mass,
+    material: physicsMaterialDefinition(physics),
+    linearDamping: physics.mode === "dynamic" ? 0.08 : 0,
+    angularDamping: physics.mode === "dynamic" ? 0.08 : 0,
+    allowSleep: physics.mode !== "trigger",
+    transform: transformFromDefinition(definition.transform),
+    shapes,
+    linearVelocity: vectorFromTuple(physics.linearVelocity),
+    angularVelocity: vectorFromTuple(physics.angularVelocity),
+  };
 }
 
 /**
@@ -3197,27 +3342,20 @@ function createPhysicsBody(definition: ResolvedEntity): Body {
  * the surface that was drawn. Terrain is always static and always uses the `ground` friction
  * preset — a rolling ball should slow on soil, not skate.
  */
-function createTerrainBody(definition: ResolvedEntity, object: Object3D): Body | null {
+function createTerrainBodyDefinition(definition: ResolvedEntity, object: Object3D): PhysicsBodyDefinition | null {
   const terrain = definition.terrain;
   if (!terrain) return null;
   const cached = object.userData.graphysxTerrainHeights;
   const heights = cached instanceof Float32Array ? cached : sampleTerrainHeights(terrain);
-  const { shape, offset, orientation } = createTerrainHeightfield(terrain, heights);
-  const material = new CannonMaterial({ friction: 0.45, restitution: 0.05 });
-  material.name = `graphysx-${definition.id}-terrain`;
-  const body = new Body({ mass: 0, material, type: Body.STATIC });
-  body.addShape(shape, offset, orientation);
-  body.position.set(...definition.transform.position);
-  body.quaternion.setFromEuler(...definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3);
-  body.updateMassProperties();
-  return body;
-}
-
-function syncObjectToBody(object: Object3D, body: Body): void {
-  body.position.set(object.position.x, object.position.y, object.position.z);
-  body.quaternion.set(object.quaternion.x, object.quaternion.y, object.quaternion.z, object.quaternion.w);
-  body.aabbNeedsUpdate = true;
-  body.wakeUp();
+  return {
+    mode: "static",
+    transform: transformFromDefinition(definition.transform),
+    shapes: [createTerrainHeightfield(terrain, heights)],
+    material: {
+      id: "ground",
+      ...PHYSICS_MATERIAL_PRESETS.ground,
+    },
+  };
 }
 
 /**
@@ -3284,11 +3422,6 @@ function rebuildTerrainMesh(runtime: RuntimeEntity): void {
   runtime.object.geometry.dispose();
   runtime.object.geometry = createTerrainGeometry(terrain, heights);
   runtime.object.userData.graphysxTerrainHeights = heights;
-}
-
-function syncBodyToObject(body: Body, object: Object3D): void {
-  object.position.set(body.position.x, body.position.y, body.position.z);
-  object.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
 }
 
 function validateWorldDefinition(definition: AgentWorldDefinition): void {
@@ -3422,8 +3555,14 @@ function roundVector(vector: Vector3): AgentWorldVector3 {
   return [Number(vector.x.toFixed(3)), Number(vector.y.toFixed(3)), Number(vector.z.toFixed(3))];
 }
 
-function roundCannonVector(vector: Vec3): AgentWorldVector3 {
+function roundPhysicsVector(vector: PhysicsVector3): AgentWorldVector3 {
   return [Number(vector.x.toFixed(3)), Number(vector.y.toFixed(3)), Number(vector.z.toFixed(3))];
+}
+
+function physicsAabbsOverlap(a: PhysicsAabb, b: PhysicsAabb): boolean {
+  return a.min.x <= b.max.x && a.max.x >= b.min.x
+    && a.min.y <= b.max.y && a.max.y >= b.min.y
+    && a.min.z <= b.max.z && a.max.z >= b.min.z;
 }
 
 function uniqueStrings(values: string[]): string[] {

@@ -68,7 +68,7 @@ import {
  *   visualiser and nothing else; deleting the gizmo would change nothing about the physics.
  *   The simulation coupling therefore does not live in this module's `update()` the way the
  *   flock's does. It lives in the runtime, as a pass over other entities run immediately
- *   before the cannon step — which is the only place that can see rigid bodies, particle
+ *   before the physics step — which is the only place that can see rigid bodies, particle
  *   systems and flocks at once.
  *
  * The honest summary: **entity for identity, runtime pass for effect.** This module owns the

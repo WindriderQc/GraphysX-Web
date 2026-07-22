@@ -67,6 +67,8 @@ export class SceneStoreError extends Error {
 
 export type SceneStoreClient = {
   readonly baseUrl: string;
+  /** Sent as `x-graphysx-token` on every request; null when the store is open. */
+  readonly token: string | null;
   list(): Promise<SceneStoreSummary[]>;
   get(name: string): Promise<SceneStoreRecord>;
   /** The cheap poll: revision plus attribution, without the document. Null when absent. */
@@ -79,10 +81,15 @@ export type SceneStoreClient = {
   ): Promise<SceneStorePutResult>;
 };
 
-async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
+async function request<T>(baseUrl: string, path: string, token: string | null, init?: RequestInit): Promise<T> {
+  // `x-graphysx-token`, not `Authorization`: the latter upgrades every CORS preflight and
+  // collides with anything else (a fronting proxy, basic auth) that owns that header in a
+  // browser. The store accepts both.
+  const headers = new Headers(init?.headers);
+  if (token && !headers.has("x-graphysx-token")) headers.set("x-graphysx-token", token);
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}${path}`, { cache: "no-store", ...init });
+    response = await fetch(`${baseUrl}${path}`, { cache: "no-store", ...init, headers });
   } catch (error) {
     // A dead store should read as "the store is unreachable", not as a mangled TypeError
     // surfacing from deep inside fetch.
@@ -102,20 +109,41 @@ async function request<T>(baseUrl: string, path: string, init?: RequestInit): Pr
   return payload as T;
 }
 
-export function createSceneStoreClient(baseUrl: string): SceneStoreClient {
+export type SceneStoreClientOptions = {
+  /**
+   * Token for a store started with GRAPHYSX_STORE_TOKEN. Omitted, the client picks up
+   * `?storeToken=` from the page URL — the same channel `?scene=` and `?store=` already
+   * ride, so main.ts needs no new wiring. Explicit null disables the pickup.
+   */
+  token?: string | null;
+};
+
+/** The page URL is a config surface this module already shares with main.ts. */
+function tokenFromLocation(): string | null {
+  if (typeof window === "undefined" || !window.location) return null;
+  try {
+    return new URLSearchParams(window.location.search).get("storeToken") || null;
+  } catch {
+    return null;
+  }
+}
+
+export function createSceneStoreClient(baseUrl: string, options: SceneStoreClientOptions = {}): SceneStoreClient {
   const root = baseUrl.replace(/\/+$/, "");
+  const token = options.token !== undefined ? options.token || null : tokenFromLocation();
   return {
     baseUrl: root,
+    token,
     async list() {
-      const payload = await request<{ scenes: SceneStoreSummary[] }>(root, "/scenes");
+      const payload = await request<{ scenes: SceneStoreSummary[] }>(root, "/scenes", token);
       return payload.scenes;
     },
     get(name) {
-      return request<SceneStoreRecord>(root, `/scenes/${encodeURIComponent(name)}`);
+      return request<SceneStoreRecord>(root, `/scenes/${encodeURIComponent(name)}`, token);
     },
     async head(name) {
       try {
-        return await request<SceneStoreHead>(root, `/scenes/${encodeURIComponent(name)}/revision`);
+        return await request<SceneStoreHead>(root, `/scenes/${encodeURIComponent(name)}/revision`, token);
       } catch (error) {
         // Absent is a legitimate state — the scene has not been pushed yet.
         if (error instanceof SceneStoreError && error.status === 404) return null;
@@ -123,7 +151,7 @@ export function createSceneStoreClient(baseUrl: string): SceneStoreClient {
       }
     },
     put(name, definition, expectedRevision, attribution) {
-      return request<SceneStorePutResult>(root, `/scenes/${encodeURIComponent(name)}`, {
+      return request<SceneStorePutResult>(root, `/scenes/${encodeURIComponent(name)}`, token, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -279,7 +307,13 @@ export function connectSceneStore(options: SceneStoreSessionOptions): SceneStore
     if (typeof EventSource === "undefined") return;
     // EventSource reconnects on its own and replays Last-Event-ID, so a dropped connection
     // resumes from the last delta rather than reloading the world.
-    source = new EventSource(`${client.baseUrl}/scenes/${encodeURIComponent(name)}/stream`);
+    //
+    // The token rides the query string here because EventSource cannot set headers — the
+    // one place the store accepts `?token=`. That does put it in URL-shaped places (proxy
+    // logs, server access logs); the stream is read-only either way.
+    const streamUrl = new URL(`${client.baseUrl}/scenes/${encodeURIComponent(name)}/stream`, window.location.href);
+    if (client.token) streamUrl.searchParams.set("token", client.token);
+    source = new EventSource(streamUrl.toString());
     source.addEventListener("hello", (event) => {
       const hello = JSON.parse((event as MessageEvent<string>).data) as { revision: number; mustReload?: boolean };
       setOnline(true);

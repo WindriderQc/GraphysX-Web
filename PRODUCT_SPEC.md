@@ -223,7 +223,7 @@ Related corrections elsewhere in this spec:
   fields are the one system that is an entity *for identity* but a runtime pass *for effect*:
   the `force-field` entity carries position/radius/lifetime and serialises like anything else,
   while the actual pushing is a pass over other entities in `updateSimulation`, immediately
-  before the cannon step, applying `a·mass` to dynamic bodies and an `externalAcceleration`
+  before the physics step, applying `a·mass` to dynamic bodies and an `externalAcceleration`
   hook to flocks and emitters. Measured ~0.52 ms/step for one attractor over 200 dynamic
   bodies + a 240-member flock (particles opt-out, the default); ~1.24 ms/step with a
   1500-particle emitter added to the pass.
@@ -232,8 +232,8 @@ Related corrections elsewhere in this spec:
   `agent-world-water.ts`), and the showroom's ground is an ordinary `terrain` entity on a
   recovered archive heightmap. The old host terrain was not merely dishonest, it was broken:
   the flat ground plane was hidden and nothing replaced its collider, so anything dropped in
-  the showroom fell through the world forever. Terrain now carries a static cannon-es
-  `Heightfield`, and `scripts/smoke-showroom.mjs` asserts a dropped sphere comes to *rest*
+  the showroom fell through the world forever. Terrain now carries a static Rapier
+  heightfield, and `scripts/smoke-showroom.mjs` asserts a dropped sphere comes to *rest*
   rather than merely existing. ~~Click-to-focus is still not implemented.~~ **Implemented.** Clicking non-interactive scenery
   eases both the orbit pivot and the camera position onto the clicked subject's bounding sphere
   over 1.5 s (cubic in-out, distance derived from subject size, viewing direction preserved),
@@ -303,11 +303,11 @@ budgeted 256² target. Both are reachable from `api.spawn`, listed by `api.heigh
 placeable from the editor's Terrain palette, and survive export→load. The editor also gained an
 inspector, a prefab/model/texture/effects/terrain palette, and an exit path.
 
-**Highest-value next graduations** (in order): ~~a force-field behavior~~ **done** (`forces-r1`);
-~~map-editor UI on the default host~~ **done** (`levels-r1`, see below). What remains at the head
-of this list is **tree-DNA / evolutionary entities** (§14 phase 4, still legacy-only in
-`nature-lab.ts`) — the third Nature-of-Code system — then **crowds**, still welded inside
-`race-scene.ts`.
+**Highest-value next graduations** (historical): ~~a force-field behavior~~ **done**
+(`forces-r1`); ~~map-editor UI on the default host~~ **done** (`levels-r1`, see below);
+~~tree-DNA / evolutionary entities~~ **done** (`dna-r2`); ~~crowds~~ **done** (`crowd-r1`).
+All simulation-system families §4 names are now expressible in v2; the current status table
+in §8.1 is authoritative.
 
 **Update (`levels-r1`):** the level *data* model was already graduated; what was missing was that
 nothing could turn a grid into a scene. `levels.play()` now materialises one (§14 phase 5), and the
@@ -335,7 +335,8 @@ collider was the *opposite triangulation* of the same corner heights — exact a
 to 0.35 units out mid-quad. Max |collider − mesh| is now 0.349 → 0.000. `npm run probe:terrain`
 is a radial sweep (20 radii × 8 bearings, rest asserted on position *and* velocity) rather than
 one drop; run it after touching terrain. The residual drift it still reports *outside* the pad is
-the cannon narrowphase seam-kick recorded in the handoff, not a height-data problem.
+the legacy narrowphase seam-kick recorded in the handoff, not a height-data problem; the Rapier
+migration's `FIX_INTERNAL_EDGES` probe now guards the corrected behavior.
 
 ## 9. Repo roles
 
@@ -417,7 +418,7 @@ Foundation before flourish. Each phase is shippable and course-correctable.
 2. **Clean host** *(core landed — `host-r1`)* — `src/platform-host.ts` (`PlatformHost`) renders
    the `agent-world/v2` model on its own `WebGLRenderer`, camera, `OrbitControls`, neutral
    `RoomEnvironment` IBL, and a single animation loop, with **zero `race-scene.ts` dependency**.
-   The runtime already owned its Three.js `group`, cannon physics, and `update(dt)`; the host
+   The runtime already owned its Three.js `group`, physics world, and `update(dt)`; the host
    just lends the four things race-scene used to. Verified at `?host=standalone`: canvas renders,
    loop advances, 16-entity world simulates, zero errors. `host-r2` then wired **full agent
    parity** onto the host — `src/agent-world-api.ts` builds the entire `window.__GRAPHYSX__`

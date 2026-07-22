@@ -7,7 +7,7 @@ import { DirectionalLight, Group, HemisphereLight, type Scene, type WebGLRendere
  * with no collider. That was a real bug, not just an honesty problem: the flat ground plane
  * was hidden and nothing replaced its physics, so anything dropped in the showroom fell
  * through the world and kept going. Terrain is now an ordinary `terrain` entity in the v2
- * scene (see `showroom-scene.ts`), carrying a static cannon-es heightfield collider — so the
+ * scene (see `showroom-scene.ts`), carrying a static Rapier heightfield collider — so the
  * scene owns its ground, and it is selectable, editable, serialisable and landable-on.
  *
  * The sky is NOT set here either. It is `environment.sky` in the v2 scene, so it is

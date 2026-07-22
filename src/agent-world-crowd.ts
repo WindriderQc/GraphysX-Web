@@ -40,7 +40,7 @@ import {
  *
  * ## The one honest addition: separation
  *
- * The recovered NPCs never separate. Each was a cannon-es dynamic sphere, so inter-agent
+ * The recovered NPCs never separate. Each was a dynamic physics sphere, so inter-agent
  * spacing was a *free side effect of the solver's sphere-sphere collisions* — there is no
  * separation rule in `updateNpcs` to port. Dropping physics therefore deletes spacing, and an
  * instanced crowd without it walks through itself. The `separation` term below is an
@@ -179,7 +179,7 @@ const BASE_CROWD: ResolvedAgentWorldCrowd = {
 const RACE_SCENE_NOTE =
   "Wander turn (±40° every 0.33s), pursuer retarget (0.5s, nearest target), rejection-sampled " +
   "spawn and body proportions carried over from race-scene.ts buildNpcs/updateNpcs; the " +
-  "separation term is an adaptation replacing cannon-es sphere collisions, not recovered.";
+  "separation term is an adaptation replacing rigid-body sphere collisions, not recovered.";
 
 export const GRAPHYSX_AGENT_WORLD_CROWDS: readonly AgentWorldCrowdDescriptor[] = [
   {
@@ -642,7 +642,7 @@ export class AgentWorldCrowdSystem {
     // as one more term in the steering aim above: members move at a fixed speed with a
     // rate-limited turn, so a directional push cannot stop two of them converging, and
     // measurably did not (min spacing 0.19 with it on vs 0.20 off — i.e. nothing). What the
-    // cannon-es solver actually did was resolve overlap *positionally*, so this does too —
+    // legacy rigid-body solver actually did was resolve overlap *positionally*, so this does too —
     // a single relaxation pass moving each overlapping pair apart by half the overlap each.
     if (config.separation > 0) {
       const strength = Math.min(1, config.separation);

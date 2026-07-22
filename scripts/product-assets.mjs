@@ -52,6 +52,7 @@ async function filesUnder(relDir) {
 const LEGACY_BOOT_ASSETS = [
   "/assets/textures/sun.jpg",
   "/assets/textures/archive/haze.png",
+  "/assets/textures/archive/Concrete.jpg",
   "/assets/textures/archive/twoway.jpg",
   "/assets/textures/ball/FireArrow800.jpg",
   "/assets/textures/classic/Alien01_B_diff.bmp",
@@ -94,6 +95,11 @@ export async function productAssetManifest() {
   // than the asset catalog (they are a world, not palette vocabulary), so the release
   // manifest scrapes that module the same way it scrapes the level styles.
   for (const url of await anyAssetLiterals("src/archive-world1-manifest.ts")) wanted.add(url);
+
+  // The front-door galleries are generated release assets rather than runtime vocabulary.
+  // Claim the whole generated directory so `npm run assets:shelf-thumbnails` can add or
+  // refresh a scene without a second hand-maintained filename list.
+  for (const url of await filesUnder("/assets/shelf-thumbnails")) wanted.add(url);
 
   for (const url of LEGACY_BOOT_ASSETS) wanted.add(url);
 

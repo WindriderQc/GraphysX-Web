@@ -25,7 +25,7 @@ which is why they are legacy-only and unreachable from the editor and the agent 
 | File | Role |
 | --- | --- |
 | `src/platform-host.ts` | Renderer, camera, OrbitControls, ONE animation loop. Zero race-scene dependency. |
-| `src/agent-world-runtime.ts` | The v2 runtime: entities, cannon-es physics, behaviours, deterministic `update(dt)`. |
+| `src/agent-world-runtime.ts` | The v2 runtime: entities, Rapier physics, behaviours, deterministic `update(dt)`. |
 | `src/agent-world-api.ts` **and** `src/prototype-app.ts` | **Both** implement `GraphysXAgentWorldApi`. A new API method must be added to both or the build breaks. |
 | `src/platform-editor.ts` | Top bar, left scene tree, right inspector, bottom tabbed library, Levels workbench, media import dialog. |
 | `server/asset-store.mjs` + `src/agent-world-media.ts` | Runtime media imports: datalake browse/import/upload on the store server; browser side converts foreign models to `graphysx-mesh-json` and registers imports into the curated registries (`api.media.*`). |
@@ -82,7 +82,7 @@ the editor palette. Follow how `emitter`, `terrain`, `water` and `flock` did it.
 Clean `PlatformHost`; full agent API + tool bridge; rebuilt editor (scene tree, deep
 inspector, tabbed library, Save/Load/Export); ASCII/grid level workbench with lossless
 round-trip; graduated vocabulary — skyboxes (6 archive sets), particle emitters (8
-archive-derived presets), heightmap terrain with a cannon-es `Heightfield` collider,
+archive-derived presets), heightmap terrain with a Rapier heightfield collider,
 reflective water, flocking (entity type, 0.228 ms/step for 116 members), **force fields**
 (4 kinds / 5 presets, entity for identity + runtime pass for effect), a **2D overlay layer**
 (`environment.overlay`, 3 Canvas2D sketches, drawn in the one shared `tick()`); showroom with
@@ -103,7 +103,7 @@ one game rebuilt *on* the platform (BallZ, `ballz-play.ts`) is won by collecting
 
 **Round-trip sweep** (`scripts/smoke-roundtrip.mjs`, in `verify.mjs`). 63 settable properties
 set through the public API and read back through four paths — `state()`, `exportDocument()`, a
-reload from that export, and where observable the live three.js/cannon object. It exists because
+reload from that export, and where observable the live Three.js/physics object. It exists because
 the same bug kept recurring in different clothes: **a surface that writes state without ever
 reading it back**. Four instances found and fixed that way. Run it after adding any settable
 field, and prefer an object-verified check over a storage round-trip where one is possible.
@@ -116,7 +116,7 @@ the mesh near the flatten rim" entry, both fixed in `agent-world-terrain.ts`:
   the last grid ring inside the radius — r≈10.2, not 12, on the showroom field. The blend now
   starts one cell diagonal further out, so `flattenRadius` is a guarantee.
 - The collider was the *opposite triangulation* of the same corner heights. `PlaneGeometry`
-  and cannon split each quad on the same diagonal in index space, but the old single-axis
+  and the collider split each quad on the same diagonal in index space, but the old single-axis
   index flip mirrored one axis and turned it into the other diagonal in world space — exact at
   every vertex, up to 0.35 units out mid-quad. Mapping the shape's x index along world Z (a
   plain transpose) lands them on top of each other: max |collider − mesh| 0.349 → 0.000.
@@ -154,25 +154,19 @@ here blocks a release; pick by value rather than by order.
 
 ## Known defects — recorded, not hidden
 
-- **Spheres landing within ~0.1 units of a heightfield cell seam get a lateral kick.**
-  cannon-es builds each terrain cell as two closed triangular prisms and runs sphere-vs-convex
-  against each. A sphere that penetrates on landing catches the *rim edge* of the neighbouring
-  prism, which returns a tilted normal instead of the flat face normal, and the resulting
-  impulse starts it rolling — permanently, because a cannon sphere has no rolling resistance.
-  Reproduced on a **perfectly flat** heightfield, so it is not a height-data problem. Scales
-  with penetration per step: dropping from 6 m at `dt=1/60` drifts up to 25 units; at
-  `dt=1/240` the same drop drifts 0.05. Not fixed — the cure is either patching cannon's
-  narrowphase or halving the fixed timestep, and `Trimesh` is not an escape (cannon has no
-  box/convex-vs-Trimesh narrowphase, so kinetic stacks would fall through). After the pad fix
-  below it no longer shows up inside the showroom pad, but it is why `probe:terrain` reports
-  drift outside it.
+- ~~**Spheres landing within ~0.1 units of a heightfield cell seam get a lateral kick.**~~
+  **Fixed by the Rapier migration.** The legacy solver represented cells as closed triangular
+  prisms, so a penetrating sphere could catch a neighbouring rim and receive a tilted contact
+  normal. Rapier heightfields use `FIX_INTERNAL_EDGES`; the deterministic seam probe now guards
+  against that lateral impulse on a perfectly flat field.
 - **Water reads grey at grazing angles.** three's `Water.js` hard-codes Fresnel
   `rf0 = 0.3`; real water is ~0.02. Patched to a uniform, but a low camera still mirrors a
   pale sky.
 - **Ball drop retuned 9 m/0.52 → 6 m/0.34** partly for test stability. Real justification,
   mixed motive.
-- **A runtime rollback raises an uncaught error** when a rejected transaction leaves the
-  gizmo attached to a destroyed object. Gated in the UI, not fixed at source.
+- ~~**A runtime rollback raises an uncaught error** when a rejected transaction leaves the
+  gizmo attached to a destroyed object.~~ **Fixed** in `13aba57`: every `world.loaded`
+  synchronously rebinds or detaches the gizmo, with a second guard before editor render.
 - **`?host=legacy` in a production build shows missing archive textures/meshes.** Deliberate
   — it is a reference fallback, fully intact in `vite dev`, and was costing ~76 MB per push.
 

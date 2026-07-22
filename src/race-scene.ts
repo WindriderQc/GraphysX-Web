@@ -53,8 +53,6 @@ import {
   WebGLRenderer,
   WireframeGeometry
 } from "three";
-import type { Constraint } from "cannon-es";
-import { Body, Box as CannonBox, DistanceConstraint, HingeConstraint, RaycastResult, RigidVehicle, Sphere as CannonSphere, Vec3 } from "cannon-es";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
@@ -237,7 +235,11 @@ import {
   type CubzRotationSelection
 } from "./cubz-tva-animation";
 import {
+  type PhysicsBody,
+  type PhysicsConstraint,
+  type PhysicsVehicle,
   PhysicsWorld,
+  syncBodyToMesh,
   setBodyTransform
 } from "./engine/physics-world";
 import {
@@ -536,7 +538,7 @@ function cubZDisplayCenter(source: readonly [number, number, number]): Vector3 {
 type MovingRuntimePart = {
   spec: MovingPart;
   mesh: Mesh;
-  body: Body;
+  body: PhysicsBody;
   basePosition: Vector3;
   previousPosition: Vector3;
 };
@@ -544,7 +546,7 @@ type MovingRuntimePart = {
 type NpcAgent = {
   group: Group;
   bodyMaterial: MeshStandardMaterial;
-  body: Body;
+  body: PhysicsBody;
   kind: "zombie" | "human";
   direction: Vector3;
   turnTimer: number;
@@ -553,7 +555,7 @@ type NpcAgent = {
 
 type LegacyRuntimePart = {
   mesh: Mesh;
-  body: Body;
+  body: PhysicsBody;
   kind: "rotator" | "piston";
   axis: "x" | "y";
   basePosition: Vector3;
@@ -740,7 +742,7 @@ export class RaceScene {
   private readonly innerBall: Mesh;
   private readonly innerArrow: Group;
   private readonly playerGroup = new Group();
-  private readonly playerBody: Body;
+  private readonly playerBody: PhysicsBody;
   private readonly worldGroup = new Group();
   private readonly menuCube = new Group();
   private readonly archivePreviewGroup = new Group();
@@ -776,7 +778,7 @@ export class RaceScene {
   private milkyWayEnvironment: MilkyWayEnvironment | null = null;
   private milkyWayProfile: MilkyWayProfile = "graphysx2017";
   private suzanneAsciiEnvironment: SuzanneAsciiEnvironment | null = null;
-  private readonly suzannePistonBodies: Body[] = [];
+  private readonly suzannePistonBodies: PhysicsBody[] = [];
   private skyboxSelectorEnvironment: SkyboxSelectorEnvironment | null = null;
   private carSelectorEnvironment: CarSelectorEnvironment | null = null;
   private natureLab: NatureLab | null = null;
@@ -789,23 +791,23 @@ export class RaceScene {
   private sunSprite: Sprite | null = null;
   private airplaneFlyer: { mesh: Mesh; curve: CatmullRomCurve3 } | null = null;
   private physicsLab: {
-    pairs: Array<{ mesh: Mesh; body: Body }>;
-    staticBodies: Body[];
-    constraints: Constraint[];
-    wreckingBall: { body: Body; home: Vec3 } | null;
+    pairs: Array<{ mesh: Mesh; body: PhysicsBody }>;
+    staticBodies: PhysicsBody[];
+    constraints: PhysicsConstraint[];
+    wreckingBall: { body: PhysicsBody; home: Vector3 } | null;
   } | null = null;
   private readonly npcs: NpcAgent[] = [];
   private zombiesTotal = 0;
   private vehicleRig: {
-    vehicle: RigidVehicle;
-    chassisBody: Body;
+    vehicle: PhysicsVehicle;
+    chassisBody: PhysicsBody;
     chassisGroup: Group;
-    wheels: Array<{ mesh: Mesh; body: Body }>;
+    wheels: Array<{ mesh: Mesh; index: number; connection: Vector3; radius: number }>;
   } | null = null;
   private ballz18AiRival: {
     label: string;
     group: Group;
-    body: Body;
+    body: PhysicsBody;
     start: Vector3;
     waypoints: Vector3[];
     waypointIndex: number;
@@ -823,7 +825,7 @@ export class RaceScene {
   private transitionAmount = 0;
   private waterMaterial: ShaderMaterial | null = null;
   private lastActivityMs = performance.now();
-  private readonly bullets: Array<{ mesh: Mesh; body: Body; bornMs: number }> = [];
+  private readonly bullets: Array<{ mesh: Mesh; body: PhysicsBody; bornMs: number }> = [];
   private lapsCompleted = 0;
   private debugWireframe = false;
   private debugOverrideMaterial: MeshBasicMaterial | null = null;
@@ -835,7 +837,7 @@ export class RaceScene {
   private ghostShell: Mesh | null = null;
   private ghostBestLine: Line | null = null;
   private ghostLastLapLine: Line | null = null;
-  private readonly staticBodies: Body[] = [];
+  private readonly staticBodies: PhysicsBody[] = [];
   private readonly startGate = new Group();
   private readonly halfGate = new Group();
   private readonly finishGate = new Group();
@@ -874,7 +876,6 @@ export class RaceScene {
   private cameraPitch = 0.72;
   private cameraDistance = 28;
   private raceCameraDistance = DEFAULT_RACE_CAMERA_DISTANCE;
-  private readonly cameraRaycastResult = new RaycastResult();
   private cameraCollision = {
     active: false,
     hitBodyId: null as number | null,
@@ -2018,12 +2019,39 @@ export class RaceScene {
       return false;
     }
     const { chassisBody } = this.vehicleRig;
-    chassisBody.position.y += 2.8;
-    chassisBody.quaternion.setFromEuler(Math.PI, 0, 0);
-    chassisBody.velocity.set(0, 0, 0);
-    chassisBody.angularVelocity.set(0, 0, 0);
-    chassisBody.wakeUp();
+    const position = this.physics.readPosition(chassisBody, new Vector3());
+    const rotation = new Quaternion().setFromEuler(new Euler(Math.PI, 0, 0));
+    position.y += 2.8;
+    this.physics.writeTransform(chassisBody, position, rotation);
+    this.physics.writeLinearVelocity(chassisBody, new Vector3());
+    this.physics.writeAngularVelocity(chassisBody, new Vector3());
+    this.physics.wakeBody(chassisBody);
     return true;
+  }
+
+  getVehicleDebugState(): {
+    chassisHandle: number;
+    playerHandle: number;
+    chassisDynamic: boolean;
+    position: { x: number; y: number; z: number };
+    velocity: { x: number; y: number; z: number };
+    wheels: Array<{ contact: boolean; suspensionLength: number | null; steering: number | null }>;
+  } | null {
+    if (!this.vehicleRig) return null;
+    const position = this.physics.readPosition(this.vehicleRig.chassisBody, new Vector3());
+    const velocity = this.physics.readLinearVelocity(this.vehicleRig.chassisBody, new Vector3());
+    return {
+      chassisHandle: this.vehicleRig.chassisBody.id,
+      playerHandle: this.playerBody.id,
+      chassisDynamic: this.vehicleRig.chassisBody.rigidBody.isDynamic(),
+      position: { x: position.x, y: position.y, z: position.z },
+      velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
+      wheels: this.vehicleRig.wheels.map(({ index }) => ({
+        contact: this.vehicleRig!.vehicle.wheelIsInContact(index),
+        suspensionLength: this.vehicleRig!.vehicle.wheelSuspensionLength(index),
+        steering: this.vehicleRig!.vehicle.wheelSteering(index)
+      }))
+    };
   }
 
   getRaceLoadState(): RaceLoadState {
@@ -2504,7 +2532,7 @@ export class RaceScene {
       this.flightRig.group.quaternion.identity();
       this.flightRig.speed = 0;
     }
-    setBodyTransform(this.playerBody, this.raceStart);
+    setBodyTransform(this.playerBody, this.vehicleRig ? new Vector3(400, 2, 400) : this.raceStart);
     this.playerGroup.position.copy(this.raceStart);
     this.previousPlayerPosition.copy(this.raceStart);
     this.playerGroup.quaternion.identity();
@@ -2784,6 +2812,9 @@ export class RaceScene {
     const flightForward = this.flightRig
       ? new Vector3(0, 0, -1).applyQuaternion(this.flightRig.group.quaternion)
       : null;
+    const playerVelocity = this.vehicleRig
+      ? this.readBodyVelocity(this.vehicleRig.chassisBody)
+      : this.readBodyVelocity(this.playerBody);
     const flightThrust = (Number(this.input.isDown("KeyW")) - Number(this.input.isDown("KeyS"))) as -1 | 0 | 1;
     const flightRoll = (Number(this.input.isDown("ArrowLeft")) - Number(this.input.isDown("ArrowRight"))) as -1 | 0 | 1;
     const flightPitch = (Number(this.input.isDown("ArrowUp")) - Number(this.input.isDown("ArrowDown"))) as -1 | 0 | 1;
@@ -2807,9 +2838,9 @@ export class RaceScene {
         .filter((npc) => npc.alive && npc.kind === "zombie")
         .map((npc) => ({ x: npc.group.position.x, y: npc.group.position.y, z: npc.group.position.z })),
       playerVelocity: {
-        x: this.playerBody.velocity.x,
-        y: this.playerBody.velocity.y,
-        z: this.playerBody.velocity.z
+        x: playerVelocity.x,
+        y: playerVelocity.y,
+        z: playerVelocity.z
       },
       inputAxis: this.input.getMoveAxis(),
       controllerVector: {
@@ -2888,7 +2919,7 @@ export class RaceScene {
         continue;
       }
       this.playerGroup.position.copy(ring.position);
-      this.playerBody.position.set(ring.position.x, ring.position.y, ring.position.z);
+      this.writeBodyPosition(this.playerBody, ring.position);
       this.collectRings();
     }
 
@@ -2900,11 +2931,11 @@ export class RaceScene {
     for (let pass = 0; pass < lapPasses && this.raceActive && !this.raceFinished; pass += 1) {
       const halfwayTarget = this.getGateTarget("halfway");
       this.playerGroup.position.set(halfwayTarget.x, this.raceStart.y, halfwayTarget.z);
-      this.playerBody.position.set(halfwayTarget.x, this.raceStart.y, halfwayTarget.z);
+      this.writeBodyPosition(this.playerBody, this.playerGroup.position);
       this.checkLapProgress();
       const finishTarget = this.getGateTarget("finish");
       this.playerGroup.position.set(finishTarget.x, this.raceStart.y, finishTarget.z);
-      this.playerBody.position.set(finishTarget.x, this.raceStart.y, finishTarget.z);
+      this.writeBodyPosition(this.playerBody, this.playerGroup.position);
       this.checkLapProgress();
     }
     return this.getSnapshot();
@@ -2924,7 +2955,7 @@ export class RaceScene {
   /** Deterministic placement for browser QA and agent-authored level inspection. */
   debugSetPlayerState(position: [number, number, number], velocity: [number, number, number] = [0, 0, 0]): RaceDebugSnapshot {
     setBodyTransform(this.playerBody, new Vector3(...position));
-    this.playerBody.velocity.set(...velocity);
+    this.physics.writeLinearVelocity(this.playerBody, new Vector3(...velocity));
     this.playerGroup.position.set(...position);
     this.previousPlayerPosition.set(...position);
     this.activeForceZone = this.findPlayerForceZone();
@@ -2934,6 +2965,26 @@ export class RaceScene {
 
   private get raceStart(): Vector3 {
     return new Vector3(...this.race.start);
+  }
+
+  private readBodyPosition(body: PhysicsBody): Vector3 {
+    return this.physics.readPosition(body, new Vector3());
+  }
+
+  private readBodyRotation(body: PhysicsBody): Quaternion {
+    return this.physics.readRotation(body, new Quaternion());
+  }
+
+  private readBodyVelocity(body: PhysicsBody): Vector3 {
+    return this.physics.readLinearVelocity(body, new Vector3());
+  }
+
+  private readBodyAngularVelocity(body: PhysicsBody): Vector3 {
+    return this.physics.readAngularVelocity(body, new Vector3());
+  }
+
+  private writeBodyPosition(body: PhysicsBody, position: Vector3, wakeUp = true): void {
+    this.physics.writeTransform(body, position, this.readBodyRotation(body), wakeUp);
   }
 
   private attachEvents(): void {
@@ -3294,8 +3345,7 @@ export class RaceScene {
     this.airplaneFlyer = null;
     this.clearBullets();
     if (this.flightRig) {
-      this.playerBody.type = Body.DYNAMIC;
-      this.playerBody.collisionResponse = true;
+      this.physics.setBodyMode(this.playerBody, "dynamic", true);
     }
     this.flightRig = null;
     this.clearGhostVisuals();
@@ -3467,13 +3517,7 @@ export class RaceScene {
     this.playerRadius = radius;
     this.playerGroup.scale.setScalar(radius / PLAYER_RADIUS);
 
-    const shape = this.playerBody.shapes[0];
-    if (shape instanceof CannonSphere) {
-      shape.radius = radius;
-      shape.updateBoundingSphereRadius();
-      this.playerBody.updateBoundingRadius();
-      this.playerBody.aabbNeedsUpdate = true;
-    }
+    this.physics.setSphereRadius(this.playerBody, radius);
   }
 
   /** trigger lazy loads; returns true when all requested datasets are in memory */
@@ -3684,7 +3728,7 @@ export class RaceScene {
       }>;
     };
     const data = SuzanneAsciiEnvironment.data as unknown as SuzannePhysicsData;
-    const addStaticBox = (position: number[], size: number[]): Body => {
+    const addStaticBox = (position: number[], size: number[]): PhysicsBody => {
       const body = this.physics.addStaticBox(
         new Vector3(position[0], position[1], position[2]),
         new Vector3(size[0] / 2, size[1] / 2, size[2] / 2)
@@ -3719,7 +3763,7 @@ export class RaceScene {
         )
       );
       const bar = addStaticBox(piston.position, piston.barScale);
-      bar.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+      this.physics.writeTransform(bar, new Vector3(...(piston.position as [number, number, number])), rotation);
 
       const localPlate = new Vector3(piston.linearLimits[0], 0, 0).applyQuaternion(rotation);
       const platePosition = new Vector3(...(piston.position as [number, number, number])).add(localPlate);
@@ -3727,7 +3771,7 @@ export class RaceScene {
         platePosition,
         new Vector3(piston.plateScale[0] / 2, piston.plateScale[1] / 2, piston.plateScale[2] / 2)
       );
-      plate.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+      this.physics.writeTransform(plate, platePosition, rotation);
       this.staticBodies.push(plate);
       this.suzannePistonBodies.push(plate);
     });
@@ -3989,11 +4033,12 @@ export class RaceScene {
     const start = new Vector3(...spec.start);
     group.position.copy(start);
     this.worldGroup.add(group);
-    const body = this.physics.addDynamicSphere(start, radius, 1);
-    body.linearDamping = 0;
-    body.angularDamping = 0.05;
-    body.allowSleep = false;
-    body.wakeUp();
+    const body = this.physics.addDynamicSphere(start, radius, 1, {
+      linearDamping: 0,
+      angularDamping: 0.05,
+      allowSleep: false
+    });
+    this.physics.wakeBody(body);
 
     this.ballz18AiRival = {
       label: spec.label,
@@ -4019,19 +4064,22 @@ export class RaceScene {
     if (!rival || !spec || rival.waypoints.length === 0) return;
 
     const target = rival.waypoints[rival.waypointIndex];
-    const ballDx = target.x - rival.body.position.x;
-    const ballDz = target.z - rival.body.position.z;
+    const bodyPosition = this.readBodyPosition(rival.body);
+    const ballDx = target.x - bodyPosition.x;
+    const ballDz = target.z - bodyPosition.z;
     const ballDistance = Math.hypot(ballDx, ballDz);
     if (ballDistance > 0.001) {
       const directionX = ballDx / ballDistance;
       const directionZ = ballDz / ballDistance;
-      rival.body.applyTorque(new Vec3(directionZ * spec.torquePower, 0, -directionX * spec.torquePower));
-      rival.body.wakeUp();
+      this.physics.applyTorque(rival.body, new Vector3(directionZ * spec.torquePower, 0, -directionX * spec.torquePower));
+      this.physics.wakeBody(rival.body);
     }
 
-    const angularSpeed = rival.body.angularVelocity.length();
+    const angularVelocity = this.readBodyAngularVelocity(rival.body);
+    const angularSpeed = angularVelocity.length();
     if (angularSpeed > spec.maxAngularVelocity) {
-      rival.body.angularVelocity.scale(spec.maxAngularVelocity / angularSpeed, rival.body.angularVelocity);
+      angularVelocity.multiplyScalar(spec.maxAngularVelocity / angularSpeed);
+      this.physics.writeAngularVelocity(rival.body, angularVelocity);
     }
 
     if (ballDistance <= spec.waypointReach) {
@@ -4042,7 +4090,7 @@ export class RaceScene {
       }
     }
 
-    if (rival.body.position.y < (this.race.bounds.minY ?? -9) - 3) {
+    if (bodyPosition.y < (this.race.bounds.minY ?? -9) - 3) {
       setBodyTransform(rival.body, rival.start);
       rival.waypointIndex = 0;
     }
@@ -4051,8 +4099,8 @@ export class RaceScene {
   private syncBallz18AiRival(): void {
     const rival = this.ballz18AiRival;
     if (!rival) return;
-    rival.group.position.set(rival.body.position.x, rival.body.position.y, rival.body.position.z);
-    rival.group.quaternion.set(rival.body.quaternion.x, rival.body.quaternion.y, rival.body.quaternion.z, rival.body.quaternion.w);
+    this.physics.readPosition(rival.body, rival.group.position);
+    this.physics.readRotation(rival.body, rival.group.quaternion);
   }
 
   private buildClassicHumanPopulation(count: number): void {
@@ -4093,7 +4141,7 @@ export class RaceScene {
         x = MathUtils.lerp(bounds.minX + 2, bounds.maxX - 2, Math.random());
         z = MathUtils.lerp(bounds.minZ + 2, bounds.maxZ - 2, Math.random());
         const awayFromPlayer = Math.hypot(x - this.race.start[0], z - this.race.start[2]) > 6;
-        const awayFromNpcs = this.npcs.every((npc) => Math.hypot(x - npc.body.position.x, z - npc.body.position.z) > 1.5);
+        const awayFromNpcs = this.npcs.every((npc) => Math.hypot(x - npc.group.position.x, z - npc.group.position.z) > 1.5);
         if (awayFromPlayer && awayFromNpcs) {
           break;
         }
@@ -4117,9 +4165,10 @@ export class RaceScene {
       group.position.set(x, 0.6, z);
       this.worldGroup.add(group);
 
-      const body = this.physics.addDynamicSphere(new Vector3(x, 0.8, z), 0.34, 0.55);
-      body.linearDamping = 0.82;
-      body.angularDamping = 0.95;
+      const body = this.physics.addDynamicSphere(new Vector3(x, 0.8, z), 0.34, 0.55, {
+        linearDamping: 0.82,
+        angularDamping: 0.95
+      });
 
       this.npcs.push({
         group,
@@ -4143,6 +4192,7 @@ export class RaceScene {
 
   private updateNpcs(deltaSeconds: number): void {
     const bounds = this.race.bounds;
+    const playerPosition = this.readBodyPosition(this.playerBody);
 
     for (const npc of this.npcs) {
       if (!npc.alive) {
@@ -4169,7 +4219,8 @@ export class RaceScene {
               }
             }
           }
-          npc.direction.set(target.x - npc.body.position.x, 0, target.z - npc.body.position.z);
+          const bodyPosition = this.readBodyPosition(npc.body);
+          npc.direction.set(target.x - bodyPosition.x, 0, target.z - bodyPosition.z);
           if (npc.direction.lengthSq() < 0.001) {
             npc.direction.copy(randomNpcDirection());
           }
@@ -4180,30 +4231,32 @@ export class RaceScene {
 
       // legacy Human::ForceNTorque — gravity handled by world, push along direction
       const force = npc.kind === "zombie" ? 4.6 : 3.4;
-      npc.body.applyForce(new Vec3(npc.direction.x * force, 0, npc.direction.z * force));
+      this.physics.applyForce(npc.body, new Vector3(npc.direction.x * force, 0, npc.direction.z * force));
 
       // legacy human_wallContactProcess — new random direction at the walls
+      const bodyPosition = this.readBodyPosition(npc.body);
       const nearWall =
-        npc.body.position.x < bounds.minX + 0.9 ||
-        npc.body.position.x > bounds.maxX - 0.9 ||
-        npc.body.position.z < bounds.minZ + 0.9 ||
-        npc.body.position.z > bounds.maxZ - 0.9;
+        bodyPosition.x < bounds.minX + 0.9 ||
+        bodyPosition.x > bounds.maxX - 0.9 ||
+        bodyPosition.z < bounds.minZ + 0.9 ||
+        bodyPosition.z > bounds.maxZ - 0.9;
       if (nearWall) {
-        npc.body.position.x = MathUtils.clamp(npc.body.position.x, bounds.minX + 0.9, bounds.maxX - 0.9);
-        npc.body.position.z = MathUtils.clamp(npc.body.position.z, bounds.minZ + 0.9, bounds.maxZ - 0.9);
+        bodyPosition.x = MathUtils.clamp(bodyPosition.x, bounds.minX + 0.9, bounds.maxX - 0.9);
+        bodyPosition.z = MathUtils.clamp(bodyPosition.z, bounds.minZ + 0.9, bounds.maxZ - 0.9);
+        this.writeBodyPosition(npc.body, bodyPosition);
         if (npc.kind === "human") {
           npc.direction.copy(randomNpcDirection());
         }
       }
 
-      npc.group.position.set(npc.body.position.x, npc.body.position.y - 0.28, npc.body.position.z);
+      npc.group.position.set(bodyPosition.x, bodyPosition.y - 0.28, bodyPosition.z);
       npc.group.rotation.y = Math.atan2(npc.direction.x, npc.direction.z);
 
       // ZombieKiller contact: roll over a zombie to squash it
       if (npc.kind === "zombie") {
         const distance = Math.hypot(
-          npc.body.position.x - this.playerBody.position.x,
-          npc.body.position.z - this.playerBody.position.z
+          bodyPosition.x - playerPosition.x,
+          bodyPosition.z - playerPosition.z
         );
         if (distance < this.playerRadius + 0.42) {
           this.squashNpc(npc);
@@ -4370,18 +4423,24 @@ export class RaceScene {
     const liveryPath = model === "cobra" ? "/assets/textures/cars/cobra_blue.png" : "/assets/textures/cars/ChassisSTi.bmp";
 
     const start = this.raceStart;
-    const chassisBody = new Body({
-      mass: 14,
-      position: new Vec3(start.x, start.y, start.z),
+    const chassisBody = this.physics.addDynamicBox(start, new Vector3(1, 0.5, 2.4), 14, {
+      colliderOffset: new Vector3(0, 0.26, -0.42),
       angularDamping: 0.35,
-      linearDamping: 0.02
+      linearDamping: 0.02,
+      allowSleep: false,
+      massAtBodyOrigin: true
     });
     // legacy SetBodyCenterOfMass(0,-1,+10): CoM low and toward the nose —
     // achieved here by offsetting the collision shape up and behind the body origin
-    chassisBody.addShape(new CannonBox(new Vec3(1.0, 0.5, 2.4)), new Vec3(0, 0.26, -0.42));
-    chassisBody.allowSleep = false;
-
-    const vehicle = new RigidVehicle({ chassisBody });
+    const wheelDefinitions = impreza.wheels.map((wheel) => ({
+      connection: new Vector3(wheel.offset[0], wheel.offset[1], wheel.offset[2]),
+      radius: Math.max(0.2, (wheel.bounds.max[1] - wheel.bounds.min[1]) / 2)
+    }));
+    const vehicle = this.physics.createVehicle(chassisBody, {
+      upAxis: 1,
+      forwardAxis: 2,
+      wheels: wheelDefinitions
+    });
 
     const chassisGroup = new Group();
     const chassisGeometry = this.buildMaterialGroupedGeometry(
@@ -4437,34 +4496,20 @@ export class RaceScene {
       metalness: 0.18,
       side: DoubleSide
     });
-    const wheels: Array<{ mesh: Mesh; body: Body }> = [];
-    for (const wheel of impreza.wheels) {
-      const radius = Math.max(0.2, (wheel.bounds.max[1] - wheel.bounds.min[1]) / 2);
-      const body = new Body({
-        mass: 1.4,
-        position: new Vec3(start.x + wheel.offset[0], start.y + wheel.offset[1], start.z + wheel.offset[2]),
-        shape: new CannonSphere(radius),
-        angularDamping: 0.45
-      });
-      body.allowSleep = false;
-      vehicle.addWheel({
-        body,
-        position: new Vec3(wheel.offset[0], wheel.offset[1], wheel.offset[2]),
-        axis: new Vec3(1, 0, 0),
-        direction: new Vec3(0, -1, 0)
-      });
-
+    const wheels: Array<{ mesh: Mesh; index: number; connection: Vector3; radius: number }> = [];
+    impreza.wheels.forEach((wheel, index) => {
+      const definition = wheelDefinitions[index];
       const mesh = new Mesh(this.buildLegacyGeometry(wheel.positions, wheel.indices, wheel.uvs), wheelMaterial);
       mesh.castShadow = true;
       this.worldGroup.add(mesh);
-      wheels.push({ mesh, body });
-    }
+      wheels.push({ mesh, index, connection: definition.connection, radius: definition.radius });
+    });
 
-    vehicle.addToWorld(this.physics.world);
-
-    // the ball becomes a ghost mirror of the chassis so rings/gates/camera work unchanged
-    this.playerBody.type = Body.KINEMATIC;
-    this.playerBody.collisionResponse = false;
+    // Race objectives and cameras read playerGroup directly. Keep the disabled ball proxy far
+    // away: Rapier's ray-cast vehicle query can otherwise see a translated kinematic collider
+    // even after that collider is disabled, causing the suspension to lift the chassis forever.
+    this.physics.setBodyMode(this.playerBody, "kinematic", false);
+    setBodyTransform(this.playerBody, new Vector3(400, 2, 400));
 
     this.vehicleRig = { vehicle, chassisBody, chassisGroup, wheels };
   }
@@ -4473,14 +4518,14 @@ export class RaceScene {
     if (!this.vehicleRig) {
       return;
     }
-    this.vehicleRig.vehicle.removeFromWorld(this.physics.world);
+    this.physics.removeVehicle(this.vehicleRig.vehicle);
+    this.physics.removeBody(this.vehicleRig.chassisBody);
     this.worldGroup.remove(this.vehicleRig.chassisGroup);
     for (const wheel of this.vehicleRig.wheels) {
       this.worldGroup.remove(wheel.mesh);
     }
     this.vehicleRig = null;
-    this.playerBody.type = Body.DYNAMIC;
-    this.playerBody.collisionResponse = true;
+    this.physics.setBodyMode(this.playerBody, "dynamic", true);
   }
 
   private readVehicleInput(deltaSeconds = 1 / 60): void {
@@ -4499,21 +4544,7 @@ export class RaceScene {
     const drive = moveAxis.forward * 3000;
     const { vehicle } = this.vehicleRig;
     if (moveAxis.forward !== 0 || moveAxis.turn !== 0) {
-      this.vehicleRig.chassisBody.wakeUp();
-      for (const wheel of this.vehicleRig.wheels) {
-        wheel.body.wakeUp();
-      }
-    }
-    if (drive !== 0) {
-      // Cannon's spherical-wheel RigidVehicle can lose longitudinal traction
-      // against the decoded banked triangle mesh even while the source torque
-      // visibly spins the rear wheels. Convert a small disclosed fraction of
-      // the same 3000-unit source power into chassis traction along the
-      // Impreza's authored +Z nose so W/GO reliably propels the car.
-      this.vehicleRig.chassisBody.applyLocalForce(
-        new Vec3(0, 0, drive * 0.035),
-        Vec3.ZERO
-      );
+      this.physics.wakeBody(this.vehicleRig.chassisBody);
     }
     const STEER_STEP = MathUtils.degToRad(10) * deltaSeconds * 30; // legacy ±10°/frame at ~30fps
     const STEER_MAX = MathUtils.degToRad(45);
@@ -4526,11 +4557,13 @@ export class RaceScene {
     const impreza = ((inputModel === "cobra" ? carsCatalog.cobra : carsCatalog.impreza) ?? carsCatalog.impreza) as { wheels: Array<{ offset: number[] }> };
     impreza.wheels.forEach((wheel, index) => {
       if (wheel.offset[2] > 0) {
-        vehicle.setSteeringValue(this.vehicleSteering, index);
-        vehicle.setWheelForce(0, index);
+        vehicle.setWheelSteering(index, this.vehicleSteering);
+        vehicle.setWheelEngineForce(index, 0);
       } else {
-        vehicle.setWheelForce(drive, index); // RWD, comme dans le temps
+        vehicle.setWheelSteering(index, 0);
+        vehicle.setWheelEngineForce(index, drive); // RWD, comme dans le temps
       }
+      vehicle.setWheelBrake(index, 0);
     });
   }
 
@@ -4539,21 +4572,32 @@ export class RaceScene {
       return;
     }
     const { chassisBody, chassisGroup, wheels } = this.vehicleRig;
-    chassisGroup.position.set(chassisBody.position.x, chassisBody.position.y, chassisBody.position.z);
-    chassisGroup.quaternion.set(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w);
+    const chassisPosition = this.physics.readPosition(chassisBody, chassisGroup.position);
+    const chassisRotation = this.physics.readRotation(chassisBody, chassisGroup.quaternion);
     for (const wheel of wheels) {
-      wheel.mesh.position.set(wheel.body.position.x, wheel.body.position.y, wheel.body.position.z);
-      wheel.mesh.quaternion.set(wheel.body.quaternion.x, wheel.body.quaternion.y, wheel.body.quaternion.z, wheel.body.quaternion.w);
+      const hardPoint = this.vehicleRig.vehicle.wheelHardPoint(wheel.index);
+      const suspensionLength = this.vehicleRig.vehicle.wheelSuspensionLength(wheel.index) ?? 0;
+      if (hardPoint) {
+        const suspensionDirection = new Vector3(0, -1, 0).applyQuaternion(chassisRotation);
+        wheel.mesh.position.set(hardPoint.x, hardPoint.y, hardPoint.z).addScaledVector(suspensionDirection, suspensionLength);
+      } else {
+        wheel.mesh.position.copy(wheel.connection).applyQuaternion(chassisRotation).add(chassisPosition);
+      }
+      const steering = this.vehicleRig.vehicle.wheelSteering(wheel.index) ?? 0;
+      const rolling = this.vehicleRig.vehicle.wheelRotation(wheel.index) ?? 0;
+      wheel.mesh.quaternion
+        .copy(chassisRotation)
+        .multiply(new Quaternion().setFromAxisAngle(UP_AXIS, steering))
+        .multiply(new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), rolling));
     }
 
-    // ghost-mirror the ball onto the chassis so all existing systems follow the car
-    this.playerBody.position.copy(chassisBody.position);
-    this.playerBody.velocity.copy(chassisBody.velocity);
-    this.playerGroup.position.set(chassisBody.position.x, chassisBody.position.y, chassisBody.position.z);
+    // The visible/player-facing proxy is the Three group. The disabled Rapier ball stays parked
+    // away from vehicle rays; mirroring its transform here makes the chassis self-suspend.
+    this.playerGroup.position.copy(chassisPosition);
 
     // fell off the world — rebuild at the start line
     const minY = this.race.bounds.minY ?? -10;
-    if (chassisBody.position.y < minY) {
+    if (chassisPosition.y < minY) {
       this.teardownVehicle();
       this.buildVehicle();
     }
@@ -4711,7 +4755,7 @@ export class RaceScene {
 
   // ---- Phase R1.1: classic 2015 ball preset (CLBallZ.cpp: g=-25, omega-brake x0.5) ----
   private applyBallPreset(): void {
-    this.physics.world.gravity.set(0, this.ballPreset === "classic2015" ? -25 : -18, 0);
+    this.physics.setGravity(new Vector3(0, this.ballPreset === "classic2015" ? -25 : -18, 0));
     this.applyBallPresetVisuals();
   }
 
@@ -4932,8 +4976,7 @@ export class RaceScene {
     this.worldGroup.add(group);
 
     // ghost-mirror the ball body so rings/gates/camera keep working
-    this.playerBody.type = Body.KINEMATIC;
-    this.playerBody.collisionResponse = false;
+    this.physics.setBodyMode(this.playerBody, "kinematic", false);
 
     // FlightXScene.cpp only moves the airplane while W/S is pressed. Starting
     // stopped also prevents the countdown from silently crossing the half gate.
@@ -4984,8 +5027,12 @@ export class RaceScene {
     group.position.y = MathUtils.clamp(group.position.y, 2, 34);
 
     // mirror onto the ball body: rings, gates, HUD, ghost, camera all follow
-    this.playerBody.position.set(group.position.x, group.position.y, group.position.z);
-    this.playerBody.velocity.set(forward.x * this.flightRig.speed, forward.y * this.flightRig.speed, forward.z * this.flightRig.speed);
+    this.physics.writeTransform(this.playerBody, group.position, group.quaternion, false);
+    this.physics.writeLinearVelocity(
+      this.playerBody,
+      new Vector3(forward.x * this.flightRig.speed, forward.y * this.flightRig.speed, forward.z * this.flightRig.speed),
+      false
+    );
     this.playerGroup.position.copy(group.position);
   }
 
@@ -5133,7 +5180,7 @@ export class RaceScene {
     origin.y += 0.15;
 
     const body = this.physics.addDynamicSphere(origin, 0.15, 1.0);
-    body.velocity.set(direction.x * 26, 1.2, direction.z * 26);
+    this.physics.writeLinearVelocity(body, new Vector3(direction.x * 26, 1.2, direction.z * 26));
 
     const mesh = new Mesh(
       new SphereGeometry(0.15, 10, 8),
@@ -5151,7 +5198,7 @@ export class RaceScene {
     const now = performance.now();
     for (let index = this.bullets.length - 1; index >= 0; index--) {
       const bullet = this.bullets[index];
-      bullet.mesh.position.set(bullet.body.position.x, bullet.body.position.y, bullet.body.position.z);
+      this.physics.readPosition(bullet.body, bullet.mesh.position);
 
       let spent = now - bullet.bornMs > 1000; // legacy lifetime 1000
       if (!spent) {
@@ -5449,11 +5496,11 @@ export class RaceScene {
     // park the (invisible) player ball far away so it can't disturb the lab
     setBodyTransform(this.playerBody, new Vector3(400, 2, 400));
 
-    const pairs: Array<{ mesh: Mesh; body: Body }> = [];
-    const staticBodies: Body[] = [];
-    const constraints: Constraint[] = [];
+    const pairs: Array<{ mesh: Mesh; body: PhysicsBody }> = [];
+    const staticBodies: PhysicsBody[] = [];
+    const constraints: PhysicsConstraint[] = [];
 
-    const addPair = (mesh: Mesh, body: Body): void => {
+    const addPair = (mesh: Mesh, body: PhysicsBody): void => {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.archivePreviewGroup.add(mesh);
@@ -5477,7 +5524,7 @@ export class RaceScene {
     anchorMesh.position.set(-6, 7.2, 0);
     this.archivePreviewGroup.add(anchorMesh);
 
-    let previous: Body = anchor;
+    let previous: PhysicsBody = anchor;
     for (let link = 0; link < 4; link++) {
       const y = 6.2 - link * 1.05;
       const body = this.physics.addDynamicSphere(new Vector3(-6, y, 0), 0.34, link === 3 ? 2.6 : 0.7);
@@ -5486,11 +5533,18 @@ export class RaceScene {
         new MeshStandardMaterial({ color: new Color(link === 3 ? "#f95f4c" : "#c9d4df"), metalness: 0.45, roughness: 0.3 })
       );
       addPair(mesh, body);
-      constraints.push(new DistanceConstraint(previous, body, 1.05));
+      constraints.push(
+        this.physics.addSphericalConstraint(
+          previous,
+          body,
+          new Vector3(0, -0.525, 0),
+          new Vector3(0, 0.525, 0)
+        )
+      );
       previous = body;
     }
     // give the chain a starting swing
-    previous.velocity.set(4.5, 0, 0);
+    this.physics.writeLinearVelocity(previous, new Vector3(4.5, 0, 0));
 
     // seesaw — Newton hinge joint
     const post = new Mesh(new BoxGeometry(0.4, 1.2, 0.4), new MeshStandardMaterial({ color: new Color("#6b4a2f"), roughness: 0.7 }));
@@ -5507,12 +5561,13 @@ export class RaceScene {
     );
     addPair(plankMesh, plankBody);
     constraints.push(
-      new HingeConstraint(postBody, plankBody, {
-        pivotA: new Vec3(0, 0.75, 0),
-        pivotB: new Vec3(0, 0, 0),
-        axisA: new Vec3(0, 0, 1),
-        axisB: new Vec3(0, 0, 1)
-      })
+      this.physics.addRevoluteConstraint(
+        postBody,
+        plankBody,
+        new Vector3(0, 0.75, 0),
+        new Vector3(0, 0, 0),
+        new Vector3(0, 0, 1)
+      )
     );
 
     // rigid box stack
@@ -5530,11 +5585,7 @@ export class RaceScene {
     );
     addPair(ballMesh, ballBody);
 
-    for (const constraint of constraints) {
-      this.physics.addConstraint(constraint);
-    }
-
-    this.physicsLab = { pairs, staticBodies, constraints, wreckingBall: { body: ballBody, home: new Vec3(5.1, 8.5, 0) } };
+    this.physicsLab = { pairs, staticBodies, constraints, wreckingBall: { body: ballBody, home: new Vector3(5.1, 8.5, 0) } };
   }
 
   private updatePhysicsLab(deltaSeconds: number): void {
@@ -5543,14 +5594,11 @@ export class RaceScene {
     }
     this.physics.step(deltaSeconds);
     for (const pair of this.physicsLab.pairs) {
-      pair.mesh.position.set(pair.body.position.x, pair.body.position.y, pair.body.position.z);
-      pair.mesh.quaternion.set(pair.body.quaternion.x, pair.body.quaternion.y, pair.body.quaternion.z, pair.body.quaternion.w);
+      syncBodyToMesh(pair.body, pair.mesh);
     }
     const ball = this.physicsLab.wreckingBall;
-    if (ball && ball.body.position.y < -6) {
-      ball.body.position.copy(ball.home);
-      ball.body.velocity.set(0, 0, 0);
-      ball.body.angularVelocity.set(0, 0, 0);
+    if (ball && this.readBodyPosition(ball.body).y < -6) {
+      setBodyTransform(ball.body, ball.home);
     }
   }
 
@@ -9193,8 +9241,7 @@ export class RaceScene {
         assembly.group.updateMatrixWorld(true);
         const position = assembly.plate.getWorldPosition(new Vector3());
         const orientation = assembly.plate.getWorldQuaternion(new Quaternion());
-        body.position.set(position.x, position.y, position.z);
-        body.quaternion.set(orientation.x, orientation.y, orientation.z, orientation.w);
+        this.physics.moveKinematicBody(body, position, orientation);
       });
     }
 
@@ -9230,34 +9277,22 @@ export class RaceScene {
         mesh.position.y = basePosition.y + offset;
       }
 
-      part.body.position.set(mesh.position.x, mesh.position.y, mesh.position.z);
-      part.body.velocity.set(
-        (mesh.position.x - part.previousPosition.x) / Math.max(deltaSeconds, 0.001),
-        (mesh.position.y - part.previousPosition.y) / Math.max(deltaSeconds, 0.001),
-        (mesh.position.z - part.previousPosition.z) / Math.max(deltaSeconds, 0.001)
-      );
-      part.body.quaternion.setFromEuler(mesh.rotation.x, mesh.rotation.y, mesh.rotation.z);
-      part.body.angularVelocity.set(0, spec.kind === "rotator" ? spec.speed : 0, 0);
+      const rotation = new Quaternion().setFromEuler(mesh.rotation);
+      this.physics.moveKinematicBody(part.body, mesh.position, rotation);
       part.previousPosition.copy(mesh.position);
     }
 
     for (const part of this.legacyParts) {
       if (part.kind === "rotator") {
         part.mesh.rotation.y = elapsedSeconds * part.speed + part.phase;
-        part.body.quaternion.setFromEuler(0, part.mesh.rotation.y, 0);
-        part.body.angularVelocity.set(0, part.speed, 0);
+        this.physics.moveKinematicBody(part.body, part.mesh.position, part.mesh.quaternion);
         continue;
       }
 
       const offset = Math.sin(elapsedSeconds * part.speed + part.phase) * part.amplitude;
       part.mesh.position.copy(part.basePosition);
       part.mesh.position[part.axis] += offset;
-      part.body.position.set(part.mesh.position.x, part.mesh.position.y, part.mesh.position.z);
-      part.body.velocity.set(
-        (part.mesh.position.x - part.previousPosition.x) / Math.max(deltaSeconds, 0.001),
-        (part.mesh.position.y - part.previousPosition.y) / Math.max(deltaSeconds, 0.001),
-        (part.mesh.position.z - part.previousPosition.z) / Math.max(deltaSeconds, 0.001)
-      );
+      this.physics.moveKinematicBody(part.body, part.mesh.position, part.mesh.quaternion);
       part.previousPosition.copy(part.mesh.position);
     }
 
@@ -9348,35 +9383,42 @@ export class RaceScene {
     }
 
     const grounded = this.isPlayerGrounded();
+    const bodyPosition = this.readBodyPosition(this.playerBody);
+    const bodyVelocity = this.readBodyVelocity(this.playerBody);
     const forceScale = grounded ? CONTROL_FORCE : AIR_CONTROL_FORCE;
     if (controlMagnitude > 0.001) {
-      this.playerBody.applyForce(new Vec3(desired.x * forceScale * control, 0, desired.y * forceScale * control), this.playerBody.position);
+      this.physics.applyForce(
+        this.playerBody,
+        new Vector3(desired.x * forceScale * control, 0, desired.y * forceScale * control),
+        bodyPosition
+      );
     }
 
     if (grounded && this.activeForceZone?.kind !== "ice") {
       const idleGrip = this.ballPreset === "classic2015" ? 0.87 : 0.94;
       const grip = controlMagnitude > 0.001 ? BALLZ_GROUND_GRIP : idleGrip;
       const gripStep = Math.pow(grip, deltaSeconds * 60);
-      this.playerBody.velocity.x *= gripStep;
-      this.playerBody.velocity.z *= gripStep;
+      bodyVelocity.x *= gripStep;
+      bodyVelocity.z *= gripStep;
     }
 
     // legacy CLBallZ: with no input and |omega| > 3, angular velocity halves each frame
     if (this.ballPreset === "classic2015" && controlMagnitude <= 0.001) {
-      const omega = this.playerBody.angularVelocity;
+      const omega = this.readBodyAngularVelocity(this.playerBody);
       if (omega.length() > 3) {
         const brake = Math.pow(0.5, deltaSeconds * 60);
-        omega.scale(brake, omega);
+        omega.multiplyScalar(brake);
+        this.physics.writeAngularVelocity(this.playerBody, omega, false);
       }
     }
 
-    const horizontalSpeed = Math.hypot(this.playerBody.velocity.x, this.playerBody.velocity.z);
+    const horizontalSpeed = Math.hypot(bodyVelocity.x, bodyVelocity.z);
     if (horizontalSpeed > BALLZ_MAX_GROUND_SPEED) {
       const limit = BALLZ_MAX_GROUND_SPEED / horizontalSpeed;
-      this.playerBody.velocity.x *= limit;
-      this.playerBody.velocity.z *= limit;
+      bodyVelocity.x *= limit;
+      bodyVelocity.z *= limit;
     }
-    this.playerBody.velocity.y = Math.max(this.playerBody.velocity.y, -18);
+    bodyVelocity.y = Math.max(bodyVelocity.y, -18);
 
     if (grounded) {
       this.canJump = true;
@@ -9388,15 +9430,17 @@ export class RaceScene {
       this.raceCameraDistance = this.getDefaultRaceCameraDistance();
     }
 
-    if (this.input.consumePress("Space") && this.canJump) {
-      this.playerBody.velocity.y = 9.2;
+    const jumped = this.input.consumePress("Space") && this.canJump;
+    if (jumped) {
+      bodyVelocity.y = 9.2;
       this.canJump = false;
       this.particles.burst(this.playerGroup.position, 28, 3.8, 0.52);
     }
+    this.physics.writeLinearVelocity(this.playerBody, bodyVelocity, controlMagnitude > 0.001 || jumped);
   }
 
   private findPlayerForceZone(): RaceForceZone | null {
-    const position = this.playerBody.position;
+    const position = this.readBodyPosition(this.playerBody);
     return this.race.forceZones?.find((zone) => {
       const halfX = zone.size[0] / 2;
       const halfY = zone.size[1] / 2;
@@ -9415,16 +9459,17 @@ export class RaceScene {
       return;
     }
 
-    const offsetX = this.playerBody.position.x - zone.position[0];
-    const offsetZ = this.playerBody.position.z - zone.position[2];
+    const playerPosition = this.readBodyPosition(this.playerBody);
+    const offsetX = playerPosition.x - zone.position[0];
+    const offsetZ = playerPosition.z - zone.position[2];
     const distance = Math.hypot(offsetX, offsetZ);
     const fallbackDirection = zone.position[0] >= 0 ? 1 : -1;
     const directionX = distance > 0.05 ? offsetX / distance : fallbackDirection;
     const directionZ = distance > 0.05 ? offsetZ / distance : 0;
     if (zone.kind === "fire") {
-      this.playerBody.applyForce(new Vec3(directionX * 58, 44, directionZ * 58), this.playerBody.position);
+      this.physics.applyForce(this.playerBody, new Vector3(directionX * 58, 44, directionZ * 58), playerPosition);
     } else {
-      this.playerBody.applyForce(new Vec3(-directionX * 34, 0, -directionZ * 34), this.playerBody.position);
+      this.physics.applyForce(this.playerBody, new Vector3(-directionX * 34, 0, -directionZ * 34), playerPosition);
     }
 
     this.forceEffectAccumulator += deltaSeconds;
@@ -9432,16 +9477,16 @@ export class RaceScene {
       this.forceEffectAccumulator %= 0.08;
       const color = zone.kind === "fire" ? "#ff6a2a" : "#73eaff";
       const origin = new Vector3(
-        this.playerBody.position.x,
-        Math.max(0.25, this.playerBody.position.y - this.playerRadius * 0.65),
-        this.playerBody.position.z
+        playerPosition.x,
+        Math.max(0.25, playerPosition.y - this.playerRadius * 0.65),
+        playerPosition.z
       );
       this.particles.burst(origin, zone.kind === "fire" ? 7 : 4, zone.kind === "fire" ? 3.2 : 1.5, 0.42, color);
     }
   }
 
   private syncPlayerVisuals(): void {
-    const currentPosition = new Vector3(this.playerBody.position.x, this.playerBody.position.y, this.playerBody.position.z);
+    const currentPosition = this.readBodyPosition(this.playerBody);
     const deltaX = currentPosition.x - this.previousPlayerPosition.x;
     const deltaZ = currentPosition.z - this.previousPlayerPosition.z;
     const horizontalDistance = Math.hypot(deltaX, deltaZ);
@@ -9462,47 +9507,44 @@ export class RaceScene {
   /** contact-normal grounded check — works on elevated terrain, not just y≈0 floors */
   private isPlayerGrounded(): boolean {
     const fallbackFloorY = this.playerRadius + 0.05;
+    const position = this.readBodyPosition(this.playerBody);
+    const velocity = this.readBodyVelocity(this.playerBody);
     if (
       this.race.bounds.minY === undefined &&
-      this.playerBody.position.y <= fallbackFloorY + 0.08 &&
-      this.playerBody.velocity.y <= 0.2
+      position.y <= fallbackFloorY + 0.08 &&
+      velocity.y <= 0.2
     ) {
       return true;
     }
 
-    for (const contact of this.physics.world.contacts) {
-      const isBi = contact.bi === this.playerBody;
-      const isBj = contact.bj === this.playerBody;
-      if (!isBi && !isBj) {
-        continue;
-      }
-      const normalY = isBi ? -contact.ni.y : contact.ni.y;
-      if (normalY > 0.35) {
-        return true;
-      }
-    }
-    return false;
+    return this.physics.isBodyGrounded(this.playerBody, 0.35);
   }
 
   private applyBounds(): void {
     const bounds = this.race.bounds;
-    this.playerBody.position.x = MathUtils.clamp(this.playerBody.position.x, bounds.minX + this.playerRadius, bounds.maxX - this.playerRadius);
-    this.playerBody.position.z = MathUtils.clamp(this.playerBody.position.z, bounds.minZ + this.playerRadius, bounds.maxZ - this.playerRadius);
+    const position = this.readBodyPosition(this.playerBody);
+    const velocity = this.readBodyVelocity(this.playerBody);
+    position.x = MathUtils.clamp(position.x, bounds.minX + this.playerRadius, bounds.maxX - this.playerRadius);
+    position.z = MathUtils.clamp(position.z, bounds.minZ + this.playerRadius, bounds.maxZ - this.playerRadius);
     if (bounds.minY !== undefined) {
       // terrain race: falling below the world respawns the ball at the start
-      if (this.playerBody.position.y < bounds.minY + this.playerRadius) {
+      if (position.y < bounds.minY + this.playerRadius) {
         setBodyTransform(this.playerBody, this.raceStart);
+        position.copy(this.raceStart);
+        velocity.set(0, 0, 0);
       }
     } else {
       const fallbackFloorY = this.playerRadius + 0.05;
-      if (this.playerBody.position.y < fallbackFloorY) {
-        this.playerBody.position.y = fallbackFloorY;
-        if (this.playerBody.velocity.y < 0) {
-          this.playerBody.velocity.y = 0;
+      if (position.y < fallbackFloorY) {
+        position.y = fallbackFloorY;
+        if (velocity.y < 0) {
+          velocity.y = 0;
         }
       }
     }
-    this.playerGroup.position.set(this.playerBody.position.x, this.playerBody.position.y, this.playerBody.position.z);
+    this.writeBodyPosition(this.playerBody, position, false);
+    this.physics.writeLinearVelocity(this.playerBody, velocity, false);
+    this.playerGroup.position.copy(position);
   }
 
   private updateVisitCamera(deltaSeconds: number, immediate = false): void {
@@ -9547,7 +9589,8 @@ export class RaceScene {
   private updateRaceFollowCamera(deltaSeconds: number, immediate = false): void {
     const target = this.playerGroup.position.clone();
     target.y += 1.05;
-    const horizontalSpeed = Math.hypot(this.playerBody.velocity.x, this.playerBody.velocity.z);
+    const playerVelocity = this.readBodyVelocity(this.playerBody);
+    const horizontalSpeed = Math.hypot(playerVelocity.x, playerVelocity.z);
     const chaseDistance = this.raceCameraDistance + Math.min(2.5, horizontalSpeed * 0.12);
     const horizontalDistance = Math.cos(this.cameraPitch) * chaseDistance;
     const desired = new Vector3(
@@ -9585,18 +9628,15 @@ export class RaceScene {
     direction.multiplyScalar(1 / desiredDistance);
     const startOffset = Math.min(0.65, desiredDistance * 0.1);
     const start = target.clone().addScaledVector(direction, startOffset);
-    this.cameraRaycastResult.reset();
-    const hit = this.physics.world.raycastClosest(
-      new Vec3(start.x, start.y, start.z),
-      new Vec3(desired.x, desired.y, desired.z),
-      { skipBackfaces: true },
-      this.cameraRaycastResult
-    );
-    if (!hit || !this.cameraRaycastResult.hasHit || this.cameraRaycastResult.body === this.playerBody) {
+    const hit = this.physics.castSegmentClosest(start, desired, {
+      skipBackfaces: true,
+      excludeBody: this.playerBody
+    });
+    if (!hit) {
       return desired;
     }
 
-    const point = this.cameraRaycastResult.hitPointWorld;
+    const point = hit.point;
     const hitDistance = Math.hypot(point.x - target.x, point.y - target.y, point.z - target.z);
     if (hitDistance >= desiredDistance - 0.05) {
       return desired;
@@ -9604,7 +9644,7 @@ export class RaceScene {
 
     const resolvedDistance = MathUtils.clamp(hitDistance - 0.35, 0.55, desiredDistance);
     this.cameraCollision.active = true;
-    this.cameraCollision.hitBodyId = this.cameraRaycastResult.body?.id ?? null;
+    this.cameraCollision.hitBodyId = hit.body?.handle ?? null;
     this.cameraCollision.resolvedDistance = resolvedDistance;
 
     // A direct wall hit can otherwise collapse the camera almost into BallZ.
@@ -9618,16 +9658,13 @@ export class RaceScene {
       const elevatedDesiredDistance = Math.min(desiredDistance, 6);
       const elevatedDesired = target.clone().addScaledVector(elevatedDirection, elevatedDesiredDistance);
       const elevatedStart = target.clone().addScaledVector(elevatedDirection, 0.65);
-      this.cameraRaycastResult.reset();
-      const elevatedHit = this.physics.world.raycastClosest(
-        new Vec3(elevatedStart.x, elevatedStart.y, elevatedStart.z),
-        new Vec3(elevatedDesired.x, elevatedDesired.y, elevatedDesired.z),
-        { skipBackfaces: true },
-        this.cameraRaycastResult
-      );
+      const elevatedHit = this.physics.castSegmentClosest(elevatedStart, elevatedDesired, {
+        skipBackfaces: true,
+        excludeBody: this.playerBody
+      });
       let elevatedResolvedDistance = elevatedDesiredDistance;
-      if (elevatedHit && this.cameraRaycastResult.hasHit && this.cameraRaycastResult.body !== this.playerBody) {
-        const elevatedPoint = this.cameraRaycastResult.hitPointWorld;
+      if (elevatedHit) {
+        const elevatedPoint = elevatedHit.point;
         const elevatedHitDistance = Math.hypot(
           elevatedPoint.x - target.x,
           elevatedPoint.y - target.y,

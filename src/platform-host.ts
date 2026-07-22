@@ -20,6 +20,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import {
   AgentWorldRuntime,
@@ -87,13 +88,28 @@ export interface PlatformHostOptions {
    * is a splash screen.
    */
   intro?: boolean;
+  /**
+   * Force the post stack on regardless of what the loaded scene's `environment.post` says.
+   * Default false — post remains a per-scene opt-in (§4: a pass must earn its frame budget),
+   * and this switch exists so a route (`?post=bloom`) or a harness can demo the pipeline on
+   * scenes that never asked. A scene's own `environment.post` tuning always wins over the
+   * host default when both are present.
+   */
+  post?: boolean;
 }
+
+/**
+ * The host's demo tuning for {@link PlatformHostOptions.post} / {@link PlatformHost.setPostEnabled}.
+ * Deliberately subtle: threshold 0.85 keeps ordinary lit surfaces below the bloom knee so only
+ * emissives (rings, gates, beacons) glow, and strength 0.35 is a halo rather than a fog.
+ */
+const HOST_DEMO_POST: AgentWorldPost = { bloom: { strength: 0.35, radius: 0.4, threshold: 0.85 } };
 
 /**
  * Standalone renderer/host for the `graphysx.agent-world/v2` scene model.
  *
  * The {@link AgentWorldRuntime} already owns its Three.js scene-graph (`group`),
- * its cannon-es physics world, behaviors, and deterministic `update(dt)` step.
+ * its Rapier physics world, behaviors, and deterministic `update(dt)` step.
  * This host lends it only the four things `race-scene.ts` used to: a renderer, a
  * camera, orbit controls, and ONE animation loop. It has no dependency on the
  * 388 KB race monolith — this is the clean spine the platform runs on.
@@ -125,9 +141,13 @@ export class PlatformHost {
   private readonly controls: OrbitControls;
   private readonly clock = new Clock();
   private readonly onResize = () => this.resize();
-  /** Post stack — exists only while the scene's `environment.post` asks for one. */
+  /** Post stack — exists only while the scene's `environment.post` (or the host override) asks for one. */
   private composer: EffectComposer | null = null;
   private bloomPass: UnrealBloomPass | null = null;
+  private smaaPass: SMAAPass | null = null;
+  private outputPass: OutputPass | null = null;
+  /** Host-side post request (option / `?post=bloom` / setPostEnabled). The scene's own wins. */
+  private postOverride: AgentWorldPost | null = null;
   private frame = 0;
   private disposed = false;
   private readonly unsubscribeEvents: () => void;
@@ -231,6 +251,9 @@ export class PlatformHost {
     this.world = new AgentWorldRuntime(options.world ?? GRAPHYSX_AGENT_DEMO_WORLD);
     this.scene.add(this.world.group);
     this.audio = new AgentWorldAudioLayer(this.camera, this.world);
+    // Before the first applyEnvironment, so an opted-in host renders its very first frame
+    // through the composer rather than flickering the bare path for one frame.
+    if (options.post === true) this.postOverride = HOST_DEMO_POST;
     this.applyEnvironment();
 
     // Parity gap, closed at the source. `applyEnvironment()` was reachable from exactly three
@@ -504,8 +527,26 @@ export class PlatformHost {
       this.camera.updateProjectionMatrix();
     }
     this.applySky(environment.sky);
-    this.applyPost(environment.post);
+    // The scene document's request wins — it is tuned for that scene. The host override only
+    // fills in when the scene is silent, so `?post=bloom` demos the stack without ever
+    // overriding an author's numbers.
+    this.applyPost(environment.post ?? this.postOverride);
     this.applyOverlay(environment.overlay);
+  }
+
+  /**
+   * Turn the host-side post stack on or off at runtime (`window.__GRAPHYSX_HOST__.setPostEnabled(true)`
+   * from a console, or any embedding page). Same precedence as the `post` option: a scene whose
+   * own `environment.post` is set keeps its tuning; this only covers scenes that asked for nothing.
+   */
+  setPostEnabled(enabled: boolean): void {
+    this.postOverride = enabled ? HOST_DEMO_POST : null;
+    this.applyEnvironment();
+  }
+
+  /** True when frames are currently drawn through the composer rather than the bare renderer. */
+  get postActive(): boolean {
+    return this.composer !== null;
   }
 
   /**
@@ -516,11 +557,7 @@ export class PlatformHost {
    */
   private applyPost(post: AgentWorldPost | null): void {
     if (!post) {
-      if (this.composer) {
-        this.composer.dispose();
-        this.composer = null;
-        this.bloomPass = null;
-      }
+      this.teardownComposer();
       return;
     }
     if (!this.composer) {
@@ -531,15 +568,34 @@ export class PlatformHost {
       this.composer.addPass(new RenderPass(this.scene, this.camera));
       this.bloomPass = new UnrealBloomPass(size.clone(), post.bloom.strength, post.bloom.radius, post.bloom.threshold);
       this.composer.addPass(this.bloomPass);
+      // The composer renders into plain (non-multisampled) targets, so the context's own MSAA
+      // is lost the moment post turns on; SMAA buys the edges back for one screen-space pass.
+      // It works in linear space, so it must sit BEFORE the OutputPass (its own contract).
+      this.smaaPass = new SMAAPass();
+      this.composer.addPass(this.smaaPass);
       // Tone mapping + sRGB conversion move here once a composer owns the frame; without
       // this pass the composed output is linear and reads washed out.
-      this.composer.addPass(new OutputPass());
+      this.outputPass = new OutputPass();
+      this.composer.addPass(this.outputPass);
     }
     if (this.bloomPass) {
       this.bloomPass.strength = post.bloom.strength;
       this.bloomPass.radius = post.bloom.radius;
       this.bloomPass.threshold = post.bloom.threshold;
     }
+  }
+
+  /** Drop the post stack and its GPU targets — `composer.dispose()` does not dispose passes. */
+  private teardownComposer(): void {
+    if (!this.composer) return;
+    this.bloomPass?.dispose();
+    this.smaaPass?.dispose();
+    this.outputPass?.dispose();
+    this.composer.dispose();
+    this.composer = null;
+    this.bloomPass = null;
+    this.smaaPass = null;
+    this.outputPass = null;
   }
 
   /** Mount the scene's 2D overlay sketch, or clear the canvas when the scene asks for none. */
@@ -794,7 +850,7 @@ export class PlatformHost {
     this.editor?.dispose();
     this.bridge.dispose();
     this.controls.dispose();
-    this.composer?.dispose();
+    this.teardownComposer();
     this.scene.remove(this.world.group);
     this.world.dispose();
     this.renderer.dispose();
