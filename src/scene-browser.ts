@@ -390,8 +390,7 @@ const BROWSER_CSS = `
   --gx-raise:rgba(16,38,49,.9);
   --gx-border:#1b3b49;
   --gx-border-soft:#153040;
-  --gx-accent:var(--gx-accent-deep,#37b6d3);
-  --gx-accent-deep:#1c6a80;
+  /* Accent tokens cascade from platform-theme's :root — no local cyan pair here. */
   --gx-text:#dbeff5;
   --gx-muted:#7fb0c0;
   --gx-field:#0b222c;
@@ -407,7 +406,7 @@ const BROWSER_CSS = `
 .gx-sb-dot{width:7px;height:7px;border-radius:50%;background:#4b6572;flex:none;transition:background .2s,box-shadow .2s}
 .gx-sb-dot[data-online=true]{background:#3fd39b;box-shadow:0 0 0 3px rgba(63,211,155,.16)}
 .gx-sb-dot[data-online=false]{background:#e2685f;box-shadow:0 0 0 3px rgba(226,104,95,.16)}
-.gx-sb-icon{background:none;border:none;color:var(--gx-muted);cursor:pointer;font:16px/1 system-ui;padding:0 4px}
+.gx-sb-icon{background:none;border:none;color:var(--gx-muted);cursor:pointer;font:16px/1 var(--gx-font);padding:0 4px}
 .gx-sb-icon:hover{color:var(--gx-text)}
 .gx-sb-collapsed .gx-sb-body{display:none}
 
@@ -422,13 +421,13 @@ const BROWSER_CSS = `
 .gx-sb-empty strong{color:var(--gx-text)}
 .gx-sb-empty code{font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--gx-text)}
 
-.gx-sb-live{margin:0 5px;padding:7px 9px;border-radius:6px;background:rgba(55,182,211,.1);border:1px solid var(--gx-accent-deep);color:var(--gx-text);font-size:11.5px;line-height:1.45}
+.gx-sb-live{margin:0 5px;padding:7px 9px;border-radius:6px;background:var(--gx-accent-soft);border:1px solid var(--gx-accent-deep);color:var(--gx-text);font-size:11.5px;line-height:1.45}
 .gx-sb-actor{font-weight:700;color:var(--gx-accent)}
 .gx-sb-rev{color:var(--gx-muted)}
 .gx-sb-flash{animation:gx-sb-pulse 1.1s ease-out}
 @keyframes gx-sb-pulse{
-  0%{background:rgba(55,182,211,.42);border-color:var(--gx-accent)}
-  100%{background:rgba(55,182,211,.1);border-color:var(--gx-accent-deep)}
+  0%{background:var(--gx-accent-glow);border-color:var(--gx-accent)}
+  100%{background:var(--gx-accent-soft);border-color:var(--gx-accent-deep)}
 }
 
 .gx-sb-foot{display:flex;gap:6px;padding:8px 5px 5px}

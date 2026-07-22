@@ -14,6 +14,9 @@
  */
 import "@fontsource/space-grotesk/400.css";
 import "@fontsource/space-grotesk/500.css";
+// 600 is the workhorse weight of the chrome (`font:600 …` on names, tabs, badges); without
+// this file the browser silently substitutes 700 for every one of those.
+import "@fontsource/space-grotesk/600.css";
 import "@fontsource/space-grotesk/700.css";
 
 export function installPlatformTheme(): void {
@@ -28,6 +31,12 @@ export function installPlatformTheme(): void {
       --gx-accent:#78f0d0;
       --gx-accent-deep:#2fb6d0;
       --gx-accent-edge:#4fd0e6;
+      /* The accent at panel duties: a dark fill that carries ink-coloured text (active rows,
+         tabs, chips), and three alpha washes so panels never re-derive their own rgba()s. */
+      --gx-accent-fill:#1d6f5a;
+      --gx-accent-soft:rgba(120,240,208,.13);
+      --gx-accent-ring:rgba(120,240,208,.26);
+      --gx-accent-glow:rgba(120,240,208,.42);
       --gx-life:#5fe0b4;
       --gx-violet:#8fa0e0;
       --gx-ink:#eafaff;

@@ -2920,8 +2920,9 @@ const EDITOR_CSS = `
   --gx-raise:rgba(16,38,49,.9);
   --gx-border:#1b3b49;
   --gx-border-soft:#153040;
-  --gx-accent:#37b6d3;
-  --gx-accent-deep:#1c6a80;
+  /* Accent comes from the product theme (platform-theme.ts): --gx-accent, --gx-accent-deep,
+     --gx-accent-fill and the alpha washes cascade from :root. The editor used to pin its own
+     cyan pair here, which is exactly the palette fork the one-theme layer exists to end. */
   --gx-text:#dbeff5;
   --gx-muted:#7fb0c0;
   --gx-field:#0b222c;
@@ -2929,7 +2930,7 @@ const EDITOR_CSS = `
   --gx-radius-sm:6px;
   --gx-s1:4px; --gx-s2:6px; --gx-s3:8px; --gx-s4:12px; --gx-s5:16px;
   position:fixed;z-index:20;box-sizing:border-box;
-  font:12px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:var(--gx-text);
+  font:12px/1.45 var(--gx-font);color:var(--gx-text);
   background:var(--gx-panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   border:1px solid var(--gx-border);border-radius:var(--gx-radius);
   box-shadow:0 10px 34px rgba(0,10,16,.42);
@@ -2942,7 +2943,7 @@ const EDITOR_CSS = `
 .gx-ed-group+.gx-ed-group{padding-left:var(--gx-s3);border-left:1px solid var(--gx-border-soft)}
 .gx-ed-toolbar button,.gx-ed-toolbar select{background:var(--gx-field);color:var(--gx-text);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:5px 10px;cursor:pointer;font:inherit;line-height:1.2}
 .gx-ed-toolbar button:hover,.gx-ed-toolbar select:hover{background:var(--gx-raise);border-color:var(--gx-accent-deep)}
-.gx-ed-toolbar button.gx-ed-on{background:var(--gx-accent-deep);border-color:var(--gx-accent);color:#fff}
+.gx-ed-toolbar button.gx-ed-on{background:var(--gx-accent-fill);border-color:var(--gx-accent);color:#fff}
 .gx-ed-exit{background:var(--gx-raise);border-color:var(--gx-accent-deep)}
 
 /* ---- rails ---- */
@@ -2955,15 +2956,15 @@ const EDITOR_CSS = `
 
 .gx-ed-head{display:flex;align-items:center;gap:var(--gx-s3);flex:none}
 .gx-ed-head--drawer{flex-wrap:nowrap}
-.gx-ed-title{font:600 10px/1.4 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--gx-muted);flex:none}
-.gx-ed-count{margin-left:auto;font:600 10px/1 system-ui,sans-serif;color:var(--gx-accent);background:rgba(55,182,211,.13);border:1px solid var(--gx-border);border-radius:99px;padding:3px 8px}
+.gx-ed-title{font:600 10px/1.4 var(--gx-font);letter-spacing:.14em;text-transform:uppercase;color:var(--gx-muted);flex:none}
+.gx-ed-count{margin-left:auto;font:600 10px/1 var(--gx-font);color:var(--gx-accent);background:var(--gx-accent-soft);border:1px solid var(--gx-border);border-radius:99px;padding:3px 8px}
 .gx-ed-readout{font-size:11px;color:var(--gx-muted);word-break:break-all;flex:none}
 
 /* ---- inputs (one look, everywhere) ---- */
-.gx-ed-panel input,.gx-ed-panel select,.gx-ed-workbench input,.gx-ed-workbench textarea{background:var(--gx-field);color:var(--gx-text);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:4px 6px;font:11px/1.3 system-ui,sans-serif;min-width:0}
+.gx-ed-panel input,.gx-ed-panel select,.gx-ed-workbench input,.gx-ed-workbench textarea{background:var(--gx-field);color:var(--gx-text);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:4px 6px;font:11px/1.3 var(--gx-font);min-width:0}
 .gx-ed-panel input:hover,.gx-ed-panel select:hover,.gx-ed-workbench input:hover,.gx-ed-workbench textarea:hover{border-color:var(--gx-accent-deep)}
 .gx-ed-panel input:focus,.gx-ed-panel select:focus,.gx-ed-panel button:focus-visible,
-.gx-ed-workbench input:focus,.gx-ed-workbench textarea:focus,.gx-ed-workbench button:focus-visible{outline:none;border-color:var(--gx-accent);box-shadow:0 0 0 2px rgba(55,182,211,.24)}
+.gx-ed-workbench input:focus,.gx-ed-workbench textarea:focus,.gx-ed-workbench button:focus-visible{outline:none;border-color:var(--gx-accent);box-shadow:0 0 0 2px var(--gx-accent-ring)}
 .gx-ed-panel input[type=color]{padding:1px;width:44px;height:22px;cursor:pointer;flex:none}
 /* Spinners steal a third of a narrow numeric field and clip the value. */
 .gx-ed-panel input[type=number],.gx-ed-workbench input[type=number]{-moz-appearance:textfield;text-align:right}
@@ -2977,9 +2978,9 @@ const EDITOR_CSS = `
 
 /* ---- scene tree ---- */
 .gx-ed-list{overflow-y:auto;display:flex;flex-direction:column;gap:2px;flex:1 1 auto;min-height:0;padding-right:2px}
-.gx-ed-row{display:flex;align-items:center;gap:var(--gx-s2);text-align:left;width:100%;background:transparent;color:#c6e2ea;border:1px solid transparent;border-radius:var(--gx-radius-sm);padding:4px 6px;cursor:pointer;font:11px/1.3 system-ui,sans-serif}
+.gx-ed-row{display:flex;align-items:center;gap:var(--gx-s2);text-align:left;width:100%;background:transparent;color:#c6e2ea;border:1px solid transparent;border-radius:var(--gx-radius-sm);padding:4px 6px;cursor:pointer;font:11px/1.3 var(--gx-font)}
 .gx-ed-row:hover{background:var(--gx-raise);border-color:var(--gx-border)}
-.gx-ed-row--active{background:var(--gx-accent-deep);border-color:var(--gx-accent);color:#fff;font-weight:600}
+.gx-ed-row--active{background:var(--gx-accent-fill);border-color:var(--gx-accent);color:#fff;font-weight:600}
 .gx-ed-glyph{flex:none;width:13px;text-align:center;color:var(--gx-accent);font-size:11px}
 .gx-ed-row--active .gx-ed-glyph{color:#fff}
 .gx-ed-row-id{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2989,8 +2990,8 @@ const EDITOR_CSS = `
 /* ---- inspector ---- */
 .gx-ed-inspector{display:flex;flex-direction:column;gap:5px}
 .gx-ed-ident{display:flex;align-items:center;gap:var(--gx-s2);justify-content:space-between;background:var(--gx-raise);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:5px var(--gx-s3)}
-.gx-ed-ident-id{font:600 12px/1.3 system-ui,sans-serif;color:#eaf9ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gx-ed-badge{flex:none;font:600 9.5px/1 system-ui,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--gx-accent);border:1px solid var(--gx-border);background:rgba(55,182,211,.13);border-radius:99px;padding:4px 7px}
+.gx-ed-ident-id{font:600 12px/1.3 var(--gx-font);color:#eaf9ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gx-ed-badge{flex:none;font:600 9.5px/1 var(--gx-font);letter-spacing:.07em;text-transform:uppercase;color:var(--gx-accent);border:1px solid var(--gx-border);background:var(--gx-accent-soft);border-radius:99px;padding:4px 7px}
 .gx-ed-section{border:1px solid var(--gx-border-soft);border-radius:var(--gx-radius-sm);background:rgba(4,14,20,.4)}
 .gx-ed-section>summary{list-style:none;cursor:pointer;padding:5px var(--gx-s3);display:flex;align-items:center;gap:var(--gx-s2)}
 .gx-ed-section>summary::-webkit-details-marker{display:none}
@@ -3003,14 +3004,14 @@ const EDITOR_CSS = `
 .gx-ed-field>:not(.gx-ed-label){flex:1 1 auto;min-width:0}
 .gx-ed-vec{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
 .gx-ed-axis{display:flex;align-items:center;gap:2px;min-width:0}
-.gx-ed-axis>span{flex:none;font:600 9px/1 system-ui,sans-serif;text-transform:uppercase;color:var(--gx-muted)}
+.gx-ed-axis>span{flex:none;font:600 9px/1 var(--gx-font);text-transform:uppercase;color:var(--gx-muted)}
 .gx-ed-axis>input{width:100%;padding:4px 4px}
 .gx-ed-slider{display:flex;align-items:center;gap:var(--gx-s2)}
 .gx-ed-value{flex:none;font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gx-muted);min-width:34px;text-align:right}
 .gx-ed-inline{display:flex;align-items:center;gap:var(--gx-s2);justify-content:flex-end}
 .gx-ed-attached{display:flex;align-items:center;gap:var(--gx-s2);background:var(--gx-field);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:3px 4px 3px 8px;font-size:11px}
 .gx-ed-attached>span{flex:1 1 auto}
-.gx-ed-x{flex:none;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--gx-muted);cursor:pointer;font:14px/1 system-ui,sans-serif;padding:1px 6px}
+.gx-ed-x{flex:none;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--gx-muted);cursor:pointer;font:14px/1 var(--gx-font);padding:1px 6px}
 .gx-ed-x:hover{background:#5c2230;border-color:#8d3346;color:#ffd9e0}
 .gx-ed-blank{display:flex;flex-direction:column;align-items:center;gap:var(--gx-s2);text-align:center;padding:var(--gx-s5) var(--gx-s3);color:var(--gx-muted);border:1px dashed var(--gx-border);border-radius:var(--gx-radius-sm)}
 .gx-ed-blank-glyph{font-size:22px;color:var(--gx-accent);opacity:.55}
@@ -3019,22 +3020,22 @@ const EDITOR_CSS = `
 
 /* ---- library drawer ---- */
 .gx-ed-tabs{display:flex;gap:2px;background:rgba(4,14,20,.5);border:1px solid var(--gx-border-soft);border-radius:var(--gx-radius-sm);padding:2px}
-.gx-ed-tab{background:transparent;border:none;border-radius:5px;color:var(--gx-muted);cursor:pointer;font:600 10.5px/1 system-ui,sans-serif;letter-spacing:.03em;padding:5px 11px}
+.gx-ed-tab{background:transparent;border:none;border-radius:5px;color:var(--gx-muted);cursor:pointer;font:600 10.5px/1 var(--gx-font);letter-spacing:.03em;padding:5px 11px}
 .gx-ed-tab:hover{color:var(--gx-text);background:var(--gx-raise)}
-.gx-ed-tab--on{background:var(--gx-accent-deep);color:#fff}
-.gx-ed-collapse{margin-left:auto;flex:none;background:var(--gx-field);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);color:var(--gx-muted);cursor:pointer;font:10px/1 system-ui,sans-serif;padding:6px 9px}
+.gx-ed-tab--on{background:var(--gx-accent-fill);color:#fff}
+.gx-ed-collapse{margin-left:auto;flex:none;background:var(--gx-field);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);color:var(--gx-muted);cursor:pointer;font:10px/1 var(--gx-font);padding:6px 9px}
 /* Play is the workbench's primary action, so it reads as one. It carries the auto margin and the
    close button then sits directly beside it, rather than the two splitting the free space. */
-.gx-lv-play{margin-left:auto;flex:none;border-radius:var(--gx-radius-sm);cursor:pointer;font:10px/1 system-ui,sans-serif;padding:6px 11px;color:#0c1f1a;background:linear-gradient(180deg,#5fe0b4,#2fae86);border:1px solid #6ff0c4;font-weight:700}
+.gx-lv-play{margin-left:auto;flex:none;border-radius:var(--gx-radius-sm);cursor:pointer;font:10px/1 var(--gx-font);padding:6px 11px;color:#0c1f1a;background:linear-gradient(180deg,#5fe0b4,#2fae86);border:1px solid #6ff0c4;font-weight:700}
 .gx-lv-play:hover{background:linear-gradient(180deg,#72e9c1,#38bd93)}
 .gx-lv-play + .gx-ed-collapse{margin-left:6px}
 .gx-ed-collapse:hover{color:var(--gx-text);border-color:var(--gx-accent-deep)}
 .gx-ed-grid{display:flex;flex-wrap:wrap;gap:var(--gx-s1)}
 .gx-ed-grid--drawer{overflow-y:auto;align-content:flex-start;flex:1 1 auto;min-height:0;padding-right:2px}
-.gx-ed-chip{background:var(--gx-field);color:#c6e2ea;border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:5px 9px;cursor:pointer;font:10.5px/1.2 system-ui,sans-serif}
+.gx-ed-chip{background:var(--gx-field);color:#c6e2ea;border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:5px 9px;cursor:pointer;font:10.5px/1.2 var(--gx-font)}
 .gx-ed-chip:hover{background:var(--gx-raise);border-color:var(--gx-accent);color:#fff}
-.gx-ed-chip:focus-visible{outline:none;border-color:var(--gx-accent);box-shadow:0 0 0 2px rgba(55,182,211,.24)}
-.gx-ed-chip--on{background:var(--gx-accent-deep);border-color:var(--gx-accent);color:#fff}
+.gx-ed-chip:focus-visible{outline:none;border-color:var(--gx-accent);box-shadow:0 0 0 2px var(--gx-accent-ring)}
+.gx-ed-chip--on{background:var(--gx-accent-fill);border-color:var(--gx-accent);color:#fff}
 
 /* ---- levels workbench ---- */
 /* An overlay, not a fourth rail: it fills the working area under the toolbar and closes
@@ -3048,9 +3049,9 @@ const EDITOR_CSS = `
 .gx-lv-ascii{flex:0 0 232px;display:flex;flex-direction:column;gap:var(--gx-s2);min-height:0}
 
 .gx-lv-list{flex:1 1 auto;min-height:60px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding-right:2px}
-.gx-lv-row{display:flex;align-items:center;gap:var(--gx-s2);text-align:left;width:100%;background:transparent;color:#c6e2ea;border:1px solid transparent;border-radius:var(--gx-radius-sm);padding:4px 6px;cursor:pointer;font:11px/1.3 system-ui,sans-serif}
+.gx-lv-row{display:flex;align-items:center;gap:var(--gx-s2);text-align:left;width:100%;background:transparent;color:#c6e2ea;border:1px solid transparent;border-radius:var(--gx-radius-sm);padding:4px 6px;cursor:pointer;font:11px/1.3 var(--gx-font)}
 .gx-lv-row:hover{background:var(--gx-raise);border-color:var(--gx-border)}
-.gx-lv-row--active{background:var(--gx-accent-deep);border-color:var(--gx-accent);color:#fff;font-weight:600}
+.gx-lv-row--active{background:var(--gx-accent-fill);border-color:var(--gx-accent);color:#fff;font-weight:600}
 .gx-lv-row-id{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gx-lv-row-dim{flex:none;font:9.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gx-muted)}
 .gx-lv-row--active .gx-lv-row-dim{color:#cdeef7}
@@ -3063,9 +3064,9 @@ const EDITOR_CSS = `
 .gx-lv-tools{display:flex;align-items:center;flex-wrap:wrap;gap:var(--gx-s1);flex:none}
 .gx-lv-tools input[type=number]{width:52px}
 .gx-lv-palette{display:flex;flex-wrap:wrap;gap:var(--gx-s1);flex:none}
-.gx-lv-swatch{display:flex;align-items:center;gap:var(--gx-s2);background:var(--gx-field);color:#c6e2ea;border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:3px 8px 3px 3px;cursor:pointer;font:10.5px/1.2 system-ui,sans-serif}
+.gx-lv-swatch{display:flex;align-items:center;gap:var(--gx-s2);background:var(--gx-field);color:#c6e2ea;border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:3px 8px 3px 3px;cursor:pointer;font:10.5px/1.2 var(--gx-font)}
 .gx-lv-swatch:hover{background:var(--gx-raise);border-color:var(--gx-accent)}
-.gx-lv-swatch--on{background:var(--gx-accent-deep);border-color:var(--gx-accent);color:#fff}
+.gx-lv-swatch--on{background:var(--gx-accent-fill);border-color:var(--gx-accent);color:#fff}
 .gx-lv-swatch-glyph{flex:none;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:4px;font:700 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace}
 
 /* A flex canvas with an auto-margin grid centres small levels without clipping the
@@ -3079,7 +3080,7 @@ const EDITOR_CSS = `
 .gx-lv-cell--marked{box-shadow:inset 0 0 0 2px var(--gx-accent)}
 
 .gx-lv-text{flex:1 1 auto;min-height:0;resize:none;white-space:pre;overflow:auto;font:12px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace !important;letter-spacing:.09em}
-.gx-lv-status{flex:none;font:11px/1.4 system-ui,sans-serif;color:var(--gx-muted);border-top:1px solid var(--gx-border-soft);padding-top:var(--gx-s2);min-height:16px;word-break:break-word}
+.gx-lv-status{flex:none;font:11px/1.4 var(--gx-font);color:var(--gx-muted);border-top:1px solid var(--gx-border-soft);padding-top:var(--gx-s2);min-height:16px;word-break:break-word}
 .gx-lv-status--error{color:#ff9fb0}
 
 /* ---- toolbar tail: live status + help ---- */
@@ -3092,20 +3093,20 @@ const EDITOR_CSS = `
 
 /* ---- scene tree visibility toggle ---- */
 .gx-ed-eye{flex:none;width:16px;text-align:center;color:var(--gx-accent);opacity:.65;cursor:pointer;border-radius:4px}
-.gx-ed-eye:hover{opacity:1;background:rgba(55,182,211,.18)}
+.gx-ed-eye:hover{opacity:1;background:var(--gx-accent-soft)}
 .gx-ed-eye--off{color:var(--gx-muted);opacity:.5}
 
 /* ---- library thumbnails (textures + media) ---- */
 .gx-ed-thumb{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;width:86px;background:var(--gx-field);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:4px;cursor:pointer;color:#c6e2ea}
 .gx-ed-thumb:hover{background:var(--gx-raise);border-color:var(--gx-accent);color:#fff}
-.gx-ed-thumb--on{border-color:var(--gx-accent);box-shadow:0 0 0 2px rgba(55,182,211,.35)}
+.gx-ed-thumb--on{border-color:var(--gx-accent);box-shadow:0 0 0 2px var(--gx-accent-ring)}
 .gx-ed-thumb--disabled{opacity:.4;cursor:not-allowed}
 .gx-ed-thumb img{width:76px;height:52px;object-fit:cover;border-radius:4px;background:#04121a;pointer-events:none}
 .gx-ed-thumb-glyph{width:76px;height:52px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--gx-accent);background:rgba(4,18,26,.8);border-radius:4px}
-.gx-ed-thumb-label{max-width:78px;font:10px/1.25 system-ui,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gx-ed-thumb-label{max-width:78px;font:10px/1.25 var(--gx-font);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gx-md-x{position:absolute;top:2px;right:2px;z-index:1}
 .gx-md-terrain{position:absolute;top:2px;left:2px;z-index:1;font-size:11px}
-.gx-md-terrain:hover{background:var(--gx-accent-deep);border-color:var(--gx-accent);color:#fff}
+.gx-md-terrain:hover{background:var(--gx-accent-fill);border-color:var(--gx-accent);color:#fff}
 .gx-md-bar{display:flex;align-items:center;gap:var(--gx-s2);flex-wrap:wrap;width:100%;flex:none}
 
 /* ---- media import dialog ---- */

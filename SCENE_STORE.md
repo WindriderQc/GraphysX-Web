@@ -17,7 +17,8 @@ npm run dev              # then open http://localhost:5173/?scene=welcome
 ```
 
 `?scene=<name>` opens a stored scene and polls it every 2s. `?store=<url>` points at a
-store other than `http://localhost:8788`.
+store other than `http://localhost:8788`. `?storeToken=<token>` is how the page presents
+the token when the store requires one (see Auth below).
 
 The showroom still composes first, so if the store is down or the scene is missing you get
 the normal welcome scene and a console warning rather than an empty world.
@@ -123,6 +124,56 @@ revision rather than clobbering. `editScene()` re-reads and retries up to 3 time
 agents editing the same scene converge instead of fighting. This mirrors the runtime's own
 in-page check (`agent-world-runtime.ts:835`).
 
+## Auth
+
+Two modes, chosen by whether `GRAPHYSX_STORE_TOKEN` is set when the store starts.
+
+**Open (default).** No token, no auth — exactly the store as it has always run. The server
+says so at startup (`UNAUTHENTICATED MODE … LAN boundary only`) so nobody discovers it by
+accident. Run it behind the same boundary as any other LAN service and never port-forward
+it in this mode.
+
+**Token.** Set `GRAPHYSX_STORE_TOKEN=<secret>` and every mutating route (`PUT /scenes/:name`,
+`POST /scenes/:name/changes`, `POST /assets/import`, `POST /assets/upload`,
+`DELETE /assets/:id`) and everything under `/datalake` requires it. Read-only scene and
+asset GETs stay open in both modes — a stored scene is the shareable artifact. The datalake
+is personal media, so even listing it is guarded.
+
+Three ways to present the token, checked in this order:
+
+- `Authorization: Bearer <token>` — what `tools/graphysx-scene-agent.mjs` sends when the
+  same env var is set on the client side.
+- `x-graphysx-token: <token>` — what the browser client sends (pass `?storeToken=<token>`
+  in the page URL, or hand `{ token }` to `createSceneStoreClient`).
+- `?token=<token>` — accepted **only** on `/scenes/:name/stream`, because EventSource
+  cannot set headers. Tokens in URLs end up in proxy and access logs; the stream is
+  read-only either way, so the leak costs a read credential, not a write one.
+
+A missing or wrong token gets a `401` with a JSON error body. Comparison is constant-time.
+
+```bash
+# open mode — as before
+curl -X PUT localhost:8788/scenes/welcome -d @scene.json
+
+# token mode
+export GRAPHYSX_STORE_TOKEN=s3cret
+node server/scene-store.mjs                     # server side
+curl -H "Authorization: Bearer s3cret" -X PUT localhost:8788/scenes/welcome -d @scene.json
+npm run scene -- list                           # the tool reads the env var itself
+```
+
+**CORS.** Unset, every response carries `access-control-allow-origin: *` — compat with
+today. Set `GRAPHYSX_STORE_ORIGIN` to a comma-separated allowlist
+(`GRAPHYSX_STORE_ORIGIN=http://localhost:5173,https://graphysx.example`) and the store
+echoes the request's Origin only when it matches, sends no allow-origin header when it
+does not, and adds `vary: origin`. Note the browser sends `*`-mode requests fine today
+precisely because nothing needs credentials; if you set a token for a browser client,
+set the allowlist too.
+
+**Datalake.** The root comes from `GRAPHYSX_DATALAKE_DIR` and nowhere else — the old
+hardcoded `E:\Media\Datalake` fallback is gone. Unset, `/datalake`, `/datalake/file` and
+`/assets/import` answer `503 {"error":"datalake not configured (set GRAPHYSX_DATALAKE_DIR)"}`.
+
 ## What this deliberately is not
 
 Reloading the whole document on every remote change drops physics state — a ball mid-flight
@@ -131,10 +182,17 @@ it is exactly what milestone B (a relay with live deltas) and C (shared physics 
 fix. This rung exists to make the Telegram → Hermes → visible change loop real before any of
 that gets built.
 
-There is no auth. Run it behind the same boundary as any other LAN service.
+The token is one shared secret, not accounts: it says "allowed to write", not "who".
+Attribution stays on `actor`, which remains self-reported. Transport is plain HTTP — on
+anything wider than a LAN, put TLS in front or the token travels in the clear.
 
 ## Verified by
 
 `npm run smoke:scene-store` (also in `npm run verify`) drives the whole loop: seed a scene,
 open it in a headless browser, have an out-of-process agent spawn an entity, and assert it
 appears in the tab — then remove it and assert it disappears.
+
+`node scripts/smoke-store-auth.mjs` covers the auth section above, node-only: 401 without
+or with a wrong token, writes with either header, reads staying open, the datalake gate,
+the CORS allowlist, the 503 when no datalake is configured, and that a tokenless store
+still behaves exactly as before.

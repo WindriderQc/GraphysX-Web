@@ -12,6 +12,7 @@
 // Zero dependencies on purpose: this has to be trivial to run on the AgentX box.
 
 import { createServer } from "node:http";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { existsSync } from "node:fs";
@@ -31,6 +32,62 @@ const NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/;
 
 const DEFAULT_PORT = Number(process.env.GRAPHYSX_STORE_PORT ?? 8788);
 const DEFAULT_DIR = process.env.GRAPHYSX_STORE_DIR ?? join(REPO_ROOT, ".graphysx-store", "scenes");
+
+/**
+ * Auth + CORS for both halves of the store — the asset routes receive this guard from the
+ * router below rather than building their own, so the two halves cannot drift.
+ *
+ * Opt-in on purpose: with no GRAPHYSX_STORE_TOKEN set the store behaves exactly as it
+ * always has — open on the LAN — and says so loudly at startup. With a token set, every
+ * mutating route and everything under /datalake requires it; read-only scene GETs stay
+ * open in both modes, because a stored scene is the shareable artifact and the datalake
+ * is personal media.
+ */
+export function createStoreGuard({
+  token = process.env.GRAPHYSX_STORE_TOKEN,
+  origins = process.env.GRAPHYSX_STORE_ORIGIN,
+} = {}) {
+  const cleaned = typeof token === "string" && token.trim() ? token.trim() : null;
+  // Compare sha256 digests, not the strings: timingSafeEqual demands equal lengths, and a
+  // digest comparison cannot leak where the first wrong byte was.
+  const expected = cleaned ? createHash("sha256").update(cleaned).digest() : null;
+  const allowlist = (typeof origins === "string" ? origins.split(",") : Array.isArray(origins) ? origins : [])
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+
+  return {
+    enabled: expected !== null,
+
+    /**
+     * CORS headers for one response. No allowlist → today's `*` (compat). An allowlist
+     * echoes the request's Origin only when it matches — a miss gets no allow-origin
+     * header at all — and always varies on Origin so caches cannot cross-serve.
+     */
+    corsHeaders(request) {
+      if (allowlist.length === 0) return { "access-control-allow-origin": "*" };
+      const headers = { vary: "origin" };
+      const origin = String(request.headers.origin ?? "").replace(/\/+$/, "");
+      if (origin && allowlist.includes(origin)) headers["access-control-allow-origin"] = origin;
+      return headers;
+    },
+
+    /**
+     * `Authorization: Bearer <token>`, or `x-graphysx-token` for clients that cannot set
+     * the former, or — only where the route opts in (the SSE stream, because EventSource
+     * cannot set headers at all) — `?token=`. Always true when no token is configured.
+     */
+    authorized(request, url, { allowQueryToken = false } = {}) {
+      if (!expected) return true;
+      const header = request.headers.authorization;
+      let presented = null;
+      if (typeof header === "string" && /^bearer\s/i.test(header)) presented = header.replace(/^bearer\s+/i, "").trim();
+      else if (typeof request.headers["x-graphysx-token"] === "string") presented = request.headers["x-graphysx-token"].trim();
+      else if (allowQueryToken) presented = url.searchParams.get("token");
+      if (!presented) return false;
+      return timingSafeEqual(createHash("sha256").update(presented).digest(), expected);
+    },
+  };
+}
 
 /**
  * Writes are serialised per scene name. Two agents racing on the same scene would
@@ -191,18 +248,20 @@ export function createSceneStore({ dir = DEFAULT_DIR } = {}) {
   };
 }
 
-function send(response, status, payload) {
+function send(response, status, payload, cors = { "access-control-allow-origin": "*" }) {
   const body = `${JSON.stringify(payload, null, 2)}\n`;
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
     // The page is served by vite/nginx on a different origin than this store, so the
-    // browser client is always cross-origin. This is a LAN tool with no auth — put it
-    // behind the same boundary you'd put any other AgentX service, not on the internet.
-    "access-control-allow-origin": "*",
+    // browser client is always cross-origin. `cors` comes from the guard: `*` unless
+    // GRAPHYSX_STORE_ORIGIN narrows it. Without a GRAPHYSX_STORE_TOKEN this is still a
+    // LAN tool with no auth — keep it behind the same boundary as any other AgentX
+    // service, not on the internet.
+    ...cors,
     "access-control-allow-methods": "GET, PUT, POST, DELETE, OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-headers": "authorization, x-graphysx-token, content-type",
   });
   response.end(body);
 }
@@ -290,21 +349,30 @@ function createRelay() {
   };
 }
 
-export function createSceneStoreServer({ dir, assetDir, datalakeDir } = {}) {
+export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, origins } = {}) {
   const store = createSceneStore({ dir });
   const assets = createAssetStore({
     ...(assetDir !== undefined ? { dir: assetDir } : {}),
     ...(datalakeDir !== undefined ? { datalakeDir } : {}),
   });
+  const guard = createStoreGuard({
+    ...(token !== undefined ? { token } : {}),
+    ...(origins !== undefined ? { origins } : {}),
+  });
   const relay = createRelay();
 
   const server = createServer((request, response) => {
     void (async () => {
+      const cors = guard.corsHeaders(request);
+      const unauthorized = () =>
+        send(response, 401, { error: "This store requires a token (Authorization: Bearer <GRAPHYSX_STORE_TOKEN>)" }, cors);
       try {
         const url = new URL(request.url ?? "/", "http://localhost");
         const path = url.pathname.replace(/\/+$/, "") || "/";
 
-        if (request.method === "OPTIONS") return send(response, 204, {});
+        // Preflight is always answered: the browser sends it credential-less by design,
+        // and the 401 (if one is coming) belongs to the real request.
+        if (request.method === "OPTIONS") return send(response, 204, {}, cors);
 
         if (path === "/health" && request.method === "GET") {
           const scenes = await store.list();
@@ -315,15 +383,17 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir } = {}) {
             sceneCount: scenes.length,
             assetCount: await assets.count(),
             datalake: assets.datalakeDir ?? null,
-          });
+            authenticated: guard.enabled,
+          }, cors);
         }
 
         // Media routes (/assets/*, /datalake/*) live in asset-store.mjs; everything the
-        // asset handler does not claim falls through to the scene routes below.
-        if (await handleAssetRequest(assets, request, response, url, path)) return undefined;
+        // asset handler does not claim falls through to the scene routes below. The guard
+        // rides along so those routes enforce the same token.
+        if (await handleAssetRequest(assets, request, response, url, path, guard)) return undefined;
 
         if (path === "/scenes" && request.method === "GET") {
-          return send(response, 200, { schema: SCENE_STORE_SCHEMA, scenes: await store.list() });
+          return send(response, 200, { schema: SCENE_STORE_SCHEMA, scenes: await store.list() }, cors);
         }
 
         const sceneMatch = /^\/scenes\/([^/]+)$/.exec(path);
@@ -335,8 +405,11 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir } = {}) {
         if (streamMatch && request.method === "GET") {
           const name = decodeURIComponent(streamMatch[1]);
           assertName(name);
+          // The stream is a read and reads stay open — but this route is the one place
+          // `?token=` is understood (EventSource cannot set headers), so a client that
+          // sends it anyway is not wrong, just early.
           const record = await store.get(name);
-          if (!record) return send(response, 404, { error: `Unknown scene: ${name}` });
+          if (!record) return send(response, 404, { error: `Unknown scene: ${name}` }, cors);
 
           // EventSource replays its last id on reconnect; honour it so a dropped
           // connection resumes rather than forcing a reload.
@@ -350,7 +423,7 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir } = {}) {
             // Proxies that buffer will hold events until the buffer fills, which turns a
             // live feed into a batch one. nginx honours this.
             "x-accel-buffering": "no",
-            "access-control-allow-origin": "*",
+            ...cors,
           });
 
           // The client needs to know where it stands before any delta arrives, and whether
@@ -382,16 +455,17 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir } = {}) {
 
         // --- commands in, delta out ------------------------------------------------
         if (changesMatch && request.method === "POST") {
+          if (!guard.authorized(request, url)) return unauthorized();
           const name = decodeURIComponent(changesMatch[1]);
           assertName(name);
           const body = await readJsonBody(request);
           const record = await store.get(name);
-          if (!record) return send(response, 404, { error: `Unknown scene: ${name}` });
+          if (!record) return send(response, 404, { error: `Unknown scene: ${name}` }, cors);
           if (body?.expectedRevision !== undefined && body.expectedRevision !== record.revision) {
             return send(response, 409, {
               error: `Revision conflict: expected ${body.expectedRevision}, current ${record.revision}`,
               revision: record.revision,
-            });
+            }, cors);
           }
 
           const commands = Array.isArray(body?.commands) ? body.commands : [body?.commands];
@@ -412,7 +486,7 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir } = {}) {
             commands,
             outputs,
           });
-          return send(response, 200, { ...written, outputs, subscribers: relay.subscriberCount(name) });
+          return send(response, 200, { ...written, outputs, subscribers: relay.subscriberCount(name) }, cors);
         }
 
         // A deliberately tiny endpoint: the browser polls this every couple of seconds
@@ -421,14 +495,14 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir } = {}) {
           const name = decodeURIComponent(revisionMatch[1]);
           assertName(name);
           const record = await store.get(name);
-          if (!record) return send(response, 404, { error: `Unknown scene: ${name}` });
+          if (!record) return send(response, 404, { error: `Unknown scene: ${name}` }, cors);
           return send(response, 200, {
             name,
             revision: record.revision,
             updatedAt: record.updatedAt,
             actor: record.actor ?? null,
             intent: record.intent ?? null,
-          });
+          }, cors);
         }
 
         if (sceneMatch) {
@@ -437,11 +511,12 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir } = {}) {
 
           if (request.method === "GET") {
             const record = await store.get(name);
-            if (!record) return send(response, 404, { error: `Unknown scene: ${name}` });
-            return send(response, 200, record);
+            if (!record) return send(response, 404, { error: `Unknown scene: ${name}` }, cors);
+            return send(response, 200, record, cors);
           }
 
           if (request.method === "PUT") {
+            if (!guard.authorized(request, url)) return unauthorized();
             const body = await readJsonBody(request);
             // Accept either {definition, expectedRevision} or a bare definition, so
             // `curl -d @scene.json` works without ceremony.
@@ -462,25 +537,30 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir } = {}) {
               intent: result.intent,
               replaced: true,
             });
-            return send(response, result.created ? 201 : 200, result);
+            return send(response, result.created ? 201 : 200, result, cors);
           }
         }
 
-        return send(response, 404, { error: `No route for ${request.method} ${path}` });
+        return send(response, 404, { error: `No route for ${request.method} ${path}` }, cors);
       } catch (error) {
         const status = error?.status ?? 400;
         const payload = { error: error instanceof Error ? error.message : String(error) };
         if (error?.revision !== undefined) payload.revision = error.revision;
-        return send(response, status, payload);
+        return send(response, status, payload, cors);
       }
     })();
   });
 
-  return { server, store, assets };
+  return { server, store, assets, guard };
 }
 
-export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, datalakeDir } = {}) {
-  const { server, store, assets } = createSceneStoreServer({ dir, assetDir, datalakeDir });
+export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, datalakeDir, token, origins } = {}) {
+  const { server, store, assets, guard } = createSceneStoreServer({ dir, assetDir, datalakeDir, token, origins });
+  if (!guard.enabled) {
+    // One line, every start, on purpose: the open mode is a deliberate LAN convenience
+    // and the operator should never discover it by accident.
+    console.warn("[scene-store] UNAUTHENTICATED MODE — no GRAPHYSX_STORE_TOKEN set; writes and the datalake are open to anyone who can reach this port. LAN boundary only.");
+  }
   // Node closes idle keep-alive sockets after 5s by default, but `fetch` (undici) pools and
   // reuses them — so a client that pauses longer than that between calls picks a socket the
   // server has already closed and fails with a bare "fetch failed". That is what made the
@@ -498,6 +578,7 @@ export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, data
   return {
     port: actualPort,
     assets,
+    guard,
     // 127.0.0.1 rather than localhost: on Windows, Node's fetch resolves localhost to ::1
     // first, and whether that reaches a listener bound to the IPv4 any-address is a coin
     // flip. It surfaced as an intermittent "scene store unreachable" against a store that
@@ -523,11 +604,12 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   const dir = DEFAULT_DIR;
   const existed = existsSync(dir);
   startSceneStore({ port: DEFAULT_PORT, dir })
-    .then(({ url, assets }) => {
+    .then(({ url, assets, guard }) => {
       console.log(`graphysx scene store listening on ${url}`);
       console.log(`  scenes:   ${dir}${existed ? "" : " (created)"}`);
       console.log(`  assets:   ${assets.dir}`);
       console.log(`  datalake: ${assets.datalakeDir ?? "not configured (set GRAPHYSX_DATALAKE_DIR)"}`);
+      console.log(`  auth:     ${guard.enabled ? "token required for writes and /datalake" : "OPEN (set GRAPHYSX_STORE_TOKEN to require a bearer token)"}`);
       console.log(`  try:      curl ${url}/scenes`);
     })
     .catch((error) => {

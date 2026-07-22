@@ -74,10 +74,12 @@ import {
 import {
   Body,
   Box as CannonBox,
+  ContactMaterial,
   Cylinder as CannonCylinder,
   Material as CannonMaterial,
   Plane as CannonPlane,
   Quaternion as CannonQuaternion,
+  SAPBroadphase,
   Sphere as CannonSphere,
   Vec3,
   World as CannonWorld
@@ -927,6 +929,20 @@ type RuntimeEntity = {
   assetState: AgentWorldEntityState["asset"];
 };
 
+/**
+ * The cached per-consumer `externalAcceleration` closure for the force-field pass, plus the
+ * mutable state it reads. The closure is created once per entity and reused every step —
+ * only `tags`, `channel` and the two matrices are refreshed — so installing a hook never
+ * allocates after the first frame an entity is steered.
+ */
+type ForceFieldHookState = {
+  tags: string[];
+  channel: "affectsFlocks" | "affectsParticles";
+  toWorld: Matrix4;
+  toLocal: Matrix4;
+  hook: (localPosition: Vector3, localVelocity: Vector3, out: Vector3) => void;
+};
+
 type ResolvedAgentWorldPhysics = {
   mode: AgentWorldPhysicsMode;
   mass: number;
@@ -1128,7 +1144,12 @@ export class AgentWorldRuntime {
    * a system whose whole job is invisible.
    */
   private readonly forceFieldReadings = new Map<string, { affected: Set<string>; peak: number }>();
-  /** Allocation-free scratch for the per-step force pass. Owned here so the hot loop never allocates. */
+  /**
+   * Scratch for the per-step force pass. Owned here so the steady-state loop reuses these
+   * instead of allocating: together with {@link forceFieldActive}, {@link forceFieldInverses}
+   * and {@link forceFieldHooks} it makes the pass allocation-free once the scene has settled —
+   * new objects appear only when a field or steered consumer first shows up, never per step.
+   */
   private readonly forceFieldScratch = {
     localPoint: new Vector3(),
     localVelocity: new Vector3(),
@@ -1140,8 +1161,17 @@ export class AgentWorldRuntime {
     worldAcceleration: new Vector3(),
     hookWorldPoint: new Vector3(),
     hookWorldVelocity: new Vector3(),
-    hookWorldAcceleration: new Vector3()
+    hookWorldAcceleration: new Vector3(),
+    force: new Vec3(),
+    /** Stays (0,0,0): passed to `applyForce` so cannon does not build a default Vec3 per call. */
+    forcePoint: new Vec3()
   };
+  /** The enabled fields this step, rebuilt in place each pass rather than spread+filtered. */
+  private readonly forceFieldActive: RuntimeEntity[] = [];
+  /** Field id → cached world→local matrix, refreshed (not reallocated) every step. */
+  private readonly forceFieldInverses = new Map<string, Matrix4>();
+  /** Consumer entity id → its cached hook closure; pruned when the entity disappears. */
+  private readonly forceFieldHooks = new Map<string, ForceFieldHookState>();
 
   constructor(definition: AgentWorldDefinition = GRAPHYSX_AGENT_DEMO_WORLD) {
     this.group.name = "GraphysXAgentWorldV2";
@@ -1149,6 +1179,11 @@ export class AgentWorldRuntime {
     this.environmentRoot.name = "AgentEnvironment";
     this.group.add(this.environmentRoot, this.worldRoot);
     this.physicsWorld.allowSleep = true;
+    // Sweep-and-prune instead of the O(n²) naive default. The world is built once here and
+    // reused across every load/clear (buildEnvironment only re-aims gravity), so this and
+    // the contact-material table below are one-time registrations.
+    this.physicsWorld.broadphase = new SAPBroadphase(this.physicsWorld);
+    registerPhysicsContactMaterials(this.physicsWorld);
     this.loadDefinition(definition);
     this.recordEvent("world.created", `Created ${this.definition.label}`);
   }
@@ -2124,10 +2159,24 @@ export class AgentWorldRuntime {
    * scale without a special case.
    */
   private applyForceFields(): void {
-    const fields = [...this.entities.values()].filter(
-      (runtime) => runtime.definition.type === "force-field" && runtime.definition.forceField?.enabled,
-    );
-    this.forceFieldReadings.clear();
+    const fields = this.forceFieldActive;
+    fields.length = 0;
+    for (const runtime of this.entities.values()) {
+      if (runtime.definition.type === "force-field" && runtime.definition.forceField?.enabled) fields.push(runtime);
+    }
+    // Drop cached readings and inverses for fields that stopped existing (or stopped being
+    // enabled fields), and cached hooks for consumers that left the world — so state() never
+    // reports a ghost field, and a scene reload does not leak last scene's closures.
+    for (const id of this.forceFieldReadings.keys()) {
+      const runtime = this.entities.get(id);
+      if (!runtime || runtime.definition.type !== "force-field" || !runtime.definition.forceField?.enabled) {
+        this.forceFieldReadings.delete(id);
+        this.forceFieldInverses.delete(id);
+      }
+    }
+    for (const id of this.forceFieldHooks.keys()) {
+      if (!this.entities.has(id)) this.forceFieldHooks.delete(id);
+    }
     // Clear last step's hooks unconditionally, so removing or disabling the last field really
     // does stop the pushing. This is the shape of bug this codebase keeps finding: state that
     // is written on the way in and never unwritten on the way out.
@@ -2143,47 +2192,18 @@ export class AgentWorldRuntime {
 
     for (const field of fields) {
       field.object.updateWorldMatrix(true, false);
-      this.forceFieldReadings.set(field.definition.id, { affected: new Set<string>(), peak: 0 });
+      const reading = this.forceFieldReadings.get(field.definition.id);
+      if (reading) {
+        reading.affected.clear();
+        reading.peak = 0;
+      } else {
+        this.forceFieldReadings.set(field.definition.id, { affected: new Set<string>(), peak: 0 });
+      }
+      const inverse = this.forceFieldInverses.get(field.definition.id) ?? new Matrix4();
+      this.forceFieldInverses.set(field.definition.id, inverse.copy(field.object.matrixWorld).invert());
     }
-    const inverses = new Map<string, Matrix4>();
-    for (const field of fields) inverses.set(field.definition.id, new Matrix4().copy(field.object.matrixWorld).invert());
 
     const scratch = this.forceFieldScratch;
-    const elapsed = this.elapsedSeconds;
-
-    /**
-     * Sum every field of a given channel that reaches `worldPoint` into `outWorld`, in world
-     * space. `channel` selects which of the three `affects*` flags gates a field, so bodies,
-     * flocks and particles share one path and differ only in the flag they read.
-     */
-    const accumulate = (
-      targetId: string,
-      targetTags: string[],
-      channel: "affectsBodies" | "affectsFlocks" | "affectsParticles",
-      worldPoint: Vector3,
-      worldVelocity: Vector3,
-      outWorld: Vector3,
-    ): void => {
-      outWorld.set(0, 0, 0);
-      for (const field of fields) {
-        const config = field.definition.forceField!;
-        if (!config[channel]) continue;
-        if (config.affectsTags.length > 0 && !config.affectsTags.some((tag) => targetTags.includes(tag))) continue;
-        const inverse = inverses.get(field.definition.id)!;
-        // World → field-local, for both the point and the velocity direction.
-        scratch.localPoint.copy(worldPoint).applyMatrix4(inverse);
-        scratch.localVelocity.copy(worldPoint).add(worldVelocity).applyMatrix4(inverse).sub(scratch.localPoint);
-        const influence = sampleForceFieldAcceleration(config, scratch.localPoint, scratch.localVelocity, elapsed, scratch.localAcceleration);
-        if (influence <= 0 || scratch.localAcceleration.lengthSq() < 1e-12) continue;
-        // Field-local → world, same trick in the other direction.
-        scratch.worldA.copy(scratch.localPoint).applyMatrix4(field.object.matrixWorld);
-        scratch.worldB.copy(scratch.localPoint).add(scratch.localAcceleration).applyMatrix4(field.object.matrixWorld).sub(scratch.worldA);
-        outWorld.add(scratch.worldB);
-        const reading = this.forceFieldReadings.get(field.definition.id)!;
-        reading.affected.add(targetId);
-        reading.peak = Math.max(reading.peak, scratch.worldB.length());
-      }
-    };
 
     const anyBodies = fields.some((field) => field.definition.forceField!.affectsBodies);
     const anyFlocks = fields.some((field) => field.definition.forceField!.affectsFlocks);
@@ -2197,15 +2217,14 @@ export class AgentWorldRuntime {
       if (anyBodies && runtime.body && definition.physics?.mode === "dynamic") {
         scratch.worldPoint.set(runtime.body.position.x, runtime.body.position.y, runtime.body.position.z);
         scratch.worldVelocity.set(runtime.body.velocity.x, runtime.body.velocity.y, runtime.body.velocity.z);
-        accumulate(definition.id, definition.tags, "affectsBodies", scratch.worldPoint, scratch.worldVelocity, scratch.worldAcceleration);
+        this.accumulateForceFields(definition.id, definition.tags, "affectsBodies", scratch.worldPoint, scratch.worldVelocity, scratch.worldAcceleration);
         if (scratch.worldAcceleration.lengthSq() > 1e-12) {
           // F = m·a. Applying an acceleration rather than a force is the whole reason a heavy
           // crate and a light ball fall into an attractor together — the p5 original got there
           // by dividing the force back out by mass on the way in.
           const mass = runtime.body.mass || 1;
-          runtime.body.applyForce(
-            new Vec3(scratch.worldAcceleration.x * mass, scratch.worldAcceleration.y * mass, scratch.worldAcceleration.z * mass),
-          );
+          scratch.force.set(scratch.worldAcceleration.x * mass, scratch.worldAcceleration.y * mass, scratch.worldAcceleration.z * mass);
+          runtime.body.applyForce(scratch.force, scratch.forcePoint);
           // A body asleep in a field would ignore it forever; a field arriving is exactly the
           // kind of event that should wake it.
           if (runtime.body.sleepState === Body.SLEEPING) runtime.body.wakeUp();
@@ -2225,19 +2244,71 @@ export class AgentWorldRuntime {
       const particles = findParticleSystem(runtime.object);
       const steered = flock ?? crowd;
       if ((!steered || !anyFlocks) && (!particles || !anyParticles)) continue;
-      const channel = steered ? "affectsFlocks" : "affectsParticles";
       runtime.object.updateWorldMatrix(true, false);
-      const toWorld = new Matrix4().copy(runtime.object.matrixWorld);
-      const toLocal = new Matrix4().copy(toWorld).invert();
-      const hook = (localPosition: Vector3, localVelocity: Vector3, out: Vector3): void => {
-        // Consumer-local → world, sample every field, back to consumer-local.
-        scratch.hookWorldPoint.copy(localPosition).applyMatrix4(toWorld);
-        scratch.hookWorldVelocity.copy(localPosition).add(localVelocity).applyMatrix4(toWorld).sub(scratch.hookWorldPoint);
-        accumulate(definition.id, definition.tags, channel, scratch.hookWorldPoint, scratch.hookWorldVelocity, scratch.hookWorldAcceleration);
-        out.copy(scratch.hookWorldPoint).add(scratch.hookWorldAcceleration).applyMatrix4(toLocal).sub(localPosition);
-      };
-      if (steered && anyFlocks) steered.externalAcceleration = hook;
-      if (particles && anyParticles) particles.externalAcceleration = hook;
+      let hookState = this.forceFieldHooks.get(definition.id);
+      if (!hookState) {
+        const entityId = definition.id;
+        const created: ForceFieldHookState = {
+          tags: definition.tags,
+          channel: steered ? "affectsFlocks" : "affectsParticles",
+          toWorld: new Matrix4(),
+          toLocal: new Matrix4(),
+          hook: (localPosition: Vector3, localVelocity: Vector3, out: Vector3): void => {
+            // Consumer-local → world, sample every field, back to consumer-local. Reads its
+            // matrices and channel off `created` so the closure survives across steps.
+            const hookScratch = this.forceFieldScratch;
+            hookScratch.hookWorldPoint.copy(localPosition).applyMatrix4(created.toWorld);
+            hookScratch.hookWorldVelocity.copy(localPosition).add(localVelocity).applyMatrix4(created.toWorld).sub(hookScratch.hookWorldPoint);
+            this.accumulateForceFields(entityId, created.tags, created.channel, hookScratch.hookWorldPoint, hookScratch.hookWorldVelocity, hookScratch.hookWorldAcceleration);
+            out.copy(hookScratch.hookWorldPoint).add(hookScratch.hookWorldAcceleration).applyMatrix4(created.toLocal).sub(localPosition);
+          }
+        };
+        hookState = created;
+        this.forceFieldHooks.set(entityId, hookState);
+      }
+      hookState.tags = definition.tags;
+      hookState.channel = steered ? "affectsFlocks" : "affectsParticles";
+      hookState.toWorld.copy(runtime.object.matrixWorld);
+      hookState.toLocal.copy(hookState.toWorld).invert();
+      if (steered && anyFlocks) steered.externalAcceleration = hookState.hook;
+      if (particles && anyParticles) particles.externalAcceleration = hookState.hook;
+    }
+  }
+
+  /**
+   * Sum every active field of a given channel that reaches `worldPoint` into `outWorld`, in
+   * world space. `channel` selects which of the three `affects*` flags gates a field, so
+   * bodies, flocks and particles share one path and differ only in the flag they read. A
+   * method rather than a per-step closure inside {@link applyForceFields} so the cached
+   * hooks in {@link forceFieldHooks} can keep calling it across frames.
+   */
+  private accumulateForceFields(
+    targetId: string,
+    targetTags: string[],
+    channel: "affectsBodies" | "affectsFlocks" | "affectsParticles",
+    worldPoint: Vector3,
+    worldVelocity: Vector3,
+    outWorld: Vector3,
+  ): void {
+    const scratch = this.forceFieldScratch;
+    outWorld.set(0, 0, 0);
+    for (const field of this.forceFieldActive) {
+      const config = field.definition.forceField!;
+      if (!config[channel]) continue;
+      if (config.affectsTags.length > 0 && !config.affectsTags.some((tag) => targetTags.includes(tag))) continue;
+      const inverse = this.forceFieldInverses.get(field.definition.id)!;
+      // World → field-local, for both the point and the velocity direction.
+      scratch.localPoint.copy(worldPoint).applyMatrix4(inverse);
+      scratch.localVelocity.copy(worldPoint).add(worldVelocity).applyMatrix4(inverse).sub(scratch.localPoint);
+      const influence = sampleForceFieldAcceleration(config, scratch.localPoint, scratch.localVelocity, this.elapsedSeconds, scratch.localAcceleration);
+      if (influence <= 0 || scratch.localAcceleration.lengthSq() < 1e-12) continue;
+      // Field-local → world, same trick in the other direction.
+      scratch.worldA.copy(scratch.localPoint).applyMatrix4(field.object.matrixWorld);
+      scratch.worldB.copy(scratch.localPoint).add(scratch.localAcceleration).applyMatrix4(field.object.matrixWorld).sub(scratch.worldA);
+      outWorld.add(scratch.worldB);
+      const reading = this.forceFieldReadings.get(field.definition.id)!;
+      reading.affected.add(targetId);
+      reading.peak = Math.max(reading.peak, scratch.worldB.length());
     }
   }
 
@@ -2304,7 +2375,13 @@ export class AgentWorldRuntime {
         // A trigger's interactions are its response to being crossed. This is what lets a
         // gate light up, a pickup vanish, or a launcher fire without any external agent in
         // the loop — the first in-world cause-and-effect the vocabulary has had.
-        if (trigger.definition.interactions.length > 0) {
+        //
+        // A hidden trigger is inert. A collected ring *is* its invisibility (the rules layer
+        // re-derives the collected set from the visibility snapshot), so once restitution went
+        // live a bouncing ball could re-cross a collected ring and toggle it back into the
+        // world — un-collecting it. The enter/exit events still fire (occupancy is real);
+        // only the trigger's own response is suppressed while it is hidden.
+        if (trigger.definition.interactions.length > 0 && trigger.definition.visible !== false) {
           try {
             this.interactInternal(triggerId);
           } catch (error) {
@@ -3098,6 +3175,67 @@ function createSplineCurve(path: Required<AgentWorldSplinePath>): CatmullRomCurv
   return new CatmullRomCurve3(path.points.map((point) => new Vector3(...point)), path.closed, "catmullrom", path.tension);
 }
 
+/**
+ * The six surface presets, as the solver vocabulary. These numbers reach cannon through the
+ * {@link ContactMaterial} pairs {@link registerPhysicsContactMaterials} installs on each
+ * world — never through per-body material values, see {@link SHARED_PHYSICS_MATERIALS}.
+ */
+const PHYSICS_MATERIAL_PRESETS: Record<AgentWorldPhysicsMaterial, { friction: number; restitution: number }> = {
+  default: { friction: 0.18, restitution: 0.28 },
+  wall: { friction: 0.32, restitution: 0.08 },
+  finish: { friction: 0.16, restitution: 0.2 },
+  ground: { friction: 0.45, restitution: 0.05 },
+  ball: { friction: 0.12, restitution: 0.68 },
+  human: { friction: 0.5, restitution: 0.02 }
+};
+
+/**
+ * One shared cannon material per preset. Cannon resolves a contact by looking the *pair* of
+ * material instances up in the world's contact-material table, so every body carrying a
+ * preset must reference the same instance — the per-body `new CannonMaterial(...)` this
+ * replaces guaranteed a table miss on every contact, which is why the presets used to be
+ * physically inert. Constructed name-only, deliberately: cannon overrides a registered pair
+ * with a friction/restitution *product* whenever both bodies' materials carry their own
+ * values (>= 0), and that product rule would silently defeat the pair table below.
+ */
+const SHARED_PHYSICS_MATERIALS: Record<AgentWorldPhysicsMaterial, CannonMaterial> = {
+  default: new CannonMaterial("graphysx-default"),
+  wall: new CannonMaterial("graphysx-wall"),
+  finish: new CannonMaterial("graphysx-finish"),
+  ground: new CannonMaterial("graphysx-ground"),
+  ball: new CannonMaterial("graphysx-ball"),
+  human: new CannonMaterial("graphysx-human")
+};
+
+/**
+ * Install every unique preset pair (self-pairs included, 21 in all) on a freshly built
+ * world, mirroring what the legacy engine's `PhysicsWorld` did for its single material.
+ * Combination rules: friction is the geometric mean `sqrt(fA·fB)` — a slick surface keeps
+ * mattering against a grippy one; restitution is `max(rA, rB)` — the bouncier surface wins,
+ * so a ball rebounds off dead ground instead of averaging into a thud. The default contact
+ * material is set to the `default` preset so a body with no material (the environment
+ * ground plane, foreign bodies) still behaves like the vocabulary says.
+ */
+function registerPhysicsContactMaterials(world: CannonWorld): void {
+  const names = Object.keys(PHYSICS_MATERIAL_PRESETS) as AgentWorldPhysicsMaterial[];
+  for (let a = 0; a < names.length; a += 1) {
+    for (let b = a; b < names.length; b += 1) {
+      const presetA = PHYSICS_MATERIAL_PRESETS[names[a]];
+      const presetB = PHYSICS_MATERIAL_PRESETS[names[b]];
+      // Geometric mean for both: it respects authored *deadening* — a bouncy ball on the
+      // lossy `ground` preset (0.05) settles, on another `ball` surface (0.68) it stays
+      // lively. `max()` was tried first and let the ball's restitution steamroll every
+      // surface it touched: nothing ever came to rest.
+      world.addContactMaterial(new ContactMaterial(SHARED_PHYSICS_MATERIALS[names[a]], SHARED_PHYSICS_MATERIALS[names[b]], {
+        friction: Math.sqrt(presetA.friction * presetB.friction),
+        restitution: Math.sqrt(presetA.restitution * presetB.restitution)
+      }));
+    }
+  }
+  world.defaultContactMaterial.friction = PHYSICS_MATERIAL_PRESETS.default.friction;
+  world.defaultContactMaterial.restitution = PHYSICS_MATERIAL_PRESETS.default.restitution;
+}
+
 function resolvePhysics(
   source: AgentWorldPhysics,
   entityType: AgentWorldEntityType,
@@ -3115,23 +3253,15 @@ function resolvePhysics(
     throw new Error("Transform behaviors require kinematic physics");
   }
   const material = source.material ?? "default";
-  const presets: Record<AgentWorldPhysicsMaterial, { friction: number; restitution: number }> = {
-    default: { friction: 0.18, restitution: 0.28 },
-    wall: { friction: 0.32, restitution: 0.08 },
-    finish: { friction: 0.16, restitution: 0.2 },
-    ground: { friction: 0.45, restitution: 0.05 },
-    ball: { friction: 0.12, restitution: 0.68 },
-    human: { friction: 0.5, restitution: 0.02 }
-  };
-  if (!(material in presets)) throw new Error(`Unsupported physics material: ${String(material)}`);
+  if (!(material in PHYSICS_MATERIAL_PRESETS)) throw new Error(`Unsupported physics material: ${String(material)}`);
   const requestedMass = source.mass ?? 1;
   if (!Number.isFinite(requestedMass) || requestedMass < 0 || requestedMass > 100000) throw new Error("Physics mass must be between 0 and 100000");
   return {
     mode: source.mode,
     mass: source.mode === "dynamic" ? Math.max(0.001, requestedMass) : 0,
     material,
-    friction: clamp(source.friction ?? presets[material].friction, 0, 1),
-    restitution: clamp(source.restitution ?? presets[material].restitution, 0, 1),
+    friction: clamp(source.friction ?? PHYSICS_MATERIAL_PRESETS[material].friction, 0, 1),
+    restitution: clamp(source.restitution ?? PHYSICS_MATERIAL_PRESETS[material].restitution, 0, 1),
     linearVelocity: sanitizeVector(source.linearVelocity ?? [0, 0, 0], -10000, 10000, "physics.linearVelocity"),
     angularVelocity: sanitizeVector(source.angularVelocity ?? [0, 0, 0], -10000, 10000, "physics.angularVelocity")
   };
@@ -3143,11 +3273,12 @@ function isMotionBehavior(behavior: AgentWorldBehavior): boolean {
 
 function createPhysicsBody(definition: ResolvedEntity): Body {
   const physics = definition.physics!;
-  const material = new CannonMaterial({ friction: physics.friction, restitution: physics.restitution });
-  material.name = `graphysx-${definition.id}-${physics.material}`;
   const body = new Body({
     mass: physics.mass,
-    material,
+    // The shared preset instance, so this body's contacts resolve through the registered
+    // pair table. The resolved friction/restitution stay on the definition for state() and
+    // the document round-trip.
+    material: SHARED_PHYSICS_MATERIALS[physics.material],
     linearDamping: physics.mode === "dynamic" ? 0.08 : 0,
     angularDamping: physics.mode === "dynamic" ? 0.08 : 0,
     // A trigger is detected but never resolved: contacts are reported and then discarded,
@@ -3203,9 +3334,7 @@ function createTerrainBody(definition: ResolvedEntity, object: Object3D): Body |
   const cached = object.userData.graphysxTerrainHeights;
   const heights = cached instanceof Float32Array ? cached : sampleTerrainHeights(terrain);
   const { shape, offset, orientation } = createTerrainHeightfield(terrain, heights);
-  const material = new CannonMaterial({ friction: 0.45, restitution: 0.05 });
-  material.name = `graphysx-${definition.id}-terrain`;
-  const body = new Body({ mass: 0, material, type: Body.STATIC });
+  const body = new Body({ mass: 0, material: SHARED_PHYSICS_MATERIALS.ground, type: Body.STATIC });
   body.addShape(shape, offset, orientation);
   body.position.set(...definition.transform.position);
   body.quaternion.setFromEuler(...definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3);

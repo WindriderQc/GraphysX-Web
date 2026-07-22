@@ -189,9 +189,9 @@ const SHELF_CSS = `
 .gx-shelf-head{display:flex;align-items:center;gap:12px}
 .gx-shelf-head h2{margin:0;flex:1;font-size:19px;letter-spacing:.04em;color:var(--gx-ink);font-weight:700}
 .gx-shelf-close{background:transparent;border:1px solid rgba(120,240,208,.3);border-radius:6px;
-  color:#9fd6e4;cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px}
+  color:var(--gx-ink-soft);cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px}
 .gx-shelf-close:hover{border-color:var(--gx-accent);color:var(--gx-ink)}
-.gx-shelf-blurb{margin:0;color:#8fb9c7;font-size:12.5px;line-height:1.5}
+.gx-shelf-blurb{margin:0;color:var(--gx-ink-faint);font-size:12.5px;line-height:1.5}
 .gx-shelf-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto}
 .gx-shelf-row{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
   background:rgba(16,38,50,.8);border:1px solid rgba(79,208,230,.2);border-radius:10px;
@@ -199,5 +199,5 @@ const SHELF_CSS = `
 .gx-shelf-row:hover{background:rgba(24,56,72,.92);border-color:var(--gx-accent-edge)}
 .gx-shelf-row--error{border-color:#f95f4c}
 .gx-shelf-name{color:var(--gx-ink);font-size:14px;font-weight:600}
-.gx-shelf-meta{color:#7fa9b9;font-size:11.5px;letter-spacing:.03em}
+.gx-shelf-meta{color:var(--gx-ink-faint);font-size:11.5px;letter-spacing:.03em}
 `;
