@@ -1563,3 +1563,24 @@ lit-ness rather than guessing a class that belongs to the PBR-finish pass's own 
 - Final local release gate: **31/31 passed** (typecheck, build, two Rapier probes, and all 27
   browser/node smokes). Overlay used one isolated fresh-server retry after a localhost connection
   reset; the retry passed, the teardown returned immediately, and no product assertion failed.
+
+## 2026-07-23 — Wave 13: five authored light worlds, one stable scene field
+
+- Expanded the reflection-lighting registry from one proof asset to five intentionally different
+  Poly Haven 1K HDR environments: Studio Small 08, Studio Garden, Overcast Soil, Lilienstein,
+  and Vignaioli Night. All binaries are vendored and their exact source, author, CC0 license, size,
+  and MD5 stay beside them in `public/assets/hdri/README.md`.
+- Kept the scene contract small: `environment.lighting` still stores `source: "hdri"` plus one
+  stable ID. No URL, loader state, texture, or PMREM target enters a document. API/bridge/store and
+  old-scene compatibility therefore reuse the Wave 11 path unchanged.
+- Removed the editor's hard-coded `studio-small-08` readback. The selected registry ID now drives
+  both the document and renderer, while the compact lighting card shows the look description and
+  an explicit CC0/author Poly Haven link. The visible cube sky remains independent.
+- Evidence: typecheck and production build green; release manifest contains all
+  five HDR files; standalone enumerates the exact catalog at 82 tools with zero parity drift;
+  99/99 round-trip properties pass using `vignaioli-night`; the editor decodes all five real HDRs,
+  caps its PMREM cache at four, evicts Studio Small, preserves the active Rainy Night target and
+  backdrop, fits the 296px rail, and reports zero HTTP/console/page errors.
+- Full `npm run verify`: **32/32 passed**. Games, Milky Way, Maison, and Rapier Race each used one
+  isolated fresh-server retry after a localhost transport reset/timeout; all final attempts and
+  every product assertion were green.

@@ -21,7 +21,7 @@ import { modelMaterialPresetsFor } from "./agent-world-model-materials";
 import type { AgentLevelState, GraphysXAgentLevelApi } from "./agent-level-library";
 import type { AgentMediaFileEntry, AgentMediaListing, AgentWorldMediaDescriptor } from "./agent-world-media";
 import type { MapEditorTile } from "./race-scene";
-import { GRAPHYSX_AGENT_WORLD_HDRIS } from "./agent-world-hdris";
+import { GRAPHYSX_AGENT_WORLD_HDRIS, resolveAgentWorldHdri } from "./agent-world-hdris";
 
 type AgentWorldEnvironmentDefinition = NonNullable<AgentWorldDefinition["environment"]>;
 
@@ -629,7 +629,9 @@ export class PlatformEditor {
           : lighting.source === "sky" && !skySelected
             ? "Sky · Fallback"
             : lighting.source === "sky" ? "Sky"
-              : lighting.source === "hdri" ? "HDRI · Studio Small" : "Studio";
+              : lighting.source === "hdri"
+                ? `HDRI · ${resolveAgentWorldHdri(lighting.hdri)?.label ?? lighting.hdri}`
+                : "Studio";
         this.lightingState.textContent = stateLabel;
         this.lightingState.classList.toggle("gx-ed-post-state--on", !!lighting);
       }
@@ -642,6 +644,16 @@ export class PlatformEditor {
       if (lightingHint) lightingHint.textContent = skySelected
         ? "Scene sky, neutral Studio, and HDRI change reflections without removing the backdrop."
         : "Backdrop and Blur become available when a sky texture is selected.";
+      const hdri = lighting?.source === "hdri" ? resolveAgentWorldHdri(lighting.hdri) : null;
+      const lightingDetail = this.lightingControls?.querySelector<HTMLElement>(".gx-ed-ibl-detail");
+      const lightingDescription = lightingDetail?.querySelector<HTMLElement>("span");
+      const lightingCredit = lightingDetail?.querySelector<HTMLAnchorElement>("a");
+      if (lightingDetail) lightingDetail.hidden = !hdri;
+      if (lightingDescription) lightingDescription.textContent = hdri?.description ?? "";
+      if (lightingCredit && hdri) {
+        lightingCredit.href = hdri.sourceUrl;
+        lightingCredit.textContent = `CC0 · ${hdri.author}`;
+      }
     }
     if (this.postToggle && !postFocused) {
       const post = state?.environment?.post ?? null;
@@ -1690,7 +1702,10 @@ export class PlatformEditor {
     for (const hdri of GRAPHYSX_AGENT_WORLD_HDRIS) {
       const option = document.createElement("option");
       option.value = `hdri:${hdri.id}`;
-      option.textContent = `${hdri.label} HDRI`;
+      // The card and live status already say HDRI; keeping option labels to the human look
+      // name lets "Sunlit Courtyard" and "Diffuse Overcast" fit the 296px inspector.
+      option.textContent = hdri.label;
+      option.title = hdri.description;
       lightingSource.append(option);
     }
 
@@ -1759,7 +1774,8 @@ export class PlatformEditor {
         backgroundBlur: Number(blur.input.value),
       };
       if (lightingSource.value.startsWith("hdri:")) {
-        return { ...controls, source: "hdri", hdri: "studio-small-08" };
+        const hdri = resolveAgentWorldHdri(lightingSource.value.slice("hdri:".length));
+        if (hdri) return { ...controls, source: "hdri", hdri: hdri.id };
       }
       return { ...controls, source: lightingSource.value === "sky" ? "sky" : "studio" };
     };
@@ -1788,11 +1804,22 @@ export class PlatformEditor {
         : lightingSource.value === "sky" && !skySelected
           ? "Sky · Fallback"
           : lightingSource.value === "sky" ? "Sky"
-            : lightingSource.value.startsWith("hdri:") ? "HDRI · Studio Small" : "Studio";
+            : lightingSource.value.startsWith("hdri:")
+              ? `HDRI · ${resolveAgentWorldHdri(lightingSource.value.slice("hdri:".length))?.label ?? "Unknown"}`
+              : "Studio";
       lightingState.classList.toggle("gx-ed-post-state--on", authored);
       lightingHint.textContent = skySelected
         ? "Scene sky, neutral Studio, and HDRI change reflections without removing the backdrop."
         : "Backdrop and Blur become available when a sky texture is selected.";
+      const hdri = lightingSource.value.startsWith("hdri:")
+        ? resolveAgentWorldHdri(lightingSource.value.slice("hdri:".length))
+        : null;
+      lightingDetail.hidden = !hdri;
+      lightingDescription.textContent = hdri?.description ?? "";
+      if (hdri) {
+        lightingCredit.href = hdri.sourceUrl;
+        lightingCredit.textContent = `CC0 · ${hdri.author}`;
+      }
     };
     const applyLighting = () => {
       if (lightingSource.value === "auto") {
@@ -1846,7 +1873,15 @@ export class PlatformEditor {
     lightingWrap.className = "gx-ed-post gx-ed-ibl";
     const lightingHint = document.createElement("div");
     lightingHint.className = "gx-ed-hint";
-    lightingWrap.append(lightingHead, lightingSelectors, lightingTuning, lightingHint);
+    const lightingDetail = document.createElement("div");
+    lightingDetail.className = "gx-ed-ibl-detail";
+    lightingDetail.dataset.gxIbl = "detail";
+    const lightingDescription = document.createElement("span");
+    const lightingCredit = document.createElement("a");
+    lightingCredit.target = "_blank";
+    lightingCredit.rel = "noreferrer";
+    lightingDetail.append(lightingDescription, lightingCredit);
+    lightingWrap.append(lightingHead, lightingSelectors, lightingTuning, lightingDetail, lightingHint);
     // If an agent changes the look while a human is focused inside the card, `refresh()`
     // deliberately protects the in-flight control. Re-read once focus leaves the card so that
     // stale fields can never overwrite the agent's newer full lighting object.
@@ -3515,6 +3550,10 @@ const EDITOR_CSS = `
 .gx-ed-ibl-head>.gx-ed-post-state{margin-left:auto;text-transform:capitalize}
 .gx-ed-ibl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;transition:opacity .15s ease}
 .gx-ed-ibl-grid select{width:100%;padding:3px 4px}
+.gx-ed-ibl-detail{display:flex;flex-direction:column;gap:3px;padding:5px 6px;border-left:2px solid rgba(35,225,183,.45);background:rgba(3,12,18,.28);font-size:9.5px;line-height:1.35;color:#8eb5c0;overflow-wrap:anywhere}
+.gx-ed-ibl-detail[hidden]{display:none}
+.gx-ed-ibl-detail>a{color:#68d8c3;text-decoration:none}
+.gx-ed-ibl-detail>a:hover,.gx-ed-ibl-detail>a:focus{text-decoration:underline}
 .gx-ed-vec{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
 .gx-ed-axis{display:flex;align-items:center;gap:2px;min-width:0}
 .gx-ed-axis>span{flex:none;font:600 9px/1 var(--gx-font);text-transform:uppercase;color:var(--gx-muted)}

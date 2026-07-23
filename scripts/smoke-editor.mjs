@@ -395,6 +395,49 @@ try {
     roomEnvironment: window.__GRAPHYSX_HOST__.scene.environment === window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture,
   }));
   await page.screenshot({ path: path.join(ART, "editor-ibl-hdri.png"), fullPage: false });
+  // Drive every curated environment through the actual selector. The fifth load crosses the
+  // four-entry PMREM limit: the original studio target must be retired while the active rainy
+  // target remains owned, selected, and renderer-visible.
+  const hdriIds = await page.$$eval(
+    '[data-gx-ibl="source"] option[value^="hdri:"]',
+    (options) => options.map((option) => option.value.slice("hdri:".length)),
+  );
+  for (const hdriId of hdriIds.slice(1)) {
+    await page.selectOption('[data-gx-ibl="source"]', `hdri:${hdriId}`);
+    await page.waitForFunction(
+      (id) => window.__GRAPHYSX__.state().environment.lighting?.source === "hdri"
+        && window.__GRAPHYSX__.state().environment.lighting?.hdri === id
+        && window.__GRAPHYSX_HOST__.scene.environment !== window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture,
+      hdriId,
+      { timeout: SMOKE_TIMEOUT },
+    );
+  }
+  out.iblLibrary = await page.evaluate(() => {
+    const hdris = window.__GRAPHYSX__.hdris();
+    const active = hdris.at(-1);
+    const cache = window.__GRAPHYSX_HOST__.hdriCache;
+    const detail = document.querySelector('[data-gx-ibl="detail"]');
+    const credit = detail?.querySelector("a");
+    return {
+      ids: hdris.map((hdri) => hdri.id),
+      optionCount: document.querySelectorAll('[data-gx-ibl="source"] option[value^="hdri:"]').length,
+      optionTitles: [...document.querySelectorAll('[data-gx-ibl="source"] option[value^="hdri:"]')]
+        .every((option) => (option.title ?? "").length > 30),
+      selected: window.__GRAPHYSX__.state().environment.lighting?.hdri ?? null,
+      sourceControl: document.querySelector('[data-gx-ibl="source"]')?.value ?? null,
+      status: document.querySelector('[data-gx-ibl="state"]')?.textContent?.trim() ?? null,
+      detail: detail?.querySelector("span")?.textContent?.trim() ?? null,
+      credit: credit?.textContent?.trim() ?? null,
+      sourceUrl: credit?.href ?? null,
+      cacheSize: cache?.size ?? null,
+      firstEvicted: cache ? !cache.has(hdris[0]?.url) : null,
+      activeCached: cache && active
+        ? cache.get(active.url)?.texture === window.__GRAPHYSX_HOST__.scene.environment
+        : null,
+      sameBackground: window.__GX_IBL_BACKGROUND__ === window.__GRAPHYSX_HOST__.scene.background,
+    };
+  });
+  await page.screenshot({ path: path.join(ART, "editor-ibl-hdri-library.png"), fullPage: false });
   await page.selectOption('[data-gx-ibl="source"]', "sky");
   await page.waitForTimeout(150);
   await page.selectOption('[data-gx-ibl="preset"]', "natural");
@@ -634,10 +677,25 @@ const ok =
   out.iblHdri?.lighting?.source === "hdri" &&
   out.iblHdri?.lighting?.hdri === "studio-small-08" &&
   out.iblHdri?.sourceControl === "hdri:studio-small-08" &&
-  out.iblHdri?.status === "HDRI · Studio Small" &&
+  out.iblHdri?.status === "HDRI · Studio Small 08" &&
   out.iblHdri?.sameBackground === true &&
   out.iblHdri?.differentFromSky === true &&
   out.iblHdri?.roomEnvironment === false &&
+  JSON.stringify(out.iblLibrary?.ids) === JSON.stringify([
+    "studio-small-08", "studio-garden", "overcast-soil", "lilienstein", "vignaioli-night",
+  ]) &&
+  out.iblLibrary?.optionCount === 5 &&
+  out.iblLibrary?.optionTitles === true &&
+  out.iblLibrary?.selected === "vignaioli-night" &&
+  out.iblLibrary?.sourceControl === "hdri:vignaioli-night" &&
+  out.iblLibrary?.status === "HDRI · Rainy Night" &&
+  /street lamps/i.test(out.iblLibrary?.detail ?? "") &&
+  /CC0.*Greg Zaal.*Rico Cilliers.*Poly Haven/i.test(out.iblLibrary?.credit ?? "") &&
+  /polyhaven\.com\/a\/vignaioli_night/.test(out.iblLibrary?.sourceUrl ?? "") &&
+  out.iblLibrary?.cacheSize === 4 &&
+  out.iblLibrary?.firstEvicted === true &&
+  out.iblLibrary?.activeCached === true &&
+  out.iblLibrary?.sameBackground === true &&
   out.iblRejected?.lighting?.intensity === 1 &&
   out.iblRejected?.input === "1" &&
   out.iblRejected?.preset === "natural" &&
