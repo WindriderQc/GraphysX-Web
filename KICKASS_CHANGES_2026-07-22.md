@@ -195,6 +195,26 @@ new `scripts/smoke-great-slide.mjs`, `scripts/smoke-games.mjs`
 - Local acceptance covered both paths: a mismatched SHA failed before browser launch; a matching
   manifest completed the full Great Slide canary with zero failed responses/console/page errors.
 
+## Wave 9 — Human-authored looks + Map 1 gravity descent
+
+**Files:** `src/platform-editor.ts`, `src/platform-host.ts`, new `src/archive-map1-scene.ts`,
+`src/main.ts`, new `scripts/smoke-map1.mjs`, editor/round-trip smokes and shelf thumbnail plumbing
+
+- Bloom authoring is now a deliberate editor surface: Subtle/Cinematic/Neon presets, visible
+  Power/Knee/Spread fields, accessible names, live on/off state, and a compact layout that fits the
+  inspector rail. Environment edits use one atomic `set-environment` transaction instead of
+  export/reloading the whole scene, so selection, physics state, object identity, Undo, and agents'
+  event path stay intact. Repeated look edits reuse one cached PMREM target per sky instead of
+  regenerating image-based lighting; host teardown now disposes the cube maps, render targets,
+  neutral RoomEnvironment target, and generator it owns.
+- Map 1 is a real Games route. The exact recovered 699-vertex/1,456-triangle payload drives both the
+  rendered course and Rapier trimesh. A modern one-gate gravity descent adds controls, HUD, finish,
+  results, replay, return, a scene-native camera footprint, and explicit faithful/adapted/absent
+  provenance rather than claiming unrecovered 2011 rules.
+- The Map 1 smoke uses real ArrowUp input and natural fixed-step motion over the collider. It crosses
+  halfway near step 780 and completes near step 949 with finite state; replay rebuilds the exact
+  collider and returning restores the showroom.
+
 ---
 
 ## Bug found & fixed while verifying
@@ -221,19 +241,22 @@ still fire (occupancy is real). `smoke-ballz`'s ring-collection assertion caught
 - `smoke:rapier-race` — Piste vehicle contact, drive, steering, finite state, screenshot, errors
 - `smoke:mesh-colliders` — Great Slide exact trimesh, dynamic convex hull, rejection + round-trip
 - `smoke:great-slide` — Games launch, exact-collider gate, subject controls, results, replay + return
+- `smoke:map1` — exact recovered collider, real-input natural descent, halfway, win, replay + return
 - `smoke:store-auth` — token gate, CORS, tokenless compat (node-only, cheapest in the list)
 - `smoke:dna` — was authored but never registered; now in the gate (node-only, deterministic)
 
 ## Verification run in this session (served `dist`, swiftshader)
 
-Latest full `npm run verify`: **all 30 checks passed** — typecheck, production build, both Rapier
-probes, every browser/node smoke, Great Slide's complete play/replay proof, Piste race, store auth,
-and DNA. `overlay` hit one transient first-attempt local-server reset; the gate's isolated fresh-
-server retry passed it, with no product assertion failure. Screenshots are in `output/verify`.
+Latest full `npm run verify`: **all 31 checks passed** — typecheck, production build, both Rapier
+probes, every browser/node smoke, Great Slide and Map 1 complete play/replay proofs, Piste race,
+store auth, and DNA. `games` hit one transient first-attempt local-server reset; the gate's isolated
+fresh-server retry passed it, with no product assertion failure. Screenshots are in `output/verify`.
 
 ## Remaining follow-ups
 
-- The `environment.post` field already exists in the runtime — a scene-authored bloom flag is wired;
-  consider surfacing it in the editor inspector.
+- ~~Surface scene-authored bloom in the editor.~~ **Done in Wave 9**, including named presets,
+  readable tuning, selection-preserving transactions, and browser/persistence coverage.
+- Add scene-authored IBL intensity/rotation/background controls, then introduce a licensed 1K HDRI
+  and a focused recovered Physical-material pass. PMREM caching/ownership is complete in Wave 9.
 - `_to_delete/graphysx-kickass.tgz` was the delivery bundle to remove; `_to_delete/` is no longer
   present in this working tree.

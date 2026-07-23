@@ -163,6 +163,19 @@ if (mode === "legacy") {
               }),
             },
             {
+              id: "archive-map1",
+              label: "Map 1: Gravity Descent",
+              meta: "exact recovered mesh  ·  halfway gate  ·  adapted gravity run",
+              play: () => loadComposedGame(async () => {
+                const { composeArchiveMap1, frameArchiveMap1 } = await import("./archive-map1-scene");
+                const result = composeArchiveMap1(host.api);
+                if (!result.ok) throw new Error(result.error ?? "Could not compose Map 1");
+                host.applyEnvironment();
+                frameArchiveMap1(host);
+                await waitForExactCollider(host.api, "map1-terrain");
+              }),
+            },
+            {
               id: "archive-skybox-spiral",
               label: "Skybox Spiral",
               meta: "archive course  ·  16 rings  ·  moving parts  ·  lostvalley sky",
@@ -365,6 +378,11 @@ if (mode === "legacy") {
         composeArchiveWorld1: () => import("./archive-world1-scene").then(({ composeArchiveWorld1, WORLD1_PROVENANCE }) => {
           const result = composeArchiveWorld1(host.api);
           return { ...result, provenance: WORLD1_PROVENANCE };
+        }),
+        // Map 1 — exact recovered geometry wrapped in an explicitly adapted gravity run.
+        composeArchiveMap1: () => import("./archive-map1-scene").then(({ composeArchiveMap1, MAP1_PROVENANCE }) => {
+          const result = composeArchiveMap1(host.api);
+          return { ...result, provenance: MAP1_PROVENANCE };
         }),
         skyboxSpiralProvenance: SKYBOX_SPIRAL_PROVENANCE,
         toPlatformRows,

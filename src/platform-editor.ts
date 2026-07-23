@@ -6,6 +6,7 @@ import type {
   AgentWorldEntityPatch,
   AgentWorldEntityState,
   AgentWorldEntityType,
+  AgentWorldDefinition,
   AgentWorldEnvelope,
   AgentWorldPost,
   AgentWorldMaterial,
@@ -16,6 +17,8 @@ import type {
 import type { AgentLevelState, GraphysXAgentLevelApi } from "./agent-level-library";
 import type { AgentMediaFileEntry, AgentMediaListing, AgentWorldMediaDescriptor } from "./agent-world-media";
 import type { MapEditorTile } from "./race-scene";
+
+type AgentWorldEnvironmentDefinition = NonNullable<AgentWorldDefinition["environment"]>;
 
 export interface PlatformEditorDeps {
   renderer: WebGLRenderer;
@@ -51,6 +54,20 @@ const SNAP_STEPS = [
   { id: "default", label: "0.25", translate: 0.25, rotateDegrees: 15, scale: 0.1 },
   { id: "coarse", label: "1.0", translate: 1, rotateDegrees: 45, scale: 0.25 },
 ] as const;
+
+/** Named looks use values already proven by shipped scenes; "custom" remains lossless. */
+const BLOOM_PRESETS: Record<string, readonly [number, number, number]> = {
+  subtle: [0.35, 0.85, 0.4],
+  cinematic: [0.48, 0.62, 0.35],
+  neon: [0.65, 0.6, 0.4],
+};
+
+const matchBloomPreset = (values: readonly number[]): string => {
+  for (const [id, preset] of Object.entries(BLOOM_PRESETS)) {
+    if (preset.every((value, index) => Math.abs(value - (values[index] ?? -1)) < 0.0001)) return id;
+  }
+  return "custom";
+};
 
 /** Keyboard map, rendered by the help overlay so the list can never drift from the code. */
 const SHORTCUTS: ReadonlyArray<[string, string]> = [
@@ -212,6 +229,9 @@ export class PlatformEditor {
   private envelopeInputs: HTMLInputElement[] = [];
   private postToggle: HTMLInputElement | null = null;
   private postInputs: HTMLInputElement[] = [];
+  private postPreset: HTMLSelectElement | null = null;
+  private postState: HTMLElement | null = null;
+  private postControls: HTMLElement | null = null;
   private levelTile: MapEditorTile = "wall";
   private levelTool: LevelTool = "paint";
   /** Cell elements indexed `y * width + x`, so a drag can repaint one cell without a rebuild. */
@@ -565,6 +585,15 @@ export class PlatformEditor {
         input.value = postValues[index] === null ? "" : String(postValues[index]);
         input.disabled = !post;
       });
+      if (this.postPreset) {
+        this.postPreset.disabled = !post;
+        this.postPreset.value = post ? matchBloomPreset(postValues as number[]) : "custom";
+      }
+      if (this.postState) {
+        this.postState.textContent = post ? "On" : "Off";
+        this.postState.classList.toggle("gx-ed-post-state--on", !!post);
+      }
+      this.postControls?.querySelector(".gx-ed-post-grid")?.classList.toggle("gx-ed-post-grid--disabled", !post);
     }
     if (this.envelopeToggle && !envelopeFocused) {
       const envelope = state?.environment?.envelope ?? null;
@@ -1444,43 +1473,103 @@ export class PlatformEditor {
     envelopeWrap.style.gap = "4px";
     envelopeWrap.append(envelopeToggle, fogNear, fogFar, cameraFar);
 
-    // Post/bloom, same contract as the envelope row: unchecked is the bare renderer (a
-    // real state — no composer exists), checked is strength / threshold / radius.
+    // Post/bloom is scene vocabulary, not a hidden route flag. The original control was a
+    // bare checkbox followed by three title-only number boxes; it technically exposed the
+    // data but made the values impossible to identify at a glance. Keep the compact rail,
+    // add visible labels, and seed presets from tunings already proven in shipped scenes.
     const postToggle = document.createElement("input");
     postToggle.type = "checkbox";
-    postToggle.title = "Scene bloom pass (strength, threshold, radius)";
-    const makeRatio = (title: string) => {
-      const input = makeDistance(title);
+    postToggle.setAttribute("aria-label", "Enable scene bloom");
+    postToggle.dataset.gxBloom = "toggle";
+
+    const postState = document.createElement("span");
+    postState.className = "gx-ed-post-state";
+
+    const toggleLabel = document.createElement("label");
+    toggleLabel.className = "gx-ed-post-toggle";
+    const toggleCopy = document.createElement("span");
+    toggleCopy.textContent = "Scene glow";
+    toggleLabel.append(postToggle, toggleCopy, postState);
+
+    const postPreset = document.createElement("select");
+    postPreset.setAttribute("aria-label", "Bloom preset");
+    postPreset.dataset.gxBloom = "preset";
+    for (const [value, label] of [["custom", "Custom"], ["subtle", "Subtle"], ["cinematic", "Cinematic"], ["neon", "Neon"]]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      postPreset.append(option);
+    }
+
+    const makeRatio = (label: string, field: string, max: number) => {
+      const control = document.createElement("label");
+      control.className = "gx-ed-post-control";
+      const caption = document.createElement("span");
+      caption.textContent = label;
+      const input = makeDistance(`${label} (${max === 3 ? "0–3" : "0–1"})`);
       input.step = "0.05";
-      input.max = "3";
-      return input;
+      input.max = String(max);
+      input.dataset.gxBloom = field;
+      control.append(caption, input);
+      return { control, input };
     };
-    const bloomStrength = makeRatio("Bloom strength (0–3)");
-    const bloomThreshold = makeRatio("Bloom threshold (0–1): luminance below this never blooms");
-    const bloomRadius = makeRatio("Bloom radius (0–1)");
+    const strength = makeRatio("Power", "strength", 3);
+    const threshold = makeRatio("Knee", "threshold", 1);
+    const radius = makeRatio("Spread", "radius", 1);
+    const bloomStrength = strength.input;
+    const bloomThreshold = threshold.input;
+    const bloomRadius = radius.input;
+    const postTuning = document.createElement("div");
+    postTuning.className = "gx-ed-post-grid";
+    postTuning.append(strength.control, threshold.control, radius.control);
+
+    const syncPostUi = () => {
+      const enabled = postToggle.checked;
+      postState.textContent = enabled ? "On" : "Off";
+      postState.classList.toggle("gx-ed-post-state--on", enabled);
+      postPreset.disabled = !enabled;
+      postTuning.classList.toggle("gx-ed-post-grid--disabled", !enabled);
+      for (const input of [bloomStrength, bloomThreshold, bloomRadius]) input.disabled = !enabled;
+      postPreset.value = enabled
+        ? matchBloomPreset([Number(bloomStrength.value), Number(bloomThreshold.value), Number(bloomRadius.value)])
+        : "custom";
+    };
     const applyPost = () => {
       if (!postToggle.checked) {
         this.setPost(null);
+        syncPostUi();
         return;
       }
       const next = { strength: Number(bloomStrength.value), threshold: Number(bloomThreshold.value), radius: Number(bloomRadius.value) };
       if (bloomStrength.value === "" || bloomThreshold.value === "" || bloomRadius.value === "") return;
+      if (![next.strength, next.threshold, next.radius].every(Number.isFinite)) return;
       if (!(next.strength >= 0 && next.strength <= 3 && next.threshold >= 0 && next.threshold <= 1 && next.radius >= 0 && next.radius <= 1)) return;
       this.setPost({ bloom: next });
     };
     postToggle.addEventListener("change", () => {
-      for (const input of [bloomStrength, bloomThreshold, bloomRadius]) input.disabled = !postToggle.checked;
       if (postToggle.checked && bloomStrength.value === "") {
-        // The Spiral's tuning — proven values, and only emissives glow at this threshold.
-        bloomStrength.value = "0.65";
-        bloomThreshold.value = "0.6";
-        bloomRadius.value = "0.4";
+        // Great Slide's cinematic tuning is a restrained default for authored scenes.
+        [bloomStrength.value, bloomThreshold.value, bloomRadius.value] = BLOOM_PRESETS.cinematic.map(String);
       }
+      syncPostUi();
       applyPost();
     });
-    for (const input of [bloomStrength, bloomThreshold, bloomRadius]) input.addEventListener("change", applyPost);
+    postPreset.addEventListener("change", () => {
+      const preset = BLOOM_PRESETS[postPreset.value];
+      if (!preset) return;
+      postToggle.checked = true;
+      [bloomStrength.value, bloomThreshold.value, bloomRadius.value] = preset.map(String);
+      syncPostUi();
+      applyPost();
+    });
+    for (const input of [bloomStrength, bloomThreshold, bloomRadius]) {
+      input.addEventListener("input", () => { postPreset.value = "custom"; });
+      input.addEventListener("change", () => { applyPost(); syncPostUi(); });
+    }
     this.postToggle = postToggle;
     this.postInputs = [bloomStrength, bloomThreshold, bloomRadius];
+    this.postPreset = postPreset;
+    this.postState = postState;
     const currentPost = this.deps.world.getEnvironment().post;
     if (currentPost) {
       postToggle.checked = true;
@@ -1491,10 +1580,16 @@ export class PlatformEditor {
       });
     }
     const postWrap = document.createElement("div");
-    postWrap.style.display = "flex";
-    postWrap.style.alignItems = "center";
-    postWrap.style.gap = "4px";
-    postWrap.append(postToggle, bloomStrength, bloomThreshold, bloomRadius);
+    postWrap.className = "gx-ed-post";
+    const postTop = document.createElement("div");
+    postTop.className = "gx-ed-post-head";
+    postTop.append(toggleLabel, postPreset);
+    const postHint = document.createElement("div");
+    postHint.className = "gx-ed-hint";
+    postHint.textContent = "Glow around bright and emissive surfaces.";
+    postWrap.append(postTop, postTuning, postHint);
+    this.postControls = postWrap;
+    syncPostUi();
 
     return this.section("Environment", [
       this.field("Sky", select),
@@ -1504,52 +1599,39 @@ export class PlatformEditor {
     ]);
   }
 
-  /**
-   * Environment is part of the scene definition rather than a mutable field, so changing
-   * the sky is an export → patch → load round trip. Entities survive; selection does not.
-   */
   private setSky(skyId: string | null): void {
-    const definition = this.deps.api.export();
-    if (!definition) return;
-    this.deps.api.load({
-      ...definition,
-      environment: { ...definition.environment, sky: skyId },
-    });
-    this.deps.onEnvironmentChanged?.();
-    this.select(null);
+    this.patchEnvironment({ sky: skyId });
   }
 
   private setOverlay(overlayId: string | null): void {
-    const definition = this.deps.api.export();
-    if (!definition) return;
-    this.deps.api.load({
-      ...definition,
-      environment: { ...definition.environment, overlay: overlayId as never },
-    });
-    this.deps.onEnvironmentChanged?.();
-    this.select(null);
+    this.patchEnvironment({ overlay: overlayId as never });
   }
 
   private setEnvelope(envelope: AgentWorldEnvelope | null): void {
-    const definition = this.deps.api.export();
-    if (!definition) return;
-    this.deps.api.load({
-      ...definition,
-      environment: { ...definition.environment, envelope: envelope as never },
-    });
-    this.deps.onEnvironmentChanged?.();
-    this.select(null);
+    this.patchEnvironment({ envelope: envelope as never });
   }
 
   private setPost(post: AgentWorldPost | null): void {
+    this.patchEnvironment({ post: post as never });
+  }
+
+  /**
+   * Environment edits used to export and reload the entire document. That reset simulation,
+   * rebuilt every entity, and cleared selection for a change that the runtime already supports
+   * atomically. A single set-environment transaction keeps physics and the editing context live,
+   * adds the change to Undo, and emits the same host environment event agents use.
+   */
+  private patchEnvironment(patch: Partial<AgentWorldEnvironmentDefinition>): void {
     const definition = this.deps.api.export();
     if (!definition) return;
-    this.deps.api.load({
-      ...definition,
-      environment: { ...definition.environment, post: post as never },
-    });
-    this.deps.onEnvironmentChanged?.();
-    this.select(null);
+    this.deps.api.transaction([{
+      op: "set-environment",
+      environment: { ...definition.environment, ...patch },
+    }]);
+    // A successful set-environment synchronously emits environment.changed. PlatformHost owns
+    // that subscription and applies the sky/overlay/post once; calling its legacy callback here
+    // would do the same work twice and, for skies, allocate a second PMREM render texture.
+    this.refresh("force");
   }
 
   private saveScene(): void {
@@ -3025,6 +3107,19 @@ const EDITOR_CSS = `
 .gx-ed-field{display:flex;align-items:center;gap:var(--gx-s2)}
 .gx-ed-label{flex:0 0 58px;font-size:10.5px;color:var(--gx-muted)}
 .gx-ed-field>:not(.gx-ed-label){flex:1 1 auto;min-width:0}
+.gx-ed-post{display:flex;flex-direction:column;gap:6px;padding:6px;background:linear-gradient(135deg,rgba(35,225,183,.07),rgba(58,146,220,.04));border:1px solid var(--gx-border-soft);border-radius:var(--gx-radius-sm)}
+.gx-ed-post-head{display:flex;align-items:center;gap:6px}
+.gx-ed-post-head>select{margin-left:auto;width:92px;padding:3px 5px}
+.gx-ed-post-toggle{display:flex;align-items:center;gap:5px;cursor:pointer;font-size:10.5px;color:#c6e2ea;white-space:nowrap}
+.gx-ed-post-toggle>input{margin:0;accent-color:var(--gx-accent)}
+.gx-ed-post-state{font:600 9px/1 var(--gx-font);letter-spacing:.06em;text-transform:uppercase;color:var(--gx-muted);background:var(--gx-field);border:1px solid var(--gx-border);border-radius:99px;padding:3px 5px}
+.gx-ed-post-state--on{color:var(--gx-accent);background:var(--gx-accent-soft);border-color:var(--gx-accent-deep)}
+.gx-ed-post-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;transition:opacity .15s ease}
+.gx-ed-post-grid--disabled{opacity:.42}
+.gx-ed-post-control{display:flex;flex-direction:column;gap:2px;min-width:0}
+.gx-ed-post-control>span{font:600 8.5px/1.2 var(--gx-font);letter-spacing:.06em;text-transform:uppercase;color:var(--gx-muted)}
+.gx-ed-post-control>input{width:100%;padding:3px 4px}
+.gx-ed-post>.gx-ed-hint{line-height:1.3}
 .gx-ed-vec{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
 .gx-ed-axis{display:flex;align-items:center;gap:2px;min-width:0}
 .gx-ed-axis>span{flex:none;font:600 9px/1 var(--gx-font);text-transform:uppercase;color:var(--gx-muted)}

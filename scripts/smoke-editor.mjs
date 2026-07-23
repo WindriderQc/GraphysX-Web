@@ -5,8 +5,8 @@ import path from "node:path";
 // Covers the human editing surface end to end: every library tab is reachable, a recovered
 // mesh asset spawns, the inspector commits transform + material edits through the public
 // API, an archive texture applies, a behaviour attaches and is listed as detachable, the
-// scene-tree filter narrows rows, and the editor is a place you can leave. Each of these
-// was a real regression at some point.
+// scene-tree filter narrows rows, scene bloom is authorable without rebuilding the world,
+// and the editor is a place you can leave. Each of these was a real regression at some point.
 
 const EXE = process.env.SMOKE_CHROMIUM || undefined;
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
@@ -147,6 +147,82 @@ try {
   // The behaviour shows up as a detachable row in the inspector, not just in state.
   out.behaviourRows = await page.$$eval(".gx-ed-attached", (els) => els.length);
 
+  // Bloom used to be three unlabeled boxes that export→loaded the whole scene on every edit.
+  // Drive the human-facing preset and a custom value, then prove the host composer changed
+  // while the selected entity and its actual Three object stayed put.
+  out.bloomInitial = await page.evaluate(() => ({
+    post: window.__GRAPHYSX__.state().environment.post,
+    toggle: document.querySelector('[data-gx-bloom="toggle"]')?.checked ?? null,
+    presetDisabled: document.querySelector('[data-gx-bloom="preset"]')?.disabled ?? null,
+    inputsDisabled: [...document.querySelectorAll('[data-gx-bloom="strength"], [data-gx-bloom="threshold"], [data-gx-bloom="radius"]')]
+      .every((input) => input.disabled),
+  }));
+  out.selectedBeforeBloom = (await page.textContent(".gx-ed-ident-id"))?.trim() ?? null;
+  await page.evaluate((id) => {
+    window.__GX_BLOOM_OBJECT__ = window.__GRAPHYSX_HOST__.world.getEntityObject(id);
+    window.__GX_BLOOM_ENVIRONMENT__ = window.__GRAPHYSX_HOST__.scene.environment;
+  }, out.selectedBeforeBloom);
+  await page.click('[data-gx-bloom="toggle"]');
+  await page.selectOption('[data-gx-bloom="preset"]', "neon");
+  await page.waitForTimeout(350);
+  out.bloomNeon = await page.evaluate((id) => ({
+    post: window.__GRAPHYSX__.state().environment.post,
+    composer: !!window.__GRAPHYSX_HOST__.composer,
+    pass: window.__GRAPHYSX_HOST__.bloomPass ? {
+      strength: window.__GRAPHYSX_HOST__.bloomPass.strength,
+      threshold: window.__GRAPHYSX_HOST__.bloomPass.threshold,
+      radius: window.__GRAPHYSX_HOST__.bloomPass.radius,
+    } : null,
+    selected: document.querySelector(".gx-ed-ident-id")?.textContent?.trim() ?? null,
+    sameObject: window.__GX_BLOOM_OBJECT__ === window.__GRAPHYSX_HOST__.world.getEntityObject(id),
+    sameEnvironment: window.__GX_BLOOM_ENVIRONMENT__ === window.__GRAPHYSX_HOST__.scene.environment,
+    preset: document.querySelector('[data-gx-bloom="preset"]')?.value ?? null,
+  }), out.selectedBeforeBloom);
+  await page.fill('[data-gx-bloom="strength"]', "0.8");
+  await page.dispatchEvent('[data-gx-bloom="strength"]', "change");
+  await page.fill('[data-gx-bloom="threshold"]', "0.55");
+  await page.dispatchEvent('[data-gx-bloom="threshold"]', "change");
+  await page.fill('[data-gx-bloom="radius"]', "0.3");
+  await page.dispatchEvent('[data-gx-bloom="radius"]', "change");
+  await page.waitForTimeout(350);
+  out.bloomCustom = await page.evaluate(() => ({
+    post: window.__GRAPHYSX__.state().environment.post,
+    preset: document.querySelector('[data-gx-bloom="preset"]')?.value ?? null,
+    state: document.querySelector(".gx-ed-post-state")?.textContent?.trim() ?? null,
+    sameEnvironment: window.__GX_BLOOM_ENVIRONMENT__ === window.__GRAPHYSX_HOST__.scene.environment,
+  }));
+  await page.selectOption('[data-gx-bloom="preset"]', "cinematic");
+  await page.waitForTimeout(300);
+  out.bloomCinematic = await page.evaluate(() => ({
+    post: window.__GRAPHYSX__.state().environment.post,
+    preset: document.querySelector('[data-gx-bloom="preset"]')?.value ?? null,
+    sameEnvironment: window.__GX_BLOOM_ENVIRONMENT__ === window.__GRAPHYSX_HOST__.scene.environment,
+  }));
+  // Native number inputs permit programmatic out-of-range values. The editor must reject one
+  // before it reaches transaction rollback, which would rebuild the selected live object.
+  await page.fill('[data-gx-bloom="strength"]', "4");
+  await page.dispatchEvent('[data-gx-bloom="strength"]', "change");
+  await page.waitForTimeout(200);
+  out.bloomRejected = await page.evaluate((id) => ({
+    post: window.__GRAPHYSX__.state().environment.post,
+    sameObject: window.__GX_BLOOM_OBJECT__ === window.__GRAPHYSX_HOST__.world.getEntityObject(id),
+    sameEnvironment: window.__GX_BLOOM_ENVIRONMENT__ === window.__GRAPHYSX_HOST__.scene.environment,
+  }), out.selectedBeforeBloom);
+  await page.selectOption('[data-gx-bloom="preset"]', "cinematic");
+  await page.waitForTimeout(200);
+  await page.locator(".gx-ed-post").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(ART, "editor-bloom.png"), fullPage: false });
+
+  await page.click('[data-gx-bloom="toggle"]');
+  await page.waitForTimeout(250);
+  out.bloomOff = await page.evaluate(() => ({
+    post: window.__GRAPHYSX__.state().environment.post,
+    composer: !!window.__GRAPHYSX_HOST__.composer,
+    sameEnvironment: window.__GX_BLOOM_ENVIRONMENT__ === window.__GRAPHYSX_HOST__.scene.environment,
+    inputsDisabled: [...document.querySelectorAll('[data-gx-bloom="strength"], [data-gx-bloom="threshold"], [data-gx-bloom="radius"]')]
+      .every((input) => input.disabled),
+  }));
+
   // The scene tree filter narrows the rows without touching the world.
   const allRows = await page.$$eval(".gx-ed-row", (els) => els.length);
   await page.fill(".gx-ed-panel--left .gx-ed-filter", "edit-model-");
@@ -202,9 +278,42 @@ const ok =
   out.textureApplied === "checker" &&
   out.behaviourCount === 1 &&
   out.behaviourRows === 1 &&
+  out.bloomInitial?.post === null &&
+  out.bloomInitial?.toggle === false &&
+  out.bloomInitial?.presetDisabled === true &&
+  out.bloomInitial?.inputsDisabled === true &&
+  out.bloomNeon?.post?.bloom?.strength === 0.65 &&
+  out.bloomNeon?.post?.bloom?.threshold === 0.6 &&
+  out.bloomNeon?.post?.bloom?.radius === 0.4 &&
+  out.bloomNeon?.composer === true &&
+  out.bloomNeon?.pass?.strength === 0.65 &&
+  out.bloomNeon?.pass?.threshold === 0.6 &&
+  out.bloomNeon?.pass?.radius === 0.4 &&
+  out.bloomNeon?.selected === out.selectedBeforeBloom &&
+  out.bloomNeon?.sameObject === true &&
+  out.bloomNeon?.sameEnvironment === true &&
+  out.bloomNeon?.preset === "neon" &&
+  out.bloomCustom?.post?.bloom?.strength === 0.8 &&
+  out.bloomCustom?.post?.bloom?.threshold === 0.55 &&
+  out.bloomCustom?.post?.bloom?.radius === 0.3 &&
+  out.bloomCustom?.preset === "custom" &&
+  out.bloomCustom?.state === "On" &&
+  out.bloomCustom?.sameEnvironment === true &&
+  out.bloomCinematic?.post?.bloom?.strength === 0.48 &&
+  out.bloomCinematic?.post?.bloom?.threshold === 0.62 &&
+  out.bloomCinematic?.post?.bloom?.radius === 0.35 &&
+  out.bloomCinematic?.preset === "cinematic" &&
+  out.bloomCinematic?.sameEnvironment === true &&
+  out.bloomRejected?.post?.bloom?.strength === 0.48 &&
+  out.bloomRejected?.post?.bloom?.threshold === 0.62 &&
+  out.bloomRejected?.post?.bloom?.radius === 0.35 &&
+  out.bloomRejected?.sameObject === true &&
+  out.bloomRejected?.sameEnvironment === true &&
+  out.bloomOff?.post === null &&
+  out.bloomOff?.composer === false &&
+  out.bloomOff?.sameEnvironment === true &&
+  out.bloomOff?.inputsDisabled === true &&
   out.treeFilterWorks &&
   out.welcomeBack &&
   out.editorHiddenAgain;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
-
-

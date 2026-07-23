@@ -5,7 +5,6 @@ import {
   CubeTexture,
   CubeTextureLoader,
   Fog,
-  Texture,
   PCFSoftShadowMap,
   PerspectiveCamera,
   PMREMGenerator,
@@ -13,6 +12,7 @@ import {
   SRGBColorSpace,
   Vector2,
   Vector3,
+  WebGLRenderTarget,
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -131,9 +131,12 @@ export class PlatformHost {
   editor: PlatformEditor | null = null;
 
   private editorLoad: Promise<PlatformEditor | null> | null = null;
-  private readonly skyCache = new Map<string, CubeTexture>();
-  private skyToken = 0;
-  private roomEnvironment: Texture | null = null;
+  private readonly skyCache = new Map<string, { background: CubeTexture; environmentTarget: WebGLRenderTarget }>();
+  private readonly pendingSkyKeys = new Set<string>();
+  private requestedSkyKey: string | null = null;
+  private requestedSkyHorizon: string | null = null;
+  private readonly pmremGenerator: PMREMGenerator;
+  private readonly roomEnvironmentTarget: WebGLRenderTarget;
   private readonly interactive: boolean;
   private readonly autoOrbit: boolean;
   private readonly onExitEditor?: () => void;
@@ -243,10 +246,11 @@ export class PlatformHost {
 
     // Neutral image-based lighting so PBR materials read well without any archive
     // skybox assets. The world still brings its own scene lights.
-    const pmrem = new PMREMGenerator(this.renderer);
-    this.roomEnvironment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environment = this.roomEnvironment;
-    pmrem.dispose();
+    this.pmremGenerator = new PMREMGenerator(this.renderer);
+    const room = new RoomEnvironment();
+    this.roomEnvironmentTarget = this.pmremGenerator.fromScene(room, 0.04);
+    room.dispose();
+    this.scene.environment = this.roomEnvironmentTarget.texture;
 
     this.world = new AgentWorldRuntime(options.world ?? GRAPHYSX_AGENT_DEMO_WORLD);
     this.scene.add(this.world.group);
@@ -256,9 +260,9 @@ export class PlatformHost {
     if (options.post === true) this.postOverride = HOST_DEMO_POST;
     this.applyEnvironment();
 
-    // Parity gap, closed at the source. `applyEnvironment()` was reachable from exactly three
-    // places: construction, the editor's own `onEnvironmentChanged` callback, and two manual
-    // calls in `main.ts`. So a HUMAN picking a sky in the inspector saw it applied, while an
+    // Parity gap, closed at the source. Before this subscription, `applyEnvironment()` was
+    // reached through construction and caller-owned callbacks/manual calls. So a HUMAN picking
+    // a sky in the inspector saw it applied, while an
     // AGENT doing the identical thing through `api.create` / `api.load` / `levels.play()` had
     // its environment stored in the runtime and silently never rendered — the sky was in the
     // document, the inspector agreed it was selected, and the viewport showed the old one.
@@ -411,9 +415,12 @@ export class PlatformHost {
    * resumes circling the *new* subject. That is the whole point of the feature — click a
    * thing and the showroom starts showing you that thing.
    */
-  focusOn(point: Vector3, subjectRadius = 2, duration = 1.5): void {
+  focusOn(point: Vector3, subjectRadius = 2, duration = 1.5, maxDistance = 46): void {
     const target = point.clone();
-    const distance = Math.min(46, Math.max(5.5, subjectRadius * 3.4 + 3));
+    // Interactive showroom focus stays capped at 46 by default. Large authored courses can
+    // raise the cap explicitly so the camera does not land inside a mesh whose span is wider
+    // than the showroom itself.
+    const distance = Math.min(Math.max(46, maxDistance), Math.max(5.5, subjectRadius * 3.4 + 3));
     const direction = this.camera.position.clone().sub(this.controls.target);
     if (direction.lengthSq() < 1e-6) direction.set(0, 0.45, 1);
     direction.normalize();
@@ -613,19 +620,24 @@ export class PlatformHost {
    * face order with quarter-turned poles, so the recovered `archive-skybox` conversion
    * does the orienting — re-deriving that would be a genuine waste.
    *
-   * Loading is async and cached per set; a scene that switches back to no sky (or swaps
-   * mid-load) is protected by the token check, so a slow load can never overwrite a newer
-   * selection.
+   * Loading and the generated image-based lighting are cached per set. A scene that switches
+   * while a load is pending records the desired cache key, so a slow response can never
+   * overwrite a newer selection and an A -> B -> A sequence still reuses the one A request.
    */
   private applySky(skyId: string | null): void {
-    this.skyToken += 1;
-    const token = this.skyToken;
     if (!skyId) {
-      this.scene.environment = this.roomEnvironment;
+      this.requestedSkyKey = null;
+      this.requestedSkyHorizon = null;
+      this.scene.environment = this.roomEnvironmentTarget.texture;
       return;
     }
     const descriptor = this.world.listSkies().find((sky) => sky.id === skyId);
-    if (!descriptor) return;
+    if (!descriptor) {
+      this.requestedSkyKey = null;
+      this.requestedSkyHorizon = null;
+      this.scene.environment = this.roomEnvironmentTarget.texture;
+      return;
+    }
 
     const faceUrls = agentWorldSkyFaceUrls(descriptor);
     // Key on the FACES, not the id. An imported set lives in the asset store, which
@@ -635,11 +647,17 @@ export class PlatformHost {
     // That is the same stale-serve `media-r1` already paid for once at the HTTP layer;
     // this is the in-memory instance of it.
     const cacheKey = faceUrls.join("|");
+    this.requestedSkyKey = cacheKey;
+    this.requestedSkyHorizon = descriptor.horizonColor;
     const cached = this.skyCache.get(cacheKey);
     if (cached) {
-      this.setSkyTexture(cached, descriptor.horizonColor, token);
+      this.activateSky(cached, cacheKey);
       return;
     }
+    // Do not light a newly requested sky with the previous sky while its faces are loading.
+    this.scene.environment = this.roomEnvironmentTarget.texture;
+    if (this.pendingSkyKeys.has(cacheKey)) return;
+    this.pendingSkyKeys.add(cacheKey);
     const loader = new CubeTextureLoader();
     // Imported faces are served cross-origin from the asset store (a different port),
     // and `orientArchiveCubeTexture` rotates the poles through a 2D canvas — without
@@ -650,29 +668,48 @@ export class PlatformHost {
     loader.load(
       faceUrls,
       (texture) => {
+        this.pendingSkyKeys.delete(cacheKey);
+        if (this.disposed) {
+          texture.dispose();
+          return;
+        }
         texture.colorSpace = SRGBColorSpace;
         const oriented = orientArchiveCubeTexture(texture);
-        this.skyCache.set(cacheKey, oriented);
-        this.setSkyTexture(oriented, descriptor.horizonColor, token);
+        // A defensive guard for loader implementations that complete the same request twice.
+        const existing = this.skyCache.get(cacheKey);
+        if (existing) {
+          oriented.dispose();
+          this.activateSky(existing, cacheKey);
+          return;
+        }
+        const resource = {
+          background: oriented,
+          environmentTarget: this.pmremGenerator.fromCubemap(oriented),
+        };
+        this.skyCache.set(cacheKey, resource);
+        this.activateSky(resource, cacheKey);
       },
       undefined,
-      () => console.warn(`Could not load sky "${descriptor.id}" from ${faceUrls[0]}`),
+      () => {
+        this.pendingSkyKeys.delete(cacheKey);
+        console.warn(`Could not load sky "${descriptor.id}" from ${faceUrls[0]}`);
+      },
     );
   }
 
-  private setSkyTexture(texture: CubeTexture, horizonColor: string, token: number): void {
-    if (this.disposed || token !== this.skyToken) return;
-    this.scene.background = texture;
-    // Light the scene from the sky it actually sits under.
-    const pmrem = new PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromCubemap(texture).texture;
-    pmrem.dispose();
+  private activateSky(
+    resource: { background: CubeTexture; environmentTarget: WebGLRenderTarget },
+    cacheKey: string,
+  ): void {
+    if (this.disposed || cacheKey !== this.requestedSkyKey) return;
+    this.scene.background = resource.background;
+    this.scene.environment = resource.environmentTarget.texture;
     // Keep distance fog, tinted to the sky's horizon, so ground fades into the skyline
     // instead of ending at a hard plane edge. Dropping the fog here was a mistake: fog
     // does not fight a skybox, fog of the wrong colour does. The sky-path defaults sit
     // slightly deeper than the flat-background pair; a scene envelope overrides both.
     const envelope = this.world.getEnvironment().envelope;
-    this.scene.fog = new Fog(horizonColor, envelope?.fogNear ?? 38, envelope?.fogFar ?? 138);
+    this.scene.fog = new Fog(this.requestedSkyHorizon ?? "#101820", envelope?.fogNear ?? 38, envelope?.fogFar ?? 138);
   }
 
   /**
@@ -851,6 +888,16 @@ export class PlatformHost {
     this.bridge.dispose();
     this.controls.dispose();
     this.teardownComposer();
+    this.scene.background = null;
+    this.scene.environment = null;
+    for (const resource of this.skyCache.values()) {
+      resource.environmentTarget.dispose();
+      resource.background.dispose();
+    }
+    this.skyCache.clear();
+    this.pendingSkyKeys.clear();
+    this.roomEnvironmentTarget.dispose();
+    this.pmremGenerator.dispose();
     this.scene.remove(this.world.group);
     this.world.dispose();
     this.renderer.dispose();

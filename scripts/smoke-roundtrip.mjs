@@ -499,9 +499,15 @@ try {
         state: post2.bloom ? post2.bloom.threshold : undefined,
         object: host.bloomPass ? host.bloomPass.threshold : undefined,
       }, { before: before.post ? before.post.bloom.threshold : null });
+      check("environment.post.bloom.radius", "environment", 0.3, {
+        state: post2.bloom ? post2.bloom.radius : undefined,
+        object: host.bloomPass ? host.bloomPass.radius : undefined,
+      }, { before: before.post ? before.post.bloom.radius : null });
       check("environment.post composer exists", "environment", true, { object: !!host.composer }, { before: false });
       api.transaction([{ op: "set-environment", environment: { post: null } }]);
       check("environment.post composer torn down", "environment", true, { object: !host.composer }, { before: false, note: "null means no composer exists at all — the bare renderer path" });
+      // Leave the authored look enabled for the export/reload proof below.
+      api.transaction([{ op: "set-environment", environment: { post: { bloom: { strength: 0.8, threshold: 0.55, radius: 0.3 } } } }]);
     }
 
     // ================= PERSISTENCE: export -> reload -> re-read =================
@@ -539,7 +545,16 @@ try {
     }
     const envAfter = api.state().environment;
     const envSurvived = eq(beforeEnv.ground.size, envAfter.ground.size) && eq(beforeEnv.background, envAfter.background)
-      && eq(beforeEnv.envelope ? beforeEnv.envelope.fogFar : null, envAfter.envelope ? envAfter.envelope.fogFar : null);
+      && eq(beforeEnv.envelope ? beforeEnv.envelope.fogFar : null, envAfter.envelope ? envAfter.envelope.fogFar : null)
+      && eq(beforeEnv.post?.bloom?.strength ?? null, envAfter.post?.bloom?.strength ?? null)
+      && eq(beforeEnv.post?.bloom?.threshold ?? null, envAfter.post?.bloom?.threshold ?? null)
+      && eq(beforeEnv.post?.bloom?.radius ?? null, envAfter.post?.bloom?.radius ?? null);
+    const postAfterReload = host.bloomPass ? {
+      strength: host.bloomPass.strength,
+      threshold: host.bloomPass.threshold,
+      radius: host.bloomPass.radius,
+      composer: !!host.composer,
+    } : null;
 
     // Also confirm every entity's exported form carried its config block (export read path).
     const exportCoverage = ["em1", "terr1", "wat1", "flk1", "ff1", "dna1", "crd1"].map((id) => {
@@ -561,6 +576,7 @@ try {
       stateOnly,
       reloadDiffs,
       envSurvived,
+      postAfterReload,
       exportCoverage,
       counts: {
         total: results.length,
@@ -618,6 +634,10 @@ const ok =
   reloadFailures.length === 0 &&
   exportGaps.length === 0 &&
   sweep.envSurvived === true &&
+  sweep.postAfterReload?.strength === 0.8 &&
+  sweep.postAfterReload?.threshold === 0.55 &&
+  sweep.postAfterReload?.radius === 0.3 &&
+  sweep.postAfterReload?.composer === true &&
   pageErrors.length === 0;
 
 process.exit(ok ? 0 : 1);

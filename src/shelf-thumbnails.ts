@@ -13,6 +13,7 @@ export const SHELF_SCENE_THUMBNAIL_IDS: ReadonlySet<string> = new Set([
   "archive-forces-garden",
   "archive-garage",
   "archive-great-slide",
+  "archive-map1",
   "living-systems",
   "prefab-plaza",
   "glow-garden",
