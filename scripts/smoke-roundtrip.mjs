@@ -546,6 +546,22 @@ try {
       check("environment.lighting rejects out-of-range background intensity", "validation", true, {
         object: rejectsLighting({ ...lighting2, backgroundIntensity: 4 }),
       }, { before: false });
+      check("environment.lighting rejects unknown HDRI", "validation", true, {
+        object: rejectsLighting({ ...lighting2, source: "hdri", hdri: "missing-hdri" }),
+      }, { before: false });
+      const hdriId = api.hdris()[0]?.id ?? null;
+      if (hdriId) {
+        api.transaction([{ op: "set-environment", environment: {
+          ...authoredEnvironment,
+          lighting: { ...lighting2, source: "hdri", hdri: hdriId },
+        } }]);
+        const hdriLighting = api.state().environment.lighting;
+        check("environment.lighting.hdri", "environment", hdriId, {
+          state: hdriLighting?.source === "hdri" ? hdriLighting.hdri : null,
+          object: api.export().environment.lighting?.source === "hdri" ? api.export().environment.lighting.hdri : null,
+        }, { before: null });
+        api.transaction([{ op: "set-environment", environment: { ...authoredEnvironment, lighting: lighting2 } }]);
+      }
 
       // Post/bloom: applied by the HOST as an EffectComposer that only exists while the
       // scene asks. Object-observable both ways — the composer appears with real pass

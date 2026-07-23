@@ -53,11 +53,16 @@ try {
     const api = window.__GRAPHYSX__;
     const terrain = api.query({ ids: ["great-slide-terrain"] })[0];
     const run = api.rules.status();
+    let material = null;
+    window.__GRAPHYSX_HOST__.world.getEntityObject("great-slide-terrain")?.traverse((object) => {
+      if (!material && object.isMesh) material = Array.isArray(object.material) ? object.material[0] : object.material;
+    });
     return {
       mode: window.__GRAPHYSX_HOST__.mode,
       paused: api.state()?.paused,
       hudCourse: document.querySelector(".gx-bz-course")?.textContent ?? "",
       terrain: terrain?.physics?.collider ?? null,
+      material: material ? { physical: material.isMeshPhysicalMaterial === true, roughness: material.roughness, metalness: material.metalness, clearcoat: material.clearcoat } : null,
       rules: run ? {
         phase: run.phase,
         checkpointCount: run.checkpointCount,
@@ -209,6 +214,10 @@ const ok =
   out.loaded?.terrain?.effective === "trimesh" &&
   out.loaded?.terrain?.vertexCount === 100 &&
   out.loaded?.terrain?.triangleCount === 92 &&
+  out.loaded?.material?.physical === true &&
+  out.loaded?.material?.roughness === 0.36 &&
+  out.loaded?.material?.metalness === 0.08 &&
+  out.loaded?.material?.clearcoat === 0.35 &&
   out.loaded?.rules?.phase === "running" &&
   out.loaded?.rules?.checkpointCount === 2 &&
   out.loaded?.rules?.collectibleCount === 0 &&

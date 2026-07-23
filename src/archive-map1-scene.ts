@@ -204,6 +204,7 @@ function buildDefinition(): AgentWorldDefinition {
       // `skyx` is the stock set used by the restoration-era Map 1 visit. No archived
       // scene record binds it to Map1.TVM, so provenance lists it as presentation.
       sky: "skyx",
+      lighting: { source: "hdri", hdri: "studio-small-08", intensity: 0.95, yawDegrees: 18, backgroundIntensity: 0.9, backgroundBlur: 0.08 },
       overlay: "vignette",
       ground: { visible: false, size: 90, color: "#0b1b24", grid: false, gridColor: "#24586a" },
       physics: { gravity: [0, -9.81, 0] },

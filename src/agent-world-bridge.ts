@@ -7,7 +7,7 @@ export const GRAPHYSX_AGENT_TOOL_EVENT_SCHEMA = "graphysx.agent-tool-event/v1" a
 
 const TOOL_PATHS = [
   "schema", "worldSchema", "levelSchema", "version", "capabilities",
-  "open", "demo", "state", "assets", "textures", "skies", "emitters", "heightmaps", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select",
+  "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select",
   "sounds", "flocks", "crowds", "forceFields", "formulas", "dna",
   "attachBehavior", "detachBehavior", "interact", "prefabs", "spawnPrefab", "starters", "loadStarter",
   "transaction", "commit", "history", "events", "undo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
@@ -34,6 +34,7 @@ const TOOL_SUMMARIES: Record<string, string> = {
   exportDocument: "Export the persistable scene document: authored content only, without session-only spawns.",
   textures: "Discover stable archive texture IDs and their intended visual uses.",
   skies: "List the per-scene skybox sets recovered from the archive.",
+  hdris: "List the bundled HDR reflection environments with source and license provenance.",
   emitters: "List the archive particle-emitter presets, with provenance, budgets and keyframe ramps, for spawning `emitter` entities.",
   heightmaps: "List the curated heightmaps, with archive provenance, for spawning `terrain` entities. Terrain carries a static heightfield collider, so objects land on it.",
   sounds: "List the archive sound samples plus media-library imports, for `sound` entities and `play-sound` interactions.",

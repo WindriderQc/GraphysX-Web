@@ -17,6 +17,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
@@ -37,6 +38,7 @@ import { createOverlaySketch, type AgentWorldOverlayId, type OverlaySketch } fro
 import { createGraphysXAgentToolBridge, type GraphysXAgentToolBridge } from "./agent-world-bridge";
 import { orientArchiveCubeTexture } from "./archive-skybox";
 import { agentWorldSkyFaceUrls } from "./agent-world-skies";
+import { resolveAgentWorldHdri } from "./agent-world-hdris";
 import { installPlatformTheme } from "./platform-theme";
 // Type-only: the editor module (and the ~348 KB TransformControls gizmo stack it pulls in)
 // is loaded on demand, so the showroom front door never pays for chrome it keeps hidden.
@@ -107,6 +109,8 @@ export interface PlatformHostOptions {
 const HOST_DEMO_POST: AgentWorldPost = { bloom: { strength: 0.35, radius: 0.4, threshold: 0.85 } };
 /** Six curated skies plus two active import/working slots; older GPU resources are released. */
 const MAX_SKY_CACHE_ENTRIES = 8;
+/** HDR PMREMs are larger than cube backdrops; the curated library is intentionally tighter. */
+const MAX_HDRI_CACHE_ENTRIES = 4;
 
 /**
  * Standalone renderer/host for the `graphysx.agent-world/v2` scene model.
@@ -137,10 +141,14 @@ export class PlatformHost {
   private readonly skyCache = new Map<string, { background: CubeTexture; environmentTarget: WebGLRenderTarget }>();
   /** Attempt token per key: late face errors cannot clear a newer retry's in-flight guard. */
   private readonly pendingSkyKeys = new Map<string, symbol>();
+  private readonly hdriCache = new Map<string, WebGLRenderTarget>();
+  private readonly pendingHdriKeys = new Map<string, symbol>();
   private requestedSkyKey: string | null = null;
   private requestedSkyHorizon: string | null = null;
   /** Whether the current look wants a loaded sky to drive reflections as well as backdrop. */
   private requestedSkyLighting = false;
+  /** Lighting and backdrop are independent: a late sky must never replace an active HDRI. */
+  private requestedEnvironmentKey = "studio";
   private readonly pmremGenerator: PMREMGenerator;
   private readonly roomEnvironmentTarget: WebGLRenderTarget;
   private readonly interactive: boolean;
@@ -641,11 +649,15 @@ export class PlatformHost {
   }
 
   private applySky(skyId: string | null, lighting: AgentWorldLighting | null): void {
-    this.requestedSkyLighting = lighting?.source !== "studio" && !!skyId;
+    this.requestedSkyLighting = (lighting === null || lighting.source === "sky") && !!skyId;
+    const hdri = lighting?.source === "hdri" ? resolveAgentWorldHdri(lighting.hdri) : null;
+    this.requestedEnvironmentKey = hdri ? `hdri:${hdri.url}` : "studio";
+    // Never let the previous look linger while a new PMREM is in flight.
+    this.scene.environment = this.roomEnvironmentTarget.texture;
+    if (hdri) this.requestHdri(hdri.url, hdri.id);
     if (!skyId) {
       this.requestedSkyKey = null;
       this.requestedSkyHorizon = null;
-      this.scene.environment = this.roomEnvironmentTarget.texture;
       return;
     }
     const descriptor = this.world.listSkies().find((sky) => sky.id === skyId);
@@ -666,6 +678,7 @@ export class PlatformHost {
     const cacheKey = faceUrls.join("|");
     this.requestedSkyKey = cacheKey;
     this.requestedSkyHorizon = descriptor.horizonColor;
+    if (this.requestedSkyLighting) this.requestedEnvironmentKey = `sky:${cacheKey}`;
     const cached = this.skyCache.get(cacheKey);
     if (cached) {
       // Map insertion order is the LRU order. A hit is recent and moves to the tail.
@@ -675,7 +688,6 @@ export class PlatformHost {
       return;
     }
     // Do not light a newly requested sky with the previous sky while its faces are loading.
-    this.scene.environment = this.roomEnvironmentTarget.texture;
     if (this.pendingSkyKeys.has(cacheKey)) return;
     const attempt = Symbol(cacheKey);
     this.pendingSkyKeys.set(cacheKey, attempt);
@@ -752,15 +764,76 @@ export class PlatformHost {
   ): void {
     if (this.disposed || cacheKey !== this.requestedSkyKey) return;
     this.scene.background = resource.background;
-    this.scene.environment = this.requestedSkyLighting
-      ? resource.environmentTarget.texture
-      : this.roomEnvironmentTarget.texture;
+    if (this.requestedEnvironmentKey === `sky:${cacheKey}`) {
+      this.scene.environment = resource.environmentTarget.texture;
+    }
     // Keep distance fog, tinted to the sky's horizon, so ground fades into the skyline
     // instead of ending at a hard plane edge. Dropping the fog here was a mistake: fog
     // does not fight a skybox, fog of the wrong colour does. The sky-path defaults sit
     // slightly deeper than the flat-background pair; a scene envelope overrides both.
     const envelope = this.world.getEnvironment().envelope;
     this.scene.fog = new Fog(this.requestedSkyHorizon ?? "#101820", envelope?.fogNear ?? 38, envelope?.fogFar ?? 138);
+  }
+
+  /** Load, prefilter, cache, and latest-request-guard a reflection-only HDR environment. */
+  private requestHdri(url: string, id: string): void {
+    const key = `hdri:${url}`;
+    const cached = this.hdriCache.get(url);
+    if (cached) {
+      this.hdriCache.delete(url);
+      this.hdriCache.set(url, cached);
+      if (!this.disposed && this.requestedEnvironmentKey === key) this.scene.environment = cached.texture;
+      return;
+    }
+    if (this.pendingHdriKeys.has(url)) return;
+    const attempt = Symbol(url);
+    this.pendingHdriKeys.set(url, attempt);
+    new RGBELoader().load(
+      url,
+      (texture) => {
+        if (this.pendingHdriKeys.get(url) !== attempt || this.disposed) {
+          texture.dispose();
+          return;
+        }
+        this.pendingHdriKeys.delete(url);
+        let target: WebGLRenderTarget;
+        try {
+          target = this.pmremGenerator.fromEquirectangular(texture);
+        } catch (error) {
+          texture.dispose();
+          console.warn(`Could not prepare HDRI "${id}" for image lighting.`, error);
+          return;
+        }
+        texture.dispose();
+        const existing = this.hdriCache.get(url);
+        if (existing) {
+          target.dispose();
+          target = existing;
+          this.hdriCache.delete(url);
+        }
+        this.hdriCache.set(url, target);
+        this.trimHdriCache();
+        if (!this.disposed && this.requestedEnvironmentKey === key) this.scene.environment = target.texture;
+      },
+      undefined,
+      () => {
+        if (this.pendingHdriKeys.get(url) !== attempt) return;
+        this.pendingHdriKeys.delete(url);
+        console.warn(`Could not load HDRI "${id}" from ${url}`);
+      },
+    );
+  }
+
+  private trimHdriCache(): void {
+    while (this.hdriCache.size > MAX_HDRI_CACHE_ENTRIES) {
+      const requestedUrl = this.requestedEnvironmentKey.startsWith("hdri:")
+        ? this.requestedEnvironmentKey.slice("hdri:".length)
+        : null;
+      const candidate = [...this.hdriCache.keys()].find((url) => url !== requestedUrl);
+      if (!candidate) return;
+      this.hdriCache.get(candidate)?.dispose();
+      this.hdriCache.delete(candidate);
+    }
   }
 
   /**
@@ -947,6 +1020,9 @@ export class PlatformHost {
     }
     this.skyCache.clear();
     this.pendingSkyKeys.clear();
+    for (const target of this.hdriCache.values()) target.dispose();
+    this.hdriCache.clear();
+    this.pendingHdriKeys.clear();
     this.roomEnvironmentTarget.dispose();
     this.pmremGenerator.dispose();
     this.scene.remove(this.world.group);

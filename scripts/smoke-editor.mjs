@@ -140,30 +140,41 @@ try {
   out.modelSpawned = (await page.evaluate(() => window.__GRAPHYSX__.state().entities.length)) > before;
   out.spawnedType = spawned?.type ?? null;
 
-  // The spawned model is selected, so the inspector is live: edit a transform field and a
-  // material slider and prove both land as ordinary API updates on the shared world.
+  // The spawned model is selected, so its transform is live. Recovered submaterials are
+  // source-owned slot data; the inspector must say so instead of offering write-only generic
+  // sliders that cannot represent a multi-material mesh.
   out.selectedInInspector = (await page.textContent(".gx-ed-ident-id"))?.trim() ?? null;
+  out.modelMaterialNote = (await page.textContent('[data-gx-model-materials="source"]'))?.trim() ?? null;
   await page.fill(".gx-ed-inspector .gx-ed-vec input >> nth=0", "3.5");
   await page.dispatchEvent(".gx-ed-inspector .gx-ed-vec input >> nth=0", "change");
   await page.waitForTimeout(250);
   out.positionX = (await findSpawned())?.position?.[0] ?? null;
 
+  // Material controls remain fully editable for ordinary scene primitives.
+  await page.click('.gx-ed-toolbar button:text-is("+ Box")');
+  await page.waitForFunction(() => document.querySelector(".gx-ed-ident-id")?.textContent?.trim()?.startsWith("edit-box-") === true, { timeout: SMOKE_TIMEOUT });
+  const materialTargetId = (await page.textContent(".gx-ed-ident-id"))?.trim() ?? "";
+  const findMaterialTarget = () => page.evaluate((id) => window.__GRAPHYSX__.query({ ids: [id] })[0] ?? null, materialTargetId);
+  out.materialTargetType = (await findMaterialTarget())?.type ?? null;
   const roughness = ".gx-ed-inspector input[type=range] >> nth=0";
   await page.fill(roughness, "0.15");
   await page.dispatchEvent(roughness, "change");
   await page.waitForTimeout(250);
-  out.roughness = (await findSpawned())?.material?.roughness ?? null;
+  out.roughness = (await findMaterialTarget())?.material?.roughness ?? null;
 
   // Apply an archive texture from the Textures tab, then attach a living behaviour.
   await page.click('.gx-ed-tab:text-is("Textures")');
   // Textures render as thumb cards now; the label is a child span rather than the button text.
   await page.click('.gx-ed-thumb:has(.gx-ed-thumb-label:text-is("Checker"))');
   await page.waitForTimeout(400);
-  out.textureApplied = (await findSpawned())?.material?.texture?.id ?? null;
+  out.textureApplied = (await findMaterialTarget())?.material?.texture?.id ?? null;
 
-  await page.click('.gx-ed-chip:text-is("+ Spin")');
-  await page.waitForTimeout(300);
-  const withBehaviour = await findSpawned();
+  // Transform behaviours intentionally require kinematic physics; make that contract true
+  // before exercising the human attach control.
+  await page.evaluate((id) => window.__GRAPHYSX__.update(id, { physics: { mode: "kinematic" } }), materialTargetId);
+  await page.click('.gx-ed-section:has(summary:text-is("Behaviours")) .gx-ed-chip:text-is("+ Spin")');
+  await page.waitForFunction((id) => (window.__GRAPHYSX__.query({ ids: [id] })[0]?.behaviors?.length ?? 0) === 1, materialTargetId, { timeout: SMOKE_TIMEOUT });
+  const withBehaviour = await findMaterialTarget();
   out.behaviourCount = Array.isArray(withBehaviour?.behaviors) ? withBehaviour.behaviors.length : 0;
   // The behaviour shows up as a detachable row in the inspector, not just in state.
   out.behaviourRows = await page.$$eval(".gx-ed-attached", (els) => els.length);
@@ -281,6 +292,34 @@ try {
     cachedEnvironment: window.__GX_IBL_SKY_ENVIRONMENT__ === window.__GRAPHYSX_HOST__.scene.environment,
     sameBackground: window.__GX_IBL_BACKGROUND__ === window.__GRAPHYSX_HOST__.scene.background,
   }));
+  // The bundled HDRI is reflection-only: keep the cube backdrop, prove a pending HDR load
+  // cannot steal Studio after the source changes, then activate the cached PMREM explicitly.
+  await page.route("**/*.hdr", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await route.continue();
+  });
+  await page.selectOption('[data-gx-ibl="source"]', "hdri:studio-small-08");
+  await page.selectOption('[data-gx-ibl="source"]', "studio");
+  await page.waitForTimeout(700);
+  out.iblPendingHdriStudio = await page.evaluate(() => ({
+    roomEnvironment: window.__GRAPHYSX_HOST__.scene.environment === window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture,
+    sameBackground: window.__GX_IBL_BACKGROUND__ === window.__GRAPHYSX_HOST__.scene.background,
+    source: window.__GRAPHYSX__.state().environment.lighting?.source ?? null,
+  }));
+  await page.unroute("**/*.hdr");
+  await page.selectOption('[data-gx-ibl="source"]', "hdri:studio-small-08");
+  await page.waitForFunction(() => window.__GRAPHYSX_HOST__.scene.environment !== window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture, { timeout: SMOKE_TIMEOUT });
+  out.iblHdri = await page.evaluate(() => ({
+    lighting: window.__GRAPHYSX__.state().environment.lighting,
+    sourceControl: document.querySelector('[data-gx-ibl="source"]')?.value ?? null,
+    status: document.querySelector('[data-gx-ibl="state"]')?.textContent?.trim() ?? null,
+    sameBackground: window.__GX_IBL_BACKGROUND__ === window.__GRAPHYSX_HOST__.scene.background,
+    differentFromSky: window.__GX_IBL_SKY_ENVIRONMENT__ !== window.__GRAPHYSX_HOST__.scene.environment,
+    roomEnvironment: window.__GRAPHYSX_HOST__.scene.environment === window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture,
+  }));
+  await page.screenshot({ path: path.join(ART, "editor-ibl-hdri.png"), fullPage: false });
+  await page.selectOption('[data-gx-ibl="source"]', "sky");
+  await page.waitForTimeout(150);
   await page.selectOption('[data-gx-ibl="preset"]', "natural");
   await page.waitForTimeout(150);
   await page.fill('[data-gx-ibl="intensity"]', "4");
@@ -442,6 +481,8 @@ const ok =
   out.modelSpawned &&
   out.spawnedType === "model" &&
   out.selectedInInspector?.startsWith("edit-model-") &&
+  /Source materials/.test(out.modelMaterialNote ?? "") &&
+  out.materialTargetType === "box" &&
   out.positionX === 3.5 &&
   out.roughness === 0.15 &&
   out.textureApplied === "checker" &&
@@ -482,6 +523,16 @@ const ok =
   out.iblStudio?.differentFromSky === true &&
   out.iblSkyAgain?.cachedEnvironment === true &&
   out.iblSkyAgain?.sameBackground === true &&
+  out.iblPendingHdriStudio?.roomEnvironment === true &&
+  out.iblPendingHdriStudio?.sameBackground === true &&
+  out.iblPendingHdriStudio?.source === "studio" &&
+  out.iblHdri?.lighting?.source === "hdri" &&
+  out.iblHdri?.lighting?.hdri === "studio-small-08" &&
+  out.iblHdri?.sourceControl === "hdri:studio-small-08" &&
+  out.iblHdri?.status === "HDRI · Studio Small" &&
+  out.iblHdri?.sameBackground === true &&
+  out.iblHdri?.differentFromSky === true &&
+  out.iblHdri?.roomEnvironment === false &&
   out.iblRejected?.lighting?.intensity === 1 &&
   out.iblRejected?.input === "1" &&
   out.iblRejected?.preset === "natural" &&

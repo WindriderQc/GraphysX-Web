@@ -18,6 +18,7 @@ import type {
 import type { AgentLevelState, GraphysXAgentLevelApi } from "./agent-level-library";
 import type { AgentMediaFileEntry, AgentMediaListing, AgentWorldMediaDescriptor } from "./agent-world-media";
 import type { MapEditorTile } from "./race-scene";
+import { GRAPHYSX_AGENT_WORLD_HDRIS } from "./agent-world-hdris";
 
 type AgentWorldEnvironmentDefinition = NonNullable<AgentWorldDefinition["environment"]>;
 
@@ -606,7 +607,9 @@ export class PlatformEditor {
       const values = lighting
         ? [lighting.intensity, lighting.yawDegrees, lighting.backgroundIntensity, lighting.backgroundBlur]
         : IBL_PRESETS.natural;
-      this.lightingSource.value = lighting?.source ?? "auto";
+      this.lightingSource.value = lighting?.source === "hdri"
+        ? `hdri:${lighting.hdri}`
+        : lighting?.source ?? "auto";
       this.lightingInputs.forEach((input, index) => {
         input.value = String(values[index]);
         input.disabled = !lighting || (!skySelected && index >= 2);
@@ -620,7 +623,8 @@ export class PlatformEditor {
           ? (skySelected ? "Auto · Sky" : "Auto · Studio")
           : lighting.source === "sky" && !skySelected
             ? "Sky · Fallback"
-            : lighting.source === "sky" ? "Sky" : "Studio";
+            : lighting.source === "sky" ? "Sky"
+              : lighting.source === "hdri" ? "HDRI · Studio Small" : "Studio";
         this.lightingState.textContent = stateLabel;
         this.lightingState.classList.toggle("gx-ed-post-state--on", !!lighting);
       }
@@ -631,7 +635,7 @@ export class PlatformEditor {
       });
       const lightingHint = this.lightingControls?.querySelector<HTMLElement>(".gx-ed-hint");
       if (lightingHint) lightingHint.textContent = skySelected
-        ? "Sky and Studio change reflections without removing the backdrop."
+        ? "Scene sky, neutral Studio, and HDRI change reflections without removing the backdrop."
         : "Backdrop and Blur become available when a sky texture is selected.";
     }
     if (this.postToggle && !postFocused) {
@@ -789,6 +793,13 @@ export class PlatformEditor {
   }
 
   private materialSection(entity: AgentWorldEntityState): HTMLElement {
+    if (entity.type === "model") {
+      const note = document.createElement("div");
+      note.className = "gx-ed-hint";
+      note.dataset.gxModelMaterials = "source";
+      note.textContent = "Source materials · preserved per mesh and material slot. Add slot-aware overrides in a future material pass.";
+      return this.section("Material", [note]);
+    }
     const patch = (values: Partial<AgentWorldMaterial>): void => this.patchEntity(entity.id, { material: values });
     const colour = this.colourInput(entity.material.color, (value) => patch({ color: value }));
     const emissive = this.colourInput(entity.material.emissive, (value) => patch({ emissive: value }));
@@ -1536,10 +1547,16 @@ export class PlatformEditor {
     const lightingSource = document.createElement("select");
     lightingSource.dataset.gxIbl = "source";
     lightingSource.setAttribute("aria-label", "Image lighting source");
-    for (const [value, label] of [["auto", "Automatic"], ["sky", "Scene sky"], ["studio", "Studio"]]) {
+    for (const [value, label] of [["auto", "Automatic"], ["sky", "Scene sky"], ["studio", "Neutral studio"]]) {
       const option = document.createElement("option");
       option.value = value;
       option.textContent = label;
+      lightingSource.append(option);
+    }
+    for (const hdri of GRAPHYSX_AGENT_WORLD_HDRIS) {
+      const option = document.createElement("option");
+      option.value = `hdri:${hdri.id}`;
+      option.textContent = `${hdri.label} HDRI`;
       lightingSource.append(option);
     }
 
@@ -1600,13 +1617,18 @@ export class PlatformEditor {
     lightingTuning.className = "gx-ed-ibl-grid gx-ed-ibl-grid--tuning";
     lightingTuning.append(light.control, yaw.control, backdrop.control, blur.control);
 
-    const readLightingValues = (): AgentWorldLighting => ({
-      source: lightingSource.value === "sky" ? "sky" : "studio",
-      intensity: Number(light.input.value),
-      yawDegrees: Number(yaw.input.value),
-      backgroundIntensity: Number(backdrop.input.value),
-      backgroundBlur: Number(blur.input.value),
-    });
+    const readLightingValues = (): AgentWorldLighting => {
+      const controls = {
+        intensity: Number(light.input.value),
+        yawDegrees: Number(yaw.input.value),
+        backgroundIntensity: Number(backdrop.input.value),
+        backgroundBlur: Number(blur.input.value),
+      };
+      if (lightingSource.value.startsWith("hdri:")) {
+        return { ...controls, source: "hdri", hdri: "studio-small-08" };
+      }
+      return { ...controls, source: lightingSource.value === "sky" ? "sky" : "studio" };
+    };
     const validLighting = (value: AgentWorldLighting) => Number.isFinite(value.intensity)
       && value.intensity >= 0 && value.intensity <= 3
       && Number.isFinite(value.yawDegrees) && value.yawDegrees >= -180 && value.yawDegrees <= 180
@@ -1631,10 +1653,11 @@ export class PlatformEditor {
         ? (skySelected ? "Auto · Sky" : "Auto · Studio")
         : lightingSource.value === "sky" && !skySelected
           ? "Sky · Fallback"
-          : lightingSource.value === "sky" ? "Sky" : "Studio";
+          : lightingSource.value === "sky" ? "Sky"
+            : lightingSource.value.startsWith("hdri:") ? "HDRI · Studio Small" : "Studio";
       lightingState.classList.toggle("gx-ed-post-state--on", authored);
       lightingHint.textContent = skySelected
-        ? "Sky and Studio change reflections without removing the backdrop."
+        ? "Scene sky, neutral Studio, and HDRI change reflections without removing the backdrop."
         : "Backdrop and Blur become available when a sky texture is selected.";
     };
     const applyLighting = () => {
@@ -1677,7 +1700,9 @@ export class PlatformEditor {
     this.lightingInputs = lightingInputs;
     this.lightingState = lightingState;
     const currentLighting = this.deps.world.getEnvironment().lighting;
-    lightingSource.value = currentLighting?.source ?? "auto";
+    lightingSource.value = currentLighting?.source === "hdri"
+      ? `hdri:${currentLighting.hdri}`
+      : currentLighting?.source ?? "auto";
     const initialLighting = currentLighting
       ? [currentLighting.intensity, currentLighting.yawDegrees, currentLighting.backgroundIntensity, currentLighting.backgroundBlur]
       : IBL_PRESETS.natural;

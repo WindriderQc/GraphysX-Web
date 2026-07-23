@@ -216,6 +216,7 @@ function archiveGreatSlide(): Pick<AgentWorldDefinition, "environment" | "entiti
     environment: {
       background: "#071622",
       sky: "lostvalley",
+      lighting: { source: "hdri", hdri: "studio-small-08", intensity: 1.05, yawDegrees: -25, backgroundIntensity: 0.85, backgroundBlur: 0.12 },
       overlay: "vignette",
       ground: { visible: false, size: 80, color: "#0c2530", grid: false, gridColor: "#4fa9b5" },
       physics: { gravity: [0, -9.81, 0] },

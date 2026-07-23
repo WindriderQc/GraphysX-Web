@@ -6,7 +6,9 @@ import {
   Float32BufferAttribute,
   Group,
   Mesh,
+  MeshPhysicalMaterial,
   MeshPhongMaterial,
+  MeshStandardMaterial,
   RepeatWrapping,
   SRGBColorSpace,
   Texture,
@@ -104,6 +106,38 @@ type AssetPayload = {
   bounds?: { min: Tuple3; max: Tuple3; size: Tuple3 };
   meshes: PayloadMesh[];
 };
+
+type RecoveredPbrProfile = {
+  shading: "standard" | "physical";
+  roughness: number;
+  metalness: number;
+  clearcoat?: number;
+  clearcoatRoughness?: number;
+};
+
+/**
+ * Focused presentation profiles for the recovered meshes visitors meet first. These do not
+ * rewrite archive payloads or pretend inferred surfaces were recovered; they adapt the old
+ * Phong power into intentional PBR finishes while preserving every source colour, texture,
+ * group, and geometry byte. Unlisted assets retain their exact legacy Phong path.
+ */
+function recoveredPbrProfile(assetId: string | null, materialName: string): RecoveredPbrProfile | null {
+  if (assetId === "archive-impreza") {
+    if (/CHASIS\.JPG/i.test(materialName)) return { shading: "physical", roughness: 0.28, metalness: 0.12, clearcoat: 0.85, clearcoatRoughness: 0.18 };
+    if (/VENTANAS/i.test(materialName)) return { shading: "physical", roughness: 0.16, metalness: 0.04, clearcoat: 0.72, clearcoatRoughness: 0.12 };
+    if (/UNDERCARRIAGE|CHASIS_A/i.test(materialName)) return { shading: "standard", roughness: 0.78, metalness: 0.02 };
+    return { shading: "standard", roughness: 0.72, metalness: 0.04 };
+  }
+  if (assetId === "archive-cobra") {
+    return /tire/i.test(materialName)
+      ? { shading: "standard", roughness: 0.9, metalness: 0 }
+      : { shading: "physical", roughness: 0.22, metalness: 0.16, clearcoat: 1, clearcoatRoughness: 0.12 };
+  }
+  if (assetId === "archive-piste-ovale") return { shading: "standard", roughness: 0.8, metalness: 0.02 };
+  if (assetId === "archive-slide-large") return { shading: "physical", roughness: 0.36, metalness: 0.08, clearcoat: 0.35, clearcoatRoughness: 0.3 };
+  if (assetId === "archive-map1") return { shading: "standard", roughness: 0.82, metalness: 0 };
+  return null;
+}
 
 export type AgentWorldModelCollisionMesh = {
   /** Flat xyz triples after the asset's fit/recentre/handedness transform. */
@@ -253,23 +287,45 @@ export async function loadAgentWorldModel(
     geometry.computeBoundingSphere();
     const materials = (sourceMesh.materials?.length ? sourceMesh.materials : [{}]).map((sourceMaterial) => {
       const textureUrl = sourceMaterial.textureUrl ?? null;
-      const material = new MeshPhongMaterial({
-        name: sourceMaterial.name ?? "GraphysX recovered material",
+      const name = sourceMaterial.name ?? "GraphysX recovered material";
+      const common = {
+        name,
         color: textureUrl ? 0xffffff : tupleColor(sourceMaterial.color, 0xb8c1c9),
-        specular: tupleColor(sourceMaterial.specular, 0x111111),
         emissive: tupleColor(sourceMaterial.emissive, 0x000000),
-        shininess: Math.max(0, Math.min(100, sourceMaterial.specularPower ?? 18)),
         side: DoubleSide,
         map: textureUrl ? textures.get(textureUrl) ?? null : null,
         // `transparent` stays false on purpose: an alpha-tested cutout is opaque as far as
         // sorting and depth are concerned, which is what keeps overlapping leaf quads from
         // flickering against each other.
-        alphaTest: asset.alphaTest
-      });
+        alphaTest: asset.alphaTest,
+      };
+      const profile = recoveredPbrProfile(asset.id, name);
+      const material = profile?.shading === "physical"
+        ? new MeshPhysicalMaterial({
+            ...common,
+            roughness: profile.roughness,
+            metalness: profile.metalness,
+            clearcoat: profile.clearcoat ?? 0,
+            clearcoatRoughness: profile.clearcoatRoughness ?? 0,
+          })
+        : profile?.shading === "standard"
+          ? new MeshStandardMaterial({ ...common, roughness: profile.roughness, metalness: profile.metalness })
+          : new MeshPhongMaterial({
+              ...common,
+              specular: tupleColor(sourceMaterial.specular, 0x111111),
+              shininess: Math.max(0, Math.min(100, sourceMaterial.specularPower ?? 18)),
+            });
+      if (profile) {
+        material.userData.graphysxRecoveredPbr = true;
+        material.userData.graphysxRecoveredProfile = { assetId: asset.id, ...profile };
+      }
       return material;
     });
     const mesh = new Mesh(geometry, materials.length === 1 ? materials[0] : materials);
     mesh.name = sourceMesh.name ?? "GraphysX model mesh";
+    // Source-owned material slots must not inherit the model entity's generic default teal.
+    // The inspector presents these as source materials until slot-aware overrides exist.
+    mesh.userData.graphysxMaterialLocked = materials.some((material) => material.userData.graphysxRecoveredPbr === true);
     sourceRoot.add(mesh);
   }
 
