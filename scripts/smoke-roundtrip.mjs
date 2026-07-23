@@ -485,6 +485,68 @@ try {
         object: host.camera.far,
       }, { before: before.envelope ? before.envelope.cameraFar : null, note: "default far is 260; asserting the projection actually widened" });
 
+      // Image-based lighting is scene data backed by native Three Scene properties. Studio
+      // is deterministic here (no cube load race), while the editor smoke covers the visible
+      // sky + cached sky-PMREM source switch.
+      api.transaction([{ op: "set-environment", environment: { lighting: {
+        source: "studio",
+        intensity: 1.25,
+        yawDegrees: -35,
+        backgroundIntensity: 0.75,
+        backgroundBlur: 0.28,
+      } } }]);
+      const lighting2 = api.state().environment.lighting || {};
+      check("environment.lighting.source", "environment", "studio", { state: lighting2.source }, { before: before.lighting?.source ?? null });
+      check("environment.lighting.intensity", "environment", 1.25, {
+        state: lighting2.intensity,
+        object: host.scene.environmentIntensity,
+      }, { before: before.lighting?.intensity ?? null });
+      check("environment.lighting.yawDegrees", "environment", -35, {
+        state: lighting2.yawDegrees,
+        object: Math.round(host.scene.environmentRotation.y * 180 / Math.PI),
+      }, { before: before.lighting?.yawDegrees ?? null });
+      check("environment.lighting.backgroundIntensity", "environment", 0.75, {
+        state: lighting2.backgroundIntensity,
+        object: host.scene.backgroundIntensity,
+      }, { before: before.lighting?.backgroundIntensity ?? null });
+      check("environment.lighting.backgroundBlur", "environment", 0.28, {
+        state: lighting2.backgroundBlur,
+        object: host.scene.backgroundBlurriness,
+      }, { before: before.lighting?.backgroundBlur ?? null });
+      check("environment.lighting aligned background yaw", "environment", -35, {
+        object: Math.round(host.scene.backgroundRotation.y * 180 / Math.PI),
+      }, { before: 0 });
+      const authoredEnvironment = api.export().environment;
+      const rejectsLighting = (lighting) => {
+        try {
+          const result = api.transaction([{ op: "set-environment", environment: { ...authoredEnvironment, lighting } }]);
+          const stable = api.state().environment.lighting;
+          return result?.ok === false
+            && stable?.source === "studio"
+            && stable?.intensity === 1.25
+            && stable?.yawDegrees === -35
+            && stable?.backgroundIntensity === 0.75
+            && stable?.backgroundBlur === 0.28;
+        } catch {
+          return false;
+        }
+      };
+      check("environment.lighting rejects invalid source", "validation", true, {
+        object: rejectsLighting({ ...lighting2, source: "moon" }),
+      }, { before: false });
+      check("environment.lighting rejects out-of-range intensity", "validation", true, {
+        object: rejectsLighting({ ...lighting2, intensity: 4 }),
+      }, { before: false });
+      check("environment.lighting rejects non-finite yaw", "validation", true, {
+        object: rejectsLighting({ ...lighting2, yawDegrees: Number.POSITIVE_INFINITY }),
+      }, { before: false });
+      check("environment.lighting rejects out-of-range blur", "validation", true, {
+        object: rejectsLighting({ ...lighting2, backgroundBlur: 2 }),
+      }, { before: false });
+      check("environment.lighting rejects out-of-range background intensity", "validation", true, {
+        object: rejectsLighting({ ...lighting2, backgroundIntensity: 4 }),
+      }, { before: false });
+
       // Post/bloom: applied by the HOST as an EffectComposer that only exists while the
       // scene asks. Object-observable both ways — the composer appears with real pass
       // parameters, and clearing post tears it down again (a leaked composer would tax
@@ -507,7 +569,10 @@ try {
       api.transaction([{ op: "set-environment", environment: { post: null } }]);
       check("environment.post composer torn down", "environment", true, { object: !host.composer }, { before: false, note: "null means no composer exists at all — the bare renderer path" });
       // Leave the authored look enabled for the export/reload proof below.
-      api.transaction([{ op: "set-environment", environment: { post: { bloom: { strength: 0.8, threshold: 0.55, radius: 0.3 } } } }]);
+      api.transaction([{ op: "set-environment", environment: {
+        post: { bloom: { strength: 0.8, threshold: 0.55, radius: 0.3 } },
+        lighting: { source: "studio", intensity: 1.25, yawDegrees: -35, backgroundIntensity: 0.75, backgroundBlur: 0.28 },
+      } }]);
     }
 
     // ================= PERSISTENCE: export -> reload -> re-read =================
@@ -548,13 +613,27 @@ try {
       && eq(beforeEnv.envelope ? beforeEnv.envelope.fogFar : null, envAfter.envelope ? envAfter.envelope.fogFar : null)
       && eq(beforeEnv.post?.bloom?.strength ?? null, envAfter.post?.bloom?.strength ?? null)
       && eq(beforeEnv.post?.bloom?.threshold ?? null, envAfter.post?.bloom?.threshold ?? null)
-      && eq(beforeEnv.post?.bloom?.radius ?? null, envAfter.post?.bloom?.radius ?? null);
+      && eq(beforeEnv.post?.bloom?.radius ?? null, envAfter.post?.bloom?.radius ?? null)
+      && eq(beforeEnv.lighting?.source ?? null, envAfter.lighting?.source ?? null)
+      && eq(beforeEnv.lighting?.intensity ?? null, envAfter.lighting?.intensity ?? null)
+      && eq(beforeEnv.lighting?.yawDegrees ?? null, envAfter.lighting?.yawDegrees ?? null)
+      && eq(beforeEnv.lighting?.backgroundIntensity ?? null, envAfter.lighting?.backgroundIntensity ?? null)
+      && eq(beforeEnv.lighting?.backgroundBlur ?? null, envAfter.lighting?.backgroundBlur ?? null);
     const postAfterReload = host.bloomPass ? {
       strength: host.bloomPass.strength,
       threshold: host.bloomPass.threshold,
       radius: host.bloomPass.radius,
       composer: !!host.composer,
     } : null;
+    const lightingAfterReload = {
+      state: envAfter.lighting,
+      intensity: host.scene.environmentIntensity,
+      environmentYawDegrees: Math.round(host.scene.environmentRotation.y * 180 / Math.PI),
+      backgroundYawDegrees: Math.round(host.scene.backgroundRotation.y * 180 / Math.PI),
+      backgroundIntensity: host.scene.backgroundIntensity,
+      backgroundBlur: host.scene.backgroundBlurriness,
+      studioEnvironment: host.scene.environment === host.roomEnvironmentTarget.texture,
+    };
 
     // Also confirm every entity's exported form carried its config block (export read path).
     const exportCoverage = ["em1", "terr1", "wat1", "flk1", "ff1", "dna1", "crd1"].map((id) => {
@@ -577,6 +656,7 @@ try {
       reloadDiffs,
       envSurvived,
       postAfterReload,
+      lightingAfterReload,
       exportCoverage,
       counts: {
         total: results.length,
@@ -638,6 +718,18 @@ const ok =
   sweep.postAfterReload?.threshold === 0.55 &&
   sweep.postAfterReload?.radius === 0.3 &&
   sweep.postAfterReload?.composer === true &&
+  sweep.lightingAfterReload?.state?.source === "studio" &&
+  sweep.lightingAfterReload?.state?.intensity === 1.25 &&
+  sweep.lightingAfterReload?.state?.yawDegrees === -35 &&
+  sweep.lightingAfterReload?.state?.backgroundIntensity === 0.75 &&
+  sweep.lightingAfterReload?.state?.backgroundBlur === 0.28 &&
+  sweep.lightingAfterReload?.intensity === 1.25 &&
+  sweep.lightingAfterReload?.environmentYawDegrees === -35 &&
+  sweep.lightingAfterReload?.backgroundYawDegrees === -35 &&
+  sweep.lightingAfterReload?.backgroundIntensity === 0.75 &&
+  sweep.lightingAfterReload?.backgroundBlur === 0.28 &&
+  sweep.lightingAfterReload?.studioEnvironment === true &&
+  consoleErrors.length === 0 &&
   pageErrors.length === 0;
 
 process.exit(ok ? 0 : 1);

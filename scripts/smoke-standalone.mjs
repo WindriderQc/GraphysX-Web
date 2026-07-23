@@ -54,6 +54,15 @@ try {
     const manifest = bridge && typeof bridge.manifest === "function" ? bridge.manifest() : null;
     // Manifest parity: the bridge must describe every callable path on the API — no drift.
     const parity = bridge && typeof bridge.audit === "function" ? bridge.audit() : null;
+    const environment = gx.export().environment;
+    const bridgeLightingResult = await bridge.call("transaction", [{
+      op: "set-environment",
+      environment: {
+        ...environment,
+        lighting: { source: "studio", intensity: 1.1, yawDegrees: 12, backgroundIntensity: 0.9, backgroundBlur: 0.1 },
+      },
+    }]);
+    const bridgeLighting = gx.state().environment.lighting;
     const levelCreate = gx.levels.create({ id: "smoke-level", label: "Smoke Level", width: 8, height: 8 });
     const map1Asset = gx.assets().find((asset) => asset.id === "archive-map1") ?? null;
     const map1Response = map1Asset ? await fetch(map1Asset.url) : null;
@@ -71,6 +80,9 @@ try {
       toolCount: manifest && Array.isArray(manifest.tools) ? manifest.tools.length : null,
       parityMissing: parity ? parity.missing : null,
       parityExtra: parity ? parity.extra : null,
+      lightingCapability: gx.capabilities.includes("environment.lighting"),
+      bridgeLightingOk: bridgeLightingResult?.ok === true,
+      bridgeLighting,
       levelCreateOk: !!(levelCreate && levelCreate.ok),
       levelCount: gx.levels.list().length,
       map1: {
@@ -112,11 +124,14 @@ out.pageErrors = pageErrors;
 console.log(JSON.stringify(out, null, 2));
 await browser.close();
 const apiOk = out.api && out.api.spawnOk && out.api.entitiesAfter > out.api.entitiesBefore && out.api.levelCreateOk && out.api.toolCount > 0 &&
+  out.api.lightingCapability && out.api.bridgeLightingOk && out.api.bridgeLighting?.source === "studio" &&
+  out.api.bridgeLighting?.intensity === 1.1 && out.api.bridgeLighting?.yawDegrees === 12 &&
+  out.api.bridgeLighting?.backgroundIntensity === 0.9 && out.api.bridgeLighting?.backgroundBlur === 0.1 &&
   out.api.map1?.listed && out.api.map1?.status === 200 && out.api.map1?.vertices === 699 && out.api.map1?.triangles === 1456 &&
   /positions/.test(out.api.map1?.exact ?? "");
 const parityOk = out.api && Array.isArray(out.api.parityMissing) && out.api.parityMissing.length === 0 && out.api.parityExtra.length === 0;
 if (!parityOk) console.log("bridge parity drift:", JSON.stringify({ missing: out.api?.parityMissing, extra: out.api?.parityExtra }));
 const editorOk = out.editor && out.editor.hasToolbar && out.editor.hasPanel && out.editor.panelCount === 3 && out.editor.entitiesAfter > out.editor.entitiesBefore && out.editor.rowCount > 0;
-process.exit(out.fatal || pageErrors.length || !out.loopRunning || !apiOk || !parityOk || !editorOk ? 1 : 0);
+process.exit(out.fatal || consoleErrors.length || pageErrors.length || !out.loopRunning || !apiOk || !parityOk || !editorOk ? 1 : 0);
 
 

@@ -115,7 +115,7 @@ Stable texture IDs are `checker`, `green-grid`, `abstract-cubes`, `two-way`, `er
 
 `media` is the runtime import path. It is backed by the same store server that holds shared
 scenes (`npm run serve:scenes`, port 8788), which also fronts a configurable **datalake** —
-a local media folder (`GRAPHYSX_DATALAKE_DIR`, default `E:\Media\Datalake`) browsable and
+a local media folder configured with `GRAPHYSX_DATALAKE_DIR` (disabled when unset), browsable and
 importable at runtime. No rebuild, no registry edit: an import is immediately listed by
 `assets()`/`textures()`, resolvable from scene documents, and visible in the editor's
 library (Media tab, plus Textures/Models for its kind).
@@ -678,7 +678,7 @@ gx.spawn({ id: "ambience", type: "sound", transform: { position: [0, 2, 0] },
   sound: { source: "coin", volume: 0.5, refDistance: 12 } });
 ```
 
-The environment block carries `background`, `sky` (per-scene skybox), `overlay` (generative 2D layer), `envelope`, `ground`, and `physics.gravity`. `envelope` is the scene's viewing envelope — `{ fogNear, fogFar, cameraFar }` in world units, or `null` (the default) for the host values: fog 34–130 and camera far 260, tuned to showroom-sized scenes. A world larger than a few dozen units should declare one; the recovered archive worlds span 56–1135 units, and without an envelope the host's fog wall and far plane swallow them.
+The environment block carries `background`, `sky` (per-scene skybox), `lighting`, `post`, `overlay` (generative 2D layer), `envelope`, `ground`, and `physics.gravity`. `lighting` is `null` for the compatibility look (selected sky lights the scene, otherwise the neutral studio), or `{ source: "sky" | "studio", intensity, yawDegrees, backgroundIntensity, backgroundBlur }`; the numeric ranges are 0–3, -180–180, 0–3, and 0–1. Source changes affect reflections without removing the visible sky, and explicit `sky` safely uses Studio until a sky is available. `envelope` is the scene's viewing envelope — `{ fogNear, fogFar, cameraFar }` in world units, or `null` (the default) for the host values: fog 34–130 and camera far 260, tuned to showroom-sized scenes. A world larger than a few dozen units should declare one; the recovered archive worlds span 56–1135 units, and without an envelope the host's fog wall and far plane swallow them.
 
 Point lights draw a small emissive marker sphere at their origin so an invisible thing can be found and selected. `marker: false` on the entity — at spawn or via `update` — removes the lightbulb and keeps the light, which is what a composed scene lighting a showpiece wants.
 

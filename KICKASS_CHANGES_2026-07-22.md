@@ -1,6 +1,6 @@
 # GraphysX-Web — Feature & Fix Wave (2026-07-22)
 
-Eight waves landed off the peer review and its follow-ups, plus one real bug found while verifying. Base: `643e184`
+Ten waves landed off the peer review and its follow-ups, plus one real bug found while verifying. Base: `643e184`
 (applied cleanly onto your `78e1fe3`, which only adds `showroom-welcome.ts` — untouched here).
 All changes typecheck (`tsc --noEmit` clean) and build (`vite build` green). Affected smokes were
 run individually against a served `dist` and pass; every new smoke is registered in the gate.
@@ -215,6 +215,33 @@ new `scripts/smoke-great-slide.mjs`, `scripts/smoke-games.mjs`
   halfway near step 780 and completes near step 949 with finite state; replay rebuilds the exact
   collider and returning restores the showroom.
 
+## Wave 10 — Scene-authored image lighting
+
+**Files:** `src/agent-world-runtime.ts`, `src/platform-host.ts`, `src/platform-editor.ts`,
+editor/round-trip smokes
+
+- Scenes can now author image-lighting source (selected sky or neutral studio), reflection
+  intensity, aligned environment/background yaw, backdrop intensity, and backdrop blur. `null`
+  remains the compatibility default: existing scenes still use sky IBL when a sky exists and the
+  RoomEnvironment otherwise, with neutral 1/0/1/0 tuning.
+- The editor presents Automatic/Sky/Studio source choices plus Natural/Soft/Hero looks and compact,
+  accessible Light/Yaw/Backdrop/Blur fields. Explicit Sky safely reports and renders a Studio
+  fallback until a sky exists; invalid programmatic values are restored before they can trigger a
+  transaction rollback.
+- Visible backdrop and reflections are independent. Studio can light PBR surfaces behind a selected
+  cube sky, while Sky reuses its cached PMREM. Intensity/yaw/blur edits are native Three Scene
+  properties and never regenerate the PMREM; late sky loads consult the latest lighting source.
+  The GPU cache is capped at eight LRU entries without evicting the active sky, and preparation
+  failures dispose their cube texture while leaving the neutral Studio fallback live and retryable.
+- Editor coverage proves exact live Three values, sky/studio switching, PMREM identity reuse,
+  selection/live-object preservation, accessibility, compact layout, invalid-input rejection, and
+  Automatic reset. Round-trip coverage proves all fields through export/reload and renderer state.
+- The focused editor harness now enters through the real showroom flow and swaps to a small
+  deterministic authoring lab before its broad assertions, avoiding minutes of irrelevant
+  SwiftShader work on the 96-actor showroom.
+- Scope remains honest: scene IBL affects Standard/Physical materials. Recovered Phong headline
+  meshes need the planned focused Physical-material pass before they receive the full benefit.
+
 ---
 
 ## Bug found & fixed while verifying
@@ -247,16 +274,20 @@ still fire (occupancy is real). `smoke-ballz`'s ring-collection assertion caught
 
 ## Verification run in this session (served `dist`, swiftshader)
 
-Latest full `npm run verify`: **all 31 checks passed** — typecheck, production build, both Rapier
-probes, every browser/node smoke, Great Slide and Map 1 complete play/replay proofs, Piste race,
-store auth, and DNA. `games` hit one transient first-attempt local-server reset; the gate's isolated
-fresh-server retry passed it, with no product assertion failure. Screenshots are in `output/verify`.
+Release-gate components are **all green** — typecheck, production build, both Rapier probes, and all
+27 browser/node smokes, including the new image-lighting editor/bridge/round-trip coverage, Great
+Slide and Map 1 complete play/replay proofs, Piste race, store auth, and DNA. The aggregate Windows
+passes exhausted their retries on transient localhost resets before Games/World 1/Store Auth could
+start and once during an Editor sky request; each affected smoke then passed against the same built
+`dist` bundle in stable-base or focused mode, with no product assertion failure. Screenshots are in
+`output/verify`.
 
 ## Remaining follow-ups
 
 - ~~Surface scene-authored bloom in the editor.~~ **Done in Wave 9**, including named presets,
   readable tuning, selection-preserving transactions, and browser/persistence coverage.
-- Add scene-authored IBL intensity/rotation/background controls, then introduce a licensed 1K HDRI
-  and a focused recovered Physical-material pass. PMREM caching/ownership is complete in Wave 9.
+- ~~Add scene-authored IBL intensity/rotation/background controls.~~ **Done in Wave 10**, including
+  sky/studio source separation, named looks, PMREM reuse, async-race safety, and renderer/persistence
+  coverage. Next: a licensed 1K HDRI and focused recovered Physical-material pass.
 - `_to_delete/graphysx-kickass.tgz` was the delivery bundle to remove; `_to_delete/` is no longer
   present in this working tree.

@@ -532,6 +532,23 @@ export type AgentWorldPost = {
   };
 };
 
+/**
+ * Scene-authored image-based lighting. `null` deliberately preserves the legacy host
+ * behaviour: a selected sky lights the scene, otherwise the neutral studio does.
+ */
+export type AgentWorldLighting = {
+  /** The selected sky or the host's neutral studio environment. */
+  source: "sky" | "studio";
+  /** Strength of the reflected image lighting, 0–3. */
+  intensity: number;
+  /** Rotation shared by the lighting and visible sky so reflections stay aligned. */
+  yawDegrees: number;
+  /** Strength of the visible sky/background, 0–3. */
+  backgroundIntensity: number;
+  /** Defocus applied to a texture background, 0–1. */
+  backgroundBlur: number;
+};
+
 export type AgentWorldEnvironment = {
   background: string;
   /**
@@ -552,6 +569,8 @@ export type AgentWorldEnvironment = {
    * costs nothing — only a scene that asks pays for what it asked for.
    */
   post: AgentWorldPost | null;
+  /** Authored IBL look, or null for the backward-compatible automatic host look. */
+  lighting: AgentWorldLighting | null;
   /**
    * Per-scene generative 2D overlay, or null for none. Like `sky`, it is scene data the host
    * renders rather than a global setting — and off by default, because a 2D layer must earn its
@@ -1012,6 +1031,7 @@ const DEFAULT_ENVIRONMENT: AgentWorldEnvironment = {
   sky: null,
   envelope: null,
   post: null,
+  lighting: null,
   overlay: null,
   ground: {
     visible: true,
@@ -1035,6 +1055,7 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "material.texture",
   "texture.list",
   "environment.sky",
+  "environment.lighting",
   "sky.list",
   "entity.emitter",
   "emitter.list",
@@ -1920,7 +1941,7 @@ export class AgentWorldRuntime {
     // the ground, while the rendered sky and background silently stayed on the old values —
     // the same write-only parity gap that `world.loaded` closed for `create`/`load`, reopened
     // by a different entry point. Emitting here lets the host re-apply for every caller.
-    this.emit("environment.changed", [], { sky: this.environment.sky, overlay: this.environment.overlay, background: this.environment.background, envelope: this.environment.envelope, post: this.environment.post });
+    this.emit("environment.changed", [], { sky: this.environment.sky, overlay: this.environment.overlay, background: this.environment.background, envelope: this.environment.envelope, post: this.environment.post, lighting: this.environment.lighting });
   }
 
   private loadDefinition(source: AgentWorldDefinition): void {
@@ -3301,11 +3322,37 @@ function resolveEnvironment(source?: AgentWorldDefinition["environment"]): Agent
     sky,
     envelope: resolveEnvelope(source?.envelope),
     post: resolvePost(source?.post),
+    lighting: resolveLighting(source?.lighting),
     overlay,
     ground: { ...DEFAULT_ENVIRONMENT.ground, ...(source?.ground ?? {}) },
     physics: {
       gravity: sanitizeVector(source?.physics?.gravity ?? DEFAULT_ENVIRONMENT.physics.gravity, -1000, 1000, "physics.gravity")
     }
+  };
+}
+
+function resolveLighting(source: AgentWorldEnvironment["lighting"] | undefined): AgentWorldLighting | null {
+  if (source === null || source === undefined) return DEFAULT_ENVIRONMENT.lighting;
+  if (typeof source !== "object" || (source.source !== "sky" && source.source !== "studio")) {
+    throw new Error('environment.lighting must have source "sky" or "studio", or be null');
+  }
+  const entries = [
+    ["intensity", source.intensity, 0, 3],
+    ["yawDegrees", source.yawDegrees, -180, 180],
+    ["backgroundIntensity", source.backgroundIntensity, 0, 3],
+    ["backgroundBlur", source.backgroundBlur, 0, 1],
+  ] as const;
+  for (const [label, value, minimum, maximum] of entries) {
+    if (!Number.isFinite(value) || value < minimum || value > maximum) {
+      throw new Error(`lighting.${label} must be a finite number between ${minimum} and ${maximum}`);
+    }
+  }
+  return {
+    source: source.source,
+    intensity: source.intensity,
+    yawDegrees: source.yawDegrees,
+    backgroundIntensity: source.backgroundIntensity,
+    backgroundBlur: source.backgroundBlur,
   };
 }
 
