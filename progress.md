@@ -1494,3 +1494,46 @@ does not "fix" it back into a real-time wait.
   fresh-server retry after a localhost connection reset; all product assertions and browser error
   checks passed. Map 1, editor PMREM identity/invalid-input coverage, and the hardened 22-check
   store-auth smoke are part of that full gate.
+
+## 2026-07-23 — `level1-r1`: the mega-world at 1:1, and the third pin
+
+The fifth and last archive mesh-world port (`0b31c5d`). "Level1 2011: The Long Canyon" is on
+the Games shelf: the recovered 828-vertex / 1648-triangle Level1.TVM at its native 1135-unit
+span, exact trimesh collider from the same vendored payload, two gates and a finish down the
+descent, results panel, replay, showroom return. Full gate 32/32.
+
+### The third pin
+
+The roadmap's old claim was that Level1 2011 "cannot currently be rendered at all" because of
+the fixed far plane. That was pin one (fixed by `environment.envelope`); mesh collision was pin
+two (fixed by scene-native trimesh). Landing the port found a **third**: `asset.fitSize` capped
+at 1000 in `agent-world-assets.ts`, written before any asset that large existed. This mesh was
+the first thing to ever hit the line — compose failed outright with a validator error. The cap
+is now 10000 with the reasoning recorded at the site. The lesson generalises: a capability
+unblocked by two fixes can still be blocked by a third stale limit nobody has hit yet, and only
+actually composing the thing finds it.
+
+### Derive, fail, measure
+
+The first composition placed spawn and gates from the decoded vertex height profile. The spawn
+missed the start plateau's edge and the ball fell past the entire world — to y −11,863 — also
+tunnelling through a 2-unit-thick catch floor at fall speeds of ~2 units per fixed step (now 30
+thick; at mega-world speeds a thin floor is a coin flip per step). The fix was not better
+arithmetic: a **19-probe physics drop-grid** over the composed scene (probes spawned through
+the public API, stepped deterministically, catch floor removed so only the mesh answers) mapped
+where the floor actually is. It found what no derivation would have: a hole near z −260 that
+plumb drops thread, and the mesh simply *ending* before z −560 — the first finish had been
+placed off the edge of the world. Every gameplay coordinate now comes from that measurement,
+and the provenance record says so: gate placement started under `faithful` ("follows the
+decoded profile") and was moved to `adapted`, where it always belonged.
+
+### Deterministic to the step, and the screenshot rule pays again
+
+Two independent smoke runs finish at exactly **step 2245** — 37 simulated seconds, spawn → rim
+gate → deep gate → canyon mouth. And the framing took two captured frames to get right, both
+times with every gameplay assertion green: a 1135-unit world subtends the entire frame end-on,
+so no focus distance helps until the approach direction is broadside — `focusOn` derives its
+direction from camera-minus-orbit-target at call time, and the orbit target is still the
+showroom's when the framing helper runs. Commented in the helper. The terrain materialises as
+`MeshPhongMaterial` via the vendored-materials path; the smoke records the type and asserts
+lit-ness rather than guessing a class that belongs to the PBR-finish pass's own coverage.

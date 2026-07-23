@@ -79,8 +79,14 @@ and gameplay remain explicit adaptations rather than a claim of archive-faithful
    ~~Map 1 gravity descent~~ are reachable ports. Map 1 carries its exact 699-vertex/1456-triangle
    mesh and trimesh collider through a natural halfway-to-finish run; its material, scale,
    orientation, spawn, gate, controls, camera, lighting, and rules are explicitly adaptations.
-   **An archive-faithful Great Slide rules reconstruction and Level1 2011 remain**, each needing
-   new source evidence, provenance notes, and a gameplay smoke.
+   **An archive-faithful Great Slide rules reconstruction remains** (needs new source
+   evidence). ~~Level1 2011~~ — **done** (`0b31c5d`): the 1135-unit mega-world at 1:1, with
+   its own smoke and a provenance record that keeps the mesh in `faithful` and every piece of
+   gameplay geography in `adapted` (all of it placed from a 19-probe physics drop-grid over
+   the composed scene — no archived layout exists to be faithful to). Landing it surfaced and
+   removed the THIRD mega-world pin: `asset.fitSize` was capped at 1000 from before any asset
+   that large existed, the same vintage as the fixed far plane and the missing mesh colliders.
+   All five Horizon 2 ports are now reachable from the Games shelf.
 
 ## Horizon 3 — The look
 
