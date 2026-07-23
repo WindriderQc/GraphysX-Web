@@ -226,7 +226,13 @@ export function resolveAgentWorldModelAsset(source?: AgentWorldModelAsset): Reso
   const url = source.url?.trim() || catalogAsset?.url || "";
   if (!url) throw new Error("A model entity requires a loadable asset URL");
   const fitSize = source.fitSize ?? 4;
-  if (!Number.isFinite(fitSize) || fitSize <= 0 || fitSize > 1000) throw new Error("asset.fitSize must be between 0 and 1000");
+  // 10000, not the original 1000: the cap predates any asset that large, and it was the
+  // third hidden pin on mega-worlds after the fixed far plane (fixed by
+  // `environment.envelope`, ceiling 100000) and mesh collision (fixed by scene-native
+  // trimesh colliders). Level1 2011 ships its recovered mesh at a native 1135.4 — the first
+  // asset to hit this line — and shrinking the largest recovered world to fit a stale
+  // validator would invert what those two capabilities were built for.
+  if (!Number.isFinite(fitSize) || fitSize <= 0 || fitSize > 10000) throw new Error("asset.fitSize must be between 0 and 10000");
   const alphaTest = source.alphaTest ?? 0;
   if (!Number.isFinite(alphaTest) || alphaTest < 0 || alphaTest > 1) throw new Error("asset.alphaTest must be between 0 and 1");
   const colorKey = source.colorKey?.trim() || null;

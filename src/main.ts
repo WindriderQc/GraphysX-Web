@@ -176,6 +176,19 @@ if (mode === "legacy") {
               }),
             },
             {
+              id: "archive-level1-2011",
+              label: "Level1 2011: The Long Canyon",
+              meta: "largest recovered mesh, 1:1  ·  2 gates  ·  adapted canyon run",
+              play: () => loadComposedGame(async () => {
+                const { composeArchiveLevel12011, frameArchiveLevel12011 } = await import("./archive-level1-2011-scene");
+                const result = composeArchiveLevel12011(host.api);
+                if (!result.ok) throw new Error(result.error ?? "Could not compose Level1 2011");
+                host.applyEnvironment();
+                frameArchiveLevel12011(host);
+                await waitForExactCollider(host.api, "level1-terrain");
+              }),
+            },
+            {
               id: "archive-skybox-spiral",
               label: "Skybox Spiral",
               meta: "archive course  ·  16 rings  ·  moving parts  ·  lostvalley sky",
@@ -383,6 +396,12 @@ if (mode === "legacy") {
         composeArchiveMap1: () => import("./archive-map1-scene").then(({ composeArchiveMap1, MAP1_PROVENANCE }) => {
           const result = composeArchiveMap1(host.api);
           return { ...result, provenance: MAP1_PROVENANCE };
+        }),
+        // Level1 2011 — the largest recovered mesh at 1:1, gameplay explicitly adapted
+        // because no archived runtime source loads it.
+        composeArchiveLevel12011: () => import("./archive-level1-2011-scene").then(({ composeArchiveLevel12011, LEVEL1_2011_PROVENANCE }) => {
+          const result = composeArchiveLevel12011(host.api);
+          return { ...result, provenance: LEVEL1_2011_PROVENANCE };
         }),
         skyboxSpiralProvenance: SKYBOX_SPIRAL_PROVENANCE,
         toPlatformRows,
