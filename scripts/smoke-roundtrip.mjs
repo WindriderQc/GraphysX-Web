@@ -549,7 +549,9 @@ try {
       check("environment.lighting rejects unknown HDRI", "validation", true, {
         object: rejectsLighting({ ...lighting2, source: "hdri", hdri: "missing-hdri" }),
       }, { before: false });
-      const hdriId = api.hdris()[0]?.id ?? null;
+      // Use the last catalog entry so this proves the schema accepts the expanded stable-id
+      // vocabulary rather than accidentally passing on the original single HDRI.
+      const hdriId = api.hdris().at(-1)?.id ?? null;
       if (hdriId) {
         api.transaction([{ op: "set-environment", environment: {
           ...authoredEnvironment,

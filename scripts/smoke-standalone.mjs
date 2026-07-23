@@ -84,7 +84,7 @@ try {
       lightingCapability: gx.capabilities.includes("environment.lighting"),
       bridgeLightingOk: bridgeLightingResult?.ok === true,
       bridgeLighting,
-      hdri: hdris[0] ?? null,
+      hdris,
       hdriCapability: gx.capabilities.includes("environment.hdri") && gx.capabilities.includes("hdri.list"),
       levelCreateOk: !!(levelCreate && levelCreate.ok),
       levelCount: gx.levels.list().length,
@@ -127,8 +127,17 @@ out.pageErrors = pageErrors;
 console.log(JSON.stringify(out, null, 2));
 await browser.close();
 const apiOk = out.api && out.api.spawnOk && out.api.entitiesAfter > out.api.entitiesBefore && out.api.levelCreateOk && out.api.toolCount > 0 &&
-  out.api.lightingCapability && out.api.hdriCapability && out.api.hdri?.id === "studio-small-08" &&
-  out.api.hdri?.license === "CC0-1.0" && /polyhaven/i.test(out.api.hdri?.sourceUrl ?? "") &&
+  out.api.lightingCapability && out.api.hdriCapability &&
+  JSON.stringify(out.api.hdris?.map((hdri) => hdri.id)) === JSON.stringify([
+    "studio-small-08", "studio-garden", "overcast-soil", "lilienstein", "vignaioli-night",
+  ]) &&
+  out.api.hdris?.every((hdri) =>
+    hdri.resolution === "1K" &&
+    hdri.license === "CC0-1.0" &&
+    /polyhaven/i.test(hdri.sourceUrl ?? "") &&
+    /^\/assets\/hdri\/.+_1k\.hdr$/.test(hdri.url ?? "") &&
+    typeof hdri.description === "string" && hdri.description.length > 30
+  ) &&
   out.api.bridgeLightingOk && out.api.bridgeLighting?.source === "studio" &&
   out.api.bridgeLighting?.intensity === 1.1 && out.api.bridgeLighting?.yawDegrees === 12 &&
   out.api.bridgeLighting?.backgroundIntensity === 0.9 && out.api.bridgeLighting?.backgroundBlur === 0.1 &&

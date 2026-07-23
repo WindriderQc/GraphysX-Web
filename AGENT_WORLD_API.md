@@ -48,7 +48,7 @@ const unsubscribe = bridge.subscribe((event) => {
 });
 ```
 
-The manifest uses `graphysx.agent-tool-bridge/v1` and describes every callable path on the World API — all 81 of them, `rules.*`, `media.*`, `levels.*`, and the constant contract identifiers included, 38 mutating — whether it mutates state, positional-array arguments, schemas, coordinate convention, and available transports. `request()` accepts a structured request and always returns a structured success/error response.
+The manifest uses `graphysx.agent-tool-bridge/v1` and describes every callable path on the World API — all 82 of them, `rules.*`, `media.*`, `levels.*`, and the constant contract identifiers included, 38 mutating — whether it mutates state, positional-array arguments, schemas, coordinate convention, and available transports. `request()` accepts a structured request and always returns a structured success/error response.
 
 "Every callable path" is machine-checked, not aspirational: `bridge.audit()` walks the live API and returns `{ missing, extra }` against the manifest. Both empty means full parity; a drift is reported, never thrown.
 
@@ -110,6 +110,38 @@ gx.spawn({
 ```
 
 Stable texture IDs are `checker`, `green-grid`, `abstract-cubes`, `two-way`, `eroded-metal`, `rusted-metal`, `marble`, `wood-floor`, `worn-wood`, `earth`, and `spheres`. When an asset store is running, `textures()` and `assets()` also list everything imported through the media library (below) under `category: "imported"`, usable by the same `{ id }` reference.
+
+### Curated HDR image lighting
+
+`gx.hdris()` lists the five bundled 1K reflection environments, including stable ID,
+description, author, Poly Haven source, resolution, and CC0 license. They are vendored release
+assets: a scene never depends on a third-party request at runtime.
+
+```js
+const looks = gx.hdris();
+// studio-small-08, studio-garden, overcast-soil, lilienstein, vignaioli-night
+
+gx.transaction([{
+  op: "set-environment",
+  environment: {
+    ...gx.export().environment,
+    lighting: {
+      source: "hdri",
+      hdri: "lilienstein",
+      intensity: 1.15,
+      yawDegrees: -25,
+      backgroundIntensity: 1,
+      backgroundBlur: 0
+    }
+  }
+}]);
+```
+
+HDRI lighting is reflection-only. The selected `environment.sky` remains the visible backdrop,
+and yaw/intensity remain ordinary scene data. The available looks are **Studio Small 08**
+(softbox), **Sunlit Courtyard** (crisp midday), **Diffuse Overcast** (low-contrast material
+inspection), **Golden Meadow** (warm sunset), and **Rainy Night** (mixed artificial light).
+Unknown IDs are rejected before the document changes.
 
 ## Media library: import your own textures, models, and sounds
 

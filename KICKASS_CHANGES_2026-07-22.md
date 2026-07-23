@@ -320,8 +320,11 @@ start and once during an Editor sky request; each affected smoke then passed aga
   coverage.
 - ~~Add a licensed 1K HDRI and focused recovered Physical-material pass.~~ **Done in Wave 11**,
   including CC0 provenance, reflection/backdrop race isolation, hero-scene activation, selective
-  Physical/Standard profiles, source-material inspector honesty, and live-object coverage. Next:
-  slot-aware model material overrides and a larger curated HDRI library.
+  Physical/Standard profiles, source-material inspector honesty, and live-object coverage.
+- ~~Add slot-aware model material overrides.~~ **Done in Wave 12**, including stable assignment
+  IDs, sparse reversible overrides, clone/map ownership, editor presets, and replacement safety.
+- ~~Expand the licensed HDRI proof into a curated library.~~ **Done in Wave 13** with five distinct
+  looks, visible provenance, unchanged scene schema, and real four-entry LRU eviction coverage.
 - `_to_delete/graphysx-kickass.tgz` was the delivery bundle to remove; `_to_delete/` is no longer
   present in this working tree.
 
@@ -353,3 +356,26 @@ start and once during an Editor sky request; each affected smoke then passed aga
 - Final local release gate: **31/31 passed**. The Wave 12 editor, vehicle, and scene-store paths
   are in that complete gate; Overlay recovered one transport reset on its built-in fresh-server
   retry, with no product assertion failure.
+
+## Wave 13 — Curated HDRI lighting library
+
+- The single Studio Small proof is now a five-look, deliberately varied 1K library: softbox
+  studio, sunlit courtyard, diffuse overcast, golden-hour meadow, and rainy Italian night.
+  Every original Poly Haven HDR is vendored with exact author/source/license/MD5 provenance;
+  production does not call the third-party API or CDN.
+- `api.hdris()` and the unchanged 82-tool bridge enumerate stable IDs and complete metadata.
+  `environment.lighting.hdri` remains the only scene field, so older documents stay compatible
+  and the new looks travel through existing transaction, export, import, store, and agent paths.
+- The editor's former single-ID shortcut is gone: any registered HDRI resolves from the selected
+  stable ID. The compact card gives every look a human label, description, and visible CC0/author
+  source link while keeping source, tuning presets, backdrop, and reflections independent.
+- The existing four-entry PMREM LRU is now exercised rather than theoretical. The focused editor
+  smoke loads all five real HDR files under SwiftShader, proves the oldest target is disposed,
+  the active target remains cached and renderer-bound, the cube backdrop is unchanged, and the
+  296px rail has no horizontal overflow.
+- API coverage asserts the exact catalog and provenance contract with zero bridge drift. The
+  round-trip sweep selects the newest non-original ID (`vignaioli-night`) so expanded schema
+  validation cannot accidentally pass only because Studio Small still works.
+- Final local release gate: **32/32 passed**. Games, Milky Way, Maison, and Rapier Race each
+  recovered a localhost-only reset/timeout through the existing isolated fresh-server retry;
+  every product assertion passed and no browser console/page error survived.
