@@ -15,11 +15,13 @@ mkdirSync(ART, { recursive: true });
 
 const consoleErrors = [];
 const pageErrors = [];
+const badResponses = [];
 const browser = await launchSmokeBrowser();
 const page = await browser.newPage();
 applySmokeTimeout(page);
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
 page.on("pageerror", (e) => pageErrors.push(String(e)));
+page.on("response", (r) => { if (r.status() >= 400) badResponses.push(`${r.status()} ${r.url()}`); });
 
 const out = {};
 try {
@@ -140,15 +142,90 @@ try {
   out.modelSpawned = (await page.evaluate(() => window.__GRAPHYSX__.state().entities.length)) > before;
   out.spawnedType = spawned?.type ?? null;
 
-  // The spawned model is selected, so its transform is live. Recovered submaterials are
-  // source-owned slot data; the inspector must say so instead of offering write-only generic
-  // sliders that cannot represent a multi-material mesh.
+  // The spawned model is selected, so its transform and source-owned material slots are live.
+  await page.waitForFunction(
+    () => window.__GRAPHYSX__.state().entities.some((entity) => entity.id.startsWith("edit-model-") && entity.asset?.status === "ready"),
+    { timeout: SMOKE_TIMEOUT },
+  );
   out.selectedInInspector = (await page.textContent(".gx-ed-ident-id"))?.trim() ?? null;
-  out.modelMaterialNote = (await page.textContent('[data-gx-model-materials="source"]'))?.trim() ?? null;
+  out.modelMaterialSlots = await page.$$eval("[data-gx-material-slot]", (cards) => cards.length);
+  out.phongControls = await page.evaluate(() => ({
+    roughness: document.querySelectorAll('[data-gx-material-slot] input[aria-label*="roughness"]').length,
+    clearcoat: document.querySelectorAll('[data-gx-material-slot] input[aria-label*="clearcoat"]').length,
+    opacity: document.querySelectorAll('[data-gx-material-slot] input[aria-label*="opacity"]').length,
+    color: document.querySelectorAll('[data-gx-material-slot] input[aria-label*="base color"]').length,
+  }));
   await page.fill(".gx-ed-inspector .gx-ed-vec input >> nth=0", "3.5");
   await page.dispatchEvent(".gx-ed-inspector .gx-ed-vec input >> nth=0", "change");
   await page.waitForTimeout(250);
   out.positionX = (await findSpawned())?.position?.[0] ?? null;
+
+  // A real multi-slot showpiece: seven exact Impreza assignments, compact disclosure,
+  // accessible controls, preset authoring, and state that survives leaving the editor.
+  out.imprezaSpawnResult = await page.evaluate(() => window.__GRAPHYSX__.spawn({
+    id: "editor-impreza",
+    label: "Editor Impreza",
+    type: "model",
+    asset: { id: "archive-impreza", fitSize: 4 },
+    transform: { position: [0, 1.2, 0] },
+  }));
+  await page.waitForFunction(
+    () => ["ready", "error"].includes(window.__GRAPHYSX__.query({ ids: ["editor-impreza"] })[0]?.asset?.status),
+    { timeout: SMOKE_TIMEOUT },
+  );
+  out.imprezaAsset = await page.evaluate(() => window.__GRAPHYSX__.query({ ids: ["editor-impreza"] })[0]?.asset ?? null);
+  if (out.imprezaAsset?.status !== "ready") throw new Error(`Impreza asset failed: ${out.imprezaAsset?.error ?? "unknown"}`);
+  // The previous transform input intentionally retains focus after its change event. A real
+  // pointer selection blurs it before click; reproduce that browser ordering explicitly when
+  // invoking the row handler synchronously.
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.$eval(
+    '.gx-ed-row-id:text-is("editor-impreza")',
+    (label) => label.closest("button")?.click(),
+  );
+  out.imprezaSelection = await page.evaluate(() => ({
+    selected: document.querySelector(".gx-ed-ident-id")?.textContent?.trim() ?? null,
+    stateSlots: window.__GRAPHYSX__.query({ ids: ["editor-impreza"] })[0]?.materialSlots?.length ?? null,
+    domSlots: document.querySelectorAll("[data-gx-material-slot]").length,
+    materialHint: document.querySelector("[data-gx-model-materials]")?.textContent?.trim() ?? null,
+  }));
+  await page.waitForFunction(() => document.querySelectorAll("[data-gx-material-slot]").length === 7, { timeout: SMOKE_TIMEOUT });
+  out.imprezaInspector = await page.evaluate(() => {
+    const rail = document.querySelector(".gx-ed-panel--right");
+    const section = document.querySelector(".gx-ed-section:has([data-gx-material-slot])");
+    const cards = [...document.querySelectorAll("[data-gx-material-slot]")];
+    const controls = [...section.querySelectorAll("input,button,select")];
+    const wheelCards = cards.filter((card) => /Wheel/.test(card.querySelector(".gx-ed-material-name")?.textContent ?? ""));
+    return {
+      slotCount: cards.length,
+      openCount: cards.filter((card) => card.open).length,
+      allNamed: controls.every((control) => control.disabled || !!control.getAttribute("aria-label") || !!control.textContent?.trim() || !!control.title),
+      railNoOverflow: rail.scrollWidth <= rail.clientWidth,
+      sectionNoOverflow: section.scrollWidth <= section.clientWidth,
+      cardsNoOverflow: cards.every((card) => card.scrollWidth <= card.clientWidth),
+      wheelCount: wheelCards.length,
+      wheelClearcoatControls: wheelCards.reduce((count, card) => count + card.querySelectorAll('input[aria-label*="clearcoat"]').length, 0),
+      resetAllDisabled: document.querySelector("[data-gx-material-reset-all]")?.disabled ?? null,
+    };
+  });
+  await page.click('[data-gx-material-preset="impreza-rally-blue"]');
+  await page.waitForFunction(
+    () => window.__GRAPHYSX__.query({ ids: ["editor-impreza"] })[0]?.materialSlots.some((slot) => slot.role === "body" && slot.overridden),
+    { timeout: SMOKE_TIMEOUT },
+  );
+  out.imprezaPreset = await page.evaluate(() => {
+    const entity = window.__GRAPHYSX__.query({ ids: ["editor-impreza"] })[0];
+    const body = entity.materialSlots.find((slot) => slot.role === "body");
+    return {
+      overridden: body?.overridden ?? false,
+      roughness: body?.roughness ?? null,
+      status: document.querySelector(`[data-gx-material-slot="${body?.id}"] .gx-ed-material-status`)?.textContent ?? "",
+      resetAllEnabled: document.querySelector("[data-gx-material-reset-all]")?.disabled === false,
+    };
+  });
+  await page.screenshot({ path: path.join(ART, "editor-material-slots.png"), fullPage: false });
 
   // Material controls remain fully editable for ordinary scene primitives.
   await page.click('.gx-ed-toolbar button:text-is("+ Box")');
@@ -451,12 +528,23 @@ try {
     return !t || getComputedStyle(t).display === "none";
   });
   await page.screenshot({ path: path.join(ART, "editor-exit.png"), fullPage: false });
+  await page.click(".gx-welcome .gx-go-editor");
+  await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
+  await page.$eval(
+    '.gx-ed-row-id:text-is("editor-impreza")',
+    (label) => label.closest("button")?.click(),
+  );
+  out.overrideAfterReentry = await page.evaluate(() => ({
+    state: window.__GRAPHYSX__.query({ ids: ["editor-impreza"] })[0]?.materialSlots.some((slot) => slot.role === "body" && slot.overridden) ?? false,
+    status: [...document.querySelectorAll(".gx-ed-material-status")].some((status) => status.textContent === "Overridden"),
+  }));
 } catch (e) {
   out.fatal = String(e);
 }
 
 out.consoleErrors = consoleErrors;
 out.pageErrors = pageErrors;
+out.badResponses = badResponses;
 console.log(JSON.stringify(out, null, 2));
 await browser.close();
 
@@ -481,7 +569,24 @@ const ok =
   out.modelSpawned &&
   out.spawnedType === "model" &&
   out.selectedInInspector?.startsWith("edit-model-") &&
-  /Source materials/.test(out.modelMaterialNote ?? "") &&
+  out.modelMaterialSlots > 0 &&
+  out.phongControls?.roughness === 0 &&
+  out.phongControls?.clearcoat === 0 &&
+  out.phongControls?.opacity > 0 &&
+  out.phongControls?.color > 0 &&
+  out.imprezaInspector?.slotCount === 7 &&
+  out.imprezaInspector?.openCount === 1 &&
+  out.imprezaInspector?.allNamed === true &&
+  out.imprezaInspector?.railNoOverflow === true &&
+  out.imprezaInspector?.sectionNoOverflow === true &&
+  out.imprezaInspector?.cardsNoOverflow === true &&
+  out.imprezaInspector?.wheelCount === 4 &&
+  out.imprezaInspector?.wheelClearcoatControls === 0 &&
+  out.imprezaInspector?.resetAllDisabled === true &&
+  out.imprezaPreset?.overridden === true &&
+  out.imprezaPreset?.roughness === 0.24 &&
+  out.imprezaPreset?.status === "Overridden" &&
+  out.imprezaPreset?.resetAllEnabled === true &&
   out.materialTargetType === "box" &&
   out.positionX === 3.5 &&
   out.roughness === 0.15 &&
@@ -588,5 +693,8 @@ const ok =
   out.treeFilterWorks &&
   out.welcomeBack &&
   out.editorHiddenAgain &&
+  out.overrideAfterReentry?.state === true &&
+  out.overrideAfterReentry?.status === true &&
+  out.badResponses.length === 0 &&
   consoleErrors.length === 0;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);

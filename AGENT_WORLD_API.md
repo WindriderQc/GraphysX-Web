@@ -232,6 +232,50 @@ gx.spawn({
 });
 ```
 
+### Recovered model material slots
+
+A loaded `model` reports `materialSlots` through `query()` and `state()`. Each slot is one
+exact mesh/material assignment with a stable ID, source-map presence, recovered material
+class (`phong`, `standard`, or `physical`), semantic role, current values, override state,
+and any related assignments that repeat the same recovered material name/map. Related
+assignments are reported for context; an edit remains local to the addressed slot.
+
+Use `modelMaterialOverrides` instead of the generic entity `material` patch:
+
+```js
+const impreza = gx.query({ ids: ["garage-impreza"] })[0];
+const body = impreza.materialSlots.find((slot) => slot.role === "body");
+
+gx.update("garage-impreza", {
+  modelMaterialOverrides: {
+    [body.id]: {
+      color: "#d6e6ff",
+      roughness: 0.24,
+      clearcoat: 0.9,
+      clearcoatRoughness: 0.14
+    }
+  }
+});
+
+// Restore one recovered assignment, leaving every sibling override intact.
+gx.update("garage-impreza", {
+  modelMaterialOverrides: { [body.id]: null }
+});
+
+// Restore every assignment on this model.
+gx.update("garage-impreza", { modelMaterialOverrides: null });
+```
+
+Overrides are sparse and merge at both levels: changing one property preserves the other
+properties on that slot and preserves every sibling slot. Empty override maps are omitted
+from exported documents. Supported properties are `color`, `opacity`, `emissive`, and
+`emissiveIntensity` where the material exposes them; Standard adds `roughness` and
+`metalness`; Physical adds `clearcoat` and `clearcoatRoughness`. Unsupported upgrades are
+rejected rather than silently converting recovered material classes. The source texture,
+UVs, color space, and source material remain owned by the model payload. The capability is
+advertised as `model.material-slots`; the existing generic `update`, `query`, `state`,
+`export`, and `load` tools provide bridge parity without renderer objects crossing the API.
+
 Physics modes are `static`, `dynamic`, `kinematic`, and `trigger`. The default
 `physics.collider: "auto"` preserves the predictable primitive collider inferred from the entity
 type; for a model, that is the agent-supplied `geometry.width/height/depth` box. A model may instead

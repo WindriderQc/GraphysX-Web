@@ -14,6 +14,13 @@ import {
   Texture,
   TextureLoader
 } from "three";
+import {
+  inferModelMaterialRole,
+  modelMaterialSlotId,
+  modelMaterialSlotLabel,
+  registerAgentWorldModelMaterialSlots,
+  type AgentWorldModelMaterialRegistration,
+} from "./agent-world-model-materials";
 
 export type AgentWorldModelFormat = "graphysx-mesh-json";
 
@@ -265,7 +272,7 @@ export async function loadAgentWorldModel(
     .map((material) => material.textureUrl)
     .filter((url): url is string => Boolean(url))))];
   const textures = new Map<string, Texture>();
-  await Promise.all(textureUrls.map(async (url) => {
+  const textureResults = await Promise.allSettled(textureUrls.map(async (url) => {
     const texture = asset.colorKey
       ? await loadColorKeyedTexture(url, asset.colorKey, asset.colorKeyTolerance)
       : await textureLoader.loadAsync(url);
@@ -274,6 +281,13 @@ export async function loadAgentWorldModel(
     texture.wrapT = RepeatWrapping;
     textures.set(url, texture);
   }));
+  const textureFailure = textureResults.find((result) => result.status === "rejected");
+  if (textureFailure?.status === "rejected") {
+    // Promise.all used to reject on the first bad URL and leak every texture that had already
+    // resolved (plus later successes). allSettled gives this load sole ownership to clean up.
+    textures.forEach((texture) => texture.dispose());
+    throw textureFailure.reason;
+  }
   if (target.userData.graphysxDisposed) {
     textures.forEach((texture) => texture.dispose());
     return;
@@ -281,7 +295,8 @@ export async function loadAgentWorldModel(
 
   const sourceRoot = new Group();
   sourceRoot.name = `${asset.id ?? asset.url} source model`;
-  for (const sourceMesh of payload.meshes) {
+  const materialSlots: AgentWorldModelMaterialRegistration[] = [];
+  for (const [meshIndex, sourceMesh] of payload.meshes.entries()) {
     const geometry = new BufferGeometry();
     geometry.name = sourceMesh.name ?? "GraphysX recovered mesh";
     geometry.setAttribute("position", new Float32BufferAttribute(sourceMesh.positions, 3));
@@ -329,9 +344,27 @@ export async function loadAgentWorldModel(
     });
     const mesh = new Mesh(geometry, materials.length === 1 ? materials[0] : materials);
     mesh.name = sourceMesh.name ?? "GraphysX model mesh";
-    // Source-owned material slots must not inherit the model entity's generic default teal.
-    // The inspector presents these as source materials until slot-aware overrides exist.
-    mesh.userData.graphysxMaterialLocked = materials.some((material) => material.userData.graphysxRecoveredPbr === true);
+    // A model's payload owns its source materials. Entity-level generic material updates are
+    // intentionally locked out; slot overrides below are the only path that may replace one.
+    mesh.userData.graphysxMaterialLocked = true;
+    materials.forEach((material, materialIndex) => {
+      const sourceMaterial = sourceMesh.materials?.[materialIndex] ?? {};
+      const materialName = sourceMaterial.name ?? material.name ?? "GraphysX recovered material";
+      const meshName = sourceMesh.name ?? `mesh-${meshIndex}`;
+      const role = inferModelMaterialRole(asset.id, meshName, materialName);
+      materialSlots.push({
+        id: modelMaterialSlotId(meshName, meshIndex, materialName, materialIndex),
+        label: modelMaterialSlotLabel(role, meshName, materialName),
+        role,
+        mesh,
+        meshName,
+        meshIndex,
+        materialName,
+        materialIndex,
+        sourceMaterial: material,
+        sourceMapName: sourceMaterial.textureUrl ?? null,
+      });
+    });
     sourceRoot.add(mesh);
   }
 
@@ -346,6 +379,7 @@ export async function loadAgentWorldModel(
     sourceRoot.position.set(...fit.offset);
   }
   target.add(sourceRoot);
+  registerAgentWorldModelMaterialSlots(target, materialSlots);
 }
 
 /** Fetch only validated collision geometry for an already-rendered `auto` model promoted later. */

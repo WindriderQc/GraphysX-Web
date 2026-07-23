@@ -1537,3 +1537,29 @@ direction from camera-minus-orbit-target at call time, and the orbit target is s
 showroom's when the framing helper runs. Commented in the helper. The terrain materialises as
 `MeshPhongMaterial` via the vendored-materials path; the smoke records the type and asserts
 lit-ness rather than guessing a class that belongs to the PBR-finish pass's own coverage.
+
+## 2026-07-23 — Wave 12 material-slot authoring
+
+- Added stable, renderer-neutral model material-slot state and sparse
+  `modelMaterialOverrides` authoring. Exact Archive Garage inventory is 7 Impreza assignments,
+  5 Cobra assignments, and 1 Piste Ovale assignment; no unsupported source material was invented.
+- Added property-aware Phong/Standard/Physical validation, local per-assignment clone overrides,
+  source restoration, repeated-source metadata, two-level patch/transaction/store merges, bridge
+  parity through existing generic tools, and portable export/load with empty resets omitted.
+- Rebuilt the model Materials inspector as compact slot disclosures with supported controls only,
+  source/type/map/status context, accessible labels, presets, and one/all reset. Primitive material
+  controls remain unchanged.
+- Hardened ownership and async behavior: failed multi-texture loads dispose every successful
+  sibling; retired override clones never dispose shared source maps; teardown deduplicates owned
+  materials/textures and includes detached sources; stale or disposed model loads cannot mutate a
+  replacement runtime.
+- Extended vehicles, editor, and scene-store smokes for exact identities, isolation, disposal
+  cycles, transparent glass, remote sparse merges, late-load reset/replacement races, round trips,
+  and human-editor persistence.
+- Hardened isolated-server teardown after the full gate exposed a real harness wedge: when a
+  Chromium attempt died during a localhost reset, `server.close()` could wait forever on its
+  half-open socket because request timeouts are intentionally disabled. Teardown now stops accepts
+  and closes the departed child's remaining connections before retrying on the fresh server.
+- Final local release gate: **31/31 passed** (typecheck, build, two Rapier probes, and all 27
+  browser/node smokes). Overlay used one isolated fresh-server retry after a localhost connection
+  reset; the retry passed, the teardown returned immediately, and no product assertion failed.
