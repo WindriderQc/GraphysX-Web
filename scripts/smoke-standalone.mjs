@@ -55,6 +55,7 @@ try {
     // Manifest parity: the bridge must describe every callable path on the API — no drift.
     const parity = bridge && typeof bridge.audit === "function" ? bridge.audit() : null;
     const environment = gx.export().environment;
+    const hdris = gx.hdris();
     const bridgeLightingResult = await bridge.call("transaction", [{
       op: "set-environment",
       environment: {
@@ -83,6 +84,8 @@ try {
       lightingCapability: gx.capabilities.includes("environment.lighting"),
       bridgeLightingOk: bridgeLightingResult?.ok === true,
       bridgeLighting,
+      hdri: hdris[0] ?? null,
+      hdriCapability: gx.capabilities.includes("environment.hdri") && gx.capabilities.includes("hdri.list"),
       levelCreateOk: !!(levelCreate && levelCreate.ok),
       levelCount: gx.levels.list().length,
       map1: {
@@ -124,7 +127,9 @@ out.pageErrors = pageErrors;
 console.log(JSON.stringify(out, null, 2));
 await browser.close();
 const apiOk = out.api && out.api.spawnOk && out.api.entitiesAfter > out.api.entitiesBefore && out.api.levelCreateOk && out.api.toolCount > 0 &&
-  out.api.lightingCapability && out.api.bridgeLightingOk && out.api.bridgeLighting?.source === "studio" &&
+  out.api.lightingCapability && out.api.hdriCapability && out.api.hdri?.id === "studio-small-08" &&
+  out.api.hdri?.license === "CC0-1.0" && /polyhaven/i.test(out.api.hdri?.sourceUrl ?? "") &&
+  out.api.bridgeLightingOk && out.api.bridgeLighting?.source === "studio" &&
   out.api.bridgeLighting?.intensity === 1.1 && out.api.bridgeLighting?.yawDegrees === 12 &&
   out.api.bridgeLighting?.backgroundIntensity === 0.9 && out.api.bridgeLighting?.backgroundBlur === 0.1 &&
   out.api.map1?.listed && out.api.map1?.status === 200 && out.api.map1?.vertices === 699 && out.api.map1?.triangles === 1456 &&

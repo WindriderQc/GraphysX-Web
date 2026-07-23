@@ -242,6 +242,35 @@ editor/round-trip smokes
 - Scope remains honest: scene IBL affects Standard/Physical materials. Recovered Phong headline
   meshes need the planned focused Physical-material pass before they receive the full benefit.
 
+## Wave 11 — Licensed HDRI and recovered PBR showpieces
+
+**Files:** `src/agent-world-hdris.ts`, `src/platform-host.ts`, `src/agent-world-assets.ts`,
+scene/editor/API/bridge manifests and focused smokes
+
+- Added Poly Haven's Studio Small 08 1K HDR as a bundled, traceable CC0 reflection environment.
+  Its registry descriptor exposes author/source/license metadata through `api.hdris()` and the
+  agent bridge; the production manifest derives the binary URL from that registry. The vendored
+  file is 1,508,872 bytes with MD5 `de3ba64222895aca876b1d1c2e0cf81a`.
+- `environment.lighting` now accepts `{ source: "hdri", hdri: "studio-small-08", ... }` without
+  changing existing Sky, Studio, or `null` documents. HDRI is deliberately reflection-only: a
+  scene's selected cube sky remains its backdrop and fog horizon.
+- The host loads RGBE lazily, converts it once to a PMREM, releases the raw HDR texture, caches a
+  bounded four-entry LRU, and guards every async completion. Backdrop and reflection ownership are
+  tracked separately, so a late cube sky cannot overwrite HDRI and a late HDRI cannot overwrite a
+  newer Studio/Sky request.
+- The Archive Garage now uses the studio HDRI and its Impreza/Cobra hero surfaces are intentional
+  Physical clearcoat materials; tires, wheels, undercarriage, and Piste Ovale are rough Standard
+  materials. Great Slide receives restrained coated composite and Map 1 a rough Standard terrain.
+  Source texture maps, sRGB handling, material groups, geometry, and collision payloads are
+  unchanged. Every asset outside this focused list retains its legacy Phong path.
+- Recovered PBR materials are source-owned and locked against the generic entity default, avoiding
+  the latent teal-overwrite trap. The inspector now says “Source materials” for multi-slot models
+  instead of offering sliders that only changed exported state while leaving pixels untouched.
+  Disposal now deduplicates and releases maps for Phong, Standard, and Physical materials alike.
+- Garage, Great Slide, Map 1, editor, standalone bridge, production-manifest, and 99-property
+  round-trip coverage inspect the live Three material/environment objects, not only serialized
+  state. The editor smoke also delays the real HDR response to prove HDRI→Studio race safety.
+
 ---
 
 ## Bug found & fixed while verifying
@@ -288,6 +317,10 @@ start and once during an Editor sky request; each affected smoke then passed aga
   readable tuning, selection-preserving transactions, and browser/persistence coverage.
 - ~~Add scene-authored IBL intensity/rotation/background controls.~~ **Done in Wave 10**, including
   sky/studio source separation, named looks, PMREM reuse, async-race safety, and renderer/persistence
-  coverage. Next: a licensed 1K HDRI and focused recovered Physical-material pass.
+  coverage.
+- ~~Add a licensed 1K HDRI and focused recovered Physical-material pass.~~ **Done in Wave 11**,
+  including CC0 provenance, reflection/backdrop race isolation, hero-scene activation, selective
+  Physical/Standard profiles, source-material inspector honesty, and live-object coverage. Next:
+  slot-aware model material overrides and a larger curated HDRI library.
 - `_to_delete/graphysx-kickass.tgz` was the delivery bundle to remove; `_to_delete/` is no longer
   present in this working tree.

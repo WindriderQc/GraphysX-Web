@@ -19,6 +19,12 @@ import {
 } from "./agent-world-dna";
 import { GRAPHYSX_AGENT_WORLD_OVERLAYS, isOverlayId, type AgentWorldOverlayDescriptor, type AgentWorldOverlayId } from "./agent-world-overlay";
 import {
+  GRAPHYSX_AGENT_WORLD_HDRIS,
+  resolveAgentWorldHdri,
+  type AgentWorldHdriDescriptor,
+  type AgentWorldHdriId,
+} from "./agent-world-hdris";
+import {
   GRAPHYSX_AGENT_RULES_CAPABILITIES,
   advanceRun,
   armRun,
@@ -59,7 +65,6 @@ import {
   LineBasicMaterial,
   Matrix4,
   Mesh,
-  MeshPhongMaterial,
   MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
@@ -536,9 +541,7 @@ export type AgentWorldPost = {
  * Scene-authored image-based lighting. `null` deliberately preserves the legacy host
  * behaviour: a selected sky lights the scene, otherwise the neutral studio does.
  */
-export type AgentWorldLighting = {
-  /** The selected sky or the host's neutral studio environment. */
-  source: "sky" | "studio";
+type AgentWorldLightingControls = {
   /** Strength of the reflected image lighting, 0–3. */
   intensity: number;
   /** Rotation shared by the lighting and visible sky so reflections stay aligned. */
@@ -548,6 +551,11 @@ export type AgentWorldLighting = {
   /** Defocus applied to a texture background, 0–1. */
   backgroundBlur: number;
 };
+
+export type AgentWorldLighting = AgentWorldLightingControls & (
+  | { /** The selected sky or the host's neutral procedural studio. */ source: "sky" | "studio"; hdri?: never }
+  | { /** A curated HDR image lights reflections; the selected sky remains the backdrop. */ source: "hdri"; hdri: AgentWorldHdriId }
+);
 
 export type AgentWorldEnvironment = {
   background: string;
@@ -859,6 +867,8 @@ export type GraphysXAgentWorldApi = {
   textures(): readonly AgentWorldTextureDescriptor[];
   /** The curated per-scene skybox sets recovered from the archive. */
   skies(): readonly AgentWorldSkyDescriptor[];
+  /** Curated, vendored reflection environments with license provenance. */
+  hdris(): readonly AgentWorldHdriDescriptor[];
   /** The curated particle-emitter presets decoded from the TV3D archive library. */
   emitters(): readonly AgentWorldEmitterDescriptor[];
   /** The archive sound samples plus any media-library imports, for `sound` entities. */
@@ -1056,7 +1066,9 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "texture.list",
   "environment.sky",
   "environment.lighting",
+  "environment.hdri",
   "sky.list",
+  "hdri.list",
   "entity.emitter",
   "emitter.list",
   "entity.sound",
@@ -1257,6 +1269,10 @@ export class AgentWorldRuntime {
 
   listSkies(): readonly AgentWorldSkyDescriptor[] {
     return deepClone(allAgentWorldSkies());
+  }
+
+  listHdris(): readonly AgentWorldHdriDescriptor[] {
+    return deepClone(GRAPHYSX_AGENT_WORLD_HDRIS) as AgentWorldHdriDescriptor[];
   }
 
   /** The archive particle-emitter presets, as scene vocabulary. */
@@ -3333,8 +3349,11 @@ function resolveEnvironment(source?: AgentWorldDefinition["environment"]): Agent
 
 function resolveLighting(source: AgentWorldEnvironment["lighting"] | undefined): AgentWorldLighting | null {
   if (source === null || source === undefined) return DEFAULT_ENVIRONMENT.lighting;
-  if (typeof source !== "object" || (source.source !== "sky" && source.source !== "studio")) {
-    throw new Error('environment.lighting must have source "sky" or "studio", or be null');
+  if (typeof source !== "object" || (source.source !== "sky" && source.source !== "studio" && source.source !== "hdri")) {
+    throw new Error('environment.lighting must have source "sky", "studio", or "hdri", or be null');
+  }
+  if (source.source === "hdri" && !resolveAgentWorldHdri(source.hdri)) {
+    throw new Error(`Unknown HDRI: ${String(source.hdri)}. Use one of ${GRAPHYSX_AGENT_WORLD_HDRIS.map((entry) => entry.id).join(", ")}`);
   }
   const entries = [
     ["intensity", source.intensity, 0, 3],
@@ -3347,13 +3366,15 @@ function resolveLighting(source: AgentWorldEnvironment["lighting"] | undefined):
       throw new Error(`lighting.${label} must be a finite number between ${minimum} and ${maximum}`);
     }
   }
-  return {
-    source: source.source,
+  const controls: AgentWorldLightingControls = {
     intensity: source.intensity,
     yawDegrees: source.yawDegrees,
     backgroundIntensity: source.backgroundIntensity,
     backgroundBlur: source.backgroundBlur,
   };
+  return source.source === "hdri"
+    ? { ...controls, source: "hdri", hdri: source.hdri }
+    : { ...controls, source: source.source };
 }
 
 function resolvePost(source: AgentWorldEnvironment["post"] | undefined): AgentWorldPost | null {
@@ -3856,6 +3877,7 @@ function findParticleSystem(object: Object3D): AgentWorldParticleSystem | null {
 
 function disposeObjectTree(root: Object3D): void {
   root.userData.graphysxDisposed = true;
+  const disposedTextures = new Set<Texture>();
   root.traverse((child) => {
     const particles = findParticleSystem(child);
     if (particles) {
@@ -3892,9 +3914,17 @@ function disposeObjectTree(root: Object3D): void {
     const materials = Array.isArray(child.material) ? child.material : [child.material];
     materials.forEach((material) => {
       if (material.userData.graphysxAgentTexture instanceof Texture) {
-        (material.userData.graphysxAgentTexture as Texture).dispose();
+        const texture = material.userData.graphysxAgentTexture as Texture;
+        if (!disposedTextures.has(texture)) {
+          texture.dispose();
+          disposedTextures.add(texture);
+        }
       }
-      if (material instanceof MeshPhongMaterial) material.map?.dispose();
+      const map = "map" in material && material.map instanceof Texture ? material.map : null;
+      if (map && !disposedTextures.has(map)) {
+        map.dispose();
+        disposedTextures.add(map);
+      }
       material.dispose();
     });
   });

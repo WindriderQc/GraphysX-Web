@@ -54,12 +54,17 @@ try {
     const exported = api.export();
     const document_ = api.exportDocument();
     const projection = JSON.parse(window.render_game_to_text());
+    let material = null;
+    window.__GRAPHYSX_HOST__.world.getEntityObject("map1-terrain")?.traverse((object) => {
+      if (!material && object.isMesh) material = Array.isArray(object.material) ? object.material[0] : object.material;
+    });
     return {
       mode: window.__GRAPHYSX_HOST__.mode,
       paused: api.state()?.paused,
       worldId: api.state()?.world.id,
       hudCourse: document.querySelector(".gx-bz-course")?.textContent ?? "",
       terrain: terrain?.physics?.collider ?? null,
+      material: material ? { standard: material.isMeshStandardMaterial === true && material.isMeshPhysicalMaterial !== true, roughness: material.roughness, metalness: material.metalness } : null,
       rules: run ? {
         phase: run.phase,
         checkpointCount: run.checkpointCount,
@@ -204,6 +209,9 @@ const ok =
   out.loaded?.terrain?.effective === "trimesh" &&
   out.loaded?.terrain?.vertexCount === 699 &&
   out.loaded?.terrain?.triangleCount === 1456 &&
+  out.loaded?.material?.standard === true &&
+  out.loaded?.material?.roughness === 0.82 &&
+  out.loaded?.material?.metalness === 0 &&
   out.loaded?.rules?.phase === "running" &&
   out.loaded?.rules?.checkpointCount === 1 &&
   out.loaded?.rules?.checkpointIndex === 0 &&

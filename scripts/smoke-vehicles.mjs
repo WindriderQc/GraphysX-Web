@@ -54,6 +54,11 @@ try {
       { timeout: SMOKE_TIMEOUT },
     )
     .catch(() => {});
+  await page.waitForFunction(
+    () => window.__GRAPHYSX__.state().environment.lighting?.source === "hdri"
+      && window.__GRAPHYSX_HOST__.scene.environment !== window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture,
+    { timeout: SMOKE_TIMEOUT },
+  );
 
   out.scene = await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
@@ -65,8 +70,32 @@ try {
       models: models
         .map((m) => ({ id: m.id, status: m.asset?.status ?? null, y: Number(m.position[1].toFixed(3)) }))
         .sort((a, b) => a.id.localeCompare(b.id)),
+      pbr: models.map((model) => {
+        const root = window.__GRAPHYSX_HOST__.world.getEntityObject(model.id);
+        const materials = [];
+        root?.traverse((object) => {
+          if (!object.isMesh) return;
+          for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+            materials.push({
+              name: material.name,
+              phong: material.isMeshPhongMaterial === true,
+              standard: material.isMeshStandardMaterial === true && material.isMeshPhysicalMaterial !== true,
+              physical: material.isMeshPhysicalMaterial === true,
+              roughness: material.roughness ?? null,
+              metalness: material.metalness ?? null,
+              clearcoat: material.clearcoat ?? null,
+              hasMap: !!material.map,
+              map: material.map?.name ?? material.map?.source?.data?.currentSrc ?? material.map?.source?.data?.src ?? null,
+              colorSpace: material.map?.colorSpace ?? null,
+            });
+          }
+        });
+        return { id: model.id, materials };
+      }).sort((a, b) => a.id.localeCompare(b.id)),
       // The garage replaced the world rather than being added to the showroom.
       showroomEntities: api.query({ tag: "showroom" }).length,
+      hdriActive: api.state().environment.lighting?.source === "hdri"
+        && window.__GRAPHYSX_HOST__.scene.environment !== window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture,
     };
   });
 
@@ -106,8 +135,18 @@ const ok =
   out.scene?.shelfGone === true &&
   out.scene?.entities === 25 &&
   out.scene?.showroomEntities === 0 &&
+  out.scene?.hdriActive === true &&
   out.scene?.models?.length === 3 &&
   out.scene.models.every((m) => m.status === "ready") &&
+  out.scene.pbr?.find((model) => model.id === "garage-impreza")?.materials.filter((material) => material.physical).length === 2 &&
+  out.scene.pbr?.find((model) => model.id === "garage-impreza")?.materials.filter((material) => material.standard).length === 5 &&
+  out.scene.pbr?.find((model) => model.id === "garage-impreza")?.materials.every((material) => !material.phong && (!material.hasMap || material.colorSpace === "srgb")) &&
+  out.scene.pbr?.find((model) => model.id === "garage-cobra")?.materials.filter((material) => material.physical).length === 1 &&
+  out.scene.pbr?.find((model) => model.id === "garage-cobra")?.materials.filter((material) => material.standard).length === 4 &&
+  out.scene.pbr?.find((model) => model.id === "garage-cobra")?.materials.every((material) => !material.phong) &&
+  out.scene.pbr?.find((model) => model.id === "garage-piste-ovale")?.materials.length === 1 &&
+  out.scene.pbr?.find((model) => model.id === "garage-piste-ovale")?.materials[0]?.standard === true &&
+  out.scene.pbr?.find((model) => model.id === "garage-piste-ovale")?.materials[0]?.roughness === 0.8 &&
   out.roundTrip?.survived === true &&
   out.roundTrip?.allReady === true &&
   out.badResponses.length === 0;

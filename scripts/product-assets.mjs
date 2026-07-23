@@ -68,6 +68,11 @@ export async function productAssetManifest() {
     for (const file of await filesUnder(basePath)) wanted.add(file);
   }
 
+  // Curated HDR reflection environments. URLs and license provenance live together in the
+  // registry; deriving the release entry here prevents a locally working look from being
+  // pruned out of production.
+  for (const url of await assetLiterals("src/agent-world-hdris.ts", "url")) wanted.add(url);
+
   // Curated textures the editor palette offers.
   for (const url of await assetLiterals("src/agent-world-textures.ts", "url")) wanted.add(url);
   // The archive sound samples `sound` entities reference by id. Until this line they

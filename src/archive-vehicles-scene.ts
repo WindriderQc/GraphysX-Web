@@ -364,6 +364,9 @@ export function composeArchiveVehicles(api: GraphysXAgentWorldApi): void {
       // No skybox: this is an interior. Sky ownership is per-scene (§11), and the honest
       // value for a room is "none".
       sky: null,
+      // A licensed studio probe gives the recovered clearcoat/rubber profiles readable
+      // reflections without putting an outdoor panorama behind an interior room.
+      lighting: { source: "hdri", hdri: "studio-small-08", intensity: 0.95, yawDegrees: -20, backgroundIntensity: 1, backgroundBlur: 0 },
       overlay: null,
       // The floor is a real entity with a collider, so the editor's helper grid is off.
       ground: { visible: false, size: ROOM_WIDTH, color: "#0f1419", grid: false, gridColor: "#1e2831" },
