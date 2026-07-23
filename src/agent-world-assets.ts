@@ -143,6 +143,9 @@ function recoveredPbrProfile(assetId: string | null, materialName: string): Reco
   if (assetId === "archive-piste-ovale") return { shading: "standard", roughness: 0.8, metalness: 0.02 };
   if (assetId === "archive-slide-large") return { shading: "physical", roughness: 0.36, metalness: 0.08, clearcoat: 0.35, clearcoatRoughness: 0.3 };
   if (assetId === "archive-map1") return { shading: "standard", roughness: 0.82, metalness: 0 };
+  // Dry canyon rock at 1:1 scale: fully rough so the kilometre-long faces read by form and
+  // fog rather than by specular sheen the archive never recorded.
+  if (assetId === "archive-level1-2011") return { shading: "standard", roughness: 0.85, metalness: 0 };
   return null;
 }
 

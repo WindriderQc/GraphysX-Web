@@ -20,7 +20,7 @@ const BROWSE_IDS = [
   "signal-trail",
   "physics-sketchbook",
 ];
-const GAME_IDS = ["archive-great-slide", "archive-map1", "archive-skybox-spiral", "archive-world1"];
+const GAME_IDS = ["archive-great-slide", "archive-level1-2011", "archive-map1", "archive-skybox-spiral", "archive-world1"];
 const requestedIds = new Set((process.env.SHELF_THUMBNAIL_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean));
 const shouldCapture = (id) => requestedIds.size === 0 || requestedIds.has(id);
 
@@ -44,9 +44,13 @@ async function capture(id, shelf, selector) {
   await page.waitForFunction(() => Boolean(window.__GRAPHYSX_HOST__), null, { timeout: 60_000 });
   await page.click(`.gx-welcome .gx-go-${shelf}`);
   await page.waitForSelector(selector, { timeout: 60_000 });
-  await page.click(selector);
+  // Dispatch the click on the element rather than through pointer hit-testing: the shelves
+  // have grown past the 360-pixel capture viewport, and a row inside the shelf's own scroll
+  // container can be unreachable by Playwright's viewport check while being perfectly real.
+  // Genuine clickability is the games/browse smokes' assertion, not this snapshot harness's.
+  await page.$eval(selector, (element) => element.click());
   await page.waitForFunction(() => window.__GRAPHYSX__.query({}).length > 0, null, { timeout: 60_000 });
-  await page.waitForTimeout(id === "archive-world1" || id === "archive-map1" || id === "archive-garage" ? 4_500 : 2_500);
+  await page.waitForTimeout(id === "archive-world1" || id === "archive-map1" || id === "archive-level1-2011" || id === "archive-garage" ? 4_500 : 2_500);
   // The editor is deliberately mounted over the same renderer after Browse opens a scene.
   // Capture the scene, not its authoring chrome: the renderer canvas is the one direct app
   // child we keep. This also strips the play HUD and win panel for course previews.

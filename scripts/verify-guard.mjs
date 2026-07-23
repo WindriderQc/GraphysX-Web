@@ -19,10 +19,26 @@
  * fixed is one where nothing told anybody anything.
  */
 import { spawn } from "node:child_process";
-import { readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /** A run older than this is assumed dead even if its pid was recycled onto something else. */
 const STALE_AFTER_MS = 60 * 60 * 1000;
+
+/**
+ * The lock lives at a MACHINE-GLOBAL path, not under the repo's `output/`. The per-checkout
+ * location it replaced could only ever see runs from the same checkout — a gate in a git
+ * worktree has its own `output/`, so two worktree sessions' verifies sailed straight past
+ * each other's locks. Measured cost of that gap: six local runs in one day, five losing a
+ * random smoke to transport errors while three agent sessions shared the box. What the lock
+ * protects is the MACHINE (one verify software-rasterises WebGL on ~70% of its cores), so
+ * the lock must be scoped to the machine.
+ */
+export function machineVerifyLockPath() {
+  const base = process.env.LOCALAPPDATA || tmpdir();
+  return join(base, "graphysx", "verify.lock");
+}
 
 function isAlive(pid) {
   try {
@@ -60,30 +76,51 @@ export function killTree(pid) {
  * A lock whose owner is dead, or which is older than STALE_AFTER_MS, is taken over rather
  * than respected — a crashed run must not wedge the gate for everyone who comes after.
  */
-export async function acquireVerifyLock(lockPath, { force = false } = {}) {
-  if (!force) {
-    let held = null;
+export async function acquireVerifyLock(lockPath, { force = false, wait = false } = {}) {
+  const readHolder = async () => {
     try {
-      held = JSON.parse(await readFile(lockPath, "utf8"));
+      return JSON.parse(await readFile(lockPath, "utf8"));
     } catch {
-      held = null; // absent or unreadable — treat as free
+      return null; // absent or unreadable — treat as free
     }
-    if (held?.pid && isAlive(held.pid)) {
-      const ageMs = Date.now() - (held.started ?? 0);
-      if (ageMs < STALE_AFTER_MS) {
-        const mins = Math.round(ageMs / 60000);
-        const error = new Error(
-          `verify is already running (pid ${held.pid}, started ${mins} min ago).\n` +
-            `  Concurrent runs software-rasterise WebGL and will starve the machine.\n` +
-            `  Wait for it, or if you are sure it is dead: npm run verify -- --force-lock`,
-        );
-        error.code = "EVERIFYLOCKED";
-        throw error;
+  };
+  const isLive = (held) =>
+    Boolean(held?.pid && isAlive(held.pid) && Date.now() - (held.started ?? 0) < STALE_AFTER_MS);
+
+  if (!force) {
+    let held = await readHolder();
+    if (isLive(held) && wait) {
+      // `--wait` queues instead of failing. Agents retry a refused gate anyway; polling here
+      // turns that retry storm into an orderly queue, and the machine only ever runs one.
+      const waitStarted = Date.now();
+      const WAIT_CAP_MS = 45 * 60 * 1000;
+      console.log(`verify: waiting for the running gate (pid ${held.pid}) to finish...`);
+      while (isLive(held)) {
+        if (Date.now() - waitStarted > WAIT_CAP_MS) {
+          const error = new Error("verify: waited 45 minutes for the lock; giving up. Investigate the holder.");
+          error.code = "EVERIFYLOCKED";
+          throw error;
+        }
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 15_000));
+        held = await readHolder();
       }
-      console.warn(`verify: taking over a stale lock (pid ${held.pid}, ${Math.round(ageMs / 60000)} min old)`);
+      console.log("verify: lock freed, starting.");
+    } else if (isLive(held)) {
+      const mins = Math.round((Date.now() - (held.started ?? 0)) / 60000);
+      const error = new Error(
+        `verify is already running (pid ${held.pid}, started ${mins} min ago).\n` +
+          `  Concurrent runs software-rasterise WebGL and will starve the machine.\n` +
+          `  Queue behind it with: npm run verify -- --wait\n` +
+          `  Or if you are sure it is dead: npm run verify -- --force-lock`,
+      );
+      error.code = "EVERIFYLOCKED";
+      throw error;
+    } else if (held?.pid) {
+      console.warn(`verify: taking over a stale lock (pid ${held.pid}, ${Math.round((Date.now() - (held.started ?? 0)) / 60000)} min old)`);
     }
   }
 
+  await mkdir(join(lockPath, ".."), { recursive: true }).catch(() => undefined);
   await writeFile(lockPath, JSON.stringify({ pid: process.pid, started: Date.now() }), "utf8");
   let released = false;
   return async () => {

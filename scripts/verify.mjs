@@ -3,7 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startStaticServer } from "./static-server.mjs";
-import { acquireVerifyLock, installSignalCleanup, withDeadline } from "./verify-guard.mjs";
+import { acquireVerifyLock, installSignalCleanup, machineVerifyLockPath, withDeadline } from "./verify-guard.mjs";
 
 // One command that proves a release is shippable: typecheck, build, then drive the
 // built output in a real headless browser through every product route.
@@ -22,7 +22,10 @@ const ARTIFACTS = path.join(ROOT, "output", "verify");
 // reach the server — flakiness that looks like a product bug but is purely the harness
 // colliding with itself. Set VERIFY_PORT to pin it when you need a stable URL.
 const PORT = Number(process.env.VERIFY_PORT || 0);
-const LOCK_PATH = path.join(ROOT, "output", ".verify.lock");
+// Machine-global, NOT under this checkout's output/: a gate in a git worktree has its own
+// output/ and could never see this one's lock. The lock protects the machine's cores, so it
+// is scoped to the machine. See machineVerifyLockPath in verify-guard.mjs for the history.
+const LOCK_PATH = machineVerifyLockPath();
 // Generous enough that a slow-but-working run is never killed, tight enough that a wedged
 // one is noticed the same day. The whole suite normally finishes well inside these.
 // The deadline exists to catch wedged smokes (two verify parents were once found alive
@@ -121,7 +124,7 @@ try {
   // The lock lives beside the artifacts, so its directory has to exist before the artifacts
   // step that would otherwise create it.
   await mkdir(path.dirname(LOCK_PATH), { recursive: true });
-  releaseLock = await acquireVerifyLock(LOCK_PATH, { force: argv.includes("--force-lock") });
+  releaseLock = await acquireVerifyLock(LOCK_PATH, { force: argv.includes("--force-lock"), wait: argv.includes("--wait") });
 } catch (error) {
   if (error.code === "EVERIFYLOCKED") {
     console.error(`\n${error.message}`);
