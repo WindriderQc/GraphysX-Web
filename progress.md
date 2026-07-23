@@ -1462,3 +1462,33 @@ does not "fix" it back into a real-time wait.
   makes the workflow red and atomically restores that release; retention keeps current + previous.
 - Local acceptance: exact-SHA mismatch failed before browser launch; exact-SHA match passed the
   complete Great Slide canary with zero failed responses, console errors, or page errors.
+
+## 2026-07-22 — Environment look controls and Map 1 gravity descent
+
+- Replaced the editor's cryptic bloom checkbox/three unlabeled boxes with a compact authored-look
+  card: Subtle, Cinematic, and Neon presets plus visible Power/Knee/Spread controls, state, hint,
+  accessible names, and stable smoke selectors. Visual inspection confirmed it fits the 296px rail.
+- Environment edits now merge the complete environment through an atomic `set-environment`
+  transaction. The editor smoke proves a selected model and its live Three object survive the look
+  change while the EffectComposer takes the exact values; off tears the composer down. The
+  round-trip sweep is 86/86 and now proves radius plus composer recreation after reload.
+- Closed the host-side look resource leak found in final review. One owned PMREM generator now
+  produces and caches one render target per exact six-face sky key; repeated bloom/envelope edits
+  preserve the environment texture by identity, pending sky loads are deduplicated and race-safe,
+  and every cube map/target plus the temporary RoomEnvironment is disposed by its owner. The editor
+  smoke also proves an out-of-range typed bloom value is rejected without rebuilding the world.
+- Added **Map 1: Gravity Descent** to Games. Its exact 699-vertex/1,456-triangle recovered mesh is
+  both render geometry and Rapier trimesh; one modern halfway gate, controls, HUD, results, replay,
+  return, lighting, safety floor, and framing are explicitly adaptations. The original materials,
+  controller, spawn, checkpoint intent, camera, timing, and rules remain absent.
+- `smoke:map1` drives real ArrowUp and natural 60Hz motion across the collider: halfway at about
+  step 780, finish at step 949, finite throughout, exact replay collider, clean showroom return,
+  and zero failed responses/console/page errors. Screenshot inspection caught the inherited 46-unit
+  camera cap landing inside the 72-unit course; the host focus API now permits an explicit larger
+  course cap while retaining 46 as the showroom default.
+- Next look wave: scene-authored IBL intensity/yaw/background controls using current cube skies and
+  RoomEnvironment, then a licensed 1K HDRI and focused Physical-material migration.
+- Final release-candidate `npm run verify`: **31/31 passed**. The Games smoke used one isolated
+  fresh-server retry after a localhost connection reset; all product assertions and browser error
+  checks passed. Map 1, editor PMREM identity/invalid-input coverage, and the hardened 22-check
+  store-auth smoke are part of that full gate.

@@ -20,7 +20,7 @@ const BROWSE_IDS = [
   "signal-trail",
   "physics-sketchbook",
 ];
-const GAME_IDS = ["archive-great-slide", "archive-skybox-spiral", "archive-world1"];
+const GAME_IDS = ["archive-great-slide", "archive-map1", "archive-skybox-spiral", "archive-world1"];
 const requestedIds = new Set((process.env.SHELF_THUMBNAIL_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean));
 const shouldCapture = (id) => requestedIds.size === 0 || requestedIds.has(id);
 
@@ -46,7 +46,7 @@ async function capture(id, shelf, selector) {
   await page.waitForSelector(selector, { timeout: 60_000 });
   await page.click(selector);
   await page.waitForFunction(() => window.__GRAPHYSX__.query({}).length > 0, null, { timeout: 60_000 });
-  await page.waitForTimeout(id === "archive-world1" || id === "archive-garage" ? 4_500 : 2_500);
+  await page.waitForTimeout(id === "archive-world1" || id === "archive-map1" || id === "archive-garage" ? 4_500 : 2_500);
   // The editor is deliberately mounted over the same renderer after Browse opens a scene.
   // Capture the scene, not its authoring chrome: the renderer canvas is the one direct app
   // child we keep. This also strips the play HUD and win panel for course previews.

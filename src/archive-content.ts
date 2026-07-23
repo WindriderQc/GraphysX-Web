@@ -500,7 +500,7 @@ export const ARCHIVE_SCENES: ArchiveSceneRecord[] = [
     kind: "BallZ concept",
     source: "Yanik C++ BCKUP/BallZ 2011/BallZ/Map1.TVM",
     status: "PARTIAL",
-    revival: "Decoded vertical geometry is visitable; original materials and authored play rules remain."
+    revival: "Exact 699-vertex / 1,456-triangle decoded geometry now ships as a scene-native trimesh and an adapted one-gate gravity descent with controls, results, replay, and return. Original materials, controller, spawn, checkpoint intent, camera, timing, and authored play rules remain unrecovered."
   },
   {
     family: "BallZ world concepts",

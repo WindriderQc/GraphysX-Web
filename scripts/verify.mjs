@@ -40,7 +40,7 @@ const externalBase = baseArgIndex >= 0 ? argv[baseArgIndex + 1] : process.env.SM
 
 const SMOKES = [
   { name: "showroom", script: "scripts/smoke-showroom.mjs", covers: "default route: welcome showroom, gated editor, auto-orbit" },
-  { name: "editor", script: "scripts/smoke-editor.mjs", covers: "editor: library palette, model + texture + behaviour, exit path" },
+  { name: "editor", script: "scripts/smoke-editor.mjs", covers: "editor: library palette, model + texture + behaviour, bloom authoring, exit path" },
   { name: "standalone", script: "scripts/smoke-standalone.mjs", covers: "?host=standalone: agent API, tool bridge, human editor" },
   { name: "levels", script: "scripts/smoke-levels.mjs", covers: "levels workbench: paint, fill, ASCII round trip, undo, create" },
   { name: "foundation", script: "scripts/smoke-foundation.mjs", covers: "?host=legacy: archive player still boots" },
@@ -62,6 +62,7 @@ const SMOKES = [
   { name: "physics", script: "scripts/smoke-physics.mjs", covers: "physics migration baseline: contacts, fixed-step schedules, sleep/wake, teardown/reload" },
   { name: "mesh-colliders", script: "scripts/smoke-mesh-colliders.mjs", covers: "scene-native model colliders: Great Slide trimesh, dynamic convex hull, rejection, bridge + round-trip" },
   { name: "great-slide", script: "scripts/smoke-great-slide.mjs", covers: "Great Slide gravity run: Games launch, exact collider gate, subject controls, checkpoints, results, replay + return" },
+  { name: "map1", script: "scripts/smoke-map1.mjs", covers: "Map 1 gravity descent: Games launch, exact recovered collider, halfway gate, results, replay + return" },
   { name: "rapier-race", script: "scripts/smoke-rapier-race.mjs", covers: "Rapier RaceScene: Piste vehicle motion, steering, finite state, browser errors" },
   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
   { name: "dna", script: "scripts/smoke-dna.mjs", covers: "DNA forest: deterministic genome drift, preset fidelity, node-level (no browser)" },

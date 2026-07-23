@@ -41,6 +41,25 @@ function put(url, token, header = "authorization") {
   });
 }
 
+// A long browser suite can leave Windows' loopback stack briefly unable to connect to a freshly
+// assigned ephemeral port even though listen() has completed. Probe the read-only endpoint with
+// bounded backoff so that transport churn cannot masquerade as an auth failure; every assertion
+// below still uses its original request and status contract.
+async function waitForStore(url) {
+  let lastError;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      const response = await fetch(`${url}/scenes`, { headers: { connection: "close" } });
+      if (response.status === 200) return;
+      lastError = new Error(`Store readiness returned ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(400, 50 * 2 ** attempt)));
+  }
+  throw lastError ?? new Error("Store readiness failed");
+}
+
 let store = null;
 let dir = null;
 let datalake = null;
@@ -52,6 +71,7 @@ try {
 
   // --- token mode, datalake configured -----------------------------------------
   store = await startSceneStore({ port: 0, dir, token: TOKEN, origins: ORIGIN, datalakeDir: datalake });
+  await waitForStore(store.url);
 
   let r = await put(store.url, null);
   check("PUT without token -> 401", r.status === 401, `got ${r.status}`);
@@ -134,6 +154,7 @@ try {
 
   // --- token mode, datalake NOT configured -------------------------------------
   store = await startSceneStore({ port: 0, dir, token: TOKEN, datalakeDir: null });
+  await waitForStore(store.url);
   r = await fetch(`${store.url}/datalake`, { headers: { authorization: `Bearer ${TOKEN}` } });
   check("unconfigured datalake -> 503 even with token", r.status === 503, `got ${r.status}`);
   r = await fetch(`${store.url}/assets/import`, {
@@ -147,6 +168,7 @@ try {
 
   // --- compat mode: no token, everything open as before ------------------------
   store = await startSceneStore({ port: 0, dir, token: null, origins: null, datalakeDir: null });
+  await waitForStore(store.url);
   r = await put(store.url, null);
   check("compat mode: PUT without token -> 200", r.status === 200, `got ${r.status}`);
   r = await fetch(`${store.url}/scenes`, { headers: { origin: "http://anywhere.test" } });

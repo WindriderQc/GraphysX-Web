@@ -26,6 +26,7 @@
     "smoke:physics": "node scripts/smoke-physics.mjs",
     "smoke:mesh-colliders": "node scripts/smoke-mesh-colliders.mjs",
     "smoke:great-slide": "node scripts/smoke-great-slide.mjs",
+    "smoke:map1": "node scripts/smoke-map1.mjs",
     "smoke:live-release": "node scripts/smoke-live-release.mjs",
     "smoke:rapier-race": "node scripts/smoke-rapier-race.mjs",
     "smoke:store-auth": "node scripts/smoke-store-auth.mjs",
