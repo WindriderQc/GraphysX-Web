@@ -121,7 +121,7 @@ export type GraphysXAgentMediaApi = {
   list(kind?: AgentWorldMediaKind): readonly AgentWorldMediaDescriptor[];
   /** Re-pull the store manifest and re-register every import. Resolves to the count. */
   refresh(): Promise<AgentWorldResult<number>>;
-  /** One directory level of the configured datalake (E:\Media\Datalake by default). */
+  /** One directory level of the configured datalake (`GRAPHYSX_DATALAKE_DIR`). */
   browse(path?: string): Promise<AgentWorldResult<AgentMediaListing>>;
   /**
    * Import one datalake file into the library. Textures/sounds are copied server-side;

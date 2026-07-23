@@ -29,6 +29,27 @@ try {
   await page.click(".gx-welcome button");
   await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
 
+  // Keep the real showroom -> editor navigation contract above, then author inside a small
+  // deterministic world. Rendering all 96 showroom actors through SwiftShader for every
+  // inspector assertion adds minutes of software-GPU work without testing editor behavior.
+  await page.evaluate(() => window.__GRAPHYSX__.create({
+    schema: "graphysx.agent-world/v2",
+    id: "editor-smoke-lab",
+    label: "Editor Smoke Lab",
+    environment: {
+      background: "#07141d",
+      sky: null,
+      ground: { visible: true, size: 24, color: "#102b2c", grid: true, gridColor: "#4aa998" },
+      physics: { gravity: [0, -9.81, 0] },
+    },
+    entities: [
+      { id: "editor-ambient", type: "ambient-light", intensity: 0.8 },
+      { id: "editor-sun", type: "directional-light", intensity: 2, transform: { position: [-6, 9, 8] } },
+      { id: "editor-plinth", type: "box", transform: { position: [0, 0.5, 0], scale: [4, 0.5, 4] } },
+    ],
+  }));
+  await page.waitForFunction(() => window.__GRAPHYSX__.state()?.world?.id === "editor-smoke-lab", { timeout: SMOKE_TIMEOUT });
+
   await page.waitForSelector(".gx-ed-panel--drawer", { timeout: SMOKE_TIMEOUT });
   out.hasExitButton = await page.$$eval(".gx-ed-toolbar button", (els) =>
     els.some((e) => (e.textContent ?? "").includes("Showroom")));
@@ -147,6 +168,154 @@ try {
   // The behaviour shows up as a detachable row in the inspector, not just in state.
   out.behaviourRows = await page.$$eval(".gx-ed-attached", (els) => els.length);
 
+  // Image lighting is authored independently from the visible sky. Exercise the human
+  // controls and inspect Three's live Scene values: these are renderer-facing properties,
+  // so state/export assertions alone would miss a write-only implementation.
+  out.iblInitial = await page.evaluate(() => ({
+    lighting: window.__GRAPHYSX__.state().environment.lighting,
+    source: document.querySelector('[data-gx-ibl="source"]')?.value ?? null,
+    presetDisabled: document.querySelector('[data-gx-ibl="preset"]')?.disabled ?? null,
+    inputsDisabled: [...document.querySelectorAll('[data-gx-ibl="intensity"], [data-gx-ibl="yaw"], [data-gx-ibl="background-intensity"], [data-gx-ibl="background-blur"]')]
+      .every((input) => input.disabled),
+  }));
+  const skySelector = '.gx-ed-field:has(.gx-ed-label:text-is("Sky")) select';
+  const firstSky = await page.locator(`${skySelector} option:not([value=""])`).first().getAttribute("value");
+  // Start flat so the blur scalar can be renderer-verified without asking CI's software GPU
+  // to filter a cube; the sky/source/cache assertions below then exercise a real texture path.
+  await page.selectOption(skySelector, "");
+  await page.waitForFunction(() => window.__GRAPHYSX_HOST__.scene.background?.isColor === true, { timeout: SMOKE_TIMEOUT });
+  out.selectedBeforeIbl = (await page.textContent(".gx-ed-ident-id"))?.trim() ?? null;
+  await page.evaluate((id) => {
+    window.__GX_IBL_OBJECT__ = window.__GRAPHYSX_HOST__.world.getEntityObject(id);
+  }, out.selectedBeforeIbl);
+  await page.selectOption('[data-gx-ibl="source"]', "sky");
+  await page.waitForTimeout(150);
+  await page.selectOption('[data-gx-ibl="preset"]', "hero");
+  await page.waitForTimeout(250);
+  out.iblHero = await page.evaluate((id) => ({
+    lighting: window.__GRAPHYSX__.state().environment.lighting,
+    intensity: window.__GRAPHYSX_HOST__.scene.environmentIntensity,
+    environmentYaw: window.__GRAPHYSX_HOST__.scene.environmentRotation.y,
+    backgroundYaw: window.__GRAPHYSX_HOST__.scene.backgroundRotation.y,
+    backgroundIntensity: window.__GRAPHYSX_HOST__.scene.backgroundIntensity,
+    backgroundBlur: window.__GRAPHYSX_HOST__.scene.backgroundBlurriness,
+    roomFallback: window.__GRAPHYSX_HOST__.scene.environment === window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture,
+    sameObject: window.__GX_IBL_OBJECT__ === window.__GRAPHYSX_HOST__.world.getEntityObject(id),
+    preset: document.querySelector('[data-gx-ibl="preset"]')?.value ?? null,
+  }), out.selectedBeforeIbl);
+  await page.locator(".gx-ed-ibl").scrollIntoViewIfNeeded();
+  await page.locator(".gx-ed-ibl").screenshot({ path: path.join(ART, "editor-ibl.png") });
+  // An agent can edit the same full object while a human field is focused. The control stays
+  // stable mid-edit, then the whole card must converge on blur so stale sibling values cannot
+  // overwrite the agent's newer source/preset on the next human change.
+  await page.focus('[data-gx-ibl="intensity"]');
+  await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    api.transaction([{ op: "set-environment", environment: {
+      ...api.export().environment,
+      lighting: { source: "studio", intensity: 0.9, yawDegrees: 15, backgroundIntensity: 0.9, backgroundBlur: 0.15 },
+    } }]);
+  });
+  await page.locator('[data-gx-ibl="intensity"]').blur();
+  await page.waitForFunction(() => document.querySelector('[data-gx-ibl="source"]')?.value === "studio"
+    && document.querySelector('[data-gx-ibl="preset"]')?.value === "soft"
+    && document.querySelector('[data-gx-ibl="intensity"]')?.value === "0.9", { timeout: SMOKE_TIMEOUT });
+  out.iblExternalSync = await page.evaluate((id) => ({
+    lighting: window.__GRAPHYSX__.state().environment.lighting,
+    source: document.querySelector('[data-gx-ibl="source"]')?.value ?? null,
+    preset: document.querySelector('[data-gx-ibl="preset"]')?.value ?? null,
+    intensity: document.querySelector('[data-gx-ibl="intensity"]')?.value ?? null,
+    sameObject: window.__GX_IBL_OBJECT__ === window.__GRAPHYSX_HOST__.world.getEntityObject(id),
+  }), out.selectedBeforeIbl);
+  await page.selectOption('[data-gx-ibl="source"]', "sky");
+  await page.selectOption('[data-gx-ibl="preset"]', "hero");
+  // Blur has now been proven on Three's live Scene. Set it back to zero before attaching a
+  // cube backdrop: headless CI renders through SwiftShader, where filtering the sky adds cost
+  // without strengthening the source/cache assertions that follow.
+  await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const environment = api.export().environment;
+    api.transaction([{ op: "set-environment", environment: {
+      ...environment,
+      lighting: { ...environment.lighting, backgroundBlur: 0 },
+    } }]);
+  });
+  await page.waitForFunction(() => document.querySelector('[data-gx-ibl="background-blur"]')?.value === "0", { timeout: SMOKE_TIMEOUT });
+  // Hold the six face requests long enough to deterministically switch source while the sky
+  // is pending. Its late completion may install the backdrop, but must not steal Studio IBL.
+  await page.route("**/*", async (route) => {
+    if (route.request().resourceType() === "image") await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.continue();
+  });
+  await page.selectOption(skySelector, firstSky);
+  await page.selectOption('[data-gx-ibl="source"]', "studio");
+  await page.waitForFunction(() => window.__GRAPHYSX_HOST__.scene.background?.isCubeTexture === true, { timeout: SMOKE_TIMEOUT });
+  out.iblPendingStudio = await page.evaluate(() => ({
+    cubeBackground: window.__GRAPHYSX_HOST__.scene.background?.isCubeTexture === true,
+    roomEnvironment: window.__GRAPHYSX_HOST__.scene.environment === window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture,
+    source: window.__GRAPHYSX__.state().environment.lighting?.source ?? null,
+  }));
+  await page.unroute("**/*");
+  await page.selectOption('[data-gx-ibl="source"]', "sky");
+  await page.waitForFunction(() => window.__GRAPHYSX_HOST__.scene.environment !== window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture, { timeout: SMOKE_TIMEOUT });
+  out.iblSkyLoaded = await page.evaluate(() => {
+    window.__GX_IBL_BACKGROUND__ = window.__GRAPHYSX_HOST__.scene.background;
+    window.__GX_IBL_SKY_ENVIRONMENT__ = window.__GRAPHYSX_HOST__.scene.environment;
+    return {
+      cubeBackground: window.__GRAPHYSX_HOST__.scene.background?.isCubeTexture === true,
+      skyEnvironment: window.__GRAPHYSX_HOST__.scene.environment !== window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture,
+    };
+  });
+  await page.screenshot({ path: path.join(ART, "editor-ibl-sky.png"), fullPage: false });
+  await page.selectOption('[data-gx-ibl="source"]', "studio");
+  await page.waitForTimeout(200);
+  out.iblStudio = await page.evaluate(() => ({
+    lighting: window.__GRAPHYSX__.state().environment.lighting,
+    sameBackground: window.__GX_IBL_BACKGROUND__ === window.__GRAPHYSX_HOST__.scene.background,
+    roomEnvironment: window.__GRAPHYSX_HOST__.scene.environment === window.__GRAPHYSX_HOST__.roomEnvironmentTarget.texture,
+    differentFromSky: window.__GX_IBL_SKY_ENVIRONMENT__ !== window.__GRAPHYSX_HOST__.scene.environment,
+  }));
+  await page.selectOption('[data-gx-ibl="source"]', "sky");
+  await page.waitForTimeout(200);
+  out.iblSkyAgain = await page.evaluate(() => ({
+    cachedEnvironment: window.__GX_IBL_SKY_ENVIRONMENT__ === window.__GRAPHYSX_HOST__.scene.environment,
+    sameBackground: window.__GX_IBL_BACKGROUND__ === window.__GRAPHYSX_HOST__.scene.background,
+  }));
+  await page.selectOption('[data-gx-ibl="preset"]', "natural");
+  await page.waitForTimeout(150);
+  await page.fill('[data-gx-ibl="intensity"]', "4");
+  await page.dispatchEvent('[data-gx-ibl="intensity"]', "change");
+  await page.waitForTimeout(150);
+  out.iblRejected = await page.evaluate((id) => ({
+    lighting: window.__GRAPHYSX__.state().environment.lighting,
+    input: document.querySelector('[data-gx-ibl="intensity"]')?.value ?? null,
+    preset: document.querySelector('[data-gx-ibl="preset"]')?.value ?? null,
+    sameObject: window.__GX_IBL_OBJECT__ === window.__GRAPHYSX_HOST__.world.getEntityObject(id),
+    sameEnvironment: window.__GX_IBL_SKY_ENVIRONMENT__ === window.__GRAPHYSX_HOST__.scene.environment,
+  }), out.selectedBeforeIbl);
+  out.iblAccessibility = await page.$$eval("[data-gx-ibl]", (els) => ({
+    allNamed: els.filter((el) => el.matches("input,select")).every((el) => !!el.getAttribute("aria-label") || !!el.closest("label")?.textContent?.trim()),
+    noOverflow: (() => { const card = document.querySelector(".gx-ed-ibl"); return !!card && card.scrollWidth <= card.clientWidth; })(),
+  }));
+  await page.selectOption('[data-gx-ibl="source"]', "auto");
+  await page.waitForTimeout(150);
+  out.iblAuto = await page.evaluate(() => ({
+    lighting: window.__GRAPHYSX__.state().environment.lighting,
+    state: document.querySelector('[data-gx-ibl="state"]')?.textContent?.trim() ?? null,
+    inputsDisabled: [...document.querySelectorAll('[data-gx-ibl="intensity"], [data-gx-ibl="yaw"], [data-gx-ibl="background-intensity"], [data-gx-ibl="background-blur"]')]
+      .every((input) => input.disabled),
+    preset: document.querySelector('[data-gx-ibl="preset"]')?.value ?? null,
+    values: [...document.querySelectorAll('[data-gx-ibl="intensity"], [data-gx-ibl="yaw"], [data-gx-ibl="background-intensity"], [data-gx-ibl="background-blur"]')]
+      .map((input) => input.value),
+    defaults: {
+      intensity: window.__GRAPHYSX_HOST__.scene.environmentIntensity,
+      environmentYaw: window.__GRAPHYSX_HOST__.scene.environmentRotation.y,
+      backgroundYaw: window.__GRAPHYSX_HOST__.scene.backgroundRotation.y,
+      backgroundIntensity: window.__GRAPHYSX_HOST__.scene.backgroundIntensity,
+      backgroundBlur: window.__GRAPHYSX_HOST__.scene.backgroundBlurriness,
+    },
+  }));
+
   // Bloom used to be three unlabeled boxes that export→loaded the whole scene on every edit.
   // Drive the human-facing preset and a custom value, then prove the host composer changed
   // while the selected entity and its actual Three object stayed put.
@@ -188,7 +357,7 @@ try {
   out.bloomCustom = await page.evaluate(() => ({
     post: window.__GRAPHYSX__.state().environment.post,
     preset: document.querySelector('[data-gx-bloom="preset"]')?.value ?? null,
-    state: document.querySelector(".gx-ed-post-state")?.textContent?.trim() ?? null,
+    state: document.querySelector('[data-gx-bloom="state"]')?.textContent?.trim() ?? null,
     sameEnvironment: window.__GX_BLOOM_ENVIRONMENT__ === window.__GRAPHYSX_HOST__.scene.environment,
   }));
   await page.selectOption('[data-gx-bloom="preset"]', "cinematic");
@@ -210,7 +379,7 @@ try {
   }), out.selectedBeforeBloom);
   await page.selectOption('[data-gx-bloom="preset"]', "cinematic");
   await page.waitForTimeout(200);
-  await page.locator(".gx-ed-post").scrollIntoViewIfNeeded();
+  await page.locator(".gx-ed-post:not(.gx-ed-ibl)").scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(ART, "editor-bloom.png"), fullPage: false });
 
   await page.click('[data-gx-bloom="toggle"]');
@@ -278,6 +447,58 @@ const ok =
   out.textureApplied === "checker" &&
   out.behaviourCount === 1 &&
   out.behaviourRows === 1 &&
+  out.iblInitial?.lighting === null &&
+  out.iblInitial?.source === "auto" &&
+  out.iblInitial?.presetDisabled === true &&
+  out.iblInitial?.inputsDisabled === true &&
+  out.iblHero?.lighting?.source === "sky" &&
+  out.iblHero?.lighting?.intensity === 1.25 &&
+  out.iblHero?.lighting?.yawDegrees === -35 &&
+  out.iblHero?.lighting?.backgroundIntensity === 0.75 &&
+  out.iblHero?.lighting?.backgroundBlur === 0.28 &&
+  out.iblHero?.intensity === 1.25 &&
+  Math.abs(out.iblHero?.environmentYaw - (-35 * Math.PI / 180)) < 1e-9 &&
+  Math.abs(out.iblHero?.backgroundYaw - (-35 * Math.PI / 180)) < 1e-9 &&
+  out.iblHero?.backgroundIntensity === 0.75 &&
+  out.iblHero?.backgroundBlur === 0.28 &&
+  out.iblHero?.roomFallback === true &&
+  out.iblHero?.sameObject === true &&
+  out.iblHero?.preset === "hero" &&
+  out.iblExternalSync?.lighting?.source === "studio" &&
+  out.iblExternalSync?.lighting?.intensity === 0.9 &&
+  out.iblExternalSync?.lighting?.yawDegrees === 15 &&
+  out.iblExternalSync?.source === "studio" &&
+  out.iblExternalSync?.preset === "soft" &&
+  out.iblExternalSync?.intensity === "0.9" &&
+  out.iblExternalSync?.sameObject === true &&
+  out.iblPendingStudio?.cubeBackground === true &&
+  out.iblPendingStudio?.roomEnvironment === true &&
+  out.iblPendingStudio?.source === "studio" &&
+  out.iblSkyLoaded?.cubeBackground === true &&
+  out.iblSkyLoaded?.skyEnvironment === true &&
+  out.iblStudio?.lighting?.source === "studio" &&
+  out.iblStudio?.sameBackground === true &&
+  out.iblStudio?.roomEnvironment === true &&
+  out.iblStudio?.differentFromSky === true &&
+  out.iblSkyAgain?.cachedEnvironment === true &&
+  out.iblSkyAgain?.sameBackground === true &&
+  out.iblRejected?.lighting?.intensity === 1 &&
+  out.iblRejected?.input === "1" &&
+  out.iblRejected?.preset === "natural" &&
+  out.iblRejected?.sameObject === true &&
+  out.iblRejected?.sameEnvironment === true &&
+  out.iblAccessibility?.allNamed === true &&
+  out.iblAccessibility?.noOverflow === true &&
+  out.iblAuto?.lighting === null &&
+  out.iblAuto?.state === "Auto · Sky" &&
+  out.iblAuto?.inputsDisabled === true &&
+  out.iblAuto?.preset === "natural" &&
+  JSON.stringify(out.iblAuto?.values) === JSON.stringify(["1", "0", "1", "0"]) &&
+  out.iblAuto?.defaults?.intensity === 1 &&
+  out.iblAuto?.defaults?.environmentYaw === 0 &&
+  out.iblAuto?.defaults?.backgroundYaw === 0 &&
+  out.iblAuto?.defaults?.backgroundIntensity === 1 &&
+  out.iblAuto?.defaults?.backgroundBlur === 0 &&
   out.bloomInitial?.post === null &&
   out.bloomInitial?.toggle === false &&
   out.bloomInitial?.presetDisabled === true &&
@@ -315,5 +536,6 @@ const ok =
   out.bloomOff?.inputsDisabled === true &&
   out.treeFilterWorks &&
   out.welcomeBack &&
-  out.editorHiddenAgain;
+  out.editorHiddenAgain &&
+  consoleErrors.length === 0;
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);

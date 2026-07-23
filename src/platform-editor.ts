@@ -8,6 +8,7 @@ import type {
   AgentWorldEntityType,
   AgentWorldDefinition,
   AgentWorldEnvelope,
+  AgentWorldLighting,
   AgentWorldPost,
   AgentWorldMaterial,
   AgentWorldColliderKind,
@@ -60,6 +61,20 @@ const BLOOM_PRESETS: Record<string, readonly [number, number, number]> = {
   subtle: [0.35, 0.85, 0.4],
   cinematic: [0.48, 0.62, 0.35],
   neon: [0.65, 0.6, 0.4],
+};
+
+/** Image-lighting looks that stay restrained enough for the shipped PBR scenes. */
+const IBL_PRESETS: Record<string, readonly [number, number, number, number]> = {
+  natural: [1, 0, 1, 0],
+  soft: [0.9, 15, 0.9, 0.15],
+  hero: [1.25, -35, 0.75, 0.28],
+};
+
+const matchIblPreset = (values: readonly number[]): string => {
+  for (const [id, preset] of Object.entries(IBL_PRESETS)) {
+    if (preset.every((value, index) => Math.abs(value - (values[index] ?? Infinity)) < 0.0001)) return id;
+  }
+  return "custom";
 };
 
 const matchBloomPreset = (values: readonly number[]): string => {
@@ -232,6 +247,11 @@ export class PlatformEditor {
   private postPreset: HTMLSelectElement | null = null;
   private postState: HTMLElement | null = null;
   private postControls: HTMLElement | null = null;
+  private lightingSource: HTMLSelectElement | null = null;
+  private lightingPreset: HTMLSelectElement | null = null;
+  private lightingInputs: HTMLInputElement[] = [];
+  private lightingState: HTMLElement | null = null;
+  private lightingControls: HTMLElement | null = null;
   private levelTile: MapEditorTile = "wall";
   private levelTool: LevelTool = "paint";
   /** Cell elements indexed `y * width + x`, so a drag can repaint one cell without a rebuild. */
@@ -577,6 +597,43 @@ export class PlatformEditor {
       || this.envelopeInputs.includes(document.activeElement as HTMLInputElement);
     const postFocused = document.activeElement === this.postToggle
       || this.postInputs.includes(document.activeElement as HTMLInputElement);
+    const lightingFocused = document.activeElement === this.lightingSource
+      || document.activeElement === this.lightingPreset
+      || this.lightingInputs.includes(document.activeElement as HTMLInputElement);
+    if (this.lightingSource && !lightingFocused) {
+      const lighting = state?.environment?.lighting ?? null;
+      const skySelected = !!state?.environment?.sky;
+      const values = lighting
+        ? [lighting.intensity, lighting.yawDegrees, lighting.backgroundIntensity, lighting.backgroundBlur]
+        : IBL_PRESETS.natural;
+      this.lightingSource.value = lighting?.source ?? "auto";
+      this.lightingInputs.forEach((input, index) => {
+        input.value = String(values[index]);
+        input.disabled = !lighting || (!skySelected && index >= 2);
+      });
+      if (this.lightingPreset) {
+        this.lightingPreset.disabled = !lighting;
+        this.lightingPreset.value = lighting ? matchIblPreset(values) : "natural";
+      }
+      if (this.lightingState) {
+        const stateLabel = !lighting
+          ? (skySelected ? "Auto · Sky" : "Auto · Studio")
+          : lighting.source === "sky" && !skySelected
+            ? "Sky · Fallback"
+            : lighting.source === "sky" ? "Sky" : "Studio";
+        this.lightingState.textContent = stateLabel;
+        this.lightingState.classList.toggle("gx-ed-post-state--on", !!lighting);
+      }
+      this.lightingControls?.querySelectorAll(".gx-ed-ibl-grid").forEach((grid) => {
+        if (grid.classList.contains("gx-ed-ibl-grid--tuning")) {
+          grid.classList.toggle("gx-ed-post-grid--disabled", !lighting);
+        }
+      });
+      const lightingHint = this.lightingControls?.querySelector<HTMLElement>(".gx-ed-hint");
+      if (lightingHint) lightingHint.textContent = skySelected
+        ? "Sky and Studio change reflections without removing the backdrop."
+        : "Backdrop and Blur become available when a sky texture is selected.";
+    }
     if (this.postToggle && !postFocused) {
       const post = state?.environment?.post ?? null;
       this.postToggle.checked = !!post;
@@ -1473,6 +1530,175 @@ export class PlatformEditor {
     envelopeWrap.style.gap = "4px";
     envelopeWrap.append(envelopeToggle, fogNear, fogFar, cameraFar);
 
+    // Image-based lighting is independent from the visible sky: an author can keep a
+    // dramatic backdrop while using the neutral studio probe on the PBR materials. `Auto`
+    // remains a first-class null state so older scenes retain their exact host-selected look.
+    const lightingSource = document.createElement("select");
+    lightingSource.dataset.gxIbl = "source";
+    lightingSource.setAttribute("aria-label", "Image lighting source");
+    for (const [value, label] of [["auto", "Automatic"], ["sky", "Scene sky"], ["studio", "Studio"]]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      lightingSource.append(option);
+    }
+
+    const lightingPreset = document.createElement("select");
+    lightingPreset.dataset.gxIbl = "preset";
+    lightingPreset.setAttribute("aria-label", "Image lighting preset");
+    for (const [value, label] of [["custom", "Custom"], ["natural", "Natural"], ["soft", "Soft"], ["hero", "Hero"]]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      lightingPreset.append(option);
+    }
+
+    const makeIblInput = (label: string, field: string, minimum: number, maximum: number, step: number) => {
+      const control = document.createElement("label");
+      control.className = "gx-ed-post-control";
+      const caption = document.createElement("span");
+      caption.textContent = label;
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = String(minimum);
+      input.max = String(maximum);
+      input.step = String(step);
+      input.dataset.gxIbl = field;
+      input.setAttribute("aria-label", `Image lighting ${label}`);
+      control.append(caption, input);
+      return { control, input };
+    };
+    const light = makeIblInput("Light", "intensity", 0, 3, 0.05);
+    const yaw = makeIblInput("Yaw °", "yaw", -180, 180, 1);
+    const backdrop = makeIblInput("Backdrop", "background-intensity", 0, 3, 0.05);
+    const blur = makeIblInput("Blur", "background-blur", 0, 1, 0.05);
+    const lightingInputs = [light.input, yaw.input, backdrop.input, blur.input];
+
+    const lightingState = document.createElement("span");
+    lightingState.className = "gx-ed-post-state";
+    lightingState.dataset.gxIbl = "state";
+    lightingState.setAttribute("role", "status");
+    lightingState.setAttribute("aria-live", "polite");
+
+    const labelledSelect = (captionText: string, control: HTMLSelectElement) => {
+      const label = document.createElement("label");
+      label.className = "gx-ed-post-control";
+      const caption = document.createElement("span");
+      caption.textContent = captionText;
+      label.append(caption, control);
+      return label;
+    };
+    const lightingHead = document.createElement("div");
+    lightingHead.className = "gx-ed-ibl-head";
+    const lightingTitle = document.createElement("span");
+    lightingTitle.textContent = "Image lighting";
+    lightingHead.append(lightingTitle, lightingState);
+    const lightingSelectors = document.createElement("div");
+    lightingSelectors.className = "gx-ed-ibl-grid gx-ed-ibl-grid--selectors";
+    lightingSelectors.append(labelledSelect("Source", lightingSource), labelledSelect("Preset", lightingPreset));
+    const lightingTuning = document.createElement("div");
+    lightingTuning.className = "gx-ed-ibl-grid gx-ed-ibl-grid--tuning";
+    lightingTuning.append(light.control, yaw.control, backdrop.control, blur.control);
+
+    const readLightingValues = (): AgentWorldLighting => ({
+      source: lightingSource.value === "sky" ? "sky" : "studio",
+      intensity: Number(light.input.value),
+      yawDegrees: Number(yaw.input.value),
+      backgroundIntensity: Number(backdrop.input.value),
+      backgroundBlur: Number(blur.input.value),
+    });
+    const validLighting = (value: AgentWorldLighting) => Number.isFinite(value.intensity)
+      && value.intensity >= 0 && value.intensity <= 3
+      && Number.isFinite(value.yawDegrees) && value.yawDegrees >= -180 && value.yawDegrees <= 180
+      && Number.isFinite(value.backgroundIntensity) && value.backgroundIntensity >= 0 && value.backgroundIntensity <= 3
+      && Number.isFinite(value.backgroundBlur) && value.backgroundBlur >= 0 && value.backgroundBlur <= 1
+      && lightingInputs.every((input) => input.value !== "");
+    const restoreLightingValues = () => {
+      const current = this.deps.world.getEnvironment().lighting;
+      const values = current
+        ? [current.intensity, current.yawDegrees, current.backgroundIntensity, current.backgroundBlur]
+        : IBL_PRESETS.natural;
+      lightingInputs.forEach((input, index) => { input.value = String(values[index]); });
+      lightingPreset.value = current ? matchIblPreset(values) : "natural";
+    };
+    const syncLightingUi = () => {
+      const authored = lightingSource.value !== "auto";
+      const skySelected = !!this.deps.world.getEnvironment().sky;
+      lightingPreset.disabled = !authored;
+      lightingInputs.forEach((input, index) => { input.disabled = !authored || (!skySelected && index >= 2); });
+      lightingTuning.classList.toggle("gx-ed-post-grid--disabled", !authored);
+      lightingState.textContent = !authored
+        ? (skySelected ? "Auto · Sky" : "Auto · Studio")
+        : lightingSource.value === "sky" && !skySelected
+          ? "Sky · Fallback"
+          : lightingSource.value === "sky" ? "Sky" : "Studio";
+      lightingState.classList.toggle("gx-ed-post-state--on", authored);
+      lightingHint.textContent = skySelected
+        ? "Sky and Studio change reflections without removing the backdrop."
+        : "Backdrop and Blur become available when a sky texture is selected.";
+    };
+    const applyLighting = () => {
+      if (lightingSource.value === "auto") {
+        this.setLighting(null);
+        syncLightingUi();
+        return;
+      }
+      const next = readLightingValues();
+      if (!validLighting(next)) {
+        restoreLightingValues();
+        return;
+      }
+      this.setLighting(next);
+    };
+    lightingSource.addEventListener("change", () => {
+      if (lightingSource.value === "auto") {
+        lightingInputs.forEach((input, index) => { input.value = String(IBL_PRESETS.natural[index]); });
+        lightingPreset.value = "natural";
+      }
+      if (lightingSource.value !== "auto" && lightingInputs.some((input) => input.value === "")) {
+        lightingInputs.forEach((input, index) => { input.value = String(IBL_PRESETS.natural[index]); });
+      }
+      syncLightingUi();
+      applyLighting();
+    });
+    lightingPreset.addEventListener("change", () => {
+      const preset = IBL_PRESETS[lightingPreset.value];
+      if (!preset) return;
+      lightingInputs.forEach((input, index) => { input.value = String(preset[index]); });
+      applyLighting();
+    });
+    for (const input of lightingInputs) {
+      input.addEventListener("input", () => { lightingPreset.value = "custom"; });
+      input.addEventListener("change", applyLighting);
+    }
+
+    this.lightingSource = lightingSource;
+    this.lightingPreset = lightingPreset;
+    this.lightingInputs = lightingInputs;
+    this.lightingState = lightingState;
+    const currentLighting = this.deps.world.getEnvironment().lighting;
+    lightingSource.value = currentLighting?.source ?? "auto";
+    const initialLighting = currentLighting
+      ? [currentLighting.intensity, currentLighting.yawDegrees, currentLighting.backgroundIntensity, currentLighting.backgroundBlur]
+      : IBL_PRESETS.natural;
+    lightingInputs.forEach((input, index) => { input.value = String(initialLighting[index]); });
+    lightingPreset.value = currentLighting ? matchIblPreset(initialLighting) : "natural";
+    const lightingWrap = document.createElement("div");
+    lightingWrap.className = "gx-ed-post gx-ed-ibl";
+    const lightingHint = document.createElement("div");
+    lightingHint.className = "gx-ed-hint";
+    lightingWrap.append(lightingHead, lightingSelectors, lightingTuning, lightingHint);
+    // If an agent changes the look while a human is focused inside the card, `refresh()`
+    // deliberately protects the in-flight control. Re-read once focus leaves the card so that
+    // stale fields can never overwrite the agent's newer full lighting object.
+    lightingWrap.addEventListener("focusout", () => {
+      requestAnimationFrame(() => {
+        if (!lightingWrap.contains(document.activeElement)) this.refresh();
+      });
+    });
+    this.lightingControls = lightingWrap;
+    syncLightingUi();
+
     // Post/bloom is scene vocabulary, not a hidden route flag. The original control was a
     // bare checkbox followed by three title-only number boxes; it technically exposed the
     // data but made the values impossible to identify at a glance. Keep the compact rail,
@@ -1484,6 +1710,7 @@ export class PlatformEditor {
 
     const postState = document.createElement("span");
     postState.className = "gx-ed-post-state";
+    postState.dataset.gxBloom = "state";
 
     const toggleLabel = document.createElement("label");
     toggleLabel.className = "gx-ed-post-toggle";
@@ -1593,6 +1820,7 @@ export class PlatformEditor {
 
     return this.section("Environment", [
       this.field("Sky", select),
+      this.field("Lighting", lightingWrap),
       this.field("2D overlay", overlay),
       this.field("Envelope", envelopeWrap),
       this.field("Bloom", postWrap),
@@ -1613,6 +1841,10 @@ export class PlatformEditor {
 
   private setPost(post: AgentWorldPost | null): void {
     this.patchEnvironment({ post: post as never });
+  }
+
+  private setLighting(lighting: AgentWorldLighting | null): void {
+    this.patchEnvironment({ lighting });
   }
 
   /**
@@ -3120,6 +3352,10 @@ const EDITOR_CSS = `
 .gx-ed-post-control>span{font:600 8.5px/1.2 var(--gx-font);letter-spacing:.06em;text-transform:uppercase;color:var(--gx-muted)}
 .gx-ed-post-control>input{width:100%;padding:3px 4px}
 .gx-ed-post>.gx-ed-hint{line-height:1.3}
+.gx-ed-ibl-head{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#c6e2ea}
+.gx-ed-ibl-head>.gx-ed-post-state{margin-left:auto;text-transform:capitalize}
+.gx-ed-ibl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;transition:opacity .15s ease}
+.gx-ed-ibl-grid select{width:100%;padding:3px 4px}
 .gx-ed-vec{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
 .gx-ed-axis{display:flex;align-items:center;gap:2px;min-width:0}
 .gx-ed-axis>span{flex:none;font:600 9px/1 var(--gx-font);text-transform:uppercase;color:var(--gx-muted)}

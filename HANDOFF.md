@@ -113,7 +113,7 @@ enters play. No store required for either.
 one game rebuilt *on* the platform (BallZ, `ballz-play.ts`) is won by collecting every ring and
 *then* reaching the finish; crossing early does not count.
 
-**Round-trip sweep** (`scripts/smoke-roundtrip.mjs`, in `verify.mjs`). 63 settable properties
+**Round-trip sweep** (`scripts/smoke-roundtrip.mjs`, in `verify.mjs`). 97 property and rejection checks
 set through the public API and read back through four paths — `state()`, `exportDocument()`, a
 reload from that export, and where observable the live Three.js/physics object. It exists because
 the same bug kept recurring in different clothes: **a surface that writes state without ever

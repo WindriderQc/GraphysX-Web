@@ -124,7 +124,8 @@ tagged:
   movers, evolutionary/DNA entities that adapt over time.
 - **Populations** — humans, zombies, crowds with steering/movement behaviors.
 - **Environment** — lights, heightmap terrain, water with reflection, skyboxes (scoped
-  ownership), reusable CubX/CubZ assemblies.
+  ownership), scene-authored image lighting (sky/studio source, intensity, aligned yaw and
+  backdrop tuning), reusable CubX/CubZ assemblies.
 - **Physics & objects** — rigid bodies, materials, impulses, vehicles, props, splines.
 - **2D** — generative p5 sketches as overlays or in-world textures.
 

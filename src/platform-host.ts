@@ -26,6 +26,7 @@ import {
   AgentWorldRuntime,
   GRAPHYSX_AGENT_DEMO_WORLD,
   type AgentWorldDefinition,
+  type AgentWorldLighting,
   type AgentWorldPost,
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
@@ -104,6 +105,8 @@ export interface PlatformHostOptions {
  * emissives (rings, gates, beacons) glow, and strength 0.35 is a halo rather than a fog.
  */
 const HOST_DEMO_POST: AgentWorldPost = { bloom: { strength: 0.35, radius: 0.4, threshold: 0.85 } };
+/** Six curated skies plus two active import/working slots; older GPU resources are released. */
+const MAX_SKY_CACHE_ENTRIES = 8;
 
 /**
  * Standalone renderer/host for the `graphysx.agent-world/v2` scene model.
@@ -132,9 +135,12 @@ export class PlatformHost {
 
   private editorLoad: Promise<PlatformEditor | null> | null = null;
   private readonly skyCache = new Map<string, { background: CubeTexture; environmentTarget: WebGLRenderTarget }>();
-  private readonly pendingSkyKeys = new Set<string>();
+  /** Attempt token per key: late face errors cannot clear a newer retry's in-flight guard. */
+  private readonly pendingSkyKeys = new Map<string, symbol>();
   private requestedSkyKey: string | null = null;
   private requestedSkyHorizon: string | null = null;
+  /** Whether the current look wants a loaded sky to drive reflections as well as backdrop. */
+  private requestedSkyLighting = false;
   private readonly pmremGenerator: PMREMGenerator;
   private readonly roomEnvironmentTarget: WebGLRenderTarget;
   private readonly interactive: boolean;
@@ -533,7 +539,8 @@ export class PlatformHost {
       this.camera.far = cameraFar;
       this.camera.updateProjectionMatrix();
     }
-    this.applySky(environment.sky);
+    this.applyLighting(environment.lighting);
+    this.applySky(environment.sky, environment.lighting);
     // The scene document's request wins — it is tuned for that scene. The host override only
     // fills in when the scene is silent, so `?post=bloom` demos the stack without ever
     // overriding an author's numbers.
@@ -624,7 +631,17 @@ export class PlatformHost {
    * while a load is pending records the desired cache key, so a slow response can never
    * overwrite a newer selection and an A -> B -> A sequence still reuses the one A request.
    */
-  private applySky(skyId: string | null): void {
+  private applyLighting(lighting: AgentWorldLighting | null): void {
+    const yawRadians = ((lighting?.yawDegrees ?? 0) * Math.PI) / 180;
+    this.scene.environmentIntensity = lighting?.intensity ?? 1;
+    this.scene.environmentRotation.set(0, yawRadians, 0);
+    this.scene.backgroundIntensity = lighting?.backgroundIntensity ?? 1;
+    this.scene.backgroundRotation.set(0, yawRadians, 0);
+    this.scene.backgroundBlurriness = lighting?.backgroundBlur ?? 0;
+  }
+
+  private applySky(skyId: string | null, lighting: AgentWorldLighting | null): void {
+    this.requestedSkyLighting = lighting?.source !== "studio" && !!skyId;
     if (!skyId) {
       this.requestedSkyKey = null;
       this.requestedSkyHorizon = null;
@@ -651,13 +668,17 @@ export class PlatformHost {
     this.requestedSkyHorizon = descriptor.horizonColor;
     const cached = this.skyCache.get(cacheKey);
     if (cached) {
+      // Map insertion order is the LRU order. A hit is recent and moves to the tail.
+      this.skyCache.delete(cacheKey);
+      this.skyCache.set(cacheKey, cached);
       this.activateSky(cached, cacheKey);
       return;
     }
     // Do not light a newly requested sky with the previous sky while its faces are loading.
     this.scene.environment = this.roomEnvironmentTarget.texture;
     if (this.pendingSkyKeys.has(cacheKey)) return;
-    this.pendingSkyKeys.add(cacheKey);
+    const attempt = Symbol(cacheKey);
+    this.pendingSkyKeys.set(cacheKey, attempt);
     const loader = new CubeTextureLoader();
     // Imported faces are served cross-origin from the asset store (a different port),
     // and `orientArchiveCubeTexture` rotates the poles through a 2D canvas — without
@@ -668,33 +689,61 @@ export class PlatformHost {
     loader.load(
       faceUrls,
       (texture) => {
+        if (this.pendingSkyKeys.get(cacheKey) !== attempt) {
+          texture.dispose();
+          return;
+        }
         this.pendingSkyKeys.delete(cacheKey);
         if (this.disposed) {
           texture.dispose();
           return;
         }
         texture.colorSpace = SRGBColorSpace;
-        const oriented = orientArchiveCubeTexture(texture);
-        // A defensive guard for loader implementations that complete the same request twice.
-        const existing = this.skyCache.get(cacheKey);
-        if (existing) {
-          oriented.dispose();
-          this.activateSky(existing, cacheKey);
+        let resource: { background: CubeTexture; environmentTarget: WebGLRenderTarget };
+        try {
+          const oriented = orientArchiveCubeTexture(texture);
+          // A defensive guard for loader implementations that complete the same request twice.
+          const existing = this.skyCache.get(cacheKey);
+          if (existing) {
+            oriented.dispose();
+            this.skyCache.delete(cacheKey);
+            this.skyCache.set(cacheKey, existing);
+            this.activateSky(existing, cacheKey);
+            return;
+          }
+          resource = {
+            background: oriented,
+            environmentTarget: this.pmremGenerator.fromCubemap(oriented),
+          };
+        } catch (error) {
+          texture.dispose();
+          console.warn(`Could not prepare sky "${descriptor.id}" for image lighting.`, error);
           return;
         }
-        const resource = {
-          background: oriented,
-          environmentTarget: this.pmremGenerator.fromCubemap(oriented),
-        };
+        // Ownership transfers only after both the raw cube and its PMREM target exist.
         this.skyCache.set(cacheKey, resource);
+        this.trimSkyCache();
         this.activateSky(resource, cacheKey);
       },
       undefined,
       () => {
+        if (this.pendingSkyKeys.get(cacheKey) !== attempt) return;
         this.pendingSkyKeys.delete(cacheKey);
         console.warn(`Could not load sky "${descriptor.id}" from ${faceUrls[0]}`);
       },
     );
+  }
+
+  /** Bound imported-sky churn without ever evicting the backdrop currently in use. */
+  private trimSkyCache(): void {
+    while (this.skyCache.size > MAX_SKY_CACHE_ENTRIES) {
+      const candidate = [...this.skyCache.keys()].find((key) => key !== this.requestedSkyKey);
+      if (!candidate) return;
+      const resource = this.skyCache.get(candidate);
+      this.skyCache.delete(candidate);
+      resource?.environmentTarget.dispose();
+      resource?.background.dispose();
+    }
   }
 
   private activateSky(
@@ -703,7 +752,9 @@ export class PlatformHost {
   ): void {
     if (this.disposed || cacheKey !== this.requestedSkyKey) return;
     this.scene.background = resource.background;
-    this.scene.environment = resource.environmentTarget.texture;
+    this.scene.environment = this.requestedSkyLighting
+      ? resource.environmentTarget.texture
+      : this.roomEnvironmentTarget.texture;
     // Keep distance fog, tinted to the sky's horizon, so ground fades into the skyline
     // instead of ending at a hard plane edge. Dropping the fog here was a mistake: fog
     // does not fight a skybox, fog of the wrong colour does. The sky-path defaults sit

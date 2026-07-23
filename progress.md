@@ -1486,8 +1486,10 @@ does not "fix" it back into a real-time wait.
   and zero failed responses/console/page errors. Screenshot inspection caught the inherited 46-unit
   camera cap landing inside the 72-unit course; the host focus API now permits an explicit larger
   course cap while retaining 46 as the showroom default.
-- Next look wave: scene-authored IBL intensity/yaw/background controls using current cube skies and
-  RoomEnvironment, then a licensed 1K HDRI and focused Physical-material migration.
+- Scene-authored IBL controls are complete: Automatic/Sky/Studio source, intensity, aligned yaw,
+  backdrop intensity/blur, Natural/Soft/Hero editor looks, bounded PMREM reuse, async-source race
+  safety, and renderer/export/reload coverage. Next: a licensed 1K HDRI and focused
+  Physical-material migration for recovered Phong meshes.
 - Final release-candidate `npm run verify`: **31/31 passed**. The Games smoke used one isolated
   fresh-server retry after a localhost connection reset; all product assertions and browser error
   checks passed. Map 1, editor PMREM identity/invalid-input coverage, and the hardened 22-check
