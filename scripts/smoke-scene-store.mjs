@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { startSceneStore } from "../server/scene-store.mjs";
+import { applyCommands } from "../server/scene-commands.mjs";
 import { editScene, openScene, putScene } from "../tools/graphysx-scene-agent.mjs";
 
 // Milestone A end to end: an agent edits a stored scene from outside the browser, and the
@@ -40,6 +41,48 @@ let dir = null;
 let browser = null;
 
 try {
+  // Document-side updates must use the same two-level sparse merge as the browser runtime.
+  // Otherwise a remote agent changing roughness could silently erase a human's color choice.
+  const modelDocument = {
+    schema: "graphysx.agent-world/v2",
+    id: "model-material-command-smoke",
+    entities: [{
+      id: "model",
+      type: "model",
+      asset: { id: "archive-impreza" },
+      modelMaterialOverrides: {
+        "mesh:0:chasis:material:0:material-1-chasis-jpg": { color: "#112233", roughness: 0.4 },
+        "mesh:0:chasis:material:1:material-2-ventanas-jpg": { opacity: 0.8 },
+      },
+    }],
+  };
+  const bodySlot = "mesh:0:chasis:material:0:material-1-chasis-jpg";
+  const glassSlot = "mesh:0:chasis:material:1:material-2-ventanas-jpg";
+  const merged = applyCommands(modelDocument, [{
+    op: "update",
+    id: "model",
+    patch: { modelMaterialOverrides: { [bodySlot]: { clearcoat: 0.9 } } },
+  }]).definition.entities[0];
+  const resetOne = applyCommands({ ...modelDocument, entities: [merged] }, [{
+    op: "update",
+    id: "model",
+    patch: { modelMaterialOverrides: { [bodySlot]: null } },
+  }]).definition.entities[0];
+  const resetAll = applyCommands({ ...modelDocument, entities: [merged] }, [{
+    op: "update",
+    id: "model",
+    patch: { modelMaterialOverrides: null },
+  }]).definition.entities[0];
+  out.modelOverrideCommands = {
+    preservesProperties: merged.modelMaterialOverrides[bodySlot].color === "#112233"
+      && merged.modelMaterialOverrides[bodySlot].roughness === 0.4
+      && merged.modelMaterialOverrides[bodySlot].clearcoat === 0.9,
+    preservesSiblingSlot: merged.modelMaterialOverrides[glassSlot].opacity === 0.8,
+    resetOne: !resetOne.modelMaterialOverrides[bodySlot]
+      && resetOne.modelMaterialOverrides[glassSlot].opacity === 0.8,
+    resetAll: !resetAll.modelMaterialOverrides,
+  };
+
   dir = await mkdtemp(path.join(tmpdir(), "graphysx-store-"));
   // Port 0 → the OS picks a free one, so the smoke never collides with a running store.
   store = await startSceneStore({ port: 0, dir });
@@ -226,6 +269,7 @@ out.pageErrors = pageErrors;
 console.log(JSON.stringify(out, null, 2));
 
 const ok =
+  Object.values(out.modelOverrideCommands ?? {}).every(Boolean) &&
   out.seededRevision === 1 &&
   out.seededEntities === 4 &&
   out.staleWriteRejected &&

@@ -26,6 +26,17 @@ function hashString(value) {
   return hash;
 }
 
+function mergeModelMaterialOverrides(current, patch) {
+  if (patch === undefined) return current;
+  if (patch === null) return undefined;
+  const next = { ...(current ?? {}) };
+  for (const [slotId, values] of Object.entries(patch)) {
+    if (values === null) delete next[slotId];
+    else next[slotId] = { ...(next[slotId] ?? {}), ...values };
+  }
+  return Object.keys(next).length ? next : undefined;
+}
+
 /**
  * Applies one command in place. Narrow and loud: a malformed command should fail here with
  * a clear message rather than produce a document that fails to load in a browser later.
@@ -61,6 +72,7 @@ function applyCommand(definition, command) {
       ...patch,
       transform: patch.transform ? { ...current.transform, ...patch.transform } : current.transform,
       material: patch.material ? { ...current.material, ...patch.material } : current.material,
+      modelMaterialOverrides: mergeModelMaterialOverrides(current.modelMaterialOverrides, patch.modelMaterialOverrides),
       physics: patch.physics === null ? undefined : patch.physics ? { ...current.physics, ...patch.physics } : current.physics,
     };
     return { op: "update", id: command.id };

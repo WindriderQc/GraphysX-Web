@@ -324,3 +324,32 @@ start and once during an Editor sky request; each affected smoke then passed aga
   slot-aware model material overrides and a larger curated HDRI library.
 - `_to_delete/graphysx-kickass.tgz` was the delivery bundle to remove; `_to_delete/` is no longer
   present in this working tree.
+
+## Wave 12 — Recovered material-slot authoring
+
+- Models now expose one stable slot per exact mesh/material assignment. Archive Garage proves
+  the recovered inventory without flattening it: Impreza has seven assignments, Cobra five, and
+  Piste Ovale one explicitly unresolved/inferred surface. Repeated wheel/tire sources are related
+  in state but stay locally editable.
+- `modelMaterialOverrides` is sparse scene data and uses two-level merge semantics across the
+  runtime, transactions, bridge, export/load, and the document-side scene store. `null` restores
+  one slot or the complete model; empty maps do not serialize. Generic model `material` patches
+  are rejected so source-owned materials cannot be accidentally painted as one homogeneous mesh.
+- The editor replaces the old read-only source-material notice with compact disclosure cards,
+  exact stable IDs, source-map/type/status metadata, supported-property controls only, accessible
+  names, one/all reset, and focused presets for Impreza, Cobra, and the inferred Piste surface.
+- Each active override owns exactly one clone. Reset/replacement disposes only that clone, never
+  its shared recovered map; whole-entity teardown deduplicates materials/textures and also retires
+  detached source materials. Multi-texture load failure uses all-settled cleanup, and late model
+  completion checks disposed/runtime identity before it can affect a replacement entity.
+- `smoke-vehicles` covers exact slot IDs/types/maps, local isolation, bridge edits, transparent
+  glass depth behavior, reset cycles and disposal counts, unsupported-property rejection,
+  export/reload, reset-all, rapid pre-load override/reset, and remove/re-spawn stale-load races.
+  `smoke-editor` covers the 296px inspector, disclosure/accessibility, supported controls, presets,
+  and editor leave/re-entry persistence; the scene-store smoke covers sparse remote merges.
+- The gate's isolated static server now force-retires connections owned by an exited Chromium
+  child after stopping accepts. This closes the `server.close()` wedge exposed when a transport
+  reset killed a smoke while request timeouts were intentionally disabled.
+- Final local release gate: **31/31 passed**. The Wave 12 editor, vehicle, and scene-store paths
+  are in that complete gate; Overlay recovered one transport reset on its built-in fresh-server
+  retry, with no product assertion failure.

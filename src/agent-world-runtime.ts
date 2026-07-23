@@ -63,6 +63,7 @@ import {
   IcosahedronGeometry,
   Line,
   LineBasicMaterial,
+  Material,
   Matrix4,
   Mesh,
   MeshStandardMaterial,
@@ -98,6 +99,24 @@ import {
   type AgentWorldModelAsset,
   type ResolvedAgentWorldModelAsset
 } from "./agent-world-assets";
+import {
+  applyAgentWorldModelMaterialOverrides,
+  inspectAgentWorldModelMaterialSlots,
+  patchAgentWorldModelMaterialOverrides,
+  resolveAgentWorldModelMaterialOverrides,
+  sourceAgentWorldModelMaterials,
+  type AgentWorldModelMaterialOverridePatch,
+  type AgentWorldModelMaterialOverrides,
+  type AgentWorldModelMaterialSlot,
+} from "./agent-world-model-materials";
+export type {
+  AgentWorldModelMaterialOverride,
+  AgentWorldModelMaterialOverridePatch,
+  AgentWorldModelMaterialOverrides,
+  AgentWorldModelMaterialPreset,
+  AgentWorldModelMaterialRole,
+  AgentWorldModelMaterialSlot,
+} from "./agent-world-model-materials";
 import {
   GRAPHYSX_AGENT_WORLD_PREFABS,
   instantiateAgentWorldPrefab,
@@ -410,6 +429,11 @@ export type AgentWorldEntityDefinition = {
   parentId?: string;
   transform?: Partial<AgentWorldTransform>;
   material?: Partial<AgentWorldMaterial>;
+  /**
+   * Sparse, declarative overrides for source-owned model material slots. Keys come from
+   * `state().entities[].materialSlots`; Three.js objects and texture references never do.
+   */
+  modelMaterialOverrides?: AgentWorldModelMaterialOverrides;
   geometry?: {
     width?: number;
     height?: number;
@@ -476,6 +500,8 @@ export type AgentWorldEntityPatch = {
   parentId?: string | null;
   transform?: Partial<AgentWorldTransform>;
   material?: Partial<AgentWorldMaterial>;
+  /** Per-slot null resets one slot; outer null resets every model material override. */
+  modelMaterialOverrides?: AgentWorldModelMaterialOverridePatch | null;
   visible?: boolean;
   castShadow?: boolean;
   receiveShadow?: boolean;
@@ -645,6 +671,8 @@ export type AgentWorldEntityState = {
   rotationDegrees: AgentWorldVector3;
   scale: AgentWorldVector3;
   material: AgentWorldMaterial;
+  /** Null on non-models; an empty array while a model asset is still loading. */
+  materialSlots: AgentWorldModelMaterialSlot[] | null;
   geometry: Required<NonNullable<AgentWorldEntityDefinition["geometry"]>>;
   intensity: number;
   distance: number;
@@ -947,6 +975,7 @@ type ResolvedEntity = {
   parentId: string | null;
   transform: AgentWorldTransform;
   material: AgentWorldMaterial;
+  modelMaterialOverrides: AgentWorldModelMaterialOverrides;
   geometry: Required<NonNullable<AgentWorldEntityDefinition["geometry"]>>;
   path: Required<AgentWorldSplinePath> | null;
   asset: ResolvedAgentWorldModelAsset | null;
@@ -1063,6 +1092,7 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "entity.agent-avatar",
   "asset.list",
   "material.texture",
+  "model.material-slots",
   "texture.list",
   "environment.sky",
   "environment.lighting",
@@ -1742,7 +1772,17 @@ export class AgentWorldRuntime {
     }
     if (patch.label !== undefined) definition.label = patch.label;
     if (patch.transform) definition.transform = mergeTransform(definition.transform, patch.transform);
-    if (patch.material) definition.material = resolveMaterial(patch.material, definition.material);
+    if (patch.material) {
+      if (definition.type === "model") throw new Error("Model source materials use modelMaterialOverrides, not the generic material patch");
+      definition.material = resolveMaterial(patch.material, definition.material);
+    }
+    if (patch.modelMaterialOverrides !== undefined) {
+      if (definition.type !== "model") throw new Error("Only model entities accept modelMaterialOverrides");
+      definition.modelMaterialOverrides = patchAgentWorldModelMaterialOverrides(
+        definition.modelMaterialOverrides,
+        patch.modelMaterialOverrides,
+      );
+    }
     if (patch.visible !== undefined) definition.visible = patch.visible;
     if (patch.castShadow !== undefined) definition.castShadow = patch.castShadow;
     if (patch.receiveShadow !== undefined) definition.receiveShadow = patch.receiveShadow;
@@ -2681,6 +2721,9 @@ export class AgentWorldRuntime {
   private applyResolvedEntity(runtime: RuntimeEntity): void {
     const { definition, object } = runtime;
     object.visible = definition.visible;
+    if (definition.type === "model") {
+      applyAgentWorldModelMaterialOverrides(object, definition.modelMaterialOverrides);
+    }
     const particles = findParticleSystem(object);
     if (particles && definition.emitter) particles.configure(definition.emitter);
     const water = findWaterSurface(object);
@@ -2733,6 +2776,12 @@ export class AgentWorldRuntime {
     const path = resolveSplinePath(source.type, source.path);
     const asset = source.type === "model" ? resolveAgentWorldModelAsset(source.asset) : null;
     if (source.type !== "model" && source.asset) throw new Error("Only model entities accept an asset");
+    const modelMaterialOverrides = source.type === "model"
+      ? resolveAgentWorldModelMaterialOverrides(source.modelMaterialOverrides)
+      : {};
+    if (source.type !== "model" && source.modelMaterialOverrides) {
+      throw new Error("Only model entities accept modelMaterialOverrides");
+    }
     const agent = source.type === "agent" ? resolveAgentProfile(source.agent) : null;
     if (source.type !== "agent" && source.agent) throw new Error("Only agent entities accept an agent profile");
     const emitter = source.type === "emitter" ? resolveAgentWorldEmitter(source.emitter) : null;
@@ -2792,6 +2841,7 @@ export class AgentWorldRuntime {
       parentId: source.parentId ?? null,
       transform: mergeTransform(DEFAULT_TRANSFORM, source.transform ?? {}),
       material: resolveMaterial(source.material),
+      modelMaterialOverrides,
       geometry: { ...DEFAULT_GEOMETRY, ...(source.geometry ?? {}) },
       path,
       asset,
@@ -2920,6 +2970,9 @@ export class AgentWorldRuntime {
       rotationDegrees: roundVector(new Vector3(runtime.object.rotation.x, runtime.object.rotation.y, runtime.object.rotation.z).multiplyScalar(180 / Math.PI)),
       scale: roundVector(runtime.object.scale),
       material: deepClone(runtime.definition.material),
+      materialSlots: runtime.definition.type === "model"
+        ? inspectAgentWorldModelMaterialSlots(runtime.object, runtime.definition.modelMaterialOverrides)
+        : null,
       geometry: deepClone(runtime.definition.geometry),
       intensity: runtime.definition.intensity,
       distance: runtime.definition.distance,
@@ -3803,6 +3856,9 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     ...(definition.parentId ? { parentId: definition.parentId } : {}),
     transform: deepClone(definition.transform),
     material: deepClone(definition.material),
+    ...(Object.keys(definition.modelMaterialOverrides).length > 0
+      ? { modelMaterialOverrides: deepClone(definition.modelMaterialOverrides) }
+      : {}),
     geometry: deepClone(definition.geometry),
     ...(definition.path ? { path: deepClone(definition.path) } : {}),
     ...(definition.asset ? {
@@ -3878,6 +3934,29 @@ function findParticleSystem(object: Object3D): AgentWorldParticleSystem | null {
 function disposeObjectTree(root: Object3D): void {
   root.userData.graphysxDisposed = true;
   const disposedTextures = new Set<Texture>();
+  const disposedMaterials = new Set<Material>();
+  const disposeMaterial = (material: Material): void => {
+    if (disposedMaterials.has(material)) return;
+    // Invalidates a pending applyAgentTexture completion before releasing the material.
+    material.userData.graphysxTextureToken = {};
+    if (material.userData.graphysxAgentTexture instanceof Texture) {
+      const texture = material.userData.graphysxAgentTexture as Texture;
+      if (!disposedTextures.has(texture)) {
+        texture.dispose();
+        disposedTextures.add(texture);
+      }
+    }
+    const map = "map" in material && material.map instanceof Texture ? material.map : null;
+    if (map && !disposedTextures.has(map)) {
+      map.dispose();
+      disposedTextures.add(map);
+    }
+    material.dispose();
+    disposedMaterials.add(material);
+  };
+  // An overridden slot keeps its immutable source material detached from mesh.material.
+  // Include it in whole-entity teardown, while the Sets protect shared source maps/materials.
+  sourceAgentWorldModelMaterials(root).forEach(disposeMaterial);
   root.traverse((child) => {
     const particles = findParticleSystem(child);
     if (particles) {
@@ -3912,20 +3991,6 @@ function disposeObjectTree(root: Object3D): void {
     if (!(child instanceof Mesh) && !(child instanceof Line)) return;
     child.geometry?.dispose();
     const materials = Array.isArray(child.material) ? child.material : [child.material];
-    materials.forEach((material) => {
-      if (material.userData.graphysxAgentTexture instanceof Texture) {
-        const texture = material.userData.graphysxAgentTexture as Texture;
-        if (!disposedTextures.has(texture)) {
-          texture.dispose();
-          disposedTextures.add(texture);
-        }
-      }
-      const map = "map" in material && material.map instanceof Texture ? material.map : null;
-      if (map && !disposedTextures.has(map)) {
-        map.dispose();
-        disposedTextures.add(map);
-      }
-      material.dispose();
-    });
+    materials.forEach(disposeMaterial);
   });
 }

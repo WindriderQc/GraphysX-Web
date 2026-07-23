@@ -150,7 +150,13 @@ export function startStaticServer({ root, resolveRoot, port = 4188, host = "127.
         server,
         port: bound,
         url: `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${bound}/`,
-        close: () => new Promise((done) => server.close(() => done())),
+        close: () => new Promise((done) => {
+          // Stop accepting first, then retire sockets left behind by a crashed/timed-out
+          // Chromium child. `server.close()` alone can wait forever on a half-open request
+          // because requestTimeout is intentionally disabled for large local assets.
+          server.close(() => done());
+          server.closeAllConnections?.();
+        }),
       });
     });
   });

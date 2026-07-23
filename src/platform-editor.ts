@@ -11,10 +11,13 @@ import type {
   AgentWorldLighting,
   AgentWorldPost,
   AgentWorldMaterial,
+  AgentWorldModelMaterialOverride,
+  AgentWorldModelMaterialSlot,
   AgentWorldColliderKind,
   AgentWorldPhysicsMode,
   GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
+import { modelMaterialPresetsFor } from "./agent-world-model-materials";
 import type { AgentLevelState, GraphysXAgentLevelApi } from "./agent-level-library";
 import type { AgentMediaFileEntry, AgentMediaListing, AgentWorldMediaDescriptor } from "./agent-world-media";
 import type { MapEditorTile } from "./race-scene";
@@ -229,6 +232,8 @@ export class PlatformEditor {
    * rather than inventing a value it cannot read.
    */
   private readonly physicsExtras = new Map<string, { friction?: number; restitution?: number }>();
+  /** Slot cards keep their disclosure state across event-driven inspector rebuilds. */
+  private readonly expandedMaterialSlots = new Set<string>();
 
   // ---- levels workbench state (all of it view state; tiles live only in `api.levels`) ----
   private levelsOpen = false;
@@ -794,11 +799,7 @@ export class PlatformEditor {
 
   private materialSection(entity: AgentWorldEntityState): HTMLElement {
     if (entity.type === "model") {
-      const note = document.createElement("div");
-      note.className = "gx-ed-hint";
-      note.dataset.gxModelMaterials = "source";
-      note.textContent = "Source materials · preserved per mesh and material slot. Add slot-aware overrides in a future material pass.";
-      return this.section("Material", [note]);
+      return this.modelMaterialSection(entity);
     }
     const patch = (values: Partial<AgentWorldMaterial>): void => this.patchEntity(entity.id, { material: values });
     const colour = this.colourInput(entity.material.color, (value) => patch({ color: value }));
@@ -822,6 +823,139 @@ export class PlatformEditor {
       this.field("Opacity", opacity),
       this.field("Texture", texture),
     ]);
+  }
+
+  private modelMaterialSection(entity: AgentWorldEntityState): HTMLElement {
+    const slots = entity.materialSlots ?? [];
+    const assetStatus = entity.asset?.status ?? "loading";
+    if (assetStatus !== "ready" || slots.length === 0) {
+      const note = document.createElement("div");
+      note.className = "gx-ed-hint";
+      note.dataset.gxModelMaterials = assetStatus;
+      note.textContent = assetStatus === "error"
+        ? `Material slots unavailable · ${entity.asset?.error ?? "model load failed"}`
+        : "Discovering source material slots…";
+      return this.section("Materials", [note]);
+    }
+
+    const overridden = slots.filter((slot) => slot.overridden).length;
+    const head = document.createElement("div");
+    head.className = "gx-ed-material-head";
+    const status = document.createElement("span");
+    status.className = "gx-ed-hint";
+    status.textContent = `${slots.length} slot${slots.length === 1 ? "" : "s"} · ${overridden ? `${overridden} overridden` : "source"}`;
+    const resetAll = this.chip("Reset all", () => {
+      this.patchEntity(entity.id, { modelMaterialOverrides: null }, "force");
+    }, `Reset all material slots on ${entity.label} to source`);
+    resetAll.disabled = overridden === 0;
+    resetAll.dataset.gxMaterialResetAll = "";
+    head.append(status, resetAll);
+
+    const cards = slots.map((slot, index) => this.modelMaterialSlotCard(entity, slot, index));
+    return this.section("Materials", [head, ...cards]);
+  }
+
+  private modelMaterialSlotCard(
+    entity: AgentWorldEntityState,
+    slot: AgentWorldModelMaterialSlot,
+    index: number,
+  ): HTMLElement {
+    const card = document.createElement("details");
+    card.className = "gx-ed-material-slot";
+    card.dataset.gxMaterialSlot = slot.id;
+    card.open = this.expandedMaterialSlots.has(slot.id) || slot.overridden || index === 0;
+    card.addEventListener("toggle", () => {
+      if (card.open) this.expandedMaterialSlots.add(slot.id);
+      else this.expandedMaterialSlots.delete(slot.id);
+    });
+
+    const summary = document.createElement("summary");
+    const name = document.createElement("span");
+    name.className = "gx-ed-material-name";
+    name.textContent = slot.label;
+    const badge = document.createElement("span");
+    badge.className = `gx-ed-material-status${slot.overridden ? " gx-ed-material-status--on" : ""}`;
+    badge.textContent = slot.overridden ? "Overridden" : "Source";
+    summary.append(name, badge);
+
+    const body = document.createElement("div");
+    body.className = "gx-ed-material-slot-body";
+    const meta = document.createElement("div");
+    meta.className = "gx-ed-material-meta";
+    meta.textContent = `${slot.materialType} · ${slot.hasSourceMap ? "source map" : "no source map"} · mesh ${slot.meshIndex} / material ${slot.materialIndex}`;
+    meta.title = `${slot.materialName}\n${slot.id}`;
+    const identity = document.createElement("code");
+    identity.className = "gx-ed-material-id";
+    identity.textContent = slot.id;
+    identity.title = "Stable material slot identity";
+    body.append(meta, identity);
+
+    if (slot.relatedSlotIds.length > 0) {
+      const relation = document.createElement("div");
+      relation.className = "gx-ed-hint";
+      relation.textContent = `Repeated source across ${slot.relatedSlotIds.length + 1} assignments · this edit stays local.`;
+      body.append(relation);
+    }
+
+    const patch = (values: AgentWorldModelMaterialOverride, rebuild: "skip" | "force" = "skip"): void => {
+      this.patchEntity(entity.id, { modelMaterialOverrides: { [slot.id]: values } }, rebuild);
+    };
+    const color = this.colourInput(slot.color, (value) => patch({ color: value }));
+    color.setAttribute("aria-label", `${slot.label} base color`);
+    body.append(this.field("Colour", color));
+    if (slot.roughness !== undefined) body.append(this.modelMaterialSlider(slot, "Roughness", slot.roughness, (value) => patch({ roughness: value })));
+    if (slot.metalness !== undefined) body.append(this.modelMaterialSlider(slot, "Metalness", slot.metalness, (value) => patch({ metalness: value })));
+    if (slot.clearcoat !== undefined) body.append(this.modelMaterialSlider(slot, "Clearcoat", slot.clearcoat, (value) => patch({ clearcoat: value })));
+    if (slot.clearcoatRoughness !== undefined) {
+      body.append(this.modelMaterialSlider(slot, "Coat rough.", slot.clearcoatRoughness, (value) => patch({ clearcoatRoughness: value })));
+    }
+    body.append(this.modelMaterialSlider(slot, "Opacity", slot.opacity, (value) => patch({ opacity: value })));
+    if (slot.emissive !== undefined) {
+      const emissive = this.colourInput(slot.emissive, (value) => patch({ emissive: value }));
+      emissive.setAttribute("aria-label", `${slot.label} emissive color`);
+      body.append(this.field("Emissive", emissive));
+    }
+    if (slot.emissiveIntensity !== undefined) {
+      body.append(this.modelMaterialSlider(slot, "Emission", slot.emissiveIntensity, (value) => patch({ emissiveIntensity: value }), 0, 4));
+    }
+
+    const presets = modelMaterialPresetsFor(entity.asset?.id ?? null, slot.role);
+    if (presets.length > 0) {
+      const presetRow = document.createElement("div");
+      presetRow.className = "gx-ed-material-presets";
+      for (const preset of presets) {
+        const button = this.chip(preset.label, () => patch(preset.values, "force"), preset.description);
+        button.setAttribute("aria-label", `Apply ${preset.label} preset to ${slot.label}`);
+        button.dataset.gxMaterialPreset = preset.id;
+        presetRow.append(button);
+      }
+      body.append(presetRow);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "gx-ed-material-actions";
+    const reset = this.chip("Reset slot", () => {
+      this.patchEntity(entity.id, { modelMaterialOverrides: { [slot.id]: null } }, "force");
+    }, `Restore ${slot.label} to its recovered source appearance`);
+    reset.disabled = !slot.overridden;
+    reset.dataset.gxMaterialReset = slot.id;
+    actions.append(reset);
+    body.append(actions);
+    card.append(summary, body);
+    return card;
+  }
+
+  private modelMaterialSlider(
+    slot: AgentWorldModelMaterialSlot,
+    label: string,
+    value: number,
+    onChange: (value: number) => void,
+    minimum = 0,
+    maximum = 1,
+  ): HTMLElement {
+    const control = this.sliderInput(value, minimum, maximum, 0.01, onChange);
+    control.querySelector("input")?.setAttribute("aria-label", `${slot.label} ${label.toLowerCase()}`);
+    return this.field(label, control);
   }
 
   private physicsSection(entity: AgentWorldEntityState): HTMLElement {
@@ -3388,6 +3522,23 @@ const EDITOR_CSS = `
 .gx-ed-slider{display:flex;align-items:center;gap:var(--gx-s2)}
 .gx-ed-value{flex:none;font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gx-muted);min-width:34px;text-align:right}
 .gx-ed-inline{display:flex;align-items:center;gap:var(--gx-s2);justify-content:flex-end}
+.gx-ed-material-head{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.gx-ed-material-head>.gx-ed-hint{min-width:0}
+.gx-ed-material-slot{border:1px solid var(--gx-border-soft);border-radius:6px;background:rgba(10,28,36,.55);min-width:0;max-width:100%;overflow:hidden}
+.gx-ed-material-slot>summary{list-style:none;display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px}
+.gx-ed-material-slot>summary::-webkit-details-marker{display:none}
+.gx-ed-material-slot>summary::before{content:"▸";flex:none;color:var(--gx-muted);font-size:9px}
+.gx-ed-material-slot[open]>summary::before{content:"▾"}
+.gx-ed-material-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 10.5px/1.25 var(--gx-font);color:#d7eef5}
+.gx-ed-material-status{flex:none;font:600 8px/1 var(--gx-font);letter-spacing:.05em;text-transform:uppercase;color:var(--gx-muted);border:1px solid var(--gx-border);border-radius:99px;padding:3px 5px}
+.gx-ed-material-status--on{color:var(--gx-accent);border-color:var(--gx-accent-deep);background:var(--gx-accent-soft)}
+.gx-ed-material-slot-body{display:flex;flex-direction:column;gap:5px;padding:0 6px 7px;min-width:0}
+.gx-ed-material-meta{font:9.5px/1.35 var(--gx-font);color:#7196a1;overflow-wrap:anywhere}
+.gx-ed-material-id{display:block;max-width:100%;font:8.5px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:#557986;white-space:normal;overflow-wrap:anywhere}
+.gx-ed-material-presets{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+.gx-ed-material-presets>.gx-ed-chip{flex:1 1 92px;min-width:0;white-space:normal}
+.gx-ed-material-actions{display:flex;justify-content:flex-end;min-width:0}
+.gx-ed-chip:disabled{opacity:.4;cursor:not-allowed}
 .gx-ed-attached{display:flex;align-items:center;gap:var(--gx-s2);background:var(--gx-field);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:3px 4px 3px 8px;font-size:11px}
 .gx-ed-attached>span{flex:1 1 auto}
 .gx-ed-x{flex:none;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--gx-muted);cursor:pointer;font:14px/1 var(--gx-font);padding:1px 6px}
