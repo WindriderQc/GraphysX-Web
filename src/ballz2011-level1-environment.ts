@@ -350,9 +350,3 @@ export class Ballz2011Level1Environment {
     this.ownedLights.length = 0;
   }
 }
-
-export function createBallz2011Level1Environment(
-  options: Ballz2011Level1EnvironmentOptions = {}
-): Ballz2011Level1Environment {
-  return new Ballz2011Level1Environment(options);
-}

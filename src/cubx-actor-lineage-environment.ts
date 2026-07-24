@@ -192,21 +192,6 @@ export const CUBX_ACTOR_LINEAGE_FIDELITY = Object.freeze({
   coordinateBoundary: INSPECTION_GEOMETRY.coordinateBoundary
 });
 
-export const CUBX_ACTOR_CLICK_FLOW = Object.freeze(LINEAGE.clickFlow.map((flow) => Object.freeze({ ...flow })));
-
-export const CUBX_ACTOR_LINEAGE_CLIPS = Object.freeze({
-  get: Object.freeze(Array.from({ length: 7 }, (_, index) => {
-    const asset = ASSETS.get(`get-${index + 2}`)!;
-    return Object.freeze({ pairIndex: index + 1, assetId: asset.id, filename: asset.filename, ...asset.timing });
-  })),
-  rot: Object.freeze(Array.from({ length: 7 }, (_, index) => {
-    const asset = ASSETS.get(`rot-${index + 1}`)!;
-    return Object.freeze({ pairIndex: index + 1, assetId: asset.id, filename: asset.filename, ...asset.timing });
-  })),
-  openFull: Object.freeze({ assetId: "open-full", filename: ASSETS.get("open-full")!.filename, ...ASSETS.get("open-full")!.timing }),
-  openSolo: Object.freeze({ assetId: "open-solo", filename: ASSETS.get("open-solo")!.filename, ...ASSETS.get("open-solo")!.timing })
-});
-
 export type CubxActorLineageState = {
   schema: "graphysx.cubx-actor-lineage-inspector/v1";
   isolatedFromCubz: true;

@@ -1150,11 +1150,6 @@ export function composeArchivePlayground(api: GraphysXAgentWorldApi, id: Archive
   api.create(buildArchivePlayground(id));
 }
 
-/** Descriptor list for a shelf row, without pulling in the full provenance blocks. */
-export function listArchivePlaygrounds(): readonly { id: ArchivePlaygroundId; label: string; summary: string }[] {
-  return ARCHIVE_PLAYGROUNDS.map(({ id, label, summary }) => ({ id, label, summary }));
-}
-
 /**
  * Browse-shelf rows for both playgrounds, in the exact shape `ComposedSceneEntry` wants.
  *

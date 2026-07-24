@@ -57,9 +57,6 @@ const OPEN_TRACKS = parseCubXTracks(cubxAnimationData.animations.open.tracks);
 export const CUBX_OPEN_SOURCE_RANGE = [0, 100] as const;
 export const CUBX_OPEN_TRACK_NAMES = OPEN_TRACKS.map((track) => track.node);
 export const CUBX_OPEN_CUBE_TRACK_NAMES = Array.from({ length: 8 }, (_, index) => `Bo_te${String(index + 1).padStart(2, "0")}`);
-export const CUBX_OPEN_MISSING_CUBE_TRACK_NAMES = CUBX_OPEN_CUBE_TRACK_NAMES.filter(
-  (name) => !CUBX_OPEN_TRACK_NAMES.includes(name)
-);
 
 function sampleVector3(keys: PositionKey[] | ScaleKey[], time: number): [number, number, number] {
   if (keys.length === 0) return [0, 0, 0];
@@ -112,5 +109,3 @@ export function sampleCubXOpen(progress: number): CubXOpenSample {
 
   return { sourceTime, nodes };
 }
-
-export const CUBX_OPEN_BIND_SAMPLE = sampleCubXOpen(0);
