@@ -1602,3 +1602,38 @@ lit-ness rather than guessing a class that belongs to the PBR-finish pass's own 
   before assertions on localhost page/store reachability. Each passed immediately against a stable
   isolated server. With no worktree-owned process left behind, the complete gate was rerun from a
   clean build and passed **32/32** with no timeout changes or weakened assertions.
+
+## 2026-07-24 — `quarantine-r1`: the crowd conversion gets a browsable home
+
+The `crowd.conversion` mechanic (`4af96fa`, "contact conversion") existed only in tests —
+`setRole` had a caller, but nothing a visitor could open. "The Quarantine" (`b554d1b`) is that home: a Browse
+starter beside Living Systems. A 90-member ground crowd on the `pursuit` preset (which carries
+the recovered 0.85-contact / 3s-grace infection verbatim), three seed pursuers, a containment
+beacon at the crowd's focus point. Open it in the editor and the population flips as you watch.
+The recovered zombie-hunt as ordinary scene data: no player, no scripting, no invented win
+condition — which is exactly the entity/rules split the crowd graduation chose.
+
+**A behavioural probe caught three defects `tsc` could not**, and this is the entry's real
+lesson: a starter that typechecks is not a starter that composes.
+
+- The beacon carried a `pulse` behaviour on `static` physics; the runtime rejects transform
+  behaviours on non-kinematic bodies. Dropped the collider — a crowd is steered, nothing
+  collides with it, so the body was never needed.
+- The `pulse` shape written first (`property`/`amplitude`) does not exist; the real one is
+  scale-based (`minimumScale`/`maximumScale`). Guessing a vocabulary shape from memory instead
+  of reading the type is how it slipped in.
+- The descriptor claimed 6 entities; `starterLights` returns 2, so it is 4.
+
+Verified through the real runtime, not asserted: `loadStarter` composes 4 entities, the infection
+spreads 3→11 pursuers over 12 simulated seconds, each conversion fires a `crowd.converted` stream
+event, zero errors, screenshotted twice. The shelf-thumbnail settle time is bumped to 7s because
+the 3s conversion grace means a shorter shot catches an all-pale crowd and misses the whole
+subject — commented at the capture site.
+
+**The concurrency guard proved itself, twice, unprompted.** The `quarantine` gate hit another
+session's running verify and was cleanly *refused* by the now-machine-global lock (`f6dccdb`);
+`npm run verify -- --wait` queued it and it took the lock automatically the moment the other
+finished. The exact scenario that produced five-of-six unreadable runs on 2026-07-21 was a
+non-event. Its two reds (`triggers`, `media`) were the documented `net::ERR_*` / `fetch failed`
+transport flake under the loaded box — both confirmed passing in isolation, neither touching a
+Browse starter, per the check now written into `CLAUDE.md`.
