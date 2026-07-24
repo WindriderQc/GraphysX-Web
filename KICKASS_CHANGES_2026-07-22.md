@@ -379,3 +379,22 @@ start and once during an Editor sky request; each affected smoke then passed aga
 - Final local release gate: **32/32 passed**. Games, Milky Way, Maison, and Rapier Race each
   recovered a localhost-only reset/timeout through the existing isolated fresh-server retry;
   every product assertion passed and no browser console/page error survived.
+
+## Wave 14 — BallZ authored look pass
+
+- Closed §14.5's old “no shader pass” gap by composing capabilities that now exist as scene
+  vocabulary. Materialized grid levels author `environment.post.bloom` plus Golden Meadow HDRI
+  lighting while retaining Lost Valley as the visible cube backdrop; there is no bespoke BallZ
+  renderer, document shape, or bridge method.
+- The look is intentionally selective: a high bloom threshold and restrained strength/radius
+  lift existing emissive gameplay landmarks without softening the checker scale cue, recovered
+  marble walls, terrain, or HUD. The warm reflection source matches the low authored key light
+  and remains independent from the recovered sky.
+- `smoke-ballz` now waits for the real HDR decode/PMREM path and asserts exact authored, exported,
+  loaded, and live compositor values; separate backdrop/reflection textures; the cached HDRI
+  target; ice surface roughness/opacity/physics semantics; full play/win/replay behavior; and
+  empty console/page error lists.
+- Final local release gate: **32/32 passed**. The first complete attempt lost BallZ, Overlay,
+  Media, and Level1 2011 solely to localhost/server-start transport failures before their
+  assertions; all four passed immediately in isolation, and a clean second complete gate passed
+  every check without retrying or weakening a timeout.

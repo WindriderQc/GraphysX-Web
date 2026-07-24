@@ -45,12 +45,12 @@ try {
     const api = window.__GRAPHYSX__;
 
     // A small level this test fully controls, rather than the fallback starter. 7x7, walled
-    // border, start bottom-centre, one ring mid-board, finish at the top.
+    // border, start bottom-centre, one ring mid-board, one ice patch, finish at the top.
     const imported = api.levels.importAscii({
       id: "smoke-ballz",
       label: "Smoke BallZ",
       cellSize: 2.6,
-      rows: ["#######", "#..F..#", "#.....#", "#..o..#", "#.....#", "#..S..#", "#######"],
+      rows: ["#######", "#..F..#", "#.~...#", "#..o..#", "#.....#", "#..S..#", "#######"],
     });
     if (!imported.ok) return { importError: imported.error };
 
@@ -60,6 +60,7 @@ try {
     const ids = api.query({ tag: "ballz" }).map((entity) => entity.id);
     const ball = api.query({ ids: ["ballz-ball"] })[0];
     const finish = api.query({ ids: ["ballz-finish-gate"] })[0];
+    const ice = api.query({ tag: "ice" })[0];
 
     return {
       materialised: ids.length,
@@ -70,6 +71,49 @@ try {
       wallCount: ids.filter((id) => id.startsWith("ballz-wall-")).length,
       ringCount: ids.filter((id) => id.startsWith("ballz-ring-")).length,
       hasStartPad: ids.includes("ballz-start-pad"),
+      ice: ice ? {
+        id: ice.id,
+        roughness: ice.material.roughness,
+        opacity: ice.material.opacity,
+        physicsMaterial: ice.physics?.material,
+      } : null,
+    };
+  });
+
+  // --- Is the visual pass scene data, and did the host actually render it? --------------
+  // This used to be the explicit §14.5 gap: no post-processing field existed, and the level
+  // relied on its visible sky for both backdrop and reflections. Wait for the real HDR decode
+  // and PMREM conversion, then prove bloom + image lighting are authored, renderer-bound, and
+  // independent from the Lost Valley cube background.
+  await page.waitForFunction(() => {
+    const host = window.__GRAPHYSX_HOST__;
+    const look = window.__GRAPHYSX__.state().environment;
+    return look.lighting?.source === "hdri"
+      && look.lighting.hdri === "lilienstein"
+      && !!host.composer
+      && !!host.bloomPass
+      && host.scene.environment !== host.roomEnvironmentTarget.texture;
+  }, null, { timeout: SMOKE_TIMEOUT });
+  out.look = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const host = window.__GRAPHYSX_HOST__;
+    const environment = api.state().environment;
+    const exported = api.export().environment;
+    return {
+      sky: environment.sky,
+      lighting: environment.lighting,
+      post: environment.post,
+      exportedLighting: exported.lighting,
+      exportedPost: exported.post,
+      composer: !!host.composer,
+      bloom: host.bloomPass ? {
+        strength: host.bloomPass.strength,
+        threshold: host.bloomPass.threshold,
+        radius: host.bloomPass.radius,
+      } : null,
+      cubeBackground: host.scene.background?.isCubeTexture === true,
+      separateReflectionSource: host.scene.environment !== host.scene.background,
+      hdriCached: host.hdriCache?.has("/assets/hdri/lilienstein_1k.hdr") === true,
     };
   });
 
@@ -152,11 +196,14 @@ try {
     if (!loaded.ok) return { loadError: loaded.error };
     const after = api.query({ tag: "ballz" }).length;
     const finish = api.query({ ids: ["ballz-finish-gate"] })[0];
+    const environment = api.state().environment;
     return {
       before,
       after,
       survived: before === after && before > 0,
       stillTrigger: finish?.physics?.mode === "trigger",
+      lighting: environment.lighting,
+      post: environment.post,
     };
   });
 
@@ -325,6 +372,26 @@ const ok =
   out.play?.hasStartPad === true &&
   out.play?.wallCount === 24 &&
   out.play?.ringCount === 1 &&
+  out.play?.ice?.roughness === 0.06 &&
+  out.play?.ice?.opacity === 0.82 &&
+  out.play?.ice?.physicsMaterial === "finish" &&
+  out.look?.sky === "lostvalley" &&
+  out.look?.lighting?.source === "hdri" &&
+  out.look?.lighting?.hdri === "lilienstein" &&
+  out.look?.lighting?.intensity === 0.92 &&
+  out.look?.lighting?.yawDegrees === 24 &&
+  out.look?.post?.bloom?.strength === 0.38 &&
+  out.look?.post?.bloom?.threshold === 0.72 &&
+  out.look?.post?.bloom?.radius === 0.24 &&
+  JSON.stringify(out.look?.exportedLighting) === JSON.stringify(out.look?.lighting) &&
+  JSON.stringify(out.look?.exportedPost) === JSON.stringify(out.look?.post) &&
+  out.look?.composer === true &&
+  out.look?.bloom?.strength === 0.38 &&
+  out.look?.bloom?.threshold === 0.72 &&
+  out.look?.bloom?.radius === 0.24 &&
+  out.look?.cubeBackground === true &&
+  out.look?.separateReflectionSource === true &&
+  out.look?.hdriCached === true &&
   out.rest?.supported === true &&
   out.wall?.stoppedByWall === true &&
   out.finish?.firedOnce === true &&
@@ -333,6 +400,9 @@ const ok =
   out.ring?.collected === true &&
   out.roundTrip?.survived === true &&
   out.roundTrip?.stillTrigger === true &&
+  out.roundTrip?.lighting?.source === "hdri" &&
+  out.roundTrip?.lighting?.hdri === "lilienstein" &&
+  out.roundTrip?.post?.bloom?.strength === 0.38 &&
   out.control?.movedNorth === true &&
   out.hudVisible?.present === true &&
   out.hudVisible?.sized === true &&

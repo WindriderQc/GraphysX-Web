@@ -1584,3 +1584,21 @@ lit-ness rather than guessing a class that belongs to the PBR-finish pass's own 
 - Full `npm run verify`: **32/32 passed**. Games, Milky Way, Maison, and Rapier Race each used one
   isolated fresh-server retry after a localhost transport reset/timeout; all final attempts and
   every product assertion were green.
+
+## 2026-07-24 — Wave 14: the BallZ look becomes scene data
+
+- Rechecked the remaining handoff against HEAD before coding. Audio was already complete in
+  `audio-r1/r2`; GitHub had no open issues or PRs; production still served the Wave 13 merge.
+  The first real unfinished enrichment was §14.5's BallZ shader/look pass.
+- The old deferral was correct when written but obsolete now that authored bloom and curated HDRI
+  lighting exist. Materialized grid levels opt into Golden Meadow reflections and restrained
+  bloom while the Lost Valley cube stays the visible backdrop. No schema, API, bridge, or
+  BallZ-private renderer was added.
+- Focused built-output smoke is green: real HDR decode + PMREM, exact composer values, independent
+  cube backdrop, export/load survival, ice surface semantics, controls, collision, rings, finish,
+  HUD, win/replay, and no console/page errors. The web-game client also exercised the production
+  game route and emitted synchronized `render_game_to_text` state without errors.
+- Full release gate attempt one passed 28/32; BallZ, Overlay, Media, and Level1 2011 failed only
+  before assertions on localhost page/store reachability. Each passed immediately against a stable
+  isolated server. With no worktree-owned process left behind, the complete gate was rerun from a
+  clean build and passed **32/32** with no timeout changes or weakened assertions.

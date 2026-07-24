@@ -53,18 +53,15 @@ import type { AgentLevelState } from "./agent-level-library";
  *   this genre.
  * - **Emitters**, on landmarks only — see `EMITTER_BUDGET` below.
  *
- * ## On the shader pass §14 also asks for
+ * ## The authored look pass
  *
- * Not done, as a decision rather than an omission. There is no post-processing stage in
- * `PlatformHost` and no v2 field that could describe one, so a bloom/vignette pass would mean
- * either bespoke host rendering (which the invariant forbids — the beauty has to be scene
- * data, or we have decorated a port) or threading a whole new `environment.postProcessing`
- * concept through the runtime, both API implementations and the editor. That is a feature,
- * not a finish pass, and it would land on a scene already running at single-digit fps under
- * the harness's software GL, where a full-screen composite is the most expensive thing
- * available. The one real shader this scene does run is the emitters': the particle system is
- * a `ShaderMaterial` with per-particle colour/size ramps, so the glow at the gates is GPU
- * shader work reached through ordinary scene vocabulary. That is the honest extent of it.
+ * The original deferral was correct: at the time, `PlatformHost` had no post-processing or
+ * image-lighting vocabulary, so adding a private shader here would have made this one scene
+ * prettier by breaking the product invariant. Those capabilities have since graduated as
+ * `environment.post.bloom` and `environment.lighting`. The level now opts into both through
+ * ordinary scene data: a restrained bloom catches only the already-emissive landmarks, and a
+ * warm HDRI lights reflective surfaces while the recovered Lost Valley cube remains the visible
+ * backdrop. Export, editor, agent, and renderer therefore all see the same look.
  */
 
 /** Grid coordinates map (x, row) → world (x, z); the level is centred on the origin. */
@@ -113,10 +110,9 @@ const PALETTE = {
   ball: { color: "#f4fbff", roughness: 0.3, metalness: 0.06 },
   // Tuned across four screenshots, and the lesson was about intensity rather than hue. A
   // saturated body with a matching emissive read as cyan plastic; a near-white body at
-  // intensity 2.6 overcorrected into blank white posts, because with no bloom pass an
-  // emissive that strong simply clips under ACES and takes the hue with it. Lightening the
-  // body while pulling the intensity *down* to sub-1 is what actually works: the emissive
-  // lifts the material out of shadow without saturating it, so the colour survives.
+  // intensity 2.6 overcorrected into blank white posts under ACES. Lightening the body while
+  // pulling the intensity *down* to sub-1 preserves the hue and leaves headroom for the scene's
+  // restrained bloom pass to add a halo rather than a clipped white core.
   pylon: { color: "#7fdcee", emissive: "#1fbcd8", emissiveIntensity: 0.85, roughness: 0.22, metalness: 0.35 },
 } as const;
 
@@ -618,6 +614,28 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
       // gives the strongest ground-to-sky contrast. It is an ordinary per-scene field, so a
       // level can be re-skied from the inspector or by `api.update` without touching this.
       sky: "lostvalley",
+      // The visible cube and reflection lighting are deliberately independent. Golden Meadow
+      // matches the authored late-afternoon key without replacing Lost Valley as the level's
+      // backdrop; the stable registry id is the only asset reference that enters the document.
+      lighting: {
+        source: "hdri",
+        hdri: "lilienstein",
+        intensity: 0.92,
+        yawDegrees: 24,
+        backgroundIntensity: 0.9,
+        backgroundBlur: 0.08,
+      },
+      // Selective bloom is already impossible with UnrealBloomPass, so the threshold does the
+      // product work: ordinary checker, marble, terrain, and HUD stay crisp while rings, gates,
+      // fire, and the start marker cross it. The values are below the editor's Cinematic preset
+      // on strength/radius and above it on threshold—legibility, not a neon wash.
+      post: {
+        bloom: {
+          strength: 0.38,
+          threshold: 0.72,
+          radius: 0.24,
+        },
+      },
       // The level brings its own floor slab, so the runtime's flat grid would z-fight it.
       ground: { visible: false, size: 60, color: "#123039", grid: false, gridColor: "#2a7d8f" },
       // Warm key + cool fill, angled so walls cast readable shadows down the grid rather

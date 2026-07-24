@@ -159,9 +159,12 @@ here blocks a release; pick by value rather than by order.
 3. ~~**Crowds** — welded inside `race-scene.ts`~~ — **Done**, `crowd-r1`; see the note below.
 4. ~~Prefabs are in the API but absent from the editor UI~~ — done: the library's Prefabs
    tab (the default tab) spawns through the same `spawnPrefab` an agent calls.
-5. Audio (19 sounds upstream, 4 vendored); ~~CubX recovered geometry (still 8 plain
-   boxes)~~ — done, `cubx-r1` graduated the recovered assembly into a prefab;
-   the §14.5 BallZ shader pass; high-res skies; p5-to-texture and multi-layer overlay stacks
+5. ~~Audio~~ — done in `audio-r1/r2`: the four samples with surviving callsites are vendored,
+   placed sources and interaction one-shots are scene vocabulary, and the other upstream files
+   were not promoted without scope/provenance. ~~CubX recovered geometry (still 8 plain boxes)~~
+   — done, `cubx-r1` graduated the recovered assembly into a prefab. ~~The §14.5 BallZ shader
+   pass~~ — done in Wave 14 through authored HDRI + bloom scene data, not a private renderer.
+   Remaining optional enrichments: high-res skies; p5-to-texture and multi-layer overlay stacks
    (both named as deferred in `overlay-r1`, both optional in §4).
 
 ## Known defects — recorded, not hidden
