@@ -10,7 +10,7 @@ import {
   type AgentWorldPrefabOptions
 } from "./agent-world-prefabs";
 
-export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook" | "living-systems" | "archive-great-slide";
+export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook" | "living-systems" | "quarantine" | "archive-great-slide";
 
 export type AgentWorldStarterDescriptor = {
   id: AgentWorldStarterId;
@@ -39,6 +39,13 @@ export const GRAPHYSX_AGENT_WORLD_STARTERS: readonly AgentWorldStarterDescriptor
     summary: "The graduated vocabulary in one scene: terrain and a reflecting lake under a sky, a starling flock, a whirlpool force field, particle braziers, and a 2D overlay.",
     prefabCount: 0,
     entityCount: 9
+  },
+  {
+    id: "quarantine",
+    label: "The Quarantine",
+    summary: "A ground crowd with contact conversion on: a few pursuers seek the nearest wanderer, and every wanderer they reach turns pursuer, so the population flips as you watch. The recovered zombie-hunt mechanic as ordinary scene data — no player, no scripting.",
+    prefabCount: 0,
+    entityCount: 4
   },
   {
     id: "prefab-plaza",
@@ -98,6 +105,7 @@ export function instantiateAgentWorldStarter(
 function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition, "environment" | "entities" | "rules"> {
   if (starterId === "archive-great-slide") return archiveGreatSlide();
   if (starterId === "living-systems") return livingSystems();
+  if (starterId === "quarantine") return quarantine();
   if (starterId === "physics-sketchbook") return physicsSketchbook();
   if (starterId === "prefab-plaza") {
     return {
@@ -369,6 +377,54 @@ function livingSystems(): Pick<AgentWorldDefinition, "environment" | "entities">
         physics: { mode: "kinematic" },
         behaviors: [{ type: "spin", axis: "y", speedDegrees: 32 }, { type: "bob", amplitude: 0.5, frequencyHz: 0.28 }],
         castShadow: true, tags: ["focus", "living"],
+      },
+    ],
+  };
+}
+
+function quarantine(): Pick<AgentWorldDefinition, "environment" | "entities"> {
+  return {
+    environment: {
+      background: "#0a0f14",
+      sky: "clearnight",
+      // A soft frame so the eye stays on the crowd rather than the horizon.
+      overlay: "vignette",
+      ground: { visible: true, size: 60, color: "#141d24", grid: true, gridColor: "#2c4a3a" },
+      // Bloom picks out the pursuer green as it spreads — the emissive is what glows.
+      post: { bloom: { strength: 0.4, threshold: 0.62, radius: 0.4 } },
+    },
+    entities: [
+      ...starterLights("quarantine", "#8fb0c4", "#e8d9b0", [-18, 24, -14]),
+      {
+        // The whole show: a ground crowd with contact conversion on. The "pursuit" preset
+        // ships the recovered infection verbatim (0.85 contact, 3s grace); everything else
+        // here is staging. `pursuers: 3` seeds the outbreak, `count: 90` gives it room to
+        // spread, and a wide plot keeps the early game readable before the crowd flips.
+        id: "quarantine-crowd", label: "The Population", type: "crowd",
+        transform: { position: [0, 0, 0] },
+        crowd: {
+          preset: "pursuit",
+          count: 90,
+          pursuers: 3,
+          size: [22, 22],
+          wanderColor: "#cdd6de",
+          pursuerColor: "#4ce07a",
+          emissiveIntensity: 0.55,
+          seed: 42,
+        },
+        tags: ["life", "crowd", "quarantine"],
+      },
+      {
+        // A containment marker at the centre — the pursuers' focus fallback once no wanderer
+        // is left, so the last of the flipped crowd converges here rather than scattering.
+        id: "quarantine-core", label: "Containment Beacon", type: "cylinder",
+        transform: { position: [0, 1.1, 0], scale: [0.6, 1, 0.6] },
+        geometry: { radius: 1, height: 2.2, radialSegments: 24 },
+        material: { color: "#ff6a3d", emissive: "#c0331a", emissiveIntensity: 1.1, roughness: 0.4, metalness: 0.2 },
+        // No collider: a crowd is steered, not simulated, so nothing would collide with it, and
+        // a static body cannot carry the pulse (transform behaviours need kinematic-or-none).
+        behaviors: [{ type: "pulse", minimumScale: 0.94, maximumScale: 1.08, frequencyHz: 0.5 }],
+        castShadow: true, tags: ["focus", "quarantine"],
       },
     ],
   };

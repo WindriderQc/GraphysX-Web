@@ -14,6 +14,7 @@ const BROWSE_IDS = [
   "archive-forces-garden",
   "archive-garage",
   "living-systems",
+  "quarantine",
   "prefab-plaza",
   "glow-garden",
   "signal-outpost",
@@ -50,7 +51,13 @@ async function capture(id, shelf, selector) {
   // Genuine clickability is the games/browse smokes' assertion, not this snapshot harness's.
   await page.$eval(selector, (element) => element.click());
   await page.waitForFunction(() => window.__GRAPHYSX__.query({}).length > 0, null, { timeout: 60_000 });
-  await page.waitForTimeout(id === "archive-world1" || id === "archive-map1" || id === "archive-level1-2011" || id === "archive-garage" ? 4_500 : 2_500);
+  // The Quarantine's whole subject is the infection spreading, and it does not begin until
+  // the crowd's 3s conversion grace elapses — a 2.5s shot would be an all-pale crowd. Give it
+  // long enough that several pursuers have converted and the green is visible.
+  const settleMs = id === "quarantine" ? 7_000
+    : id === "archive-world1" || id === "archive-map1" || id === "archive-level1-2011" || id === "archive-garage" ? 4_500
+    : 2_500;
+  await page.waitForTimeout(settleMs);
   // The editor is deliberately mounted over the same renderer after Browse opens a scene.
   // Capture the scene, not its authoring chrome: the renderer canvas is the one direct app
   // child we keep. This also strips the play HUD and win panel for course previews.
