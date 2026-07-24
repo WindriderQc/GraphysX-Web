@@ -525,10 +525,17 @@ Foundation before flourish. Each phase is shippable and course-correctable.
    measures and expires; there is no best-time persistence, which needs a store-side concept that
    does not exist. The five archive ports are unblocked, not done.
 
-   **Not yet, and not hidden:** no shader pass. Camera framing after materialising is the host
-   default rather than fitted to the level — play a 44×30 level and the floor slab fills the
-   viewport. Ice tiles model low friction but not the tile's attraction. This is a level that
-   runs, not yet a game that ships.
+   **Update (Wave 14): the shader/look gap is closed through portable scene vocabulary.**
+   Materialized grids author Golden Meadow HDRI reflections while keeping Lost Valley as the
+   visible cube backdrop, plus restrained `environment.post.bloom` tuned to lift emissive rings,
+   gates, fire, start markers, and pylons without washing the checker, marble, terrain, or HUD.
+   The focused smoke proves exact state/export/load values, the live PMREM target, compositor
+   settings, backdrop/reflection independence, ice material semantics, gameplay, and zero browser
+   errors. No private BallZ renderer or shader path was introduced.
+
+   Camera framing after materialising is now fitted to the level. Ice tiles still model low
+   friction but not the archive tile's attraction; that gameplay semantic remains absent rather
+   than being implied by the visual finish.
 
    **Update (`envelope-r1`):** the scene envelope the mesh ports were waiting on, plus the two
    shared-file defects the vehicle garage worked around. `environment.envelope` — `{ fogNear,
