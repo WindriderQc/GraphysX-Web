@@ -92,11 +92,13 @@ export type BallzLevelComposition = {
 const PALETTE = {
   // Tints, not colours: both of these multiply a texture, so they are lighter than the
   // surface they are meant to produce.
-  floor: { color: "#f0dcaa", roughness: 0.62, metalness: 0.04 },
-  // Near-neutral, because `marble09.jpg` is already a warm tan scan. Tinting it warm as well
-  // (the first two attempts) compounded into terracotta and the arena read as rusty rather
-  // than quarried.
-  wall: { color: "#ddd8cc", roughness: 0.42, metalness: 0.08 },
+  // Multiplies the warm BallZ18 wood scan; kept near-white so the grain stays legible and the
+  // planks read as honey wood rather than muddy brown.
+  floor: { color: "#e9dcc0", roughness: 0.66, metalness: 0.03 },
+  // Near-neutral, because `marble09.jpg` is already a warm tan scan. Now that the floor is warm
+  // wood rather than a competing checker, the marble walls read as the quarried stone the arena
+  // is cut from — the classic marble-wall / wood-floor pairing — instead of "damier marble".
+  wall: { color: "#d6cdbb", roughness: 0.5, metalness: 0.06 },
   // Emissive intensities are deliberately high on everything that is *information* — a ring
   // you must collect, a gate you must reach. Under a raking sun the arena has real shadow in
   // it now, and a landmark that only reflects light disappears into the dark half of the
@@ -217,14 +219,12 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
     geometry: { width: extentX, height: playSurfaceThickness, depth: extentZ },
     material: {
       ...PALETTE.floor,
-      // Exactly one checker square per grid cell. `Damier.jpg` is not a 1x1 checker — it is a
-      // 20x20 board in a single image, so the repeat that aligns the pattern to the level is
-      // `cells / 20`, not `cells`. Getting that wrong (repeat = width/2, the obvious guess)
-      // put ten squares in every cell and the floor came out as grey noise; screenshot-checked
-      // both ways. Aligned, the pattern *is* the level's coordinate system, so a player reads
-      // distance and speed off the floor instead of guessing at a flat colour — which is the
-      // whole reason a rolling-ball game has a checkered floor in the first place.
-      texture: { id: "checker" as const, repeat: [width / 20, height / 20] as [number, number] },
+      // The genuine BallZ18 wood floor (`WoodFloor05_col.jpg`, the archive's own surface), not
+      // the harsh black/white `Damier.jpg` checker it used to carry. The checkerboard read as a
+      // chessboard test-fixture and fought the marble walls for attention ("damier marble"); warm
+      // plank wood grounds the arena as a place. The grid/scale cue now comes from the cell seams,
+      // the wall frame and the raking shadows rather than a blown-out checker.
+      texture: { id: "wood-floor" as const, repeat: [Math.max(3, width / 7), Math.max(3, height / 7)] as [number, number] },
     },
     physics: { mode: "static", material: "ground" },
     castShadow: false,
@@ -636,6 +636,11 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
           radius: 0.24,
         },
       },
+      // The host's default fog (near 38 / far 138, tuned to the ~36-unit showroom) pulls the
+      // green sky-horizon haze right across the arena — a 20-cell level spans ~52 units, so its
+      // far half dissolves into murk. Push the fog out so the whole play surface reads crisp and
+      // only the distant backdrop keeps the atmosphere. cameraFar stays clear of fogFar.
+      envelope: { fogNear: 64, fogFar: 210, cameraFar: 260 },
       // The level brings its own floor slab, so the runtime's flat grid would z-fight it.
       ground: { visible: false, size: 60, color: "#123039", grid: false, gridColor: "#2a7d8f" },
       // Warm key + cool fill, angled so walls cast readable shadows down the grid rather

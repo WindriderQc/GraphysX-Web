@@ -107,17 +107,59 @@ export function mountBallzPlay(
 
   // Arrow keys only, on purpose: the editor already binds W/E/R to gizmo modes and Delete to
   // remove, so WASD would fight it the moment someone plays a level with the editor open.
+  //
+  // Steering is HELD-key continuous, not one impulse per OS key-repeat. A press fires one
+  // immediate push (responsive, and synchronous for a step-driven agent/test); while the key is
+  // held a steer loop keeps pushing. The speed limit is applied PER DIRECTION, not as a global
+  // gate: a push is suppressed only when the ball is already fast *along that push's own axis*.
+  // A global "if speed >= cap, stop pushing" gate (the obvious version) silently kills braking
+  // and turning at speed — the ball hits the cap and then ignores the brake and the steer, which
+  // reads as the ball "fighting" the controls. Capping per-axis means the opposing key always
+  // brakes and the perpendicular key always turns; only the already-maxed direction stops adding.
   const pushBy = new Map<string, string>(PUSH_DIRECTIONS.map((direction) => [direction.key, direction.id]));
+  const dirById = new Map<string, readonly [number, number, number]>(
+    PUSH_DIRECTIONS.map((direction) => [direction.id, direction.vector]),
+  );
+  const held = new Set<string>();
+  const STEER_HZ = 30;
+  const SPEED_CAP = 6.5; // m/s along a single axis; the opposing key still brakes past this.
+  const isField = (target: HTMLElement | null): boolean =>
+    !!target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
+  const pushIfUnderCap = (interactionId: string, velocity: readonly number[] | undefined): void => {
+    const dir = dirById.get(interactionId);
+    // Velocity component along this push's direction. Braking (opposite) is negative and always
+    // allowed; a perpendicular turn is ~0 and always allowed; only an already-fast same-axis
+    // push is suppressed.
+    const along = dir && velocity ? velocity[0] * dir[0] + velocity[2] * dir[2] : 0;
+    if (along < SPEED_CAP) api.interact(ballId, interactionId);
+  };
   const onKeyDown = (event: KeyboardEvent): void => {
-    const target = event.target as HTMLElement | null;
-    // Never steal a keystroke from a field — the level workbench is full of them.
-    if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+    if (isField(event.target as HTMLElement | null)) return;
     const interactionId = pushBy.get(event.key);
     if (!interactionId) return;
     event.preventDefault();
-    api.interact(ballId, interactionId);
+    // Fire once on the initial press (not on OS auto-repeat); the held loop keeps accelerating.
+    if (!held.has(event.key)) {
+      held.add(event.key);
+      const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
+      pushIfUnderCap(interactionId, velocity);
+    }
   };
+  const onKeyUp = (event: KeyboardEvent): void => {
+    if (pushBy.has(event.key)) held.delete(event.key);
+  };
+  const onBlur = (): void => held.clear(); // a defocused tab must not leave a key stuck.
+  const steer = window.setInterval(() => {
+    if (won || held.size === 0) return;
+    const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
+    for (const key of held) {
+      const interactionId = pushBy.get(key);
+      if (interactionId) pushIfUnderCap(interactionId, velocity);
+    }
+  }, 1000 / STEER_HZ);
   window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", onBlur);
 
   // Poll the *run*, not the stream. 200 ms is a HUD refresh rate, and the run it reads is
   // advanced inside the simulation tick — so unlike the old cursor-into-`events()` version,
@@ -149,7 +191,10 @@ export function mountBallzPlay(
 
   return () => {
     window.clearInterval(poll);
+    window.clearInterval(steer);
     window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keyup", onKeyUp);
+    window.removeEventListener("blur", onBlur);
     hud.remove();
     container.querySelector(".gx-bz-win")?.remove();
   };
