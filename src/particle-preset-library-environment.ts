@@ -843,7 +843,3 @@ export class ParticlePresetLibraryEnvironment {
     runtime.geometry.attributes.aSize.needsUpdate = true;
   }
 }
-
-export function createParticlePresetLibraryEnvironment(options: ParticlePresetLibraryOptions = {}): ParticlePresetLibraryEnvironment {
-  return new ParticlePresetLibraryEnvironment(options);
-}

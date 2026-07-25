@@ -65,16 +65,6 @@ export interface RapierRaceVehicleDefinition {
   wheels: readonly RapierRaceWheelDefinition[];
 }
 
-export interface RapierWheelSample {
-  hardPoint: RaceVector3 | null;
-  contactPoint: RaceVector3 | null;
-  contactNormal: RaceVector3 | null;
-  suspensionLength: number | null;
-  steering: number | null;
-  rotation: number | null;
-  inContact: boolean;
-}
-
 /**
  * Cast a finite segment and return the nearest accepted hit.
  *
@@ -188,22 +178,6 @@ export function createRapierRaceVehicleController(
   return controller;
 }
 
-/** Read the controller state needed to place a visual wheel; no wheel rigid-body is created. */
-export function readRapierWheelSample(
-  controller: RAPIER_TYPES.DynamicRayCastVehicleController,
-  wheelIndex: number
-): RapierWheelSample {
-  return {
-    hardPoint: copyVector(controller.wheelHardPoint(wheelIndex)),
-    contactPoint: copyVector(controller.wheelContactPoint(wheelIndex)),
-    contactNormal: copyVector(controller.wheelContactNormal(wheelIndex)),
-    suspensionLength: controller.wheelSuspensionLength(wheelIndex),
-    steering: controller.wheelSteering(wheelIndex),
-    rotation: controller.wheelRotation(wheelIndex),
-    inContact: controller.wheelIsInContact(wheelIndex)
-  };
-}
-
 /** Exact-distance chain replacement: coincident local anchors preserve the authored link spacing. */
 export function createRapierSphericalJointData(
   anchorOnFirst: RaceVector3,
@@ -219,8 +193,4 @@ export function createRapierRevoluteJointData(
   axis: RaceVector3
 ): RAPIER_TYPES.JointData {
   return RAPIER.JointData.revolute(anchorOnFirst, anchorOnSecond, axis);
-}
-
-function copyVector(value: RAPIER_TYPES.Vector | null): RaceVector3 | null {
-  return value ? { x: value.x, y: value.y, z: value.z } : null;
 }

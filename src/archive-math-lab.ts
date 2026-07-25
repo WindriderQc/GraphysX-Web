@@ -223,10 +223,6 @@ export function composeArchiveMathLab(api: GraphysXAgentWorldApi): void {
   api.create(buildArchiveMathLab());
 }
 
-export function listArchiveMathScenes(): readonly ArchiveMathScene[] {
-  return ARCHIVE_MATH_SCENES;
-}
-
 /** Browse Scenes rows, matching the shape `archive-playgrounds.ts` and `archive-milkyway.ts` use. */
 export function archiveMathBrowseRows(
   api: GraphysXAgentWorldApi,

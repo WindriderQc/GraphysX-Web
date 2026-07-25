@@ -746,11 +746,6 @@ export function composeArchiveBuilding(
   api.create(buildArchiveBuilding(id));
 }
 
-/** Descriptor list for a shelf row, without pulling in the full provenance blocks. */
-export function listArchiveBuildings(): readonly { id: ArchiveBuildingId; label: string; summary: string }[] {
-  return ARCHIVE_BUILDINGS.map(({ id, label, summary }) => ({ id, label, summary }));
-}
-
 /**
  * Browse-shelf rows, in the exact shape `ComposedSceneEntry` wants.
  *

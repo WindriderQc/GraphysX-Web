@@ -636,7 +636,3 @@ export class ParticleEffectEnvironment {
     return position;
   }
 }
-
-export function createParticleEffectEnvironment(options: ParticleEffectEnvironmentOptions = {}): ParticleEffectEnvironment {
-  return new ParticleEffectEnvironment(options);
-}

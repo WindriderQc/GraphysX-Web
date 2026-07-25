@@ -827,11 +827,6 @@ export function composeArchiveMilkyWay(
   api.create(buildArchiveMilkyWay(id));
 }
 
-/** Descriptor list for a shelf row, without pulling in the full provenance blocks. */
-export function listArchiveMilkyWayScenes(): readonly { id: ArchiveMilkyWayId; label: string; summary: string }[] {
-  return ARCHIVE_MILKYWAY_SCENES.map(({ id, label, summary }) => ({ id, label, summary }));
-}
-
 /**
  * Browse-shelf rows, in the exact shape `ComposedSceneEntry` wants.
  *

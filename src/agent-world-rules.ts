@@ -173,10 +173,6 @@ export type AgentWorldRulesSnapshot = {
   entities: { id: string; visible: boolean; tags: readonly string[] }[];
 };
 
-export function isRulesDefinition(value: unknown): value is AgentWorldRulesDefinition {
-  return Boolean(value) && (value as AgentWorldRulesDefinition).schema === GRAPHYSX_AGENT_RULES_SCHEMA;
-}
-
 /**
  * Validate on the way in, so a malformed block fails at `create`/`set` with a sentence rather
  * than producing a run that quietly never completes. Every reference must resolve to an

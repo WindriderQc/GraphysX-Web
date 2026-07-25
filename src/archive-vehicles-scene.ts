@@ -5,7 +5,7 @@ import {
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
 import type { PlatformHost } from "./platform-host";
-import { ARCHIVE_VEHICLE_MESHES, archiveVehicleMesh } from "./archive-vehicles-manifest";
+import { archiveVehicleMesh } from "./archive-vehicles-manifest";
 
 /**
  * The Archive Garage — the recovered GraphysX vehicles, presented on the platform.
@@ -374,20 +374,6 @@ export function composeArchiveVehicles(api: GraphysXAgentWorldApi): void {
     entities: [...lights, ...room, ...plinths, ...vehicles, ...track],
   });
 }
-
-/**
- * Ids of every entity this scene creates that carries a recovered mesh. Exported so a smoke
- * test (or the lead's wiring) can assert the models actually resolved rather than silently
- * failing to load — a `model` entity whose fetch 404s is an empty Group that looks fine in
- * the outliner and renders nothing.
- */
-export const ARCHIVE_GARAGE_MODEL_IDS: readonly string[] = [
-  ...CARS.map((car) => car.entityId),
-  "garage-piste-ovale",
-];
-
-/** The provenance rows behind this scene, for a UI or a report that wants to show lineage. */
-export const ARCHIVE_GARAGE_PROVENANCE = ARCHIVE_VEHICLE_MESHES;
 
 /**
  * Aim the host camera at the garage.

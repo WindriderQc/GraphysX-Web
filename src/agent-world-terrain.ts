@@ -184,12 +184,6 @@ export function isAgentWorldHeightmap(value: unknown): value is AgentWorldHeight
   return GRAPHYSX_AGENT_WORLD_HEIGHTMAPS.some((map) => map.id === value);
 }
 
-export function findAgentWorldHeightmap(id: AgentWorldHeightmapId): AgentWorldHeightmapDescriptor {
-  const descriptor = GRAPHYSX_AGENT_WORLD_HEIGHTMAPS.find((map) => map.id === id);
-  if (!descriptor) throw new Error(`Unknown GraphysX heightmap: ${String(id)}`);
-  return descriptor;
-}
-
 /** Validate + clamp a terrain field into the fully-specified form the runtime and export use. */
 export function resolveAgentWorldTerrain(
   source?: AgentWorldTerrain,

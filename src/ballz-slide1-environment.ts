@@ -463,7 +463,3 @@ export class BallzSlide1Environment {
     this.ownedLights.length = 0;
   }
 }
-
-export function createBallzSlide1Environment(options: BallzSlide1EnvironmentOptions = {}): BallzSlide1Environment {
-  return new BallzSlide1Environment(options);
-}

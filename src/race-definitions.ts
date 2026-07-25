@@ -967,15 +967,3 @@ export const RACE_DEFINITIONS: RaceDefinition[] = [
     rings: []
   }
 ];
-
-export const REVIVAL_BACKLOG = [
-  "Scene builder: ASCII maps, XML scene files, trigger zones, and object-library import.",
-  "BallZ modifiers: shell grip, inner-ball weight, air control, friction, bounce, and chaos upgrades.",
-  "Physics lab: Newton-style joints, hinges, sliders, push plates, chains, elevators, pistons, and dry rolling friction.",
-  "Particle lab: ring bursts, flames, smoke, billboards, texture cycles, explosion presets, and emitter editor.",
-  "Shader lab: per-pixel lighting, bump mapping, projection, haze, water refraction/reflection, and post effects.",
-  "Sky and atmosphere: day/night skyboxes, LostValley, clear night, sun pass, galaxy objects, and heightmap terrain.",
-  "3D toys: CubX actor, airplane spline follow, billboards, dynamic mesh tests, alphabet TVM meshes, and rotator assets.",
-  "Game shells: main menu, race select, after-race, high scores, math-game screen, editor screen, and arcade HUD.",
-  "Media recovery: convert TVM/X/3DS/OBJ assets to GLB, normalize textures, and tag source inspiration per scene."
-];
