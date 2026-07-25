@@ -8,3 +8,4 @@ output/
 .env
 .env.*
 !.env.example
+_to_delete/

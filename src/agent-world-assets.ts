@@ -4,23 +4,16 @@ import {
   Color,
   DoubleSide,
   Float32BufferAttribute,
+  FrontSide,
   Group,
   Mesh,
-  MeshPhysicalMaterial,
-  MeshPhongMaterial,
   MeshStandardMaterial,
   RepeatWrapping,
   SRGBColorSpace,
   Texture,
   TextureLoader
 } from "three";
-import {
-  inferModelMaterialRole,
-  modelMaterialSlotId,
-  modelMaterialSlotLabel,
-  registerAgentWorldModelMaterialSlots,
-  type AgentWorldModelMaterialRegistration,
-} from "./agent-world-model-materials";
+import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 export type AgentWorldModelFormat = "graphysx-mesh-json";
 
@@ -114,63 +107,12 @@ type AssetPayload = {
   meshes: PayloadMesh[];
 };
 
-type RecoveredPbrProfile = {
-  shading: "standard" | "physical";
-  roughness: number;
-  metalness: number;
-  clearcoat?: number;
-  clearcoatRoughness?: number;
-};
-
-/**
- * Focused presentation profiles for the recovered meshes visitors meet first. These do not
- * rewrite archive payloads or pretend inferred surfaces were recovered; they adapt the old
- * Phong power into intentional PBR finishes while preserving every source colour, texture,
- * group, and geometry byte. Unlisted assets retain their exact legacy Phong path.
- */
-function recoveredPbrProfile(assetId: string | null, materialName: string): RecoveredPbrProfile | null {
-  if (assetId === "archive-impreza") {
-    if (/CHASIS\.JPG/i.test(materialName)) return { shading: "physical", roughness: 0.28, metalness: 0.12, clearcoat: 0.85, clearcoatRoughness: 0.18 };
-    if (/VENTANAS/i.test(materialName)) return { shading: "physical", roughness: 0.16, metalness: 0.04, clearcoat: 0.72, clearcoatRoughness: 0.12 };
-    if (/UNDERCARRIAGE|CHASIS_A/i.test(materialName)) return { shading: "standard", roughness: 0.78, metalness: 0.02 };
-    return { shading: "standard", roughness: 0.72, metalness: 0.04 };
-  }
-  if (assetId === "archive-cobra") {
-    return /tire/i.test(materialName)
-      ? { shading: "standard", roughness: 0.9, metalness: 0 }
-      : { shading: "physical", roughness: 0.22, metalness: 0.16, clearcoat: 1, clearcoatRoughness: 0.12 };
-  }
-  if (assetId === "archive-piste-ovale") return { shading: "standard", roughness: 0.8, metalness: 0.02 };
-  if (assetId === "archive-slide-large") return { shading: "physical", roughness: 0.36, metalness: 0.08, clearcoat: 0.35, clearcoatRoughness: 0.3 };
-  if (assetId === "archive-map1") return { shading: "standard", roughness: 0.82, metalness: 0 };
-  // Dry canyon rock at 1:1 scale: fully rough so the kilometre-long faces read by form and
-  // fog rather than by specular sheen the archive never recorded.
-  if (assetId === "archive-level1-2011") return { shading: "standard", roughness: 0.85, metalness: 0 };
-  return null;
-}
-
-export type AgentWorldModelCollisionMesh = {
-  /** Flat xyz triples after the asset's fit/recentre/handedness transform. */
-  vertices: number[];
-  /** Triangle indices into `vertices`. Meshes in one payload are merged with offsets. */
-  indices: number[];
-  vertexCount: number;
-  triangleCount: number;
-};
-
 export type ResolvedAgentWorldModelAsset = Required<
   Pick<AgentWorldModelAsset, "format" | "fitSize" | "alphaTest" | "colorKeyTolerance">
 > & {
   id: string | null;
   url: string;
   colorKey: string | null;
-};
-
-export type AgentWorldModelCollisionRequest = {
-  maxVertices: number;
-  maxTriangles: number;
-  /** Runs as soon as geometry JSON is validated, before presentation textures are fetched. */
-  onReady(mesh: AgentWorldModelCollisionMesh): void;
 };
 
 /**
@@ -236,13 +178,7 @@ export function resolveAgentWorldModelAsset(source?: AgentWorldModelAsset): Reso
   const url = source.url?.trim() || catalogAsset?.url || "";
   if (!url) throw new Error("A model entity requires a loadable asset URL");
   const fitSize = source.fitSize ?? 4;
-  // 10000, not the original 1000: the cap predates any asset that large, and it was the
-  // third hidden pin on mega-worlds after the fixed far plane (fixed by
-  // `environment.envelope`, ceiling 100000) and mesh collision (fixed by scene-native
-  // trimesh colliders). Level1 2011 ships its recovered mesh at a native 1135.4 — the first
-  // asset to hit this line — and shrinking the largest recovered world to fit a stale
-  // validator would invert what those two capabilities were built for.
-  if (!Number.isFinite(fitSize) || fitSize <= 0 || fitSize > 10000) throw new Error("asset.fitSize must be between 0 and 10000");
+  if (!Number.isFinite(fitSize) || fitSize <= 0 || fitSize > 1000) throw new Error("asset.fitSize must be between 0 and 1000");
   const alphaTest = source.alphaTest ?? 0;
   if (!Number.isFinite(alphaTest) || alphaTest < 0 || alphaTest > 1) throw new Error("asset.alphaTest must be between 0 and 1");
   const colorKey = source.colorKey?.trim() || null;
@@ -254,28 +190,18 @@ export function resolveAgentWorldModelAsset(source?: AgentWorldModelAsset): Reso
   return { id, url, format, fitSize, alphaTest, colorKey, colorKeyTolerance };
 }
 
-export async function loadAgentWorldModel(
-  target: Group,
-  asset: ResolvedAgentWorldModelAsset,
-  collision?: AgentWorldModelCollisionRequest,
-): Promise<void> {
+export async function loadAgentWorldModel(target: Group, asset: ResolvedAgentWorldModelAsset): Promise<void> {
   const response = await fetch(asset.url);
   if (!response.ok) throw new Error(`Model request failed (${response.status}): ${asset.url}`);
   const payload = await response.json() as AssetPayload;
-  validatePayload(payload, collision);
-  const fit = modelFit(payload.bounds, asset.fitSize);
-  if (target.userData.graphysxDisposed) return;
-  // Physics must not wait on presentation assets. A missing/slow texture can make the model
-  // ugly, but it must never leave an already-validated static collision surface absent while
-  // the rest of the world is stepping.
-  if (collision) collision.onReady(collisionMeshFromPayload(payload, fit.scale, fit.offset, fit.mirrorZ));
+  validatePayload(payload);
 
   const textureLoader = new TextureLoader();
   const textureUrls = [...new Set(payload.meshes.flatMap((mesh) => (mesh.materials ?? [])
     .map((material) => material.textureUrl)
     .filter((url): url is string => Boolean(url))))];
   const textures = new Map<string, Texture>();
-  const textureResults = await Promise.allSettled(textureUrls.map(async (url) => {
+  await Promise.all(textureUrls.map(async (url) => {
     const texture = asset.colorKey
       ? await loadColorKeyedTexture(url, asset.colorKey, asset.colorKeyTolerance)
       : await textureLoader.loadAsync(url);
@@ -284,13 +210,6 @@ export async function loadAgentWorldModel(
     texture.wrapT = RepeatWrapping;
     textures.set(url, texture);
   }));
-  const textureFailure = textureResults.find((result) => result.status === "rejected");
-  if (textureFailure?.status === "rejected") {
-    // Promise.all used to reject on the first bad URL and leak every texture that had already
-    // resolved (plus later successes). allSettled gives this load sole ownership to clean up.
-    textures.forEach((texture) => texture.dispose());
-    throw textureFailure.reason;
-  }
   if (target.userData.graphysxDisposed) {
     textures.forEach((texture) => texture.dispose());
     return;
@@ -298,179 +217,101 @@ export async function loadAgentWorldModel(
 
   const sourceRoot = new Group();
   sourceRoot.name = `${asset.id ?? asset.url} source model`;
-  const materialSlots: AgentWorldModelMaterialRegistration[] = [];
-  for (const [meshIndex, sourceMesh] of payload.meshes.entries()) {
+  for (const sourceMesh of payload.meshes) {
     const geometry = new BufferGeometry();
     geometry.name = sourceMesh.name ?? "GraphysX recovered mesh";
     geometry.setAttribute("position", new Float32BufferAttribute(sourceMesh.positions, 3));
     if (sourceMesh.uvs?.length) geometry.setAttribute("uv", new Float32BufferAttribute(sourceMesh.uvs, 2));
     geometry.setIndex(sourceMesh.indices);
     for (const group of sourceMesh.groups ?? []) geometry.addGroup(group.start, group.count, group.materialIndex);
-    geometry.computeVertexNormals();
-    geometry.computeBoundingBox();
-    geometry.computeBoundingSphere();
+    // Recovered .3ds meshes carry no smoothing groups, so a flat vertex-normal average
+    // melted hard body panels into one soft blob. Creased normals keep the mesh sharp where
+    // adjacent faces meet at more than the threshold (car doors, wheel arches) while still
+    // smoothing curved surfaces.
+    const shaded = smoothGeometry(geometry, 50);
+    shaded.computeBoundingBox();
+    shaded.computeBoundingSphere();
     const materials = (sourceMesh.materials?.length ? sourceMesh.materials : [{}]).map((sourceMaterial) => {
       const textureUrl = sourceMaterial.textureUrl ?? null;
-      const name = sourceMaterial.name ?? "GraphysX recovered material";
-      const common = {
-        name,
+      const name = (sourceMaterial.name ?? "").toLowerCase();
+      // Glass slots (recovered as an opaque window photo pasted on the body) read as solid
+      // plastic. Detect them by material/texture name and let light through.
+      const isGlass = /glass|window|windshield|windscreen|screen|vitre/.test(name)
+        || /window|glass/i.test(textureUrl ?? "");
+      // .3ds gives Phong specularPower; map it to a PBR roughness so the paint catches the
+      // scene's RoomEnvironment IBL like every other (MeshStandard) surface in the platform.
+      // Before this, models were MeshPhong and received *no* environment light at all, so
+      // cars read dark, flat and plastic against a PBR room. High shininess -> smoother.
+      const shininess = Math.max(0, Math.min(100, sourceMaterial.specularPower ?? 18));
+      const specular = tupleColor(sourceMaterial.specular, 0x111111);
+      const specularLuma = (specular.r + specular.g + specular.b) / 3;
+      const material = new MeshStandardMaterial({
+        name: sourceMaterial.name ?? "GraphysX recovered material",
         color: textureUrl ? 0xffffff : tupleColor(sourceMaterial.color, 0xb8c1c9),
         emissive: tupleColor(sourceMaterial.emissive, 0x000000),
-        side: DoubleSide,
+        roughness: isGlass ? 0.08 : Math.max(0.16, Math.min(0.92, 1 - shininess / 120)),
+        // Painted bodywork is a dielectric; only a genuinely bright specular slot reads as
+        // metal (chrome/trim). Keeps the paint from going mirror-black under IBL.
+        metalness: isGlass ? 0.0 : (specularLuma > 0.35 ? 0.6 : 0.05),
         map: textureUrl ? textures.get(textureUrl) ?? null : null,
-        // `transparent` stays false on purpose: an alpha-tested cutout is opaque as far as
-        // sorting and depth are concerned, which is what keeps overlapping leaf quads from
-        // flickering against each other.
-        alphaTest: asset.alphaTest,
-      };
-      const profile = recoveredPbrProfile(asset.id, name);
-      const material = profile?.shading === "physical"
-        ? new MeshPhysicalMaterial({
-            ...common,
-            roughness: profile.roughness,
-            metalness: profile.metalness,
-            clearcoat: profile.clearcoat ?? 0,
-            clearcoatRoughness: profile.clearcoatRoughness ?? 0,
-          })
-        : profile?.shading === "standard"
-          ? new MeshStandardMaterial({ ...common, roughness: profile.roughness, metalness: profile.metalness })
-          : new MeshPhongMaterial({
-              ...common,
-              specular: tupleColor(sourceMaterial.specular, 0x111111),
-              shininess: Math.max(0, Math.min(100, sourceMaterial.specularPower ?? 18)),
-            });
-      if (profile) {
-        material.userData.graphysxRecoveredPbr = true;
-        material.userData.graphysxRecoveredProfile = { assetId: asset.id, ...profile };
-      }
+        // Interiors show through DoubleSide on thin coincident glass; glass renders front-only
+        // to avoid z-fighting against the body panel behind it. Solid bodywork keeps DoubleSide
+        // because the recovered -Z mirror flips winding.
+        side: isGlass ? FrontSide : DoubleSide,
+        transparent: isGlass,
+        opacity: isGlass ? 0.34 : 1,
+        depthWrite: !isGlass,
+        alphaTest: asset.alphaTest
+      });
       return material;
     });
-    const mesh = new Mesh(geometry, materials.length === 1 ? materials[0] : materials);
+    const mesh = new Mesh(shaded, materials.length === 1 ? materials[0] : materials);
     mesh.name = sourceMesh.name ?? "GraphysX model mesh";
-    // A model's payload owns its source materials. Entity-level generic material updates are
-    // intentionally locked out; slot overrides below are the only path that may replace one.
-    mesh.userData.graphysxMaterialLocked = true;
-    materials.forEach((material, materialIndex) => {
-      const sourceMaterial = sourceMesh.materials?.[materialIndex] ?? {};
-      const materialName = sourceMaterial.name ?? material.name ?? "GraphysX recovered material";
-      const meshName = sourceMesh.name ?? `mesh-${meshIndex}`;
-      const role = inferModelMaterialRole(asset.id, meshName, materialName);
-      materialSlots.push({
-        id: modelMaterialSlotId(meshName, meshIndex, materialName, materialIndex),
-        label: modelMaterialSlotLabel(role, meshName, materialName),
-        role,
-        mesh,
-        meshName,
-        meshIndex,
-        materialName,
-        materialIndex,
-        sourceMaterial: material,
-        sourceMapName: sourceMaterial.textureUrl ?? null,
-      });
-    });
     sourceRoot.add(mesh);
   }
 
-  if (payload.bounds) {
-    sourceRoot.scale.set(fit.scale, fit.scale, -fit.scale);
+  const bounds = payload.bounds;
+  if (bounds) {
+    const center = bounds.min.map((value, axis) => (value + bounds.max[axis]) / 2) as Tuple3;
+    const maximumSpan = Math.max(...bounds.size, 0.0001);
+    const scale = asset.fitSize / maximumSpan;
+    sourceRoot.scale.set(scale, scale, -scale);
     // Three composes an object's matrix T·R·S — position is applied after, and is NOT
     // scaled. Setting position = -center alongside a scale therefore recentred by the
     // UNSCALED offset, so any model whose fitSize differed from its native span landed
     // off its anchor (and the Z flip mirrored that error's sign). The offset has to go
     // through the same factors the vertices do: world = S·v + p, and p = -S·center puts
     // the bounds centre exactly on the group origin at every fitSize.
-    sourceRoot.position.set(...fit.offset);
+    sourceRoot.position.set(-center[0] * scale, -center[1] * scale, center[2] * scale);
   }
   target.add(sourceRoot);
-  registerAgentWorldModelMaterialSlots(target, materialSlots);
 }
 
-/** Fetch only validated collision geometry for an already-rendered `auto` model promoted later. */
-export async function loadAgentWorldCollisionMesh(
-  asset: ResolvedAgentWorldModelAsset,
-  limits: Pick<AgentWorldModelCollisionRequest, "maxVertices" | "maxTriangles">,
-): Promise<AgentWorldModelCollisionMesh> {
-  const response = await fetch(asset.url);
-  if (!response.ok) throw new Error(`Model request failed (${response.status}): ${asset.url}`);
-  const payload = await response.json() as AssetPayload;
-  validatePayload(payload, limits);
-  const fit = modelFit(payload.bounds, asset.fitSize);
-  return collisionMeshFromPayload(payload, fit.scale, fit.offset, fit.mirrorZ);
+/**
+ * Recovered .3ds geometry has no smoothing groups. A plain `computeVertexNormals` averages
+ * across every shared vertex, melting hard car panels into a blob; flat shading facets curved
+ * surfaces. `toCreasedNormals` returns a non-indexed geometry whose vertices are smoothed only
+ * where adjacent faces meet under the threshold, preserving real creases. On any failure we
+ * fall back to averaged normals on the original geometry.
+ */
+function smoothGeometry(geometry: BufferGeometry, creaseAngleDegrees: number): BufferGeometry {
+  try {
+    const creased = toCreasedNormals(geometry, (creaseAngleDegrees * Math.PI) / 180);
+    if (creased.getAttribute("normal")) return creased;
+  } catch {
+    // fall through
+  }
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
-function validatePayload(payload: AssetPayload, collision?: Pick<AgentWorldModelCollisionRequest, "maxVertices" | "maxTriangles">): void {
+function validatePayload(payload: AssetPayload): void {
   if (!payload || !Array.isArray(payload.meshes) || payload.meshes.length === 0) throw new Error("Model payload contains no meshes");
   if (payload.meshes.length > 256) throw new Error("Model payload exceeds the 256-mesh limit");
-  let totalVertices = 0;
-  let totalTriangles = 0;
   for (const mesh of payload.meshes) {
     if (!Array.isArray(mesh.positions) || mesh.positions.length < 9 || mesh.positions.length % 3 !== 0) throw new Error("Model mesh has invalid positions");
     if (!Array.isArray(mesh.indices) || mesh.indices.length < 3 || mesh.indices.length % 3 !== 0) throw new Error("Model mesh has invalid indices");
-    const vertexCount = mesh.positions.length / 3;
-    for (let index = 0; index < mesh.positions.length; index += 1) {
-      if (!Number.isFinite(mesh.positions[index])) throw new Error(`Model mesh position ${index} is not finite`);
-    }
-    for (let index = 0; index < mesh.indices.length; index += 1) {
-      const value = mesh.indices[index];
-      if (!Number.isInteger(value) || value < 0 || value >= vertexCount) {
-        throw new Error(`Model mesh index ${index} (${String(value)}) is outside 0..${vertexCount - 1}`);
-      }
-    }
-    totalVertices += vertexCount;
-    totalTriangles += mesh.indices.length / 3;
-    if (collision && (totalVertices > collision.maxVertices || totalTriangles > collision.maxTriangles)) {
-      throw new Error(
-        `Model colliders support at most ${collision.maxVertices} vertices and ${collision.maxTriangles} triangles; ` +
-        `this asset has at least ${totalVertices} vertices and ${totalTriangles} triangles`,
-      );
-    }
   }
-}
-
-function modelFit(bounds: AssetPayload["bounds"], fitSize: number): { scale: number; offset: Tuple3; mirrorZ: boolean } {
-  if (!bounds) return { scale: 1, offset: [0, 0, 0], mirrorZ: false };
-  const center = bounds.min.map((value, axis) => (value + bounds.max[axis]) / 2) as Tuple3;
-  const scale = fitSize / Math.max(...bounds.size, 0.0001);
-  return {
-    scale,
-    offset: [-center[0] * scale, -center[1] * scale, center[2] * scale],
-    mirrorZ: true,
-  };
-}
-
-function collisionMeshFromPayload(
-  payload: AssetPayload,
-  scale: number,
-  offset: Tuple3,
-  mirrorZ: boolean,
-): AgentWorldModelCollisionMesh {
-  const vertices: number[] = [];
-  const indices: number[] = [];
-  let vertexOffset = 0;
-  for (const mesh of payload.meshes) {
-    for (let index = 0; index < mesh.positions.length; index += 3) {
-      vertices.push(
-        mesh.positions[index] * scale + offset[0],
-        mesh.positions[index + 1] * scale + offset[1],
-        mesh.positions[index + 2] * (mirrorZ ? -scale : scale) + offset[2],
-      );
-    }
-    for (let index = 0; index < mesh.indices.length; index += 3) {
-      const first = mesh.indices[index] + vertexOffset;
-      const second = mesh.indices[index + 1] + vertexOffset;
-      const third = mesh.indices[index + 2] + vertexOffset;
-      // The asset loader's Z mirror has a negative determinant. Reverse winding so the
-      // authored front face remains the collider's front face after handedness conversion.
-      indices.push(first, mirrorZ ? third : second, mirrorZ ? second : third);
-    }
-    vertexOffset += mesh.positions.length / 3;
-  }
-  return {
-    vertices,
-    indices,
-    vertexCount: vertices.length / 3,
-    triangleCount: indices.length / 3,
-  };
 }
 
 function tupleColor(value: Tuple3 | [number, number, number, number] | undefined, fallback: number): Color {

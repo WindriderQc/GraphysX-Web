@@ -5,6 +5,7 @@ import {
   CubeTexture,
   CubeTextureLoader,
   Fog,
+  Texture,
   PCFSoftShadowMap,
   PerspectiveCamera,
   PMREMGenerator,
@@ -12,12 +13,10 @@ import {
   SRGBColorSpace,
   Vector2,
   Vector3,
-  WebGLRenderTarget,
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
@@ -27,7 +26,6 @@ import {
   AgentWorldRuntime,
   GRAPHYSX_AGENT_DEMO_WORLD,
   type AgentWorldDefinition,
-  type AgentWorldLighting,
   type AgentWorldPost,
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
@@ -38,7 +36,6 @@ import { createOverlaySketch, type AgentWorldOverlayId, type OverlaySketch } fro
 import { createGraphysXAgentToolBridge, type GraphysXAgentToolBridge } from "./agent-world-bridge";
 import { orientArchiveCubeTexture } from "./archive-skybox";
 import { agentWorldSkyFaceUrls } from "./agent-world-skies";
-import { resolveAgentWorldHdri } from "./agent-world-hdris";
 import { installPlatformTheme } from "./platform-theme";
 // Type-only: the editor module (and the ~348 KB TransformControls gizmo stack it pulls in)
 // is loaded on demand, so the showroom front door never pays for chrome it keeps hidden.
@@ -73,7 +70,7 @@ export interface PlatformHostOptions {
    * Called when the visitor leaves play. A level replaces the world, so "back" cannot simply
    * mean un-hiding chrome — the page has to decide what to show instead, usually the showroom.
    */
-  onExitPlay?: () => void;
+  onExitPlay?: (restoredMode: PlatformMode) => void;
   /**
    * Initial camera framing. The default is a wide overview suited to the demo world; a
    * composed scene like the showroom wants its own, tighter framing.
@@ -107,16 +104,12 @@ export interface PlatformHostOptions {
  * emissives (rings, gates, beacons) glow, and strength 0.35 is a halo rather than a fog.
  */
 const HOST_DEMO_POST: AgentWorldPost = { bloom: { strength: 0.35, radius: 0.4, threshold: 0.85 } };
-/** Six curated skies plus two active import/working slots; older GPU resources are released. */
-const MAX_SKY_CACHE_ENTRIES = 8;
-/** HDR PMREMs are larger than cube backdrops; the curated library is intentionally tighter. */
-const MAX_HDRI_CACHE_ENTRIES = 4;
 
 /**
  * Standalone renderer/host for the `graphysx.agent-world/v2` scene model.
  *
  * The {@link AgentWorldRuntime} already owns its Three.js scene-graph (`group`),
- * its Rapier physics world, behaviors, and deterministic `update(dt)` step.
+ * its cannon-es physics world, behaviors, and deterministic `update(dt)` step.
  * This host lends it only the four things `race-scene.ts` used to: a renderer, a
  * camera, orbit controls, and ONE animation loop. It has no dependency on the
  * 388 KB race monolith — this is the clean spine the platform runs on.
@@ -138,23 +131,13 @@ export class PlatformHost {
   editor: PlatformEditor | null = null;
 
   private editorLoad: Promise<PlatformEditor | null> | null = null;
-  private readonly skyCache = new Map<string, { background: CubeTexture; environmentTarget: WebGLRenderTarget }>();
-  /** Attempt token per key: late face errors cannot clear a newer retry's in-flight guard. */
-  private readonly pendingSkyKeys = new Map<string, symbol>();
-  private readonly hdriCache = new Map<string, WebGLRenderTarget>();
-  private readonly pendingHdriKeys = new Map<string, symbol>();
-  private requestedSkyKey: string | null = null;
-  private requestedSkyHorizon: string | null = null;
-  /** Whether the current look wants a loaded sky to drive reflections as well as backdrop. */
-  private requestedSkyLighting = false;
-  /** Lighting and backdrop are independent: a late sky must never replace an active HDRI. */
-  private requestedEnvironmentKey = "studio";
-  private readonly pmremGenerator: PMREMGenerator;
-  private readonly roomEnvironmentTarget: WebGLRenderTarget;
+  private readonly skyCache = new Map<string, CubeTexture>();
+  private skyToken = 0;
+  private roomEnvironment: Texture | null = null;
   private readonly interactive: boolean;
   private readonly autoOrbit: boolean;
   private readonly onExitEditor?: () => void;
-  private readonly onExitPlay?: () => void;
+  private readonly onExitPlay?: (restoredMode: PlatformMode) => void;
   private readonly controls: OrbitControls;
   private readonly clock = new Clock();
   private readonly onResize = () => this.resize();
@@ -260,11 +243,10 @@ export class PlatformHost {
 
     // Neutral image-based lighting so PBR materials read well without any archive
     // skybox assets. The world still brings its own scene lights.
-    this.pmremGenerator = new PMREMGenerator(this.renderer);
-    const room = new RoomEnvironment();
-    this.roomEnvironmentTarget = this.pmremGenerator.fromScene(room, 0.04);
-    room.dispose();
-    this.scene.environment = this.roomEnvironmentTarget.texture;
+    const pmrem = new PMREMGenerator(this.renderer);
+    this.roomEnvironment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environment = this.roomEnvironment;
+    pmrem.dispose();
 
     this.world = new AgentWorldRuntime(options.world ?? GRAPHYSX_AGENT_DEMO_WORLD);
     this.scene.add(this.world.group);
@@ -274,9 +256,9 @@ export class PlatformHost {
     if (options.post === true) this.postOverride = HOST_DEMO_POST;
     this.applyEnvironment();
 
-    // Parity gap, closed at the source. Before this subscription, `applyEnvironment()` was
-    // reached through construction and caller-owned callbacks/manual calls. So a HUMAN picking
-    // a sky in the inspector saw it applied, while an
+    // Parity gap, closed at the source. `applyEnvironment()` was reachable from exactly three
+    // places: construction, the editor's own `onEnvironmentChanged` callback, and two manual
+    // calls in `main.ts`. So a HUMAN picking a sky in the inspector saw it applied, while an
     // AGENT doing the identical thing through `api.create` / `api.load` / `levels.play()` had
     // its environment stored in the runtime and silently never rendered — the sky was in the
     // document, the inspector agreed it was selected, and the viewport showed the old one.
@@ -429,12 +411,9 @@ export class PlatformHost {
    * resumes circling the *new* subject. That is the whole point of the feature — click a
    * thing and the showroom starts showing you that thing.
    */
-  focusOn(point: Vector3, subjectRadius = 2, duration = 1.5, maxDistance = 46): void {
+  focusOn(point: Vector3, subjectRadius = 2, duration = 1.5): void {
     const target = point.clone();
-    // Interactive showroom focus stays capped at 46 by default. Large authored courses can
-    // raise the cap explicitly so the camera does not land inside a mesh whose span is wider
-    // than the showroom itself.
-    const distance = Math.min(Math.max(46, maxDistance), Math.max(5.5, subjectRadius * 3.4 + 3));
+    const distance = Math.min(46, Math.max(5.5, subjectRadius * 3.4 + 3));
     const direction = this.camera.position.clone().sub(this.controls.target);
     if (direction.lengthSq() < 1e-6) direction.set(0, 0.45, 1);
     direction.normalize();
@@ -547,8 +526,7 @@ export class PlatformHost {
       this.camera.far = cameraFar;
       this.camera.updateProjectionMatrix();
     }
-    this.applyLighting(environment.lighting);
-    this.applySky(environment.sky, environment.lighting);
+    this.applySky(environment.sky);
     // The scene document's request wins — it is tuned for that scene. The host override only
     // fills in when the scene is silent, so `?post=bloom` demos the stack without ever
     // overriding an author's numbers.
@@ -635,38 +613,19 @@ export class PlatformHost {
    * face order with quarter-turned poles, so the recovered `archive-skybox` conversion
    * does the orienting — re-deriving that would be a genuine waste.
    *
-   * Loading and the generated image-based lighting are cached per set. A scene that switches
-   * while a load is pending records the desired cache key, so a slow response can never
-   * overwrite a newer selection and an A -> B -> A sequence still reuses the one A request.
+   * Loading is async and cached per set; a scene that switches back to no sky (or swaps
+   * mid-load) is protected by the token check, so a slow load can never overwrite a newer
+   * selection.
    */
-  private applyLighting(lighting: AgentWorldLighting | null): void {
-    const yawRadians = ((lighting?.yawDegrees ?? 0) * Math.PI) / 180;
-    this.scene.environmentIntensity = lighting?.intensity ?? 1;
-    this.scene.environmentRotation.set(0, yawRadians, 0);
-    this.scene.backgroundIntensity = lighting?.backgroundIntensity ?? 1;
-    this.scene.backgroundRotation.set(0, yawRadians, 0);
-    this.scene.backgroundBlurriness = lighting?.backgroundBlur ?? 0;
-  }
-
-  private applySky(skyId: string | null, lighting: AgentWorldLighting | null): void {
-    this.requestedSkyLighting = (lighting === null || lighting.source === "sky") && !!skyId;
-    const hdri = lighting?.source === "hdri" ? resolveAgentWorldHdri(lighting.hdri) : null;
-    this.requestedEnvironmentKey = hdri ? `hdri:${hdri.url}` : "studio";
-    // Never let the previous look linger while a new PMREM is in flight.
-    this.scene.environment = this.roomEnvironmentTarget.texture;
-    if (hdri) this.requestHdri(hdri.url, hdri.id);
+  private applySky(skyId: string | null): void {
+    this.skyToken += 1;
+    const token = this.skyToken;
     if (!skyId) {
-      this.requestedSkyKey = null;
-      this.requestedSkyHorizon = null;
+      this.scene.environment = this.roomEnvironment;
       return;
     }
     const descriptor = this.world.listSkies().find((sky) => sky.id === skyId);
-    if (!descriptor) {
-      this.requestedSkyKey = null;
-      this.requestedSkyHorizon = null;
-      this.scene.environment = this.roomEnvironmentTarget.texture;
-      return;
-    }
+    if (!descriptor) return;
 
     const faceUrls = agentWorldSkyFaceUrls(descriptor);
     // Key on the FACES, not the id. An imported set lives in the asset store, which
@@ -676,21 +635,11 @@ export class PlatformHost {
     // That is the same stale-serve `media-r1` already paid for once at the HTTP layer;
     // this is the in-memory instance of it.
     const cacheKey = faceUrls.join("|");
-    this.requestedSkyKey = cacheKey;
-    this.requestedSkyHorizon = descriptor.horizonColor;
-    if (this.requestedSkyLighting) this.requestedEnvironmentKey = `sky:${cacheKey}`;
     const cached = this.skyCache.get(cacheKey);
     if (cached) {
-      // Map insertion order is the LRU order. A hit is recent and moves to the tail.
-      this.skyCache.delete(cacheKey);
-      this.skyCache.set(cacheKey, cached);
-      this.activateSky(cached, cacheKey);
+      this.setSkyTexture(cached, descriptor.horizonColor, token);
       return;
     }
-    // Do not light a newly requested sky with the previous sky while its faces are loading.
-    if (this.pendingSkyKeys.has(cacheKey)) return;
-    const attempt = Symbol(cacheKey);
-    this.pendingSkyKeys.set(cacheKey, attempt);
     const loader = new CubeTextureLoader();
     // Imported faces are served cross-origin from the asset store (a different port),
     // and `orientArchiveCubeTexture` rotates the poles through a 2D canvas — without
@@ -701,139 +650,29 @@ export class PlatformHost {
     loader.load(
       faceUrls,
       (texture) => {
-        if (this.pendingSkyKeys.get(cacheKey) !== attempt) {
-          texture.dispose();
-          return;
-        }
-        this.pendingSkyKeys.delete(cacheKey);
-        if (this.disposed) {
-          texture.dispose();
-          return;
-        }
         texture.colorSpace = SRGBColorSpace;
-        let resource: { background: CubeTexture; environmentTarget: WebGLRenderTarget };
-        try {
-          const oriented = orientArchiveCubeTexture(texture);
-          // A defensive guard for loader implementations that complete the same request twice.
-          const existing = this.skyCache.get(cacheKey);
-          if (existing) {
-            oriented.dispose();
-            this.skyCache.delete(cacheKey);
-            this.skyCache.set(cacheKey, existing);
-            this.activateSky(existing, cacheKey);
-            return;
-          }
-          resource = {
-            background: oriented,
-            environmentTarget: this.pmremGenerator.fromCubemap(oriented),
-          };
-        } catch (error) {
-          texture.dispose();
-          console.warn(`Could not prepare sky "${descriptor.id}" for image lighting.`, error);
-          return;
-        }
-        // Ownership transfers only after both the raw cube and its PMREM target exist.
-        this.skyCache.set(cacheKey, resource);
-        this.trimSkyCache();
-        this.activateSky(resource, cacheKey);
+        const oriented = orientArchiveCubeTexture(texture);
+        this.skyCache.set(cacheKey, oriented);
+        this.setSkyTexture(oriented, descriptor.horizonColor, token);
       },
       undefined,
-      () => {
-        if (this.pendingSkyKeys.get(cacheKey) !== attempt) return;
-        this.pendingSkyKeys.delete(cacheKey);
-        console.warn(`Could not load sky "${descriptor.id}" from ${faceUrls[0]}`);
-      },
+      () => console.warn(`Could not load sky "${descriptor.id}" from ${faceUrls[0]}`),
     );
   }
 
-  /** Bound imported-sky churn without ever evicting the backdrop currently in use. */
-  private trimSkyCache(): void {
-    while (this.skyCache.size > MAX_SKY_CACHE_ENTRIES) {
-      const candidate = [...this.skyCache.keys()].find((key) => key !== this.requestedSkyKey);
-      if (!candidate) return;
-      const resource = this.skyCache.get(candidate);
-      this.skyCache.delete(candidate);
-      resource?.environmentTarget.dispose();
-      resource?.background.dispose();
-    }
-  }
-
-  private activateSky(
-    resource: { background: CubeTexture; environmentTarget: WebGLRenderTarget },
-    cacheKey: string,
-  ): void {
-    if (this.disposed || cacheKey !== this.requestedSkyKey) return;
-    this.scene.background = resource.background;
-    if (this.requestedEnvironmentKey === `sky:${cacheKey}`) {
-      this.scene.environment = resource.environmentTarget.texture;
-    }
+  private setSkyTexture(texture: CubeTexture, horizonColor: string, token: number): void {
+    if (this.disposed || token !== this.skyToken) return;
+    this.scene.background = texture;
+    // Light the scene from the sky it actually sits under.
+    const pmrem = new PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromCubemap(texture).texture;
+    pmrem.dispose();
     // Keep distance fog, tinted to the sky's horizon, so ground fades into the skyline
     // instead of ending at a hard plane edge. Dropping the fog here was a mistake: fog
     // does not fight a skybox, fog of the wrong colour does. The sky-path defaults sit
     // slightly deeper than the flat-background pair; a scene envelope overrides both.
     const envelope = this.world.getEnvironment().envelope;
-    this.scene.fog = new Fog(this.requestedSkyHorizon ?? "#101820", envelope?.fogNear ?? 38, envelope?.fogFar ?? 138);
-  }
-
-  /** Load, prefilter, cache, and latest-request-guard a reflection-only HDR environment. */
-  private requestHdri(url: string, id: string): void {
-    const key = `hdri:${url}`;
-    const cached = this.hdriCache.get(url);
-    if (cached) {
-      this.hdriCache.delete(url);
-      this.hdriCache.set(url, cached);
-      if (!this.disposed && this.requestedEnvironmentKey === key) this.scene.environment = cached.texture;
-      return;
-    }
-    if (this.pendingHdriKeys.has(url)) return;
-    const attempt = Symbol(url);
-    this.pendingHdriKeys.set(url, attempt);
-    new RGBELoader().load(
-      url,
-      (texture) => {
-        if (this.pendingHdriKeys.get(url) !== attempt || this.disposed) {
-          texture.dispose();
-          return;
-        }
-        this.pendingHdriKeys.delete(url);
-        let target: WebGLRenderTarget;
-        try {
-          target = this.pmremGenerator.fromEquirectangular(texture);
-        } catch (error) {
-          texture.dispose();
-          console.warn(`Could not prepare HDRI "${id}" for image lighting.`, error);
-          return;
-        }
-        texture.dispose();
-        const existing = this.hdriCache.get(url);
-        if (existing) {
-          target.dispose();
-          target = existing;
-          this.hdriCache.delete(url);
-        }
-        this.hdriCache.set(url, target);
-        this.trimHdriCache();
-        if (!this.disposed && this.requestedEnvironmentKey === key) this.scene.environment = target.texture;
-      },
-      undefined,
-      () => {
-        if (this.pendingHdriKeys.get(url) !== attempt) return;
-        this.pendingHdriKeys.delete(url);
-        console.warn(`Could not load HDRI "${id}" from ${url}`);
-      },
-    );
-  }
-
-  private trimHdriCache(): void {
-    while (this.hdriCache.size > MAX_HDRI_CACHE_ENTRIES) {
-      const requestedUrl = this.requestedEnvironmentKey.startsWith("hdri:")
-        ? this.requestedEnvironmentKey.slice("hdri:".length)
-        : null;
-      const candidate = [...this.hdriCache.keys()].find((url) => url !== requestedUrl);
-      if (!candidate) return;
-      this.hdriCache.get(candidate)?.dispose();
-      this.hdriCache.delete(candidate);
-    }
+    this.scene.fog = new Fog(horizonColor, envelope?.fogNear ?? 38, envelope?.fogFar ?? 138);
   }
 
   /**
@@ -880,30 +719,30 @@ export class PlatformHost {
   }
 
   /**
-   * Frame the camera on the authored play footprint when play begins.
+   * Frame the camera on the whole level when play begins.
    *
-   * Grid levels already expose `ballz-floor`. Composed games do not: World 1, Skybox Spiral,
-   * and Great Slide have entirely different geometry, so hard-coding the grid slab left them
-   * at the showroom camera. A hidden ordinary box tagged `playfield` is the scene-native answer:
-   * its centre and width/depth describe what should fit, without teaching the host any course
-   * ids or waiting for async model bounds. Existing grid levels remain the fallback.
+   * Until now play inherited whatever framing the previous surface left — the showroom's
+   * off-axis overview, tuned for the showroom composition — so a level was seen at a
+   * coincidental angle: a big one overflowed, a small one sat lost in the frame, and the ball
+   * was never the subject. A game wants a deliberate, repeatable view of the board.
+   *
+   * Framed on `ballz-floor` rather than the world's bounding box on purpose. The floor slab is
+   * exactly the play footprint; the world also contains the terrain pad and the hills beyond
+   * it, and fitting those would pull the camera back until the maze was a detail. The host
+   * already reads the `player` tag to know it is in a game, so reading the floor is the same
+   * tier of knowledge, not a new dependency.
    */
   private frameOnPlay(): void {
-    const floor = this.api.query({ tag: "playfield" })[0] ?? this.api.query({ ids: ["ballz-floor"] })[0];
+    const floor = this.api.query({ ids: ["ballz-floor"] })[0];
     if (!floor) return;
     const center = new Vector3(...floor.position);
-    const width = floor.geometry.width * floor.scale[0];
-    const depth = floor.geometry.depth * floor.scale[2];
+    const span = Math.max(floor.geometry.width, floor.geometry.depth);
 
-    // Fit each authored axis against the field of view it actually occupies. The previous
-    // single-span calculation fit a 58×18 slide's width into the *vertical* FOV, shrinking the
-    // course to a strip in the middle of a widescreen view.
+    // Distance that fits `span` across the narrower (vertical) field of view, with margin so
+    // the walls at the rim are not flush against the frame edge. The board foreshortens along
+    // the view direction, so fitting the vertical extent covers the horizontal one too.
     const vfov = (this.camera.fov * Math.PI) / 180;
-    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
-    const distance = Math.max(
-      (width * 0.5) / Math.tan(hfov / 2),
-      (depth * 0.5) / Math.tan(vfov / 2),
-    ) * 1.18;
+    const distance = (span * 0.5) / Math.tan(vfov / 2) * 1.25;
 
     // One consistent game angle: from +z and well above, looking down the board. A fixed
     // direction is the point — every level opens the same way, so the control scheme (up = away)
@@ -925,8 +764,12 @@ export class PlatformHost {
   /** Leave play and go back where you came from. */
   exitPlay(): void {
     if (this.currentMode !== "play") return;
-    this.setMode(this.modeBeforePlay);
-    this.onExitPlay?.();
+    const restoredMode = this.modeBeforePlay;
+    this.setMode(restoredMode);
+    // The caller needs to know WHICH surface we returned to: a level played from the editor
+    // must land back in the editor, not have the showroom front door recomposed on top of it
+    // (which stacked the welcome card over the live editor chrome — two click layers at once).
+    this.onExitPlay?.(restoredMode);
   }
 
   private tick(): void {
@@ -1012,19 +855,6 @@ export class PlatformHost {
     this.bridge.dispose();
     this.controls.dispose();
     this.teardownComposer();
-    this.scene.background = null;
-    this.scene.environment = null;
-    for (const resource of this.skyCache.values()) {
-      resource.environmentTarget.dispose();
-      resource.background.dispose();
-    }
-    this.skyCache.clear();
-    this.pendingSkyKeys.clear();
-    for (const target of this.hdriCache.values()) target.dispose();
-    this.hdriCache.clear();
-    this.pendingHdriKeys.clear();
-    this.roomEnvironmentTarget.dispose();
-    this.pmremGenerator.dispose();
     this.scene.remove(this.world.group);
     this.world.dispose();
     this.renderer.dispose();

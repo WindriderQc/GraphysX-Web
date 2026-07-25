@@ -53,15 +53,18 @@ import type { AgentLevelState } from "./agent-level-library";
  *   this genre.
  * - **Emitters**, on landmarks only — see `EMITTER_BUDGET` below.
  *
- * ## The authored look pass
+ * ## On the shader pass §14 also asks for
  *
- * The original deferral was correct: at the time, `PlatformHost` had no post-processing or
- * image-lighting vocabulary, so adding a private shader here would have made this one scene
- * prettier by breaking the product invariant. Those capabilities have since graduated as
- * `environment.post.bloom` and `environment.lighting`. The level now opts into both through
- * ordinary scene data: a restrained bloom catches only the already-emissive landmarks, and a
- * warm HDRI lights reflective surfaces while the recovered Lost Valley cube remains the visible
- * backdrop. Export, editor, agent, and renderer therefore all see the same look.
+ * Not done, as a decision rather than an omission. There is no post-processing stage in
+ * `PlatformHost` and no v2 field that could describe one, so a bloom/vignette pass would mean
+ * either bespoke host rendering (which the invariant forbids — the beauty has to be scene
+ * data, or we have decorated a port) or threading a whole new `environment.postProcessing`
+ * concept through the runtime, both API implementations and the editor. That is a feature,
+ * not a finish pass, and it would land on a scene already running at single-digit fps under
+ * the harness's software GL, where a full-screen composite is the most expensive thing
+ * available. The one real shader this scene does run is the emitters': the particle system is
+ * a `ShaderMaterial` with per-particle colour/size ramps, so the glow at the gates is GPU
+ * shader work reached through ordinary scene vocabulary. That is the honest extent of it.
  */
 
 /** Grid coordinates map (x, row) → world (x, z); the level is centred on the origin. */
@@ -92,11 +95,13 @@ export type BallzLevelComposition = {
 const PALETTE = {
   // Tints, not colours: both of these multiply a texture, so they are lighter than the
   // surface they are meant to produce.
-  floor: { color: "#f0dcaa", roughness: 0.62, metalness: 0.04 },
-  // Near-neutral, because `marble09.jpg` is already a warm tan scan. Tinting it warm as well
-  // (the first two attempts) compounded into terracotta and the arena read as rusty rather
-  // than quarried.
-  wall: { color: "#ddd8cc", roughness: 0.42, metalness: 0.08 },
+  // Multiplies the warm BallZ18 wood scan; kept near-white so the grain stays legible and the
+  // planks read as honey wood rather than muddy brown.
+  floor: { color: "#e9dcc0", roughness: 0.66, metalness: 0.03 },
+  // Near-neutral, because `marble09.jpg` is already a warm tan scan. Now that the floor is warm
+  // wood rather than a competing checker, the marble walls read as the quarried stone the arena
+  // is cut from — the classic marble-wall / wood-floor pairing — instead of "damier marble".
+  wall: { color: "#d6cdbb", roughness: 0.5, metalness: 0.06 },
   // Emissive intensities are deliberately high on everything that is *information* — a ring
   // you must collect, a gate you must reach. Under a raking sun the arena has real shadow in
   // it now, and a landmark that only reflects light disappears into the dark half of the
@@ -110,9 +115,10 @@ const PALETTE = {
   ball: { color: "#f4fbff", roughness: 0.3, metalness: 0.06 },
   // Tuned across four screenshots, and the lesson was about intensity rather than hue. A
   // saturated body with a matching emissive read as cyan plastic; a near-white body at
-  // intensity 2.6 overcorrected into blank white posts under ACES. Lightening the body while
-  // pulling the intensity *down* to sub-1 preserves the hue and leaves headroom for the scene's
-  // restrained bloom pass to add a halo rather than a clipped white core.
+  // intensity 2.6 overcorrected into blank white posts, because with no bloom pass an
+  // emissive that strong simply clips under ACES and takes the hue with it. Lightening the
+  // body while pulling the intensity *down* to sub-1 is what actually works: the emissive
+  // lifts the material out of shadow without saturating it, so the colour survives.
   pylon: { color: "#7fdcee", emissive: "#1fbcd8", emissiveIntensity: 0.85, roughness: 0.22, metalness: 0.35 },
 } as const;
 
@@ -217,14 +223,13 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
     geometry: { width: extentX, height: playSurfaceThickness, depth: extentZ },
     material: {
       ...PALETTE.floor,
-      // Exactly one checker square per grid cell. `Damier.jpg` is not a 1x1 checker — it is a
-      // 20x20 board in a single image, so the repeat that aligns the pattern to the level is
-      // `cells / 20`, not `cells`. Getting that wrong (repeat = width/2, the obvious guess)
-      // put ten squares in every cell and the floor came out as grey noise; screenshot-checked
-      // both ways. Aligned, the pattern *is* the level's coordinate system, so a player reads
-      // distance and speed off the floor instead of guessing at a flat colour — which is the
-      // whole reason a rolling-ball game has a checkered floor in the first place.
-      texture: { id: "checker" as const, repeat: [width / 20, height / 20] as [number, number] },
+      // The genuine BallZ18 wood floor (`WoodFloor05_col.jpg`, the archive's own 3 MB surface),
+      // not the harsh black/white `Damier.jpg` checker it used to carry. The checkerboard read
+      // as a chessboard test-fixture and fought the marble walls for attention ("damier marble").
+      // Warm plank wood grounds the arena as a *place*; the grid coordinate cue now comes from
+      // the pinstripe cell seams and the wall frame instead of a blown-out checker. Repeat is
+      // scaled so a few planks span each cell region rather than tiling to mush.
+      texture: { id: "wood-floor" as const, repeat: [Math.max(3, width / 7), Math.max(3, height / 7)] as [number, number] },
     },
     physics: { mode: "static", material: "ground" },
     castShadow: false,
@@ -614,28 +619,11 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
       // gives the strongest ground-to-sky contrast. It is an ordinary per-scene field, so a
       // level can be re-skied from the inspector or by `api.update` without touching this.
       sky: "lostvalley",
-      // The visible cube and reflection lighting are deliberately independent. Golden Meadow
-      // matches the authored late-afternoon key without replacing Lost Valley as the level's
-      // backdrop; the stable registry id is the only asset reference that enters the document.
-      lighting: {
-        source: "hdri",
-        hdri: "lilienstein",
-        intensity: 0.92,
-        yawDegrees: 24,
-        backgroundIntensity: 0.9,
-        backgroundBlur: 0.08,
-      },
-      // Selective bloom is already impossible with UnrealBloomPass, so the threshold does the
-      // product work: ordinary checker, marble, terrain, and HUD stay crisp while rings, gates,
-      // fire, and the start marker cross it. The values are below the editor's Cinematic preset
-      // on strength/radius and above it on threshold—legibility, not a neon wash.
-      post: {
-        bloom: {
-          strength: 0.38,
-          threshold: 0.72,
-          radius: 0.24,
-        },
-      },
+      // The shader pass §14.5 always wanted, now that it exists (KICKASS Wave 3): the rings,
+      // gates and pylons carry high emissive intensities that were tuned expecting glow, and
+      // under ACES without bloom they merely clip. A restrained bloom (threshold high so only
+      // the emissive information glows, not the lit wood/marble) is what finally lands them.
+      post: { bloom: { strength: 0.55, threshold: 0.72, radius: 0.5 } },
       // The level brings its own floor slab, so the runtime's flat grid would z-fight it.
       ground: { visible: false, size: 60, color: "#123039", grid: false, gridColor: "#2a7d8f" },
       // Warm key + cool fill, angled so walls cast readable shadows down the grid rather
