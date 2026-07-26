@@ -23,6 +23,7 @@
     "smoke:roundtrip": "node scripts/smoke-roundtrip.mjs",
     "smoke:rules": "node scripts/smoke-rules.mjs",
     "smoke:media": "node scripts/smoke-media.mjs",
+    "smoke:surfaces": "node scripts/smoke-surfaces.mjs",
     "smoke:physics": "node scripts/smoke-physics.mjs",
     "smoke:mesh-colliders": "node scripts/smoke-mesh-colliders.mjs",
     "smoke:great-slide": "node scripts/smoke-great-slide.mjs",

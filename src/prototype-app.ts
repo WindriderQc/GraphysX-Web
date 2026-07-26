@@ -76,6 +76,7 @@ import { getAgentWorldMediaApi } from "./agent-world-media";
 import { allAgentWorldSounds } from "./agent-world-sounds";
 import { allAgentWorldSkies } from "./agent-world-skies";
 import { GRAPHYSX_AGENT_WORLD_HDRIS } from "./agent-world-hdris";
+import { GRAPHYSX_AGENT_WORLD_SURFACES } from "./agent-world-surface";
 import { GRAPHYSX_AGENT_WORLD_EMITTERS } from "./agent-world-particles";
 import { GRAPHYSX_AGENT_WORLD_HEIGHTMAPS } from "./agent-world-terrain";
 import { GRAPHYSX_AGENT_WORLD_FLOCKS } from "./agent-world-flock";
@@ -3469,6 +3470,7 @@ export class PrototypeApp {
       // library is vocabulary, not a second-class citizen of whichever host is asking.
       skies: () => allAgentWorldSkies(),
       hdris: () => GRAPHYSX_AGENT_WORLD_HDRIS,
+      surfaces: () => GRAPHYSX_AGENT_WORLD_SURFACES,
       emitters: () => GRAPHYSX_AGENT_WORLD_EMITTERS,
       heightmaps: () => GRAPHYSX_AGENT_WORLD_HEIGHTMAPS,
       flocks: () => GRAPHYSX_AGENT_WORLD_FLOCKS,

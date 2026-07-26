@@ -102,6 +102,7 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
     sounds: () => allAgentWorldSounds(),
     skies: () => runtime.listSkies(),
     hdris: () => runtime.listHdris(),
+    surfaces: () => runtime.listSurfaces(),
     emitters: () => runtime.listEmitters(),
     heightmaps: () => runtime.listHeightmaps(),
     flocks: () => runtime.listFlocks(),

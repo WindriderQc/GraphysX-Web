@@ -18,6 +18,7 @@ import {
   type ResolvedAgentWorldDna,
 } from "./agent-world-dna";
 import { GRAPHYSX_AGENT_WORLD_OVERLAYS, isOverlayId, type AgentWorldOverlayDescriptor, type AgentWorldOverlayId } from "./agent-world-overlay";
+import { GRAPHYSX_AGENT_WORLD_SURFACES, createSurfaceSketch, isSurfaceSketchId, type AgentWorldSurfaceDescriptor, type AgentWorldSurfaceSketchId, type SurfaceSketch } from "./agent-world-surface";
 import {
   GRAPHYSX_AGENT_WORLD_HDRIS,
   resolveAgentWorldHdri,
@@ -52,6 +53,7 @@ import {
   BoxGeometry,
   BufferGeometry,
   CatmullRomCurve3,
+  CanvasTexture,
   Color,
   ConeGeometry,
   CylinderGeometry,
@@ -422,6 +424,25 @@ export type AgentWorldInteraction =
   | AgentWorldApplyImpulseInteraction
   | AgentWorldPlaySoundInteraction;
 
+/**
+ * A live generative Canvas2D texture drawn onto this mesh's surface (Generative Surfaces / Wave
+ * 15). Off unless declared. Valid on the primitive mesh types (box/plane/cylinder/cone/torus/
+ * sphere/icosahedron); the runtime draws the sketch in its one shared per-frame pass.
+ */
+export type AgentWorldSurface = {
+  sketch: AgentWorldSurfaceSketchId;
+  /** Square canvas edge in px, clamped 64..1024 (default 256). A budget lever. */
+  resolution?: number;
+  /** Target redraws per second, clamped 1..60 (default 30). A slow sign can idle low. */
+  fps?: number;
+  /** Also drive the emissive map so the surface glows. Default true. */
+  emissive?: boolean;
+  /** Multiply tint over the sketch, #rrggbb. Default #ffffff. */
+  tint?: string;
+};
+
+type ResolvedAgentWorldSurface = Required<AgentWorldSurface>;
+
 export type AgentWorldEntityDefinition = {
   id?: string;
   label?: string;
@@ -463,6 +484,8 @@ export type AgentWorldEntityDefinition = {
   crowd?: AgentWorldCrowd;
   /** Recovered Math Game molecule field. Only valid on `formula-field` entities. */
   formula?: AgentWorldFormula;
+  /** Live generative Canvas2D surface texture. Valid on primitive mesh entities. */
+  surface?: AgentWorldSurface | null;
   /** Recovered Living Forest genome. Only valid on `dna-tree` entities. */
   dna?: AgentWorldDna;
   /**
@@ -502,6 +525,8 @@ export type AgentWorldEntityPatch = {
   material?: Partial<AgentWorldMaterial>;
   /** Per-slot null resets one slot; outer null resets every model material override. */
   modelMaterialOverrides?: AgentWorldModelMaterialOverridePatch | null;
+  /** Add, retune, or (null) remove a live generative surface. */
+  surface?: AgentWorldSurface | null;
   visible?: boolean;
   castShadow?: boolean;
   receiveShadow?: boolean;
@@ -714,6 +739,8 @@ export type AgentWorldEntityState = {
   /** Terrain configuration plus the derived collider facts an agent needs to place things. */
   terrain: (ResolvedAgentWorldTerrain & { minimumHeight: number; maximumHeight: number; colliderVertices: number }) | null;
   water: ResolvedAgentWorldWater | null;
+  /** Live generative surface configuration, so an agent/editor sees a painted mesh in state(). */
+  surface: ResolvedAgentWorldSurface | null;
   /**
    * Flock configuration plus live readings. `leadPosition` and `averageSpeed` are what make
    * the simulation *observable*: a flock that has stalled is visible in `state()` rather than
@@ -855,6 +882,8 @@ export type AgentWorldState = {
   world: { id: string; label: string };
   revision: number;
   elapsedSeconds: number;
+  /** Total generative-surface redraws so far — climbs with the frame loop while surfaces run. */
+  surfaceRedraws: number;
   paused: boolean;
   entityCount: number;
   selectedIds: string[];
@@ -897,6 +926,8 @@ export type GraphysXAgentWorldApi = {
   skies(): readonly AgentWorldSkyDescriptor[];
   /** Curated, vendored reflection environments with license provenance. */
   hdris(): readonly AgentWorldHdriDescriptor[];
+  /** The generative surface sketches an entity can carry via `entity.surface.sketch`. */
+  surfaces(): readonly AgentWorldSurfaceDescriptor[];
   /** The curated particle-emitter presets decoded from the TV3D archive library. */
   emitters(): readonly AgentWorldEmitterDescriptor[];
   /** The archive sound samples plus any media-library imports, for `sound` entities. */
@@ -989,6 +1020,7 @@ type ResolvedEntity = {
   forceField: ResolvedAgentWorldForceField | null;
   formula: ResolvedAgentWorldFormula | null;
   dna: ResolvedAgentWorldDna | null;
+  surface: ResolvedAgentWorldSurface | null;
   physics: ResolvedAgentWorldPhysics | null;
   intensity: number;
   distance: number;
@@ -1271,6 +1303,8 @@ export class AgentWorldRuntime {
   private readonly forceFieldInverses = new Map<string, Matrix4>();
   /** Consumer entity id → its cached hook closure; pruned when the entity disappears. */
   private readonly forceFieldHooks = new Map<string, ForceFieldHookState>();
+  /** Total generative-surface redraws — a smoke asserts this climbs with frameCount (one loop). */
+  private surfaceRedraws = 0;
 
   constructor(
     definition: AgentWorldDefinition = GRAPHYSX_AGENT_DEMO_WORLD,
@@ -1295,6 +1329,11 @@ export class AgentWorldRuntime {
   /** The generative 2D overlays a scene can select. Off (null) is always also valid. */
   listOverlays(): readonly AgentWorldOverlayDescriptor[] {
     return GRAPHYSX_AGENT_WORLD_OVERLAYS;
+  }
+
+  /** The generative surface sketches an entity can carry via `entity.surface.sketch`. */
+  listSurfaces(): readonly AgentWorldSurfaceDescriptor[] {
+    return GRAPHYSX_AGENT_WORLD_SURFACES;
   }
 
   listSkies(): readonly AgentWorldSkyDescriptor[] {
@@ -1658,6 +1697,7 @@ export class AgentWorldRuntime {
       world: { id: this.definition.id, label: this.definition.label },
       revision: this.revision,
       elapsedSeconds: Number(this.elapsedSeconds.toFixed(3)),
+      surfaceRedraws: this.surfaceRedraws,
       paused: this.paused,
       entityCount: entityStates.length,
       selectedIds: [...this.selectedIds],
@@ -1855,6 +1895,10 @@ export class AgentWorldRuntime {
       if (definition.type !== "force-field") throw new Error("Only force-field entities accept a force field configuration");
       definition.forceField = resolveAgentWorldForceField(patch.forceField, definition.forceField ?? undefined);
       findForceFieldVisual(runtime.object)?.configure(definition.forceField);
+    }
+    if (patch.surface !== undefined) {
+      definition.surface = resolveAgentWorldSurface(patch.surface, definition.type);
+      remountEntitySurface(runtime.object, definition.surface, definition.material);
     }
     if (patch.interactions) definition.interactions = this.resolveInteractions(patch.interactions);
     this.applyResolvedEntity(runtime);
@@ -2297,8 +2341,36 @@ export class AgentWorldRuntime {
         }
       }
     }
+    // Generative surfaces advance in this same pass, so they inherit pause/step for free and
+    // never open a second frame loop.
+    this.drawSurfaces(deltaSeconds);
     // Last, so the rules see the crossings this slice produced rather than last slice's.
     this.updateRules();
+  }
+
+  /**
+   * Draw every live generative surface onto its CanvasTexture. Budget-gated three ways: at most
+   * MAX_ACTIVE_SURFACES are driven per frame, each canvas is capped at 1024² by the resolver, and
+   * each surface only redraws when its own `fps` interval has elapsed — a sign can idle at 8 fps
+   * while a hero screen runs at 60. `surfacesDrawn` counts redraws so a smoke can prove this runs
+   * in the shared loop (it must climb with frameCount), mirroring the overlay's frame counter.
+   */
+  private drawSurfaces(deltaSeconds: number): void {
+    const MAX_ACTIVE_SURFACES = 8;
+    let active = 0;
+    for (const runtime of this.entities.values()) {
+      const surface = findEntitySurface(runtime.object);
+      if (!surface) continue;
+      if (++active > MAX_ACTIVE_SURFACES) break;
+      surface.accum += deltaSeconds;
+      surface.elapsed += deltaSeconds;
+      const interval = 1 / surface.fps;
+      if (surface.accum < interval) continue;
+      surface.sketch.draw(surface.ctx, surface.accum, surface.elapsed, surface.size, surface.size);
+      surface.texture.needsUpdate = true;
+      surface.accum = 0;
+      this.surfaceRedraws += 1;
+    }
   }
 
   /**
@@ -2831,10 +2903,12 @@ export class AgentWorldRuntime {
     if (source.type === "terrain" && source.physics) {
       throw new Error("Terrain entities carry their own static heightfield collider; remove the physics field");
     }
+    const surface = resolveAgentWorldSurface(source.surface, source.type);
     const physics = source.physics ? resolvePhysics(source.physics, source.type, source.parentId ?? null, behaviors) : null;
     return {
       formula,
       dna,
+      surface,
       id,
       label: source.label?.trim() || id,
       type: source.type,
@@ -3014,6 +3088,7 @@ export class AgentWorldRuntime {
       sound: runtime.definition.sound ? deepClone(runtime.definition.sound) : null,
       terrain: runtime.definition.terrain ? terrainStateOf(runtime) : null,
       water: runtime.definition.water ? deepClone(runtime.definition.water) : null,
+      surface: runtime.definition.surface ? deepClone(runtime.definition.surface) : null,
       flock: runtime.definition.flock ? flockStateOf(runtime) : null,
       crowd: runtime.definition.crowd ? crowdStateOf(runtime) : null,
       forceField: runtime.definition.forceField ? this.forceFieldStateOf(runtime) : null
@@ -3202,7 +3277,76 @@ function createEntityObject(definition: ResolvedEntity): Object3D {
   const geometry = createGeometry(definition);
   const material = new MeshStandardMaterial();
   applyMaterial(material, definition.material);
-  return new Mesh(geometry, material);
+  const mesh = new Mesh(geometry, material);
+  if (definition.surface) mountEntitySurface(mesh, material, definition.surface);
+  return mesh;
+}
+
+/** Per-entity live surface state, discovered off the mesh via userData (findParticleSystem idiom). */
+type EntitySurfaceState = {
+  ctx: CanvasRenderingContext2D;
+  texture: CanvasTexture;
+  sketch: SurfaceSketch;
+  fps: number;
+  size: number;
+  accum: number;
+  elapsed: number;
+};
+
+/**
+ * Attach a generative Canvas2D surface to a primitive mesh: an offscreen canvas becomes a
+ * CanvasTexture used as the material's colour (and, when emissive, its emissive map so it glows).
+ * The draw itself happens in the runtime's one per-frame pass; this only builds and seeds it.
+ */
+function mountEntitySurface(mesh: Mesh, material: MeshStandardMaterial, surface: ResolvedAgentWorldSurface): void {
+  const canvas = document.createElement("canvas");
+  canvas.width = surface.resolution;
+  canvas.height = surface.resolution;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  const sketch = createSurfaceSketch(surface.sketch);
+  // Seed one frame so the surface is never blank before the first update pass.
+  sketch.draw(ctx, 0, 0, surface.resolution, surface.resolution);
+  texture.needsUpdate = true;
+  material.map = texture;
+  material.color = new Color(surface.tint);
+  if (surface.emissive) {
+    // Reuse the SAME texture as the emissive map: one object, disposed once by disposeObjectTree.
+    material.emissiveMap = texture;
+    material.emissive = new Color(surface.tint);
+    material.emissiveIntensity = 0.7;
+  }
+  material.needsUpdate = true;
+  // The surface owns this material; opt out of the generic per-entity material pass (the same
+  // way water and flock members do) so it is not reset to the base colour every update.
+  mesh.userData.graphysxMaterialLocked = true;
+  mesh.userData.graphysxSurface = { ctx, texture, sketch, fps: surface.fps, size: surface.resolution, accum: 0, elapsed: 0 } satisfies EntitySurfaceState;
+}
+
+/**
+ * Add, retune or remove a live surface on an already-built primitive mesh. Disposes the old
+ * CanvasTexture, restores the entity's base material, and mounts the new surface if any — so an
+ * agent or the editor can `update({ surface: ... })` or `update({ surface: null })` at runtime.
+ */
+function remountEntitySurface(object: Object3D, surface: ResolvedAgentWorldSurface | null, baseMaterial: AgentWorldMaterial): void {
+  if (!(object instanceof Mesh) || !(object.material instanceof MeshStandardMaterial)) return;
+  const material = object.material;
+  const existing = findEntitySurface(object);
+  if (existing) existing.texture.dispose();
+  delete object.userData.graphysxSurface;
+  object.userData.graphysxMaterialLocked = false;
+  material.map = null;
+  material.emissiveMap = null;
+  // Restore the base look first; mountEntitySurface re-applies the surface over it (and re-locks).
+  applyMaterial(material, baseMaterial);
+  if (surface) mountEntitySurface(object, material, surface);
+}
+
+function findEntitySurface(object: Object3D): EntitySurfaceState | null {
+  const state = object.userData.graphysxSurface;
+  return state && typeof state === "object" && "sketch" in state ? state as EntitySurfaceState : null;
 }
 
 function createGeometry(definition: ResolvedEntity) {
@@ -3843,6 +3987,28 @@ function isEntityType(value: unknown): value is AgentWorldEntityType {
   return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "crowd", "force-field", "formula-field", "dna-tree", "sound", "ambient-light", "directional-light", "point-light"].includes(String(value));
 }
 
+const SURFACE_ENTITY_TYPES = new Set<AgentWorldEntityType>(["box", "sphere", "plane", "cylinder", "cone", "torus", "icosahedron"]);
+
+/**
+ * Validate and default an entity's generative surface. Null unless declared; only the primitive
+ * mesh types can carry one (a light or a flock has no single face to paint). Every numeric lever
+ * is clamped so a scene document can never ask the runtime for an unbounded canvas.
+ */
+function resolveAgentWorldSurface(source: AgentWorldSurface | null | undefined, type: AgentWorldEntityType): ResolvedAgentWorldSurface | null {
+  if (source === null || source === undefined) return null;
+  if (!SURFACE_ENTITY_TYPES.has(type)) throw new Error(`Only primitive mesh entities accept a surface (got ${type})`);
+  if (!isSurfaceSketchId(source.sketch)) throw new Error(`Unknown surface sketch: ${String(source.sketch)}`);
+  const tint = source.tint ?? "#ffffff";
+  if (!/^#[0-9a-fA-F]{6}$/.test(tint)) throw new Error(`surface.tint must be #rrggbb: ${tint}`);
+  return {
+    sketch: source.sketch,
+    resolution: Math.round(clamp(source.resolution ?? 256, 64, 1024)),
+    fps: Math.round(clamp(source.fps ?? 30, 1, 60)),
+    emissive: source.emissive ?? true,
+    tint,
+  };
+}
+
 function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition {
   return {
     // Carried explicitly: a formula field that does not serialise would round-trip into an
@@ -3850,6 +4016,7 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     ...(definition.formula ? { formula: deepClone(definition.formula) } : {}),
     // Same reason: a dna-tree without its genome would round-trip into the default grove.
     ...(definition.dna ? { dna: deepClone(definition.dna) } : {}),
+    ...(definition.surface ? { surface: deepClone(definition.surface) } : {}),
     id: definition.id,
     label: definition.label,
     type: definition.type,

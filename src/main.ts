@@ -280,6 +280,20 @@ if (mode === "legacy") {
                 frameArchiveVehicles(host);
               },
             },
+            {
+              id: "surfaces-showcase",
+              label: "Generative Surfaces",
+              summary: "Live Canvas2D sketches — waveform, grid-pulse and plasma — running on in-world screens, a billboard and a curved display, under bloom.",
+              meta: "6 entities  ·  5 live surfaces  ·  one shared loop",
+              open: async () => {
+                const { composeGenerativeSurfaces, frameGenerativeSurfaces } = await import("./surfaces-showcase");
+                showroomEnvironment?.();
+                showroomEnvironment = null;
+                composeGenerativeSurfaces(host.api);
+                host.applyEnvironment();
+                frameGenerativeSurfaces(host);
+              },
+            },
           ],
           // A starter replaces the world, so take the showroom's host-mounted set down with it,
           // then open the loaded scene in the editor — Browse is "load a scene to work on it".
