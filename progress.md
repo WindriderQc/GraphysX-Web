@@ -1884,3 +1884,35 @@ BallShell + `archive-ballctrl-gridxl`. No console/page errors. Screenshot inspec
 
 Next ranked work: Suzanne moving parts as genuine course obstacles, then the five remaining
 NOT_REVIVED and 22 preview/pipeline records re-audited against HEAD.
+
+## 2026-07-27 — `revival-debt-r3`: Suzanne's decoded machinery becomes a playable course
+
+The asset ledger's “source models need GLB conversion” was stale. `suzanne1-level.json`
+already held exact decoded geometry for all eight `Suzanne1.*.x` objects: **38,646 vertices,
+20,036 triangles**, source bounds, UVs, colours and the recorded Suzanne1UV/twoway bindings.
+`scripts/vendor-suzanne-machinery.mjs` now republishes every object as a provenance-bearing
+`graphysx-mesh-json` asset, retaining source-space values byte-for-value. Native `fitSize`
+plus each source bounds centre reconstructs the shared placement after the v2 loader's
+documented handedness conversion. No unrecorded RotatorUV assignment was invented.
+
+They are no longer gallery-only evidence. **Suzanne Machinery Run** is a Games-shelf course
+using the exact recovered arena, piston stand/trigger, finish line, door gate, piston,
+rotator and rotator cube. The piston, lifting door and rotator cube are kinematic convex-hull
+obstacles; the arena and stationary machinery use exact trimeshes. Their disclosed timings
+retain the prior restoration's values because the decoded roles prove movement but no complete
+2015 timing loop survives. The twelve exact `ringPath` X/Z coordinates become eleven ordered
+checkpoints and a final ring, driven by the recovered Classic/GridXL ball.
+
+Verified: build green; `smoke-suzanne-machinery` launches through the human Games path, resolves
+all eight assets, proves the 8,208-vertex / 4,116-triangle arena collider and three moving
+convex colliders, observes piston/door/rotator motion, traverses all twelve source path points,
+and reaches the win state with no HTTP, console or page errors. Screenshot inspected at
+`output/smoke/suzanne-machinery-gameplay.png`; the recovered monkey/arena, machinery, rings and
+classic player are visible together. The required `web_game_playwright_client.js` human-path
+loop also turned east, rolled through Ring 1, and left the player finite on the exact arena at
+[-1.706, 0.289, -2.377]; its screenshot and concise state are under
+`output/web-game-suzanne/`, with no error artifact.
+
+Next ranked work: re-check the five `*_NOT_REVIVED` inventories and all 22 preview/pipeline
+records against HEAD, graduate the remaining player-visible archive content, then run the full
+release gate and emit format-patches.

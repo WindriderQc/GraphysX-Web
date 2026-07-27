@@ -59,6 +59,7 @@ export type AgentWorldAssetCategory =
   | "prop"
   | "vehicle"
   | "archive-prop"
+  | "archive-machinery"
   | "glyph"
   | "imported";
 

@@ -163,6 +163,19 @@ if (mode === "legacy") {
               }),
             },
             {
+              id: "archive-suzanne-machinery",
+              label: "Suzanne Machinery Run",
+              meta: "8 exact recovered meshes  ·  3 moving obstacles  ·  12-point archive route",
+              play: () => loadComposedGame(async () => {
+                const { composeArchiveSuzanneMachinery, frameArchiveSuzanneMachinery } = await import("./archive-suzanne-machinery-scene");
+                const result = composeArchiveSuzanneMachinery(host.api);
+                if (!result.ok) throw new Error(result.error ?? "Could not compose Suzanne Machinery Run");
+                host.applyEnvironment();
+                frameArchiveSuzanneMachinery(host);
+                await waitForExactCollider(host.api, "suzanne-machinery-level");
+              }),
+            },
+            {
               id: "archive-map1",
               label: "Map 1: Gravity Descent",
               meta: "exact recovered mesh  ·  halfway gate  ·  adapted gravity run",

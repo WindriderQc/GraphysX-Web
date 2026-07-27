@@ -29,6 +29,7 @@
     "smoke:great-slide": "node scripts/smoke-great-slide.mjs",
     "smoke:map1": "node scripts/smoke-map1.mjs",
     "smoke:level1-2011": "node scripts/smoke-level1-2011.mjs",
+    "smoke:suzanne-machinery": "node scripts/smoke-suzanne-machinery.mjs",
     "smoke:live-release": "node scripts/smoke-live-release.mjs",
     "smoke:rapier-race": "node scripts/smoke-rapier-race.mjs",
     "smoke:store-auth": "node scripts/smoke-store-auth.mjs",
@@ -42,6 +43,7 @@
     "assets:slide-large": "node scripts/vendor-slide-large.mjs && node scripts/build-asset-catalog.mjs",
     "assets:map1": "node scripts/vendor-map1.mjs",
     "assets:level1-2011": "node scripts/vendor-level1-2011.mjs",
+    "assets:suzanne-machinery": "node scripts/vendor-suzanne-machinery.mjs && node scripts/build-asset-catalog.mjs",
     "assets:shelf-thumbnails": "node scripts/capture-shelf-thumbnails.mjs",
     "qa": "node scripts/qa-agent-entities.mjs"
   },

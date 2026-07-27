@@ -872,8 +872,8 @@ export const ASSET_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
   {
     label: "Suzanne Moving Parts",
     source: "Suzanne1.Piston.x, Suzanne1.Rotator.x, Suzanne1.RotatorCube.x",
-    status: "pipeline",
-    detail: "Represented by piston/rotator proxies; source models need GLB conversion."
+    status: "ported",
+    detail: "All eight decoded Suzanne machinery objects are now faithful vendored v2 assets. The piston, door gate and rotator cube are collision-bearing moving obstacles in the player-visible Suzanne Machinery Run; motion timing and game rules are disclosed adaptations."
   },
   {
     label: "Airplane",
