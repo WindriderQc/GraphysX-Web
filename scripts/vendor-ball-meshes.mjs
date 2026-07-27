@@ -1,5 +1,7 @@
 // Vendor the recovered 2011 ball meshes — BallShell / BallCtrl / BallFire — from the legacy
-// TVM catalog into ordinary v2 model assets.
+// TVM catalog into ordinary v2 model assets. The fourth payload is not new geometry: it
+// republishes BallCtrl verbatim with the ledger-recorded GridXL classic skin so the three
+// source-era appearances can be selected as ordinary scene vocabulary.
 //
 // The original BallZ player was never a wireframe primitive: it is BallShell.tvm (the open
 // cage the player sees) around an inner controller ball wearing FireArrow800.JPG — the
@@ -39,6 +41,14 @@ const PARTS = [
     material: { name: "ballctrl", color: [1, 1, 1, 1], textureName: "FireArrow800.JPG", textureUrl: "/assets/textures/ball/FireArrow800.jpg" },
   },
   {
+    kind: "ctrl",
+    file: "archive-ballctrl-gridxl.json",
+    name: "BallCtrlGridXL",
+    source: "BallZ 2011/Release/Media/Ball/BallCtrl.tvm + Media/GridXL.bmp",
+    material: { name: "ballctrl-gridxl", color: [1, 1, 1, 1], textureName: "GridXL.bmp", textureUrl: "/assets/textures/ball/GridXL.bmp" },
+    fidelity: "faithful BallCtrl positions, UVs and indices copied unmodified; GridXL restored as the recorded classic skin",
+  },
+  {
     kind: "fire",
     file: "archive-ballfire.json",
     name: "BallFire",
@@ -69,7 +79,7 @@ for (const part of PARTS) {
     provenance: {
       archiveSource: part.source,
       decodedBy: "TVM decode into src/legacy/tvm-catalog.json; republished verbatim by scripts/vendor-ball-meshes.mjs",
-      fidelity: "faithful — positions, UVs and indices copied unmodified; normals derived by the loader",
+      fidelity: part.fidelity ?? "faithful — positions, UVs and indices copied unmodified; normals derived by the loader",
     },
     meshCount: 1,
     vertexCount,

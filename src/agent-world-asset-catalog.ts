@@ -72,6 +72,7 @@ export const GRAPHYSX_AGENT_WORLD_ASSET_CATALOG: readonly AgentWorldAssetDescrip
   { id: "archive-cobra", label: "Cobra", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-cobra.json", source: "Yanik C++ BCKUP/Media/Models/cars/Low_Cobra.3DS" },
   { id: "archive-impreza", label: "Impreza", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-impreza.json", source: "Yanik C++ BCKUP/Media/Models/cars/impreza.3ds" },
   { id: "archive-piste-ovale", label: "Piste Ovale", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-piste-ovale.json", source: "AtmelCubx/PisteOvale.tvm" },
+  { id: "archive-ballctrl-gridxl", label: "Ballctrl Gridxl", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-ballctrl-gridxl.json", source: "BallZ 2011/Release/Media/Ball/BallCtrl.tvm + Media/GridXL.bmp" },
   { id: "archive-ballctrl", label: "Ballctrl", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-ballctrl.json", source: "BallZ 2011/Release/Media/Ball/BallCtrl.tvm" },
   { id: "archive-ballfire", label: "Ballfire", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-ballfire.json", source: "BallZ 2011/Release/Media/Ball/BallFire.tvm" },
   { id: "archive-ballshell", label: "Ballshell", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-ballshell.json", source: "BallZ 2011/Release/Media/Ball/BallShell.tvm" },

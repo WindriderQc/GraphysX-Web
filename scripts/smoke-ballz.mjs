@@ -245,6 +245,10 @@ try {
   });
   await page.waitForTimeout(250);
   await page.screenshot({ path: path.join(ART, "ballz-lap-counter-3d.png") });
+  // The route started in the editor. The visual close-up temporarily used scene mode to
+  // remove authoring chrome; restore the real origin before the next play so Exit returns
+  // to the editor rather than letting the screenshot setup alter product behaviour.
+  await page.evaluate(() => window.__GRAPHYSX_HOST__.setMode("editor"));
 
   // --- The two-body player: steering, the fire-arrow, and the per-direction cap ---------
   // The original BallZ control model as scene vocabulary: `api.steer` aims a heading and
@@ -558,6 +562,65 @@ try {
     };
   });
   await page.screenshot({ path: path.join(ART, "ballz-win.png") });
+
+  // The three appearances are not private menu state: agents and the editor discover and
+  // instantiate them as ordinary prefabs. Prove the classic recipe carries GridXL and the
+  // same steering contract as the in-game ball.
+  out.ballPresets = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const ids = api.prefabs().filter((prefab) => prefab.id.startsWith("ballz-ball-")).map((prefab) => prefab.id);
+    const spawned = api.spawnPrefab("ballz-ball-classic", { idPrefix: "smoke-classic-ball", position: [8, 3, 8] });
+    const body = api.query({ ids: ["smoke-classic-ball"] })[0];
+    const shell = api.query({ ids: ["smoke-classic-ball:shell"] })[0];
+    const aim = api.query({ ids: ["smoke-classic-ball:aim"] })[0];
+    return {
+      ids,
+      spawned: spawned.ok,
+      entityCount: spawned.ok ? spawned.value?.entityIds.length ?? 0 : 0,
+      presetTagged: body?.tags.includes("ball-preset:classic") ?? false,
+      steeringArrowId: body?.steering?.arrowId ?? null,
+      shellAsset: shell?.asset?.id ?? null,
+      aimAsset: aim?.asset?.id ?? null,
+    };
+  });
+
+  await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    api.pause(true);
+    api.create({
+      schema: api.worldSchema,
+      id: "ballz-preset-gallery",
+      label: "Recovered BallZ Ball Presets",
+      environment: {
+        background: "#091721",
+        sky: "clearnight",
+        ground: { visible: false },
+        physics: { gravity: [0, -9.81, 0] },
+      },
+      entities: [
+        { id: "gallery-floor", type: "box", transform: { position: [0, -0.2, 0] }, geometry: { width: 10, height: 0.4, depth: 5 }, material: { color: "#243747", roughness: 0.7 }, physics: { mode: "static", material: "ground" } },
+        { id: "gallery-key", type: "directional-light", transform: { position: [-4, 7, 6] }, intensity: 4.2, material: { color: "#fff1d8" } },
+        { id: "gallery-fill", type: "ambient-light", intensity: 0.75, material: { color: "#86b8d2" } },
+      ],
+    });
+    api.spawnPrefab("ballz-ball-revival", { idPrefix: "gallery-revival", position: [-3, 1, 0] });
+    api.spawnPrefab("ballz-ball-classic", { idPrefix: "gallery-classic", position: [0, 1, 0] });
+    api.spawnPrefab("ballz-ball-fire", { idPrefix: "gallery-fire", position: [3, 1, 0] });
+  });
+  await page.waitForFunction(() => {
+    const models = window.__GRAPHYSX__.query({ type: "model" });
+    return models.length === 6 && models.every((model) => model.asset?.status === "ready");
+  }, null, { timeout: SMOKE_TIMEOUT });
+  out.ballPresetGallery = await page.evaluate(() => {
+    const host = window.__GRAPHYSX_HOST__;
+    host.setMode("scene");
+    host.camera.position.set(0, 3.4, 10);
+    host.controls.target.set(0, 1, 0);
+    host.camera.lookAt(host.controls.target);
+    return window.__GRAPHYSX__.query({ tag: "ballz-ball-preset" }).map((entity) => entity.id);
+  });
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: path.join(ART, "ballz-ball-presets.png") });
 } catch (error) {
   out.fatal = String(error);
 }
@@ -613,6 +676,14 @@ const ok =
   out.laps?.digitCount === 3 &&
   JSON.stringify(out.laps?.visibleDigits) === JSON.stringify(["ballz-lap-digit-1"]) &&
   out.laps?.recoveredGlyphModels === 11 &&
+  JSON.stringify(out.ballPresets?.ids) === JSON.stringify(["ballz-ball-revival", "ballz-ball-classic", "ballz-ball-fire"]) &&
+  out.ballPresets?.spawned === true &&
+  out.ballPresets?.entityCount === 3 &&
+  out.ballPresets?.presetTagged === true &&
+  out.ballPresets?.steeringArrowId === "smoke-classic-ball:aim" &&
+  out.ballPresets?.shellAsset === "archive-ballshell" &&
+  out.ballPresets?.aimAsset === "archive-ballctrl-gridxl" &&
+  JSON.stringify(out.ballPresetGallery) === JSON.stringify(["gallery-revival", "gallery-classic", "gallery-fire"]) &&
   out.steer?.hasSteering === true &&
   out.steer?.arrowId === "ballz-aim-arrow" &&
   out.steer?.hasArrow === true &&

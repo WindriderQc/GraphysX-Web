@@ -1,5 +1,6 @@
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { createLevelThumbnail, SHELF_THUMBNAIL_CSS } from "./shelf-thumbnails";
+import { BALLZ_BALL_PRESETS, loadBallzBallPreset, saveBallzBallPreset } from "./ballz-ball-presets";
 
 /**
  * The BallZ title screen — the game's own front door, one level up from a bare list of
@@ -46,6 +47,27 @@ export function mountBallzMenu(container: HTMLElement, options: BallzMenuOptions
   const sub = document.createElement("div");
   sub.className = "gx-bzmenu-sub";
   sub.textContent = "the revival · point the fire arrow, roll the caged ball, take every ring, three tours to the finish";
+
+  const presetPicker = document.createElement("div");
+  presetPicker.className = "gx-bzmenu-presets";
+  presetPicker.setAttribute("aria-label", "Ball appearance");
+  let selectedPreset = loadBallzBallPreset();
+  const presetButtons: HTMLButtonElement[] = [];
+  for (const preset of BALLZ_BALL_PRESETS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "gx-bzmenu-preset";
+    button.dataset.ballPreset = preset.id;
+    button.innerHTML = `<b>${preset.label}</b><small>${preset.id === "classic" ? "GridXL" : preset.id === "fire" ? "BallFire" : "BallShell + Fire"}</small>`;
+    button.title = preset.summary;
+    button.addEventListener("click", () => {
+      selectedPreset = saveBallzBallPreset(preset.id);
+      for (const candidate of presetButtons) candidate.classList.toggle("is-selected", candidate.dataset.ballPreset === selectedPreset.id);
+    });
+    button.classList.toggle("is-selected", preset.id === selectedPreset.id);
+    presetButtons.push(button);
+    presetPicker.append(button);
+  }
 
   const start = document.createElement("button");
   start.type = "button";
@@ -99,7 +121,7 @@ export function mountBallzMenu(container: HTMLElement, options: BallzMenuOptions
     onClose?.();
   });
 
-  card.append(mark, sub, start, roster, back);
+  card.append(mark, sub, presetPicker, start, roster, back);
   overlay.append(card);
   container.append(overlay);
 
@@ -135,6 +157,13 @@ ${SHELF_THUMBNAIL_CSS}
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 4px 22px rgba(255,110,26,.45))}
 .gx-bzmenu-sub{color:var(--gx-ink-faint);font-size:12.5px;letter-spacing:.05em;line-height:1.55;max-width:420px}
+.gx-bzmenu-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;width:100%;max-width:430px}
+.gx-bzmenu-preset{display:flex;flex-direction:column;gap:2px;align-items:center;cursor:pointer;padding:8px 7px;
+  border-radius:9px;border:1px solid rgba(120,240,208,.2);background:rgba(13,31,42,.72);color:var(--gx-ink-soft);
+  font-family:var(--gx-font)}
+.gx-bzmenu-preset b{font-size:12px;letter-spacing:.05em}.gx-bzmenu-preset small{font-size:9px;color:var(--gx-ink-faint)}
+.gx-bzmenu-preset:hover{border-color:rgba(255,176,84,.65)}
+.gx-bzmenu-preset.is-selected{border-color:#ffac47;color:#fff3d6;background:rgba(109,48,13,.48);box-shadow:0 0 16px rgba(255,138,42,.16)}
 .gx-bzmenu-start{cursor:pointer;margin-top:2px;border-radius:12px;padding:13px 34px;
   font:800 17px var(--gx-font);letter-spacing:.06em;color:#1b0d02;
   background:linear-gradient(180deg,#ffd24d,#ff8a2a);border:1px solid #ffb054;

@@ -1852,3 +1852,35 @@ ArrowUp input, play-state text capture, no error artifact). Visual artifacts:
 Next ranked work: GridXL/classic + fire/revival ball preset vocabulary, the recorded classic
 level floor/sky/companion-post deviations, then Suzanne moving parts and the remaining
 player-visible ledger audits.
+
+## 2026-07-27 — `revival-debt-r2`: three recovered balls + faithful classic course bindings
+
+The BallZ title screen now exposes **Revival / Classic / Fire** before starting a course.
+The choice persists and materialises as scene data (preset tags + explicit model assets), not
+as a renderer-side recolour. The combinations follow the recovered selector vocabulary:
+Revival = BallShell + BallFire controller; Classic = BallShell + a faithful BallCtrl geometry
+variant wearing the archived **GridXL** skin; Fire = full-size BallFire + BallCtrl controller.
+All three are also discoverable `api.prefabs()` / editor chips, with dynamic ball physics and
+the same steer/aim contract as the in-game player. `scripts/vendor-ball-meshes.mjs` remains the
+single provenance-bearing vendor and now emits the GridXL BallCtrl variant.
+
+The three recorded classic-course presentation deviations are retired. Archive Level 1 now
+owns ClearBlue + Alien01 diffuse **and normal** (10×10) + directional-arrow walls; Level 2 owns
+LostValley + Checkerboard (20×20) + Wood03 walls. This required graduating normal maps into
+the v2 material vocabulary: `normalTexture` and `normalScale` resolve, serialize, apply in
+linear colour space, restore correctly on patches, and dispose with the entity. The lowercase
+`f` / `h` cells remain floor in the editable grid but materialise as source-scaled, static
+0.2-radius / 2-unit companion cylinders at their exact archived coordinates. The trigger is
+still local to uppercase F/H, so `gate-line-collapsed-to-cell` remains honestly recorded.
+
+Verified: build green; `smoke-archive-levels` passes both complete courses (census, translation,
+containment, steering, 20 rings, three laps, export/load) and additionally proves exact sky,
+floor, normal, wall and two physical companion bindings plus the actual renderer map names;
+`smoke-ballz` proves all three preset descriptors and instantiates Classic as a 3-entity prefab;
+`smoke-games` selects Classic through the human menu and proves the resulting scene carries
+BallShell + `archive-ballctrl-gridxl`. No console/page errors. Screenshot inspection:
+`output/smoke/ballz-ball-presets.png` (three distinct recovered appearances),
+`output/smoke/games-ballz-menu.png`, and `output/verify/archive-ballz-level{1,2}.png`.
+
+Next ranked work: Suzanne moving parts as genuine course obstacles, then the five remaining
+NOT_REVIVED and 22 preview/pipeline records re-audited against HEAD.

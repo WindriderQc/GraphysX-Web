@@ -71,7 +71,11 @@ try {
     hasStart: !!document.querySelector(".gx-bzmenu-start"),
     courseCount: document.querySelectorAll(".gx-bzmenu-course").length,
     firstCourseListed: !!document.querySelector('.gx-bzmenu-course[data-level-id="first-course"]'),
+    presetCount: document.querySelectorAll(".gx-bzmenu-preset").length,
+    selectedPreset: document.querySelector(".gx-bzmenu-preset.is-selected")?.dataset.ballPreset ?? null,
   }));
+  await page.click('.gx-bzmenu-preset[data-ball-preset="classic"]');
+  out.menu.selectedClassic = await page.evaluate(() => document.querySelector(".gx-bzmenu-preset.is-selected")?.dataset.ballPreset ?? null);
   await page.screenshot({ path: path.join(ART, "games-ballz-menu.png"), fullPage: false });
 
   // ---- play it, through the full ceremony ----
@@ -96,7 +100,24 @@ try {
       domFallbackAbsent: !document.querySelector(".gx-bz-count"),
     };
   });
+  // The live stage can advance between the assertion and Chromium's screenshot task. Freeze
+  // the now-proven ceremony, then stage GO through the same ordinary visibility field for a
+  // deterministic visual artifact. This is presentation setup only; the assertion above is
+  // what proves a naturally advancing recovered stage was visible.
+  await page.evaluate(() => window.__GRAPHYSX__.pause(true));
+  await page.waitForFunction(() => window.__GRAPHYSX__.query({ tag: "ballz-countdown-stage" }).every((entity) => !entity.visible), null, { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["ballz-countdown-stage-go-g", "ballz-countdown-stage-go-o"] }).every((entity) => entity.asset?.status === "ready"), null, { timeout: SMOKE_TIMEOUT });
+  await page.evaluate(() => window.__GRAPHYSX__.update("ballz-countdown-stage-go", { visible: true }));
+  await page.waitForTimeout(120);
   await page.screenshot({ path: path.join(ART, "games-ballz-countdown-3d.png"), fullPage: false });
+  await page.evaluate(() => {
+    window.__GRAPHYSX__.update("ballz-countdown-stage-go", { visible: false });
+    window.__GRAPHYSX__.pause(false);
+  });
+  await page.waitForFunction(() => {
+    const api = window.__GRAPHYSX__;
+    return api.query({ ids: ["ballz-ball-shell", "ballz-aim-arrow"] }).every((entity) => entity.asset?.status === "ready");
+  }, null, { timeout: SMOKE_TIMEOUT });
   await page.waitForFunction(
     () => window.__GRAPHYSX__.query({ tag: "ballz-countdown-stage" }).every((entity) => !entity.visible),
     null,
@@ -109,6 +130,11 @@ try {
     // No authoring chrome on a game surface.
     toolbarShown: await shown(".gx-ed-toolbar"),
     levelEntities: await page.evaluate(() => window.__GRAPHYSX__.query({ tag: "ballz" }).length),
+    preset: await page.evaluate(() => ({
+      tags: window.__GRAPHYSX__.query({ ids: ["ballz-ball"] })[0]?.tags ?? [],
+      shell: window.__GRAPHYSX__.query({ ids: ["ballz-ball-shell"] })[0]?.asset?.id ?? null,
+      controller: window.__GRAPHYSX__.query({ ids: ["ballz-aim-arrow"] })[0]?.asset?.id ?? null,
+    })),
     // The showroom's own entities must be gone: a course sitting inside the showroom's hills
     // would mean the world was added to rather than replaced.
     showroomEntities: await page.evaluate(() => window.__GRAPHYSX__.query({ tag: "showroom" }).length),
@@ -263,6 +289,9 @@ const ok =
   out.menu?.hasStart === true &&
   out.menu?.courseCount >= 1 &&
   out.menu?.firstCourseListed === true &&
+  out.menu?.presetCount === 3 &&
+  out.menu?.selectedPreset === "revival" &&
+  out.menu?.selectedClassic === "classic" &&
   /^archive-glyph-(?:[123g])$/.test(out.countdown?.recoveredMesh ?? "") &&
   /^ballz-countdown-stage-(?:[123]|go)$/.test(out.countdown?.visibleStage ?? "") &&
   out.countdown?.domFallbackAbsent === true &&
@@ -274,6 +303,9 @@ const ok =
   out.playing?.shelfGone === true &&
   out.playing?.toolbarShown === false &&
   out.playing?.levelEntities > 20 &&
+  out.playing?.preset?.tags?.includes("ball-preset:classic") === true &&
+  out.playing?.preset?.shell === "archive-ballshell" &&
+  out.playing?.preset?.controller === "archive-ballctrl-gridxl" &&
   out.playing?.showroomEntities === 0 &&
   out.ballResponds === true &&
   out.framedOnLevel === true &&

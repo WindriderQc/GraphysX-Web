@@ -8,6 +8,8 @@ import {
 } from "./agent-world-runtime";
 import type { AgentLevelState } from "./agent-level-library";
 import { ARCHIVE_BALLZ_LEVELS } from "./archive-ballz-levels";
+import { loadBallzBallPreset } from "./ballz-ball-presets";
+import { getClassicLevelStyle, type ClassicLevelStyle } from "./classic-level-style";
 
 /**
  * Turns an authored ASCII level into a playable `graphysx.agent-world/v2` scene.
@@ -38,12 +40,10 @@ import { ARCHIVE_BALLZ_LEVELS } from "./archive-ballz-levels";
  * tan slab with plain orange blocks, floating against a skybox mountain. Everything that
  * fixes it is vocabulary that had already graduated, so none of it is new rendering:
  *
- * - **Textures.** The floor takes `checker` and the walls `wood-floor`, both of which are
- *   literally the BallZ18 archive's own surfaces (`Damier.jpg`, `WoodFloor05_col.jpg`). The
- *   checker is not decoration: its repeat is pinned to the grid at one tile per two cells, so
- *   it is a *scale and speed cue*, which is the thing a rolling-ball game reads motion from.
- *   The ball carries the same checker for the same reason — an untextured sphere rolling and
- *   an untextured sphere sliding look identical.
+ * - **Textures.** Hand-painted levels use the warm BallZ18 wood floor + marble wall pairing.
+ *   Recovered classic levels instead own their recorded presentation: Level 1 Alien01
+ *   diffuse/normal + arrow blocks, Level 2 Checkerboard + Wood03. Repeats are source facts,
+ *   so the floor remains a scale and speed cue rather than generic decoration.
  * - **Terrain.** The arena now sits ON something. A `terrain` entity puts a levelled pad
  *   under the plinth at exactly the plinth's underside, and lets the landform fall away and
  *   rise into hills beyond it. This depends on `flattenRadius` being a guarantee rather than
@@ -61,8 +61,8 @@ import { ARCHIVE_BALLZ_LEVELS } from "./archive-ballz-levels";
  * prettier by breaking the product invariant. Those capabilities have since graduated as
  * `environment.post.bloom` and `environment.lighting`. The level now opts into both through
  * ordinary scene data: a restrained bloom catches only the already-emissive landmarks, and a
- * warm HDRI lights reflective surfaces while the recovered Lost Valley cube remains the visible
- * backdrop. Export, editor, agent, and renderer therefore all see the same look.
+ * warm HDRI lights reflective surfaces while each classic level keeps its recovered sky binding.
+ * Export, editor, agent, and renderer therefore all see the same look.
  */
 
 /** Grid coordinates map (x, row) → world (x, z); the level is centred on the origin. */
@@ -145,6 +145,33 @@ const FLOOR_THICKNESS_RATIO = 0.6;
  */
 const BALL_RADIUS_RATIO = 0.22;
 
+type ClassicPlatformBinding = {
+  style: ClassicLevelStyle;
+  floorTextureId: "classic-alien01" | "classic-checkerboard";
+  floorNormalTextureId: "classic-alien01-normal" | null;
+  wallTextureId: "two-way" | "classic-wood03";
+};
+
+function classicPlatformBinding(levelId: string): ClassicPlatformBinding | null {
+  if (levelId === "archive-ballz-level1") {
+    return {
+      style: getClassicLevelStyle("stockroom-level1"),
+      floorTextureId: "classic-alien01",
+      floorNormalTextureId: "classic-alien01-normal",
+      wallTextureId: "two-way",
+    };
+  }
+  if (levelId === "archive-ballz-level2") {
+    return {
+      style: getClassicLevelStyle("stockroom-level2"),
+      floorTextureId: "classic-checkerboard",
+      floorNormalTextureId: null,
+      wallTextureId: "classic-wood03",
+    };
+  }
+  return null;
+}
+
 
 
 /**
@@ -180,8 +207,10 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
   let finishId: string | null = null;
   let finishPosition: [number, number, number] | null = null;
   let spawnPosition: [number, number, number] | null = null;
-  const archiveFacts = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === level.id)?.provenance.levelListFacts;
+  const archiveLevel = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === level.id);
+  const archiveFacts = archiveLevel?.provenance.levelListFacts;
   const archiveLaps = typeof archiveFacts?.["laps"] === "number" ? Math.max(1, Math.floor(archiveFacts["laps"])) : 1;
+  const classicBinding = classicPlatformBinding(level.id);
 
   // Landmark emitters are *requested* here and allocated after the grid walk, because the
   // budget has to be spent in priority order and the finish gate may well be the last tile
@@ -225,15 +254,25 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
     // measure from it. Nothing above the play surface moved when the plinth was added below.
     transform: { position: [0, -playSurfaceThickness / 2, 0] },
     geometry: { width: extentX, height: playSurfaceThickness, depth: extentZ },
-    material: {
-      ...PALETTE.floor,
-      // The genuine BallZ18 wood floor (`WoodFloor05_col.jpg`, the archive's own surface), not
-      // the harsh black/white `Damier.jpg` checker it used to carry. The checkerboard read as a
-      // chessboard test-fixture and fought the marble walls for attention ("damier marble"); warm
-      // plank wood grounds the arena as a place. The grid/scale cue now comes from the cell seams,
-      // the wall frame and the raking shadows rather than a blown-out checker.
-      texture: { id: "wood-floor" as const, repeat: [Math.max(3, width / 7), Math.max(3, height / 7)] as [number, number] },
-    },
+    material: classicBinding
+      ? {
+          color: "#ffffff",
+          roughness: 0.7,
+          metalness: 0.02,
+          texture: { id: classicBinding.floorTextureId, repeat: classicBinding.style.floor.repeat },
+          ...(classicBinding.floorNormalTextureId
+            ? {
+                normalTexture: { id: classicBinding.floorNormalTextureId, repeat: classicBinding.style.floor.repeat },
+                normalScale: 0.72,
+              }
+            : {}),
+        }
+      : {
+          ...PALETTE.floor,
+          // Hand-painted platform levels retain the warm BallZ18 wood scan. The classic
+          // archive levels above take their own source bindings instead of inheriting it.
+          texture: { id: "wood-floor" as const, repeat: [Math.max(3, width / 7), Math.max(3, height / 7)] as [number, number] },
+        },
     physics: { mode: "static", material: "ground" },
     castShadow: false,
     tags: ["ballz", "floor"],
@@ -254,17 +293,11 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
           label: "Wall",
           transform: { position: [cell.worldX, wallHeight / 2, cell.worldZ] },
           geometry: { width: cellSize * 0.98, height: wallHeight, depth: cellSize * 0.98 },
-          // `marble09.jpg`, one tile per block. The first attempt used the BallZ18 wood floor
-          // for provenance reasons and it was simply wrong: that scan is near-black and made
-          // of hairline planks, so a wall run rendered as an undifferentiated chocolate bar
-          // (screenshot-checked). Marble is mid-tone, warm, and veined at a scale you can
-          // actually see on a 2.6-unit block — and a marble arena over a checkered floor is
-          // the honest ancestry of this whole genre anyway.
-          //
-          // The image is loaded once and shared by every wall in the level: three keys the GPU
-          // upload on the texture `Source`, and the runtime clones from one cached load, so N
-          // walls cost N draw calls but only one upload.
-          material: { ...PALETTE.wall, texture: { id: "marble" as const, repeat: [1, 1] as [number, number] } },
+          // Classic levels bind their recorded cube skins (Level 1 directional arrows,
+          // Level 2 gold Wood03). Hand-painted levels keep the modern marble default.
+          material: classicBinding
+            ? { color: "#ffffff", roughness: 0.58, metalness: 0.04, texture: { id: classicBinding.wallTextureId, repeat: [1, 1] } }
+            : { ...PALETTE.wall, texture: { id: "marble" as const, repeat: [1, 1] as [number, number] } },
           physics: { mode: "static", material: "wall" },
           tags: ["ballz", "wall"],
         });
@@ -450,21 +483,60 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
     }
   }
 
+  // The grid has singleton F/H tiles, so the lowercase f/h posts are necessarily plain
+  // floor in the editable level document. They are not lost: for the two recovered classic
+  // levels the materialiser reads their exact archived cells and emits the source-shaped
+  // solid cylinders as ordinary entities. A framed Level 1 shifts authored coordinates by
+  // one cell; Level 2 does not. This retires `companion-posts-dropped` without inventing a
+  // new editor tile or falsely turning the post into a hazard.
+  if (archiveLevel && classicBinding) {
+    const authoredOffset = archiveLevel.frame ? 1 : 0;
+    for (let y = 0; y < archiveLevel.archiveRows.length; y += 1) {
+      for (let x = 0; x < archiveLevel.archiveRows[y].length; x += 1) {
+        const symbol = archiveLevel.archiveRows[y][x];
+        if (symbol !== "f" && symbol !== "h") continue;
+        const cell = cellAt(x + authoredOffset, y + authoredOffset);
+        const postHeight = cellSize * classicBinding.style.markers.height;
+        const finishPost = symbol === "f";
+        entities.push({
+          id: `ballz-companion-${symbol}-${x}-${y}`,
+          type: "cylinder",
+          label: finishPost ? "Finish Companion Post" : "Halfway Companion Post",
+          transform: { position: [cell.worldX, postHeight / 2, cell.worldZ] },
+          geometry: {
+            radius: cellSize * classicBinding.style.markers.radius,
+            height: postHeight,
+            radialSegments: 20,
+          },
+          material: {
+            color: finishPost ? classicBinding.style.markers.finishColor : classicBinding.style.markers.halfwayColor,
+            emissive: finishPost ? "#4d0000" : "#00084d",
+            emissiveIntensity: 0.28,
+            roughness: 0.48,
+            metalness: 0.06,
+          },
+          physics: { mode: "static", material: "wall" },
+          tags: ["ballz", "gate-post", "companion-post", finishPost ? "finish" : "half"],
+        });
+      }
+    }
+  }
+
   if (!spawnPosition) {
     // A level with no `start` is still worth materialising — it is a layout being authored.
     // Say so rather than inventing a spawn in a corner that may be inside a wall.
     deviations.push("Level has no start tile, so no ball was spawned.");
   } else {
     // --- The two-body player: the RECOVERED 2011 ball ------------------------------------
-    // Not an invented look: the outer cage is the decoded `BallShell.tvm` and the aim
-    // indicator is the decoded `BallFire.tvm` wearing the archived `FireArrow800.JPG` — the
-    // arrow TEXTURE on the inner controller ball is how the original told you where you
-    // would go. `ballz-ball` itself is the invisible physics sphere (the collider matches
-    // the shell's radius); the shell mesh is parented to it and rolls with it, while the
-    // FireArrow ball is a separate entity the runtime's steering pass anchors at the
-    // subject's centre and yaws to the heading — pointing, never rolling, exactly like the
-    // recovered game. Provenance: meshes and texture `faithful` (vendor-ball-meshes.mjs);
-    // the steering/camera code around them remains `adapted` from the author's design.
+    // Not an invented look: Revival, Classic and Fire are explicit combinations of the
+    // decoded BallShell / BallCtrl / BallFire geometry. Classic's BallCtrl carries GridXL;
+    // Revival is the BallShell + FireArrow combination this product first shipped; Fire
+    // promotes BallFire to the rolling outer model. `ballz-ball` remains the invisible
+    // physics sphere. The rolling model is parented to it, while the controller model is a
+    // separate entity the steering pass anchors and yaws — pointing, never rolling.
+    // Provenance: geometry and texture payloads `faithful` (vendor-ball-meshes.mjs); the
+    // shared steering/camera contract remains `adapted` from the author's design.
+    const ballPreset = loadBallzBallPreset();
     const cellScale = cellSize / 2.6;
     const ballRadius = cellSize * BALL_RADIUS_RATIO;
     entities.push({
@@ -506,32 +578,30 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
         targetIds: ["ballz-ball"],
         impulse: vector.map((axis) => axis * cellSize) as AgentWorldVector3,
       })),
-      tags: ["ballz", "ball", "player"],
+      tags: ["ballz", "ball", "player", "ballz-ball-preset", `ball-preset:${ballPreset.id}`],
     });
     entities.push({
       id: "ballz-ball-shell",
       type: "model",
-      label: "Ball Shell",
+      label: `${ballPreset.label} Ball Shell`,
       parentId: "ballz-ball",
       transform: { position: [0, 0, 0] },
-      // The decoded 2011 cage, fitted to the collider's diameter. Its revival translucency
-      // is the asset's recovered-PBR profile, so every scene that spawns it agrees.
-      asset: { id: "archive-ballshell", fitSize: ballRadius * 2 },
-      tags: ["ballz", "ball"],
+      asset: { id: ballPreset.shellAssetId, fitSize: ballRadius * 2 },
+      tags: ["ballz", "ball", `ball-preset:${ballPreset.id}`],
     });
 
-    // The aim: the recovered FireArrow controller ball, INSIDE the shell. Anchored (never
-    // parented — parenting would make it roll with the physics body) at the subject centre
-    // by the steering pass, yawed to the heading. The legacy selector sized the inner ball
-    // at 6.601/8.5 of the shell radius; kept exactly.
+    // The aim/controller ball sits INSIDE the shell. Anchored (never parented — parenting
+    // would make it roll with the physics body) at the subject centre by the steering pass,
+    // yawed to the heading. The legacy selector sized it at 6.601/8.5 of the shell radius;
+    // kept exactly for every appearance.
     entities.push({
       id: "ballz-aim-arrow",
       type: "model",
-      label: "Fire Arrow Ball",
+      label: `${ballPreset.label} Controller Ball`,
       transform: { position: [spawnPosition[0], spawnPosition[1], spawnPosition[2]] },
-      asset: { id: "archive-ballfire", fitSize: ballRadius * 2 * (6.601 / 8.5) },
+      asset: { id: ballPreset.aimAssetId, fitSize: ballRadius * 2 * (6.601 / 8.5) },
       castShadow: false,
-      tags: ["ballz", "aim"],
+      tags: ["ballz", "aim", `ball-preset:${ballPreset.id}`],
     });
 
     // The recovered A-Z / 0-9 TVM set is finally ordinary model vocabulary. The countdown
@@ -788,10 +858,10 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
       // direction, and an enclosed arena under it renders almost perfectly flat — wall
       // shadows disappear into the ambient. A sky replaces that probe with a directional
       // one, which is what lets the raking shadows read. Measured against all six sets:
-      // `clearblue` is a 512 px set that reads as muddy brown at play angles; `lostvalley`
-      // gives the strongest ground-to-sky contrast. It is an ordinary per-scene field, so a
-      // level can be re-skied from the inspector or by `api.update` without touching this.
-      sky: "lostvalley",
+      // Recovered classic levels own their recorded sky binding: ClearBlue for Level 1,
+      // LostValley for Level 2. Hand-painted levels retain LostValley as the modern default.
+      // This remains an ordinary per-scene field, editable through the inspector/API.
+      sky: classicBinding?.style.source.sky ?? "lostvalley",
       // The visible cube and reflection lighting are deliberately independent. Golden Meadow
       // matches the authored late-afternoon key without replacing Lost Valley as the level's
       // backdrop; the stable registry id is the only asset reference that enters the document.

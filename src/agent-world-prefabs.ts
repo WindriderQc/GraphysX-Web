@@ -2,6 +2,7 @@ import type {
   AgentWorldEntityDefinition,
   AgentWorldVector3
 } from "./agent-world-runtime";
+import { getBallzBallPreset, type BallzBallPresetId } from "./ballz-ball-presets";
 
 export type AgentWorldPrefabId =
   | "cubx-assembly"
@@ -9,7 +10,10 @@ export type AgentWorldPrefabId =
   | "signal-beacon"
   | "portal-arch"
   | "orbital-sculpture"
-  | "habitat-pod";
+  | "habitat-pod"
+  | "ballz-ball-revival"
+  | "ballz-ball-classic"
+  | "ballz-ball-fire";
 
 export type AgentWorldPrefabPalette = {
   primary: string;
@@ -80,6 +84,27 @@ export const GRAPHYSX_AGENT_WORLD_PREFABS: readonly AgentWorldPrefabDescriptor[]
     summary: "Compact sci-fi shelter with dome, base, antenna and entry lights.",
     entityCount: 8,
     defaultPalette: { primary: "#dceff2", secondary: "#34566a", accent: "#7df6d2", emissive: "#1d7f70" }
+  },
+  {
+    id: "ballz-ball-revival",
+    label: "BallZ Ball — Revival",
+    summary: "Recovered BallShell cage with the FireArrow controller, on the shared v2 ball physics.",
+    entityCount: 3,
+    defaultPalette: { primary: "#d9f3f7", secondary: "#ffffff", accent: "#ff9a2a", emissive: "#3c2100" }
+  },
+  {
+    id: "ballz-ball-classic",
+    label: "BallZ Ball — Classic",
+    summary: "Recovered BallShell cage with the GridXL-skinned BallCtrl core.",
+    entityCount: 3,
+    defaultPalette: { primary: "#f4efe0", secondary: "#fff3ce", accent: "#ba9cff", emissive: "#20180a" }
+  },
+  {
+    id: "ballz-ball-fire",
+    label: "BallZ Ball — Fire",
+    summary: "Recovered BallFire outer mesh with the FireArrow BallCtrl core.",
+    entityCount: 3,
+    defaultPalette: { primary: "#ff8a36", secondary: "#ffffff", accent: "#ffce67", emissive: "#7d1600" }
   }
 ] as const;
 
@@ -112,6 +137,52 @@ export function instantiateAgentWorldPrefab(
   };
 
   switch (prefabId) {
+    case "ballz-ball-revival":
+    case "ballz-ball-classic":
+    case "ballz-ball-fire": {
+      const presetId: BallzBallPresetId = prefabId === "ballz-ball-classic"
+        ? "classic"
+        : prefabId === "ballz-ball-fire" ? "fire" : "revival";
+      const preset = getBallzBallPreset(presetId);
+      const position = options.position ?? [0, 1, 0];
+      const scale = options.scale ?? [1, 1, 1];
+      const body: AgentWorldEntityDefinition = {
+        id: prefix,
+        label: descriptor.label,
+        type: "sphere",
+        transform: { position, rotationDegrees: options.rotationDegrees ?? [0, 0, 0], scale },
+        geometry: { radius: 1, radialSegments: 12 },
+        material: { color: "#dff4ff", opacity: 0.03, roughness: 0.4, metalness: 0 },
+        castShadow: false,
+        physics: { mode: "dynamic", material: "ball", mass: 1.7, friction: 0.55, restitution: 0.5 },
+        steering: {
+          headingDegrees: 0,
+          force: 30,
+          speedCap: 7.02,
+          turnRateDegrees: 240,
+          kickImpulse: 9.36,
+          jumpImpulse: 13,
+          arrowId: `${prefix}:aim`,
+        },
+        tags: uniqueTags([...rootTags, "ballz", "ball", "ballz-ball-preset", `ball-preset:${preset.id}`]),
+      };
+      return [
+        body,
+        {
+          id: `${prefix}:shell`, label: `${preset.label} Rolling Shell`, type: "model", parentId: prefix,
+          transform: { position: [0, 0, 0] },
+          asset: { id: preset.shellAssetId, fitSize: 2 },
+          tags: [...partTags, "ballz", "ball", `ball-preset:${preset.id}`],
+        },
+        {
+          id: `${prefix}:aim`, label: `${preset.label} Controller`, type: "model",
+          transform: { position, scale },
+          asset: { id: preset.aimAssetId, fitSize: 2 * (6.601 / 8.5) },
+          castShadow: false,
+          tags: [...partTags, "ballz", "aim", `ball-preset:${preset.id}`],
+        },
+      ];
+    }
     case "cubx-assembly": {
       // The recovered CubX assembly, re-authored as v2 primitives.
       //

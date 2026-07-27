@@ -154,7 +154,7 @@ function recoveredPbrProfile(assetId: string | null, materialName: string): Reco
   if (assetId === "archive-ballshell") {
     return { shading: "physical", roughness: 0.24, metalness: 0.1, clearcoat: 0.5, clearcoatRoughness: 0.2, opacity: 0.42 };
   }
-  if (assetId === "archive-ballctrl" || assetId === "archive-ballfire") {
+  if (assetId === "archive-ballctrl" || assetId === "archive-ballctrl-gridxl" || assetId === "archive-ballfire") {
     return { shading: "standard", roughness: 0.32, metalness: 0.1 };
   }
   if (assetId === "archive-impreza") {

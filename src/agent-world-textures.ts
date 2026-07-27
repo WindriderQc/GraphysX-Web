@@ -89,6 +89,42 @@ export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
     source: "BallZ archive"
   },
   {
+    id: "classic-alien01",
+    label: "Classic Alien 01",
+    url: "/assets/textures/classic/Alien01_B_diff.bmp",
+    category: "surface",
+    description: "Level 1's recovered alien-panel floor diffuse map.",
+    defaultRepeat: [10, 10],
+    source: "StockRoom Level 1 / BallZ 2015 archive"
+  },
+  {
+    id: "classic-alien01-normal",
+    label: "Classic Alien 01 Normal",
+    url: "/assets/textures/classic/Alien01_B_normal.bmp",
+    category: "surface",
+    description: "Level 1's recovered tangent-space alien-panel normal map.",
+    defaultRepeat: [10, 10],
+    source: "StockRoom Level 1 / BallZ 2015 archive"
+  },
+  {
+    id: "classic-checkerboard",
+    label: "Classic Checkerboard",
+    url: "/assets/textures/classic/Checkerboard.png",
+    category: "pattern",
+    description: "Level 2's recovered checkerboard floor, repeated once per authored cell.",
+    defaultRepeat: [20, 20],
+    source: "StockRoom Level 2 / BallZ 2015 archive"
+  },
+  {
+    id: "classic-wood03",
+    label: "Classic Wood 03",
+    url: "/assets/textures/classic/Wood03_diff.bmp",
+    category: "surface",
+    description: "Level 2's recovered gold wood wall surface.",
+    defaultRepeat: [1, 1],
+    source: "StockRoom Level 2 / BallZ 2015 archive"
+  },
+  {
     id: "worn-wood",
     label: "Worn Wood",
     url: "/assets/textures/village/worn_wood.jpg",

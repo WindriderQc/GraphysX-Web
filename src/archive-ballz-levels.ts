@@ -39,8 +39,8 @@ import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
  * | `.`     | empty floor                                           | `.` floor     |
  * | `R`     | checkpoint ring                                       | `o` ring      |
  * | `@`     | player spawn                                          | `S` start     |
- * | `F`/`f` | the two posts of the finish line                      | `F` / dropped |
- * | `H`/`h` | the two posts of the halfway line                     | `H` / dropped |
+ * | `F`/`f` | the two posts of the finish line                      | `F` + recovered companion entity |
+ * | `H`/`h` | the two posts of the halfway line                     | `H` + recovered companion entity |
  *
  * `M`/`r`/`$` (Level 3's alphabet) are **not** in this table on purpose; see
  * `ARCHIVE_BALLZ_NOT_REVIVED` below.
@@ -116,11 +116,10 @@ export type ArchiveBallzLevel = {
 /**
  * Shared between both levels: the finish and halfway *lines* of the 2015 courses are each
  * defined by a pair of posts (`F`+`f`, `H`+`h`), and `race-definitions.ts` averages the pair's
- * z to get a lap line spanning the whole arena. A platform grid expresses a gate as one cell,
- * so the uppercase post's archived cell becomes the gate and the lowercase companion is
- * dropped to floor. That is a genuine change to how the course plays — an unmissable line
- * becomes a place you must aim at — and it is recorded on every level rather than smoothed
- * over.
+ * z to get a lap line spanning the whole arena. A platform grid still expresses the trigger
+ * as one uppercase cell, so the line-to-local-trigger deviation remains. The materialiser now
+ * restores each lowercase archived cell as its source-shaped solid cylinder; those companions
+ * are scene entities because the editable grid has no non-trigger post tile.
  */
 const GATE_DEVIATIONS = [
   {
@@ -130,31 +129,9 @@ const GATE_DEVIATIONS = [
       "The platform grid has one `F` and one `H` cell, so each gate sits on its uppercase post's " +
       "archived cell and the crossing is local instead of arena-wide.",
   },
-  {
-    code: "companion-posts-dropped",
-    detail:
-      "The lowercase companion posts (`f`, `h`) become plain floor. In the archive they are solid " +
-      "0.2-radius pillars; the grid's only solid-obstacle tile is `!` hazard, whose red glow would " +
-      "misrepresent a lap post as a danger, so they are dropped rather than mislabelled.",
-  },
   // `laps-reduced-to-one` was recorded here while `composeBallzLevel` hardcoded `laps: 1`.
   // The materialiser now reads this module's `levelListFacts.laps`, so a classic level runs
   // its archived `nbrTour` = 3 tours and the deviation no longer exists to record.
-  {
-    code: "sky-not-per-level",
-    detail:
-      "`levelList.xml` binds Level 1 to ClearBlue and Level 2 to LostValley. `composeBallzLevel` pins " +
-      "`sky: \"lostvalley\"` for every materialised level, so Level 2 matches its record by coincidence " +
-      "and Level 1 does not. PRODUCT_SPEC §14.5 separately records that the surviving ClearBlue set is " +
-      "512 px and reads muddy at play angles, so this is not a loss worth forcing.",
-  },
-  {
-    code: "floor-texture-not-per-level",
-    detail:
-      "Archived floor bindings (Level 1 `Alien01_B_diff.bmp` + normal map, Level 2 `Checkerboard.png`) " +
-      "are not applied: the materialiser gives every level the archive `Damier.jpg` checker. Level 2's " +
-      "archived floor *is* a checkerboard, so it lands right; Level 1's alien plate does not.",
-  },
   {
     code: "ball-feel-not-recovered",
     detail:
@@ -176,9 +153,9 @@ const CLASSIC_MAPPING = (solid: string): ArchiveSymbolMapping[] => [
   { symbol: "R", tile: "o", note: "Uppercase checkpoint ring becomes a collectible ring." },
   { symbol: "@", tile: "S", note: "Player spawn becomes the single start tile." },
   { symbol: "F", tile: "F", note: "Uppercase finish post becomes the finish gate." },
-  { symbol: "f", tile: null, note: "Lowercase finish post dropped to floor; the grid has one finish cell." },
+  { symbol: "f", tile: null, note: "Floor in the editable grid; materialised as the recovered finish companion post entity." },
   { symbol: "H", tile: "H", note: "Uppercase halfway post becomes the halfway gate." },
-  { symbol: "h", tile: null, note: "Lowercase halfway post dropped to floor; the grid has one halfway cell." },
+  { symbol: "h", tile: null, note: "Floor in the editable grid; materialised as the recovered halfway companion post entity." },
 ];
 
 /**
@@ -257,6 +234,8 @@ const ARCHIVE_LEVEL_1: ArchiveBallzLevel = {
       "All 400 authored cells, verbatim and in place: 106 `T` solids, 20 `R` checkpoints, one `@` spawn, one each of `F`/`f`/`H`/`h`.",
       "Ring count and ring positions — every one of the twenty archived checkpoints is a collectible ring at its archived cell.",
       "The spawn cell, and the finish/halfway gates at the archived cells of their uppercase posts.",
+      "The lowercase finish/halfway companion posts at their archived cells, scaled from the source 0.2-radius / 2-unit cylinders.",
+      "The ClearBlue sky and Alien01 diffuse + normal floor binding from levelList.xml; directional-arrow wall skin from the archived screenshot evidence.",
       "The course's topology: a central solid diamond with ring chains down both flanks, a far-corner halfway gate, and a finish beside the start.",
       "Square, 1:1 cell aspect — the grid is scaled uniformly, never stretched.",
     ],
@@ -266,10 +245,8 @@ const ARCHIVE_LEVEL_1: ArchiveBallzLevel = {
       "The rings being *required* to open the finish. `levelList.xml` records a 10-second ring bonus, i.e. rings were optional time in the archive; the platform's rules block makes collectibles a gate. A recovered layout, a platform rule.",
     ],
     deliberatelyAbsent: [
-      "The archived ClearBlue sky and the Alien01_B floor/normal binding — the materialiser owns both and this module may not edit it.",
-      "Three laps, the archived best time, and the 10-second ring bonus — no lap-count or scoreboard field is reachable from a grid level.",
+      "The archived best time and the 10-second ring bonus — no scoreboard/bonus field is reachable from a grid level.",
       "The 2015 ball tuning (mass 1250, gravity -25, torque steering, angular brake).",
-      "The four lap posts as physical pillars.",
     ],
   },
   deviations: [
@@ -304,8 +281,8 @@ const ARCHIVE_LEVEL_1: ArchiveBallzLevel = {
  * It is the better-shaped of the two as a platform level for one specific reason — **its
  * perimeter is already closed**, all 76 border cells are `Z`, so it ships at exactly its
  * authored 20x20 with no frame, no overwrite and no invented cell at all. Its archived sky
- * (LostValley) and archived floor (a checkerboard) also happen to be what the materialiser
- * gives every level, so this is the closest the platform gets to the record.
+ * (LostValley), checkerboard floor, Wood03 walls and companion posts are selected from the
+ * level's own classic style record, so this is the closest platform course to the source.
  */
 const ARCHIVE_LEVEL_2: ArchiveBallzLevel = {
   id: "archive-ballz-level2",
@@ -367,8 +344,9 @@ const ARCHIVE_LEVEL_2: ArchiveBallzLevel = {
       "The entire 20x20 grid, cell for cell, with no addition and no removal: 140 `Z` solids, 20 `R` checkpoints, one `@` spawn, one each of `F`/`f`/`H`/`h`.",
       "The closed perimeter, which is the archive's own — asserted rather than assumed.",
       "The concentric-shell topology and the symmetric checkpoint layout inside it.",
-      "The archived LostValley sky, matched (by the materialiser's fixed choice rather than by selection).",
-      "A checkerboard floor, which is what `levelList.xml` binds this level to.",
+      "The archived LostValley sky, selected from this level's style binding.",
+      "The Checkerboard floor and Wood03 wall binding from levelList.xml / screenshot evidence.",
+      "The lowercase finish/halfway companion posts at their archived cells, scaled from the source 0.2-radius / 2-unit cylinders.",
       "Square, 1:1 cell aspect — the grid is scaled uniformly, never stretched.",
     ],
     inferred: [
@@ -377,8 +355,8 @@ const ARCHIVE_LEVEL_2: ArchiveBallzLevel = {
     ],
     deliberatelyAbsent: [
       "The ten `iNumHuman` proxies the archive requests for this level — there is no crowd entity in the v2 vocabulary, and standing boxes in for people would be theatre.",
-      "Three laps, the archived best time, and the ring bonus.",
-      "The 2015 ball tuning, and the lap posts as physical pillars.",
+      "The archived best time and ring bonus.",
+      "The 2015 ball tuning.",
     ],
   },
   deviations: [

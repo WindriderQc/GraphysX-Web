@@ -193,6 +193,8 @@ try {
       const played = api.levels.play(id);
       if (!played.ok) return { playError: played.error };
       const ids = api.query({ tag: "ballz" }).map((e) => e.id);
+      const floor = api.query({ ids: ["ballz-floor"] })[0];
+      const wall = api.query({ tag: "wall" })[0];
       return {
         walls: ids.filter((i) => i.startsWith("ballz-wall-")).length,
         rings: ids.filter((i) => i.startsWith("ballz-ring-")).length,
@@ -204,6 +206,12 @@ try {
         // budget on the finish first, and a level with 20 rings must not have starved it.
         hasFinishBeacon: ids.includes("ballz-finish-gate-glow"),
         hasHalfBeacon: ids.includes("ballz-half-gate-glow"),
+        sky: api.state()?.environment.sky ?? null,
+        floorTexture: floor?.material.texture?.id ?? null,
+        floorNormalTexture: floor?.material.normalTexture?.id ?? null,
+        floorRepeat: floor?.material.texture?.repeat ?? null,
+        wallTexture: wall?.material.texture?.id ?? null,
+        companionPosts: api.query({ tag: "companion-post" }).map((post) => ({ id: post.id, physics: post.physics?.mode })),
         entities: api.state()?.entities.length ?? 0,
         rulesArmed: !!api.rules.status(),
         collectibleCount: api.rules.status()?.collectibleCount ?? 0,
@@ -217,6 +225,16 @@ try {
     check("twenty rings, a halfway gate, a finish gate, a ball and a start pad", built.rings === 20 && built.hasHalf && built.hasFinish && built.hasBall && built.hasStartPad, built);
     check("the rules block armed with 20 collectibles and one ordered checkpoint", built.rulesArmed && built.collectibleCount === 20 && built.checkpointCount === 1, { collectibles: built.collectibleCount, checkpoints: built.checkpointCount });
     check("both gates got a beacon out of the emitter budget", built.hasFinishBeacon && built.hasHalfBeacon, { finish: built.hasFinishBeacon, half: built.hasHalfBeacon });
+    const expectedSurface = record.id === "archive-ballz-level1"
+      ? { sky: "clearblue", floor: "classic-alien01", normal: "classic-alien01-normal", repeat: [10, 10], wall: "two-way" }
+      : { sky: "lostvalley", floor: "classic-checkerboard", normal: null, repeat: [20, 20], wall: "classic-wood03" };
+    check("the level owns its archived sky/floor/wall binding", built.sky === expectedSurface.sky
+      && built.floorTexture === expectedSurface.floor
+      && built.floorNormalTexture === expectedSurface.normal
+      && JSON.stringify(built.floorRepeat) === JSON.stringify(expectedSurface.repeat)
+      && built.wallTexture === expectedSurface.wall, { expected: expectedSurface, built });
+    check("both lowercase companion posts are physical scene entities", built.companionPosts.length === 2
+      && built.companionPosts.every((post) => post.physics === "static"), built.companionPosts);
 
     // --- does the ball rest on the floor, or fall through it? ------------------------------
     const rest = await page.evaluate(() => {
@@ -389,6 +407,22 @@ try {
       api.pause(false);
     }, record.id);
     await page.waitForTimeout(1600);
+    await page.waitForFunction((expected) => {
+      const host = window.__GRAPHYSX_HOST__;
+      const floor = host.world.getEntityObject("ballz-floor");
+      let material = null;
+      floor?.traverse((child) => { if (!material && child.isMesh) material = child.material; });
+      return material?.map?.name === `GraphysXTexture:${expected.floor}`
+        && (expected.normal === null || material?.normalMap?.name === `GraphysXTexture:${expected.normal}`);
+    }, expectedSurface, { timeout: SMOKE_TIMEOUT });
+    const renderedSurface = await page.evaluate(() => {
+      const floor = window.__GRAPHYSX_HOST__.world.getEntityObject("ballz-floor");
+      let material = null;
+      floor?.traverse((child) => { if (!material && child.isMesh) material = child.material; });
+      return { map: material?.map?.name ?? null, normalMap: material?.normalMap?.name ?? null };
+    });
+    check("the renderer bound the recovered floor maps", renderedSurface.map === `GraphysXTexture:${expectedSurface.floor}`
+      && (expectedSurface.normal === null || renderedSurface.normalMap === `GraphysXTexture:${expectedSurface.normal}`), renderedSurface);
     const shot = path.join(ART, `${record.id}.png`);
     await page.screenshot({ path: shot });
     console.log(`  shot  ${shot}`);

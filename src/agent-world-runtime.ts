@@ -74,6 +74,7 @@ import {
   Matrix4,
   Mesh,
   MeshStandardMaterial,
+  NoColorSpace,
   Object3D,
   PlaneGeometry,
   PointLight,
@@ -278,6 +279,10 @@ export type AgentWorldMaterial = {
   opacity: number;
   wireframe: boolean;
   texture: AgentWorldTexture | null;
+  /** Optional tangent-space normal map, using the same scoped texture vocabulary. */
+  normalTexture: AgentWorldTexture | null;
+  /** Strength applied uniformly to the normal map's X/Y channels. */
+  normalScale: number;
 };
 
 export type AgentWorldSplinePath = {
@@ -1208,7 +1213,9 @@ const DEFAULT_MATERIAL: AgentWorldMaterial = {
   metalness: 0.08,
   opacity: 1,
   wireframe: false,
-  texture: null
+  texture: null,
+  normalTexture: null,
+  normalScale: 1
 };
 
 const DEFAULT_GEOMETRY = {
@@ -3755,8 +3762,10 @@ function applyMaterial(material: MeshStandardMaterial, definition: AgentWorldMat
   material.transparent = definition.opacity < 1;
   material.depthWrite = definition.opacity >= 0.5;
   material.wireframe = definition.wireframe;
+  material.normalScale.set(definition.normalScale, definition.normalScale);
   material.needsUpdate = true;
   applyAgentTexture(material, definition.texture);
+  applyAgentNormalTexture(material, definition.normalTexture);
 }
 
 const agentTextureLoader = new TextureLoader();
@@ -3817,6 +3826,62 @@ function applyAgentTexture(material: MeshStandardMaterial, settings: AgentWorldT
   });
 }
 
+function applyAgentNormalTexture(material: MeshStandardMaterial, settings: AgentWorldTexture | null): void {
+  const previousAgentTexture = material.userData.graphysxAgentNormalTexture instanceof Texture
+    ? material.userData.graphysxAgentNormalTexture as Texture
+    : null;
+  if (!settings) {
+    material.userData.graphysxNormalTextureToken = Symbol("no-agent-normal-texture");
+    if (material.userData.graphysxHasOriginalNormalMap === true) {
+      material.normalMap = material.userData.graphysxOriginalNormalMap instanceof Texture
+        ? material.userData.graphysxOriginalNormalMap as Texture
+        : null;
+      delete material.userData.graphysxOriginalNormalMap;
+      delete material.userData.graphysxHasOriginalNormalMap;
+    }
+    previousAgentTexture?.dispose();
+    delete material.userData.graphysxAgentNormalTexture;
+    delete material.userData.graphysxNormalTextureKey;
+    material.needsUpdate = true;
+    return;
+  }
+
+  const resolved = resolveTexture(settings);
+  if (!resolved) return;
+  const key = JSON.stringify(resolved);
+  if (material.userData.graphysxNormalTextureKey === key && previousAgentTexture && material.normalMap === previousAgentTexture) return;
+  if (material.userData.graphysxHasOriginalNormalMap !== true) {
+    material.userData.graphysxOriginalNormalMap = material.normalMap;
+    material.userData.graphysxHasOriginalNormalMap = true;
+  }
+  const token = Symbol(`agent-normal-texture:${resolved.id}`);
+  material.userData.graphysxNormalTextureToken = token;
+  void loadAgentTexture(resolved.id).then((baseTexture) => {
+    if (material.userData.graphysxNormalTextureToken !== token) return;
+    const texture = baseTexture.clone();
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
+    texture.repeat.set(...(resolved.repeat ?? [1, 1]));
+    texture.offset.set(...(resolved.offset ?? [0, 0]));
+    texture.center.set(0.5, 0.5);
+    texture.rotation = (resolved.rotationDegrees ?? 0) * Math.PI / 180;
+    // Normal data is linear, never display colour.
+    texture.colorSpace = NoColorSpace;
+    texture.needsUpdate = true;
+    const oldTexture = material.userData.graphysxAgentNormalTexture instanceof Texture
+      ? material.userData.graphysxAgentNormalTexture as Texture
+      : null;
+    material.normalMap = texture;
+    material.userData.graphysxAgentNormalTexture = texture;
+    material.userData.graphysxNormalTextureKey = key;
+    oldTexture?.dispose();
+    material.needsUpdate = true;
+  }).catch((error: unknown) => {
+    if (material.userData.graphysxNormalTextureToken !== token) return;
+    material.userData.graphysxNormalTextureError = error instanceof Error ? error.message : String(error);
+  });
+}
+
 function loadAgentTexture(id: AgentWorldTextureId): Promise<Texture> {
   const cached = agentTextureCache.get(id);
   if (cached) return cached;
@@ -3855,7 +3920,9 @@ function resolveMaterial(source?: Partial<AgentWorldMaterial>, base: AgentWorldM
     metalness: clamp(source?.metalness ?? base.metalness, 0, 1),
     opacity: clamp(source?.opacity ?? base.opacity, 0, 1),
     wireframe: source?.wireframe ?? base.wireframe,
-    texture: source?.texture === undefined ? deepClone(base.texture) : resolveTexture(source.texture)
+    texture: source?.texture === undefined ? deepClone(base.texture) : resolveTexture(source.texture),
+    normalTexture: source?.normalTexture === undefined ? deepClone(base.normalTexture) : resolveTexture(source.normalTexture),
+    normalScale: clamp(source?.normalScale ?? base.normalScale, 0, 8)
   };
 }
 
@@ -4506,8 +4573,16 @@ function disposeObjectTree(root: Object3D): void {
     if (disposedMaterials.has(material)) return;
     // Invalidates a pending applyAgentTexture completion before releasing the material.
     material.userData.graphysxTextureToken = {};
+    material.userData.graphysxNormalTextureToken = {};
     if (material.userData.graphysxAgentTexture instanceof Texture) {
       const texture = material.userData.graphysxAgentTexture as Texture;
+      if (!disposedTextures.has(texture)) {
+        texture.dispose();
+        disposedTextures.add(texture);
+      }
+    }
+    if (material.userData.graphysxAgentNormalTexture instanceof Texture) {
+      const texture = material.userData.graphysxAgentNormalTexture as Texture;
       if (!disposedTextures.has(texture)) {
         texture.dispose();
         disposedTextures.add(texture);
@@ -4517,6 +4592,11 @@ function disposeObjectTree(root: Object3D): void {
     if (map && !disposedTextures.has(map)) {
       map.dispose();
       disposedTextures.add(map);
+    }
+    const normalMap = "normalMap" in material && material.normalMap instanceof Texture ? material.normalMap : null;
+    if (normalMap && !disposedTextures.has(normalMap)) {
+      normalMap.dispose();
+      disposedTextures.add(normalMap);
     }
     material.dispose();
     disposedMaterials.add(material);
