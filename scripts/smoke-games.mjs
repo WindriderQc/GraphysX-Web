@@ -82,19 +82,28 @@ try {
     showroomEntities: await page.evaluate(() => window.__GRAPHYSX__.query({ tag: "showroom" }).length),
   };
 
-  // Play frames the level rather than inheriting the showroom's off-axis overview: the orbit
-  // pivot should be on the level centre (near the origin for a centred course), not the
-  // showroom target of [-0.5, 3.4, -5], and the ease should have settled.
+  // Play leaves the showroom's off-axis overview for the game camera. Since
+  // `ballz-finished-r1` a steerable subject gets the CHASE camera: the orbit target is kept
+  // synced onto the ball itself (not the showroom target of [-0.5, 3.4, -5]) and the camera
+  // sits behind-and-above it. That is a stronger claim than the old fixed framing — the
+  // camera is on the level because it is on the ball that lives there.
   out.framing = await page.evaluate(() => {
     const host = window.__GRAPHYSX_HOST__;
     const t = host.orbitTarget;
-    return { targetX: t.x, targetY: t.y, targetZ: t.z, settled: !host.focusing };
+    const ball = host.world.getEntityObject("ballz-ball");
+    const camera = host.camera.position;
+    return {
+      targetX: t.x, targetY: t.y, targetZ: t.z,
+      settled: !host.focusing,
+      targetToBall: ball ? t.distanceTo(ball.position) : null,
+      cameraAboveBall: ball ? camera.y - ball.position.y : null,
+    };
   });
   out.framedOnLevel =
     out.framing.settled &&
-    Math.abs(out.framing.targetX) < 3 &&
-    Math.abs(out.framing.targetZ) < 3 &&
-    Math.abs(out.framing.targetY - 3.4) > 0.5;
+    out.framing.targetToBall !== null &&
+    out.framing.targetToBall < 4 &&
+    out.framing.cameraAboveBall > 2;
 
   // The level is playable, not just displayed. One real key event is enough here — the physics
   // of it is smoke-ballz's job.

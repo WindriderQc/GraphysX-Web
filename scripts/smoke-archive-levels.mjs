@@ -280,14 +280,19 @@ try {
       for (let i = 0; i < 120; i += 1) api.step(1 / 60);
       window.__BEFORE__ = api.query({ ids: ["ballz-ball"] })[0].position.slice();
     }, record.id);
-    await page.keyboard.press("ArrowUp");
+    // HELD, not pressed: the two-body scheme (`ballz-finished-r1`) makes ↑ continuous thrust
+    // integrated inside the simulation step, so an instant down+up between paused steps is
+    // zero applied force by design. Holding the key across the deterministic steps is what a
+    // rolling player actually does — the claim under test is unchanged.
+    await page.keyboard.down("ArrowUp");
     const steered = await page.evaluate(() => {
       const api = window.__GRAPHYSX__;
       for (let i = 0; i < 90; i += 1) api.step(1 / 60);
       const after = api.query({ ids: ["ballz-ball"] })[0].position;
       return { movedNorth: after[2] < window.__BEFORE__[2] - 0.2, before: window.__BEFORE__[2].toFixed(2), after: after[2].toFixed(2) };
     });
-    check("a real ArrowUp keypress rolls the ball north", steered.movedNorth, steered);
+    await page.keyboard.up("ArrowUp");
+    check("a real ArrowUp keydown rolls the ball north", steered.movedNorth, steered);
 
     // --- is it actually completable? --------------------------------------------------------
     const run = await page.evaluate((id) => {
@@ -319,13 +324,22 @@ try {
       for (const ring of rings) teleport(ring.position);
       const afterRings = api.rules.status();
 
-      // 3. The ordered checkpoint, then the finish.
+      // 3. The archived race is `nbrTour` = 3 (levelList.xml), honoured since
+      //    `ballz-finished-r1` retired the `laps-reduced-to-one` deviation: each tour is the
+      //    ordered checkpoint then the finish, the checkpoint re-arms per lap, and only the
+      //    third finish crossing completes. Collected rings stay collected across laps.
       const half = api.query({ ids: ["ballz-half-gate"] })[0];
       teleport(half.position);
       const afterHalf = api.rules.status();
       const gate = api.query({ ids: ["ballz-finish-gate"] })[0];
       teleport(gate.position);
       settle(30);
+      const afterFirstTour = api.rules.status();
+      for (let tour = 1; tour < (api.rules.get()?.laps ?? 1); tour += 1) {
+        teleport(half.position);
+        teleport(gate.position);
+        settle(30);
+      }
       const final = api.rules.status();
 
       return {
@@ -333,6 +347,10 @@ try {
         ringsSeen: rings.length,
         collected: afterRings?.collected.length ?? 0,
         checkpointAfterHalf: afterHalf?.checkpointIndex ?? -1,
+        lapsRequired: api.rules.get()?.laps ?? 0,
+        lapAfterFirstTour: afterFirstTour?.lap ?? -1,
+        phaseAfterFirstTour: afterFirstTour?.phase,
+        collectedAtEnd: final?.collected.length ?? 0,
         phase: final?.phase,
         elapsed: Number((final?.elapsedSeconds ?? 0).toFixed(2)),
         hiddenRings: api.query({ tag: "collectible" }).filter((r) => r.visible === false).length,
@@ -341,7 +359,10 @@ try {
     check("the finish does not count before the rings are collected", run.earlyPhase === "running", run.earlyPhase);
     check("all twenty rings collect and hide themselves", run.collected === 20 && run.hiddenRings === 20, { collected: run.collected, hidden: run.hiddenRings, seen: run.ringsSeen });
     check("the halfway gate registers as the ordered checkpoint", run.checkpointAfterHalf >= 1, run.checkpointAfterHalf);
-    check("the level completes: rings, then halfway, then finish", run.phase === "complete", run);
+    check("the archived nbrTour = 3 is honoured", run.lapsRequired === 3, run.lapsRequired);
+    check("the first tour banks a lap without winning", run.lapAfterFirstTour === 1 && run.phaseAfterFirstTour === "running", { lap: run.lapAfterFirstTour, phase: run.phaseAfterFirstTour });
+    check("rings stay collected across laps", run.collectedAtEnd === 20, run.collectedAtEnd);
+    check("the level completes: rings, then three tours of halfway -> finish", run.phase === "complete", run);
 
     // --- is a recovered level an ordinary scene? --------------------------------------------
     const roundTrip = await page.evaluate(() => {

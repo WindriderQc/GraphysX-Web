@@ -1713,3 +1713,17 @@ intact. Two harness fixes that are not assertion weakenings: waits on the HUD's 
 repaint / the runtime's own phase instead of wall-clock guesses, because the software-GL
 main thread starves timers — the 600 ms that used to be enough saw a mount-time snapshot
 of the previous run.
+
+### Full-gate follow-up (same day)
+
+The 2-core sandbox gate surfaced two smokes still asserting the pre-`ballz-finished-r1`
+truths, updated to the new semantics rather than weakened: `smoke-archive-levels` now HOLDS
+ArrowUp across the deterministic steps (an instant press is zero applied force under
+continuous thrust, by design) and completes the classic level over its honoured three tours
+(lap banked after tour one without winning, rings staying collected across laps);
+`smoke-games` asserts the chase camera — orbit target synced onto the ball, camera
+behind-and-above — instead of the old fixed play framing it replaced. Two other gate reds
+(`editor`, `vehicles`) were proven environmental on the starved box: the vehicles failure
+set is byte-identical on a tree without any of this work (models never reach `ready` under
+load), and the editor red is the documented slow-first-paint timeout. CI is the authority
+for both.
