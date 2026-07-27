@@ -51,7 +51,16 @@ export type AgentWorldModelAsset = {
 };
 
 /** Broad grouping so an agent can ask for "a tree" without knowing archive file names. */
-export type AgentWorldAssetCategory = "vegetation" | "port" | "camp" | "character" | "prop" | "vehicle" | "imported";
+export type AgentWorldAssetCategory =
+  | "vegetation"
+  | "port"
+  | "camp"
+  | "character"
+  | "prop"
+  | "vehicle"
+  | "archive-prop"
+  | "glyph"
+  | "imported";
 
 export type AgentWorldAssetDescriptor = {
   id: string;

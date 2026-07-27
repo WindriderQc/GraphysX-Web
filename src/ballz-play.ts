@@ -74,6 +74,16 @@ export function mountBallzPlay(
   // about whether you had won.
   const initial = api.rules.status();
   let won = initial?.phase === "complete";
+  const lapDigitIds = api.query({ tag: "ballz-lap-digit" }).map((entity) => entity.id);
+  let displayedLap = Math.min((initial?.lap ?? 0) + 1, initial?.laps ?? 1);
+
+  const syncLapDisplay = (run: ReturnType<typeof api.rules.status>): void => {
+    if (!run || lapDigitIds.length === 0) return;
+    const nextLap = Math.min(run.lap + 1, run.laps);
+    if (nextLap === displayedLap) return;
+    for (const id of lapDigitIds) api.update(id, { visible: id === `ballz-lap-digit-${nextLap}` });
+    displayedLap = nextLap;
+  };
 
   const hud = document.createElement("div");
   hud.className = "gx-bz-hud";
@@ -113,6 +123,7 @@ export function mountBallzPlay(
       parts.push("finish is open");
     }
     status.textContent = parts.join("  ·  ");
+    syncLapDisplay(run);
   };
   renderHud();
 
@@ -189,12 +200,17 @@ export function mountBallzPlay(
  * exactly the behaviour it had before countdowns existed.
  */
 function mountCountdown(api: GraphysXAgentWorldApi, container: HTMLElement, onGo: () => void): () => void {
-  const overlay = document.createElement("div");
-  overlay.className = "gx-bz-count";
-  const digit = document.createElement("div");
-  digit.className = "gx-bz-count-digit";
-  overlay.append(digit);
-  container.append(overlay);
+  const meshStages = new Set(api.query({ tag: "ballz-countdown-stage" }).map((entity) => entity.id));
+  const expectedStages = ["ballz-countdown-stage-3", "ballz-countdown-stage-2", "ballz-countdown-stage-1", "ballz-countdown-stage-go"];
+  const usesRecoveredMeshes = expectedStages.every((id) => meshStages.has(id));
+  const overlay = usesRecoveredMeshes ? null : document.createElement("div");
+  const digit = usesRecoveredMeshes ? null : document.createElement("div");
+  if (overlay && digit) {
+    overlay.className = "gx-bz-count";
+    digit.className = "gx-bz-count-digit";
+    overlay.append(digit);
+    container.append(overlay);
+  }
 
   // The revision baseline is taken at the FIRST tick, not at mount: this layer mounts inside
   // the `world.loaded` dispatch, which runs *before* `create()` bumps the world revision, so
@@ -206,26 +222,45 @@ function mountCountdown(api: GraphysXAgentWorldApi, container: HTMLElement, onGo
   const steps = ["3", "2", "1", "GO!"];
   let index = 0;
   let timer = 0;
+  let clearTimer = 0;
+  let visibleMeshStage: string | null = null;
+  const setMeshStage = (stage: string | null): void => {
+    if (!usesRecoveredMeshes || visibleMeshStage === stage) return;
+    const wanted = stage ? `ballz-countdown-stage-${stage === "GO!" ? "go" : stage}` : null;
+    for (const id of expectedStages) api.update(id, { visible: id === wanted });
+    visibleMeshStage = stage;
+  };
   const finish = (viaGo: boolean): void => {
     window.clearInterval(timer);
     if (viaGo) {
       // The clock starts when the player does. The subject is still on its spawn (controls
       // were locked), so the reset's respawn is a no-op in space and a fresh start in time.
       api.rules.reset();
-      digit.textContent = "GO!";
-      overlay.classList.add("gx-bz-count-go");
-      window.setTimeout(() => overlay.remove(), 650);
+      if (digit && overlay) {
+        digit.textContent = "GO!";
+        overlay.classList.add("gx-bz-count-go");
+      }
+      setMeshStage("GO!");
+      clearTimer = window.setTimeout(() => {
+        overlay?.remove();
+        setMeshStage(null);
+      }, 650);
     } else {
-      overlay.remove();
+      overlay?.remove();
+      setMeshStage(null);
     }
     onGo();
   };
   const show = (): void => {
-    digit.textContent = steps[index];
-    digit.classList.remove("gx-bz-count-pop");
-    // Restart the pop animation from frame zero for each digit.
-    void digit.offsetWidth;
-    digit.classList.add("gx-bz-count-pop");
+    const step = steps[index];
+    setMeshStage(step);
+    if (digit) {
+      digit.textContent = step;
+      digit.classList.remove("gx-bz-count-pop");
+      // Restart the pop animation from frame zero for each digit.
+      void digit.offsetWidth;
+      digit.classList.add("gx-bz-count-pop");
+    }
   };
   show();
   timer = window.setInterval(() => {
@@ -241,11 +276,16 @@ function mountCountdown(api: GraphysXAgentWorldApi, container: HTMLElement, onGo
       return;
     }
     show();
+    // Showing a recovered stage is itself an ordinary API update. Make those known revision
+    // bumps the new baseline so the next tick still detects only outside activity.
+    baselineRevision = api.state()?.revision ?? baselineRevision;
   }, 800);
 
   return () => {
     window.clearInterval(timer);
-    overlay.remove();
+    window.clearTimeout(clearTimer);
+    overlay?.remove();
+    setMeshStage(null);
   };
 }
 

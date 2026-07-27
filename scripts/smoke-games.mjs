@@ -77,10 +77,31 @@ try {
   // ---- play it, through the full ceremony ----
   await page.click(".gx-bzmenu-start");
   // The 3-2-1-GO start: nothing programmatic touches the world here, so the human path gets
-  // the whole countdown. Wait it out by its own overlay, not by wall-clock guessing.
-  await page.waitForSelector(".gx-bz-count", { timeout: SMOKE_TIMEOUT });
-  out.sawCountdown = true;
-  await page.waitForFunction(() => !document.querySelector(".gx-bz-count"), null, { timeout: SMOKE_TIMEOUT });
+  // the whole countdown. The classic levels now use the recovered TVM glyph meshes in the
+  // scene; the DOM overlay remains only as a fallback for composed courses without them.
+  await page.waitForFunction(() => {
+    const api = window.__GRAPHYSX__;
+    const stage = api?.query({ tag: "ballz-countdown-stage" }).find((entity) => entity.visible);
+    if (!stage) return false;
+    const glyphId = stage.id.endsWith("-go") ? `${stage.id}-g` : `${stage.id}-glyph`;
+    return api.query({ ids: [glyphId] })[0]?.asset?.status === "ready";
+  }, null, { timeout: SMOKE_TIMEOUT });
+  out.countdown = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const stage = api.query({ tag: "ballz-countdown-stage" }).find((entity) => entity.visible);
+    const glyphId = stage?.id.endsWith("-go") ? `${stage.id}-g` : `${stage?.id}-glyph`;
+    return {
+      recoveredMesh: glyphId ? api.query({ ids: [glyphId] })[0]?.asset?.id ?? null : null,
+      visibleStage: stage?.id ?? null,
+      domFallbackAbsent: !document.querySelector(".gx-bz-count"),
+    };
+  });
+  await page.screenshot({ path: path.join(ART, "games-ballz-countdown-3d.png"), fullPage: false });
+  await page.waitForFunction(
+    () => window.__GRAPHYSX__.query({ tag: "ballz-countdown-stage" }).every((entity) => !entity.visible),
+    null,
+    { timeout: SMOKE_TIMEOUT },
+  );
   out.playing = {
     mode: await page.evaluate(() => window.__GRAPHYSX_HOST__.mode),
     hudShown: await shown(".gx-bz-hud"),
@@ -242,7 +263,9 @@ const ok =
   out.menu?.hasStart === true &&
   out.menu?.courseCount >= 1 &&
   out.menu?.firstCourseListed === true &&
-  out.sawCountdown === true &&
+  /^archive-glyph-(?:[123g])$/.test(out.countdown?.recoveredMesh ?? "") &&
+  /^ballz-countdown-stage-(?:[123]|go)$/.test(out.countdown?.visibleStage ?? "") &&
+  out.countdown?.domFallbackAbsent === true &&
   out.shelf?.previewCount === out.shelf?.rowCount &&
 
   out.shelf?.welcomeGone === true &&

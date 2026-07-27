@@ -125,8 +125,8 @@ export async function buildAssetCatalog() {
     const payload = JSON.parse(await readFile(join(PORT_DIR, file), "utf8"));
     entries.push({
       id: file.slice(0, -5),
-      label: labelOf(file.slice(0, -5).replace(/^archive-/, "")),
-      category: "port",
+      label: payload.catalog?.label ?? labelOf(file.slice(0, -5).replace(/^archive-/, "")),
+      category: payload.catalog?.category ?? "port",
       format: "graphysx-mesh-json",
       url: `/assets/ports/${file}`,
       source: payload.provenance?.archiveSource ?? "",

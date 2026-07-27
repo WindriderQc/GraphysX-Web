@@ -1819,3 +1819,36 @@ the countdown self-cancel flakily.
 Verified: smoke-ballz green (recovered-model assertions replace the wireframe ones),
 smoke-games green through the full ceremony (hero → title screen → countdown → chase →
 exit), screenshots of the shell + FireArrow ball in the arena.
+
+## 2026-07-27 — `revival-debt-r1`: the TVM catalog becomes scene vocabulary
+
+Fresh-clone debt sweep, verified against `2625643` before implementation. The surviving
+`tvm-catalog.json` contains exactly **14 non-ball assets** and **36 alphabet assets** — not
+anonymous blobs after all. `CubXScene.cpp::LoadLettersAndNumbers` in the workshop supplies
+the missing identity/provenance for the latter (`Media/alphabet/A.tvm` through `Z.tvm`, then
+`0.tvm` through `9.tvm`). `scripts/vendor-tvm-meshes.mjs` now republishes all 50 payloads as
+curated `graphysx-mesh-json` assets with source bounds/materials, disclosed neutral PBR
+adaptations, and catalog roles. The generated public catalog exposes 14 `archive-prop` and
+36 `glyph` assets to agents and the editor.
+
+The first headline use is live. BallZ's CSS countdown is now only a compatibility fallback:
+ordinary scene groups display recovered 3D meshes for **3 · 2 · 1 · GO**, while archive
+levels carry a recovered mesh **LAP 1/2/3** display beside the finish. The play layer changes
+only entity visibility, mirroring the rules lap; export/load and agent edits therefore keep
+working. A dedicated screenshot caught the source transform's handedness trap: archive
+`RotateX(-90)` came from a left-handed renderer and rendered the Three.js label upside-down,
+so the faithful right-handed presentation uses +90. Final screenshots show upright LAP 1
+and GO, with no DOM countdown stacked over it.
+
+Verified: `npm run build`; `smoke-ballz` (51 materialised entities on the small test level,
+36 glyph + 14 archive-prop catalog records, 4 countdown stages, archive Level 1 = 3 laps,
+counter = LAP + three switchable digits, export/load and all gameplay checks green);
+`smoke-games` (hero → title → recovered mesh countdown → play → exit/browse, no console or
+page errors); and the required `web_game_playwright_client.js` loop (menu clicks, countdown,
+ArrowUp input, play-state text capture, no error artifact). Visual artifacts:
+`output/smoke/games-ballz-countdown-3d.png`, `output/smoke/ballz-lap-counter-3d.png`, and
+`output/web-game-revival/shot-0.png`.
+
+Next ranked work: GridXL/classic + fire/revival ball preset vocabulary, the recorded classic
+level floor/sky/companion-post deviations, then Suzanne moving parts and the remaining
+player-visible ledger audits.

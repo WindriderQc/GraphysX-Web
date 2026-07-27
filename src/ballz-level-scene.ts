@@ -178,7 +178,10 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
   const ringIds: string[] = [];
   let halfId: string | null = null;
   let finishId: string | null = null;
+  let finishPosition: [number, number, number] | null = null;
   let spawnPosition: [number, number, number] | null = null;
+  const archiveFacts = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === level.id)?.provenance.levelListFacts;
+  const archiveLaps = typeof archiveFacts?.["laps"] === "number" ? Math.max(1, Math.floor(archiveFacts["laps"])) : 1;
 
   // Landmark emitters are *requested* here and allocated after the grid walk, because the
   // budget has to be spent in priority order and the finish gate may well be the last tile
@@ -341,7 +344,10 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
       if (tile === "half" || tile === "finish") {
         const id = tile === "half" ? "ballz-half-gate" : "ballz-finish-gate";
         if (tile === "half") halfId = id;
-        else finishId = id;
+        else {
+          finishId = id;
+          finishPosition = [cell.worldX, wallHeight * 0.5, cell.worldZ];
+        }
         entities.push({
           id,
           type: "box",
@@ -527,6 +533,118 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
       castShadow: false,
       tags: ["ballz", "aim"],
     });
+
+    // The recovered A-Z / 0-9 TVM set is finally ordinary model vocabulary. The countdown
+    // lives in the world rather than as a CSS numeral: four stage groups share one position
+    // ahead of the start, and the play view changes only their ordinary `visible` field.
+    // Every source `LoadLettersAndNumbers` host rotated X by -90 after loading the TVM.
+    // The archive renderer was left-handed; Three.js is right-handed, so the faithful
+    // presentation transform uses the opposite sign here (the literal -90 rendered the
+    // recovered LAP label upside-down, which the dedicated counter screenshot caught).
+    const countdownPosition: [number, number, number] = [
+      spawnPosition[0],
+      // Directly above the start, not "ahead" of it. The first course spawns in a narrow
+      // walled pocket; putting the glyph two cells forward made the recovered mesh real but
+      // hid it behind the far wall from the chase camera (the screenshot caught this).
+      // The chase camera is only ~5.4 units above the ball. A first cut at 1.75 cells
+      // projected to NDC y=0.86 and sat underneath the HUD; 0.95 cells centres the tall
+      // mesh over the ball without intersecting it.
+      spawnPosition[1] + cellSize * 0.95,
+      spawnPosition[2],
+    ];
+    for (const digit of ["3", "2", "1"] as const) {
+      const groupId = `ballz-countdown-stage-${digit}`;
+      entities.push({
+        id: groupId,
+        type: "group",
+        label: `Countdown ${digit}`,
+        transform: { position: countdownPosition },
+        visible: false,
+        tags: ["ballz", "countdown", "ballz-countdown-stage"],
+      });
+      entities.push({
+        id: `${groupId}-glyph`,
+        parentId: groupId,
+        type: "model",
+        label: `Recovered countdown ${digit}`,
+        transform: { position: [0, 0, 0], rotationDegrees: [90, 0, 0] },
+        asset: { id: `archive-glyph-${digit}`, fitSize: cellSize * 0.82 },
+        castShadow: false,
+        tags: ["ballz", "countdown", "archive-glyph"],
+      });
+    }
+    const goId = "ballz-countdown-stage-go";
+    entities.push({
+      id: goId,
+      type: "group",
+      label: "Countdown GO",
+      transform: { position: countdownPosition },
+      visible: false,
+      tags: ["ballz", "countdown", "ballz-countdown-stage"],
+    });
+    for (const [glyph, offset] of [["g", -0.5], ["o", 0.5]] as const) {
+      entities.push({
+        id: `${goId}-${glyph}`,
+        parentId: goId,
+        type: "model",
+        label: `Recovered countdown ${glyph.toUpperCase()}`,
+        transform: { position: [offset * cellSize, 0, 0], rotationDegrees: [90, 0, 0] },
+        asset: { id: `archive-glyph-${glyph}`, fitSize: cellSize * 0.72 },
+        castShadow: false,
+        tags: ["ballz", "countdown", "archive-glyph"],
+      });
+    }
+  }
+
+  // A source-shaped 3D lap display beside the finish. CLClockDisplay duplicated the same
+  // number meshes and switched which duplicate was enabled; this display does exactly that
+  // through entity visibility. The play layer only mirrors `rules.status().lap` — rules stay
+  // authoritative, and the counter remains editable/exportable scene data.
+  if (finishPosition && archiveLaps > 1 && archiveLaps <= 9) {
+    const lapGroupId = "ballz-lap-display";
+    entities.push({
+      id: lapGroupId,
+      type: "group",
+      label: "Recovered 3D Lap Counter",
+      transform: { position: [finishPosition[0], wallHeight * 2.05, finishPosition[2]] },
+      tags: ["ballz", "lap-counter", "archive-glyph"],
+    });
+    entities.push({
+      id: "ballz-lap-display-board",
+      parentId: lapGroupId,
+      type: "box",
+      label: "Lap Counter Backing",
+      transform: { position: [0, 0, 0.08] },
+      geometry: { width: cellSize * 2.8, height: cellSize * 0.9, depth: cellSize * 0.08 },
+      material: { color: "#14222b", emissive: "#071018", emissiveIntensity: 0.35, opacity: 0.82, roughness: 0.48, metalness: 0.18 },
+      castShadow: false,
+      tags: ["ballz", "lap-counter"],
+    });
+    for (const [index, glyph] of ["l", "a", "p"].entries()) {
+      entities.push({
+        id: `ballz-lap-label-${glyph}`,
+        parentId: lapGroupId,
+        type: "model",
+        label: `Lap label ${glyph.toUpperCase()}`,
+        transform: { position: [cellSize * (-1.02 + index * 0.48), 0, 0], rotationDegrees: [90, 0, 0] },
+        asset: { id: `archive-glyph-${glyph}`, fitSize: cellSize * 0.52 },
+        castShadow: false,
+        tags: ["ballz", "lap-counter", "archive-glyph"],
+      });
+    }
+    for (let lap = 1; lap <= archiveLaps; lap += 1) {
+      entities.push({
+        id: `ballz-lap-digit-${lap}`,
+        parentId: lapGroupId,
+        type: "model",
+        label: `Lap ${lap}`,
+        transform: { position: [cellSize * 0.78, 0, 0], rotationDegrees: [90, 0, 0] },
+        asset: { id: `archive-glyph-${lap}`, fitSize: cellSize * 0.62 },
+        visible: lap === 1,
+        castShadow: false,
+        tags: ["ballz", "lap-counter", "ballz-lap-digit", "archive-glyph"],
+      });
+    }
   }
 
   // --- Corner pylons -------------------------------------------------------------------
@@ -635,8 +753,6 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
   // three times around, not once. A level whose recovered facts carry a lap count gets it —
   // the rules engine re-arms the ordered checkpoints each lap while collected rings stay
   // collected, which is exactly the classic structure. Hand-painted levels stay one lap.
-  const archiveFacts = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === level.id)?.provenance.levelListFacts;
-  const archiveLaps = typeof archiveFacts?.["laps"] === "number" ? Math.max(1, Math.floor(archiveFacts["laps"])) : 1;
   const rules: AgentWorldRulesDefinition | undefined =
     finishId || ringIds.length > 0
       ? {

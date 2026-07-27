@@ -62,6 +62,7 @@ try {
     const ball = api.query({ ids: ["ballz-ball"] })[0];
     const finish = api.query({ ids: ["ballz-finish-gate"] })[0];
     const ice = api.query({ tag: "ice" })[0];
+    const assets = api.assets();
 
     return {
       materialised: ids.length,
@@ -72,6 +73,9 @@ try {
       wallCount: ids.filter((id) => id.startsWith("ballz-wall-")).length,
       ringCount: ids.filter((id) => id.startsWith("ballz-ring-")).length,
       hasStartPad: ids.includes("ballz-start-pad"),
+      countdownStages: api.query({ tag: "ballz-countdown-stage" }).length,
+      recoveredGlyphAssets: assets.filter((asset) => asset.category === "glyph").length,
+      recoveredTvmAssets: assets.filter((asset) => asset.category === "archive-prop").length,
       ice: ice ? {
         id: ice.id,
         roughness: ice.material.roughness,
@@ -215,8 +219,32 @@ try {
     const api = window.__GRAPHYSX__;
     const played = api.levels.play("archive-ballz-level1");
     if (!played.ok) return { playError: played.error };
-    return { archiveLaps: api.rules.get()?.laps ?? null };
+    const digits = api.query({ tag: "ballz-lap-digit" });
+    return {
+      archiveLaps: api.rules.get()?.laps ?? null,
+      hasRecoveredCounter: api.query({ ids: ["ballz-lap-display"] }).length === 1,
+      digitCount: digits.length,
+      visibleDigits: digits.filter((entity) => entity.visible).map((entity) => entity.id),
+      recoveredGlyphModels: api.query({ tag: "archive-glyph" }).filter((entity) => entity.type === "model").length,
+    };
   });
+
+  await page.waitForFunction(() => {
+    const counter = window.__GRAPHYSX__.query({ tag: "lap-counter" });
+    const models = counter.filter((entity) => entity.type === "model");
+    return models.length === 6 && models.every((entity) => entity.asset?.status === "ready");
+  }, null, { timeout: SMOKE_TIMEOUT });
+  await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const host = window.__GRAPHYSX_HOST__;
+    const counter = api.query({ ids: ["ballz-lap-display"] })[0];
+    host.setMode("scene");
+    host.camera.position.set(counter.position[0], counter.position[1] + 0.4, counter.position[2] + 12);
+    host.controls.target.set(...counter.position);
+    host.camera.lookAt(host.controls.target);
+  });
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: path.join(ART, "ballz-lap-counter-3d.png") });
 
   // --- The two-body player: steering, the fire-arrow, and the per-direction cap ---------
   // The original BallZ control model as scene vocabulary: `api.steer` aims a heading and
@@ -546,6 +574,9 @@ const ok =
   out.play?.hasStartPad === true &&
   out.play?.wallCount === 24 &&
   out.play?.ringCount === 1 &&
+  out.play?.countdownStages === 4 &&
+  out.play?.recoveredGlyphAssets === 36 &&
+  out.play?.recoveredTvmAssets === 14 &&
   out.play?.ice?.roughness === 0.06 &&
   out.play?.ice?.opacity === 0.82 &&
   out.play?.ice?.physicsMaterial === "finish" &&
@@ -578,6 +609,10 @@ const ok =
   out.roundTrip?.lighting?.hdri === "lilienstein" &&
   out.roundTrip?.post?.bloom?.strength === 0.38 &&
   out.laps?.archiveLaps === 3 &&
+  out.laps?.hasRecoveredCounter === true &&
+  out.laps?.digitCount === 3 &&
+  JSON.stringify(out.laps?.visibleDigits) === JSON.stringify(["ballz-lap-digit-1"]) &&
+  out.laps?.recoveredGlyphModels === 11 &&
   out.steer?.hasSteering === true &&
   out.steer?.arrowId === "ballz-aim-arrow" &&
   out.steer?.hasArrow === true &&
