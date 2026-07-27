@@ -1759,3 +1759,30 @@ while the primary's stays running (strict gate attribution), the ring banks in B
 (shared), standings rank the rival first, and `subjects` round-trips through the document.
 `smoke-rules` re-run green — the solo path is byte-compatible (the per-subject branch only
 exists when `subjects` is declared).
+
+## 2026-07-27 — Wave 16 groundwork: the sky pipeline, and a defect that was already dead
+
+**`scripts/vendor-sky-from-hdri.mjs`.** The "genuinely high-res skies" item split honestly in
+two: pixels and provenance need a 4k/8k panorama this sandbox cannot download (Poly Haven
+403s from here), but the missing *tool* is done — equirect Radiance HDR → six faces in the
+archive file convention (`left|right|up|down|front|back.jpg`), with the loader's TV3D
+quarter-turns pre-baked inversely into up/down so `orientArchiveCubeTexture` lands them
+exactly right. Radiance RLE decoder in ~60 lines, pure-math cube projection, ACES+sRGB tone
+mapping, Chromium as the JPEG encoder per the `vendor-sky-jpeg.mjs` precedent — zero new
+dependencies. Verified: a 512² set from the bundled 1k lilienstein, horizon-ring montage
+seamless across all four side faces.
+
+**The `--verify` lesson cost three attempts and is worth recording.** Per-texel comparison of
+the reprojected set against the source scored ~20/255 on a KNOWN-good projection — grass and
+canopy at the source's own Nyquist disagree with themselves by ~14/255 under a quarter-degree
+jitter, and the error was invariant with face resolution, so it was never going to average
+out. The working design compares the WRITTEN FILES (decoded, loader-turns applied,
+box-reduced to 16²) against the pre-bake reference reduced identically: texture phase
+cancels exactly, JPEG noise floors at ~1/255, and a swapped file, missing quarter-turn or
+flipped axis scores tens to hundreds. Measured result on the test set: 0.16/255 overall.
+
+**Water-grey-at-grazing was already fixed** — the ledger lagged a third time (the CLAUDE.md
+check-against-HEAD rule keeps earning its place). `agent-world-water.ts` carries rf0 as a
+uniform at the physical 0.02, distance tinting, and adjustable specular; screenshot at a
+deliberately grazing camera shows the surface mirroring the actual skyline with no pale
+wash. Ledger updated with the evidence rather than silently.

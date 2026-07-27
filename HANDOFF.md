@@ -173,7 +173,13 @@ here blocks a release; pick by value rather than by order.
    were not promoted without scope/provenance. ~~CubX recovered geometry (still 8 plain boxes)~~
    — done, `cubx-r1` graduated the recovered assembly into a prefab. ~~The §14.5 BallZ shader
    pass~~ — done in Wave 14 through authored HDRI + bloom scene data, not a private renderer.
-   Remaining optional enrichments: high-res skies; p5-to-texture and multi-layer overlay stacks
+   Remaining optional enrichments: high-res skies — **the tooling half is done**:
+   `scripts/vendor-sky-from-hdri.mjs` converts any equirect Radiance HDR (a 4k/8k Poly Haven
+   panorama, a datalake capture) into a correctly oriented six-face set in the archive file
+   convention, with a coarse-reprojection `--verify` that catches naming/orientation/encoding
+   faults against a ~1/255 JPEG floor. What remains is curation: download the panoramas
+   (blocked from the build sandbox), run the tool per set, and add registry entries with real
+   provenance to `agent-world-skies.ts`; p5-to-texture and multi-layer overlay stacks
    (both named as deferred in `overlay-r1`, both optional in §4).
 
 ## Known defects — recorded, not hidden
@@ -183,9 +189,13 @@ here blocks a release; pick by value rather than by order.
   prisms, so a penetrating sphere could catch a neighbouring rim and receive a tilted contact
   normal. Rapier heightfields use `FIX_INTERNAL_EDGES`; the deterministic seam probe now guards
   against that lateral impulse on a perfectly flat field.
-- **Water reads grey at grazing angles.** three's `Water.js` hard-codes Fresnel
-  `rf0 = 0.3`; real water is ~0.02. Patched to a uniform, but a low camera still mirrors a
-  pale sky.
+- ~~**Water reads grey at grazing angles.**~~ **Fixed, and the ledger lagged again** — checked
+  against HEAD 2026-07-27 per the CLAUDE.md rule: `agent-world-water.ts` already carries the
+  full remedy (Fresnel `rf0` as a uniform defaulting to the physical 0.02, distance tint
+  attenuation, adjustable sun specular). Screenshot-verified at a deliberately grazing camera
+  (1.6 units over a 240-unit sea): the surface mirrors the actual skyline, the near field
+  tints, no pale wash. The "still mirrors a pale sky" tail of the old entry described the
+  pre-tint state.
 - **Ball drop retuned 9 m/0.52 → 6 m/0.34** partly for test stability. Real justification,
   mixed motive.
 - ~~**A runtime rollback raises an uncaught error** when a rejected transaction leaves the
