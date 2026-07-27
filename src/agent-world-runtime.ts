@@ -29,10 +29,13 @@ import {
   GRAPHYSX_AGENT_RULES_CAPABILITIES,
   advanceRun,
   armRun,
+  rankSubjectRuns,
   validateRules,
+  type AgentWorldRaceSubject,
   type AgentWorldRulesDefinition,
   type AgentWorldRulesSnapshot,
   type AgentWorldRunStatus,
+  type AgentWorldSubjectRun,
 } from "./agent-world-rules";
 // Re-exported so a consumer that already imports the runtime's vocabulary does not have to
 // know the rules layer lives in its own module — `AgentWorldDefinition` and the rules block
@@ -43,9 +46,11 @@ export {
   describeRun,
   formatClock,
   type AgentWorldCheckpointRule,
+  type AgentWorldRaceSubject,
   type AgentWorldRulesDefinition,
   type AgentWorldRunPhase,
   type AgentWorldRunStatus,
+  type AgentWorldSubjectRun,
 } from "./agent-world-rules";
 
 import {
@@ -425,6 +430,73 @@ export type AgentWorldInteraction =
   | AgentWorldPlaySoundInteraction;
 
 /**
+ * First-class heading-based steering for a dynamic entity — the BallZ two-body player model
+ * (a fire-arrow aim indicator plus a caged physics ball), expressed as scene vocabulary.
+ *
+ * The entity carrying `steering` is the physics subject. `headingDegrees` is where its
+ * fire-arrow points (0 = -Z "north", 90 = +X "east", clockwise seen from above); `thrust`
+ * and `turn` are live inputs in -1..1 the runtime integrates every simulation step: heading
+ * advances by `turn * turnRateDegrees * dt`, and a force of `thrust * force` newtons is
+ * applied along the heading. The speed limit is enforced PER DIRECTION, not as a global
+ * gate — a push is suppressed only when the ball is already fast along that push's own
+ * direction, so the brake (negative thrust) and a turned heading keep full authority at
+ * top speed. A global cap silently kills braking and turning; that lesson is recorded in
+ * `ballz-play.ts` and honoured here at the vocabulary level.
+ *
+ * `arrowId` names an ordinary (non-physics) entity the runtime keeps anchored at the
+ * subject every step — x/z from the body, its own authored y — and yawed to the heading.
+ * The arrow is cosmetic/logical, never a physics body: it is the "where will I go"
+ * pointer, and making the runtime place it is what keeps a keyboard player, a mouse
+ * player, and an agent driving `api.steer` perfectly in sync with what the screen shows.
+ *
+ * Inputs (`thrust`, `turn`) are session state and deliberately do not serialise — a saved
+ * scene must not reload with a phantom key held down. The heading and the tuning do.
+ */
+export type AgentWorldSteering = {
+  /** Aim heading in degrees. 0 points -Z, 90 points +X; normalised into [0, 360). */
+  headingDegrees?: number;
+  /** Continuous forward input, -1..1. Negative is the brake / reverse thrust. Transient. */
+  thrust?: number;
+  /** Continuous rotate input, -1..1. Positive turns clockwise (east-ward). Transient. */
+  turn?: number;
+  /** Newtons applied along the heading at |thrust| = 1. Default 30. */
+  force?: number;
+  /** m/s along a push's own direction past which that push stops adding. Default 7. */
+  speedCap?: number;
+  /** Heading change in degrees/second at |turn| = 1. Default 220. */
+  turnRateDegrees?: number;
+  /** Impulse magnitude at kick = 1 (see AgentWorldSteerInput.kick). Default 6. */
+  kickImpulse?: number;
+  /** Optional entity the runtime anchors to the subject and yaws to the heading. */
+  arrowId?: string;
+};
+
+/** One `api.steer` call: absolute aim, live inputs, and/or a one-shot kick. */
+export type AgentWorldSteerInput = {
+  /** Set the aim to an absolute heading (mouse pointing). */
+  headingDegrees?: number;
+  /** Set the continuous forward input, -1..1 (keyboard ↑/↓ edges). */
+  thrust?: number;
+  /** Set the continuous rotate input, -1..1 (keyboard ←/→ edges). */
+  turn?: number;
+  /**
+   * Fire a one-shot impulse of `kick * kickImpulse` along the heading — the golf-style
+   * launch (mouse click / drag-for-power / Space). 0..1, consumed immediately.
+   */
+  kick?: number;
+};
+
+export type AgentWorldSteerReceipt = {
+  entityId: string;
+  headingDegrees: number;
+  thrust: number;
+  turn: number;
+  /** The kick magnitude actually applied this call, 0 when none was requested. */
+  kicked: number;
+  linearVelocity: AgentWorldVector3;
+};
+
+/**
  * A live generative Canvas2D texture drawn onto this mesh's surface (Generative Surfaces / Wave
  * 15). Off unless declared. Valid on the primitive mesh types (box/plane/cylinder/cone/torus/
  * sphere/icosahedron); the runtime draws the sketch in its one shared per-frame pass.
@@ -442,6 +514,17 @@ export type AgentWorldSurface = {
 };
 
 type ResolvedAgentWorldSurface = Required<AgentWorldSurface>;
+
+type ResolvedAgentWorldSteering = {
+  headingDegrees: number;
+  thrust: number;
+  turn: number;
+  force: number;
+  speedCap: number;
+  turnRateDegrees: number;
+  kickImpulse: number;
+  arrowId: string | null;
+};
 
 export type AgentWorldEntityDefinition = {
   id?: string;
@@ -486,6 +569,8 @@ export type AgentWorldEntityDefinition = {
   formula?: AgentWorldFormula;
   /** Live generative Canvas2D surface texture. Valid on primitive mesh entities. */
   surface?: AgentWorldSurface | null;
+  /** Heading-based steering (the two-body player model). Dynamic-physics entities only. */
+  steering?: AgentWorldSteering | null;
   /** Recovered Living Forest genome. Only valid on `dna-tree` entities. */
   dna?: AgentWorldDna;
   /**
@@ -527,6 +612,8 @@ export type AgentWorldEntityPatch = {
   modelMaterialOverrides?: AgentWorldModelMaterialOverridePatch | null;
   /** Add, retune, or (null) remove a live generative surface. */
   surface?: AgentWorldSurface | null;
+  /** Add, retune, or (null) remove heading-based steering. Merged over the current block. */
+  steering?: AgentWorldSteering | null;
   visible?: boolean;
   castShadow?: boolean;
   receiveShadow?: boolean;
@@ -676,6 +763,7 @@ export type AgentWorldCommand =
   | { op: "attach-behavior"; id: string; behavior: AgentWorldBehavior }
   | { op: "detach-behavior"; id: string; behaviorId: string }
   | { op: "interact"; id: string; interactionId?: string }
+  | { op: "steer"; id: string; input: AgentWorldSteerInput }
   | { op: "set-environment"; environment: AgentWorldDefinition["environment"] }
   | { op: "select"; ids: string[] };
 
@@ -715,6 +803,17 @@ export type AgentWorldEntityState = {
   tags: string[];
   behaviors: Array<{ id: string; type: AgentWorldBehavior["type"] }>;
   interactions: Array<{ id: string; label: string; type: AgentWorldInteraction["type"]; targetIds: string[]; impulse?: AgentWorldVector3; relativePoint?: AgentWorldVector3; sound?: string; volume?: number; positional?: boolean; refDistance?: number }>;
+  /** Live steering pose and tuning when the entity carries a `steering` block. */
+  steering?: {
+    headingDegrees: number;
+    thrust: number;
+    turn: number;
+    force: number;
+    speedCap: number;
+    turnRateDegrees: number;
+    kickImpulse: number;
+    arrowId: string | null;
+  };
   physics: {
     mode: AgentWorldPhysicsMode;
     mass: number;
@@ -961,6 +1060,7 @@ export type GraphysXAgentWorldApi = {
   attachBehavior(id: string, behavior: AgentWorldBehavior): AgentWorldResult<{ entityId: string; behaviorId: string }>;
   detachBehavior(id: string, behaviorId: string): AgentWorldResult<string>;
   interact(id: string, interactionId?: string): AgentWorldResult<AgentWorldInteractionReceipt>;
+  steer(id: string, input: AgentWorldSteerInput): AgentWorldResult<AgentWorldSteerReceipt>;
   prefabs(): readonly AgentWorldPrefabDescriptor[];
   spawnPrefab(prefabId: AgentWorldPrefabId, options?: AgentWorldPrefabOptions): AgentWorldResult<AgentWorldPrefabInstance>;
   starters(): readonly AgentWorldStarterDescriptor[];
@@ -983,6 +1083,8 @@ export type GraphysXAgentWorldApi = {
     get(): AgentWorldRulesDefinition | null;
     set(rules: AgentWorldRulesDefinition | null): AgentWorldResult<AgentWorldRunStatus | null>;
     status(): AgentWorldRunStatus | null;
+    /** Ranked per-racer runs, or null when the rules declare no `subjects`. */
+    standings(): AgentWorldSubjectRun[] | null;
     reset(): AgentWorldResult<AgentWorldRunStatus | null>;
   };
   undo(): AgentWorldResult<AgentWorldState>;
@@ -1021,6 +1123,7 @@ type ResolvedEntity = {
   formula: ResolvedAgentWorldFormula | null;
   dna: ResolvedAgentWorldDna | null;
   surface: ResolvedAgentWorldSurface | null;
+  steering: ResolvedAgentWorldSteering | null;
   physics: ResolvedAgentWorldPhysics | null;
   intensity: number;
   distance: number;
@@ -1159,6 +1262,7 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "interaction.trigger",
   "interaction.impulse",
   "interaction.sound",
+  "control.steer",
   "prefab.list",
   "prefab.spawn",
   "starter.list",
@@ -1249,6 +1353,12 @@ export class AgentWorldRuntime {
    */
   private rules: AgentWorldRulesDefinition | null = null;
   private run: AgentWorldRunStatus | null = null;
+  /**
+   * Multiplayer: one run per race subject (`rules.subjects`), advanced from the same event
+   * pages as `run`. `run` is always the PRIMARY subject's entry in here when this is
+   * non-null, so every single-subject consumer stays correct without knowing races exist.
+   */
+  private subjectRuns: Map<string, { subject: AgentWorldRaceSubject; run: AgentWorldRunStatus }> | null = null;
   private rulesCursor = 0;
   private definition: AgentWorldDefinition = deepClone(GRAPHYSX_AGENT_DEMO_WORLD);
   private environment: AgentWorldEnvironment = deepClone(DEFAULT_ENVIRONMENT);
@@ -1299,6 +1409,8 @@ export class AgentWorldRuntime {
   };
   /** The enabled fields this step, rebuilt in place each pass rather than spread+filtered. */
   private readonly forceFieldActive: RuntimeEntity[] = [];
+  /** Scratch for the steering pass — direction/impulse math without per-frame allocation. */
+  private readonly steeringScratch = new Vector3();
   /** Field id → cached world→local matrix, refreshed (not reallocated) every step. */
   private readonly forceFieldInverses = new Map<string, Matrix4>();
   /** Consumer entity id → its cached hook closure; pruned when the entity disappears. */
@@ -1453,6 +1565,23 @@ export class AgentWorldRuntime {
     if (!receipt) return this.failure(`Interaction failed: ${id}`);
     this.recordEvent("interaction.triggered", `${receipt.label} on ${id}`);
     return this.success(receipt);
+  }
+
+  steer(id: string, input: AgentWorldSteerInput): AgentWorldResult<AgentWorldSteerReceipt> {
+    const result = this.transaction([{ op: "steer", id, input }]);
+    if (!result.ok) return this.failure(result.error ?? `Steer failed: ${id}`);
+    const receipt = result.value?.[0] as AgentWorldSteerReceipt | undefined;
+    if (!receipt) return this.failure(`Steer failed: ${id}`);
+    return this.success(receipt);
+  }
+
+  /**
+   * The cheap per-frame read a chase camera needs: the steering subject's live heading, with
+   * no state clone. Null when the entity does not exist or carries no steering block.
+   */
+  steeringHeadingOf(id: string): number | null {
+    const steering = this.entities.get(id)?.definition.steering;
+    return steering ? steering.headingDegrees : null;
   }
 
   listPrefabs(): readonly AgentWorldPrefabDescriptor[] {
@@ -1755,6 +1884,7 @@ export class AgentWorldRuntime {
       case "attach-behavior": return this.attachBehaviorInternal(command.id, command.behavior);
       case "detach-behavior": this.detachBehaviorInternal(command.id, command.behaviorId); return command.behaviorId;
       case "interact": return this.interactInternal(command.id, command.interactionId);
+      case "steer": return this.steerInternal(command.id, command.input);
       case "set-environment": this.setEnvironmentInternal(command.environment); return this.environment;
       case "select": this.selectedIds = command.ids.filter((id) => this.entities.has(id)); return [...this.selectedIds];
     }
@@ -1900,6 +2030,12 @@ export class AgentWorldRuntime {
       definition.surface = resolveAgentWorldSurface(patch.surface, definition.type);
       remountEntitySurface(runtime.object, definition.surface, definition.material);
     }
+    if (patch.steering !== undefined) {
+      if (patch.steering !== null && definition.physics?.mode !== "dynamic") throw new Error("Steering requires dynamic physics");
+      definition.steering = patch.steering === null
+        ? null
+        : resolveAgentWorldSteering(patch.steering, definition.steering ?? undefined);
+    }
     if (patch.interactions) definition.interactions = this.resolveInteractions(patch.interactions);
     this.applyResolvedEntity(runtime);
     // A terrain patch reshapes the ground, so the collider has to be rebuilt with it —
@@ -2031,6 +2167,46 @@ export class AgentWorldRuntime {
     };
   }
 
+  /**
+   * One steer call: absolute aim and/or live inputs, plus an optional one-shot kick. The
+   * continuous integration (turn → heading, thrust → force) happens in `applySteering`
+   * inside the simulation step, so it inherits pause/step exactly as an emitter does —
+   * this method only writes the inputs and fires the kick, which is why a keyboard player
+   * costs a handful of calls per key *edge* rather than one per frame.
+   */
+  private steerInternal(id: string, input: AgentWorldSteerInput): AgentWorldSteerReceipt {
+    const runtime = this.requireEntity(id);
+    const steering = runtime.definition.steering;
+    if (!steering) throw new Error(`Entity has no steering: ${id}`);
+    if (input.headingDegrees !== undefined) {
+      if (!Number.isFinite(input.headingDegrees)) throw new Error("steer.headingDegrees must be a finite number");
+      steering.headingDegrees = normalizeHeadingDegrees(input.headingDegrees);
+    }
+    if (input.thrust !== undefined) steering.thrust = clamp(input.thrust, -1, 1);
+    if (input.turn !== undefined) steering.turn = clamp(input.turn, -1, 1);
+    let kicked = 0;
+    if (input.kick !== undefined && runtime.body && runtime.definition.physics?.mode === "dynamic") {
+      kicked = clamp(input.kick, 0, 1);
+      if (kicked > 0) {
+        const radians = steering.headingDegrees * (Math.PI / 180);
+        const magnitude = kicked * steering.kickImpulse;
+        this.steeringScratch.set(Math.sin(radians) * magnitude, 0, -Math.cos(radians) * magnitude);
+        this.physicsWorld.applyImpulse(runtime.body, this.steeringScratch);
+        this.physicsWorld.wakeBody(runtime.body);
+      }
+    }
+    if (runtime.body) this.physicsWorld.readLinearVelocity(runtime.body, this.physicsScratch.linearVelocity);
+    else this.physicsScratch.linearVelocity.set(0, 0, 0);
+    return {
+      entityId: id,
+      headingDegrees: Number(steering.headingDegrees.toFixed(2)),
+      thrust: steering.thrust,
+      turn: steering.turn,
+      kicked,
+      linearVelocity: roundPhysicsVector(this.physicsScratch.linearVelocity),
+    };
+  }
+
   private setEnvironmentInternal(environment: AgentWorldDefinition["environment"]): void {
     this.environment = resolveEnvironment(environment);
     this.buildEnvironment();
@@ -2099,6 +2275,7 @@ export class AgentWorldRuntime {
     if (!rules) {
       this.rules = null;
       this.run = null;
+      this.subjectRuns = null;
       this.definition.rules = undefined;
       this.rulesCursor = this.streamSequence;
       return;
@@ -2107,8 +2284,32 @@ export class AgentWorldRuntime {
     this.rules = deepClone(rules);
     this.definition.rules = deepClone(rules);
     this.rulesCursor = this.streamSequence;
-    this.run = armRun(this.rules, this.rulesSnapshot(), this.rulesCursor);
-    this.recordEvent("rules.armed", `${this.run.checkpointCount} checkpoints · ${this.run.collectibleCount} collectibles · ${this.run.laps} lap(s)`);
+    this.armSubjectRuns();
+    this.run = this.armPrimaryRun();
+    this.recordEvent("rules.armed", `${this.run.checkpointCount} checkpoints · ${this.run.collectibleCount} collectibles · ${this.run.laps} lap(s)${this.subjectRuns ? ` · ${this.subjectRuns.size} racers` : ""}`);
+  }
+
+  /** Arm one run per race subject, or clear the map for a single-subject course. */
+  private armSubjectRuns(): void {
+    const subjects = this.rules?.subjects;
+    if (!this.rules || !subjects?.length) {
+      this.subjectRuns = null;
+      return;
+    }
+    const snapshot = this.rulesSnapshot();
+    this.subjectRuns = new Map(
+      subjects.map((subject) => [subject.id, { subject: deepClone(subject), run: armRun(this.rules!, snapshot, this.rulesCursor) }]),
+    );
+  }
+
+  /** The run `status()` answers with: the primary racer's in a race, else a fresh solo run. */
+  private armPrimaryRun(): AgentWorldRunStatus {
+    if (this.subjectRuns) {
+      const primaryId = this.rules?.subjectId ?? [...this.subjectRuns.keys()][0];
+      const entry = this.subjectRuns.get(primaryId!);
+      if (entry) return entry.run;
+    }
+    return armRun(this.rules!, this.rulesSnapshot(), this.rulesCursor);
   }
 
   /**
@@ -2140,8 +2341,26 @@ export class AgentWorldRuntime {
     if (!this.rules || !this.run) return;
     const page = this.readEvents(this.rulesCursor);
     this.rulesCursor = page.sequence;
+    const snapshot = this.rulesSnapshot();
+    if (this.subjectRuns) {
+      // A race advances every racer over the SAME page — one read of the stream, N verdicts.
+      const primaryId = this.rules.subjectId ?? [...this.subjectRuns.keys()][0];
+      for (const entry of this.subjectRuns.values()) {
+        const before = entry.run;
+        entry.run = advanceRun(before, this.rules, page, snapshot, entry.subject);
+        if (entry.run.phase !== before.phase && (entry.run.phase === "complete" || entry.run.phase === "expired")) {
+          this.recordEvent(
+            "rules.finished",
+            `${entry.subject.label ?? entry.subject.id}: ${entry.run.outcome} in ${entry.run.elapsedSeconds.toFixed(2)}s${entry.run.desynced ? " (desynced)" : ""}`,
+            entry.subject.id,
+          );
+        }
+      }
+      this.run = this.subjectRuns.get(primaryId!)?.run ?? this.run;
+      return;
+    }
     const before = this.run;
-    this.run = advanceRun(before, this.rules, page, this.rulesSnapshot());
+    this.run = advanceRun(before, this.rules, page, snapshot);
     if (this.run.resyncs > before.resyncs) {
       this.recordEvent("rules.resync", `stream gap at ${before.sequence}; collectibles rebuilt from the scene, lap and gate counts kept and flagged`);
     }
@@ -2181,26 +2400,48 @@ export class AgentWorldRuntime {
    */
   resetRun(): AgentWorldResult<AgentWorldRunStatus | null> {
     if (!this.rules) return this.failure("This scene declares no rules");
-    const spawn = this.rules.spawn;
-    if (spawn) {
-      const subject = this.entities.get(spawn.entityId);
-      if (subject) {
-        const position = spawn.position ?? subject.definition.transform.position;
-        subject.object.position.set(...position);
-        if (subject.body) {
-          this.physicsScratch.transform.position.set(...position);
-          this.physicsScratch.transform.rotation.copy(subject.object.quaternion);
-          this.physicsWorld.writeTransform(subject.body, this.physicsScratch.transform);
-          this.physicsWorld.writeLinearVelocity(subject.body, ZERO_PHYSICS_VECTOR);
-          this.physicsWorld.writeAngularVelocity(subject.body, ZERO_PHYSICS_VECTOR);
-          this.physicsWorld.wakeBody(subject.body);
-        }
+    const returnToSpawn = (entityId: string, position?: AgentWorldVector3): void => {
+      const subject = this.entities.get(entityId);
+      if (!subject) return;
+      const target = position ?? subject.definition.transform.position;
+      subject.object.position.set(...target);
+      if (subject.body) {
+        this.physicsScratch.transform.position.set(...target);
+        this.physicsScratch.transform.rotation.copy(subject.object.quaternion);
+        this.physicsWorld.writeTransform(subject.body, this.physicsScratch.transform);
+        this.physicsWorld.writeLinearVelocity(subject.body, ZERO_PHYSICS_VECTOR);
+        this.physicsWorld.writeAngularVelocity(subject.body, ZERO_PHYSICS_VECTOR);
+        this.physicsWorld.wakeBody(subject.body);
       }
+    };
+    const spawn = this.rules.spawn;
+    if (spawn) returnToSpawn(spawn.entityId, spawn.position);
+    // Every racer goes back to its mark, not just the primary — a race reset that left the
+    // rivals mid-course would hand them the first lap.
+    for (const subject of this.rules.subjects ?? []) {
+      if (subject.id !== spawn?.entityId) returnToSpawn(subject.id, subject.spawn?.position);
     }
     this.rulesCursor = this.streamSequence;
-    this.run = armRun(this.rules, this.rulesSnapshot(), this.rulesCursor);
+    this.armSubjectRuns();
+    this.run = this.armPrimaryRun();
     this.recordEvent("rules.reset", spawn?.entityId ?? "clock only");
     return this.success(deepClone(this.run));
+  }
+
+  /**
+   * The race standings, ranked, or null when the scene's rules declare no `subjects`.
+   * Finished runs first by time, then the running by laps/gates/pickups — the same pure
+   * ranking a HUD or an out-of-process spectator computes from these statuses.
+   */
+  raceStandings(): AgentWorldSubjectRun[] | null {
+    if (!this.subjectRuns) return null;
+    return rankSubjectRuns(
+      [...this.subjectRuns.values()].map(({ subject, run }) => ({
+        subjectId: subject.id,
+        label: subject.label ?? subject.id,
+        run: deepClone(run),
+      })),
+    );
   }
 
   private buildEnvironment(): void {
@@ -2290,8 +2531,10 @@ export class AgentWorldRuntime {
         this.physicsWorld.writeTransform(runtime.body, { position: runtime.object.position, rotation: runtime.object.quaternion });
       }
     }
-    // Fields act before the solver: a force applied after the step would not be integrated
-    // until the next one, which is a one-frame lag that shows up as jitter on a fast attractor.
+    // Steering and fields act before the solver: a force applied after the step would not be
+    // integrated until the next one, which is a one-frame lag that shows up as jitter on a
+    // fast attractor — and as mushy controls on a steered ball.
+    if (deltaSeconds > 0) this.applySteering(deltaSeconds);
     this.applyForceFields();
     if (deltaSeconds > 0) this.physicsWorld.step(deltaSeconds, { fixedTimeStep: 1 / 60, maxSubSteps: 4 });
     for (const runtime of this.entities.values()) {
@@ -2299,6 +2542,9 @@ export class AgentWorldRuntime {
         this.physicsWorld.readTransform(runtime.body, { position: runtime.object.position, rotation: runtime.object.quaternion });
       }
     }
+    // Arrows anchor AFTER the read-back so the aim indicator stands on the ball's fresh
+    // position — anchoring before the step would trail it by one frame at speed.
+    this.placeSteeringArrows();
     this.updateTriggers();
     // Emitters, water and flocks tick inside updateSimulation, so they inherit pause/step for
     // free — `api.pause(true)` freezes the murmuration, and `api.step(dt)` advances it one
@@ -2346,6 +2592,60 @@ export class AgentWorldRuntime {
     this.drawSurfaces(deltaSeconds);
     // Last, so the rules see the crossings this slice produced rather than last slice's.
     this.updateRules();
+  }
+
+  /**
+   * Integrate steering for every entity that carries it: turn advances the heading, thrust
+   * applies force along it. The speed limit is enforced PER DIRECTION — the push is skipped
+   * only when the body is already fast along the push's own direction, so the brake and a
+   * turned heading keep authority at top speed (a global cap silently kills both; see the
+   * `AgentWorldSteering` doc). Runs inside the simulation step, so `pause` freezes steering
+   * and a deterministic `step(dt)` drives it exactly — which is what lets an agent play.
+   */
+  private applySteering(deltaSeconds: number): void {
+    for (const runtime of this.entities.values()) {
+      const steering = runtime.definition.steering;
+      if (!steering) continue;
+      if (steering.turn !== 0) {
+        steering.headingDegrees = normalizeHeadingDegrees(steering.headingDegrees + steering.turn * steering.turnRateDegrees * deltaSeconds);
+      }
+      if (steering.thrust === 0 || !runtime.body || runtime.definition.physics?.mode !== "dynamic") continue;
+      const radians = steering.headingDegrees * (Math.PI / 180);
+      const sign = steering.thrust < 0 ? -1 : 1;
+      // The push's own direction (heading, or its reverse for the brake).
+      const pushX = Math.sin(radians) * sign;
+      const pushZ = -Math.cos(radians) * sign;
+      this.physicsWorld.readLinearVelocity(runtime.body, this.physicsScratch.linearVelocity);
+      const along = this.physicsScratch.linearVelocity.x * pushX + this.physicsScratch.linearVelocity.z * pushZ;
+      if (along >= steering.speedCap) continue;
+      const magnitude = Math.abs(steering.thrust) * steering.force * deltaSeconds;
+      this.steeringScratch.set(pushX * magnitude, 0, pushZ * magnitude);
+      this.physicsWorld.applyImpulse(runtime.body, this.steeringScratch);
+      this.physicsWorld.wakeBody(runtime.body);
+    }
+  }
+
+  /**
+   * Anchor every steering arrow at its subject — x/z from the body, the arrow's own authored
+   * y — and yaw it to the heading. Written to the arrow's *definition* as well as its object,
+   * so `state()`, `export()` and the next frame's transform reset all agree with the screen.
+   * A missing arrow entity is skipped silently: the reference is soft by design.
+   */
+  private placeSteeringArrows(): void {
+    for (const runtime of this.entities.values()) {
+      const steering = runtime.definition.steering;
+      if (!steering?.arrowId) continue;
+      const arrow = this.entities.get(steering.arrowId);
+      if (!arrow || arrow.definition.physics) continue;
+      const position = arrow.definition.transform.position;
+      position[0] = runtime.object.position.x;
+      position[2] = runtime.object.position.z;
+      // Heading 0 must point the arrow's authored -Z toward world -Z: object yaw = -heading.
+      arrow.definition.transform.rotationDegrees[1] = -steering.headingDegrees;
+      arrow.object.position.x = position[0];
+      arrow.object.position.z = position[2];
+      arrow.object.rotation.y = -steering.headingDegrees * (Math.PI / 180);
+    }
   }
 
   /**
@@ -2905,10 +3205,15 @@ export class AgentWorldRuntime {
     }
     const surface = resolveAgentWorldSurface(source.surface, source.type);
     const physics = source.physics ? resolvePhysics(source.physics, source.type, source.parentId ?? null, behaviors) : null;
+    // Steering drives a rigid body, so it demands one. The arrow reference is deliberately
+    // soft (like look-at): the arrow entity commonly spawns in the same create() batch.
+    if (source.steering && physics?.mode !== "dynamic") throw new Error("Steering requires dynamic physics");
+    const steering = source.steering ? resolveAgentWorldSteering(source.steering) : null;
     return {
       formula,
       dna,
       surface,
+      steering,
       id,
       label: source.label?.trim() || id,
       type: source.type,
@@ -3076,6 +3381,18 @@ export class AgentWorldRuntime {
           refDistance: interaction.refDistance,
         } : {})
       })),
+      ...(runtime.definition.steering ? {
+        steering: {
+          headingDegrees: Number(runtime.definition.steering.headingDegrees.toFixed(2)),
+          thrust: runtime.definition.steering.thrust,
+          turn: runtime.definition.steering.turn,
+          force: runtime.definition.steering.force,
+          speedCap: runtime.definition.steering.speedCap,
+          turnRateDegrees: runtime.definition.steering.turnRateDegrees,
+          kickImpulse: runtime.definition.steering.kickImpulse,
+          arrowId: runtime.definition.steering.arrowId,
+        }
+      } : {}),
       // Terrain's collider is implied rather than requested, so report it here anyway —
       // an agent asking "can I land on this?" must be able to see the answer in state().
       physics: physicsState,
@@ -4009,6 +4326,49 @@ function resolveAgentWorldSurface(source: AgentWorldSurface | null | undefined, 
   };
 }
 
+/** Normalise any finite heading into [0, 360). */
+function normalizeHeadingDegrees(value: number): number {
+  const wrapped = value % 360;
+  return wrapped < 0 ? wrapped + 360 : wrapped;
+}
+
+/**
+ * Validate and default a steering block. Merged over `current` so a patch (or `api.steer`)
+ * can set one input without resetting the rest. Every lever is clamped: a scene document or
+ * an agent can never ask for an unbounded force or a NaN heading.
+ */
+function resolveAgentWorldSteering(source: AgentWorldSteering, current?: ResolvedAgentWorldSteering): ResolvedAgentWorldSteering {
+  const heading = source.headingDegrees ?? current?.headingDegrees ?? 0;
+  if (!Number.isFinite(heading)) throw new Error("steering.headingDegrees must be a finite number");
+  const arrowId = source.arrowId !== undefined ? (source.arrowId?.trim() || null) : current?.arrowId ?? null;
+  return {
+    headingDegrees: normalizeHeadingDegrees(heading),
+    thrust: clamp(source.thrust ?? current?.thrust ?? 0, -1, 1),
+    turn: clamp(source.turn ?? current?.turn ?? 0, -1, 1),
+    force: clamp(source.force ?? current?.force ?? 30, 0, 100000),
+    speedCap: clamp(source.speedCap ?? current?.speedCap ?? 7, 0.1, 10000),
+    turnRateDegrees: clamp(source.turnRateDegrees ?? current?.turnRateDegrees ?? 220, 1, 3600),
+    kickImpulse: clamp(source.kickImpulse ?? current?.kickImpulse ?? 6, 0, 100000),
+    arrowId,
+  };
+}
+
+/**
+ * The steering that enters a document: pose and tuning, never the live inputs. A saved
+ * scene reloading with a phantom thrust key held down would be the write-only-state defect
+ * inverted — state that reads back *more* than was meant to persist.
+ */
+function serializeSteering(steering: ResolvedAgentWorldSteering): AgentWorldSteering {
+  return {
+    headingDegrees: Number(steering.headingDegrees.toFixed(2)),
+    force: steering.force,
+    speedCap: steering.speedCap,
+    turnRateDegrees: steering.turnRateDegrees,
+    kickImpulse: steering.kickImpulse,
+    ...(steering.arrowId ? { arrowId: steering.arrowId } : {}),
+  };
+}
+
 function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition {
   return {
     // Carried explicitly: a formula field that does not serialise would round-trip into an
@@ -4017,6 +4377,7 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
     // Same reason: a dna-tree without its genome would round-trip into the default grove.
     ...(definition.dna ? { dna: deepClone(definition.dna) } : {}),
     ...(definition.surface ? { surface: deepClone(definition.surface) } : {}),
+    ...(definition.steering ? { steering: serializeSteering(definition.steering) } : {}),
     id: definition.id,
     label: definition.label,
     type: definition.type,

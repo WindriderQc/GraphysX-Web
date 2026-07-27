@@ -7,7 +7,9 @@ import {
   Fog,
   PCFSoftShadowMap,
   PerspectiveCamera,
+  Plane,
   PMREMGenerator,
+  Raycaster,
   Scene,
   SRGBColorSpace,
   Vector2,
@@ -176,6 +178,23 @@ export class PlatformHost {
   readonly audio: AgentWorldAudioLayer;
   /** Teardown for the active play layer (arrow keys + HUD), when a playable world is loaded. */
   private playLayer: (() => void) | null = null;
+  /**
+   * The chase-camera subject: the steerable ball, when the loaded world has one. Play mode
+   * with a subject runs the follow camera in the one shared tick; without one it keeps the
+   * fixed play framing. Null outside play.
+   */
+  private chaseTargetId: string | null = null;
+  /** The subject's world radius, for camera distances and the aim plane's height. */
+  private chaseRadius = 0.5;
+  /** Scratch for the chase camera and mouse-aim raycast — no per-frame allocation. */
+  private readonly chaseScratch = {
+    desired: new Vector3(),
+    look: new Vector3(),
+    ndc: new Vector2(),
+    hit: new Vector3(),
+    plane: new Plane(new Vector3(0, 1, 0), 0),
+    raycaster: new Raycaster(),
+  };
   // The generative 2D overlay: a canvas over the WebGL canvas, drawn in the SAME tick() as the
   // 3D scene. There is deliberately no second animation loop (§5).
   private readonly overlayCanvas: HTMLCanvasElement;
@@ -868,15 +887,103 @@ export class PlatformHost {
     this.playLayer?.();
     this.playLayer = null;
     if (mode === "play") this.remountPlayLayer();
+    // Leaving play hands the camera back to the orbit controls from wherever the chase
+    // left it; the target is already synced to the subject, so there is no snap.
+    else this.chaseTargetId = null;
   }
 
   /** Tear down and rebuild the play layer against whatever world is loaded right now. */
   private remountPlayLayer(): void {
     this.playLayer?.();
     this.playLayer = this.currentMode === "play"
-      ? mountBallzPlay(this.api, this.container, () => this.exitPlay())
+      ? mountBallzPlay(this.api, this.container, () => this.exitPlay(), {
+          screenToGround: (clientX, clientY) => this.screenToGround(clientX, clientY),
+        })
       : null;
-    if (this.currentMode === "play") this.frameOnPlay();
+    // A steerable subject gets the chase camera (it eases in from wherever the camera is,
+    // so there is no separate entry move to fight); anything else keeps the fixed framing.
+    const subject = this.currentMode === "play" ? this.findChaseSubject() : null;
+    this.chaseTargetId = subject?.id ?? null;
+    this.chaseRadius = subject
+      ? Math.max(0.2, subject.geometry.radius * Math.max(subject.scale[0], subject.scale[1], subject.scale[2]))
+      : 0.5;
+    if (this.currentMode === "play" && !this.chaseTargetId) this.frameOnPlay();
+  }
+
+  /**
+   * The entity the play camera should live behind: the rules subject when it steers, else
+   * the single steerable player. Null means "no chase" — the fixed framing is the fallback,
+   * exactly as the play layer falls back to the four-direction pushes.
+   */
+  private findChaseSubject(): { id: string; geometry: { radius: number }; scale: [number, number, number] } | null {
+    const subjectId = this.api.rules.get()?.subjectId ?? null;
+    const candidates = subjectId ? this.api.query({ ids: [subjectId] }) : this.api.query({ tag: "player" });
+    const steerable = candidates.filter((entity) => entity.steering);
+    return steerable.length > 0 ? steerable[0] : null;
+  }
+
+  /**
+   * Raycast a client-space point onto the play plane (the ground under the steerable ball),
+   * for mouse aiming. The host owns this because it owns the camera; what the play layer
+   * does with the point is an ordinary `api.steer`.
+   */
+  private screenToGround(clientX: number, clientY: number): [number, number, number] | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const scratch = this.chaseScratch;
+    scratch.ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    scratch.raycaster.setFromCamera(scratch.ndc, this.camera);
+    const subject = this.chaseTargetId ? this.world.getEntityObject(this.chaseTargetId) : null;
+    const planeY = subject ? subject.position.y - this.chaseRadius : 0;
+    scratch.plane.constant = -planeY;
+    const hit = scratch.raycaster.ray.intersectPlane(scratch.plane, scratch.hit);
+    return hit ? [hit.x, hit.y, hit.z] : null;
+  }
+
+  /**
+   * The follow camera (the original BallZ chase): behind-and-above the caged ball, offset
+   * yaw following the fire-arrow's heading so "up" on screen is always "where the arrow
+   * points", eased with exponential damping so it tracks without snapping. Runs in the one
+   * shared tick — never a second loop — and replaces `controls.update()` for the frame, so
+   * the orbit spherical state cannot fight the follow pose. The orbit target is kept synced
+   * to the ball, which is what makes leaving play (or losing the subject) seamless.
+   */
+  private updateChase(delta: number): void {
+    const subject = this.chaseTargetId ? this.world.getEntityObject(this.chaseTargetId) : null;
+    if (!subject) {
+      this.controls.update();
+      return;
+    }
+    // The chase owns the camera; an entry/focus move still in flight would fight it.
+    this.focusMove = null;
+    const heading = this.world.steeringHeadingOf(this.chaseTargetId!) ?? 0;
+    const radians = (heading * Math.PI) / 180;
+    const dirX = Math.sin(radians);
+    const dirZ = -Math.cos(radians);
+    // Steeper than the classic 30°: at ~38° elevation the aim arrow reads ahead of the ball
+    // instead of hiding behind it, and a spawn beside an arena wall is seen over the wall
+    // rather than through it (screenshot-verified both ways).
+    const radius = this.chaseRadius;
+    const distance = Math.max(6.5, radius * 12);
+    const height = Math.max(4.6, radius * 9.5);
+    const scratch = this.chaseScratch;
+    scratch.desired.set(
+      subject.position.x - dirX * distance,
+      subject.position.y + height,
+      subject.position.z - dirZ * distance,
+    );
+    // Softly to the pose, faster onto the subject: the ball stays pinned near frame centre
+    // while the orbit direction swings with a beat of lag, which is what reads as "chasing".
+    const positionBlend = 1 - Math.exp(-4.2 * delta);
+    const targetBlend = 1 - Math.exp(-9 * delta);
+    this.camera.position.lerp(scratch.desired, positionBlend);
+    scratch.look.set(
+      subject.position.x + dirX * radius * 2,
+      subject.position.y + radius,
+      subject.position.z + dirZ * radius * 2,
+    );
+    this.controls.target.lerp(scratch.look, targetBlend);
+    this.camera.lookAt(this.controls.target);
   }
 
   /**
@@ -939,7 +1046,10 @@ export class PlatformHost {
     // After advanceFocus, so an intro whose camera move landed (or was grabbed away) this
     // frame settles the exposure in the same frame rather than a frame late.
     this.updateIntro(delta);
-    this.controls.update();
+    // The chase camera replaces the orbit update for the frame while play has a steerable
+    // subject; every other surface keeps OrbitControls exactly as before.
+    if (this.currentMode === "play" && this.chaseTargetId) this.updateChase(delta);
+    else this.controls.update();
     // Arm one shadow rebuild per frame (see `autoUpdate = false` in the constructor). The
     // first `render()` below consumes it; any nested pass a scene entity triggers reuses it.
     this.renderer.shadowMap.needsUpdate = true;

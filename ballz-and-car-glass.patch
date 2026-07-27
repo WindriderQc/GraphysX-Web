@@ -1,0 +1,272 @@
+From 886b8ef94852e532bd163f5f1f7b8fa78e681848 Mon Sep 17 00:00:00 2001
+From: Claude <claude@anthropic.com>
+Date: Sat, 25 Jul 2026 04:57:37 +0000
+Subject: [PATCH] BallZ wood floor + per-axis-cap held-key steering; car window
+ glass via profile opacity
+
+- BallZ: wood floor over the checker ('damier marble'), warm marble walls
+- BallZ controls: held-key continuous steering, capped PER AXIS so braking and
+  turning keep full authority at top speed (a global cap silently killed them)
+- Cars: recovered-PBR glass profiles now apply their opacity, so VENTANAS/window
+  slots render as translucent glass instead of an opaque black slab
+---
+ src/agent-world-assets.ts | 48 ++++++++++++++++++++++++++++++-----
+ src/ballz-level-scene.ts  | 31 +++++++++++++----------
+ src/ballz-play.ts         | 53 ++++++++++++++++++++++++++++++++++++---
+ 3 files changed, 109 insertions(+), 23 deletions(-)
+
+diff --git a/src/agent-world-assets.ts b/src/agent-world-assets.ts
+index 63cf057..e8546a8 100644
+--- a/src/agent-world-assets.ts
++++ b/src/agent-world-assets.ts
+@@ -4,6 +4,7 @@ import {
+   Color,
+   DoubleSide,
+   Float32BufferAttribute,
++  FrontSide,
+   Group,
+   Mesh,
+   MeshPhysicalMaterial,
+@@ -14,6 +15,7 @@ import {
+   Texture,
+   TextureLoader
+ } from "three";
++import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+ import {
+   inferModelMaterialRole,
+   modelMaterialSlotId,
+@@ -120,6 +122,13 @@ type RecoveredPbrProfile = {
+   metalness: number;
+   clearcoat?: number;
+   clearcoatRoughness?: number;
++  /**
++   * Sub-1 makes the surface see-through glass. The profile intent existed for the car windows
++   * but the factory below never applied opacity, so every recovered window rendered as an opaque
++   * black slab pasted on the body. Setting it here, and honouring it in the factory, is what
++   * turns `VENTANAS` (Spanish for "windows") into actual glass.
++   */
++  opacity?: number;
+ };
+ 
+ /**
+@@ -131,7 +140,7 @@ type RecoveredPbrProfile = {
+ function recoveredPbrProfile(assetId: string | null, materialName: string): RecoveredPbrProfile | null {
+   if (assetId === "archive-impreza") {
+     if (/CHASIS\.JPG/i.test(materialName)) return { shading: "physical", roughness: 0.28, metalness: 0.12, clearcoat: 0.85, clearcoatRoughness: 0.18 };
+-    if (/VENTANAS/i.test(materialName)) return { shading: "physical", roughness: 0.16, metalness: 0.04, clearcoat: 0.72, clearcoatRoughness: 0.12 };
++    if (/VENTANAS/i.test(materialName)) return { shading: "physical", roughness: 0.12, metalness: 0.04, clearcoat: 0.72, clearcoatRoughness: 0.1, opacity: 0.42 };
+     if (/UNDERCARRIAGE|CHASIS_A/i.test(materialName)) return { shading: "standard", roughness: 0.78, metalness: 0.02 };
+     return { shading: "standard", roughness: 0.72, metalness: 0.04 };
+   }
+@@ -306,9 +315,13 @@ export async function loadAgentWorldModel(
+     if (sourceMesh.uvs?.length) geometry.setAttribute("uv", new Float32BufferAttribute(sourceMesh.uvs, 2));
+     geometry.setIndex(sourceMesh.indices);
+     for (const group of sourceMesh.groups ?? []) geometry.addGroup(group.start, group.count, group.materialIndex);
+-    geometry.computeVertexNormals();
+-    geometry.computeBoundingBox();
+-    geometry.computeBoundingSphere();
++    // Recovered .3ds meshes carry no smoothing groups, so a flat vertex-normal average melted
++    // hard car panels (doors, wheel arches, the Impreza's rear quarter) into one soft blob.
++    // Creased normals keep the mesh sharp where adjacent faces meet past the threshold while
++    // still smoothing genuinely curved surfaces; on any failure we fall back to averaging.
++    const shaded = smoothRecoveredNormals(geometry, 45);
++    shaded.computeBoundingBox();
++    shaded.computeBoundingSphere();
+     const materials = (sourceMesh.materials?.length ? sourceMesh.materials : [{}]).map((sourceMaterial) => {
+       const textureUrl = sourceMaterial.textureUrl ?? null;
+       const name = sourceMaterial.name ?? "GraphysX recovered material";
+@@ -324,6 +337,11 @@ export async function loadAgentWorldModel(
+         alphaTest: asset.alphaTest,
+       };
+       const profile = recoveredPbrProfile(asset.id, name);
++      // A profile opacity below 1 is glass: it renders translucent and front-only so the body
++      // panel behind it does not z-fight, and stops writing depth so it sorts correctly.
++      const glass = profile?.opacity !== undefined && profile.opacity < 1
++        ? { transparent: true, opacity: profile.opacity, depthWrite: false, side: FrontSide }
++        : {};
+       const material = profile?.shading === "physical"
+         ? new MeshPhysicalMaterial({
+             ...common,
+@@ -331,9 +349,10 @@ export async function loadAgentWorldModel(
+             metalness: profile.metalness,
+             clearcoat: profile.clearcoat ?? 0,
+             clearcoatRoughness: profile.clearcoatRoughness ?? 0,
++            ...glass,
+           })
+         : profile?.shading === "standard"
+-          ? new MeshStandardMaterial({ ...common, roughness: profile.roughness, metalness: profile.metalness })
++          ? new MeshStandardMaterial({ ...common, roughness: profile.roughness, metalness: profile.metalness, ...glass })
+           : new MeshPhongMaterial({
+               ...common,
+               specular: tupleColor(sourceMaterial.specular, 0x111111),
+@@ -345,7 +364,7 @@ export async function loadAgentWorldModel(
+       }
+       return material;
+     });
+-    const mesh = new Mesh(geometry, materials.length === 1 ? materials[0] : materials);
++    const mesh = new Mesh(shaded, materials.length === 1 ? materials[0] : materials);
+     mesh.name = sourceMesh.name ?? "GraphysX model mesh";
+     // A model's payload owns its source materials. Entity-level generic material updates are
+     // intentionally locked out; slot overrides below are the only path that may replace one.
+@@ -398,6 +417,23 @@ export async function loadAgentWorldCollisionMesh(
+   return collisionMeshFromPayload(payload, fit.scale, fit.offset, fit.mirrorZ);
+ }
+ 
++/**
++ * Recovered .3ds geometry has no smoothing groups, so a plain `computeVertexNormals` averages
++ * across every shared vertex and melts hard panels into a blob. `toCreasedNormals` returns a
++ * non-indexed geometry whose vertices are smoothed only where adjacent faces meet under the
++ * threshold, preserving real creases. Falls back to averaged normals on any failure.
++ */
++function smoothRecoveredNormals(geometry: BufferGeometry, creaseAngleDegrees: number): BufferGeometry {
++  try {
++    const creased = toCreasedNormals(geometry, (creaseAngleDegrees * Math.PI) / 180);
++    if (creased.getAttribute("normal")) return creased;
++  } catch {
++    // fall through to averaged normals
++  }
++  geometry.computeVertexNormals();
++  return geometry;
++}
++
+ function validatePayload(payload: AssetPayload, collision?: Pick<AgentWorldModelCollisionRequest, "maxVertices" | "maxTriangles">): void {
+   if (!payload || !Array.isArray(payload.meshes) || payload.meshes.length === 0) throw new Error("Model payload contains no meshes");
+   if (payload.meshes.length > 256) throw new Error("Model payload exceeds the 256-mesh limit");
+diff --git a/src/ballz-level-scene.ts b/src/ballz-level-scene.ts
+index 411c930..616de70 100644
+--- a/src/ballz-level-scene.ts
++++ b/src/ballz-level-scene.ts
+@@ -92,11 +92,13 @@ export type BallzLevelComposition = {
+ const PALETTE = {
+   // Tints, not colours: both of these multiply a texture, so they are lighter than the
+   // surface they are meant to produce.
+-  floor: { color: "#f0dcaa", roughness: 0.62, metalness: 0.04 },
+-  // Near-neutral, because `marble09.jpg` is already a warm tan scan. Tinting it warm as well
+-  // (the first two attempts) compounded into terracotta and the arena read as rusty rather
+-  // than quarried.
+-  wall: { color: "#ddd8cc", roughness: 0.42, metalness: 0.08 },
++  // Multiplies the warm BallZ18 wood scan; kept near-white so the grain stays legible and the
++  // planks read as honey wood rather than muddy brown.
++  floor: { color: "#e9dcc0", roughness: 0.66, metalness: 0.03 },
++  // Near-neutral, because `marble09.jpg` is already a warm tan scan. Now that the floor is warm
++  // wood rather than a competing checker, the marble walls read as the quarried stone the arena
++  // is cut from — the classic marble-wall / wood-floor pairing — instead of "damier marble".
++  wall: { color: "#d6cdbb", roughness: 0.5, metalness: 0.06 },
+   // Emissive intensities are deliberately high on everything that is *information* — a ring
+   // you must collect, a gate you must reach. Under a raking sun the arena has real shadow in
+   // it now, and a landmark that only reflects light disappears into the dark half of the
+@@ -217,14 +219,12 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+     geometry: { width: extentX, height: playSurfaceThickness, depth: extentZ },
+     material: {
+       ...PALETTE.floor,
+-      // Exactly one checker square per grid cell. `Damier.jpg` is not a 1x1 checker — it is a
+-      // 20x20 board in a single image, so the repeat that aligns the pattern to the level is
+-      // `cells / 20`, not `cells`. Getting that wrong (repeat = width/2, the obvious guess)
+-      // put ten squares in every cell and the floor came out as grey noise; screenshot-checked
+-      // both ways. Aligned, the pattern *is* the level's coordinate system, so a player reads
+-      // distance and speed off the floor instead of guessing at a flat colour — which is the
+-      // whole reason a rolling-ball game has a checkered floor in the first place.
+-      texture: { id: "checker" as const, repeat: [width / 20, height / 20] as [number, number] },
++      // The genuine BallZ18 wood floor (`WoodFloor05_col.jpg`, the archive's own surface), not
++      // the harsh black/white `Damier.jpg` checker it used to carry. The checkerboard read as a
++      // chessboard test-fixture and fought the marble walls for attention ("damier marble"); warm
++      // plank wood grounds the arena as a place. The grid/scale cue now comes from the cell seams,
++      // the wall frame and the raking shadows rather than a blown-out checker.
++      texture: { id: "wood-floor" as const, repeat: [Math.max(3, width / 7), Math.max(3, height / 7)] as [number, number] },
+     },
+     physics: { mode: "static", material: "ground" },
+     castShadow: false,
+@@ -636,6 +636,11 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+           radius: 0.24,
+         },
+       },
++      // The host's default fog (near 38 / far 138, tuned to the ~36-unit showroom) pulls the
++      // green sky-horizon haze right across the arena — a 20-cell level spans ~52 units, so its
++      // far half dissolves into murk. Push the fog out so the whole play surface reads crisp and
++      // only the distant backdrop keeps the atmosphere. cameraFar stays clear of fogFar.
++      envelope: { fogNear: 64, fogFar: 210, cameraFar: 260 },
+       // The level brings its own floor slab, so the runtime's flat grid would z-fight it.
+       ground: { visible: false, size: 60, color: "#123039", grid: false, gridColor: "#2a7d8f" },
+       // Warm key + cool fill, angled so walls cast readable shadows down the grid rather
+diff --git a/src/ballz-play.ts b/src/ballz-play.ts
+index b9cdd14..dfdeecd 100644
+--- a/src/ballz-play.ts
++++ b/src/ballz-play.ts
+@@ -107,17 +107,59 @@ export function mountBallzPlay(
+ 
+   // Arrow keys only, on purpose: the editor already binds W/E/R to gizmo modes and Delete to
+   // remove, so WASD would fight it the moment someone plays a level with the editor open.
++  //
++  // Steering is HELD-key continuous, not one impulse per OS key-repeat. A press fires one
++  // immediate push (responsive, and synchronous for a step-driven agent/test); while the key is
++  // held a steer loop keeps pushing. The speed limit is applied PER DIRECTION, not as a global
++  // gate: a push is suppressed only when the ball is already fast *along that push's own axis*.
++  // A global "if speed >= cap, stop pushing" gate (the obvious version) silently kills braking
++  // and turning at speed — the ball hits the cap and then ignores the brake and the steer, which
++  // reads as the ball "fighting" the controls. Capping per-axis means the opposing key always
++  // brakes and the perpendicular key always turns; only the already-maxed direction stops adding.
+   const pushBy = new Map<string, string>(PUSH_DIRECTIONS.map((direction) => [direction.key, direction.id]));
++  const dirById = new Map<string, readonly [number, number, number]>(
++    PUSH_DIRECTIONS.map((direction) => [direction.id, direction.vector]),
++  );
++  const held = new Set<string>();
++  const STEER_HZ = 30;
++  const SPEED_CAP = 6.5; // m/s along a single axis; the opposing key still brakes past this.
++  const isField = (target: HTMLElement | null): boolean =>
++    !!target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
++  const pushIfUnderCap = (interactionId: string, velocity: readonly number[] | undefined): void => {
++    const dir = dirById.get(interactionId);
++    // Velocity component along this push's direction. Braking (opposite) is negative and always
++    // allowed; a perpendicular turn is ~0 and always allowed; only an already-fast same-axis
++    // push is suppressed.
++    const along = dir && velocity ? velocity[0] * dir[0] + velocity[2] * dir[2] : 0;
++    if (along < SPEED_CAP) api.interact(ballId, interactionId);
++  };
+   const onKeyDown = (event: KeyboardEvent): void => {
+-    const target = event.target as HTMLElement | null;
+-    // Never steal a keystroke from a field — the level workbench is full of them.
+-    if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
++    if (isField(event.target as HTMLElement | null)) return;
+     const interactionId = pushBy.get(event.key);
+     if (!interactionId) return;
+     event.preventDefault();
+-    api.interact(ballId, interactionId);
++    // Fire once on the initial press (not on OS auto-repeat); the held loop keeps accelerating.
++    if (!held.has(event.key)) {
++      held.add(event.key);
++      const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
++      pushIfUnderCap(interactionId, velocity);
++    }
+   };
++  const onKeyUp = (event: KeyboardEvent): void => {
++    if (pushBy.has(event.key)) held.delete(event.key);
++  };
++  const onBlur = (): void => held.clear(); // a defocused tab must not leave a key stuck.
++  const steer = window.setInterval(() => {
++    if (won || held.size === 0) return;
++    const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
++    for (const key of held) {
++      const interactionId = pushBy.get(key);
++      if (interactionId) pushIfUnderCap(interactionId, velocity);
++    }
++  }, 1000 / STEER_HZ);
+   window.addEventListener("keydown", onKeyDown);
++  window.addEventListener("keyup", onKeyUp);
++  window.addEventListener("blur", onBlur);
+ 
+   // Poll the *run*, not the stream. 200 ms is a HUD refresh rate, and the run it reads is
+   // advanced inside the simulation tick — so unlike the old cursor-into-`events()` version,
+@@ -149,7 +191,10 @@ export function mountBallzPlay(
+ 
+   return () => {
+     window.clearInterval(poll);
++    window.clearInterval(steer);
+     window.removeEventListener("keydown", onKeyDown);
++    window.removeEventListener("keyup", onKeyUp);
++    window.removeEventListener("blur", onBlur);
+     hud.remove();
+     container.querySelector(".gx-bz-win")?.remove();
+   };
+-- 
+2.43.0
+

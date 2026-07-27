@@ -9,9 +9,9 @@ const TOOL_PATHS = [
   "schema", "worldSchema", "levelSchema", "version", "capabilities",
   "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select",
   "sounds", "flocks", "crowds", "forceFields", "formulas", "dna", "surfaces",
-  "attachBehavior", "detachBehavior", "interact", "prefabs", "spawnPrefab", "starters", "loadStarter",
+  "attachBehavior", "detachBehavior", "interact", "steer", "prefabs", "spawnPrefab", "starters", "loadStarter",
   "transaction", "commit", "history", "events", "undo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
-  "rules.get", "rules.set", "rules.status", "rules.reset",
+  "rules.get", "rules.set", "rules.status", "rules.standings", "rules.reset",
   "media.schema", "media.status", "media.list", "media.refresh", "media.browse", "media.import", "media.importSky", "media.register", "media.remove", "media.terrainHeights",
   "levels.schema", "levels.levelSchema", "levels.version", "levels.capabilities",
   "levels.tiles", "levels.tileSemantics", "levels.active", "levels.list", "levels.get", "levels.create", "levels.remove",
@@ -21,7 +21,7 @@ const TOOL_PATHS = [
 
 const MUTATING_TOOLS = new Set<string>([
   "open", "demo", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select", "attachBehavior", "detachBehavior",
-  "interact", "spawnPrefab", "loadStarter", "transaction", "commit", "undo", "pause", "step", "save", "load",
+  "interact", "steer", "spawnPrefab", "loadStarter", "transaction", "commit", "undo", "pause", "step", "save", "load",
   "rules.set", "rules.reset",
   "media.refresh", "media.import", "media.importSky", "media.register", "media.remove",
   "levels.create", "levels.remove", "levels.open", "levels.patch", "levels.fill", "levels.resize", "levels.transaction",
@@ -29,6 +29,7 @@ const MUTATING_TOOLS = new Set<string>([
 ]);
 
 const TOOL_SUMMARIES: Record<string, string> = {
+  steer: "Drive a steerable subject: set its aim heading, live thrust/turn inputs (-1..1), or fire a one-shot kick (0..1) along the heading. The same call a human's arrow keys and mouse make — read the subject's `steering` block via query() first.",
   state: "Read the complete serializable 3D world state.",
   export: "Export the full runtime snapshot, including session-only entities.",
   exportDocument: "Export the persistable scene document: authored content only, without session-only spawns.",
@@ -56,6 +57,7 @@ const TOOL_SUMMARIES: Record<string, string> = {
   "rules.get": "Read the scene's rules block: spawn, ordered checkpoints, laps, timer, finish.",
   "rules.set": "Install or replace the scene's rules block; validates every id and arms a fresh run.",
   "rules.status": "Read the live run: phase, laps, checkpoint progress, collected pickups, simulation-time clock.",
+  "rules.standings": "Read the ranked per-racer runs of a multi-subject course (`rules.subjects`), or null for a solo course.",
   "rules.reset": "Re-arm the run and return the subject to its spawn.",
   "media.status": "Read the media library's store connectivity, datalake root, and import count.",
   "media.list": "List the imported assets known locally, optionally filtered by kind.",

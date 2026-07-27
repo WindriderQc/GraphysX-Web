@@ -209,6 +209,9 @@ import {
   type AgentWorldEntityPatch,
   type AgentWorldEntityState,
   type AgentWorldInteractionReceipt,
+  type AgentWorldSteerInput,
+  type AgentWorldSteerReceipt,
+  type AgentWorldSubjectRun,
   type AgentWorldQuery,
   type AgentWorldResult,
   type AgentWorldState
@@ -1822,6 +1825,13 @@ export class RaceScene {
     return result;
   }
 
+  steerAgentWorld(id: string, input: AgentWorldSteerInput): AgentWorldResult<AgentWorldSteerReceipt> {
+    const result = this.agentWorld?.steer(id, input) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
+    this.afterAgentWorldMutation(result.ok);
+    if (!result.ok) this.options.onAgentWorldStateChanged?.();
+    return result;
+  }
+
   listAgentWorldPrefabs(): readonly AgentWorldPrefabDescriptor[] {
     return this.agentWorld?.listPrefabs() ?? [];
   }
@@ -1908,6 +1918,10 @@ export class RaceScene {
 
   agentWorldRunStatus(): AgentWorldRunStatus | null {
     return this.agentWorld?.runStatus() ?? null;
+  }
+
+  agentWorldRaceStandings(): AgentWorldSubjectRun[] | null {
+    return this.agentWorld?.raceStandings() ?? null;
   }
 
   resetAgentWorldRun(): AgentWorldResult<AgentWorldRunStatus | null> {

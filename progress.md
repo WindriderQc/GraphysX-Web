@@ -1637,3 +1637,152 @@ finished. The exact scenario that produced five-of-six unreadable runs on 2026-0
 non-event. Its two reds (`triggers`, `media`) were the documented `net::ERR_*` / `fetch failed`
 transport flake under the loaded box — both confirmed passing in isolation, neither touching a
 Browse starter, per the check now written into `CLAUDE.md`.
+
+## 2026-07-27 — `ballz-finished-r1`: the two-body player, the chase camera, and `api.steer`
+
+The finished BallZ game per `BALLZ_GAME_DESIGN`: the author's original control model —
+a **fire-arrow** the player aims and a **caged ball** that is the only physics body —
+rebuilt as ordinary v2 vocabulary. Provenance stays honest: the layouts are `faithful`
+recoveries; this control/camera/feel layer is the author's design intent, recorded as
+`adapted`, never claimed as recovered bytes.
+
+### Steering as scene vocabulary, not play-layer code
+
+A dynamic entity can now carry a `steering` block (heading, thrust/turn inputs, force,
+per-direction speed cap, turn rate, kick impulse, `arrowId`), integrated by the runtime
+inside the deterministic simulation step — so `pause`/`step` drive it exactly like an
+emitter, which is what makes an agent's game *replayable*. One new API call, `steer(id,
+{ headingDegrees?, thrust?, turn?, kick? })`, on **both** implementations and the bridge
+manifest (`control.steer` capability). Inputs land on edges (keydown/keyup, a throttled
+pointer move), never per frame; the continuous work happens in the step. The per-direction
+cap lesson from the held-key patch is honoured at the vocabulary level: a push is
+suppressed only when the body is already fast along that push's own direction, so the
+brake and a turned heading keep authority at the cap.
+
+The runtime also anchors the arrow entity at the subject every step (x/z from the body,
+its own authored y, yaw = heading), written to the arrow's definition as well as its
+object so `state()`, `export()`, and the screen never disagree. Serialisation carries
+pose + tuning and deliberately drops the transient inputs — a saved scene must not reload
+with a phantom key held down.
+
+### The two-body player in the materialiser
+
+`ballz-ball` is now the **cage**: a 12-segment wireframe sphere at exactly its physics
+radius (the struts the player sees are the surface that touches the world), with a solid
+checkered core parented inside — a child of a dynamic body inherits its quaternion, so
+both roll as one and the checker still tells rolling from sliding. The fire-arrow is a
+`group` with an emissive shaft + cone head above the bloom threshold. The four grid push
+interactions remain on the ball, deliberately: serialised control vocabulary a smoke or
+an agent can still fire.
+
+Ratios per the design doc: mass 1.7, friction 0.55 (the sphere genuinely rolls on wood),
+restitution 0.5 (lively-but-settles; multiply-combine against the walls' 0.08 keeps arena
+hits absorbed), thrust reaching the cap in ~0.4 s, kick ≈ 5.5 m/s at full power.
+
+### Both control schemes, chosen by the scene
+
+The play layer picks by what the subject carries: a `steering` block gets ←/→ aim, ↑/↓
+thrust/brake, Space kick, mouse point-to-aim (host raycasts the play plane; the layer
+only calls `api.steer`) and click / drag-for-power launch. A subject without one — the
+composed courses' balls — keeps the held-key per-axis pushes unchanged.
+
+### The chase camera, in the one shared loop
+
+Play mode with a steerable subject runs a follow camera in `tick()`: behind-and-above at
+~38° (screenshot-verified against the 30° first cut, where a spawn beside an arena wall
+was occluded and the arrow hid behind the ball), yaw following the arrow with exponential
+damping, replacing `controls.update()` for the frame so the orbit spherical state cannot
+fight it. The orbit target stays synced to the ball, so leaving play is seamless. No
+subject → the fixed play framing, exactly as the play layer falls back.
+
+### Laps, honestly
+
+`composeBallzLevel` now reads the archive's `levelListFacts.laps`, so the classic levels
+run their `nbrTour` = 3 tours and the recorded `laps-reduced-to-one` deviation is retired
+(the entry in `archive-ballz-levels.ts` says so rather than silently vanishing).
+
+### Verified
+
+`smoke-ballz` extended: steering block + arrow + core exist and round-trip (inputs
+excluded), aim receipt, thrust accelerates along the heading with zero lateral drift,
+per-direction cap holds (7.18 measured vs 7.02 cap + solver overshoot), brake bites at
+the cap, kick imparts 5.5 m/s, arrow anchored within 0.05 of the moving ball, chase
+camera behind/above with the ball frame-centred and the orbit target synced, archive
+level arms 3 laps, keyboard drives the ball through a real held keydown, win flow
+intact. Two harness fixes that are not assertion weakenings: waits on the HUD's own
+repaint / the runtime's own phase instead of wall-clock guesses, because the software-GL
+main thread starves timers — the 600 ms that used to be enough saw a mount-time snapshot
+of the previous run.
+
+### Full-gate follow-up (same day)
+
+The 2-core sandbox gate surfaced two smokes still asserting the pre-`ballz-finished-r1`
+truths, updated to the new semantics rather than weakened: `smoke-archive-levels` now HOLDS
+ArrowUp across the deterministic steps (an instant press is zero applied force under
+continuous thrust, by design) and completes the classic level over its honoured three tours
+(lap banked after tour one without winning, rings staying collected across laps);
+`smoke-games` asserts the chase camera — orbit target synced onto the ball, camera
+behind-and-above — instead of the old fixed play framing it replaced. Two other gate reds
+(`editor`, `vehicles`) were proven environmental on the starved box: the vehicles failure
+set is byte-identical on a tree without any of this work (models never reach `ready` under
+load), and the editor red is the documented slow-first-paint timeout. CI is the authority
+for both.
+
+## 2026-07-27 — `agent-play-r1`: an agent wins BallZ, and races become per-subject runs
+
+Rung 1 and rung 2's engine half of the AgentX arc (BALLZ_AGENTX_MULTIPLAYER_PLAN), same day
+as `ballz-finished-r1` because the steering vocabulary was built to make them cheap.
+
+**`tools/ballz-agent-driver.mjs` — an agent plays the game.** A policy loop that speaks ONLY
+the discoverable bridge (`query` / `rules.status` / `steer` / `step`; never `__GRAPHYSX__`
+directly), with a deterministic pause+step game loop deciding at ~6 Hz of simulated time.
+Naive greedy pursuit measured itself into Level 1's central diamond (10/20 rings, then 400
+simulated seconds pushing a wall), so the agent pathfinds — over the authored grid it reads
+through `levels.get`, the same discoverable data the materialiser builds walls from. BFS,
+line-of-sight waypoint smoothing, stuck-kick backstop. Baseline on `archive-ballz-level1`:
+**20/20 rings, 3 laps, complete in 123.7 simulated seconds, zero kicks** — the number a
+model-driven (AgentX/Ollama) policy gets to beat. Win-panel screenshot in the session record.
+
+**Per-subject runs (`rules.subjects`).** A rules block can now name its racers; each gets its
+OWN run — laps, ordered gates, clock — advanced from the same trigger stream, attributed by
+who crossed. `subjectId` stays the primary and `status()` keeps answering with it, so every
+existing consumer (HUD, win panel, chase camera) is correct unmodified. Collectibles are
+deliberately SHARED in a race: a taken ring hides itself for everyone, so requiring each
+racer to personally cross every ring would make all runs but one unwinnable — rings are
+co-op world state, the race is the laps. New `rules.standings()` (both impls + bridge)
+returns the ranked board: finished first by time, then laps/gates/pickups; ranking is a pure
+function (`rankSubjectRuns`) so a HUD and an out-of-process spectator rank identically.
+`rules.reset()` returns every racer to its mark, not just the primary.
+
+Verified in `smoke-ballz`: a spawned rival driven ring → halfway → finish completes ITS run
+while the primary's stays running (strict gate attribution), the ring banks in BOTH runs
+(shared), standings rank the rival first, and `subjects` round-trips through the document.
+`smoke-rules` re-run green — the solo path is byte-compatible (the per-subject branch only
+exists when `subjects` is declared).
+
+## 2026-07-27 — Wave 16 groundwork: the sky pipeline, and a defect that was already dead
+
+**`scripts/vendor-sky-from-hdri.mjs`.** The "genuinely high-res skies" item split honestly in
+two: pixels and provenance need a 4k/8k panorama this sandbox cannot download (Poly Haven
+403s from here), but the missing *tool* is done — equirect Radiance HDR → six faces in the
+archive file convention (`left|right|up|down|front|back.jpg`), with the loader's TV3D
+quarter-turns pre-baked inversely into up/down so `orientArchiveCubeTexture` lands them
+exactly right. Radiance RLE decoder in ~60 lines, pure-math cube projection, ACES+sRGB tone
+mapping, Chromium as the JPEG encoder per the `vendor-sky-jpeg.mjs` precedent — zero new
+dependencies. Verified: a 512² set from the bundled 1k lilienstein, horizon-ring montage
+seamless across all four side faces.
+
+**The `--verify` lesson cost three attempts and is worth recording.** Per-texel comparison of
+the reprojected set against the source scored ~20/255 on a KNOWN-good projection — grass and
+canopy at the source's own Nyquist disagree with themselves by ~14/255 under a quarter-degree
+jitter, and the error was invariant with face resolution, so it was never going to average
+out. The working design compares the WRITTEN FILES (decoded, loader-turns applied,
+box-reduced to 16²) against the pre-bake reference reduced identically: texture phase
+cancels exactly, JPEG noise floors at ~1/255, and a swapped file, missing quarter-turn or
+flipped axis scores tens to hundreds. Measured result on the test set: 0.16/255 overall.
+
+**Water-grey-at-grazing was already fixed** — the ledger lagged a third time (the CLAUDE.md
+check-against-HEAD rule keeps earning its place). `agent-world-water.ts` carries rf0 as a
+uniform at the physical 0.02, distance tinting, and adjustable specular; screenshot at a
+deliberately grazing camera shows the surface mirroring the actual skyline with no pale
+wash. Ledger updated with the evidence rather than silently.

@@ -4,6 +4,7 @@ import {
   Color,
   DoubleSide,
   Float32BufferAttribute,
+  FrontSide,
   Group,
   Mesh,
   MeshPhysicalMaterial,
@@ -14,6 +15,7 @@ import {
   Texture,
   TextureLoader
 } from "three";
+import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
   inferModelMaterialRole,
   modelMaterialSlotId,
@@ -120,6 +122,13 @@ type RecoveredPbrProfile = {
   metalness: number;
   clearcoat?: number;
   clearcoatRoughness?: number;
+  /**
+   * Sub-1 makes the surface see-through glass. The profile intent existed for the car windows
+   * but the factory below never applied opacity, so every recovered window rendered as an opaque
+   * black slab pasted on the body. Setting it here, and honouring it in the factory, is what
+   * turns `VENTANAS` (Spanish for "windows") into actual glass.
+   */
+  opacity?: number;
 };
 
 /**
@@ -131,7 +140,7 @@ type RecoveredPbrProfile = {
 function recoveredPbrProfile(assetId: string | null, materialName: string): RecoveredPbrProfile | null {
   if (assetId === "archive-impreza") {
     if (/CHASIS\.JPG/i.test(materialName)) return { shading: "physical", roughness: 0.28, metalness: 0.12, clearcoat: 0.85, clearcoatRoughness: 0.18 };
-    if (/VENTANAS/i.test(materialName)) return { shading: "physical", roughness: 0.16, metalness: 0.04, clearcoat: 0.72, clearcoatRoughness: 0.12 };
+    if (/VENTANAS/i.test(materialName)) return { shading: "physical", roughness: 0.12, metalness: 0.04, clearcoat: 0.72, clearcoatRoughness: 0.1, opacity: 0.42 };
     if (/UNDERCARRIAGE|CHASIS_A/i.test(materialName)) return { shading: "standard", roughness: 0.78, metalness: 0.02 };
     return { shading: "standard", roughness: 0.72, metalness: 0.04 };
   }
@@ -306,9 +315,13 @@ export async function loadAgentWorldModel(
     if (sourceMesh.uvs?.length) geometry.setAttribute("uv", new Float32BufferAttribute(sourceMesh.uvs, 2));
     geometry.setIndex(sourceMesh.indices);
     for (const group of sourceMesh.groups ?? []) geometry.addGroup(group.start, group.count, group.materialIndex);
-    geometry.computeVertexNormals();
-    geometry.computeBoundingBox();
-    geometry.computeBoundingSphere();
+    // Recovered .3ds meshes carry no smoothing groups, so a flat vertex-normal average melted
+    // hard car panels (doors, wheel arches, the Impreza's rear quarter) into one soft blob.
+    // Creased normals keep the mesh sharp where adjacent faces meet past the threshold while
+    // still smoothing genuinely curved surfaces; on any failure we fall back to averaging.
+    const shaded = smoothRecoveredNormals(geometry, 45);
+    shaded.computeBoundingBox();
+    shaded.computeBoundingSphere();
     const materials = (sourceMesh.materials?.length ? sourceMesh.materials : [{}]).map((sourceMaterial) => {
       const textureUrl = sourceMaterial.textureUrl ?? null;
       const name = sourceMaterial.name ?? "GraphysX recovered material";
@@ -324,6 +337,11 @@ export async function loadAgentWorldModel(
         alphaTest: asset.alphaTest,
       };
       const profile = recoveredPbrProfile(asset.id, name);
+      // A profile opacity below 1 is glass: it renders translucent and front-only so the body
+      // panel behind it does not z-fight, and stops writing depth so it sorts correctly.
+      const glass = profile?.opacity !== undefined && profile.opacity < 1
+        ? { transparent: true, opacity: profile.opacity, depthWrite: false, side: FrontSide }
+        : {};
       const material = profile?.shading === "physical"
         ? new MeshPhysicalMaterial({
             ...common,
@@ -331,9 +349,10 @@ export async function loadAgentWorldModel(
             metalness: profile.metalness,
             clearcoat: profile.clearcoat ?? 0,
             clearcoatRoughness: profile.clearcoatRoughness ?? 0,
+            ...glass,
           })
         : profile?.shading === "standard"
-          ? new MeshStandardMaterial({ ...common, roughness: profile.roughness, metalness: profile.metalness })
+          ? new MeshStandardMaterial({ ...common, roughness: profile.roughness, metalness: profile.metalness, ...glass })
           : new MeshPhongMaterial({
               ...common,
               specular: tupleColor(sourceMaterial.specular, 0x111111),
@@ -345,7 +364,7 @@ export async function loadAgentWorldModel(
       }
       return material;
     });
-    const mesh = new Mesh(geometry, materials.length === 1 ? materials[0] : materials);
+    const mesh = new Mesh(shaded, materials.length === 1 ? materials[0] : materials);
     mesh.name = sourceMesh.name ?? "GraphysX model mesh";
     // A model's payload owns its source materials. Entity-level generic material updates are
     // intentionally locked out; slot overrides below are the only path that may replace one.
@@ -396,6 +415,23 @@ export async function loadAgentWorldCollisionMesh(
   validatePayload(payload, limits);
   const fit = modelFit(payload.bounds, asset.fitSize);
   return collisionMeshFromPayload(payload, fit.scale, fit.offset, fit.mirrorZ);
+}
+
+/**
+ * Recovered .3ds geometry has no smoothing groups, so a plain `computeVertexNormals` averages
+ * across every shared vertex and melts hard panels into a blob. `toCreasedNormals` returns a
+ * non-indexed geometry whose vertices are smoothed only where adjacent faces meet under the
+ * threshold, preserving real creases. Falls back to averaged normals on any failure.
+ */
+function smoothRecoveredNormals(geometry: BufferGeometry, creaseAngleDegrees: number): BufferGeometry {
+  try {
+    const creased = toCreasedNormals(geometry, (creaseAngleDegrees * Math.PI) / 180);
+    if (creased.getAttribute("normal")) return creased;
+  } catch {
+    // fall through to averaged normals
+  }
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function validatePayload(payload: AssetPayload, collision?: Pick<AgentWorldModelCollisionRequest, "maxVertices" | "maxTriangles">): void {

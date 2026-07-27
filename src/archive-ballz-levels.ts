@@ -137,12 +137,9 @@ const GATE_DEVIATIONS = [
       "0.2-radius pillars; the grid's only solid-obstacle tile is `!` hazard, whose red glow would " +
       "misrepresent a lap post as a danger, so they are dropped rather than mislabelled.",
   },
-  {
-    code: "laps-reduced-to-one",
-    detail:
-      "`levelList.xml` sets `nbrTour` = 3 for every classic level. `composeBallzLevel` emits " +
-      "`laps: 1`, and this module may not edit it, so the shipped course is one lap of a three-lap race.",
-  },
+  // `laps-reduced-to-one` was recorded here while `composeBallzLevel` hardcoded `laps: 1`.
+  // The materialiser now reads this module's `levelListFacts.laps`, so a classic level runs
+  // its archived `nbrTour` = 3 tours and the deviation no longer exists to record.
   {
     code: "sky-not-per-level",
     detail:

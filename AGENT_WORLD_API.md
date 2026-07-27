@@ -458,6 +458,10 @@ Entities can expose a labeled `toggle-visibility`, `apply-impulse` or `play-soun
 
 `play-sound` fires a sound from scene data — `{ type: "play-sound", sound, volume?, positional?, refDistance?, targetIds? }`, where `sound` is a sound id (`sounds()`, curated or imported) or a URL. It is the one type where **`targetIds` may be omitted**: the common case is a pickup or gate sounding at its own position, and empty means "at the entity carrying the interaction" rather than "nowhere". Naming targets plays one overlapping one-shot at each. Put one on a trigger volume and a ring chimes when something crosses it, with no play-layer code in the loop:
 
+## Steering (`steer()`)
+
+A dynamic entity can carry a `steering` block — the two-body player model rebuilt from the original BallZ: a fire-arrow aim heading plus continuous thrust integrated inside the deterministic simulation step. `steer(id, { headingDegrees?, thrust?, turn?, kick? })` sets the absolute aim, the live inputs (-1..1; `turn` rotates the heading at `turnRateDegrees`/s, `thrust` applies `force` newtons along it), and/or fires a one-shot `kick` (0..1 of `kickImpulse`) along the heading — the golf-style launch. The speed limit is enforced per direction, so negative thrust always brakes and a turned heading always steers, even at the cap. `steering.arrowId` names an ordinary entity the runtime anchors at the subject and yaws to the heading, so what an agent aims is literally what a human sees. Read the live pose and tuning back from `query()`/`state()` (`entity.steering`); the document serialises pose and tuning but never the transient inputs. A human's arrow keys and mouse go through this same call — `pause(true)` + `step(dt)` + `steer()` is a complete, deterministic way for an agent to play BallZ.
+
 ```js
 gx.spawn({
   id: "ring-3", type: "torus", physics: { mode: "trigger" },
@@ -726,6 +730,8 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `spawn(entity)`, `update(id, patch)`, `remove(id)` | Perform a single entity edit. |
 | `attachBehavior(id, behavior)`, `detachBehavior(id, behaviorId)` | Change simulation behavior without replacing an entity. |
 | `interact(id, interactionId?)` | Trigger the same atomic labeled action used by 3D clicks and accessible Studio controls. |
+| `steer(id, input)` | Drive a steerable subject: absolute aim heading, live thrust/turn inputs, or a one-shot kick — the same call the BallZ keyboard and mouse make. |
+| `rules.standings()` | Ranked per-racer runs of a multi-subject course (`rules.subjects`), or null for a solo course. Each racer gets its own laps/gates/clock from the same trigger stream; rings are shared (a taken ring hides for everyone). |
 | `starters()`, `loadStarter(id, options?)` | Discover or load complete, lit, editable starter worlds in one call. |
 | `prefabs()`, `spawnPrefab(id, options?)` | Discover or place reusable multi-entity 3D recipes. |
 | `transaction(commands)` | Commit a multi-object edit atomically; any invalid command rolls the whole batch back. |
@@ -758,8 +764,8 @@ The environment block carries `background`, `sky` (per-scene skybox), `lighting`
 
 Point lights draw a small emissive marker sphere at their origin so an invisible thing can be found and selected. `marker: false` on the entity — at spawn or via `update` — removes the lightbulb and keeps the light, which is what a composed scene lighting a showpiece wants.
 
-Behaviors: `spin`, `bob`, `orbit`, `pulse`, `look-at`, and `follow-spline`. Interaction types: `toggle-visibility`, `apply-impulse` and `play-sound`.
+Behaviors: `spin`, `bob`, `orbit`, `pulse`, `look-at`, and `follow-spline`. Interaction types: `toggle-visibility`, `apply-impulse` and `play-sound`. Dynamic entities can additionally carry a `steering` block driven by `steer()` (see **Steering**).
 
-Queries can filter by `ids`, `type`, `tag`, case-insensitive `labelIncludes`, or a world-space `within: { center, radius }` test. Transactions and collaborative commits accept `spawn`, `spawn-prefab`, `update`, `remove`, `attach-behavior`, `detach-behavior`, `interact`, `set-environment`, and `select` commands.
+Queries can filter by `ids`, `type`, `tag`, case-insensitive `labelIncludes`, or a world-space `within: { center, radius }` test. Transactions and collaborative commits accept `spawn`, `spawn-prefab`, `update`, `remove`, `attach-behavior`, `detach-behavior`, `interact`, `steer`, `set-environment`, and `select` commands.
 
 The current contract intentionally stays above Three.js. Future renderers can implement the same world schema while agents keep using the same tools.

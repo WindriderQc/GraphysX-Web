@@ -82,7 +82,19 @@ export const GRAPHYSX_AGENT_RULES_CAPABILITIES = [
   "rules.finish",
   "rules.collectibles",
   "rules.resync",
+  "rules.subjects",
 ] as const;
+
+/**
+ * One racer in a multi-subject course. Each named subject gets its OWN run — laps,
+ * checkpoint index, clock — advanced from the same trigger stream, attributed by who
+ * crossed. `spawn` is where reset puts this subject; absent means its authored transform.
+ */
+export type AgentWorldRaceSubject = {
+  id: string;
+  label?: string;
+  spawn?: { position?: AgentWorldVector3 };
+};
 
 /** An ordered gate. Crossing it only counts when it is the one that is next due. */
 export type AgentWorldCheckpointRule = {
@@ -121,6 +133,25 @@ export type AgentWorldRulesDefinition = {
   laps?: number;
   /** `limitSeconds` expires the run; absent means the clock only measures. */
   timer?: { limitSeconds?: number };
+  /**
+   * Multiplayer: the racers. When present, EVERY listed subject gets its own run advanced
+   * from the same trigger stream — per-subject laps, checkpoint order and clock — and
+   * `subjectId` (which must then be one of them, defaulting to the first) names the primary
+   * run that `status()` keeps answering with, so every existing consumer (HUD, win panel,
+   * chase camera) stays correct unmodified.
+   *
+   * Collectibles in a multi-subject course are SHARED: a taken ring hides itself for
+   * everyone, so requiring each racer to personally cross every ring would make all runs
+   * but one unwinnable. Rings are co-op world state; the race is the laps.
+   */
+  subjects?: AgentWorldRaceSubject[];
+};
+
+/** One racer's run plus its identity, as `standings()` reports it. */
+export type AgentWorldSubjectRun = {
+  subjectId: string;
+  label: string;
+  run: AgentWorldRunStatus;
 };
 
 export type AgentWorldRunPhase = "idle" | "running" | "complete" | "expired";
@@ -203,6 +234,20 @@ export function validateRules(rules: AgentWorldRulesDefinition, knownIds: Readon
   }
   if (rules.laps !== undefined && (!Number.isFinite(rules.laps) || rules.laps < 1)) {
     throw new Error("Rules laps must be a positive number");
+  }
+  if (rules.subjects) {
+    if (rules.subjects.length === 0) throw new Error("Rules subjects must not be an empty list");
+    const subjectIds = new Set<string>();
+    for (const subject of rules.subjects) {
+      require(subject.id, "race subject");
+      if (subjectIds.has(subject.id)) throw new Error(`Rules repeat race subject: ${subject.id}`);
+      subjectIds.add(subject.id);
+    }
+    // The primary must be a racer: a `status()` that answered for a subject outside the race
+    // would rank nobody and desync every HUD built on it.
+    if (rules.subjectId && !subjectIds.has(rules.subjectId)) {
+      throw new Error(`Rules subjectId must be one of the race subjects: ${rules.subjectId}`);
+    }
   }
   if (rules.timer?.limitSeconds !== undefined && !(rules.timer.limitSeconds > 0)) {
     throw new Error("Rules timer limitSeconds must be a positive number");
@@ -289,6 +334,12 @@ export function advanceRun(
   rules: AgentWorldRulesDefinition,
   page: AgentWorldEventPage,
   snapshot: AgentWorldRulesSnapshot,
+  /**
+   * Evaluate as this racer instead of `rules.subjectId` — the per-subject path. Gates and
+   * the finish then count only this subject's crossings, while collectibles count anyone's
+   * (see `subjects` on the definition for why rings are shared in a race).
+   */
+  asSubject?: AgentWorldRaceSubject,
 ): AgentWorldRunStatus {
   let next: AgentWorldRunStatus = { ...status, collected: [...status.collected], sequence: page.sequence };
 
@@ -297,7 +348,7 @@ export function advanceRun(
   // A finished run still tracks its cursor (so a later resume is not instantly stale) but
   // stops interpreting crossings — a victory lap is not a second lap.
   if (next.phase === "running") {
-    for (const event of page.events) next = applyEvent(next, rules, event);
+    for (const event of page.events) next = applyEvent(next, rules, event, asSubject);
     next.elapsedSeconds = Math.max(0, snapshot.nowSeconds - next.startedAtSeconds);
 
     const limit = rules.timer?.limitSeconds;
@@ -315,6 +366,7 @@ function applyEvent(
   status: AgentWorldRunStatus,
   rules: AgentWorldRulesDefinition,
   event: AgentWorldStreamEvent,
+  asSubject?: AgentWorldRaceSubject,
 ): AgentWorldRunStatus {
   // A world reload replaces every entity under the run's feet. Continuing to count into it
   // would attribute the next scene's crossings to this scene's lap.
@@ -324,7 +376,12 @@ function applyEvent(
   const triggerId = String(event.data?.triggerId ?? "");
   const entityId = String(event.data?.entityId ?? "");
   if (!triggerId) return status;
-  if (rules.subjectId && entityId !== rules.subjectId) return status;
+  const subjectFilter = asSubject?.id ?? rules.subjectId;
+  const crossedBySubject = !subjectFilter || entityId === subjectFilter;
+  // In a race, a ring taken by ANY racer is gone from the world for all of them, so it
+  // counts for all of them; single-subject courses keep the strict attribution they had.
+  const collectibleCounts = asSubject ? true : crossedBySubject;
+  if (!crossedBySubject && !collectibleCounts) return status;
 
   const next: AgentWorldRunStatus = { ...status };
 
@@ -334,9 +391,11 @@ function applyEvent(
   // Membership is tested against the set resolved at arm time, never re-derived per event.
   // A `Set` is not used because the status has to stay JSON — it crosses `postMessage` and
   // the bridge, and a Set would arrive as `{}`.
-  if (next.collectibleIds.includes(triggerId) && !next.collected.includes(triggerId)) {
+  if (collectibleCounts && next.collectibleIds.includes(triggerId) && !next.collected.includes(triggerId)) {
     next.collected = [...next.collected, triggerId];
   }
+  // Gates and the finish are strictly this run's subject; a rival's crossing is theirs.
+  if (!crossedBySubject) return next;
 
   const checkpoints = rules.checkpoints ?? [];
   const due = checkpoints[next.checkpointIndex];
@@ -407,6 +466,28 @@ export function describeRun(status: AgentWorldRunStatus): string {
   parts.push(formatClock(status.elapsedSeconds));
   if (status.desynced) parts.push("~resynced");
   return parts.join("  ·  ");
+}
+
+/**
+ * Order racers for a standings board. Finished runs first (fastest time wins), then the
+ * still-running by distance through the course: laps banked, then gates cleared this lap,
+ * then pickups banked, then who has been at it the shortest as the tiebreak — a pure
+ * function over run statuses, so a HUD, a smoke, and an out-of-process spectator all rank
+ * identically.
+ */
+export function rankSubjectRuns(entries: readonly AgentWorldSubjectRun[]): AgentWorldSubjectRun[] {
+  return [...entries].sort((left, right) => {
+    const l = left.run;
+    const r = right.run;
+    const leftDone = l.phase === "complete" ? 1 : 0;
+    const rightDone = r.phase === "complete" ? 1 : 0;
+    if (leftDone !== rightDone) return rightDone - leftDone;
+    if (leftDone && rightDone) return l.elapsedSeconds - r.elapsedSeconds;
+    if (l.lap !== r.lap) return r.lap - l.lap;
+    if (l.checkpointIndex !== r.checkpointIndex) return r.checkpointIndex - l.checkpointIndex;
+    if (l.collected.length !== r.collected.length) return r.collected.length - l.collected.length;
+    return l.elapsedSeconds - r.elapsedSeconds;
+  });
 }
 
 export function formatClock(seconds: number): string {
