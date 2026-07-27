@@ -1637,3 +1637,79 @@ finished. The exact scenario that produced five-of-six unreadable runs on 2026-0
 non-event. Its two reds (`triggers`, `media`) were the documented `net::ERR_*` / `fetch failed`
 transport flake under the loaded box — both confirmed passing in isolation, neither touching a
 Browse starter, per the check now written into `CLAUDE.md`.
+
+## 2026-07-27 — `ballz-finished-r1`: the two-body player, the chase camera, and `api.steer`
+
+The finished BallZ game per `BALLZ_GAME_DESIGN`: the author's original control model —
+a **fire-arrow** the player aims and a **caged ball** that is the only physics body —
+rebuilt as ordinary v2 vocabulary. Provenance stays honest: the layouts are `faithful`
+recoveries; this control/camera/feel layer is the author's design intent, recorded as
+`adapted`, never claimed as recovered bytes.
+
+### Steering as scene vocabulary, not play-layer code
+
+A dynamic entity can now carry a `steering` block (heading, thrust/turn inputs, force,
+per-direction speed cap, turn rate, kick impulse, `arrowId`), integrated by the runtime
+inside the deterministic simulation step — so `pause`/`step` drive it exactly like an
+emitter, which is what makes an agent's game *replayable*. One new API call, `steer(id,
+{ headingDegrees?, thrust?, turn?, kick? })`, on **both** implementations and the bridge
+manifest (`control.steer` capability). Inputs land on edges (keydown/keyup, a throttled
+pointer move), never per frame; the continuous work happens in the step. The per-direction
+cap lesson from the held-key patch is honoured at the vocabulary level: a push is
+suppressed only when the body is already fast along that push's own direction, so the
+brake and a turned heading keep authority at the cap.
+
+The runtime also anchors the arrow entity at the subject every step (x/z from the body,
+its own authored y, yaw = heading), written to the arrow's definition as well as its
+object so `state()`, `export()`, and the screen never disagree. Serialisation carries
+pose + tuning and deliberately drops the transient inputs — a saved scene must not reload
+with a phantom key held down.
+
+### The two-body player in the materialiser
+
+`ballz-ball` is now the **cage**: a 12-segment wireframe sphere at exactly its physics
+radius (the struts the player sees are the surface that touches the world), with a solid
+checkered core parented inside — a child of a dynamic body inherits its quaternion, so
+both roll as one and the checker still tells rolling from sliding. The fire-arrow is a
+`group` with an emissive shaft + cone head above the bloom threshold. The four grid push
+interactions remain on the ball, deliberately: serialised control vocabulary a smoke or
+an agent can still fire.
+
+Ratios per the design doc: mass 1.7, friction 0.55 (the sphere genuinely rolls on wood),
+restitution 0.5 (lively-but-settles; multiply-combine against the walls' 0.08 keeps arena
+hits absorbed), thrust reaching the cap in ~0.4 s, kick ≈ 5.5 m/s at full power.
+
+### Both control schemes, chosen by the scene
+
+The play layer picks by what the subject carries: a `steering` block gets ←/→ aim, ↑/↓
+thrust/brake, Space kick, mouse point-to-aim (host raycasts the play plane; the layer
+only calls `api.steer`) and click / drag-for-power launch. A subject without one — the
+composed courses' balls — keeps the held-key per-axis pushes unchanged.
+
+### The chase camera, in the one shared loop
+
+Play mode with a steerable subject runs a follow camera in `tick()`: behind-and-above at
+~38° (screenshot-verified against the 30° first cut, where a spawn beside an arena wall
+was occluded and the arrow hid behind the ball), yaw following the arrow with exponential
+damping, replacing `controls.update()` for the frame so the orbit spherical state cannot
+fight it. The orbit target stays synced to the ball, so leaving play is seamless. No
+subject → the fixed play framing, exactly as the play layer falls back.
+
+### Laps, honestly
+
+`composeBallzLevel` now reads the archive's `levelListFacts.laps`, so the classic levels
+run their `nbrTour` = 3 tours and the recorded `laps-reduced-to-one` deviation is retired
+(the entry in `archive-ballz-levels.ts` says so rather than silently vanishing).
+
+### Verified
+
+`smoke-ballz` extended: steering block + arrow + core exist and round-trip (inputs
+excluded), aim receipt, thrust accelerates along the heading with zero lateral drift,
+per-direction cap holds (7.18 measured vs 7.02 cap + solver overshoot), brake bites at
+the cap, kick imparts 5.5 m/s, arrow anchored within 0.05 of the moving ball, chase
+camera behind/above with the ball frame-centred and the orbit target synced, archive
+level arms 3 laps, keyboard drives the ball through a real held keydown, win flow
+intact. Two harness fixes that are not assertion weakenings: waits on the HUD's own
+repaint / the runtime's own phase instead of wall-clock guesses, because the software-GL
+main thread starves timers — the 600 ms that used to be enough saw a mount-time snapshot
+of the previous run.

@@ -209,6 +209,8 @@ import {
   type AgentWorldEntityPatch,
   type AgentWorldEntityState,
   type AgentWorldInteractionReceipt,
+  type AgentWorldSteerInput,
+  type AgentWorldSteerReceipt,
   type AgentWorldQuery,
   type AgentWorldResult,
   type AgentWorldState
@@ -1817,6 +1819,13 @@ export class RaceScene {
 
   interactAgentWorld(id: string, interactionId?: string): AgentWorldResult<AgentWorldInteractionReceipt> {
     const result = this.agentWorld?.interact(id, interactionId) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
+    this.afterAgentWorldMutation(result.ok);
+    if (!result.ok) this.options.onAgentWorldStateChanged?.();
+    return result;
+  }
+
+  steerAgentWorld(id: string, input: AgentWorldSteerInput): AgentWorldResult<AgentWorldSteerReceipt> {
+    const result = this.agentWorld?.steer(id, input) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
     this.afterAgentWorldMutation(result.ok);
     if (!result.ok) this.options.onAgentWorldStateChanged?.();
     return result;

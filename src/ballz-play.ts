@@ -28,10 +28,21 @@ import {
  * It still owns no scene state: the ball's steering is four `apply-impulse` interactions on
  * the ball itself, so a key press is an ordinary API call an agent could make too.
  */
+export type BallzPlayOptions = {
+  /**
+   * Host-supplied raycast of a client-space point onto the play plane, for mouse aiming.
+   * The host owns the camera, so it owns the unprojection; everything this layer *does*
+   * with the result is an ordinary `api.steer` call. Returns null when the pointer misses
+   * the plane (grazing angles at the horizon).
+   */
+  screenToGround?: (clientX: number, clientY: number) => [number, number, number] | null;
+};
+
 export function mountBallzPlay(
   api: GraphysXAgentWorldApi,
   container: HTMLElement,
   onExit?: () => void,
+  options: BallzPlayOptions = {},
 ): () => void {
   const rules = api.rules.get();
   const players = api.query({ tag: "player" });
@@ -105,61 +116,19 @@ export function mountBallzPlay(
   };
   renderHud();
 
-  // Arrow keys only, on purpose: the editor already binds W/E/R to gizmo modes and Delete to
+  // Two control schemes over one subject, chosen by what the SCENE says. A ball carrying a
+  // `steering` block gets the two-body fire-arrow model (heading + thrust through
+  // `api.steer`); a subject without one — the composed courses' own balls, or a scene
+  // authored before steering existed — keeps the four-direction held-key pushes. Arrow keys
+  // in both cases, on purpose: the editor already binds W/E/R to gizmo modes and Delete to
   // remove, so WASD would fight it the moment someone plays a level with the editor open.
-  //
-  // Steering is HELD-key continuous, not one impulse per OS key-repeat. A press fires one
-  // immediate push (responsive, and synchronous for a step-driven agent/test); while the key is
-  // held a steer loop keeps pushing. The speed limit is applied PER DIRECTION, not as a global
-  // gate: a push is suppressed only when the ball is already fast *along that push's own axis*.
-  // A global "if speed >= cap, stop pushing" gate (the obvious version) silently kills braking
-  // and turning at speed — the ball hits the cap and then ignores the brake and the steer, which
-  // reads as the ball "fighting" the controls. Capping per-axis means the opposing key always
-  // brakes and the perpendicular key always turns; only the already-maxed direction stops adding.
-  const pushBy = new Map<string, string>(PUSH_DIRECTIONS.map((direction) => [direction.key, direction.id]));
-  const dirById = new Map<string, readonly [number, number, number]>(
-    PUSH_DIRECTIONS.map((direction) => [direction.id, direction.vector]),
-  );
-  const held = new Set<string>();
-  const STEER_HZ = 30;
-  const SPEED_CAP = 6.5; // m/s along a single axis; the opposing key still brakes past this.
-  const isField = (target: HTMLElement | null): boolean =>
-    !!target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
-  const pushIfUnderCap = (interactionId: string, velocity: readonly number[] | undefined): void => {
-    const dir = dirById.get(interactionId);
-    // Velocity component along this push's direction. Braking (opposite) is negative and always
-    // allowed; a perpendicular turn is ~0 and always allowed; only an already-fast same-axis
-    // push is suppressed.
-    const along = dir && velocity ? velocity[0] * dir[0] + velocity[2] * dir[2] : 0;
-    if (along < SPEED_CAP) api.interact(ballId, interactionId);
-  };
-  const onKeyDown = (event: KeyboardEvent): void => {
-    if (isField(event.target as HTMLElement | null)) return;
-    const interactionId = pushBy.get(event.key);
-    if (!interactionId) return;
-    event.preventDefault();
-    // Fire once on the initial press (not on OS auto-repeat); the held loop keeps accelerating.
-    if (!held.has(event.key)) {
-      held.add(event.key);
-      const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
-      pushIfUnderCap(interactionId, velocity);
-    }
-  };
-  const onKeyUp = (event: KeyboardEvent): void => {
-    if (pushBy.has(event.key)) held.delete(event.key);
-  };
-  const onBlur = (): void => held.clear(); // a defocused tab must not leave a key stuck.
-  const steer = window.setInterval(() => {
-    if (won || held.size === 0) return;
-    const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
-    for (const key of held) {
-      const interactionId = pushBy.get(key);
-      if (interactionId) pushIfUnderCap(interactionId, velocity);
-    }
-  }, 1000 / STEER_HZ);
-  window.addEventListener("keydown", onKeyDown);
-  window.addEventListener("keyup", onKeyUp);
-  window.addEventListener("blur", onBlur);
+  const steerable = !!api.query({ ids: [ballId] })[0]?.steering;
+  if (steerable) {
+    hint.textContent = "← → aim · ↑ roll · ↓ brake · space kick · point & click to launch";
+  }
+  const teardownControls = steerable
+    ? mountSteerControls(api, ballId, container, () => won, options)
+    : mountLegacyPushControls(api, ballId, () => won);
 
   // Poll the *run*, not the stream. 200 ms is a HUD refresh rate, and the run it reads is
   // advanced inside the simulation tick — so unlike the old cursor-into-`events()` version,
@@ -191,12 +160,197 @@ export function mountBallzPlay(
 
   return () => {
     window.clearInterval(poll);
+    teardownControls();
+    hud.remove();
+    container.querySelector(".gx-bz-win")?.remove();
+  };
+}
+
+/** Never steal a keystroke from a field — the level workbench is full of them. */
+function isFormField(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
+}
+
+/**
+ * The two-body control scheme (the original BallZ model): ←/→ rotate the fire-arrow, ↑/↓
+ * thrust and brake along its heading, Space is the strong kick; the mouse aims the arrow at
+ * the ground point under the cursor and a click (or a drag, for power) launches toward it.
+ *
+ * Everything here is an `api.steer` call, and the calls happen on input EDGES — a keydown,
+ * a keyup, a throttled pointer move — never per frame. The continuous work (turn → heading,
+ * thrust → force, the per-direction speed cap) is the runtime's steering pass, inside the
+ * simulation step, which is exactly what lets an agent drive the identical ball with the
+ * identical call and inherit the identical physics.
+ */
+function mountSteerControls(
+  api: GraphysXAgentWorldApi,
+  ballId: string,
+  container: HTMLElement,
+  isWon: () => boolean,
+  options: BallzPlayOptions,
+): () => void {
+  const held = new Set<string>();
+  const axisInputs = (): { thrust: number; turn: number } => ({
+    thrust: (held.has("ArrowUp") ? 1 : 0) - (held.has("ArrowDown") ? 1 : 0),
+    turn: (held.has("ArrowRight") ? 1 : 0) - (held.has("ArrowLeft") ? 1 : 0),
+  });
+  const sendAxes = (): void => {
+    api.steer(ballId, axisInputs());
+  };
+
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (isFormField(event.target)) return;
+    if (event.key === " " || event.code === "Space") {
+      event.preventDefault();
+      // Once per press: OS auto-repeat must not machine-gun the launch impulse.
+      if (!event.repeat && !isWon()) api.steer(ballId, { kick: 1 });
+      return;
+    }
+    if (!/^Arrow(Up|Down|Left|Right)$/.test(event.key)) return;
+    event.preventDefault();
+    if (held.has(event.key) || isWon()) return;
+    held.add(event.key);
+    sendAxes();
+  };
+  const onKeyUp = (event: KeyboardEvent): void => {
+    if (!held.delete(event.key)) return;
+    sendAxes();
+  };
+  // A defocused tab must not leave a key held: zero every input on blur.
+  const onBlur = (): void => {
+    held.clear();
+    api.steer(ballId, { thrust: 0, turn: 0 });
+  };
+
+  // Mouse aim. The heading is computed from the ball's live position to the ground point
+  // under the cursor, throttled to ~20 Hz — an aim update is a transaction, and the arrow
+  // only needs to track the hand, not the mouse's report rate.
+  const AIM_INTERVAL_MS = 50;
+  let lastAimAt = 0;
+  let aimedHeading: number | null = null;
+  const headingToward = (point: [number, number, number]): number | null => {
+    const ball = api.query({ ids: [ballId] })[0];
+    if (!ball) return null;
+    const dx = point[0] - ball.position[0];
+    const dz = point[2] - ball.position[2];
+    if (dx * dx + dz * dz < 0.04) return null; // pointing at the ball itself is no direction
+    return (Math.atan2(dx, -dz) * 180) / Math.PI;
+  };
+  // Only the WebGL canvas counts: the HUD's buttons and the win panel live in the same
+  // container, and a click on "Exit play" must not double as a launch.
+  const onSceneCanvas = (event: Event): boolean => event.target instanceof HTMLCanvasElement;
+  const onPointerMove = (event: PointerEvent): void => {
+    if (!options.screenToGround || isWon() || !onSceneCanvas(event)) return;
+    const now = performance.now();
+    if (now - lastAimAt < AIM_INTERVAL_MS) return;
+    const point = options.screenToGround(event.clientX, event.clientY);
+    if (!point) return;
+    const heading = headingToward(point);
+    if (heading === null) return;
+    lastAimAt = now;
+    aimedHeading = heading;
+    api.steer(ballId, { headingDegrees: heading });
+  };
+
+  // Click / drag-for-power launch. Press-to-release distance in CSS pixels maps to kick
+  // power: a plain click is a modest chip, a full pull is the cap. Direction is wherever
+  // the arrow points at release — the pointer has been aiming it all along.
+  let pressedAt: { x: number; y: number } | null = null;
+  const onPointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0 || !onSceneCanvas(event)) return;
+    pressedAt = { x: event.clientX, y: event.clientY };
+  };
+  const onPointerUp = (event: PointerEvent): void => {
+    const pressed = pressedAt;
+    pressedAt = null;
+    if (!pressed || isWon() || !onSceneCanvas(event)) return;
+    const dragPx = Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y);
+    const kick = dragPx < 8 ? 0.55 : Math.min(1, 0.35 + dragPx / 240);
+    // Final aim at the release point, when the plane raycast has one; the throttle above
+    // may have skipped the last few pixels of the gesture.
+    const point = options.screenToGround?.(event.clientX, event.clientY) ?? null;
+    const heading = point ? headingToward(point) : aimedHeading;
+    api.steer(ballId, { ...(heading !== null && heading !== undefined ? { headingDegrees: heading } : {}), kick });
+  };
+
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", onBlur);
+  container.addEventListener("pointermove", onPointerMove);
+  container.addEventListener("pointerdown", onPointerDown);
+  container.addEventListener("pointerup", onPointerUp);
+  return () => {
+    window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keyup", onKeyUp);
+    window.removeEventListener("blur", onBlur);
+    container.removeEventListener("pointermove", onPointerMove);
+    container.removeEventListener("pointerdown", onPointerDown);
+    container.removeEventListener("pointerup", onPointerUp);
+    // Leave nothing thrusting after the layer is gone — the entity outlives the HUD.
+    if (held.size > 0) api.steer(ballId, { thrust: 0, turn: 0 });
+  };
+}
+
+/**
+ * The pre-steering scheme, kept for subjects without a `steering` block (composed courses'
+ * own balls, older scenes). Steering is HELD-key continuous, not one impulse per OS
+ * key-repeat. A press fires one immediate push (responsive, and synchronous for a
+ * step-driven agent/test); while the key is held a steer loop keeps pushing. The speed
+ * limit is applied PER DIRECTION, not as a global gate: a push is suppressed only when the
+ * ball is already fast *along that push's own axis*. A global "if speed >= cap, stop
+ * pushing" gate (the obvious version) silently kills braking and turning at speed — the
+ * ball hits the cap and then ignores the brake and the steer, which reads as the ball
+ * "fighting" the controls. Capping per-axis means the opposing key always brakes and the
+ * perpendicular key always turns; only the already-maxed direction stops adding.
+ */
+function mountLegacyPushControls(api: GraphysXAgentWorldApi, ballId: string, isWon: () => boolean): () => void {
+  const pushBy = new Map<string, string>(PUSH_DIRECTIONS.map((direction) => [direction.key, direction.id]));
+  const dirById = new Map<string, readonly [number, number, number]>(
+    PUSH_DIRECTIONS.map((direction) => [direction.id, direction.vector]),
+  );
+  const held = new Set<string>();
+  const STEER_HZ = 30;
+  const SPEED_CAP = 6.5; // m/s along a single axis; the opposing key still brakes past this.
+  const pushIfUnderCap = (interactionId: string, velocity: readonly number[] | undefined): void => {
+    const dir = dirById.get(interactionId);
+    // Velocity component along this push's direction. Braking (opposite) is negative and always
+    // allowed; a perpendicular turn is ~0 and always allowed; only an already-fast same-axis
+    // push is suppressed.
+    const along = dir && velocity ? velocity[0] * dir[0] + velocity[2] * dir[2] : 0;
+    if (along < SPEED_CAP) api.interact(ballId, interactionId);
+  };
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (isFormField(event.target)) return;
+    const interactionId = pushBy.get(event.key);
+    if (!interactionId) return;
+    event.preventDefault();
+    // Fire once on the initial press (not on OS auto-repeat); the held loop keeps accelerating.
+    if (!held.has(event.key)) {
+      held.add(event.key);
+      const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
+      pushIfUnderCap(interactionId, velocity);
+    }
+  };
+  const onKeyUp = (event: KeyboardEvent): void => {
+    if (pushBy.has(event.key)) held.delete(event.key);
+  };
+  const onBlur = (): void => held.clear(); // a defocused tab must not leave a key stuck.
+  const steer = window.setInterval(() => {
+    if (isWon() || held.size === 0) return;
+    const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
+    for (const key of held) {
+      const interactionId = pushBy.get(key);
+      if (interactionId) pushIfUnderCap(interactionId, velocity);
+    }
+  }, 1000 / STEER_HZ);
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", onBlur);
+  return () => {
     window.clearInterval(steer);
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("blur", onBlur);
-    hud.remove();
-    container.querySelector(".gx-bz-win")?.remove();
   };
 }
 

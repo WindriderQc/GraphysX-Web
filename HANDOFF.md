@@ -113,6 +113,15 @@ enters play. No store required for either.
 one game rebuilt *on* the platform (BallZ, `ballz-play.ts`) is won by collecting every ring and
 *then* reaching the finish; crossing early does not count.
 
+**BallZ is a finished game** (`ballz-finished-r1`): the original two-body control model —
+fire-arrow aim + caged physics ball — as scene vocabulary. A dynamic entity can carry a
+`steering` block integrated in the deterministic step; `api.steer` (both impls + bridge) sets
+heading/thrust/turn/kick, the runtime anchors the arrow entity to the subject, and the host
+runs a chase camera in the one shared tick while play has a steerable subject. Keyboard
+(←/→ aim, ↑/↓ thrust/brake, Space kick) and mouse (point-to-aim, click / drag-for-power)
+drive the same call an agent makes; classic levels run their archived `nbrTour` = 3 laps.
+Subjects without steering (composed courses) keep the per-axis push scheme.
+
 **Round-trip sweep** (`scripts/smoke-roundtrip.mjs`, in `verify.mjs`). 97 property and rejection checks
 set through the public API and read back through four paths — `state()`, `exportDocument()`, a
 reload from that export, and where observable the live Three.js/physics object. It exists because
