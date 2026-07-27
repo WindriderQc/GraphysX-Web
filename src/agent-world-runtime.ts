@@ -29,10 +29,13 @@ import {
   GRAPHYSX_AGENT_RULES_CAPABILITIES,
   advanceRun,
   armRun,
+  rankSubjectRuns,
   validateRules,
+  type AgentWorldRaceSubject,
   type AgentWorldRulesDefinition,
   type AgentWorldRulesSnapshot,
   type AgentWorldRunStatus,
+  type AgentWorldSubjectRun,
 } from "./agent-world-rules";
 // Re-exported so a consumer that already imports the runtime's vocabulary does not have to
 // know the rules layer lives in its own module — `AgentWorldDefinition` and the rules block
@@ -43,9 +46,11 @@ export {
   describeRun,
   formatClock,
   type AgentWorldCheckpointRule,
+  type AgentWorldRaceSubject,
   type AgentWorldRulesDefinition,
   type AgentWorldRunPhase,
   type AgentWorldRunStatus,
+  type AgentWorldSubjectRun,
 } from "./agent-world-rules";
 
 import {
@@ -1078,6 +1083,8 @@ export type GraphysXAgentWorldApi = {
     get(): AgentWorldRulesDefinition | null;
     set(rules: AgentWorldRulesDefinition | null): AgentWorldResult<AgentWorldRunStatus | null>;
     status(): AgentWorldRunStatus | null;
+    /** Ranked per-racer runs, or null when the rules declare no `subjects`. */
+    standings(): AgentWorldSubjectRun[] | null;
     reset(): AgentWorldResult<AgentWorldRunStatus | null>;
   };
   undo(): AgentWorldResult<AgentWorldState>;
@@ -1346,6 +1353,12 @@ export class AgentWorldRuntime {
    */
   private rules: AgentWorldRulesDefinition | null = null;
   private run: AgentWorldRunStatus | null = null;
+  /**
+   * Multiplayer: one run per race subject (`rules.subjects`), advanced from the same event
+   * pages as `run`. `run` is always the PRIMARY subject's entry in here when this is
+   * non-null, so every single-subject consumer stays correct without knowing races exist.
+   */
+  private subjectRuns: Map<string, { subject: AgentWorldRaceSubject; run: AgentWorldRunStatus }> | null = null;
   private rulesCursor = 0;
   private definition: AgentWorldDefinition = deepClone(GRAPHYSX_AGENT_DEMO_WORLD);
   private environment: AgentWorldEnvironment = deepClone(DEFAULT_ENVIRONMENT);
@@ -2262,6 +2275,7 @@ export class AgentWorldRuntime {
     if (!rules) {
       this.rules = null;
       this.run = null;
+      this.subjectRuns = null;
       this.definition.rules = undefined;
       this.rulesCursor = this.streamSequence;
       return;
@@ -2270,8 +2284,32 @@ export class AgentWorldRuntime {
     this.rules = deepClone(rules);
     this.definition.rules = deepClone(rules);
     this.rulesCursor = this.streamSequence;
-    this.run = armRun(this.rules, this.rulesSnapshot(), this.rulesCursor);
-    this.recordEvent("rules.armed", `${this.run.checkpointCount} checkpoints · ${this.run.collectibleCount} collectibles · ${this.run.laps} lap(s)`);
+    this.armSubjectRuns();
+    this.run = this.armPrimaryRun();
+    this.recordEvent("rules.armed", `${this.run.checkpointCount} checkpoints · ${this.run.collectibleCount} collectibles · ${this.run.laps} lap(s)${this.subjectRuns ? ` · ${this.subjectRuns.size} racers` : ""}`);
+  }
+
+  /** Arm one run per race subject, or clear the map for a single-subject course. */
+  private armSubjectRuns(): void {
+    const subjects = this.rules?.subjects;
+    if (!this.rules || !subjects?.length) {
+      this.subjectRuns = null;
+      return;
+    }
+    const snapshot = this.rulesSnapshot();
+    this.subjectRuns = new Map(
+      subjects.map((subject) => [subject.id, { subject: deepClone(subject), run: armRun(this.rules!, snapshot, this.rulesCursor) }]),
+    );
+  }
+
+  /** The run `status()` answers with: the primary racer's in a race, else a fresh solo run. */
+  private armPrimaryRun(): AgentWorldRunStatus {
+    if (this.subjectRuns) {
+      const primaryId = this.rules?.subjectId ?? [...this.subjectRuns.keys()][0];
+      const entry = this.subjectRuns.get(primaryId!);
+      if (entry) return entry.run;
+    }
+    return armRun(this.rules!, this.rulesSnapshot(), this.rulesCursor);
   }
 
   /**
@@ -2303,8 +2341,26 @@ export class AgentWorldRuntime {
     if (!this.rules || !this.run) return;
     const page = this.readEvents(this.rulesCursor);
     this.rulesCursor = page.sequence;
+    const snapshot = this.rulesSnapshot();
+    if (this.subjectRuns) {
+      // A race advances every racer over the SAME page — one read of the stream, N verdicts.
+      const primaryId = this.rules.subjectId ?? [...this.subjectRuns.keys()][0];
+      for (const entry of this.subjectRuns.values()) {
+        const before = entry.run;
+        entry.run = advanceRun(before, this.rules, page, snapshot, entry.subject);
+        if (entry.run.phase !== before.phase && (entry.run.phase === "complete" || entry.run.phase === "expired")) {
+          this.recordEvent(
+            "rules.finished",
+            `${entry.subject.label ?? entry.subject.id}: ${entry.run.outcome} in ${entry.run.elapsedSeconds.toFixed(2)}s${entry.run.desynced ? " (desynced)" : ""}`,
+            entry.subject.id,
+          );
+        }
+      }
+      this.run = this.subjectRuns.get(primaryId!)?.run ?? this.run;
+      return;
+    }
     const before = this.run;
-    this.run = advanceRun(before, this.rules, page, this.rulesSnapshot());
+    this.run = advanceRun(before, this.rules, page, snapshot);
     if (this.run.resyncs > before.resyncs) {
       this.recordEvent("rules.resync", `stream gap at ${before.sequence}; collectibles rebuilt from the scene, lap and gate counts kept and flagged`);
     }
@@ -2344,26 +2400,48 @@ export class AgentWorldRuntime {
    */
   resetRun(): AgentWorldResult<AgentWorldRunStatus | null> {
     if (!this.rules) return this.failure("This scene declares no rules");
-    const spawn = this.rules.spawn;
-    if (spawn) {
-      const subject = this.entities.get(spawn.entityId);
-      if (subject) {
-        const position = spawn.position ?? subject.definition.transform.position;
-        subject.object.position.set(...position);
-        if (subject.body) {
-          this.physicsScratch.transform.position.set(...position);
-          this.physicsScratch.transform.rotation.copy(subject.object.quaternion);
-          this.physicsWorld.writeTransform(subject.body, this.physicsScratch.transform);
-          this.physicsWorld.writeLinearVelocity(subject.body, ZERO_PHYSICS_VECTOR);
-          this.physicsWorld.writeAngularVelocity(subject.body, ZERO_PHYSICS_VECTOR);
-          this.physicsWorld.wakeBody(subject.body);
-        }
+    const returnToSpawn = (entityId: string, position?: AgentWorldVector3): void => {
+      const subject = this.entities.get(entityId);
+      if (!subject) return;
+      const target = position ?? subject.definition.transform.position;
+      subject.object.position.set(...target);
+      if (subject.body) {
+        this.physicsScratch.transform.position.set(...target);
+        this.physicsScratch.transform.rotation.copy(subject.object.quaternion);
+        this.physicsWorld.writeTransform(subject.body, this.physicsScratch.transform);
+        this.physicsWorld.writeLinearVelocity(subject.body, ZERO_PHYSICS_VECTOR);
+        this.physicsWorld.writeAngularVelocity(subject.body, ZERO_PHYSICS_VECTOR);
+        this.physicsWorld.wakeBody(subject.body);
       }
+    };
+    const spawn = this.rules.spawn;
+    if (spawn) returnToSpawn(spawn.entityId, spawn.position);
+    // Every racer goes back to its mark, not just the primary — a race reset that left the
+    // rivals mid-course would hand them the first lap.
+    for (const subject of this.rules.subjects ?? []) {
+      if (subject.id !== spawn?.entityId) returnToSpawn(subject.id, subject.spawn?.position);
     }
     this.rulesCursor = this.streamSequence;
-    this.run = armRun(this.rules, this.rulesSnapshot(), this.rulesCursor);
+    this.armSubjectRuns();
+    this.run = this.armPrimaryRun();
     this.recordEvent("rules.reset", spawn?.entityId ?? "clock only");
     return this.success(deepClone(this.run));
+  }
+
+  /**
+   * The race standings, ranked, or null when the scene's rules declare no `subjects`.
+   * Finished runs first by time, then the running by laps/gates/pickups — the same pure
+   * ranking a HUD or an out-of-process spectator computes from these statuses.
+   */
+  raceStandings(): AgentWorldSubjectRun[] | null {
+    if (!this.subjectRuns) return null;
+    return rankSubjectRuns(
+      [...this.subjectRuns.values()].map(({ subject, run }) => ({
+        subjectId: subject.id,
+        label: subject.label ?? subject.id,
+        run: deepClone(run),
+      })),
+    );
   }
 
   private buildEnvironment(): void {

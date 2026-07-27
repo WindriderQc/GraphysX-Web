@@ -159,6 +159,7 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
       get: () => runtime.getRules(),
       set: (rules) => runtime.setRules(rules),
       status: () => runtime.runStatus(),
+      standings: () => runtime.raceStandings(),
       reset: () => runtime.resetRun(),
     },
     undo: () => runtime.undo(),

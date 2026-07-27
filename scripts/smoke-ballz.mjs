@@ -417,6 +417,70 @@ try {
   // The same world back in the editor, for comparison against ballz-play.png above.
   await page.screenshot({ path: path.join(ART, "ballz-level.png") });
 
+  // --- Multiplayer: per-subject runs from one trigger stream ----------------------------
+  // `rules.subjects` gives every racer its own run. A rival ball is spawned as an ordinary
+  // steerable entity, the rules are re-set with two subjects, and the rival is driven
+  // through ring → halfway → finish: ITS run must bank and complete while the primary's
+  // stays running (gates are strictly attributed), the ring must count for BOTH (a taken
+  // ring hides for everyone — rings are co-op, the race is the laps), and `standings()`
+  // must rank the finisher first. All deterministic pause+step.
+  out.race = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    api.levels.play("smoke-ballz");
+    api.pause(true);
+    for (let i = 0; i < 60; i += 1) api.step(1 / 60);
+    const spawned = api.spawn({
+      id: "rival-ball",
+      type: "sphere",
+      label: "Rival",
+      transform: { position: [2.6, 0.7, 5.2] },
+      geometry: { radius: 0.55 },
+      material: { color: "#ffd27a", wireframe: true },
+      physics: { mode: "dynamic", material: "ball", mass: 1.7 },
+      steering: { headingDegrees: 0 },
+      tags: ["ballz", "player"],
+    });
+    if (!spawned.ok) return { spawnError: spawned.error };
+    const rules = api.rules.get();
+    const set = api.rules.set({
+      ...rules,
+      subjectId: "ballz-ball",
+      subjects: [
+        { id: "ballz-ball", label: "P1" },
+        { id: "rival-ball", label: "Rival", spawn: { position: [2.6, 0.7, 5.2] } },
+      ],
+    });
+    if (!set.ok) return { setError: set.error };
+
+    const teleport = (id, position) => {
+      api.update(id, { transform: { position } });
+      for (let i = 0; i < 18; i += 1) api.step(1 / 60);
+    };
+    const ring = api.query({ tag: "collectible" })[0];
+    teleport("rival-ball", ring.position);
+    const primaryAfterRing = api.rules.status();
+    const standingsAfterRing = api.rules.standings();
+    const gate = api.query({ ids: ["ballz-finish-gate"] })[0];
+    teleport("rival-ball", gate.position);
+    const primaryAfterRivalFinish = api.rules.status();
+    const standings = api.rules.standings();
+    const rival = standings?.find((entry) => entry.subjectId === "rival-ball");
+    const primary = standings?.find((entry) => entry.subjectId === "ballz-ball");
+    return {
+      racers: standings?.length ?? 0,
+      // The shared ring: taken by the rival, banked in BOTH runs.
+      ringSharedToPrimary: primaryAfterRing?.collected.length === 1,
+      ringSharedToRival: standingsAfterRing?.find((entry) => entry.subjectId === "rival-ball")?.run.collected.length === 1,
+      // Strict gate attribution: the rival finishing must not finish the primary.
+      rivalComplete: rival?.run.phase === "complete",
+      primaryStillRunning: primary?.run.phase === "running" && primaryAfterRivalFinish?.phase === "running",
+      rivalRankedFirst: standings?.[0]?.subjectId === "rival-ball",
+      rivalLabel: rival?.label,
+      // The race round-trips: subjects are ordinary rules data in the document.
+      exportedSubjects: api.export().rules?.subjects?.length ?? 0,
+    };
+  });
+
   // --- Winning the level: rings THEN finish, and not before -----------------------------
   // The win rule has to be real, not a "reached the finish" rubber stamp: crossing the finish
   // with rings still out must NOT win, and collecting them all then returning must. Driven with
@@ -551,6 +615,14 @@ const ok =
   out.afterExit?.mode === "editor" &&
   out.afterExit?.toolbarShown === true &&
   out.afterExit?.hudGone === true &&
+  out.race?.racers === 2 &&
+  out.race?.ringSharedToPrimary === true &&
+  out.race?.ringSharedToRival === true &&
+  out.race?.rivalComplete === true &&
+  out.race?.primaryStillRunning === true &&
+  out.race?.rivalRankedFirst === true &&
+  out.race?.rivalLabel === "Rival" &&
+  out.race?.exportedSubjects === 2 &&
   out.wonWithRingsOut === false &&
   out.phaseWithRingsOut === "running" &&
   out.win?.shown === true &&

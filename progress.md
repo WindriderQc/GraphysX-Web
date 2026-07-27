@@ -1727,3 +1727,35 @@ behind-and-above — instead of the old fixed play framing it replaced. Two othe
 set is byte-identical on a tree without any of this work (models never reach `ready` under
 load), and the editor red is the documented slow-first-paint timeout. CI is the authority
 for both.
+
+## 2026-07-27 — `agent-play-r1`: an agent wins BallZ, and races become per-subject runs
+
+Rung 1 and rung 2's engine half of the AgentX arc (BALLZ_AGENTX_MULTIPLAYER_PLAN), same day
+as `ballz-finished-r1` because the steering vocabulary was built to make them cheap.
+
+**`tools/ballz-agent-driver.mjs` — an agent plays the game.** A policy loop that speaks ONLY
+the discoverable bridge (`query` / `rules.status` / `steer` / `step`; never `__GRAPHYSX__`
+directly), with a deterministic pause+step game loop deciding at ~6 Hz of simulated time.
+Naive greedy pursuit measured itself into Level 1's central diamond (10/20 rings, then 400
+simulated seconds pushing a wall), so the agent pathfinds — over the authored grid it reads
+through `levels.get`, the same discoverable data the materialiser builds walls from. BFS,
+line-of-sight waypoint smoothing, stuck-kick backstop. Baseline on `archive-ballz-level1`:
+**20/20 rings, 3 laps, complete in 123.7 simulated seconds, zero kicks** — the number a
+model-driven (AgentX/Ollama) policy gets to beat. Win-panel screenshot in the session record.
+
+**Per-subject runs (`rules.subjects`).** A rules block can now name its racers; each gets its
+OWN run — laps, ordered gates, clock — advanced from the same trigger stream, attributed by
+who crossed. `subjectId` stays the primary and `status()` keeps answering with it, so every
+existing consumer (HUD, win panel, chase camera) is correct unmodified. Collectibles are
+deliberately SHARED in a race: a taken ring hides itself for everyone, so requiring each
+racer to personally cross every ring would make all runs but one unwinnable — rings are
+co-op world state, the race is the laps. New `rules.standings()` (both impls + bridge)
+returns the ranked board: finished first by time, then laps/gates/pickups; ranking is a pure
+function (`rankSubjectRuns`) so a HUD and an out-of-process spectator rank identically.
+`rules.reset()` returns every racer to its mark, not just the primary.
+
+Verified in `smoke-ballz`: a spawned rival driven ring → halfway → finish completes ITS run
+while the primary's stays running (strict gate attribution), the ring banks in BOTH runs
+(shared), standings rank the rival first, and `subjects` round-trips through the document.
+`smoke-rules` re-run green — the solo path is byte-compatible (the per-subject branch only
+exists when `subjects` is declared).

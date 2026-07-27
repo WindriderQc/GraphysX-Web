@@ -211,6 +211,7 @@ import {
   type AgentWorldInteractionReceipt,
   type AgentWorldSteerInput,
   type AgentWorldSteerReceipt,
+  type AgentWorldSubjectRun,
   type AgentWorldQuery,
   type AgentWorldResult,
   type AgentWorldState
@@ -1917,6 +1918,10 @@ export class RaceScene {
 
   agentWorldRunStatus(): AgentWorldRunStatus | null {
     return this.agentWorld?.runStatus() ?? null;
+  }
+
+  agentWorldRaceStandings(): AgentWorldSubjectRun[] | null {
+    return this.agentWorld?.raceStandings() ?? null;
   }
 
   resetAgentWorldRun(): AgentWorldResult<AgentWorldRunStatus | null> {

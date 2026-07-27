@@ -731,6 +731,7 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `attachBehavior(id, behavior)`, `detachBehavior(id, behaviorId)` | Change simulation behavior without replacing an entity. |
 | `interact(id, interactionId?)` | Trigger the same atomic labeled action used by 3D clicks and accessible Studio controls. |
 | `steer(id, input)` | Drive a steerable subject: absolute aim heading, live thrust/turn inputs, or a one-shot kick — the same call the BallZ keyboard and mouse make. |
+| `rules.standings()` | Ranked per-racer runs of a multi-subject course (`rules.subjects`), or null for a solo course. Each racer gets its own laps/gates/clock from the same trigger stream; rings are shared (a taken ring hides for everyone). |
 | `starters()`, `loadStarter(id, options?)` | Discover or load complete, lit, editable starter worlds in one call. |
 | `prefabs()`, `spawnPrefab(id, options?)` | Discover or place reusable multi-entity 3D recipes. |
 | `transaction(commands)` | Commit a multi-object edit atomically; any invalid command rolls the whole batch back. |
