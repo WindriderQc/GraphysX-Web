@@ -54,6 +54,7 @@ const SMOKES = [
   { name: "ballz", script: "scripts/smoke-ballz.mjs", covers: "levels.play(): grid materialises, ball rests, walls stop it, gate + ring fire" },
   { name: "games", script: "scripts/smoke-games.mjs", covers: "front door: showroom -> Games shelf -> playing a level -> back" },
   { name: "overlay", script: "scripts/smoke-overlay.mjs", covers: "2D overlay layer: off by default, one shared loop, draws over 3D, round-trips" },
+  { name: "surfaces", script: "scripts/smoke-surfaces.mjs", covers: "generative surfaces: off by default, one shared loop (surfaceRedraws tracks frames), scene data round-trip, retune + remove" },
   { name: "archive-levels", script: "scripts/smoke-archive-levels.mjs", covers: "recovered BallZ arenas: census fidelity, containment, reachable, completable" },
   { name: "spiral", script: "scripts/smoke-spiral.mjs", covers: "Skybox Spiral port: composes, ball rests, movers move, markerless light, completable, round-trips" },
   { name: "world1", script: "scripts/smoke-world1.mjs", covers: "World 1 mesh port: six meshes ready, physics-only descent through both holes, elevator moves, completable" },
