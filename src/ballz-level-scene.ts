@@ -138,15 +138,14 @@ const EMITTER_BUDGET = 8;
 const FLOOR_THICKNESS_RATIO = 0.6;
 
 /**
- * The caged ball's radius as a fraction of a cell — the cage IS the physics sphere, so the
- * struts the player sees are exactly the surface that touches the world. Sized so it clears
- * a one-cell gap comfortably but cannot squeeze between two diagonal walls, which is what
- * makes a grid level readable.
+ * The ball's radius as a fraction of a cell — the recovered BallShell mesh is fitted to
+ * exactly this collider radius, so the cage the player sees is the surface that touches the
+ * world. Sized so it clears a one-cell gap comfortably but cannot squeeze between two
+ * diagonal walls, which is what makes a grid level readable.
  */
 const BALL_RADIUS_RATIO = 0.22;
 
-/** The solid core inside the cage. Carries the checker that makes rolling readable. */
-const CORE_RADIUS_RATIO = 0.135;
+
 
 /**
  * The ball's steering set. Exported so the input binding maps a key to an interaction id
@@ -450,41 +449,45 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
     // Say so rather than inventing a spawn in a corner that may be inside a wall.
     deviations.push("Level has no start tile, so no ball was spawned.");
   } else {
-    // --- The two-body player (the original BallZ control model) --------------------------
-    // A CAGED BALL that is the physics subject, and a FIRE-ARROW that is the aim. The cage
-    // is the collider the player sees: `ballz-ball` renders as an open wireframe sphere at
-    // exactly its physics radius, with a solid checkered core parented inside. Both roll as
-    // one body — a child of a dynamic entity inherits its quaternion — so the checker still
-    // tells rolling from sliding, now through the struts of the cage.
-    //
-    // Provenance: the layouts around this ball are `faithful` recoveries; this control and
-    // camera model is the author's original design intent rebuilt on v2 vocabulary, recorded
-    // as `adapted` (see BALLZ_GAME_DESIGN) — the recovered archive holds the levels, not the
-    // original control code.
+    // --- The two-body player: the RECOVERED 2011 ball ------------------------------------
+    // Not an invented look: the outer cage is the decoded `BallShell.tvm` and the aim
+    // indicator is the decoded `BallFire.tvm` wearing the archived `FireArrow800.JPG` — the
+    // arrow TEXTURE on the inner controller ball is how the original told you where you
+    // would go. `ballz-ball` itself is the invisible physics sphere (the collider matches
+    // the shell's radius); the shell mesh is parented to it and rolls with it, while the
+    // FireArrow ball is a separate entity the runtime's steering pass anchors at the
+    // subject's centre and yaws to the heading — pointing, never rolling, exactly like the
+    // recovered game. Provenance: meshes and texture `faithful` (vendor-ball-meshes.mjs);
+    // the steering/camera code around them remains `adapted` from the author's design.
     const cellScale = cellSize / 2.6;
+    const ballRadius = cellSize * BALL_RADIUS_RATIO;
     entities.push({
       id: "ballz-ball",
       type: "sphere",
-      label: "Caged Ball",
+      label: "Player Ball",
       transform: { position: spawnPosition },
-      // 12 segments, so the wireframe reads as struts rather than a fine net.
-      geometry: { radius: cellSize * BALL_RADIUS_RATIO, radialSegments: 12 },
-      material: { color: "#dff4ff", emissive: "#2ea8c8", emissiveIntensity: 0.55, roughness: 0.35, metalness: 0.5, wireframe: true },
+      geometry: { radius: ballRadius, radialSegments: 12 },
+      // The collider proxy: all but invisible, so the recovered shell IS the ball you see.
+      // Not `visible: false` — visibility inherits, and the shell is parented inside.
+      material: { color: "#dff4ff", opacity: 0.03, roughness: 0.4, metalness: 0 },
+      castShadow: false,
       // Heavier than a marble so it has authority (design ratio 1.5–2.0). Friction raised
       // above the `ball` preset so the sphere genuinely rolls on the wood rather than
       // gliding; restitution ~0.5 is lively-but-settles, and the multiply-combine against
       // the walls' 0.08 keeps arena hits absorbed rather than launching.
       physics: { mode: "dynamic", material: "ball", mass: 1.7, friction: 0.55, restitution: 0.5 },
       // The fire-arrow/heading model, as scene data: `api.steer` aims and thrusts, the
-      // runtime integrates it in the simulation step, and the arrow entity below is anchored
-      // to this ball every frame. Force reaches the speed cap in ~0.4 s; the cap is enforced
-      // per-direction so brake and turn keep authority at top speed.
+      // runtime integrates it in the simulation step, and the FireArrow ball below is
+      // anchored to this body every frame. Force reaches the speed cap in ~0.4 s; the cap
+      // is per-direction so brake and turn keep authority at top speed; Space is a straight
+      // vertical hop (`jump`), sized to clear a wall with a little to spare.
       steering: {
         headingDegrees: 0,
         force: 30 * cellScale,
         speedCap: cellSize * 2.7,
         turnRateDegrees: 240,
         kickImpulse: cellSize * 3.6,
+        jumpImpulse: cellSize * 5,
         arrowId: "ballz-aim-arrow",
       },
       // The four grid pushes REMAIN, deliberately: they are serialised control vocabulary an
@@ -500,53 +503,27 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
       tags: ["ballz", "ball", "player"],
     });
     entities.push({
-      id: "ballz-ball-core",
-      type: "sphere",
-      label: "Ball Core",
+      id: "ballz-ball-shell",
+      type: "model",
+      label: "Ball Shell",
       parentId: "ballz-ball",
       transform: { position: [0, 0, 0] },
-      geometry: { radius: cellSize * CORE_RADIUS_RATIO },
-      // The same archive checker as ever, tuned to put roughly four squares around the
-      // sphere (0.2 of a 20x20 board). A plain sphere rolling and a plain sphere sliding are
-      // the same picture; a checkered one tells you which, and that distinction is the entire
-      // feel of this genre. The core casts the contact shadow; the cage would cast noise.
-      material: { ...PALETTE.ball, texture: { id: "checker" as const, repeat: [0.2, 0.2] as [number, number] } },
+      // The decoded 2011 cage, fitted to the collider's diameter. Its revival translucency
+      // is the asset's recovered-PBR profile, so every scene that spawns it agrees.
+      asset: { id: "archive-ballshell", fitSize: ballRadius * 2 },
       tags: ["ballz", "ball"],
     });
 
-    // The FIRE-ARROW: a bright shaft-and-head marker on the ground plane, anchored at the
-    // ball by the runtime's steering pass and yawed to the current heading. It is cosmetic/
-    // logical, never a physics body — the "where will I go" pointer both control schemes and
-    // any agent share. Emissive above the bloom threshold, so it reads from any angle.
-    const arrowY = cellSize * 0.035;
+    // The aim: the recovered FireArrow controller ball, INSIDE the shell. Anchored (never
+    // parented — parenting would make it roll with the physics body) at the subject centre
+    // by the steering pass, yawed to the heading. The legacy selector sized the inner ball
+    // at 6.601/8.5 of the shell radius; kept exactly.
     entities.push({
       id: "ballz-aim-arrow",
-      type: "group",
-      label: "Fire Arrow",
-      transform: { position: [spawnPosition[0], 0, spawnPosition[2]] },
-      castShadow: false,
-      tags: ["ballz", "aim"],
-    });
-    entities.push({
-      id: "ballz-aim-arrow-shaft",
-      type: "box",
-      label: "Fire Arrow Shaft",
-      parentId: "ballz-aim-arrow",
-      transform: { position: [0, arrowY, -cellSize * 0.52] },
-      geometry: { width: cellSize * 0.09, height: cellSize * 0.025, depth: cellSize * 0.5 },
-      material: { color: "#ffb054", emissive: "#ff6a1a", emissiveIntensity: 2.1, roughness: 0.3, metalness: 0.1 },
-      castShadow: false,
-      tags: ["ballz", "aim"],
-    });
-    entities.push({
-      id: "ballz-aim-arrow-head",
-      type: "cone",
-      label: "Fire Arrow Head",
-      parentId: "ballz-aim-arrow",
-      // A cone points +Y; laid flat with -90° about X it points -Z, the heading-0 direction.
-      transform: { position: [0, arrowY, -cellSize * 0.9], rotationDegrees: [-90, 0, 0] },
-      geometry: { radius: cellSize * 0.13, height: cellSize * 0.28 },
-      material: { color: "#ffd27a", emissive: "#ff7a1a", emissiveIntensity: 2.4, roughness: 0.25, metalness: 0.1 },
+      type: "model",
+      label: "Fire Arrow Ball",
+      transform: { position: [spawnPosition[0], spawnPosition[1], spawnPosition[2]] },
+      asset: { id: "archive-ballfire", fitSize: ballRadius * 2 * (6.601 / 8.5) },
       castShadow: false,
       tags: ["ballz", "aim"],
     });

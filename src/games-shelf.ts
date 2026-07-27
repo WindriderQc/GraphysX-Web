@@ -1,5 +1,6 @@
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { createLevelThumbnail, createSceneThumbnail, SHELF_THUMBNAIL_CSS } from "./shelf-thumbnails";
+import { BALLZ_MENU_LEVEL_IDS, mountBallzMenu } from "./ballz-menu";
 
 /**
  * The "Games & Playgrounds" front-door shelf.
@@ -98,6 +99,36 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   const list = document.createElement("div");
   list.className = "gx-shelf-list";
 
+  // THE GAME gets a hero card, not a bare level row. "First Course" as a top-level button
+  // read as a test fixture; BallZ is a title, and clicking it opens the game's own menu
+  // (title screen, Start Game, the course roster). The shelf's generic level list below
+  // excludes the game's courses so they are not listed twice.
+  const hero = document.createElement("button");
+  hero.type = "button";
+  hero.className = "gx-shelf-hero";
+  hero.dataset.gameId = "ballz";
+  const heroMark = document.createElement("span");
+  heroMark.className = "gx-shelf-hero-mark";
+  heroMark.textContent = "BallZ";
+  const heroCopy = document.createElement("span");
+  heroCopy.className = "gx-shelf-hero-copy";
+  heroCopy.textContent = "the revival — fire arrow, caged ball, every ring, three tours";
+  const heroCta = document.createElement("span");
+  heroCta.className = "gx-shelf-hero-cta";
+  heroCta.textContent = "▶ Play";
+  hero.append(heroMark, heroCopy, heroCta);
+  hero.addEventListener("click", () => {
+    mountBallzMenu(container, {
+      api,
+      onPlay: (levelId) => {
+        dispose();
+        onPlay?.(levelId);
+      },
+      // Back from the title screen lands on the shelf, which never went away.
+    });
+  });
+  list.append(hero);
+
   for (const course of composed ?? []) {
     const row = document.createElement("button");
     row.type = "button";
@@ -144,6 +175,7 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   // Read the library rather than a curated manifest: anything a person or an agent authors
   // shows up here without a second registration step.
   for (const summary of api.levels.list()) {
+    if (BALLZ_MENU_LEVEL_IDS.includes(summary.id)) continue; // listed inside the BallZ menu
     const row = document.createElement("button");
     row.type = "button";
     row.className = "gx-shelf-row";
@@ -227,6 +259,20 @@ ${SHELF_THUMBNAIL_CSS}
 .gx-shelf-blurb{margin:0;color:var(--gx-ink-faint);font-size:12.5px;line-height:1.5}
 .gx-shelf-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;overflow-y:auto;
   padding:1px 5px 1px 1px}
+.gx-shelf-hero{grid-column:1 / -1;display:flex;align-items:center;gap:16px;cursor:pointer;text-align:left;
+  padding:16px 20px;border-radius:12px;border:1px solid rgba(255,138,54,.45);
+  background:
+    radial-gradient(130% 160% at 8% 20%,rgba(255,122,26,.28),rgba(9,22,31,0) 52%),
+    linear-gradient(100deg,rgba(38,20,8,.92),rgba(16,32,44,.92));
+  box-shadow:0 8px 30px rgba(255,110,26,.14)}
+.gx-shelf-hero:hover{border-color:#ffb054;box-shadow:0 10px 36px rgba(255,110,26,.28)}
+.gx-shelf-hero-mark{font:900 30px/1 var(--gx-font);letter-spacing:.04em;
+  background:linear-gradient(180deg,#ffe14d,#ff9a2a 55%,#ff2e17);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 2px 12px rgba(255,110,26,.4))}
+.gx-shelf-hero-copy{flex:1;color:var(--gx-ink-soft);font-size:12px;letter-spacing:.05em;line-height:1.4}
+.gx-shelf-hero-cta{color:#1b0d02;font:800 13px var(--gx-font);letter-spacing:.06em;padding:9px 18px;border-radius:9px;
+  background:linear-gradient(180deg,#ffd24d,#ff8a2a);box-shadow:0 4px 18px rgba(255,138,42,.3)}
 .gx-shelf-row{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
   background:rgba(16,38,50,.8);border:1px solid rgba(79,208,230,.2);border-radius:10px;
   padding:7px;cursor:pointer;color:inherit;min-width:0}

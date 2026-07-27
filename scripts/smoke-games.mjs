@@ -53,23 +53,34 @@ try {
     const rows = [...document.querySelectorAll(".gx-shelf-row")];
     return {
       rowCount: rows.length,
-      // The seeded course must be there on a first visit, or the shelf opens on the bare
-      // fallback starter and reads as empty.
-      hasFirstCourse: rows.some((row) => row.dataset.levelId === "first-course"),
-      // A row should say what it contains before you commit to it.
-      firstCourseMeta: rows.find((row) => row.dataset.levelId === "first-course")
-        ?.querySelector(".gx-shelf-meta")?.textContent ?? null,
+      // THE GAME is a branded hero card, not a bare level row; the game's courses live in
+      // its own menu so they are not listed twice.
+      hasBallzHero: !!document.querySelector('.gx-shelf-hero[data-game-id="ballz"]'),
+      firstCourseListedGenerically: rows.some((row) => row.dataset.levelId === "first-course"),
       previewCount: rows.filter((row) => row.querySelector(".gx-shelf-thumb")).length,
-      levelPreview: rows.find((row) => row.dataset.levelId === "first-course")
-        ?.querySelector("canvas.gx-shelf-thumb")?.getAttribute("aria-label") ?? null,
       welcomeGone: !document.querySelector(".gx-welcome"),
     };
   });
   await page.screenshot({ path: path.join(ART, "games-shelf.png"), fullPage: false });
 
-  // ---- play it ----
-  await page.click('.gx-shelf-row[data-level-id="first-course"]');
-  await page.waitForTimeout(1400);
+  // ---- the BallZ title screen ----
+  await page.click('.gx-shelf-hero[data-game-id="ballz"]');
+  await page.waitForSelector(".gx-bzmenu", { timeout: SMOKE_TIMEOUT });
+  out.menu = await page.evaluate(() => ({
+    mark: document.querySelector(".gx-bzmenu-mark")?.textContent ?? null,
+    hasStart: !!document.querySelector(".gx-bzmenu-start"),
+    courseCount: document.querySelectorAll(".gx-bzmenu-course").length,
+    firstCourseListed: !!document.querySelector('.gx-bzmenu-course[data-level-id="first-course"]'),
+  }));
+  await page.screenshot({ path: path.join(ART, "games-ballz-menu.png"), fullPage: false });
+
+  // ---- play it, through the full ceremony ----
+  await page.click(".gx-bzmenu-start");
+  // The 3-2-1-GO start: nothing programmatic touches the world here, so the human path gets
+  // the whole countdown. Wait it out by its own overlay, not by wall-clock guessing.
+  await page.waitForSelector(".gx-bz-count", { timeout: SMOKE_TIMEOUT });
+  out.sawCountdown = true;
+  await page.waitForFunction(() => !document.querySelector(".gx-bz-count"), null, { timeout: SMOKE_TIMEOUT });
   out.playing = {
     mode: await page.evaluate(() => window.__GRAPHYSX_HOST__.mode),
     hudShown: await shown(".gx-bz-hud"),
@@ -108,8 +119,9 @@ try {
   // The level is playable, not just displayed. One real key event is enough here — the physics
   // of it is smoke-ballz's job.
   const before = await page.evaluate(() => window.__GRAPHYSX__.query({ ids: ["ballz-ball"] })[0]?.position ?? null);
-  await page.keyboard.press("ArrowUp");
+  await page.keyboard.down("ArrowUp");
   await page.waitForTimeout(700);
+  await page.keyboard.up("ArrowUp");
   const after = await page.evaluate(() => window.__GRAPHYSX__.query({ ids: ["ballz-ball"] })[0]?.position ?? null);
   out.ballResponds = !!before && !!after && (before[0] !== after[0] || before[2] !== after[2]);
   await page.screenshot({ path: path.join(ART, "games-playing.png"), fullPage: false });
@@ -224,10 +236,15 @@ const ok =
   out.frontDoor?.browseButton === true &&
   out.frontDoor?.mode === "scene" &&
   out.shelf?.rowCount > 0 &&
-  out.shelf?.hasFirstCourse === true &&
-  /ring/.test(out.shelf?.firstCourseMeta ?? "") &&
+  out.shelf?.hasBallzHero === true &&
+  out.shelf?.firstCourseListedGenerically === false &&
+  out.menu?.mark === "BallZ" &&
+  out.menu?.hasStart === true &&
+  out.menu?.courseCount >= 1 &&
+  out.menu?.firstCourseListed === true &&
+  out.sawCountdown === true &&
   out.shelf?.previewCount === out.shelf?.rowCount &&
-  /First Course level preview/.test(out.shelf?.levelPreview ?? "") &&
+
   out.shelf?.welcomeGone === true &&
   out.playing?.mode === "play" &&
   out.playing?.hudShown === true &&

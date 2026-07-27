@@ -229,12 +229,17 @@ try {
     api.pause(true);
     for (let i = 0; i < 120; i += 1) api.step(1 / 60); // settle onto the floor
     const spawned = api.query({ ids: ["ballz-ball"] })[0];
+    const shell = api.query({ ids: ["ballz-ball-shell"] })[0];
+    const aim = api.query({ ids: ["ballz-aim-arrow"] })[0];
     const result = {
       hasSteering: !!spawned.steering,
       arrowId: spawned.steering?.arrowId ?? null,
-      hasArrow: !!api.query({ ids: ["ballz-aim-arrow"] })[0],
-      hasCore: !!api.query({ ids: ["ballz-ball-core"] })[0],
-      cageWireframe: spawned.material.wireframe === true,
+      hasArrow: !!aim,
+      // The recovered 2011 ball: the shell mesh parented to the collider, the FireArrow
+      // controller ball as the anchored aim — models, not invented primitives.
+      shellIsRecoveredModel: shell?.type === "model" && shell?.parentId === "ballz-ball",
+      aimIsRecoveredModel: aim?.type === "model",
+      colliderNearInvisible: (spawned.material.opacity ?? 1) < 0.1,
     };
 
     // Give the run some runway: the smoke grid is only 7 cells wide, and a capped ball
@@ -576,8 +581,9 @@ const ok =
   out.steer?.hasSteering === true &&
   out.steer?.arrowId === "ballz-aim-arrow" &&
   out.steer?.hasArrow === true &&
-  out.steer?.hasCore === true &&
-  out.steer?.cageWireframe === true &&
+  out.steer?.shellIsRecoveredModel === true &&
+  out.steer?.aimIsRecoveredModel === true &&
+  out.steer?.colliderNearInvisible === true &&
   out.steer?.aimReceipt === 90 &&
   out.steer?.movedEast > 0.5 &&
   out.steer?.driftZ < 0.6 &&

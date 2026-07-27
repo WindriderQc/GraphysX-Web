@@ -467,8 +467,16 @@ export type AgentWorldSteering = {
   turnRateDegrees?: number;
   /** Impulse magnitude at kick = 1 (see AgentWorldSteerInput.kick). Default 6. */
   kickImpulse?: number;
+  /** Vertical impulse magnitude at jump = 1 (see AgentWorldSteerInput.jump). Default 8. */
+  jumpImpulse?: number;
   /** Optional entity the runtime anchors to the subject and yaws to the heading. */
   arrowId?: string;
+  /**
+   * Vertical offset of the anchored arrow above the subject's centre. The original BallZ
+   * aim indicator is the FireArrow-textured controller ball INSIDE the shell — lift 0, the
+   * default — while a ground-decal style arrow would ride at a negative lift.
+   */
+  arrowLift?: number;
 };
 
 /** One `api.steer` call: absolute aim, live inputs, and/or a one-shot kick. */
@@ -481,9 +489,15 @@ export type AgentWorldSteerInput = {
   turn?: number;
   /**
    * Fire a one-shot impulse of `kick * kickImpulse` along the heading — the golf-style
-   * launch (mouse click / drag-for-power / Space). 0..1, consumed immediately.
+   * launch. 0..1, consumed immediately.
    */
   kick?: number;
+  /**
+   * Fire a one-shot VERTICAL impulse of `jump * jumpImpulse` — the original BallZ hop
+   * (Space). 0..1, consumed immediately. Straight up, never along the heading: jumping is
+   * how you clear a hazard while still aiming at the ring behind it.
+   */
+  jump?: number;
 };
 
 export type AgentWorldSteerReceipt = {
@@ -493,6 +507,8 @@ export type AgentWorldSteerReceipt = {
   turn: number;
   /** The kick magnitude actually applied this call, 0 when none was requested. */
   kicked: number;
+  /** The jump magnitude actually applied this call, 0 when none was requested. */
+  jumped: number;
   linearVelocity: AgentWorldVector3;
 };
 
@@ -523,7 +539,9 @@ type ResolvedAgentWorldSteering = {
   speedCap: number;
   turnRateDegrees: number;
   kickImpulse: number;
+  jumpImpulse: number;
   arrowId: string | null;
+  arrowLift: number;
 };
 
 export type AgentWorldEntityDefinition = {
@@ -812,7 +830,9 @@ export type AgentWorldEntityState = {
     speedCap: number;
     turnRateDegrees: number;
     kickImpulse: number;
+    jumpImpulse: number;
     arrowId: string | null;
+    arrowLift: number;
   };
   physics: {
     mode: AgentWorldPhysicsMode;
@@ -2195,6 +2215,15 @@ export class AgentWorldRuntime {
         this.physicsWorld.wakeBody(runtime.body);
       }
     }
+    let jumped = 0;
+    if (input.jump !== undefined && runtime.body && runtime.definition.physics?.mode === "dynamic") {
+      jumped = clamp(input.jump, 0, 1);
+      if (jumped > 0) {
+        this.steeringScratch.set(0, jumped * steering.jumpImpulse, 0);
+        this.physicsWorld.applyImpulse(runtime.body, this.steeringScratch);
+        this.physicsWorld.wakeBody(runtime.body);
+      }
+    }
     if (runtime.body) this.physicsWorld.readLinearVelocity(runtime.body, this.physicsScratch.linearVelocity);
     else this.physicsScratch.linearVelocity.set(0, 0, 0);
     return {
@@ -2203,6 +2232,7 @@ export class AgentWorldRuntime {
       thrust: steering.thrust,
       turn: steering.turn,
       kicked,
+      jumped,
       linearVelocity: roundPhysicsVector(this.physicsScratch.linearVelocity),
     };
   }
@@ -2639,11 +2669,14 @@ export class AgentWorldRuntime {
       if (!arrow || arrow.definition.physics) continue;
       const position = arrow.definition.transform.position;
       position[0] = runtime.object.position.x;
+      // Full-position anchoring: the original aim indicator is the FireArrow controller
+      // ball INSIDE the shell, so it rides the subject's centre (plus `arrowLift`) — it
+      // follows a jump rather than staying on the floor.
+      position[1] = runtime.object.position.y + steering.arrowLift;
       position[2] = runtime.object.position.z;
       // Heading 0 must point the arrow's authored -Z toward world -Z: object yaw = -heading.
       arrow.definition.transform.rotationDegrees[1] = -steering.headingDegrees;
-      arrow.object.position.x = position[0];
-      arrow.object.position.z = position[2];
+      arrow.object.position.set(position[0], position[1], position[2]);
       arrow.object.rotation.y = -steering.headingDegrees * (Math.PI / 180);
     }
   }
@@ -3390,7 +3423,9 @@ export class AgentWorldRuntime {
           speedCap: runtime.definition.steering.speedCap,
           turnRateDegrees: runtime.definition.steering.turnRateDegrees,
           kickImpulse: runtime.definition.steering.kickImpulse,
+          jumpImpulse: runtime.definition.steering.jumpImpulse,
           arrowId: runtime.definition.steering.arrowId,
+          arrowLift: runtime.definition.steering.arrowLift,
         }
       } : {}),
       // Terrain's collider is implied rather than requested, so report it here anyway —
@@ -4349,7 +4384,9 @@ function resolveAgentWorldSteering(source: AgentWorldSteering, current?: Resolve
     speedCap: clamp(source.speedCap ?? current?.speedCap ?? 7, 0.1, 10000),
     turnRateDegrees: clamp(source.turnRateDegrees ?? current?.turnRateDegrees ?? 220, 1, 3600),
     kickImpulse: clamp(source.kickImpulse ?? current?.kickImpulse ?? 6, 0, 100000),
+    jumpImpulse: clamp(source.jumpImpulse ?? current?.jumpImpulse ?? 8, 0, 100000),
     arrowId,
+    arrowLift: clamp(source.arrowLift ?? current?.arrowLift ?? 0, -1000, 1000),
   };
 }
 
@@ -4365,7 +4402,9 @@ function serializeSteering(steering: ResolvedAgentWorldSteering): AgentWorldStee
     speedCap: steering.speedCap,
     turnRateDegrees: steering.turnRateDegrees,
     kickImpulse: steering.kickImpulse,
+    jumpImpulse: steering.jumpImpulse,
     ...(steering.arrowId ? { arrowId: steering.arrowId } : {}),
+    ...(steering.arrowLift !== 0 ? { arrowLift: steering.arrowLift } : {}),
   };
 }
 

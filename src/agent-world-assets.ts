@@ -138,6 +138,16 @@ type RecoveredPbrProfile = {
  * group, and geometry byte. Unlisted assets retain their exact legacy Phong path.
  */
 function recoveredPbrProfile(assetId: string | null, materialName: string): RecoveredPbrProfile | null {
+  // The 2011 player ball, revival look (the legacy ball-selector's default): the shell is a
+  // translucent cage so the FireArrow controller inside stays legible — same glass mechanics
+  // as the car windows. The controller/fire meshes carry the archived FireArrow texture and
+  // get a slight warm emissive lift so the aim reads in arena shadow.
+  if (assetId === "archive-ballshell") {
+    return { shading: "physical", roughness: 0.24, metalness: 0.1, clearcoat: 0.5, clearcoatRoughness: 0.2, opacity: 0.42 };
+  }
+  if (assetId === "archive-ballctrl" || assetId === "archive-ballfire") {
+    return { shading: "standard", roughness: 0.32, metalness: 0.1 };
+  }
   if (assetId === "archive-impreza") {
     if (/CHASIS\.JPG/i.test(materialName)) return { shading: "physical", roughness: 0.28, metalness: 0.12, clearcoat: 0.85, clearcoatRoughness: 0.18 };
     if (/VENTANAS/i.test(materialName)) return { shading: "physical", roughness: 0.12, metalness: 0.04, clearcoat: 0.72, clearcoatRoughness: 0.1, opacity: 0.42 };

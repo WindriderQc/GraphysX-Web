@@ -1786,3 +1786,36 @@ check-against-HEAD rule keeps earning its place). `agent-world-water.ts` carries
 uniform at the physical 0.02, distance tinting, and adjustable specular; screenshot at a
 deliberately grazing camera shows the surface mirroring the actual skyline with no pale
 wash. Ledger updated with the evidence rather than silently.
+
+## 2026-07-27 — `ballz-game-r1`: the RECOVERED ball, the title screen, and the race start
+
+Yanik's correction landed and was right: the two-body ball was never an invented wireframe —
+the archive holds it. `BallShell.tvm` (the cage), `BallCtrl.tvm`/`BallFire.tvm` (the inner
+controller wearing `FireArrow800.JPG` — the arrow TEXTURE is the aim indicator), all decoded
+long ago into the legacy tvm-catalog and used only by the legacy path. `vendor-ball-meshes.mjs`
+republishes them verbatim as curated `graphysx-mesh-json` assets (faithful provenance); the
+materialiser now spawns the shell parented to the invisible collider sphere and the FireArrow
+ball as the steering-anchored aim (full-position anchoring + `arrowLift`, since the aim rides
+the subject's centre and follows a jump). Shell translucency is a recovered-PBR profile.
+Lesson recorded: a payload without `bounds.size` fails `modelFit`, and the failure hides as a
+forever-"loading" asset.
+
+Controls corrected to the original: **Space jumps straight UP** (`steer.jump` + `jumpImpulse`
+tuning — aiming is the arrow's job), and the **mouse HOLDS to roll**: pointer aims, held
+button is the accelerator, release coasts (the click/drag-kick scheme is gone; `kick` remains
+API vocabulary).
+
+The game got its front door: a branded **BallZ hero card** on the Games shelf (fire-gradient
+wordmark) opening a **title screen** (`ballz-menu.ts`: Start Game + the course roster —
+First Course, Level 1 T Course, Level 2 Z Maze; those ids no longer listed generically), and
+a **3 · 2 · 1 · GO race start** in the play layer: controls locked (except when the world is
+paused — a deterministic harness is never held by presentation), `rules.reset()` at GO so the
+clock measures driving. Cancellation is the design: any programmatic activity (revision bump
+or pause) dismisses it, so every smoke and the agent driver keep exact prior behaviour. The
+revision baseline is taken at the first TICK, not at mount — mount happens inside the
+`world.loaded` dispatch, before `create()` bumps the revision, and a mount-time baseline made
+the countdown self-cancel flakily.
+
+Verified: smoke-ballz green (recovered-model assertions replace the wireframe ones),
+smoke-games green through the full ceremony (hero → title screen → countdown → chase →
+exit), screenshots of the shell + FireArrow ball in the arena.

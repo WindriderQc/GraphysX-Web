@@ -124,10 +124,23 @@ export function mountBallzPlay(
   // remove, so WASD would fight it the moment someone plays a level with the editor open.
   const steerable = !!api.query({ ids: [ballId] })[0]?.steering;
   if (steerable) {
-    hint.textContent = "← → aim · ↑ roll · ↓ brake · space kick · point & click to launch";
+    hint.textContent = "← → aim · ↑ roll · ↓ brake · space jump · hold the mouse to roll toward it";
+  }
+  // The race-start countdown: 3 · 2 · 1 · GO, controls locked until GO, and the run clock
+  // re-armed AT go so the time on the board measures driving, not staring at the overlay.
+  // A programmatic driver must never be held hostage by presentation, so the countdown
+  // cancels itself the moment anything touches the world through the API (a revision bump —
+  // a smoke's teleport, an agent's steer) or pauses it (a deterministic harness's first
+  // move). A human just watching changes neither, and gets the full ceremony.
+  let raceStarted = !steerable;
+  let teardownCountdown: (() => void) | null = null;
+  if (steerable) {
+    teardownCountdown = mountCountdown(api, container, () => {
+      raceStarted = true;
+    });
   }
   const teardownControls = steerable
-    ? mountSteerControls(api, ballId, container, () => won, options)
+    ? mountSteerControls(api, ballId, container, () => won || (!raceStarted && !(api.state()?.paused ?? false)), options)
     : mountLegacyPushControls(api, ballId, () => won);
 
   // Poll the *run*, not the stream. 200 ms is a HUD refresh rate, and the run it reads is
@@ -160,9 +173,79 @@ export function mountBallzPlay(
 
   return () => {
     window.clearInterval(poll);
+    teardownCountdown?.();
     teardownControls();
     hud.remove();
     container.querySelector(".gx-bz-win")?.remove();
+  };
+}
+
+/**
+ * The 3 · 2 · 1 · GO race start. Purely presentational plus one honest rules effect: at GO
+ * the run is re-armed (`rules.reset`) so the clock starts when control does. Cancellation
+ * is the load-bearing design: ANY api activity during the countdown — a revision bump from
+ * a teleporting smoke, an agent pausing the world to step it — dismisses the overlay
+ * immediately, unlocks control, and skips the reset, so every programmatic consumer keeps
+ * exactly the behaviour it had before countdowns existed.
+ */
+function mountCountdown(api: GraphysXAgentWorldApi, container: HTMLElement, onGo: () => void): () => void {
+  const overlay = document.createElement("div");
+  overlay.className = "gx-bz-count";
+  const digit = document.createElement("div");
+  digit.className = "gx-bz-count-digit";
+  overlay.append(digit);
+  container.append(overlay);
+
+  // The revision baseline is taken at the FIRST tick, not at mount: this layer mounts inside
+  // the `world.loaded` dispatch, which runs *before* `create()` bumps the world revision, so
+  // a mount-time baseline made the loading transaction itself look like agent activity and
+  // the countdown self-cancelled on the next tick (box-load dependent, maddeningly flaky).
+  // By 800 ms the load's own bump has landed; anything that moves the revision after that
+  // really is a programmatic driver.
+  let baselineRevision: number | null = null;
+  const steps = ["3", "2", "1", "GO!"];
+  let index = 0;
+  let timer = 0;
+  const finish = (viaGo: boolean): void => {
+    window.clearInterval(timer);
+    if (viaGo) {
+      // The clock starts when the player does. The subject is still on its spawn (controls
+      // were locked), so the reset's respawn is a no-op in space and a fresh start in time.
+      api.rules.reset();
+      digit.textContent = "GO!";
+      overlay.classList.add("gx-bz-count-go");
+      window.setTimeout(() => overlay.remove(), 650);
+    } else {
+      overlay.remove();
+    }
+    onGo();
+  };
+  const show = (): void => {
+    digit.textContent = steps[index];
+    digit.classList.remove("gx-bz-count-pop");
+    // Restart the pop animation from frame zero for each digit.
+    void digit.offsetWidth;
+    digit.classList.add("gx-bz-count-pop");
+  };
+  show();
+  timer = window.setInterval(() => {
+    const state = api.state();
+    if (state?.paused || (baselineRevision !== null && (state?.revision ?? 0) !== baselineRevision)) {
+      finish(false);
+      return;
+    }
+    baselineRevision = state?.revision ?? 0;
+    index += 1;
+    if (index >= steps.length - 1) {
+      finish(true);
+      return;
+    }
+    show();
+  }, 800);
+
+  return () => {
+    window.clearInterval(timer);
+    overlay.remove();
   };
 }
 
@@ -173,8 +256,9 @@ function isFormField(target: EventTarget | null): boolean {
 
 /**
  * The two-body control scheme (the original BallZ model): ←/→ rotate the fire-arrow, ↑/↓
- * thrust and brake along its heading, Space is the strong kick; the mouse aims the arrow at
- * the ground point under the cursor and a click (or a drag, for power) launches toward it.
+ * thrust and brake along its heading, Space is the vertical hop; the mouse aims the arrow
+ * at the ground point under the cursor and HOLDING the button rolls toward it — the pointer
+ * is the wheel, the held button is the accelerator.
  *
  * Everything here is an `api.steer` call, and the calls happen on input EDGES — a keydown,
  * a keyup, a throttled pointer move — never per frame. The continuous work (turn → heading,
@@ -202,8 +286,9 @@ function mountSteerControls(
     if (isFormField(event.target)) return;
     if (event.key === " " || event.code === "Space") {
       event.preventDefault();
-      // Once per press: OS auto-repeat must not machine-gun the launch impulse.
-      if (!event.repeat && !isWon()) api.steer(ballId, { kick: 1 });
+      // Once per press: OS auto-repeat must not machine-gun the hop. Straight UP — the
+      // original BallZ jump — never along the heading; aiming is the arrow's job.
+      if (!event.repeat && !isWon()) api.steer(ballId, { jump: 1 });
       return;
     }
     if (!/^Arrow(Up|Down|Left|Right)$/.test(event.key)) return;
@@ -216,9 +301,11 @@ function mountSteerControls(
     if (!held.delete(event.key)) return;
     sendAxes();
   };
+  let mouseDriving = false;
   // A defocused tab must not leave a key held: zero every input on blur.
   const onBlur = (): void => {
     held.clear();
+    mouseDriving = false;
     api.steer(ballId, { thrust: 0, turn: 0 });
   };
 
@@ -249,28 +336,24 @@ function mountSteerControls(
     if (heading === null) return;
     lastAimAt = now;
     aimedHeading = heading;
-    api.steer(ballId, { headingDegrees: heading });
+    api.steer(ballId, { headingDegrees: heading, ...(mouseDriving ? { thrust: 1 } : {}) });
   };
 
-  // Click / drag-for-power launch. Press-to-release distance in CSS pixels maps to kick
-  // power: a plain click is a modest chip, a full pull is the cap. Direction is wherever
-  // the arrow points at release — the pointer has been aiming it all along.
-  let pressedAt: { x: number; y: number } | null = null;
+  // HOLD to roll: while the button is down the ball thrusts toward the pointer — the
+  // pointer aims (above) and the held button is the accelerator, exactly like holding ↑
+  // with the arrow pinned on the cursor. Release coasts; keyboard thrust state is restored
+  // so a player mixing both inputs never has the ball die under a still-held ArrowUp.
   const onPointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0 || !onSceneCanvas(event)) return;
-    pressedAt = { x: event.clientX, y: event.clientY };
-  };
-  const onPointerUp = (event: PointerEvent): void => {
-    const pressed = pressedAt;
-    pressedAt = null;
-    if (!pressed || isWon() || !onSceneCanvas(event)) return;
-    const dragPx = Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y);
-    const kick = dragPx < 8 ? 0.55 : Math.min(1, 0.35 + dragPx / 240);
-    // Final aim at the release point, when the plane raycast has one; the throttle above
-    // may have skipped the last few pixels of the gesture.
+    if (event.button !== 0 || isWon() || !onSceneCanvas(event)) return;
+    mouseDriving = true;
     const point = options.screenToGround?.(event.clientX, event.clientY) ?? null;
     const heading = point ? headingToward(point) : aimedHeading;
-    api.steer(ballId, { ...(heading !== null && heading !== undefined ? { headingDegrees: heading } : {}), kick });
+    api.steer(ballId, { ...(heading !== null && heading !== undefined ? { headingDegrees: heading } : {}), thrust: 1 });
+  };
+  const onPointerUp = (): void => {
+    if (!mouseDriving) return;
+    mouseDriving = false;
+    api.steer(ballId, axisInputs());
   };
 
   window.addEventListener("keydown", onKeyDown);
@@ -287,7 +370,7 @@ function mountSteerControls(
     container.removeEventListener("pointerdown", onPointerDown);
     container.removeEventListener("pointerup", onPointerUp);
     // Leave nothing thrusting after the layer is gone — the entity outlives the HUD.
-    if (held.size > 0) api.steer(ballId, { thrust: 0, turn: 0 });
+    if (held.size > 0 || mouseDriving) api.steer(ballId, { thrust: 0, turn: 0 });
   };
 }
 
@@ -564,4 +647,15 @@ const BALLZ_PLAY_CSS = `
 .gx-bz-win-again{background:linear-gradient(180deg,#2f9e7f,var(--gx-accent-fill));border-color:var(--gx-life);color:var(--gx-ink)}
 .gx-bz-win-again:hover{filter:brightness(1.08)}
 @media (max-width:640px){.gx-bz-hud{top:10px;min-width:230px;padding:8px 12px}.gx-bz-status{font-size:11px}}
+/* The race-start countdown. Centre of the arena view, never blocking a click (the scene is
+   locked anyway), digits popping like a starting light. GO flashes green and fades. */
+.gx-bz-count{position:absolute;inset:0;z-index:7;display:flex;align-items:center;justify-content:center;
+  pointer-events:none}
+.gx-bz-count-digit{font:800 120px/1 var(--gx-font);color:#ffcf6a;letter-spacing:.06em;
+  text-shadow:0 6px 40px rgba(255,122,26,.65),0 2px 6px rgba(0,0,0,.8)}
+.gx-bz-count-pop{animation:gx-bz-pop .78s ease-out}
+.gx-bz-count-go .gx-bz-count-digit{color:#7df0c8;text-shadow:0 6px 46px rgba(95,224,180,.7),0 2px 6px rgba(0,0,0,.8);
+  animation:gx-bz-go .6s ease-out forwards}
+@keyframes gx-bz-pop{0%{transform:scale(1.7);opacity:0}25%{transform:scale(1);opacity:1}100%{transform:scale(.94);opacity:.9}}
+@keyframes gx-bz-go{0%{transform:scale(.8);opacity:1}100%{transform:scale(1.5);opacity:0}}
 `;
