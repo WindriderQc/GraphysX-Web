@@ -7,7 +7,6 @@ import {
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
 import type { AgentLevelState } from "./agent-level-library";
-import { ARCHIVE_BALLZ_LEVELS } from "./archive-ballz-levels";
 
 /**
  * Turns an authored ASCII level into a playable `graphysx.agent-world/v2` scene.
@@ -138,15 +137,10 @@ const EMITTER_BUDGET = 8;
 const FLOOR_THICKNESS_RATIO = 0.6;
 
 /**
- * The caged ball's radius as a fraction of a cell — the cage IS the physics sphere, so the
- * struts the player sees are exactly the surface that touches the world. Sized so it clears
- * a one-cell gap comfortably but cannot squeeze between two diagonal walls, which is what
- * makes a grid level readable.
+ * Ball radius as a fraction of a cell. Sized so it clears a one-cell gap comfortably but
+ * cannot squeeze between two diagonal walls, which is what makes a grid level readable.
  */
-const BALL_RADIUS_RATIO = 0.22;
-
-/** The solid core inside the cage. Carries the checker that makes rolling readable. */
-const CORE_RADIUS_RATIO = 0.135;
+const BALL_RADIUS_RATIO = 0.18;
 
 /**
  * The ball's steering set. Exported so the input binding maps a key to an interaction id
@@ -229,7 +223,8 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
       // the harsh black/white `Damier.jpg` checker it used to carry. The checkerboard read as a
       // chessboard test-fixture and fought the marble walls for attention ("damier marble"); warm
       // plank wood grounds the arena as a place. The grid/scale cue now comes from the cell seams,
-      // the wall frame and the raking shadows rather than a blown-out checker.
+      // the wall frame and the raking shadows rather than a blown-out checker. Repeat scaled so a
+      // few planks span each cell region rather than tiling to mush.
       texture: { id: "wood-floor" as const, repeat: [Math.max(3, width / 7), Math.max(3, height / 7)] as [number, number] },
     },
     physics: { mode: "static", material: "ground" },
@@ -450,46 +445,24 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
     // Say so rather than inventing a spawn in a corner that may be inside a wall.
     deviations.push("Level has no start tile, so no ball was spawned.");
   } else {
-    // --- The two-body player (the original BallZ control model) --------------------------
-    // A CAGED BALL that is the physics subject, and a FIRE-ARROW that is the aim. The cage
-    // is the collider the player sees: `ballz-ball` renders as an open wireframe sphere at
-    // exactly its physics radius, with a solid checkered core parented inside. Both roll as
-    // one body — a child of a dynamic entity inherits its quaternion — so the checker still
-    // tells rolling from sliding, now through the struts of the cage.
-    //
-    // Provenance: the layouts around this ball are `faithful` recoveries; this control and
-    // camera model is the author's original design intent rebuilt on v2 vocabulary, recorded
-    // as `adapted` (see BALLZ_GAME_DESIGN) — the recovered archive holds the levels, not the
-    // original control code.
-    const cellScale = cellSize / 2.6;
     entities.push({
       id: "ballz-ball",
       type: "sphere",
-      label: "Caged Ball",
+      label: "Ball",
       transform: { position: spawnPosition },
-      // 12 segments, so the wireframe reads as struts rather than a fine net.
-      geometry: { radius: cellSize * BALL_RADIUS_RATIO, radialSegments: 12 },
-      material: { color: "#dff4ff", emissive: "#2ea8c8", emissiveIntensity: 0.55, roughness: 0.35, metalness: 0.5, wireframe: true },
-      // Heavier than a marble so it has authority (design ratio 1.5–2.0). Friction raised
-      // above the `ball` preset so the sphere genuinely rolls on the wood rather than
-      // gliding; restitution ~0.5 is lively-but-settles, and the multiply-combine against
-      // the walls' 0.08 keeps arena hits absorbed rather than launching.
-      physics: { mode: "dynamic", material: "ball", mass: 1.7, friction: 0.55, restitution: 0.5 },
-      // The fire-arrow/heading model, as scene data: `api.steer` aims and thrusts, the
-      // runtime integrates it in the simulation step, and the arrow entity below is anchored
-      // to this ball every frame. Force reaches the speed cap in ~0.4 s; the cap is enforced
-      // per-direction so brake and turn keep authority at top speed.
-      steering: {
-        headingDegrees: 0,
-        force: 30 * cellScale,
-        speedCap: cellSize * 2.7,
-        turnRateDegrees: 240,
-        kickImpulse: cellSize * 3.6,
-        arrowId: "ballz-aim-arrow",
-      },
-      // The four grid pushes REMAIN, deliberately: they are serialised control vocabulary an
-      // agent (or a smoke) can fire with `api.interact`, and keeping them costs nothing. The
-      // human play layer now drives `api.steer`; both paths move the same body.
+      geometry: { radius: cellSize * BALL_RADIUS_RATIO },
+      // The same archive checker as the floor, tuned to put roughly four squares around the
+      // sphere (0.2 of a 20x20 board). A plain sphere rolling and a plain sphere sliding are
+      // the same picture; a checkered one tells you which, and that distinction is the entire
+      // feel of this genre. The ball also casts — `castShadow` defaults true, and the low sun
+      // below is what turns that into the contact shadow that stops it looking like a decal.
+      material: { ...PALETTE.ball, texture: { id: "checker" as const, repeat: [0.2, 0.2] as [number, number] } },
+      physics: { mode: "dynamic", material: "ball", mass: 1.6 },
+      // Steering lives ON the ball, as four ordinary `apply-impulse` interactions. There is no
+      // impulse call in the public API — impulses exist only as an entity's interaction — so
+      // this is not a workaround, it is the only way to push anything, and it means the control
+      // scheme is scene data: it serialises, an agent can fire it with `api.interact`, and a
+      // human's arrow key and an agent's call are literally the same operation.
       interactions: PUSH_DIRECTIONS.map(({ id, label, vector }) => ({
         id,
         label,
@@ -498,57 +471,6 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
         impulse: vector.map((axis) => axis * cellSize) as AgentWorldVector3,
       })),
       tags: ["ballz", "ball", "player"],
-    });
-    entities.push({
-      id: "ballz-ball-core",
-      type: "sphere",
-      label: "Ball Core",
-      parentId: "ballz-ball",
-      transform: { position: [0, 0, 0] },
-      geometry: { radius: cellSize * CORE_RADIUS_RATIO },
-      // The same archive checker as ever, tuned to put roughly four squares around the
-      // sphere (0.2 of a 20x20 board). A plain sphere rolling and a plain sphere sliding are
-      // the same picture; a checkered one tells you which, and that distinction is the entire
-      // feel of this genre. The core casts the contact shadow; the cage would cast noise.
-      material: { ...PALETTE.ball, texture: { id: "checker" as const, repeat: [0.2, 0.2] as [number, number] } },
-      tags: ["ballz", "ball"],
-    });
-
-    // The FIRE-ARROW: a bright shaft-and-head marker on the ground plane, anchored at the
-    // ball by the runtime's steering pass and yawed to the current heading. It is cosmetic/
-    // logical, never a physics body — the "where will I go" pointer both control schemes and
-    // any agent share. Emissive above the bloom threshold, so it reads from any angle.
-    const arrowY = cellSize * 0.035;
-    entities.push({
-      id: "ballz-aim-arrow",
-      type: "group",
-      label: "Fire Arrow",
-      transform: { position: [spawnPosition[0], 0, spawnPosition[2]] },
-      castShadow: false,
-      tags: ["ballz", "aim"],
-    });
-    entities.push({
-      id: "ballz-aim-arrow-shaft",
-      type: "box",
-      label: "Fire Arrow Shaft",
-      parentId: "ballz-aim-arrow",
-      transform: { position: [0, arrowY, -cellSize * 0.52] },
-      geometry: { width: cellSize * 0.09, height: cellSize * 0.025, depth: cellSize * 0.5 },
-      material: { color: "#ffb054", emissive: "#ff6a1a", emissiveIntensity: 2.1, roughness: 0.3, metalness: 0.1 },
-      castShadow: false,
-      tags: ["ballz", "aim"],
-    });
-    entities.push({
-      id: "ballz-aim-arrow-head",
-      type: "cone",
-      label: "Fire Arrow Head",
-      parentId: "ballz-aim-arrow",
-      // A cone points +Y; laid flat with -90° about X it points -Z, the heading-0 direction.
-      transform: { position: [0, arrowY, -cellSize * 0.9], rotationDegrees: [-90, 0, 0] },
-      geometry: { radius: cellSize * 0.13, height: cellSize * 0.28 },
-      material: { color: "#ffd27a", emissive: "#ff7a1a", emissiveIntensity: 2.4, roughness: 0.25, metalness: 0.1 },
-      castShadow: false,
-      tags: ["ballz", "aim"],
     });
   }
 
@@ -654,12 +576,6 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
   // is also the thing that makes this generalise past BallZ: a course with four gates and
   // three laps is the same block with a longer array, which is what the World 1 / Great Slide
   // ports need and could not have said before.
-  // The archive's `levelList.xml` sets `nbrTour` = 3 for the classic levels: a course is run
-  // three times around, not once. A level whose recovered facts carry a lap count gets it —
-  // the rules engine re-arms the ordered checkpoints each lap while collected rings stay
-  // collected, which is exactly the classic structure. Hand-painted levels stay one lap.
-  const archiveFacts = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === level.id)?.provenance.levelListFacts;
-  const archiveLaps = typeof archiveFacts?.["laps"] === "number" ? Math.max(1, Math.floor(archiveFacts["laps"])) : 1;
   const rules: AgentWorldRulesDefinition | undefined =
     finishId || ringIds.length > 0
       ? {
@@ -676,7 +592,7 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
           // because the set resolves when the run arms.
           ...(ringIds.length > 0 ? { collectibles: { tag: "collectible", requiredToFinish: true } } : {}),
           ...(finishId ? { finish: { triggerId: finishId } } : {}),
-          laps: archiveLaps,
+          laps: 1,
         }
       : undefined;
   if (!rules) {
@@ -721,11 +637,6 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
           radius: 0.24,
         },
       },
-      // The host's default fog (near 38 / far 138, tuned to the ~36-unit showroom) pulls the
-      // green sky-horizon haze right across the arena — a 20-cell level spans ~52 units, so its
-      // far half dissolves into murk. Push the fog out so the whole play surface reads crisp and
-      // only the distant backdrop keeps the atmosphere. cameraFar stays clear of fogFar.
-      envelope: { fogNear: 64, fogFar: 210, cameraFar: 260 },
       // The level brings its own floor slab, so the runtime's flat grid would z-fight it.
       ground: { visible: false, size: 60, color: "#123039", grid: false, gridColor: "#2a7d8f" },
       // Warm key + cool fill, angled so walls cast readable shadows down the grid rather
