@@ -1023,15 +1023,12 @@ export const ARCHIVE_PLAYGROUNDS_NOT_REVIVED = [
       "Thirteen recursively generated trees at depth 6 (child length x 0.69, 2-3 branches per node) drawn as " +
       "LineSegments, with one instanced DNA leaf per recursion terminal, a 17-second seasonal cycle, and a " +
       "per-tree colour genome that mutates by generation.",
-    verdict: "not revivable without inventing the content",
+    verdict: "revived as `dna-tree` vocabulary and the player-visible Living Forest",
     why:
-      "The recursion *is* the study. A depth-6 branching tree is on the order of 200 line segments; expressing " +
-      "it in v2 means one entity per branch, so thirteen trees is a few thousand cylinders — over any sane budget " +
-      "and unselectable in the editor. The `luminous-tree` prefab is a hand-authored tree, not a recursive one, so " +
-      "shipping a grove of them would be a picture of the study with its mechanism deleted. The seasonal cycle and " +
-      "the DNA mutation have no vocabulary either: no behavior animates material colour, and there is no genome " +
-      "concept. This is the strongest candidate for a future pass, and what it actually needs is an L-system or " +
-      "procedural-geometry primitive, which is a platform feature rather than a scene.",
+      "That missing platform feature now exists. `agent-world-dna.ts` keeps recursive depth-6 branch geometry, " +
+      "instanced terminal leaves, the 13-tree source grid, seeded per-tree genomes, seasonal leaf fall and visible " +
+      "generation drift behind one selectable `dna-tree` entity. Presets are available to agents/editor, the Nature " +
+      "Lab study remains interactive, and round-trip plus deterministic genome smokes cover the shared vocabulary.",
   },
   {
     record: "Nature Lab — Orbital Observatory (`nature-lab` study 4, `orbital-observatory.ts`)",
@@ -1039,29 +1036,24 @@ export const ARCHIVE_PLAYGROUNDS_NOT_REVIVED = [
       "A day/night Earth with a cloud shell, the ISS on a 51.6-degree inclined trajectory, an observer pass " +
       "window over Quebec City, and 160 real earthquake events decoded in-repo at `src/legacy/sbqc-quakes.json` " +
       "(source `WindriderQc/SBQC/public/data/quakes.csv`, commit 42c210f3).",
-    verdict: "partly revivable, deliberately not shipped in this pass",
+    verdict: "revived as the live Orbital Observatory",
     why:
-      "This is the one skipped record that is not a 'cannot', and its data provenance is the best in the set — the " +
-      "quake bytes are in this repository with a source commit. The ISS on its inclined orbit is an ordinary " +
-      "`orbit` behavior. What has no expression is everything that makes it an *observatory*: the day/night " +
-      "terminator is a custom shader (v2 has one texture slot per material and no night map), the detection-radius " +
-      "pass window is a computed overlay with no 2D-in-3D vocabulary, and 160 quake markers would be 160 entities " +
-      "carrying data no entity field can hold. Shipping the globe and the ISS without the telemetry would be a " +
-      "planet with a moving dot, and the telemetry is the point.",
+      "The Nature Lab destination now carries the layered source Earth/cloud/night treatment, 51.6° ISS orbit, " +
+      "Quebec observer pass window, source ISS cutout and all 160 provenance-backed quake events. It remains a " +
+      "specialized telemetry world rather than exploding the v2 document into 160 marker entities, while its " +
+      "exportable `graphysx.world/v1` recipe exposes study, seed, parameters, layers and observer to agents.",
   },
   {
     record: "Physics Lab (`physics-lab` archive mode)",
     what:
       "A live Newton-style constraint playground: a hinged seesaw, a swinging pendulum chain, a rigid box stack, " +
       "and an auto-resetting wrecking ball. Source: Newton joints (GraphysX_1), Scene3D physics callbacks.",
-    verdict: "not revivable — the vocabulary has no joints",
+    verdict: "revived on the archive surface with Rapier joints; v2 documents still omit constraints",
     why:
-      "Three of its four exhibits are *constraints*. `AgentWorldPhysics` carries mode, mass, material, friction, " +
-      "restitution and initial velocities, and nothing else: there is no hinge, no point-to-point, no distance " +
-      "constraint, so a seesaw cannot pivot, a pendulum chain cannot hang and a wrecking ball cannot swing. Only " +
-      "the box stack survives, and `physics-sketchbook` already ships a better version of that. Reviving this " +
-      "properly means graduating a constraint into the entity model — real platform work, named rather than faked " +
-      "with kinematic objects animated along a `bob` behavior, which would be a picture of a pendulum, not one.",
+      "Physics Lab now runs the hinged seesaw, distance-jointed pendulum chain, rigid stack and auto-resetting " +
+      "wrecking ball through the shared Rapier engine. It is player-visible and genuinely constrained, not a " +
+      "kinematic picture. Constraint authoring has not been added to `AgentWorldPhysics`, so the lab stays on the " +
+      "archive surface and `physics-sketchbook` remains the editable v2 subset.",
   },
   {
     record: "Three.js Playground (`threejs-playground` archive mode)",
@@ -1070,16 +1062,13 @@ export const ARCHIVE_PLAYGROUNDS_NOT_REVIVED = [
       "per file): an asteroids skybox, an Airplane.glb orbiting at radius 5, three ShaderMaterial morph spheres, " +
       "three radius-5 planet spheres sharing one earth texture, a seeded red procedural terrain, a blue " +
       "three-point line, and a spotlight pulsing 75*sin(pi*f/240)+73.",
-    verdict: "partly revivable, rejected for this pass",
+    verdict: "fully restored as the dedicated Three.js Playground visit",
     why:
-      "The strongest provenance of any candidate — every asset is SHA-verified — and still the wrong pick, because " +
-      "its identity is in the parts v2 cannot express. The three morph spheres are a per-object vertex/fragment " +
-      "shader (sinusoidal normal displacement plus a rotating dot-product colour); v2 materials are `standard` " +
-      "with no custom shader slot, so they would ship as three plain icosahedra and the scene's most distinctive " +
-      "element would simply be gone. The asteroids cubemap is not in the sky registry and adding it means editing " +
-      "shared vocabulary. `Airplane.glb` is not in the asset catalog and production prunes unregistered models out " +
-      "of dist. The spotlight pulse needs an intensity-animating behavior that does not exist. What *would* revive " +
-      "cleanly — the terrain, the earth spheres, the spline, the orbit — is the least characteristic half.",
+      "HEAD's dedicated environment keeps all nine SHA-locked assets, Asteroids cube, orbiting Airplane.glb, " +
+      "three exact morph shaders, procedural raycastable terrain, Earth spheres, textured cube, blue line and " +
+      "animated spotlight. All 16 source-bounded controls and the FPS display are live. It intentionally remains a " +
+      "specialized browser-world visit because flattening its custom shaders into standard v2 materials would lose " +
+      "the scene's identity.",
   },
   {
     record:
@@ -1089,25 +1078,24 @@ export const ARCHIVE_PLAYGROUNDS_NOT_REVIVED = [
       "Inspection grids of recovered geometry — a 61-entry ObjectLibrary catalog, 65 Dominus source assets, 28 " +
       "port placement rows, the Unity arena mesh and its 1024² atlas, the maison/cuisine compositions, and the " +
       "common-room TVM set.",
-    verdict: "not revivable as playgrounds",
+    verdict: "revived as faithful inspection destinations; correctly not relabelled as authored playgrounds",
     why:
-      "Two reasons, and either alone is enough. First, their whole content is *geometry* — hand-modelled meshes " +
-      "this vocabulary cannot author and whose files are not in the product asset catalog, so a v2 rebuild would " +
-      "be primitives standing in for models, which is theatre. Second, and more decisive, several of these records " +
-      "explicitly refuse to infer a composition: the Dominus gallery's own summary is 'without inventing the " +
-      "absent village/port composition' and the port evidence identifies itself as 'an editor catalog grid rather " +
-      "than an authored village'. Rebuilding them as scenes would invent exactly what they were careful not to. " +
-      "The brief also asked for simulation over static galleries, and a gallery is what these are.",
+      "All named galleries are player-visible archive destinations with exact meshes, placements and provenance; " +
+      "the Dominus conversion set is also discoverable in the v2 asset catalog. They remain galleries because the " +
+      "source explicitly preserves no authored village/port composition. The current product therefore revives the " +
+      "valuable geometry without inventing a world and without replacing meshes with primitive stand-ins.",
   },
   {
     record: "Input & Device Lab (`input-device-lab`)",
     what:
       "BallZ18 controller diagnostics, GraphysX robot/sonar protocols, AtmelCubx I/O schedules and MeArm controls, " +
       "as one simulation-first device lab.",
-    verdict: "not a 3D scene",
+    verdict: "revived as the live Input & Device Lab; correctly not forced into scene vocabulary",
     why:
-      "Its subject is serial protocols and input state. There is nothing to compose: no world, no geometry, no " +
-      "spatial content. It belongs where it is.",
+      "The player-visible lab now simulates source-mapped gamepad state, five serial profiles, exact robot command " +
+      "frames, 182-point sonar, eight-channel I/O, schedules and repaired MeArm controls. Hardware remains opt-in " +
+      "and permission-gated. Its subject is protocol/input state, so the UI lab — not a fabricated 3D scene — is the " +
+      "faithful revival.",
   },
   {
     record: "Voie Lactee / Milky Way Vignette (`milky-way-lab`)",
@@ -1115,16 +1103,12 @@ export const ARCHIVE_PLAYGROUNDS_NOT_REVIVED = [
       "The archived five-body planetary component — Earth, EarthClouds, Moon, Mars, Venus — with exact per-profile " +
       "positions for both the 2015 and 2017 recoveries, exact radii (6, 6.1, 2, 12, 4), a 23-degree Earth tilt, a " +
       "moon orbiting at radius 8, and two archive bugs preserved as facts.",
-    verdict: "revivable, deliberately not shipped in this pass",
+    verdict: "revived as the v2 Voie Lactée vignette",
     why:
-      "Geometrically this is the cleanest fit in the whole census: five spheres at recorded positions with an " +
-      "`orbit` behavior on the moon and a `spin` on the Earth would be a near-exact v2 rebuild. Two things held it " +
-      "back. It has no simulation at all — the brief asked for simulation over static tableaux, and the 2017 " +
-      "profile's own record says `updateRoutinePresent: false`. And four of its five bodies are *defined* by their " +
-      "textures (moon.jpg, mars.jpg, venus.jpg, earth-clouds.jpg); the v2 texture registry carries `earth` and " +
-      "nothing else, so Mars, Venus, the Moon and the cloud shell would ship as flat coloured balls and the " +
-      "scene's entire fidelity claim would evaporate. It becomes an excellent scene the moment those four maps are " +
-      "registered as textures — a small, well-defined piece of shared-vocabulary work.",
+      "The missing texture vocabulary landed: exact Earth, cloud, Moon, Mars and Venus maps are registered and " +
+      "shipped. The Browse-shelf vignette uses recovered radii, 2017 placements, Earth tilt, source spin/orbit rates " +
+      "and retrograde Moon direction, with presentation deviations recorded beside the scene and browser smoke " +
+      "covering texture delivery and motion.",
   },
 ] as const;
 

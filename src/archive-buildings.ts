@@ -669,22 +669,13 @@ export const ARCHIVE_BUILDINGS_NOT_REVIVED = [
       "face records — 40 quads and 2 octagons, not the 44 the environment's constant block claims), " +
       "one hand-painted 1024² atlas, one Standard material at metallic 0 / smoothness 0.5, one " +
       "object transform, one camera at (0, 1, −10) on a 60° lens, and one directional light.",
-    verdict: "not revived",
+    verdict: "revived on the archive surface; deliberately not duplicated as a v2 primitive scene",
     why:
-      "There is nothing to rebuild it *as*. The Unity project contains no MonoBehaviour, no prefab, " +
-      "no input map and no rigidbody — the repo's own census says so explicitly ('no gameplay is " +
-      "invented because the project contains no scripts or rules'), the legacy environment's " +
-      "`update()` is a two-line no-op that forwards orbit input, and the deleted QA harness " +
-      "(`scripts/qa-arena-archive.mjs`, removed at 218d86c) asserted the *absence* of gameplay as a " +
-      "pass condition. Unlike the Maison, its content is a genuine 48-vertex mesh with baked UVs " +
-      "onto a 532 KB atlas: v2 primitives cannot author it, and the one v2 form it could take is a " +
-      "`model` entity on a plinth — which would need the OBJ decoded into `graphysx-mesh-json` and " +
-      "registered in the asset catalog, to ship a scene whose entire content is one textured disc " +
-      "you orbit. `archive-playgrounds.ts` already reached this verdict; nothing found here " +
-      "overturns it. The mesh would make a fine *floor* for a ball course — it is closed on all " +
-      "eight sides, which is exactly the containment `archive-ballz-levels.ts` had to invent — but " +
-      "no spawn, checkpoint, lap line or objective survives, so that course would be authored here " +
-      "and merely decorated with a recovered slab.",
+      "HEAD now has the player-visible `arena-archive` visit: exact OBJ/atlas, Unity Standard values, " +
+      "authored transform, source 60° camera and directional light. The no-gameplay conclusion still " +
+      "stands — the Unity project has no scripts, input, rigidbody or objective — so it is correctly " +
+      "an inspectable recovered environment rather than an invented ball course. A second v2 primitive " +
+      "copy would add no content and would lose the baked topology/UVs that make the asset worth keeping.",
   },
   {
     record: "The Cuisine — `src/legacy/inspection-cuisine.json`, `public/assets/maison-explorer/cuisine-best.fbx`",
@@ -692,37 +683,25 @@ export const ARCHIVE_BUILDINGS_NOT_REVIVED = [
       "The kitchen from the same `blenderModel/Maison` folder: 87 objects (76 meshes, 3 lamps, 7 " +
       "empties, 1 camera) totalling 4,244 vertices and 3,676 polygons — cabinets, drawers, doors, " +
       "a sink and worktops, with parented children carrying local transforms.",
-    verdict: "not revived",
+    verdict: "revived in Maison Explorer; deliberately not approximated with v2 boxes",
     why:
-      "It is the exact inverse of the Maison, and the contrast is the useful part. The Maison " +
-      "averages 9 vertices per object and 20 of its 24 meshes are literally 8-vertex boxes, so v2 " +
-      "primitives reproduce it without loss. The Cuisine averages 56 vertices per object: its " +
-      "cabinet handles are 144-vertex / 128-polygon lathed forms, its drawers are 24/19, its " +
-      "cabinets 32/26. Rebuilding those as boxes would not be a massing model of a kitchen, it " +
-      "would be a pile of blocks where the modelling *is* the content. The FBX route is closed for " +
-      "the same reason it is closed for the Maison — the loader accepts only `graphysx-mesh-json` — " +
-      "and it is closed harder here: the record's single image, " +
-      "`C:\\Users\\Yanik\\Desktop\\Maison\\31768676_…_n.jpg`, is marked `exists: false` and " +
-      "`packed: false`, so the one texture the scene references is genuinely lost. It also carries " +
-      "7 EMPTY objects (TopLavabo, TopCoin, TopPoele, Lavabo…) which are snap targets for an " +
-      "authoring workflow v2 has no vocabulary for.",
+      "The canonical `maison-explorer` now exposes the full kitchen subspace: 87 authored objects, " +
+      "76 meshes, seven hierarchy empties, saved camera and three lights. The one absent unpacked " +
+      "Desktop JPG remains explicitly missing instead of receiving a fabricated replacement. It is " +
+      "not duplicated in this v2 massing module because its lathed handles, drawers and cabinet " +
+      "topology are the content; approximating them with boxes would reduce a faithful restoration.",
   },
   {
     record: "The Maison's room interiors — the hollow shells inside `inspection-maison.json`",
     what:
       "Six of the upper volumes are open shells (5, 10 and 14 polygons where a closed box has 6) " +
       "and three carry extra vertex loops (12, 16 and 24 vertices) where door openings are cut.",
-    verdict: "not revived, and this is the honest limit of the scene that did ship",
+    verdict: "exact interiors are player-visible in Maison Explorer; v2 massing keeps this honest limit",
     why:
-      "A Blender inspection record stores per-object totals, not topology. It says an object has 14 " +
-      "polygons; it does not say which four faces of the box are missing or where the opening sits " +
-      "in the wall. Rebuilding each room as four thin walls would require choosing the open face " +
-      "and the wall thickness for every room — that is authoring a floor plan and attributing it to " +
-      "the archive. The eight door positions constrain it a little, but nowhere near enough. The " +
-      "shipped scene therefore stops at the bounding volumes the record actually states, and makes " +
-      "the interior legible by translucency and a lift-the-storey interaction instead of by " +
-      "invention. Recovering the true interior needs the `.blend` itself re-inspected with " +
-      "per-face output — a decoder change, not a scene change.",
+      "The source-mesh Maison Explorer carries the actual open shells and door cuts. This separate v2 " +
+      "massing scene intentionally stops at inspection-record bounds because that record stores " +
+      "per-object totals, not the missing-face topology. Its translucent storeys and lift interaction " +
+      "remain a disclosed massing adapter, while the exact source visit is the fidelity destination.",
   },
 ] as const;
 

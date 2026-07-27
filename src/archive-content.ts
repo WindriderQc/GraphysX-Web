@@ -684,26 +684,26 @@ export const SCENE_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
   {
     label: "Skyboxes",
     source: "Media/Sky/ClearBlue, ClearNight, SkyX, Winter",
-    status: "preview",
-    detail: "Archive cube skies stay sharp and use a wider camera lens instead of blur. Source limits remain: most faces are 512 px, Winter is 256 px, and LostValley is 1024 px."
+    status: "ported",
+    detail: "Archive cube sets are registered scene vocabulary (`api.skies()` and the editor), retain their recovered face orientation, and bind per scene/level. Source limits remain: most faces are 512 px, Winter is 256 px, and LostValley is 1024 px."
   },
   {
     label: "Heightmaps",
     source: "Media/Heightmaps/Track.jpg, heightmap8.jpg",
-    status: "preview",
-    detail: "Procedural terrain preview uses archived heightmap imagery as material inspiration."
+    status: "ported",
+    detail: "Three archived Windows heightmaps are decoded with SHA/provenance into the terrain registry; terrain entities render the recovered samples and build matching Rapier heightfield colliders."
   },
   {
     label: "Day/Night",
     source: "GraphysX_1/Sky.cpp, Archive Atmosphere.cpp",
-    status: "preview",
-    detail: "Sun/moon orbit and atmosphere lighting are represented as a modern scene-lab target."
+    status: "ported",
+    detail: "The source Sky.cpp cycle runs in the player-visible race worlds: sun/moon phase, key/rim/hemi lighting, atmosphere tint and haze advance from each level's recorded cycle duration."
   },
   {
     label: "Spline Flight",
     source: "Media/Spline.xml, Media/Airplane/Airplane.x",
-    status: "preview",
-    detail: "A spline path and airplane proxy mark the old flight-follow experiment until model conversion lands."
+    status: "ported",
+    detail: "FlightX is a dedicated playable pipe trial using the recovered airplane asset and spline-follow vocabulary; the earlier Scene Lab proxy remains only as an overview."
   }
 ];
 
@@ -741,8 +741,8 @@ export const NATURE_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
   {
     label: "Interactive 2D Surfaces",
     source: "SBQC/public p5, Leaflet, Chart.js, amCharts and canvas experiments",
-    status: "pipeline",
-    detail: "Maps, plots, and generative canvases should become in-world instruments and agent-authored surfaces instead of isolated pages."
+    status: "ported",
+    detail: "Canvas sketches are ordinary `surface` scene data with one shared, pause-aware loop. The player-visible Generative Surfaces showcase mounts waveform, grid-pulse and plasma on screens, billboards and curved displays."
   }
 ];
 
@@ -750,26 +750,26 @@ export const GAME_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
   {
     label: "Actor Loop",
     source: "GraphysX_1/Agent.cpp, Zombie.cpp, Human.cpp",
-    status: "preview",
-    detail: "Player, enemy, and target stand-ins now share one preview space for movement/combat rules."
+    status: "ported",
+    detail: "The Game Lab runs the source-shaped player/human/zombie loop, while reusable `crowd` vocabulary carries seeking, wandering and contact conversion into v2 scenes."
   },
   {
     label: "Mouse Pick / Aim Line",
     source: "Scene3D/GamePlayScreen.cpp, ConsoleGraphysX.cpp",
-    status: "preview",
-    detail: "The old mouse-to-world line and projectile direction are represented as a cyan targeting lane."
+    status: "ported",
+    detail: "Mouse-to-world ray aiming drives the live Game Lab shot direction and BallZ hold-to-roll controller; the steering aim is observable scene state rather than a painted lane."
   },
   {
     label: "Projectile Basics",
     source: "CLScene::shotBullet, GamePlayScreen::checkInput",
-    status: "preview",
-    detail: "Bullet start, trajectory, impact marker, and physics-material targets are staged for a later playable loop."
+    status: "ported",
+    detail: "Game Lab bullets have the recovered one-second lifetime, dynamic physics trajectory, target hits and impact effects; BallZ and agent interactions reuse the same Rapier-backed runtime."
   },
   {
     label: "Fire / Particles",
     source: "ParticleEffect.cpp, ParticleEngine.cpp, Effect.cpp, createFire",
-    status: "preview",
-    detail: "Three persistent colored particle rigs, soft glow sprites, flame billboards, and race-event bursts make the engine feature visible; a full effect library remains."
+    status: "ported",
+    detail: "Recovered particle presets are registered emitter vocabulary with source shape/rate/force parameters, and persistent fire, trails, impacts and race bursts run in player-visible worlds."
   }
 ];
 
@@ -777,8 +777,8 @@ export const MAP_EDITOR_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
   {
     label: "Tile Semantics",
     source: "GraphysX_1/Scene.cpp BuildASCIIScene",
-    status: "preview",
-    detail: "Floor, wall, player start, rings, halfway gate, finish gate, and hazard tiles are represented in a browser-side map draft."
+    status: "ported",
+    detail: "The level workbench owns paintable floor/wall/start/ring/halfway/finish/hazard semantics and round-trips the same tiles the BallZ materializer plays."
   },
   {
     label: "Live Preview",
@@ -789,14 +789,14 @@ export const MAP_EDITOR_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
   {
     label: "Export Shape",
     source: "STSceneParam, Level.cs",
-    status: "preview",
-    detail: "The draft is already serializable as compact JSON and can become the bridge to future ASCII/XML import."
+    status: "ported",
+    detail: "Levels round-trip as validated JSON and exact ASCII through the public API; authored scene documents export independently from session-only play state."
   },
   {
     label: "Race Conversion",
     source: "Scene3D/GamePlayScreen.cpp",
-    status: "pipeline",
-    detail: "Next pass should convert this draft into a playable RaceDefinition with collision boxes, gates, and route rings."
+    status: "ported",
+    detail: "`levels.play()` materializes the draft as a Rapier course with collision boxes, steerable ball, ring inventory, ordered gates, lap rules, HUD, replay and editor return."
   }
 ];
 
@@ -812,26 +812,26 @@ export const EDITOR_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
   {
     label: "Load XML",
     source: "EditorScreen::onButtonLoadClick",
-    status: "preview",
-    detail: "SceneNET XML import is represented by a structured object roster and source file list."
+    status: "ported",
+    detail: "`importLegacyXml()` converts archived SceneNET XML into validated v2 scene documents, while the MyWorld/Suzanne/ObjectLibrary visits retain exact serialized evidence and malformed-record diagnostics."
   },
   {
     label: "Save XML",
     source: "GfxNet::SceneNET::Serialize",
-    status: "pipeline",
-    detail: "Needs a JSON/XML serializer once the browser-side scene schema is finalized."
+    status: "preview",
+    detail: "Exact BaseScene/test1 serializer artifacts and version differences are player-visible, and v2 authored documents export as validated JSON. Emitting new legacy SceneNET XML remains deliberately open because its lossy field mapping and duplicate semantics are not specified."
   },
   {
     label: "Add X Mesh",
     source: "EditorScreen::onButtonAddX",
-    status: "pipeline",
-    detail: "Old X meshes should become GLB assets before being added from the browser editor."
+    status: "ported",
+    detail: "Recovered X/TVM/3DS geometry is decoded to the runtime's native mesh JSON and registered in the editor asset library; browser media import also converts supported OBJ/FBX/GLB sources without a GLB-only staging rule."
   },
   {
     label: "Object Picking",
     source: "m_graphysX->isClickOnMesh",
-    status: "preview",
-    detail: "Current preview shows selected object telemetry; raycast editing can be added next."
+    status: "ported",
+    detail: "The production editor raycasts the world, selects parent entities, drives the transform gizmo and inspector, and commits validated patches through the same public API agents use."
   }
 ];
 
@@ -845,20 +845,20 @@ export const CUBX_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
   {
     label: "Clock Displays",
     source: "CLClockDisplay, LoadLettersAndNumbers",
-    status: "preview",
-    detail: "Segment-like 3D time blocks replace the old alphabet/number TVM meshes for the browser."
+    status: "ported",
+    detail: "The complete recovered 0–9/A–Z TVM alphabet is vendored as 36 discoverable glyph assets; BallZ uses it for mesh countdown and lap displays instead of segment stand-ins."
   },
   {
     label: "Earth Grid",
     source: "Earth.tvm, EarthGridXL.bmp",
-    status: "preview",
-    detail: "Planet and transparent grid shell are represented as reusable scene-lab objects."
+    status: "ported",
+    detail: "The CubX/Scene Lab Earth anchor and transparent spinning GridXL shell are live, and Earth/cloud/grid textures are registered for reuse in scene vocabulary."
   },
   {
     label: "Domotic Controls",
     source: "MenuDomo, LightTimeOn/Off, FanTimeOn/Off",
-    status: "pipeline",
-    detail: "The old home-control panels are staged visually; click behavior can become a browser interaction pass."
+    status: "ported",
+    detail: "The CubX workbench exposes the recovered clock/light/fan control surface alongside the animated eight-cube menu; browser controls drive the same visible state instead of remaining static panel art."
   }
 ];
 
@@ -896,7 +896,7 @@ export const ASSET_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
   {
     label: "XML Scenes",
     source: "Suzanne1.xml, MyWorld.xml, TestWorld.xml, ObjectLibrary.xml",
-    status: "pipeline",
-    detail: "Catalogued for parser work; current race definitions are hand-rebuilt from screenshots and notes."
+    status: "ported",
+    detail: "Suzanne, MyWorld, TestWorld and ObjectLibrary XML are decoded into exact player-visible visits with provenance and contradiction diagnostics, and SceneNET XML can be imported into the validated v2 document contract."
   }
 ];

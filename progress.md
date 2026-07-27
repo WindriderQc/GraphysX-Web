@@ -1916,3 +1916,32 @@ loop also turned east, rolled through Ring 1, and left the player finite on the 
 Next ranked work: re-check the five `*_NOT_REVIVED` inventories and all 22 preview/pipeline
 records against HEAD, graduate the remaining player-visible archive content, then run the full
 release gate and emit format-patches.
+
+## 2026-07-27 — `revival-debt-r4`: stale debt ledgers reconciled against HEAD
+
+All five `*_NOT_REVIVED` inventories were re-read against the current player-visible product,
+not treated as authoritative to-do lists. Three building entries, six BallZ entries and seven
+playground entries were stale: the Unity Arena, Maison/Cuisine interiors, exact Archive Level 3,
+the 2011 Long Canyon, Great Slide and its gallery, XML/Blender visits, Suzanne arenas, Living
+Forest, Orbital Observatory, Physics Lab, Three.js Playground, asset galleries, Input Lab and
+Voie Lactée already have faithful destinations. Their verdicts now point to those destinations
+and retain the honest reason each item is not duplicated or flattened into less-faithful v2
+primitives. The Math hardware screen and four Milky Way alternatives remain named limitations;
+inventing a composition, shader, host scene or physics behaviour would exceed the record.
+
+The mission's exact 22 preview/pipeline rows are now pinned by
+`scripts/audit-revival-debt.mjs`. Twenty were stale and are marked ported with their concrete
+runtime descendant. Two remain intentionally open: writing *new* legacy SceneNET XML has no
+specified loss/duplicate mapping, and the untranslated proprietary TV3D shader remainder has no
+faithful browser equivalent. Exact legacy XML evidence, v2 JSON export, haze, water and shadow
+descendants are already live, so those boundaries do not hide player-visible work.
+
+Verified: the Games/Browse human-path regression is green with three BallZ presets, recovered
+mesh GO, classic GridXL play, all shelf destinations loaded, no console/page errors and no
+mobile horizontal overflow. The final `npm run verify -- --wait` release gate rebuilt from
+source and passed all **35/35** checks, including the 22-row/five-ledger audit, both complete
+classic levels and Suzanne's eight assets/three movers/twelve-point route. Final screenshots
+were inspected for the mesh countdown, 3D lap counter, all three ball presets, both restored
+level treatments, and Suzanne gameplay/results; all are legible, framed and artifact-free.
+
+Delivery: emit the four ordered git format-patches into the requested repository folder.

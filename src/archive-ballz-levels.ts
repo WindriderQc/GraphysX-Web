@@ -385,44 +385,44 @@ export const ARCHIVE_BALLZ_NOT_REVIVED = [
   {
     record: "Archive Level 3 — ASCII (`StockRoom/Level3_base.ASCII`)",
     what: "A 20x19 authored grid in a different alphabet: `M` is a solid *platform you drive on*, `r` is a platform carrying an elevated checkpoint, `$` is the solid spawn tile, and `.` is empty space.",
-    verdict: "not revivable as a grid level",
+    verdict: "revived as the player-visible Archive Level 3 race; not flattened into the modern grid format",
     why:
-      "Its semantics are inverted relative to this platform's grid. Here `.` is the floor and `#` is an obstacle; there `M` is the floor and `.` is a void you fall through. A grid level has one continuous floor slab and no void, so the level's actual mechanic — a raised catwalk you can fall off — cannot exist. Mapping `M`->floor and `.`->wall would preserve the route drawing while deleting the game, and shipping that as 'recovered Level 3' would be exactly the theatre §11 forbids. It is a real candidate for a composed v2 scene later, where raised platforms over a drop are expressible.",
+      "HEAD already plays the exact 20×19 M/r/$ layout through the archive race path with 20 elevated checkpoints, four posts, source spawn, NightSky, Alien02 treatment, three laps and archived best time. It remains outside this modern grid library because `M`/`r`/`$` encode solid elevated platforms while `.` is void; translating those bytes to the library's continuous-floor semantics would delete the authored mechanic.",
   },
   {
     record: "`src/legacy/ballz2011-level1.json` (also `slide-long1`, byte-identical)",
     what: "One TVM object `Line01`: 828 vertices, 1,648 triangles, two adjacent closed 414-vertex solids with an 0.018-unit X seam. Archive bounds 210.16 x 498.73 x 1135.44 units; `displayScale` 0.1, `normalization.status: \"inferred-display-only\"`.",
-    verdict: "not revivable as gameplay",
+    verdict: "revived as the composed v2 Long Canyon run, with gameplay explicitly adapted",
     why:
-      "The record's own `interpretation` block says it: 'No archived runtime source was found loading Level1.TVM, so spawn, rules, camera, collision settings, and finish semantics remain unknown.' It also has one material slot, no usable UV map and no embedded texture name — `materialEvidence.assessment` states any coloured or textured presentation is necessarily inferred. It is a long two-lane ramp mesh with no gameplay recorded anywhere. It is honest inspection geometry and nothing more; it is emphatically not a tile grid.",
+      "`archive-level1-2011-scene.ts` now vendors the largest recovered mesh at native 1:1 scale, uses the exact geometry for rendering and a static trimesh, and exposes a player-visible two-gate canyon run. Its spawn, rules, neutral material, safety floor, lighting and camera remain explicitly labelled adaptations because the archive still preserves none of them; the same bytes are not misrepresented as a tile grid.",
   },
   {
     record: "`src/legacy/ballz-slide-track-family.json` and `slide-level.json`",
     what: "An audit of nine hashed slide/track meshes plus the decoded 'Great Slide' (Level0/SlideLarge, 527 x 113 x 164 archive units).",
-    verdict: "composed v2 scene, if anything — not a grid level",
+    verdict: "revived as composed v2/legacy destinations; correctly not a grid level",
     why:
-      "A slide is a single long curved ramp whose whole content is elevation change. A 2D tile grid has no height axis at all, so putting a slide through `importAscii` would flatten away the only thing it is. The audit's own `remainingGallery.purpose` is 'Exact-geometry archive visits only. No gameplay, spawn, physics or objectives are inferred.' The route to reviving this is a composed v2 scene of ramps carrying a `rules` block — real work, out of scope here, and named rather than faked.",
+      "Great Slide is now a v2 gravity run over the exact vendored SlideLarge geometry/collider, and the six distinct unhosted slide/track records remain reachable in the exact-geometry gallery with their materials and normalization evidence. The latter still receive no invented spawn or objective. Elevation is their content, so none is flattened through `importAscii`.",
   },
   {
     record: "`src/legacy/ballz-xml-worlds.json`",
     what: "Two serialized CScene3D compositions, `MyWorld` (4 objects) and `MyWorld - Copie`.",
-    verdict: "not revivable as gameplay",
+    verdict: "revived as exact XML evidence visits and import vocabulary; correctly not called gameplay",
     why:
-      "The record classifies them itself: `assembledDiscoverableWorldCount: 0`, 'editor/loader tests rather than finished exploration worlds', and `MyWorld` contains two malformed DUPLICATE records with `invalid-duplicate-target` resolution. A four-object editor save with a floating airplane is not a level.",
+      "MyWorld, its distinct copy and the serializer artifacts are player-visible archive visits, including malformed duplicate diagnostics and exact source transforms. `importLegacyXml()` also converts valid SceneNET content into v2 documents. Their own census still says `assembledDiscoverableWorldCount: 0`, so they remain editor/loader evidence rather than fabricated levels.",
   },
   {
     record: "`src/legacy/ballz-blender-level1-export.json`",
     what: "A 743-byte FBX export *manifest* — Blender 2.79, axis forward -Z / up Y, source and output SHAs. No geometry at all.",
-    verdict: "not revivable as gameplay",
+    verdict: "revived as the exact Blender Level 1 geometry visit; correctly not called gameplay",
     why:
-      "It is provenance metadata for a mesh file, not a scene. The census independently records the Blender Level 1 prototype as a geometry visit that 'is not turned into a race because no host, spawn, physics, controls, checkpoints, rules or objective survives'.",
+      "The manifest is still metadata rather than geometry, but HEAD's dedicated Blender Level 1 visit uses the best surviving 356-vertex/354-polygon source with its saved camera, point light and material. No host, spawn, physics, controls, checkpoints or objective survives, so keeping it as an inspectable authored scene is the faithful completion.",
   },
   {
     record: "`src/legacy/suzanne1-ascii-scene.json` / `suzanne2-ascii-scene.json`",
     what: "Genuine 40x40 authored ASCII arenas, decoded *into this repository* with source SHAs (Suzanne1.ASCII `64ec6746…`) — 208 walls, 45 chain assemblies, 15 rings, 3 pistons, gates and a spawn.",
-    verdict: "revivable as a grid level, deliberately not shipped in this pass",
+    verdict: "revived on the archive game surface; moving machinery also graduated to a v2 course",
     why:
-      "This is the one skipped record that is not a 'cannot'. It is within the 64x64 / 4096-cell limits and its provenance is the strongest of anything here — the bytes are in-repo. It is held back because 1,319 of its 1,600 cells are empty floor with only 15 rings scattered across them: at any playable cell size it is a very large, very sparse plain, and its chains and pistons (the things that make it *that* arena) have no tile in this vocabulary, so a grid conversion would ship the emptiness without the content. Shipping it would break the brief's own bar — playable is not the same as worth playing. It is the strongest candidate for the next pass, most likely as a composed v2 scene where the chains and pistons can exist.",
+      "Suzanne 1 now plays its exact 40×40 arena with 208 walls, 45 chain assemblies, 15 rings, three pistons, effects, posts, gates, spawn and three-lap loop; Suzanne 2 remains a distinct player-visible evidence/game visit with its source contradiction disclosed. This sweep additionally vendors the separate eight-part 2015 machinery study and makes its piston, door and rotator collision-bearing v2 obstacles. A sparse grid-only duplicate would still throw away the chains and pistons, so none is added here.",
   },
 ] as const;
 
