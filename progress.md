@@ -1945,3 +1945,53 @@ were inspected for the mesh countdown, 3D lap counter, all three ball presets, b
 level treatments, and Suzanne gameplay/results; all are legible, framed and artifact-free.
 
 Delivery: emit the four ordered git format-patches into the requested repository folder.
+
+## 2026-07-28 — `revival-r2`: two sweeps meet, and the delta reconciles them
+
+Two sessions ran the REVIVAL_DEBT_SWEEP in parallel without knowing it: the four commits
+above (`b9a4365`…`3b15306`) landed while this session built the same ranked plan against the
+same base. On discovery, this session's seven-commit series was NOT rebased wholesale — it
+was re-derived as a delta, keeping upstream wherever the two implementations covered the
+same ground (glyph vendoring with the richer catalog envelope, the in-scene countdown/lap
+stages, the preset mechanism and its prefabs, the scene-document `normalTexture` vocabulary,
+the broader ledger reconcile and its `audit-revival-debt` gate) and porting only what the
+other sweep did not have:
+
+- **`clearblue-hd`** — Level 1's binding shipped on the recovered 512 px ClearBlue, which
+  reads muddy brown at play angles (the recorded reason the binding was once deviated away).
+  `vendor-sky-clearblue-hd.mjs` derives a disclosed 2× clarity pass (unsharp + mild tone
+  lift, 682 KB at q0.9 — the nightsky q1.0 rule is about pixel-scale chroma this set lacks);
+  the style record keeps the archive's own binding name and presentation maps it to the HD
+  set. Required companion: `smoke-media`'s curated-sky check re-keyed on identity — it
+  counted skies whose source string was exactly "GraphysX archive", which any honestly-
+  provenanced derived set breaks.
+- **Level 2's humans** — `iNumHuman` = 10 honoured as a wandering crowd (possible since
+  crowd-r1, recorded as impossible ever since); deviation renamed
+  `humans-placed-not-positioned` because the archived scatter/seed is unrecoverable. The
+  `best-time-not-shown` deviation corrected to `best-time-as-medal-reference` (the medal
+  scale judges against ScoreBest since the scoreboard landed).
+- **Suzanne 1, the 40×40 ASCII arena** — the machinery run revived the `.x` study; this
+  composes the OTHER record (`Suzanne1.ASCII`, in-repo bytes `64ec6746…`), which the ledger
+  already described as playing. Now it does: 208 dynamic walls in their recorded per-symbol
+  textures, the three archived pistons as kinematic movers at recorded cells/orientations
+  (±0.5 travel; constant-speed drive disclosed adapted), 45 chain stands, 15 ZRing pickups
+  at the archived 0.1°/ms, LINE gates spanning the archived post pairs including the full
+  halfway diagonal, laps 3. `smoke-suzanne1` gates it; the Suzanne texture set (objet39,
+  Podium, GrassSample, ZRing) and concrete join the registry.
+- **A provenance correction** — the gridxl payload claimed GridXL as "the recorded classic
+  skin"; no record binds it (the decode kept no material assignment; the ctrl's recovered
+  binding is FireArrow800). The claim is now the honest split: geometry faithful, binding
+  adapted.
+
+Deliberately DROPPED from this session's original series, superseded by upstream: its glyph
+vendoring (same decoded geometry, thinner envelope), its camera-attached glyph marquee (the
+in-scene countdown stages + lap display cover the same words; two systems for one job is
+clutter — the marquee survives on branch `revival-r1-prev` if camera-anchored words are ever
+wanted), its shell-based GridXL look and remove+spawn look mechanism, its registry-level
+normal maps (the scene-document vocabulary is strictly richer), and ~14 ledger edits the
+upstream reconcile already covered more broadly.
+
+Lesson, recorded because it will happen again: the check-against-HEAD rule applies to
+*upstream* too. Verify `origin/main` immediately before generating a patch series, not only
+when a session starts — four commits landed mid-session and the first delivery attempt
+conflicted on thirteen files.
