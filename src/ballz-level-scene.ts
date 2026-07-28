@@ -861,7 +861,11 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
       // Recovered classic levels own their recorded sky binding: ClearBlue for Level 1,
       // LostValley for Level 2. Hand-painted levels retain LostValley as the modern default.
       // This remains an ordinary per-scene field, editable through the inspector/API.
-      sky: classicBinding?.style.source.sky ?? "lostvalley",
+      // The style RECORD keeps the archive's own binding name (`clearblue`); presentation
+      // maps it onto the disclosed `clearblue-hd` clarity pass, because the recovered 512 px
+      // faces read muddy brown at play angles — the recorded reason this binding was once
+      // deviated away. Adapted pixels, recorded binding; the untouched set stays selectable.
+      sky: classicBinding?.style.source.sky === "clearblue" ? "clearblue-hd" : classicBinding?.style.source.sky ?? "lostvalley",
       // The visible cube and reflection lighting are deliberately independent. Golden Meadow
       // matches the authored late-afternoon key without replacing Lost Valley as the level's
       // backdrop; the stable registry id is the only asset reference that enters the document.

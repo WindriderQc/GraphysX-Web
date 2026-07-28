@@ -399,6 +399,7 @@ try {
   out.sky = await page.evaluate(async () => {
     const api = window.__GRAPHYSX__;
     const curatedCount = api.skies().length;
+    const curatedIds = api.skies().map((s) => s.id);
 
     const directional = await api.media.importSky("Sky/SmokeDome");
     const axial = await api.media.importSky("Sky/Axial");
@@ -445,7 +446,12 @@ try {
       hasNoBasePath: directional.value.basePath === undefined,
       horizonSampled: /^#[0-9a-f]{6}$/i.test(directional.value.horizonColor),
       registered: api.skies().some((s) => s.id === directional.value.id),
-      curatedIntact: api.skies().filter((s) => s.source === "GraphysX archive").length === curatedCount,
+      // Every pre-import id must survive unreplaced, and only the two imports may be new.
+      // (This used to count skies whose source string was exactly "GraphysX archive", which
+      // broke — as a stale ledger, not a defect — the day `clearblue-hd` registered with an
+      // honest adapted-provenance source. Identity, not source prose, is the invariant.)
+      curatedIntact: curatedIds.every((id) => api.skies().some((s) => s.id === id))
+        && api.skies().length === curatedCount + 2,
       loadOk: loaded.ok,
       applied,
       reloadOk: reloaded.ok,

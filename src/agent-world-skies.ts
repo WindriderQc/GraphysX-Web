@@ -5,7 +5,7 @@ import { archiveSkyboxUrls, type ArchiveSkyboxUrls } from "./archive-skybox";
  * (media-library sky sets registered while a store is running) without erasing the
  * literal union from tooling. Same shape as `AgentWorldTextureId`.
  */
-export type AgentWorldSkyId = "clearblue" | "clearnight" | "lostvalley" | "nightsky" | "skyx" | "winter" | (string & {});
+export type AgentWorldSkyId = "clearblue" | "clearblue-hd" | "clearnight" | "lostvalley" | "nightsky" | "skyx" | "winter" | (string & {});
 
 type AgentWorldSkyCommon = {
   id: string;
@@ -64,6 +64,16 @@ export const GRAPHYSX_AGENT_WORLD_SKIES = [
     resolution: 512,
     horizonColor: "#aec8dc",
     source: "GraphysX archive"
+  },
+  {
+    id: "clearblue-hd",
+    label: "Clear Blue HD",
+    basePath: "/assets/sky/clearblue-hd",
+    extension: "jpg",
+    description: "The archived ClearBlue through a disclosed 2x clarity pass — classic Level 1's recorded sky, legible at play angles. Adapted pixels; the recovered set stays at clearblue.",
+    resolution: 1024,
+    horizonColor: "#aec8dc",
+    source: "GraphysX archive clearblue, adapted by scripts/vendor-sky-clearblue-hd.mjs (2x upscale, unsharp, mild tone lift)"
   },
   {
     id: "lostvalley",
