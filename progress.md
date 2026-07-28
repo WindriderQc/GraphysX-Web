@@ -2143,3 +2143,8 @@ hit the same Windows loopback churn twice before its first HTTP assertion. Its e
 readiness backoff covered under two seconds—shorter than the observed recovery window after
 the long browser matrix. The bounded readiness probe now allows twelve attempts capped at
 one second (about 8.5 seconds total); auth statuses and every tested contract are unchanged.
+
+Final release verification: `npm run verify -- --wait` passed all 40 checks from a fresh
+typecheck and production build. The complete browser/archive matrix, revival-debt audit,
+Rapier probes, store-auth's 22 assertions and node-only DNA suite are green. Screenshots are
+under `output/verify`; the focused human-route captures remain under `output/web-game`.
