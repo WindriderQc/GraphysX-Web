@@ -176,6 +176,18 @@ if (mode === "legacy") {
               }),
             },
             {
+              id: "archive-suzanne1",
+              label: "Suzanne 1: The Pushable Maze",
+              meta: "authored 40×40 arena  ·  208 dynamic walls  ·  3 pistons  ·  line gates  ·  3 laps",
+              play: () => loadComposedGame(async () => {
+                const { composeSuzanne1, frameSuzanne1 } = await import("./archive-suzanne1-scene");
+                const result = composeSuzanne1(host.api);
+                if (!result.ok) throw new Error(result.error ?? "Could not compose Suzanne 1");
+                host.applyEnvironment();
+                frameSuzanne1(host);
+              }),
+            },
+            {
               id: "archive-map1",
               label: "Map 1: Gravity Descent",
               meta: "exact recovered mesh  ·  halfway gate  ·  adapted gravity run",
@@ -413,6 +425,10 @@ if (mode === "legacy") {
         // The first §14.5 course port. Published so an agent (and the smoke) can compose
         // it directly, with its provenance beside it.
         composeSkyboxSpiral: () => composeSkyboxSpiral(host.api),
+        // Suzanne 1 — the 40×40 ASCII arena as a composed scene (complement to the
+        // machinery run: same family, different record). Lazy like World 1, so the 200 KB
+        // decoded arena stays off the boot path until someone opens it.
+        composeSuzanne1: () => import("./archive-suzanne1-scene").then(({ composeSuzanne1 }) => composeSuzanne1(host.api)),
         // World 1 — the first true mesh-world port. Lazy, so the manifest's slab table
         // stays off the boot path until someone actually opens the world.
         composeArchiveWorld1: () => import("./archive-world1-scene").then(({ composeArchiveWorld1, WORLD1_PROVENANCE }) => {

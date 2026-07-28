@@ -205,6 +205,51 @@ export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
     source: "GraphysX archive"
   },
   {
+    id: "concrete",
+    label: "Concrete",
+    url: "/assets/textures/archive/concrete.png",
+    category: "surface",
+    description: "Recovered concrete slab — the source2017 Suzanne floor binding, and a plain hard ground anywhere.",
+    defaultRepeat: [4, 4],
+    source: "GraphysX archive; Scene3D/BallZLevel.h floor binding"
+  },
+  {
+    id: "objet39",
+    label: "Objet 39",
+    url: "/assets/textures/suzanne1/objet39.jpg",
+    category: "surface",
+    description: "The recovered Suzanne wall texture — Scene.cpp binds every `#` wall cube to it.",
+    defaultRepeat: [1, 1],
+    source: "BallZ archive StockRoom/Suzanne1; Scene3D/BallZLevel.h"
+  },
+  {
+    id: "podium",
+    label: "Podium",
+    url: "/assets/textures/suzanne1/Podium.JPG",
+    category: "surface",
+    description: "The recovered Suzanne `z` wall texture.",
+    defaultRepeat: [1, 1],
+    source: "BallZ archive StockRoom/Suzanne1/Podium.JPG"
+  },
+  {
+    id: "grass-sample",
+    label: "Grass Sample",
+    url: "/assets/textures/suzanne1/GrassSample.jpg",
+    category: "nature",
+    description: "The recovered Suzanne grass sample — the `Z` wall binding, and the reference2016 floor.",
+    defaultRepeat: [1, 1],
+    source: "BallZ archive StockRoom/Suzanne1/GrassSample.jpg"
+  },
+  {
+    id: "z-ring",
+    label: "Z Ring",
+    url: "/assets/textures/suzanne1/ZRing.png",
+    category: "pattern",
+    description: "The recovered Suzanne ring-pickup skin.",
+    defaultRepeat: [1, 1],
+    source: "BallZ archive StockRoom/Suzanne1/ZRing.png"
+  },
+  {
     id: "spheres",
     label: "3D Spheres",
     url: "/assets/textures/suzanne1/3D_Spheres.jpg",
