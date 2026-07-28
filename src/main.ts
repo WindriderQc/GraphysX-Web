@@ -273,6 +273,22 @@ if (mode === "legacy") {
           // as a composed row. main.ts supplies it because framing needs the host, which the
           // shelf deliberately does not have.
           composed: [
+            {
+              id: "archive-day-night-rig",
+              label: "Archive Day / Night Observatory",
+              summary: "The recovered atmosphere equations driving two scene-authored sky and HDRI looks over an editable celestial instrument.",
+              meta: "12-second cycle  ·  recovered curves  ·  ClearBlue HD ↔ NightSky",
+              open: async () => {
+                const { composeArchiveDayNight, frameArchiveDayNight } = await import("./archive-day-night-scene");
+                showroomEnvironment?.();
+                showroomEnvironment = null;
+                const result = composeArchiveDayNight(host.api);
+                if (!result.ok) throw new Error(result.error ?? "Could not compose Archive Day / Night Observatory");
+                host.applyEnvironment();
+                frameArchiveDayNight(host);
+                void host.enterEditor();
+              },
+            },
             // The recovered Nature Lab playgrounds. They open in the editor like any browsed
             // scene, so their simulation vocabulary is selectable and editable.
             // The recovered Voie Lactee vignette. Same shape as the playgrounds: it opens in the
@@ -386,6 +402,7 @@ if (mode === "legacy") {
         world: host.api.state()?.world ?? null,
         paused: host.api.state()?.paused ?? false,
         run: host.api.rules.status(),
+        atmosphere: host.dayNightState,
         players: host.api.query({ tag: "player" }).map((entity) => ({
           id: entity.id,
           position: entity.position,
@@ -445,6 +462,13 @@ if (mode === "legacy") {
         composeSuzanne2: () => import("./archive-suzanne2-scene").then(({ composeSuzanne2, SUZANNE2_PROVENANCE }) => {
           const result = composeSuzanne2(host.api);
           return { ...result, provenance: SUZANNE2_PROVENANCE };
+        }),
+        // The archived atmosphere equations as ordinary scene vocabulary, with the image
+        // endpoints and modern observatory adaptation disclosed beside the composer.
+        composeArchiveDayNight: () => import("./archive-day-night-scene").then(({ composeArchiveDayNight, DAY_NIGHT_PROVENANCE }) => {
+          const result = composeArchiveDayNight(host.api);
+          host.applyEnvironment();
+          return { ...result, provenance: DAY_NIGHT_PROVENANCE };
         }),
         // World 1 — the first true mesh-world port. Lazy, so the manifest's slab table
         // stays off the boot path until someone actually opens the world.

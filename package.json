@@ -30,6 +30,7 @@
     "smoke:map1": "node scripts/smoke-map1.mjs",
     "smoke:level1-2011": "node scripts/smoke-level1-2011.mjs",
     "smoke:suzanne-machinery": "node scripts/smoke-suzanne-machinery.mjs",
+    "smoke:day-night": "node scripts/smoke-day-night.mjs",
     "audit:revival-debt": "node scripts/audit-revival-debt.mjs",
     "smoke:live-release": "node scripts/smoke-live-release.mjs",
     "smoke:rapier-race": "node scripts/smoke-rapier-race.mjs",

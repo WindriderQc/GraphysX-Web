@@ -2033,3 +2033,32 @@ with the visuals (0/2 of 15 placed, finite position/velocity, no console-error a
 
 Next ranked work: verify and graduate a scene-native day/night rig over the shipped sky/HDRI
 stack; then translate `meshlight.shade`; then compose Level 3 as a v2 scene.
+
+## 2026-07-28 — `revival-next-r2`: archived Day/Night becomes scene vocabulary
+
+The race player already carried a private descendant of `Sky.cpp`/`Atmosphere.cpp`; the
+remaining gap was authored v2 scenes. `environment.dayNight` now round-trips a cycle duration,
+phase offset, and explicit day/night sky + lighting + background endpoints. The host advances
+the recovered phase, sun-height, daylight ramp, logistic brightness and horizon-warmth curves
+on simulation time, switches the endpoint sky/HDRI only at the source visibility threshold,
+and continuously drives sun, moon, hemisphere light, fog, image-light intensity and the
+archived sun sprite. Pause freezes it; deterministic `api.step()` advances it.
+
+`archive-day-night-scene.ts` makes that vocabulary player-visible as a 23-entity editable
+celestial observatory. The observatory is explicitly a modern inspection set, not a recovered
+level. Its ClearBlue HD + Lilienstein day and NightSky + Vignaioli night bindings are likewise
+marked adapted because the old atmosphere code did not record image endpoints. Browse lists
+the scene first among composed archive visits, and `render_game_to_text` exposes its concise
+live atmosphere state.
+
+Verified: `npm run build` and `smoke-day-night` green. The smoke fixes noon at source phase
+0.5, steps exactly six seconds to midnight, proves the two sky/HDRI bindings, verifies pause
+and document round-trip, and captures `day-night-noon.png` / `day-night-midnight.png`. Both
+captures were inspected: the observatory, instrument rings and eight hour beacons remain
+readable in the bright mountain day and the restrained black/blue night, with no browser
+errors. The required web-game client also took the human front-door → Browse → first archive
+scene path, advanced 120 rendered frames, and matched the visible day scene to
+`render_game_to_text` (phase 0.7299, ClearBlue HD/Lilienstein, no error artifact).
+
+Next ranked work: translate `meshlight.shade` as a scene-native material with faithful source
+semantics and a visible comparison; then compose Archive Level 3 as a v2 game.

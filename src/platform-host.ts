@@ -1,17 +1,24 @@
 import {
   ACESFilmicToneMapping,
+  AdditiveBlending,
   Clock,
   Color,
   CubeTexture,
   CubeTextureLoader,
+  DirectionalLight,
   Fog,
+  HemisphereLight,
+  MathUtils,
   PCFSoftShadowMap,
   PerspectiveCamera,
   Plane,
   PMREMGenerator,
   Raycaster,
   Scene,
+  Sprite,
+  SpriteMaterial,
   SRGBColorSpace,
+  TextureLoader,
   Vector2,
   Vector3,
   WebGLRenderTarget,
@@ -29,6 +36,7 @@ import {
   AgentWorldRuntime,
   GRAPHYSX_AGENT_DEMO_WORLD,
   type AgentWorldDefinition,
+  type AgentWorldDayNight,
   type AgentWorldLighting,
   type AgentWorldPost,
   type GraphysXAgentWorldApi,
@@ -153,6 +161,30 @@ export class PlatformHost {
   private requestedEnvironmentKey = "studio";
   private readonly pmremGenerator: PMREMGenerator;
   private readonly roomEnvironmentTarget: WebGLRenderTarget;
+  /** Host-rendered descendant of the archived Sky.cpp / Atmosphere.cpp cycle. */
+  private readonly dayNightSun = new DirectionalLight("#fff3d5", 0);
+  private readonly dayNightMoon = new DirectionalLight("#8fb8ff", 0);
+  private readonly dayNightHemi = new HemisphereLight("#dff4ff", "#0b1018", 0);
+  private dayNightSunSprite: Sprite | null = null;
+  private activeDayNight: AgentWorldDayNight | null = null;
+  private activeDayNightLook: "day" | "night" | null = null;
+  private dayNightReading: {
+    phase: number;
+    sunHeight: number;
+    daylight: number;
+    brightness: number;
+    activeLook: "day" | "night";
+    sky: string | null;
+    hdri: string | null;
+  } | null = null;
+  private readonly dayNightColor = new Color();
+  private readonly dayNightDayColor = new Color();
+  private readonly dayNightNightColor = new Color();
+  private readonly dayNightHemiSkyDay = new Color("#ffd6a1");
+  private readonly dayNightHemiSkyNight = new Color("#dff4ff");
+  private readonly dayNightHemiGroundDay = new Color("#4a3928");
+  private readonly dayNightHemiGroundNight = new Color("#07101a");
+  private readonly dayNightSunDirection = new Vector3();
   private readonly interactive: boolean;
   private readonly autoOrbit: boolean;
   private readonly onExitEditor?: () => void;
@@ -285,6 +317,13 @@ export class PlatformHost {
     room.dispose();
     this.scene.environment = this.roomEnvironmentTarget.texture;
 
+    this.dayNightSun.visible = false;
+    this.dayNightSun.castShadow = true;
+    this.dayNightSun.shadow.mapSize.set(2048, 2048);
+    this.dayNightMoon.visible = false;
+    this.dayNightHemi.visible = false;
+    this.scene.add(this.dayNightSun, this.dayNightMoon, this.dayNightHemi);
+
     this.world = new AgentWorldRuntime(options.world ?? GRAPHYSX_AGENT_DEMO_WORLD);
     this.scene.add(this.world.group);
     this.audio = new AgentWorldAudioLayer(this.camera, this.world);
@@ -370,6 +409,11 @@ export class PlatformHost {
   /** The active overlay id, or null. */
   get activeOverlay(): AgentWorldOverlayId | null {
     return this.overlayId;
+  }
+
+  /** Concise live atmosphere state for HUDs, browser drivers and smoke tests. */
+  get dayNightState(): Readonly<NonNullable<typeof this.dayNightReading>> | null {
+    return this.dayNightReading ? { ...this.dayNightReading } : null;
   }
 
   /**
@@ -566,8 +610,23 @@ export class PlatformHost {
       this.camera.far = cameraFar;
       this.camera.updateProjectionMatrix();
     }
-    this.applyLighting(environment.lighting);
-    this.applySky(environment.sky, environment.lighting);
+    this.activeDayNight = environment.dayNight;
+    this.activeDayNightLook = null;
+    if (this.activeDayNight) {
+      this.dayNightSun.visible = true;
+      this.dayNightMoon.visible = true;
+      this.dayNightHemi.visible = true;
+      this.ensureDayNightSunSprite().visible = true;
+      this.updateDayNight(true);
+    } else {
+      this.dayNightSun.visible = false;
+      this.dayNightMoon.visible = false;
+      this.dayNightHemi.visible = false;
+      if (this.dayNightSunSprite) this.dayNightSunSprite.visible = false;
+      this.dayNightReading = null;
+      this.applyLighting(environment.lighting);
+      this.applySky(environment.sky, environment.lighting);
+    }
     // The scene document's request wins — it is tuned for that scene. The host override only
     // fills in when the scene is silent, so `?post=bloom` demos the stack without ever
     // overriding an author's numbers.
@@ -763,6 +822,82 @@ export class PlatformHost {
         console.warn(`Could not load sky "${descriptor.id}" from ${faceUrls[0]}`);
       },
     );
+  }
+
+  /**
+   * Advance the archived atmosphere curves on simulation time, then bind the matching
+   * shipped sky/HDRI endpoint. The endpoint changes only at the source sun-visibility
+   * threshold; intensity, colour, fog and celestial motion stay continuous every frame.
+   */
+  private updateDayNight(force = false): void {
+    const config = this.activeDayNight;
+    if (!config) return;
+    const elapsed = this.world.getElapsedSeconds();
+    const turns = ((elapsed / config.cycleSeconds) + config.phaseOffset) % 1;
+    const phase = turns * Math.PI * 2 - Math.PI / 2;
+    const sunHeight = Math.sin(phase);
+    const daylight = MathUtils.clamp(((sunHeight + 1 - 0.2) / 2) * 2, 0, 1);
+    const brightness = 1 / (1 + Math.exp(-(daylight - 0.6) / 0.05));
+    const horizonWarmth = MathUtils.clamp(1 - Math.abs(sunHeight) * 1.7, 0, 1);
+    const lookName: "day" | "night" = sunHeight > -0.12 ? "day" : "night";
+    const look = config[lookName];
+    if (force || lookName !== this.activeDayNightLook) {
+      this.activeDayNightLook = lookName;
+      this.applyLighting(look.lighting);
+      this.applySky(look.sky, look.lighting);
+    }
+
+    const endpointEnergy = lookName === "day"
+      ? 0.24 + brightness * 0.76
+      : 0.38 + (1 - brightness) * 0.62;
+    this.scene.environmentIntensity = look.lighting.intensity * endpointEnergy;
+    this.scene.backgroundIntensity = look.lighting.backgroundIntensity * (0.32 + endpointEnergy * 0.68);
+
+    this.dayNightSun.intensity = 0.12 + brightness * 2.1;
+    this.dayNightSun.color.setRGB(1, 1 - horizonWarmth * 0.32, 1 - horizonWarmth * 0.55);
+    this.dayNightMoon.intensity = 0.08 + (1 - brightness) * 0.82;
+    this.dayNightHemi.intensity = 0.2 + daylight * 0.72;
+    this.dayNightHemi.color.copy(this.dayNightHemiSkyNight).lerp(this.dayNightHemiSkyDay, horizonWarmth * 0.36);
+    this.dayNightHemi.groundColor.copy(this.dayNightHemiGroundNight).lerp(this.dayNightHemiGroundDay, daylight * 0.4);
+
+    this.dayNightSunDirection.set(Math.cos(phase) * 0.55, sunHeight, Math.sin(phase)).normalize();
+    this.dayNightSun.position.copy(this.dayNightSunDirection).multiplyScalar(30);
+    this.dayNightMoon.position.copy(this.dayNightSunDirection).multiplyScalar(-30);
+    const sprite = this.ensureDayNightSunSprite();
+    sprite.visible = sunHeight > -0.12;
+    sprite.position.copy(this.camera.position).addScaledVector(this.dayNightSunDirection, 140);
+    (sprite.material as SpriteMaterial).opacity = MathUtils.clamp(0.15 + brightness * 0.85, 0, 1);
+
+    this.dayNightDayColor.set(config.day.background);
+    this.dayNightNightColor.set(config.night.background);
+    this.dayNightColor.copy(this.dayNightNightColor).lerp(this.dayNightDayColor, daylight);
+    if (!look.sky) this.scene.background = this.dayNightColor;
+    if (this.scene.fog instanceof Fog) this.scene.fog.color.copy(this.dayNightColor);
+
+    this.dayNightReading = {
+      phase: Number(turns.toFixed(4)),
+      sunHeight: Number(sunHeight.toFixed(4)),
+      daylight: Number(daylight.toFixed(4)),
+      brightness: Number(brightness.toFixed(4)),
+      activeLook: lookName,
+      sky: look.sky,
+      hdri: look.lighting.source === "hdri" ? look.lighting.hdri : null,
+    };
+  }
+
+  private ensureDayNightSunSprite(): Sprite {
+    if (this.dayNightSunSprite) return this.dayNightSunSprite;
+    const material = new SpriteMaterial({
+      map: new TextureLoader().load("/assets/textures/sun.jpg"),
+      blending: AdditiveBlending,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+    });
+    this.dayNightSunSprite = new Sprite(material);
+    this.dayNightSunSprite.scale.setScalar(26);
+    this.scene.add(this.dayNightSunSprite);
+    return this.dayNightSunSprite;
   }
 
   /** Bound imported-sky churn without ever evicting the backdrop currently in use. */
@@ -1041,6 +1176,7 @@ export class PlatformHost {
     const delta = this.clock.getDelta();
     // Freeze simulation while the gizmo is dragging (matches the reference behavior).
     if (!this.editor?.isTransforming()) this.world.update(delta);
+    this.updateDayNight();
     this.audio.sync();
     this.advanceFocus(delta);
     // After advanceFocus, so an intro whose camera move landed (or was grabbed away) this
@@ -1122,6 +1258,13 @@ export class PlatformHost {
     this.bridge.dispose();
     this.controls.dispose();
     this.teardownComposer();
+    if (this.dayNightSunSprite) {
+      const material = this.dayNightSunSprite.material as SpriteMaterial;
+      material.map?.dispose();
+      material.dispose();
+      this.scene.remove(this.dayNightSunSprite);
+      this.dayNightSunSprite = null;
+    }
     this.scene.background = null;
     this.scene.environment = null;
     for (const resource of this.skyCache.values()) {

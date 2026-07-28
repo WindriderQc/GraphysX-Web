@@ -718,6 +718,28 @@ export type AgentWorldLighting = AgentWorldLightingControls & (
   | { /** A curated HDR image lights reflections; the selected sky remains the backdrop. */ source: "hdri"; hdri: AgentWorldHdriId }
 );
 
+export type AgentWorldDayNightLook = {
+  /** Backdrop for this half of the cycle; null keeps the endpoint's flat background. */
+  sky: AgentWorldSkyId | null;
+  /** Sky/HDRI/studio image lighting and its authored intensity/yaw/blur controls. */
+  lighting: AgentWorldLighting;
+  /** Fog and flat-background colour for this endpoint. */
+  background: string;
+};
+
+/**
+ * Scene-native descendant of GraphysX_1/Sky.cpp + AtmelCubx/Atmosphere.cpp.
+ * The host preserves their orbit/day/logistic curves while the two endpoint looks bind the
+ * platform's shipped sky and HDRI vocabulary. `phaseOffset` is a fraction of one full cycle;
+ * zero starts at midnight, matching the archived `-PI/2` phase.
+ */
+export type AgentWorldDayNight = {
+  cycleSeconds: number;
+  phaseOffset: number;
+  day: AgentWorldDayNightLook;
+  night: AgentWorldDayNightLook;
+};
+
 export type AgentWorldEnvironment = {
   background: string;
   /**
@@ -740,6 +762,8 @@ export type AgentWorldEnvironment = {
   post: AgentWorldPost | null;
   /** Authored IBL look, or null for the backward-compatible automatic host look. */
   lighting: AgentWorldLighting | null;
+  /** Optional archived sun/atmosphere cycle over two scene-authored sky/HDRI looks. */
+  dayNight: AgentWorldDayNight | null;
   /**
    * Per-scene generative 2D overlay, or null for none. Like `sky`, it is scene data the host
    * renders rather than a global setting — and off by default, because a 2D layer must earn its
@@ -1233,6 +1257,7 @@ const DEFAULT_ENVIRONMENT: AgentWorldEnvironment = {
   envelope: null,
   post: null,
   lighting: null,
+  dayNight: null,
   overlay: null,
   ground: {
     visible: true,
@@ -1259,6 +1284,7 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "environment.sky",
   "environment.lighting",
   "environment.hdri",
+  "environment.day-night",
   "sky.list",
   "hdri.list",
   "entity.emitter",
@@ -1463,6 +1489,11 @@ export class AgentWorldRuntime {
 
   getEnvironment(): AgentWorldEnvironment {
     return deepClone(this.environment);
+  }
+
+  /** Simulation clock without allocating the full public state snapshot (host atmosphere). */
+  getElapsedSeconds(): number {
+    return this.elapsedSeconds;
   }
 
   /** The generative 2D overlays a scene can select. Off (null) is always also valid. */
@@ -2254,7 +2285,7 @@ export class AgentWorldRuntime {
     // the ground, while the rendered sky and background silently stayed on the old values —
     // the same write-only parity gap that `world.loaded` closed for `create`/`load`, reopened
     // by a different entry point. Emitting here lets the host re-apply for every caller.
-    this.emit("environment.changed", [], { sky: this.environment.sky, overlay: this.environment.overlay, background: this.environment.background, envelope: this.environment.envelope, post: this.environment.post, lighting: this.environment.lighting });
+    this.emit("environment.changed", [], { sky: this.environment.sky, overlay: this.environment.overlay, background: this.environment.background, envelope: this.environment.envelope, post: this.environment.post, lighting: this.environment.lighting, dayNight: this.environment.dayNight });
   }
 
   private loadDefinition(source: AgentWorldDefinition): void {
@@ -3963,11 +3994,37 @@ function resolveEnvironment(source?: AgentWorldDefinition["environment"]): Agent
     envelope: resolveEnvelope(source?.envelope),
     post: resolvePost(source?.post),
     lighting: resolveLighting(source?.lighting),
+    dayNight: resolveDayNight(source?.dayNight),
     overlay,
     ground: { ...DEFAULT_ENVIRONMENT.ground, ...(source?.ground ?? {}) },
     physics: {
       gravity: sanitizeVector(source?.physics?.gravity ?? DEFAULT_ENVIRONMENT.physics.gravity, -1000, 1000, "physics.gravity")
     }
+  };
+}
+
+function resolveDayNight(source: AgentWorldEnvironment["dayNight"] | undefined): AgentWorldDayNight | null {
+  if (source === null || source === undefined) return DEFAULT_ENVIRONMENT.dayNight;
+  if (typeof source !== "object") throw new Error("environment.dayNight must be an object or null");
+  if (!Number.isFinite(source.cycleSeconds) || source.cycleSeconds < 5 || source.cycleSeconds > 86_400) {
+    throw new Error("dayNight.cycleSeconds must be a finite number between 5 and 86400");
+  }
+  if (!Number.isFinite(source.phaseOffset) || source.phaseOffset < 0 || source.phaseOffset >= 1) {
+    throw new Error("dayNight.phaseOffset must be a finite number from 0 up to (but not including) 1");
+  }
+  const resolveLook = (look: AgentWorldDayNightLook, label: "day" | "night"): AgentWorldDayNightLook => {
+    if (!look || typeof look !== "object") throw new Error(`dayNight.${label} must be an object`);
+    if (look.sky !== null && !resolveAgentWorldSky(look.sky)) throw new Error(`Unknown dayNight.${label} sky: ${String(look.sky)}`);
+    const lighting = resolveLighting(look.lighting);
+    if (!lighting) throw new Error(`dayNight.${label}.lighting must select sky, studio, or hdri`);
+    if (typeof look.background !== "string" || !look.background.trim()) throw new Error(`dayNight.${label}.background must be a colour string`);
+    return { sky: look.sky, lighting, background: look.background };
+  };
+  return {
+    cycleSeconds: source.cycleSeconds,
+    phaseOffset: source.phaseOffset,
+    day: resolveLook(source.day, "day"),
+    night: resolveLook(source.night, "night"),
   };
 }
 
