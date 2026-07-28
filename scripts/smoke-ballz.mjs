@@ -75,7 +75,11 @@ try {
       hasStartPad: ids.includes("ballz-start-pad"),
       countdownStages: api.query({ tag: "ballz-countdown-stage" }).length,
       recoveredGlyphAssets: assets.filter((asset) => asset.category === "glyph").length,
-      recoveredTvmAssets: assets.filter((asset) => asset.category === "archive-prop").length,
+      // Keep this census about the original TVM recovery. Suzanne's recovered .x
+      // props share archive-prop, but are a different source family.
+      recoveredTvmAssets: assets.filter(
+        (asset) => asset.category === "archive-prop" && asset.id.startsWith("archive-tvm-"),
+      ).length,
       ice: ice ? {
         id: ice.id,
         roughness: ice.material.roughness,

@@ -2129,3 +2129,11 @@ Level 3 world, finite motion from z=6 to z=-0.262, 0/20, lap 0/3, and no error a
 Focused verification: `npm run build` and `npm run smoke:level3` green. Next: run the full
 release gate, re-check origin/main immediately before packaging, and deliver the new-wave
 format-patch series with one-command-per-line PowerShell apply steps.
+
+The first full release-gate pass reached all 40 checks and passed 38. It found one stale
+smoke assumption rather than a product regression: `recoveredTvmAssets` counted every
+`archive-prop`, so Suzanne 2's three recovered `.x` props changed the supposed 14-item TVM
+census to 17. The census is now scoped to the `archive-tvm-*` source family, preserving the
+original 14-asset contract while allowing other faithfully vendored prop families to grow.
+The other failed check exhausted its retry on local preview-server connection resets after
+its product assertions had passed; no Games behavior failed. A clean full-gate rerun follows.
