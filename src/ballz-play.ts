@@ -598,7 +598,12 @@ function buildScoreRow(finish: LevelFinishSummary): HTMLElement {
 function archiveReferenceMs(levelId: string): number | null {
   const level = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === levelId);
   const value = level?.provenance.levelListFacts["scoreBestMs"];
-  return typeof value === "number" && value > 0 ? value : null;
+  if (typeof value === "number" && value > 0) return value;
+  // Level 3 deliberately is not in the modern grid library: its M/r/$ alphabet needs the
+  // composed raised-platform scene. Its levelList.xml reference still belongs on the same
+  // finish board, keyed by the composed world id instead of pretending it is a grid level.
+  if (levelId === "archive-level3-v2") return 158507.313;
+  return null;
 }
 
 /** Reload a composed course without letting gravity outrun an async exact model collider. */

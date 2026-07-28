@@ -116,6 +116,24 @@ export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
     source: "StockRoom Level 2 / BallZ 2015 archive"
   },
   {
+    id: "classic-alien02",
+    label: "Classic Alien 02",
+    url: "/assets/textures/classic/Alien02_diff.bmp",
+    category: "surface",
+    description: "Level 3's recovered purple catch-floor and platform-side diffuse map.",
+    defaultRepeat: [10, 10],
+    source: "StockRoom Level 3 / BallZ 2015 archive"
+  },
+  {
+    id: "classic-alien02-normal",
+    label: "Classic Alien 02 Normal",
+    url: "/assets/textures/classic/Alien02_normal.bmp",
+    category: "surface",
+    description: "Level 3's recovered tangent-space Alien02 normal map.",
+    defaultRepeat: [10, 10],
+    source: "StockRoom Level 3 / BallZ 2015 archive"
+  },
+  {
     id: "classic-wood03",
     label: "Classic Wood 03",
     url: "/assets/textures/classic/Wood03_diff.bmp",

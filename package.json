@@ -32,6 +32,7 @@
     "smoke:suzanne-machinery": "node scripts/smoke-suzanne-machinery.mjs",
     "smoke:day-night": "node scripts/smoke-day-night.mjs",
     "smoke:meshlight": "node scripts/smoke-meshlight.mjs",
+    "smoke:level3": "node scripts/smoke-level3.mjs",
     "audit:revival-debt": "node scripts/audit-revival-debt.mjs",
     "smoke:live-release": "node scripts/smoke-live-release.mjs",
     "smoke:rapier-race": "node scripts/smoke-rapier-race.mjs",

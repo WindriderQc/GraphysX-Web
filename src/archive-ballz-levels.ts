@@ -391,10 +391,10 @@ export const ARCHIVE_BALLZ_LEVELS: readonly ArchiveBallzLevel[] = [ARCHIVE_LEVEL
 export const ARCHIVE_BALLZ_NOT_REVIVED = [
   {
     record: "Archive Level 3 — ASCII (`StockRoom/Level3_base.ASCII`)",
-    what: "A 20x19 authored grid in a different alphabet: `M` is a solid *platform you drive on*, `r` is a platform carrying an elevated checkpoint, `$` is the solid spawn tile, and `.` is empty space.",
-    verdict: "revived as the player-visible Archive Level 3 race; not flattened into the modern grid format",
+    what: "A 20x19 authored grid in a different alphabet: `M` is a solid *platform you drive on*, `r` is a platform carrying an elevated checkpoint, `$` is the solid spawn tile, and `.` has no raised platform (levelList.xml separately records the lower catch floor).",
+    verdict: "revived as the player-visible Archive Level 3 race and a composed v2 game; not flattened into the modern grid format",
     why:
-      "HEAD already plays the exact 20×19 M/r/$ layout through the archive race path with 20 elevated checkpoints, four posts, source spawn, NightSky, Alien02 treatment, three laps and archived best time. It remains outside this modern grid library because `M`/`r`/`$` encode solid elevated platforms while `.` is void; translating those bytes to the library's continuous-floor semantics would delete the authored mechanic.",
+      "`archive-level3-scene.ts` now shares the exact 20×19 M/r/$ bytes with the legacy race and composes all 178 raised platforms, 20 elevated checkpoints, four posts joined into their source LINE gates, authored spawn, NightSky, Alien02 diffuse/normal catch floor, arrow tops, three laps and archived best time as ordinary v2 data. The smoke proves the platform-to-floor drop, all three laps, replay, round-trip and visible HUD reset. It remains outside the modern grid library because that format cannot express a lower floor beneath raised per-cell platforms without deleting the course's authored height relationship.",
   },
   {
     record: "`src/legacy/ballz2011-level1.json` (also `slide-long1`, byte-identical)",

@@ -332,29 +332,32 @@ const archiveLevel2 = buildArchiveAsciiLevel({
   fallbackStart: [-6.5, 0.93, 7.5]
 });
 
+/** Canonical recovered bytes, shared by the legacy race and the v2 composition. */
+export const ARCHIVE_LEVEL3_ROWS = [
+  "....................",
+  "..................H.",
+  "..MMMMMMMM.MMMMMMM..",
+  "..MMMrrMMM.MMMMMMM..",
+  "..MMrrrrMM.MMMMMMM..",
+  "..MMrrrrMM.MMMMMMM..",
+  "..MMMrrMMMh.........",
+  "..MMMMMMMM....MMMM..",
+  "..............MMrM..",
+  "..MMMM........MMrM..",
+  "..MMMM........MrMM..",
+  "..MMMM........MrMM..",
+  ".fMMMMF.....MMMMrM..",
+  "..MMMM.MMMMMMMMMrM..",
+  "..MMMM.MMMMMMMrMMM..",
+  "..MM$M.MMMMMrMMMMM..",
+  "..MMMM.MMMMMMMMMMM..",
+  "....................",
+  "...................."
+] as const;
+
 const archiveLevel3 = buildArchiveAsciiLevel({
   id: "archive-level3",
-  rows: [
-    "....................",
-    "..................H.",
-    "..MMMMMMMM.MMMMMMM..",
-    "..MMMrrMMM.MMMMMMM..",
-    "..MMrrrrMM.MMMMMMM..",
-    "..MMrrrrMM.MMMMMMM..",
-    "..MMMrrMMMh.........",
-    "..MMMMMMMM....MMMM..",
-    "..............MMrM..",
-    "..MMMM........MMrM..",
-    "..MMMM........MrMM..",
-    "..MMMM........MrMM..",
-    ".fMMMMF.....MMMMrM..",
-    "..MMMM.MMMMMMMMMrM..",
-    "..MMMM.MMMMMMMrMMM..",
-    "..MM$M.MMMMMrMMMMM..",
-    "..MMMM.MMMMMMMMMMM..",
-    "....................",
-    "...................."
-  ],
+  rows: [...ARCHIVE_LEVEL3_ROWS],
   solidSymbol: "M",
   solidMaterial: "arrow-gold",
   floorMaterial: "purple-grid",
@@ -429,7 +432,7 @@ export const RACE_DEFINITIONS: RaceDefinition[] = [
     referenceImage: "/assets/references/screenShotLevel3.png",
     archiveInspiration: ["StockRoom/levelList.xml", "StockRoom/Level3_base.ASCII", "screenShotLevel3.png", "GraphysX_1/Scene.cpp::BuildASCIIScene"],
     classicStyle: "stockroom-level3",
-    skybox: "clearnight",
+    skybox: "nightsky",
     laps: { count: 3, ringBonusMs: 10000 },
     champion: { name: "Archive best", timeMs: 158507.313, note: "levelList.xml ScoreBest" },
     targetMs: 190000,

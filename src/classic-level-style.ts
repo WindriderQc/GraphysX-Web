@@ -12,7 +12,7 @@ export type ClassicLevelStyle = {
   source: {
     ascii: string;
     screenshot: string;
-    sky: "clearblue" | "lostvalley" | "clearnight";
+    sky: "clearblue" | "lostvalley" | "clearnight" | "nightsky";
     scoreBestMs: number;
     laps: 3;
     humans: number;
@@ -258,7 +258,7 @@ export const CLASSIC_LEVEL_STYLES: Record<ClassicLevelStyleId, ClassicLevelStyle
     source: {
       ascii: "StockRoom/Level3_base.ASCII",
       screenshot: "StockRoom/screenShotLevel3.png",
-      sky: "clearnight",
+      sky: "nightsky",
       scoreBestMs: 158507.313,
       laps: 3,
       humans: 0

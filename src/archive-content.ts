@@ -459,8 +459,8 @@ export const ARCHIVE_SCENES: ArchiveSceneRecord[] = [
     name: "Archive Level 3 — ASCII",
     kind: "Authored BallZ level",
     source: "StockRoom/levelList.xml; Level3_base.ASCII; screenShotLevel3.png",
-    status: "PARTIAL",
-    revival: "Exact 20×19 M/r layout, 20 checkpoints, four posts, $ spawn, three laps, 0.3-radius BallZ, NightSky assignment, Alien02 floor, and archived best time are playable. The Metal03 family survives but has no proven Level 3 binding; camera/light and handling fidelity remain."
+    status: "RESTORED",
+    revival: "Exact 20×19 M/r/$ bytes now drive both the legacy race and a composed v2 game: 178 raised arrow/Alien02 platforms above the source bAddFloor Alien02 diffuse+normal catch floor, 20 checkpoints, four posts joined into the recorded LINE gates, authored spawn, 0.3-radius recovered BallZ appearance, NightSky, three laps and archived best time. The Metal03 family still has no proven Level 3 binding; PBR exposure, Rapier materials and shared steering remain disclosed adapters."
   },
   {
     family: "BallZ authored arenas",

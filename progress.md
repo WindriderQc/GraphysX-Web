@@ -2094,3 +2094,38 @@ without an error artifact.
 
 Next ranked work: compose Archive Level 3's exact ASCII record as an ordinary v2 game, then
 run the full gate and deliver the complete new-wave patch series.
+
+## 2026-07-28 — `revival-next-r4`: Archive Level 3 composed, replay HUD repaired
+
+The Datalake source was checked again before implementation. `Level3_base.ASCII` is exactly
+20×19 (`02CE8ECB…CD34`): 157 `M`, 20 `r`, one `$`, four gate endpoints and 198 `.`.
+`levelList.xml` resolves two stale assumptions: it says `bAddFloor=true` and
+`SkyDay=NightSky`. The source screenshot shows what that means—178 raised yellow two-way
+catwalk cells with purple Alien02 sides over a lower purple Alien02 catch floor, not a
+bottomless void. The legacy metadata's `clearnight` binding is corrected to `nightsky`.
+
+`archive-level3-scene.ts` shares one exported canonical row constant with the legacy race and
+composes the source structure as 389 ordinary v2 entities: 178 collision platforms plus 178
+thin arrow tops, Alien02 diffuse+normal catch floor, 20 elevated checkpoint triggers, the
+four individual F/f/H/h posts, full f–F and H–h LINE triggers, the authored `$` spawn and
+0.3-radius selected recovered BallZ preset, plus the source-position/adapted-exposure lights.
+Rules require every checkpoint, the halfway LINE, the finish LINE, and three laps. Alien02
+diffuse and normal are now reusable registered scene textures. The Games shelf headlines the
+composition, and the archive API exposes it with source hashes, exact census, archived
+158507.313 ms best and faithful/adapted split. That reference also feeds the shared finish
+board's medal calculation instead of surviving only as provenance text.
+
+`smoke-level3` proves 178/20/4/2 census, exact texture and normal bindings, NightSky, source
+spawn/radius, a real fall from an empty cell to the lower catch floor, reset, all checkpoints,
+the ordered LINE gates over three laps, document round-trip and composed replay. Its first
+screenshot exposed a shared replay bug: scene state restarted but the HUD stayed frozen on
+20/20 and lap 3/3 because the play layer remounted synchronously before load() armed the new
+rules. The host now defers that remount one microtask; the smoke pins both fresh state and the
+visible `0 / 20 · lap 1 / 3` HUD. `archive-level3-v2.png` was inspected against the archived
+screenshot. The required web-game client also used the human Showroom → Games → first card
+route, drove forward, turned and jumped; `render_game_to_text` reported the same running
+Level 3 world, finite motion from z=6 to z=-0.262, 0/20, lap 0/3, and no error artifact.
+
+Focused verification: `npm run build` and `npm run smoke:level3` green. Next: run the full
+release gate, re-check origin/main immediately before packaging, and deliver the new-wave
+format-patch series with one-command-per-line PowerShell apply steps.

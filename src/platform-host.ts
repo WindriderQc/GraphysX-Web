@@ -361,8 +361,15 @@ export class PlatformHost {
         this.setMode("play");
         // A newly loaded world needs a FRESH play layer. setMode early-returns when the mode
         // has not changed, so replaying a level kept the previous HUD alive and its ring count
-        // carried across — a brand new level opening on "1 / 1 rings · FINISH".
-        if (alreadyPlaying) this.remountPlayLayer();
+        // carried across — a brand new level opening on "1 / 1 rings · FINISH". Defer the
+        // remount one microtask: world.loaded deliberately fires before load() installs the
+        // incoming rules block, and mounting synchronously can therefore inherit the previous
+        // completed run (`won=true`) forever even though the new world itself is pristine.
+        if (alreadyPlaying) {
+          queueMicrotask(() => {
+            if (!this.disposed && this.currentMode === "play") this.remountPlayLayer();
+          });
+        }
       } else if (this.currentMode === "play") {
         // The world was replaced by something with nothing to play. Leaving the play surface up
         // over a scene with no ball would be a mode lying about what it contains.

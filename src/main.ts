@@ -152,6 +152,18 @@ if (mode === "legacy") {
           // the garage row in Browse: main.ts supplies them because composing needs the host.
           composed: [
             {
+              id: "archive-level3-v2",
+              label: "Level 3: Alien Catwalks",
+              meta: "exact 20×19 ASCII  ·  178 raised platforms  ·  20 checkpoints  ·  3 laps",
+              play: () => loadComposedGame(async () => {
+                const { composeArchiveLevel3, frameArchiveLevel3 } = await import("./archive-level3-scene");
+                const result = composeArchiveLevel3(host.api);
+                if (!result.ok) throw new Error(result.error ?? "Could not compose Archive Level 3");
+                host.applyEnvironment();
+                frameArchiveLevel3(host);
+              }),
+            },
+            {
               id: "archive-great-slide",
               label: "Great Slide: Gravity Run",
               meta: "exact recovered mesh  ·  2 checkpoints  ·  modern adapted gameplay",
@@ -478,6 +490,13 @@ if (mode === "legacy") {
         composeSuzanne2: () => import("./archive-suzanne2-scene").then(({ composeSuzanne2, SUZANNE2_PROVENANCE }) => {
           const result = composeSuzanne2(host.api);
           return { ...result, provenance: SUZANNE2_PROVENANCE };
+        }),
+        // Level 3 — its exact M/r/$ catwalk alphabet, lower Alien02 floor and endpoint LINE
+        // gates as a composed v2 race rather than a lossy modern-grid transcription.
+        composeArchiveLevel3: () => import("./archive-level3-scene").then(({ composeArchiveLevel3, ARCHIVE_LEVEL3_PROVENANCE }) => {
+          const result = composeArchiveLevel3(host.api);
+          host.applyEnvironment();
+          return { ...result, provenance: ARCHIVE_LEVEL3_PROVENANCE };
         }),
         // The archived atmosphere equations as ordinary scene vocabulary, with the image
         // endpoints and modern observatory adaptation disclosed beside the composer.
