@@ -3452,6 +3452,7 @@ export class PrototypeApp {
       patch: (id: string, changes: AgentLevelCellPatch[], options?: AgentLevelTransactionOptions) => this.patchAgentLevel(id, changes, options),
       fill: (id: string, rect: AgentLevelRect, tile: MapEditorTile, options?: AgentLevelTransactionOptions) => this.fillAgentLevel(id, rect, tile, options),
       resize: (id: string, width: number, height: number, defaultTile?: MapEditorTile, options?: AgentLevelTransactionOptions) => this.resizeAgentLevel(id, width, height, defaultTile, options),
+      configureRace: (id, race, options?: AgentLevelTransactionOptions) => this.afterAgentLevelMutation(this.levelLibrary.configureRace(id, race, options), id === this.activeEditorLevelId),
       transaction: (id: string, operations: AgentLevelOperation[], options?: AgentLevelTransactionOptions) => this.transactAgentLevel(id, operations, options),
       undo: (id: string) => this.undoAgentLevel(id),
       importAscii: (source: AgentLevelAsciiImport) => this.importAgentLevelAscii(source),
@@ -5175,6 +5176,7 @@ function createEditorLevelDefinition(id: string, label: string, tiles: MapEditor
     width: 11,
     height: 11,
     cellSize: 2.6,
+    race: { laps: 1, requireRings: true, requireHalfway: true },
     tiles: [...tiles]
   };
 }

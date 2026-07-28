@@ -209,7 +209,11 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
   let spawnPosition: [number, number, number] | null = null;
   const archiveLevel = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === level.id);
   const archiveFacts = archiveLevel?.provenance.levelListFacts;
-  const archiveLaps = typeof archiveFacts?.["laps"] === "number" ? Math.max(1, Math.floor(archiveFacts["laps"])) : 1;
+  // Recovered facts remain authoritative for the two classic levels. Every other level uses
+  // the race vocabulary authored beside its grid in the workbench/API.
+  const laps = typeof archiveFacts?.["laps"] === "number" ? Math.max(1, Math.floor(archiveFacts["laps"])) : level.race.laps;
+  const requireHalfway = archiveLevel ? true : level.race.requireHalfway;
+  const requireRings = archiveLevel ? true : level.race.requireRings;
   const classicBinding = classicPlatformBinding(level.id);
 
   // Landmark emitters are *requested* here and allocated after the grid walk, because the
@@ -692,7 +696,7 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
   // number meshes and switched which duplicate was enabled; this display does exactly that
   // through entity visibility. The play layer only mirrors `rules.status().lap` — rules stay
   // authoritative, and the counter remains editable/exportable scene data.
-  if (finishPosition && archiveLaps > 1 && archiveLaps <= 9) {
+  if (finishPosition && laps > 1 && laps <= 9) {
     const lapGroupId = "ballz-lap-display";
     entities.push({
       id: lapGroupId,
@@ -724,7 +728,7 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
         tags: ["ballz", "lap-counter", "archive-glyph"],
       });
     }
-    for (let lap = 1; lap <= archiveLaps; lap += 1) {
+    for (let lap = 1; lap <= laps; lap += 1) {
       entities.push({
         id: `ballz-lap-digit-${lap}`,
         parentId: lapGroupId,
@@ -840,11 +844,13 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
   // The same rule as data is portable. A halfway gate becomes an *ordered checkpoint*, which
   // is also the thing that makes this generalise past BallZ: a course with four gates and
   // three laps is the same block with a longer array, which is what the World 1 / Great Slide
-  // ports need and could not have said before.
+  // ports need and could not have said before. Hand-painted courses now choose whether this
+  // checkpoint and their rings are requirements; the grid and its rule vocabulary travel as
+  // one level document instead of relying on a hardcoded materialiser policy.
   // The archive's `levelList.xml` sets `nbrTour` = 3 for the classic levels: a course is run
   // three times around, not once. A level whose recovered facts carry a lap count gets it —
   // the rules engine re-arms the ordered checkpoints each lap while collected rings stay
-  // collected, which is exactly the classic structure. Hand-painted levels stay one lap.
+  // collected, which is exactly the classic structure. Hand-painted levels use `level.race`.
   const rules: AgentWorldRulesDefinition | undefined =
     finishId || ringIds.length > 0
       ? {
@@ -855,13 +861,13 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
           // The halfway gate is the one ordered checkpoint a BallZ grid can express. Crossing
           // the finish without it does not count, which is what stops a level being won by
           // rolling straight from the start pad to the goal past everything else.
-          ...(halfId ? { checkpoints: [{ triggerId: halfId, label: "Halfway" }] } : {}),
+          ...(halfId && requireHalfway ? { checkpoints: [{ triggerId: halfId, label: "Halfway" }] } : {}),
           // Tag-resolved rather than an id list: the tag is already on every ring, and a
           // level edited after materialising (an agent spawning another ring) stays correct
           // because the set resolves when the run arms.
-          ...(ringIds.length > 0 ? { collectibles: { tag: "collectible", requiredToFinish: true } } : {}),
+          ...(ringIds.length > 0 ? { collectibles: { tag: "collectible", requiredToFinish: requireRings } } : {}),
           ...(finishId ? { finish: { triggerId: finishId } } : {}),
-          laps: archiveLaps,
+          laps,
         }
       : undefined;
   if (!rules) {

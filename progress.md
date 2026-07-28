@@ -2,6 +2,16 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-07-28 — `map-editor-race-r1` (in progress)
+
+- Re-verified the proposed archive-debt candidate against current `HEAD`: draw → store → play already shipped in the Levels workbench, so the live missing piece was authored race rules rather than another play path.
+- Added transactional level vocabulary for 1–9 laps, required/optional rings, and required/optional halfway checkpoint. Old localStorage documents migrate to the established one-lap/all-rings/halfway behavior; create, duplicate, ASCII import/export, summaries, cloning, revision conflicts, undo, and the public human/agent API now carry the same rule block.
+- Wired those settings into BallZ scene rules and the recovered mesh lap counter. The two archive levels still take their recorded three-lap facts as authority; newly painted levels now choose their own rules.
+- Added human controls to the Levels workbench and expanded its browser smoke to prove UI authoring, invalid-rule rejection, ASCII round-trip, materialized world rules, and a three-digit recovered lap display. Typecheck passes; visual/game smoke and the full release gate remain.
+- Targeted QA is green: Levels workbench twice (including agent bridge parity and rule undo), BallZ materializer with the local scene store, and the required web-game client with arrow-key bursts. Inspected screenshots show the compact rule card fits cleanly beside the 20×20 grid; `render_game_to_text` agrees with the visible HUD (`lap 1 / 3`, one ordered checkpoint). The only first client console error was the documented optional `localhost:8788/scenes` probe while that local service was intentionally down; rerunning with it up produced zero console/page errors.
+- Release verification built and exercised all 41 checks. The summary was 39/41 solely because Suzanne 1 and Level 3 each exhausted both ephemeral-server attempts at `page.goto` (`ERR_CONNECTION_TIMED_OUT`, before any assertion); both full scripts then passed against the same `dist/` on a stable local preview with zero console/page errors. Every changed surface passed inside the matrix, including Levels and BallZ.
+- TODO after publishing: continue the shader-pack translation one source shader at a time. `ppl.shade` and `Projection.fx` remain explicitly named by the current register; re-check their archive bindings and player-visible value against `HEAD` before choosing between them. The BallZ fluid-layer shader remains named legacy-only and must not be simulated without recovered binding evidence.
+
 - 2026-07-18: Created the standalone web-product repository from GraphysX restoration commit `36eac3d5a023e7a21f7b319e6e335d7ffca7d1d1`.
 - 2026-07-18: Kept only the runtime source, curated browser assets, operational QA, and agent adapter. Historical archives and generated browser output remain in the source GraphysX repository.
 - 2026-07-18: Added an atomic static release workflow for `graphysx.specialblend.ca`.

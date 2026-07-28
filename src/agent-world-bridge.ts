@@ -15,7 +15,7 @@ const TOOL_PATHS = [
   "media.schema", "media.status", "media.list", "media.refresh", "media.browse", "media.import", "media.importSky", "media.register", "media.remove", "media.terrainHeights",
   "levels.schema", "levels.levelSchema", "levels.version", "levels.capabilities",
   "levels.tiles", "levels.tileSemantics", "levels.active", "levels.list", "levels.get", "levels.create", "levels.remove",
-  "levels.open", "levels.region", "levels.patch", "levels.fill", "levels.resize", "levels.transaction", "levels.undo",
+  "levels.open", "levels.region", "levels.patch", "levels.fill", "levels.resize", "levels.configureRace", "levels.transaction", "levels.undo",
   "levels.importAscii", "levels.exportAscii", "levels.play"
 ] as const;
 
@@ -24,7 +24,7 @@ const MUTATING_TOOLS = new Set<string>([
   "interact", "steer", "spawnPrefab", "loadStarter", "transaction", "commit", "undo", "pause", "step", "save", "load",
   "rules.set", "rules.reset",
   "media.refresh", "media.import", "media.importSky", "media.register", "media.remove",
-  "levels.create", "levels.remove", "levels.open", "levels.patch", "levels.fill", "levels.resize", "levels.transaction",
+  "levels.create", "levels.remove", "levels.open", "levels.patch", "levels.fill", "levels.resize", "levels.configureRace", "levels.transaction",
   "levels.undo", "levels.importAscii", "levels.play"
 ]);
 
@@ -69,6 +69,7 @@ const TOOL_SUMMARIES: Record<string, string> = {
   "media.remove": "Remove an imported asset from the store and the registries (async).",
   "media.terrainHeights": "Decode an imported image into a normalized heights grid for `terrain.heights` (async).",
   "levels.region": "Read a bounded region of a named semantic level.",
+  "levels.configureRace": "Author a level's lap count and ring/halfway requirements.",
   "levels.transaction": "Apply multiple named-level edits atomically."
 };
 

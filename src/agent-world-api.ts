@@ -59,6 +59,7 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
     fill: (id, rect, tile, options) => library.fill(id, rect, tile, options),
     resize: (id, width, height, defaultTile, options) =>
       library.resize(id, width, height, defaultTile ?? "floor", options),
+    configureRace: (id, race, options) => library.configureRace(id, race, options),
     transaction: (id, operations, options) => library.transaction(id, operations, options),
     undo: (id) => library.undo(id),
     importAscii: (source) => library.importAscii(source),
@@ -205,6 +206,7 @@ function createHostFallbackLevel(): AgentLevelDefinition {
     width,
     height,
     cellSize: 2.6,
+    race: { laps: 1, requireRings: true, requireHalfway: true },
     tiles,
   };
 }

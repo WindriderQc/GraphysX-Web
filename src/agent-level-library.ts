@@ -20,6 +20,7 @@ export const GRAPHYSX_AGENT_LEVEL_CAPABILITIES = [
   "level.patch",
   "level.fill",
   "level.resize",
+  "level.race.configure",
   "level.transaction",
   "level.undo",
   "level.ascii.import",
@@ -43,14 +44,34 @@ export const GRAPHYSX_AGENT_LEVEL_TILE_SEMANTICS: Readonly<Record<MapEditorTile,
   ice: "Attractive force that preserves ground momentum"
 };
 
+export type AgentLevelRaceDefinition = {
+  /** Number of finish-line crossings required to win. */
+  laps: number;
+  /** Whether every authored ring must be collected before a lap can bank. */
+  requireRings: boolean;
+  /** Whether the authored halfway gate is an ordered checkpoint. */
+  requireHalfway: boolean;
+};
+
+export type AgentLevelRacePatch = Partial<AgentLevelRaceDefinition>;
+
+export const GRAPHYSX_AGENT_LEVEL_DEFAULT_RACE: Readonly<AgentLevelRaceDefinition> = {
+  laps: 1,
+  requireRings: true,
+  requireHalfway: true,
+};
+
 export type AgentLevelDefinition = MapEditorDraft & {
   schema: typeof GRAPHYSX_AGENT_LEVEL_SCHEMA;
   id: string;
   label: string;
   cellSize: number;
+  /** Optional for v1 source compatibility; the library resolves the established defaults. */
+  race?: AgentLevelRacePatch;
 };
 
-export type AgentLevelState = AgentLevelDefinition & {
+export type AgentLevelState = Omit<AgentLevelDefinition, "race"> & {
+  race: AgentLevelRaceDefinition;
   revision: number;
 };
 
@@ -60,6 +81,7 @@ export type AgentLevelSummary = {
   width: number;
   height: number;
   cellSize: number;
+  race: AgentLevelRaceDefinition;
   revision: number;
   counts: Record<MapEditorTile, number>;
 };
@@ -72,6 +94,7 @@ export type AgentLevelCreateOptions = {
   cellSize?: number;
   defaultTile?: MapEditorTile;
   tiles?: MapEditorTile[];
+  race?: AgentLevelRacePatch;
 };
 
 export type AgentLevelCellPatch = {
@@ -90,7 +113,8 @@ export type AgentLevelRect = {
 export type AgentLevelOperation =
   | { op: "patch"; changes: AgentLevelCellPatch[] }
   | { op: "fill"; rect: AgentLevelRect; tile: MapEditorTile }
-  | { op: "resize"; width: number; height: number; defaultTile?: MapEditorTile };
+  | { op: "resize"; width: number; height: number; defaultTile?: MapEditorTile }
+  | { op: "configure-race"; race: AgentLevelRacePatch };
 
 export type AgentLevelTransactionOptions = {
   expectedRevision?: number;
@@ -109,6 +133,7 @@ export type AgentLevelAsciiDocument = {
   width: number;
   height: number;
   cellSize: number;
+  race: AgentLevelRaceDefinition;
   legend: Readonly<Record<MapEditorTile, string>>;
   rows: string[];
 };
@@ -117,6 +142,7 @@ export type AgentLevelAsciiImport = {
   id: string;
   label?: string;
   cellSize?: number;
+  race?: AgentLevelRacePatch;
   rows: string[];
 };
 
@@ -144,6 +170,7 @@ export type GraphysXAgentLevelApi = {
   patch(id: string, changes: AgentLevelCellPatch[], options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState>;
   fill(id: string, rect: AgentLevelRect, tile: MapEditorTile, options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState>;
   resize(id: string, width: number, height: number, defaultTile?: MapEditorTile, options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState>;
+  configureRace(id: string, race: AgentLevelRacePatch, options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState>;
   transaction(id: string, operations: AgentLevelOperation[], options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState>;
   undo(id: string): AgentLevelResult<AgentLevelState>;
   importAscii(source: AgentLevelAsciiImport): AgentLevelResult<AgentLevelState>;
@@ -215,6 +242,7 @@ export class AgentLevelLibrary {
         width: options.width,
         height: options.height,
         cellSize: options.cellSize ?? 2.6,
+        race: resolveRace(options.race),
         tiles
       }, 0);
       this.levels.set(level.id, level);
@@ -282,6 +310,10 @@ export class AgentLevelLibrary {
     return this.transaction(id, [{ op: "resize", width, height, defaultTile }], options);
   }
 
+  configureRace(id: string, race: AgentLevelRacePatch, options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState> {
+    return this.transaction(id, [{ op: "configure-race", race }], options);
+  }
+
   transaction(id: string, operations: AgentLevelOperation[], options: AgentLevelTransactionOptions = {}): AgentLevelResult<AgentLevelState> {
     try {
       const current = this.requireLevel(id);
@@ -337,6 +369,7 @@ export class AgentLevelLibrary {
         width,
         height: source.rows.length,
         cellSize: source.cellSize,
+        race: source.race,
         tiles
       });
     } catch (error) {
@@ -361,6 +394,7 @@ export class AgentLevelLibrary {
           width: level.width,
           height: level.height,
           cellSize: level.cellSize,
+          race: { ...level.race },
           legend: ASCII_LEGEND,
           rows
         }
@@ -470,6 +504,11 @@ function applyOperation(level: AgentLevelState, operation: AgentLevelOperation):
     level.tiles = resized;
     return;
   }
+  if (operation.op === "configure-race") {
+    validateRacePatch(operation.race);
+    level.race = resolveRace({ ...level.race, ...operation.race });
+    return;
+  }
   throw new Error(`Unsupported level operation: ${String((operation as { op?: unknown }).op)}`);
 }
 
@@ -481,6 +520,7 @@ function resolveDefinition(definition: AgentLevelDefinition, revision: number): 
     width: definition.width,
     height: definition.height,
     cellSize: definition.cellSize,
+    race: resolveRace(definition.race),
     tiles: [...definition.tiles],
     revision
   };
@@ -494,10 +534,37 @@ function validateLevel(level: AgentLevelState): void {
   if (!level.label?.trim() || level.label.trim().length > 80) throw new Error("Level label must contain 1 to 80 characters");
   validateDimensions(level.width, level.height);
   if (!Number.isFinite(level.cellSize) || level.cellSize < 0.25 || level.cellSize > 20) throw new Error("Level cellSize must be between 0.25 and 20");
+  validateRace(level.race);
   if (!Array.isArray(level.tiles) || level.tiles.length !== level.width * level.height) throw new Error(`Level requires exactly ${level.width * level.height} tiles`);
   for (const tile of level.tiles) validateTile(tile);
   validateSingletons(level.tiles);
   if (!Number.isInteger(level.revision) || level.revision < 0) throw new Error("Level revision must be a non-negative integer");
+}
+
+function resolveRace(race?: AgentLevelRacePatch | null): AgentLevelRaceDefinition {
+  const resolved = {
+    laps: race?.laps ?? GRAPHYSX_AGENT_LEVEL_DEFAULT_RACE.laps,
+    requireRings: race?.requireRings ?? GRAPHYSX_AGENT_LEVEL_DEFAULT_RACE.requireRings,
+    requireHalfway: race?.requireHalfway ?? GRAPHYSX_AGENT_LEVEL_DEFAULT_RACE.requireHalfway,
+  };
+  validateRace(resolved);
+  return resolved;
+}
+
+function validateRacePatch(race: AgentLevelRacePatch): void {
+  if (!race || typeof race !== "object" || Array.isArray(race)) throw new Error("Race configuration must be an object");
+  const allowed = new Set(["laps", "requireRings", "requireHalfway"]);
+  const unknown = Object.keys(race).find((key) => !allowed.has(key));
+  if (unknown) throw new Error(`Unsupported race setting: ${unknown}`);
+  if ("laps" in race && (!Number.isInteger(race.laps) || (race.laps ?? 0) < 1 || (race.laps ?? 10) > 9)) throw new Error("Race laps must be an integer from 1 to 9");
+  if ("requireRings" in race && typeof race.requireRings !== "boolean") throw new Error("Race requireRings must be a boolean");
+  if ("requireHalfway" in race && typeof race.requireHalfway !== "boolean") throw new Error("Race requireHalfway must be a boolean");
+}
+
+function validateRace(race: AgentLevelRaceDefinition): void {
+  if (!race || !Number.isInteger(race.laps) || race.laps < 1 || race.laps > 9) throw new Error("Race laps must be an integer from 1 to 9");
+  if (typeof race.requireRings !== "boolean") throw new Error("Race requireRings must be a boolean");
+  if (typeof race.requireHalfway !== "boolean") throw new Error("Race requireHalfway must be a boolean");
 }
 
 function validateDimensions(width: number, height: number): void {
@@ -546,6 +613,7 @@ function summarize(level: AgentLevelState): AgentLevelSummary {
     width: level.width,
     height: level.height,
     cellSize: level.cellSize,
+    race: { ...level.race },
     revision: level.revision,
     counts
   };
@@ -561,7 +629,7 @@ function failure<T = never>(error: unknown, revision = 0): AgentLevelResult<T> {
 }
 
 function cloneLevel(level: AgentLevelState): AgentLevelState {
-  return { ...level, tiles: [...level.tiles] };
+  return { ...level, race: { ...level.race }, tiles: [...level.tiles] };
 }
 
 function cloneValue<T>(value: T): T {
@@ -570,7 +638,9 @@ function cloneValue<T>(value: T): T {
 }
 
 function sameContent(left: AgentLevelState, right: AgentLevelState): boolean {
-  return left.width === right.width && left.height === right.height && left.cellSize === right.cellSize && left.label === right.label && left.tiles.every((tile, index) => right.tiles[index] === tile);
+  return left.width === right.width && left.height === right.height && left.cellSize === right.cellSize && left.label === right.label
+    && left.race.laps === right.race.laps && left.race.requireRings === right.race.requireRings && left.race.requireHalfway === right.race.requireHalfway
+    && left.tiles.every((tile, index) => right.tiles[index] === tile);
 }
 
 function humanizeId(id: string): string {

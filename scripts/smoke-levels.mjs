@@ -24,7 +24,7 @@ page.on("pageerror", (e) => pageErrors.push(String(e)));
 
 const levelState = (id) => page.evaluate((levelId) => {
   const level = window.__GRAPHYSX__.levels.get(levelId);
-  return level && { id: level.id, width: level.width, height: level.height, revision: level.revision, tiles: level.tiles };
+  return level && { id: level.id, width: level.width, height: level.height, revision: level.revision, race: level.race, tiles: level.tiles };
 }, id);
 const tileAt = (level, x, y) => level.tiles[y * level.width + x];
 
@@ -92,6 +92,36 @@ try {
   out.filledCells = [[5, 5], [6, 6], [7, 7], [5, 7], [7, 5]].map(([x, y]) => tileAt(filled, x, y));
   out.fillOk = out.filledCells.every((t) => t === "ice") && tileAt(filled, 8, 8) !== "ice";
 
+  // ---- authored race rules ----
+  // These controls write the same transactional vocabulary an agent uses. Three laps also
+  // proves the recovered mesh counter is useful to a newly drawn course, not only the archive.
+  await page.fill('.gx-lv-race input[aria-label="Race laps"]', "3");
+  await page.uncheck('.gx-lv-race input[aria-label="Require all rings"]');
+  await page.click('.gx-lv-race .gx-ed-chip:text-is("Apply rules")');
+  await page.waitForTimeout(200);
+  const configured = await levelState(activeId);
+  out.raceConfigured = configured?.race;
+  out.raceRevisionBumped = configured?.revision > filled.revision;
+  out.raceMeta = await page.textContent(".gx-lv-meta");
+  out.invalidRaceRejected = await page.evaluate((id) => {
+    const before = window.__GRAPHYSX__.levels.get(id);
+    const result = window.__GRAPHYSX__.levels.configureRace(id, { laps: 10 });
+    const after = window.__GRAPHYSX__.levels.get(id);
+    return !result.ok && result.error.includes("1 to 9") && after.revision === before.revision && after.race.laps === 3;
+  }, activeId);
+  out.raceUndo = await page.evaluate((id) => {
+    const changed = window.__GRAPHYSX__.levels.configureRace(id, { laps: 4 });
+    const undone = window.__GRAPHYSX__.levels.undo(id);
+    return changed.ok && changed.value.race.laps === 4 && undone.ok && undone.value.race.laps === 3 && undone.revision > changed.revision;
+  }, activeId);
+  out.bridgeRaceParity = await page.evaluate(async (id) => {
+    const bridge = window.__GRAPHYSX_AGENT_BRIDGE__;
+    const descriptor = bridge.manifest().tools.find((tool) => tool.path === "levels.configureRace");
+    const result = await bridge.call("levels.configureRace", id, { laps: 3 });
+    const audit = bridge.audit();
+    return descriptor?.mutates === true && result.ok && audit.missing.length === 0 && audit.extra.length === 0;
+  }, activeId);
+
   // ---- ASCII export → import round trip ----
   await page.click('.gx-lv-ascii .gx-ed-chip:text-is("Export")');
   await page.waitForTimeout(200);
@@ -99,7 +129,7 @@ try {
   out.asciiRows = exported.split("\n").length;
   out.asciiMatchesApi = await page.evaluate(([id, text]) => {
     const doc = window.__GRAPHYSX__.levels.exportAscii(id);
-    return doc.ok && doc.value.rows.join("\n") === text;
+    return doc.ok && doc.value.rows.join("\n") === text && doc.value.race.laps === 3 && doc.value.race.requireRings === false;
   }, [activeId, exported]);
 
   await page.fill(".gx-lv-ascii input[type=text]", "smoke-roundtrip");
@@ -112,6 +142,9 @@ try {
   out.roundTripLossless = !!imported
     && imported.width === source.width
     && imported.height === source.height
+    && imported.race.laps === source.race.laps
+    && imported.race.requireRings === source.race.requireRings
+    && imported.race.requireHalfway === source.race.requireHalfway
     && imported.tiles.length === source.tiles.length
     && imported.tiles.every((tile, index) => tile === source.tiles[index]);
   // …and the workbench followed the import, so the grid on screen is the imported level.
@@ -187,6 +220,8 @@ try {
   // getting out of the way so the result is actually visible.
   await page.click('.gx-ed-toolbar button:text-is("Levels")');
   await page.waitForTimeout(300);
+  await page.click('.gx-lv-row[title^="smoke-roundtrip "]');
+  await page.waitForTimeout(200);
   out.playButtonExists = (await page.$(".gx-lv-play")) !== null;
   await page.click(".gx-lv-play");
   await page.waitForTimeout(500);
@@ -194,9 +229,8 @@ try {
     const ballz = window.__GRAPHYSX__.query({ tag: "ballz" });
     return {
       entities: ballz.length,
-      // The active level here was resized to 44x30 and filled, so it has no start tile and
-      // honestly spawns no ball. Asserting the floor proves materialisation without assuming
-      // a layout this smoke never authored.
+      // Re-selected the ASCII round-trip course above, so this is the authored-rules path
+      // rather than the empty 44×30 resize fixture used by the editor checks.
       hasFloor: ballz.some((entity) => entity.id === "ballz-floor"),
       workbenchClosed: getComputedStyle(document.querySelector(".gx-ed-workbench")).display === "none",
       // The inspector must agree with the world it is inspecting. A materialised level carries
@@ -205,6 +239,8 @@ try {
       skyDropdownAgrees:
         (document.querySelector(".gx-ed-panel select")?.value ?? null) ===
         (window.__GRAPHYSX__.state()?.environment?.sky ?? ""),
+      rules: window.__GRAPHYSX__.rules.get(),
+      lapDigits: ballz.filter((entity) => entity.tags?.includes("ballz-lap-digit")).length,
     };
   });
   await page.screenshot({ path: path.join(ART, "levels-played.png"), fullPage: false });
@@ -228,6 +264,14 @@ const ok =
   out.startAt === "start" &&
   out.startCount === 1 &&
   out.fillOk &&
+  out.raceConfigured?.laps === 3 &&
+  out.raceConfigured?.requireRings === false &&
+  out.raceConfigured?.requireHalfway === true &&
+  out.raceRevisionBumped &&
+  out.raceMeta?.includes("3 laps") &&
+  out.invalidRaceRejected &&
+  out.raceUndo &&
+  out.bridgeRaceParity &&
   out.asciiRows > 1 &&
   out.asciiMatchesApi &&
   out.importCreated &&
@@ -250,6 +294,10 @@ const ok =
   out.playButtonExists &&
   out.played?.entities > 0 &&
   out.played?.hasFloor &&
+  out.played?.rules?.laps === 3 &&
+  out.played?.rules?.collectibles?.requiredToFinish === false &&
+  out.played?.rules?.checkpoints?.[0]?.label === "Halfway" &&
+  out.played?.lapDigits === 3 &&
   out.played?.workbenchClosed &&
   out.played?.skyDropdownAgrees &&
   out.closed &&

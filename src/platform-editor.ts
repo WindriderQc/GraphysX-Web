@@ -163,6 +163,9 @@ interface LevelsWorkbenchUi {
   newHeight: HTMLInputElement;
   resizeWidth: HTMLInputElement;
   resizeHeight: HTMLInputElement;
+  raceLaps: HTMLInputElement;
+  raceRequireRings: HTMLInputElement;
+  raceRequireHalfway: HTMLInputElement;
   toolButtons: Map<LevelTool, HTMLButtonElement>;
 }
 
@@ -2197,9 +2200,35 @@ export class PlatformEditor {
     canvas.addEventListener("pointerover", this.onLevelPointerOver);
     main.append(tools, palette, canvas);
 
-    // ---- right column: ASCII ----
+    // ---- right column: race vocabulary + ASCII ----
     const asciiColumn = document.createElement("div");
     asciiColumn.className = "gx-lv-ascii";
+    const racePanel = document.createElement("div");
+    racePanel.className = "gx-lv-race";
+    const raceLaps = this.numberInput(1, 1, 1);
+    raceLaps.max = "9";
+    raceLaps.setAttribute("aria-label", "Race laps");
+    const raceRequireRings = document.createElement("input");
+    raceRequireRings.type = "checkbox";
+    raceRequireRings.setAttribute("aria-label", "Require all rings");
+    const raceRequireHalfway = document.createElement("input");
+    raceRequireHalfway.type = "checkbox";
+    raceRequireHalfway.setAttribute("aria-label", "Require halfway checkpoint");
+    const raceRow = document.createElement("div");
+    raceRow.className = "gx-lv-race-row";
+    raceRow.append(this.tinyLabel("Laps"), raceLaps, this.chip("Apply rules", () => this.configureLevelRace(), "Save the authored win conditions"));
+    const raceChecks = document.createElement("div");
+    raceChecks.className = "gx-lv-race-checks";
+    const labelledCheck = (input: HTMLInputElement, text: string): HTMLLabelElement => {
+      const label = document.createElement("label");
+      label.append(input, document.createTextNode(text));
+      return label;
+    };
+    raceChecks.append(
+      labelledCheck(raceRequireRings, "Require all rings"),
+      labelledCheck(raceRequireHalfway, "Require halfway"),
+    );
+    racePanel.append(raceRow, raceChecks);
     const ascii = document.createElement("textarea");
     ascii.className = "gx-lv-text";
     ascii.spellcheck = false;
@@ -2213,7 +2242,7 @@ export class PlatformEditor {
       this.chip("Export", () => this.exportLevelAscii(), "Re-read the active level as ASCII"),
       this.chip("Import", () => this.importLevelAscii(), "Create a level from the ASCII above"),
     );
-    asciiColumn.append(this.subhead("ASCII"), ascii, importId, asciiActions);
+    asciiColumn.append(this.subhead("Race rules"), racePanel, this.subhead("ASCII"), ascii, importId, asciiActions);
 
     const body = document.createElement("div");
     body.className = "gx-lv-body";
@@ -2225,7 +2254,8 @@ export class PlatformEditor {
     panel.append(head, body, status);
     return {
       panel, meta, list, canvas, palette, status, ascii, importId,
-      newId, newWidth, newHeight, resizeWidth, resizeHeight, toolButtons,
+      newId, newWidth, newHeight, resizeWidth, resizeHeight,
+      raceLaps, raceRequireRings, raceRequireHalfway, toolButtons,
     };
   }
 
@@ -2308,6 +2338,9 @@ export class PlatformEditor {
     if (level) {
       this.levelUi.resizeWidth.value = String(level.width);
       this.levelUi.resizeHeight.value = String(level.height);
+      this.levelUi.raceLaps.value = String(level.race.laps);
+      this.levelUi.raceRequireRings.checked = level.race.requireRings;
+      this.levelUi.raceRequireHalfway.checked = level.race.requireHalfway;
       this.levelUi.importId.placeholder = `${level.id}-import`;
     }
     this.renderLevelGrid(level);
@@ -2315,7 +2348,7 @@ export class PlatformEditor {
 
   private updateLevelMeta(level: AgentLevelState | null = this.levels.get(this.levelId)): void {
     this.levelUi.meta.textContent = level
-      ? `${level.id} · ${level.label} · ${level.width}×${level.height} · rev ${level.revision}`
+      ? `${level.id} · ${level.label} · ${level.width}×${level.height} · ${level.race.laps} lap${level.race.laps === 1 ? "" : "s"} · rev ${level.revision}`
       : "No level selected";
   }
 
@@ -2536,6 +2569,7 @@ export class PlatformEditor {
       id: this.uniqueLevelId(`${source.id}-copy`),
       label: `${source.label} copy`,
       cellSize: source.cellSize,
+      race: exported.value.race,
       rows: exported.value.rows,
     });
     if (!result.ok || !result.value) {
@@ -2572,6 +2606,23 @@ export class PlatformEditor {
     this.renderLevels();
     this.syncLevelAscii();
     this.levelMessage(`Resized to ${width}×${height} · rev ${result.revision}`);
+  }
+
+  private configureLevelRace(): void {
+    const result = this.levels.configureRace(this.levelId, {
+      laps: Number(this.levelUi.raceLaps.value),
+      requireRings: this.levelUi.raceRequireRings.checked,
+      requireHalfway: this.levelUi.raceRequireHalfway.checked,
+    });
+    if (!result.ok || !result.value) {
+      this.levelMessage(result.error ?? "Could not save race rules", true);
+      this.renderLevels();
+      return;
+    }
+    this.renderLevels();
+    this.syncLevelAscii();
+    const { race } = result.value;
+    this.levelMessage(`Race: ${race.laps} lap${race.laps === 1 ? "" : "s"} · rings ${race.requireRings ? "required" : "optional"} · halfway ${race.requireHalfway ? "required" : "optional"} · rev ${result.revision}`);
   }
 
   private undoLevel(): void {
@@ -2622,6 +2673,7 @@ export class PlatformEditor {
       id,
       label: source?.label,
       cellSize: source?.cellSize,
+      race: source?.race,
       rows,
     });
     if (!result.ok || !result.value) {
@@ -3629,6 +3681,13 @@ const EDITOR_CSS = `
 .gx-lv-form .gx-ed-chip{flex:none;white-space:nowrap}
 .gx-lv-tiny{flex:none;font-size:10px;color:var(--gx-muted)}
 .gx-lv-spacer{flex:1 1 auto}
+.gx-lv-race{display:flex;flex-direction:column;gap:var(--gx-s2);padding:8px;background:rgba(4,14,20,.42);border:1px solid var(--gx-border-soft);border-radius:var(--gx-radius-sm)}
+.gx-lv-race-row{display:flex;align-items:center;gap:var(--gx-s2)}
+.gx-lv-race-row input[type=number]{width:48px}
+.gx-lv-race-row .gx-ed-chip{margin-left:auto;white-space:nowrap}
+.gx-lv-race-checks{display:flex;flex-direction:column;gap:5px;color:#c6e2ea;font:10.5px/1.2 var(--gx-font)}
+.gx-lv-race-checks label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.gx-lv-race-checks input{accent-color:var(--gx-accent)}
 
 .gx-lv-tools{display:flex;align-items:center;flex-wrap:wrap;gap:var(--gx-s1);flex:none}
 .gx-lv-tools input[type=number]{width:52px}
