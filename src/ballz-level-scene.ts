@@ -522,6 +522,28 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
     }
   }
 
+  // --- The recorded humans, restored ----------------------------------------------------
+  // `levelList.xml` requests `iNumHuman` proxies per level (Level 2 asks for ten). The
+  // record used to say no crowd entity existed to honour it; that went stale at `crowd-r1`,
+  // so the request is now met with actual vocabulary: a wandering crowd confined to the
+  // arena, no pursuers (the archive requested ambient humans, not a hunt). The archived
+  // spawn scatter/seed is unrecoverable (recorded), so placement is the crowd system's own.
+  const archiveHumans = typeof archiveFacts?.["humans"] === "number" ? Math.max(0, Math.floor(archiveFacts["humans"])) : 0;
+  if (archiveHumans > 0) {
+    entities.push({
+      id: "ballz-humans",
+      type: "crowd",
+      label: `Archive Humans (${archiveHumans})`,
+      transform: { position: [0, 0, 0] },
+      crowd: {
+        count: archiveHumans,
+        pursuers: 0,
+        size: [extentX / 2 - cellSize, extentZ / 2 - cellSize],
+      },
+      tags: ["ballz", "humans"],
+    });
+  }
+
   if (!spawnPosition) {
     // A level with no `start` is still worth materialising — it is a layout being authored.
     // Say so rather than inventing a spawn in a corner that may be inside a wall.

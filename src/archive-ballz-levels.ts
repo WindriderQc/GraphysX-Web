@@ -140,10 +140,13 @@ const GATE_DEVIATIONS = [
       "layout is recovered; the handling is the platform's own and is not claimed as archive feel.",
   },
   {
-    code: "best-time-not-shown",
+    code: "best-time-as-medal-reference",
     detail:
-      "`levelList.xml` carries a real `ScoreBest` per level. There is no scoreboard in the rules " +
-      "vocabulary, so the archived time is recorded here as provenance and shown nowhere.",
+      "`levelList.xml` carries a real `ScoreBest` per level. The win panel's medal scale now judges " +
+      "against it (`ballz-play.ts::archiveReferenceMs`), so the archived time does real work — but it " +
+      "is presented as a medal threshold rather than displayed as the recovered figure itself. " +
+      "(This entry previously claimed the time was shown nowhere; that went stale when the scoreboard " +
+      "landed, and is corrected rather than silently dropped.)",
   },
 ] as const;
 
@@ -354,16 +357,20 @@ const ARCHIVE_LEVEL_2: ArchiveBallzLevel = {
       "The rings being *required* to open the finish rather than a 10-second time bonus.",
     ],
     deliberatelyAbsent: [
-      "The ten `iNumHuman` proxies the archive requests for this level — there is no crowd entity in the v2 vocabulary, and standing boxes in for people would be theatre.",
-      "The archived best time and ring bonus.",
+      "The archive's human spawn scatter — the ten `iNumHuman` proxies ARE placed now (a wandering crowd, honoured from this record; the old no-crowd-vocabulary claim went stale at crowd-r1), but their archived positions/seed are unrecoverable, so where they stand is the crowd system's own.",
+      "The ring bonus — rings gate completion here instead.",
       "The 2015 ball tuning.",
     ],
   },
   deviations: [
     ...GATE_DEVIATIONS,
     {
-      code: "humans-absent",
-      detail: "`levelList.xml` requests 10 human proxies for this level. No crowd/agent entity exists in the v2 vocabulary, so none are placed.",
+      code: "humans-placed-not-positioned",
+      detail:
+        "`levelList.xml` requests 10 human proxies for this level and they are placed — a wandering " +
+        "crowd (no pursuers) confined to the arena. What remains deviated is placement: the archived " +
+        "scatter and seed are unrecoverable, so positions are the crowd system's own. (This entry was " +
+        "`humans-absent` and claimed no crowd vocabulary existed; stale since crowd-r1, honoured now.)",
     },
     {
       code: "rings-required-not-bonus",

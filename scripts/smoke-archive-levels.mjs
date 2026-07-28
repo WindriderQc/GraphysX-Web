@@ -212,6 +212,7 @@ try {
         floorRepeat: floor?.material.texture?.repeat ?? null,
         wallTexture: wall?.material.texture?.id ?? null,
         companionPosts: api.query({ tag: "companion-post" }).map((post) => ({ id: post.id, physics: post.physics?.mode })),
+        humans: api.query({ ids: ["ballz-humans"] })[0]?.crowd?.count ?? 0,
         entities: api.state()?.entities.length ?? 0,
         rulesArmed: !!api.rules.status(),
         collectibleCount: api.rules.status()?.collectibleCount ?? 0,
@@ -233,6 +234,10 @@ try {
       && built.floorNormalTexture === expectedSurface.normal
       && JSON.stringify(built.floorRepeat) === JSON.stringify(expectedSurface.repeat)
       && built.wallTexture === expectedSurface.wall, { expected: expectedSurface, built });
+    // Level 2's recorded `iNumHuman` = 10 is honoured as a wandering crowd; Level 1 records
+    // zero humans and must not gain any.
+    const expectedHumans = record.id === "archive-ballz-level2" ? 10 : 0;
+    check("the recorded iNumHuman count is honoured", built.humans === expectedHumans, { got: built.humans, expected: expectedHumans });
     check("both lowercase companion posts are physical scene entities", built.companionPosts.length === 2
       && built.companionPosts.every((post) => post.physics === "static"), built.companionPosts);
 
