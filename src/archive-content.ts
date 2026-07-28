@@ -644,7 +644,7 @@ export const ARCHIVE_SCENES: ArchiveSceneRecord[] = [
     kind: "3D environment",
     source: "common/room2.tvm; #23 HLSL_Shadow_Mapping/main.cpp; common/shaders/meshlight.shade; common/sky.tvm",
     status: "PARTIAL",
-    revival: "Room 2 is a discoverable standalone shadow lab with decoded indexed geometry, archived transforms, logo diffuse/normal DDS maps, teapot, point light, and A/D orbit. The exact 726-vertex / 1,200-triangle sky.tvm skydome is separately inspectable as a component, not miscounted as its own scene. Exact HLSL parallax/specular behavior remains."
+    revival: "Room 2 is a discoverable standalone shadow lab with decoded indexed geometry, archived transforms, logo diffuse/normal DDS maps, teapot, point light, A/D orbit, and the translated meshlight.shade normal-alpha parallax/Lyon specular math. Its missing source specular-map binding and Three point-shadow kernel are disclosed adaptations. The exact 726-vertex / 1,200-triangle sky.tvm skydome is separately inspectable as a component, not miscounted as its own scene."
   },
   {
     family: "Standalone environments",
@@ -676,7 +676,7 @@ export const ARCHIVE_SCENES: ArchiveSceneRecord[] = [
     kind: "Engine demonstration",
     source: "#23 HLSL_Shadow_Mapping",
     status: "PARTIAL",
-    revival: "Room 2 Shadow Lab reconstructs the demo's exact room2 transform, teapot/light assembly, DDS bump maps, point-shadow equivalent, black background, and A/D orbit. Exact archived HLSL parallax/specular shader math remains."
+    revival: "Room 2 Shadow Lab reconstructs the demo's exact room2 transform, teapot/light assembly, DDS bump maps, black background and A/D orbit, and now runs the archived HLSL normal-alpha parallax, Lyon specular and 0.15 diffuse-floor equations. Three point-shadow PCF replaces the old 25-offset cube sampler; the absent SpecMap binding uses a visibly disclosed diffuse-red mask."
   }
 ];
 
@@ -885,7 +885,7 @@ export const ASSET_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
     label: "Shader Pack",
     source: "Media/shaders/ppl.shade, meshlight.shade, post_haze.shade, Projection.fx",
     status: "preview",
-    detail: "A modern EffectComposer pass now ports the post_haze distortion idea, and animated water has a recovered distortion texture; the rest of the shader pack still needs feature-by-feature translation."
+    detail: "`meshlight.shade` is now vendored and translated as selectable scene-material vocabulary: normal-alpha parallax, Lyon specular, independent red-channel mask, SpecMP, light colour/position and the 0.15 floor are preserved; Three point-shadow PCF is the disclosed replacement for its cubic 25-tap kernel. The visible lab and Room 2 use it. post_haze also has a modern EffectComposer descendant; ppl.shade and Projection.fx remain."
   },
   {
     label: "Texture Set",

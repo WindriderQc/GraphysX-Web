@@ -289,6 +289,22 @@ if (mode === "legacy") {
                 void host.enterEditor();
               },
             },
+            {
+              id: "archive-meshlight-lab",
+              label: "Archive meshlight.shade Lab",
+              summary: "The recovered parallax, Lyon-specular and diffuse-floor equations beside the platform material reference, using Room 2's exact DDS maps.",
+              meta: "source HLSL vendored  ·  selectable v2 material  ·  shadow-kernel adaptation disclosed",
+              open: async () => {
+                const { composeArchiveMeshlight, frameArchiveMeshlight } = await import("./archive-meshlight-scene");
+                showroomEnvironment?.();
+                showroomEnvironment = null;
+                const result = composeArchiveMeshlight(host.api);
+                if (!result.ok) throw new Error(result.error ?? "Could not compose Archive meshlight.shade Lab");
+                host.applyEnvironment();
+                frameArchiveMeshlight(host);
+                void host.enterEditor();
+              },
+            },
             // The recovered Nature Lab playgrounds. They open in the editor like any browsed
             // scene, so their simulation vocabulary is selectable and editable.
             // The recovered Voie Lactee vignette. Same shape as the playgrounds: it opens in the
@@ -469,6 +485,11 @@ if (mode === "legacy") {
           const result = composeArchiveDayNight(host.api);
           host.applyEnvironment();
           return { ...result, provenance: DAY_NIGHT_PROVENANCE };
+        }),
+        composeArchiveMeshlight: () => import("./archive-meshlight-scene").then(({ composeArchiveMeshlight, MESHLIGHT_SCENE_PROVENANCE }) => {
+          const result = composeArchiveMeshlight(host.api);
+          host.applyEnvironment();
+          return { ...result, provenance: MESHLIGHT_SCENE_PROVENANCE };
         }),
         // World 1 — the first true mesh-world port. Lazy, so the manifest's slab table
         // stays off the boot path until someone actually opens the world.

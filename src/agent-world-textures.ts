@@ -259,6 +259,24 @@ export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
     source: "BallZ archive"
   },
   {
+    id: "common-tv3dlogo-diffuse",
+    label: "Room 2 TV3D Logo Diffuse",
+    url: "/assets/textures/common/tv3dlogo_d.dds",
+    category: "surface",
+    description: "Exact DDS diffuse map embedded by the recovered room2.tvm shadow-mapping assembly.",
+    defaultRepeat: [1, 1],
+    source: "BallZ2015/common/room2.tvm"
+  },
+  {
+    id: "common-tv3dlogo-normal",
+    label: "Room 2 TV3D Logo Normal",
+    url: "/assets/textures/common/tv3dlogo_n.dds",
+    category: "surface",
+    description: "Exact tangent-space DDS normal/height map embedded by the recovered room2.tvm assembly.",
+    defaultRepeat: [1, 1],
+    source: "BallZ2015/common/room2.tvm"
+  },
+  {
     id: "zack",
     label: "Zack Magician",
     url: "/assets/textures/suzanne1/Zack.jpg",

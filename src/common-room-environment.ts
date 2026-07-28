@@ -20,6 +20,7 @@ import {
 } from "three";
 import { TeapotGeometry } from "three/examples/jsm/geometries/TeapotGeometry.js";
 import { DDSLoader } from "three/examples/jsm/loaders/DDSLoader.js";
+import { applyArchiveMeshlightShader, ARCHIVE_MESHLIGHT_PROVENANCE } from "./archive-meshlight-material";
 import commonScenesJson from "./legacy/common-scenes.json";
 
 type Tuple3 = readonly [number, number, number];
@@ -102,6 +103,14 @@ export type CommonRoomEnvironmentState = {
   };
   controls: "A/D orbit";
   recommendedBackground: "#000000";
+  shader: {
+    id: "archive-meshlight";
+    sourceSha256: string;
+    parallaxStrength: number;
+    specularMultiplier: number;
+    shadowKernel: "three-point-pcf-adapted";
+    specularInput: "diffuse-red-adapted-missing-source-map";
+  };
 };
 
 const COMMON_SCENES = commonScenesJson as unknown as CommonScenesData;
@@ -340,7 +349,15 @@ export class CommonRoomEnvironment {
         shadowMapSize: [this.pointLight.shadow.mapSize.x, this.pointLight.shadow.mapSize.y]
       },
       controls: "A/D orbit",
-      recommendedBackground: "#000000"
+      recommendedBackground: "#000000",
+      shader: {
+        id: "archive-meshlight",
+        sourceSha256: ARCHIVE_MESHLIGHT_PROVENANCE.sourceSha256,
+        parallaxStrength: 0.04,
+        specularMultiplier: 5,
+        shadowKernel: "three-point-pcf-adapted",
+        specularInput: "diffuse-red-adapted-missing-source-map",
+      },
     };
   }
 
@@ -395,6 +412,17 @@ export class CommonRoomEnvironment {
       colorTexture.colorSpace = SRGBColorSpace;
       this.roomMaterial.map = colorTexture;
       this.roomMaterial.normalMap = normalTexture;
+      applyArchiveMeshlightShader(this.roomMaterial, {
+        id: "archive-meshlight",
+        parallaxStrength: 0.04,
+        specularMultiplier: 5,
+        // room2.tvm embeds only diffuse + normal DDS names. The HLSL requires SpecMap but
+        // the demo never binds one; reusing diffuse red makes the equation visible while
+        // state/provenance names the adaptation instead of inventing a recovered map.
+        specularTexture: null,
+        lightPosition: [...COMMON_SCENES.room2ArchiveAssembly.light.position],
+        lightColor: "#ffffff",
+      }, colorTexture);
       this.roomMaterial.needsUpdate = true;
       this.status = "ready";
     } catch (error) {

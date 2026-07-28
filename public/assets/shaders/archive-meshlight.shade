@@ -1,0 +1,264 @@
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+//      Cubic Shadow Mapping( Object ).
+//
+//              Parallax mapped.
+//              Shadow mapped.
+//              Specular mapped. ( lyon )
+//              Supports alpha.
+//
+//      Written By Geoff Wilson.
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+/*
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Variables.
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+        float4x4 World       : WORLD;
+        float4x4 wViewProj   : WORLDVIEWPROJECTION;
+        float4   ViewPos     : VIEWPOS;
+
+        float3   LightPos;
+        float4   LightColour = float4(1, 0, 0, 1);
+        
+        
+        float  pStrength     = 0.04;
+        float  uvScale       = 1;
+        float  TexScale      = 0.0001;
+        float  FallOff       = 100;
+        float  SubFactor;
+        
+        float  SpecMP        = 5;
+        
+        #define NUM_SAMPLES 8
+        #define BIAS        0.88 
+
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Textures and Samplers.
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        
+        texture DiffMap      : TEXTURE0;
+        texture NormMap      : TEXTURE1;
+        texture SpecMap      : TEXTURE2;
+        texture DeepMap;
+        
+        sampler2D DiffSample = sampler_state
+        {
+                Texture = (DiffMap);
+		MIPFILTER = LINEAR;
+		MAGFILTER = LINEAR;
+		MINFILTER = LINEAR;
+        };
+        
+        sampler2D NormSample = sampler_state
+        {
+                Texture = (NormMap);
+		MIPFILTER = LINEAR;
+		MAGFILTER = LINEAR;
+		MINFILTER = LINEAR;
+        };
+        
+        sampler2D SpecSample = sampler_state
+        {
+                Texture = (SpecMap);
+		MIPFILTER = LINEAR;
+		MAGFILTER = LINEAR;
+		MINFILTER = LINEAR;
+        };
+        
+        samplerCUBE DeepSample = sampler_state
+        {
+                Texture = (DeepMap);
+        };
+        
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Structures.
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        
+        struct a2vp
+        {
+                float4 Position: POSITION0;
+                float3 Tangent : TANGENT;
+                float3 Normal  : NORMAL;
+                float3 BiNormal: BINORMAL;
+                float2 UV      : TEXCOORD0;
+        };
+        
+        struct vp2fp
+        {
+                float4 Position: POSITION0;
+                float3 LightVec: TEXCOORD0; //
+                float2 UV      : TEXCOORD1; //
+                float3 ViewVec : TEXCOORD2; //
+                float3 SmPos   : TEXCOORD3; //
+                float  Deep    : TEXCOORD4; //
+        };
+
+        struct fpin
+        {
+                float3 LightVec: TEXCOORD0; //
+                float2 UV      : TEXCOORD1; //
+                float3 ViewVec : TEXCOORD2; //
+                float3 SmPos   : TEXCOORD3; //
+                float  Deep    : TEXCOORD4; //
+        };
+        
+        struct fp2a
+        {
+                float4 Colour: COLOR0;
+        };
+        
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Functions.
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+        void TBN(float2 UV, float4 Pos, float3 Tang, float3 Norm, float3 BiNorm, out float4 rPos, out float3 rLightVec, out float3 rViewVec, out float2 rUV)
+        {
+                rPos            = mul(Pos, wViewProj);
+                rUV             = UV * uvScale;
+                
+                float3 PosWorld = mul(Pos, World);
+                
+                float3x3 TBN    = float3x3(Tang, BiNorm, Norm);
+                float3x3 WTTS   = mul(TBN, (float4x3)World);
+                
+                rViewVec        = mul(WTTS, ViewPos - PosWorld);
+                rLightVec       = mul(WTTS, (LightPos - PosWorld));
+        }
+
+        void Bumping(float3 ViewVec, float2 UV, out float3 rViewVec, out float2 rUV)
+        {
+                rViewVec        = normalize(ViewVec);
+                rUV             = (tex2D(NormSample, UV).a * pStrength - (pStrength * 0.5)) * rViewVec.xy + UV;
+        }
+        
+        float CalculateLyon(float3 VV, float3 LV, float3 NV)
+        {
+                float3 HalfWay     = normalize(VV + LV);
+                float3 Difference  = HalfWay - NV;
+                float  SS          = saturate(dot(Difference, Difference) * 60);
+                return pow(1 - SS, 3);
+        }
+        
+        void RigLighting(float3 LightVec, float3 ViewVec, float2 UV, out float4 rColour)
+        {
+                float4 Col      = tex2D(DiffSample, UV);
+                float3 Norm     = 2 * tex2D(NormSample, UV) - 1;
+                float  Spec     = tex2D(SpecSample, UV).r;
+
+                float3 Light    = normalize(LightVec);
+                
+//Blinds attenuation. Calc your own.
+                float LenSq     = dot(Light, Light);
+                float Attn      = min((FallOff * FallOff) / LenSq, 1);
+//End Blinds attenuation.
+
+                float Diffuse   = saturate(dot(Light, Norm));// * Attn;
+                Diffuse        += 0.15;
+                float Specular  = CalculateLyon(ViewVec, Light, Norm);
+//                float Specular  = (pow(saturate(dot(reflect(ViewVec, Norm), Light)), 16));
+                
+                rColour         = ((Diffuse * Col) + (Specular * (Spec * SpecMP))) * LightColour;// * Attn;
+//                rColour         = (Diffuse * Col) * LightColour * Attn;
+                rColour.a       = Col.a;
+        }
+        
+        void SMapping(float3 sPos, float Deep, samplerCUBE sSampler, out float4 rsFactor)
+        {
+                float3 Dir      = normalize(LightPos.xyz - sPos);
+                float3 nDir     = -Dir;
+                
+//                TexScale        = TexScale * Deep;
+ //              TexScale = 0.001;
+//                TexScale        = clamp(TexScale, 0, 0.002);
+                       
+                float  Depth    = texCUBE(sSampler, float4(nDir, 1)).r;
+                
+                float4 sFactor  = float4(1, 1, 1, 1);
+                
+                for(int i = 0; i < NUM_SAMPLES; i++)
+                {
+                        float Depth0 = texCUBE(sSampler, float4(nDir, 1) + TexScale * float4(2 + i, -1 - i, 1 + i, 0)).r;
+                        float Depth1 = texCUBE(sSampler, float4(nDir, 1) + TexScale * float4(1 + i, 2 + i, -1 - i, 0)).r;
+                        float Depth2 = texCUBE(sSampler, float4(nDir, 1) + TexScale * float4(-1 - i, 1 + i, 2 + i, 0)).r;
+                        
+                        if(Deep > Depth0) sFactor.rgb -= SubFactor;
+                        if(Deep > Depth1) sFactor.rgb -= SubFactor;
+                        if(Deep > Depth2) sFactor.rgb -= SubFactor;
+                }
+                
+                if(Deep > Depth) sFactor.rgb  -= SubFactor;
+                
+                rsFactor        = saturate(sFactor);
+        }
+        
+        void VSMapping(float4 Pos, out float3 rsPos, out float rDeep)
+        {
+                rsPos           = mul(Pos, World).xyz;
+                rDeep           = length(rsPos - LightPos.xyz) * BIAS;
+        }
+        
+        void Composite(float4 sFactor, float4 Colour, out float4 rColour)
+        {
+                rColour         = sFactor * Colour;
+        }
+        
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Programs.
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+        void vp(in a2vp IN, out vp2fp OUT)
+        {
+                TBN(IN.UV, IN.Position, IN.Tangent, IN.Normal, IN.BiNormal, OUT.Position, OUT.LightVec, OUT.ViewVec, OUT.UV);
+                VSMapping(IN.Position, OUT.SmPos, OUT.Deep);
+                
+//                OUT.UV = IN.UV;
+        }
+        
+        void fp(in fpin IN, out fp2a OUT)
+        {
+                float3 VV_P;
+                float2 UV_P;
+                float4 SF_SM;
+                float4 CR_RL;
+                float4 ER_CC;
+
+                Bumping(IN.ViewVec, IN.UV, VV_P, UV_P);
+                SMapping(IN.SmPos, IN.Deep, DeepSample, SF_SM);
+                RigLighting(IN.LightVec, VV_P, UV_P, CR_RL);
+                Composite(SF_SM, CR_RL, ER_CC);
+                
+                OUT.Colour      = ER_CC;
+        }
+
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Techniques.
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+        technique object_shadows
+        {
+                pass pass0
+                {
+                        vertexshader = compile vs_3_0 vp();
+                        pixelshader  = compile ps_3_0 fp();
+                }
+        }
+        
+        
+        
+        

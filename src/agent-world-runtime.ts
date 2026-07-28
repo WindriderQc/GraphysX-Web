@@ -62,6 +62,7 @@ import {
   Color,
   ConeGeometry,
   CylinderGeometry,
+  DataTexture,
   DirectionalLight,
   DoubleSide,
   Euler,
@@ -87,6 +88,7 @@ import {
   TorusGeometry,
   Vector3
 } from "three";
+import { DDSLoader } from "three/examples/jsm/loaders/DDSLoader.js";
 import { RapierPhysicsEngine } from "./physics/rapier-physics-engine";
 import type {
   PhysicsAabb,
@@ -151,6 +153,11 @@ import {
   type AgentWorldTextureDescriptor,
   type AgentWorldTextureId
 } from "./agent-world-textures";
+import {
+  applyArchiveMeshlightShader,
+  setArchiveMeshlightSpecularMap,
+  type ArchiveMeshlightSettings,
+} from "./archive-meshlight-material";
 import {
   allAgentWorldSkies,
   resolveAgentWorldSky,
@@ -283,6 +290,8 @@ export type AgentWorldMaterial = {
   normalTexture: AgentWorldTexture | null;
   /** Strength applied uniformly to the normal map's X/Y channels. */
   normalScale: number;
+  /** Optional recovered shader translation; null keeps the platform PBR material. */
+  shader: ArchiveMeshlightSettings | null;
 };
 
 export type AgentWorldSplinePath = {
@@ -1239,7 +1248,8 @@ const DEFAULT_MATERIAL: AgentWorldMaterial = {
   wireframe: false,
   texture: null,
   normalTexture: null,
-  normalScale: 1
+  normalScale: 1,
+  shader: null
 };
 
 const DEFAULT_GEOMETRY = {
@@ -1279,6 +1289,7 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "entity.agent-avatar",
   "asset.list",
   "material.texture",
+  "material.shader.archive-meshlight",
   "model.material-slots",
   "texture.list",
   "environment.sky",
@@ -3805,10 +3816,14 @@ function applyMaterial(material: MeshStandardMaterial, definition: AgentWorldMat
   material.needsUpdate = true;
   applyAgentTexture(material, definition.texture);
   applyAgentNormalTexture(material, definition.normalTexture);
+  applyAgentArchiveShader(material, definition.shader);
 }
 
 const agentTextureLoader = new TextureLoader();
+const agentDdsTextureLoader = new DDSLoader();
 const agentTextureCache = new Map<AgentWorldTextureId, Promise<Texture>>();
+const archiveMeshlightEmptySpecular = new DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+archiveMeshlightEmptySpecular.needsUpdate = true;
 
 function applyAgentTexture(material: MeshStandardMaterial, settings: AgentWorldTexture | null): void {
   const previousAgentTexture = material.userData.graphysxAgentTexture instanceof Texture
@@ -3921,12 +3936,69 @@ function applyAgentNormalTexture(material: MeshStandardMaterial, settings: Agent
   });
 }
 
+function applyAgentArchiveShader(material: MeshStandardMaterial, settings: ArchiveMeshlightSettings | null): void {
+  const previous = material.userData.graphysxAgentSpecularTexture instanceof Texture
+    ? material.userData.graphysxAgentSpecularTexture as Texture
+    : null;
+  if (!settings) {
+    material.userData.graphysxSpecularTextureToken = Symbol("no-agent-specular-texture");
+    previous?.dispose();
+    delete material.userData.graphysxAgentSpecularTexture;
+    delete material.userData.graphysxSpecularTextureKey;
+    applyArchiveMeshlightShader(material, null, archiveMeshlightEmptySpecular);
+    return;
+  }
+
+  applyArchiveMeshlightShader(material, settings, previous ?? archiveMeshlightEmptySpecular);
+  const specular = settings.specularTexture;
+  if (!specular) {
+    material.userData.graphysxSpecularTextureToken = Symbol("no-meshlight-specular-map");
+    previous?.dispose();
+    delete material.userData.graphysxAgentSpecularTexture;
+    delete material.userData.graphysxSpecularTextureKey;
+    setArchiveMeshlightSpecularMap(material, archiveMeshlightEmptySpecular);
+    return;
+  }
+  const resolved = resolveTexture(specular);
+  if (!resolved) return;
+  const key = JSON.stringify(resolved);
+  if (material.userData.graphysxSpecularTextureKey === key && previous) {
+    setArchiveMeshlightSpecularMap(material, previous);
+    return;
+  }
+  const token = Symbol(`meshlight-specular:${resolved.id}`);
+  material.userData.graphysxSpecularTextureToken = token;
+  void loadAgentTexture(resolved.id).then((baseTexture) => {
+    if (material.userData.graphysxSpecularTextureToken !== token) return;
+    const texture = baseTexture.clone();
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
+    texture.repeat.set(...(resolved.repeat ?? [1, 1]));
+    texture.offset.set(...(resolved.offset ?? [0, 0]));
+    texture.center.set(0.5, 0.5);
+    texture.rotation = (resolved.rotationDegrees ?? 0) * Math.PI / 180;
+    texture.colorSpace = NoColorSpace;
+    texture.needsUpdate = true;
+    const oldTexture = material.userData.graphysxAgentSpecularTexture instanceof Texture
+      ? material.userData.graphysxAgentSpecularTexture as Texture
+      : null;
+    material.userData.graphysxAgentSpecularTexture = texture;
+    material.userData.graphysxSpecularTextureKey = key;
+    setArchiveMeshlightSpecularMap(material, texture);
+    oldTexture?.dispose();
+  }).catch((error: unknown) => {
+    if (material.userData.graphysxSpecularTextureToken !== token) return;
+    material.userData.graphysxSpecularTextureError = error instanceof Error ? error.message : String(error);
+  });
+}
+
 function loadAgentTexture(id: AgentWorldTextureId): Promise<Texture> {
   const cached = agentTextureCache.get(id);
   if (cached) return cached;
   const descriptor = findAgentWorldTexture(id);
   if (!descriptor) return Promise.reject(new Error(`Unknown GraphysX texture: ${id}`));
-  const pending = agentTextureLoader.loadAsync(descriptor.url).then((texture) => {
+  const loader = descriptor.url.toLowerCase().endsWith(".dds") ? agentDdsTextureLoader : agentTextureLoader;
+  const pending = loader.loadAsync(descriptor.url).then((texture) => {
     texture.name = `GraphysXTexture:${id}`;
     texture.colorSpace = SRGBColorSpace;
     texture.wrapS = RepeatWrapping;
@@ -3961,7 +4033,22 @@ function resolveMaterial(source?: Partial<AgentWorldMaterial>, base: AgentWorldM
     wireframe: source?.wireframe ?? base.wireframe,
     texture: source?.texture === undefined ? deepClone(base.texture) : resolveTexture(source.texture),
     normalTexture: source?.normalTexture === undefined ? deepClone(base.normalTexture) : resolveTexture(source.normalTexture),
-    normalScale: clamp(source?.normalScale ?? base.normalScale, 0, 8)
+    normalScale: clamp(source?.normalScale ?? base.normalScale, 0, 8),
+    shader: source?.shader === undefined ? deepClone(base.shader) : resolveArchiveShader(source.shader),
+  };
+}
+
+function resolveArchiveShader(source: AgentWorldMaterial["shader"] | undefined): ArchiveMeshlightSettings | null {
+  if (source === null || source === undefined) return null;
+  if (source.id !== "archive-meshlight") throw new Error(`Unknown material shader: ${String((source as { id?: unknown }).id)}`);
+  if (typeof source.lightColor !== "string" || !source.lightColor.trim()) throw new Error("material.shader.lightColor must be a colour string");
+  return {
+    id: "archive-meshlight",
+    parallaxStrength: clamp(source.parallaxStrength, 0, 0.5),
+    specularMultiplier: clamp(source.specularMultiplier, 0, 20),
+    specularTexture: source.specularTexture === null ? null : resolveTexture(source.specularTexture),
+    lightPosition: sanitizeVector(source.lightPosition, -100000, 100000, "material.shader.lightPosition"),
+    lightColor: source.lightColor,
   };
 }
 
@@ -4639,6 +4726,7 @@ function disposeObjectTree(root: Object3D): void {
     // Invalidates a pending applyAgentTexture completion before releasing the material.
     material.userData.graphysxTextureToken = {};
     material.userData.graphysxNormalTextureToken = {};
+    material.userData.graphysxSpecularTextureToken = {};
     if (material.userData.graphysxAgentTexture instanceof Texture) {
       const texture = material.userData.graphysxAgentTexture as Texture;
       if (!disposedTextures.has(texture)) {
@@ -4648,6 +4736,13 @@ function disposeObjectTree(root: Object3D): void {
     }
     if (material.userData.graphysxAgentNormalTexture instanceof Texture) {
       const texture = material.userData.graphysxAgentNormalTexture as Texture;
+      if (!disposedTextures.has(texture)) {
+        texture.dispose();
+        disposedTextures.add(texture);
+      }
+    }
+    if (material.userData.graphysxAgentSpecularTexture instanceof Texture) {
+      const texture = material.userData.graphysxAgentSpecularTexture as Texture;
       if (!disposedTextures.has(texture)) {
         texture.dispose();
         disposedTextures.add(texture);

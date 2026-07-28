@@ -2062,3 +2062,35 @@ scene path, advanced 120 rendered frames, and matched the visible day scene to
 
 Next ranked work: translate `meshlight.shade` as a scene-native material with faithful source
 semantics and a visible comparison; then compose Archive Level 3 as a v2 game.
+
+## 2026-07-28 — `revival-next-r3`: meshlight.shade translated, vendored, selectable
+
+The 9,298-byte StockRoom source was re-read before implementation (SHA-256
+`AE1ECFC…BFF05`). Its source text now ships at
+`/assets/shaders/archive-meshlight.shade`; line endings alone are normalized CRLF→LF and the
+vendored byte hash (`0EE6F3…5A1C`) is recorded and gated. The release asset manifest claims
+the source explicitly, so production no longer prunes a locally visible archive artifact.
+
+`material.shader.id = "archive-meshlight"` is new v2 document vocabulary. It preserves the
+normal-map-alpha single-sample parallax offset, `CalculateLyon` half-vector difference
+equation and ×60/pow3 shape, independent red-channel specular sampler, `SpecMP`, light
+position/colour and the source's +0.15 diffuse floor. Settings patch live and round-trip.
+The old 25-offset TV3D cubic shadow-map sampler is the one deliberate renderer adaptation:
+the translated result takes Three's point-shadow PCF visibility, preserving shadows without
+a second cube render. Room 2 now runs the translation over its exact `tv3dlogo_d.dds` and
+`tv3dlogo_n.dds`. Since room2.tvm and the #23 host bind only those two maps although the HLSL
+declares `SpecMap`, diffuse red is reused as a visibly disclosed demonstration mask rather
+than inventing a recovered third texture.
+
+The six-entity Browse lab compares platform PBR, the shader's red/default `pStrength=.04` +
+`SpecMP=5`, and EditorScreen's recorded commented halogen/`.25` tuning. `smoke-meshlight`
+proves both translated programs compile without WebGL errors, exact DDS inputs and the
+independent spec sampler load, source equations are present in the compiled fragment shader,
+live `.11`/`7` patching reaches uniforms, the document round-trips, and the vendored source
+ships with its expected markers/hash. `npm run build` and the focused smoke are green;
+`meshlight-lab.png` was inspected. The required web-game client used the human Browse card,
+advanced 120 frames and matched the visible comparison to world `archive-meshlight-lab`
+without an error artifact.
+
+Next ranked work: compose Archive Level 3's exact ASCII record as an ordinary v2 game, then
+run the full gate and deliver the complete new-wave patch series.

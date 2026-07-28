@@ -72,6 +72,7 @@ const SMOKES = [
   { name: "suzanne1", script: "scripts/smoke-suzanne1.mjs", covers: "Suzanne 1 ASCII arena: archive census, dynamic walls, piston moves, completable over 3 laps, round-trips" },
   { name: "suzanne2", script: "scripts/smoke-suzanne2.mjs", covers: "Suzanne 2 ASCII/XML arena: archive census, vendored meshes, moving piston, any 2 of 15 rings, round-trip" },
   { name: "day-night", script: "scripts/smoke-day-night.mjs", covers: "scene-native archive atmosphere: source curves, authored sky/HDRI endpoints, deterministic pause/step, round-trip" },
+  { name: "meshlight", script: "scripts/smoke-meshlight.mjs", covers: "meshlight.shade: vendored HLSL, compiled parallax/Lyon translation, exact Room 2 maps, live patch + round-trip" },
   { name: "revival-ledgers", script: "scripts/audit-revival-debt.mjs", covers: "debt sweep: pinned 22-item register plus all five NOT_REVIVED inventories checked against HEAD" },
   { name: "rapier-race", script: "scripts/smoke-rapier-race.mjs", covers: "Rapier RaceScene: Piste vehicle motion, steering, finite state, browser errors" },
   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
