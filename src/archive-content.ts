@@ -885,7 +885,7 @@ export const ASSET_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
     label: "Shader Pack",
     source: "Media/shaders/ppl.shade, meshlight.shade, post_haze.shade, Projection.fx",
     status: "preview",
-    detail: "`meshlight.shade` is now vendored and translated as selectable scene-material vocabulary: normal-alpha parallax, Lyon specular, independent red-channel mask, SpecMP, light colour/position and the 0.15 floor are preserved; Three point-shadow PCF is the disclosed replacement for its cubic 25-tap kernel. The visible lab and Room 2 use it. post_haze also has a modern EffectComposer descendant; ppl.shade and Projection.fx remain."
+    detail: "`meshlight.shade` and `ppl.shade` are vendored and translated as selectable scene-material vocabulary. meshlight preserves its normal-alpha parallax, Lyon specular, independent red-channel mask, SpecMP, light colour/position and 0.15 floor; its visible lab and Room 2 use it. ppl preserves its parallax + tangent-Lambert math and exact ZRing/ball_Normal active binding in a visible ring lab. post_haze has a modern EffectComposer descendant. Projection.fx remains source-only: two independent archive searches found no loader/binding, so no use was invented."
   },
   {
     label: "Texture Set",

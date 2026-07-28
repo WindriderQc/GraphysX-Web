@@ -268,6 +268,15 @@ export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
     source: "BallZ archive StockRoom/Suzanne1/ZRing.png"
   },
   {
+    id: "archive-ball-normal",
+    label: "BallZ PPL Ball Normal",
+    url: "/assets/textures/archive/ball_Normal.png",
+    category: "surface",
+    description: "Exact tangent-space normal/height map bound by BallZ2015's active ppl.shade ring and editor paths.",
+    defaultRepeat: [1, 1],
+    source: "BallZ2015/StockRoom/ball_Normal.png; SHA-256 F4198F4535F4FEBEB0B7DEABEF6F2F8C2BFD0A6EA94A14C0A952FEBD4354C02B"
+  },
+  {
     id: "spheres",
     label: "3D Spheres",
     url: "/assets/textures/suzanne1/3D_Spheres.jpg",

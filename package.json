@@ -33,6 +33,7 @@
     "smoke:suzanne-machinery": "node scripts/smoke-suzanne-machinery.mjs",
     "smoke:day-night": "node scripts/smoke-day-night.mjs",
     "smoke:meshlight": "node scripts/smoke-meshlight.mjs",
+    "smoke:ppl": "node scripts/smoke-ppl.mjs",
     "smoke:level3": "node scripts/smoke-level3.mjs",
     "audit:revival-debt": "node scripts/audit-revival-debt.mjs",
     "smoke:live-release": "node scripts/smoke-live-release.mjs",
@@ -49,6 +50,7 @@
     "assets:map1": "node scripts/vendor-map1.mjs",
     "assets:level1-2011": "node scripts/vendor-level1-2011.mjs",
     "assets:suzanne-machinery": "node scripts/vendor-suzanne-machinery.mjs && node scripts/build-asset-catalog.mjs",
+    "assets:ppl-shader": "node scripts/vendor-ppl-shader.mjs",
     "assets:shelf-thumbnails": "node scripts/capture-shelf-thumbnails.mjs",
     "qa": "node scripts/qa-agent-entities.mjs"
   },

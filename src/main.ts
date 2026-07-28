@@ -373,6 +373,22 @@ if (mode === "legacy") {
                 void host.enterEditor();
               },
             },
+            {
+              id: "archive-ppl-lab",
+              label: "Archive ppl.shade Ring Lab",
+              summary: "The recovered ZRing sphere binding with its exact normal/height map, source parallax default and active BallZ tuning.",
+              meta: "source HLSL + normal vendored  ·  selectable v2 material  ·  active Anneaux binding",
+              open: async () => {
+                const { composeArchivePpl, frameArchivePpl } = await import("./archive-ppl-scene");
+                showroomEnvironment?.();
+                showroomEnvironment = null;
+                const result = composeArchivePpl(host.api);
+                if (!result.ok) throw new Error(result.error ?? "Could not compose Archive ppl.shade Ring Lab");
+                host.applyEnvironment();
+                frameArchivePpl(host);
+                void host.enterEditor();
+              },
+            },
             // The recovered Nature Lab playgrounds. They open in the editor like any browsed
             // scene, so their simulation vocabulary is selectable and editable.
             // The recovered Voie Lactee vignette. Same shape as the playgrounds: it opens in the
@@ -574,6 +590,11 @@ if (mode === "legacy") {
           const result = composeArchiveMeshlight(host.api);
           host.applyEnvironment();
           return { ...result, provenance: MESHLIGHT_SCENE_PROVENANCE };
+        }),
+        composeArchivePpl: () => import("./archive-ppl-scene").then(({ composeArchivePpl, PPL_SCENE_PROVENANCE }) => {
+          const result = composeArchivePpl(host.api);
+          host.applyEnvironment();
+          return { ...result, provenance: PPL_SCENE_PROVENANCE };
         }),
         // World 1 — the first true mesh-world port. Lazy, so the manifest's slab table
         // stays off the boot path until someone actually opens the world.

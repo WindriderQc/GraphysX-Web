@@ -1,0 +1,93 @@
+/*
+        Parallax Mapped Object.
+        Written By Geoff Wilson.
+*/
+
+	float4x4 wViewProj : WORLDVIEWPROJ;
+	float4x4 World     : WORLD;
+        float4   ViewPos   : VIEWPOS;
+	texture  Diffuse   : TEXTURE0;
+	texture  Normal; //  : TEXTURE1;          //We have the parallax map packed in to the alpha channel of the normal map.
+
+	float    BumpAmount = 0.03;                //Amount of bump.
+        float3   LPos       = float3(0, 0, 0);  //Light position.      
+	
+	sampler2D DiffuseSample = sampler_state
+	{
+		Texture   = (Diffuse);
+		MIPFILTER = LINEAR;
+		MAGFILTER = LINEAR;
+		MINFILTER = LINEAR;
+	}; 
+
+	sampler2D NormalSample = sampler_state
+	{
+		Texture   = (Normal);
+		MIPFILTER = LINEAR;
+		MAGFILTER = LINEAR;
+		MINFILTER = LINEAR;
+	}; 
+
+        struct TV3DtoVERTEX
+        {
+                float4 PosOfVertex: POSITION0;
+		float2 UV         : TEXCOORD0;
+                float3 Tangent    : TANGENT;
+                float3 Normal     : NORMAL;
+                float3 BiNormal   : BINORMAL;
+        };
+
+        struct VERTEXtoFRAGMENT
+        {
+                float4 PosOfVertex: POSITION0;
+		float2 UV         : TEXCOORD0;
+                float3 LightVec   : TEXCOORD1;
+                float3 ViewVec    : TEXCOORD2;
+        };
+
+        struct FRAGMENTtoSCREEN
+        {
+                float4 Colour: COLOR0;
+        };
+
+        void VertexProgram(in TV3DtoVERTEX IN, out VERTEXtoFRAGMENT OUT)
+        {       
+                         OUT.PosOfVertex = mul(IN.PosOfVertex, wViewProj);
+                         OUT.UV          = IN.UV;
+
+                float3x3 TBN             = float3x3(IN.Tangent, IN.BiNormal, IN.Normal);
+                float3x3 WTTS            = mul(TBN, World);
+
+                float3   PosWorld        = mul(IN.PosOfVertex, World);
+
+                         OUT.LightVec    = mul(WTTS, (LPos - PosWorld));
+                         OUT.ViewVec     = mul(WTTS, (ViewPos - PosWorld));
+        }
+
+        void FragmentProgram(in VERTEXtoFRAGMENT IN, out FRAGMENTtoSCREEN OUT)
+        {
+                float3 V          = normalize(IN.ViewVec);
+		float2 pUV        = (tex2D(NormalSample, IN.UV).a * BumpAmount - (BumpAmount * 0.5)) * V.xy + IN.UV;
+		float4 Col        = tex2D(DiffuseSample, pUV);
+                float3 N          = 2 * tex2D(NormalSample, pUV).rgb - 1;
+                float3 L          = normalize(IN.LightVec);
+                float  D          = saturate(dot(L, N));
+
+
+                       OUT.Colour = D * Col;
+        }
+        
+        technique render
+	{
+                pass pass0
+                {
+                        vertexshader = compile vs_1_1 VertexProgram();
+                        pixelshader  = compile ps_2_0 FragmentProgram();
+                }
+        }
+        
+        
+        
+        
+        
+        

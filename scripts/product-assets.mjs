@@ -83,9 +83,10 @@ export async function productAssetManifest() {
   // floors and walls 404 in production while looking perfect in dev. Derived from the module so
   // adding a style cannot silently drop its textures.
   for (const url of await anyAssetLiterals("src/classic-level-style.ts")) wanted.add(url);
-  // Vendored source text for the first shader-pack translation. It is fetched by the
-  // player-visible lab and smoke, and its URL lives beside the translation provenance.
+  // Vendored source text for recovered shader-pack translations. They are fetched by the
+  // player-visible labs and smokes, and their URLs live beside translation provenance.
   for (const url of await anyAssetLiterals("src/archive-meshlight-material.ts")) wanted.add(url);
+  for (const url of await anyAssetLiterals("src/archive-ppl-material.ts")) wanted.add(url);
 
   // Every mesh in the generated catalog, plus the textures each mesh's materials name.
   // The mesh JSON carries absolute `textureUrl`s, so this cannot drift from the meshes.

@@ -153,6 +153,21 @@ which greys out the one- and two-pixel coloured stars this set is made of (max c
 
 ## Remaining, in priority order
 
+### Latest revival: `shader-ppl-r1` (2026-07-28)
+
+BallZ2015's active `ppl.shade` path is scene-native now. The exact StockRoom HLSL and
+`ball_Normal.png` are vendored with SHA guards; `material.shader.archive-ppl` preserves its
+normal-alpha parallax and tangent-Lambert equations, plus distinct 0.03 source-default and
+0.025 active `Anneaux.cpp` tuning. Browse Scenes exposes a ZRing-on-sphere comparison lab.
+`smoke:ppl` covers source/asset hashes, GLSL compile, active bindings, live patch and document
+round-trip; the prior meshlight smoke remains green. `Projection.fx` was searched by exact
+filename and by its Fresnel parameters, with no loader/binding found, so it remains source-only.
+
+Delivery note: the full gate was 41/42 only because Media's two ephemeral local stores both
+failed their first Node health fetch during heavy loopback churn; the complete Media smoke
+passed immediately afterward on a stable host with zero browser errors. Do not misreport that
+transport failure as a shader or media assertion failure.
+
 The v1 bar is met, so what follows are **enrichments beyond it**, not gaps in it. Nothing
 here blocks a release; pick by value rather than by order.
 

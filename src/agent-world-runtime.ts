@@ -159,6 +159,10 @@ import {
   type ArchiveMeshlightSettings,
 } from "./archive-meshlight-material";
 import {
+  applyArchivePplShader,
+  type ArchivePplSettings,
+} from "./archive-ppl-material";
+import {
   allAgentWorldSkies,
   resolveAgentWorldSky,
   type AgentWorldSkyDescriptor,
@@ -291,7 +295,7 @@ export type AgentWorldMaterial = {
   /** Strength applied uniformly to the normal map's X/Y channels. */
   normalScale: number;
   /** Optional recovered shader translation; null keeps the platform PBR material. */
-  shader: ArchiveMeshlightSettings | null;
+  shader: ArchiveMeshlightSettings | ArchivePplSettings | null;
 };
 
 export type AgentWorldSplinePath = {
@@ -1290,6 +1294,7 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "asset.list",
   "material.texture",
   "material.shader.archive-meshlight",
+  "material.shader.archive-ppl",
   "model.material-slots",
   "texture.list",
   "environment.sky",
@@ -3936,16 +3941,21 @@ function applyAgentNormalTexture(material: MeshStandardMaterial, settings: Agent
   });
 }
 
-function applyAgentArchiveShader(material: MeshStandardMaterial, settings: ArchiveMeshlightSettings | null): void {
+function applyAgentArchiveShader(material: MeshStandardMaterial, settings: ArchiveMeshlightSettings | ArchivePplSettings | null): void {
   const previous = material.userData.graphysxAgentSpecularTexture instanceof Texture
     ? material.userData.graphysxAgentSpecularTexture as Texture
     : null;
-  if (!settings) {
+  // Both translations own onBeforeCompile. Clear whichever one was previously active before
+  // selecting the document's discriminated shader id.
+  applyArchiveMeshlightShader(material, null, archiveMeshlightEmptySpecular);
+  applyArchivePplShader(material, null);
+
+  if (!settings || settings.id === "archive-ppl") {
     material.userData.graphysxSpecularTextureToken = Symbol("no-agent-specular-texture");
     previous?.dispose();
     delete material.userData.graphysxAgentSpecularTexture;
     delete material.userData.graphysxSpecularTextureKey;
-    applyArchiveMeshlightShader(material, null, archiveMeshlightEmptySpecular);
+    if (settings?.id === "archive-ppl") applyArchivePplShader(material, settings);
     return;
   }
 
@@ -4038,8 +4048,15 @@ function resolveMaterial(source?: Partial<AgentWorldMaterial>, base: AgentWorldM
   };
 }
 
-function resolveArchiveShader(source: AgentWorldMaterial["shader"] | undefined): ArchiveMeshlightSettings | null {
+function resolveArchiveShader(source: AgentWorldMaterial["shader"] | undefined): ArchiveMeshlightSettings | ArchivePplSettings | null {
   if (source === null || source === undefined) return null;
+  if (source.id === "archive-ppl") {
+    return {
+      id: "archive-ppl",
+      bumpAmount: clamp(source.bumpAmount, 0, 0.5),
+      lightPosition: sanitizeVector(source.lightPosition, -100000, 100000, "material.shader.lightPosition"),
+    };
+  }
   if (source.id !== "archive-meshlight") throw new Error(`Unknown material shader: ${String((source as { id?: unknown }).id)}`);
   if (typeof source.lightColor !== "string" || !source.lightColor.trim()) throw new Error("material.shader.lightColor must be a colour string");
   return {
