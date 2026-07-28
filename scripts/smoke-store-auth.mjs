@@ -47,7 +47,7 @@ function put(url, token, header = "authorization") {
 // below still uses its original request and status contract.
 async function waitForStore(url) {
   let lastError;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     try {
       const response = await fetch(`${url}/scenes`, { headers: { connection: "close" } });
       if (response.status === 200) return;
@@ -55,7 +55,7 @@ async function waitForStore(url) {
     } catch (error) {
       lastError = error;
     }
-    await new Promise((resolve) => setTimeout(resolve, Math.min(400, 50 * 2 ** attempt)));
+    await new Promise((resolve) => setTimeout(resolve, Math.min(1_000, 50 * 2 ** attempt)));
   }
   throw lastError ?? new Error("Store readiness failed");
 }

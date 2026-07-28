@@ -2137,3 +2137,9 @@ census to 17. The census is now scoped to the `archive-tvm-*` source family, pre
 original 14-asset contract while allowing other faithfully vendored prop families to grow.
 The other failed check exhausted its retry on local preview-server connection resets after
 its product assertions had passed; no Games behavior failed. A clean full-gate rerun follows.
+
+That rerun passed all 39 product/browser checks, but the final node-only store-auth probe
+hit the same Windows loopback churn twice before its first HTTP assertion. Its existing
+readiness backoff covered under two seconds—shorter than the observed recovery window after
+the long browser matrix. The bounded readiness probe now allows twelve attempts capped at
+one second (about 8.5 seconds total); auth statuses and every tested contract are unchanged.
