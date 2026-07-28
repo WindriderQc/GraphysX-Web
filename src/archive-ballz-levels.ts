@@ -429,7 +429,7 @@ export const ARCHIVE_BALLZ_NOT_REVIVED = [
     what: "Genuine 40x40 authored ASCII arenas, decoded *into this repository* with source SHAs (Suzanne1.ASCII `64ec6746…`) — 208 walls, 45 chain assemblies, 15 rings, 3 pistons, gates and a spawn.",
     verdict: "revived on the archive game surface; moving machinery also graduated to a v2 course",
     why:
-      "Suzanne 1 now plays its exact 40×40 arena with 208 walls, 45 chain assemblies, 15 rings, three pistons, effects, posts, gates, spawn and three-lap loop; Suzanne 2 remains a distinct player-visible evidence/game visit with its source contradiction disclosed. This sweep additionally vendors the separate eight-part 2015 machinery study and makes its piston, door and rotator collision-bearing v2 obstacles. A sparse grid-only duplicate would still throw away the chains and pistons, so none is added here.",
+      "Suzanne 1 plays its exact 40×40 arena with 208 walls, 45 chain assemblies, 15 rings, three pistons, effects, posts, gates, spawn and three-lap loop. Suzanne 2 is now a distinct v2 game with all 315 collision cubes, its three decoded XML meshes, moving pistons and the active any-two-of-fifteen pickup rule; Rotator placement is explicitly excluded because only Suzanne 1 source calls it. The separate eight-part 2015 machinery study keeps its piston, door and rotator collision-bearing obstacles. A sparse grid-only duplicate would still throw away the chains and pistons, so none is added here.",
   },
 ] as const;
 

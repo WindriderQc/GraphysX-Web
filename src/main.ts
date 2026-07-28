@@ -188,6 +188,18 @@ if (mode === "legacy") {
               }),
             },
             {
+              id: "archive-suzanne2",
+              label: "Suzanne 2: Any Two Rings",
+              meta: "authored 40×40 arena  ·  315 dynamic walls  ·  15 rings  ·  shipped any-two rule",
+              play: () => loadComposedGame(async () => {
+                const { composeSuzanne2, frameSuzanne2 } = await import("./archive-suzanne2-scene");
+                const result = composeSuzanne2(host.api);
+                if (!result.ok) throw new Error(result.error ?? "Could not compose Suzanne 2");
+                host.applyEnvironment();
+                frameSuzanne2(host);
+              }),
+            },
+            {
               id: "archive-map1",
               label: "Map 1: Gravity Descent",
               meta: "exact recovered mesh  ·  halfway gate  ·  adapted gravity run",
@@ -429,6 +441,11 @@ if (mode === "legacy") {
         // machinery run: same family, different record). Lazy like World 1, so the 200 KB
         // decoded arena stays off the boot path until someone opens it.
         composeSuzanne1: () => import("./archive-suzanne1-scene").then(({ composeSuzanne1 }) => composeSuzanne1(host.api)),
+        // Suzanne 2 — distinct authored arena and its source-shaped any-two-of-fifteen rule.
+        composeSuzanne2: () => import("./archive-suzanne2-scene").then(({ composeSuzanne2, SUZANNE2_PROVENANCE }) => {
+          const result = composeSuzanne2(host.api);
+          return { ...result, provenance: SUZANNE2_PROVENANCE };
+        }),
         // World 1 — the first true mesh-world port. Lazy, so the manifest's slab table
         // stays off the boot path until someone actually opens the world.
         composeArchiveWorld1: () => import("./archive-world1-scene").then(({ composeArchiveWorld1, WORLD1_PROVENANCE }) => {

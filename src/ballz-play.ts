@@ -117,7 +117,7 @@ export function mountBallzPlay(
     const parts = [describeRun(run)];
     // Only when the lap's requirements are met do we say the finish is live — announcing it
     // earlier invites a run straight at a gate that will not count.
-    const ringsIn = run.collected.length >= run.collectibleCount;
+    const ringsIn = run.collected.length >= run.collectibleTarget;
     const gatesIn = run.checkpointIndex >= run.checkpointCount;
     if (run.phase === "running" && ringsIn && gatesIn && (run.collectibleCount > 0 || run.checkpointCount > 0)) {
       parts.push("finish is open");

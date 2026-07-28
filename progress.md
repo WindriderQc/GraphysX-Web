@@ -1995,3 +1995,41 @@ Lesson, recorded because it will happen again: the check-against-HEAD rule appli
 *upstream* too. Verify `origin/main` immediately before generating a patch series, not only
 when a session starts — four commits landed mid-session and the first delivery attempt
 conflicted on thirteen files.
+
+## 2026-07-28 — `revival-next-r1`: Suzanne 2 becomes a source-shaped v2 game
+
+The next-candidate list was checked against `origin/main` before building. Map-editor race
+conversion was already complete (`levels.play()` materialises the Rapier course and
+`smoke-levels` covers paint/fill/ASCII/undo/create/play). Rotator and RotatorCube were also
+already faithfully vendored and moving in Suzanne Machinery Run. Archive call-site review
+found both meshes only under Suzanne 1 backup XML/code; Suzanne 2 never places them, so no
+placement was invented.
+
+The remaining Suzanne 2 gap is closed. `archive-suzanne2-scene.ts` composes the exact 40×40
+ASCII/XML record as an ordinary v2 game: 313 #/Z/z dynamic walls plus two dynamic effect
+walls, 15 rings, three three-body chain stands, three archived pistons with moving plates,
+four posts and both LINE gates, the finish board, source spawn/player, and all three XML
+objects. Airplane, BonedGate and SuperCage decoded geometry is now republished as three
+faithful `graphysx-mesh-json` assets with source SHA/bytes and catalog provenance. BonedGate
+uses its exact dynamic convex hull; the 29,298-vertex airplane exceeds v2's safe hull ceiling,
+so its exact render mesh uses a disclosed source-bounds dynamic box collider.
+
+The apparent rule conflict was adjudicated in favour of active shipped code, not repaired:
+`GamePlayScreen.cpp` advances at `getScore() == 2` while the ASCII authors 15 rings. Rules now
+support `collectibles.targetCount`, including collectible-only completion, so *any* two of
+the fifteen end Suzanne 2. A runtime fix ensures only the declared player/racers can fire a
+rules-bound pickup interaction; dynamic archive walls still report overlaps but can no longer
+consume rings.
+
+Verified: `npm run build`, `smoke-rules`, and `smoke-suzanne2` green. The latter proves all
+315 walls remain dynamic, the archive census, a piston moves, a deliberately non-adjacent
+ring pair completes at 2/15, all three meshes load, and the 371-entity document round-trips.
+Screenshots inspected at `output/smoke/suzanne2-arena.png` and
+`output/web-game/suzanne2-play/shot-{0,1}.png`: overview and chase views show the grass arena,
+source wall textures, moving machinery, rings, posts, player and HUD. The required web-game
+client drove the human Games shelf, rolled/turned/jumped the ball from
+[-24, 0.669, -33.6] to [-29.072, 0.719, -12.453], and `render_game_to_text` stayed consistent
+with the visuals (0/2 of 15 placed, finite position/velocity, no console-error artifact).
+
+Next ranked work: verify and graduate a scene-native day/night rig over the shipped sky/HDRI
+stack; then translate `meshlight.shade`; then compose Level 3 as a v2 scene.

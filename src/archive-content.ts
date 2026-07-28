@@ -141,7 +141,7 @@ export const ARCHIVE_MODES: ArchiveMode[] = [
   {
     id: "suzanne2-archive",
     label: "Suzanne 2 Authored Level",
-    summary: "The distinct 40×40 Suzanne2.ASCII/XML composition with exact source actors, X meshes and the archived 15-ring versus two-pickup rule conflict exposed.",
+    summary: "The distinct playable 40×40 Suzanne2.ASCII/XML composition with exact source actors, three faithfully vendored X meshes, and the active any-two-of-fifteen ring rule preserved.",
     source: "Scene3D/GamePlayScreen.cpp; GraphysX_1/Scene.cpp; Suzanne2.ASCII; Suzanne2.xml"
   },
   {
@@ -484,7 +484,7 @@ export const ARCHIVE_SCENES: ArchiveSceneRecord[] = [
     kind: "Authored BallZ level",
     source: "StockRoom/Suzanne2.ASCII; Suzanne2.xml",
     status: "PARTIAL",
-    revival: "Dedicated source-backed visit preserves the exact 40×40 layout, 315 collision cubes, 15 rings, chains, pistons, gates, effects, player cage, Airplane, BonedGate and XML billboard. It exposes the active source's two-pickup victory bug and absent lap target; no corrected rule, missing CubX actor animation, or screenshot-era presentation is invented."
+    revival: "The visit is now also a v2 game: exact 40×40 layout, 315 dynamic collision cubes, 15 rings, chains, moving pistons, gates, effects, player cage, Airplane, BonedGate and XML billboard. The active source's any-two-pickup advance is faithfully executable through a threshold rule; no corrected 15-ring objective, missing CubX actor animation, Rotator placement, lap target, sky or screenshot-era presentation is invented."
   },
   {
     family: "BallZ world concepts",

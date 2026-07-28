@@ -126,7 +126,17 @@ export type AgentWorldRulesDefinition = {
    * default when any are declared — the finish will not bank a lap until all are in, which
    * is what stops the rings being scenery you can drive past.
    */
-  collectibles?: { triggerIds?: string[]; tag?: string; requiredToFinish?: boolean };
+  collectibles?: {
+    triggerIds?: string[];
+    tag?: string;
+    requiredToFinish?: boolean;
+    /**
+     * Number of pickups needed when the authored rule is a threshold rather than "all".
+     * Omit to require the whole resolved inventory. A collectible-only rule completes as
+     * soon as this threshold is reached; a race uses it as the gate before its finish.
+     */
+    targetCount?: number;
+  };
   /** The lap line. Crossing it with the lap's requirements met banks the lap. */
   finish?: { triggerId: string };
   /** Laps required to complete. Defaults to 1, which is the plain "reach the end" case. */
@@ -181,6 +191,8 @@ export type AgentWorldRunStatus = {
    */
   collectibleIds: string[];
   collectibleCount: number;
+  /** Pickups required by the rule; can be lower than the authored inventory. */
+  collectibleTarget: number;
   /** How the run ended, when it has. */
   outcome: "complete" | "timeout" | null;
   /** The stream cursor to hand back to `events()`. */
@@ -252,6 +264,12 @@ export function validateRules(rules: AgentWorldRulesDefinition, knownIds: Readon
   if (rules.timer?.limitSeconds !== undefined && !(rules.timer.limitSeconds > 0)) {
     throw new Error("Rules timer limitSeconds must be a positive number");
   }
+  if (
+    rules.collectibles?.targetCount !== undefined
+    && (!Number.isInteger(rules.collectibles.targetCount) || rules.collectibles.targetCount < 1)
+  ) {
+    throw new Error("Rules collectibles.targetCount must be a positive integer");
+  }
   if (!rules.finish && !rules.checkpoints?.length && !rules.collectibles) {
     // A block with a spawn and a clock and nothing to reach is almost certainly a half-typed
     // course rather than an intent. Say so now.
@@ -293,6 +311,12 @@ export function armRun(
 ): AgentWorldRunStatus {
   const checkpoints = rules.checkpoints ?? [];
   const collectibles = resolveCollectibles(rules, snapshot);
+  const collectibleTarget = rules.collectibles?.targetCount ?? collectibles.length;
+  if (collectibleTarget > collectibles.length) {
+    throw new Error(
+      `Rules collectibles.targetCount (${collectibleTarget}) exceeds the resolved collectible inventory (${collectibles.length})`,
+    );
+  }
   return {
     schema: GRAPHYSX_AGENT_RUN_SCHEMA,
     phase: "running",
@@ -306,6 +330,7 @@ export function armRun(
     collected: alreadyTaken(collectibles, snapshot),
     collectibleIds: collectibles,
     collectibleCount: collectibles.length,
+    collectibleTarget,
     outcome: null,
     sequence,
     desynced: false,
@@ -317,7 +342,7 @@ export function armRun(
 function lapIsReady(status: AgentWorldRunStatus, rules: AgentWorldRulesDefinition): boolean {
   if (status.checkpointIndex < status.checkpointCount) return false;
   const required = rules.collectibles?.requiredToFinish ?? Boolean(rules.collectibles);
-  if (required && status.collected.length < status.collectibleCount) return false;
+  if (required && status.collected.length < status.collectibleTarget) return false;
   return true;
 }
 
@@ -393,6 +418,18 @@ function applyEvent(
   // the bridge, and a Set would arrive as `{}`.
   if (collectibleCounts && next.collectibleIds.includes(triggerId) && !next.collected.includes(triggerId)) {
     next.collected = [...next.collected, triggerId];
+    // Some archive games end on a pickup threshold and have no finish volume at all.
+    // Keep that rule in data instead of fabricating a finish line or choosing privileged
+    // collectibles. Suzanne 2 is the source-shaped example: any two of fifteen rings.
+    if (
+      !rules.finish
+      && (rules.checkpoints?.length ?? 0) === 0
+      && next.collected.length >= next.collectibleTarget
+    ) {
+      next.lap = next.laps;
+      next.phase = "complete";
+      next.outcome = "complete";
+    }
   }
   // Gates and the finish are strictly this run's subject; a rival's crossing is theirs.
   if (!crossedBySubject) return next;
@@ -460,7 +497,10 @@ export function describeRun(status: AgentWorldRunStatus): string {
   // "3 / 8 collected", not a bare "3 / 8". This layer no longer knows the pickups are rings,
   // but a fraction with no noun beside a clock reads as another time value — which is exactly
   // how it looked on screen once the BallZ HUD started rendering from here.
-  if (status.collectibleCount > 0) parts.push(`${status.collected.length} / ${status.collectibleCount} collected`);
+  if (status.collectibleCount > 0) {
+    const inventory = status.collectibleTarget === status.collectibleCount ? "" : ` (${status.collectibleCount} placed)`;
+    parts.push(`${status.collected.length} / ${status.collectibleTarget} collected${inventory}`);
+  }
   if (status.checkpointCount > 0) parts.push(`gate ${status.checkpointIndex} / ${status.checkpointCount}`);
   if (status.laps > 1) parts.push(`lap ${Math.min(status.lap + 1, status.laps)} / ${status.laps}`);
   parts.push(formatClock(status.elapsedSeconds));

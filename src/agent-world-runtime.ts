@@ -2963,7 +2963,15 @@ export class AgentWorldRuntime {
         // live a bouncing ball could re-cross a collected ring and toggle it back into the
         // world — un-collecting it. The enter/exit events still fire (occupancy is real);
         // only the trigger's own response is suppressed while it is hidden.
-        if (trigger.definition.interactions.length > 0 && trigger.definition.visible !== false) {
+        // A rules-bound collectible belongs to the declared player(s), not to every dynamic
+        // body in the world. Pushable archive walls can legitimately overlap ring triggers;
+        // they still emit occupancy evidence, but must never consume the pickup. Generic
+        // interaction triggers keep their original any-mover behaviour.
+        const isRulesCollectible = this.run?.collectibleIds.includes(triggerId) ?? false;
+        const allowedCollector = !isRulesCollectible
+          || (this.rules?.subjects?.some((subject) => subject.id === moverId)
+            ?? (!this.rules?.subjectId || this.rules.subjectId === moverId));
+        if (allowedCollector && trigger.definition.interactions.length > 0 && trigger.definition.visible !== false) {
           try {
             this.interactInternal(triggerId);
           } catch (error) {

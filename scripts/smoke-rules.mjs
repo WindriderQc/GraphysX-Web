@@ -244,6 +244,58 @@ try {
     };
   });
 
+  // A threshold course is the rule Suzanne 2 actually shipped: fifteen rings exist, but
+  // *any* two end the run. Prove this is cardinality, not two privileged ids.
+  out.threshold = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const entities = [
+      { id: "threshold-runner", type: "sphere", transform: { position: [-20, 1, 0] }, geometry: { radius: 0.5 }, physics: { mode: "kinematic" } },
+      ...[0, 1, 2].map((index) => ({
+        id: `threshold-ring-${index}`,
+        type: "sphere",
+        transform: { position: [index * 5, 1, 0] },
+        geometry: { radius: 1 },
+        physics: { mode: "trigger" },
+        tags: ["threshold-pickup"],
+        interactions: [{ id: `take-threshold-${index}`, type: "toggle-visibility", targetIds: [`threshold-ring-${index}`] }],
+      })),
+    ];
+    const created = api.create({
+      schema: "graphysx.agent-world/v2",
+      id: "threshold-course",
+      label: "Threshold Course",
+      environment: { ground: { visible: false }, physics: { gravity: [0, 0, 0] } },
+      entities,
+      rules: {
+        schema: "graphysx.agent-rules/v1",
+        subjectId: "threshold-runner",
+        collectibles: { tag: "threshold-pickup", targetCount: 2 },
+      },
+    });
+    if (!created.ok) return { fatal: created.error };
+    api.pause(true);
+    const cross = (x) => {
+      api.update("threshold-runner", { transform: { position: [x, 1, 0] } });
+      api.step(1 / 60);
+      api.update("threshold-runner", { transform: { position: [-20, 1, 0] } });
+      api.step(1 / 60);
+    };
+    cross(0);
+    const afterOne = api.rules.status();
+    cross(10); // deliberately skip the middle ring
+    const afterAnyTwo = api.rules.status();
+    return {
+      fatal: null,
+      afterOne: { phase: afterOne.phase, collected: afterOne.collected.length },
+      afterAnyTwo: {
+        phase: afterAnyTwo.phase,
+        collected: afterAnyTwo.collected.length,
+        inventory: afterAnyTwo.collectibleCount,
+        target: afterAnyTwo.collectibleTarget,
+      },
+    };
+  });
+
   await page.screenshot({ path: path.join(ART, "rules.png"), fullPage: false });
 } catch (e) {
   out.fatal = String(e);
@@ -257,6 +309,7 @@ await browser.close();
 const c = out.course ?? {};
 const d = out.clockAndDocument ?? {};
 const p = out.drop ?? {};
+const t = out.threshold ?? {};
 
 const ok =
   !c.fatal &&
@@ -284,6 +337,10 @@ const ok =
   // The gap is noticed, recovered where recoverable, and admitted permanently.
   p.tookOneBefore === true &&
   p.desyncedFlagged === true && p.resyncs >= 1 &&
-  p.collectedSurvived === true && p.staysDesynced === true;
+  p.collectedSurvived === true && p.staysDesynced === true &&
+  // Any two of a larger inventory complete without an invented finish gate.
+  !t.fatal && t.afterOne?.phase === "running" && t.afterOne?.collected === 1 &&
+  t.afterAnyTwo?.phase === "complete" && t.afterAnyTwo?.collected === 2 &&
+  t.afterAnyTwo?.inventory === 3 && t.afterAnyTwo?.target === 2;
 
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);

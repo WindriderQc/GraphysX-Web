@@ -257,6 +257,15 @@ export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
     description: "Recovered sphere study for normals, curvature, and lighting explanations.",
     defaultRepeat: [1, 1],
     source: "BallZ archive"
+  },
+  {
+    id: "zack",
+    label: "Zack Magician",
+    url: "/assets/textures/suzanne1/Zack.jpg",
+    category: "science",
+    description: "Recovered Suzanne magician billboard used by the s cells and Suzanne 2 XML attachment.",
+    defaultRepeat: [1, 1],
+    source: "BallZ archive StockRoom/Suzanne1/Zack.jpg"
   }
 ] as const satisfies readonly AgentWorldTextureDescriptor[];
 
