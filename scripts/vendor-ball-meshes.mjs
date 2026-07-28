@@ -46,7 +46,13 @@ const PARTS = [
     name: "BallCtrlGridXL",
     source: "BallZ 2011/Release/Media/Ball/BallCtrl.tvm + Media/GridXL.bmp",
     material: { name: "ballctrl-gridxl", color: [1, 1, 1, 1], textureName: "GridXL.bmp", textureUrl: "/assets/textures/ball/GridXL.bmp" },
-    fidelity: "faithful BallCtrl positions, UVs and indices copied unmodified; GridXL restored as the recorded classic skin",
+    // Honest split: the geometry is faithful, the TEXTURE BINDING is not recorded. The TVM
+    // decode kept no material assignment, and the ctrl's recovered binding is FireArrow800
+    // (the aim); GridXL sits beside it in Media/Ball and its use as the classic skin is
+    // inferred from that adjacency. Adapted, per the provenance invariant — placements
+    // informed by recovered data are still placements we chose.
+    fidelity:
+      "geometry faithful — BallCtrl positions, UVs and indices copied unmodified; the GridXL texture binding is adapted (inferred from the Media/Ball set; the archive's own material assignment did not survive the decode)",
   },
   {
     kind: "fire",
