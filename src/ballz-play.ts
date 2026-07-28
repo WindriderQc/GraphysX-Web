@@ -1,6 +1,7 @@
 import { PUSH_DIRECTIONS } from "./ballz-level-scene";
 import { describeRun, formatClock, type AgentWorldDefinition, type GraphysXAgentWorldApi } from "./agent-world-runtime";
-import { ARCHIVE_BALLZ_LEVELS } from "./archive-ballz-levels";
+import { archiveReferenceMs, raceRecordIdForWorld } from "./archive-race-records";
+import { createPersonalGhostSession, getPersonalGhostState } from "./level-ghosts";
 import {
   LevelRecordStore,
   formatMedal,
@@ -55,6 +56,8 @@ export function mountBallzPlay(
   // A level with no controllable subject is a layout rather than something to play.
   if (!ball || !subjectId) return () => {};
   const ballId = subjectId;
+  const recordId = raceRecordIdForWorld(api.state()?.world.id ?? "");
+  const ghostSession = recordId ? createPersonalGhostSession(api, ballId, recordId) : null;
   // A composed replay reloads the pristine scene so hidden pickups, transforms, velocities,
   // and rules all restart together. Grid levels retain their existing library-backed replay.
   // `world.loaded` mounts this view before the runtime arms the rules block (deliberately: the
@@ -94,7 +97,9 @@ export function mountBallzPlay(
   status.className = "gx-bz-status";
   const hint = document.createElement("div");
   hint.className = "gx-bz-hint";
-  hint.textContent = (initial?.collectibleCount ?? 0) > 0 ? "collect the rings, then reach the finish" : "arrow keys to roll";
+  const hasGhost = getPersonalGhostState()?.available ?? false;
+  const baseHint = (initial?.collectibleCount ?? 0) > 0 ? "collect the rings, then reach the finish" : "arrow keys to roll";
+  hint.textContent = `${baseHint}${hasGhost ? " · race your personal ghost" : ""}`;
   hud.append(course, status, hint);
   // Play is a place you can leave. Without this the only way out of a game is a page reload,
   // which is the sort of dead end that makes a mode feel like a trap rather than a surface.
@@ -135,7 +140,7 @@ export function mountBallzPlay(
   // remove, so WASD would fight it the moment someone plays a level with the editor open.
   const steerable = !!api.query({ ids: [ballId] })[0]?.steering;
   if (steerable) {
-    hint.textContent = "← → aim · ↑ roll · ↓ brake · space jump · hold the mouse to roll toward it";
+    hint.textContent = `← → aim · ↑ roll · ↓ brake · space jump${hasGhost ? " · personal ghost active" : ""}`;
   }
   // The race-start countdown: 3 · 2 · 1 · GO, controls locked until GO, and the run clock
   // re-armed AT go so the time on the board measures driving, not staring at the overlay.
@@ -161,7 +166,9 @@ export function mountBallzPlay(
   const poll = window.setInterval(() => {
     if (won) return;
     const run = api.rules.status();
+    if (run && raceStarted) ghostSession?.tick(run.elapsedSeconds * 1000);
     if (run?.phase === "complete") {
+      ghostSession?.finish(run.elapsedSeconds * 1000, !run.desynced);
       win(run.collectibleCount, run.elapsedSeconds, run.desynced);
       return;
     }
@@ -186,6 +193,7 @@ export function mountBallzPlay(
     window.clearInterval(poll);
     teardownCountdown?.();
     teardownControls();
+    ghostSession?.dispose();
     hud.remove();
     container.querySelector(".gx-bz-win")?.remove();
   };
@@ -507,9 +515,7 @@ function buildWinPanel(
   const actions = document.createElement("div");
   actions.className = "gx-bz-win-actions";
 
-  const worldId = api.state()?.world.id ?? "";
-  const levelId = worldId.startsWith("ballz-level-") ? worldId.slice("ballz-level-".length) : null;
-  const recordId = levelId ?? (worldId || null);
+  const recordId = raceRecordIdForWorld(api.state()?.world.id ?? "");
 
   // The scoreboard finally drawn (ROADMAP Horizon 3 §6): time, medal, best, delta-to-best, fed
   // from the rules run this panel already renders plus the level record store. A desynced run
@@ -589,21 +595,6 @@ function buildScoreRow(finish: LevelFinishSummary): HTMLElement {
     row.append(stat("best", formatRaceTime(finish.bestMs)));
   }
   return row;
-}
-
-/**
- * The archive's recovered `ScoreBest` for a seeded level, when this run is one of them — the
- * reference the medal scale judges against. Hand-painted levels return null and stay unscored.
- */
-function archiveReferenceMs(levelId: string): number | null {
-  const level = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === levelId);
-  const value = level?.provenance.levelListFacts["scoreBestMs"];
-  if (typeof value === "number" && value > 0) return value;
-  // Level 3 deliberately is not in the modern grid library: its M/r/$ alphabet needs the
-  // composed raised-platform scene. Its levelList.xml reference still belongs on the same
-  // finish board, keyed by the composed world id instead of pretending it is a grid level.
-  if (levelId === "archive-level3-v2") return 158507.313;
-  return null;
 }
 
 /** Reload a composed course without letting gravity outrun an async exact model collider. */

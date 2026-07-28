@@ -1,6 +1,7 @@
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { createLevelThumbnail, createSceneThumbnail, SHELF_THUMBNAIL_CSS } from "./shelf-thumbnails";
 import { BALLZ_MENU_LEVEL_IDS, mountBallzMenu } from "./ballz-menu";
+import { mountArchiveCup, type ArchiveCupCourse } from "./archive-cup";
 
 /**
  * The "Games & Playgrounds" front-door shelf.
@@ -61,6 +62,10 @@ export type GamesShelfOptions = {
   api: GraphysXAgentWorldApi;
   /** Archive courses and other composed playables, listed above the level library. */
   composed?: GamesShelfComposedRow[];
+  /** Ordered campaign rounds. When present the shelf promotes them as the Archive Cup. */
+  archiveCup?: ArchiveCupCourse[];
+  /** Return from a campaign race directly to its refreshed standings. */
+  openArchiveCup?: boolean;
   /** Called after a level is materialised, so the caller can take the showroom down with it. */
   onPlay?: (levelId: string) => void;
   /** Called when the ✕ dismisses the shelf without playing, so the caller can restore the front door. */
@@ -68,7 +73,7 @@ export type GamesShelfOptions = {
 };
 
 export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptions): () => void {
-  const { api, composed, onPlay, onClose } = options;
+  const { api, composed, archiveCup, openArchiveCup, onPlay, onClose } = options;
   injectStyleOnce();
 
   // Seed once. A returning visitor who edited or deleted this course keeps their version —
@@ -98,6 +103,36 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
 
   const list = document.createElement("div");
   list.className = "gx-shelf-list";
+
+  const openCup = (): void => {
+    if (!archiveCup?.length) return;
+    mountArchiveCup(container, {
+      courses: archiveCup,
+      onPlay: (course) => {
+        dispose();
+        onPlay?.(course.id);
+      },
+    });
+  };
+
+  if (archiveCup?.length) {
+    const cup = document.createElement("button");
+    cup.type = "button";
+    cup.className = "gx-shelf-cup";
+    cup.dataset.gameId = "archive-cup";
+    const cupMark = document.createElement("span");
+    cupMark.className = "gx-shelf-cup-mark";
+    cupMark.textContent = "Archive Cup";
+    const cupCopy = document.createElement("span");
+    cupCopy.className = "gx-shelf-hero-copy";
+    cupCopy.textContent = "nine recovered courses · persistent unlocks · medals · personal ghosts";
+    const cupCta = document.createElement("span");
+    cupCta.className = "gx-shelf-cup-cta";
+    cupCta.textContent = "▶ Tour";
+    cup.append(cupMark, cupCopy, cupCta);
+    cup.addEventListener("click", openCup);
+    list.append(cup);
+  }
 
   // THE GAME gets a hero card, not a bare level row. "First Course" as a top-level button
   // read as a test fixture; BallZ is a title, and clicking it opens the game's own menu
@@ -231,6 +266,7 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
     dispose();
     onClose?.();
   });
+  if (openArchiveCup) queueMicrotask(openCup);
   return dispose;
 }
 
@@ -266,6 +302,11 @@ ${SHELF_THUMBNAIL_CSS}
     linear-gradient(100deg,rgba(38,20,8,.92),rgba(16,32,44,.92));
   box-shadow:0 8px 30px rgba(255,110,26,.14)}
 .gx-shelf-hero:hover{border-color:#ffb054;box-shadow:0 10px 36px rgba(255,110,26,.28)}
+.gx-shelf-cup{grid-column:1 / -1;display:flex;align-items:center;gap:16px;cursor:pointer;text-align:left;padding:16px 20px;
+  border-radius:12px;border:1px solid rgba(112,239,255,.42);background:radial-gradient(120% 160% at 8% 20%,rgba(52,191,190,.25),transparent 53%),linear-gradient(100deg,rgba(7,37,44,.96),rgba(14,27,39,.94));box-shadow:0 8px 30px rgba(52,191,190,.12)}
+.gx-shelf-cup:hover{border-color:#86f3de;box-shadow:0 10px 36px rgba(52,191,190,.24)}
+.gx-shelf-cup-mark{font:850 25px/1 var(--gx-font);letter-spacing:.03em;color:#86f3de;text-shadow:0 0 22px rgba(112,239,255,.36)}
+.gx-shelf-cup-cta{color:#031216;font:800 13px var(--gx-font);letter-spacing:.06em;padding:9px 18px;border-radius:9px;background:linear-gradient(180deg,#8af5d7,#48c7c4);box-shadow:0 4px 18px rgba(72,199,196,.26)}
 .gx-shelf-hero-mark{font:900 30px/1 var(--gx-font);letter-spacing:.04em;
   background:linear-gradient(180deg,#ffe14d,#ff9a2a 55%,#ff2e17);
   -webkit-background-clip:text;background-clip:text;color:transparent;

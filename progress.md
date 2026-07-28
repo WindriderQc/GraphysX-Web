@@ -2148,3 +2148,39 @@ Final release verification: `npm run verify -- --wait` passed all 40 checks from
 typecheck and production build. The complete browser/archive matrix, revival-debt audit,
 Rapier probes, store-auth's 22 assertions and node-only DNA suite are green. Screenshots are
 under `output/verify`; the focused human-route captures remain under `output/web-game`.
+
+## 2026-07-28 — `archive-cup-r1`: the recovered courses become a campaign
+
+The Games shelf now promotes Archive Cup as a first-class nine-round tour: BallZ Levels 1–3,
+Great Slide, Map 1, Level1 2011, Suzanne Machinery, Suzanne 1 and Suzanne 2. Round 1 starts
+unlocked; each verified clear in the existing `graphysx-level-records-v1` store unlocks the
+next. Returning players retain their clears, best times and medals without a migration. The
+three courses with recovered ScoreBest values use the existing faithful medal scale; the six
+without source times show completion and best time without inventing a medal reference.
+Legacy `Level.cs` medal points (100/75/50) are summed separately from the cleared-round count.
+
+Every rules-backed course now records a bounded 150 ms trajectory for a verified personal
+best. On replay it materialises as `personal-best-ghost`: a translucent cyan, non-physical,
+ephemeral scene entity moved through ordinary `api.update` calls. It is excluded from authored
+exports, never starts before the 3·2·1·GO gate, never records a desynchronised finish, and an
+older board time cannot be mislabeled by a later/slower first trace. Campaign and ghost state
+are both included in `render_game_to_text`. Exiting a Cup race returns directly to refreshed
+standings; ordinary Games/BallZ play still returns to the showroom.
+
+Focused verification is green: production build, the pre-existing Games journey, and the new
+Archive Cup smoke. The new smoke proves the 1-of-9 fresh unlock, restored 2/9 progress, 175
+medal points, round-3 unlock, personal-ghost playback/ephemeral/no-physics contract, text
+projection, and race→standings return. `archive-cup-standings.png` and
+`archive-cup-personal-ghost.png` were inspected at 1280×800; no clipping or browser errors.
+The required web-game client also opened the human Showroom→Games route, advanced rendered
+frames, captured the new Cup/BallZ shelf, and matched its scene-mode text projection.
+
+The expanded full release gate passed 39/41 checks in one sweep. Its two misses were audited:
+Rapier Race never reached either ephemeral preview server (`ERR_CONNECTION_TIMED_OUT`) and
+passed immediately against the stable preview; meshlight's behavior was green but its
+byte-identity check exposed that Windows had converted the 9,036-byte LF-normalized vendored
+shader to 9,300 CRLF bytes. `*.shade text eol=lf` now makes that provenance contract stable
+across checkouts; after rebuilding, the exact `0EE6F3…5A1C` SHA, meshlight smoke and Rapier
+Race smoke are green. Together the matrix plus isolated reruns cover all 41 checks.
+
+Next: merge the campaign commit to main, push, and confirm its production deployment.

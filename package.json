@@ -13,6 +13,7 @@
     "smoke:editor": "node scripts/smoke-editor.mjs",
     "smoke:standalone": "node scripts/smoke-standalone.mjs",
     "smoke:levels": "node scripts/smoke-levels.mjs",
+    "smoke:archive-cup": "node scripts/smoke-archive-cup.mjs",
     "smoke:foundation": "node scripts/smoke-foundation.mjs",
     "probe:terrain": "node scripts/probe-terrain-rest.mjs",
     "probe:rapier-heightfield": "node scripts/probe-rapier-heightfield.mjs",

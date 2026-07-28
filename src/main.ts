@@ -28,6 +28,9 @@ import {
 } from "./archive-playgrounds";
 import { composeSkyboxSpiral, frameSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from "./archive-skybox-spiral";
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import { archiveReferenceMs } from "./archive-race-records";
+import { getArchiveCupRuntimeState, type ArchiveCupCourse } from "./archive-cup";
+import { getPersonalGhostState } from "./level-ghosts";
 import {
   ARCHIVE_BALLZ_LEVELS,
   ARCHIVE_BALLZ_NOT_REVIVED,
@@ -102,6 +105,9 @@ if (mode === "legacy") {
     // a ported village would otherwise sit inside the showroom's hills. Kept so opening a
     // scene can take the showroom down with it.
     let showroomEnvironment: (() => void) | null = null;
+    // A campaign race returns to the standings instead of dropping the player at the generic
+    // front door. The flag is armed only by Archive Cup launchers and consumed on exit.
+    let resumeArchiveCup = false;
     const enterEditor = (): void => {
       interaction?.setEnabled(false);
       void host.enterEditor();
@@ -143,14 +149,12 @@ if (mode === "legacy") {
       interaction?.setEnabled(true);
       mountWelcome(root, enterEditor, openGames, openBrowse);
     };
-    const openGames = (): void => {
+    const openGamesShelf = (showArchiveCup = false): void => {
       interaction?.setEnabled(false);
       void import("./games-shelf").then(({ mountGamesShelf }) => {
-        mountGamesShelf(root, {
-          api: host.api,
+        const composed = [
           // Archive courses composed as whole scenes rather than grid levels. Same deal as
           // the garage row in Browse: main.ts supplies them because composing needs the host.
-          composed: [
             {
               id: "archive-level3-v2",
               label: "Level 3: Alien Catwalks",
@@ -259,7 +263,58 @@ if (mode === "legacy") {
                 frameArchiveWorld1(host);
               }),
             },
-          ],
+          ];
+
+        const composedRound = (id: string, recordId: string = id): ArchiveCupCourse => {
+          const course = composed.find((candidate) => candidate.id === id);
+          if (!course) throw new Error(`Archive Cup course ${id} is not registered`);
+          return {
+            ...course,
+            recordId,
+            referenceMs: archiveReferenceMs(recordId),
+            play: async () => {
+              resumeArchiveCup = true;
+              try {
+                await course.play();
+              } catch (error) {
+                resumeArchiveCup = false;
+                throw error;
+              }
+            },
+          };
+        };
+        const gridRound = (id: string, label: string, meta: string): ArchiveCupCourse => ({
+          id,
+          recordId: id,
+          label,
+          meta,
+          referenceMs: archiveReferenceMs(id),
+          play: () => {
+            resumeArchiveCup = true;
+            const result = host.api.levels.play(id);
+            if (!result.ok) {
+              resumeArchiveCup = false;
+              throw new Error(result.error ?? `Could not play ${label}`);
+            }
+          },
+        });
+        const archiveCup: ArchiveCupCourse[] = [
+          gridRound("archive-ballz-level1", "Level 1: Alien Landing", "Alien floor · 3 laps · recovered ScoreBest"),
+          gridRound("archive-ballz-level2", "Level 2: Checkerboard Crowd", "Checkerboard · wandering crowd · recovered ScoreBest"),
+          composedRound("archive-level3-v2"),
+          composedRound("archive-great-slide"),
+          composedRound("archive-map1", "graphysx-archive-map1"),
+          composedRound("archive-level1-2011", "graphysx-archive-level1-2011"),
+          composedRound("archive-suzanne-machinery", "graphysx-archive-suzanne-machinery"),
+          composedRound("archive-suzanne1"),
+          composedRound("archive-suzanne2"),
+        ];
+
+        mountGamesShelf(root, {
+          api: host.api,
+          composed,
+          archiveCup,
+          openArchiveCup: showArchiveCup,
           // The level is already materialised by the time this fires; the host has switched to
           // play mode on its own. All that is left is taking the showroom's set down so a
           // course is not sitting inside the showroom's hills.
@@ -271,6 +326,7 @@ if (mode === "legacy") {
         });
       });
     };
+    const openGames = (): void => openGamesShelf(false);
     const openBrowse = (): void => {
       interaction?.setEnabled(false);
       void import("./browse-shelf").then(({ mountBrowseShelf }) => {
@@ -416,7 +472,14 @@ if (mode === "legacy") {
           },
       // Leaving a game returns to the front door rather than to a chrome-less view of the level
       // you just finished, which would be a dead end with no way onward.
-      onExitPlay: editorFirst ? undefined : () => restoreShowroom(),
+      onExitPlay: editorFirst
+        ? undefined
+        : () => {
+            const returnToCup = resumeArchiveCup;
+            resumeArchiveCup = false;
+            restoreShowroom(!returnToCup);
+            if (returnToCup) openGamesShelf(true);
+          },
     });
     Object.assign(window, {
       __GRAPHYSX_HOST__: host,
@@ -430,6 +493,8 @@ if (mode === "legacy") {
         world: host.api.state()?.world ?? null,
         paused: host.api.state()?.paused ?? false,
         run: host.api.rules.status(),
+        archiveCup: getArchiveCupRuntimeState(),
+        personalGhost: getPersonalGhostState(),
         atmosphere: host.dayNightState,
         players: host.api.query({ tag: "player" }).map((entity) => ({
           id: entity.id,
