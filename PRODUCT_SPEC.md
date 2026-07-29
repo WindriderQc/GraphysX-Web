@@ -8,7 +8,7 @@ Foundation slice `foundation-r1` has landed: the app now boots into the platform
 core `host-r1` has landed too: `PlatformHost` renders the v2 world on its own
 renderer/camera/controls/loop with zero `race-scene` dependency (reachable at
 `?host=standalone`). `host-r2` adds full agent parity on that host — the complete
-`window.__GRAPHYSX__` API + 47-tool bridge, wired straight to the runtime. `editor-r1`
+`window.__GRAPHYSX__` API + 90-tool bridge, wired straight to the runtime. `editor-r1`
 adds the human editing layer (click-select, transform gizmo, outliner, add/delete/starter/
 pause). **The default is now flipped onto the clean host** (`foundation-r2` / `showroom-r1`):
 the app boots the welcome showroom on `PlatformHost`, and race-scene is retired to
@@ -61,9 +61,9 @@ browser and then inhabit them together.**
 4. **Layered rendering, cheaply.** A scene is a stack: the 3D viewport plus optional 2D
    layer(s). UI chrome (HUD, menus, inspector) is **DOM/HTML over the canvas — near-free**
    and the default. A **generative** 2D layer (hand-written canvas, or p5 for rich sketches)
-   is **optional, opt-in per scene, and off by default**; p5-to-texture can also map a 2D
-   sketch onto an in-world surface. Generative 2D must earn its frame budget or it isn't
-   enabled.
+   is **optional, opt-in per scene, and off by default**; scene-native Canvas2D surfaces can
+   also map a sketch onto an in-world mesh texture. Generative 2D must earn its frame budget
+   or it isn't enabled.
 5. **Performant by intent.** Rich scenes must stay smooth: instancing, LOD, budgeted
    particle/agent counts, deterministic step, and — a hard rule — **one shared
    `requestAnimationFrame` loop**. The 3D render and any 2D layer draw in the *same* tick;
@@ -82,7 +82,8 @@ A GraphysX scene is a **stack of layers plus a live simulation**, not a single c
 
 - **3D world** — the existing `graphysx.agent-world/v2`: entities, groups, lights,
   materials, textures, models, splines, prefabs, environment + sky, and physics
-  (static / dynamic / kinematic; materials; impulses; gravity; deterministic pause/step).
+  (static / dynamic / kinematic; materials; impulses; gravity; serializable fixed,
+  revolute and rope joints; deterministic pause/step).
   Recovered model materials remain source-owned but expose stable per-mesh/per-material
   assignment slots. Sparse scene-authored overrides can tune only properties the recovered
   material class supports, preserving maps, geometry, transforms, physics, and provenance.
@@ -90,7 +91,8 @@ A GraphysX scene is a **stack of layers plus a live simulation**, not a single c
   all driven by the single shared frame loop (never a second loop). UI chrome uses
   **DOM/HTML** (near-free, default). An optional **generative** layer (canvas, or p5 for
   rich sketches) is off by default and only enabled when it earns its cost; it can also be
-  *drawn to a texture* mapped onto in-world surfaces (screens, billboards, portals). If a
+  *drawn to a texture* mapped onto in-world surfaces (screens, billboards, portals); this
+  scene-native CanvasTexture path ships for primitive mesh entities. If a
   scene's generative 2D isn't worth the frame budget, it simply isn't used.
 - **Simulation systems** — particles/emitters, force fields, flocking/boids and steering,
   autonomous crowds (humans, zombies), evolutionary/DNA entities, spline followers. These
@@ -129,8 +131,10 @@ tagged:
 - **Environment** — lights, heightmap terrain, water with reflection, skyboxes (scoped
   ownership), scene-authored image lighting (sky/procedural studio/five curated licensed HDRI
   sources, intensity, aligned yaw and backdrop tuning), reusable CubX/CubZ assemblies.
-- **Physics & objects** — rigid bodies, materials, impulses, vehicles, props, splines.
-- **2D** — generative p5 sketches as overlays or in-world textures.
+- **Physics & objects** — rigid bodies, materials, impulses, fixed/revolute/rope joints,
+  the recovered Rapier raycast vehicle route, props, splines.
+- **2D** — generative Canvas2D sketches as overlays or scene-native in-world textures;
+  archived p5 sources remain evidence for adapted presets where appropriate.
 
 These are the *floor*. The intent is an open environment where new systems compose with the
 recovered ones.
@@ -169,7 +173,8 @@ the authenticated, session-scoped relay — roadmap, not v1. Say so; don't fake 
   as ordinary editable v2 scenes.
 - **2D overlay** capability in the scene model — DOM HUD/menu (near-free, default). An
   optional generative layer (canvas/p5) is opt-in, single-loop, and off by default.
-- **Save / load / export / import** (v2 JSON + legacy-XML migration); named-level library
+- **Save / load / export / import** (lossless v2 JSON + legacy-XML migration and a
+  warning-first flat SceneNET v1.2 compatibility export); named-level library
   where it is genuine platform vocabulary.
 - **Live local interaction** (human click + in-browser/stdio agent on the same scene);
   honest version text (desktop + mobile); atomic static-release deploy.
@@ -194,13 +199,13 @@ locked inside a legacy environment module (`?host=legacy` only) has **not** grad
 | --- | --- |
 | Welcome showroom as front door | **Ships.** |
 | Agent World API + discoverable tool bridge | **Ships.** (Tool count grows as vocabulary graduates; the manifest is the source of truth, not a number pinned here.) |
-| Save / load / export / import (v2 JSON + legacy XML) | **Save / load / export now have editor UI** (toolbar buttons at `platform-editor.ts:1373-1375`, backed by `saveScene`/`loadScene`/`exportScene` at `:2063-2089`; Export downloads a `*.graphysx.json`). Only *file import* (external JSON / legacy XML) remains API-only — there is no import button, though `levels.importAscii` is wired. Corrected 2026-07-24: the blanket "no UI on the default host" was stale. |
+| Save / load / export / import (v2 JSON + legacy XML) | **Ships.** The compact editor toolbar exposes Save, Load, JSON Export and **Legacy XML** export; the Advanced JSON Workbench exposes **Import JSON / XML**. `exportLegacyXml()` emits a deterministic flat Scene3D v1.2 subset with structured warnings and rejects duplicate IDs or hierarchy instead of silently renaming/flattening. JSON remains the only lossless canonical format. Direct file import is workbench-only rather than duplicated in the compact toolbar. |
 | Scene Editor: outliner, gizmo, create/delete, pause/step | **Ships.** |
 | Scene Editor: inspector, materials/textures, behaviors, interactions, tags, undo, JSON Workbench | **Ships on the default host.** Model material authoring is assignment-aware: the editor discovers stable slots after load, identifies source-map and repeated-source relationships, exposes only supported Phong/Standard/Physical controls, offers provenance-conscious presets for the Archive Garage vehicles, and resets one slot or all slots without replacing recovered source materials. |
 | Simulation systems (particles + ≥1 Nature-of-Code system) as editor entities | **Ships.** `emitter` is a v2 entity type (`agent-world-particles.ts`) with 8 presets derived from the decoded TV3D archive library, spawnable from the editor's Effects palette and via `api.emitters()`, budgeted at 600 particles/emitter. `flock` (`agent-world-flock.ts`) and now `force-field` (`agent-world-force-field.ts`) are v2 entity types too, both in the editor's Life palette with `api.flocks()` / `api.forceFields()`. Force fields graduate the second Nature-of-Code system — the forces-garden attractor/flow/drag/vortex from the p5 `sAll` sketches — and act *on* rigid bodies, particle emitters and flocks. A fourth, `formula-field` (`agent-world-formula.ts`), graduates the recovered Math Game — `Formulas::moleculesUpdate`'s PARABOLA/SLOPE and the `moleculesCreate` molecule grid — as an instanced field whose coefficients are ordinary scene data, editable in the inspector and via `api.update`. It affords the archive's full 10,000 molecules where a flock caps at 240, because a formula has no neighbour test. ~~DNA/evolutionary entities are still legacy-only in `nature-lab.ts`.~~ **Corrected**: `dna-tree` graduated in `dna-r2`, and `crowd` (`agent-world-crowd.ts`) graduated the race scene's NPC population in `crowd-r1` — a neutral instanced ground crowd with `wander`/`pursue` roles, in the editor's Life palette and on `api.crowds()`. With those two, every simulation system §4 lists is expressible in v2. |
-| Curated vocabulary: assets, models, textures, prefabs | **Partial.** 69 mesh assets (including the three recovered vehicles under a `vehicle` category, and the five recovered mesh-world ports under `port`) + 17 textures + prefabs (including the recovered `cubx-assembly`) reachable from v2. ~~Prefabs exist in the API but are absent from the editor UI~~ — corrected: the editor's library has a Prefabs tab (the default tab), and each chip calls the same `spawnPrefab` an agent calls. |
+| Curated vocabulary: assets, models, textures, prefabs | **Ships and remains extensible.** The live asset/texture/prefab registries and tool manifest are authoritative rather than stale pinned counts. Recovered vehicles use the `vehicle` category, recovered mesh worlds use `port`, `cubx-assembly` is a prefab, and the editor library calls the same spawn/import paths as the agent API. |
 | Browse Scenes + Games & Apps | **Both ship on the front door.** **Games & Playgrounds** (`games-shelf.ts`): lists the level library, every row is `api.levels.play(id)`, playing switches the host to `play` mode and returns to the showroom on exit — with a win state (`ballz-play.ts`) and framed camera. **Browse Scenes** (`browse-shelf.ts`): a gallery of the curated starter scenes (`api.starters()`), each row opening the scene in the *editor* (Browse loads a scene to work on it; Games enters play). No store required. The store-backed scene browser (`scene-browser.ts`) remains the path for *saved* scenes once a store is reachable. §5's three destinations are all live. |
-| 2D overlay capability in the scene model | **Ships.** `environment.overlay` is a scene-serialisable field (`agent-world-overlay.ts`): a generative Canvas2D layer the host draws over the 3D view, off by default, three sketches (vignette/starfield/scanlines), reachable from `api` (via `environment`) and an editor dropdown. Drawn in the single shared `tick()` — `smoke-overlay.mjs` asserts the overlay advances one frame per 3D frame (never a second rAF). DOM chrome (HUD/menus) was already the default 2D path; this adds the generative layer §4 wanted. p5-to-texture and multi-layer stacks remain future. |
+| 2D overlay capability in the scene model | **Ships.** `environment.overlay` is a scene-serialisable Canvas2D layer over the 3D view, while an entity's optional `surface` is a scene-serialisable CanvasTexture mapped onto a primitive mesh. Both are off by default and advance only in the shared runtime tick; `smoke-overlay.mjs` and `smoke-surfaces.mjs` guard frame coupling, live patching, removal and export/load. Multiple composited overlay layers remain deliberately out of scope. |
 | Live local interaction (human + in-browser agent, one scene) | **Ships.** |
 | Atomic static-release deploy | **Ships**, now gated on CI (`ci.yml` → `deploy.yml`), with staging on UGBrutal. |
 
@@ -263,7 +268,7 @@ Related corrections elsewhere in this spec:
   color string with no scoped-sky mechanism.~~ **Corrected 2026-07-24** (this bullet had gone
   stale and even contradicted §8.2, which already lists `skybox` as graduated): per-scene sky
   ownership ships as v2 scene data. `environment.sky` is an `AgentWorldSkyId | null`
-  (`agent-world-runtime.ts`), `api.skies()` returns six curated archive sets
+  (`agent-world-runtime.ts`), `api.skies()` returns seven curated archive sets
   (`agent-world-skies.ts`), and the inspector has a live sky dropdown (`platform-editor.ts`
   `skySelect`). The §11 "sky ownership is scoped" tenet is met — each scene owns its own sky.
 
@@ -277,7 +282,7 @@ three.js scene graph directly and were read only as evidence.
 | --- | --- | --- |
 | CubX assembly | `cubx-assembly` prefab | 8 corner cubes + 12 edge struts from the decoded `CubXOpen.tva` hierarchy. Click proxies deliberately absent: the audit records that click-index → BoxNN → actor orderings disagree in the source. |
 | BallZ Level 1 + Level 2 | ASCII grid levels | Level 2 ships at 100% authored cells. Five further records are recorded as **not** revived, with reasons. |
-| Impreza · Cobra · Piste Ovale | `model` entities, Archive Garage | No drivable vehicle: wheel joints are not v2 vocabulary, so it would only be a textured box. |
+| Impreza · Cobra · Piste Ovale | `model` entities in Archive Garage; Piste Ovale–Impreza player route | The Garage stays a faithful static v2 display because no garage driving binding survives. Separately, the player-visible race uses the recovered drive/camera/control evidence through the real Rapier raycast vehicle and suspension. That specialized controller is not misrepresented as generic v2 wheel-joint vocabulary. |
 | Flock Planet · Forces & Flow Garden | composed scenes | Their constants had already graduated — the scenes address them by preset id, so the smoke re-derives fidelity from the shipped registry. |
 | Voie Lactée | composed scene | No sun, no heliocentric orbits, no scale compression — the record supports none of them, and the agent refused to invent them. |
 | Math Game | `formula-field` + a composed screen | The A/B/C/M/X slider panel is deliberately absent: the coefficients are already editable in the inspector and via `api.update`, which *is* the platform's answer to it. |
@@ -300,7 +305,8 @@ production. It caught the vehicle meshes, the planet maps, the Math board, and f
 level-style textures. Each was fixed by claiming the asset; a build guard that fails when a product
 module references an unshipped URL is the standing fix and is queued.
 
-**Graduated since this audit:** `skybox` in `environment` (six archive sets, per-scene); the
+**Graduated since this audit:** `skybox` in `environment` (seven archive sets, per-scene,
+including the exact authored 2048² BallZ18 Clear Sky); the
 particle `emitter` entity type (eight archive-derived presets); and the `terrain` and `water`
 entity types. Terrain is heightmap-backed with a static heightfield collider and five curated
 fields — three decoded from workshop BMPs by `scripts/vendor-heightmaps.mjs` with source path,
@@ -431,7 +437,8 @@ Foundation before flourish. Each phase is shippable and course-correctable.
    loop advances, 16-entity world simulates, zero errors. `host-r2` then wired **full agent
    parity** onto the host — `src/agent-world-api.ts` builds the entire `window.__GRAPHYSX__`
    API + discoverable bridge straight from the runtime (no PrototypeApp, no race-scene). Smoke
-   drives spawn (16→17 entities), asset/texture discovery, a 47-tool bridge manifest, and level
+   originally drove spawn (16→17 entities), asset/texture discovery, a 47-tool bridge manifest,
+   and level
    authoring, zero errors. `editor-r1` delivered exactly that:
    `src/platform-editor.ts` (`PlatformEditor`) adds click-selection (via `world.findEntityId`),
    the transform gizmo with commit-on-release, a toolbar (Move/Rotate/Scale, add box/sphere/light,
@@ -464,9 +471,10 @@ Foundation before flourish. Each phase is shippable and course-correctable.
    on-platform scene behaviors (they exist and need polish).
 5. **First on-platform game** *(started — `levels-r1`)* — one new, elegant BallZ-inspired level
    authored as a v2 scene, to the BallZ18 aesthetic bar, with a shader pass — **rebuilt on the
-   platform, not ported.** (Note: a true 2048 "Clear Sky" set is not in this repo; `clearblue`
-   is 512 px — confirmed by eye, it reads muddy brown at play angles. A high-res sky would be a
-   deliberate workshop→curate→import, not a pointer.)
+   platform, not ported.** **Corrected 2026-07-28:** the exact six authored 2048² BallZ18
+   `Skybox_Clear_Sky` PNGs now ship byte-identically with Unity-material provenance and native
+   cubemap orientation. No surviving archive scene binds that material, so its current Day/Night
+   endpoint is explicitly a modern adaptation; the older 512 px `clearblue` set remains unchanged.
 
    **Landed:** `src/ballz-level-scene.ts` materialises an authored ASCII grid into a playable v2
    scene, so `levels.play()` is no longer a hardcoded failure. Floor, walls, hazards, start pad

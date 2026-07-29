@@ -240,3 +240,62 @@ here blocks a release; pick by value rather than by order.
 - **Stage commits by explicit path. Never `git add -A`.** Several sessions have shared this
   tree concurrently, and a broad add has already swept one session's work into another's
   commit under an unrelated message — twice.
+
+## 2026-07-28 — archive/media parity reconciliation (`functional-media-parity-r1`)
+
+This section supersedes stale counts and open-gap claims above without rewriting the historical
+record. At baseline `2ff08fa`, four things were genuinely missing: a reproducible whole-archive
+media/functionality census, scene-serializable physics constraints, the exact authored BallZ18
+2048² Clear Sky set, and a SceneNET write path. The earlier “no drivable vehicle” and
+“p5-to-texture is future” statements were already stale: Piste Ovale–Impreza uses the real Rapier
+raycast vehicle in its specialized player route, and primitive entities already support a
+scene-native generative CanvasTexture `surface`. The Garage remains intentionally static because
+no garage driving binding survives, and multiple composited overlay layers remain out of scope.
+
+**Landed in this reconciliation:** `docs/archive-parity-ledger.json` inventories 8,823 media
+paths / 5,949 unique hashes / 2,874 byte-identical duplicate paths / 5,688,234,500 examined bytes.
+Its 71 functionality records resolve to 66 REVIVED, 3 SOURCE-ONLY, 1 SUPERSEDED and 1 OUT OF
+SCOPE. Media resolves to 545 REVIVED, 2,870 ALIASED, 3,421 SOURCE-ONLY, 1,982 OUT OF SCOPE and
+5 explicit zero-byte UNRECOVERABLE records. The checked-in generator and CI audit reject stale
+output, invalid evidence, unclassified rows and ledger self-evidence.
+
+The v2 document now owns validated fixed, revolute/hinge and rope joints. They are patchable and
+removable through the human/agent API, transaction/undo/export/load safe, rebuilt after body
+changes, reported by `state()` and `render_game_to_text`, and demonstrated by the ordinary
+Physics Sketchbook scene. The bridge is now 90 tools, and the round-trip sweep is 99/99; the older
+97-check and six-sky counts above are historical. Seven curated skies now ship, including the
+exact six byte-identical BallZ18 Clear Sky PNGs with Unity provenance and native-cubemap
+orientation. No surviving scene binds that Unity material, so its current Day/Night use is
+explicitly adapted rather than presented as recovered placement.
+
+SceneNET compatibility is bidirectional at an honest boundary. Imports cover the surviving
+Object3D/Obj3D/EntityNET and v1.0–v1.2 shapes; `exportLegacyXml()` and both editor surfaces expose
+a deterministic flat Scene3D v1.2 subset. Geometry dimensions, pose, visibility, known textures
+and basic physics survive. Structured warnings disclose omitted environments, rules, joints,
+unsupported entities and material/PBR fields; duplicate IDs and hierarchy are rejected rather
+than silently renamed or flattened. Canonical v2 JSON remains the only lossless scene format.
+
+**Remaining evidence boundaries:** the Projection effect and BallZ fluid-layer shader stay
+SOURCE-ONLY because exhaustive binding searches found no host loader/parameter callsite; the
+Arduino hardware panel also stays SOURCE-ONLY because the archive preserves a physical-device UI
+but no faithful browser device binding. The five zero-byte files remain explicitly UNRECOVERABLE.
+These are evidence limits, not placeholders for invented behavior.
+
+Focused verification is green: physics/joints, Rapier race vehicle, generative surfaces,
+BallZ18 sky, day/night, SceneNET XML, archive levels, standalone bridge parity, the 99/99
+round-trip sweep, typecheck, production build, revival-debt audit and archive-parity audit.
+Inspected captures: `output/web-game/joints-final-second/shot-0.png`,
+`output/verify/rapier-piste-race.png`,
+`output/smoke/surfaces-plasma.png`, `output/smoke/ballz18-clear-sky.png`,
+`output/web-game/ballz18-sky-final/shot-0.png`, `output/smoke/scenenet-xml-export.png`, and
+`output/web-game/scenenet-export-final-2/shot-0.png`. Browser text state matched the visible
+world and no product console/page errors remained. The final full-gate result is appended after
+the single authorized combined run.
+
+**Final combined verification:** the one authorized `npm run verify -- --wait` run completed
+45/46 checks. All type/build/audit/node checks and 42 of 43 browser smokes passed in-matrix;
+Rapier Race alone exhausted both ephemeral preview servers at `page.goto` before any assertion.
+The exact unchanged `smoke:rapier-race` then passed against the same built `dist/` on a
+health-checked stable preview: real chassis motion, rear-wheel drive, suspension contacts,
+steering, finite state, screenshot and zero console/page errors. No assertion was weakened and
+the full gate was not rerun.

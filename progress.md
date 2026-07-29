@@ -2203,3 +2203,46 @@ across checkouts; after rebuilding, the exact `0EE6F3…5A1C` SHA, meshlight smo
 Race smoke are green. Together the matrix plus isolated reruns cover all 41 checks.
 
 Next: merge the campaign commit to main, push, and confirm its production deployment.
+
+## 2026-07-28 — `functional-media-parity-r1`: archive revival reconciled to evidence
+
+Started from a fresh clone of `origin/main` at `2ff08fa` and re-read the workshop, Datalake,
+registries, not-revived registers and historical SceneNET/EntityNET sources. The new reproducible
+parity ledger classifies all 8,823 media paths (5,949 unique hashes; 2,874 duplicate paths;
+5,688,234,500 bytes) and 71 functionality records. Final media dispositions are 545 REVIVED,
+2,870 ALIASED, 3,421 SOURCE-ONLY, 1,982 OUT OF SCOPE and 5 explicit zero-byte UNRECOVERABLE;
+functionality is 66 REVIVED, 3 SOURCE-ONLY, 1 SUPERSEDED and 1 OUT OF SCOPE. Its generator and
+audit cannot accept self-evidence or silently stale checked-in output.
+
+Three real gaps closed. Fixed, revolute and rope constraints are now validated, serializable,
+patchable v2 vocabulary across Rapier, transactions, undo, export/load, editor, API, bridge and
+`render_game_to_text`; the Physics Sketchbook is an ordinary 9-entity/3-joint scene. The exact
+authored 2048² BallZ18 Clear Sky faces now ship byte-identically with Unity provenance and correct
+native cubemap orientation; no surviving scene binds the material, so current Day/Night use is
+labelled adapted. SceneNET now has warning-first deterministic flat v1.2 XML export in both APIs,
+the 90-tool bridge and both human authoring surfaces, alongside expanded import compatibility for
+the surviving schema families. JSON remains canonical; unsupported entity/material/environment,
+rule and joint loss is structured, while duplicates and hierarchy are rejected.
+
+Two old gap claims were stale before this work: the player-visible Piste Ovale–Impreza route
+already used the real Rapier raycast vehicle, and primitive entities already carried a live,
+single-loop CanvasTexture `surface`. Both dedicated smokes are green. The static Archive Garage
+still has no invented drive binding, and multi-overlay composition remains deliberately out of
+scope. Remaining source-only functionality is limited to the unbound Projection effect, the
+unbound BallZ fluid-layer shader and the physical Arduino panel without a browser-device binding;
+five zero-byte files remain explicitly unrecoverable.
+
+Focused QA is green across joints, Rapier race, surfaces, sky/day-night, SceneNET XML, archive
+levels, bridge parity, 99/99 round-trip, typecheck, build and both strict audits. Inspected captures
+are under `output/smoke`, `output/verify` and `output/web-game`, including the joint workshop,
+Piste race, plasma surface, BallZ18 sky and SceneNET export. The generic web-game client exercised
+human routes, rendered frames, inspected `render_game_to_text` and found no surviving product
+console/page errors. The final full-gate result is appended after the single authorized combined
+run; patch delivery stays local and nothing is pushed.
+
+Final combined verification used the required full command exactly once. Its matrix was 45/46:
+every type/build/audit/node check and 42 of 43 browser smokes passed; Rapier Race's two ephemeral
+preview hosts both timed out at navigation before an assertion. The unchanged affected smoke then
+passed in full against the same `dist/` on a health-checked stable preview, covering chassis
+motion, drive, suspension, steering, finite state, screenshot and zero browser errors. No gate or
+assertion was weakened, and the full matrix was not rerun.
