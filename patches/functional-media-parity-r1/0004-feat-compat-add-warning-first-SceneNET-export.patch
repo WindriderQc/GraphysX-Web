@@ -1,4 +1,4 @@
-From 1a45f3555c099003bedbb2333b954f89a2fa1813 Mon Sep 17 00:00:00 2001
+From 0b7ee70d5ceacaf4674da9c00311a995f38dd30e Mon Sep 17 00:00:00 2001
 From: yanik <yanikbeaulieu@hotmail.com>
 Date: Tue, 28 Jul 2026 23:30:09 -0400
 Subject: [PATCH 4/5] feat(compat): add warning-first SceneNET export

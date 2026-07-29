@@ -1,4 +1,4 @@
-From f6bffce1541a54ac604dc6c22a094022625c55e2 Mon Sep 17 00:00:00 2001
+From 695eeb63b1c5dc0721cde78db2fe5f435949be39 Mon Sep 17 00:00:00 2001
 From: yanik <yanikbeaulieu@hotmail.com>
 Date: Tue, 28 Jul 2026 22:54:50 -0400
 Subject: [PATCH 2/5] feat(physics): add serializable scene joints

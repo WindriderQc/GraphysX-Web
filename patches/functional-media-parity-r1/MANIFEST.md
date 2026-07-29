@@ -5,11 +5,15 @@ Nothing in this package has been pushed.
 
 ## Apply contract
 
-- Repository baseline: `2ff08fad1a2ee006dee240fe0cc557bf7e2fa157`
-- Expected result tree: `89b009dd5927b9cb36dc7fd883ccdd4df7a25e8b`
-- Source implementation head: `f0013f686911d261c15301319ef0a47cb4e5a781`
+- Repository baseline: `e3ece77c613e0fabeaf88d543efbb1347b4d83c7`
+- Expected result tree: `91e0b0116c3cdb5b3859849e358eaabba7a1c94a`
+- Source implementation head: `5b682fc2e69a0717878986c2070ab8cc9c094a16`
 - Apply from PowerShell: `./patches/functional-media-parity-r1/APPLY-STEPS.ps1`
 - Optional validation target: `./patches/functional-media-parity-r1/APPLY-STEPS.ps1 -RepositoryPath C:\path\to\baseline-clone`
+
+The baseline already tracks an older copy of this bundle. The apply script therefore permits
+tracked changes only inside its own package directory while rejecting every other dirty tracked
+path; the five product patches do not touch the package directory.
 
 `git am` preserves the authored commits but may produce different commit IDs because the
 committer timestamp changes. The script verifies the resulting Git tree, which must match the
@@ -19,11 +23,11 @@ source implementation byte-for-byte.
 
 | Patch | Source commit | Purpose | Bytes | SHA-256 |
 | --- | --- | --- | ---: | --- |
-| `0001-audit-establish-archive-parity-census.patch` | `5c5558fcb90a0c68a90945fe6001f39c0bb30e72` | Reproducible complete media/functionality census, evidence rules, strict stale-ledger audit. | 7,457,317 | `98d82ebf2b2fe898941494ca6effcc077615912b2159e0cb6367e835b36e7383` |
-| `0002-feat-physics-add-serializable-scene-joints.patch` | `f6bffce1541a54ac604dc6c22a094022625c55e2` | Fixed, revolute and rope joints across Rapier, v2 documents, API/bridge/editor/undo/export/load and the Constraint Workshop. | 65,178 | `9c421b54d7d8ca556ca0acf1cded59889618d27c5f4cee181d66b33e93a0de1a` |
-| `0003-feat-media-restore-authored-BallZ18-clear-sky.patch` | `382bec43d0e673f166d2ea64925f99c5ed4fe757` | Exact six authored 2048² BallZ18 sky PNGs, provenance, native cubemap orientation and visual regression coverage. | 12,682,791 | `3d90a8bfbc59c2a7952ad855cdd00dd6ebf7cb2c1fa3e47276e2ae63b3bd87d7` |
-| `0004-feat-compat-add-warning-first-SceneNET-export.patch` | `1a45f3555c099003bedbb2333b954f89a2fa1813` | Expanded SceneNET imports plus deterministic warning-first flat v1.2 XML export in APIs, bridge and human UIs. | 56,184 | `d784b28c936feda15f988f955e6f2d815f432de3605c837db74e83ae68fd200a` |
-| `0005-docs-reconcile-archive-revival-status.patch` | `f0013f686911d261c15301319ef0a47cb4e5a781` | Append-only handoff/progress record and corrected product reality tables. | 25,999 | `f1838f945c590c09a09de19651fe086905a3d66017fba0fab91f10243ecd5398` |
+| `0001-audit-establish-archive-parity-census.patch` | `cd3cb021e488fc7c704f59c88d5702db1a8ea6e4` | Reproducible complete media/functionality census, evidence rules, strict stale-ledger audit. | 7,457,317 | `a47487ea44e07bf4f8273ed0cea37d970f43734b8b96bb0278979e1520d93452` |
+| `0002-feat-physics-add-serializable-scene-joints.patch` | `695eeb63b1c5dc0721cde78db2fe5f435949be39` | Fixed, revolute and rope joints across Rapier, v2 documents, API/bridge/editor/undo/export/load and the Constraint Workshop. | 65,178 | `fd6662c5019bb2fb4848eea229161aff94ebd306d936a1dde9818e57e5913460` |
+| `0003-feat-media-restore-authored-BallZ18-clear-sky.patch` | `1758dfd5edf416e3cdfe88efcff1acfb92e56e49` | Exact six authored 2048² BallZ18 sky PNGs, provenance, native cubemap orientation and visual regression coverage. | 12,682,791 | `30ad71fecb34bd5f4ae3ac642745db93221351a44f16190b81befdd6255b2906` |
+| `0004-feat-compat-add-warning-first-SceneNET-export.patch` | `0b7ee70d5ceacaf4674da9c00311a995f38dd30e` | Expanded SceneNET imports plus deterministic warning-first flat v1.2 XML export in APIs, bridge and human UIs. | 56,184 | `fc6e2aadea9cd9b650e2528dc256a06dafead19665c3c32080ddf006eb0d2683` |
+| `0005-docs-reconcile-archive-revival-status.patch` | `5b682fc2e69a0717878986c2070ab8cc9c094a16` | Append-only handoff/progress record and corrected product reality tables. | 25,999 | `dbcea0c5faf293b29b1bcfbab261b3a1f1914f67d8ccd38ec7ee7e0a03526e1f` |
 
 ## Final census
 
@@ -53,8 +57,15 @@ invented for any of them.
   health-checked stable preview, covering real chassis motion, drive, suspension, steering,
   finite state, screenshot and zero console/page errors. The full matrix was not rerun and no
   assertion was weakened.
-- The ordered patches were applied from the stated baseline in an independent detached worktree;
-  the result was clean and its tree matched `89b009dd5927b9cb36dc7fd883ccdd4df7a25e8b` exactly.
+- After `origin/main` advanced to the two-body BallZ commit `e3ece77`, the series was replayed
+  conflict-free on that exact current baseline. Typecheck, production build, both strict audits,
+  joints, exact-sky and SceneNET XML focused smokes passed on the combined tree.
+- The re-derived ordered patches were applied from the stated baseline in an independent detached
+  worktree; the result was clean and its tree matched
+  `91e0b0116c3cdb5b3859849e358eaabba7a1c94a` exactly.
+- The same-repository upgrade path was also exercised with only this tracked package updated in
+  the worktree. All five commits applied, package changes were preserved, and the resulting HEAD
+  tree again matched `91e0b0116c3cdb5b3859849e358eaabba7a1c94a` exactly.
 
 Inspected captures are recorded append-only in `HANDOFF.md` and `progress.md`; generated QA
 output is intentionally not part of this patch delivery.

@@ -5,14 +5,19 @@ param(
 
 $ErrorActionPreference = "Stop"
 $graphysxRepo = (Resolve-Path -LiteralPath $RepositoryPath).Path
-$graphysxExpectedBaseline = "2ff08fad1a2ee006dee240fe0cc557bf7e2fa157"
-$graphysxExpectedTree = "89b009dd5927b9cb36dc7fd883ccdd4df7a25e8b"
+$graphysxExpectedBaseline = "e3ece77c613e0fabeaf88d543efbb1347b4d83c7"
+$graphysxExpectedTree = "91e0b0116c3cdb5b3859849e358eaabba7a1c94a"
 $graphysxActualBaseline = (& git -C $graphysxRepo rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw "Not a readable Git repository: $graphysxRepo" }
 if ($graphysxActualBaseline -ne $graphysxExpectedBaseline) { throw "Expected baseline $graphysxExpectedBaseline, found $graphysxActualBaseline" }
 $graphysxTrackedStatus = & git -C $graphysxRepo status --porcelain --untracked-files=no
 if ($LASTEXITCODE -ne 0) { throw "Could not inspect repository status: $graphysxRepo" }
-if ($graphysxTrackedStatus) { throw "Tracked changes are present; commit or stash them before applying this series." }
+$graphysxPackageRelative = [IO.Path]::GetRelativePath($graphysxRepo, $PSScriptRoot).Replace("\", "/")
+$graphysxUnexpectedTrackedStatus = @($graphysxTrackedStatus | Where-Object {
+  $graphysxChangedPath = $_.Substring(3).Replace("\", "/")
+  -not ($graphysxChangedPath -eq $graphysxPackageRelative -or $graphysxChangedPath.StartsWith("$graphysxPackageRelative/"))
+})
+if ($graphysxUnexpectedTrackedStatus) { throw "Tracked changes outside this patch package are present; commit or stash them before applying this series." }
 
 & git -C $graphysxRepo am -- "$PSScriptRoot\0001-audit-establish-archive-parity-census.patch"
 if ($LASTEXITCODE -ne 0) { throw "Patch 0001 failed. Resolve it or run: git -C `"$graphysxRepo`" am --abort" }
