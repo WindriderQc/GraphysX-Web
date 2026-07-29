@@ -1372,10 +1372,13 @@ export class PlatformEditor {
       this.toolButton("Undo", () => { this.deps.api.undo(); this.select(null); }),
     ]));
 
+    const legacyExport = this.toolButton("Legacy XML", () => this.exportLegacyXml(), "Warning-first flat Scene3D v1.2 compatibility subset");
+    legacyExport.dataset.gxExport = "legacy-xml";
     toolbar.append(this.group([
       this.toolButton("Save", () => this.saveScene()),
       this.toolButton("Load", () => this.loadScene()),
       this.toolButton("Export", () => this.exportScene()),
+      legacyExport,
     ]));
 
     this.levelsButton = this.toolButton("Levels", () => this.setLevelsOpen(!this.levelsOpen), "Open the BallZ level workbench");
@@ -2089,6 +2092,23 @@ export class PlatformEditor {
     link.download = `${definition.id ?? "scene"}.graphysx.json`;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  private exportLegacyXml(): void {
+    const result = this.deps.api.exportLegacyXml();
+    if (!result.ok || !result.value) {
+      this.toolbarStatus.textContent = result.error ?? "Legacy XML export failed";
+      return;
+    }
+    const definition = this.deps.api.exportDocument();
+    const blob = new Blob([result.value.xml], { type: "application/xml" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${definition?.id ?? "scene"}.scenenet.xml`;
+    link.click();
+    URL.revokeObjectURL(url);
+    this.toolbarStatus.textContent = `XML ${result.value.exportedEntityCount}/${result.value.sourceEntityCount} · ${result.value.warnings.length} warning${result.value.warnings.length === 1 ? "" : "s"}`;
   }
 
   // ------------------------------------------------------------------ levels

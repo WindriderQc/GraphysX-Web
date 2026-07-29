@@ -232,6 +232,7 @@ import {
 // Type-only on purpose: the media library imports runtime types back, and a value
 // import here would make that a real cycle instead of an erased one.
 import type { GraphysXAgentMediaApi } from "./agent-world-media";
+import type { AgentWorldLegacyXmlExportConversion } from "./agent-world-legacy-xml";
 
 export const GRAPHYSX_AGENT_WORLD_SCHEMA = "graphysx.agent-world/v2" as const;
 export const GRAPHYSX_AGENT_WORLD_STATE_SCHEMA = "graphysx.agent-world-state/v2" as const;
@@ -1152,6 +1153,8 @@ export type GraphysXAgentWorldApi = {
     convertedEntityCount: number;
     warnings: string[];
   }>;
+  /** Export the active authored document, or a supplied v2 definition, through the explicit Scene3D v1.2 subset. */
+  exportLegacyXml(definition?: AgentWorldDefinition): AgentWorldResult<AgentWorldLegacyXmlExportConversion>;
   open(): boolean;
   demo(): AgentWorldResult<AgentWorldState>;
   state(): AgentWorldState | null;
@@ -1400,6 +1403,7 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "time.pause",
   "time.step",
   "snapshot.export",
+  "legacy.xml.export",
   "snapshot.save",
   "snapshot.load",
   "events.stream",

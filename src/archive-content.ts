@@ -818,8 +818,8 @@ export const EDITOR_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
   {
     label: "Save XML",
     source: "GfxNet::SceneNET::Serialize",
-    status: "preview",
-    detail: "Exact BaseScene/test1 serializer artifacts and version differences are player-visible, and v2 authored documents export as validated JSON. Emitting new legacy SceneNET XML remains deliberately open because its lossy field mapping and duplicate semantics are not specified."
+    status: "ported",
+    detail: "The editor and agent API emit a deterministic flat Scene3D v1.2 subset with structured loss warnings. Primitive transforms, visibility, known textures and basic physics survive; duplicate IDs and hierarchy are rejected instead of silently renamed or flattened. JSON remains the lossless format."
   },
   {
     label: "Add X Mesh",

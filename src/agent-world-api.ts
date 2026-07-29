@@ -19,7 +19,7 @@ import { allAgentWorldAssets } from "./agent-world-assets";
 import { allAgentWorldSounds } from "./agent-world-sounds";
 import { allAgentWorldTextures } from "./agent-world-textures";
 import { getAgentWorldMediaApi } from "./agent-world-media";
-import { convertLegacyGraphysXXml } from "./agent-world-legacy-xml";
+import { convertAgentWorldToLegacyXml, convertLegacyGraphysXXml } from "./agent-world-legacy-xml";
 import { composeBallzLevel } from "./ballz-level-scene";
 
 /**
@@ -127,6 +127,21 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
             convertedEntityCount: conversion.convertedEntityCount,
             warnings: conversion.warnings,
           },
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          revision: runtime.getState().revision,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+    exportLegacyXml: (definition) => {
+      try {
+        return {
+          ok: true,
+          revision: runtime.getState().revision,
+          value: convertAgentWorldToLegacyXml(definition ?? runtime.exportDocument()),
         };
       } catch (error) {
         return {

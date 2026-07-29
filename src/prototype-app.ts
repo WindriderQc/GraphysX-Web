@@ -93,6 +93,7 @@ import {
   type AgentWorldTextureId
 } from "./agent-world-textures";
 import {
+  convertAgentWorldToLegacyXml,
   convertLegacyGraphysXXml,
   type AgentWorldLegacyXmlOptions
 } from "./agent-world-legacy-xml";
@@ -3338,6 +3339,7 @@ export class PrototypeApp {
         return this.raceScene.createAgentWorld(definition);
       },
       importLegacyAgentWorldXml: (xml: string, options?: AgentWorldLegacyXmlOptions) => this.importLegacyAgentWorldXml(xml, options),
+      exportLegacyAgentWorldXml: (definition?: AgentWorldDefinition) => this.exportLegacyAgentWorldXml(definition),
       loadAgentWorldDemo: () => {
         this.ensureAgentWorldStudio();
         return this.raceScene.createAgentWorld(GRAPHYSX_AGENT_DEMO_WORLD);
@@ -3488,6 +3490,7 @@ export class PrototypeApp {
       formulas: () => GRAPHYSX_AGENT_WORLD_FORMULAS,
       dna: () => GRAPHYSX_AGENT_WORLD_DNA,
       importLegacyXml: debugApi.importLegacyAgentWorldXml,
+      exportLegacyXml: debugApi.exportLegacyAgentWorldXml,
       open: debugApi.openAgentWorldStudio,
       demo: debugApi.loadAgentWorldDemo,
       state: debugApi.agentWorldState,
@@ -4463,6 +4466,24 @@ export class PrototypeApp {
         this.setState("world-api-lab");
         return;
       }
+      if (action === "download-legacy-xml") {
+        const result = this.exportLegacyAgentWorldXml();
+        if (!result.ok || !result.value) throw new Error(result.error ?? "Legacy XML export failed");
+        const definition = this.raceScene.exportAgentWorldDocument();
+        const blob = new Blob([result.value.xml], { type: "application/xml" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `${definition?.id.replace(/[^a-z0-9_-]+/gi, "-") || "graphysx-world"}.scenenet.xml`;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+        this.agentWorldEditorHasError = false;
+        this.agentWorldEditorMessage = `Downloaded ${anchor.download} · ${result.value.exportedEntityCount}/${result.value.sourceEntityCount} entities · ${result.value.warnings.length} warning${result.value.warnings.length === 1 ? "" : "s"}.`;
+        this.setState("world-api-lab");
+        return;
+      }
       if (action === "create") {
         const type = agentAuthorValue(studio, "create", "type") as AgentWorldEntityDefinition["type"];
         const id = agentAuthorValue(studio, "create", "id").trim();
@@ -4699,6 +4720,17 @@ export class PrototypeApp {
     }
   }
 
+  private exportLegacyAgentWorldXml(definition?: AgentWorldDefinition) {
+    const current = definition ?? this.raceScene.exportAgentWorldDocument();
+    const revision = this.raceScene.getAgentWorldState()?.revision ?? 0;
+    if (!current) return { ok: false as const, revision, error: "Agent World Studio is not open" };
+    try {
+      return { ok: true as const, revision, value: convertAgentWorldToLegacyXml(current) };
+    } catch (error) {
+      return { ok: false as const, revision, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
   private async importAgentWorldFile(input: HTMLInputElement): Promise<void> {
     const file = input.files?.[0];
     input.value = "";
@@ -4873,7 +4905,7 @@ gx.commit({
     const commitExample = JSON.stringify({ actor: { id: "studio-user", label: "Studio User", kind: "human" }, intent: "Apply a reviewed Studio change", expectedRevision: state?.revision ?? 0, commands: [{ op: "select", ids: selectedState ? [selectedState.id] : [] }] }, null, 2);
     const authoringStudio = `<section class="agent-authoring-studio" data-agent-authoring-studio>
       <div class="agent-authoring-heading"><span><span class="stat-label">Human + Agent Parity</span><strong>World Editor</strong><small>Every control below calls the same validated runtime used by <code>window.__GRAPHYSX__</code>.</small></span><b class="${this.agentWorldEditorHasError ? "is-error" : ""}" data-agent-editor-message>${escapeHtml(this.agentWorldEditorMessage)}</b></div>
-      <div class="agent-world-filebar"><span><b>Portable World File</b><small>validated v2 JSON · archived GraphysX XML migration</small></span><div><button data-agent-authoring-action="download-world">Download JSON</button><button data-agent-authoring-action="import-file">Import JSON / XML</button><input type="file" accept="application/json,text/xml,application/xml,.json,.xml" data-agent-world-file-input hidden></div></div>
+      <div class="agent-world-filebar"><span><b>Portable World File</b><small>lossless v2 JSON · warning-first SceneNET v1.2 subset</small></span><div><button data-agent-authoring-action="download-world">Download JSON</button><button data-agent-authoring-action="download-legacy-xml">Legacy XML</button><button data-agent-authoring-action="import-file">Import JSON / XML</button><input type="file" accept="application/json,text/xml,application/xml,.json,.xml" data-agent-world-file-input hidden></div></div>
       <div class="agent-authoring-layout">
         <aside class="agent-outliner"><span><b>Entity Outliner</b><small>${stateEntities.length} in this world</small></span><div class="agent-outliner-list">${entities || "<small>The world is empty.</small>"}</div></aside>
         ${selectedEditor}

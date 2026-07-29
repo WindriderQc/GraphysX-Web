@@ -14,7 +14,6 @@ const REGISTER = [
   "Suzanne Moving Parts", "Shader Pack", "XML Scenes",
 ];
 const INTENTIONALLY_OPEN = new Map([
-  ["Save XML", "new legacy SceneNET XML output has no specified loss/duplicate mapping; exact source artifacts and v2 JSON export are live"],
   ["Shader Pack", "proprietary TV3D shader math is only partly translatable; haze/water/shadow descendants are live and the absent remainder is named"],
 ]);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

@@ -67,6 +67,7 @@ const SMOKES = [
   { name: "physics", script: "scripts/smoke-physics.mjs", covers: "physics migration baseline: contacts, fixed-step schedules, sleep/wake, teardown/reload" },
   { name: "joints", script: "scripts/smoke-joints.mjs", covers: "scene-authored fixed/revolute/rope joints: motion, bridge parity, patch, undo, export/reload" },
   { name: "ballz18-sky", script: "scripts/smoke-ballz18-sky.mjs", covers: "exact authored 2048px BallZ18 sky: release manifest, six SHA-256 hashes, decode, orientation, scene application" },
+  { name: "scenenet-xml", script: "scripts/smoke-scenenet-xml.mjs", covers: "SceneNET v1.0/v1.1/v1.2/split-enum import-export-import, deterministic XML, structured loss warnings, ambiguity rejection, editor download" },
   { name: "mesh-colliders", script: "scripts/smoke-mesh-colliders.mjs", covers: "scene-native model colliders: Great Slide trimesh, dynamic convex hull, rejection, bridge + round-trip" },
   { name: "great-slide", script: "scripts/smoke-great-slide.mjs", covers: "Great Slide gravity run: Games launch, exact collider gate, subject controls, checkpoints, results, replay + return" },
   { name: "map1", script: "scripts/smoke-map1.mjs", covers: "Map 1 gravity descent: Games launch, exact recovered collider, halfway gate, results, replay + return" },

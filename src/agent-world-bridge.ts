@@ -7,7 +7,7 @@ export const GRAPHYSX_AGENT_TOOL_EVENT_SCHEMA = "graphysx.agent-tool-event/v1" a
 
 const TOOL_PATHS = [
   "schema", "worldSchema", "levelSchema", "version", "capabilities",
-  "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select",
+  "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "exportLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select",
   "sounds", "flocks", "crowds", "forceFields", "formulas", "dna", "surfaces",
   "attachBehavior", "detachBehavior", "interact", "steer", "prefabs", "spawnPrefab", "starters", "loadStarter",
   "transaction", "commit", "history", "events", "undo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
@@ -46,6 +46,7 @@ const TOOL_SUMMARIES: Record<string, string> = {
   dna: "List the recovered Living Forest genome presets.",
   surfaces: "List the generative surface sketches (waveform/grid-pulse/plasma) for a mesh's `surface` field.",
   importLegacyXml: "Convert an archived GraphysX XML scene into the validated v2 world contract.",
+  exportLegacyXml: "Export the authored v2 scene through the deterministic flat Scene3D v1.2 subset, with structured loss warnings.",
   create: "Replace the active world with a complete v2 definition.",
   spawn: "Create one typed 3D entity.",
   update: "Patch an entity by stable ID.",

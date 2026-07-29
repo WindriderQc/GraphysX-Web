@@ -30,7 +30,9 @@ gx.update(crate.id, { tags: [...crate.tags, "reviewed-by-agent"] });
 
 The visible editor's **Download JSON** button writes the complete current `graphysx.agent-world/v2` document as `<world-id>.graphysx.json`. **Import JSON / XML** reads that format or migrates an archived GraphysX serializer XML scene into the same validated v2 runtime. Unsupported custom meshes remain labeled visible proxies and the import reports conversion warnings instead of silently inventing assets. Files are limited to 5 MB in the browser UI.
 
-The API equivalents are `gx.export()`, `gx.create(definition)` (or `gx.load(definition)`), and `gx.importLegacyXml(xml, options)`. This makes the file a straightforward handoff format between a person, an agent, source control, and another GraphysX session.
+**Legacy XML** is a compatibility export, not a second lossless format. It emits deterministic flat `Scene3D` v1.2 XML for boxes, spheres, cylinders, cones, and planes, preserving position/rotation/scale, visibility, known texture names, and basic static/dynamic/kinematic physics. Geometry dimensions are visibly preserved by baking them into legacy Scale. The result includes structured warnings for omitted environments, rules, joints, PBR material fields, unsupported entity kinds, and other loss. Duplicate v2 IDs and hierarchy are rejected because SceneNET has no stable ID or parent field; they are never silently renamed or flattened.
+
+The API equivalents are `gx.export()`, `gx.create(definition)` (or `gx.load(definition)`), `gx.importLegacyXml(xml, options)`, and `gx.exportLegacyXml(optionalDefinition)`. The last returns `{ ok, value: { xml, format, sourceEntityCount, exportedEntityCount, omittedEntityIds, warnings } }`; use v2 JSON whenever full fidelity is required.
 
 ## External agent bridge
 
@@ -48,7 +50,7 @@ const unsubscribe = bridge.subscribe((event) => {
 });
 ```
 
-The manifest uses `graphysx.agent-tool-bridge/v1` and describes every callable path on the World API — all 82 of them, `rules.*`, `media.*`, `levels.*`, and the constant contract identifiers included, 38 mutating — whether it mutates state, positional-array arguments, schemas, coordinate convention, and available transports. `request()` accepts a structured request and always returns a structured success/error response.
+The manifest uses `graphysx.agent-tool-bridge/v1` and describes every callable path on the World API — all 90 of them, `rules.*`, `media.*`, `levels.*`, and the constant contract identifiers included, 43 mutating — whether it mutates state, positional-array arguments, schemas, coordinate convention, and available transports. `request()` accepts a structured request and always returns a structured success/error response.
 
 "Every callable path" is machine-checked, not aspirational: `bridge.audit()` walks the live API and returns `{ missing, extra }` against the manifest. Both empty means full parity; a drift is reported, never thrown.
 
@@ -771,7 +773,7 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `rules.status()`, `rules.reset()` | Read the live run, or re-arm it and return the subject to its spawn. |
 | `pause(boolean)`, `step(seconds)` | Control deterministic simulation time. |
 | `undo()` | Restore the definition before the most recent successful edit. |
-| `export()`, `exportDocument()`, `save(name)`, `load(nameOrDefinition)` | Move worlds between JSON, memory, and local browser storage; `exportDocument()` drops session-only spawns. |
+| `export()`, `exportDocument()`, `exportLegacyXml(optionalDefinition)`, `save(name)`, `load(nameOrDefinition)` | Move worlds between JSON, warning-first SceneNET v1.2 XML, memory, and local browser storage; `exportDocument()` drops session-only spawns and JSON remains lossless. |
 | `levels.*` | Manage, region-edit, ASCII-import/export, open, and play a persistent library of semantic grid levels. |
 | `schema`, `worldSchema`, `levelSchema`, `version`, `capabilities` | Constant contract identifiers and capability lists — value paths, readable through the bridge like any method. |
 

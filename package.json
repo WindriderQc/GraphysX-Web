@@ -28,6 +28,7 @@
     "smoke:physics": "node scripts/smoke-physics.mjs",
     "smoke:joints": "node scripts/smoke-joints.mjs",
     "smoke:ballz18-sky": "node scripts/smoke-ballz18-sky.mjs",
+    "smoke:scenenet-xml": "node scripts/smoke-scenenet-xml.mjs",
     "smoke:mesh-colliders": "node scripts/smoke-mesh-colliders.mjs",
     "smoke:great-slide": "node scripts/smoke-great-slide.mjs",
     "smoke:map1": "node scripts/smoke-map1.mjs",
