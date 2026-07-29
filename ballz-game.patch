@@ -1,0 +1,1628 @@
+From caeae3d4532d19ce777cced807e9460c650a894c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 27 Jul 2026 18:23:08 +0000
+Subject: [PATCH 1/2] fix: restore the two-body player lost in the #15 merge
+ resolution
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The 'Merge main into feature/ballz-finished' conflict resolution took the
+#13 side of ballz-play.ts and ballz-level-scene.ts, dropping the steer
+control layer (keyboard aim/thrust + mouse point-and-launch), the caged
+ball + fire-arrow entities, the steering block, the fog envelope, and the
+nbrTour=3 lap honoring — while the runtime/host/rules halves survived,
+leaving main internally inconsistent (smoke-ballz red). This restores the
+feature branch's final versions; nothing from #13 is lost (its wood floor
+and values are identical, its global-cap steering is superseded by the
+per-axis legacy path plus the steer scheme). smoke-ballz green.
+---
+ src/ballz-level-scene.ts | 129 +++++++++++++++++---
+ src/ballz-play.ts        | 256 ++++++++++++++++++++++++++++++++-------
+ 2 files changed, 319 insertions(+), 66 deletions(-)
+
+diff --git a/src/ballz-level-scene.ts b/src/ballz-level-scene.ts
+index 125b69c..5a5cf70 100644
+--- a/src/ballz-level-scene.ts
++++ b/src/ballz-level-scene.ts
+@@ -7,6 +7,7 @@ import {
+   type GraphysXAgentWorldApi,
+ } from "./agent-world-runtime";
+ import type { AgentLevelState } from "./agent-level-library";
++import { ARCHIVE_BALLZ_LEVELS } from "./archive-ballz-levels";
+ 
+ /**
+  * Turns an authored ASCII level into a playable `graphysx.agent-world/v2` scene.
+@@ -137,10 +138,15 @@ const EMITTER_BUDGET = 8;
+ const FLOOR_THICKNESS_RATIO = 0.6;
+ 
+ /**
+- * Ball radius as a fraction of a cell. Sized so it clears a one-cell gap comfortably but
+- * cannot squeeze between two diagonal walls, which is what makes a grid level readable.
++ * The caged ball's radius as a fraction of a cell — the cage IS the physics sphere, so the
++ * struts the player sees are exactly the surface that touches the world. Sized so it clears
++ * a one-cell gap comfortably but cannot squeeze between two diagonal walls, which is what
++ * makes a grid level readable.
+  */
+-const BALL_RADIUS_RATIO = 0.18;
++const BALL_RADIUS_RATIO = 0.22;
++
++/** The solid core inside the cage. Carries the checker that makes rolling readable. */
++const CORE_RADIUS_RATIO = 0.135;
+ 
+ /**
+  * The ball's steering set. Exported so the input binding maps a key to an interaction id
+@@ -223,8 +229,7 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+       // the harsh black/white `Damier.jpg` checker it used to carry. The checkerboard read as a
+       // chessboard test-fixture and fought the marble walls for attention ("damier marble"); warm
+       // plank wood grounds the arena as a place. The grid/scale cue now comes from the cell seams,
+-      // the wall frame and the raking shadows rather than a blown-out checker. Repeat scaled so a
+-      // few planks span each cell region rather than tiling to mush.
++      // the wall frame and the raking shadows rather than a blown-out checker.
+       texture: { id: "wood-floor" as const, repeat: [Math.max(3, width / 7), Math.max(3, height / 7)] as [number, number] },
+     },
+     physics: { mode: "static", material: "ground" },
+@@ -445,24 +450,46 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+     // Say so rather than inventing a spawn in a corner that may be inside a wall.
+     deviations.push("Level has no start tile, so no ball was spawned.");
+   } else {
++    // --- The two-body player (the original BallZ control model) --------------------------
++    // A CAGED BALL that is the physics subject, and a FIRE-ARROW that is the aim. The cage
++    // is the collider the player sees: `ballz-ball` renders as an open wireframe sphere at
++    // exactly its physics radius, with a solid checkered core parented inside. Both roll as
++    // one body — a child of a dynamic entity inherits its quaternion — so the checker still
++    // tells rolling from sliding, now through the struts of the cage.
++    //
++    // Provenance: the layouts around this ball are `faithful` recoveries; this control and
++    // camera model is the author's original design intent rebuilt on v2 vocabulary, recorded
++    // as `adapted` (see BALLZ_GAME_DESIGN) — the recovered archive holds the levels, not the
++    // original control code.
++    const cellScale = cellSize / 2.6;
+     entities.push({
+       id: "ballz-ball",
+       type: "sphere",
+-      label: "Ball",
++      label: "Caged Ball",
+       transform: { position: spawnPosition },
+-      geometry: { radius: cellSize * BALL_RADIUS_RATIO },
+-      // The same archive checker as the floor, tuned to put roughly four squares around the
+-      // sphere (0.2 of a 20x20 board). A plain sphere rolling and a plain sphere sliding are
+-      // the same picture; a checkered one tells you which, and that distinction is the entire
+-      // feel of this genre. The ball also casts — `castShadow` defaults true, and the low sun
+-      // below is what turns that into the contact shadow that stops it looking like a decal.
+-      material: { ...PALETTE.ball, texture: { id: "checker" as const, repeat: [0.2, 0.2] as [number, number] } },
+-      physics: { mode: "dynamic", material: "ball", mass: 1.6 },
+-      // Steering lives ON the ball, as four ordinary `apply-impulse` interactions. There is no
+-      // impulse call in the public API — impulses exist only as an entity's interaction — so
+-      // this is not a workaround, it is the only way to push anything, and it means the control
+-      // scheme is scene data: it serialises, an agent can fire it with `api.interact`, and a
+-      // human's arrow key and an agent's call are literally the same operation.
++      // 12 segments, so the wireframe reads as struts rather than a fine net.
++      geometry: { radius: cellSize * BALL_RADIUS_RATIO, radialSegments: 12 },
++      material: { color: "#dff4ff", emissive: "#2ea8c8", emissiveIntensity: 0.55, roughness: 0.35, metalness: 0.5, wireframe: true },
++      // Heavier than a marble so it has authority (design ratio 1.5–2.0). Friction raised
++      // above the `ball` preset so the sphere genuinely rolls on the wood rather than
++      // gliding; restitution ~0.5 is lively-but-settles, and the multiply-combine against
++      // the walls' 0.08 keeps arena hits absorbed rather than launching.
++      physics: { mode: "dynamic", material: "ball", mass: 1.7, friction: 0.55, restitution: 0.5 },
++      // The fire-arrow/heading model, as scene data: `api.steer` aims and thrusts, the
++      // runtime integrates it in the simulation step, and the arrow entity below is anchored
++      // to this ball every frame. Force reaches the speed cap in ~0.4 s; the cap is enforced
++      // per-direction so brake and turn keep authority at top speed.
++      steering: {
++        headingDegrees: 0,
++        force: 30 * cellScale,
++        speedCap: cellSize * 2.7,
++        turnRateDegrees: 240,
++        kickImpulse: cellSize * 3.6,
++        arrowId: "ballz-aim-arrow",
++      },
++      // The four grid pushes REMAIN, deliberately: they are serialised control vocabulary an
++      // agent (or a smoke) can fire with `api.interact`, and keeping them costs nothing. The
++      // human play layer now drives `api.steer`; both paths move the same body.
+       interactions: PUSH_DIRECTIONS.map(({ id, label, vector }) => ({
+         id,
+         label,
+@@ -472,6 +499,57 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+       })),
+       tags: ["ballz", "ball", "player"],
+     });
++    entities.push({
++      id: "ballz-ball-core",
++      type: "sphere",
++      label: "Ball Core",
++      parentId: "ballz-ball",
++      transform: { position: [0, 0, 0] },
++      geometry: { radius: cellSize * CORE_RADIUS_RATIO },
++      // The same archive checker as ever, tuned to put roughly four squares around the
++      // sphere (0.2 of a 20x20 board). A plain sphere rolling and a plain sphere sliding are
++      // the same picture; a checkered one tells you which, and that distinction is the entire
++      // feel of this genre. The core casts the contact shadow; the cage would cast noise.
++      material: { ...PALETTE.ball, texture: { id: "checker" as const, repeat: [0.2, 0.2] as [number, number] } },
++      tags: ["ballz", "ball"],
++    });
++
++    // The FIRE-ARROW: a bright shaft-and-head marker on the ground plane, anchored at the
++    // ball by the runtime's steering pass and yawed to the current heading. It is cosmetic/
++    // logical, never a physics body — the "where will I go" pointer both control schemes and
++    // any agent share. Emissive above the bloom threshold, so it reads from any angle.
++    const arrowY = cellSize * 0.035;
++    entities.push({
++      id: "ballz-aim-arrow",
++      type: "group",
++      label: "Fire Arrow",
++      transform: { position: [spawnPosition[0], 0, spawnPosition[2]] },
++      castShadow: false,
++      tags: ["ballz", "aim"],
++    });
++    entities.push({
++      id: "ballz-aim-arrow-shaft",
++      type: "box",
++      label: "Fire Arrow Shaft",
++      parentId: "ballz-aim-arrow",
++      transform: { position: [0, arrowY, -cellSize * 0.52] },
++      geometry: { width: cellSize * 0.09, height: cellSize * 0.025, depth: cellSize * 0.5 },
++      material: { color: "#ffb054", emissive: "#ff6a1a", emissiveIntensity: 2.1, roughness: 0.3, metalness: 0.1 },
++      castShadow: false,
++      tags: ["ballz", "aim"],
++    });
++    entities.push({
++      id: "ballz-aim-arrow-head",
++      type: "cone",
++      label: "Fire Arrow Head",
++      parentId: "ballz-aim-arrow",
++      // A cone points +Y; laid flat with -90° about X it points -Z, the heading-0 direction.
++      transform: { position: [0, arrowY, -cellSize * 0.9], rotationDegrees: [-90, 0, 0] },
++      geometry: { radius: cellSize * 0.13, height: cellSize * 0.28 },
++      material: { color: "#ffd27a", emissive: "#ff7a1a", emissiveIntensity: 2.4, roughness: 0.25, metalness: 0.1 },
++      castShadow: false,
++      tags: ["ballz", "aim"],
++    });
+   }
+ 
+   // --- Corner pylons -------------------------------------------------------------------
+@@ -576,6 +654,12 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+   // is also the thing that makes this generalise past BallZ: a course with four gates and
+   // three laps is the same block with a longer array, which is what the World 1 / Great Slide
+   // ports need and could not have said before.
++  // The archive's `levelList.xml` sets `nbrTour` = 3 for the classic levels: a course is run
++  // three times around, not once. A level whose recovered facts carry a lap count gets it —
++  // the rules engine re-arms the ordered checkpoints each lap while collected rings stay
++  // collected, which is exactly the classic structure. Hand-painted levels stay one lap.
++  const archiveFacts = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === level.id)?.provenance.levelListFacts;
++  const archiveLaps = typeof archiveFacts?.["laps"] === "number" ? Math.max(1, Math.floor(archiveFacts["laps"])) : 1;
+   const rules: AgentWorldRulesDefinition | undefined =
+     finishId || ringIds.length > 0
+       ? {
+@@ -592,7 +676,7 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+           // because the set resolves when the run arms.
+           ...(ringIds.length > 0 ? { collectibles: { tag: "collectible", requiredToFinish: true } } : {}),
+           ...(finishId ? { finish: { triggerId: finishId } } : {}),
+-          laps: 1,
++          laps: archiveLaps,
+         }
+       : undefined;
+   if (!rules) {
+@@ -637,6 +721,11 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+           radius: 0.24,
+         },
+       },
++      // The host's default fog (near 38 / far 138, tuned to the ~36-unit showroom) pulls the
++      // green sky-horizon haze right across the arena — a 20-cell level spans ~52 units, so its
++      // far half dissolves into murk. Push the fog out so the whole play surface reads crisp and
++      // only the distant backdrop keeps the atmosphere. cameraFar stays clear of fogFar.
++      envelope: { fogNear: 64, fogFar: 210, cameraFar: 260 },
+       // The level brings its own floor slab, so the runtime's flat grid would z-fight it.
+       ground: { visible: false, size: 60, color: "#123039", grid: false, gridColor: "#2a7d8f" },
+       // Warm key + cool fill, angled so walls cast readable shadows down the grid rather
+diff --git a/src/ballz-play.ts b/src/ballz-play.ts
+index ff30308..5b01c25 100644
+--- a/src/ballz-play.ts
++++ b/src/ballz-play.ts
+@@ -28,10 +28,21 @@ import {
+  * It still owns no scene state: the ball's steering is four `apply-impulse` interactions on
+  * the ball itself, so a key press is an ordinary API call an agent could make too.
+  */
++export type BallzPlayOptions = {
++  /**
++   * Host-supplied raycast of a client-space point onto the play plane, for mouse aiming.
++   * The host owns the camera, so it owns the unprojection; everything this layer *does*
++   * with the result is an ordinary `api.steer` call. Returns null when the pointer misses
++   * the plane (grazing angles at the horizon).
++   */
++  screenToGround?: (clientX: number, clientY: number) => [number, number, number] | null;
++};
++
+ export function mountBallzPlay(
+   api: GraphysXAgentWorldApi,
+   container: HTMLElement,
+   onExit?: () => void,
++  options: BallzPlayOptions = {},
+ ): () => void {
+   const rules = api.rules.get();
+   const players = api.query({ tag: "player" });
+@@ -105,51 +116,19 @@ export function mountBallzPlay(
+   };
+   renderHud();
+ 
+-  // Arrow keys only, on purpose: the editor already binds W/E/R to gizmo modes and Delete to
++  // Two control schemes over one subject, chosen by what the SCENE says. A ball carrying a
++  // `steering` block gets the two-body fire-arrow model (heading + thrust through
++  // `api.steer`); a subject without one — the composed courses' own balls, or a scene
++  // authored before steering existed — keeps the four-direction held-key pushes. Arrow keys
++  // in both cases, on purpose: the editor already binds W/E/R to gizmo modes and Delete to
+   // remove, so WASD would fight it the moment someone plays a level with the editor open.
+-  //
+-  // Steering is HELD-key continuous, not one impulse per OS key-repeat. The old scheme fired a
+-  // fixed push on every `keydown` the OS auto-repeat produced, so the feel was hostage to the
+-  // platform's repeat delay and rate — a sluggish start, then a machine-gun of kicks. Now a press
+-  // fires one immediate push (responsive, and synchronous for a step-driven agent/test), and while
+-  // the key is held a steer loop keeps pushing only while the ball is under a speed cap, so holding
+-  // accelerates smoothly to a controllable top speed and releasing coasts. Each push is still the
+-  // ball's own `apply-impulse` interaction, so human and agent steering stay the identical operation.
+-  const pushBy = new Map<string, string>(PUSH_DIRECTIONS.map((direction) => [direction.key, direction.id]));
+-  const held = new Set<string>();
+-  const STEER_HZ = 20; // each push is a fixed impulse, so cadence sets acceleration: ~4 pushes to cap.
+-  const SPEED_CAP = 6.5; // m/s horizontal; holding brings the ball here, then pushes stop adding.
+-  const isField = (target: HTMLElement | null): boolean =>
+-    !!target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
+-  const onKeyDown = (event: KeyboardEvent): void => {
+-    if (isField(event.target as HTMLElement | null)) return;
+-    const interactionId = pushBy.get(event.key);
+-    if (!interactionId) return;
+-    event.preventDefault();
+-    // Fire once on the initial press (not on OS auto-repeat); the held loop keeps accelerating.
+-    if (!held.has(event.key)) {
+-      held.add(event.key);
+-      api.interact(ballId, interactionId);
+-    }
+-  };
+-  const onKeyUp = (event: KeyboardEvent): void => {
+-    if (pushBy.has(event.key)) held.delete(event.key);
+-  };
+-  const onBlur = (): void => held.clear(); // a defocused tab must not leave a key stuck.
+-  const steer = window.setInterval(() => {
+-    if (won || held.size === 0) return;
+-    const state = api.query({ ids: [ballId] })[0];
+-    const velocity = state?.physics?.linearVelocity;
+-    const horizontalSpeed = velocity ? Math.hypot(velocity[0], velocity[2]) : 0;
+-    if (horizontalSpeed >= SPEED_CAP) return;
+-    for (const key of held) {
+-      const interactionId = pushBy.get(key);
+-      if (interactionId) api.interact(ballId, interactionId);
+-    }
+-  }, 1000 / STEER_HZ);
+-  window.addEventListener("keydown", onKeyDown);
+-  window.addEventListener("keyup", onKeyUp);
+-  window.addEventListener("blur", onBlur);
++  const steerable = !!api.query({ ids: [ballId] })[0]?.steering;
++  if (steerable) {
++    hint.textContent = "← → aim · ↑ roll · ↓ brake · space kick · point & click to launch";
++  }
++  const teardownControls = steerable
++    ? mountSteerControls(api, ballId, container, () => won, options)
++    : mountLegacyPushControls(api, ballId, () => won);
+ 
+   // Poll the *run*, not the stream. 200 ms is a HUD refresh rate, and the run it reads is
+   // advanced inside the simulation tick — so unlike the old cursor-into-`events()` version,
+@@ -181,12 +160,197 @@ export function mountBallzPlay(
+ 
+   return () => {
+     window.clearInterval(poll);
++    teardownControls();
++    hud.remove();
++    container.querySelector(".gx-bz-win")?.remove();
++  };
++}
++
++/** Never steal a keystroke from a field — the level workbench is full of them. */
++function isFormField(target: EventTarget | null): boolean {
++  return target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
++}
++
++/**
++ * The two-body control scheme (the original BallZ model): ←/→ rotate the fire-arrow, ↑/↓
++ * thrust and brake along its heading, Space is the strong kick; the mouse aims the arrow at
++ * the ground point under the cursor and a click (or a drag, for power) launches toward it.
++ *
++ * Everything here is an `api.steer` call, and the calls happen on input EDGES — a keydown,
++ * a keyup, a throttled pointer move — never per frame. The continuous work (turn → heading,
++ * thrust → force, the per-direction speed cap) is the runtime's steering pass, inside the
++ * simulation step, which is exactly what lets an agent drive the identical ball with the
++ * identical call and inherit the identical physics.
++ */
++function mountSteerControls(
++  api: GraphysXAgentWorldApi,
++  ballId: string,
++  container: HTMLElement,
++  isWon: () => boolean,
++  options: BallzPlayOptions,
++): () => void {
++  const held = new Set<string>();
++  const axisInputs = (): { thrust: number; turn: number } => ({
++    thrust: (held.has("ArrowUp") ? 1 : 0) - (held.has("ArrowDown") ? 1 : 0),
++    turn: (held.has("ArrowRight") ? 1 : 0) - (held.has("ArrowLeft") ? 1 : 0),
++  });
++  const sendAxes = (): void => {
++    api.steer(ballId, axisInputs());
++  };
++
++  const onKeyDown = (event: KeyboardEvent): void => {
++    if (isFormField(event.target)) return;
++    if (event.key === " " || event.code === "Space") {
++      event.preventDefault();
++      // Once per press: OS auto-repeat must not machine-gun the launch impulse.
++      if (!event.repeat && !isWon()) api.steer(ballId, { kick: 1 });
++      return;
++    }
++    if (!/^Arrow(Up|Down|Left|Right)$/.test(event.key)) return;
++    event.preventDefault();
++    if (held.has(event.key) || isWon()) return;
++    held.add(event.key);
++    sendAxes();
++  };
++  const onKeyUp = (event: KeyboardEvent): void => {
++    if (!held.delete(event.key)) return;
++    sendAxes();
++  };
++  // A defocused tab must not leave a key held: zero every input on blur.
++  const onBlur = (): void => {
++    held.clear();
++    api.steer(ballId, { thrust: 0, turn: 0 });
++  };
++
++  // Mouse aim. The heading is computed from the ball's live position to the ground point
++  // under the cursor, throttled to ~20 Hz — an aim update is a transaction, and the arrow
++  // only needs to track the hand, not the mouse's report rate.
++  const AIM_INTERVAL_MS = 50;
++  let lastAimAt = 0;
++  let aimedHeading: number | null = null;
++  const headingToward = (point: [number, number, number]): number | null => {
++    const ball = api.query({ ids: [ballId] })[0];
++    if (!ball) return null;
++    const dx = point[0] - ball.position[0];
++    const dz = point[2] - ball.position[2];
++    if (dx * dx + dz * dz < 0.04) return null; // pointing at the ball itself is no direction
++    return (Math.atan2(dx, -dz) * 180) / Math.PI;
++  };
++  // Only the WebGL canvas counts: the HUD's buttons and the win panel live in the same
++  // container, and a click on "Exit play" must not double as a launch.
++  const onSceneCanvas = (event: Event): boolean => event.target instanceof HTMLCanvasElement;
++  const onPointerMove = (event: PointerEvent): void => {
++    if (!options.screenToGround || isWon() || !onSceneCanvas(event)) return;
++    const now = performance.now();
++    if (now - lastAimAt < AIM_INTERVAL_MS) return;
++    const point = options.screenToGround(event.clientX, event.clientY);
++    if (!point) return;
++    const heading = headingToward(point);
++    if (heading === null) return;
++    lastAimAt = now;
++    aimedHeading = heading;
++    api.steer(ballId, { headingDegrees: heading });
++  };
++
++  // Click / drag-for-power launch. Press-to-release distance in CSS pixels maps to kick
++  // power: a plain click is a modest chip, a full pull is the cap. Direction is wherever
++  // the arrow points at release — the pointer has been aiming it all along.
++  let pressedAt: { x: number; y: number } | null = null;
++  const onPointerDown = (event: PointerEvent): void => {
++    if (event.button !== 0 || !onSceneCanvas(event)) return;
++    pressedAt = { x: event.clientX, y: event.clientY };
++  };
++  const onPointerUp = (event: PointerEvent): void => {
++    const pressed = pressedAt;
++    pressedAt = null;
++    if (!pressed || isWon() || !onSceneCanvas(event)) return;
++    const dragPx = Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y);
++    const kick = dragPx < 8 ? 0.55 : Math.min(1, 0.35 + dragPx / 240);
++    // Final aim at the release point, when the plane raycast has one; the throttle above
++    // may have skipped the last few pixels of the gesture.
++    const point = options.screenToGround?.(event.clientX, event.clientY) ?? null;
++    const heading = point ? headingToward(point) : aimedHeading;
++    api.steer(ballId, { ...(heading !== null && heading !== undefined ? { headingDegrees: heading } : {}), kick });
++  };
++
++  window.addEventListener("keydown", onKeyDown);
++  window.addEventListener("keyup", onKeyUp);
++  window.addEventListener("blur", onBlur);
++  container.addEventListener("pointermove", onPointerMove);
++  container.addEventListener("pointerdown", onPointerDown);
++  container.addEventListener("pointerup", onPointerUp);
++  return () => {
++    window.removeEventListener("keydown", onKeyDown);
++    window.removeEventListener("keyup", onKeyUp);
++    window.removeEventListener("blur", onBlur);
++    container.removeEventListener("pointermove", onPointerMove);
++    container.removeEventListener("pointerdown", onPointerDown);
++    container.removeEventListener("pointerup", onPointerUp);
++    // Leave nothing thrusting after the layer is gone — the entity outlives the HUD.
++    if (held.size > 0) api.steer(ballId, { thrust: 0, turn: 0 });
++  };
++}
++
++/**
++ * The pre-steering scheme, kept for subjects without a `steering` block (composed courses'
++ * own balls, older scenes). Steering is HELD-key continuous, not one impulse per OS
++ * key-repeat. A press fires one immediate push (responsive, and synchronous for a
++ * step-driven agent/test); while the key is held a steer loop keeps pushing. The speed
++ * limit is applied PER DIRECTION, not as a global gate: a push is suppressed only when the
++ * ball is already fast *along that push's own axis*. A global "if speed >= cap, stop
++ * pushing" gate (the obvious version) silently kills braking and turning at speed — the
++ * ball hits the cap and then ignores the brake and the steer, which reads as the ball
++ * "fighting" the controls. Capping per-axis means the opposing key always brakes and the
++ * perpendicular key always turns; only the already-maxed direction stops adding.
++ */
++function mountLegacyPushControls(api: GraphysXAgentWorldApi, ballId: string, isWon: () => boolean): () => void {
++  const pushBy = new Map<string, string>(PUSH_DIRECTIONS.map((direction) => [direction.key, direction.id]));
++  const dirById = new Map<string, readonly [number, number, number]>(
++    PUSH_DIRECTIONS.map((direction) => [direction.id, direction.vector]),
++  );
++  const held = new Set<string>();
++  const STEER_HZ = 30;
++  const SPEED_CAP = 6.5; // m/s along a single axis; the opposing key still brakes past this.
++  const pushIfUnderCap = (interactionId: string, velocity: readonly number[] | undefined): void => {
++    const dir = dirById.get(interactionId);
++    // Velocity component along this push's direction. Braking (opposite) is negative and always
++    // allowed; a perpendicular turn is ~0 and always allowed; only an already-fast same-axis
++    // push is suppressed.
++    const along = dir && velocity ? velocity[0] * dir[0] + velocity[2] * dir[2] : 0;
++    if (along < SPEED_CAP) api.interact(ballId, interactionId);
++  };
++  const onKeyDown = (event: KeyboardEvent): void => {
++    if (isFormField(event.target)) return;
++    const interactionId = pushBy.get(event.key);
++    if (!interactionId) return;
++    event.preventDefault();
++    // Fire once on the initial press (not on OS auto-repeat); the held loop keeps accelerating.
++    if (!held.has(event.key)) {
++      held.add(event.key);
++      const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
++      pushIfUnderCap(interactionId, velocity);
++    }
++  };
++  const onKeyUp = (event: KeyboardEvent): void => {
++    if (pushBy.has(event.key)) held.delete(event.key);
++  };
++  const onBlur = (): void => held.clear(); // a defocused tab must not leave a key stuck.
++  const steer = window.setInterval(() => {
++    if (isWon() || held.size === 0) return;
++    const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
++    for (const key of held) {
++      const interactionId = pushBy.get(key);
++      if (interactionId) pushIfUnderCap(interactionId, velocity);
++    }
++  }, 1000 / STEER_HZ);
++  window.addEventListener("keydown", onKeyDown);
++  window.addEventListener("keyup", onKeyUp);
++  window.addEventListener("blur", onBlur);
++  return () => {
+     window.clearInterval(steer);
+     window.removeEventListener("keydown", onKeyDown);
+     window.removeEventListener("keyup", onKeyUp);
+     window.removeEventListener("blur", onBlur);
+-    hud.remove();
+-    container.querySelector(".gx-bz-win")?.remove();
+   };
+ }
+ 
+-- 
+2.43.0
+
+
+From 5848828423e97d6b674fde003a0fa15c0cd448e4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 27 Jul 2026 19:13:23 +0000
+Subject: [PATCH 2/2] feat(ballz): the recovered ball, the title screen, and
+ the 3-2-1-GO start
+
+- BallShell/BallCtrl/BallFire vendored verbatim from the legacy tvm-catalog
+  as curated mesh-json assets; the FireArrow texture on the inner controller
+  ball IS the aim indicator, as the original had it
+- steering: jump input (Space hops straight up, own jumpImpulse tuning),
+  full-position arrow anchoring + arrowLift (the aim rides the ball centre)
+- mouse: HOLD to roll toward the pointer (aim = pointer, accelerator = held
+  button); click/drag-kick scheme removed
+- BallZ hero card on the Games shelf -> title screen (ballz-menu.ts) with
+  Start Game + course roster; game courses leave the generic level list
+- race start: 3-2-1-GO overlay, controls locked until GO (except paused
+  worlds - harnesses are never held by presentation), rules.reset at GO;
+  cancels on any programmatic activity; revision baseline at first tick
+  (mount runs inside world.loaded, before create() bumps revision)
+- smokes updated and green: ballz (recovered-model assertions), games
+  (hero -> menu -> countdown -> play ceremony)
+---
+ progress.md                                |  33 +++++
+ public/assets/ports/archive-ballctrl.json  |   1 +
+ public/assets/ports/archive-ballfire.json  |   1 +
+ public/assets/ports/archive-ballshell.json |   1 +
+ scripts/smoke-ballz.mjs                    |  16 ++-
+ scripts/smoke-games.mjs                    |  47 +++++--
+ scripts/vendor-ball-meshes.mjs             |  99 +++++++++++++
+ src/agent-world-asset-catalog.ts           |   3 +
+ src/agent-world-assets.ts                  |  10 ++
+ src/agent-world-runtime.ts                 |  45 +++++-
+ src/ballz-level-scene.ts                   | 105 ++++++--------
+ src/ballz-menu.ts                          | 155 +++++++++++++++++++++
+ src/ballz-play.ts                          | 142 +++++++++++++++----
+ src/games-shelf.ts                         |  46 ++++++
+ 14 files changed, 593 insertions(+), 111 deletions(-)
+ create mode 100644 public/assets/ports/archive-ballctrl.json
+ create mode 100644 public/assets/ports/archive-ballfire.json
+ create mode 100644 public/assets/ports/archive-ballshell.json
+ create mode 100644 scripts/vendor-ball-meshes.mjs
+ create mode 100644 src/ballz-menu.ts
+
+diff --git a/progress.md b/progress.md
+index 540b2dc..146c0fa 100644
+--- a/progress.md
++++ b/progress.md
+@@ -1786,3 +1786,36 @@ check-against-HEAD rule keeps earning its place). `agent-world-water.ts` carries
+ uniform at the physical 0.02, distance tinting, and adjustable specular; screenshot at a
+ deliberately grazing camera shows the surface mirroring the actual skyline with no pale
+ wash. Ledger updated with the evidence rather than silently.
++
++## 2026-07-27 — `ballz-game-r1`: the RECOVERED ball, the title screen, and the race start
++
++Yanik's correction landed and was right: the two-body ball was never an invented wireframe —
++the archive holds it. `BallShell.tvm` (the cage), `BallCtrl.tvm`/`BallFire.tvm` (the inner
++controller wearing `FireArrow800.JPG` — the arrow TEXTURE is the aim indicator), all decoded
++long ago into the legacy tvm-catalog and used only by the legacy path. `vendor-ball-meshes.mjs`
++republishes them verbatim as curated `graphysx-mesh-json` assets (faithful provenance); the
++materialiser now spawns the shell parented to the invisible collider sphere and the FireArrow
++ball as the steering-anchored aim (full-position anchoring + `arrowLift`, since the aim rides
++the subject's centre and follows a jump). Shell translucency is a recovered-PBR profile.
++Lesson recorded: a payload without `bounds.size` fails `modelFit`, and the failure hides as a
++forever-"loading" asset.
++
++Controls corrected to the original: **Space jumps straight UP** (`steer.jump` + `jumpImpulse`
++tuning — aiming is the arrow's job), and the **mouse HOLDS to roll**: pointer aims, held
++button is the accelerator, release coasts (the click/drag-kick scheme is gone; `kick` remains
++API vocabulary).
++
++The game got its front door: a branded **BallZ hero card** on the Games shelf (fire-gradient
++wordmark) opening a **title screen** (`ballz-menu.ts`: Start Game + the course roster —
++First Course, Level 1 T Course, Level 2 Z Maze; those ids no longer listed generically), and
++a **3 · 2 · 1 · GO race start** in the play layer: controls locked (except when the world is
++paused — a deterministic harness is never held by presentation), `rules.reset()` at GO so the
++clock measures driving. Cancellation is the design: any programmatic activity (revision bump
++or pause) dismisses it, so every smoke and the agent driver keep exact prior behaviour. The
++revision baseline is taken at the first TICK, not at mount — mount happens inside the
++`world.loaded` dispatch, before `create()` bumps the revision, and a mount-time baseline made
++the countdown self-cancel flakily.
++
++Verified: smoke-ballz green (recovered-model assertions replace the wireframe ones),
++smoke-games green through the full ceremony (hero → title screen → countdown → chase →
++exit), screenshots of the shell + FireArrow ball in the arena.
+diff --git a/public/assets/ports/archive-ballctrl.json b/public/assets/ports/archive-ballctrl.json
+new file mode 100644
+index 0000000..0808333
+--- /dev/null
++++ b/public/assets/ports/archive-ballctrl.json
+@@ -0,0 +1 @@
++{"source":"BallZ 2011/Release/Media/Ball/BallCtrl.tvm","provenance":{"archiveSource":"BallZ 2011/Release/Media/Ball/BallCtrl.tvm","decodedBy":"TVM decode into src/legacy/tvm-catalog.json; republished verbatim by scripts/vendor-ball-meshes.mjs","fidelity":"faithful — positions, UVs and indices copied unmodified; normals derived by the loader"},"meshCount":1,"vertexCount":559,"faceCount":960,"triangleCount":960,"materialGroupCount":1,"normals":"derived","bounds":{"min":[-6.601,-6.601,-6.601],"max":[6.601,6.601,6.601],"size":[13.202,13.202,13.202]},"radius":6.601,"meshes":[{"name":"BallCtrl","vertexCount":559,"faceCount":960,"triangleCount":960,"positions":[0,0,-6.601,0,1.288,-6.474,-0.251,1.263,-6.474,-0.493,1.19,-6.474,-0.715,1.071,-6.474,-0.911,0.911,-6.474,-1.071,0.715,-6.474,-1.19,0.493,-6.474,-1.263,0.251,-6.474,-1.288,0,-6.474,-1.263,-0.251,-6.474,-1.19,-0.493,-6.474,-1.071,-0.715,-6.474,-0.911,-0.911,-6.474,-0.715,-1.071,-6.474,-0.493,-1.19,-6.474,-0.251,-1.263,-6.474,0,-1.288,-6.474,0.251,-1.263,-6.474,0.493,-1.19,-6.474,0.715,-1.071,-6.474,0.911,-0.911,-6.474,1.071,-0.715,-6.474,1.19,-0.493,-6.474,1.263,-0.251,-6.474,1.288,0,-6.474,1.263,0.251,-6.474,1.19,0.493,-6.474,1.071,0.715,-6.474,0.911,0.911,-6.474,0.715,1.071,-6.474,0.493,1.19,-6.474,0.251,1.263,-6.474,0,2.526,-6.098,-0.493,2.478,-6.098,-0.967,2.334,-6.098,-1.403,2.1,-6.098,-1.786,1.786,-6.098,-2.1,1.403,-6.098,-2.334,0.967,-6.098,-2.478,0.493,-6.098,-2.526,0,-6.098,-2.478,-0.493,-6.098,-2.334,-0.967,-6.098,-2.1,-1.403,-6.098,-1.786,-1.786,-6.098,-1.403,-2.1,-6.098,-0.967,-2.334,-6.098,-0.493,-2.478,-6.098,0,-2.526,-6.098,0.493,-2.478,-6.098,0.967,-2.334,-6.098,1.403,-2.1,-6.098,1.786,-1.786,-6.098,2.1,-1.403,-6.098,2.334,-0.967,-6.098,2.478,-0.493,-6.098,2.526,0,-6.098,2.478,0.493,-6.098,2.334,0.967,-6.098,2.1,1.403,-6.098,1.786,1.786,-6.098,1.403,2.1,-6.098,0.967,2.334,-6.098,0.493,2.478,-6.098,0,3.667,-5.488,-0.715,3.597,-5.488,-1.403,3.388,-5.488,-2.037,3.049,-5.488,-2.593,2.593,-5.488,-3.049,2.037,-5.488,-3.388,1.403,-5.488,-3.597,0.715,-5.488,-3.667,0,-5.488,-3.597,-0.715,-5.488,-3.388,-1.403,-5.488,-3.049,-2.037,-5.488,-2.593,-2.593,-5.488,-2.037,-3.049,-5.488,-1.403,-3.388,-5.488,-0.715,-3.597,-5.488,0,-3.667,-5.488,0.715,-3.597,-5.488,1.403,-3.388,-5.488,2.037,-3.049,-5.488,2.593,-2.593,-5.488,3.049,-2.037,-5.488,3.388,-1.403,-5.488,3.597,-0.715,-5.488,3.667,0,-5.488,3.597,0.715,-5.488,3.388,1.403,-5.488,3.049,2.037,-5.488,2.593,2.593,-5.488,2.037,3.049,-5.488,1.403,3.388,-5.488,0.715,3.597,-5.488,0,4.668,-4.668,-0.911,4.578,-4.668,-1.786,4.312,-4.668,-2.593,3.881,-4.668,-3.3,3.3,-4.668,-3.881,2.593,-4.668,-4.312,1.786,-4.668,-4.578,0.911,-4.668,-4.668,0,-4.668,-4.578,-0.911,-4.668,-4.312,-1.786,-4.668,-3.881,-2.593,-4.668,-3.3,-3.3,-4.668,-2.593,-3.881,-4.668,-1.786,-4.312,-4.668,-0.911,-4.578,-4.668,0,-4.668,-4.668,0.911,-4.578,-4.668,1.786,-4.312,-4.668,2.593,-3.881,-4.668,3.3,-3.3,-4.668,3.881,-2.593,-4.668,4.312,-1.786,-4.668,4.578,-0.911,-4.668,4.668,0,-4.668,4.578,0.911,-4.668,4.312,1.786,-4.668,3.881,2.593,-4.668,3.3,3.3,-4.668,2.593,3.881,-4.668,1.786,4.312,-4.668,0.911,4.578,-4.668,0,5.488,-3.667,-1.071,5.383,-3.667,-2.1,5.071,-3.667,-3.049,4.564,-3.667,-3.881,3.881,-3.667,-4.564,3.049,-3.667,-5.071,2.1,-3.667,-5.383,1.071,-3.667,-5.488,0,-3.667,-5.383,-1.071,-3.667,-5.071,-2.1,-3.667,-4.564,-3.049,-3.667,-3.881,-3.881,-3.667,-3.049,-4.564,-3.667,-2.1,-5.071,-3.667,-1.071,-5.383,-3.667,0,-5.488,-3.667,1.071,-5.383,-3.667,2.1,-5.071,-3.667,3.049,-4.563,-3.667,3.881,-3.881,-3.667,4.564,-3.049,-3.667,5.071,-2.1,-3.667,5.383,-1.071,-3.667,5.488,0,-3.667,5.383,1.071,-3.667,5.071,2.1,-3.667,4.563,3.049,-3.667,3.881,3.881,-3.667,3.049,4.564,-3.667,2.1,5.071,-3.667,1.071,5.383,-3.667,0,6.098,-2.526,-1.19,5.981,-2.526,-2.334,5.634,-2.526,-3.388,5.071,-2.526,-4.312,4.312,-2.526,-5.071,3.388,-2.526,-5.634,2.334,-2.526,-5.981,1.19,-2.526,-6.098,0,-2.526,-5.981,-1.19,-2.526,-5.634,-2.334,-2.526,-5.071,-3.388,-2.526,-4.312,-4.312,-2.526,-3.388,-5.071,-2.526,-2.334,-5.634,-2.526,-1.19,-5.981,-2.526,0,-6.098,-2.526,1.19,-5.981,-2.526,2.334,-5.634,-2.526,3.388,-5.071,-2.526,4.312,-4.312,-2.526,5.071,-3.388,-2.526,5.634,-2.334,-2.526,5.981,-1.19,-2.526,6.098,0,-2.526,5.981,1.19,-2.526,5.634,2.334,-2.526,5.071,3.388,-2.526,4.312,4.312,-2.526,3.388,5.071,-2.526,2.334,5.634,-2.526,1.19,5.981,-2.526,0,6.474,-1.288,-1.263,6.35,-1.288,-2.478,5.981,-1.288,-3.597,5.383,-1.288,-4.578,4.578,-1.288,-5.383,3.597,-1.288,-5.981,2.478,-1.288,-6.35,1.263,-1.288,-6.474,0,-1.288,-6.35,-1.263,-1.288,-5.981,-2.478,-1.288,-5.383,-3.597,-1.288,-4.578,-4.578,-1.288,-3.597,-5.383,-1.288,-2.478,-5.981,-1.288,-1.263,-6.35,-1.288,0,-6.474,-1.288,1.263,-6.35,-1.288,2.478,-5.981,-1.288,3.597,-5.383,-1.288,4.578,-4.578,-1.288,5.383,-3.597,-1.288,5.981,-2.478,-1.288,6.35,-1.263,-1.288,6.474,0,-1.288,6.35,1.263,-1.288,5.981,2.478,-1.288,5.383,3.597,-1.288,4.578,4.578,-1.288,3.597,5.383,-1.288,2.478,5.981,-1.288,1.263,6.35,-1.288,0,6.601,0,-1.288,6.474,0,-2.526,6.098,0,-3.667,5.488,0,-4.668,4.668,0,-5.488,3.667,0,-6.098,2.526,0,-6.474,1.288,0,-6.601,0,0,-6.474,-1.288,0,-6.098,-2.526,0,-5.488,-3.667,0,-4.668,-4.668,0,-3.667,-5.488,0,-2.526,-6.098,0,-1.288,-6.474,0,0,-6.601,0,1.288,-6.474,0,2.526,-6.098,0,3.667,-5.488,0,4.668,-4.668,0,5.488,-3.667,0,6.098,-2.526,0,6.474,-1.288,0,6.601,0,0,6.474,1.288,0,6.098,2.526,0,5.488,3.667,0,4.668,4.668,0,3.667,5.488,0,2.526,6.098,0,1.288,6.474,0,0,6.474,1.288,-1.263,6.35,1.288,-2.478,5.981,1.288,-3.597,5.383,1.288,-4.578,4.578,1.288,-5.383,3.597,1.288,-5.981,2.478,1.288,-6.35,1.263,1.288,-6.474,0,1.288,-6.35,-1.263,1.288,-5.981,-2.478,1.288,-5.383,-3.597,1.288,-4.578,-4.578,1.288,-3.597,-5.383,1.288,-2.478,-5.981,1.288,-1.263,-6.35,1.288,0,-6.474,1.288,1.263,-6.35,1.288,2.478,-5.981,1.288,3.597,-5.383,1.288,4.578,-4.578,1.288,5.383,-3.597,1.288,5.981,-2.478,1.288,6.35,-1.263,1.288,6.474,0,1.288,6.35,1.263,1.288,5.981,2.478,1.288,5.383,3.597,1.288,4.578,4.578,1.288,3.597,5.383,1.288,2.478,5.981,1.288,1.263,6.35,1.288,0,6.098,2.526,-1.19,5.981,2.526,-2.334,5.634,2.526,-3.388,5.071,2.526,-4.312,4.312,2.526,-5.071,3.388,2.526,-5.634,2.334,2.526,-5.981,1.19,2.526,-6.098,0,2.526,-5.981,-1.19,2.526,-5.634,-2.334,2.526,-5.071,-3.388,2.526,-4.312,-4.312,2.526,-3.388,-5.071,2.526,-2.334,-5.634,2.526,-1.19,-5.981,2.526,0,-6.098,2.526,1.19,-5.981,2.526,2.334,-5.634,2.526,3.388,-5.071,2.526,4.312,-4.312,2.526,5.071,-3.388,2.526,5.634,-2.334,2.526,5.981,-1.19,2.526,6.098,0,2.526,5.981,1.19,2.526,5.634,2.334,2.526,5.071,3.388,2.526,4.312,4.312,2.526,3.388,5.071,2.526,2.334,5.634,2.526,1.19,5.981,2.526,0,5.488,3.667,-1.071,5.383,3.667,-2.1,5.071,3.667,-3.049,4.564,3.667,-3.881,3.881,3.667,-4.564,3.049,3.667,-5.071,2.1,3.667,-5.383,1.071,3.667,-5.488,0,3.667,-5.383,-1.071,3.667,-5.071,-2.1,3.667,-4.564,-3.049,3.667,-3.881,-3.881,3.667,-3.049,-4.564,3.667,-2.1,-5.071,3.667,-1.071,-5.383,3.667,0,-5.488,3.667,1.071,-5.383,3.667,2.1,-5.071,3.667,3.049,-4.563,3.667,3.881,-3.881,3.667,4.564,-3.049,3.667,5.071,-2.1,3.667,5.383,-1.071,3.667,5.488,0,3.667,5.383,1.071,3.667,5.071,2.1,3.667,4.563,3.049,3.667,3.881,3.881,3.667,3.049,4.564,3.667,2.1,5.071,3.667,1.071,5.383,3.667,0,4.668,4.668,-0.911,4.578,4.668,-1.786,4.312,4.668,-2.593,3.881,4.668,-3.3,3.3,4.668,-3.881,2.593,4.668,-4.312,1.786,4.668,-4.578,0.911,4.668,-4.668,0,4.668,-4.578,-0.911,4.668,-4.312,-1.786,4.668,-3.881,-2.593,4.668,-3.3,-3.3,4.668,-2.593,-3.881,4.668,-1.786,-4.312,4.668,-0.911,-4.578,4.668,0,-4.668,4.668,0.911,-4.578,4.668,1.786,-4.312,4.668,2.593,-3.881,4.668,3.3,-3.3,4.668,3.881,-2.593,4.668,4.312,-1.786,4.668,4.578,-0.911,4.668,4.668,0,4.668,4.578,0.911,4.668,4.312,1.786,4.668,3.881,2.593,4.668,3.3,3.3,4.668,2.593,3.881,4.668,1.786,4.312,4.668,0.911,4.578,4.668,0,3.667,5.488,-0.715,3.597,5.488,-1.403,3.388,5.488,-2.037,3.049,5.488,-2.593,2.593,5.488,-3.049,2.037,5.488,-3.388,1.403,5.488,-3.597,0.715,5.488,-3.667,0,5.488,-3.597,-0.715,5.488,-3.388,-1.403,5.488,-3.049,-2.037,5.488,-2.593,-2.593,5.488,-2.037,-3.049,5.488,-1.403,-3.388,5.488,-0.715,-3.597,5.488,0,-3.667,5.488,0.715,-3.597,5.488,1.403,-3.388,5.488,2.037,-3.049,5.488,2.593,-2.593,5.488,3.049,-2.037,5.488,3.388,-1.403,5.488,3.597,-0.715,5.488,3.667,0,5.488,3.597,0.715,5.488,3.388,1.403,5.488,3.049,2.037,5.488,2.593,2.593,5.488,2.037,3.049,5.488,1.403,3.388,5.488,0.715,3.597,5.488,0,2.526,6.098,-0.493,2.478,6.098,-0.967,2.334,6.098,-1.403,2.1,6.098,-1.786,1.786,6.098,-2.1,1.403,6.098,-2.334,0.967,6.098,-2.478,0.493,6.098,-2.526,0,6.098,-2.478,-0.493,6.098,-2.334,-0.967,6.098,-2.1,-1.403,6.098,-1.786,-1.786,6.098,-1.403,-2.1,6.098,-0.967,-2.334,6.098,-0.493,-2.478,6.098,0,-2.526,6.098,0.493,-2.478,6.098,0.967,-2.334,6.098,1.403,-2.1,6.098,1.786,-1.786,6.098,2.1,-1.403,6.098,2.334,-0.967,6.098,2.478,-0.493,6.098,2.526,0,6.098,2.478,0.493,6.098,2.334,0.967,6.098,2.1,1.403,6.098,1.786,1.786,6.098,1.403,2.1,6.098,0.967,2.334,6.098,0.493,2.478,6.098,0,1.288,6.474,-0.251,1.263,6.474,-0.493,1.19,6.474,-0.715,1.071,6.474,-0.911,0.911,6.474,-1.071,0.715,6.474,-1.19,0.493,6.474,-1.263,0.251,6.474,-1.288,0,6.474,-1.263,-0.251,6.474,-1.19,-0.493,6.474,-1.071,-0.715,6.474,-0.911,-0.911,6.474,-0.715,-1.071,6.474,-0.493,-1.19,6.474,-0.251,-1.263,6.474,0,-1.288,6.474,0.251,-1.263,6.474,0.493,-1.19,6.474,0.715,-1.071,6.474,0.911,-0.911,6.474,1.071,-0.715,6.474,1.19,-0.493,6.474,1.263,-0.251,6.474,1.288,0,6.474,1.263,0.251,6.474,1.19,0.493,6.474,1.071,0.715,6.474,0.911,0.911,6.474,0.715,1.071,6.474,0.493,1.19,6.474,0.251,1.263,6.474,0,0,6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,1.288,-6.474,0,2.526,-6.098,0,3.667,-5.488,0,4.668,-4.668,0,5.488,-3.667,0,6.098,-2.526,0,6.474,-1.288,0,6.601,0,0,6.474,1.288,0,6.098,2.526,0,5.488,3.667,0,4.668,4.668,0,3.667,5.488,0,2.526,6.098,0,1.288,6.474,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601],"uvs":[0,1,0,0.938,0.031,0.938,0.063,0.938,0.094,0.938,0.125,0.938,0.156,0.938,0.188,0.938,0.219,0.938,0.25,0.938,0.281,0.938,0.312,0.938,0.344,0.938,0.375,0.938,0.406,0.938,0.438,0.938,0.469,0.938,0.5,0.938,0.531,0.938,0.563,0.938,0.594,0.938,0.625,0.938,0.656,0.938,0.688,0.938,0.719,0.938,0.75,0.938,0.781,0.938,0.813,0.938,0.844,0.938,0.875,0.938,0.906,0.938,0.938,0.938,0.969,0.938,0,0.875,0.031,0.875,0.063,0.875,0.094,0.875,0.125,0.875,0.156,0.875,0.188,0.875,0.219,0.875,0.25,0.875,0.281,0.875,0.312,0.875,0.344,0.875,0.375,0.875,0.406,0.875,0.438,0.875,0.469,0.875,0.5,0.875,0.531,0.875,0.563,0.875,0.594,0.875,0.625,0.875,0.656,0.875,0.688,0.875,0.719,0.875,0.75,0.875,0.781,0.875,0.813,0.875,0.844,0.875,0.875,0.875,0.906,0.875,0.938,0.875,0.969,0.875,0,0.813,0.031,0.813,0.063,0.813,0.094,0.813,0.125,0.813,0.156,0.813,0.188,0.813,0.219,0.813,0.25,0.813,0.281,0.813,0.312,0.813,0.344,0.813,0.375,0.813,0.406,0.813,0.438,0.813,0.469,0.813,0.5,0.813,0.531,0.813,0.563,0.813,0.594,0.813,0.625,0.813,0.656,0.813,0.688,0.813,0.719,0.813,0.75,0.813,0.781,0.813,0.813,0.813,0.844,0.813,0.875,0.813,0.906,0.813,0.938,0.813,0.969,0.813,0,0.75,0.031,0.75,0.063,0.75,0.094,0.75,0.125,0.75,0.156,0.75,0.188,0.75,0.219,0.75,0.25,0.75,0.281,0.75,0.312,0.75,0.344,0.75,0.375,0.75,0.406,0.75,0.438,0.75,0.469,0.75,0.5,0.75,0.531,0.75,0.563,0.75,0.594,0.75,0.625,0.75,0.656,0.75,0.688,0.75,0.719,0.75,0.75,0.75,0.781,0.75,0.813,0.75,0.844,0.75,0.875,0.75,0.906,0.75,0.938,0.75,0.969,0.75,0,0.688,0.031,0.688,0.063,0.688,0.094,0.688,0.125,0.688,0.156,0.688,0.188,0.688,0.219,0.688,0.25,0.688,0.281,0.688,0.312,0.688,0.344,0.688,0.375,0.688,0.406,0.688,0.438,0.688,0.469,0.688,0.5,0.688,0.531,0.688,0.563,0.688,0.594,0.688,0.625,0.688,0.656,0.688,0.688,0.688,0.719,0.688,0.75,0.688,0.781,0.688,0.813,0.688,0.844,0.688,0.875,0.688,0.906,0.688,0.938,0.688,0.969,0.688,0,0.625,0.031,0.625,0.063,0.625,0.094,0.625,0.125,0.625,0.156,0.625,0.188,0.625,0.219,0.625,0.25,0.625,0.281,0.625,0.312,0.625,0.344,0.625,0.375,0.625,0.406,0.625,0.438,0.625,0.469,0.625,0.5,0.625,0.531,0.625,0.563,0.625,0.594,0.625,0.625,0.625,0.656,0.625,0.688,0.625,0.719,0.625,0.75,0.625,0.781,0.625,0.813,0.625,0.844,0.625,0.875,0.625,0.906,0.625,0.938,0.625,0.969,0.625,0,0.563,0.031,0.563,0.063,0.563,0.094,0.563,0.125,0.563,0.156,0.563,0.188,0.563,0.219,0.563,0.25,0.563,0.281,0.563,0.312,0.563,0.344,0.563,0.375,0.563,0.406,0.563,0.438,0.563,0.469,0.563,0.5,0.563,0.531,0.563,0.563,0.563,0.594,0.563,0.625,0.563,0.656,0.563,0.688,0.563,0.719,0.563,0.75,0.563,0.781,0.563,0.813,0.563,0.844,0.563,0.875,0.563,0.906,0.563,0.938,0.563,0.969,0.563,0,0.5,0.031,0.5,0.063,0.5,0.094,0.5,0.125,0.5,0.156,0.5,0.188,0.5,0.219,0.5,0.25,0.5,0.281,0.5,0.312,0.5,0.344,0.5,0.375,0.5,0.406,0.5,0.438,0.5,0.469,0.5,0.5,0.5,0.531,0.5,0.563,0.5,0.594,0.5,0.625,0.5,0.656,0.5,0.688,0.5,0.719,0.5,0.75,0.5,0.781,0.5,0.813,0.5,0.844,0.5,0.875,0.5,0.906,0.5,0.938,0.5,0.969,0.5,0,0.438,0.031,0.438,0.063,0.438,0.094,0.438,0.125,0.438,0.156,0.438,0.188,0.438,0.219,0.438,0.25,0.438,0.281,0.438,0.312,0.438,0.344,0.438,0.375,0.438,0.406,0.438,0.438,0.438,0.469,0.438,0.5,0.438,0.531,0.438,0.563,0.438,0.594,0.438,0.625,0.438,0.656,0.438,0.688,0.438,0.719,0.438,0.75,0.438,0.781,0.438,0.813,0.438,0.844,0.438,0.875,0.438,0.906,0.438,0.938,0.438,0.969,0.438,0,0.375,0.031,0.375,0.063,0.375,0.094,0.375,0.125,0.375,0.156,0.375,0.188,0.375,0.219,0.375,0.25,0.375,0.281,0.375,0.312,0.375,0.344,0.375,0.375,0.375,0.406,0.375,0.438,0.375,0.469,0.375,0.5,0.375,0.531,0.375,0.563,0.375,0.594,0.375,0.625,0.375,0.656,0.375,0.688,0.375,0.719,0.375,0.75,0.375,0.781,0.375,0.813,0.375,0.844,0.375,0.875,0.375,0.906,0.375,0.938,0.375,0.969,0.375,0,0.313,0.031,0.313,0.063,0.313,0.094,0.313,0.125,0.313,0.156,0.313,0.188,0.313,0.219,0.313,0.25,0.313,0.281,0.313,0.312,0.313,0.344,0.313,0.375,0.313,0.406,0.313,0.438,0.313,0.469,0.313,0.5,0.313,0.531,0.313,0.563,0.313,0.594,0.313,0.625,0.313,0.656,0.313,0.688,0.313,0.719,0.313,0.75,0.313,0.781,0.313,0.813,0.313,0.844,0.313,0.875,0.313,0.906,0.313,0.938,0.313,0.969,0.313,0,0.25,0.031,0.25,0.063,0.25,0.094,0.25,0.125,0.25,0.156,0.25,0.188,0.25,0.219,0.25,0.25,0.25,0.281,0.25,0.312,0.25,0.344,0.25,0.375,0.25,0.406,0.25,0.438,0.25,0.469,0.25,0.5,0.25,0.531,0.25,0.563,0.25,0.594,0.25,0.625,0.25,0.656,0.25,0.688,0.25,0.719,0.25,0.75,0.25,0.781,0.25,0.813,0.25,0.844,0.25,0.875,0.25,0.906,0.25,0.938,0.25,0.969,0.25,0,0.188,0.031,0.188,0.063,0.188,0.094,0.188,0.125,0.188,0.156,0.188,0.188,0.188,0.219,0.188,0.25,0.188,0.281,0.188,0.312,0.188,0.344,0.188,0.375,0.188,0.406,0.188,0.438,0.188,0.469,0.188,0.5,0.188,0.531,0.188,0.563,0.188,0.594,0.188,0.625,0.188,0.656,0.188,0.688,0.188,0.719,0.188,0.75,0.188,0.781,0.188,0.813,0.188,0.844,0.188,0.875,0.188,0.906,0.188,0.938,0.188,0.969,0.188,0,0.125,0.031,0.125,0.063,0.125,0.094,0.125,0.125,0.125,0.156,0.125,0.188,0.125,0.219,0.125,0.25,0.125,0.281,0.125,0.312,0.125,0.344,0.125,0.375,0.125,0.406,0.125,0.438,0.125,0.469,0.125,0.5,0.125,0.531,0.125,0.563,0.125,0.594,0.125,0.625,0.125,0.656,0.125,0.688,0.125,0.719,0.125,0.75,0.125,0.781,0.125,0.813,0.125,0.844,0.125,0.875,0.125,0.906,0.125,0.938,0.125,0.969,0.125,0,0.062,0.031,0.062,0.063,0.062,0.094,0.062,0.125,0.062,0.156,0.062,0.188,0.062,0.219,0.062,0.25,0.062,0.281,0.062,0.312,0.062,0.344,0.062,0.375,0.062,0.406,0.062,0.438,0.062,0.469,0.062,0.5,0.062,0.531,0.062,0.563,0.062,0.594,0.062,0.625,0.062,0.656,0.062,0.688,0.062,0.719,0.062,0.75,0.062,0.781,0.062,0.813,0.062,0.844,0.062,0.875,0.062,0.906,0.062,0.938,0.062,0.969,0.062,0,0,0.031,1,0.063,1,0.094,1,0.125,1,0.156,1,0.188,1,0.219,1,0.25,1,0.281,1,0.312,1,0.344,1,0.375,1,0.406,1,0.438,1,0.469,1,0.5,1,0.531,1,0.563,1,0.594,1,0.625,1,0.656,1,0.688,1,0.719,1,0.75,1,0.781,1,0.813,1,0.844,1,0.875,1,0.906,1,0.938,1,0.969,1,1,0.938,1,0.875,1,0.813,1,0.75,1,0.688,1,0.625,1,0.563,1,0.5,1,0.438,1,0.375,1,0.313,1,0.25,1,0.188,1,0.125,1,0.062,0.031,0,0.063,0,0.094,0,0.125,0,0.156,0,0.188,0,0.219,0,0.25,0,0.281,0,0.312,0,0.344,0,0.375,0,0.406,0,0.438,0,0.469,0,0.5,0,0.531,0,0.563,0,0.594,0,0.625,0,0.656,0,0.688,0,0.719,0,0.75,0,0.781,0,0.813,0,0.844,0,0.875,0,0.906,0,0.938,0,0.969,0],"indices":[0,2,1,482,3,2,483,4,3,484,5,4,485,6,5,486,7,6,487,8,7,488,9,8,489,10,9,490,11,10,491,12,11,492,13,12,493,14,13,494,15,14,495,16,15,496,17,16,497,18,17,498,19,18,499,20,19,500,21,20,501,22,21,502,23,22,503,24,23,504,25,24,505,26,25,506,27,26,507,28,27,508,29,28,509,30,29,510,31,30,511,32,31,512,513,32,1,34,33,1,2,34,2,35,34,2,3,35,3,36,35,3,4,36,4,37,36,4,5,37,5,38,37,5,6,38,6,39,38,6,7,39,7,40,39,7,8,40,8,41,40,8,9,41,9,42,41,9,10,42,10,43,42,10,11,43,11,44,43,11,12,44,12,45,44,12,13,45,13,46,45,13,14,46,14,47,46,14,15,47,15,48,47,15,16,48,16,49,48,16,17,49,17,50,49,17,18,50,18,51,50,18,19,51,19,52,51,19,20,52,20,53,52,20,21,53,21,54,53,21,22,54,22,55,54,22,23,55,23,56,55,23,24,56,24,57,56,24,25,57,25,58,57,25,26,58,26,59,58,26,27,59,27,60,59,27,28,60,28,61,60,28,29,61,29,62,61,29,30,62,30,63,62,30,31,63,31,64,63,31,32,64,32,514,64,32,513,514,33,66,65,33,34,66,34,67,66,34,35,67,35,68,67,35,36,68,36,69,68,36,37,69,37,70,69,37,38,70,38,71,70,38,39,71,39,72,71,39,40,72,40,73,72,40,41,73,41,74,73,41,42,74,42,75,74,42,43,75,43,76,75,43,44,76,44,77,76,44,45,77,45,78,77,45,46,78,46,79,78,46,47,79,47,80,79,47,48,80,48,81,80,48,49,81,49,82,81,49,50,82,50,83,82,50,51,83,51,84,83,51,52,84,52,85,84,52,53,85,53,86,85,53,54,86,54,87,86,54,55,87,55,88,87,55,56,88,56,89,88,56,57,89,57,90,89,57,58,90,58,91,90,58,59,91,59,92,91,59,60,92,60,93,92,60,61,93,61,94,93,61,62,94,62,95,94,62,63,95,63,96,95,63,64,96,64,515,96,64,514,515,65,98,97,65,66,98,66,99,98,66,67,99,67,100,99,67,68,100,68,101,100,68,69,101,69,102,101,69,70,102,70,103,102,70,71,103,71,104,103,71,72,104,72,105,104,72,73,105,73,106,105,73,74,106,74,107,106,74,75,107,75,108,107,75,76,108,76,109,108,76,77,109,77,110,109,77,78,110,78,111,110,78,79,111,79,112,111,79,80,112,80,113,112,80,81,113,81,114,113,81,82,114,82,115,114,82,83,115,83,116,115,83,84,116,84,117,116,84,85,117,85,118,117,85,86,118,86,119,118,86,87,119,87,120,119,87,88,120,88,121,120,88,89,121,89,122,121,89,90,122,90,123,122,90,91,123,91,124,123,91,92,124,92,125,124,92,93,125,93,126,125,93,94,126,94,127,126,94,95,127,95,128,127,95,96,128,96,516,128,96,515,516,97,130,129,97,98,130,98,131,130,98,99,131,99,132,131,99,100,132,100,133,132,100,101,133,101,134,133,101,102,134,102,135,134,102,103,135,103,136,135,103,104,136,104,137,136,104,105,137,105,138,137,105,106,138,106,139,138,106,107,139,107,140,139,107,108,140,108,141,140,108,109,141,109,142,141,109,110,142,110,143,142,110,111,143,111,144,143,111,112,144,112,145,144,112,113,145,113,146,145,113,114,146,114,147,146,114,115,147,115,148,147,115,116,148,116,149,148,116,117,149,117,150,149,117,118,150,118,151,150,118,119,151,119,152,151,119,120,152,120,153,152,120,121,153,121,154,153,121,122,154,122,155,154,122,123,155,123,156,155,123,124,156,124,157,156,124,125,157,125,158,157,125,126,158,126,159,158,126,127,159,127,160,159,127,128,160,128,517,160,128,516,517,129,162,161,129,130,162,130,163,162,130,131,163,131,164,163,131,132,164,132,165,164,132,133,165,133,166,165,133,134,166,134,167,166,134,135,167,135,168,167,135,136,168,136,169,168,136,137,169,137,170,169,137,138,170,138,171,170,138,139,171,139,172,171,139,140,172,140,173,172,140,141,173,141,174,173,141,142,174,142,175,174,142,143,175,143,176,175,143,144,176,144,177,176,144,145,177,145,178,177,145,146,178,146,179,178,146,147,179,147,180,179,147,148,180,148,181,180,148,149,181,149,182,181,149,150,182,150,183,182,150,151,183,151,184,183,151,152,184,152,185,184,152,153,185,153,186,185,153,154,186,154,187,186,154,155,187,155,188,187,155,156,188,156,189,188,156,157,189,157,190,189,157,158,190,158,191,190,158,159,191,159,192,191,159,160,192,160,518,192,160,517,518,161,194,193,161,162,194,162,195,194,162,163,195,163,196,195,163,164,196,164,197,196,164,165,197,165,198,197,165,166,198,166,199,198,166,167,199,167,200,199,167,168,200,168,201,200,168,169,201,169,202,201,169,170,202,170,203,202,170,171,203,171,204,203,171,172,204,172,205,204,172,173,205,173,206,205,173,174,206,174,207,206,174,175,207,175,208,207,175,176,208,176,209,208,176,177,209,177,210,209,177,178,210,178,211,210,178,179,211,179,212,211,179,180,212,180,213,212,180,181,213,181,214,213,181,182,214,182,215,214,182,183,215,183,216,215,183,184,216,184,217,216,184,185,217,185,218,217,185,186,218,186,219,218,186,187,219,187,220,219,187,188,220,188,221,220,188,189,221,189,222,221,189,190,222,190,223,222,190,191,223,191,224,223,191,192,224,192,519,224,192,518,519,193,226,225,193,194,226,194,227,226,194,195,227,195,228,227,195,196,228,196,229,228,196,197,229,197,230,229,197,198,230,198,231,230,198,199,231,199,232,231,199,200,232,200,233,232,200,201,233,201,234,233,201,202,234,202,235,234,202,203,235,203,236,235,203,204,236,204,237,236,204,205,237,205,238,237,205,206,238,206,239,238,206,207,239,207,240,239,207,208,240,208,241,240,208,209,241,209,242,241,209,210,242,210,243,242,210,211,243,211,244,243,211,212,244,212,245,244,212,213,245,213,246,245,213,214,246,214,247,246,214,215,247,215,248,247,215,216,248,216,249,248,216,217,249,217,250,249,217,218,250,218,251,250,218,219,251,219,252,251,219,220,252,220,253,252,220,221,253,221,254,253,221,222,254,222,255,254,222,223,255,223,256,255,223,224,256,224,520,256,224,519,520,225,258,257,225,226,258,226,259,258,226,227,259,227,260,259,227,228,260,228,261,260,228,229,261,229,262,261,229,230,262,230,263,262,230,231,263,231,264,263,231,232,264,232,265,264,232,233,265,233,266,265,233,234,266,234,267,266,234,235,267,235,268,267,235,236,268,236,269,268,236,237,269,237,270,269,237,238,270,238,271,270,238,239,271,239,272,271,239,240,272,240,273,272,240,241,273,241,274,273,241,242,274,242,275,274,242,243,275,243,276,275,243,244,276,244,277,276,244,245,277,245,278,277,245,246,278,246,279,278,246,247,279,247,280,279,247,248,280,248,281,280,248,249,281,249,282,281,249,250,282,250,283,282,250,251,283,251,284,283,251,252,284,252,285,284,252,253,285,253,286,285,253,254,286,254,287,286,254,255,287,255,288,287,255,256,288,256,521,288,256,520,521,257,290,289,257,258,290,258,291,290,258,259,291,259,292,291,259,260,292,260,293,292,260,261,293,261,294,293,261,262,294,262,295,294,262,263,295,263,296,295,263,264,296,264,297,296,264,265,297,265,298,297,265,266,298,266,299,298,266,267,299,267,300,299,267,268,300,268,301,300,268,269,301,269,302,301,269,270,302,270,303,302,270,271,303,271,304,303,271,272,304,272,305,304,272,273,305,273,306,305,273,274,306,274,307,306,274,275,307,275,308,307,275,276,308,276,309,308,276,277,309,277,310,309,277,278,310,278,311,310,278,279,311,279,312,311,279,280,312,280,313,312,280,281,313,281,314,313,281,282,314,282,315,314,282,283,315,283,316,315,283,284,316,284,317,316,284,285,317,285,318,317,285,286,318,286,319,318,286,287,319,287,320,319,287,288,320,288,522,320,288,521,522,289,322,321,289,290,322,290,323,322,290,291,323,291,324,323,291,292,324,292,325,324,292,293,325,293,326,325,293,294,326,294,327,326,294,295,327,295,328,327,295,296,328,296,329,328,296,297,329,297,330,329,297,298,330,298,331,330,298,299,331,299,332,331,299,300,332,300,333,332,300,301,333,301,334,333,301,302,334,302,335,334,302,303,335,303,336,335,303,304,336,304,337,336,304,305,337,305,338,337,305,306,338,306,339,338,306,307,339,307,340,339,307,308,340,308,341,340,308,309,341,309,342,341,309,310,342,310,343,342,310,311,343,311,344,343,311,312,344,312,345,344,312,313,345,313,346,345,313,314,346,314,347,346,314,315,347,315,348,347,315,316,348,316,349,348,316,317,349,317,350,349,317,318,350,318,351,350,318,319,351,319,352,351,319,320,352,320,523,352,320,522,523,321,354,353,321,322,354,322,355,354,322,323,355,323,356,355,323,324,356,324,357,356,324,325,357,325,358,357,325,326,358,326,359,358,326,327,359,327,360,359,327,328,360,328,361,360,328,329,361,329,362,361,329,330,362,330,363,362,330,331,363,331,364,363,331,332,364,332,365,364,332,333,365,333,366,365,333,334,366,334,367,366,334,335,367,335,368,367,335,336,368,336,369,368,336,337,369,337,370,369,337,338,370,338,371,370,338,339,371,339,372,371,339,340,372,340,373,372,340,341,373,341,374,373,341,342,374,342,375,374,342,343,375,343,376,375,343,344,376,344,377,376,344,345,377,345,378,377,345,346,378,346,379,378,346,347,379,347,380,379,347,348,380,348,381,380,348,349,381,349,382,381,349,350,382,350,383,382,350,351,383,351,384,383,351,352,384,352,524,384,352,523,524,353,386,385,353,354,386,354,387,386,354,355,387,355,388,387,355,356,388,356,389,388,356,357,389,357,390,389,357,358,390,358,391,390,358,359,391,359,392,391,359,360,392,360,393,392,360,361,393,361,394,393,361,362,394,362,395,394,362,363,395,363,396,395,363,364,396,364,397,396,364,365,397,365,398,397,365,366,398,366,399,398,366,367,399,367,400,399,367,368,400,368,401,400,368,369,401,369,402,401,369,370,402,370,403,402,370,371,403,371,404,403,371,372,404,372,405,404,372,373,405,373,406,405,373,374,406,374,407,406,374,375,407,375,408,407,375,376,408,376,409,408,376,377,409,377,410,409,377,378,410,378,411,410,378,379,411,379,412,411,379,380,412,380,413,412,380,381,413,381,414,413,381,382,414,382,415,414,382,383,415,383,416,415,383,384,416,384,525,416,384,524,525,385,418,417,385,386,418,386,419,418,386,387,419,387,420,419,387,388,420,388,421,420,388,389,421,389,422,421,389,390,422,390,423,422,390,391,423,391,424,423,391,392,424,392,425,424,392,393,425,393,426,425,393,394,426,394,427,426,394,395,427,395,428,427,395,396,428,396,429,428,396,397,429,397,430,429,397,398,430,398,431,430,398,399,431,399,432,431,399,400,432,400,433,432,400,401,433,401,434,433,401,402,434,402,435,434,402,403,435,403,436,435,403,404,436,404,437,436,404,405,437,405,438,437,405,406,438,406,439,438,406,407,439,407,440,439,407,408,440,408,441,440,408,409,441,409,442,441,409,410,442,410,443,442,410,411,443,411,444,443,411,412,444,412,445,444,412,413,445,413,446,445,413,414,446,414,447,446,414,415,447,415,448,447,415,416,448,416,526,448,416,525,526,417,450,449,417,418,450,418,451,450,418,419,451,419,452,451,419,420,452,420,453,452,420,421,453,421,454,453,421,422,454,422,455,454,422,423,455,423,456,455,423,424,456,424,457,456,424,425,457,425,458,457,425,426,458,426,459,458,426,427,459,427,460,459,427,428,460,428,461,460,428,429,461,429,462,461,429,430,462,430,463,462,430,431,463,431,464,463,431,432,464,432,465,464,432,433,465,433,466,465,433,434,466,434,467,466,434,435,467,435,468,467,435,436,468,436,469,468,436,437,469,437,470,469,437,438,470,438,471,470,438,439,471,439,472,471,439,440,472,440,473,472,440,441,473,441,474,473,441,442,474,442,475,474,442,443,475,443,476,475,443,444,476,444,477,476,444,445,477,445,478,477,445,446,478,446,479,478,446,447,479,447,480,479,447,448,480,448,527,480,448,526,527,481,449,450,528,450,451,529,451,452,530,452,453,531,453,454,532,454,455,533,455,456,534,456,457,535,457,458,536,458,459,537,459,460,538,460,461,539,461,462,540,462,463,541,463,464,542,464,465,543,465,466,544,466,467,545,467,468,546,468,469,547,469,470,548,470,471,549,471,472,550,472,473,551,473,474,552,474,475,553,475,476,554,476,477,555,477,478,556,478,479,557,479,480,558,480,527],"groups":[{"start":0,"count":2880,"materialIndex":0}],"materials":[{"name":"ballctrl","color":[1,1,1,1],"textureName":"FireArrow800.JPG","textureUrl":"/assets/textures/ball/FireArrow800.jpg"}]}]}
+\ No newline at end of file
+diff --git a/public/assets/ports/archive-ballfire.json b/public/assets/ports/archive-ballfire.json
+new file mode 100644
+index 0000000..3a1d137
+--- /dev/null
++++ b/public/assets/ports/archive-ballfire.json
+@@ -0,0 +1 @@
++{"source":"BallZ 2011/Release/Media/Ball/BallFire.tvm","provenance":{"archiveSource":"BallZ 2011/Release/Media/Ball/BallFire.tvm","decodedBy":"TVM decode into src/legacy/tvm-catalog.json; republished verbatim by scripts/vendor-ball-meshes.mjs","fidelity":"faithful — positions, UVs and indices copied unmodified; normals derived by the loader"},"meshCount":1,"vertexCount":559,"faceCount":960,"triangleCount":960,"materialGroupCount":1,"normals":"derived","bounds":{"min":[-6.601,-6.601,-6.601],"max":[6.601,6.601,6.601],"size":[13.202,13.202,13.202]},"radius":6.601,"meshes":[{"name":"BallFire","vertexCount":559,"faceCount":960,"triangleCount":960,"positions":[0,0,-6.601,0,1.288,-6.474,-0.251,1.263,-6.474,-0.493,1.19,-6.474,-0.715,1.071,-6.474,-0.911,0.911,-6.474,-1.071,0.715,-6.474,-1.19,0.493,-6.474,-1.263,0.251,-6.474,-1.288,0,-6.474,-1.263,-0.251,-6.474,-1.19,-0.493,-6.474,-1.071,-0.715,-6.474,-0.911,-0.911,-6.474,-0.715,-1.071,-6.474,-0.493,-1.19,-6.474,-0.251,-1.263,-6.474,0,-1.288,-6.474,0.251,-1.263,-6.474,0.493,-1.19,-6.474,0.715,-1.071,-6.474,0.911,-0.911,-6.474,1.071,-0.715,-6.474,1.19,-0.493,-6.474,1.263,-0.251,-6.474,1.288,0,-6.474,1.263,0.251,-6.474,1.19,0.493,-6.474,1.071,0.715,-6.474,0.911,0.911,-6.474,0.715,1.071,-6.474,0.493,1.19,-6.474,0.251,1.263,-6.474,0,2.526,-6.098,-0.493,2.478,-6.098,-0.967,2.334,-6.098,-1.403,2.1,-6.098,-1.786,1.786,-6.098,-2.1,1.403,-6.098,-2.334,0.967,-6.098,-2.478,0.493,-6.098,-2.526,0,-6.098,-2.478,-0.493,-6.098,-2.334,-0.967,-6.098,-2.1,-1.403,-6.098,-1.786,-1.786,-6.098,-1.403,-2.1,-6.098,-0.967,-2.334,-6.098,-0.493,-2.478,-6.098,0,-2.526,-6.098,0.493,-2.478,-6.098,0.967,-2.334,-6.098,1.403,-2.1,-6.098,1.786,-1.786,-6.098,2.1,-1.403,-6.098,2.334,-0.967,-6.098,2.478,-0.493,-6.098,2.526,0,-6.098,2.478,0.493,-6.098,2.334,0.967,-6.098,2.1,1.403,-6.098,1.786,1.786,-6.098,1.403,2.1,-6.098,0.967,2.334,-6.098,0.493,2.478,-6.098,0,3.667,-5.488,-0.715,3.597,-5.488,-1.403,3.388,-5.488,-2.037,3.049,-5.488,-2.593,2.593,-5.488,-3.049,2.037,-5.488,-3.388,1.403,-5.488,-3.597,0.715,-5.488,-3.667,0,-5.488,-3.597,-0.715,-5.488,-3.388,-1.403,-5.488,-3.049,-2.037,-5.488,-2.593,-2.593,-5.488,-2.037,-3.049,-5.488,-1.403,-3.388,-5.488,-0.715,-3.597,-5.488,0,-3.667,-5.488,0.715,-3.597,-5.488,1.403,-3.388,-5.488,2.037,-3.049,-5.488,2.593,-2.593,-5.488,3.049,-2.037,-5.488,3.388,-1.403,-5.488,3.597,-0.715,-5.488,3.667,0,-5.488,3.597,0.715,-5.488,3.388,1.403,-5.488,3.049,2.037,-5.488,2.593,2.593,-5.488,2.037,3.049,-5.488,1.403,3.388,-5.488,0.715,3.597,-5.488,0,4.668,-4.668,-0.911,4.578,-4.668,-1.786,4.312,-4.668,-2.593,3.881,-4.668,-3.3,3.3,-4.668,-3.881,2.593,-4.668,-4.312,1.786,-4.668,-4.578,0.911,-4.668,-4.668,0,-4.668,-4.578,-0.911,-4.668,-4.312,-1.786,-4.668,-3.881,-2.593,-4.668,-3.3,-3.3,-4.668,-2.593,-3.881,-4.668,-1.786,-4.312,-4.668,-0.911,-4.578,-4.668,0,-4.668,-4.668,0.911,-4.578,-4.668,1.786,-4.312,-4.668,2.593,-3.881,-4.668,3.3,-3.3,-4.668,3.881,-2.593,-4.668,4.312,-1.786,-4.668,4.578,-0.911,-4.668,4.668,0,-4.668,4.578,0.911,-4.668,4.312,1.786,-4.668,3.881,2.593,-4.668,3.3,3.3,-4.668,2.593,3.881,-4.668,1.786,4.312,-4.668,0.911,4.578,-4.668,0,5.488,-3.667,-1.071,5.383,-3.667,-2.1,5.071,-3.667,-3.049,4.564,-3.667,-3.881,3.881,-3.667,-4.564,3.049,-3.667,-5.071,2.1,-3.667,-5.383,1.071,-3.667,-5.488,0,-3.667,-5.383,-1.071,-3.667,-5.071,-2.1,-3.667,-4.564,-3.049,-3.667,-3.881,-3.881,-3.667,-3.049,-4.564,-3.667,-2.1,-5.071,-3.667,-1.071,-5.383,-3.667,0,-5.488,-3.667,1.071,-5.383,-3.667,2.1,-5.071,-3.667,3.049,-4.563,-3.667,3.881,-3.881,-3.667,4.564,-3.049,-3.667,5.071,-2.1,-3.667,5.383,-1.071,-3.667,5.488,0,-3.667,5.383,1.071,-3.667,5.071,2.1,-3.667,4.563,3.049,-3.667,3.881,3.881,-3.667,3.049,4.564,-3.667,2.1,5.071,-3.667,1.071,5.383,-3.667,0,6.098,-2.526,-1.19,5.981,-2.526,-2.334,5.634,-2.526,-3.388,5.071,-2.526,-4.312,4.312,-2.526,-5.071,3.388,-2.526,-5.634,2.334,-2.526,-5.981,1.19,-2.526,-6.098,0,-2.526,-5.981,-1.19,-2.526,-5.634,-2.334,-2.526,-5.071,-3.388,-2.526,-4.312,-4.312,-2.526,-3.388,-5.071,-2.526,-2.334,-5.634,-2.526,-1.19,-5.981,-2.526,0,-6.098,-2.526,1.19,-5.981,-2.526,2.334,-5.634,-2.526,3.388,-5.071,-2.526,4.312,-4.312,-2.526,5.071,-3.388,-2.526,5.634,-2.334,-2.526,5.981,-1.19,-2.526,6.098,0,-2.526,5.981,1.19,-2.526,5.634,2.334,-2.526,5.071,3.388,-2.526,4.312,4.312,-2.526,3.388,5.071,-2.526,2.334,5.634,-2.526,1.19,5.981,-2.526,0,6.474,-1.288,-1.263,6.35,-1.288,-2.478,5.981,-1.288,-3.597,5.383,-1.288,-4.578,4.578,-1.288,-5.383,3.597,-1.288,-5.981,2.478,-1.288,-6.35,1.263,-1.288,-6.474,0,-1.288,-6.35,-1.263,-1.288,-5.981,-2.478,-1.288,-5.383,-3.597,-1.288,-4.578,-4.578,-1.288,-3.597,-5.383,-1.288,-2.478,-5.981,-1.288,-1.263,-6.35,-1.288,0,-6.474,-1.288,1.263,-6.35,-1.288,2.478,-5.981,-1.288,3.597,-5.383,-1.288,4.578,-4.578,-1.288,5.383,-3.597,-1.288,5.981,-2.478,-1.288,6.35,-1.263,-1.288,6.474,0,-1.288,6.35,1.263,-1.288,5.981,2.478,-1.288,5.383,3.597,-1.288,4.578,4.578,-1.288,3.597,5.383,-1.288,2.478,5.981,-1.288,1.263,6.35,-1.288,0,6.601,0,-1.288,6.474,0,-2.526,6.098,0,-3.667,5.488,0,-4.668,4.668,0,-5.488,3.667,0,-6.098,2.526,0,-6.474,1.288,0,-6.601,0,0,-6.474,-1.288,0,-6.098,-2.526,0,-5.488,-3.667,0,-4.668,-4.668,0,-3.667,-5.488,0,-2.526,-6.098,0,-1.288,-6.474,0,0,-6.601,0,1.288,-6.474,0,2.526,-6.098,0,3.667,-5.488,0,4.668,-4.668,0,5.488,-3.667,0,6.098,-2.526,0,6.474,-1.288,0,6.601,0,0,6.474,1.288,0,6.098,2.526,0,5.488,3.667,0,4.668,4.668,0,3.667,5.488,0,2.526,6.098,0,1.288,6.474,0,0,6.474,1.288,-1.263,6.35,1.288,-2.478,5.981,1.288,-3.597,5.383,1.288,-4.578,4.578,1.288,-5.383,3.597,1.288,-5.981,2.478,1.288,-6.35,1.263,1.288,-6.474,0,1.288,-6.35,-1.263,1.288,-5.981,-2.478,1.288,-5.383,-3.597,1.288,-4.578,-4.578,1.288,-3.597,-5.383,1.288,-2.478,-5.981,1.288,-1.263,-6.35,1.288,0,-6.474,1.288,1.263,-6.35,1.288,2.478,-5.981,1.288,3.597,-5.383,1.288,4.578,-4.578,1.288,5.383,-3.597,1.288,5.981,-2.478,1.288,6.35,-1.263,1.288,6.474,0,1.288,6.35,1.263,1.288,5.981,2.478,1.288,5.383,3.597,1.288,4.578,4.578,1.288,3.597,5.383,1.288,2.478,5.981,1.288,1.263,6.35,1.288,0,6.098,2.526,-1.19,5.981,2.526,-2.334,5.634,2.526,-3.388,5.071,2.526,-4.312,4.312,2.526,-5.071,3.388,2.526,-5.634,2.334,2.526,-5.981,1.19,2.526,-6.098,0,2.526,-5.981,-1.19,2.526,-5.634,-2.334,2.526,-5.071,-3.388,2.526,-4.312,-4.312,2.526,-3.388,-5.071,2.526,-2.334,-5.634,2.526,-1.19,-5.981,2.526,0,-6.098,2.526,1.19,-5.981,2.526,2.334,-5.634,2.526,3.388,-5.071,2.526,4.312,-4.312,2.526,5.071,-3.388,2.526,5.634,-2.334,2.526,5.981,-1.19,2.526,6.098,0,2.526,5.981,1.19,2.526,5.634,2.334,2.526,5.071,3.388,2.526,4.312,4.312,2.526,3.388,5.071,2.526,2.334,5.634,2.526,1.19,5.981,2.526,0,5.488,3.667,-1.071,5.383,3.667,-2.1,5.071,3.667,-3.049,4.564,3.667,-3.881,3.881,3.667,-4.564,3.049,3.667,-5.071,2.1,3.667,-5.383,1.071,3.667,-5.488,0,3.667,-5.383,-1.071,3.667,-5.071,-2.1,3.667,-4.564,-3.049,3.667,-3.881,-3.881,3.667,-3.049,-4.564,3.667,-2.1,-5.071,3.667,-1.071,-5.383,3.667,0,-5.488,3.667,1.071,-5.383,3.667,2.1,-5.071,3.667,3.049,-4.563,3.667,3.881,-3.881,3.667,4.564,-3.049,3.667,5.071,-2.1,3.667,5.383,-1.071,3.667,5.488,0,3.667,5.383,1.071,3.667,5.071,2.1,3.667,4.563,3.049,3.667,3.881,3.881,3.667,3.049,4.564,3.667,2.1,5.071,3.667,1.071,5.383,3.667,0,4.668,4.668,-0.911,4.578,4.668,-1.786,4.312,4.668,-2.593,3.881,4.668,-3.3,3.3,4.668,-3.881,2.593,4.668,-4.312,1.786,4.668,-4.578,0.911,4.668,-4.668,0,4.668,-4.578,-0.911,4.668,-4.312,-1.786,4.668,-3.881,-2.593,4.668,-3.3,-3.3,4.668,-2.593,-3.881,4.668,-1.786,-4.312,4.668,-0.911,-4.578,4.668,0,-4.668,4.668,0.911,-4.578,4.668,1.786,-4.312,4.668,2.593,-3.881,4.668,3.3,-3.3,4.668,3.881,-2.593,4.668,4.312,-1.786,4.668,4.578,-0.911,4.668,4.668,0,4.668,4.578,0.911,4.668,4.312,1.786,4.668,3.881,2.593,4.668,3.3,3.3,4.668,2.593,3.881,4.668,1.786,4.312,4.668,0.911,4.578,4.668,0,3.667,5.488,-0.715,3.597,5.488,-1.403,3.388,5.488,-2.037,3.049,5.488,-2.593,2.593,5.488,-3.049,2.037,5.488,-3.388,1.403,5.488,-3.597,0.715,5.488,-3.667,0,5.488,-3.597,-0.715,5.488,-3.388,-1.403,5.488,-3.049,-2.037,5.488,-2.593,-2.593,5.488,-2.037,-3.049,5.488,-1.403,-3.388,5.488,-0.715,-3.597,5.488,0,-3.667,5.488,0.715,-3.597,5.488,1.403,-3.388,5.488,2.037,-3.049,5.488,2.593,-2.593,5.488,3.049,-2.037,5.488,3.388,-1.403,5.488,3.597,-0.715,5.488,3.667,0,5.488,3.597,0.715,5.488,3.388,1.403,5.488,3.049,2.037,5.488,2.593,2.593,5.488,2.037,3.049,5.488,1.403,3.388,5.488,0.715,3.597,5.488,0,2.526,6.098,-0.493,2.478,6.098,-0.967,2.334,6.098,-1.403,2.1,6.098,-1.786,1.786,6.098,-2.1,1.403,6.098,-2.334,0.967,6.098,-2.478,0.493,6.098,-2.526,0,6.098,-2.478,-0.493,6.098,-2.334,-0.967,6.098,-2.1,-1.403,6.098,-1.786,-1.786,6.098,-1.403,-2.1,6.098,-0.967,-2.334,6.098,-0.493,-2.478,6.098,0,-2.526,6.098,0.493,-2.478,6.098,0.967,-2.334,6.098,1.403,-2.1,6.098,1.786,-1.786,6.098,2.1,-1.403,6.098,2.334,-0.967,6.098,2.478,-0.493,6.098,2.526,0,6.098,2.478,0.493,6.098,2.334,0.967,6.098,2.1,1.403,6.098,1.786,1.786,6.098,1.403,2.1,6.098,0.967,2.334,6.098,0.493,2.478,6.098,0,1.288,6.474,-0.251,1.263,6.474,-0.493,1.19,6.474,-0.715,1.071,6.474,-0.911,0.911,6.474,-1.071,0.715,6.474,-1.19,0.493,6.474,-1.263,0.251,6.474,-1.288,0,6.474,-1.263,-0.251,6.474,-1.19,-0.493,6.474,-1.071,-0.715,6.474,-0.911,-0.911,6.474,-0.715,-1.071,6.474,-0.493,-1.19,6.474,-0.251,-1.263,6.474,0,-1.288,6.474,0.251,-1.263,6.474,0.493,-1.19,6.474,0.715,-1.071,6.474,0.911,-0.911,6.474,1.071,-0.715,6.474,1.19,-0.493,6.474,1.263,-0.251,6.474,1.288,0,6.474,1.263,0.251,6.474,1.19,0.493,6.474,1.071,0.715,6.474,0.911,0.911,6.474,0.715,1.071,6.474,0.493,1.19,6.474,0.251,1.263,6.474,0,0,6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,0,-6.601,0,1.288,-6.474,0,2.526,-6.098,0,3.667,-5.488,0,4.668,-4.668,0,5.488,-3.667,0,6.098,-2.526,0,6.474,-1.288,0,6.601,0,0,6.474,1.288,0,6.098,2.526,0,5.488,3.667,0,4.668,4.668,0,3.667,5.488,0,2.526,6.098,0,1.288,6.474,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601,0,0,6.601],"uvs":[0,1,0,0.938,0.031,0.938,0.063,0.938,0.094,0.938,0.125,0.938,0.156,0.938,0.188,0.938,0.219,0.938,0.25,0.938,0.281,0.938,0.312,0.938,0.344,0.938,0.375,0.938,0.406,0.938,0.438,0.938,0.469,0.938,0.5,0.938,0.531,0.938,0.563,0.938,0.594,0.938,0.625,0.938,0.656,0.938,0.688,0.938,0.719,0.938,0.75,0.938,0.781,0.938,0.813,0.938,0.844,0.938,0.875,0.938,0.906,0.938,0.938,0.938,0.969,0.938,0,0.875,0.031,0.875,0.063,0.875,0.094,0.875,0.125,0.875,0.156,0.875,0.188,0.875,0.219,0.875,0.25,0.875,0.281,0.875,0.312,0.875,0.344,0.875,0.375,0.875,0.406,0.875,0.438,0.875,0.469,0.875,0.5,0.875,0.531,0.875,0.563,0.875,0.594,0.875,0.625,0.875,0.656,0.875,0.688,0.875,0.719,0.875,0.75,0.875,0.781,0.875,0.813,0.875,0.844,0.875,0.875,0.875,0.906,0.875,0.938,0.875,0.969,0.875,0,0.813,0.031,0.813,0.063,0.813,0.094,0.813,0.125,0.813,0.156,0.813,0.188,0.813,0.219,0.813,0.25,0.813,0.281,0.813,0.312,0.813,0.344,0.813,0.375,0.813,0.406,0.813,0.438,0.813,0.469,0.813,0.5,0.813,0.531,0.813,0.563,0.813,0.594,0.813,0.625,0.813,0.656,0.813,0.688,0.813,0.719,0.813,0.75,0.813,0.781,0.813,0.813,0.813,0.844,0.813,0.875,0.813,0.906,0.813,0.938,0.813,0.969,0.813,0,0.75,0.031,0.75,0.063,0.75,0.094,0.75,0.125,0.75,0.156,0.75,0.188,0.75,0.219,0.75,0.25,0.75,0.281,0.75,0.312,0.75,0.344,0.75,0.375,0.75,0.406,0.75,0.438,0.75,0.469,0.75,0.5,0.75,0.531,0.75,0.563,0.75,0.594,0.75,0.625,0.75,0.656,0.75,0.688,0.75,0.719,0.75,0.75,0.75,0.781,0.75,0.813,0.75,0.844,0.75,0.875,0.75,0.906,0.75,0.938,0.75,0.969,0.75,0,0.688,0.031,0.688,0.063,0.688,0.094,0.688,0.125,0.688,0.156,0.688,0.188,0.688,0.219,0.688,0.25,0.688,0.281,0.688,0.312,0.688,0.344,0.688,0.375,0.688,0.406,0.688,0.438,0.688,0.469,0.688,0.5,0.688,0.531,0.688,0.563,0.688,0.594,0.688,0.625,0.688,0.656,0.688,0.688,0.688,0.719,0.688,0.75,0.688,0.781,0.688,0.813,0.688,0.844,0.688,0.875,0.688,0.906,0.688,0.938,0.688,0.969,0.688,0,0.625,0.031,0.625,0.063,0.625,0.094,0.625,0.125,0.625,0.156,0.625,0.188,0.625,0.219,0.625,0.25,0.625,0.281,0.625,0.312,0.625,0.344,0.625,0.375,0.625,0.406,0.625,0.438,0.625,0.469,0.625,0.5,0.625,0.531,0.625,0.563,0.625,0.594,0.625,0.625,0.625,0.656,0.625,0.688,0.625,0.719,0.625,0.75,0.625,0.781,0.625,0.813,0.625,0.844,0.625,0.875,0.625,0.906,0.625,0.938,0.625,0.969,0.625,0,0.563,0.031,0.563,0.063,0.563,0.094,0.563,0.125,0.563,0.156,0.563,0.188,0.563,0.219,0.563,0.25,0.563,0.281,0.563,0.312,0.563,0.344,0.563,0.375,0.563,0.406,0.563,0.438,0.563,0.469,0.563,0.5,0.563,0.531,0.563,0.563,0.563,0.594,0.563,0.625,0.563,0.656,0.563,0.688,0.563,0.719,0.563,0.75,0.563,0.781,0.563,0.813,0.563,0.844,0.563,0.875,0.563,0.906,0.563,0.938,0.563,0.969,0.563,0,0.5,0.031,0.5,0.063,0.5,0.094,0.5,0.125,0.5,0.156,0.5,0.188,0.5,0.219,0.5,0.25,0.5,0.281,0.5,0.312,0.5,0.344,0.5,0.375,0.5,0.406,0.5,0.438,0.5,0.469,0.5,0.5,0.5,0.531,0.5,0.563,0.5,0.594,0.5,0.625,0.5,0.656,0.5,0.688,0.5,0.719,0.5,0.75,0.5,0.781,0.5,0.813,0.5,0.844,0.5,0.875,0.5,0.906,0.5,0.938,0.5,0.969,0.5,0,0.438,0.031,0.438,0.063,0.438,0.094,0.438,0.125,0.438,0.156,0.438,0.188,0.438,0.219,0.438,0.25,0.438,0.281,0.438,0.312,0.438,0.344,0.438,0.375,0.438,0.406,0.438,0.438,0.438,0.469,0.438,0.5,0.438,0.531,0.438,0.563,0.438,0.594,0.438,0.625,0.438,0.656,0.438,0.688,0.438,0.719,0.438,0.75,0.438,0.781,0.438,0.813,0.438,0.844,0.438,0.875,0.438,0.906,0.438,0.938,0.438,0.969,0.438,0,0.375,0.031,0.375,0.063,0.375,0.094,0.375,0.125,0.375,0.156,0.375,0.188,0.375,0.219,0.375,0.25,0.375,0.281,0.375,0.312,0.375,0.344,0.375,0.375,0.375,0.406,0.375,0.438,0.375,0.469,0.375,0.5,0.375,0.531,0.375,0.563,0.375,0.594,0.375,0.625,0.375,0.656,0.375,0.688,0.375,0.719,0.375,0.75,0.375,0.781,0.375,0.813,0.375,0.844,0.375,0.875,0.375,0.906,0.375,0.938,0.375,0.969,0.375,0,0.313,0.031,0.313,0.063,0.313,0.094,0.313,0.125,0.313,0.156,0.313,0.188,0.313,0.219,0.313,0.25,0.313,0.281,0.313,0.312,0.313,0.344,0.313,0.375,0.313,0.406,0.313,0.438,0.313,0.469,0.313,0.5,0.313,0.531,0.313,0.563,0.313,0.594,0.313,0.625,0.313,0.656,0.313,0.688,0.313,0.719,0.313,0.75,0.313,0.781,0.313,0.813,0.313,0.844,0.313,0.875,0.313,0.906,0.313,0.938,0.313,0.969,0.313,0,0.25,0.031,0.25,0.063,0.25,0.094,0.25,0.125,0.25,0.156,0.25,0.188,0.25,0.219,0.25,0.25,0.25,0.281,0.25,0.312,0.25,0.344,0.25,0.375,0.25,0.406,0.25,0.438,0.25,0.469,0.25,0.5,0.25,0.531,0.25,0.563,0.25,0.594,0.25,0.625,0.25,0.656,0.25,0.688,0.25,0.719,0.25,0.75,0.25,0.781,0.25,0.813,0.25,0.844,0.25,0.875,0.25,0.906,0.25,0.938,0.25,0.969,0.25,0,0.188,0.031,0.188,0.063,0.188,0.094,0.188,0.125,0.188,0.156,0.188,0.188,0.188,0.219,0.188,0.25,0.188,0.281,0.188,0.312,0.188,0.344,0.188,0.375,0.188,0.406,0.188,0.438,0.188,0.469,0.188,0.5,0.188,0.531,0.188,0.563,0.188,0.594,0.188,0.625,0.188,0.656,0.188,0.688,0.188,0.719,0.188,0.75,0.188,0.781,0.188,0.813,0.188,0.844,0.188,0.875,0.188,0.906,0.188,0.938,0.188,0.969,0.188,0,0.125,0.031,0.125,0.063,0.125,0.094,0.125,0.125,0.125,0.156,0.125,0.188,0.125,0.219,0.125,0.25,0.125,0.281,0.125,0.312,0.125,0.344,0.125,0.375,0.125,0.406,0.125,0.438,0.125,0.469,0.125,0.5,0.125,0.531,0.125,0.563,0.125,0.594,0.125,0.625,0.125,0.656,0.125,0.688,0.125,0.719,0.125,0.75,0.125,0.781,0.125,0.813,0.125,0.844,0.125,0.875,0.125,0.906,0.125,0.938,0.125,0.969,0.125,0,0.062,0.031,0.062,0.063,0.062,0.094,0.062,0.125,0.062,0.156,0.062,0.188,0.062,0.219,0.062,0.25,0.062,0.281,0.062,0.312,0.062,0.344,0.062,0.375,0.062,0.406,0.062,0.438,0.062,0.469,0.062,0.5,0.062,0.531,0.062,0.563,0.062,0.594,0.062,0.625,0.062,0.656,0.062,0.688,0.062,0.719,0.062,0.75,0.062,0.781,0.062,0.813,0.062,0.844,0.062,0.875,0.062,0.906,0.062,0.938,0.062,0.969,0.062,0,0,0.031,1,0.063,1,0.094,1,0.125,1,0.156,1,0.188,1,0.219,1,0.25,1,0.281,1,0.312,1,0.344,1,0.375,1,0.406,1,0.438,1,0.469,1,0.5,1,0.531,1,0.563,1,0.594,1,0.625,1,0.656,1,0.688,1,0.719,1,0.75,1,0.781,1,0.813,1,0.844,1,0.875,1,0.906,1,0.938,1,0.969,1,1,0.938,1,0.875,1,0.813,1,0.75,1,0.688,1,0.625,1,0.563,1,0.5,1,0.438,1,0.375,1,0.313,1,0.25,1,0.188,1,0.125,1,0.062,0.031,0,0.063,0,0.094,0,0.125,0,0.156,0,0.188,0,0.219,0,0.25,0,0.281,0,0.312,0,0.344,0,0.375,0,0.406,0,0.438,0,0.469,0,0.5,0,0.531,0,0.563,0,0.594,0,0.625,0,0.656,0,0.688,0,0.719,0,0.75,0,0.781,0,0.813,0,0.844,0,0.875,0,0.906,0,0.938,0,0.969,0],"indices":[0,2,1,482,3,2,483,4,3,484,5,4,485,6,5,486,7,6,487,8,7,488,9,8,489,10,9,490,11,10,491,12,11,492,13,12,493,14,13,494,15,14,495,16,15,496,17,16,497,18,17,498,19,18,499,20,19,500,21,20,501,22,21,502,23,22,503,24,23,504,25,24,505,26,25,506,27,26,507,28,27,508,29,28,509,30,29,510,31,30,511,32,31,512,513,32,1,34,33,1,2,34,2,35,34,2,3,35,3,36,35,3,4,36,4,37,36,4,5,37,5,38,37,5,6,38,6,39,38,6,7,39,7,40,39,7,8,40,8,41,40,8,9,41,9,42,41,9,10,42,10,43,42,10,11,43,11,44,43,11,12,44,12,45,44,12,13,45,13,46,45,13,14,46,14,47,46,14,15,47,15,48,47,15,16,48,16,49,48,16,17,49,17,50,49,17,18,50,18,51,50,18,19,51,19,52,51,19,20,52,20,53,52,20,21,53,21,54,53,21,22,54,22,55,54,22,23,55,23,56,55,23,24,56,24,57,56,24,25,57,25,58,57,25,26,58,26,59,58,26,27,59,27,60,59,27,28,60,28,61,60,28,29,61,29,62,61,29,30,62,30,63,62,30,31,63,31,64,63,31,32,64,32,514,64,32,513,514,33,66,65,33,34,66,34,67,66,34,35,67,35,68,67,35,36,68,36,69,68,36,37,69,37,70,69,37,38,70,38,71,70,38,39,71,39,72,71,39,40,72,40,73,72,40,41,73,41,74,73,41,42,74,42,75,74,42,43,75,43,76,75,43,44,76,44,77,76,44,45,77,45,78,77,45,46,78,46,79,78,46,47,79,47,80,79,47,48,80,48,81,80,48,49,81,49,82,81,49,50,82,50,83,82,50,51,83,51,84,83,51,52,84,52,85,84,52,53,85,53,86,85,53,54,86,54,87,86,54,55,87,55,88,87,55,56,88,56,89,88,56,57,89,57,90,89,57,58,90,58,91,90,58,59,91,59,92,91,59,60,92,60,93,92,60,61,93,61,94,93,61,62,94,62,95,94,62,63,95,63,96,95,63,64,96,64,515,96,64,514,515,65,98,97,65,66,98,66,99,98,66,67,99,67,100,99,67,68,100,68,101,100,68,69,101,69,102,101,69,70,102,70,103,102,70,71,103,71,104,103,71,72,104,72,105,104,72,73,105,73,106,105,73,74,106,74,107,106,74,75,107,75,108,107,75,76,108,76,109,108,76,77,109,77,110,109,77,78,110,78,111,110,78,79,111,79,112,111,79,80,112,80,113,112,80,81,113,81,114,113,81,82,114,82,115,114,82,83,115,83,116,115,83,84,116,84,117,116,84,85,117,85,118,117,85,86,118,86,119,118,86,87,119,87,120,119,87,88,120,88,121,120,88,89,121,89,122,121,89,90,122,90,123,122,90,91,123,91,124,123,91,92,124,92,125,124,92,93,125,93,126,125,93,94,126,94,127,126,94,95,127,95,128,127,95,96,128,96,516,128,96,515,516,97,130,129,97,98,130,98,131,130,98,99,131,99,132,131,99,100,132,100,133,132,100,101,133,101,134,133,101,102,134,102,135,134,102,103,135,103,136,135,103,104,136,104,137,136,104,105,137,105,138,137,105,106,138,106,139,138,106,107,139,107,140,139,107,108,140,108,141,140,108,109,141,109,142,141,109,110,142,110,143,142,110,111,143,111,144,143,111,112,144,112,145,144,112,113,145,113,146,145,113,114,146,114,147,146,114,115,147,115,148,147,115,116,148,116,149,148,116,117,149,117,150,149,117,118,150,118,151,150,118,119,151,119,152,151,119,120,152,120,153,152,120,121,153,121,154,153,121,122,154,122,155,154,122,123,155,123,156,155,123,124,156,124,157,156,124,125,157,125,158,157,125,126,158,126,159,158,126,127,159,127,160,159,127,128,160,128,517,160,128,516,517,129,162,161,129,130,162,130,163,162,130,131,163,131,164,163,131,132,164,132,165,164,132,133,165,133,166,165,133,134,166,134,167,166,134,135,167,135,168,167,135,136,168,136,169,168,136,137,169,137,170,169,137,138,170,138,171,170,138,139,171,139,172,171,139,140,172,140,173,172,140,141,173,141,174,173,141,142,174,142,175,174,142,143,175,143,176,175,143,144,176,144,177,176,144,145,177,145,178,177,145,146,178,146,179,178,146,147,179,147,180,179,147,148,180,148,181,180,148,149,181,149,182,181,149,150,182,150,183,182,150,151,183,151,184,183,151,152,184,152,185,184,152,153,185,153,186,185,153,154,186,154,187,186,154,155,187,155,188,187,155,156,188,156,189,188,156,157,189,157,190,189,157,158,190,158,191,190,158,159,191,159,192,191,159,160,192,160,518,192,160,517,518,161,194,193,161,162,194,162,195,194,162,163,195,163,196,195,163,164,196,164,197,196,164,165,197,165,198,197,165,166,198,166,199,198,166,167,199,167,200,199,167,168,200,168,201,200,168,169,201,169,202,201,169,170,202,170,203,202,170,171,203,171,204,203,171,172,204,172,205,204,172,173,205,173,206,205,173,174,206,174,207,206,174,175,207,175,208,207,175,176,208,176,209,208,176,177,209,177,210,209,177,178,210,178,211,210,178,179,211,179,212,211,179,180,212,180,213,212,180,181,213,181,214,213,181,182,214,182,215,214,182,183,215,183,216,215,183,184,216,184,217,216,184,185,217,185,218,217,185,186,218,186,219,218,186,187,219,187,220,219,187,188,220,188,221,220,188,189,221,189,222,221,189,190,222,190,223,222,190,191,223,191,224,223,191,192,224,192,519,224,192,518,519,193,226,225,193,194,226,194,227,226,194,195,227,195,228,227,195,196,228,196,229,228,196,197,229,197,230,229,197,198,230,198,231,230,198,199,231,199,232,231,199,200,232,200,233,232,200,201,233,201,234,233,201,202,234,202,235,234,202,203,235,203,236,235,203,204,236,204,237,236,204,205,237,205,238,237,205,206,238,206,239,238,206,207,239,207,240,239,207,208,240,208,241,240,208,209,241,209,242,241,209,210,242,210,243,242,210,211,243,211,244,243,211,212,244,212,245,244,212,213,245,213,246,245,213,214,246,214,247,246,214,215,247,215,248,247,215,216,248,216,249,248,216,217,249,217,250,249,217,218,250,218,251,250,218,219,251,219,252,251,219,220,252,220,253,252,220,221,253,221,254,253,221,222,254,222,255,254,222,223,255,223,256,255,223,224,256,224,520,256,224,519,520,225,258,257,225,226,258,226,259,258,226,227,259,227,260,259,227,228,260,228,261,260,228,229,261,229,262,261,229,230,262,230,263,262,230,231,263,231,264,263,231,232,264,232,265,264,232,233,265,233,266,265,233,234,266,234,267,266,234,235,267,235,268,267,235,236,268,236,269,268,236,237,269,237,270,269,237,238,270,238,271,270,238,239,271,239,272,271,239,240,272,240,273,272,240,241,273,241,274,273,241,242,274,242,275,274,242,243,275,243,276,275,243,244,276,244,277,276,244,245,277,245,278,277,245,246,278,246,279,278,246,247,279,247,280,279,247,248,280,248,281,280,248,249,281,249,282,281,249,250,282,250,283,282,250,251,283,251,284,283,251,252,284,252,285,284,252,253,285,253,286,285,253,254,286,254,287,286,254,255,287,255,288,287,255,256,288,256,521,288,256,520,521,257,290,289,257,258,290,258,291,290,258,259,291,259,292,291,259,260,292,260,293,292,260,261,293,261,294,293,261,262,294,262,295,294,262,263,295,263,296,295,263,264,296,264,297,296,264,265,297,265,298,297,265,266,298,266,299,298,266,267,299,267,300,299,267,268,300,268,301,300,268,269,301,269,302,301,269,270,302,270,303,302,270,271,303,271,304,303,271,272,304,272,305,304,272,273,305,273,306,305,273,274,306,274,307,306,274,275,307,275,308,307,275,276,308,276,309,308,276,277,309,277,310,309,277,278,310,278,311,310,278,279,311,279,312,311,279,280,312,280,313,312,280,281,313,281,314,313,281,282,314,282,315,314,282,283,315,283,316,315,283,284,316,284,317,316,284,285,317,285,318,317,285,286,318,286,319,318,286,287,319,287,320,319,287,288,320,288,522,320,288,521,522,289,322,321,289,290,322,290,323,322,290,291,323,291,324,323,291,292,324,292,325,324,292,293,325,293,326,325,293,294,326,294,327,326,294,295,327,295,328,327,295,296,328,296,329,328,296,297,329,297,330,329,297,298,330,298,331,330,298,299,331,299,332,331,299,300,332,300,333,332,300,301,333,301,334,333,301,302,334,302,335,334,302,303,335,303,336,335,303,304,336,304,337,336,304,305,337,305,338,337,305,306,338,306,339,338,306,307,339,307,340,339,307,308,340,308,341,340,308,309,341,309,342,341,309,310,342,310,343,342,310,311,343,311,344,343,311,312,344,312,345,344,312,313,345,313,346,345,313,314,346,314,347,346,314,315,347,315,348,347,315,316,348,316,349,348,316,317,349,317,350,349,317,318,350,318,351,350,318,319,351,319,352,351,319,320,352,320,523,352,320,522,523,321,354,353,321,322,354,322,355,354,322,323,355,323,356,355,323,324,356,324,357,356,324,325,357,325,358,357,325,326,358,326,359,358,326,327,359,327,360,359,327,328,360,328,361,360,328,329,361,329,362,361,329,330,362,330,363,362,330,331,363,331,364,363,331,332,364,332,365,364,332,333,365,333,366,365,333,334,366,334,367,366,334,335,367,335,368,367,335,336,368,336,369,368,336,337,369,337,370,369,337,338,370,338,371,370,338,339,371,339,372,371,339,340,372,340,373,372,340,341,373,341,374,373,341,342,374,342,375,374,342,343,375,343,376,375,343,344,376,344,377,376,344,345,377,345,378,377,345,346,378,346,379,378,346,347,379,347,380,379,347,348,380,348,381,380,348,349,381,349,382,381,349,350,382,350,383,382,350,351,383,351,384,383,351,352,384,352,524,384,352,523,524,353,386,385,353,354,386,354,387,386,354,355,387,355,388,387,355,356,388,356,389,388,356,357,389,357,390,389,357,358,390,358,391,390,358,359,391,359,392,391,359,360,392,360,393,392,360,361,393,361,394,393,361,362,394,362,395,394,362,363,395,363,396,395,363,364,396,364,397,396,364,365,397,365,398,397,365,366,398,366,399,398,366,367,399,367,400,399,367,368,400,368,401,400,368,369,401,369,402,401,369,370,402,370,403,402,370,371,403,371,404,403,371,372,404,372,405,404,372,373,405,373,406,405,373,374,406,374,407,406,374,375,407,375,408,407,375,376,408,376,409,408,376,377,409,377,410,409,377,378,410,378,411,410,378,379,411,379,412,411,379,380,412,380,413,412,380,381,413,381,414,413,381,382,414,382,415,414,382,383,415,383,416,415,383,384,416,384,525,416,384,524,525,385,418,417,385,386,418,386,419,418,386,387,419,387,420,419,387,388,420,388,421,420,388,389,421,389,422,421,389,390,422,390,423,422,390,391,423,391,424,423,391,392,424,392,425,424,392,393,425,393,426,425,393,394,426,394,427,426,394,395,427,395,428,427,395,396,428,396,429,428,396,397,429,397,430,429,397,398,430,398,431,430,398,399,431,399,432,431,399,400,432,400,433,432,400,401,433,401,434,433,401,402,434,402,435,434,402,403,435,403,436,435,403,404,436,404,437,436,404,405,437,405,438,437,405,406,438,406,439,438,406,407,439,407,440,439,407,408,440,408,441,440,408,409,441,409,442,441,409,410,442,410,443,442,410,411,443,411,444,443,411,412,444,412,445,444,412,413,445,413,446,445,413,414,446,414,447,446,414,415,447,415,448,447,415,416,448,416,526,448,416,525,526,417,450,449,417,418,450,418,451,450,418,419,451,419,452,451,419,420,452,420,453,452,420,421,453,421,454,453,421,422,454,422,455,454,422,423,455,423,456,455,423,424,456,424,457,456,424,425,457,425,458,457,425,426,458,426,459,458,426,427,459,427,460,459,427,428,460,428,461,460,428,429,461,429,462,461,429,430,462,430,463,462,430,431,463,431,464,463,431,432,464,432,465,464,432,433,465,433,466,465,433,434,466,434,467,466,434,435,467,435,468,467,435,436,468,436,469,468,436,437,469,437,470,469,437,438,470,438,471,470,438,439,471,439,472,471,439,440,472,440,473,472,440,441,473,441,474,473,441,442,474,442,475,474,442,443,475,443,476,475,443,444,476,444,477,476,444,445,477,445,478,477,445,446,478,446,479,478,446,447,479,447,480,479,447,448,480,448,527,480,448,526,527,481,449,450,528,450,451,529,451,452,530,452,453,531,453,454,532,454,455,533,455,456,534,456,457,535,457,458,536,458,459,537,459,460,538,460,461,539,461,462,540,462,463,541,463,464,542,464,465,543,465,466,544,466,467,545,467,468,546,468,469,547,469,470,548,470,471,549,471,472,550,472,473,551,473,474,552,474,475,553,475,476,554,476,477,555,477,478,556,478,479,557,479,480,558,480,527],"groups":[{"start":0,"count":2880,"materialIndex":0}],"materials":[{"name":"ballfire","color":[1,1,1,1],"textureName":"FireArrow800.JPG","textureUrl":"/assets/textures/ball/FireArrow800.jpg"}]}]}
+\ No newline at end of file
+diff --git a/public/assets/ports/archive-ballshell.json b/public/assets/ports/archive-ballshell.json
+new file mode 100644
+index 0000000..37adf42
+--- /dev/null
++++ b/public/assets/ports/archive-ballshell.json
+@@ -0,0 +1 @@
++{"source":"BallZ 2011/Release/Media/Ball/BallShell.tvm","provenance":{"archiveSource":"BallZ 2011/Release/Media/Ball/BallShell.tvm","decodedBy":"TVM decode into src/legacy/tvm-catalog.json; republished verbatim by scripts/vendor-ball-meshes.mjs","fidelity":"faithful — positions, UVs and indices copied unmodified; normals derived by the loader"},"meshCount":1,"vertexCount":1118,"faceCount":1920,"triangleCount":1920,"materialGroupCount":1,"normals":"derived","bounds":{"min":[-8.5,-8.5,-8.5],"max":[8.5,8.5,8.5],"size":[17,17,17]},"radius":8.5,"meshes":[{"name":"BallShell","vertexCount":1118,"faceCount":1920,"triangleCount":1920,"positions":[0,0,-8.5,0,1.658,-8.336,-0.323,1.626,-8.336,-0.635,1.532,-8.336,-0.921,1.379,-8.336,-1.173,1.173,-8.336,-1.379,0.921,-8.336,-1.532,0.635,-8.336,-1.626,0.323,-8.336,-1.658,0,-8.336,-1.626,-0.323,-8.336,-1.532,-0.635,-8.336,-1.379,-0.921,-8.336,-1.173,-1.173,-8.336,-0.921,-1.379,-8.336,-0.635,-1.532,-8.336,-0.323,-1.626,-8.336,0,-1.658,-8.336,0.323,-1.626,-8.336,0.635,-1.532,-8.336,0.921,-1.379,-8.336,1.173,-1.173,-8.336,1.379,-0.921,-8.336,1.532,-0.635,-8.336,1.626,-0.323,-8.336,1.658,0,-8.336,1.626,0.323,-8.336,1.532,0.635,-8.336,1.379,0.921,-8.336,1.173,1.173,-8.336,0.921,1.379,-8.336,0.635,1.532,-8.336,0.323,1.626,-8.336,0,3.253,-7.853,-0.635,3.19,-7.853,-1.245,3.005,-7.853,-1.807,2.704,-7.853,-2.3,2.3,-7.853,-2.704,1.807,-7.853,-3.005,1.245,-7.853,-3.19,0.635,-7.853,-3.253,0,-7.853,-3.19,-0.635,-7.853,-3.005,-1.245,-7.853,-2.704,-1.807,-7.853,-2.3,-2.3,-7.853,-1.807,-2.704,-7.853,-1.245,-3.005,-7.853,-0.635,-3.19,-7.853,0,-3.253,-7.853,0.635,-3.19,-7.853,1.245,-3.005,-7.853,1.807,-2.704,-7.853,2.3,-2.3,-7.853,2.704,-1.807,-7.853,3.005,-1.245,-7.853,3.19,-0.635,-7.853,3.253,0,-7.853,3.19,0.635,-7.853,3.005,1.245,-7.853,2.704,1.807,-7.853,2.3,2.3,-7.853,1.807,2.704,-7.853,1.245,3.005,-7.853,0.635,3.19,-7.853,0,4.722,-7.067,-0.921,4.631,-7.067,-1.807,4.363,-7.067,-2.623,3.926,-7.067,-3.339,3.339,-7.067,-3.926,2.623,-7.067,-4.363,1.807,-7.067,-4.631,0.921,-7.067,-4.722,0,-7.067,-4.631,-0.921,-7.067,-4.363,-1.807,-7.067,-3.926,-2.623,-7.067,-3.339,-3.339,-7.067,-2.623,-3.926,-7.067,-1.807,-4.363,-7.067,-0.921,-4.631,-7.067,0,-4.722,-7.067,0.921,-4.631,-7.067,1.807,-4.363,-7.067,2.623,-3.926,-7.067,3.339,-3.339,-7.067,3.926,-2.623,-7.067,4.363,-1.807,-7.067,4.631,-0.921,-7.067,4.722,0,-7.067,4.631,0.921,-7.067,4.363,1.807,-7.067,3.926,2.623,-7.067,3.339,3.339,-7.067,2.623,3.926,-7.067,1.807,4.363,-7.067,0.921,4.631,-7.067,0,6.01,-6.01,-1.173,5.895,-6.01,-2.3,5.553,-6.01,-3.339,4.997,-6.01,-4.25,4.25,-6.01,-4.997,3.339,-6.01,-5.553,2.3,-6.01,-5.895,1.173,-6.01,-6.01,0,-6.01,-5.895,-1.173,-6.01,-5.553,-2.3,-6.01,-4.997,-3.339,-6.01,-4.25,-4.25,-6.01,-3.339,-4.997,-6.01,-2.3,-5.553,-6.01,-1.173,-5.895,-6.01,0,-6.01,-6.01,1.173,-5.895,-6.01,2.3,-5.553,-6.01,3.339,-4.997,-6.01,4.25,-4.25,-6.01,4.997,-3.339,-6.01,5.553,-2.3,-6.01,5.895,-1.173,-6.01,6.01,0,-6.01,5.895,1.173,-6.01,5.553,2.3,-6.01,4.997,3.339,-6.01,4.25,4.25,-6.01,3.339,4.997,-6.01,2.3,5.553,-6.01,1.173,5.895,-6.01,0,7.067,-4.722,-1.379,6.931,-4.722,-2.704,6.529,-4.722,-3.926,5.876,-4.722,-4.997,4.997,-4.722,-5.876,3.926,-4.722,-6.529,2.704,-4.722,-6.931,1.379,-4.722,-7.067,0,-4.722,-6.931,-1.379,-4.722,-6.529,-2.704,-4.722,-5.876,-3.926,-4.722,-4.997,-4.997,-4.722,-3.926,-5.876,-4.722,-2.704,-6.529,-4.722,-1.379,-6.931,-4.722,0,-7.067,-4.722,1.379,-6.931,-4.722,2.704,-6.529,-4.722,3.926,-5.876,-4.722,4.997,-4.997,-4.722,5.876,-3.926,-4.722,6.529,-2.704,-4.722,6.931,-1.379,-4.722,7.067,0,-4.722,6.931,1.379,-4.722,6.529,2.704,-4.722,5.876,3.926,-4.722,4.997,4.997,-4.722,3.926,5.876,-4.722,2.704,6.529,-4.722,1.379,6.931,-4.722,0,7.853,-3.253,-1.532,7.702,-3.253,-3.005,7.255,-3.253,-4.363,6.529,-3.253,-5.553,5.553,-3.253,-6.529,4.363,-3.253,-7.255,3.005,-3.253,-7.702,1.532,-3.253,-7.853,0,-3.253,-7.702,-1.532,-3.253,-7.255,-3.005,-3.253,-6.529,-4.363,-3.253,-5.553,-5.553,-3.253,-4.363,-6.529,-3.253,-3.005,-7.255,-3.253,-1.532,-7.702,-3.253,0,-7.853,-3.253,1.532,-7.702,-3.253,3.005,-7.255,-3.253,4.363,-6.529,-3.253,5.553,-5.553,-3.253,6.529,-4.363,-3.253,7.255,-3.005,-3.253,7.702,-1.532,-3.253,7.853,0,-3.253,7.702,1.532,-3.253,7.255,3.005,-3.253,6.529,4.363,-3.253,5.553,5.553,-3.253,4.363,6.529,-3.253,3.005,7.255,-3.253,1.532,7.702,-3.253,0,8.336,-1.658,-1.626,8.176,-1.658,-3.19,7.702,-1.658,-4.631,6.931,-1.658,-5.895,5.895,-1.658,-6.931,4.631,-1.658,-7.702,3.19,-1.658,-8.176,1.626,-1.658,-8.336,0,-1.658,-8.176,-1.626,-1.658,-7.702,-3.19,-1.658,-6.931,-4.631,-1.658,-5.895,-5.895,-1.658,-4.631,-6.931,-1.658,-3.19,-7.702,-1.658,-1.626,-8.176,-1.658,0,-8.336,-1.658,1.626,-8.176,-1.658,3.19,-7.702,-1.658,4.631,-6.931,-1.658,5.895,-5.895,-1.658,6.931,-4.631,-1.658,7.702,-3.19,-1.658,8.176,-1.626,-1.658,8.336,0,-1.658,8.176,1.626,-1.658,7.702,3.19,-1.658,6.931,4.631,-1.658,5.895,5.895,-1.658,4.631,6.931,-1.658,3.19,7.702,-1.658,1.626,8.176,-1.658,0,8.5,0,-1.658,8.336,0,-3.253,7.853,0,-4.722,7.067,0,-6.01,6.01,0,-7.067,4.722,0,-7.853,3.253,0,-8.336,1.658,0,-8.5,0,0,-8.336,-1.658,0,-7.853,-3.253,0,-7.067,-4.722,0,-6.01,-6.01,0,-4.722,-7.067,0,-3.253,-7.853,0,-1.658,-8.336,0,0,-8.5,0,1.658,-8.336,0,3.253,-7.853,0,4.722,-7.067,0,6.01,-6.01,0,7.067,-4.722,0,7.853,-3.253,0,8.336,-1.658,0,8.5,0,0,8.336,1.658,0,7.853,3.253,0,7.067,4.722,0,6.01,6.01,0,4.722,7.067,0,3.253,7.853,0,1.658,8.336,0,0,8.336,1.658,-1.626,8.176,1.658,-3.19,7.702,1.658,-4.631,6.931,1.658,-5.895,5.895,1.658,-6.931,4.631,1.658,-7.702,3.19,1.658,-8.176,1.626,1.658,-8.336,0,1.658,-8.176,-1.626,1.658,-7.702,-3.19,1.658,-6.931,-4.631,1.658,-5.895,-5.895,1.658,-4.631,-6.931,1.658,-3.19,-7.702,1.658,-1.626,-8.176,1.658,0,-8.336,1.658,1.626,-8.176,1.658,3.19,-7.702,1.658,4.631,-6.931,1.658,5.895,-5.895,1.658,6.931,-4.631,1.658,7.702,-3.19,1.658,8.176,-1.626,1.658,8.336,0,1.658,8.176,1.626,1.658,7.702,3.19,1.658,6.931,4.631,1.658,5.895,5.895,1.658,4.631,6.931,1.658,3.19,7.702,1.658,1.626,8.176,1.658,0,7.853,3.253,-1.532,7.702,3.253,-3.005,7.255,3.253,-4.363,6.529,3.253,-5.553,5.553,3.253,-6.529,4.363,3.253,-7.255,3.005,3.253,-7.702,1.532,3.253,-7.853,0,3.253,-7.702,-1.532,3.253,-7.255,-3.005,3.253,-6.529,-4.363,3.253,-5.553,-5.553,3.253,-4.363,-6.529,3.253,-3.005,-7.255,3.253,-1.532,-7.702,3.253,0,-7.853,3.253,1.532,-7.702,3.253,3.005,-7.255,3.253,4.363,-6.529,3.253,5.553,-5.553,3.253,6.529,-4.363,3.253,7.255,-3.005,3.253,7.702,-1.532,3.253,7.853,0,3.253,7.702,1.532,3.253,7.255,3.005,3.253,6.529,4.363,3.253,5.553,5.553,3.253,4.363,6.529,3.253,3.005,7.255,3.253,1.532,7.702,3.253,0,7.067,4.722,-1.379,6.931,4.722,-2.704,6.529,4.722,-3.926,5.876,4.722,-4.997,4.997,4.722,-5.876,3.926,4.722,-6.529,2.704,4.722,-6.931,1.379,4.722,-7.067,0,4.722,-6.931,-1.379,4.722,-6.529,-2.704,4.722,-5.876,-3.926,4.722,-4.997,-4.997,4.722,-3.926,-5.876,4.722,-2.704,-6.529,4.722,-1.379,-6.931,4.722,0,-7.067,4.722,1.379,-6.931,4.722,2.704,-6.529,4.722,3.926,-5.876,4.722,4.997,-4.997,4.722,5.876,-3.926,4.722,6.529,-2.704,4.722,6.931,-1.379,4.722,7.067,0,4.722,6.931,1.379,4.722,6.529,2.704,4.722,5.876,3.926,4.722,4.997,4.997,4.722,3.926,5.876,4.722,2.704,6.529,4.722,1.379,6.931,4.722,0,6.01,6.01,-1.173,5.895,6.01,-2.3,5.553,6.01,-3.339,4.997,6.01,-4.25,4.25,6.01,-4.997,3.339,6.01,-5.553,2.3,6.01,-5.895,1.173,6.01,-6.01,0,6.01,-5.895,-1.173,6.01,-5.553,-2.3,6.01,-4.997,-3.339,6.01,-4.25,-4.25,6.01,-3.339,-4.997,6.01,-2.3,-5.553,6.01,-1.173,-5.895,6.01,0,-6.01,6.01,1.173,-5.895,6.01,2.3,-5.553,6.01,3.339,-4.997,6.01,4.25,-4.25,6.01,4.997,-3.339,6.01,5.553,-2.3,6.01,5.895,-1.173,6.01,6.01,0,6.01,5.895,1.173,6.01,5.553,2.3,6.01,4.997,3.339,6.01,4.25,4.25,6.01,3.339,4.997,6.01,2.3,5.553,6.01,1.173,5.895,6.01,0,4.722,7.067,-0.921,4.631,7.067,-1.807,4.363,7.067,-2.623,3.926,7.067,-3.339,3.339,7.067,-3.926,2.623,7.067,-4.363,1.807,7.067,-4.631,0.921,7.067,-4.722,0,7.067,-4.631,-0.921,7.067,-4.363,-1.807,7.067,-3.926,-2.623,7.067,-3.339,-3.339,7.067,-2.623,-3.926,7.067,-1.807,-4.363,7.067,-0.921,-4.631,7.067,0,-4.722,7.067,0.921,-4.631,7.067,1.807,-4.363,7.067,2.623,-3.926,7.067,3.339,-3.339,7.067,3.926,-2.623,7.067,4.363,-1.807,7.067,4.631,-0.921,7.067,4.722,0,7.067,4.631,0.921,7.067,4.363,1.807,7.067,3.926,2.623,7.067,3.339,3.339,7.067,2.623,3.926,7.067,1.807,4.363,7.067,0.921,4.631,7.067,0,3.253,7.853,-0.635,3.19,7.853,-1.245,3.005,7.853,-1.807,2.704,7.853,-2.3,2.3,7.853,-2.704,1.807,7.853,-3.005,1.245,7.853,-3.19,0.635,7.853,-3.253,0,7.853,-3.19,-0.635,7.853,-3.005,-1.245,7.853,-2.704,-1.807,7.853,-2.3,-2.3,7.853,-1.807,-2.704,7.853,-1.245,-3.005,7.853,-0.635,-3.19,7.853,0,-3.253,7.853,0.635,-3.19,7.853,1.245,-3.005,7.853,1.807,-2.704,7.853,2.3,-2.3,7.853,2.704,-1.807,7.853,3.005,-1.245,7.853,3.19,-0.635,7.853,3.253,0,7.853,3.19,0.635,7.853,3.005,1.245,7.853,2.704,1.807,7.853,2.3,2.3,7.853,1.807,2.704,7.853,1.245,3.005,7.853,0.635,3.19,7.853,0,1.658,8.336,-0.323,1.626,8.336,-0.635,1.532,8.336,-0.921,1.379,8.336,-1.173,1.173,8.336,-1.379,0.921,8.336,-1.532,0.635,8.336,-1.626,0.323,8.336,-1.658,0,8.336,-1.626,-0.323,8.336,-1.532,-0.635,8.336,-1.379,-0.921,8.336,-1.173,-1.173,8.336,-0.921,-1.379,8.336,-0.635,-1.532,8.336,-0.323,-1.626,8.336,0,-1.658,8.336,0.323,-1.626,8.336,0.635,-1.532,8.336,0.921,-1.379,8.336,1.173,-1.173,8.336,1.379,-0.921,8.336,1.532,-0.635,8.336,1.626,-0.323,8.336,1.658,0,8.336,1.626,0.323,8.336,1.532,0.635,8.336,1.379,0.921,8.336,1.173,1.173,8.336,0.921,1.379,8.336,0.635,1.532,8.336,0.323,1.626,8.336,0,0,8.5,0,0,-6.931,0,1.352,-6.798,-0.264,1.326,-6.798,-0.517,1.249,-6.798,-0.751,1.124,-6.798,-0.956,0.956,-6.798,-1.124,0.751,-6.798,-1.249,0.517,-6.798,-1.326,0.264,-6.798,-1.352,0,-6.798,-1.326,-0.264,-6.798,-1.249,-0.517,-6.798,-1.124,-0.751,-6.798,-0.956,-0.956,-6.798,-0.751,-1.124,-6.798,-0.517,-1.249,-6.798,-0.264,-1.326,-6.798,0,-1.352,-6.798,0.264,-1.326,-6.798,0.517,-1.249,-6.798,0.751,-1.124,-6.798,0.956,-0.956,-6.798,1.124,-0.751,-6.798,1.249,-0.517,-6.798,1.326,-0.264,-6.798,1.352,0,-6.798,1.326,0.264,-6.798,1.249,0.517,-6.798,1.124,0.751,-6.798,0.956,0.956,-6.798,0.751,1.124,-6.798,0.517,1.249,-6.798,0.264,1.326,-6.798,0,2.652,-6.403,-0.517,2.601,-6.403,-1.015,2.45,-6.403,-1.474,2.205,-6.403,-1.876,1.876,-6.403,-2.205,1.474,-6.403,-2.45,1.015,-6.403,-2.601,0.517,-6.403,-2.652,0,-6.403,-2.601,-0.517,-6.403,-2.45,-1.015,-6.403,-2.205,-1.474,-6.403,-1.876,-1.876,-6.403,-1.474,-2.205,-6.403,-1.015,-2.45,-6.403,-0.517,-2.601,-6.403,0,-2.652,-6.403,0.517,-2.601,-6.403,1.015,-2.45,-6.403,1.474,-2.205,-6.403,1.876,-1.876,-6.403,2.205,-1.474,-6.403,2.45,-1.015,-6.403,2.601,-0.517,-6.403,2.652,0,-6.403,2.601,0.517,-6.403,2.45,1.015,-6.403,2.205,1.474,-6.403,1.876,1.876,-6.403,1.474,2.205,-6.403,1.015,2.45,-6.403,0.517,2.601,-6.403,0,3.851,-5.763,-0.751,3.777,-5.763,-1.474,3.558,-5.763,-2.139,3.202,-5.763,-2.723,2.723,-5.763,-3.202,2.139,-5.763,-3.558,1.474,-5.763,-3.777,0.751,-5.763,-3.851,0,-5.763,-3.777,-0.751,-5.763,-3.558,-1.474,-5.763,-3.202,-2.139,-5.763,-2.723,-2.723,-5.763,-2.139,-3.202,-5.763,-1.474,-3.558,-5.763,-0.751,-3.777,-5.763,0,-3.851,-5.763,0.751,-3.777,-5.763,1.474,-3.558,-5.763,2.139,-3.202,-5.763,2.723,-2.723,-5.763,3.202,-2.139,-5.763,3.558,-1.474,-5.763,3.777,-0.751,-5.763,3.851,0,-5.763,3.777,0.751,-5.763,3.558,1.474,-5.763,3.202,2.139,-5.763,2.723,2.723,-5.763,2.139,3.202,-5.763,1.474,3.558,-5.763,0.751,3.777,-5.763,0,4.901,-4.901,-0.956,4.807,-4.901,-1.876,4.528,-4.901,-2.723,4.075,-4.901,-3.465,3.465,-4.901,-4.075,2.723,-4.901,-4.528,1.876,-4.901,-4.807,0.956,-4.901,-4.901,0,-4.901,-4.807,-0.956,-4.901,-4.528,-1.876,-4.901,-4.075,-2.723,-4.901,-3.465,-3.465,-4.901,-2.723,-4.075,-4.901,-1.876,-4.528,-4.901,-0.956,-4.807,-4.901,0,-4.901,-4.901,0.956,-4.807,-4.901,1.876,-4.528,-4.901,2.723,-4.075,-4.901,3.465,-3.465,-4.901,4.075,-2.723,-4.901,4.528,-1.876,-4.901,4.807,-0.956,-4.901,4.901,0,-4.901,4.807,0.956,-4.901,4.528,1.876,-4.901,4.075,2.723,-4.901,3.465,3.465,-4.901,2.723,4.075,-4.901,1.876,4.528,-4.901,0.956,4.807,-4.901,0,5.763,-3.851,-1.124,5.652,-3.851,-2.205,5.324,-3.851,-3.202,4.792,-3.851,-4.075,4.075,-3.851,-4.792,3.202,-3.851,-5.324,2.205,-3.851,-5.652,1.124,-3.851,-5.763,0,-3.851,-5.652,-1.124,-3.851,-5.324,-2.205,-3.851,-4.792,-3.202,-3.851,-4.075,-4.075,-3.851,-3.202,-4.792,-3.851,-2.205,-5.324,-3.851,-1.124,-5.652,-3.851,0,-5.763,-3.851,1.124,-5.652,-3.851,2.205,-5.324,-3.851,3.202,-4.792,-3.851,4.075,-4.075,-3.851,4.792,-3.202,-3.851,5.324,-2.205,-3.851,5.652,-1.124,-3.851,5.763,0,-3.851,5.652,1.124,-3.851,5.324,2.205,-3.851,4.792,3.202,-3.851,4.075,4.075,-3.851,3.202,4.792,-3.851,2.205,5.324,-3.851,1.124,5.652,-3.851,0,6.403,-2.652,-1.249,6.28,-2.652,-2.45,5.916,-2.652,-3.558,5.324,-2.652,-4.528,4.528,-2.652,-5.324,3.558,-2.652,-5.916,2.45,-2.652,-6.28,1.249,-2.652,-6.403,0,-2.652,-6.28,-1.249,-2.652,-5.916,-2.45,-2.652,-5.324,-3.558,-2.652,-4.528,-4.528,-2.652,-3.558,-5.324,-2.652,-2.45,-5.916,-2.652,-1.249,-6.28,-2.652,0,-6.403,-2.652,1.249,-6.28,-2.652,2.45,-5.916,-2.652,3.558,-5.324,-2.652,4.528,-4.528,-2.652,5.324,-3.558,-2.652,5.916,-2.45,-2.652,6.28,-1.249,-2.652,6.403,0,-2.652,6.28,1.249,-2.652,5.916,2.45,-2.652,5.324,3.558,-2.652,4.528,4.528,-2.652,3.558,5.324,-2.652,2.45,5.916,-2.652,1.249,6.28,-2.652,0,6.798,-1.352,-1.326,6.667,-1.352,-2.601,6.28,-1.352,-3.777,5.652,-1.352,-4.807,4.807,-1.352,-5.652,3.777,-1.352,-6.28,2.601,-1.352,-6.667,1.326,-1.352,-6.798,0,-1.352,-6.667,-1.326,-1.352,-6.28,-2.601,-1.352,-5.652,-3.777,-1.352,-4.807,-4.807,-1.352,-3.777,-5.652,-1.352,-2.601,-6.28,-1.352,-1.326,-6.667,-1.352,0,-6.798,-1.352,1.326,-6.667,-1.352,2.601,-6.28,-1.352,3.777,-5.652,-1.352,4.807,-4.807,-1.352,5.652,-3.777,-1.352,6.28,-2.601,-1.352,6.667,-1.326,-1.352,6.798,0,-1.352,6.667,1.326,-1.352,6.28,2.601,-1.352,5.652,3.777,-1.352,4.807,4.807,-1.352,3.777,5.652,-1.352,2.601,6.28,-1.352,1.326,6.667,-1.352,0,6.931,0,-1.352,6.798,0,-2.652,6.403,0,-3.851,5.763,0,-4.901,4.901,0,-5.763,3.851,0,-6.403,2.652,0,-6.798,1.352,0,-6.931,0,0,-6.798,-1.352,0,-6.403,-2.652,0,-5.763,-3.851,0,-4.901,-4.901,0,-3.851,-5.763,0,-2.652,-6.403,0,-1.352,-6.798,0,0,-6.931,0,1.352,-6.798,0,2.652,-6.403,0,3.851,-5.763,0,4.901,-4.901,0,5.763,-3.851,0,6.403,-2.652,0,6.798,-1.352,0,6.931,0,0,6.798,1.352,0,6.403,2.652,0,5.763,3.851,0,4.901,4.901,0,3.851,5.763,0,2.652,6.403,0,1.352,6.798,0,0,6.798,1.352,-1.326,6.667,1.352,-2.601,6.28,1.352,-3.777,5.652,1.352,-4.807,4.807,1.352,-5.652,3.777,1.352,-6.28,2.601,1.352,-6.667,1.326,1.352,-6.798,0,1.352,-6.667,-1.326,1.352,-6.28,-2.601,1.352,-5.652,-3.777,1.352,-4.807,-4.807,1.352,-3.777,-5.652,1.352,-2.601,-6.28,1.352,-1.326,-6.667,1.352,0,-6.798,1.352,1.326,-6.667,1.352,2.601,-6.28,1.352,3.777,-5.652,1.352,4.807,-4.807,1.352,5.652,-3.777,1.352,6.28,-2.601,1.352,6.667,-1.326,1.352,6.798,0,1.352,6.667,1.326,1.352,6.28,2.601,1.352,5.652,3.777,1.352,4.807,4.807,1.352,3.777,5.652,1.352,2.601,6.28,1.352,1.326,6.667,1.352,0,6.403,2.652,-1.249,6.28,2.652,-2.45,5.916,2.652,-3.558,5.324,2.652,-4.528,4.528,2.652,-5.324,3.558,2.652,-5.916,2.45,2.652,-6.28,1.249,2.652,-6.403,0,2.652,-6.28,-1.249,2.652,-5.916,-2.45,2.652,-5.324,-3.558,2.652,-4.528,-4.528,2.652,-3.558,-5.324,2.652,-2.45,-5.916,2.652,-1.249,-6.28,2.652,0,-6.403,2.652,1.249,-6.28,2.652,2.45,-5.916,2.652,3.558,-5.324,2.652,4.528,-4.528,2.652,5.324,-3.558,2.652,5.916,-2.45,2.652,6.28,-1.249,2.652,6.403,0,2.652,6.28,1.249,2.652,5.916,2.45,2.652,5.324,3.558,2.652,4.528,4.528,2.652,3.558,5.324,2.652,2.45,5.916,2.652,1.249,6.28,2.652,0,5.763,3.851,-1.124,5.652,3.851,-2.205,5.324,3.851,-3.202,4.792,3.851,-4.075,4.075,3.851,-4.792,3.202,3.851,-5.324,2.205,3.851,-5.652,1.124,3.851,-5.763,0,3.851,-5.652,-1.124,3.851,-5.324,-2.205,3.851,-4.792,-3.202,3.851,-4.075,-4.075,3.851,-3.202,-4.792,3.851,-2.205,-5.324,3.851,-1.124,-5.652,3.851,0,-5.763,3.851,1.124,-5.652,3.851,2.205,-5.324,3.851,3.202,-4.792,3.851,4.075,-4.075,3.851,4.792,-3.202,3.851,5.324,-2.205,3.851,5.652,-1.124,3.851,5.763,0,3.851,5.652,1.124,3.851,5.324,2.205,3.851,4.792,3.202,3.851,4.075,4.075,3.851,3.202,4.792,3.851,2.205,5.324,3.851,1.124,5.652,3.851,0,4.901,4.901,-0.956,4.807,4.901,-1.876,4.528,4.901,-2.723,4.075,4.901,-3.465,3.465,4.901,-4.075,2.723,4.901,-4.528,1.876,4.901,-4.807,0.956,4.901,-4.901,0,4.901,-4.807,-0.956,4.901,-4.528,-1.876,4.901,-4.075,-2.723,4.901,-3.465,-3.465,4.901,-2.723,-4.075,4.901,-1.876,-4.528,4.901,-0.956,-4.807,4.901,0,-4.901,4.901,0.956,-4.807,4.901,1.876,-4.528,4.901,2.723,-4.075,4.901,3.465,-3.465,4.901,4.075,-2.723,4.901,4.528,-1.876,4.901,4.807,-0.956,4.901,4.901,0,4.901,4.807,0.956,4.901,4.528,1.876,4.901,4.075,2.723,4.901,3.465,3.465,4.901,2.723,4.075,4.901,1.876,4.528,4.901,0.956,4.807,4.901,0,3.851,5.763,-0.751,3.777,5.763,-1.474,3.558,5.763,-2.139,3.202,5.763,-2.723,2.723,5.763,-3.202,2.139,5.763,-3.558,1.474,5.763,-3.777,0.751,5.763,-3.851,0,5.763,-3.777,-0.751,5.763,-3.558,-1.474,5.763,-3.202,-2.139,5.763,-2.723,-2.723,5.763,-2.139,-3.202,5.763,-1.474,-3.558,5.763,-0.751,-3.777,5.763,0,-3.851,5.763,0.751,-3.777,5.763,1.474,-3.558,5.763,2.139,-3.202,5.763,2.723,-2.723,5.763,3.202,-2.139,5.763,3.558,-1.474,5.763,3.777,-0.751,5.763,3.851,0,5.763,3.777,0.751,5.763,3.558,1.474,5.763,3.202,2.139,5.763,2.723,2.723,5.763,2.139,3.202,5.763,1.474,3.558,5.763,0.751,3.777,5.763,0,2.652,6.403,-0.517,2.601,6.403,-1.015,2.45,6.403,-1.474,2.205,6.403,-1.876,1.876,6.403,-2.205,1.474,6.403,-2.45,1.015,6.403,-2.601,0.517,6.403,-2.652,0,6.403,-2.601,-0.517,6.403,-2.45,-1.015,6.403,-2.205,-1.474,6.403,-1.876,-1.876,6.403,-1.474,-2.205,6.403,-1.015,-2.45,6.403,-0.517,-2.601,6.403,0,-2.652,6.403,0.517,-2.601,6.403,1.015,-2.45,6.403,1.474,-2.205,6.403,1.876,-1.876,6.403,2.205,-1.474,6.403,2.45,-1.015,6.403,2.601,-0.517,6.403,2.652,0,6.403,2.601,0.517,6.403,2.45,1.015,6.403,2.205,1.474,6.403,1.876,1.876,6.403,1.474,2.205,6.403,1.015,2.45,6.403,0.517,2.601,6.403,0,1.352,6.798,-0.264,1.326,6.798,-0.517,1.249,6.798,-0.751,1.124,6.798,-0.956,0.956,6.798,-1.124,0.751,6.798,-1.249,0.517,6.798,-1.326,0.264,6.798,-1.352,0,6.798,-1.326,-0.264,6.798,-1.249,-0.517,6.798,-1.124,-0.751,6.798,-0.956,-0.956,6.798,-0.751,-1.124,6.798,-0.517,-1.249,6.798,-0.264,-1.326,6.798,0,-1.352,6.798,0.264,-1.326,6.798,0.517,-1.249,6.798,0.751,-1.124,6.798,0.956,-0.956,6.798,1.124,-0.751,6.798,1.249,-0.517,6.798,1.326,-0.264,6.798,1.352,0,6.798,1.326,0.264,6.798,1.249,0.517,6.798,1.124,0.751,6.798,0.956,0.956,6.798,0.751,1.124,6.798,0.517,1.249,6.798,0.264,1.326,6.798,0,0,6.931,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,0,-8.5,0,1.658,-8.336,0,3.253,-7.853,0,4.722,-7.067,0,6.01,-6.01,0,7.067,-4.722,0,7.853,-3.253,0,8.336,-1.658,0,8.5,0,0,8.336,1.658,0,7.853,3.253,0,7.067,4.722,0,6.01,6.01,0,4.722,7.067,0,3.253,7.853,0,1.658,8.336,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,8.5,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,0,-6.931,0,1.352,-6.798,0,2.652,-6.403,0,3.851,-5.763,0,4.901,-4.901,0,5.763,-3.851,0,6.403,-2.652,0,6.798,-1.352,0,6.931,0,0,6.798,1.352,0,6.403,2.652,0,5.763,3.851,0,4.901,4.901,0,3.851,5.763,0,2.652,6.403,0,1.352,6.798,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931,0,0,6.931],"uvs":[0,1,0,0.938,0.031,0.938,0.063,0.938,0.094,0.938,0.125,0.938,0.156,0.938,0.188,0.938,0.219,0.938,0.25,0.938,0.281,0.938,0.312,0.938,0.344,0.938,0.375,0.938,0.406,0.938,0.438,0.938,0.469,0.938,0.5,0.938,0.531,0.938,0.563,0.938,0.594,0.938,0.625,0.938,0.656,0.938,0.688,0.938,0.719,0.938,0.75,0.938,0.781,0.938,0.813,0.938,0.844,0.938,0.875,0.938,0.906,0.938,0.938,0.938,0.969,0.938,0,0.875,0.031,0.875,0.063,0.875,0.094,0.875,0.125,0.875,0.156,0.875,0.188,0.875,0.219,0.875,0.25,0.875,0.281,0.875,0.312,0.875,0.344,0.875,0.375,0.875,0.406,0.875,0.438,0.875,0.469,0.875,0.5,0.875,0.531,0.875,0.563,0.875,0.594,0.875,0.625,0.875,0.656,0.875,0.688,0.875,0.719,0.875,0.75,0.875,0.781,0.875,0.813,0.875,0.844,0.875,0.875,0.875,0.906,0.875,0.938,0.875,0.969,0.875,0,0.813,0.031,0.813,0.063,0.813,0.094,0.813,0.125,0.813,0.156,0.813,0.188,0.813,0.219,0.813,0.25,0.813,0.281,0.813,0.312,0.813,0.344,0.813,0.375,0.813,0.406,0.813,0.438,0.813,0.469,0.813,0.5,0.813,0.531,0.813,0.563,0.813,0.594,0.813,0.625,0.813,0.656,0.813,0.688,0.813,0.719,0.813,0.75,0.813,0.781,0.813,0.813,0.813,0.844,0.813,0.875,0.813,0.906,0.813,0.938,0.813,0.969,0.813,0,0.75,0.031,0.75,0.063,0.75,0.094,0.75,0.125,0.75,0.156,0.75,0.188,0.75,0.219,0.75,0.25,0.75,0.281,0.75,0.312,0.75,0.344,0.75,0.375,0.75,0.406,0.75,0.438,0.75,0.469,0.75,0.5,0.75,0.531,0.75,0.563,0.75,0.594,0.75,0.625,0.75,0.656,0.75,0.688,0.75,0.719,0.75,0.75,0.75,0.781,0.75,0.813,0.75,0.844,0.75,0.875,0.75,0.906,0.75,0.938,0.75,0.969,0.75,0,0.688,0.031,0.688,0.063,0.688,0.094,0.688,0.125,0.688,0.156,0.688,0.188,0.688,0.219,0.688,0.25,0.688,0.281,0.688,0.312,0.688,0.344,0.688,0.375,0.688,0.406,0.688,0.438,0.688,0.469,0.688,0.5,0.688,0.531,0.688,0.563,0.688,0.594,0.688,0.625,0.688,0.656,0.688,0.688,0.688,0.719,0.688,0.75,0.688,0.781,0.688,0.813,0.688,0.844,0.688,0.875,0.688,0.906,0.688,0.938,0.688,0.969,0.688,0,0.625,0.031,0.625,0.063,0.625,0.094,0.625,0.125,0.625,0.156,0.625,0.188,0.625,0.219,0.625,0.25,0.625,0.281,0.625,0.312,0.625,0.344,0.625,0.375,0.625,0.406,0.625,0.438,0.625,0.469,0.625,0.5,0.625,0.531,0.625,0.563,0.625,0.594,0.625,0.625,0.625,0.656,0.625,0.688,0.625,0.719,0.625,0.75,0.625,0.781,0.625,0.813,0.625,0.844,0.625,0.875,0.625,0.906,0.625,0.938,0.625,0.969,0.625,0,0.563,0.031,0.563,0.063,0.563,0.094,0.563,0.125,0.563,0.156,0.563,0.188,0.563,0.219,0.563,0.25,0.563,0.281,0.563,0.312,0.563,0.344,0.563,0.375,0.563,0.406,0.563,0.438,0.563,0.469,0.563,0.5,0.563,0.531,0.563,0.563,0.563,0.594,0.563,0.625,0.563,0.656,0.563,0.688,0.563,0.719,0.563,0.75,0.563,0.781,0.563,0.813,0.563,0.844,0.563,0.875,0.563,0.906,0.563,0.938,0.563,0.969,0.563,0,0.5,0.031,0.5,0.063,0.5,0.094,0.5,0.125,0.5,0.156,0.5,0.188,0.5,0.219,0.5,0.25,0.5,0.281,0.5,0.312,0.5,0.344,0.5,0.375,0.5,0.406,0.5,0.438,0.5,0.469,0.5,0.5,0.5,0.531,0.5,0.563,0.5,0.594,0.5,0.625,0.5,0.656,0.5,0.688,0.5,0.719,0.5,0.75,0.5,0.781,0.5,0.813,0.5,0.844,0.5,0.875,0.5,0.906,0.5,0.938,0.5,0.969,0.5,0,0.438,0.031,0.438,0.063,0.438,0.094,0.438,0.125,0.438,0.156,0.438,0.188,0.438,0.219,0.438,0.25,0.438,0.281,0.438,0.312,0.438,0.344,0.438,0.375,0.438,0.406,0.438,0.438,0.438,0.469,0.438,0.5,0.438,0.531,0.438,0.563,0.438,0.594,0.438,0.625,0.438,0.656,0.438,0.688,0.438,0.719,0.438,0.75,0.438,0.781,0.438,0.813,0.438,0.844,0.438,0.875,0.438,0.906,0.438,0.938,0.438,0.969,0.438,0,0.375,0.031,0.375,0.063,0.375,0.094,0.375,0.125,0.375,0.156,0.375,0.188,0.375,0.219,0.375,0.25,0.375,0.281,0.375,0.312,0.375,0.344,0.375,0.375,0.375,0.406,0.375,0.438,0.375,0.469,0.375,0.5,0.375,0.531,0.375,0.563,0.375,0.594,0.375,0.625,0.375,0.656,0.375,0.688,0.375,0.719,0.375,0.75,0.375,0.781,0.375,0.813,0.375,0.844,0.375,0.875,0.375,0.906,0.375,0.938,0.375,0.969,0.375,0,0.313,0.031,0.313,0.063,0.313,0.094,0.313,0.125,0.313,0.156,0.313,0.188,0.313,0.219,0.313,0.25,0.313,0.281,0.313,0.312,0.313,0.344,0.313,0.375,0.313,0.406,0.313,0.438,0.313,0.469,0.313,0.5,0.313,0.531,0.313,0.563,0.313,0.594,0.313,0.625,0.313,0.656,0.313,0.688,0.313,0.719,0.313,0.75,0.313,0.781,0.313,0.813,0.313,0.844,0.313,0.875,0.313,0.906,0.313,0.938,0.313,0.969,0.313,0,0.25,0.031,0.25,0.063,0.25,0.094,0.25,0.125,0.25,0.156,0.25,0.188,0.25,0.219,0.25,0.25,0.25,0.281,0.25,0.312,0.25,0.344,0.25,0.375,0.25,0.406,0.25,0.438,0.25,0.469,0.25,0.5,0.25,0.531,0.25,0.563,0.25,0.594,0.25,0.625,0.25,0.656,0.25,0.688,0.25,0.719,0.25,0.75,0.25,0.781,0.25,0.813,0.25,0.844,0.25,0.875,0.25,0.906,0.25,0.938,0.25,0.969,0.25,0,0.188,0.031,0.188,0.063,0.188,0.094,0.188,0.125,0.188,0.156,0.188,0.188,0.188,0.219,0.188,0.25,0.188,0.281,0.188,0.312,0.188,0.344,0.188,0.375,0.188,0.406,0.188,0.438,0.188,0.469,0.188,0.5,0.188,0.531,0.188,0.563,0.188,0.594,0.188,0.625,0.188,0.656,0.188,0.688,0.188,0.719,0.188,0.75,0.188,0.781,0.188,0.813,0.188,0.844,0.188,0.875,0.188,0.906,0.188,0.938,0.188,0.969,0.188,0,0.125,0.031,0.125,0.063,0.125,0.094,0.125,0.125,0.125,0.156,0.125,0.188,0.125,0.219,0.125,0.25,0.125,0.281,0.125,0.312,0.125,0.344,0.125,0.375,0.125,0.406,0.125,0.438,0.125,0.469,0.125,0.5,0.125,0.531,0.125,0.563,0.125,0.594,0.125,0.625,0.125,0.656,0.125,0.688,0.125,0.719,0.125,0.75,0.125,0.781,0.125,0.813,0.125,0.844,0.125,0.875,0.125,0.906,0.125,0.938,0.125,0.969,0.125,0,0.062,0.031,0.062,0.063,0.062,0.094,0.062,0.125,0.062,0.156,0.062,0.188,0.062,0.219,0.062,0.25,0.062,0.281,0.062,0.312,0.062,0.344,0.062,0.375,0.062,0.406,0.062,0.438,0.062,0.469,0.062,0.5,0.062,0.531,0.062,0.563,0.062,0.594,0.062,0.625,0.062,0.656,0.062,0.688,0.062,0.719,0.062,0.75,0.062,0.781,0.062,0.813,0.062,0.844,0.062,0.875,0.062,0.906,0.062,0.938,0.062,0.969,0.062,0,0,0,1,0,0.938,0.031,0.938,0.063,0.938,0.094,0.938,0.125,0.938,0.156,0.938,0.188,0.938,0.219,0.938,0.25,0.938,0.281,0.938,0.312,0.938,0.344,0.938,0.375,0.938,0.406,0.938,0.438,0.938,0.469,0.938,0.5,0.938,0.531,0.938,0.563,0.938,0.594,0.938,0.625,0.938,0.656,0.938,0.688,0.938,0.719,0.938,0.75,0.938,0.781,0.938,0.813,0.938,0.844,0.938,0.875,0.938,0.906,0.938,0.938,0.938,0.969,0.938,0,0.875,0.031,0.875,0.063,0.875,0.094,0.875,0.125,0.875,0.156,0.875,0.188,0.875,0.219,0.875,0.25,0.875,0.281,0.875,0.312,0.875,0.344,0.875,0.375,0.875,0.406,0.875,0.438,0.875,0.469,0.875,0.5,0.875,0.531,0.875,0.563,0.875,0.594,0.875,0.625,0.875,0.656,0.875,0.688,0.875,0.719,0.875,0.75,0.875,0.781,0.875,0.813,0.875,0.844,0.875,0.875,0.875,0.906,0.875,0.938,0.875,0.969,0.875,0,0.813,0.031,0.813,0.063,0.813,0.094,0.813,0.125,0.813,0.156,0.813,0.188,0.813,0.219,0.813,0.25,0.813,0.281,0.813,0.312,0.813,0.344,0.813,0.375,0.813,0.406,0.813,0.438,0.813,0.469,0.813,0.5,0.813,0.531,0.813,0.563,0.813,0.594,0.813,0.625,0.813,0.656,0.813,0.688,0.813,0.719,0.813,0.75,0.813,0.781,0.813,0.813,0.813,0.844,0.813,0.875,0.813,0.906,0.813,0.938,0.813,0.969,0.813,0,0.75,0.031,0.75,0.063,0.75,0.094,0.75,0.125,0.75,0.156,0.75,0.188,0.75,0.219,0.75,0.25,0.75,0.281,0.75,0.312,0.75,0.344,0.75,0.375,0.75,0.406,0.75,0.438,0.75,0.469,0.75,0.5,0.75,0.531,0.75,0.563,0.75,0.594,0.75,0.625,0.75,0.656,0.75,0.688,0.75,0.719,0.75,0.75,0.75,0.781,0.75,0.813,0.75,0.844,0.75,0.875,0.75,0.906,0.75,0.938,0.75,0.969,0.75,0,0.688,0.031,0.688,0.063,0.688,0.094,0.688,0.125,0.688,0.156,0.688,0.188,0.688,0.219,0.688,0.25,0.688,0.281,0.688,0.312,0.688,0.344,0.688,0.375,0.688,0.406,0.688,0.438,0.688,0.469,0.688,0.5,0.688,0.531,0.688,0.563,0.688,0.594,0.688,0.625,0.688,0.656,0.688,0.688,0.688,0.719,0.688,0.75,0.688,0.781,0.688,0.813,0.688,0.844,0.688,0.875,0.688,0.906,0.688,0.938,0.688,0.969,0.688,0,0.625,0.031,0.625,0.063,0.625,0.094,0.625,0.125,0.625,0.156,0.625,0.188,0.625,0.219,0.625,0.25,0.625,0.281,0.625,0.312,0.625,0.344,0.625,0.375,0.625,0.406,0.625,0.438,0.625,0.469,0.625,0.5,0.625,0.531,0.625,0.563,0.625,0.594,0.625,0.625,0.625,0.656,0.625,0.688,0.625,0.719,0.625,0.75,0.625,0.781,0.625,0.813,0.625,0.844,0.625,0.875,0.625,0.906,0.625,0.938,0.625,0.969,0.625,0,0.563,0.031,0.563,0.063,0.563,0.094,0.563,0.125,0.563,0.156,0.563,0.188,0.563,0.219,0.563,0.25,0.563,0.281,0.563,0.312,0.563,0.344,0.563,0.375,0.563,0.406,0.563,0.438,0.563,0.469,0.563,0.5,0.563,0.531,0.563,0.563,0.563,0.594,0.563,0.625,0.563,0.656,0.563,0.688,0.563,0.719,0.563,0.75,0.563,0.781,0.563,0.813,0.563,0.844,0.563,0.875,0.563,0.906,0.563,0.938,0.563,0.969,0.563,0,0.5,0.031,0.5,0.063,0.5,0.094,0.5,0.125,0.5,0.156,0.5,0.188,0.5,0.219,0.5,0.25,0.5,0.281,0.5,0.312,0.5,0.344,0.5,0.375,0.5,0.406,0.5,0.438,0.5,0.469,0.5,0.5,0.5,0.531,0.5,0.563,0.5,0.594,0.5,0.625,0.5,0.656,0.5,0.688,0.5,0.719,0.5,0.75,0.5,0.781,0.5,0.813,0.5,0.844,0.5,0.875,0.5,0.906,0.5,0.938,0.5,0.969,0.5,0,0.438,0.031,0.438,0.063,0.438,0.094,0.438,0.125,0.438,0.156,0.438,0.188,0.438,0.219,0.438,0.25,0.438,0.281,0.438,0.312,0.438,0.344,0.438,0.375,0.438,0.406,0.438,0.438,0.438,0.469,0.438,0.5,0.438,0.531,0.438,0.563,0.438,0.594,0.438,0.625,0.438,0.656,0.438,0.688,0.438,0.719,0.438,0.75,0.438,0.781,0.438,0.813,0.438,0.844,0.438,0.875,0.438,0.906,0.438,0.938,0.438,0.969,0.438,0,0.375,0.031,0.375,0.063,0.375,0.094,0.375,0.125,0.375,0.156,0.375,0.188,0.375,0.219,0.375,0.25,0.375,0.281,0.375,0.312,0.375,0.344,0.375,0.375,0.375,0.406,0.375,0.438,0.375,0.469,0.375,0.5,0.375,0.531,0.375,0.563,0.375,0.594,0.375,0.625,0.375,0.656,0.375,0.688,0.375,0.719,0.375,0.75,0.375,0.781,0.375,0.813,0.375,0.844,0.375,0.875,0.375,0.906,0.375,0.938,0.375,0.969,0.375,0,0.313,0.031,0.313,0.063,0.313,0.094,0.313,0.125,0.313,0.156,0.313,0.188,0.313,0.219,0.313,0.25,0.313,0.281,0.313,0.312,0.313,0.344,0.313,0.375,0.313,0.406,0.313,0.438,0.313,0.469,0.313,0.5,0.313,0.531,0.313,0.563,0.313,0.594,0.313,0.625,0.313,0.656,0.313,0.688,0.313,0.719,0.313,0.75,0.313,0.781,0.313,0.813,0.313,0.844,0.313,0.875,0.313,0.906,0.313,0.938,0.313,0.969,0.313,0,0.25,0.031,0.25,0.063,0.25,0.094,0.25,0.125,0.25,0.156,0.25,0.188,0.25,0.219,0.25,0.25,0.25,0.281,0.25,0.312,0.25,0.344,0.25,0.375,0.25,0.406,0.25,0.438,0.25,0.469,0.25,0.5,0.25,0.531,0.25,0.563,0.25,0.594,0.25,0.625,0.25,0.656,0.25,0.688,0.25,0.719,0.25,0.75,0.25,0.781,0.25,0.813,0.25,0.844,0.25,0.875,0.25,0.906,0.25,0.938,0.25,0.969,0.25,0,0.188,0.031,0.188,0.063,0.188,0.094,0.188,0.125,0.188,0.156,0.188,0.188,0.188,0.219,0.188,0.25,0.188,0.281,0.188,0.312,0.188,0.344,0.188,0.375,0.188,0.406,0.188,0.438,0.188,0.469,0.188,0.5,0.188,0.531,0.188,0.563,0.188,0.594,0.188,0.625,0.188,0.656,0.188,0.688,0.188,0.719,0.188,0.75,0.188,0.781,0.188,0.813,0.188,0.844,0.188,0.875,0.188,0.906,0.188,0.938,0.188,0.969,0.188,0,0.125,0.031,0.125,0.063,0.125,0.094,0.125,0.125,0.125,0.156,0.125,0.188,0.125,0.219,0.125,0.25,0.125,0.281,0.125,0.312,0.125,0.344,0.125,0.375,0.125,0.406,0.125,0.438,0.125,0.469,0.125,0.5,0.125,0.531,0.125,0.563,0.125,0.594,0.125,0.625,0.125,0.656,0.125,0.688,0.125,0.719,0.125,0.75,0.125,0.781,0.125,0.813,0.125,0.844,0.125,0.875,0.125,0.906,0.125,0.938,0.125,0.969,0.125,0,0.062,0.031,0.062,0.063,0.062,0.094,0.062,0.125,0.062,0.156,0.062,0.188,0.062,0.219,0.062,0.25,0.062,0.281,0.062,0.312,0.062,0.344,0.062,0.375,0.062,0.406,0.062,0.438,0.062,0.469,0.062,0.5,0.062,0.531,0.062,0.563,0.062,0.594,0.062,0.625,0.062,0.656,0.062,0.688,0.062,0.719,0.062,0.75,0.062,0.781,0.062,0.813,0.062,0.844,0.062,0.875,0.062,0.906,0.062,0.938,0.062,0.969,0.062,0,0,0.031,1,0.063,1,0.094,1,0.125,1,0.156,1,0.188,1,0.219,1,0.25,1,0.281,1,0.312,1,0.344,1,0.375,1,0.406,1,0.438,1,0.469,1,0.5,1,0.531,1,0.563,1,0.594,1,0.625,1,0.656,1,0.688,1,0.719,1,0.75,1,0.781,1,0.813,1,0.844,1,0.875,1,0.906,1,0.938,1,0.969,1,1,0.938,1,0.875,1,0.813,1,0.75,1,0.688,1,0.625,1,0.563,1,0.5,1,0.438,1,0.375,1,0.313,1,0.25,1,0.188,1,0.125,1,0.062,0.031,0,0.063,0,0.094,0,0.125,0,0.156,0,0.188,0,0.219,0,0.25,0,0.281,0,0.312,0,0.344,0,0.375,0,0.406,0,0.438,0,0.469,0,0.5,0,0.531,0,0.563,0,0.594,0,0.625,0,0.656,0,0.688,0,0.719,0,0.75,0,0.781,0,0.813,0,0.844,0,0.875,0,0.906,0,0.938,0,0.969,0,0.031,1,0.063,1,0.094,1,0.125,1,0.156,1,0.188,1,0.219,1,0.25,1,0.281,1,0.312,1,0.344,1,0.375,1,0.406,1,0.438,1,0.469,1,0.5,1,0.531,1,0.563,1,0.594,1,0.625,1,0.656,1,0.688,1,0.719,1,0.75,1,0.781,1,0.813,1,0.844,1,0.875,1,0.906,1,0.938,1,0.969,1,1,0.938,1,0.875,1,0.813,1,0.75,1,0.688,1,0.625,1,0.563,1,0.5,1,0.438,1,0.375,1,0.313,1,0.25,1,0.188,1,0.125,1,0.062,0.031,0,0.063,0,0.094,0,0.125,0,0.156,0,0.188,0,0.219,0,0.25,0,0.281,0,0.312,0,0.344,0,0.375,0,0.406,0,0.438,0,0.469,0,0.5,0,0.531,0,0.563,0,0.594,0,0.625,0,0.656,0,0.688,0,0.719,0,0.75,0,0.781,0,0.813,0,0.844,0,0.875,0,0.906,0,0.938,0,0.969,0],"indices":[0,2,1,964,3,2,965,4,3,966,5,4,967,6,5,968,7,6,969,8,7,970,9,8,971,10,9,972,11,10,973,12,11,974,13,12,975,14,13,976,15,14,977,16,15,978,17,16,979,18,17,980,19,18,981,20,19,982,21,20,983,22,21,984,23,22,985,24,23,986,25,24,987,26,25,988,27,26,989,28,27,990,29,28,991,30,29,992,31,30,993,32,31,994,995,32,34,1,2,1,34,33,35,2,3,2,35,34,36,3,4,3,36,35,37,4,5,4,37,36,38,5,6,5,38,37,39,6,7,6,39,38,40,7,8,7,40,39,41,8,9,8,41,40,42,9,10,9,42,41,43,10,11,10,43,42,44,11,12,11,44,43,45,12,13,12,45,44,46,13,14,13,46,45,47,14,15,14,47,46,48,15,16,15,48,47,49,16,17,16,49,48,50,17,18,17,50,49,51,18,19,18,51,50,52,19,20,19,52,51,53,20,21,20,53,52,54,21,22,21,54,53,55,22,23,22,55,54,56,23,24,23,56,55,57,24,25,24,57,56,58,25,26,25,58,57,59,26,27,26,59,58,60,27,28,27,60,59,61,28,29,28,61,60,62,29,30,29,62,61,63,30,31,30,63,62,64,31,32,31,64,63,996,32,995,32,996,64,66,33,34,33,66,65,67,34,35,34,67,66,68,35,36,35,68,67,69,36,37,36,69,68,70,37,38,37,70,69,71,38,39,38,71,70,72,39,40,39,72,71,73,40,41,40,73,72,74,41,42,41,74,73,75,42,43,42,75,74,76,43,44,43,76,75,77,44,45,44,77,76,78,45,46,45,78,77,79,46,47,46,79,78,80,47,48,47,80,79,81,48,49,48,81,80,82,49,50,49,82,81,83,50,51,50,83,82,84,51,52,51,84,83,85,52,53,52,85,84,86,53,54,53,86,85,87,54,55,54,87,86,88,55,56,55,88,87,89,56,57,56,89,88,90,57,58,57,90,89,91,58,59,58,91,90,92,59,60,59,92,91,93,60,61,60,93,92,94,61,62,61,94,93,95,62,63,62,95,94,96,63,64,63,96,95,997,64,996,64,997,96,98,65,66,65,98,97,99,66,67,66,99,98,100,67,68,67,100,99,101,68,69,68,101,100,102,69,70,69,102,101,103,70,71,70,103,102,104,71,72,71,104,103,105,72,73,72,105,104,106,73,74,73,106,105,107,74,75,74,107,106,108,75,76,75,108,107,109,76,77,76,109,108,110,77,78,77,110,109,111,78,79,78,111,110,112,79,80,79,112,111,113,80,81,80,113,112,114,81,82,81,114,113,115,82,83,82,115,114,116,83,84,83,116,115,117,84,85,84,117,116,118,85,86,85,118,117,119,86,87,86,119,118,120,87,88,87,120,119,121,88,89,88,121,120,122,89,90,89,122,121,123,90,91,90,123,122,124,91,92,91,124,123,125,92,93,92,125,124,126,93,94,93,126,125,127,94,95,94,127,126,128,95,96,95,128,127,998,96,997,96,998,128,130,97,98,97,130,129,131,98,99,98,131,130,132,99,100,99,132,131,133,100,101,100,133,132,134,101,102,101,134,133,135,102,103,102,135,134,136,103,104,103,136,135,137,104,105,104,137,136,138,105,106,105,138,137,139,106,107,106,139,138,140,107,108,107,140,139,141,108,109,108,141,140,142,109,110,109,142,141,143,110,111,110,143,142,144,111,112,111,144,143,145,112,113,112,145,144,146,113,114,113,146,145,147,114,115,114,147,146,148,115,116,115,148,147,149,116,117,116,149,148,150,117,118,117,150,149,151,118,119,118,151,150,152,119,120,119,152,151,153,120,121,120,153,152,154,121,122,121,154,153,155,122,123,122,155,154,156,123,124,123,156,155,157,124,125,124,157,156,158,125,126,125,158,157,159,126,127,126,159,158,160,127,128,127,160,159,999,128,998,128,999,160,162,129,130,129,162,161,163,130,131,130,163,162,164,131,132,131,164,163,165,132,133,132,165,164,166,133,134,133,166,165,167,134,135,134,167,166,168,135,136,135,168,167,169,136,137,136,169,168,170,137,138,137,170,169,171,138,139,138,171,170,172,139,140,139,172,171,173,140,141,140,173,172,174,141,142,141,174,173,175,142,143,142,175,174,176,143,144,143,176,175,177,144,145,144,177,176,178,145,146,145,178,177,179,146,147,146,179,178,180,147,148,147,180,179,181,148,149,148,181,180,182,149,150,149,182,181,183,150,151,150,183,182,184,151,152,151,184,183,185,152,153,152,185,184,186,153,154,153,186,185,187,154,155,154,187,186,188,155,156,155,188,187,189,156,157,156,189,188,190,157,158,157,190,189,191,158,159,158,191,190,192,159,160,159,192,191,1000,160,999,160,1000,192,194,161,162,161,194,193,195,162,163,162,195,194,196,163,164,163,196,195,197,164,165,164,197,196,198,165,166,165,198,197,199,166,167,166,199,198,200,167,168,167,200,199,201,168,169,168,201,200,202,169,170,169,202,201,203,170,171,170,203,202,204,171,172,171,204,203,205,172,173,172,205,204,206,173,174,173,206,205,207,174,175,174,207,206,208,175,176,175,208,207,209,176,177,176,209,208,210,177,178,177,210,209,211,178,179,178,211,210,212,179,180,179,212,211,213,180,181,180,213,212,214,181,182,181,214,213,215,182,183,182,215,214,216,183,184,183,216,215,217,184,185,184,217,216,218,185,186,185,218,217,219,186,187,186,219,218,220,187,188,187,220,219,221,188,189,188,221,220,222,189,190,189,222,221,223,190,191,190,223,222,224,191,192,191,224,223,1001,192,1000,192,1001,224,226,193,194,193,226,225,227,194,195,194,227,226,228,195,196,195,228,227,229,196,197,196,229,228,230,197,198,197,230,229,231,198,199,198,231,230,232,199,200,199,232,231,233,200,201,200,233,232,234,201,202,201,234,233,235,202,203,202,235,234,236,203,204,203,236,235,237,204,205,204,237,236,238,205,206,205,238,237,239,206,207,206,239,238,240,207,208,207,240,239,241,208,209,208,241,240,242,209,210,209,242,241,243,210,211,210,243,242,244,211,212,211,244,243,245,212,213,212,245,244,246,213,214,213,246,245,247,214,215,214,247,246,248,215,216,215,248,247,249,216,217,216,249,248,250,217,218,217,250,249,251,218,219,218,251,250,252,219,220,219,252,251,253,220,221,220,253,252,254,221,222,221,254,253,255,222,223,222,255,254,256,223,224,223,256,255,1002,224,1001,224,1002,256,258,225,226,225,258,257,259,226,227,226,259,258,260,227,228,227,260,259,261,228,229,228,261,260,262,229,230,229,262,261,263,230,231,230,263,262,264,231,232,231,264,263,265,232,233,232,265,264,266,233,234,233,266,265,267,234,235,234,267,266,268,235,236,235,268,267,269,236,237,236,269,268,270,237,238,237,270,269,271,238,239,238,271,270,272,239,240,239,272,271,273,240,241,240,273,272,274,241,242,241,274,273,275,242,243,242,275,274,276,243,244,243,276,275,277,244,245,244,277,276,278,245,246,245,278,277,279,246,247,246,279,278,280,247,248,247,280,279,281,248,249,248,281,280,282,249,250,249,282,281,283,250,251,250,283,282,284,251,252,251,284,283,285,252,253,252,285,284,286,253,254,253,286,285,287,254,255,254,287,286,288,255,256,255,288,287,1003,256,1002,256,1003,288,290,257,258,257,290,289,291,258,259,258,291,290,292,259,260,259,292,291,293,260,261,260,293,292,294,261,262,261,294,293,295,262,263,262,295,294,296,263,264,263,296,295,297,264,265,264,297,296,298,265,266,265,298,297,299,266,267,266,299,298,300,267,268,267,300,299,301,268,269,268,301,300,302,269,270,269,302,301,303,270,271,270,303,302,304,271,272,271,304,303,305,272,273,272,305,304,306,273,274,273,306,305,307,274,275,274,307,306,308,275,276,275,308,307,309,276,277,276,309,308,310,277,278,277,310,309,311,278,279,278,311,310,312,279,280,279,312,311,313,280,281,280,313,312,314,281,282,281,314,313,315,282,283,282,315,314,316,283,284,283,316,315,317,284,285,284,317,316,318,285,286,285,318,317,319,286,287,286,319,318,320,287,288,287,320,319,1004,288,1003,288,1004,320,322,289,290,289,322,321,323,290,291,290,323,322,324,291,292,291,324,323,325,292,293,292,325,324,326,293,294,293,326,325,327,294,295,294,327,326,328,295,296,295,328,327,329,296,297,296,329,328,330,297,298,297,330,329,331,298,299,298,331,330,332,299,300,299,332,331,333,300,301,300,333,332,334,301,302,301,334,333,335,302,303,302,335,334,336,303,304,303,336,335,337,304,305,304,337,336,338,305,306,305,338,337,339,306,307,306,339,338,340,307,308,307,340,339,341,308,309,308,341,340,342,309,310,309,342,341,343,310,311,310,343,342,344,311,312,311,344,343,345,312,313,312,345,344,346,313,314,313,346,345,347,314,315,314,347,346,348,315,316,315,348,347,349,316,317,316,349,348,350,317,318,317,350,349,351,318,319,318,351,350,352,319,320,319,352,351,1005,320,1004,320,1005,352,354,321,322,321,354,353,355,322,323,322,355,354,356,323,324,323,356,355,357,324,325,324,357,356,358,325,326,325,358,357,359,326,327,326,359,358,360,327,328,327,360,359,361,328,329,328,361,360,362,329,330,329,362,361,363,330,331,330,363,362,364,331,332,331,364,363,365,332,333,332,365,364,366,333,334,333,366,365,367,334,335,334,367,366,368,335,336,335,368,367,369,336,337,336,369,368,370,337,338,337,370,369,371,338,339,338,371,370,372,339,340,339,372,371,373,340,341,340,373,372,374,341,342,341,374,373,375,342,343,342,375,374,376,343,344,343,376,375,377,344,345,344,377,376,378,345,346,345,378,377,379,346,347,346,379,378,380,347,348,347,380,379,381,348,349,348,381,380,382,349,350,349,382,381,383,350,351,350,383,382,384,351,352,351,384,383,1006,352,1005,352,1006,384,386,353,354,353,386,385,387,354,355,354,387,386,388,355,356,355,388,387,389,356,357,356,389,388,390,357,358,357,390,389,391,358,359,358,391,390,392,359,360,359,392,391,393,360,361,360,393,392,394,361,362,361,394,393,395,362,363,362,395,394,396,363,364,363,396,395,397,364,365,364,397,396,398,365,366,365,398,397,399,366,367,366,399,398,400,367,368,367,400,399,401,368,369,368,401,400,402,369,370,369,402,401,403,370,371,370,403,402,404,371,372,371,404,403,405,372,373,372,405,404,406,373,374,373,406,405,407,374,375,374,407,406,408,375,376,375,408,407,409,376,377,376,409,408,410,377,378,377,410,409,411,378,379,378,411,410,412,379,380,379,412,411,413,380,381,380,413,412,414,381,382,381,414,413,415,382,383,382,415,414,416,383,384,383,416,415,1007,384,1006,384,1007,416,418,385,386,385,418,417,419,386,387,386,419,418,420,387,388,387,420,419,421,388,389,388,421,420,422,389,390,389,422,421,423,390,391,390,423,422,424,391,392,391,424,423,425,392,393,392,425,424,426,393,394,393,426,425,427,394,395,394,427,426,428,395,396,395,428,427,429,396,397,396,429,428,430,397,398,397,430,429,431,398,399,398,431,430,432,399,400,399,432,431,433,400,401,400,433,432,434,401,402,401,434,433,435,402,403,402,435,434,436,403,404,403,436,435,437,404,405,404,437,436,438,405,406,405,438,437,439,406,407,406,439,438,440,407,408,407,440,439,441,408,409,408,441,440,442,409,410,409,442,441,443,410,411,410,443,442,444,411,412,411,444,443,445,412,413,412,445,444,446,413,414,413,446,445,447,414,415,414,447,446,448,415,416,415,448,447,1008,416,1007,416,1008,448,450,417,418,417,450,449,451,418,419,418,451,450,452,419,420,419,452,451,453,420,421,420,453,452,454,421,422,421,454,453,455,422,423,422,455,454,456,423,424,423,456,455,457,424,425,424,457,456,458,425,426,425,458,457,459,426,427,426,459,458,460,427,428,427,460,459,461,428,429,428,461,460,462,429,430,429,462,461,463,430,431,430,463,462,464,431,432,431,464,463,465,432,433,432,465,464,466,433,434,433,466,465,467,434,435,434,467,466,468,435,436,435,468,467,469,436,437,436,469,468,470,437,438,437,470,469,471,438,439,438,471,470,472,439,440,439,472,471,473,440,441,440,473,472,474,441,442,441,474,473,475,442,443,442,475,474,476,443,444,443,476,475,477,444,445,444,477,476,478,445,446,445,478,477,479,446,447,446,479,478,480,447,448,447,480,479,1009,448,1008,448,1009,480,481,449,450,1010,450,451,1011,451,452,1012,452,453,1013,453,454,1014,454,455,1015,455,456,1016,456,457,1017,457,458,1018,458,459,1019,459,460,1020,460,461,1021,461,462,1022,462,463,1023,463,464,1024,464,465,1025,465,466,1026,466,467,1027,467,468,1028,468,469,1029,469,470,1030,470,471,1031,471,472,1032,472,473,1033,473,474,1034,474,475,1035,475,476,1036,476,477,1037,477,478,1038,478,479,1039,479,480,1040,480,1009,482,483,484,1041,484,485,1042,485,486,1043,486,487,1044,487,488,1045,488,489,1046,489,490,1047,490,491,1048,491,492,1049,492,493,1050,493,494,1051,494,495,1052,495,496,1053,496,497,1054,497,498,1055,498,499,1056,499,500,1057,500,501,1058,501,502,1059,502,503,1060,503,504,1061,504,505,1062,505,506,1063,506,507,1064,507,508,1065,508,509,1066,509,510,1067,510,511,1068,511,512,1069,512,513,1070,513,514,1071,514,1072,516,483,515,483,516,484,517,484,516,484,517,485,518,485,517,485,518,486,519,486,518,486,519,487,520,487,519,487,520,488,521,488,520,488,521,489,522,489,521,489,522,490,523,490,522,490,523,491,524,491,523,491,524,492,525,492,524,492,525,493,526,493,525,493,526,494,527,494,526,494,527,495,528,495,527,495,528,496,529,496,528,496,529,497,530,497,529,497,530,498,531,498,530,498,531,499,532,499,531,499,532,500,533,500,532,500,533,501,534,501,533,501,534,502,535,502,534,502,535,503,536,503,535,503,536,504,537,504,536,504,537,505,538,505,537,505,538,506,539,506,538,506,539,507,540,507,539,507,540,508,541,508,540,508,541,509,542,509,541,509,542,510,543,510,542,510,543,511,544,511,543,511,544,512,545,512,544,512,545,513,546,513,545,513,546,514,1073,514,546,514,1073,1072,548,515,547,515,548,516,549,516,548,516,549,517,550,517,549,517,550,518,551,518,550,518,551,519,552,519,551,519,552,520,553,520,552,520,553,521,554,521,553,521,554,522,555,522,554,522,555,523,556,523,555,523,556,524,557,524,556,524,557,525,558,525,557,525,558,526,559,526,558,526,559,527,560,527,559,527,560,528,561,528,560,528,561,529,562,529,561,529,562,530,563,530,562,530,563,531,564,531,563,531,564,532,565,532,564,532,565,533,566,533,565,533,566,534,567,534,566,534,567,535,568,535,567,535,568,536,569,536,568,536,569,537,570,537,569,537,570,538,571,538,570,538,571,539,572,539,571,539,572,540,573,540,572,540,573,541,574,541,573,541,574,542,575,542,574,542,575,543,576,543,575,543,576,544,577,544,576,544,577,545,578,545,577,545,578,546,1074,546,578,546,1074,1073,580,547,579,547,580,548,581,548,580,548,581,549,582,549,581,549,582,550,583,550,582,550,583,551,584,551,583,551,584,552,585,552,584,552,585,553,586,553,585,553,586,554,587,554,586,554,587,555,588,555,587,555,588,556,589,556,588,556,589,557,590,557,589,557,590,558,591,558,590,558,591,559,592,559,591,559,592,560,593,560,592,560,593,561,594,561,593,561,594,562,595,562,594,562,595,563,596,563,595,563,596,564,597,564,596,564,597,565,598,565,597,565,598,566,599,566,598,566,599,567,600,567,599,567,600,568,601,568,600,568,601,569,602,569,601,569,602,570,603,570,602,570,603,571,604,571,603,571,604,572,605,572,604,572,605,573,606,573,605,573,606,574,607,574,606,574,607,575,608,575,607,575,608,576,609,576,608,576,609,577,610,577,609,577,610,578,1075,578,610,578,1075,1074,612,579,611,579,612,580,613,580,612,580,613,581,614,581,613,581,614,582,615,582,614,582,615,583,616,583,615,583,616,584,617,584,616,584,617,585,618,585,617,585,618,586,619,586,618,586,619,587,620,587,619,587,620,588,621,588,620,588,621,589,622,589,621,589,622,590,623,590,622,590,623,591,624,591,623,591,624,592,625,592,624,592,625,593,626,593,625,593,626,594,627,594,626,594,627,595,628,595,627,595,628,596,629,596,628,596,629,597,630,597,629,597,630,598,631,598,630,598,631,599,632,599,631,599,632,600,633,600,632,600,633,601,634,601,633,601,634,602,635,602,634,602,635,603,636,603,635,603,636,604,637,604,636,604,637,605,638,605,637,605,638,606,639,606,638,606,639,607,640,607,639,607,640,608,641,608,640,608,641,609,642,609,641,609,642,610,1076,610,642,610,1076,1075,644,611,643,611,644,612,645,612,644,612,645,613,646,613,645,613,646,614,647,614,646,614,647,615,648,615,647,615,648,616,649,616,648,616,649,617,650,617,649,617,650,618,651,618,650,618,651,619,652,619,651,619,652,620,653,620,652,620,653,621,654,621,653,621,654,622,655,622,654,622,655,623,656,623,655,623,656,624,657,624,656,624,657,625,658,625,657,625,658,626,659,626,658,626,659,627,660,627,659,627,660,628,661,628,660,628,661,629,662,629,661,629,662,630,663,630,662,630,663,631,664,631,663,631,664,632,665,632,664,632,665,633,666,633,665,633,666,634,667,634,666,634,667,635,668,635,667,635,668,636,669,636,668,636,669,637,670,637,669,637,670,638,671,638,670,638,671,639,672,639,671,639,672,640,673,640,672,640,673,641,674,641,673,641,674,642,1077,642,674,642,1077,1076,676,643,675,643,676,644,677,644,676,644,677,645,678,645,677,645,678,646,679,646,678,646,679,647,680,647,679,647,680,648,681,648,680,648,681,649,682,649,681,649,682,650,683,650,682,650,683,651,684,651,683,651,684,652,685,652,684,652,685,653,686,653,685,653,686,654,687,654,686,654,687,655,688,655,687,655,688,656,689,656,688,656,689,657,690,657,689,657,690,658,691,658,690,658,691,659,692,659,691,659,692,660,693,660,692,660,693,661,694,661,693,661,694,662,695,662,694,662,695,663,696,663,695,663,696,664,697,664,696,664,697,665,698,665,697,665,698,666,699,666,698,666,699,667,700,667,699,667,700,668,701,668,700,668,701,669,702,669,701,669,702,670,703,670,702,670,703,671,704,671,703,671,704,672,705,672,704,672,705,673,706,673,705,673,706,674,1078,674,706,674,1078,1077,708,675,707,675,708,676,709,676,708,676,709,677,710,677,709,677,710,678,711,678,710,678,711,679,712,679,711,679,712,680,713,680,712,680,713,681,714,681,713,681,714,682,715,682,714,682,715,683,716,683,715,683,716,684,717,684,716,684,717,685,718,685,717,685,718,686,719,686,718,686,719,687,720,687,719,687,720,688,721,688,720,688,721,689,722,689,721,689,722,690,723,690,722,690,723,691,724,691,723,691,724,692,725,692,724,692,725,693,726,693,725,693,726,694,727,694,726,694,727,695,728,695,727,695,728,696,729,696,728,696,729,697,730,697,729,697,730,698,731,698,730,698,731,699,732,699,731,699,732,700,733,700,732,700,733,701,734,701,733,701,734,702,735,702,734,702,735,703,736,703,735,703,736,704,737,704,736,704,737,705,738,705,737,705,738,706,1079,706,738,706,1079,1078,740,707,739,707,740,708,741,708,740,708,741,709,742,709,741,709,742,710,743,710,742,710,743,711,744,711,743,711,744,712,745,712,744,712,745,713,746,713,745,713,746,714,747,714,746,714,747,715,748,715,747,715,748,716,749,716,748,716,749,717,750,717,749,717,750,718,751,718,750,718,751,719,752,719,751,719,752,720,753,720,752,720,753,721,754,721,753,721,754,722,755,722,754,722,755,723,756,723,755,723,756,724,757,724,756,724,757,725,758,725,757,725,758,726,759,726,758,726,759,727,760,727,759,727,760,728,761,728,760,728,761,729,762,729,761,729,762,730,763,730,762,730,763,731,764,731,763,731,764,732,765,732,764,732,765,733,766,733,765,733,766,734,767,734,766,734,767,735,768,735,767,735,768,736,769,736,768,736,769,737,770,737,769,737,770,738,1080,738,770,738,1080,1079,772,739,771,739,772,740,773,740,772,740,773,741,774,741,773,741,774,742,775,742,774,742,775,743,776,743,775,743,776,744,777,744,776,744,777,745,778,745,777,745,778,746,779,746,778,746,779,747,780,747,779,747,780,748,781,748,780,748,781,749,782,749,781,749,782,750,783,750,782,750,783,751,784,751,783,751,784,752,785,752,784,752,785,753,786,753,785,753,786,754,787,754,786,754,787,755,788,755,787,755,788,756,789,756,788,756,789,757,790,757,789,757,790,758,791,758,790,758,791,759,792,759,791,759,792,760,793,760,792,760,793,761,794,761,793,761,794,762,795,762,794,762,795,763,796,763,795,763,796,764,797,764,796,764,797,765,798,765,797,765,798,766,799,766,798,766,799,767,800,767,799,767,800,768,801,768,800,768,801,769,802,769,801,769,802,770,1081,770,802,770,1081,1080,804,771,803,771,804,772,805,772,804,772,805,773,806,773,805,773,806,774,807,774,806,774,807,775,808,775,807,775,808,776,809,776,808,776,809,777,810,777,809,777,810,778,811,778,810,778,811,779,812,779,811,779,812,780,813,780,812,780,813,781,814,781,813,781,814,782,815,782,814,782,815,783,816,783,815,783,816,784,817,784,816,784,817,785,818,785,817,785,818,786,819,786,818,786,819,787,820,787,819,787,820,788,821,788,820,788,821,789,822,789,821,789,822,790,823,790,822,790,823,791,824,791,823,791,824,792,825,792,824,792,825,793,826,793,825,793,826,794,827,794,826,794,827,795,828,795,827,795,828,796,829,796,828,796,829,797,830,797,829,797,830,798,831,798,830,798,831,799,832,799,831,799,832,800,833,800,832,800,833,801,834,801,833,801,834,802,1082,802,834,802,1082,1081,836,803,835,803,836,804,837,804,836,804,837,805,838,805,837,805,838,806,839,806,838,806,839,807,840,807,839,807,840,808,841,808,840,808,841,809,842,809,841,809,842,810,843,810,842,810,843,811,844,811,843,811,844,812,845,812,844,812,845,813,846,813,845,813,846,814,847,814,846,814,847,815,848,815,847,815,848,816,849,816,848,816,849,817,850,817,849,817,850,818,851,818,850,818,851,819,852,819,851,819,852,820,853,820,852,820,853,821,854,821,853,821,854,822,855,822,854,822,855,823,856,823,855,823,856,824,857,824,856,824,857,825,858,825,857,825,858,826,859,826,858,826,859,827,860,827,859,827,860,828,861,828,860,828,861,829,862,829,861,829,862,830,863,830,862,830,863,831,864,831,863,831,864,832,865,832,864,832,865,833,866,833,865,833,866,834,1083,834,866,834,1083,1082,868,835,867,835,868,836,869,836,868,836,869,837,870,837,869,837,870,838,871,838,870,838,871,839,872,839,871,839,872,840,873,840,872,840,873,841,874,841,873,841,874,842,875,842,874,842,875,843,876,843,875,843,876,844,877,844,876,844,877,845,878,845,877,845,878,846,879,846,878,846,879,847,880,847,879,847,880,848,881,848,880,848,881,849,882,849,881,849,882,850,883,850,882,850,883,851,884,851,883,851,884,852,885,852,884,852,885,853,886,853,885,853,886,854,887,854,886,854,887,855,888,855,887,855,888,856,889,856,888,856,889,857,890,857,889,857,890,858,891,858,890,858,891,859,892,859,891,859,892,860,893,860,892,860,893,861,894,861,893,861,894,862,895,862,894,862,895,863,896,863,895,863,896,864,897,864,896,864,897,865,898,865,897,865,898,866,1084,866,898,866,1084,1083,900,867,899,867,900,868,901,868,900,868,901,869,902,869,901,869,902,870,903,870,902,870,903,871,904,871,903,871,904,872,905,872,904,872,905,873,906,873,905,873,906,874,907,874,906,874,907,875,908,875,907,875,908,876,909,876,908,876,909,877,910,877,909,877,910,878,911,878,910,878,911,879,912,879,911,879,912,880,913,880,912,880,913,881,914,881,913,881,914,882,915,882,914,882,915,883,916,883,915,883,916,884,917,884,916,884,917,885,918,885,917,885,918,886,919,886,918,886,919,887,920,887,919,887,920,888,921,888,920,888,921,889,922,889,921,889,922,890,923,890,922,890,923,891,924,891,923,891,924,892,925,892,924,892,925,893,926,893,925,893,926,894,927,894,926,894,927,895,928,895,927,895,928,896,929,896,928,896,929,897,930,897,929,897,930,898,1085,898,930,898,1085,1084,932,899,931,899,932,900,933,900,932,900,933,901,934,901,933,901,934,902,935,902,934,902,935,903,936,903,935,903,936,904,937,904,936,904,937,905,938,905,937,905,938,906,939,906,938,906,939,907,940,907,939,907,940,908,941,908,940,908,941,909,942,909,941,909,942,910,943,910,942,910,943,911,944,911,943,911,944,912,945,912,944,912,945,913,946,913,945,913,946,914,947,914,946,914,947,915,948,915,947,915,948,916,949,916,948,916,949,917,950,917,949,917,950,918,951,918,950,918,951,919,952,919,951,919,952,920,953,920,952,920,953,921,954,921,953,921,954,922,955,922,954,922,955,923,956,923,955,923,956,924,957,924,956,924,957,925,958,925,957,925,958,926,959,926,958,926,959,927,960,927,959,927,960,928,961,928,960,928,961,929,962,929,961,929,962,930,1086,930,962,930,1086,1085,963,932,931,1087,933,932,1088,934,933,1089,935,934,1090,936,935,1091,937,936,1092,938,937,1093,939,938,1094,940,939,1095,941,940,1096,942,941,1097,943,942,1098,944,943,1099,945,944,1100,946,945,1101,947,946,1102,948,947,1103,949,948,1104,950,949,1105,951,950,1106,952,951,1107,953,952,1108,954,953,1109,955,954,1110,956,955,1111,957,956,1112,958,957,1113,959,958,1114,960,959,1115,961,960,1116,962,961,1117,1086,962],"groups":[{"start":0,"count":5760,"materialIndex":0}],"materials":[{"name":"ballshell","color":[0.85,0.95,0.97,1]}]}]}
+\ No newline at end of file
+diff --git a/scripts/smoke-ballz.mjs b/scripts/smoke-ballz.mjs
+index 58a91df..9be1ba7 100644
+--- a/scripts/smoke-ballz.mjs
++++ b/scripts/smoke-ballz.mjs
+@@ -229,12 +229,17 @@ try {
+     api.pause(true);
+     for (let i = 0; i < 120; i += 1) api.step(1 / 60); // settle onto the floor
+     const spawned = api.query({ ids: ["ballz-ball"] })[0];
++    const shell = api.query({ ids: ["ballz-ball-shell"] })[0];
++    const aim = api.query({ ids: ["ballz-aim-arrow"] })[0];
+     const result = {
+       hasSteering: !!spawned.steering,
+       arrowId: spawned.steering?.arrowId ?? null,
+-      hasArrow: !!api.query({ ids: ["ballz-aim-arrow"] })[0],
+-      hasCore: !!api.query({ ids: ["ballz-ball-core"] })[0],
+-      cageWireframe: spawned.material.wireframe === true,
++      hasArrow: !!aim,
++      // The recovered 2011 ball: the shell mesh parented to the collider, the FireArrow
++      // controller ball as the anchored aim — models, not invented primitives.
++      shellIsRecoveredModel: shell?.type === "model" && shell?.parentId === "ballz-ball",
++      aimIsRecoveredModel: aim?.type === "model",
++      colliderNearInvisible: (spawned.material.opacity ?? 1) < 0.1,
+     };
+ 
+     // Give the run some runway: the smoke grid is only 7 cells wide, and a capped ball
+@@ -576,8 +581,9 @@ const ok =
+   out.steer?.hasSteering === true &&
+   out.steer?.arrowId === "ballz-aim-arrow" &&
+   out.steer?.hasArrow === true &&
+-  out.steer?.hasCore === true &&
+-  out.steer?.cageWireframe === true &&
++  out.steer?.shellIsRecoveredModel === true &&
++  out.steer?.aimIsRecoveredModel === true &&
++  out.steer?.colliderNearInvisible === true &&
+   out.steer?.aimReceipt === 90 &&
+   out.steer?.movedEast > 0.5 &&
+   out.steer?.driftZ < 0.6 &&
+diff --git a/scripts/smoke-games.mjs b/scripts/smoke-games.mjs
+index 9789d34..e9e19e4 100644
+--- a/scripts/smoke-games.mjs
++++ b/scripts/smoke-games.mjs
+@@ -53,23 +53,34 @@ try {
+     const rows = [...document.querySelectorAll(".gx-shelf-row")];
+     return {
+       rowCount: rows.length,
+-      // The seeded course must be there on a first visit, or the shelf opens on the bare
+-      // fallback starter and reads as empty.
+-      hasFirstCourse: rows.some((row) => row.dataset.levelId === "first-course"),
+-      // A row should say what it contains before you commit to it.
+-      firstCourseMeta: rows.find((row) => row.dataset.levelId === "first-course")
+-        ?.querySelector(".gx-shelf-meta")?.textContent ?? null,
++      // THE GAME is a branded hero card, not a bare level row; the game's courses live in
++      // its own menu so they are not listed twice.
++      hasBallzHero: !!document.querySelector('.gx-shelf-hero[data-game-id="ballz"]'),
++      firstCourseListedGenerically: rows.some((row) => row.dataset.levelId === "first-course"),
+       previewCount: rows.filter((row) => row.querySelector(".gx-shelf-thumb")).length,
+-      levelPreview: rows.find((row) => row.dataset.levelId === "first-course")
+-        ?.querySelector("canvas.gx-shelf-thumb")?.getAttribute("aria-label") ?? null,
+       welcomeGone: !document.querySelector(".gx-welcome"),
+     };
+   });
+   await page.screenshot({ path: path.join(ART, "games-shelf.png"), fullPage: false });
+ 
+-  // ---- play it ----
+-  await page.click('.gx-shelf-row[data-level-id="first-course"]');
+-  await page.waitForTimeout(1400);
++  // ---- the BallZ title screen ----
++  await page.click('.gx-shelf-hero[data-game-id="ballz"]');
++  await page.waitForSelector(".gx-bzmenu", { timeout: SMOKE_TIMEOUT });
++  out.menu = await page.evaluate(() => ({
++    mark: document.querySelector(".gx-bzmenu-mark")?.textContent ?? null,
++    hasStart: !!document.querySelector(".gx-bzmenu-start"),
++    courseCount: document.querySelectorAll(".gx-bzmenu-course").length,
++    firstCourseListed: !!document.querySelector('.gx-bzmenu-course[data-level-id="first-course"]'),
++  }));
++  await page.screenshot({ path: path.join(ART, "games-ballz-menu.png"), fullPage: false });
++
++  // ---- play it, through the full ceremony ----
++  await page.click(".gx-bzmenu-start");
++  // The 3-2-1-GO start: nothing programmatic touches the world here, so the human path gets
++  // the whole countdown. Wait it out by its own overlay, not by wall-clock guessing.
++  await page.waitForSelector(".gx-bz-count", { timeout: SMOKE_TIMEOUT });
++  out.sawCountdown = true;
++  await page.waitForFunction(() => !document.querySelector(".gx-bz-count"), null, { timeout: SMOKE_TIMEOUT });
+   out.playing = {
+     mode: await page.evaluate(() => window.__GRAPHYSX_HOST__.mode),
+     hudShown: await shown(".gx-bz-hud"),
+@@ -108,8 +119,9 @@ try {
+   // The level is playable, not just displayed. One real key event is enough here — the physics
+   // of it is smoke-ballz's job.
+   const before = await page.evaluate(() => window.__GRAPHYSX__.query({ ids: ["ballz-ball"] })[0]?.position ?? null);
+-  await page.keyboard.press("ArrowUp");
++  await page.keyboard.down("ArrowUp");
+   await page.waitForTimeout(700);
++  await page.keyboard.up("ArrowUp");
+   const after = await page.evaluate(() => window.__GRAPHYSX__.query({ ids: ["ballz-ball"] })[0]?.position ?? null);
+   out.ballResponds = !!before && !!after && (before[0] !== after[0] || before[2] !== after[2]);
+   await page.screenshot({ path: path.join(ART, "games-playing.png"), fullPage: false });
+@@ -224,10 +236,15 @@ const ok =
+   out.frontDoor?.browseButton === true &&
+   out.frontDoor?.mode === "scene" &&
+   out.shelf?.rowCount > 0 &&
+-  out.shelf?.hasFirstCourse === true &&
+-  /ring/.test(out.shelf?.firstCourseMeta ?? "") &&
++  out.shelf?.hasBallzHero === true &&
++  out.shelf?.firstCourseListedGenerically === false &&
++  out.menu?.mark === "BallZ" &&
++  out.menu?.hasStart === true &&
++  out.menu?.courseCount >= 1 &&
++  out.menu?.firstCourseListed === true &&
++  out.sawCountdown === true &&
+   out.shelf?.previewCount === out.shelf?.rowCount &&
+-  /First Course level preview/.test(out.shelf?.levelPreview ?? "") &&
++
+   out.shelf?.welcomeGone === true &&
+   out.playing?.mode === "play" &&
+   out.playing?.hudShown === true &&
+diff --git a/scripts/vendor-ball-meshes.mjs b/scripts/vendor-ball-meshes.mjs
+new file mode 100644
+index 0000000..2440934
+--- /dev/null
++++ b/scripts/vendor-ball-meshes.mjs
+@@ -0,0 +1,99 @@
++// Vendor the recovered 2011 ball meshes — BallShell / BallCtrl / BallFire — from the legacy
++// TVM catalog into ordinary v2 model assets.
++//
++// The original BallZ player was never a wireframe primitive: it is BallShell.tvm (the open
++// cage the player sees) around an inner controller ball wearing FireArrow800.JPG — the
++// arrow TEXTURE on the inner ball is the aim indicator. All three meshes were decoded long
++// ago into `src/legacy/tvm-catalog.json` and used only by the legacy race path; this script
++// re-publishes them as `graphysx-mesh-json` payloads under `public/assets/ports/`, where
++// `build-asset-catalog.mjs` picks them up as spawnable, discoverable assets. Faithful
++// recovery, not adaptation: positions, UVs and indices are copied verbatim (the loader
++// derives creased normals exactly as it does for every recovered mesh).
++//
++//   node scripts/vendor-ball-meshes.mjs && node scripts/build-asset-catalog.mjs
++
++import { readFile, writeFile } from "node:fs/promises";
++import path from "node:path";
++import { fileURLToPath } from "node:url";
++
++const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
++const catalog = JSON.parse(await readFile(path.join(ROOT, "src", "legacy", "tvm-catalog.json"), "utf8"));
++const ball = catalog.ball;
++if (!ball?.shell?.positions?.length) throw new Error("tvm-catalog.json carries no ball meshes");
++
++const PARTS = [
++  {
++    kind: "shell",
++    file: "archive-ballshell.json",
++    name: "BallShell",
++    source: "BallZ 2011/Release/Media/Ball/BallShell.tvm",
++    // The open cage. Untextured in the archive; its revival look (translucency) is a
++    // recovered-PBR profile in agent-world-assets.ts, keyed by asset id — not baked here.
++    material: { name: "ballshell", color: [0.85, 0.95, 0.97, 1] },
++  },
++  {
++    kind: "ctrl",
++    file: "archive-ballctrl.json",
++    name: "BallCtrl",
++    source: "BallZ 2011/Release/Media/Ball/BallCtrl.tvm",
++    material: { name: "ballctrl", color: [1, 1, 1, 1], textureName: "FireArrow800.JPG", textureUrl: "/assets/textures/ball/FireArrow800.jpg" },
++  },
++  {
++    kind: "fire",
++    file: "archive-ballfire.json",
++    name: "BallFire",
++    source: "BallZ 2011/Release/Media/Ball/BallFire.tvm",
++    material: { name: "ballfire", color: [1, 1, 1, 1], textureName: "FireArrow800.JPG", textureUrl: "/assets/textures/ball/FireArrow800.jpg" },
++  },
++];
++
++for (const part of PARTS) {
++  const mesh = ball[part.kind];
++  if (!mesh?.positions?.length) {
++    console.warn(`skipping ${part.kind}: not in the catalog`);
++    continue;
++  }
++  const vertexCount = mesh.positions.length / 3;
++  const triangleCount = mesh.indices.length / 3;
++  const bounds = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity], size: [0, 0, 0] };
++  for (let i = 0; i < mesh.positions.length; i += 3) {
++    for (let axis = 0; axis < 3; axis += 1) {
++      bounds.min[axis] = Math.min(bounds.min[axis], mesh.positions[i + axis]);
++      bounds.max[axis] = Math.max(bounds.max[axis], mesh.positions[i + axis]);
++    }
++  }
++  // `modelFit` scales by bounds.size — a payload without it fails to fit, not gracefully.
++  bounds.size = bounds.max.map((value, axis) => value - bounds.min[axis]);
++  const payload = {
++    source: part.source,
++    provenance: {
++      archiveSource: part.source,
++      decodedBy: "TVM decode into src/legacy/tvm-catalog.json; republished verbatim by scripts/vendor-ball-meshes.mjs",
++      fidelity: "faithful — positions, UVs and indices copied unmodified; normals derived by the loader",
++    },
++    meshCount: 1,
++    vertexCount,
++    faceCount: triangleCount,
++    triangleCount,
++    materialGroupCount: 1,
++    normals: "derived",
++    bounds,
++    radius: mesh.radius,
++    meshes: [
++      {
++        name: part.name,
++        vertexCount,
++        faceCount: triangleCount,
++        triangleCount,
++        positions: mesh.positions,
++        uvs: mesh.uvs ?? [],
++        indices: mesh.indices,
++        groups: [{ start: 0, count: mesh.indices.length, materialIndex: 0 }],
++        materials: [part.material],
++      },
++    ],
++  };
++  const file = path.join(ROOT, "public", "assets", "ports", part.file);
++  await writeFile(file, JSON.stringify(payload));
++  console.log(`wrote ${file} (${vertexCount} verts, ${triangleCount} tris, radius ${mesh.radius})`);
++}
+diff --git a/src/agent-world-asset-catalog.ts b/src/agent-world-asset-catalog.ts
+index 23353ba..4435977 100644
+--- a/src/agent-world-asset-catalog.ts
++++ b/src/agent-world-asset-catalog.ts
+@@ -72,6 +72,9 @@ export const GRAPHYSX_AGENT_WORLD_ASSET_CATALOG: readonly AgentWorldAssetDescrip
+   { id: "archive-cobra", label: "Cobra", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-cobra.json", source: "Yanik C++ BCKUP/Media/Models/cars/Low_Cobra.3DS" },
+   { id: "archive-impreza", label: "Impreza", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-impreza.json", source: "Yanik C++ BCKUP/Media/Models/cars/impreza.3ds" },
+   { id: "archive-piste-ovale", label: "Piste Ovale", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/vehicles/archive-piste-ovale.json", source: "AtmelCubx/PisteOvale.tvm" },
++  { id: "archive-ballctrl", label: "Ballctrl", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-ballctrl.json", source: "BallZ 2011/Release/Media/Ball/BallCtrl.tvm" },
++  { id: "archive-ballfire", label: "Ballfire", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-ballfire.json", source: "BallZ 2011/Release/Media/Ball/BallFire.tvm" },
++  { id: "archive-ballshell", label: "Ballshell", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-ballshell.json", source: "BallZ 2011/Release/Media/Ball/BallShell.tvm" },
+   { id: "archive-level1-2011", label: "Level 1 2011", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-level1-2011.json", source: "BallZ 2011/Release/Media/Level1.TVM" },
+   { id: "archive-map1", label: "Map 1", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-map1.json", source: "BallZ 2011/Release/Media/Map1.TVM" },
+   { id: "archive-slide-large", label: "Slide Large", category: "port", format: "graphysx-mesh-json", url: "/assets/ports/archive-slide-large.json", source: "Media/SlideLarge.TVM" }
+diff --git a/src/agent-world-assets.ts b/src/agent-world-assets.ts
+index e8546a8..ec138d3 100644
+--- a/src/agent-world-assets.ts
++++ b/src/agent-world-assets.ts
+@@ -138,6 +138,16 @@ type RecoveredPbrProfile = {
+  * group, and geometry byte. Unlisted assets retain their exact legacy Phong path.
+  */
+ function recoveredPbrProfile(assetId: string | null, materialName: string): RecoveredPbrProfile | null {
++  // The 2011 player ball, revival look (the legacy ball-selector's default): the shell is a
++  // translucent cage so the FireArrow controller inside stays legible — same glass mechanics
++  // as the car windows. The controller/fire meshes carry the archived FireArrow texture and
++  // get a slight warm emissive lift so the aim reads in arena shadow.
++  if (assetId === "archive-ballshell") {
++    return { shading: "physical", roughness: 0.24, metalness: 0.1, clearcoat: 0.5, clearcoatRoughness: 0.2, opacity: 0.42 };
++  }
++  if (assetId === "archive-ballctrl" || assetId === "archive-ballfire") {
++    return { shading: "standard", roughness: 0.32, metalness: 0.1 };
++  }
+   if (assetId === "archive-impreza") {
+     if (/CHASIS\.JPG/i.test(materialName)) return { shading: "physical", roughness: 0.28, metalness: 0.12, clearcoat: 0.85, clearcoatRoughness: 0.18 };
+     if (/VENTANAS/i.test(materialName)) return { shading: "physical", roughness: 0.12, metalness: 0.04, clearcoat: 0.72, clearcoatRoughness: 0.1, opacity: 0.42 };
+diff --git a/src/agent-world-runtime.ts b/src/agent-world-runtime.ts
+index e7cd8c0..7d7ca38 100644
+--- a/src/agent-world-runtime.ts
++++ b/src/agent-world-runtime.ts
+@@ -467,8 +467,16 @@ export type AgentWorldSteering = {
+   turnRateDegrees?: number;
+   /** Impulse magnitude at kick = 1 (see AgentWorldSteerInput.kick). Default 6. */
+   kickImpulse?: number;
++  /** Vertical impulse magnitude at jump = 1 (see AgentWorldSteerInput.jump). Default 8. */
++  jumpImpulse?: number;
+   /** Optional entity the runtime anchors to the subject and yaws to the heading. */
+   arrowId?: string;
++  /**
++   * Vertical offset of the anchored arrow above the subject's centre. The original BallZ
++   * aim indicator is the FireArrow-textured controller ball INSIDE the shell — lift 0, the
++   * default — while a ground-decal style arrow would ride at a negative lift.
++   */
++  arrowLift?: number;
+ };
+ 
+ /** One `api.steer` call: absolute aim, live inputs, and/or a one-shot kick. */
+@@ -481,9 +489,15 @@ export type AgentWorldSteerInput = {
+   turn?: number;
+   /**
+    * Fire a one-shot impulse of `kick * kickImpulse` along the heading — the golf-style
+-   * launch (mouse click / drag-for-power / Space). 0..1, consumed immediately.
++   * launch. 0..1, consumed immediately.
+    */
+   kick?: number;
++  /**
++   * Fire a one-shot VERTICAL impulse of `jump * jumpImpulse` — the original BallZ hop
++   * (Space). 0..1, consumed immediately. Straight up, never along the heading: jumping is
++   * how you clear a hazard while still aiming at the ring behind it.
++   */
++  jump?: number;
+ };
+ 
+ export type AgentWorldSteerReceipt = {
+@@ -493,6 +507,8 @@ export type AgentWorldSteerReceipt = {
+   turn: number;
+   /** The kick magnitude actually applied this call, 0 when none was requested. */
+   kicked: number;
++  /** The jump magnitude actually applied this call, 0 when none was requested. */
++  jumped: number;
+   linearVelocity: AgentWorldVector3;
+ };
+ 
+@@ -523,7 +539,9 @@ type ResolvedAgentWorldSteering = {
+   speedCap: number;
+   turnRateDegrees: number;
+   kickImpulse: number;
++  jumpImpulse: number;
+   arrowId: string | null;
++  arrowLift: number;
+ };
+ 
+ export type AgentWorldEntityDefinition = {
+@@ -812,7 +830,9 @@ export type AgentWorldEntityState = {
+     speedCap: number;
+     turnRateDegrees: number;
+     kickImpulse: number;
++    jumpImpulse: number;
+     arrowId: string | null;
++    arrowLift: number;
+   };
+   physics: {
+     mode: AgentWorldPhysicsMode;
+@@ -2195,6 +2215,15 @@ export class AgentWorldRuntime {
+         this.physicsWorld.wakeBody(runtime.body);
+       }
+     }
++    let jumped = 0;
++    if (input.jump !== undefined && runtime.body && runtime.definition.physics?.mode === "dynamic") {
++      jumped = clamp(input.jump, 0, 1);
++      if (jumped > 0) {
++        this.steeringScratch.set(0, jumped * steering.jumpImpulse, 0);
++        this.physicsWorld.applyImpulse(runtime.body, this.steeringScratch);
++        this.physicsWorld.wakeBody(runtime.body);
++      }
++    }
+     if (runtime.body) this.physicsWorld.readLinearVelocity(runtime.body, this.physicsScratch.linearVelocity);
+     else this.physicsScratch.linearVelocity.set(0, 0, 0);
+     return {
+@@ -2203,6 +2232,7 @@ export class AgentWorldRuntime {
+       thrust: steering.thrust,
+       turn: steering.turn,
+       kicked,
++      jumped,
+       linearVelocity: roundPhysicsVector(this.physicsScratch.linearVelocity),
+     };
+   }
+@@ -2639,11 +2669,14 @@ export class AgentWorldRuntime {
+       if (!arrow || arrow.definition.physics) continue;
+       const position = arrow.definition.transform.position;
+       position[0] = runtime.object.position.x;
++      // Full-position anchoring: the original aim indicator is the FireArrow controller
++      // ball INSIDE the shell, so it rides the subject's centre (plus `arrowLift`) — it
++      // follows a jump rather than staying on the floor.
++      position[1] = runtime.object.position.y + steering.arrowLift;
+       position[2] = runtime.object.position.z;
+       // Heading 0 must point the arrow's authored -Z toward world -Z: object yaw = -heading.
+       arrow.definition.transform.rotationDegrees[1] = -steering.headingDegrees;
+-      arrow.object.position.x = position[0];
+-      arrow.object.position.z = position[2];
++      arrow.object.position.set(position[0], position[1], position[2]);
+       arrow.object.rotation.y = -steering.headingDegrees * (Math.PI / 180);
+     }
+   }
+@@ -3390,7 +3423,9 @@ export class AgentWorldRuntime {
+           speedCap: runtime.definition.steering.speedCap,
+           turnRateDegrees: runtime.definition.steering.turnRateDegrees,
+           kickImpulse: runtime.definition.steering.kickImpulse,
++          jumpImpulse: runtime.definition.steering.jumpImpulse,
+           arrowId: runtime.definition.steering.arrowId,
++          arrowLift: runtime.definition.steering.arrowLift,
+         }
+       } : {}),
+       // Terrain's collider is implied rather than requested, so report it here anyway —
+@@ -4349,7 +4384,9 @@ function resolveAgentWorldSteering(source: AgentWorldSteering, current?: Resolve
+     speedCap: clamp(source.speedCap ?? current?.speedCap ?? 7, 0.1, 10000),
+     turnRateDegrees: clamp(source.turnRateDegrees ?? current?.turnRateDegrees ?? 220, 1, 3600),
+     kickImpulse: clamp(source.kickImpulse ?? current?.kickImpulse ?? 6, 0, 100000),
++    jumpImpulse: clamp(source.jumpImpulse ?? current?.jumpImpulse ?? 8, 0, 100000),
+     arrowId,
++    arrowLift: clamp(source.arrowLift ?? current?.arrowLift ?? 0, -1000, 1000),
+   };
+ }
+ 
+@@ -4365,7 +4402,9 @@ function serializeSteering(steering: ResolvedAgentWorldSteering): AgentWorldStee
+     speedCap: steering.speedCap,
+     turnRateDegrees: steering.turnRateDegrees,
+     kickImpulse: steering.kickImpulse,
++    jumpImpulse: steering.jumpImpulse,
+     ...(steering.arrowId ? { arrowId: steering.arrowId } : {}),
++    ...(steering.arrowLift !== 0 ? { arrowLift: steering.arrowLift } : {}),
+   };
+ }
+ 
+diff --git a/src/ballz-level-scene.ts b/src/ballz-level-scene.ts
+index 5a5cf70..a53fc65 100644
+--- a/src/ballz-level-scene.ts
++++ b/src/ballz-level-scene.ts
+@@ -138,15 +138,14 @@ const EMITTER_BUDGET = 8;
+ const FLOOR_THICKNESS_RATIO = 0.6;
+ 
+ /**
+- * The caged ball's radius as a fraction of a cell — the cage IS the physics sphere, so the
+- * struts the player sees are exactly the surface that touches the world. Sized so it clears
+- * a one-cell gap comfortably but cannot squeeze between two diagonal walls, which is what
+- * makes a grid level readable.
++ * The ball's radius as a fraction of a cell — the recovered BallShell mesh is fitted to
++ * exactly this collider radius, so the cage the player sees is the surface that touches the
++ * world. Sized so it clears a one-cell gap comfortably but cannot squeeze between two
++ * diagonal walls, which is what makes a grid level readable.
+  */
+ const BALL_RADIUS_RATIO = 0.22;
+ 
+-/** The solid core inside the cage. Carries the checker that makes rolling readable. */
+-const CORE_RADIUS_RATIO = 0.135;
++
+ 
+ /**
+  * The ball's steering set. Exported so the input binding maps a key to an interaction id
+@@ -450,41 +449,45 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+     // Say so rather than inventing a spawn in a corner that may be inside a wall.
+     deviations.push("Level has no start tile, so no ball was spawned.");
+   } else {
+-    // --- The two-body player (the original BallZ control model) --------------------------
+-    // A CAGED BALL that is the physics subject, and a FIRE-ARROW that is the aim. The cage
+-    // is the collider the player sees: `ballz-ball` renders as an open wireframe sphere at
+-    // exactly its physics radius, with a solid checkered core parented inside. Both roll as
+-    // one body — a child of a dynamic entity inherits its quaternion — so the checker still
+-    // tells rolling from sliding, now through the struts of the cage.
+-    //
+-    // Provenance: the layouts around this ball are `faithful` recoveries; this control and
+-    // camera model is the author's original design intent rebuilt on v2 vocabulary, recorded
+-    // as `adapted` (see BALLZ_GAME_DESIGN) — the recovered archive holds the levels, not the
+-    // original control code.
++    // --- The two-body player: the RECOVERED 2011 ball ------------------------------------
++    // Not an invented look: the outer cage is the decoded `BallShell.tvm` and the aim
++    // indicator is the decoded `BallFire.tvm` wearing the archived `FireArrow800.JPG` — the
++    // arrow TEXTURE on the inner controller ball is how the original told you where you
++    // would go. `ballz-ball` itself is the invisible physics sphere (the collider matches
++    // the shell's radius); the shell mesh is parented to it and rolls with it, while the
++    // FireArrow ball is a separate entity the runtime's steering pass anchors at the
++    // subject's centre and yaws to the heading — pointing, never rolling, exactly like the
++    // recovered game. Provenance: meshes and texture `faithful` (vendor-ball-meshes.mjs);
++    // the steering/camera code around them remains `adapted` from the author's design.
+     const cellScale = cellSize / 2.6;
++    const ballRadius = cellSize * BALL_RADIUS_RATIO;
+     entities.push({
+       id: "ballz-ball",
+       type: "sphere",
+-      label: "Caged Ball",
++      label: "Player Ball",
+       transform: { position: spawnPosition },
+-      // 12 segments, so the wireframe reads as struts rather than a fine net.
+-      geometry: { radius: cellSize * BALL_RADIUS_RATIO, radialSegments: 12 },
+-      material: { color: "#dff4ff", emissive: "#2ea8c8", emissiveIntensity: 0.55, roughness: 0.35, metalness: 0.5, wireframe: true },
++      geometry: { radius: ballRadius, radialSegments: 12 },
++      // The collider proxy: all but invisible, so the recovered shell IS the ball you see.
++      // Not `visible: false` — visibility inherits, and the shell is parented inside.
++      material: { color: "#dff4ff", opacity: 0.03, roughness: 0.4, metalness: 0 },
++      castShadow: false,
+       // Heavier than a marble so it has authority (design ratio 1.5–2.0). Friction raised
+       // above the `ball` preset so the sphere genuinely rolls on the wood rather than
+       // gliding; restitution ~0.5 is lively-but-settles, and the multiply-combine against
+       // the walls' 0.08 keeps arena hits absorbed rather than launching.
+       physics: { mode: "dynamic", material: "ball", mass: 1.7, friction: 0.55, restitution: 0.5 },
+       // The fire-arrow/heading model, as scene data: `api.steer` aims and thrusts, the
+-      // runtime integrates it in the simulation step, and the arrow entity below is anchored
+-      // to this ball every frame. Force reaches the speed cap in ~0.4 s; the cap is enforced
+-      // per-direction so brake and turn keep authority at top speed.
++      // runtime integrates it in the simulation step, and the FireArrow ball below is
++      // anchored to this body every frame. Force reaches the speed cap in ~0.4 s; the cap
++      // is per-direction so brake and turn keep authority at top speed; Space is a straight
++      // vertical hop (`jump`), sized to clear a wall with a little to spare.
+       steering: {
+         headingDegrees: 0,
+         force: 30 * cellScale,
+         speedCap: cellSize * 2.7,
+         turnRateDegrees: 240,
+         kickImpulse: cellSize * 3.6,
++        jumpImpulse: cellSize * 5,
+         arrowId: "ballz-aim-arrow",
+       },
+       // The four grid pushes REMAIN, deliberately: they are serialised control vocabulary an
+@@ -500,53 +503,27 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+       tags: ["ballz", "ball", "player"],
+     });
+     entities.push({
+-      id: "ballz-ball-core",
+-      type: "sphere",
+-      label: "Ball Core",
++      id: "ballz-ball-shell",
++      type: "model",
++      label: "Ball Shell",
+       parentId: "ballz-ball",
+       transform: { position: [0, 0, 0] },
+-      geometry: { radius: cellSize * CORE_RADIUS_RATIO },
+-      // The same archive checker as ever, tuned to put roughly four squares around the
+-      // sphere (0.2 of a 20x20 board). A plain sphere rolling and a plain sphere sliding are
+-      // the same picture; a checkered one tells you which, and that distinction is the entire
+-      // feel of this genre. The core casts the contact shadow; the cage would cast noise.
+-      material: { ...PALETTE.ball, texture: { id: "checker" as const, repeat: [0.2, 0.2] as [number, number] } },
++      // The decoded 2011 cage, fitted to the collider's diameter. Its revival translucency
++      // is the asset's recovered-PBR profile, so every scene that spawns it agrees.
++      asset: { id: "archive-ballshell", fitSize: ballRadius * 2 },
+       tags: ["ballz", "ball"],
+     });
+ 
+-    // The FIRE-ARROW: a bright shaft-and-head marker on the ground plane, anchored at the
+-    // ball by the runtime's steering pass and yawed to the current heading. It is cosmetic/
+-    // logical, never a physics body — the "where will I go" pointer both control schemes and
+-    // any agent share. Emissive above the bloom threshold, so it reads from any angle.
+-    const arrowY = cellSize * 0.035;
++    // The aim: the recovered FireArrow controller ball, INSIDE the shell. Anchored (never
++    // parented — parenting would make it roll with the physics body) at the subject centre
++    // by the steering pass, yawed to the heading. The legacy selector sized the inner ball
++    // at 6.601/8.5 of the shell radius; kept exactly.
+     entities.push({
+       id: "ballz-aim-arrow",
+-      type: "group",
+-      label: "Fire Arrow",
+-      transform: { position: [spawnPosition[0], 0, spawnPosition[2]] },
+-      castShadow: false,
+-      tags: ["ballz", "aim"],
+-    });
+-    entities.push({
+-      id: "ballz-aim-arrow-shaft",
+-      type: "box",
+-      label: "Fire Arrow Shaft",
+-      parentId: "ballz-aim-arrow",
+-      transform: { position: [0, arrowY, -cellSize * 0.52] },
+-      geometry: { width: cellSize * 0.09, height: cellSize * 0.025, depth: cellSize * 0.5 },
+-      material: { color: "#ffb054", emissive: "#ff6a1a", emissiveIntensity: 2.1, roughness: 0.3, metalness: 0.1 },
+-      castShadow: false,
+-      tags: ["ballz", "aim"],
+-    });
+-    entities.push({
+-      id: "ballz-aim-arrow-head",
+-      type: "cone",
+-      label: "Fire Arrow Head",
+-      parentId: "ballz-aim-arrow",
+-      // A cone points +Y; laid flat with -90° about X it points -Z, the heading-0 direction.
+-      transform: { position: [0, arrowY, -cellSize * 0.9], rotationDegrees: [-90, 0, 0] },
+-      geometry: { radius: cellSize * 0.13, height: cellSize * 0.28 },
+-      material: { color: "#ffd27a", emissive: "#ff7a1a", emissiveIntensity: 2.4, roughness: 0.25, metalness: 0.1 },
++      type: "model",
++      label: "Fire Arrow Ball",
++      transform: { position: [spawnPosition[0], spawnPosition[1], spawnPosition[2]] },
++      asset: { id: "archive-ballfire", fitSize: ballRadius * 2 * (6.601 / 8.5) },
+       castShadow: false,
+       tags: ["ballz", "aim"],
+     });
+diff --git a/src/ballz-menu.ts b/src/ballz-menu.ts
+new file mode 100644
+index 0000000..2a4748f
+--- /dev/null
++++ b/src/ballz-menu.ts
+@@ -0,0 +1,155 @@
++import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
++import { createLevelThumbnail, SHELF_THUMBNAIL_CSS } from "./shelf-thumbnails";
++
++/**
++ * The BallZ title screen — the game's own front door, one level up from a bare list of
++ * levels. The Games shelf shows ONE branded BallZ card; clicking it opens this menu:
++ * the title, the pitch, Start Game (the first course), and the course roster. Picking a
++ * course drops into play mode, where the play layer runs the 3 · 2 · 1 · GO start.
++ *
++ * A menu and not a scene, deliberately: the archive's BallZ launched through GDI dialogs
++ * around the TV3D window, so a DOM overlay IS the faithful shape of "the game's menu" —
++ * and it costs nothing per frame once dismissed.
++ */
++
++/** The courses that make up the game, in play order. Ids resolve against the level library. */
++const BALLZ_COURSES = [
++  { id: "first-course", title: "First Course", tagline: "learn the arrow — rings, ice, a hazard" },
++  { id: "archive-ballz-level1", title: "Level 1 — T Course", tagline: "the 2011 archive course · 20 rings · 3 tours" },
++  { id: "archive-ballz-level2", title: "Level 2 — Z Maze", tagline: "the 2011 archive course · 3 tours" },
++] as const;
++
++/** The level ids the shelf should NOT list generically — they live inside the game's menu. */
++export const BALLZ_MENU_LEVEL_IDS: readonly string[] = BALLZ_COURSES.map((course) => course.id);
++
++export type BallzMenuOptions = {
++  api: GraphysXAgentWorldApi;
++  /** Called after a course is materialised; the caller tears the front door down. */
++  onPlay?: (levelId: string) => void;
++  /** Called when the menu closes without playing. */
++  onClose?: () => void;
++};
++
++export function mountBallzMenu(container: HTMLElement, options: BallzMenuOptions): () => void {
++  const { api, onPlay, onClose } = options;
++  injectStyleOnce();
++
++  const overlay = document.createElement("div");
++  overlay.className = "gx-bzmenu";
++
++  const card = document.createElement("div");
++  card.className = "gx-bzmenu-card";
++
++  const mark = document.createElement("div");
++  mark.className = "gx-bzmenu-mark";
++  mark.textContent = "BallZ";
++  const sub = document.createElement("div");
++  sub.className = "gx-bzmenu-sub";
++  sub.textContent = "the revival · point the fire arrow, roll the caged ball, take every ring, three tours to the finish";
++
++  const start = document.createElement("button");
++  start.type = "button";
++  start.className = "gx-bzmenu-start";
++  start.textContent = "▶ Start Game";
++
++  const roster = document.createElement("div");
++  roster.className = "gx-bzmenu-roster";
++
++  const play = (levelId: string, feedback: HTMLElement): void => {
++    const result = api.levels.play(levelId);
++    if (!result.ok) {
++      feedback.textContent = result.error ?? "Could not start the course";
++      return;
++    }
++    dispose();
++    onPlay?.(levelId);
++  };
++  start.addEventListener("click", () => play(BALLZ_COURSES[0].id, sub));
++
++  for (const course of BALLZ_COURSES) {
++    const level = api.levels.get(course.id);
++    if (!level) continue; // an unseeded archive course is absent, not broken
++    const row = document.createElement("button");
++    row.type = "button";
++    row.className = "gx-bzmenu-course";
++    row.dataset.levelId = course.id;
++    const visual = document.createElement("span");
++    visual.className = "gx-bzmenu-visual";
++    visual.append(createLevelThumbnail(level));
++    const copy = document.createElement("span");
++    copy.className = "gx-bzmenu-copy";
++    const name = document.createElement("span");
++    name.className = "gx-bzmenu-name";
++    name.textContent = course.title;
++    const meta = document.createElement("span");
++    meta.className = "gx-bzmenu-meta";
++    meta.textContent = course.tagline;
++    copy.append(name, meta);
++    row.append(visual, copy);
++    row.addEventListener("click", () => play(course.id, meta));
++    roster.append(row);
++  }
++
++  const back = document.createElement("button");
++  back.type = "button";
++  back.className = "gx-bzmenu-back";
++  back.textContent = "← Back";
++  back.addEventListener("click", () => {
++    dispose();
++    onClose?.();
++  });
++
++  card.append(mark, sub, start, roster, back);
++  overlay.append(card);
++  container.append(overlay);
++
++  const dispose = (): void => {
++    overlay.remove();
++  };
++  return dispose;
++}
++
++const STYLE_ID = "gx-ballz-menu-css";
++
++function injectStyleOnce(): void {
++  if (document.getElementById(STYLE_ID)) return;
++  const style = document.createElement("style");
++  style.id = STYLE_ID;
++  style.textContent = MENU_CSS;
++  document.head.append(style);
++}
++
++const MENU_CSS = `
++${SHELF_THUMBNAIL_CSS}
++.gx-bzmenu{position:fixed;inset:0;z-index:41;display:flex;align-items:center;justify-content:center;
++  background:var(--gx-scrim);font-family:var(--gx-font);padding:24px}
++.gx-bzmenu-card{width:min(560px,100%);max-height:88vh;overflow-y:auto;display:flex;flex-direction:column;
++  align-items:center;gap:14px;padding:34px 30px 24px;border-radius:18px;text-align:center;
++  background:
++    radial-gradient(120% 90% at 50% 0%,rgba(255,122,26,.16),rgba(9,22,31,0) 55%),
++    rgba(9,22,31,.97);
++  border:1px solid rgba(255,138,54,.4);box-shadow:0 22px 70px rgba(0,0,0,.55)}
++/* The fire-gradient wordmark: yellow into arrow-red, the FireArrow texture as typography. */
++.gx-bzmenu-mark{font:900 64px/1 var(--gx-font);letter-spacing:.04em;
++  background:linear-gradient(180deg,#ffe14d 0%,#ff9a2a 55%,#ff2e17 100%);
++  -webkit-background-clip:text;background-clip:text;color:transparent;
++  filter:drop-shadow(0 4px 22px rgba(255,110,26,.45))}
++.gx-bzmenu-sub{color:var(--gx-ink-faint);font-size:12.5px;letter-spacing:.05em;line-height:1.55;max-width:420px}
++.gx-bzmenu-start{cursor:pointer;margin-top:2px;border-radius:12px;padding:13px 34px;
++  font:800 17px var(--gx-font);letter-spacing:.06em;color:#1b0d02;
++  background:linear-gradient(180deg,#ffd24d,#ff8a2a);border:1px solid #ffb054;
++  box-shadow:0 6px 26px rgba(255,138,42,.35)}
++.gx-bzmenu-start:hover{filter:brightness(1.08)}
++.gx-bzmenu-roster{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:6px}
++.gx-bzmenu-course{display:flex;align-items:center;gap:12px;text-align:left;cursor:pointer;
++  background:rgba(16,34,46,.85);border:1px solid rgba(79,208,230,.22);border-radius:10px;padding:8px 12px 8px 8px}
++.gx-bzmenu-course:hover{border-color:var(--gx-accent);background:rgba(22,46,60,.92)}
++.gx-bzmenu-visual{flex:0 0 84px;height:56px;border-radius:6px;overflow:hidden;display:flex}
++.gx-bzmenu-visual canvas{width:100%;height:100%;object-fit:cover}
++.gx-bzmenu-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
++.gx-bzmenu-name{color:var(--gx-ink);font-size:13.5px;font-weight:700;letter-spacing:.03em}
++.gx-bzmenu-meta{color:var(--gx-ink-faint);font-size:11px;letter-spacing:.04em}
++.gx-bzmenu-back{margin-top:4px;background:transparent;border:1px solid rgba(120,240,208,.3);border-radius:8px;
++  color:var(--gx-ink-soft);cursor:pointer;font:12px/1 var(--gx-font);padding:8px 16px}
++.gx-bzmenu-back:hover{border-color:var(--gx-accent);color:var(--gx-ink)}
++`;
+diff --git a/src/ballz-play.ts b/src/ballz-play.ts
+index 5b01c25..5da2c4c 100644
+--- a/src/ballz-play.ts
++++ b/src/ballz-play.ts
+@@ -124,10 +124,23 @@ export function mountBallzPlay(
+   // remove, so WASD would fight it the moment someone plays a level with the editor open.
+   const steerable = !!api.query({ ids: [ballId] })[0]?.steering;
+   if (steerable) {
+-    hint.textContent = "← → aim · ↑ roll · ↓ brake · space kick · point & click to launch";
++    hint.textContent = "← → aim · ↑ roll · ↓ brake · space jump · hold the mouse to roll toward it";
++  }
++  // The race-start countdown: 3 · 2 · 1 · GO, controls locked until GO, and the run clock
++  // re-armed AT go so the time on the board measures driving, not staring at the overlay.
++  // A programmatic driver must never be held hostage by presentation, so the countdown
++  // cancels itself the moment anything touches the world through the API (a revision bump —
++  // a smoke's teleport, an agent's steer) or pauses it (a deterministic harness's first
++  // move). A human just watching changes neither, and gets the full ceremony.
++  let raceStarted = !steerable;
++  let teardownCountdown: (() => void) | null = null;
++  if (steerable) {
++    teardownCountdown = mountCountdown(api, container, () => {
++      raceStarted = true;
++    });
+   }
+   const teardownControls = steerable
+-    ? mountSteerControls(api, ballId, container, () => won, options)
++    ? mountSteerControls(api, ballId, container, () => won || (!raceStarted && !(api.state()?.paused ?? false)), options)
+     : mountLegacyPushControls(api, ballId, () => won);
+ 
+   // Poll the *run*, not the stream. 200 ms is a HUD refresh rate, and the run it reads is
+@@ -160,12 +173,82 @@ export function mountBallzPlay(
+ 
+   return () => {
+     window.clearInterval(poll);
++    teardownCountdown?.();
+     teardownControls();
+     hud.remove();
+     container.querySelector(".gx-bz-win")?.remove();
+   };
+ }
+ 
++/**
++ * The 3 · 2 · 1 · GO race start. Purely presentational plus one honest rules effect: at GO
++ * the run is re-armed (`rules.reset`) so the clock starts when control does. Cancellation
++ * is the load-bearing design: ANY api activity during the countdown — a revision bump from
++ * a teleporting smoke, an agent pausing the world to step it — dismisses the overlay
++ * immediately, unlocks control, and skips the reset, so every programmatic consumer keeps
++ * exactly the behaviour it had before countdowns existed.
++ */
++function mountCountdown(api: GraphysXAgentWorldApi, container: HTMLElement, onGo: () => void): () => void {
++  const overlay = document.createElement("div");
++  overlay.className = "gx-bz-count";
++  const digit = document.createElement("div");
++  digit.className = "gx-bz-count-digit";
++  overlay.append(digit);
++  container.append(overlay);
++
++  // The revision baseline is taken at the FIRST tick, not at mount: this layer mounts inside
++  // the `world.loaded` dispatch, which runs *before* `create()` bumps the world revision, so
++  // a mount-time baseline made the loading transaction itself look like agent activity and
++  // the countdown self-cancelled on the next tick (box-load dependent, maddeningly flaky).
++  // By 800 ms the load's own bump has landed; anything that moves the revision after that
++  // really is a programmatic driver.
++  let baselineRevision: number | null = null;
++  const steps = ["3", "2", "1", "GO!"];
++  let index = 0;
++  let timer = 0;
++  const finish = (viaGo: boolean): void => {
++    window.clearInterval(timer);
++    if (viaGo) {
++      // The clock starts when the player does. The subject is still on its spawn (controls
++      // were locked), so the reset's respawn is a no-op in space and a fresh start in time.
++      api.rules.reset();
++      digit.textContent = "GO!";
++      overlay.classList.add("gx-bz-count-go");
++      window.setTimeout(() => overlay.remove(), 650);
++    } else {
++      overlay.remove();
++    }
++    onGo();
++  };
++  const show = (): void => {
++    digit.textContent = steps[index];
++    digit.classList.remove("gx-bz-count-pop");
++    // Restart the pop animation from frame zero for each digit.
++    void digit.offsetWidth;
++    digit.classList.add("gx-bz-count-pop");
++  };
++  show();
++  timer = window.setInterval(() => {
++    const state = api.state();
++    if (state?.paused || (baselineRevision !== null && (state?.revision ?? 0) !== baselineRevision)) {
++      finish(false);
++      return;
++    }
++    baselineRevision = state?.revision ?? 0;
++    index += 1;
++    if (index >= steps.length - 1) {
++      finish(true);
++      return;
++    }
++    show();
++  }, 800);
++
++  return () => {
++    window.clearInterval(timer);
++    overlay.remove();
++  };
++}
++
+ /** Never steal a keystroke from a field — the level workbench is full of them. */
+ function isFormField(target: EventTarget | null): boolean {
+   return target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
+@@ -173,8 +256,9 @@ function isFormField(target: EventTarget | null): boolean {
+ 
+ /**
+  * The two-body control scheme (the original BallZ model): ←/→ rotate the fire-arrow, ↑/↓
+- * thrust and brake along its heading, Space is the strong kick; the mouse aims the arrow at
+- * the ground point under the cursor and a click (or a drag, for power) launches toward it.
++ * thrust and brake along its heading, Space is the vertical hop; the mouse aims the arrow
++ * at the ground point under the cursor and HOLDING the button rolls toward it — the pointer
++ * is the wheel, the held button is the accelerator.
+  *
+  * Everything here is an `api.steer` call, and the calls happen on input EDGES — a keydown,
+  * a keyup, a throttled pointer move — never per frame. The continuous work (turn → heading,
+@@ -202,8 +286,9 @@ function mountSteerControls(
+     if (isFormField(event.target)) return;
+     if (event.key === " " || event.code === "Space") {
+       event.preventDefault();
+-      // Once per press: OS auto-repeat must not machine-gun the launch impulse.
+-      if (!event.repeat && !isWon()) api.steer(ballId, { kick: 1 });
++      // Once per press: OS auto-repeat must not machine-gun the hop. Straight UP — the
++      // original BallZ jump — never along the heading; aiming is the arrow's job.
++      if (!event.repeat && !isWon()) api.steer(ballId, { jump: 1 });
+       return;
+     }
+     if (!/^Arrow(Up|Down|Left|Right)$/.test(event.key)) return;
+@@ -216,9 +301,11 @@ function mountSteerControls(
+     if (!held.delete(event.key)) return;
+     sendAxes();
+   };
++  let mouseDriving = false;
+   // A defocused tab must not leave a key held: zero every input on blur.
+   const onBlur = (): void => {
+     held.clear();
++    mouseDriving = false;
+     api.steer(ballId, { thrust: 0, turn: 0 });
+   };
+ 
+@@ -249,28 +336,24 @@ function mountSteerControls(
+     if (heading === null) return;
+     lastAimAt = now;
+     aimedHeading = heading;
+-    api.steer(ballId, { headingDegrees: heading });
++    api.steer(ballId, { headingDegrees: heading, ...(mouseDriving ? { thrust: 1 } : {}) });
+   };
+ 
+-  // Click / drag-for-power launch. Press-to-release distance in CSS pixels maps to kick
+-  // power: a plain click is a modest chip, a full pull is the cap. Direction is wherever
+-  // the arrow points at release — the pointer has been aiming it all along.
+-  let pressedAt: { x: number; y: number } | null = null;
++  // HOLD to roll: while the button is down the ball thrusts toward the pointer — the
++  // pointer aims (above) and the held button is the accelerator, exactly like holding ↑
++  // with the arrow pinned on the cursor. Release coasts; keyboard thrust state is restored
++  // so a player mixing both inputs never has the ball die under a still-held ArrowUp.
+   const onPointerDown = (event: PointerEvent): void => {
+-    if (event.button !== 0 || !onSceneCanvas(event)) return;
+-    pressedAt = { x: event.clientX, y: event.clientY };
+-  };
+-  const onPointerUp = (event: PointerEvent): void => {
+-    const pressed = pressedAt;
+-    pressedAt = null;
+-    if (!pressed || isWon() || !onSceneCanvas(event)) return;
+-    const dragPx = Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y);
+-    const kick = dragPx < 8 ? 0.55 : Math.min(1, 0.35 + dragPx / 240);
+-    // Final aim at the release point, when the plane raycast has one; the throttle above
+-    // may have skipped the last few pixels of the gesture.
++    if (event.button !== 0 || isWon() || !onSceneCanvas(event)) return;
++    mouseDriving = true;
+     const point = options.screenToGround?.(event.clientX, event.clientY) ?? null;
+     const heading = point ? headingToward(point) : aimedHeading;
+-    api.steer(ballId, { ...(heading !== null && heading !== undefined ? { headingDegrees: heading } : {}), kick });
++    api.steer(ballId, { ...(heading !== null && heading !== undefined ? { headingDegrees: heading } : {}), thrust: 1 });
++  };
++  const onPointerUp = (): void => {
++    if (!mouseDriving) return;
++    mouseDriving = false;
++    api.steer(ballId, axisInputs());
+   };
+ 
+   window.addEventListener("keydown", onKeyDown);
+@@ -287,7 +370,7 @@ function mountSteerControls(
+     container.removeEventListener("pointerdown", onPointerDown);
+     container.removeEventListener("pointerup", onPointerUp);
+     // Leave nothing thrusting after the layer is gone — the entity outlives the HUD.
+-    if (held.size > 0) api.steer(ballId, { thrust: 0, turn: 0 });
++    if (held.size > 0 || mouseDriving) api.steer(ballId, { thrust: 0, turn: 0 });
+   };
+ }
+ 
+@@ -564,4 +647,15 @@ const BALLZ_PLAY_CSS = `
+ .gx-bz-win-again{background:linear-gradient(180deg,#2f9e7f,var(--gx-accent-fill));border-color:var(--gx-life);color:var(--gx-ink)}
+ .gx-bz-win-again:hover{filter:brightness(1.08)}
+ @media (max-width:640px){.gx-bz-hud{top:10px;min-width:230px;padding:8px 12px}.gx-bz-status{font-size:11px}}
++/* The race-start countdown. Centre of the arena view, never blocking a click (the scene is
++   locked anyway), digits popping like a starting light. GO flashes green and fades. */
++.gx-bz-count{position:absolute;inset:0;z-index:7;display:flex;align-items:center;justify-content:center;
++  pointer-events:none}
++.gx-bz-count-digit{font:800 120px/1 var(--gx-font);color:#ffcf6a;letter-spacing:.06em;
++  text-shadow:0 6px 40px rgba(255,122,26,.65),0 2px 6px rgba(0,0,0,.8)}
++.gx-bz-count-pop{animation:gx-bz-pop .78s ease-out}
++.gx-bz-count-go .gx-bz-count-digit{color:#7df0c8;text-shadow:0 6px 46px rgba(95,224,180,.7),0 2px 6px rgba(0,0,0,.8);
++  animation:gx-bz-go .6s ease-out forwards}
++@keyframes gx-bz-pop{0%{transform:scale(1.7);opacity:0}25%{transform:scale(1);opacity:1}100%{transform:scale(.94);opacity:.9}}
++@keyframes gx-bz-go{0%{transform:scale(.8);opacity:1}100%{transform:scale(1.5);opacity:0}}
+ `;
+diff --git a/src/games-shelf.ts b/src/games-shelf.ts
+index 3ab57dc..6cd47e5 100644
+--- a/src/games-shelf.ts
++++ b/src/games-shelf.ts
+@@ -1,5 +1,6 @@
+ import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+ import { createLevelThumbnail, createSceneThumbnail, SHELF_THUMBNAIL_CSS } from "./shelf-thumbnails";
++import { BALLZ_MENU_LEVEL_IDS, mountBallzMenu } from "./ballz-menu";
+ 
+ /**
+  * The "Games & Playgrounds" front-door shelf.
+@@ -98,6 +99,36 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
+   const list = document.createElement("div");
+   list.className = "gx-shelf-list";
+ 
++  // THE GAME gets a hero card, not a bare level row. "First Course" as a top-level button
++  // read as a test fixture; BallZ is a title, and clicking it opens the game's own menu
++  // (title screen, Start Game, the course roster). The shelf's generic level list below
++  // excludes the game's courses so they are not listed twice.
++  const hero = document.createElement("button");
++  hero.type = "button";
++  hero.className = "gx-shelf-hero";
++  hero.dataset.gameId = "ballz";
++  const heroMark = document.createElement("span");
++  heroMark.className = "gx-shelf-hero-mark";
++  heroMark.textContent = "BallZ";
++  const heroCopy = document.createElement("span");
++  heroCopy.className = "gx-shelf-hero-copy";
++  heroCopy.textContent = "the revival — fire arrow, caged ball, every ring, three tours";
++  const heroCta = document.createElement("span");
++  heroCta.className = "gx-shelf-hero-cta";
++  heroCta.textContent = "▶ Play";
++  hero.append(heroMark, heroCopy, heroCta);
++  hero.addEventListener("click", () => {
++    mountBallzMenu(container, {
++      api,
++      onPlay: (levelId) => {
++        dispose();
++        onPlay?.(levelId);
++      },
++      // Back from the title screen lands on the shelf, which never went away.
++    });
++  });
++  list.append(hero);
++
+   for (const course of composed ?? []) {
+     const row = document.createElement("button");
+     row.type = "button";
+@@ -144,6 +175,7 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
+   // Read the library rather than a curated manifest: anything a person or an agent authors
+   // shows up here without a second registration step.
+   for (const summary of api.levels.list()) {
++    if (BALLZ_MENU_LEVEL_IDS.includes(summary.id)) continue; // listed inside the BallZ menu
+     const row = document.createElement("button");
+     row.type = "button";
+     row.className = "gx-shelf-row";
+@@ -227,6 +259,20 @@ ${SHELF_THUMBNAIL_CSS}
+ .gx-shelf-blurb{margin:0;color:var(--gx-ink-faint);font-size:12.5px;line-height:1.5}
+ .gx-shelf-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;overflow-y:auto;
+   padding:1px 5px 1px 1px}
++.gx-shelf-hero{grid-column:1 / -1;display:flex;align-items:center;gap:16px;cursor:pointer;text-align:left;
++  padding:16px 20px;border-radius:12px;border:1px solid rgba(255,138,54,.45);
++  background:
++    radial-gradient(130% 160% at 8% 20%,rgba(255,122,26,.28),rgba(9,22,31,0) 52%),
++    linear-gradient(100deg,rgba(38,20,8,.92),rgba(16,32,44,.92));
++  box-shadow:0 8px 30px rgba(255,110,26,.14)}
++.gx-shelf-hero:hover{border-color:#ffb054;box-shadow:0 10px 36px rgba(255,110,26,.28)}
++.gx-shelf-hero-mark{font:900 30px/1 var(--gx-font);letter-spacing:.04em;
++  background:linear-gradient(180deg,#ffe14d,#ff9a2a 55%,#ff2e17);
++  -webkit-background-clip:text;background-clip:text;color:transparent;
++  filter:drop-shadow(0 2px 12px rgba(255,110,26,.4))}
++.gx-shelf-hero-copy{flex:1;color:var(--gx-ink-soft);font-size:12px;letter-spacing:.05em;line-height:1.4}
++.gx-shelf-hero-cta{color:#1b0d02;font:800 13px var(--gx-font);letter-spacing:.06em;padding:9px 18px;border-radius:9px;
++  background:linear-gradient(180deg,#ffd24d,#ff8a2a);box-shadow:0 4px 18px rgba(255,138,42,.3)}
+ .gx-shelf-row{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
+   background:rgba(16,38,50,.8);border:1px solid rgba(79,208,230,.2);border-radius:10px;
+   padding:7px;cursor:pointer;color:inherit;min-width:0}
+-- 
+2.43.0
+

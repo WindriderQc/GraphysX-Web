@@ -1,0 +1,988 @@
+From 1a45f3555c099003bedbb2333b954f89a2fa1813 Mon Sep 17 00:00:00 2001
+From: yanik <yanikbeaulieu@hotmail.com>
+Date: Tue, 28 Jul 2026 23:30:09 -0400
+Subject: [PATCH 4/5] feat(compat): add warning-first SceneNET export
+
+---
+ AGENT_WORLD_API.md               |   8 +-
+ docs/archive-parity-ledger.json  |  27 +--
+ package.json                     |   1 +
+ scripts/archive-parity-scope.mjs |  16 +-
+ scripts/audit-revival-debt.mjs   |   1 -
+ scripts/smoke-scenenet-xml.mjs   | 164 ++++++++++++++++
+ scripts/verify.mjs               |   1 +
+ src/agent-world-api.ts           |  17 +-
+ src/agent-world-bridge.ts        |   3 +-
+ src/agent-world-legacy-xml.ts    | 314 ++++++++++++++++++++++++++++++-
+ src/agent-world-runtime.ts       |   4 +
+ src/archive-content.ts           |   4 +-
+ src/platform-editor.ts           |  20 ++
+ src/prototype-app.ts             |  34 +++-
+ 14 files changed, 577 insertions(+), 37 deletions(-)
+ create mode 100644 scripts/smoke-scenenet-xml.mjs
+
+diff --git a/AGENT_WORLD_API.md b/AGENT_WORLD_API.md
+index c98ea10..50ae2e4 100644
+--- a/AGENT_WORLD_API.md
++++ b/AGENT_WORLD_API.md
+@@ -30,7 +30,9 @@ gx.update(crate.id, { tags: [...crate.tags, "reviewed-by-agent"] });
+ 
+ The visible editor's **Download JSON** button writes the complete current `graphysx.agent-world/v2` document as `<world-id>.graphysx.json`. **Import JSON / XML** reads that format or migrates an archived GraphysX serializer XML scene into the same validated v2 runtime. Unsupported custom meshes remain labeled visible proxies and the import reports conversion warnings instead of silently inventing assets. Files are limited to 5 MB in the browser UI.
+ 
+-The API equivalents are `gx.export()`, `gx.create(definition)` (or `gx.load(definition)`), and `gx.importLegacyXml(xml, options)`. This makes the file a straightforward handoff format between a person, an agent, source control, and another GraphysX session.
++**Legacy XML** is a compatibility export, not a second lossless format. It emits deterministic flat `Scene3D` v1.2 XML for boxes, spheres, cylinders, cones, and planes, preserving position/rotation/scale, visibility, known texture names, and basic static/dynamic/kinematic physics. Geometry dimensions are visibly preserved by baking them into legacy Scale. The result includes structured warnings for omitted environments, rules, joints, PBR material fields, unsupported entity kinds, and other loss. Duplicate v2 IDs and hierarchy are rejected because SceneNET has no stable ID or parent field; they are never silently renamed or flattened.
++
++The API equivalents are `gx.export()`, `gx.create(definition)` (or `gx.load(definition)`), `gx.importLegacyXml(xml, options)`, and `gx.exportLegacyXml(optionalDefinition)`. The last returns `{ ok, value: { xml, format, sourceEntityCount, exportedEntityCount, omittedEntityIds, warnings } }`; use v2 JSON whenever full fidelity is required.
+ 
+ ## External agent bridge
+ 
+@@ -48,7 +50,7 @@ const unsubscribe = bridge.subscribe((event) => {
+ });
+ ```
+ 
+-The manifest uses `graphysx.agent-tool-bridge/v1` and describes every callable path on the World API — all 82 of them, `rules.*`, `media.*`, `levels.*`, and the constant contract identifiers included, 38 mutating — whether it mutates state, positional-array arguments, schemas, coordinate convention, and available transports. `request()` accepts a structured request and always returns a structured success/error response.
++The manifest uses `graphysx.agent-tool-bridge/v1` and describes every callable path on the World API — all 90 of them, `rules.*`, `media.*`, `levels.*`, and the constant contract identifiers included, 43 mutating — whether it mutates state, positional-array arguments, schemas, coordinate convention, and available transports. `request()` accepts a structured request and always returns a structured success/error response.
+ 
+ "Every callable path" is machine-checked, not aspirational: `bridge.audit()` walks the live API and returns `{ missing, extra }` against the manifest. Both empty means full parity; a drift is reported, never thrown.
+ 
+@@ -771,7 +773,7 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
+ | `rules.status()`, `rules.reset()` | Read the live run, or re-arm it and return the subject to its spawn. |
+ | `pause(boolean)`, `step(seconds)` | Control deterministic simulation time. |
+ | `undo()` | Restore the definition before the most recent successful edit. |
+-| `export()`, `exportDocument()`, `save(name)`, `load(nameOrDefinition)` | Move worlds between JSON, memory, and local browser storage; `exportDocument()` drops session-only spawns. |
++| `export()`, `exportDocument()`, `exportLegacyXml(optionalDefinition)`, `save(name)`, `load(nameOrDefinition)` | Move worlds between JSON, warning-first SceneNET v1.2 XML, memory, and local browser storage; `exportDocument()` drops session-only spawns and JSON remains lossless. |
+ | `levels.*` | Manage, region-edit, ASCII-import/export, open, and play a persistent library of semantic grid levels. |
+ | `schema`, `worldSchema`, `levelSchema`, `version`, `capabilities` | Constant contract identifiers and capability lists — value paths, readable through the bridge like any method. |
+ 
+diff --git a/docs/archive-parity-ledger.json b/docs/archive-parity-ledger.json
+index f08c314..86ee6ee 100644
+--- a/docs/archive-parity-ledger.json
++++ b/docs/archive-parity-ledger.json
+@@ -1,6 +1,6 @@
+ {
+   "schema": "graphysx.archive-parity/v1",
+-  "generatedAt": "2026-07-29T03:13:40.685Z",
++  "generatedAt": "2026-07-29T03:29:35.709Z",
+   "scope": {
+     "roots": [
+       {
+@@ -237,8 +237,8 @@
+     "functionalityRecords": 71,
+     "functionalityByDisposition": {
+       "OUT OF SCOPE": 1,
+-      "REVIVED": 64,
+-      "SOURCE-ONLY": 5,
++      "REVIVED": 66,
++      "SOURCE-ONLY": 3,
+       "SUPERSEDED": 1
+     }
+   },
+@@ -352,15 +352,17 @@
+       "id": "editor-save-xml",
+       "kind": "editor-action",
+       "label": "Save XML",
+-      "disposition": "SOURCE-ONLY",
++      "disposition": "REVIVED",
+       "archiveEvidence": [
+         "GfxNet::SceneNET::Serialize"
+       ],
+       "currentEvidence": [
+-        "src/platform-editor.ts"
++        "src/platform-editor.ts",
++        "src/agent-world-legacy-xml.ts",
++        "scripts/smoke-scenenet-xml.mjs"
+       ],
+-      "destination": null,
+-      "note": "Modern JSON download is complete; legacy XML output has not yet defined a safe subset."
++      "destination": "Scene Editor > Legacy XML",
++      "note": "The button downloads the same warning-first Scene3D v1.2 subset exposed to agents; JSON remains the lossless format."
+     },
+     {
+       "id": "overlay-multiple-layers",
+@@ -1221,16 +1223,19 @@
+       "id": "scenenet-xml-export",
+       "kind": "compatibility",
+       "label": "SceneNET XML export",
+-      "disposition": "SOURCE-ONLY",
++      "disposition": "REVIVED",
+       "archiveEvidence": [
+         "GfxNet/SceneNET.cpp: XmlSerializer",
+         "GfxNet/EntityNET.h field annotations"
+       ],
+       "currentEvidence": [
+-        "src/agent-world-api.ts"
++        "src/agent-world-legacy-xml.ts",
++        "src/agent-world-api.ts",
++        "src/agent-world-bridge.ts",
++        "scripts/smoke-scenenet-xml.mjs"
+       ],
+-      "destination": null,
+-      "note": "The source serializer exists, but current HEAD defines no safe v2 subset or lossy-field warning contract."
++      "destination": "Scene Editor > Legacy XML and agent API exportLegacyXml",
++      "note": "A deterministic flat Scene3D v1.2 subset preserves primitive transforms, visibility, basic physics, and known textures; structured warnings disclose loss, while duplicate IDs and hierarchy are rejected instead of flattened."
+     },
+     {
+       "id": "scenenet-xml-import",
+diff --git a/package.json b/package.json
+index c7edded..fdb185e 100644
+--- a/package.json
++++ b/package.json
+@@ -28,6 +28,7 @@
+     "smoke:physics": "node scripts/smoke-physics.mjs",
+     "smoke:joints": "node scripts/smoke-joints.mjs",
+     "smoke:ballz18-sky": "node scripts/smoke-ballz18-sky.mjs",
++    "smoke:scenenet-xml": "node scripts/smoke-scenenet-xml.mjs",
+     "smoke:mesh-colliders": "node scripts/smoke-mesh-colliders.mjs",
+     "smoke:great-slide": "node scripts/smoke-great-slide.mjs",
+     "smoke:map1": "node scripts/smoke-map1.mjs",
+diff --git a/scripts/archive-parity-scope.mjs b/scripts/archive-parity-scope.mjs
+index 62e86b7..40d6fd8 100644
+--- a/scripts/archive-parity-scope.mjs
++++ b/scripts/archive-parity-scope.mjs
+@@ -139,11 +139,11 @@ export const FUNCTIONALITY_RECORDS = [
+     id: "scenenet-xml-export",
+     kind: "compatibility",
+     label: "SceneNET XML export",
+-    disposition: "SOURCE-ONLY",
++    disposition: "REVIVED",
+     archiveEvidence: ["GfxNet/SceneNET.cpp: XmlSerializer", "GfxNet/EntityNET.h field annotations"],
+-    currentEvidence: ["src/agent-world-api.ts"],
+-    destination: null,
+-    note: "The source serializer exists, but current HEAD defines no safe v2 subset or lossy-field warning contract.",
++    currentEvidence: ["src/agent-world-legacy-xml.ts", "src/agent-world-api.ts", "src/agent-world-bridge.ts", "scripts/smoke-scenenet-xml.mjs"],
++    destination: "Scene Editor > Legacy XML and agent API exportLegacyXml",
++    note: "A deterministic flat Scene3D v1.2 subset preserves primitive transforms, visibility, basic physics, and known textures; structured warnings disclose loss, while duplicate IDs and hierarchy are rejected instead of flattened.",
+   },
+   {
+     id: "shader-projection-fx",
+@@ -179,11 +179,11 @@ export const FUNCTIONALITY_RECORDS = [
+     id: "editor-save-xml",
+     kind: "editor-action",
+     label: "Save XML",
+-    disposition: "SOURCE-ONLY",
++    disposition: "REVIVED",
+     archiveEvidence: ["GfxNet::SceneNET::Serialize"],
+-    currentEvidence: ["src/platform-editor.ts"],
+-    destination: null,
+-    note: "Modern JSON download is complete; legacy XML output has not yet defined a safe subset.",
++    currentEvidence: ["src/platform-editor.ts", "src/agent-world-legacy-xml.ts", "scripts/smoke-scenenet-xml.mjs"],
++    destination: "Scene Editor > Legacy XML",
++    note: "The button downloads the same warning-first Scene3D v1.2 subset exposed to agents; JSON remains the lossless format.",
+   },
+   {
+     id: "editor-add-mesh",
+diff --git a/scripts/audit-revival-debt.mjs b/scripts/audit-revival-debt.mjs
+index 5aae86b..865e61d 100644
+--- a/scripts/audit-revival-debt.mjs
++++ b/scripts/audit-revival-debt.mjs
+@@ -14,7 +14,6 @@ const REGISTER = [
+   "Suzanne Moving Parts", "Shader Pack", "XML Scenes",
+ ];
+ const INTENTIONALLY_OPEN = new Map([
+-  ["Save XML", "new legacy SceneNET XML output has no specified loss/duplicate mapping; exact source artifacts and v2 JSON export are live"],
+   ["Shader Pack", "proprietary TV3D shader math is only partly translatable; haze/water/shadow descendants are live and the absent remainder is named"],
+ ]);
+ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+diff --git a/scripts/smoke-scenenet-xml.mjs b/scripts/smoke-scenenet-xml.mjs
+new file mode 100644
+index 0000000..47d9fa8
+--- /dev/null
++++ b/scripts/smoke-scenenet-xml.mjs
+@@ -0,0 +1,164 @@
++import { mkdirSync, readFileSync } from "node:fs";
++import path from "node:path";
++import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
++
++const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
++const ART = process.env.SMOKE_ARTIFACTS || path.resolve("output/smoke");
++mkdirSync(ART, { recursive: true });
++
++const fixtures = {
++  v10: `<?xml version="1.0" encoding="utf-8"?>
++<CScene3D><Actions>0=CUBE 7=PHYSICCUBE 15=V1_0</Actions><ObjList><Object3D><Type>7</Type><Name>V10 Cube</Name><TextureName>TwoWay</TextureName><Pos><x>5</x><y>1</y><z>-2</z></Pos><Scale><x>2</x><y>3</y><z>4</z></Scale><bEnable>true</bEnable><masse>0</masse><iNewtonMat>1</iNewtonMat></Object3D></ObjList></CScene3D>`,
++  v11: `<?xml version="1.0" encoding="utf-8"?>
++<Scene3D><ActionsHeader>0=CUBE 7=PHYSICCUBE 17=V1_1</ActionsHeader><ObjList><Obj3D Type="7" Name="Repeated Cube" Enabled="true" masse="0" MeshControlled="false" NewtonMat="0"><Pos x="0" y="0" z="0"/><Scale x="1" y="1" z="1"/><TextureName>TwoWay</TextureName></Obj3D><Obj3D Type="7" Name="Repeated Cube" Enabled="false" masse="0" MeshControlled="false" NewtonMat="0"><Pos x="4" y="0" z="0"/><Scale x="1" y="1" z="1"/><TextureName>TwoWay</TextureName></Obj3D></ObjList></Scene3D>`,
++  v12: `<?xml version="1.0" encoding="utf-8"?>
++<Scene3D><ActionsHeader>0=CUBE 9=PHYSICSCYLINDER 18=V1_2</ActionsHeader><ObjList><Obj3D Type="9" Name="V12 Rotor" Enabled="true" Masse="2" MeshControlled="true" NewtonMat="4"><Pos x="1.25" y="6.5" z="-3.75"/><Rot x="10" y="20" z="30"/><Scale x="0.5" y="2" z="0.5"/><PathToMesh/><TextureName>Checkerboard</TextureName></Obj3D></ObjList><ringPosList/></Scene3D>`,
++  splitEnum: `<?xml version="1.0" encoding="utf-8"?>
++<SceneNET><EntityNETList><EntityNET Type="PHYSPRIMITIVE" Geom="SPHERE" Name="Enum Sphere" Enabled="true" Masse="1.5" MeshControlled="false" NewtonMat="FINISH"><Pos x="-2" y="3" z="4"/><Rot x="0" y="45" z="0"/><Scale x="1" y="1" z="1"/><TextureName>Marble</TextureName></EntityNET></EntityNETList></SceneNET>`,
++};
++
++const browser = await launchSmokeBrowser();
++const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
++applySmokeTimeout(page);
++const consoleErrors = [];
++const pageErrors = [];
++page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
++page.on("pageerror", (error) => pageErrors.push(String(error)));
++const out = {};
++
++try {
++  await page.goto(`${BASE}?host=editor&intro=0`, { waitUntil: "load" });
++  await page.waitForFunction(() => !!window.__GRAPHYSX__ && typeof window.render_game_to_text === "function", null, { timeout: SMOKE_TIMEOUT });
++  out.contract = await page.evaluate((sourceFixtures) => {
++    const api = window.__GRAPHYSX__;
++    const summarize = (definition) => (definition?.entities ?? []).map((entity) => ({
++      id: entity.id,
++      type: entity.type,
++      transform: entity.transform,
++      texture: entity.material?.texture?.id ?? null,
++      visible: entity.visible,
++      physics: entity.physics ? {
++        mode: entity.physics.mode,
++        mass: entity.physics.mass,
++        material: entity.physics.material,
++      } : null,
++    })).sort((left, right) => left.id.localeCompare(right.id));
++    const fixtureResults = {};
++    for (const [version, xml] of Object.entries(sourceFixtures)) {
++      const first = api.importLegacyXml(xml, { id: `fixture-${version}` });
++      const before = summarize(api.exportDocument());
++      const exported = api.exportLegacyXml();
++      const deterministic = exported.ok && api.exportLegacyXml().value?.xml === exported.value?.xml;
++      const second = exported.ok ? api.importLegacyXml(exported.value.xml, { id: `fixture-${version}-roundtrip` }) : null;
++      const after = summarize(api.exportDocument());
++      fixtureResults[version] = {
++        importOk: first.ok,
++        sourceEntityCount: first.value?.sourceEntityCount ?? null,
++        importWarnings: first.value?.warnings ?? [],
++        exportOk: exported.ok,
++        format: exported.value?.format ?? null,
++        deterministic,
++        warningCodes: exported.value?.warnings.map((warning) => warning.code) ?? [],
++        reimportOk: second?.ok ?? false,
++        equivalent: JSON.stringify(before) === JSON.stringify(after),
++        before,
++        after,
++      };
++    }
++
++    const lossyDefinition = {
++      schema: api.worldSchema,
++      id: "legacy-loss-contract",
++      label: "Legacy loss contract",
++      environment: { background: "#123456" },
++      entities: [
++        { id: "wide-box", label: "Wide box label", type: "box", geometry: { width: 3, height: 2, depth: 5 }, transform: { position: [1, 2, 3], rotationDegrees: [5, 15, 25], scale: [1, 1, 1] }, material: { color: "#ff0000", texture: { id: "two-way" } }, physics: { mode: "dynamic", mass: 3, material: "ball", friction: 0.2 } },
++        { id: "modern-light", type: "point-light", intensity: 4, transform: { position: [0, 6, 0] } },
++      ],
++      rules: { subjectId: "wide-box", spawn: { position: [1, 2, 3] }, checkpoints: [], finish: { triggerId: "wide-box" }, laps: 1, requireCollectibles: false },
++    };
++    const lossy = api.exportLegacyXml(lossyDefinition);
++    const duplicate = api.exportLegacyXml({
++      schema: api.worldSchema,
++      id: "duplicates",
++      label: "Duplicates",
++      entities: [{ id: "same", type: "box" }, { id: "same", type: "sphere" }],
++    });
++    const hierarchy = api.exportLegacyXml({
++      schema: api.worldSchema,
++      id: "hierarchy",
++      label: "Hierarchy",
++      entities: [{ id: "root", type: "group" }, { id: "child", parentId: "root", type: "box" }],
++    });
++    return {
++      fixtures: fixtureResults,
++      lossy: {
++        ok: lossy.ok,
++        exported: lossy.value?.exportedEntityCount ?? null,
++        omitted: lossy.value?.omittedEntityIds ?? [],
++        warningCodes: lossy.value?.warnings.map((warning) => warning.code) ?? [],
++        warningShape: lossy.value?.warnings.every((warning) => warning.severity === "warning" && typeof warning.field === "string" && "entityId" in warning) ?? false,
++        xmlHasPose: lossy.value?.xml.includes('<Pos x="1" y="2" z="3" />') && lossy.value.xml.includes('<Rot x="5" y="15" z="25" />'),
++        xmlHasKnownTexture: lossy.value?.xml.includes("<TextureName>TwoWay</TextureName>") ?? false,
++      },
++      duplicate: { ok: duplicate.ok, error: duplicate.error ?? null },
++      hierarchy: { ok: hierarchy.ok, error: hierarchy.error ?? null },
++      bridgeListed: window.__GRAPHYSX_AGENT_BRIDGE__.manifest().tools.some((tool) => tool.name === "exportLegacyXml" && !tool.mutates),
++    };
++  }, fixtures);
++
++  await page.evaluate(() => window.__GRAPHYSX__.create({
++    schema: window.__GRAPHYSX__.worldSchema,
++    id: "legacy-ui-proof",
++    label: "Legacy XML UI Proof",
++    environment: { background: "#9cc8e4", ground: { visible: true, size: 24, color: "#274451", grid: true, gridColor: "#8ed6e8" } },
++    entities: [
++      { id: "xml-cube", type: "box", transform: { position: [-2, 1, 0], rotationDegrees: [0, 25, 0] }, material: { color: "#58c4dd" }, physics: { mode: "static", material: "wall" } },
++      { id: "xml-sphere", type: "sphere", transform: { position: [2, 1.2, 0] }, material: { color: "#f2b45f" }, physics: { mode: "dynamic", mass: 2, material: "ball" } },
++    ],
++  }));
++  const downloadPromise = page.waitForEvent("download");
++  await page.locator('[data-gx-export="legacy-xml"]').click();
++  const download = await downloadPromise;
++  const downloadedPath = path.join(ART, "legacy-ui-proof.scenenet.xml");
++  await download.saveAs(downloadedPath);
++  await page.waitForTimeout(500);
++  out.ui = {
++    suggestedFilename: download.suggestedFilename(),
++    status: await page.locator(".gx-ed-status").textContent(),
++    buttonVisible: await page.locator('[data-gx-export="legacy-xml"]').isVisible(),
++    downloadedXml: readFileSync(downloadedPath, "utf8").startsWith('<?xml version="1.0" encoding="utf-8"?>\n<Scene3D'),
++    text: JSON.parse(await page.evaluate(() => window.render_game_to_text())),
++  };
++  await page.screenshot({ path: path.join(ART, "scenenet-xml-export.png") });
++} catch (error) {
++  out.fatal = String(error);
++}
++
++out.consoleErrors = consoleErrors;
++out.pageErrors = pageErrors;
++await browser.close();
++
++const fixtureRows = Object.values(out.contract?.fixtures ?? {});
++const pass = !out.fatal
++  && fixtureRows.length === 4
++  && fixtureRows.every((fixture) => fixture.importOk && fixture.exportOk && fixture.deterministic && fixture.reimportOk && fixture.equivalent)
++  && out.contract.fixtures.v11.importWarnings.some((warning) => warning.includes("duplicate legacy Name"))
++  && JSON.stringify(out.contract.fixtures.v12.after[0]?.transform?.rotationDegrees) === JSON.stringify([10, 20, 30])
++  && out.contract.fixtures.v12.after[0]?.physics?.mode === "kinematic"
++  && out.contract.fixtures.splitEnum.after[0]?.type === "sphere"
++  && out.contract.lossy.ok && out.contract.lossy.exported === 1
++  && out.contract.lossy.omitted.includes("modern-light")
++  && ["environment-unsupported", "rules-unsupported", "entity-type-unsupported", "geometry-baked-into-scale", "material-unsupported", "physics-field-unsupported"].every((code) => out.contract.lossy.warningCodes.includes(code))
++  && out.contract.lossy.warningShape && out.contract.lossy.xmlHasPose && out.contract.lossy.xmlHasKnownTexture
++  && !out.contract.duplicate.ok && out.contract.duplicate.error.includes("duplicate entity id")
++  && !out.contract.hierarchy.ok && out.contract.hierarchy.error.includes("cannot represent hierarchy")
++  && out.contract.bridgeListed
++  && out.ui?.suggestedFilename === "legacy-ui-proof.scenenet.xml"
++  && out.ui?.status?.includes("XML 2/2") && out.ui?.buttonVisible && out.ui?.downloadedXml
++  && out.ui?.text?.world?.id === "legacy-ui-proof"
++  && consoleErrors.length === 0 && pageErrors.length === 0;
++
++console.log(JSON.stringify(out, null, 2));
++console.log(pass ? "SMOKE PASS" : "SMOKE FAIL");
++process.exit(pass ? 0 : 1);
+diff --git a/scripts/verify.mjs b/scripts/verify.mjs
+index 7c8b057..a439b2f 100644
+--- a/scripts/verify.mjs
++++ b/scripts/verify.mjs
+@@ -67,6 +67,7 @@ const SMOKES = [
+   { name: "physics", script: "scripts/smoke-physics.mjs", covers: "physics migration baseline: contacts, fixed-step schedules, sleep/wake, teardown/reload" },
+   { name: "joints", script: "scripts/smoke-joints.mjs", covers: "scene-authored fixed/revolute/rope joints: motion, bridge parity, patch, undo, export/reload" },
+   { name: "ballz18-sky", script: "scripts/smoke-ballz18-sky.mjs", covers: "exact authored 2048px BallZ18 sky: release manifest, six SHA-256 hashes, decode, orientation, scene application" },
++  { name: "scenenet-xml", script: "scripts/smoke-scenenet-xml.mjs", covers: "SceneNET v1.0/v1.1/v1.2/split-enum import-export-import, deterministic XML, structured loss warnings, ambiguity rejection, editor download" },
+   { name: "mesh-colliders", script: "scripts/smoke-mesh-colliders.mjs", covers: "scene-native model colliders: Great Slide trimesh, dynamic convex hull, rejection, bridge + round-trip" },
+   { name: "great-slide", script: "scripts/smoke-great-slide.mjs", covers: "Great Slide gravity run: Games launch, exact collider gate, subject controls, checkpoints, results, replay + return" },
+   { name: "map1", script: "scripts/smoke-map1.mjs", covers: "Map 1 gravity descent: Games launch, exact recovered collider, halfway gate, results, replay + return" },
+diff --git a/src/agent-world-api.ts b/src/agent-world-api.ts
+index c51806e..e321244 100644
+--- a/src/agent-world-api.ts
++++ b/src/agent-world-api.ts
+@@ -19,7 +19,7 @@ import { allAgentWorldAssets } from "./agent-world-assets";
+ import { allAgentWorldSounds } from "./agent-world-sounds";
+ import { allAgentWorldTextures } from "./agent-world-textures";
+ import { getAgentWorldMediaApi } from "./agent-world-media";
+-import { convertLegacyGraphysXXml } from "./agent-world-legacy-xml";
++import { convertAgentWorldToLegacyXml, convertLegacyGraphysXXml } from "./agent-world-legacy-xml";
+ import { composeBallzLevel } from "./ballz-level-scene";
+ 
+ /**
+@@ -136,6 +136,21 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
+         };
+       }
+     },
++    exportLegacyXml: (definition) => {
++      try {
++        return {
++          ok: true,
++          revision: runtime.getState().revision,
++          value: convertAgentWorldToLegacyXml(definition ?? runtime.exportDocument()),
++        };
++      } catch (error) {
++        return {
++          ok: false,
++          revision: runtime.getState().revision,
++          error: error instanceof Error ? error.message : String(error),
++        };
++      }
++    },
+     open: () => true,
+     demo: () => runtime.create(GRAPHYSX_AGENT_DEMO_WORLD),
+     state: () => runtime.getState(),
+diff --git a/src/agent-world-bridge.ts b/src/agent-world-bridge.ts
+index 957ce2b..bbbb249 100644
+--- a/src/agent-world-bridge.ts
++++ b/src/agent-world-bridge.ts
+@@ -7,7 +7,7 @@ export const GRAPHYSX_AGENT_TOOL_EVENT_SCHEMA = "graphysx.agent-tool-event/v1" a
+ 
+ const TOOL_PATHS = [
+   "schema", "worldSchema", "levelSchema", "version", "capabilities",
+-  "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select",
++  "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "exportLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select",
+   "sounds", "flocks", "crowds", "forceFields", "formulas", "dna", "surfaces",
+   "attachBehavior", "detachBehavior", "interact", "steer", "prefabs", "spawnPrefab", "starters", "loadStarter",
+   "transaction", "commit", "history", "events", "undo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
+@@ -46,6 +46,7 @@ const TOOL_SUMMARIES: Record<string, string> = {
+   dna: "List the recovered Living Forest genome presets.",
+   surfaces: "List the generative surface sketches (waveform/grid-pulse/plasma) for a mesh's `surface` field.",
+   importLegacyXml: "Convert an archived GraphysX XML scene into the validated v2 world contract.",
++  exportLegacyXml: "Export the authored v2 scene through the deterministic flat Scene3D v1.2 subset, with structured loss warnings.",
+   create: "Replace the active world with a complete v2 definition.",
+   spawn: "Create one typed 3D entity.",
+   update: "Patch an entity by stable ID.",
+diff --git a/src/agent-world-legacy-xml.ts b/src/agent-world-legacy-xml.ts
+index 38a64b6..3aaac4b 100644
+--- a/src/agent-world-legacy-xml.ts
++++ b/src/agent-world-legacy-xml.ts
+@@ -3,6 +3,7 @@ import {
+   type AgentWorldDefinition,
+   type AgentWorldEntityDefinition,
+   type AgentWorldPhysics,
++  type AgentWorldPhysicsMaterial,
+   type AgentWorldVector3
+ } from "./agent-world-runtime";
+ import type { AgentWorldTextureId } from "./agent-world-textures";
+@@ -19,22 +20,58 @@ export type AgentWorldLegacyXmlConversion = {
+   warnings: string[];
+ };
+ 
++export type AgentWorldLegacyXmlExportWarning = {
++  code:
++    | "environment-unsupported"
++    | "rules-unsupported"
++    | "joints-unsupported"
++    | "entity-type-unsupported"
++    | "entity-field-unsupported"
++    | "geometry-baked-into-scale"
++    | "material-unsupported"
++    | "texture-unsupported"
++    | "physics-field-unsupported";
++  severity: "warning";
++  entityId: string | null;
++  field: string;
++  message: string;
++};
++
++export type AgentWorldLegacyXmlExportConversion = {
++  xml: string;
++  format: "Scene3D-v1.2-subset";
++  sourceEntityCount: number;
++  exportedEntityCount: number;
++  omittedEntityIds: string[];
++  warnings: AgentWorldLegacyXmlExportWarning[];
++};
++
+ const LEGACY_TYPE_NAMES: Record<number, string> = {
+   0: "CUBE", 1: "SPHERE", 2: "CYLINDER", 3: "CONE", 4: "BILLBOARD", 5: "FLOOR", 6: "CUSTOM",
+   7: "PHYSICCUBE", 8: "PHYSICSPHERE", 9: "PHYSICSCYLINDER", 10: "PHYSICCONE", 11: "PHYSICCUSTOM",
+   12: "XMESH", 13: "PHYSICXMESH", 14: "DUPLICATE", 15: "V1_0"
+ };
+ 
+-/** Converts both archived GraphysX XML layouts (attributes or nested fields) into v2 JSON. */
++const EXPORT_ACTIONS_HEADER = [
++  "  0=CUBE  1=SPHERE  2=CYLINDER  3=CONE  4=BILLBOARD  5=FLOOR  6=CUSTOM  7=PHYSICCUBE  8=PHYSICSPHERE  9=PHYSICSCYLINDER  10=PHYSICCONE  11=PHYSICCUSTOM  12=XMESH  13=PHYSICXMESH  14=PHYSICXSTATIC  15=DUPLICATEMESH  16=TEXT  17=VERTEXSTRIP  18=V1_2",
++  "",
++  "  0=DEFAULT_MAT  1=WALL  2=FINISH  3=GROUND  4=BALL  5=HUMAN"
++].join("\n");
++
++/** Converts archived v1.0 nested records and v1.1/v1.2 attribute records into v2 JSON. */
+ export function convertLegacyGraphysXXml(xml: string, options: AgentWorldLegacyXmlOptions = {}): AgentWorldLegacyXmlConversion {
+   if (typeof xml !== "string" || !xml.trim()) throw new Error("Legacy XML source is empty");
+   if (xml.length > 5_000_000) throw new Error("Legacy XML source must be 5 MB or smaller");
+   const document = new DOMParser().parseFromString(xml, "application/xml");
+   const parserError = document.querySelector("parsererror");
+   if (parserError) throw new Error(`Legacy XML parse failed: ${parserError.textContent?.trim().slice(0, 180) || "invalid XML"}`);
+-  const sourceObjects = Array.from(document.getElementsByTagName("Object3D"));
+-  if (sourceObjects.length === 0) throw new Error("Legacy XML contains no Object3D records");
+-  if (sourceObjects.length > 512) throw new Error("Legacy XML can contain at most 512 Object3D records");
++
++  // The three surviving serializer families call the record Object3D, Obj3D or EntityNET.
++  // Walking once preserves document order when a hand-edited fixture mixes layouts.
++  const sourceObjects = Array.from(document.getElementsByTagName("*")).filter((element) =>
++    ["object3d", "obj3d", "entitynet"].includes(element.localName.toLowerCase()));
++  if (sourceObjects.length === 0) throw new Error("Legacy XML contains no Object3D, Obj3D, or EntityNET records");
++  if (sourceObjects.length > 512) throw new Error("Legacy XML can contain at most 512 entity records");
+ 
+   const warnings: string[] = [];
+   const usedIds = new Set<string>();
+@@ -60,19 +97,84 @@ export function convertLegacyGraphysXXml(xml: string, options: AgentWorldLegacyX
+   };
+ }
+ 
++/**
++ * Emit the explicit flat Scene3D v1.2 compatibility subset.
++ *
++ * Duplicate IDs and hierarchy are rejected because SceneNET has no stable ID or parent field;
++ * choosing an arbitrary rename/flatten order would corrupt references. Unsupported entities are
++ * omitted with structured warnings, while primitive geometry dimensions are baked into Scale so
++ * their visible size survives an import even though the old record has no size fields.
++ */
++export function convertAgentWorldToLegacyXml(definition: AgentWorldDefinition): AgentWorldLegacyXmlExportConversion {
++  if (!definition || definition.schema !== GRAPHYSX_AGENT_WORLD_SCHEMA || !Array.isArray(definition.entities)) {
++    throw new Error(`Legacy XML export requires a ${GRAPHYSX_AGENT_WORLD_SCHEMA} definition`);
++  }
++  if (definition.entities.length > 512) throw new Error("Legacy XML export supports at most 512 entities");
++
++  const ids = new Set<string>();
++  for (const [index, entity] of definition.entities.entries()) {
++    const id = entity.id?.trim();
++    if (!id) throw new Error(`Legacy XML export requires a stable id for entity ${index + 1}`);
++    if (ids.has(id)) throw new Error(`Legacy XML export rejected duplicate entity id: ${id}`);
++    ids.add(id);
++  }
++  const parented = definition.entities.filter((entity) => entity.parentId).map((entity) => entity.id);
++  if (parented.length) {
++    throw new Error(`Legacy XML export cannot represent hierarchy; remove parentId from: ${parented.join(", ")}`);
++  }
++
++  const warnings: AgentWorldLegacyXmlExportWarning[] = [];
++  const omittedEntityIds: string[] = [];
++  if (definition.environment) addExportWarning(warnings, "environment-unsupported", null, "environment", "Scene3D v1.2 has no scene environment fields; background, sky, lighting, ground, post-processing, and gravity are omitted.");
++  if (definition.rules) addExportWarning(warnings, "rules-unsupported", null, "rules", "Scene3D v1.2 has no race-rules block; rules are omitted.");
++  if (definition.joints?.length) addExportWarning(warnings, "joints-unsupported", null, "joints", `${definition.joints.length} scene joint(s) are omitted because SceneNET has no constraint records.`);
++
++  const records: string[] = [];
++  for (const entity of definition.entities) {
++    const id = entity.id!;
++    const record = exportEntity(entity, warnings);
++    if (record) records.push(record);
++    else omittedEntityIds.push(id);
++  }
++
++  const lines = [
++    '<?xml version="1.0" encoding="utf-8"?>',
++    '<Scene3D xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
++    `  <ActionsHeader>${escapeXmlText(EXPORT_ACTIONS_HEADER)}</ActionsHeader>`,
++    '  <filepathASCII />',
++    '  <mapSize>0</mapSize>',
++    '  <ObjList>',
++    ...records,
++    '  </ObjList>',
++    '  <ringPosList />',
++    '</Scene3D>',
++    ''
++  ];
++  return {
++    xml: lines.join("\n"),
++    format: "Scene3D-v1.2-subset",
++    sourceEntityCount: definition.entities.length,
++    exportedEntityCount: records.length,
++    omittedEntityIds,
++    warnings
++  };
++}
++
+ function convertObject(object: Element, index: number, usedIds: Set<string>, warnings: string[]): AgentWorldEntityDefinition | null {
+-  const typeCode = finiteNumber(readValue(object, ["Type"]), 0);
++  const typeCode = readLegacyTypeCode(object);
+   const sourceName = readValue(object, ["Name"]) || `Legacy Object ${index + 1}`;
+   const baseId = stableId(sourceName, `legacy-object-${index + 1}`);
+   let id = baseId;
+   for (let suffix = 2; usedIds.has(id); suffix += 1) id = `${baseId}-${suffix}`.slice(0, 80);
++  if (id !== baseId) warnings.push(`${sourceName}: duplicate legacy Name assigned stable id ${id}`);
+   usedIds.add(id);
+   const position = readVector(object, "Pos", [0, 0, 0]);
++  const rotation = readVector(object, "Rot", [0, 0, 0]);
+   const scale = readVector(object, "Scale", [1, 1, 1]).map((value) => Math.max(0.001, Math.abs(value))) as AgentWorldVector3;
+-  const mass = Math.max(0, finiteNumber(readValue(object, ["masse", "Mass"]), 0));
++  const mass = Math.max(0, finiteNumber(readValue(object, ["masse", "Mass", "Masse"]), 0));
+   const meshControlled = booleanValue(readValue(object, ["MeshControlled"]), false);
+   const enabled = booleanValue(readValue(object, ["Enabled", "bEnable"]), true);
+-  const newtonMaterial = finiteNumber(readValue(object, ["NewtonMat", "iNewtonMat"]), -1);
++  const newtonMaterial = legacyPhysicsMaterialCode(readValue(object, ["NewtonMat", "iNewtonMat"]));
+   const meshPath = readValue(object, ["PathToMesh"]);
+   const textureName = readValue(object, ["TextureName"]);
+   const textureId = legacyTextureId(textureName);
+@@ -94,7 +196,7 @@ function convertObject(object: Element, index: number, usedIds: Set<string>, war
+     id,
+     label: sourceName,
+     type,
+-    transform: { position, scale, rotationDegrees: [0, 0, 0] },
++    transform: { position, scale, rotationDegrees: rotation },
+     material: {
+       color: textureId ? "#ffffff" : customProxy ? "#b7a581" : "#78d7c8",
+       roughness: customProxy ? 0.68 : 0.52,
+@@ -108,6 +210,138 @@ function convertObject(object: Element, index: number, usedIds: Set<string>, war
+   };
+ }
+ 
++function exportEntity(entity: AgentWorldEntityDefinition, warnings: AgentWorldLegacyXmlExportWarning[]): string | null {
++  const id = entity.id!;
++  const physical = !!entity.physics;
++  const typeCode = legacyExportTypeCode(entity.type, physical);
++  if (typeCode === null || entity.physics?.mode === "trigger") {
++    const detail = entity.physics?.mode === "trigger" ? "trigger physics" : `entity type ${entity.type}`;
++    addExportWarning(warnings, "entity-type-unsupported", id, entity.physics?.mode === "trigger" ? "physics.mode" : "type", `${id}: ${detail} has no Scene3D v1.2 record and is omitted.`);
++    return null;
++  }
++
++  if (entity.label && entity.label !== id) {
++    addExportWarning(warnings, "entity-field-unsupported", id, "label", `${id}: the friendly label is omitted; the stable id is written as legacy Name to preserve identity.`);
++  }
++  const unsupportedFields = [
++    ["asset", entity.asset], ["path", entity.path], ["emitter", entity.emitter], ["sound", entity.sound],
++    ["terrain", entity.terrain], ["water", entity.water], ["flock", entity.flock], ["crowd", entity.crowd],
++    ["formula", entity.formula], ["dna", entity.dna], ["forceField", entity.forceField], ["surface", entity.surface],
++    ["steering", entity.steering], ["agent", entity.agent], ["modelMaterialOverrides", entity.modelMaterialOverrides],
++    ["behaviors", entity.behaviors?.length ? entity.behaviors : null], ["interactions", entity.interactions?.length ? entity.interactions : null],
++    ["tags", entity.tags?.length ? entity.tags : null]
++  ].filter(([, value]) => value !== undefined && value !== null);
++  if (unsupportedFields.length) {
++    const names = unsupportedFields.map(([name]) => name).join(", ");
++    addExportWarning(warnings, "entity-field-unsupported", id, names, `${id}: unsupported field(s) omitted: ${names}.`);
++  }
++
++  const transform = entity.transform ?? {};
++  const position = vectorOr(transform.position, [0, 0, 0]);
++  const rotation = vectorOr(transform.rotationDegrees, [0, 0, 0]);
++  const authoredScale = vectorOr(transform.scale, [1, 1, 1]);
++  const scale = bakeGeometryScale(entity, authoredScale);
++  if (scale.some((value, axis) => value !== authoredScale[axis])) {
++    addExportWarning(warnings, "geometry-baked-into-scale", id, "geometry", `${id}: primitive dimensions are baked into legacy Scale; visible size survives, but geometry-vs-transform separation does not.`);
++  }
++
++  const textureName = legacyTextureName(entity.material?.texture?.id ?? null);
++  if (entity.material?.texture && !textureName) {
++    addExportWarning(warnings, "texture-unsupported", id, "material.texture", `${id}: texture ${entity.material.texture.id} has no historical SceneNET name and is omitted.`);
++  }
++  if (entity.material) {
++    addExportWarning(warnings, "material-unsupported", id, "material", `${id}: Scene3D v1.2 stores only TextureName; color, PBR, opacity, normal-map, shader, and wireframe fields are omitted.`);
++  }
++  if (entity.physics && hasUnsupportedPhysicsFields(entity.physics)) {
++    addExportWarning(warnings, "physics-field-unsupported", id, "physics", `${id}: friction, restitution, velocities, and collider policy are omitted; mode, mass, material, and kinematic control survive.`);
++  }
++
++  const mass = entity.physics?.mode === "dynamic" ? Math.max(0, entity.physics.mass ?? 1) : Math.max(0, entity.physics?.mass ?? 0);
++  const meshControlled = entity.physics?.mode === "kinematic";
++  const newtonMaterial = legacyPhysicsMaterialNumber(entity.physics?.material ?? (entity.type === "plane" ? "ground" : "default"));
++  const vectorLine = (name: string, vector: AgentWorldVector3) => `      <${name} x="${formatNumber(vector[0])}" y="${formatNumber(vector[1])}" z="${formatNumber(vector[2])}" />`;
++  return [
++    `    <Obj3D Type="${typeCode}" Name="${escapeXmlAttribute(id)}" Enabled="${entity.visible === false ? "false" : "true"}" Masse="${formatNumber(mass)}" MeshControlled="${meshControlled ? "true" : "false"}" NewtonMat="${newtonMaterial}">`,
++    vectorLine("Pos", position),
++    vectorLine("Rot", rotation),
++    vectorLine("Scale", scale),
++    "      <PathToMesh />",
++    textureName ? `      <TextureName>${escapeXmlText(textureName)}</TextureName>` : "      <TextureName />",
++    "    </Obj3D>"
++  ].join("\n");
++}
++
++function readLegacyTypeCode(object: Element): number {
++  const rawType = readValue(object, ["Type"]).trim();
++  const rawGeometry = readValue(object, ["Geom", "Geometry"]).trim();
++  const numeric = Number(rawType);
++  if (rawType && Number.isInteger(numeric)) {
++    // Numeric fixtures through v1.2 use the old direct primitive codes. A numeric record
++    // carrying Geom is from the later EntityNET split enum and needs recombining.
++    return rawGeometry ? splitTypeCode(numeric, readGeometryCode(rawGeometry)) : numeric;
++  }
++  const type = rawType.toUpperCase();
++  const geometry = readGeometryCode(rawGeometry);
++  if (type === "PRIMITIVE") return primitiveTypeCode(geometry, false);
++  if (type === "PHYSPRIMITIVE") return primitiveTypeCode(geometry, true);
++  if (type === "BILLBOARD") return 4;
++  if (type === "FLOOR") return 5;
++  if (type === "CUSTOM") return 6;
++  if (type === "PHYSICCUSTOM") return 11;
++  if (type === "XMESH") return 12;
++  if (["PHYSICXMESH", "PHYSICXSTATIC"].includes(type)) return 13;
++  if (["DUPLICATE", "DUPLICATEMESH"].includes(type)) return 14;
++  if (type === "ACTOR") return 15;
++  return 0;
++}
++
++function splitTypeCode(type: number, geometry: number): number {
++  if (type === 0) return primitiveTypeCode(geometry, false);
++  if (type === 4) return primitiveTypeCode(geometry, true);
++  if (type === 1) return 4;
++  if (type === 2) return 5;
++  if (type === 3) return 6;
++  if (type === 5) return 11;
++  if (type === 6) return 12;
++  if (type === 7 || type === 8) return 13;
++  if (type === 9) return 14;
++  if (type === 12) return 15;
++  return 6;
++}
++
++function readGeometryCode(value: string): number {
++  const numeric = Number(value);
++  if (value && Number.isInteger(numeric)) return numeric;
++  return ({ CUBE: 0, SPHERE: 1, CYLINDER: 2, CONE: 3, TEAPOT: 4, PLANE: 5 } as Record<string, number>)[value.toUpperCase()] ?? 0;
++}
++
++function primitiveTypeCode(geometry: number, physical: boolean): number {
++  const primitive = geometry === 1 ? 1 : geometry === 2 ? 2 : geometry === 3 ? 3 : geometry === 5 ? 5 : 0;
++  if (!physical || primitive === 5) return primitive;
++  return primitive + 7;
++}
++
++function legacyExportTypeCode(type: AgentWorldEntityDefinition["type"], physical: boolean): number | null {
++  const primitive = type === "box" ? 0 : type === "sphere" ? 1 : type === "cylinder" ? 2 : type === "cone" ? 3 : type === "plane" ? 5 : null;
++  if (primitive === null || !physical || primitive === 5) return primitive;
++  return primitive + 7;
++}
++
++function bakeGeometryScale(entity: AgentWorldEntityDefinition, scale: AgentWorldVector3): AgentWorldVector3 {
++  const geometry = entity.geometry ?? {};
++  if (entity.type === "box") return [scale[0] * (geometry.width ?? 1), scale[1] * (geometry.height ?? 1), scale[2] * (geometry.depth ?? 1)];
++  if (entity.type === "sphere") {
++    const ratio = (geometry.radius ?? 0.5) / 0.5;
++    return [scale[0] * ratio, scale[1] * ratio, scale[2] * ratio];
++  }
++  if (entity.type === "cylinder" || entity.type === "cone") {
++    const radial = (geometry.radius ?? 0.5) / 0.5;
++    return [scale[0] * radial, scale[1] * (geometry.height ?? 1), scale[2] * radial];
++  }
++  if (entity.type === "plane") return [scale[0] * (geometry.width ?? 10) / 10, scale[1], scale[2] * (geometry.depth ?? geometry.height ?? 10) / 10];
++  return [...scale];
++}
++
+ function legacyEntityType(typeCode: number): AgentWorldEntityDefinition["type"] {
+   if (typeCode === 1 || typeCode === 8) return "sphere";
+   if (typeCode === 2 || typeCode === 9) return "cylinder";
+@@ -129,10 +363,29 @@ function legacyPhysics(typeCode: number, mass: number, meshControlled: boolean,
+   return {
+     mode: meshControlled ? "kinematic" : mass > 0 ? "dynamic" : "static",
+     mass,
+-    material: newtonMaterial === 1 ? "wall" : typeCode === 5 ? "ground" : "default"
++    material: legacyPhysicsMaterialName(newtonMaterial, typeCode)
+   };
+ }
+ 
++function legacyPhysicsMaterialCode(value: string): number {
++  const numeric = Number(value);
++  if (value && Number.isFinite(numeric)) return numeric;
++  return ({ DEF_PHYSMAT: 0, DEFAULT_MAT: 0, WALL: 1, WOOD: 1, FINISH: 2, GROUND: 3, LEVEL: 3, BALL: 4, HUMAN: 5, ELEVATOR: 5 } as Record<string, number>)[value.toUpperCase()] ?? -1;
++}
++
++function legacyPhysicsMaterialName(code: number, typeCode: number): AgentWorldPhysicsMaterial {
++  if (code === 1) return "wall";
++  if (code === 2) return "finish";
++  if (code === 3 || typeCode === 5) return "ground";
++  if (code === 4) return "ball";
++  if (code === 5) return "human";
++  return "default";
++}
++
++function legacyPhysicsMaterialNumber(material: AgentWorldPhysicsMaterial): number {
++  return ({ default: 0, wall: 1, finish: 2, ground: 3, ball: 4, human: 5 } as const)[material];
++}
++
+ function legacyTextureId(name: string): AgentWorldTextureId | null {
+   const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+   if (normalized === "twoway" || normalized === "yellowtwoway") return "two-way";
+@@ -144,6 +397,16 @@ function legacyTextureId(name: string): AgentWorldTextureId | null {
+   return null;
+ }
+ 
++function legacyTextureName(id: AgentWorldTextureId | null): string | null {
++  if (id === "two-way") return "TwoWay";
++  if (id === "checker") return "Checkerboard";
++  if (id === "green-grid") return "Grid";
++  if (id === "worn-wood") return "Wood";
++  if (id === "rusted-metal") return "Metal";
++  if (id === "marble") return "Marble";
++  return null;
++}
++
+ function readVector(object: Element, name: string, fallback: AgentWorldVector3): AgentWorldVector3 {
+   const vector = directChild(object, name);
+   if (!vector) return [...fallback];
+@@ -180,3 +443,36 @@ function stableId(value: string, fallback: string): string {
+   const id = value.trim().toLowerCase().replace(/[^a-z0-9._:-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+   return /^[a-z0-9]/.test(id) ? id : fallback;
+ }
++
++function vectorOr(value: AgentWorldVector3 | undefined, fallback: AgentWorldVector3): AgentWorldVector3 {
++  return value && value.length === 3 && value.every(Number.isFinite) ? [...value] : [...fallback];
++}
++
++function hasUnsupportedPhysicsFields(physics: AgentWorldPhysics): boolean {
++  return physics.friction !== undefined || physics.restitution !== undefined || physics.linearVelocity !== undefined
++    || physics.angularVelocity !== undefined || (physics.collider !== undefined && physics.collider !== "auto");
++}
++
++function addExportWarning(
++  warnings: AgentWorldLegacyXmlExportWarning[],
++  code: AgentWorldLegacyXmlExportWarning["code"],
++  entityId: string | null,
++  field: string,
++  message: string
++): void {
++  warnings.push({ code, severity: "warning", entityId, field, message });
++}
++
++function formatNumber(value: number): string {
++  if (!Number.isFinite(value)) throw new Error("Legacy XML export encountered a non-finite transform or mass");
++  const rounded = Number(value.toFixed(6));
++  return Object.is(rounded, -0) ? "0" : String(rounded);
++}
++
++function escapeXmlText(value: string): string {
++  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
++}
++
++function escapeXmlAttribute(value: string): string {
++  return escapeXmlText(value).replace(/"/g, "&quot;").replace(/'/g, "&apos;");
++}
+diff --git a/src/agent-world-runtime.ts b/src/agent-world-runtime.ts
+index 75b9423..073f7f9 100644
+--- a/src/agent-world-runtime.ts
++++ b/src/agent-world-runtime.ts
+@@ -232,6 +232,7 @@ import {
+ // Type-only on purpose: the media library imports runtime types back, and a value
+ // import here would make that a real cycle instead of an erased one.
+ import type { GraphysXAgentMediaApi } from "./agent-world-media";
++import type { AgentWorldLegacyXmlExportConversion } from "./agent-world-legacy-xml";
+ 
+ export const GRAPHYSX_AGENT_WORLD_SCHEMA = "graphysx.agent-world/v2" as const;
+ export const GRAPHYSX_AGENT_WORLD_STATE_SCHEMA = "graphysx.agent-world-state/v2" as const;
+@@ -1152,6 +1153,8 @@ export type GraphysXAgentWorldApi = {
+     convertedEntityCount: number;
+     warnings: string[];
+   }>;
++  /** Export the active authored document, or a supplied v2 definition, through the explicit Scene3D v1.2 subset. */
++  exportLegacyXml(definition?: AgentWorldDefinition): AgentWorldResult<AgentWorldLegacyXmlExportConversion>;
+   open(): boolean;
+   demo(): AgentWorldResult<AgentWorldState>;
+   state(): AgentWorldState | null;
+@@ -1400,6 +1403,7 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
+   "time.pause",
+   "time.step",
+   "snapshot.export",
++  "legacy.xml.export",
+   "snapshot.save",
+   "snapshot.load",
+   "events.stream",
+diff --git a/src/archive-content.ts b/src/archive-content.ts
+index c669ebe..a7069c3 100644
+--- a/src/archive-content.ts
++++ b/src/archive-content.ts
+@@ -818,8 +818,8 @@ export const EDITOR_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
+   {
+     label: "Save XML",
+     source: "GfxNet::SceneNET::Serialize",
+-    status: "preview",
+-    detail: "Exact BaseScene/test1 serializer artifacts and version differences are player-visible, and v2 authored documents export as validated JSON. Emitting new legacy SceneNET XML remains deliberately open because its lossy field mapping and duplicate semantics are not specified."
++    status: "ported",
++    detail: "The editor and agent API emit a deterministic flat Scene3D v1.2 subset with structured loss warnings. Primitive transforms, visibility, known textures and basic physics survive; duplicate IDs and hierarchy are rejected instead of silently renamed or flattened. JSON remains the lossless format."
+   },
+   {
+     label: "Add X Mesh",
+diff --git a/src/platform-editor.ts b/src/platform-editor.ts
+index 29b94ea..fc7abed 100644
+--- a/src/platform-editor.ts
++++ b/src/platform-editor.ts
+@@ -1372,10 +1372,13 @@ export class PlatformEditor {
+       this.toolButton("Undo", () => { this.deps.api.undo(); this.select(null); }),
+     ]));
+ 
++    const legacyExport = this.toolButton("Legacy XML", () => this.exportLegacyXml(), "Warning-first flat Scene3D v1.2 compatibility subset");
++    legacyExport.dataset.gxExport = "legacy-xml";
+     toolbar.append(this.group([
+       this.toolButton("Save", () => this.saveScene()),
+       this.toolButton("Load", () => this.loadScene()),
+       this.toolButton("Export", () => this.exportScene()),
++      legacyExport,
+     ]));
+ 
+     this.levelsButton = this.toolButton("Levels", () => this.setLevelsOpen(!this.levelsOpen), "Open the BallZ level workbench");
+@@ -2091,6 +2094,23 @@ export class PlatformEditor {
+     URL.revokeObjectURL(url);
+   }
+ 
++  private exportLegacyXml(): void {
++    const result = this.deps.api.exportLegacyXml();
++    if (!result.ok || !result.value) {
++      this.toolbarStatus.textContent = result.error ?? "Legacy XML export failed";
++      return;
++    }
++    const definition = this.deps.api.exportDocument();
++    const blob = new Blob([result.value.xml], { type: "application/xml" });
++    const url = URL.createObjectURL(blob);
++    const link = document.createElement("a");
++    link.href = url;
++    link.download = `${definition?.id ?? "scene"}.scenenet.xml`;
++    link.click();
++    URL.revokeObjectURL(url);
++    this.toolbarStatus.textContent = `XML ${result.value.exportedEntityCount}/${result.value.sourceEntityCount} · ${result.value.warnings.length} warning${result.value.warnings.length === 1 ? "" : "s"}`;
++  }
++
+   // ------------------------------------------------------------------ levels
+ 
+   /** Shorthand for the level sub-API — the workbench never touches tiles any other way. */
+diff --git a/src/prototype-app.ts b/src/prototype-app.ts
+index 667a895..155aff6 100644
+--- a/src/prototype-app.ts
++++ b/src/prototype-app.ts
+@@ -93,6 +93,7 @@ import {
+   type AgentWorldTextureId
+ } from "./agent-world-textures";
+ import {
++  convertAgentWorldToLegacyXml,
+   convertLegacyGraphysXXml,
+   type AgentWorldLegacyXmlOptions
+ } from "./agent-world-legacy-xml";
+@@ -3338,6 +3339,7 @@ export class PrototypeApp {
+         return this.raceScene.createAgentWorld(definition);
+       },
+       importLegacyAgentWorldXml: (xml: string, options?: AgentWorldLegacyXmlOptions) => this.importLegacyAgentWorldXml(xml, options),
++      exportLegacyAgentWorldXml: (definition?: AgentWorldDefinition) => this.exportLegacyAgentWorldXml(definition),
+       loadAgentWorldDemo: () => {
+         this.ensureAgentWorldStudio();
+         return this.raceScene.createAgentWorld(GRAPHYSX_AGENT_DEMO_WORLD);
+@@ -3488,6 +3490,7 @@ export class PrototypeApp {
+       formulas: () => GRAPHYSX_AGENT_WORLD_FORMULAS,
+       dna: () => GRAPHYSX_AGENT_WORLD_DNA,
+       importLegacyXml: debugApi.importLegacyAgentWorldXml,
++      exportLegacyXml: debugApi.exportLegacyAgentWorldXml,
+       open: debugApi.openAgentWorldStudio,
+       demo: debugApi.loadAgentWorldDemo,
+       state: debugApi.agentWorldState,
+@@ -4463,6 +4466,24 @@ export class PrototypeApp {
+         this.setState("world-api-lab");
+         return;
+       }
++      if (action === "download-legacy-xml") {
++        const result = this.exportLegacyAgentWorldXml();
++        if (!result.ok || !result.value) throw new Error(result.error ?? "Legacy XML export failed");
++        const definition = this.raceScene.exportAgentWorldDocument();
++        const blob = new Blob([result.value.xml], { type: "application/xml" });
++        const url = URL.createObjectURL(blob);
++        const anchor = document.createElement("a");
++        anchor.href = url;
++        anchor.download = `${definition?.id.replace(/[^a-z0-9_-]+/gi, "-") || "graphysx-world"}.scenenet.xml`;
++        document.body.append(anchor);
++        anchor.click();
++        anchor.remove();
++        setTimeout(() => URL.revokeObjectURL(url), 0);
++        this.agentWorldEditorHasError = false;
++        this.agentWorldEditorMessage = `Downloaded ${anchor.download} · ${result.value.exportedEntityCount}/${result.value.sourceEntityCount} entities · ${result.value.warnings.length} warning${result.value.warnings.length === 1 ? "" : "s"}.`;
++        this.setState("world-api-lab");
++        return;
++      }
+       if (action === "create") {
+         const type = agentAuthorValue(studio, "create", "type") as AgentWorldEntityDefinition["type"];
+         const id = agentAuthorValue(studio, "create", "id").trim();
+@@ -4699,6 +4720,17 @@ export class PrototypeApp {
+     }
+   }
+ 
++  private exportLegacyAgentWorldXml(definition?: AgentWorldDefinition) {
++    const current = definition ?? this.raceScene.exportAgentWorldDocument();
++    const revision = this.raceScene.getAgentWorldState()?.revision ?? 0;
++    if (!current) return { ok: false as const, revision, error: "Agent World Studio is not open" };
++    try {
++      return { ok: true as const, revision, value: convertAgentWorldToLegacyXml(current) };
++    } catch (error) {
++      return { ok: false as const, revision, error: error instanceof Error ? error.message : String(error) };
++    }
++  }
++
+   private async importAgentWorldFile(input: HTMLInputElement): Promise<void> {
+     const file = input.files?.[0];
+     input.value = "";
+@@ -4873,7 +4905,7 @@ gx.commit({
+     const commitExample = JSON.stringify({ actor: { id: "studio-user", label: "Studio User", kind: "human" }, intent: "Apply a reviewed Studio change", expectedRevision: state?.revision ?? 0, commands: [{ op: "select", ids: selectedState ? [selectedState.id] : [] }] }, null, 2);
+     const authoringStudio = `<section class="agent-authoring-studio" data-agent-authoring-studio>
+       <div class="agent-authoring-heading"><span><span class="stat-label">Human + Agent Parity</span><strong>World Editor</strong><small>Every control below calls the same validated runtime used by <code>window.__GRAPHYSX__</code>.</small></span><b class="${this.agentWorldEditorHasError ? "is-error" : ""}" data-agent-editor-message>${escapeHtml(this.agentWorldEditorMessage)}</b></div>
+-      <div class="agent-world-filebar"><span><b>Portable World File</b><small>validated v2 JSON · archived GraphysX XML migration</small></span><div><button data-agent-authoring-action="download-world">Download JSON</button><button data-agent-authoring-action="import-file">Import JSON / XML</button><input type="file" accept="application/json,text/xml,application/xml,.json,.xml" data-agent-world-file-input hidden></div></div>
++      <div class="agent-world-filebar"><span><b>Portable World File</b><small>lossless v2 JSON · warning-first SceneNET v1.2 subset</small></span><div><button data-agent-authoring-action="download-world">Download JSON</button><button data-agent-authoring-action="download-legacy-xml">Legacy XML</button><button data-agent-authoring-action="import-file">Import JSON / XML</button><input type="file" accept="application/json,text/xml,application/xml,.json,.xml" data-agent-world-file-input hidden></div></div>
+       <div class="agent-authoring-layout">
+         <aside class="agent-outliner"><span><b>Entity Outliner</b><small>${stateEntities.length} in this world</small></span><div class="agent-outliner-list">${entities || "<small>The world is empty.</small>"}</div></aside>
+         ${selectedEditor}
+-- 
+2.47.1.windows.1
+

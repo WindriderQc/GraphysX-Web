@@ -1,0 +1,957 @@
+From bddfb3a149b76c6fad1dea7a85cb15395f4ad316 Mon Sep 17 00:00:00 2001
+From: yanik <yanikbeaulieu@hotmail.com>
+Date: Tue, 28 Jul 2026 13:29:17 -0400
+Subject: [PATCH] feat(games): launch the Archive Cup campaign
+
+---
+ .gitattributes                |   2 +-
+ package.json                  |   1 +
+ progress.md                   |  36 +++++++
+ scripts/smoke-archive-cup.mjs | 126 ++++++++++++++++++++++
+ scripts/verify.mjs            |   1 +
+ src/archive-cup.ts            | 198 ++++++++++++++++++++++++++++++++++
+ src/archive-race-records.ts   |  15 +++
+ src/ballz-play.ts             |  33 +++---
+ src/games-shelf.ts            |  43 +++++++-
+ src/level-ghosts.ts           | 174 ++++++++++++++++++++++++++++++
+ src/main.ts                   |  77 +++++++++++--
+ 11 files changed, 677 insertions(+), 29 deletions(-)
+ create mode 100644 scripts/smoke-archive-cup.mjs
+ create mode 100644 src/archive-cup.ts
+ create mode 100644 src/archive-race-records.ts
+ create mode 100644 src/level-ghosts.ts
+
+diff --git a/.gitattributes b/.gitattributes
+index 021ef54..30bdb94 100644
+--- a/.gitattributes
++++ b/.gitattributes
+@@ -2,4 +2,4 @@
+ *.sh text eol=lf
+ *.yml text eol=lf
+ *.yaml text eol=lf
+-
++*.shade text eol=lf
+diff --git a/package.json b/package.json
+index 7ab1c76..1da2d86 100644
+--- a/package.json
++++ b/package.json
+@@ -13,6 +13,7 @@
+     "smoke:editor": "node scripts/smoke-editor.mjs",
+     "smoke:standalone": "node scripts/smoke-standalone.mjs",
+     "smoke:levels": "node scripts/smoke-levels.mjs",
++    "smoke:archive-cup": "node scripts/smoke-archive-cup.mjs",
+     "smoke:foundation": "node scripts/smoke-foundation.mjs",
+     "probe:terrain": "node scripts/probe-terrain-rest.mjs",
+     "probe:rapier-heightfield": "node scripts/probe-rapier-heightfield.mjs",
+diff --git a/progress.md b/progress.md
+index ff658b4..3c4ccaa 100644
+--- a/progress.md
++++ b/progress.md
+@@ -2148,3 +2148,39 @@ Final release verification: `npm run verify -- --wait` passed all 40 checks from
+ typecheck and production build. The complete browser/archive matrix, revival-debt audit,
+ Rapier probes, store-auth's 22 assertions and node-only DNA suite are green. Screenshots are
+ under `output/verify`; the focused human-route captures remain under `output/web-game`.
++
++## 2026-07-28 — `archive-cup-r1`: the recovered courses become a campaign
++
++The Games shelf now promotes Archive Cup as a first-class nine-round tour: BallZ Levels 1–3,
++Great Slide, Map 1, Level1 2011, Suzanne Machinery, Suzanne 1 and Suzanne 2. Round 1 starts
++unlocked; each verified clear in the existing `graphysx-level-records-v1` store unlocks the
++next. Returning players retain their clears, best times and medals without a migration. The
++three courses with recovered ScoreBest values use the existing faithful medal scale; the six
++without source times show completion and best time without inventing a medal reference.
++Legacy `Level.cs` medal points (100/75/50) are summed separately from the cleared-round count.
++
++Every rules-backed course now records a bounded 150 ms trajectory for a verified personal
++best. On replay it materialises as `personal-best-ghost`: a translucent cyan, non-physical,
++ephemeral scene entity moved through ordinary `api.update` calls. It is excluded from authored
++exports, never starts before the 3·2·1·GO gate, never records a desynchronised finish, and an
++older board time cannot be mislabeled by a later/slower first trace. Campaign and ghost state
++are both included in `render_game_to_text`. Exiting a Cup race returns directly to refreshed
++standings; ordinary Games/BallZ play still returns to the showroom.
++
++Focused verification is green: production build, the pre-existing Games journey, and the new
++Archive Cup smoke. The new smoke proves the 1-of-9 fresh unlock, restored 2/9 progress, 175
++medal points, round-3 unlock, personal-ghost playback/ephemeral/no-physics contract, text
++projection, and race→standings return. `archive-cup-standings.png` and
++`archive-cup-personal-ghost.png` were inspected at 1280×800; no clipping or browser errors.
++The required web-game client also opened the human Showroom→Games route, advanced rendered
++frames, captured the new Cup/BallZ shelf, and matched its scene-mode text projection.
++
++The expanded full release gate passed 39/41 checks in one sweep. Its two misses were audited:
++Rapier Race never reached either ephemeral preview server (`ERR_CONNECTION_TIMED_OUT`) and
++passed immediately against the stable preview; meshlight's behavior was green but its
++byte-identity check exposed that Windows had converted the 9,036-byte LF-normalized vendored
++shader to 9,300 CRLF bytes. `*.shade text eol=lf` now makes that provenance contract stable
++across checkouts; after rebuilding, the exact `0EE6F3…5A1C` SHA, meshlight smoke and Rapier
++Race smoke are green. Together the matrix plus isolated reruns cover all 41 checks.
++
++Next: merge the campaign commit to main, push, and confirm its production deployment.
+diff --git a/scripts/smoke-archive-cup.mjs b/scripts/smoke-archive-cup.mjs
+new file mode 100644
+index 0000000..15bb1ef
+--- /dev/null
++++ b/scripts/smoke-archive-cup.mjs
+@@ -0,0 +1,126 @@
++import { mkdirSync } from "node:fs";
++import path from "node:path";
++import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
++
++const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
++const ART = process.env.SMOKE_ARTIFACTS || path.resolve("output/smoke");
++mkdirSync(ART, { recursive: true });
++
++const consoleErrors = [];
++const pageErrors = [];
++const browser = await launchSmokeBrowser();
++const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
++applySmokeTimeout(page);
++page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
++page.on("pageerror", (error) => pageErrors.push(String(error)));
++
++const out = {};
++try {
++  await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
++  await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
++  await page.evaluate(() => {
++    localStorage.removeItem("graphysx-level-records-v1");
++    localStorage.removeItem("graphysx-level-ghosts-v1");
++  });
++  await page.click(".gx-welcome .gx-go-games");
++  await page.waitForSelector('.gx-shelf-cup[data-game-id="archive-cup"]', { timeout: SMOKE_TIMEOUT });
++  await page.click('.gx-shelf-cup[data-game-id="archive-cup"]');
++  await page.waitForSelector(".gx-cup", { timeout: SMOKE_TIMEOUT });
++
++  out.fresh = await page.evaluate(() => ({
++    rounds: document.querySelectorAll(".gx-cup-round").length,
++    enabled: [...document.querySelectorAll(".gx-cup-round")].filter((row) => !row.disabled).map((row) => row.dataset.courseId),
++    continueText: document.querySelector(".gx-cup-continue")?.textContent ?? null,
++    textState: JSON.parse(window.render_game_to_text()).archiveCup,
++  }));
++
++  // Seed two honest clears plus a prior Level 1 trace. Reloading exercises the same persistent
++  // data path a returning player uses rather than mutating campaign DOM state in place.
++  await page.evaluate(() => {
++    localStorage.setItem("graphysx-level-records-v1", JSON.stringify({
++      "archive-ballz-level1": { bestMs: 29_000, medal: "gold", completedAt: "2026-07-28T00:00:00.000Z" },
++      "archive-ballz-level2": { bestMs: 150_000, medal: "silver", completedAt: "2026-07-28T00:00:01.000Z" },
++    }));
++    localStorage.setItem("graphysx-level-ghosts-v1", JSON.stringify({
++      "archive-ballz-level1": {
++        elapsedMs: 2_000,
++        samples: [
++          { tMs: 0, position: [-13, 1.2, 10] },
++          { tMs: 2_000, position: [-10, 1.2, 10] },
++        ],
++      },
++    }));
++  });
++  await page.reload({ waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
++  await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
++  await page.click(".gx-welcome .gx-go-games");
++  await page.click('.gx-shelf-cup[data-game-id="archive-cup"]');
++  await page.waitForSelector(".gx-cup", { timeout: SMOKE_TIMEOUT });
++
++  out.returning = await page.evaluate(() => ({
++    enabled: [...document.querySelectorAll(".gx-cup-round")].filter((row) => !row.disabled).map((row) => row.dataset.courseId),
++    firstResult: document.querySelector('.gx-cup-round[data-course-id="archive-ballz-level1"] .gx-cup-result')?.textContent ?? null,
++    secondResult: document.querySelector('.gx-cup-round[data-course-id="archive-ballz-level2"] .gx-cup-result')?.textContent ?? null,
++    tallies: [...document.querySelectorAll(".gx-cup-tally strong")].map((item) => item.textContent),
++    continueText: document.querySelector(".gx-cup-continue")?.textContent ?? null,
++  }));
++  await page.screenshot({ path: path.join(ART, "archive-cup-standings.png") });
++
++  await page.click('.gx-cup-round[data-course-id="archive-ballz-level1"]');
++  await page.waitForSelector(".gx-bz-hud", { timeout: SMOKE_TIMEOUT });
++  // Pausing is the documented programmatic-countdown escape hatch. It lets the play view
++  // start its poll without waiting through presentation, then the saved trace materialises.
++  await page.evaluate(() => window.__GRAPHYSX__.pause(true));
++  await page.waitForFunction(() => window.__GRAPHYSX__.query({ tag: "personal-ghost" }).length === 1, null, { timeout: SMOKE_TIMEOUT });
++  out.playing = await page.evaluate(() => {
++    const ghost = window.__GRAPHYSX__.query({ tag: "personal-ghost" })[0];
++    const text = JSON.parse(window.render_game_to_text());
++    return {
++      mode: window.__GRAPHYSX_HOST__.mode,
++      ghost: ghost ? { id: ghost.id, ephemeral: ghost.ephemeral, physics: ghost.physics, position: ghost.position } : null,
++      textCup: text.archiveCup,
++      textGhost: text.personalGhost,
++    };
++  });
++  await page.screenshot({ path: path.join(ART, "archive-cup-personal-ghost.png") });
++
++  await page.click(".gx-bz-exit");
++  await page.waitForSelector(".gx-cup", { timeout: SMOKE_TIMEOUT });
++  out.returned = await page.evaluate(() => ({
++    cupVisible: Boolean(document.querySelector(".gx-cup")),
++    welcomeAbsent: !document.querySelector(".gx-welcome"),
++    mode: window.__GRAPHYSX_HOST__.mode,
++    state: JSON.parse(window.render_game_to_text()).archiveCup,
++  }));
++} catch (error) {
++  out.fatal = String(error);
++}
++
++out.consoleErrors = consoleErrors;
++out.pageErrors = pageErrors;
++console.log(JSON.stringify(out, null, 2));
++await browser.close();
++
++const ok =
++  out.fresh?.rounds === 9
++  && JSON.stringify(out.fresh?.enabled) === JSON.stringify(["archive-ballz-level1"])
++  && out.fresh?.continueText === "Start the Cup"
++  && out.fresh?.textState?.completed === 0
++  && JSON.stringify(out.returning?.enabled) === JSON.stringify(["archive-ballz-level1", "archive-ballz-level2", "archive-level3-v2"])
++  && /GOLD/.test(out.returning?.firstResult ?? "")
++  && /SILVER/.test(out.returning?.secondResult ?? "")
++  && JSON.stringify(out.returning?.tallies) === JSON.stringify(["2/9", "175"])
++  && out.returning?.continueText === "Continue · Round 3"
++  && out.playing?.mode === "play"
++  && out.playing?.ghost?.id === "personal-best-ghost"
++  && out.playing?.ghost?.ephemeral === true
++  && out.playing?.ghost?.physics === null
++  && out.playing?.textCup?.playingCourseId === "archive-ballz-level1"
++  && out.playing?.textGhost?.available === true
++  && out.playing?.textGhost?.visible === true
++  && out.returned?.cupVisible === true
++  && out.returned?.welcomeAbsent === true
++  && out.returned?.mode === "scene"
++  && out.returned?.state?.visible === true;
++
++process.exit(out.fatal || pageErrors.length || consoleErrors.length || !ok ? 1 : 0);
+diff --git a/scripts/verify.mjs b/scripts/verify.mjs
+index 64a674f..1c7e7a3 100644
+--- a/scripts/verify.mjs
++++ b/scripts/verify.mjs
+@@ -53,6 +53,7 @@ const SMOKES = [
+   { name: "rules", script: "scripts/smoke-rules.mjs", covers: "rules layer: ordered checkpoints, laps, sim-time clock, document round-trip, dropped -> resync" },
+   { name: "ballz", script: "scripts/smoke-ballz.mjs", covers: "levels.play(): grid materialises, ball rests, walls stop it, gate + ring fire" },
+   { name: "games", script: "scripts/smoke-games.mjs", covers: "front door: showroom -> Games shelf -> playing a level -> back" },
++  { name: "archive-cup", script: "scripts/smoke-archive-cup.mjs", covers: "nine-round campaign: persistent unlocks, medal totals, personal ghost, return to standings" },
+   { name: "overlay", script: "scripts/smoke-overlay.mjs", covers: "2D overlay layer: off by default, one shared loop, draws over 3D, round-trips" },
+   { name: "surfaces", script: "scripts/smoke-surfaces.mjs", covers: "generative surfaces: off by default, one shared loop (surfaceRedraws tracks frames), scene data round-trip, retune + remove" },
+   { name: "archive-levels", script: "scripts/smoke-archive-levels.mjs", covers: "recovered BallZ arenas: census fidelity, containment, reachable, completable" },
+diff --git a/src/archive-cup.ts b/src/archive-cup.ts
+new file mode 100644
+index 0000000..3b7e806
+--- /dev/null
++++ b/src/archive-cup.ts
+@@ -0,0 +1,198 @@
++import { MEDAL_POINTS, LevelRecordStore, formatRaceTime, type Medal } from "./scoreboard";
++
++export type ArchiveCupCourse = {
++  id: string;
++  recordId: string;
++  label: string;
++  meta: string;
++  referenceMs: number | null;
++  play: () => void | Promise<void>;
++};
++
++export type ArchiveCupSnapshot = {
++  visible: boolean;
++  playingCourseId: string | null;
++  completed: number;
++  total: number;
++  medalPoints: number;
++  nextCourseId: string | null;
++};
++
++let runtimeSnapshot: ArchiveCupSnapshot | null = null;
++
++export function getArchiveCupRuntimeState(): ArchiveCupSnapshot | null {
++  return runtimeSnapshot ? { ...runtimeSnapshot } : null;
++}
++
++export function archiveCupSnapshot(courses: ArchiveCupCourse[]): ArchiveCupSnapshot {
++  const store = new LevelRecordStore();
++  const records = courses.map((course) => store.getRecord(course.recordId));
++  const completed = records.filter(Boolean).length;
++  const medalPoints = records.reduce((score, record) => score + (record?.medal ? MEDAL_POINTS[record.medal] : 0), 0);
++  const nextIndex = records.findIndex((record) => !record);
++  return {
++    visible: false,
++    playingCourseId: null,
++    completed,
++    total: courses.length,
++    medalPoints,
++    nextCourseId: nextIndex >= 0 ? courses[nextIndex]?.id ?? null : null,
++  };
++}
++
++export function mountArchiveCup(
++  container: HTMLElement,
++  options: {
++    courses: ArchiveCupCourse[];
++    onPlay: (course: ArchiveCupCourse) => void;
++    onBack?: () => void;
++  },
++): () => void {
++  injectStyleOnce();
++  const { courses, onPlay, onBack } = options;
++  const snapshot = archiveCupSnapshot(courses);
++  runtimeSnapshot = { ...snapshot, visible: true };
++  const store = new LevelRecordStore();
++
++  const overlay = document.createElement("div");
++  overlay.className = "gx-cup";
++  const card = document.createElement("section");
++  card.className = "gx-cup-card";
++  card.setAttribute("aria-label", "Archive Cup campaign");
++
++  const head = document.createElement("header");
++  head.className = "gx-cup-head";
++  const heading = document.createElement("div");
++  const eyebrow = document.createElement("div");
++  eyebrow.className = "gx-cup-eyebrow";
++  eyebrow.textContent = "GRAPHYSX REVIVAL TOUR";
++  const title = document.createElement("h2");
++  title.textContent = "Archive Cup";
++  const blurb = document.createElement("p");
++  blurb.textContent = "Nine recovered courses. Clear each round to unlock the next; your best run returns as a personal ghost.";
++  heading.append(eyebrow, title, blurb);
++  const back = document.createElement("button");
++  back.type = "button";
++  back.className = "gx-cup-back";
++  back.textContent = "← Games";
++  head.append(heading, back);
++
++  const tally = document.createElement("div");
++  tally.className = "gx-cup-tally";
++  tally.append(tallyItem("CLEARED", `${snapshot.completed}/${snapshot.total}`), tallyItem("MEDAL POINTS", String(snapshot.medalPoints)));
++
++  const list = document.createElement("div");
++  list.className = "gx-cup-list";
++  courses.forEach((course, index) => {
++    const previousCleared = index === 0 || Boolean(store.getRecord(courses[index - 1].recordId));
++    const record = store.getRecord(course.recordId);
++    const row = document.createElement("button");
++    row.type = "button";
++    row.className = "gx-cup-round";
++    row.dataset.courseId = course.id;
++    row.disabled = !previousCleared;
++    const number = document.createElement("span");
++    number.className = "gx-cup-number";
++    number.textContent = String(index + 1).padStart(2, "0");
++    const copy = document.createElement("span");
++    copy.className = "gx-cup-copy";
++    const name = document.createElement("strong");
++    name.textContent = course.label;
++    const meta = document.createElement("small");
++    meta.textContent = previousCleared ? course.meta : "Locked — clear the previous round";
++    copy.append(name, meta);
++    const result = document.createElement("span");
++    result.className = "gx-cup-result";
++    result.textContent = record
++      ? `${medalMark(record.medal)} ${formatRaceTime(record.bestMs)}`.trim()
++      : previousCleared ? "▶ RACE" : "🔒";
++    row.append(number, copy, result);
++    row.addEventListener("click", async () => {
++      if (row.disabled) return;
++      row.disabled = true;
++      const previous = result.textContent;
++      result.textContent = "LOADING…";
++      try {
++        runtimeSnapshot = { ...archiveCupSnapshot(courses), visible: false, playingCourseId: course.id };
++        await course.play();
++        dispose(false);
++        onPlay(course);
++      } catch (error) {
++        runtimeSnapshot = { ...archiveCupSnapshot(courses), visible: true, playingCourseId: null };
++        result.textContent = error instanceof Error ? error.message : String(error);
++        row.classList.add("gx-cup-round--error");
++        row.disabled = false;
++        return;
++      }
++      result.textContent = previous;
++    });
++    list.append(row);
++  });
++
++  const action = document.createElement("button");
++  action.type = "button";
++  action.className = "gx-cup-continue";
++  const next = courses.find((course) => course.id === snapshot.nextCourseId) ?? courses[0];
++  action.textContent = snapshot.completed === snapshot.total ? "↻ Replay the Cup" : snapshot.completed > 0 ? `Continue · Round ${snapshot.completed + 1}` : "Start the Cup";
++  action.addEventListener("click", () => {
++    list.querySelector<HTMLButtonElement>(`.gx-cup-round[data-course-id="${next.id}"]`)?.click();
++  });
++
++  card.append(head, tally, list, action);
++  overlay.append(card);
++  container.append(overlay);
++
++  const dispose = (clearState = true): void => {
++    overlay.remove();
++    if (clearState && runtimeSnapshot?.visible) runtimeSnapshot = null;
++  };
++  back.addEventListener("click", () => {
++    dispose();
++    onBack?.();
++  });
++  return () => dispose();
++}
++
++function tallyItem(label: string, value: string): HTMLElement {
++  const item = document.createElement("div");
++  const figure = document.createElement("strong");
++  figure.textContent = value;
++  const name = document.createElement("span");
++  name.textContent = label;
++  item.append(figure, name);
++  return item;
++}
++
++function medalMark(medal: Medal | null): string {
++  if (medal === "gold") return "● GOLD ·";
++  if (medal === "silver") return "● SILVER ·";
++  if (medal === "bronze") return "● BRONZE ·";
++  return "✓";
++}
++
++const STYLE_ID = "gx-archive-cup-css";
++function injectStyleOnce(): void {
++  if (document.getElementById(STYLE_ID)) return;
++  const style = document.createElement("style");
++  style.id = STYLE_ID;
++  style.textContent = `
++.gx-cup{position:fixed;inset:0;z-index:42;display:flex;align-items:center;justify-content:center;padding:20px;
++  background:radial-gradient(circle at 50% 0,rgba(43,129,143,.22),transparent 50%),rgba(3,11,17,.92);font-family:var(--gx-font)}
++.gx-cup-card{width:min(820px,100%);max-height:92vh;display:flex;flex-direction:column;gap:14px;padding:22px;
++  color:var(--gx-ink);background:linear-gradient(145deg,rgba(8,27,37,.98),rgba(8,18,27,.98));border:1px solid rgba(98,226,222,.38);
++  border-radius:18px;box-shadow:0 28px 90px rgba(0,0,0,.62)}
++.gx-cup-head{display:flex;gap:18px;align-items:flex-start}.gx-cup-head>div{flex:1}.gx-cup-eyebrow{font-size:9px;font-weight:800;letter-spacing:.24em;color:#70efff}
++.gx-cup-head h2{margin:3px 0 2px;font-size:30px;letter-spacing:.02em}.gx-cup-head p{margin:0;color:var(--gx-ink-faint);font-size:12px;line-height:1.45}
++.gx-cup-back{color:var(--gx-ink-soft);background:rgba(11,31,42,.8);border:1px solid rgba(112,239,255,.25);border-radius:8px;padding:8px 11px;cursor:pointer}
++.gx-cup-tally{display:flex;gap:10px}.gx-cup-tally>div{min-width:110px;padding:9px 12px;border-radius:9px;background:rgba(56,176,179,.09);border:1px solid rgba(112,239,255,.14)}
++.gx-cup-tally strong,.gx-cup-tally span{display:block}.gx-cup-tally strong{font-size:18px;color:#86f3de}.gx-cup-tally span{font-size:8px;letter-spacing:.16em;color:var(--gx-ink-faint)}
++.gx-cup-list{display:flex;flex-direction:column;gap:6px;overflow:auto;padding-right:4px}.gx-cup-round{display:grid;grid-template-columns:42px 1fr auto;gap:12px;align-items:center;text-align:left;
++  padding:10px 12px;color:inherit;background:rgba(17,43,55,.72);border:1px solid rgba(112,239,255,.13);border-radius:10px;cursor:pointer}
++.gx-cup-round:hover:not(:disabled){background:rgba(26,61,73,.92);border-color:rgba(112,239,255,.42)}.gx-cup-round:disabled{opacity:.42;cursor:not-allowed}
++.gx-cup-number{font:800 18px/1 var(--gx-font);color:#70efff}.gx-cup-copy{display:flex;flex-direction:column;gap:2px;min-width:0}.gx-cup-copy strong{font-size:13px}.gx-cup-copy small{color:var(--gx-ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
++.gx-cup-result{font-size:10px;font-weight:800;letter-spacing:.08em;color:#86f3de}.gx-cup-round--error{border-color:#f95f4c}.gx-cup-round--error .gx-cup-result{color:#ff8d7f}
++.gx-cup-continue{padding:12px;border:0;border-radius:10px;cursor:pointer;color:#031216;font:800 13px var(--gx-font);letter-spacing:.06em;background:linear-gradient(180deg,#8af5d7,#48c7c4);box-shadow:0 8px 26px rgba(72,199,196,.22)}
++@media(max-width:640px){.gx-cup{padding:10px}.gx-cup-card{padding:15px;max-height:96vh}.gx-cup-head h2{font-size:24px}.gx-cup-round{grid-template-columns:34px 1fr}.gx-cup-result{grid-column:2}.gx-cup-copy small{white-space:normal}}
++`;
++  document.head.append(style);
++}
+diff --git a/src/archive-race-records.ts b/src/archive-race-records.ts
+new file mode 100644
+index 0000000..45317b6
+--- /dev/null
++++ b/src/archive-race-records.ts
+@@ -0,0 +1,15 @@
++import { ARCHIVE_BALLZ_LEVELS } from "./archive-ballz-levels";
++
++/** The id shared by the win board, Archive Cup and personal-ghost storage. */
++export function raceRecordIdForWorld(worldId: string): string | null {
++  if (!worldId) return null;
++  return worldId.startsWith("ballz-level-") ? worldId.slice("ballz-level-".length) : worldId;
++}
++
++/** Recovered ScoreBest reference, where the archive actually preserved one. */
++export function archiveReferenceMs(recordId: string): number | null {
++  const level = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === recordId);
++  const value = level?.provenance.levelListFacts.scoreBestMs;
++  if (typeof value === "number" && value > 0) return value;
++  return recordId === "archive-level3-v2" ? 158507.313 : null;
++}
+diff --git a/src/ballz-play.ts b/src/ballz-play.ts
+index ea0b857..602838f 100644
+--- a/src/ballz-play.ts
++++ b/src/ballz-play.ts
+@@ -1,6 +1,7 @@
+ import { PUSH_DIRECTIONS } from "./ballz-level-scene";
+ import { describeRun, formatClock, type AgentWorldDefinition, type GraphysXAgentWorldApi } from "./agent-world-runtime";
+-import { ARCHIVE_BALLZ_LEVELS } from "./archive-ballz-levels";
++import { archiveReferenceMs, raceRecordIdForWorld } from "./archive-race-records";
++import { createPersonalGhostSession, getPersonalGhostState } from "./level-ghosts";
+ import {
+   LevelRecordStore,
+   formatMedal,
+@@ -55,6 +56,8 @@ export function mountBallzPlay(
+   // A level with no controllable subject is a layout rather than something to play.
+   if (!ball || !subjectId) return () => {};
+   const ballId = subjectId;
++  const recordId = raceRecordIdForWorld(api.state()?.world.id ?? "");
++  const ghostSession = recordId ? createPersonalGhostSession(api, ballId, recordId) : null;
+   // A composed replay reloads the pristine scene so hidden pickups, transforms, velocities,
+   // and rules all restart together. Grid levels retain their existing library-backed replay.
+   // `world.loaded` mounts this view before the runtime arms the rules block (deliberately: the
+@@ -94,7 +97,9 @@ export function mountBallzPlay(
+   status.className = "gx-bz-status";
+   const hint = document.createElement("div");
+   hint.className = "gx-bz-hint";
+-  hint.textContent = (initial?.collectibleCount ?? 0) > 0 ? "collect the rings, then reach the finish" : "arrow keys to roll";
++  const hasGhost = getPersonalGhostState()?.available ?? false;
++  const baseHint = (initial?.collectibleCount ?? 0) > 0 ? "collect the rings, then reach the finish" : "arrow keys to roll";
++  hint.textContent = `${baseHint}${hasGhost ? " · race your personal ghost" : ""}`;
+   hud.append(course, status, hint);
+   // Play is a place you can leave. Without this the only way out of a game is a page reload,
+   // which is the sort of dead end that makes a mode feel like a trap rather than a surface.
+@@ -135,7 +140,7 @@ export function mountBallzPlay(
+   // remove, so WASD would fight it the moment someone plays a level with the editor open.
+   const steerable = !!api.query({ ids: [ballId] })[0]?.steering;
+   if (steerable) {
+-    hint.textContent = "← → aim · ↑ roll · ↓ brake · space jump · hold the mouse to roll toward it";
++    hint.textContent = `← → aim · ↑ roll · ↓ brake · space jump${hasGhost ? " · personal ghost active" : ""}`;
+   }
+   // The race-start countdown: 3 · 2 · 1 · GO, controls locked until GO, and the run clock
+   // re-armed AT go so the time on the board measures driving, not staring at the overlay.
+@@ -161,7 +166,9 @@ export function mountBallzPlay(
+   const poll = window.setInterval(() => {
+     if (won) return;
+     const run = api.rules.status();
++    if (run && raceStarted) ghostSession?.tick(run.elapsedSeconds * 1000);
+     if (run?.phase === "complete") {
++      ghostSession?.finish(run.elapsedSeconds * 1000, !run.desynced);
+       win(run.collectibleCount, run.elapsedSeconds, run.desynced);
+       return;
+     }
+@@ -186,6 +193,7 @@ export function mountBallzPlay(
+     window.clearInterval(poll);
+     teardownCountdown?.();
+     teardownControls();
++    ghostSession?.dispose();
+     hud.remove();
+     container.querySelector(".gx-bz-win")?.remove();
+   };
+@@ -507,9 +515,7 @@ function buildWinPanel(
+   const actions = document.createElement("div");
+   actions.className = "gx-bz-win-actions";
+ 
+-  const worldId = api.state()?.world.id ?? "";
+-  const levelId = worldId.startsWith("ballz-level-") ? worldId.slice("ballz-level-".length) : null;
+-  const recordId = levelId ?? (worldId || null);
++  const recordId = raceRecordIdForWorld(api.state()?.world.id ?? "");
+ 
+   // The scoreboard finally drawn (ROADMAP Horizon 3 §6): time, medal, best, delta-to-best, fed
+   // from the rules run this panel already renders plus the level record store. A desynced run
+@@ -591,21 +597,6 @@ function buildScoreRow(finish: LevelFinishSummary): HTMLElement {
+   return row;
+ }
+ 
+-/**
+- * The archive's recovered `ScoreBest` for a seeded level, when this run is one of them — the
+- * reference the medal scale judges against. Hand-painted levels return null and stay unscored.
+- */
+-function archiveReferenceMs(levelId: string): number | null {
+-  const level = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === levelId);
+-  const value = level?.provenance.levelListFacts["scoreBestMs"];
+-  if (typeof value === "number" && value > 0) return value;
+-  // Level 3 deliberately is not in the modern grid library: its M/r/$ alphabet needs the
+-  // composed raised-platform scene. Its levelList.xml reference still belongs on the same
+-  // finish board, keyed by the composed world id instead of pretending it is a grid level.
+-  if (levelId === "archive-level3-v2") return 158507.313;
+-  return null;
+-}
+-
+ /** Reload a composed course without letting gravity outrun an async exact model collider. */
+ async function reloadPristineScene(api: GraphysXAgentWorldApi, definition: AgentWorldDefinition): Promise<void> {
+   const exactModelIds = definition.entities
+diff --git a/src/games-shelf.ts b/src/games-shelf.ts
+index 6cd47e5..55d362d 100644
+--- a/src/games-shelf.ts
++++ b/src/games-shelf.ts
+@@ -1,6 +1,7 @@
+ import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+ import { createLevelThumbnail, createSceneThumbnail, SHELF_THUMBNAIL_CSS } from "./shelf-thumbnails";
+ import { BALLZ_MENU_LEVEL_IDS, mountBallzMenu } from "./ballz-menu";
++import { mountArchiveCup, type ArchiveCupCourse } from "./archive-cup";
+ 
+ /**
+  * The "Games & Playgrounds" front-door shelf.
+@@ -61,6 +62,10 @@ export type GamesShelfOptions = {
+   api: GraphysXAgentWorldApi;
+   /** Archive courses and other composed playables, listed above the level library. */
+   composed?: GamesShelfComposedRow[];
++  /** Ordered campaign rounds. When present the shelf promotes them as the Archive Cup. */
++  archiveCup?: ArchiveCupCourse[];
++  /** Return from a campaign race directly to its refreshed standings. */
++  openArchiveCup?: boolean;
+   /** Called after a level is materialised, so the caller can take the showroom down with it. */
+   onPlay?: (levelId: string) => void;
+   /** Called when the ✕ dismisses the shelf without playing, so the caller can restore the front door. */
+@@ -68,7 +73,7 @@ export type GamesShelfOptions = {
+ };
+ 
+ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptions): () => void {
+-  const { api, composed, onPlay, onClose } = options;
++  const { api, composed, archiveCup, openArchiveCup, onPlay, onClose } = options;
+   injectStyleOnce();
+ 
+   // Seed once. A returning visitor who edited or deleted this course keeps their version —
+@@ -99,6 +104,36 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
+   const list = document.createElement("div");
+   list.className = "gx-shelf-list";
+ 
++  const openCup = (): void => {
++    if (!archiveCup?.length) return;
++    mountArchiveCup(container, {
++      courses: archiveCup,
++      onPlay: (course) => {
++        dispose();
++        onPlay?.(course.id);
++      },
++    });
++  };
++
++  if (archiveCup?.length) {
++    const cup = document.createElement("button");
++    cup.type = "button";
++    cup.className = "gx-shelf-cup";
++    cup.dataset.gameId = "archive-cup";
++    const cupMark = document.createElement("span");
++    cupMark.className = "gx-shelf-cup-mark";
++    cupMark.textContent = "Archive Cup";
++    const cupCopy = document.createElement("span");
++    cupCopy.className = "gx-shelf-hero-copy";
++    cupCopy.textContent = "nine recovered courses · persistent unlocks · medals · personal ghosts";
++    const cupCta = document.createElement("span");
++    cupCta.className = "gx-shelf-cup-cta";
++    cupCta.textContent = "▶ Tour";
++    cup.append(cupMark, cupCopy, cupCta);
++    cup.addEventListener("click", openCup);
++    list.append(cup);
++  }
++
+   // THE GAME gets a hero card, not a bare level row. "First Course" as a top-level button
+   // read as a test fixture; BallZ is a title, and clicking it opens the game's own menu
+   // (title screen, Start Game, the course roster). The shelf's generic level list below
+@@ -231,6 +266,7 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
+     dispose();
+     onClose?.();
+   });
++  if (openArchiveCup) queueMicrotask(openCup);
+   return dispose;
+ }
+ 
+@@ -266,6 +302,11 @@ ${SHELF_THUMBNAIL_CSS}
+     linear-gradient(100deg,rgba(38,20,8,.92),rgba(16,32,44,.92));
+   box-shadow:0 8px 30px rgba(255,110,26,.14)}
+ .gx-shelf-hero:hover{border-color:#ffb054;box-shadow:0 10px 36px rgba(255,110,26,.28)}
++.gx-shelf-cup{grid-column:1 / -1;display:flex;align-items:center;gap:16px;cursor:pointer;text-align:left;padding:16px 20px;
++  border-radius:12px;border:1px solid rgba(112,239,255,.42);background:radial-gradient(120% 160% at 8% 20%,rgba(52,191,190,.25),transparent 53%),linear-gradient(100deg,rgba(7,37,44,.96),rgba(14,27,39,.94));box-shadow:0 8px 30px rgba(52,191,190,.12)}
++.gx-shelf-cup:hover{border-color:#86f3de;box-shadow:0 10px 36px rgba(52,191,190,.24)}
++.gx-shelf-cup-mark{font:850 25px/1 var(--gx-font);letter-spacing:.03em;color:#86f3de;text-shadow:0 0 22px rgba(112,239,255,.36)}
++.gx-shelf-cup-cta{color:#031216;font:800 13px var(--gx-font);letter-spacing:.06em;padding:9px 18px;border-radius:9px;background:linear-gradient(180deg,#8af5d7,#48c7c4);box-shadow:0 4px 18px rgba(72,199,196,.26)}
+ .gx-shelf-hero-mark{font:900 30px/1 var(--gx-font);letter-spacing:.04em;
+   background:linear-gradient(180deg,#ffe14d,#ff9a2a 55%,#ff2e17);
+   -webkit-background-clip:text;background-clip:text;color:transparent;
+diff --git a/src/level-ghosts.ts b/src/level-ghosts.ts
+new file mode 100644
+index 0000000..8db8b9f
+--- /dev/null
++++ b/src/level-ghosts.ts
+@@ -0,0 +1,174 @@
++import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
++import { LevelRecordStore } from "./scoreboard";
++
++const STORAGE_KEY = "graphysx-level-ghosts-v1";
++const SAMPLE_INTERVAL_MS = 150;
++const MAX_SAMPLES = 6_000;
++const GHOST_ID = "personal-best-ghost";
++
++type GhostSample = { tMs: number; position: [number, number, number] };
++type GhostTrace = { elapsedMs: number; samples: GhostSample[] };
++
++export type PersonalGhostState = {
++  recordId: string;
++  available: boolean;
++  visible: boolean;
++  bestMs: number | null;
++  recordingSamples: number;
++};
++
++let runtimeState: PersonalGhostState | null = null;
++
++export function getPersonalGhostState(): PersonalGhostState | null {
++  return runtimeState ? { ...runtimeState } : null;
++}
++
++export function createPersonalGhostSession(
++  api: GraphysXAgentWorldApi,
++  subjectId: string,
++  recordId: string,
++): {
++  tick(elapsedMs: number): void;
++  finish(elapsedMs: number, verified: boolean): void;
++  dispose(): void;
++} {
++  const saved = loadTraces()[recordId] ?? null;
++  const recordedBestMs = new LevelRecordStore().getRecord(recordId)?.bestMs ?? null;
++  const recorded: GhostSample[] = [];
++  let spawned = false;
++  let lastSampleAt = -Infinity;
++
++  runtimeState = {
++    recordId,
++    available: Boolean(saved),
++    visible: false,
++    bestMs: saved?.elapsedMs ?? null,
++    recordingSamples: 0,
++  };
++
++  const sampleSubject = (elapsedMs: number, force = false): void => {
++    if (!force && elapsedMs - lastSampleAt < SAMPLE_INTERVAL_MS) return;
++    const position = api.query({ ids: [subjectId] })[0]?.position;
++    if (!position || recorded.length >= MAX_SAMPLES) return;
++    recorded.push({ tMs: Math.max(0, Math.round(elapsedMs)), position: [...position] });
++    lastSampleAt = elapsedMs;
++    if (runtimeState?.recordId === recordId) runtimeState.recordingSamples = recorded.length;
++  };
++
++  const ensureGhost = (): void => {
++    if (!saved || spawned || saved.samples.length === 0) return;
++    const first = saved.samples[0];
++    const result = api.spawn({
++      id: GHOST_ID,
++      type: "sphere",
++      label: "Personal Ghost",
++      geometry: { radius: 0.48 },
++      transform: { position: first.position },
++      material: {
++        color: "#70efff",
++        emissive: "#27b9d2",
++        emissiveIntensity: 1.1,
++        opacity: 0.38,
++        roughness: 0.18,
++        metalness: 0.08,
++      },
++      ephemeral: true,
++      tags: ["personal-ghost", "player-visible"],
++    });
++    spawned = result.ok;
++    if (runtimeState?.recordId === recordId) runtimeState.visible = spawned;
++  };
++
++  const playbackPosition = (elapsedMs: number): [number, number, number] | null => {
++    if (!saved?.samples.length) return null;
++    const samples = saved.samples;
++    if (elapsedMs <= samples[0].tMs) return samples[0].position;
++    const final = samples[samples.length - 1];
++    if (elapsedMs >= final.tMs) return final.position;
++    let low = 0;
++    let high = samples.length - 1;
++    while (low + 1 < high) {
++      const middle = Math.floor((low + high) / 2);
++      if (samples[middle].tMs <= elapsedMs) low = middle;
++      else high = middle;
++    }
++    const a = samples[low];
++    const b = samples[high];
++    const span = Math.max(1, b.tMs - a.tMs);
++    const mix = Math.max(0, Math.min(1, (elapsedMs - a.tMs) / span));
++    return [
++      a.position[0] + (b.position[0] - a.position[0]) * mix,
++      a.position[1] + (b.position[1] - a.position[1]) * mix,
++      a.position[2] + (b.position[2] - a.position[2]) * mix,
++    ];
++  };
++
++  return {
++    tick(elapsedMs) {
++      sampleSubject(elapsedMs);
++      ensureGhost();
++      const position = playbackPosition(elapsedMs);
++      if (spawned && position) api.update(GHOST_ID, { transform: { position } });
++    },
++    finish(elapsedMs, verified) {
++      sampleSubject(elapsedMs, true);
++      if (!verified || recorded.length < 2) return;
++      if (saved && elapsedMs >= saved.elapsedMs) return;
++      // Older records may predate trajectory capture. Do not label a later, slower run as the
++      // personal best just because it is the first one with samples; wait until the player
++      // actually matches or improves the stored board time.
++      if (!saved && recordedBestMs !== null && elapsedMs > recordedBestMs) return;
++      const traces = loadTraces();
++      traces[recordId] = { elapsedMs: Math.round(elapsedMs), samples: recorded };
++      saveTraces(traces);
++      runtimeState = {
++        recordId,
++        available: true,
++        visible: spawned,
++        bestMs: Math.round(elapsedMs),
++        recordingSamples: recorded.length,
++      };
++    },
++    dispose() {
++      if (spawned) api.remove(GHOST_ID);
++      if (runtimeState?.recordId === recordId) runtimeState = null;
++    },
++  };
++}
++
++function loadTraces(): Record<string, GhostTrace> {
++  try {
++    const raw = window.localStorage.getItem(STORAGE_KEY);
++    const parsed: unknown = raw ? JSON.parse(raw) : {};
++    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
++    const traces: Record<string, GhostTrace> = {};
++    for (const [id, candidate] of Object.entries(parsed)) {
++      if (!candidate || typeof candidate !== "object") continue;
++      const trace = candidate as Partial<GhostTrace>;
++      if (!Number.isFinite(trace.elapsedMs) || (trace.elapsedMs ?? 0) <= 0 || !Array.isArray(trace.samples)) continue;
++      const samples = trace.samples.slice(0, MAX_SAMPLES).filter(isGhostSample);
++      if (samples.length < 2) continue;
++      traces[id] = { elapsedMs: Math.round(trace.elapsedMs as number), samples };
++    }
++    return traces;
++  } catch {
++    return {};
++  }
++}
++
++function isGhostSample(value: unknown): value is GhostSample {
++  if (!value || typeof value !== "object") return false;
++  const sample = value as Partial<GhostSample>;
++  return Number.isFinite(sample.tMs)
++    && Array.isArray(sample.position)
++    && sample.position.length === 3
++    && sample.position.every(Number.isFinite);
++}
++
++function saveTraces(traces: Record<string, GhostTrace>): void {
++  try {
++    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(traces));
++  } catch {
++    // Ghosts are an enhancement. A blocked or full storage area must never block a finish.
++  }
++}
+diff --git a/src/main.ts b/src/main.ts
+index 55f68d6..009758c 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -28,6 +28,9 @@ import {
+ } from "./archive-playgrounds";
+ import { composeSkyboxSpiral, frameSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from "./archive-skybox-spiral";
+ import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
++import { archiveReferenceMs } from "./archive-race-records";
++import { getArchiveCupRuntimeState, type ArchiveCupCourse } from "./archive-cup";
++import { getPersonalGhostState } from "./level-ghosts";
+ import {
+   ARCHIVE_BALLZ_LEVELS,
+   ARCHIVE_BALLZ_NOT_REVIVED,
+@@ -102,6 +105,9 @@ if (mode === "legacy") {
+     // a ported village would otherwise sit inside the showroom's hills. Kept so opening a
+     // scene can take the showroom down with it.
+     let showroomEnvironment: (() => void) | null = null;
++    // A campaign race returns to the standings instead of dropping the player at the generic
++    // front door. The flag is armed only by Archive Cup launchers and consumed on exit.
++    let resumeArchiveCup = false;
+     const enterEditor = (): void => {
+       interaction?.setEnabled(false);
+       void host.enterEditor();
+@@ -143,14 +149,12 @@ if (mode === "legacy") {
+       interaction?.setEnabled(true);
+       mountWelcome(root, enterEditor, openGames, openBrowse);
+     };
+-    const openGames = (): void => {
++    const openGamesShelf = (showArchiveCup = false): void => {
+       interaction?.setEnabled(false);
+       void import("./games-shelf").then(({ mountGamesShelf }) => {
+-        mountGamesShelf(root, {
+-          api: host.api,
++        const composed = [
+           // Archive courses composed as whole scenes rather than grid levels. Same deal as
+           // the garage row in Browse: main.ts supplies them because composing needs the host.
+-          composed: [
+             {
+               id: "archive-level3-v2",
+               label: "Level 3: Alien Catwalks",
+@@ -259,7 +263,58 @@ if (mode === "legacy") {
+                 frameArchiveWorld1(host);
+               }),
+             },
+-          ],
++          ];
++
++        const composedRound = (id: string, recordId: string = id): ArchiveCupCourse => {
++          const course = composed.find((candidate) => candidate.id === id);
++          if (!course) throw new Error(`Archive Cup course ${id} is not registered`);
++          return {
++            ...course,
++            recordId,
++            referenceMs: archiveReferenceMs(recordId),
++            play: async () => {
++              resumeArchiveCup = true;
++              try {
++                await course.play();
++              } catch (error) {
++                resumeArchiveCup = false;
++                throw error;
++              }
++            },
++          };
++        };
++        const gridRound = (id: string, label: string, meta: string): ArchiveCupCourse => ({
++          id,
++          recordId: id,
++          label,
++          meta,
++          referenceMs: archiveReferenceMs(id),
++          play: () => {
++            resumeArchiveCup = true;
++            const result = host.api.levels.play(id);
++            if (!result.ok) {
++              resumeArchiveCup = false;
++              throw new Error(result.error ?? `Could not play ${label}`);
++            }
++          },
++        });
++        const archiveCup: ArchiveCupCourse[] = [
++          gridRound("archive-ballz-level1", "Level 1: Alien Landing", "Alien floor · 3 laps · recovered ScoreBest"),
++          gridRound("archive-ballz-level2", "Level 2: Checkerboard Crowd", "Checkerboard · wandering crowd · recovered ScoreBest"),
++          composedRound("archive-level3-v2"),
++          composedRound("archive-great-slide"),
++          composedRound("archive-map1", "graphysx-archive-map1"),
++          composedRound("archive-level1-2011", "graphysx-archive-level1-2011"),
++          composedRound("archive-suzanne-machinery", "graphysx-archive-suzanne-machinery"),
++          composedRound("archive-suzanne1"),
++          composedRound("archive-suzanne2"),
++        ];
++
++        mountGamesShelf(root, {
++          api: host.api,
++          composed,
++          archiveCup,
++          openArchiveCup: showArchiveCup,
+           // The level is already materialised by the time this fires; the host has switched to
+           // play mode on its own. All that is left is taking the showroom's set down so a
+           // course is not sitting inside the showroom's hills.
+@@ -271,6 +326,7 @@ if (mode === "legacy") {
+         });
+       });
+     };
++    const openGames = (): void => openGamesShelf(false);
+     const openBrowse = (): void => {
+       interaction?.setEnabled(false);
+       void import("./browse-shelf").then(({ mountBrowseShelf }) => {
+@@ -416,7 +472,14 @@ if (mode === "legacy") {
+           },
+       // Leaving a game returns to the front door rather than to a chrome-less view of the level
+       // you just finished, which would be a dead end with no way onward.
+-      onExitPlay: editorFirst ? undefined : () => restoreShowroom(),
++      onExitPlay: editorFirst
++        ? undefined
++        : () => {
++            const returnToCup = resumeArchiveCup;
++            resumeArchiveCup = false;
++            restoreShowroom(!returnToCup);
++            if (returnToCup) openGamesShelf(true);
++          },
+     });
+     Object.assign(window, {
+       __GRAPHYSX_HOST__: host,
+@@ -430,6 +493,8 @@ if (mode === "legacy") {
+         world: host.api.state()?.world ?? null,
+         paused: host.api.state()?.paused ?? false,
+         run: host.api.rules.status(),
++        archiveCup: getArchiveCupRuntimeState(),
++        personalGhost: getPersonalGhostState(),
+         atmosphere: host.dayNightState,
+         players: host.api.query({ tag: "player" }).map((entity) => ({
+           id: entity.id,
+-- 
+2.47.1.windows.1
+

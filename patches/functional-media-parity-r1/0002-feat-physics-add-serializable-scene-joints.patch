@@ -1,0 +1,1245 @@
+From f6bffce1541a54ac604dc6c22a094022625c55e2 Mon Sep 17 00:00:00 2001
+From: yanik <yanikbeaulieu@hotmail.com>
+Date: Tue, 28 Jul 2026 22:54:50 -0400
+Subject: [PATCH 2/5] feat(physics): add serializable scene joints
+
+---
+ AGENT_WORLD_API.md                   |  32 +++-
+ docs/archive-parity-ledger.json      |  17 +-
+ package.json                         |   1 +
+ scripts/archive-parity-scope.mjs     |   8 +-
+ scripts/audit-archive-parity.mjs     |   1 +
+ scripts/generate-archive-parity.mjs  |   4 +
+ scripts/smoke-joints.mjs             | 136 ++++++++++++++
+ scripts/verify.mjs                   |   1 +
+ src/agent-world-api.ts               |   3 +
+ src/agent-world-bridge.ts            |   7 +-
+ src/agent-world-runtime.ts           | 259 +++++++++++++++++++++++++++
+ src/agent-world-starters.ts          |  89 ++++++++-
+ src/main.ts                          |   1 +
+ src/physics/physics-engine.ts        |  28 +++
+ src/physics/rapier-physics-engine.ts |  65 +++++++
+ src/platform-editor.ts               |   2 +-
+ src/prototype-app.ts                 |   8 +
+ src/race-scene.ts                    |  21 +++
+ 18 files changed, 665 insertions(+), 18 deletions(-)
+ create mode 100644 scripts/smoke-joints.mjs
+
+diff --git a/AGENT_WORLD_API.md b/AGENT_WORLD_API.md
+index ba460a2..c98ea10 100644
+--- a/AGENT_WORLD_API.md
++++ b/AGENT_WORLD_API.md
+@@ -6,7 +6,7 @@ Open **Build With Agent World API** from the home screen, or call `window.__GRAP
+ 
+ ## Human UI parity
+ 
+-The visible **World Editor** and `window.__GRAPHYSX__` are two interfaces over one runtime. A person can select entities from the outliner; create primitives, semantic agent participants, groups, lights, recovered models, and splines; add static, dynamic, or kinematic physics; choose recovered textures; edit transforms, materials, hierarchy, tags, interactions, and behaviors; remove entities; and save or restore named snapshots. Starter worlds, prefabs, pause, deterministic step, undo, and clear remain available as direct controls.
++The visible **World Editor** and `window.__GRAPHYSX__` are two interfaces over one runtime. A person can select entities from the outliner; create primitives, semantic agent participants, groups, lights, recovered models, and splines; add static, dynamic, or kinematic physics; load a starter containing editable constraints; choose recovered textures; edit transforms, materials, hierarchy, tags, interactions, and behaviors; remove entities; and save or restore named snapshots. Starter worlds, prefabs, pause, deterministic step, undo, and clear remain available as direct controls.
+ 
+ The **Advanced JSON Workbench** completes the parity surface. It accepts a full `graphysx.agent-world/v2` document, an atomic command array, or a revision-guarded actor change set. The editor does not keep a separate UI scene model: every button calls the same validated runtime method and produces the same revision, receipt, event, rollback, and error an agent receives.
+ 
+@@ -90,7 +90,7 @@ gx.starters();
+ gx.loadStarter("glow-garden");
+ ```
+ 
+-Available starters are `prefab-plaza` (43 entities), `glow-garden` (45), `signal-outpost` (41), the playable `signal-trail` (45), and `physics-sketchbook` (16). The sketchbook demonstrates textured ramps, mass, restitution, collision, impulse interaction, coordinates, orbit, and a visible semantic agent. Pass `{ id, label }` as the optional second argument when the new world needs application-specific identity.
++Available starters include `prefab-plaza` (43 entities), `glow-garden` (45), `signal-outpost` (41), the playable `signal-trail` (45), `constraint-workshop` (9), and `physics-sketchbook` (16). Constraint Workshop demonstrates fixed, revolute/hinge, and rope joints as ordinary v2 data; the sketchbook demonstrates textured ramps, mass, restitution, collision, impulse interaction, coordinates, orbit, and a visible semantic agent. Pass `{ id, label }` as the optional second argument when the new world needs application-specific identity.
+ 
+ `gx.textures()` discovers the eleven stable recovered texture IDs, their source family, browser URL, usage guidance, and repeat defaults. A material stores the stable ID plus repeat, offset, and rotation so world files remain readable and portable.
+ 
+@@ -330,6 +330,34 @@ rigid-body simulation, and `query()`/`state()` report current velocity and sleep
+ entities stay at the world root so their transform has one unambiguous coordinate space. The editor
+ shows the model collider policy in its Physics section and forces `static` when `trimesh` is chosen.
+ 
++### Serializable joints
++
++Top-level `joints` connect two physics entities by stable ID. At least one body must be dynamic;
++trigger bodies and unresolved entities are rejected. Anchors are local to each body. Revolute axes
++are expressed in body A's local space, and rope length is the maximum anchor separation.
++
++```js
++gx.addJoint({
++  id: "hinge",
++  type: "revolute",
++  bodyA: "hinge-anchor",
++  bodyB: "door",
++  anchorA: [0, -1, 0],
++  anchorB: [0, 1, 0],
++  axis: [1, 0, 0]
++});
++
++gx.updateJoint("hinge", { axis: [0, 0, 1] });
++gx.removeJoint("hinge");
++```
++
++Fixed joints may optionally set `frameRotationDegreesA` and `frameRotationDegreesB`. Rope joints
++set a positive `length`. `state()` and `render_game_to_text()` report normalized joint definitions
++plus `active`; `export()` retains the definitions without renderer or Rapier handles. Entity
++transform rebuilds reconnect their joints, removing an entity removes its connected joints, and
++removing physics from a connected entity is rejected. All three joint mutations participate in
++revision checks, transactions, undo, the async bridge, and document export/reload.
++
+ An entity with `type: "agent"` is a visible participant with a serializable role, status, perception radius, and semantic capability list. This describes who or what is present in a shared spatial explanation; it does not run arbitrary scripts or create a second AI runtime.
+ 
+ Splines are visible, queryable entities. A `follow-spline` behavior references one by stable ID; entities driven by both a path and physics use `kinematic` mode—the modern equivalent of the archived mesh-controlled flag.
+diff --git a/docs/archive-parity-ledger.json b/docs/archive-parity-ledger.json
+index ad5332a..541308d 100644
+--- a/docs/archive-parity-ledger.json
++++ b/docs/archive-parity-ledger.json
+@@ -1,6 +1,6 @@
+ {
+   "schema": "graphysx.archive-parity/v1",
+-  "generatedAt": "2026-07-29T02:28:52.530Z",
++  "generatedAt": "2026-07-29T02:51:15.569Z",
+   "scope": {
+     "roots": [
+       {
+@@ -237,8 +237,8 @@
+     "functionalityRecords": 70,
+     "functionalityByDisposition": {
+       "OUT OF SCOPE": 1,
+-      "REVIVED": 62,
+-      "SOURCE-ONLY": 6,
++      "REVIVED": 63,
++      "SOURCE-ONLY": 5,
+       "SUPERSEDED": 1
+     }
+   },
+@@ -394,15 +394,18 @@
+       "id": "physics-v2-constraint-authoring",
+       "kind": "physics",
+       "label": "Serializable scene-authored constraints",
+-      "disposition": "SOURCE-ONLY",
++      "disposition": "REVIVED",
+       "archiveEvidence": [
+         "GraphysX_1 Newton joint callsites"
+       ],
+       "currentEvidence": [
+-        "src/archive-playgrounds.ts"
++        "src/agent-world-runtime.ts",
++        "src/physics/rapier-physics-engine.ts",
++        "src/agent-world-starters.ts",
++        "scripts/smoke-joints.mjs"
+       ],
+-      "destination": null,
+-      "note": "Current v2 documents have rigid bodies but no joint definitions; the specialized lab cannot be cloned or patched as ordinary scene data."
++      "destination": "Scene Editor > Load starter > Constraint Workshop",
++      "note": "Fixed, revolute/hinge, and rope joints are validated v2 scene data with public add/update/remove tools, undo, export/reload, observable state, and a human-loadable starter."
+     },
+     {
+       "id": "scene-1-main-menu",
+diff --git a/package.json b/package.json
+index 3789dae..3b3c4a0 100644
+--- a/package.json
++++ b/package.json
+@@ -26,6 +26,7 @@
+     "smoke:media": "node scripts/smoke-media.mjs",
+     "smoke:surfaces": "node scripts/smoke-surfaces.mjs",
+     "smoke:physics": "node scripts/smoke-physics.mjs",
++    "smoke:joints": "node scripts/smoke-joints.mjs",
+     "smoke:mesh-colliders": "node scripts/smoke-mesh-colliders.mjs",
+     "smoke:great-slide": "node scripts/smoke-great-slide.mjs",
+     "smoke:map1": "node scripts/smoke-map1.mjs",
+diff --git a/scripts/archive-parity-scope.mjs b/scripts/archive-parity-scope.mjs
+index 112fc59..18c8aa9 100644
+--- a/scripts/archive-parity-scope.mjs
++++ b/scripts/archive-parity-scope.mjs
+@@ -69,11 +69,11 @@ export const FUNCTIONALITY_RECORDS = [
+     id: "physics-v2-constraint-authoring",
+     kind: "physics",
+     label: "Serializable scene-authored constraints",
+-    disposition: "SOURCE-ONLY",
++    disposition: "REVIVED",
+     archiveEvidence: ["GraphysX_1 Newton joint callsites"],
+-    currentEvidence: ["src/archive-playgrounds.ts"],
+-    destination: null,
+-    note: "Current v2 documents have rigid bodies but no joint definitions; the specialized lab cannot be cloned or patched as ordinary scene data.",
++    currentEvidence: ["src/agent-world-runtime.ts", "src/physics/rapier-physics-engine.ts", "src/agent-world-starters.ts", "scripts/smoke-joints.mjs"],
++    destination: "Scene Editor > Load starter > Constraint Workshop",
++    note: "Fixed, revolute/hinge, and rope joints are validated v2 scene data with public add/update/remove tools, undo, export/reload, observable state, and a human-loadable starter.",
+   },
+   {
+     id: "vehicle-impreza-drive",
+diff --git a/scripts/audit-archive-parity.mjs b/scripts/audit-archive-parity.mjs
+index 2b5d046..2b224ac 100644
+--- a/scripts/audit-archive-parity.mjs
++++ b/scripts/audit-archive-parity.mjs
+@@ -35,6 +35,7 @@ for (const record of ledger.media) {
+     if (hash !== record.sha256) fail(`${destination} drifted from the ledger hash for ${record.sourcePath}`);
+   }
+   for (const evidence of record.currentEvidence) {
++    if (path.resolve(ROOT, evidence) === ledgerPath) fail(`${record.sourcePath} uses the generated ledger as self-evidence`);
+     if (!(await stat(path.join(ROOT, evidence)).catch(() => null))?.isFile()) fail(`${record.sourcePath} points at missing evidence ${evidence}`);
+   }
+ }
+diff --git a/scripts/generate-archive-parity.mjs b/scripts/generate-archive-parity.mjs
+index 388652f..8298fe0 100644
+--- a/scripts/generate-archive-parity.mjs
++++ b/scripts/generate-archive-parity.mjs
+@@ -80,6 +80,10 @@ async function currentReferenceIndex() {
+   );
+   const token = /[A-Za-z0-9_ .()!#@+\-/\\]+\.[A-Za-z0-9]{1,8}/g;
+   for (const file of files) {
++    // Never let the generated ledger become evidence for itself on the next run. It contains
++    // every archive basename by design and would otherwise turn almost all SOURCE-ONLY rows
++    // into false REVIVED matches after the first regeneration.
++    if (path.resolve(file.absolute) === output) continue;
+     if (!allowed.has(path.extname(file.relative).toLowerCase())) continue;
+     const source = await readFile(file.absolute, "utf8").catch(() => "");
+     for (const match of source.matchAll(token)) {
+diff --git a/scripts/smoke-joints.mjs b/scripts/smoke-joints.mjs
+new file mode 100644
+index 0000000..a26f810
+--- /dev/null
++++ b/scripts/smoke-joints.mjs
+@@ -0,0 +1,136 @@
++import { mkdirSync } from "node:fs";
++import path from "node:path";
++import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
++import { startStaticServer } from "./static-server.mjs";
++
++const PORT = Number(process.env.SMOKE_PORT || 4544);
++const SHARED_BASE = process.env.SMOKE_BASE || null;
++const ART = process.env.SMOKE_ARTIFACTS || "output/verify";
++mkdirSync(ART, { recursive: true });
++const failures = [];
++const check = (name, condition, detail) => {
++  const pass = Boolean(condition);
++  if (!pass) failures.push(`${name}: ${JSON.stringify(detail)}`);
++  console.log(`${pass ? "  ok  " : "  FAIL"} ${name}${detail === undefined ? "" : ` ${JSON.stringify(detail)}`}`);
++};
++const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
++
++let server;
++let browser;
++const consoleErrors = [];
++const pageErrors = [];
++try {
++  if (!SHARED_BASE) server = await startStaticServer({ root: path.resolve("dist"), port: PORT });
++  browser = await launchSmokeBrowser();
++  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
++  applySmokeTimeout(page);
++  page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
++  page.on("pageerror", (error) => pageErrors.push(String(error)));
++  const base = SHARED_BASE ?? `http://127.0.0.1:${PORT}/`;
++  await page.goto(`${base}?host=standalone`, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
++  await page.waitForFunction(() => Boolean(window.__GRAPHYSX__ && window.__GRAPHYSX_HOST__), { timeout: SMOKE_TIMEOUT });
++
++  const result = await page.evaluate(() => {
++    const gx = window.__GRAPHYSX__;
++    gx.pause(true);
++    const listed = gx.starters().find((starter) => starter.id === "constraint-workshop") ?? null;
++    const loaded = gx.loadStarter("constraint-workshop");
++    const initial = gx.state();
++    const documentBefore = gx.exportDocument();
++    const bridgeAudit = window.__GRAPHYSX_AGENT_BRIDGE__.audit();
++    const bridgeMethods = window.__GRAPHYSX_AGENT_BRIDGE__.manifest().tools.map((tool) => tool.name);
++
++    const hingeKick = gx.interact("hinge-plank", "swing");
++    const fixedKick = gx.interact("fixed-block", "test-weld");
++    const ropeKick = gx.interact("rope-ball", "swing");
++    gx.step(2);
++    const moved = gx.state();
++
++    const patch = gx.updateJoint("rope-joint", { length: 2.7 });
++    const afterPatch = gx.exportDocument();
++    const removed = gx.removeJoint("rope-joint");
++    const afterRemove = gx.state();
++    const undone = gx.undo();
++    const afterUndo = gx.state();
++    const reloaded = gx.load(documentBefore);
++    const afterReload = gx.state();
++
++    const rejectedAxis = gx.addJoint({ id: "bad-axis", type: "revolute", bodyA: "hinge-anchor", bodyB: "hinge-plank", axis: [0, 0, 0] });
++    const rejectedStatic = gx.addJoint({ id: "bad-static", type: "fixed", bodyA: "constraint-floor", bodyB: "hinge-anchor" });
++    const rejectedMissing = gx.addJoint({ id: "bad-missing", type: "rope", bodyA: "rope-anchor", bodyB: "not-there", length: 2 });
++    const textState = JSON.parse(window.render_game_to_text());
++    return {
++      listed,
++      loaded,
++      initial,
++      documentBefore,
++      bridgeAudit,
++      bridgeMethods,
++      interactions: [hingeKick, fixedKick, ropeKick],
++      moved,
++      patch,
++      afterPatch,
++      removed,
++      afterRemove,
++      undone,
++      afterUndo,
++      reloaded,
++      afterReload,
++      rejectedAxis,
++      rejectedStatic,
++      rejectedMissing,
++      textState,
++    };
++  });
++
++  const stateEntity = (state, id) => state.entities.find((entity) => entity.id === id);
++  console.log("\n# discovery and shared API");
++  check("Constraint Workshop is discoverable in starter vocabulary", result.listed?.entityCount === 9, result.listed);
++  check("starter loads through the public API", result.loaded.ok && result.initial.world.id === "graphysx-constraint-workshop", result.loaded);
++  check("fixed, revolute and rope joints are active", result.initial.jointCount === 3 && result.initial.joints.every((joint) => joint.active)
++    && ["fixed", "revolute", "rope"].every((type) => result.initial.joints.some((joint) => joint.type === type)), result.initial.joints);
++  check("tool bridge exposes joint mutation with no parity drift", result.bridgeAudit.missing.length === 0 && result.bridgeAudit.extra.length === 0
++    && ["addJoint", "updateJoint", "removeJoint"].every((method) => result.bridgeMethods.includes(method)), result.bridgeAudit);
++  check("render_game_to_text reports the same joints", result.textState.joints?.length === 3, result.textState);
++
++  console.log("\n# solver behavior");
++  check("all three human-equivalent interactions fired", result.interactions.every((receipt) => receipt.ok), result.interactions);
++  const hinge = stateEntity(result.moved, "hinge-plank");
++  const fixedAnchor = stateEntity(result.moved, "fixed-anchor");
++  const fixedBlock = stateEntity(result.moved, "fixed-block");
++  const ropeAnchor = stateEntity(result.moved, "rope-anchor");
++  const ropeBall = stateEntity(result.moved, "rope-ball");
++  check("revolute body swung while its pivot radius stayed constrained", Math.abs(hinge.position[2]) > 0.1
++    && Math.abs(distance(hinge.position, [-6, 3.2, 0]) - 1) < 0.2, hinge.position);
++  check("fixed joint resisted an impulse and preserved the welded offset", distance(
++    [fixedBlock.position[0] - fixedAnchor.position[0], fixedBlock.position[1] - fixedAnchor.position[1], fixedBlock.position[2] - fixedAnchor.position[2]],
++    [0, -1.8, 0],
++  ) < 0.12, { anchor: fixedAnchor.position, block: fixedBlock.position });
++  check("rope joint capped the wrecking-ball separation", distance(ropeAnchor.position, ropeBall.position) <= 3.25, {
++    anchor: ropeAnchor.position, ball: ropeBall.position, distance: distance(ropeAnchor.position, ropeBall.position),
++  });
++
++  console.log("\n# patch, undo, reload, rejection");
++  check("joint patch is serialized", result.patch.ok && result.afterPatch.joints.find((joint) => joint.id === "rope-joint")?.length === 2.7, result.afterPatch.joints);
++  check("joint removal updates state", result.removed.ok && result.afterRemove.jointCount === 2, result.afterRemove.joints);
++  check("undo restores the removed joint", result.undone.ok && result.afterUndo.jointCount === 3, result.afterUndo.joints);
++  check("export -> load recreates all active joints", result.reloaded.ok && result.afterReload.jointCount === 3 && result.afterReload.joints.every((joint) => joint.active), result.afterReload.joints);
++  check("zero revolute axis is rejected", result.rejectedAxis.ok === false, result.rejectedAxis);
++  check("static-to-static joint is rejected", result.rejectedStatic.ok === false, result.rejectedStatic);
++  check("missing body is rejected", result.rejectedMissing.ok === false, result.rejectedMissing);
++
++  await page.screenshot({ path: path.join(ART, "constraint-workshop.png") });
++} catch (error) {
++  failures.push(String(error));
++} finally {
++  if (browser) await browser.close();
++  if (server) await server.close();
++}
++
++check("no browser console errors", consoleErrors.length === 0, consoleErrors);
++check("no page errors", pageErrors.length === 0, pageErrors);
++if (failures.length > 0) {
++  console.error(`\n${failures.length} joint smoke failure(s):\n${failures.join("\n")}`);
++  process.exit(1);
++}
++console.log("\nJoint smoke passed. Screenshot: constraint-workshop.png");
+diff --git a/scripts/verify.mjs b/scripts/verify.mjs
+index c870672..91aacd9 100644
+--- a/scripts/verify.mjs
++++ b/scripts/verify.mjs
+@@ -65,6 +65,7 @@ const SMOKES = [
+   { name: "buildings", script: "scripts/smoke-buildings.mjs", covers: "Maison massing model: archive transforms exact, recovered lamps, storey toggle" },
+   { name: "media", script: "scripts/smoke-media.mjs", covers: "media library: datalake browse/import, in-browser OBJ conversion, editor Media tab + dialog" },
+   { name: "physics", script: "scripts/smoke-physics.mjs", covers: "physics migration baseline: contacts, fixed-step schedules, sleep/wake, teardown/reload" },
++  { name: "joints", script: "scripts/smoke-joints.mjs", covers: "scene-authored fixed/revolute/rope joints: motion, bridge parity, patch, undo, export/reload" },
+   { name: "mesh-colliders", script: "scripts/smoke-mesh-colliders.mjs", covers: "scene-native model colliders: Great Slide trimesh, dynamic convex hull, rejection, bridge + round-trip" },
+   { name: "great-slide", script: "scripts/smoke-great-slide.mjs", covers: "Great Slide gravity run: Games launch, exact collider gate, subject controls, checkpoints, results, replay + return" },
+   { name: "map1", script: "scripts/smoke-map1.mjs", covers: "Map 1 gravity descent: Games launch, exact recovered collider, halfway gate, results, replay + return" },
+diff --git a/src/agent-world-api.ts b/src/agent-world-api.ts
+index ed5f68c..c51806e 100644
+--- a/src/agent-world-api.ts
++++ b/src/agent-world-api.ts
+@@ -144,6 +144,9 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
+     spawn: (entity) => runtime.spawn(entity),
+     update: (id, patch) => runtime.updateEntity(id, patch),
+     remove: (id) => runtime.remove(id),
++    addJoint: (joint) => runtime.addJoint(joint),
++    updateJoint: (id, patch) => runtime.updateJoint(id, patch),
++    removeJoint: (id) => runtime.removeJoint(id),
+     attachBehavior: (id, behavior) => runtime.attachBehavior(id, behavior),
+     detachBehavior: (id, behaviorId) => runtime.detachBehavior(id, behaviorId),
+     interact: (id, interactionId) => runtime.interact(id, interactionId),
+diff --git a/src/agent-world-bridge.ts b/src/agent-world-bridge.ts
+index a222d22..957ce2b 100644
+--- a/src/agent-world-bridge.ts
++++ b/src/agent-world-bridge.ts
+@@ -7,7 +7,7 @@ export const GRAPHYSX_AGENT_TOOL_EVENT_SCHEMA = "graphysx.agent-tool-event/v1" a
+ 
+ const TOOL_PATHS = [
+   "schema", "worldSchema", "levelSchema", "version", "capabilities",
+-  "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select",
++  "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select",
+   "sounds", "flocks", "crowds", "forceFields", "formulas", "dna", "surfaces",
+   "attachBehavior", "detachBehavior", "interact", "steer", "prefabs", "spawnPrefab", "starters", "loadStarter",
+   "transaction", "commit", "history", "events", "undo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
+@@ -20,7 +20,7 @@ const TOOL_PATHS = [
+ ] as const;
+ 
+ const MUTATING_TOOLS = new Set<string>([
+-  "open", "demo", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select", "attachBehavior", "detachBehavior",
++  "open", "demo", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select", "attachBehavior", "detachBehavior",
+   "interact", "steer", "spawnPrefab", "loadStarter", "transaction", "commit", "undo", "pause", "step", "save", "load",
+   "rules.set", "rules.reset",
+   "media.refresh", "media.import", "media.importSky", "media.register", "media.remove",
+@@ -49,6 +49,9 @@ const TOOL_SUMMARIES: Record<string, string> = {
+   create: "Replace the active world with a complete v2 definition.",
+   spawn: "Create one typed 3D entity.",
+   update: "Patch an entity by stable ID.",
++  addJoint: "Add a fixed, revolute/hinge, or rope constraint between two physics entities.",
++  updateJoint: "Patch a scene-authored joint by stable ID; the runtime rebuilds it atomically.",
++  removeJoint: "Remove a scene-authored joint by stable ID without removing its bodies.",
+   select: "Select stable entity IDs in the shared human/agent editor.",
+   transaction: "Apply multiple world commands atomically.",
+   commit: "Apply an actor-attributed, revision-guarded change set.",
+diff --git a/src/agent-world-runtime.ts b/src/agent-world-runtime.ts
+index 61f4f9c..75b9423 100644
+--- a/src/agent-world-runtime.ts
++++ b/src/agent-world-runtime.ts
+@@ -95,6 +95,8 @@ import type {
+   PhysicsBodyDefinition,
+   PhysicsBodyHandle,
+   PhysicsEngine,
++  PhysicsJointDefinition,
++  PhysicsJointHandle,
+   PhysicsMaterialDefinition,
+   PhysicsShapeDefinition,
+   PhysicsVector3,
+@@ -335,6 +337,35 @@ export type AgentWorldPhysics = {
+   collider?: AgentWorldColliderKind;
+ };
+ 
++/**
++ * The smallest joint vocabulary proven useful by the archive Physics Lab. Anchors and axes
++ * live in each body's local frame, matching Rapier and the surviving Newton callsites.
++ */
++export type AgentWorldJointDefinition = {
++  id: string;
++  type: "fixed" | "revolute" | "rope";
++  bodyA: string;
++  bodyB: string;
++  anchorA?: AgentWorldVector3;
++  anchorB?: AgentWorldVector3;
++  /** Revolute joints only; normalized by the runtime. */
++  axis?: AgentWorldVector3;
++  /** Fixed joints only; local frame orientation for body A/B. */
++  frameRotationDegreesA?: AgentWorldVector3;
++  frameRotationDegreesB?: AgentWorldVector3;
++  /** Rope joints only; maximum anchor separation. */
++  length?: number;
++};
++
++export type AgentWorldJointPatch = Partial<Omit<AgentWorldJointDefinition, "id">>;
++
++export type AgentWorldJointState = AgentWorldJointDefinition & {
++  anchorA: AgentWorldVector3;
++  anchorB: AgentWorldVector3;
++  /** False only while an exact model collider is still loading its body. */
++  active: boolean;
++};
++
+ export type AgentWorldSpinBehavior = {
+   id?: string;
+   type: "spin";
+@@ -804,6 +835,8 @@ export type AgentWorldDefinition = {
+     physics?: Partial<AgentWorldEnvironment["physics"]>;
+   };
+   entities: AgentWorldEntityDefinition[];
++  /** Scene-authored constraints between root-level physics entities. */
++  joints?: AgentWorldJointDefinition[];
+   /**
+    * What a crossing *means*: spawn, ordered checkpoints, laps, clock, finish condition.
+    *
+@@ -820,6 +853,9 @@ export type AgentWorldCommand =
+   | { op: "spawn-prefab"; prefabId: AgentWorldPrefabId; options?: AgentWorldPrefabOptions }
+   | { op: "update"; id: string; patch: AgentWorldEntityPatch }
+   | { op: "remove"; id: string }
++  | { op: "add-joint"; joint: AgentWorldJointDefinition }
++  | { op: "update-joint"; id: string; patch: AgentWorldJointPatch }
++  | { op: "remove-joint"; id: string }
+   | { op: "attach-behavior"; id: string; behavior: AgentWorldBehavior }
+   | { op: "detach-behavior"; id: string; behaviorId: string }
+   | { op: "interact"; id: string; interactionId?: string }
+@@ -1009,6 +1045,9 @@ export type AgentWorldStreamEventType =
+   | "entity.spawned"
+   | "entity.updated"
+   | "entity.removed"
++  | "joint.added"
++  | "joint.updated"
++  | "joint.removed"
+   | "asset.collider-ready"
+   | "asset.collider-error"
+   | "asset.ready"
+@@ -1047,10 +1086,12 @@ export type AgentWorldState = {
+   surfaceRedraws: number;
+   paused: boolean;
+   entityCount: number;
++  jointCount: number;
+   selectedIds: string[];
+   environment: AgentWorldEnvironment;
+   bounds: { minimum: AgentWorldVector3; maximum: AgentWorldVector3 } | null;
+   entities: AgentWorldEntityState[];
++  joints: AgentWorldJointState[];
+   recentEvents: AgentWorldEvent[];
+   recentCommits: AgentWorldCommitSummary[];
+   savedWorlds: string[];
+@@ -1119,6 +1160,9 @@ export type GraphysXAgentWorldApi = {
+   spawn(entity: AgentWorldEntityDefinition): AgentWorldResult<AgentWorldEntityState>;
+   update(id: string, patch: AgentWorldEntityPatch): AgentWorldResult<AgentWorldEntityState>;
+   remove(id: string): AgentWorldResult<string[]>;
++  addJoint(joint: AgentWorldJointDefinition): AgentWorldResult<AgentWorldJointState>;
++  updateJoint(id: string, patch: AgentWorldJointPatch): AgentWorldResult<AgentWorldJointState>;
++  removeJoint(id: string): AgentWorldResult<string>;
+   attachBehavior(id: string, behavior: AgentWorldBehavior): AgentWorldResult<{ entityId: string; behaviorId: string }>;
+   detachBehavior(id: string, behaviorId: string): AgentWorldResult<string>;
+   interact(id: string, interactionId?: string): AgentWorldResult<AgentWorldInteractionReceipt>;
+@@ -1211,6 +1255,13 @@ type RuntimeEntity = {
+   colliderLoadVersion: number;
+ };
+ 
++type ResolvedAgentWorldJoint = Required<AgentWorldJointDefinition>;
++
++type RuntimeJoint = {
++  definition: ResolvedAgentWorldJoint;
++  handle: PhysicsJointHandle | null;
++};
++
+ /**
+  * The cached per-consumer `externalAcceleration` closure for the force-field pass, plus the
+  * mutable state it reads. The closure is created once per entity and reused every step —
+@@ -1322,6 +1373,9 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
+   "force-field.list",
+   "simulation.force-fields",
+   "physics.rigid-body",
++  "physics.joint.fixed",
++  "physics.joint.revolute",
++  "physics.joint.rope",
+   "physics.collider.convex-hull",
+   "physics.collider.trimesh",
+   "spline.path",
+@@ -1401,6 +1455,7 @@ export class AgentWorldRuntime {
+   private readonly environmentRoot = new Group();
+   private readonly physicsWorld: PhysicsEngine;
+   private readonly entities = new Map<string, RuntimeEntity>();
++  private readonly joints = new Map<string, RuntimeJoint>();
+   private readonly savedWorlds = new Map<string, AgentWorldDefinition>();
+   private readonly history: AgentWorldDefinition[] = [];
+   private readonly events: AgentWorldEvent[] = [];
+@@ -1620,6 +1675,21 @@ export class AgentWorldRuntime {
+     return result.ok ? this.success(removed) : this.failure(result.error ?? "Remove failed");
+   }
+ 
++  addJoint(joint: AgentWorldJointDefinition): AgentWorldResult<AgentWorldJointState> {
++    const result = this.transaction([{ op: "add-joint", joint }]);
++    return result.ok ? this.success(this.getJointState(joint.id)) : this.failure(result.error ?? "Add joint failed");
++  }
++
++  updateJoint(id: string, patch: AgentWorldJointPatch): AgentWorldResult<AgentWorldJointState> {
++    const result = this.transaction([{ op: "update-joint", id, patch }]);
++    return result.ok ? this.success(this.getJointState(id)) : this.failure(result.error ?? "Update joint failed");
++  }
++
++  removeJoint(id: string): AgentWorldResult<string> {
++    const result = this.transaction([{ op: "remove-joint", id }]);
++    return result.ok ? this.success(id) : this.failure(result.error ?? "Remove joint failed");
++  }
++
+   attachBehavior(id: string, behavior: AgentWorldBehavior): AgentWorldResult<{ entityId: string; behaviorId: string }> {
+     const result = this.transaction([{ op: "attach-behavior", id, behavior }]);
+     return result.ok
+@@ -1820,6 +1890,7 @@ export class AgentWorldRuntime {
+       label: this.definition.label,
+       environment: deepClone(this.environment),
+       entities: [...this.entities.values()].map(({ definition }) => serializeEntity(definition)),
++      ...(this.joints.size > 0 ? { joints: [...this.joints.values()].map(({ definition }) => serializeJoint(definition)) } : {}),
+       ...(this.rules ? { rules: deepClone(this.rules) } : {})
+     };
+   }
+@@ -1847,6 +1918,11 @@ export class AgentWorldRuntime {
+       entities: [...this.entities.values()]
+         .filter(({ definition }) => !dropped.has(definition.id))
+         .map(({ definition }) => serializeEntity(definition)),
++      ...(this.joints.size > 0 ? {
++        joints: [...this.joints.values()]
++          .filter(({ definition }) => !dropped.has(definition.bodyA) && !dropped.has(definition.bodyB))
++          .map(({ definition }) => serializeJoint(definition))
++      } : {}),
+       // The rules go with the document, not with the run. What persists is "this course is
+       // three laps and needs every ring"; what does not is "you are on lap two".
+       ...(this.rules ? { rules: deepClone(this.rules) } : {})
+@@ -1903,10 +1979,12 @@ export class AgentWorldRuntime {
+       surfaceRedraws: this.surfaceRedraws,
+       paused: this.paused,
+       entityCount: entityStates.length,
++      jointCount: this.joints.size,
+       selectedIds: [...this.selectedIds],
+       environment: deepClone(this.environment),
+       bounds,
+       entities: entityStates,
++      joints: [...this.joints.keys()].map((id) => this.getJointState(id)),
+       recentEvents: this.events.slice(-12).map((event) => ({ ...event })),
+       recentCommits: this.commits.slice(-10).map((commit) => deepClone(commit)),
+       savedWorlds: [...this.savedWorlds.keys()].sort(),
+@@ -1914,6 +1992,17 @@ export class AgentWorldRuntime {
+     };
+   }
+ 
++  private getJointState(id: string): AgentWorldJointState {
++    const runtime = this.joints.get(id);
++    if (!runtime) throw new Error(`Unknown joint: ${id}`);
++    return {
++      ...serializeJoint(runtime.definition),
++      anchorA: [...runtime.definition.anchorA],
++      anchorB: [...runtime.definition.anchorB],
++      active: runtime.handle !== null,
++    };
++  }
++
+   findInteractiveEntityId(object: Object3D | null): string | null {
+     let current = object;
+     while (current && current !== this.group) {
+@@ -1946,6 +2035,7 @@ export class AgentWorldRuntime {
+     this.worldRoot.clear();
+     this.environmentRoot.clear();
+     this.entities.clear();
++    this.joints.clear();
+   }
+ 
+   private applyCommand(command: AgentWorldCommand): unknown {
+@@ -1955,6 +2045,9 @@ export class AgentWorldRuntime {
+       case "spawn-prefab": return this.spawnPrefabInternal(command.prefabId, command.options);
+       case "update": this.updateInternal(command.id, command.patch); return command.id;
+       case "remove": this.removeInternal(command.id); return command.id;
++      case "add-joint": return this.addJointInternal(command.joint);
++      case "update-joint": this.updateJointInternal(command.id, command.patch); return command.id;
++      case "remove-joint": this.removeJointInternal(command.id); return command.id;
+       case "attach-behavior": return this.attachBehaviorInternal(command.id, command.behavior);
+       case "detach-behavior": this.detachBehaviorInternal(command.id, command.behaviorId); return command.behaviorId;
+       case "interact": return this.interactInternal(command.id, command.interactionId);
+@@ -1964,6 +2057,65 @@ export class AgentWorldRuntime {
+     }
+   }
+ 
++  private addJointInternal(source: AgentWorldJointDefinition, allowPendingBody = false): string {
++    const definition = resolveJoint(source, this.entities);
++    if (this.joints.has(definition.id)) throw new Error(`Joint id already exists: ${definition.id}`);
++    const runtime: RuntimeJoint = { definition, handle: null };
++    this.joints.set(definition.id, runtime);
++    try {
++      this.refreshJointHandle(runtime, allowPendingBody);
++    } catch (error) {
++      this.joints.delete(definition.id);
++      throw error;
++    }
++    this.emit("joint.added", [definition.bodyA, definition.bodyB], { jointId: definition.id, type: definition.type });
++    return definition.id;
++  }
++
++  private updateJointInternal(id: string, patch: AgentWorldJointPatch): void {
++    const runtime = this.joints.get(id);
++    if (!runtime) throw new Error(`Unknown joint: ${id}`);
++    this.releaseJointHandle(runtime);
++    runtime.definition = resolveJoint({ ...serializeJoint(runtime.definition), ...deepClone(patch), id }, this.entities);
++    this.refreshJointHandle(runtime);
++    this.emit("joint.updated", [runtime.definition.bodyA, runtime.definition.bodyB], { jointId: id, fields: Object.keys(patch) });
++  }
++
++  private removeJointInternal(id: string): void {
++    const runtime = this.joints.get(id);
++    if (!runtime) throw new Error(`Unknown joint: ${id}`);
++    this.releaseJointHandle(runtime);
++    this.joints.delete(id);
++    this.emit("joint.removed", [runtime.definition.bodyA, runtime.definition.bodyB], { jointId: id });
++  }
++
++  private releaseJointHandle(runtime: RuntimeJoint): void {
++    if (!runtime.handle) return;
++    this.physicsWorld.removeJoint(runtime.handle);
++    runtime.handle = null;
++  }
++
++  private refreshJointHandle(runtime: RuntimeJoint, allowPendingBody = false): void {
++    this.releaseJointHandle(runtime);
++    const first = this.entities.get(runtime.definition.bodyA);
++    const second = this.entities.get(runtime.definition.bodyB);
++    if (!first?.body || !second?.body) {
++      if (allowPendingBody && first?.definition.physics && second?.definition.physics) return;
++      throw new Error(`Joint ${runtime.definition.id} requires active physics bodies: ${runtime.definition.bodyA}, ${runtime.definition.bodyB}`);
++    }
++    runtime.handle = this.physicsWorld.createJoint(first.body, second.body, physicsJointDefinition(runtime.definition));
++  }
++
++  private detachJointsForEntity(id: string): RuntimeJoint[] {
++    const affected = [...this.joints.values()].filter(({ definition }) => definition.bodyA === id || definition.bodyB === id);
++    for (const joint of affected) this.releaseJointHandle(joint);
++    return affected;
++  }
++
++  private refreshJointHandles(joints: RuntimeJoint[]): void {
++    for (const joint of joints) this.refreshJointHandle(joint, true);
++  }
++
+   private spawnInternal(source: AgentWorldEntityDefinition, allowUnresolvedLookAt = false): string {
+     const definition = this.resolveEntity(source, allowUnresolvedLookAt);
+     if (this.entities.has(definition.id)) throw new Error(`Entity id already exists: ${definition.id}`);
+@@ -2036,6 +2188,9 @@ export class AgentWorldRuntime {
+     if (patch.distance !== undefined) definition.distance = clamp(patch.distance, 0, 1000);
+     if (patch.marker !== undefined) definition.marker = patch.marker === true;
+     if (patch.physics !== undefined) {
++      if (patch.physics === null && [...this.joints.values()].some((joint) => joint.definition.bodyA === id || joint.definition.bodyB === id)) {
++        throw new Error(`Remove joints connected to ${id} before removing its physics body`);
++      }
+       definition.physics = patch.physics === null
+         ? null
+         : resolvePhysics({ ...(definition.physics ?? { mode: "static" }), ...patch.physics }, definition.type, definition.parentId, definition.behaviors);
+@@ -2130,6 +2285,12 @@ export class AgentWorldRuntime {
+   private removeInternal(id: string): void {
+     const runtime = this.requireEntity(id);
+     const ids = this.descendantIds(id).reverse();
++    const removedEntityIds = new Set([id, ...ids]);
++    for (const [jointId, joint] of [...this.joints]) {
++      if (removedEntityIds.has(joint.definition.bodyA) || removedEntityIds.has(joint.definition.bodyB)) {
++        this.removeJointInternal(jointId);
++      }
++    }
+     for (const descendantId of ids) {
+       const descendant = this.entities.get(descendantId);
+       if (!descendant) continue;
+@@ -2306,6 +2467,8 @@ export class AgentWorldRuntime {
+ 
+   private loadDefinition(source: AgentWorldDefinition): void {
+     validateWorldDefinition(source);
++    for (const joint of this.joints.values()) this.releaseJointHandle(joint);
++    this.joints.clear();
+     for (const runtime of this.entities.values()) if (runtime.body) this.physicsWorld.removeBody(runtime.body);
+     if (this.groundBody) this.physicsWorld.removeBody(this.groundBody);
+     this.groundBody = null;
+@@ -2333,6 +2496,7 @@ export class AgentWorldRuntime {
+       }
+     }
+     if (pending.length > 0) throw new Error(`Unresolved parent references: ${pending.map((entity) => entity.id ?? entity.label ?? entity.type).join(", ")}`);
++    for (const joint of source.joints ?? []) this.addJointInternal(deepClone(joint), true);
+     for (const runtime of this.entities.values()) {
+       for (const behavior of runtime.definition.behaviors) validateBehavior(behavior, this.entities);
+       for (const interaction of runtime.definition.interactions) validateInteraction(interaction, this.entities);
+@@ -3088,6 +3252,7 @@ export class AgentWorldRuntime {
+   }
+ 
+   private rebuildPhysicsBody(runtime: RuntimeEntity): void {
++    const affectedJoints = this.detachJointsForEntity(runtime.definition.id);
+     if (runtime.body) this.physicsWorld.removeBody(runtime.body);
+     // Terrain is the one type whose collider is implied by the entity rather than requested
+     // through `physics` — a terrain you can fall through is not terrain.
+@@ -3101,6 +3266,7 @@ export class AgentWorldRuntime {
+     if (runtime.body || runtime.definition.type === "terrain" || !runtime.definition.physics || runtime.definition.physics.collider === "auto") {
+       runtime.colliderError = null;
+     }
++    this.refreshJointHandles(affectedJoints);
+   }
+ 
+   private startModelLoad(runtime: RuntimeEntity): void {
+@@ -4501,6 +4667,80 @@ function validateWorldDefinition(definition: AgentWorldDefinition): void {
+   if (!definition || definition.schema !== GRAPHYSX_AGENT_WORLD_SCHEMA) throw new Error(`World schema must be ${GRAPHYSX_AGENT_WORLD_SCHEMA}`);
+   if (!definition.id?.trim() || !definition.label?.trim()) throw new Error("World id and label are required");
+   if (!Array.isArray(definition.entities)) throw new Error("World entities must be an array");
++  if (definition.joints !== undefined && !Array.isArray(definition.joints)) throw new Error("World joints must be an array");
++}
++
++function resolveJoint(source: AgentWorldJointDefinition, entities: Map<string, RuntimeEntity>): ResolvedAgentWorldJoint {
++  if (!source?.id?.trim()) throw new Error("Joint id is required");
++  const id = source.id.trim();
++  validateStableId(id, "joint id");
++  if (!(["fixed", "revolute", "rope"] as const).includes(source.type)) throw new Error(`Unsupported joint type: ${String(source.type)}`);
++  validateStableId(source.bodyA, "joint bodyA");
++  validateStableId(source.bodyB, "joint bodyB");
++  if (source.bodyA === source.bodyB) throw new Error(`Joint ${id} requires two different bodies`);
++  const first = entities.get(source.bodyA);
++  const second = entities.get(source.bodyB);
++  if (!first || !second) throw new Error(`Joint ${id} references unknown bodies: ${source.bodyA}, ${source.bodyB}`);
++  const firstPhysics = first.definition.physics;
++  const secondPhysics = second.definition.physics;
++  if (!firstPhysics || !secondPhysics) throw new Error(`Joint ${id} requires two physics entities`);
++  if (firstPhysics.mode === "trigger" || secondPhysics.mode === "trigger") throw new Error(`Joint ${id} cannot connect trigger bodies`);
++  if (firstPhysics.mode !== "dynamic" && secondPhysics.mode !== "dynamic") throw new Error(`Joint ${id} requires at least one dynamic body`);
++
++  const anchorA = sanitizeVector(source.anchorA ?? [0, 0, 0], -10000, 10000, `joint ${id} anchorA`);
++  const anchorB = sanitizeVector(source.anchorB ?? [0, 0, 0], -10000, 10000, `joint ${id} anchorB`);
++  const frameRotationDegreesA = sanitizeVector(source.frameRotationDegreesA ?? [0, 0, 0], -360000, 360000, `joint ${id} frameRotationDegreesA`);
++  const frameRotationDegreesB = sanitizeVector(source.frameRotationDegreesB ?? [0, 0, 0], -360000, 360000, `joint ${id} frameRotationDegreesB`);
++  const rawAxis = sanitizeVector(source.axis ?? [0, 1, 0], -1, 1, `joint ${id} axis`);
++  const axisLength = Math.hypot(...rawAxis);
++  if (source.type === "revolute" && axisLength === 0) throw new Error(`Joint ${id} axis cannot be zero`);
++  const axis = axisLength > 0
++    ? rawAxis.map((value) => value / axisLength) as AgentWorldVector3
++    : [0, 1, 0] as AgentWorldVector3;
++  const length = source.type === "rope"
++    ? clampPositive(source.length, 0.001, 10000, `joint ${id} length`)
++    : 0;
++  if (source.type !== "rope" && source.length !== undefined) throw new Error(`Only rope joints accept length: ${id}`);
++  if (source.type !== "revolute" && source.axis !== undefined) throw new Error(`Only revolute joints accept axis: ${id}`);
++  if (source.type !== "fixed" && (source.frameRotationDegreesA !== undefined || source.frameRotationDegreesB !== undefined)) {
++    throw new Error(`Only fixed joints accept frame rotations: ${id}`);
++  }
++  return {
++    id,
++    type: source.type,
++    bodyA: source.bodyA,
++    bodyB: source.bodyB,
++    anchorA,
++    anchorB,
++    axis,
++    frameRotationDegreesA,
++    frameRotationDegreesB,
++    length,
++  };
++}
++
++function clampPositive(value: number | undefined, minimum: number, maximum: number, label: string): number {
++  if (!Number.isFinite(value)) throw new Error(`${label} is required and must be finite`);
++  if ((value as number) < minimum || (value as number) > maximum) throw new Error(`${label} must be between ${minimum} and ${maximum}`);
++  return value as number;
++}
++
++function physicsJointDefinition(source: ResolvedAgentWorldJoint): PhysicsJointDefinition {
++  const anchorOnFirst = vectorFromTuple(source.anchorA);
++  const anchorOnSecond = vectorFromTuple(source.anchorB);
++  if (source.type === "rope") return { kind: "rope", anchorOnFirst, anchorOnSecond, length: source.length };
++  if (source.type === "revolute") return { kind: "revolute", anchorOnFirst, anchorOnSecond, axis: vectorFromTuple(source.axis) };
++  const quaternion = (rotationDegrees: AgentWorldVector3) => {
++    const radians = rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3;
++    return new Quaternion().setFromEuler(new Euler(...radians));
++  };
++  return {
++    kind: "fixed",
++    anchorOnFirst,
++    anchorOnSecond,
++    frameOnFirst: quaternion(source.frameRotationDegreesA),
++    frameOnSecond: quaternion(source.frameRotationDegreesB),
++  };
+ }
+ 
+ function resolveActor(actor?: AgentWorldActor): Required<AgentWorldActor> {
+@@ -4703,6 +4943,25 @@ function serializePhysics(physics: ResolvedAgentWorldPhysics): AgentWorldPhysics
+   return collider === "auto" ? fields : { ...fields, collider };
+ }
+ 
++function serializeJoint(joint: ResolvedAgentWorldJoint): AgentWorldJointDefinition {
++  const base = {
++    id: joint.id,
++    type: joint.type,
++    bodyA: joint.bodyA,
++    bodyB: joint.bodyB,
++    anchorA: [...joint.anchorA] as AgentWorldVector3,
++    anchorB: [...joint.anchorB] as AgentWorldVector3,
++  };
++  if (joint.type === "rope") return { ...base, type: "rope", length: joint.length };
++  if (joint.type === "revolute") return { ...base, type: "revolute", axis: [...joint.axis] as AgentWorldVector3 };
++  return {
++    ...base,
++    type: "fixed",
++    frameRotationDegreesA: [...joint.frameRotationDegreesA] as AgentWorldVector3,
++    frameRotationDegreesB: [...joint.frameRotationDegreesB] as AgentWorldVector3,
++  };
++}
++
+ function roundVector(vector: Vector3): AgentWorldVector3 {
+   return [Number(vector.x.toFixed(3)), Number(vector.y.toFixed(3)), Number(vector.z.toFixed(3))];
+ }
+diff --git a/src/agent-world-starters.ts b/src/agent-world-starters.ts
+index cf0121f..dec98e7 100644
+--- a/src/agent-world-starters.ts
++++ b/src/agent-world-starters.ts
+@@ -10,7 +10,7 @@ import {
+   type AgentWorldPrefabOptions
+ } from "./agent-world-prefabs";
+ 
+-export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook" | "living-systems" | "quarantine" | "archive-great-slide";
++export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook" | "constraint-workshop" | "living-systems" | "quarantine" | "archive-great-slide";
+ 
+ export type AgentWorldStarterDescriptor = {
+   id: AgentWorldStarterId;
+@@ -75,6 +75,13 @@ export const GRAPHYSX_AGENT_WORLD_STARTERS: readonly AgentWorldStarterDescriptor
+     prefabCount: 6,
+     entityCount: 45
+   },
++  {
++    id: "constraint-workshop",
++    label: "Constraint Workshop",
++    summary: "Editable v2 fixed, revolute/hinge, and rope joints: the archive Physics Lab mechanics as ordinary scene data.",
++    prefabCount: 0,
++    entityCount: 9
++  },
+   {
+     id: "physics-sketchbook",
+     label: "Physics Sketchbook",
+@@ -98,15 +105,17 @@ export function instantiateAgentWorldStarter(
+     label: options.label?.trim() || descriptor.label,
+     environment: base.environment,
+     entities: base.entities,
++    ...(base.joints ? { joints: base.joints } : {}),
+     ...(base.rules ? { rules: base.rules } : {})
+   };
+ }
+ 
+-function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition, "environment" | "entities" | "rules"> {
++function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition, "environment" | "entities" | "joints" | "rules"> {
+   if (starterId === "archive-great-slide") return archiveGreatSlide();
+   if (starterId === "living-systems") return livingSystems();
+   if (starterId === "quarantine") return quarantine();
+   if (starterId === "physics-sketchbook") return physicsSketchbook();
++  if (starterId === "constraint-workshop") return constraintWorkshop();
+   if (starterId === "prefab-plaza") {
+     return {
+       environment: {
+@@ -430,6 +439,82 @@ function quarantine(): Pick<AgentWorldDefinition, "environment" | "entities"> {
+   };
+ }
+ 
++/**
++ * The specialized Physics Lab proved three useful constraint families. This starter makes
++ * those same mechanics ordinary v2 scene data: every body and joint exports, patches,
++ * undoes, stores, and reloads through the public human/agent document.
++ */
++function constraintWorkshop(): Pick<AgentWorldDefinition, "environment" | "entities" | "joints"> {
++  return {
++    environment: {
++      background: "#07131f",
++      ground: { visible: false, size: 34, color: "#111f2b", grid: false, gridColor: "#3f8395" },
++      physics: { gravity: [0, -9.81, 0] },
++      post: { bloom: { strength: 0.12, threshold: 0.92, radius: 0.18 } }
++    },
++    entities: [
++      ...starterLights("constraint", "#b6d8e8", "#fff0c5", [-10, 15, 10]),
++      {
++        id: "constraint-floor", label: "Constraint Test Floor", type: "box",
++        transform: { position: [0, -0.35, 0] }, geometry: { width: 28, height: 0.7, depth: 13 },
++        material: { color: "#314d59", roughness: 0.88, metalness: 0.04, texture: { id: "checker", repeat: [7, 4] } },
++        physics: { mode: "static", material: "ground" }, receiveShadow: true,
++        tags: ["constraint-workshop", "physics:static"]
++      },
++      {
++        id: "hinge-anchor", label: "Hinge Anchor", type: "box",
++        transform: { position: [-6, 4, 0] }, geometry: { width: 0.7, height: 1.6, depth: 1.3 },
++        material: { color: "#61d7ed", emissive: "#145d70", emissiveIntensity: 0.45, metalness: 0.45, roughness: 0.32 },
++        physics: { mode: "static", material: "wall" }, castShadow: true,
++        tags: ["constraint-workshop", "joint:revolute", "physics:static"]
++      },
++      {
++        id: "hinge-plank", label: "Revolute Pendulum", type: "box",
++        transform: { position: [-6, 2.2, 0] }, geometry: { width: 0.55, height: 2, depth: 3.4 },
++        material: { color: "#ffb969", emissive: "#71360f", emissiveIntensity: 0.28, metalness: 0.15, roughness: 0.45 },
++        physics: { mode: "dynamic", mass: 2.4, material: "ball" }, castShadow: true,
++        interactions: [{ id: "swing", label: "Swing hinge", type: "apply-impulse", targetIds: ["hinge-plank"], impulse: [0, 0, 5], relativePoint: [0, -0.8, 0] }],
++        tags: ["constraint-workshop", "joint:revolute", "physics:dynamic", "agent-observable"]
++      },
++      {
++        id: "fixed-anchor", label: "Fixed Anchor", type: "box",
++        transform: { position: [0, 4.2, 0] }, geometry: { width: 1.5, height: 1.2, depth: 1.5 },
++        material: { color: "#9d8cff", emissive: "#403180", emissiveIntensity: 0.38, metalness: 0.38, roughness: 0.34 },
++        physics: { mode: "static", material: "wall" }, castShadow: true,
++        tags: ["constraint-workshop", "joint:fixed", "physics:static"]
++      },
++      {
++        id: "fixed-block", label: "Welded Dynamic Block", type: "box",
++        transform: { position: [0, 2.4, 0] }, geometry: { width: 1.2, height: 1.8, depth: 1.2 },
++        material: { color: "#d5caff", emissive: "#4a3d86", emissiveIntensity: 0.25, metalness: 0.25, roughness: 0.42 },
++        physics: { mode: "dynamic", mass: 1.8, material: "default" }, castShadow: true,
++        interactions: [{ id: "test-weld", label: "Test fixed joint", type: "apply-impulse", targetIds: ["fixed-block"], impulse: [4, 0, 0] }],
++        tags: ["constraint-workshop", "joint:fixed", "physics:dynamic", "agent-observable"]
++      },
++      {
++        id: "rope-anchor", label: "Rope Anchor", type: "sphere",
++        transform: { position: [6, 5, 0] }, geometry: { radius: 0.48, radialSegments: 24 },
++        material: { color: "#73edb8", emissive: "#176c4c", emissiveIntensity: 0.5, metalness: 0.3, roughness: 0.3 },
++        physics: { mode: "static", material: "wall" }, castShadow: true,
++        tags: ["constraint-workshop", "joint:rope", "physics:static"]
++      },
++      {
++        id: "rope-ball", label: "Rope Wrecking Ball", type: "sphere",
++        transform: { position: [6, 1.8, 0] }, geometry: { radius: 0.75, radialSegments: 32 },
++        material: { color: "#ff735d", emissive: "#7e2014", emissiveIntensity: 0.35, metalness: 0.5, roughness: 0.28 },
++        physics: { mode: "dynamic", mass: 3.2, material: "ball" }, castShadow: true,
++        interactions: [{ id: "swing", label: "Swing rope", type: "apply-impulse", targetIds: ["rope-ball"], impulse: [6, 0, 0] }],
++        tags: ["constraint-workshop", "joint:rope", "physics:dynamic", "agent-observable"]
++      }
++    ],
++    joints: [
++      { id: "hinge-joint", type: "revolute", bodyA: "hinge-anchor", bodyB: "hinge-plank", anchorA: [0, -0.8, 0], anchorB: [0, 1, 0], axis: [1, 0, 0] },
++      { id: "fixed-joint", type: "fixed", bodyA: "fixed-anchor", bodyB: "fixed-block", anchorA: [0, -0.9, 0], anchorB: [0, 0.9, 0] },
++      { id: "rope-joint", type: "rope", bodyA: "rope-anchor", bodyB: "rope-ball", anchorA: [0, 0, 0], anchorB: [0, 0, 0], length: 3.2 }
++    ]
++  };
++}
++
+ function physicsSketchbook(): Pick<AgentWorldDefinition, "environment" | "entities"> {
+   return {
+     environment: {
+diff --git a/src/main.ts b/src/main.ts
+index 271ee5c..d93eb8d 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -508,6 +508,7 @@ if (mode === "legacy") {
+         mode: host.mode,
+         world: host.api.state()?.world ?? null,
+         paused: host.api.state()?.paused ?? false,
++        joints: host.api.state()?.joints ?? [],
+         run: host.api.rules.status(),
+         archiveCup: getArchiveCupRuntimeState(),
+         personalGhost: getPersonalGhostState(),
+diff --git a/src/physics/physics-engine.ts b/src/physics/physics-engine.ts
+index bad5517..063f37a 100644
+--- a/src/physics/physics-engine.ts
++++ b/src/physics/physics-engine.ts
+@@ -81,11 +81,37 @@ export interface PhysicsStepOptions {
+   maxSubSteps?: number;
+ }
+ 
++export type PhysicsJointDefinition =
++  | {
++      kind: "fixed";
++      anchorOnFirst: PhysicsVector3;
++      anchorOnSecond: PhysicsVector3;
++      frameOnFirst: PhysicsQuaternion;
++      frameOnSecond: PhysicsQuaternion;
++    }
++  | {
++      kind: "revolute";
++      anchorOnFirst: PhysicsVector3;
++      anchorOnSecond: PhysicsVector3;
++      axis: PhysicsVector3;
++    }
++  | {
++      kind: "rope";
++      anchorOnFirst: PhysicsVector3;
++      anchorOnSecond: PhysicsVector3;
++      length: number;
++    };
++
+ declare const physicsBodyHandleBrand: unique symbol;
+ 
+ /** Identity-only token. Its backing rigid body is private to the active adapter. */
+ export type PhysicsBodyHandle = Readonly<{ [physicsBodyHandleBrand]: true }>;
+ 
++declare const physicsJointHandleBrand: unique symbol;
++
++/** Identity-only token for a constraint owned by one physics adapter. */
++export type PhysicsJointHandle = Readonly<{ [physicsJointHandleBrand]: true }>;
++
+ /**
+  * Minimal world/body seam needed by AgentWorld today.
+  *
+@@ -96,6 +122,8 @@ export type PhysicsBodyHandle = Readonly<{ [physicsBodyHandleBrand]: true }>;
+ export interface PhysicsEngine {
+   createBody(definition: PhysicsBodyDefinition): PhysicsBodyHandle;
+   removeBody(body: PhysicsBodyHandle): void;
++  createJoint(first: PhysicsBodyHandle, second: PhysicsBodyHandle, definition: PhysicsJointDefinition): PhysicsJointHandle;
++  removeJoint(joint: PhysicsJointHandle): void;
+ 
+   step(deltaSeconds: number, options?: PhysicsStepOptions): void;
+   setGravity(gravity: PhysicsVector3): void;
+diff --git a/src/physics/rapier-physics-engine.ts b/src/physics/rapier-physics-engine.ts
+index 97b95b9..53155cc 100644
+--- a/src/physics/rapier-physics-engine.ts
++++ b/src/physics/rapier-physics-engine.ts
+@@ -1,6 +1,7 @@
+ import type {
+   Collider,
+   ColliderDesc,
++  ImpulseJoint,
+   RigidBody,
+   RigidBodyDesc,
+   World,
+@@ -15,6 +16,8 @@ import type {
+   PhysicsBodyDefinition,
+   PhysicsBodyHandle,
+   PhysicsEngine,
++  PhysicsJointDefinition,
++  PhysicsJointHandle,
+   PhysicsMaterialDefinition,
+   PhysicsQuaternion,
+   PhysicsShapeDefinition,
+@@ -59,6 +62,12 @@ type RapierBodyRecord = {
+   colliders: RapierColliderRecord[];
+ };
+ 
++type RapierJointRecord = {
++  joint: ImpulseJoint;
++  first: PhysicsBodyHandle;
++  second: PhysicsBodyHandle;
++};
++
+ type PreparedShape = {
+   descriptor: ColliderDesc;
+   bounds: ShapeBounds;
+@@ -76,6 +85,7 @@ type PreparedShape = {
+ export class RapierPhysicsEngine implements PhysicsEngine {
+   private readonly world: World;
+   private readonly bodies = new Map<PhysicsBodyHandle, RapierBodyRecord>();
++  private readonly joints = new Map<PhysicsJointHandle, RapierJointRecord>();
+   private readonly forcedBodies = new Set<RigidBody>();
+   private readonly materials = new Map<string, PhysicsMaterialDefinition>();
+   private readonly defaultMaterial: PhysicsMaterialDefinition;
+@@ -174,11 +184,37 @@ export class RapierPhysicsEngine implements PhysicsEngine {
+   removeBody(handle: PhysicsBodyHandle): void {
+     this.assertLive();
+     const record = this.recordFor(handle);
++    for (const [jointHandle, joint] of [...this.joints]) {
++      if (joint.first === handle || joint.second === handle) this.removeJoint(jointHandle);
++    }
+     this.forcedBodies.delete(record.body);
+     this.world.removeRigidBody(record.body);
+     this.bodies.delete(handle);
+   }
+ 
++  createJoint(first: PhysicsBodyHandle, second: PhysicsBodyHandle, definition: PhysicsJointDefinition): PhysicsJointHandle {
++    this.assertLive();
++    if (first === second) throw new Error("A physics joint requires two different bodies");
++    const firstBody = this.recordFor(first).body;
++    const secondBody = this.recordFor(second).body;
++    const data = createJointData(definition);
++    const joint = this.world.createImpulseJoint(data, firstBody, secondBody, true);
++    // Jointed bodies commonly meet at their anchor. Letting their colliders solve that
++    // intentional contact as a penetration can lock an otherwise free hinge in place.
++    joint.setContactsEnabled(false);
++    const handle = Object.freeze({}) as PhysicsJointHandle;
++    this.joints.set(handle, { joint, first, second });
++    return handle;
++  }
++
++  removeJoint(handle: PhysicsJointHandle): void {
++    this.assertLive();
++    const record = this.joints.get(handle);
++    if (!record) throw new Error("Unknown or removed physics joint handle");
++    if (record.joint.isValid()) this.world.removeImpulseJoint(record.joint, true);
++    this.joints.delete(handle);
++  }
++
+   step(deltaSeconds: number, options: PhysicsStepOptions = {}): void {
+     this.assertLive();
+     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
+@@ -311,6 +347,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
+ 
+   dispose(): void {
+     if (this.disposed) return;
++    this.joints.clear();
+     this.bodies.clear();
+     this.forcedBodies.clear();
+     this.materials.clear();
+@@ -344,6 +381,34 @@ export class RapierPhysicsEngine implements PhysicsEngine {
+   }
+ }
+ 
++function createJointData(definition: PhysicsJointDefinition) {
++  assertVector(definition.anchorOnFirst, "First joint anchor");
++  assertVector(definition.anchorOnSecond, "Second joint anchor");
++  if (definition.kind === "fixed") {
++    return RAPIER.JointData.fixed(
++      toRapierVector(definition.anchorOnFirst),
++      normalizeQuaternion(definition.frameOnFirst, "First fixed-joint frame"),
++      toRapierVector(definition.anchorOnSecond),
++      normalizeQuaternion(definition.frameOnSecond, "Second fixed-joint frame"),
++    );
++  }
++  if (definition.kind === "rope") {
++    return RAPIER.JointData.rope(
++      positive(definition.length, "Rope length"),
++      toRapierVector(definition.anchorOnFirst),
++      toRapierVector(definition.anchorOnSecond),
++    );
++  }
++  assertVector(definition.axis, "Revolute joint axis");
++  const axisLength = Math.hypot(definition.axis.x, definition.axis.y, definition.axis.z);
++  if (axisLength === 0) throw new Error("Revolute joint axis cannot be zero");
++  return RAPIER.JointData.revolute(
++    toRapierVector(definition.anchorOnFirst),
++    toRapierVector(definition.anchorOnSecond),
++    { x: definition.axis.x / axisLength, y: definition.axis.y / axisLength, z: definition.axis.z / axisLength },
++  );
++}
++
+ function createBodyDescriptor(definition: PhysicsBodyDefinition): RigidBodyDesc {
+   if (definition.mode === "dynamic") return RAPIER.RigidBodyDesc.dynamic();
+   if (definition.mode === "static") return RAPIER.RigidBodyDesc.fixed();
+diff --git a/src/platform-editor.ts b/src/platform-editor.ts
+index 80b83b3..29b94ea 100644
+--- a/src/platform-editor.ts
++++ b/src/platform-editor.ts
+@@ -3521,7 +3521,7 @@ const EDITOR_CSS = `
+ .gx-ed-toolbar *,.gx-ed-panel *,.gx-ed-workbench *{box-sizing:border-box}
+ 
+ /* ---- top bar ---- */
+-.gx-ed-toolbar{top:var(--gx-s4);left:var(--gx-s4);right:var(--gx-s4);display:flex;flex-wrap:wrap;align-items:center;gap:var(--gx-s3);padding:var(--gx-s2) var(--gx-s3);user-select:none}
++.gx-ed-toolbar{top:var(--gx-s4);left:var(--gx-s4);right:var(--gx-s4);display:flex;flex-wrap:nowrap;align-items:center;gap:var(--gx-s3);padding:var(--gx-s2) var(--gx-s3);overflow-x:auto;overflow-y:hidden;user-select:none}
+ .gx-ed-group{display:flex;align-items:center;gap:var(--gx-s1)}
+ .gx-ed-group+.gx-ed-group{padding-left:var(--gx-s3);border-left:1px solid var(--gx-border-soft)}
+ .gx-ed-toolbar button,.gx-ed-toolbar select{background:var(--gx-field);color:var(--gx-text);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:5px 10px;cursor:pointer;font:inherit;line-height:1.2}
+diff --git a/src/prototype-app.ts b/src/prototype-app.ts
+index cbecaf4..667a895 100644
+--- a/src/prototype-app.ts
++++ b/src/prototype-app.ts
+@@ -66,6 +66,8 @@ import {
+   type AgentWorldEntityDefinition,
+   type AgentWorldEntityPatch,
+   type AgentWorldInteraction,
++  type AgentWorldJointDefinition,
++  type AgentWorldJointPatch,
+   type AgentWorldMaterial,
+   type AgentWorldQuery,
+   type AgentWorldState,
+@@ -3347,6 +3349,9 @@ export class PrototypeApp {
+       spawnAgentEntity: (entity: AgentWorldEntityDefinition) => this.raceScene.spawnAgentWorldEntity(entity),
+       updateAgentEntity: (id: string, patch: AgentWorldEntityPatch) => this.raceScene.updateAgentWorldEntity(id, patch),
+       removeAgentEntity: (id: string) => this.raceScene.removeAgentWorldEntity(id),
++      addAgentWorldJoint: (joint: AgentWorldJointDefinition) => this.raceScene.addAgentWorldJoint(joint),
++      updateAgentWorldJoint: (id: string, patch: AgentWorldJointPatch) => this.raceScene.updateAgentWorldJoint(id, patch),
++      removeAgentWorldJoint: (id: string) => this.raceScene.removeAgentWorldJoint(id),
+       attachAgentBehavior: (id: string, behavior: AgentWorldBehavior) => this.raceScene.attachAgentWorldBehavior(id, behavior),
+       detachAgentBehavior: (id: string, behaviorId: string) => this.raceScene.detachAgentWorldBehavior(id, behaviorId),
+       interactAgentEntity: (id: string, interactionId?: string) => this.raceScene.interactAgentWorld(id, interactionId),
+@@ -3491,6 +3496,9 @@ export class PrototypeApp {
+       spawn: debugApi.spawnAgentEntity,
+       update: debugApi.updateAgentEntity,
+       remove: debugApi.removeAgentEntity,
++      addJoint: debugApi.addAgentWorldJoint,
++      updateJoint: debugApi.updateAgentWorldJoint,
++      removeJoint: debugApi.removeAgentWorldJoint,
+       attachBehavior: debugApi.attachAgentBehavior,
+       detachBehavior: debugApi.detachAgentBehavior,
+       interact: debugApi.interactAgentEntity,
+diff --git a/src/race-scene.ts b/src/race-scene.ts
+index e168aca..f1b46d9 100644
+--- a/src/race-scene.ts
++++ b/src/race-scene.ts
+@@ -209,6 +209,9 @@ import {
+   type AgentWorldEntityPatch,
+   type AgentWorldEntityState,
+   type AgentWorldInteractionReceipt,
++  type AgentWorldJointDefinition,
++  type AgentWorldJointPatch,
++  type AgentWorldJointState,
+   type AgentWorldSteerInput,
+   type AgentWorldSteerReceipt,
+   type AgentWorldSubjectRun,
+@@ -1806,6 +1809,24 @@ export class RaceScene {
+     return result;
+   }
+ 
++  addAgentWorldJoint(joint: AgentWorldJointDefinition): AgentWorldResult<AgentWorldJointState> {
++    const result = this.agentWorld?.addJoint(joint) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
++    this.afterAgentWorldMutation(result.ok);
++    return result;
++  }
++
++  updateAgentWorldJoint(id: string, patch: AgentWorldJointPatch): AgentWorldResult<AgentWorldJointState> {
++    const result = this.agentWorld?.updateJoint(id, patch) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
++    this.afterAgentWorldMutation(result.ok);
++    return result;
++  }
++
++  removeAgentWorldJoint(id: string): AgentWorldResult<string> {
++    const result = this.agentWorld?.removeJoint(id) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
++    this.afterAgentWorldMutation(result.ok);
++    return result;
++  }
++
+   attachAgentWorldBehavior(id: string, behavior: AgentWorldBehavior): AgentWorldResult<{ entityId: string; behaviorId: string }> {
+     const result = this.agentWorld?.attachBehavior(id, behavior) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
+     this.afterAgentWorldMutation(result.ok);
+-- 
+2.47.1.windows.1
+

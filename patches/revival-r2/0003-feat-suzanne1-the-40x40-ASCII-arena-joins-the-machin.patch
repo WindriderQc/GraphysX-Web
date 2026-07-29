@@ -1,0 +1,688 @@
+From 4bd95f9b8ea5b89f8daa9ce9fb8df6748bfec0b1 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 28 Jul 2026 02:02:09 +0000
+Subject: [PATCH 3/5] feat(suzanne1): the 40x40 ASCII arena joins the machinery
+ run
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The machinery course revived the Suzanne1.*.x study; this composes the OTHER
+Suzanne record — the authored 40x40 Suzanne1.ASCII arena (in-repo bytes,
+64ec6746…) whose NOT_REVIVED verdict asked for exactly 'a composed v2 scene
+where the chains and pistons can exist'. The ledger's claim that Suzanne 1
+'plays its exact 40x40 arena' becomes true with this commit.
+
+archive-suzanne1-scene.ts builds it from the decoded record — every position
+the archive's own number under one declared mapping ((p - 20) x 2.4): 208 wall
+cubes DYNAMIC as archived (a pushable maze is the arena's signature) in their
+recorded per-symbol textures (objet39 / Podium / grass), the three archived
+pistons as kinematic movers between the archived ±0.5 limits along the archived
+orientations (constant-speed drive disclosed adapted — the original used
+asymmetric slider-joint forces), 45 chain assemblies as static stands (same
+joint-vocabulary disclosure), 15 ZRing pickups at the archived 0.1°/ms spin,
+LINE gates spanning the archived post pairs (the halfway line runs its full
+recorded diagonal), laps: 3, and the recovered two-body ball the record itself
+binds (internalTexture: FireArrow800.jpg). Absent and recorded: CubX anchors,
+the unconverted XML airplane, the unrecoverable random humans.
+
+The texture registry gains the recovered Suzanne1 set (objet39, podium,
+grass-sample, z-ring) and concrete (the source2017 floor binding). Games shelf
+entry beside the machinery run; __GRAPHYSX_ARCHIVE__.composeSuzanne1 for agents.
+
+Verified: new smoke-suzanne1 in the gate — census exact (208/208 dynamic walls,
+135 chain bodies, 15 rings, 3 kinematic plates, 2 gates, 4 posts), a piston
+plate proven to move along its archived axis under deterministic stepping with
+zero cross-axis drift, ball rests, all rings collect, the run completes over
+3 laps, and the document round-trips. Screenshot: suzanne1-arena.png.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AjMX8NeAJ88Biso5vpBsRJ
+---
+ scripts/smoke-suzanne1.mjs    | 162 +++++++++++++++
+ scripts/verify.mjs            |   1 +
+ src/agent-world-textures.ts   |  45 +++++
+ src/archive-suzanne1-scene.ts | 359 ++++++++++++++++++++++++++++++++++
+ src/main.ts                   |  16 ++
+ 5 files changed, 583 insertions(+)
+ create mode 100644 scripts/smoke-suzanne1.mjs
+ create mode 100644 src/archive-suzanne1-scene.ts
+
+diff --git a/scripts/smoke-suzanne1.mjs b/scripts/smoke-suzanne1.mjs
+new file mode 100644
+index 0000000..19ddc14
+--- /dev/null
++++ b/scripts/smoke-suzanne1.mjs
+@@ -0,0 +1,162 @@
++import { mkdirSync } from "node:fs";
++import path from "node:path";
++import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
++
++// Suzanne 1 composed scene: the skipped record revived. Asserts the archive counts landed
++// (208 dynamic walls, 45 chains, 15 rings, 3 pistons), that a piston plate actually MOVES
++// under deterministic stepping along its archived axis, that the ball rests and a ring
++// collects, and that the run completes through the LINE gates over the archived 3 laps.
++// All physics via pause + fixed step, never wall-clock.
++
++const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
++const ART = process.env.SMOKE_ARTIFACTS || "output/smoke";
++mkdirSync(ART, { recursive: true });
++
++const browser = await launchSmokeBrowser();
++const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
++applySmokeTimeout(page);
++const consoleErrors = [];
++const pageErrors = [];
++page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
++page.on("pageerror", (error) => pageErrors.push(String(error)));
++
++const out = {};
++
++try {
++  await page.goto(`${BASE}?host=standalone`, { waitUntil: "load" });
++  await page.waitForFunction(() => !!window.__GRAPHYSX__ && !!window.__GRAPHYSX_HOST__, null, { timeout: SMOKE_TIMEOUT });
++
++  // Compose through the discoverable archive global, the spiral smoke's own pattern.
++  await page.waitForFunction(() => !!window.__GRAPHYSX_ARCHIVE__, null, { timeout: SMOKE_TIMEOUT });
++  out.composed = await page.evaluate(async () => {
++    const created = await window.__GRAPHYSX_ARCHIVE__.composeSuzanne1();
++    return created.ok ? { ok: true } : { composeError: created.error };
++  });
++  await page.waitForFunction(() => window.__GRAPHYSX__.query({ tag: "suzanne1" }).length > 300, null, { timeout: SMOKE_TIMEOUT });
++
++  out.census = await page.evaluate(() => {
++    const api = window.__GRAPHYSX__;
++    const all = api.query({ tag: "suzanne1" });
++    const walls = all.filter((entity) => entity.id.startsWith("suzanne1-wall-"));
++    const plates = all.filter((entity) => entity.id.endsWith("-plate"));
++    return {
++      walls: walls.length,
++      wallsDynamic: walls.filter((entity) => entity.physics?.mode === "dynamic").length,
++      rings: all.filter((entity) => entity.tags.includes("collectible")).length,
++      chains: all.filter((entity) => entity.tags.includes("chain")).length,
++      plates: plates.length,
++      platesKinematic: plates.filter((entity) => entity.physics?.mode === "kinematic").length,
++      gates: all.filter((entity) => entity.tags.includes("gate")).length,
++      posts: all.filter((entity) => entity.tags.includes("post")).length,
++      hasBall: all.some((entity) => entity.id === "suzanne1-ball"),
++      laps: api.rules.get()?.laps ?? 0,
++      collectibleCount: api.rules.status()?.collectibleCount ?? 0,
++    };
++  });
++
++  // A piston plate must MOVE, deterministically, along its archived axis. Piston "0" is
++  // yaw 270 → travel along +Z only.
++  out.piston = await page.evaluate(() => {
++    const api = window.__GRAPHYSX__;
++    api.pause(true);
++    const before = api.query({ ids: ["suzanne1-piston-0-plate"] })[0]?.position;
++    for (let i = 0; i < 120; i += 1) api.step(1 / 60);
++    const after = api.query({ ids: ["suzanne1-piston-0-plate"] })[0]?.position;
++    return {
++      before,
++      after,
++      movedZ: Math.abs(after[2] - before[2]),
++      driftX: Math.abs(after[0] - before[0]),
++      driftY: Math.abs(after[1] - before[1]),
++    };
++  });
++
++  // Rest, one ring, and the full 3-lap completion through the line gates — the
++  // teleport-driven pattern the archive-levels smoke established.
++  out.run = await page.evaluate(() => {
++    const api = window.__GRAPHYSX__;
++    const settle = (n) => { for (let i = 0; i < n; i += 1) api.step(1 / 60); };
++    const teleport = (position) => {
++      const ball = api.query({ ids: ["suzanne1-ball"] })[0];
++      api.update("suzanne1-ball", {
++        transform: { position },
++        physics: { mode: ball.physics.mode, mass: ball.physics.mass, material: ball.physics.material, linearVelocity: [0, 0, 0] },
++      });
++      settle(14);
++    };
++    settle(90);
++    const ball = api.query({ ids: ["suzanne1-ball"] })[0];
++    const restY = ball.position[1];
++    for (const ring of api.query({ tag: "collectible" })) teleport(ring.position);
++    const afterRings = api.rules.status();
++    const half = api.query({ ids: ["suzanne1-half-gate"] })[0];
++    const finish = api.query({ ids: ["suzanne1-finish-gate"] })[0];
++    for (let lap = 0; lap < (api.rules.get()?.laps ?? 1); lap += 1) {
++      teleport(half.position);
++      teleport(finish.position);
++      settle(30);
++    }
++    const final = api.rules.status();
++    return {
++      restY: Number(restY.toFixed(3)),
++      ringsCollected: afterRings?.collected.length ?? 0,
++      ringsHidden: api.query({ tag: "collectible" }).filter((ring) => ring.visible === false).length,
++      phase: final?.phase,
++      lap: final?.lap,
++    };
++  });
++
++  // Round trip: a composed revived arena is an ordinary scene.
++  out.roundTrip = await page.evaluate(() => {
++    const api = window.__GRAPHYSX__;
++    const doc = api.export();
++    const before = doc.entities.length;
++    const loaded = api.load(doc);
++    return {
++      before,
++      after: api.state()?.entities.length ?? 0,
++      ok: loaded.ok,
++      lapsSurvived: api.rules.get()?.laps ?? 0,
++    };
++  });
++
++  await page.evaluate(() => { window.__GRAPHYSX_HOST__.setMode("play"); });
++  await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["suzanne1-ball-shell"] })[0]?.asset?.status === "ready", null, { timeout: SMOKE_TIMEOUT });
++  await page.waitForTimeout(2500);
++  await page.screenshot({ path: path.join(ART, "suzanne1-arena.png") });
++} catch (error) {
++  out.fatal = String(error);
++}
++
++out.consoleErrors = consoleErrors;
++out.pageErrors = pageErrors;
++await browser.close();
++
++const pass =
++  !out.fatal &&
++  out.census?.walls === 208 &&
++  out.census?.wallsDynamic === 208 &&
++  out.census?.rings === 15 &&
++  out.census?.chains === 135 &&
++  out.census?.plates === 3 &&
++  out.census?.platesKinematic === 3 &&
++  out.census?.gates === 2 &&
++  out.census?.posts === 4 &&
++  out.census?.hasBall === true &&
++  out.census?.laps === 3 &&
++  out.census?.collectibleCount === 15 &&
++  out.piston?.movedZ > 0.3 &&
++  out.piston?.driftX < 0.05 &&
++  out.piston?.driftY < 0.05 &&
++  out.run?.restY < 1.4 &&
++  out.run?.ringsCollected === 15 &&
++  out.run?.ringsHidden === 15 &&
++  out.run?.phase === "complete" &&
++  out.roundTrip?.ok === true &&
++  out.roundTrip?.before === out.roundTrip?.after &&
++  out.roundTrip?.lapsSurvived === 3 &&
++  out.pageErrors.length === 0;
++
++console.log(JSON.stringify(out, null, 2));
++console.log(pass ? "SMOKE PASS" : "SMOKE FAIL");
++process.exit(pass ? 0 : 1);
+diff --git a/scripts/verify.mjs b/scripts/verify.mjs
+index 6e5596b..b0cedfc 100644
+--- a/scripts/verify.mjs
++++ b/scripts/verify.mjs
+@@ -69,6 +69,7 @@ const SMOKES = [
+   { name: "map1", script: "scripts/smoke-map1.mjs", covers: "Map 1 gravity descent: Games launch, exact recovered collider, halfway gate, results, replay + return" },
+   { name: "level1-2011", script: "scripts/smoke-level1-2011.mjs", covers: "Level1 2011 at 1:1: largest mesh under scene envelope, exact trimesh, two gates in order, results, replay + return" },
+   { name: "suzanne-machinery", script: "scripts/smoke-suzanne-machinery.mjs", covers: "Suzanne machinery: eight vendored meshes, moving convex colliders, exact 12-point route, completable" },
++  { name: "suzanne1", script: "scripts/smoke-suzanne1.mjs", covers: "Suzanne 1 ASCII arena: archive census, dynamic walls, piston moves, completable over 3 laps, round-trips" },
+   { name: "revival-ledgers", script: "scripts/audit-revival-debt.mjs", covers: "debt sweep: pinned 22-item register plus all five NOT_REVIVED inventories checked against HEAD" },
+   { name: "rapier-race", script: "scripts/smoke-rapier-race.mjs", covers: "Rapier RaceScene: Piste vehicle motion, steering, finite state, browser errors" },
+   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
+diff --git a/src/agent-world-textures.ts b/src/agent-world-textures.ts
+index c451722..c9ca069 100644
+--- a/src/agent-world-textures.ts
++++ b/src/agent-world-textures.ts
+@@ -204,6 +204,51 @@ export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
+     defaultRepeat: [1, 1],
+     source: "GraphysX archive"
+   },
++  {
++    id: "concrete",
++    label: "Concrete",
++    url: "/assets/textures/archive/concrete.png",
++    category: "surface",
++    description: "Recovered concrete slab — the source2017 Suzanne floor binding, and a plain hard ground anywhere.",
++    defaultRepeat: [4, 4],
++    source: "GraphysX archive; Scene3D/BallZLevel.h floor binding"
++  },
++  {
++    id: "objet39",
++    label: "Objet 39",
++    url: "/assets/textures/suzanne1/objet39.jpg",
++    category: "surface",
++    description: "The recovered Suzanne wall texture — Scene.cpp binds every `#` wall cube to it.",
++    defaultRepeat: [1, 1],
++    source: "BallZ archive StockRoom/Suzanne1; Scene3D/BallZLevel.h"
++  },
++  {
++    id: "podium",
++    label: "Podium",
++    url: "/assets/textures/suzanne1/Podium.JPG",
++    category: "surface",
++    description: "The recovered Suzanne `z` wall texture.",
++    defaultRepeat: [1, 1],
++    source: "BallZ archive StockRoom/Suzanne1/Podium.JPG"
++  },
++  {
++    id: "grass-sample",
++    label: "Grass Sample",
++    url: "/assets/textures/suzanne1/GrassSample.jpg",
++    category: "nature",
++    description: "The recovered Suzanne grass sample — the `Z` wall binding, and the reference2016 floor.",
++    defaultRepeat: [1, 1],
++    source: "BallZ archive StockRoom/Suzanne1/GrassSample.jpg"
++  },
++  {
++    id: "z-ring",
++    label: "Z Ring",
++    url: "/assets/textures/suzanne1/ZRing.png",
++    category: "pattern",
++    description: "The recovered Suzanne ring-pickup skin.",
++    defaultRepeat: [1, 1],
++    source: "BallZ archive StockRoom/Suzanne1/ZRing.png"
++  },
+   {
+     id: "spheres",
+     label: "3D Spheres",
+diff --git a/src/archive-suzanne1-scene.ts b/src/archive-suzanne1-scene.ts
+new file mode 100644
+index 0000000..46de10a
+--- /dev/null
++++ b/src/archive-suzanne1-scene.ts
+@@ -0,0 +1,359 @@
++import { Vector3 } from "three";
++import {
++  GRAPHYSX_AGENT_RULES_SCHEMA,
++  GRAPHYSX_AGENT_WORLD_SCHEMA,
++  type AgentWorldEntityDefinition,
++  type AgentWorldVector3,
++  type GraphysXAgentWorldApi,
++} from "./agent-world-runtime";
++import type { PlatformHost } from "./platform-host";
++import suzanne1 from "./legacy/suzanne1-ascii-scene.json";
++
++/**
++ * Suzanne 1 — the authored 40×40 arena, composed as a v2 scene.
++ *
++ * This is the skipped record `ARCHIVE_BALLZ_NOT_REVIVED` called "the one that is not a
++ * 'cannot'": the bytes are in-repo with a source SHA (`Suzanne1.ASCII 64ec6746…`), and its
++ * verdict asked for exactly this — "a composed v2 scene where the chains and pistons can
++ * exist" — because a grid conversion had no tile for the things that make it this arena.
++ *
++ * Everything positional is the archive's own number under one declared mapping: TV3D cell
++ * space `[col + 0.5, 0.5, row + 0.5]` → world `(p - 20) × 2.4` per axis (centred, and scaled
++ * by the same 2.4 the classic grid levels use, because the archive's 1-unit cell has no
++ * meaning against this platform's fixed gravity). Textures are the recovered Suzanne1 set
++ * under the source2017 bindings the decode carries per wall (`objet39`, `Podium`, grass —
++ * the recorded `Grass.jpg` binding lands on the folder's surviving `GrassSample.jpg`).
++ *
++ * Honest fidelity split:
++ * - faithful: all 208 wall cubes (dynamic, as archived — this arena is pushable), 15 ring
++ *   pickups at archived cells wearing `ZRing.png` and spinning at the archived 0.1°/ms, the
++ *   3 pistons at archived cells/orientations with the archived ±0.5 travel, 45 chain
++ *   assemblies at archived cells with archived per-link scales, line gates between the
++ *   archived post pairs, `laps: 3`, the two-body recovered ball (the archived player IS the
++ *   FireArrow ball — `internalTexture: FireArrow800.jpg` is in the record).
++ * - adapted: piston plates run a constant-speed kinematic oscillation (the archive drove
++ *   them with an asymmetric 50/-1 slider-joint force pair; no joint vocabulary exists here);
++ *   chains stand as static stacks (archived ball-joint link dynamics need that same missing
++ *   joint vocabulary); wall mass is not in the record (1 assumed); the sky is `lostvalley`
++ *   (the record says "SkyX/LostValley branch-dependent" — one branch had to be picked).
++ * - absent: the two CubX anchors (their runtime menu state is recorded as unresolved), the
++ *   XML airplane (its .x mesh is not converted in this repo), the screenshot branch's random
++ *   humans (count and seed unrecoverable, as recorded).
++ */
++
++const S = 2.4;
++const CENTER = 20;
++
++type Tuple3 = readonly [number, number, number];
++
++const world = (p: Tuple3): AgentWorldVector3 => [(p[0] - CENTER) * S, p[1] * S, (p[2] - CENTER) * S];
++
++/** Yaw → the local +X the archive's piston math slides along, in world axes. */
++const yawDirection = (yawDegrees: number): [number, number] => {
++  const radians = (yawDegrees * Math.PI) / 180;
++  return [Math.cos(radians), -Math.sin(radians)];
++};
++
++const WALL_TEXTURE: Record<string, "objet39" | "podium" | "grass-sample"> = {
++  "#": "objet39",
++  z: "podium",
++  Z: "grass-sample",
++};
++
++function buildEntities(): AgentWorldEntityDefinition[] {
++  const data = suzanne1 as Record<string, any>;
++  const entities: AgentWorldEntityDefinition[] = [];
++  const defaults = data.sceneDefaults;
++
++  // Floor — the archived 40×40 slab, concrete per the source2017 binding, tiled at the
++  // archived 16×16 subdivision.
++  entities.push({
++    id: "suzanne1-floor",
++    type: "box",
++    label: "Arena Floor",
++    transform: { position: world(defaults.floor.center as Tuple3) },
++    geometry: { width: defaults.floor.size[0] * S, height: defaults.floor.size[1] * S, depth: defaults.floor.size[2] * S },
++    material: { color: "#cfcfcf", roughness: 0.8, metalness: 0.02, texture: { id: "concrete", repeat: [defaults.floor.archivedSubdivision[0], defaults.floor.archivedSubdivision[1]] } },
++    physics: { mode: "static", material: "ground" },
++    castShadow: false,
++    tags: ["suzanne1", "floor"],
++  });
++
++  // Walls — every one DYNAMIC, as archived: this arena's signature is that the maze itself
++  // can be shoved. Mass is not in the record; 1 per cube is the disclosed assumption.
++  for (const wall of data.walls as any[]) {
++    entities.push({
++      id: `suzanne1-wall-${wall.x}-${wall.z}`,
++      type: "box",
++      label: `Wall ${wall.symbol}`,
++      transform: { position: world(wall.position as Tuple3) },
++      geometry: { width: wall.scale[0] * S, height: wall.scale[1] * S, depth: wall.scale[2] * S },
++      material: { color: "#ffffff", roughness: 0.82, metalness: 0.04, texture: { id: WALL_TEXTURE[wall.symbol] ?? "objet39", repeat: [1, 1] } },
++      physics: { mode: "dynamic", mass: 1, material: "wall" },
++      tags: ["suzanne1", "wall"],
++    });
++  }
++
++  // Rings — sphere pickups wearing the recovered ZRing skin, spinning at the archived
++  // 0.1°/ms (= 100°/s). Triggers with the arenas' hide-on-collect mechanic verbatim.
++  for (const [index, ring] of (data.rings as any[]).entries()) {
++    const id = `suzanne1-ring-${index + 1}`;
++    entities.push({
++      id,
++      type: "sphere",
++      label: `Ring ${index + 1}`,
++      transform: { position: world(ring.position as Tuple3) },
++      geometry: { radius: ring.radius * S, radialSegments: 20 },
++      material: { color: "#ffffff", emissive: "#3a3a12", emissiveIntensity: 0.35, roughness: 0.4, texture: { id: "z-ring", repeat: [1, 1] } },
++      physics: { mode: "trigger" },
++      behaviors: [{ type: "spin", axis: "y", speedDegrees: ring.rotatesDegreesPerElapsedMillisecond * 1000 }],
++      interactions: [{ id: `${id}-collect`, label: "Collect ring", type: "toggle-visibility", targetIds: [id] }],
++      tags: ["suzanne1", "ring", "collectible"],
++    });
++  }
++
++  // Pistons — the recovered moving parts. Bar static, plate kinematic on a spline between
++  // the archived ±0.5 linear limits along the archived orientation. Constant speed is the
++  // disclosed adaptation of the archive's asymmetric 50/-1 slider forces.
++  for (const piston of data.pistons as any[]) {
++    const id = `suzanne1-piston-${piston.symbol}`;
++    const centre = world(piston.position as Tuple3);
++    const [dirX, dirZ] = yawDirection(piston.rotationDegrees[1]);
++    const a: AgentWorldVector3 = [centre[0] + dirX * piston.linearLimits[0] * S, centre[1], centre[2] + dirZ * piston.linearLimits[0] * S];
++    const b: AgentWorldVector3 = [centre[0] + dirX * piston.linearLimits[1] * S, centre[1], centre[2] + dirZ * piston.linearLimits[1] * S];
++    entities.push(
++      {
++        id: `${id}-bar`,
++        type: "box",
++        label: `Piston ${piston.symbol} bar`,
++        transform: { position: centre, rotationDegrees: [0, piston.rotationDegrees[1], 0] },
++        geometry: { width: piston.barScale[0] * S, height: piston.barScale[2] * S, depth: piston.barScale[1] * S },
++        material: { color: "#6f7377", roughness: 0.45, metalness: 0.55 },
++        physics: { mode: "static", material: "wall" },
++        tags: ["suzanne1", "piston"],
++      },
++      {
++        id: `${id}-path`,
++        type: "spline",
++        label: `Piston ${piston.symbol} travel`,
++        path: { points: [a, b], closed: true, tension: 0 },
++        visible: false,
++        tags: ["suzanne1", "piston-path"],
++      },
++      {
++        id: `${id}-plate`,
++        type: "box",
++        label: `Piston ${piston.symbol} plate`,
++        transform: { position: centre, rotationDegrees: [0, piston.rotationDegrees[1], 0] },
++        geometry: { width: piston.plateScale[0] * S, height: piston.plateScale[1] * S, depth: piston.plateScale[2] * S },
++        material: { color: "#9aa1a8", roughness: 0.35, metalness: 0.6, emissive: "#20262b", emissiveIntensity: 0.25 },
++        physics: { mode: "kinematic" },
++        behaviors: [{ type: "follow-spline", splineId: `${id}-path`, speed: 1.1 * S, loop: true }],
++        tags: ["suzanne1", "piston", "mover"],
++      },
++    );
++  }
++
++  // Chains — 45 archived assemblies, base + links at the archived per-link positions and
++  // scales, wearing the recovered 3D_Spheres skin. Static in this pass (disclosed: the
++  // archived ball-joint dynamics need a joint vocabulary v2 does not have yet); they still
++  // do their course work of narrowing the lanes they always narrowed.
++  for (const [index, chain] of (data.chains as any[]).entries()) {
++    const id = `suzanne1-chain-${index + 1}`;
++    entities.push({
++      id: `${id}-base`,
++      type: "box",
++      label: `Chain ${index + 1} base`,
++      transform: { position: world(chain.basePosition as Tuple3) },
++      geometry: { width: chain.baseScale[0] * S, height: chain.baseScale[1] * S, depth: chain.baseScale[2] * S },
++      material: { color: "#ffffff", roughness: 0.5, metalness: 0.2, texture: { id: "spheres", repeat: [1, 1] } },
++      physics: { mode: "static", material: "wall" },
++      tags: ["suzanne1", "chain"],
++    });
++    (chain.linkPositions as Tuple3[]).forEach((link, linkIndex) => {
++      const scale = chain.linkScales[linkIndex] ?? chain.linkScales[0];
++      entities.push({
++        id: `${id}-link-${linkIndex + 1}`,
++        type: "box",
++        label: `Chain ${index + 1} link ${linkIndex + 1}`,
++        transform: { position: world(link) },
++        geometry: { width: scale[0] * S, height: scale[1] * S, depth: scale[2] * S },
++        material: { color: "#ffffff", roughness: 0.5, metalness: 0.2, texture: { id: "spheres", repeat: [1, 1] } },
++        physics: { mode: "static", material: "wall" },
++        tags: ["suzanne1", "chain"],
++      });
++    });
++  }
++
++  // The magician cells — two archived effect cells, each with its recorded magenta + blue
++  // emitter pair at 64 particles. The `energy-orb` archive-derived preset carries them; the
++  // recorded colours ride as tints.
++  for (const [index, effect] of (data.effects as any[]).entries()) {
++    const centre = world(effect.position as Tuple3);
++    (effect.emitters as any[]).forEach((emitterRecord, emitterIndex) => {
++      const [r, g, b] = emitterRecord.color;
++      const tint = `#${[r, g, b].map((channel: number) => Math.round(channel * 255).toString(16).padStart(2, "0")).join("")}`;
++      entities.push({
++        id: `suzanne1-magic-${index + 1}-${emitterIndex + 1}`,
++        type: "emitter",
++        label: `Magician cell ${index + 1}`,
++        transform: { position: [centre[0], centre[1] + emitterIndex * 0.4, centre[2]] },
++        emitter: { preset: "energy-orb", maxParticles: emitterRecord.particles, color: tint },
++        tags: ["suzanne1", "effect"],
++      });
++    });
++  }
++
++  // Gates — the archive's LINE semantics, at last expressible: the finish spans its two
++  // archived posts along z=34.5, and the halfway line runs the full archived diagonal. Both
++  // pairs of posts stand as solid pillars at the line ends (radius per the classic posts).
++  const gates = defaults.gates;
++  const lineGate = (
++    id: string,
++    label: string,
++    start: Tuple3,
++    end: Tuple3,
++    color: string,
++  ): AgentWorldEntityDefinition[] => {
++    const a = world(start);
++    const b = world(end);
++    const dx = b[0] - a[0];
++    const dz = b[2] - a[2];
++    const length = Math.hypot(dx, dz);
++    const yawDegrees = (Math.atan2(-dz, dx) * 180) / Math.PI;
++    const posts: AgentWorldEntityDefinition[] = [a, b].map((post, postIndex) => ({
++      id: `${id}-post-${postIndex + 1}`,
++      type: "cylinder",
++      label: `${label} post`,
++      transform: { position: [post[0], (1.15 * S) / 2, post[2]] },
++      geometry: { radius: 0.2 * S, height: 1.15 * S, radialSegments: 14 },
++      material: { color: "#e8ddc6", roughness: 0.55, metalness: 0.08, emissive: "#5c4a22", emissiveIntensity: 0.12 },
++      physics: { mode: "static", material: "wall" },
++      tags: ["suzanne1", "post"],
++    }));
++    return [
++      {
++        id,
++        type: "box",
++        label,
++        transform: { position: [(a[0] + b[0]) / 2, S, (a[2] + b[2]) / 2], rotationDegrees: [0, yawDegrees, 0] },
++        geometry: { width: length, height: 2 * S, depth: 0.3 * S },
++        material: { color, opacity: 0.16, emissive: color, emissiveIntensity: 0.5 },
++        physics: { mode: "trigger" },
++        castShadow: false,
++        tags: ["suzanne1", "gate"],
++      },
++      ...posts,
++    ];
++  };
++  entities.push(
++    ...lineGate("suzanne1-half-gate", "Halfway Line", gates.halfStart as Tuple3, gates.halfEnd as Tuple3, "#4fd0e6"),
++    ...lineGate("suzanne1-finish-gate", "Finish Line", gates.finishStart as Tuple3, gates.finishEnd as Tuple3, "#5fe0b4"),
++  );
++
++  // The two-body player — the archived Suzanne player IS the recovered ball (its record
++  // carries `internalTexture: FireArrow800.jpg`), so this is the same faithful pair the
++  // classic levels roll: invisible collider + BallShell cage + steering-anchored FireArrow.
++  const spawn = world(defaults.player.position as Tuple3);
++  const ballRadius = defaults.player.visualRadius * S;
++  entities.push(
++    {
++      id: "suzanne1-ball",
++      type: "sphere",
++      label: "Player Ball",
++      transform: { position: spawn },
++      geometry: { radius: ballRadius, radialSegments: 12 },
++      material: { color: "#dff4ff", opacity: 0.03, roughness: 0.4, metalness: 0 },
++      castShadow: false,
++      physics: { mode: "dynamic", material: "ball", mass: 1.7, friction: 0.55, restitution: 0.5 },
++      steering: {
++        headingDegrees: 0,
++        force: 30 * (S / 2.6),
++        speedCap: S * 2.7,
++        turnRateDegrees: 240,
++        kickImpulse: S * 3.6,
++        jumpImpulse: S * 5,
++        arrowId: "suzanne1-aim-arrow",
++      },
++      tags: ["suzanne1", "ball", "player"],
++    },
++    {
++      id: "suzanne1-ball-shell",
++      type: "model",
++      label: "Ball Shell",
++      parentId: "suzanne1-ball",
++      transform: { position: [0, 0, 0] },
++      asset: { id: "archive-ballshell", fitSize: ballRadius * 2 },
++      tags: ["suzanne1", "ball"],
++    },
++    {
++      id: "suzanne1-aim-arrow",
++      type: "model",
++      label: "Fire Arrow Ball",
++      transform: { position: spawn },
++      asset: { id: "archive-ballfire", fitSize: ballRadius * 2 * (6.601 / 8.5) },
++      castShadow: false,
++      tags: ["suzanne1", "aim"],
++    },
++  );
++
++  // Light rig sized to the ~96-unit arena, after the classic levels' late-afternoon recipe.
++  entities.push(
++    {
++      id: "suzanne1-key",
++      type: "directional-light",
++      label: "Key Light",
++      transform: { position: [-78, 42, 56] },
++      intensity: 3.2,
++      material: { color: "#ffe2b0" },
++      castShadow: true,
++      tags: ["suzanne1", "lighting"],
++    },
++    {
++      id: "suzanne1-fill",
++      type: "ambient-light",
++      label: "Fill",
++      intensity: 0.16,
++      material: { color: "#9fc4d8" },
++      tags: ["suzanne1", "lighting"],
++    },
++  );
++
++  return entities;
++}
++
++export function composeSuzanne1(api: GraphysXAgentWorldApi) {
++  const data = suzanne1 as Record<string, any>;
++  return api.create({
++    schema: GRAPHYSX_AGENT_WORLD_SCHEMA,
++    id: "archive-suzanne1",
++    label: "Suzanne 1 — Moving Parts",
++    rules: {
++      schema: GRAPHYSX_AGENT_RULES_SCHEMA,
++      subjectId: "suzanne1-ball",
++      spawn: { entityId: "suzanne1-ball", position: world(data.sceneDefaults.player.position) },
++      checkpoints: [{ triggerId: "suzanne1-half-gate", label: "Halfway" }],
++      collectibles: { tag: "collectible", requiredToFinish: true },
++      finish: { triggerId: "suzanne1-finish-gate" },
++      laps: data.sceneDefaults.laps,
++    },
++    environment: {
++      background: "#0d1a24",
++      sky: "lostvalley",
++      lighting: { source: "hdri", hdri: "lilienstein", intensity: 0.92, yawDegrees: 24, backgroundIntensity: 0.9, backgroundBlur: 0.08 },
++      post: { bloom: { strength: 0.38, threshold: 0.72, radius: 0.24 } },
++      // ~96 world units across; the classic-level fog recipe scaled to keep the whole arena
++      // crisp with atmosphere only past the walls.
++      envelope: { fogNear: 120, fogFar: 380, cameraFar: 460 },
++      ground: { visible: false, size: 120, color: "#123039", grid: false, gridColor: "#2a7d8f" },
++      physics: { gravity: [0, -9.81, 0] },
++    },
++    entities: buildEntities(),
++  });
++}
++
++/** High three-quarter framing over the 96-unit arena, spawn-corner forward. */
++export function frameSuzanne1(host: PlatformHost): void {
++  host.camera.position.set(-70, 62, 92);
++  host.focusOn(new Vector3(0, 0.6, 6), 60, 1.05);
++}
+diff --git a/src/main.ts b/src/main.ts
+index 11216c7..7b1ad3b 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -175,6 +175,18 @@ if (mode === "legacy") {
+                 await waitForExactCollider(host.api, "suzanne-machinery-level");
+               }),
+             },
++            {
++              id: "archive-suzanne1",
++              label: "Suzanne 1: The Pushable Maze",
++              meta: "authored 40×40 arena  ·  208 dynamic walls  ·  3 pistons  ·  line gates  ·  3 laps",
++              play: () => loadComposedGame(async () => {
++                const { composeSuzanne1, frameSuzanne1 } = await import("./archive-suzanne1-scene");
++                const result = composeSuzanne1(host.api);
++                if (!result.ok) throw new Error(result.error ?? "Could not compose Suzanne 1");
++                host.applyEnvironment();
++                frameSuzanne1(host);
++              }),
++            },
+             {
+               id: "archive-map1",
+               label: "Map 1: Gravity Descent",
+@@ -413,6 +425,10 @@ if (mode === "legacy") {
+         // The first §14.5 course port. Published so an agent (and the smoke) can compose
+         // it directly, with its provenance beside it.
+         composeSkyboxSpiral: () => composeSkyboxSpiral(host.api),
++        // Suzanne 1 — the 40×40 ASCII arena as a composed scene (complement to the
++        // machinery run: same family, different record). Lazy like World 1, so the 200 KB
++        // decoded arena stays off the boot path until someone opens it.
++        composeSuzanne1: () => import("./archive-suzanne1-scene").then(({ composeSuzanne1 }) => composeSuzanne1(host.api)),
+         // World 1 — the first true mesh-world port. Lazy, so the manifest's slab table
+         // stays off the boot path until someone actually opens the world.
+         composeArchiveWorld1: () => import("./archive-world1-scene").then(({ composeArchiveWorld1, WORLD1_PROVENANCE }) => {
+-- 
+2.43.0
+

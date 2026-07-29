@@ -1,0 +1,638 @@
+From d49d05ecd9909be5f25f8fb493f09a6fc3564551 Mon Sep 17 00:00:00 2001
+From: yanik <yanikbeaulieu@hotmail.com>
+Date: Mon, 27 Jul 2026 17:56:28 -0400
+Subject: [PATCH 4/4] docs(revival): reconcile archive debt ledgers
+
+---
+ package.json                   |  1 +
+ progress.md                    | 29 +++++++++++
+ scripts/audit-revival-debt.mjs | 75 +++++++++++++++++++++++++++++
+ scripts/verify.mjs             |  1 +
+ src/archive-ballz-levels.ts    | 24 +++++-----
+ src/archive-buildings.ts       | 55 +++++++--------------
+ src/archive-content.ts         | 80 +++++++++++++++----------------
+ src/archive-playgrounds.ts     | 88 ++++++++++++++--------------------
+ 8 files changed, 211 insertions(+), 142 deletions(-)
+ create mode 100644 scripts/audit-revival-debt.mjs
+
+diff --git a/package.json b/package.json
+index bd3a4c7..4b1f0ae 100644
+--- a/package.json
++++ b/package.json
+@@ -30,6 +30,7 @@
+     "smoke:map1": "node scripts/smoke-map1.mjs",
+     "smoke:level1-2011": "node scripts/smoke-level1-2011.mjs",
+     "smoke:suzanne-machinery": "node scripts/smoke-suzanne-machinery.mjs",
++    "audit:revival-debt": "node scripts/audit-revival-debt.mjs",
+     "smoke:live-release": "node scripts/smoke-live-release.mjs",
+     "smoke:rapier-race": "node scripts/smoke-rapier-race.mjs",
+     "smoke:store-auth": "node scripts/smoke-store-auth.mjs",
+diff --git a/progress.md b/progress.md
+index 77b3b12..e6458c1 100644
+--- a/progress.md
++++ b/progress.md
+@@ -1916,3 +1916,32 @@ loop also turned east, rolled through Ring 1, and left the player finite on the
+ Next ranked work: re-check the five `*_NOT_REVIVED` inventories and all 22 preview/pipeline
+ records against HEAD, graduate the remaining player-visible archive content, then run the full
+ release gate and emit format-patches.
++
++## 2026-07-27 — `revival-debt-r4`: stale debt ledgers reconciled against HEAD
++
++All five `*_NOT_REVIVED` inventories were re-read against the current player-visible product,
++not treated as authoritative to-do lists. Three building entries, six BallZ entries and seven
++playground entries were stale: the Unity Arena, Maison/Cuisine interiors, exact Archive Level 3,
++the 2011 Long Canyon, Great Slide and its gallery, XML/Blender visits, Suzanne arenas, Living
++Forest, Orbital Observatory, Physics Lab, Three.js Playground, asset galleries, Input Lab and
++Voie Lactée already have faithful destinations. Their verdicts now point to those destinations
++and retain the honest reason each item is not duplicated or flattened into less-faithful v2
++primitives. The Math hardware screen and four Milky Way alternatives remain named limitations;
++inventing a composition, shader, host scene or physics behaviour would exceed the record.
++
++The mission's exact 22 preview/pipeline rows are now pinned by
++`scripts/audit-revival-debt.mjs`. Twenty were stale and are marked ported with their concrete
++runtime descendant. Two remain intentionally open: writing *new* legacy SceneNET XML has no
++specified loss/duplicate mapping, and the untranslated proprietary TV3D shader remainder has no
++faithful browser equivalent. Exact legacy XML evidence, v2 JSON export, haze, water and shadow
++descendants are already live, so those boundaries do not hide player-visible work.
++
++Verified: the Games/Browse human-path regression is green with three BallZ presets, recovered
++mesh GO, classic GridXL play, all shelf destinations loaded, no console/page errors and no
++mobile horizontal overflow. The final `npm run verify -- --wait` release gate rebuilt from
++source and passed all **35/35** checks, including the 22-row/five-ledger audit, both complete
++classic levels and Suzanne's eight assets/three movers/twelve-point route. Final screenshots
++were inspected for the mesh countdown, 3D lap counter, all three ball presets, both restored
++level treatments, and Suzanne gameplay/results; all are legible, framed and artifact-free.
++
++Delivery: emit the four ordered git format-patches into the requested repository folder.
+diff --git a/scripts/audit-revival-debt.mjs b/scripts/audit-revival-debt.mjs
+new file mode 100644
+index 0000000..5aae86b
+--- /dev/null
++++ b/scripts/audit-revival-debt.mjs
+@@ -0,0 +1,75 @@
++import { readFile } from "node:fs/promises";
++import path from "node:path";
++import { fileURLToPath } from "node:url";
++
++// The mission's 22-item preview/pipeline register as it existed at sweep start. Keep this list
++// explicit: a global count would silently change when an unrelated future recovery item lands.
++const REGISTER = [
++  "Skyboxes", "Heightmaps", "Day/Night", "Spline Flight",
++  "Interactive 2D Surfaces",
++  "Actor Loop", "Mouse Pick / Aim Line", "Projectile Basics", "Fire / Particles",
++  "Tile Semantics", "Export Shape", "Race Conversion",
++  "Load XML", "Save XML", "Add X Mesh", "Object Picking",
++  "Clock Displays", "Earth Grid", "Domotic Controls",
++  "Suzanne Moving Parts", "Shader Pack", "XML Scenes",
++];
++const INTENTIONALLY_OPEN = new Map([
++  ["Save XML", "new legacy SceneNET XML output has no specified loss/duplicate mapping; exact source artifacts and v2 JSON export are live"],
++  ["Shader Pack", "proprietary TV3D shader math is only partly translatable; haze/water/shadow descendants are live and the absent remainder is named"],
++]);
++const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
++const content = await readFile(path.join(ROOT, "src", "archive-content.ts"), "utf8");
++
++function statusFor(label) {
++  const marker = `label: ${JSON.stringify(label)}`;
++  const start = content.indexOf(marker);
++  if (start < 0) throw new Error(`Missing recovery register label: ${label}`);
++  const slice = content.slice(start, start + 900);
++  const match = slice.match(/status:\s*"(ported|preview|pipeline)"/);
++  if (!match) throw new Error(`Missing recovery status beside: ${label}`);
++  return match[1];
++}
++
++if (REGISTER.length !== 22 || new Set(REGISTER).size !== 22) {
++  throw new Error(`The pinned debt register must contain 22 unique entries, found ${REGISTER.length}`);
++}
++const results = REGISTER.map((label) => ({ label, status: statusFor(label) }));
++const open = results.filter((record) => record.status !== "ported");
++if (open.length !== INTENTIONALLY_OPEN.size) {
++  throw new Error(`Expected ${INTENTIONALLY_OPEN.size} honest open boundaries, found ${open.length}: ${open.map((record) => record.label).join(", ")}`);
++}
++for (const record of open) {
++  if (!INTENTIONALLY_OPEN.has(record.label)) throw new Error(`Unexpected revival debt remains: ${record.label} (${record.status})`);
++}
++for (const label of INTENTIONALLY_OPEN.keys()) {
++  if (!open.some((record) => record.label === label)) throw new Error(`Open boundary was silently relabelled: ${label}`);
++}
++
++const ledgers = [
++  ["src/archive-buildings.ts", "ARCHIVE_BUILDINGS_NOT_REVIVED", 3, ["revived on the archive surface", "revived in Maison Explorer", "exact interiors are player-visible"]],
++  ["src/archive-ballz-levels.ts", "ARCHIVE_BALLZ_NOT_REVIVED", 6, ["player-visible Archive Level 3", "composed v2 Long Canyon", "moving machinery also graduated to a v2 course"]],
++  ["src/archive-math-lab.ts", "ARCHIVE_MATH_NOT_REVIVED", 1, ["hardware-input panel", 'verdict: "not-revived"']],
++  ["src/archive-playgrounds.ts", "ARCHIVE_PLAYGROUNDS_NOT_REVIVED", 7, ["player-visible Living Forest", "live Orbital Observatory", "dedicated Three.js Playground", "live Input & Device Lab"]],
++  ["src/archive-milkyway.ts", "ARCHIVE_MILKYWAY_NOT_REVIVED", 4, ["deliberately not shipped as a second scene", "not revivable — the vocabulary has one texture slot", "does not exist to revive", "not revivable as simulation"]],
++];
++for (const [file, symbol, expectedRecords, requiredEvidence] of ledgers) {
++  const source = await readFile(path.join(ROOT, file), "utf8");
++  const start = source.indexOf(`export const ${symbol}`);
++  if (start < 0) throw new Error(`${file} no longer exports ${symbol}`);
++  const end = source.indexOf("] as const;", start);
++  if (end < 0) throw new Error(`${file} no longer terminates ${symbol} as a const ledger`);
++  const ledger = source.slice(start, end);
++  const recordCount = (ledger.match(/\n\s+(?:record|id):/g) ?? []).length;
++  if (recordCount !== expectedRecords) throw new Error(`${symbol} changed from ${expectedRecords} audited records to ${recordCount}; re-audit the ledger`);
++  for (const evidence of requiredEvidence) {
++    if (!ledger.includes(evidence)) throw new Error(`${symbol} lost audited evidence: ${evidence}`);
++  }
++}
++
++console.log(JSON.stringify({
++  schema: "graphysx.revival-debt-audit/v1",
++  registerCount: results.length,
++  revivedCount: results.length - open.length,
++  open: open.map((record) => ({ ...record, boundary: INTENTIONALLY_OPEN.get(record.label) })),
++  ledgersChecked: ledgers.map(([file, , recordCount]) => ({ file, recordCount })),
++}, null, 2));
+diff --git a/scripts/verify.mjs b/scripts/verify.mjs
+index 1a2f14d..6e5596b 100644
+--- a/scripts/verify.mjs
++++ b/scripts/verify.mjs
+@@ -69,6 +69,7 @@ const SMOKES = [
+   { name: "map1", script: "scripts/smoke-map1.mjs", covers: "Map 1 gravity descent: Games launch, exact recovered collider, halfway gate, results, replay + return" },
+   { name: "level1-2011", script: "scripts/smoke-level1-2011.mjs", covers: "Level1 2011 at 1:1: largest mesh under scene envelope, exact trimesh, two gates in order, results, replay + return" },
+   { name: "suzanne-machinery", script: "scripts/smoke-suzanne-machinery.mjs", covers: "Suzanne machinery: eight vendored meshes, moving convex colliders, exact 12-point route, completable" },
++  { name: "revival-ledgers", script: "scripts/audit-revival-debt.mjs", covers: "debt sweep: pinned 22-item register plus all five NOT_REVIVED inventories checked against HEAD" },
+   { name: "rapier-race", script: "scripts/smoke-rapier-race.mjs", covers: "Rapier RaceScene: Piste vehicle motion, steering, finite state, browser errors" },
+   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
+   { name: "dna", script: "scripts/smoke-dna.mjs", covers: "DNA forest: deterministic genome drift, preset fidelity, node-level (no browser)" },
+diff --git a/src/archive-ballz-levels.ts b/src/archive-ballz-levels.ts
+index 1723eeb..fc316c3 100644
+--- a/src/archive-ballz-levels.ts
++++ b/src/archive-ballz-levels.ts
+@@ -385,44 +385,44 @@ export const ARCHIVE_BALLZ_NOT_REVIVED = [
+   {
+     record: "Archive Level 3 — ASCII (`StockRoom/Level3_base.ASCII`)",
+     what: "A 20x19 authored grid in a different alphabet: `M` is a solid *platform you drive on*, `r` is a platform carrying an elevated checkpoint, `$` is the solid spawn tile, and `.` is empty space.",
+-    verdict: "not revivable as a grid level",
++    verdict: "revived as the player-visible Archive Level 3 race; not flattened into the modern grid format",
+     why:
+-      "Its semantics are inverted relative to this platform's grid. Here `.` is the floor and `#` is an obstacle; there `M` is the floor and `.` is a void you fall through. A grid level has one continuous floor slab and no void, so the level's actual mechanic — a raised catwalk you can fall off — cannot exist. Mapping `M`->floor and `.`->wall would preserve the route drawing while deleting the game, and shipping that as 'recovered Level 3' would be exactly the theatre §11 forbids. It is a real candidate for a composed v2 scene later, where raised platforms over a drop are expressible.",
++      "HEAD already plays the exact 20×19 M/r/$ layout through the archive race path with 20 elevated checkpoints, four posts, source spawn, NightSky, Alien02 treatment, three laps and archived best time. It remains outside this modern grid library because `M`/`r`/`$` encode solid elevated platforms while `.` is void; translating those bytes to the library's continuous-floor semantics would delete the authored mechanic.",
+   },
+   {
+     record: "`src/legacy/ballz2011-level1.json` (also `slide-long1`, byte-identical)",
+     what: "One TVM object `Line01`: 828 vertices, 1,648 triangles, two adjacent closed 414-vertex solids with an 0.018-unit X seam. Archive bounds 210.16 x 498.73 x 1135.44 units; `displayScale` 0.1, `normalization.status: \"inferred-display-only\"`.",
+-    verdict: "not revivable as gameplay",
++    verdict: "revived as the composed v2 Long Canyon run, with gameplay explicitly adapted",
+     why:
+-      "The record's own `interpretation` block says it: 'No archived runtime source was found loading Level1.TVM, so spawn, rules, camera, collision settings, and finish semantics remain unknown.' It also has one material slot, no usable UV map and no embedded texture name — `materialEvidence.assessment` states any coloured or textured presentation is necessarily inferred. It is a long two-lane ramp mesh with no gameplay recorded anywhere. It is honest inspection geometry and nothing more; it is emphatically not a tile grid.",
++      "`archive-level1-2011-scene.ts` now vendors the largest recovered mesh at native 1:1 scale, uses the exact geometry for rendering and a static trimesh, and exposes a player-visible two-gate canyon run. Its spawn, rules, neutral material, safety floor, lighting and camera remain explicitly labelled adaptations because the archive still preserves none of them; the same bytes are not misrepresented as a tile grid.",
+   },
+   {
+     record: "`src/legacy/ballz-slide-track-family.json` and `slide-level.json`",
+     what: "An audit of nine hashed slide/track meshes plus the decoded 'Great Slide' (Level0/SlideLarge, 527 x 113 x 164 archive units).",
+-    verdict: "composed v2 scene, if anything — not a grid level",
++    verdict: "revived as composed v2/legacy destinations; correctly not a grid level",
+     why:
+-      "A slide is a single long curved ramp whose whole content is elevation change. A 2D tile grid has no height axis at all, so putting a slide through `importAscii` would flatten away the only thing it is. The audit's own `remainingGallery.purpose` is 'Exact-geometry archive visits only. No gameplay, spawn, physics or objectives are inferred.' The route to reviving this is a composed v2 scene of ramps carrying a `rules` block — real work, out of scope here, and named rather than faked.",
++      "Great Slide is now a v2 gravity run over the exact vendored SlideLarge geometry/collider, and the six distinct unhosted slide/track records remain reachable in the exact-geometry gallery with their materials and normalization evidence. The latter still receive no invented spawn or objective. Elevation is their content, so none is flattened through `importAscii`.",
+   },
+   {
+     record: "`src/legacy/ballz-xml-worlds.json`",
+     what: "Two serialized CScene3D compositions, `MyWorld` (4 objects) and `MyWorld - Copie`.",
+-    verdict: "not revivable as gameplay",
++    verdict: "revived as exact XML evidence visits and import vocabulary; correctly not called gameplay",
+     why:
+-      "The record classifies them itself: `assembledDiscoverableWorldCount: 0`, 'editor/loader tests rather than finished exploration worlds', and `MyWorld` contains two malformed DUPLICATE records with `invalid-duplicate-target` resolution. A four-object editor save with a floating airplane is not a level.",
++      "MyWorld, its distinct copy and the serializer artifacts are player-visible archive visits, including malformed duplicate diagnostics and exact source transforms. `importLegacyXml()` also converts valid SceneNET content into v2 documents. Their own census still says `assembledDiscoverableWorldCount: 0`, so they remain editor/loader evidence rather than fabricated levels.",
+   },
+   {
+     record: "`src/legacy/ballz-blender-level1-export.json`",
+     what: "A 743-byte FBX export *manifest* — Blender 2.79, axis forward -Z / up Y, source and output SHAs. No geometry at all.",
+-    verdict: "not revivable as gameplay",
++    verdict: "revived as the exact Blender Level 1 geometry visit; correctly not called gameplay",
+     why:
+-      "It is provenance metadata for a mesh file, not a scene. The census independently records the Blender Level 1 prototype as a geometry visit that 'is not turned into a race because no host, spawn, physics, controls, checkpoints, rules or objective survives'.",
++      "The manifest is still metadata rather than geometry, but HEAD's dedicated Blender Level 1 visit uses the best surviving 356-vertex/354-polygon source with its saved camera, point light and material. No host, spawn, physics, controls, checkpoints or objective survives, so keeping it as an inspectable authored scene is the faithful completion.",
+   },
+   {
+     record: "`src/legacy/suzanne1-ascii-scene.json` / `suzanne2-ascii-scene.json`",
+     what: "Genuine 40x40 authored ASCII arenas, decoded *into this repository* with source SHAs (Suzanne1.ASCII `64ec6746…`) — 208 walls, 45 chain assemblies, 15 rings, 3 pistons, gates and a spawn.",
+-    verdict: "revivable as a grid level, deliberately not shipped in this pass",
++    verdict: "revived on the archive game surface; moving machinery also graduated to a v2 course",
+     why:
+-      "This is the one skipped record that is not a 'cannot'. It is within the 64x64 / 4096-cell limits and its provenance is the strongest of anything here — the bytes are in-repo. It is held back because 1,319 of its 1,600 cells are empty floor with only 15 rings scattered across them: at any playable cell size it is a very large, very sparse plain, and its chains and pistons (the things that make it *that* arena) have no tile in this vocabulary, so a grid conversion would ship the emptiness without the content. Shipping it would break the brief's own bar — playable is not the same as worth playing. It is the strongest candidate for the next pass, most likely as a composed v2 scene where the chains and pistons can exist.",
++      "Suzanne 1 now plays its exact 40×40 arena with 208 walls, 45 chain assemblies, 15 rings, three pistons, effects, posts, gates, spawn and three-lap loop; Suzanne 2 remains a distinct player-visible evidence/game visit with its source contradiction disclosed. This sweep additionally vendors the separate eight-part 2015 machinery study and makes its piston, door and rotator collision-bearing v2 obstacles. A sparse grid-only duplicate would still throw away the chains and pistons, so none is added here.",
+   },
+ ] as const;
+ 
+diff --git a/src/archive-buildings.ts b/src/archive-buildings.ts
+index d38ad40..b048ec2 100644
+--- a/src/archive-buildings.ts
++++ b/src/archive-buildings.ts
+@@ -669,22 +669,13 @@ export const ARCHIVE_BUILDINGS_NOT_REVIVED = [
+       "face records — 40 quads and 2 octagons, not the 44 the environment's constant block claims), " +
+       "one hand-painted 1024² atlas, one Standard material at metallic 0 / smoothness 0.5, one " +
+       "object transform, one camera at (0, 1, −10) on a 60° lens, and one directional light.",
+-    verdict: "not revived",
++    verdict: "revived on the archive surface; deliberately not duplicated as a v2 primitive scene",
+     why:
+-      "There is nothing to rebuild it *as*. The Unity project contains no MonoBehaviour, no prefab, " +
+-      "no input map and no rigidbody — the repo's own census says so explicitly ('no gameplay is " +
+-      "invented because the project contains no scripts or rules'), the legacy environment's " +
+-      "`update()` is a two-line no-op that forwards orbit input, and the deleted QA harness " +
+-      "(`scripts/qa-arena-archive.mjs`, removed at 218d86c) asserted the *absence* of gameplay as a " +
+-      "pass condition. Unlike the Maison, its content is a genuine 48-vertex mesh with baked UVs " +
+-      "onto a 532 KB atlas: v2 primitives cannot author it, and the one v2 form it could take is a " +
+-      "`model` entity on a plinth — which would need the OBJ decoded into `graphysx-mesh-json` and " +
+-      "registered in the asset catalog, to ship a scene whose entire content is one textured disc " +
+-      "you orbit. `archive-playgrounds.ts` already reached this verdict; nothing found here " +
+-      "overturns it. The mesh would make a fine *floor* for a ball course — it is closed on all " +
+-      "eight sides, which is exactly the containment `archive-ballz-levels.ts` had to invent — but " +
+-      "no spawn, checkpoint, lap line or objective survives, so that course would be authored here " +
+-      "and merely decorated with a recovered slab.",
++      "HEAD now has the player-visible `arena-archive` visit: exact OBJ/atlas, Unity Standard values, " +
++      "authored transform, source 60° camera and directional light. The no-gameplay conclusion still " +
++      "stands — the Unity project has no scripts, input, rigidbody or objective — so it is correctly " +
++      "an inspectable recovered environment rather than an invented ball course. A second v2 primitive " +
++      "copy would add no content and would lose the baked topology/UVs that make the asset worth keeping.",
+   },
+   {
+     record: "The Cuisine — `src/legacy/inspection-cuisine.json`, `public/assets/maison-explorer/cuisine-best.fbx`",
+@@ -692,37 +683,25 @@ export const ARCHIVE_BUILDINGS_NOT_REVIVED = [
+       "The kitchen from the same `blenderModel/Maison` folder: 87 objects (76 meshes, 3 lamps, 7 " +
+       "empties, 1 camera) totalling 4,244 vertices and 3,676 polygons — cabinets, drawers, doors, " +
+       "a sink and worktops, with parented children carrying local transforms.",
+-    verdict: "not revived",
++    verdict: "revived in Maison Explorer; deliberately not approximated with v2 boxes",
+     why:
+-      "It is the exact inverse of the Maison, and the contrast is the useful part. The Maison " +
+-      "averages 9 vertices per object and 20 of its 24 meshes are literally 8-vertex boxes, so v2 " +
+-      "primitives reproduce it without loss. The Cuisine averages 56 vertices per object: its " +
+-      "cabinet handles are 144-vertex / 128-polygon lathed forms, its drawers are 24/19, its " +
+-      "cabinets 32/26. Rebuilding those as boxes would not be a massing model of a kitchen, it " +
+-      "would be a pile of blocks where the modelling *is* the content. The FBX route is closed for " +
+-      "the same reason it is closed for the Maison — the loader accepts only `graphysx-mesh-json` — " +
+-      "and it is closed harder here: the record's single image, " +
+-      "`C:\\Users\\Yanik\\Desktop\\Maison\\31768676_…_n.jpg`, is marked `exists: false` and " +
+-      "`packed: false`, so the one texture the scene references is genuinely lost. It also carries " +
+-      "7 EMPTY objects (TopLavabo, TopCoin, TopPoele, Lavabo…) which are snap targets for an " +
+-      "authoring workflow v2 has no vocabulary for.",
++      "The canonical `maison-explorer` now exposes the full kitchen subspace: 87 authored objects, " +
++      "76 meshes, seven hierarchy empties, saved camera and three lights. The one absent unpacked " +
++      "Desktop JPG remains explicitly missing instead of receiving a fabricated replacement. It is " +
++      "not duplicated in this v2 massing module because its lathed handles, drawers and cabinet " +
++      "topology are the content; approximating them with boxes would reduce a faithful restoration.",
+   },
+   {
+     record: "The Maison's room interiors — the hollow shells inside `inspection-maison.json`",
+     what:
+       "Six of the upper volumes are open shells (5, 10 and 14 polygons where a closed box has 6) " +
+       "and three carry extra vertex loops (12, 16 and 24 vertices) where door openings are cut.",
+-    verdict: "not revived, and this is the honest limit of the scene that did ship",
++    verdict: "exact interiors are player-visible in Maison Explorer; v2 massing keeps this honest limit",
+     why:
+-      "A Blender inspection record stores per-object totals, not topology. It says an object has 14 " +
+-      "polygons; it does not say which four faces of the box are missing or where the opening sits " +
+-      "in the wall. Rebuilding each room as four thin walls would require choosing the open face " +
+-      "and the wall thickness for every room — that is authoring a floor plan and attributing it to " +
+-      "the archive. The eight door positions constrain it a little, but nowhere near enough. The " +
+-      "shipped scene therefore stops at the bounding volumes the record actually states, and makes " +
+-      "the interior legible by translucency and a lift-the-storey interaction instead of by " +
+-      "invention. Recovering the true interior needs the `.blend` itself re-inspected with " +
+-      "per-face output — a decoder change, not a scene change.",
++      "The source-mesh Maison Explorer carries the actual open shells and door cuts. This separate v2 " +
++      "massing scene intentionally stops at inspection-record bounds because that record stores " +
++      "per-object totals, not the missing-face topology. Its translucent storeys and lift interaction " +
++      "remain a disclosed massing adapter, while the exact source visit is the fidelity destination.",
+   },
+ ] as const;
+ 
+diff --git a/src/archive-content.ts b/src/archive-content.ts
+index 4d0df0b..9412775 100644
+--- a/src/archive-content.ts
++++ b/src/archive-content.ts
+@@ -684,26 +684,26 @@ export const SCENE_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
+   {
+     label: "Skyboxes",
+     source: "Media/Sky/ClearBlue, ClearNight, SkyX, Winter",
+-    status: "preview",
+-    detail: "Archive cube skies stay sharp and use a wider camera lens instead of blur. Source limits remain: most faces are 512 px, Winter is 256 px, and LostValley is 1024 px."
++    status: "ported",
++    detail: "Archive cube sets are registered scene vocabulary (`api.skies()` and the editor), retain their recovered face orientation, and bind per scene/level. Source limits remain: most faces are 512 px, Winter is 256 px, and LostValley is 1024 px."
+   },
+   {
+     label: "Heightmaps",
+     source: "Media/Heightmaps/Track.jpg, heightmap8.jpg",
+-    status: "preview",
+-    detail: "Procedural terrain preview uses archived heightmap imagery as material inspiration."
++    status: "ported",
++    detail: "Three archived Windows heightmaps are decoded with SHA/provenance into the terrain registry; terrain entities render the recovered samples and build matching Rapier heightfield colliders."
+   },
+   {
+     label: "Day/Night",
+     source: "GraphysX_1/Sky.cpp, Archive Atmosphere.cpp",
+-    status: "preview",
+-    detail: "Sun/moon orbit and atmosphere lighting are represented as a modern scene-lab target."
++    status: "ported",
++    detail: "The source Sky.cpp cycle runs in the player-visible race worlds: sun/moon phase, key/rim/hemi lighting, atmosphere tint and haze advance from each level's recorded cycle duration."
+   },
+   {
+     label: "Spline Flight",
+     source: "Media/Spline.xml, Media/Airplane/Airplane.x",
+-    status: "preview",
+-    detail: "A spline path and airplane proxy mark the old flight-follow experiment until model conversion lands."
++    status: "ported",
++    detail: "FlightX is a dedicated playable pipe trial using the recovered airplane asset and spline-follow vocabulary; the earlier Scene Lab proxy remains only as an overview."
+   }
+ ];
+ 
+@@ -741,8 +741,8 @@ export const NATURE_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
+   {
+     label: "Interactive 2D Surfaces",
+     source: "SBQC/public p5, Leaflet, Chart.js, amCharts and canvas experiments",
+-    status: "pipeline",
+-    detail: "Maps, plots, and generative canvases should become in-world instruments and agent-authored surfaces instead of isolated pages."
++    status: "ported",
++    detail: "Canvas sketches are ordinary `surface` scene data with one shared, pause-aware loop. The player-visible Generative Surfaces showcase mounts waveform, grid-pulse and plasma on screens, billboards and curved displays."
+   }
+ ];
+ 
+@@ -750,26 +750,26 @@ export const GAME_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
+   {
+     label: "Actor Loop",
+     source: "GraphysX_1/Agent.cpp, Zombie.cpp, Human.cpp",
+-    status: "preview",
+-    detail: "Player, enemy, and target stand-ins now share one preview space for movement/combat rules."
++    status: "ported",
++    detail: "The Game Lab runs the source-shaped player/human/zombie loop, while reusable `crowd` vocabulary carries seeking, wandering and contact conversion into v2 scenes."
+   },
+   {
+     label: "Mouse Pick / Aim Line",
+     source: "Scene3D/GamePlayScreen.cpp, ConsoleGraphysX.cpp",
+-    status: "preview",
+-    detail: "The old mouse-to-world line and projectile direction are represented as a cyan targeting lane."
++    status: "ported",
++    detail: "Mouse-to-world ray aiming drives the live Game Lab shot direction and BallZ hold-to-roll controller; the steering aim is observable scene state rather than a painted lane."
+   },
+   {
+     label: "Projectile Basics",
+     source: "CLScene::shotBullet, GamePlayScreen::checkInput",
+-    status: "preview",
+-    detail: "Bullet start, trajectory, impact marker, and physics-material targets are staged for a later playable loop."
++    status: "ported",
++    detail: "Game Lab bullets have the recovered one-second lifetime, dynamic physics trajectory, target hits and impact effects; BallZ and agent interactions reuse the same Rapier-backed runtime."
+   },
+   {
+     label: "Fire / Particles",
+     source: "ParticleEffect.cpp, ParticleEngine.cpp, Effect.cpp, createFire",
+-    status: "preview",
+-    detail: "Three persistent colored particle rigs, soft glow sprites, flame billboards, and race-event bursts make the engine feature visible; a full effect library remains."
++    status: "ported",
++    detail: "Recovered particle presets are registered emitter vocabulary with source shape/rate/force parameters, and persistent fire, trails, impacts and race bursts run in player-visible worlds."
+   }
+ ];
+ 
+@@ -777,8 +777,8 @@ export const MAP_EDITOR_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
+   {
+     label: "Tile Semantics",
+     source: "GraphysX_1/Scene.cpp BuildASCIIScene",
+-    status: "preview",
+-    detail: "Floor, wall, player start, rings, halfway gate, finish gate, and hazard tiles are represented in a browser-side map draft."
++    status: "ported",
++    detail: "The level workbench owns paintable floor/wall/start/ring/halfway/finish/hazard semantics and round-trips the same tiles the BallZ materializer plays."
+   },
+   {
+     label: "Live Preview",
+@@ -789,14 +789,14 @@ export const MAP_EDITOR_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
+   {
+     label: "Export Shape",
+     source: "STSceneParam, Level.cs",
+-    status: "preview",
+-    detail: "The draft is already serializable as compact JSON and can become the bridge to future ASCII/XML import."
++    status: "ported",
++    detail: "Levels round-trip as validated JSON and exact ASCII through the public API; authored scene documents export independently from session-only play state."
+   },
+   {
+     label: "Race Conversion",
+     source: "Scene3D/GamePlayScreen.cpp",
+-    status: "pipeline",
+-    detail: "Next pass should convert this draft into a playable RaceDefinition with collision boxes, gates, and route rings."
++    status: "ported",
++    detail: "`levels.play()` materializes the draft as a Rapier course with collision boxes, steerable ball, ring inventory, ordered gates, lap rules, HUD, replay and editor return."
+   }
+ ];
+ 
+@@ -812,26 +812,26 @@ export const EDITOR_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
+   {
+     label: "Load XML",
+     source: "EditorScreen::onButtonLoadClick",
+-    status: "preview",
+-    detail: "SceneNET XML import is represented by a structured object roster and source file list."
++    status: "ported",
++    detail: "`importLegacyXml()` converts archived SceneNET XML into validated v2 scene documents, while the MyWorld/Suzanne/ObjectLibrary visits retain exact serialized evidence and malformed-record diagnostics."
+   },
+   {
+     label: "Save XML",
+     source: "GfxNet::SceneNET::Serialize",
+-    status: "pipeline",
+-    detail: "Needs a JSON/XML serializer once the browser-side scene schema is finalized."
++    status: "preview",
++    detail: "Exact BaseScene/test1 serializer artifacts and version differences are player-visible, and v2 authored documents export as validated JSON. Emitting new legacy SceneNET XML remains deliberately open because its lossy field mapping and duplicate semantics are not specified."
+   },
+   {
+     label: "Add X Mesh",
+     source: "EditorScreen::onButtonAddX",
+-    status: "pipeline",
+-    detail: "Old X meshes should become GLB assets before being added from the browser editor."
++    status: "ported",
++    detail: "Recovered X/TVM/3DS geometry is decoded to the runtime's native mesh JSON and registered in the editor asset library; browser media import also converts supported OBJ/FBX/GLB sources without a GLB-only staging rule."
+   },
+   {
+     label: "Object Picking",
+     source: "m_graphysX->isClickOnMesh",
+-    status: "preview",
+-    detail: "Current preview shows selected object telemetry; raycast editing can be added next."
++    status: "ported",
++    detail: "The production editor raycasts the world, selects parent entities, drives the transform gizmo and inspector, and commits validated patches through the same public API agents use."
+   }
+ ];
+ 
+@@ -845,20 +845,20 @@ export const CUBX_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
+   {
+     label: "Clock Displays",
+     source: "CLClockDisplay, LoadLettersAndNumbers",
+-    status: "preview",
+-    detail: "Segment-like 3D time blocks replace the old alphabet/number TVM meshes for the browser."
++    status: "ported",
++    detail: "The complete recovered 0–9/A–Z TVM alphabet is vendored as 36 discoverable glyph assets; BallZ uses it for mesh countdown and lap displays instead of segment stand-ins."
+   },
+   {
+     label: "Earth Grid",
+     source: "Earth.tvm, EarthGridXL.bmp",
+-    status: "preview",
+-    detail: "Planet and transparent grid shell are represented as reusable scene-lab objects."
++    status: "ported",
++    detail: "The CubX/Scene Lab Earth anchor and transparent spinning GridXL shell are live, and Earth/cloud/grid textures are registered for reuse in scene vocabulary."
+   },
+   {
+     label: "Domotic Controls",
+     source: "MenuDomo, LightTimeOn/Off, FanTimeOn/Off",
+-    status: "pipeline",
+-    detail: "The old home-control panels are staged visually; click behavior can become a browser interaction pass."
++    status: "ported",
++    detail: "The CubX workbench exposes the recovered clock/light/fan control surface alongside the animated eight-cube menu; browser controls drive the same visible state instead of remaining static panel art."
+   }
+ ];
+ 
+@@ -896,7 +896,7 @@ export const ASSET_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
+   {
+     label: "XML Scenes",
+     source: "Suzanne1.xml, MyWorld.xml, TestWorld.xml, ObjectLibrary.xml",
+-    status: "pipeline",
+-    detail: "Catalogued for parser work; current race definitions are hand-rebuilt from screenshots and notes."
++    status: "ported",
++    detail: "Suzanne, MyWorld, TestWorld and ObjectLibrary XML are decoded into exact player-visible visits with provenance and contradiction diagnostics, and SceneNET XML can be imported into the validated v2 document contract."
+   }
+ ];
+diff --git a/src/archive-playgrounds.ts b/src/archive-playgrounds.ts
+index 8265c8a..ba0f6ee 100644
+--- a/src/archive-playgrounds.ts
++++ b/src/archive-playgrounds.ts
+@@ -1023,15 +1023,12 @@ export const ARCHIVE_PLAYGROUNDS_NOT_REVIVED = [
+       "Thirteen recursively generated trees at depth 6 (child length x 0.69, 2-3 branches per node) drawn as " +
+       "LineSegments, with one instanced DNA leaf per recursion terminal, a 17-second seasonal cycle, and a " +
+       "per-tree colour genome that mutates by generation.",
+-    verdict: "not revivable without inventing the content",
++    verdict: "revived as `dna-tree` vocabulary and the player-visible Living Forest",
+     why:
+-      "The recursion *is* the study. A depth-6 branching tree is on the order of 200 line segments; expressing " +
+-      "it in v2 means one entity per branch, so thirteen trees is a few thousand cylinders — over any sane budget " +
+-      "and unselectable in the editor. The `luminous-tree` prefab is a hand-authored tree, not a recursive one, so " +
+-      "shipping a grove of them would be a picture of the study with its mechanism deleted. The seasonal cycle and " +
+-      "the DNA mutation have no vocabulary either: no behavior animates material colour, and there is no genome " +
+-      "concept. This is the strongest candidate for a future pass, and what it actually needs is an L-system or " +
+-      "procedural-geometry primitive, which is a platform feature rather than a scene.",
++      "That missing platform feature now exists. `agent-world-dna.ts` keeps recursive depth-6 branch geometry, " +
++      "instanced terminal leaves, the 13-tree source grid, seeded per-tree genomes, seasonal leaf fall and visible " +
++      "generation drift behind one selectable `dna-tree` entity. Presets are available to agents/editor, the Nature " +
++      "Lab study remains interactive, and round-trip plus deterministic genome smokes cover the shared vocabulary.",
+   },
+   {
+     record: "Nature Lab — Orbital Observatory (`nature-lab` study 4, `orbital-observatory.ts`)",
+@@ -1039,29 +1036,24 @@ export const ARCHIVE_PLAYGROUNDS_NOT_REVIVED = [
+       "A day/night Earth with a cloud shell, the ISS on a 51.6-degree inclined trajectory, an observer pass " +
+       "window over Quebec City, and 160 real earthquake events decoded in-repo at `src/legacy/sbqc-quakes.json` " +
+       "(source `WindriderQc/SBQC/public/data/quakes.csv`, commit 42c210f3).",
+-    verdict: "partly revivable, deliberately not shipped in this pass",
++    verdict: "revived as the live Orbital Observatory",
+     why:
+-      "This is the one skipped record that is not a 'cannot', and its data provenance is the best in the set — the " +
+-      "quake bytes are in this repository with a source commit. The ISS on its inclined orbit is an ordinary " +
+-      "`orbit` behavior. What has no expression is everything that makes it an *observatory*: the day/night " +
+-      "terminator is a custom shader (v2 has one texture slot per material and no night map), the detection-radius " +
+-      "pass window is a computed overlay with no 2D-in-3D vocabulary, and 160 quake markers would be 160 entities " +
+-      "carrying data no entity field can hold. Shipping the globe and the ISS without the telemetry would be a " +
+-      "planet with a moving dot, and the telemetry is the point.",
++      "The Nature Lab destination now carries the layered source Earth/cloud/night treatment, 51.6° ISS orbit, " +
++      "Quebec observer pass window, source ISS cutout and all 160 provenance-backed quake events. It remains a " +
++      "specialized telemetry world rather than exploding the v2 document into 160 marker entities, while its " +
++      "exportable `graphysx.world/v1` recipe exposes study, seed, parameters, layers and observer to agents.",
+   },
+   {
+     record: "Physics Lab (`physics-lab` archive mode)",
+     what:
+       "A live Newton-style constraint playground: a hinged seesaw, a swinging pendulum chain, a rigid box stack, " +
+       "and an auto-resetting wrecking ball. Source: Newton joints (GraphysX_1), Scene3D physics callbacks.",
+-    verdict: "not revivable — the vocabulary has no joints",
++    verdict: "revived on the archive surface with Rapier joints; v2 documents still omit constraints",
+     why:
+-      "Three of its four exhibits are *constraints*. `AgentWorldPhysics` carries mode, mass, material, friction, " +
+-      "restitution and initial velocities, and nothing else: there is no hinge, no point-to-point, no distance " +
+-      "constraint, so a seesaw cannot pivot, a pendulum chain cannot hang and a wrecking ball cannot swing. Only " +
+-      "the box stack survives, and `physics-sketchbook` already ships a better version of that. Reviving this " +
+-      "properly means graduating a constraint into the entity model — real platform work, named rather than faked " +
+-      "with kinematic objects animated along a `bob` behavior, which would be a picture of a pendulum, not one.",
++      "Physics Lab now runs the hinged seesaw, distance-jointed pendulum chain, rigid stack and auto-resetting " +
++      "wrecking ball through the shared Rapier engine. It is player-visible and genuinely constrained, not a " +
++      "kinematic picture. Constraint authoring has not been added to `AgentWorldPhysics`, so the lab stays on the " +
++      "archive surface and `physics-sketchbook` remains the editable v2 subset.",
+   },
+   {
+     record: "Three.js Playground (`threejs-playground` archive mode)",
+@@ -1070,16 +1062,13 @@ export const ARCHIVE_PLAYGROUNDS_NOT_REVIVED = [
+       "per file): an asteroids skybox, an Airplane.glb orbiting at radius 5, three ShaderMaterial morph spheres, " +
+       "three radius-5 planet spheres sharing one earth texture, a seeded red procedural terrain, a blue " +
+       "three-point line, and a spotlight pulsing 75*sin(pi*f/240)+73.",
+-    verdict: "partly revivable, rejected for this pass",
++    verdict: "fully restored as the dedicated Three.js Playground visit",
+     why:
+-      "The strongest provenance of any candidate — every asset is SHA-verified — and still the wrong pick, because " +
+-      "its identity is in the parts v2 cannot express. The three morph spheres are a per-object vertex/fragment " +
+-      "shader (sinusoidal normal displacement plus a rotating dot-product colour); v2 materials are `standard` " +
+-      "with no custom shader slot, so they would ship as three plain icosahedra and the scene's most distinctive " +
+-      "element would simply be gone. The asteroids cubemap is not in the sky registry and adding it means editing " +
+-      "shared vocabulary. `Airplane.glb` is not in the asset catalog and production prunes unregistered models out " +
+-      "of dist. The spotlight pulse needs an intensity-animating behavior that does not exist. What *would* revive " +
+-      "cleanly — the terrain, the earth spheres, the spline, the orbit — is the least characteristic half.",
++      "HEAD's dedicated environment keeps all nine SHA-locked assets, Asteroids cube, orbiting Airplane.glb, " +
++      "three exact morph shaders, procedural raycastable terrain, Earth spheres, textured cube, blue line and " +
++      "animated spotlight. All 16 source-bounded controls and the FPS display are live. It intentionally remains a " +
++      "specialized browser-world visit because flattening its custom shaders into standard v2 materials would lose " +
++      "the scene's identity.",
+   },
+   {
+     record:
+@@ -1089,25 +1078,24 @@ export const ARCHIVE_PLAYGROUNDS_NOT_REVIVED = [
+       "Inspection grids of recovered geometry — a 61-entry ObjectLibrary catalog, 65 Dominus source assets, 28 " +
+       "port placement rows, the Unity arena mesh and its 1024² atlas, the maison/cuisine compositions, and the " +
+       "common-room TVM set.",
+-    verdict: "not revivable as playgrounds",
++    verdict: "revived as faithful inspection destinations; correctly not relabelled as authored playgrounds",
+     why:
+-      "Two reasons, and either alone is enough. First, their whole content is *geometry* — hand-modelled meshes " +
+-      "this vocabulary cannot author and whose files are not in the product asset catalog, so a v2 rebuild would " +
+-      "be primitives standing in for models, which is theatre. Second, and more decisive, several of these records " +
+-      "explicitly refuse to infer a composition: the Dominus gallery's own summary is 'without inventing the " +
+-      "absent village/port composition' and the port evidence identifies itself as 'an editor catalog grid rather " +
+-      "than an authored village'. Rebuilding them as scenes would invent exactly what they were careful not to. " +
+-      "The brief also asked for simulation over static galleries, and a gallery is what these are.",
++      "All named galleries are player-visible archive destinations with exact meshes, placements and provenance; " +
++      "the Dominus conversion set is also discoverable in the v2 asset catalog. They remain galleries because the " +
++      "source explicitly preserves no authored village/port composition. The current product therefore revives the " +
++      "valuable geometry without inventing a world and without replacing meshes with primitive stand-ins.",
+   },
+   {
+     record: "Input & Device Lab (`input-device-lab`)",
+     what:
+       "BallZ18 controller diagnostics, GraphysX robot/sonar protocols, AtmelCubx I/O schedules and MeArm controls, " +
+       "as one simulation-first device lab.",
+-    verdict: "not a 3D scene",
++    verdict: "revived as the live Input & Device Lab; correctly not forced into scene vocabulary",
+     why:
+-      "Its subject is serial protocols and input state. There is nothing to compose: no world, no geometry, no " +
+-      "spatial content. It belongs where it is.",
++      "The player-visible lab now simulates source-mapped gamepad state, five serial profiles, exact robot command " +
++      "frames, 182-point sonar, eight-channel I/O, schedules and repaired MeArm controls. Hardware remains opt-in " +
++      "and permission-gated. Its subject is protocol/input state, so the UI lab — not a fabricated 3D scene — is the " +
++      "faithful revival.",
+   },
+   {
+     record: "Voie Lactee / Milky Way Vignette (`milky-way-lab`)",
+@@ -1115,16 +1103,12 @@ export const ARCHIVE_PLAYGROUNDS_NOT_REVIVED = [
+       "The archived five-body planetary component — Earth, EarthClouds, Moon, Mars, Venus — with exact per-profile " +
+       "positions for both the 2015 and 2017 recoveries, exact radii (6, 6.1, 2, 12, 4), a 23-degree Earth tilt, a " +
+       "moon orbiting at radius 8, and two archive bugs preserved as facts.",
+-    verdict: "revivable, deliberately not shipped in this pass",
++    verdict: "revived as the v2 Voie Lactée vignette",
+     why:
+-      "Geometrically this is the cleanest fit in the whole census: five spheres at recorded positions with an " +
+-      "`orbit` behavior on the moon and a `spin` on the Earth would be a near-exact v2 rebuild. Two things held it " +
+-      "back. It has no simulation at all — the brief asked for simulation over static tableaux, and the 2017 " +
+-      "profile's own record says `updateRoutinePresent: false`. And four of its five bodies are *defined* by their " +
+-      "textures (moon.jpg, mars.jpg, venus.jpg, earth-clouds.jpg); the v2 texture registry carries `earth` and " +
+-      "nothing else, so Mars, Venus, the Moon and the cloud shell would ship as flat coloured balls and the " +
+-      "scene's entire fidelity claim would evaporate. It becomes an excellent scene the moment those four maps are " +
+-      "registered as textures — a small, well-defined piece of shared-vocabulary work.",
++      "The missing texture vocabulary landed: exact Earth, cloud, Moon, Mars and Venus maps are registered and " +
++      "shipped. The Browse-shelf vignette uses recovered radii, 2017 placements, Earth tilt, source spin/orbit rates " +
++      "and retrograde Moon direction, with presentation deviations recorded beside the scene and browser smoke " +
++      "covering texture delivery and motion.",
+   },
+ ] as const;
+ 
+-- 
+2.47.1.windows.1
+

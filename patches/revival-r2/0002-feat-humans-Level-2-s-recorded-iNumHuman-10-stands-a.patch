@@ -1,0 +1,139 @@
+From 5123c35c86a781b70cd67f8bebaf01347bdf1bfe Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 28 Jul 2026 01:59:42 +0000
+Subject: [PATCH 2/5] feat(humans): Level 2's recorded iNumHuman = 10 stands,
+ and two stale records correct
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+levelList.xml requests ten human proxies for Level 2. The record refused them
+('no crowd entity exists in the v2 vocabulary') — a claim stale since crowd-r1.
+The materialiser now honours the recorded count with actual vocabulary: a
+wandering crowd (no pursuers — the archive requested ambient humans, not a
+hunt) confined to the arena. The archived spawn scatter/seed is unrecoverable,
+so placement is the crowd system's own, and the deviation is renamed
+humans-placed-not-positioned to say exactly that.
+
+best-time-not-shown corrected the same way: the win panel's medal scale judges
+against the archived ScoreBest (ballz-play.ts::archiveReferenceMs) since the
+scoreboard landed, so the entry now records the honest shape — the time does
+real work as a medal threshold rather than being displayed as the recovered
+figure.
+
+Verified: smoke-archive-levels asserts Level 2 carries exactly ten humans and
+Level 1 exactly none.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AjMX8NeAJ88Biso5vpBsRJ
+---
+ scripts/smoke-archive-levels.mjs |  5 +++++
+ src/archive-ballz-levels.ts      | 21 ++++++++++++++-------
+ src/ballz-level-scene.ts         | 22 ++++++++++++++++++++++
+ 3 files changed, 41 insertions(+), 7 deletions(-)
+
+diff --git a/scripts/smoke-archive-levels.mjs b/scripts/smoke-archive-levels.mjs
+index 35276ad..086519c 100644
+--- a/scripts/smoke-archive-levels.mjs
++++ b/scripts/smoke-archive-levels.mjs
+@@ -212,6 +212,7 @@ try {
+         floorRepeat: floor?.material.texture?.repeat ?? null,
+         wallTexture: wall?.material.texture?.id ?? null,
+         companionPosts: api.query({ tag: "companion-post" }).map((post) => ({ id: post.id, physics: post.physics?.mode })),
++        humans: api.query({ ids: ["ballz-humans"] })[0]?.crowd?.count ?? 0,
+         entities: api.state()?.entities.length ?? 0,
+         rulesArmed: !!api.rules.status(),
+         collectibleCount: api.rules.status()?.collectibleCount ?? 0,
+@@ -233,6 +234,10 @@ try {
+       && built.floorNormalTexture === expectedSurface.normal
+       && JSON.stringify(built.floorRepeat) === JSON.stringify(expectedSurface.repeat)
+       && built.wallTexture === expectedSurface.wall, { expected: expectedSurface, built });
++    // Level 2's recorded `iNumHuman` = 10 is honoured as a wandering crowd; Level 1 records
++    // zero humans and must not gain any.
++    const expectedHumans = record.id === "archive-ballz-level2" ? 10 : 0;
++    check("the recorded iNumHuman count is honoured", built.humans === expectedHumans, { got: built.humans, expected: expectedHumans });
+     check("both lowercase companion posts are physical scene entities", built.companionPosts.length === 2
+       && built.companionPosts.every((post) => post.physics === "static"), built.companionPosts);
+ 
+diff --git a/src/archive-ballz-levels.ts b/src/archive-ballz-levels.ts
+index fc316c3..54a2519 100644
+--- a/src/archive-ballz-levels.ts
++++ b/src/archive-ballz-levels.ts
+@@ -140,10 +140,13 @@ const GATE_DEVIATIONS = [
+       "layout is recovered; the handling is the platform's own and is not claimed as archive feel.",
+   },
+   {
+-    code: "best-time-not-shown",
++    code: "best-time-as-medal-reference",
+     detail:
+-      "`levelList.xml` carries a real `ScoreBest` per level. There is no scoreboard in the rules " +
+-      "vocabulary, so the archived time is recorded here as provenance and shown nowhere.",
++      "`levelList.xml` carries a real `ScoreBest` per level. The win panel's medal scale now judges " +
++      "against it (`ballz-play.ts::archiveReferenceMs`), so the archived time does real work — but it " +
++      "is presented as a medal threshold rather than displayed as the recovered figure itself. " +
++      "(This entry previously claimed the time was shown nowhere; that went stale when the scoreboard " +
++      "landed, and is corrected rather than silently dropped.)",
+   },
+ ] as const;
+ 
+@@ -354,16 +357,20 @@ const ARCHIVE_LEVEL_2: ArchiveBallzLevel = {
+       "The rings being *required* to open the finish rather than a 10-second time bonus.",
+     ],
+     deliberatelyAbsent: [
+-      "The ten `iNumHuman` proxies the archive requests for this level — there is no crowd entity in the v2 vocabulary, and standing boxes in for people would be theatre.",
+-      "The archived best time and ring bonus.",
++      "The archive's human spawn scatter — the ten `iNumHuman` proxies ARE placed now (a wandering crowd, honoured from this record; the old no-crowd-vocabulary claim went stale at crowd-r1), but their archived positions/seed are unrecoverable, so where they stand is the crowd system's own.",
++      "The ring bonus — rings gate completion here instead.",
+       "The 2015 ball tuning.",
+     ],
+   },
+   deviations: [
+     ...GATE_DEVIATIONS,
+     {
+-      code: "humans-absent",
+-      detail: "`levelList.xml` requests 10 human proxies for this level. No crowd/agent entity exists in the v2 vocabulary, so none are placed.",
++      code: "humans-placed-not-positioned",
++      detail:
++        "`levelList.xml` requests 10 human proxies for this level and they are placed — a wandering " +
++        "crowd (no pursuers) confined to the arena. What remains deviated is placement: the archived " +
++        "scatter and seed are unrecoverable, so positions are the crowd system's own. (This entry was " +
++        "`humans-absent` and claimed no crowd vocabulary existed; stale since crowd-r1, honoured now.)",
+     },
+     {
+       code: "rings-required-not-bonus",
+diff --git a/src/ballz-level-scene.ts b/src/ballz-level-scene.ts
+index 3e5af25..6030608 100644
+--- a/src/ballz-level-scene.ts
++++ b/src/ballz-level-scene.ts
+@@ -522,6 +522,28 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+     }
+   }
+ 
++  // --- The recorded humans, restored ----------------------------------------------------
++  // `levelList.xml` requests `iNumHuman` proxies per level (Level 2 asks for ten). The
++  // record used to say no crowd entity existed to honour it; that went stale at `crowd-r1`,
++  // so the request is now met with actual vocabulary: a wandering crowd confined to the
++  // arena, no pursuers (the archive requested ambient humans, not a hunt). The archived
++  // spawn scatter/seed is unrecoverable (recorded), so placement is the crowd system's own.
++  const archiveHumans = typeof archiveFacts?.["humans"] === "number" ? Math.max(0, Math.floor(archiveFacts["humans"])) : 0;
++  if (archiveHumans > 0) {
++    entities.push({
++      id: "ballz-humans",
++      type: "crowd",
++      label: `Archive Humans (${archiveHumans})`,
++      transform: { position: [0, 0, 0] },
++      crowd: {
++        count: archiveHumans,
++        pursuers: 0,
++        size: [extentX / 2 - cellSize, extentZ / 2 - cellSize],
++      },
++      tags: ["ballz", "humans"],
++    });
++  }
++
+   if (!spawnPosition) {
+     // A level with no `start` is still worth materialising — it is a layout being authored.
+     // Say so rather than inventing a spawn in a corner that may be inside a wall.
+-- 
+2.43.0
+

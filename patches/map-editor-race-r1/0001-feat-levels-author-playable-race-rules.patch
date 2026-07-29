@@ -1,0 +1,667 @@
+From 7519731a7b96b189e21ef77c71ebfa855d77d50e Mon Sep 17 00:00:00 2001
+From: yanik <yanikbeaulieu@hotmail.com>
+Date: Tue, 28 Jul 2026 17:05:52 -0400
+Subject: [PATCH] feat(levels): author playable race rules
+
+---
+ progress.md                | 10 +++++
+ scripts/smoke-levels.mjs   | 58 +++++++++++++++++++++++++---
+ src/agent-level-library.ts | 78 ++++++++++++++++++++++++++++++++++++--
+ src/agent-world-api.ts     |  2 +
+ src/agent-world-bridge.ts  |  5 ++-
+ src/ballz-level-scene.ts   | 22 +++++++----
+ src/platform-editor.ts     | 67 ++++++++++++++++++++++++++++++--
+ src/prototype-app.ts       |  2 +
+ 8 files changed, 221 insertions(+), 23 deletions(-)
+
+diff --git a/progress.md b/progress.md
+index 3c4ccaa..3aa8290 100644
+--- a/progress.md
++++ b/progress.md
+@@ -2,6 +2,16 @@
+ 
+ Original prompt: "lets go then, lets make this happen!!"
+ 
++## 2026-07-28 — `map-editor-race-r1` (in progress)
++
++- Re-verified the proposed archive-debt candidate against current `HEAD`: draw → store → play already shipped in the Levels workbench, so the live missing piece was authored race rules rather than another play path.
++- Added transactional level vocabulary for 1–9 laps, required/optional rings, and required/optional halfway checkpoint. Old localStorage documents migrate to the established one-lap/all-rings/halfway behavior; create, duplicate, ASCII import/export, summaries, cloning, revision conflicts, undo, and the public human/agent API now carry the same rule block.
++- Wired those settings into BallZ scene rules and the recovered mesh lap counter. The two archive levels still take their recorded three-lap facts as authority; newly painted levels now choose their own rules.
++- Added human controls to the Levels workbench and expanded its browser smoke to prove UI authoring, invalid-rule rejection, ASCII round-trip, materialized world rules, and a three-digit recovered lap display. Typecheck passes; visual/game smoke and the full release gate remain.
++- Targeted QA is green: Levels workbench twice (including agent bridge parity and rule undo), BallZ materializer with the local scene store, and the required web-game client with arrow-key bursts. Inspected screenshots show the compact rule card fits cleanly beside the 20×20 grid; `render_game_to_text` agrees with the visible HUD (`lap 1 / 3`, one ordered checkpoint). The only first client console error was the documented optional `localhost:8788/scenes` probe while that local service was intentionally down; rerunning with it up produced zero console/page errors.
++- Release verification built and exercised all 41 checks. The summary was 39/41 solely because Suzanne 1 and Level 3 each exhausted both ephemeral-server attempts at `page.goto` (`ERR_CONNECTION_TIMED_OUT`, before any assertion); both full scripts then passed against the same `dist/` on a stable local preview with zero console/page errors. Every changed surface passed inside the matrix, including Levels and BallZ.
++- TODO after publishing: continue the shader-pack translation one source shader at a time. `ppl.shade` and `Projection.fx` remain explicitly named by the current register; re-check their archive bindings and player-visible value against `HEAD` before choosing between them. The BallZ fluid-layer shader remains named legacy-only and must not be simulated without recovered binding evidence.
++
+ - 2026-07-18: Created the standalone web-product repository from GraphysX restoration commit `36eac3d5a023e7a21f7b319e6e335d7ffca7d1d1`.
+ - 2026-07-18: Kept only the runtime source, curated browser assets, operational QA, and agent adapter. Historical archives and generated browser output remain in the source GraphysX repository.
+ - 2026-07-18: Added an atomic static release workflow for `graphysx.specialblend.ca`.
+diff --git a/scripts/smoke-levels.mjs b/scripts/smoke-levels.mjs
+index 0923d92..04203f5 100644
+--- a/scripts/smoke-levels.mjs
++++ b/scripts/smoke-levels.mjs
+@@ -24,7 +24,7 @@ page.on("pageerror", (e) => pageErrors.push(String(e)));
+ 
+ const levelState = (id) => page.evaluate((levelId) => {
+   const level = window.__GRAPHYSX__.levels.get(levelId);
+-  return level && { id: level.id, width: level.width, height: level.height, revision: level.revision, tiles: level.tiles };
++  return level && { id: level.id, width: level.width, height: level.height, revision: level.revision, race: level.race, tiles: level.tiles };
+ }, id);
+ const tileAt = (level, x, y) => level.tiles[y * level.width + x];
+ 
+@@ -92,6 +92,36 @@ try {
+   out.filledCells = [[5, 5], [6, 6], [7, 7], [5, 7], [7, 5]].map(([x, y]) => tileAt(filled, x, y));
+   out.fillOk = out.filledCells.every((t) => t === "ice") && tileAt(filled, 8, 8) !== "ice";
+ 
++  // ---- authored race rules ----
++  // These controls write the same transactional vocabulary an agent uses. Three laps also
++  // proves the recovered mesh counter is useful to a newly drawn course, not only the archive.
++  await page.fill('.gx-lv-race input[aria-label="Race laps"]', "3");
++  await page.uncheck('.gx-lv-race input[aria-label="Require all rings"]');
++  await page.click('.gx-lv-race .gx-ed-chip:text-is("Apply rules")');
++  await page.waitForTimeout(200);
++  const configured = await levelState(activeId);
++  out.raceConfigured = configured?.race;
++  out.raceRevisionBumped = configured?.revision > filled.revision;
++  out.raceMeta = await page.textContent(".gx-lv-meta");
++  out.invalidRaceRejected = await page.evaluate((id) => {
++    const before = window.__GRAPHYSX__.levels.get(id);
++    const result = window.__GRAPHYSX__.levels.configureRace(id, { laps: 10 });
++    const after = window.__GRAPHYSX__.levels.get(id);
++    return !result.ok && result.error.includes("1 to 9") && after.revision === before.revision && after.race.laps === 3;
++  }, activeId);
++  out.raceUndo = await page.evaluate((id) => {
++    const changed = window.__GRAPHYSX__.levels.configureRace(id, { laps: 4 });
++    const undone = window.__GRAPHYSX__.levels.undo(id);
++    return changed.ok && changed.value.race.laps === 4 && undone.ok && undone.value.race.laps === 3 && undone.revision > changed.revision;
++  }, activeId);
++  out.bridgeRaceParity = await page.evaluate(async (id) => {
++    const bridge = window.__GRAPHYSX_AGENT_BRIDGE__;
++    const descriptor = bridge.manifest().tools.find((tool) => tool.path === "levels.configureRace");
++    const result = await bridge.call("levels.configureRace", id, { laps: 3 });
++    const audit = bridge.audit();
++    return descriptor?.mutates === true && result.ok && audit.missing.length === 0 && audit.extra.length === 0;
++  }, activeId);
++
+   // ---- ASCII export → import round trip ----
+   await page.click('.gx-lv-ascii .gx-ed-chip:text-is("Export")');
+   await page.waitForTimeout(200);
+@@ -99,7 +129,7 @@ try {
+   out.asciiRows = exported.split("\n").length;
+   out.asciiMatchesApi = await page.evaluate(([id, text]) => {
+     const doc = window.__GRAPHYSX__.levels.exportAscii(id);
+-    return doc.ok && doc.value.rows.join("\n") === text;
++    return doc.ok && doc.value.rows.join("\n") === text && doc.value.race.laps === 3 && doc.value.race.requireRings === false;
+   }, [activeId, exported]);
+ 
+   await page.fill(".gx-lv-ascii input[type=text]", "smoke-roundtrip");
+@@ -112,6 +142,9 @@ try {
+   out.roundTripLossless = !!imported
+     && imported.width === source.width
+     && imported.height === source.height
++    && imported.race.laps === source.race.laps
++    && imported.race.requireRings === source.race.requireRings
++    && imported.race.requireHalfway === source.race.requireHalfway
+     && imported.tiles.length === source.tiles.length
+     && imported.tiles.every((tile, index) => tile === source.tiles[index]);
+   // …and the workbench followed the import, so the grid on screen is the imported level.
+@@ -187,6 +220,8 @@ try {
+   // getting out of the way so the result is actually visible.
+   await page.click('.gx-ed-toolbar button:text-is("Levels")');
+   await page.waitForTimeout(300);
++  await page.click('.gx-lv-row[title^="smoke-roundtrip "]');
++  await page.waitForTimeout(200);
+   out.playButtonExists = (await page.$(".gx-lv-play")) !== null;
+   await page.click(".gx-lv-play");
+   await page.waitForTimeout(500);
+@@ -194,9 +229,8 @@ try {
+     const ballz = window.__GRAPHYSX__.query({ tag: "ballz" });
+     return {
+       entities: ballz.length,
+-      // The active level here was resized to 44x30 and filled, so it has no start tile and
+-      // honestly spawns no ball. Asserting the floor proves materialisation without assuming
+-      // a layout this smoke never authored.
++      // Re-selected the ASCII round-trip course above, so this is the authored-rules path
++      // rather than the empty 44×30 resize fixture used by the editor checks.
+       hasFloor: ballz.some((entity) => entity.id === "ballz-floor"),
+       workbenchClosed: getComputedStyle(document.querySelector(".gx-ed-workbench")).display === "none",
+       // The inspector must agree with the world it is inspecting. A materialised level carries
+@@ -205,6 +239,8 @@ try {
+       skyDropdownAgrees:
+         (document.querySelector(".gx-ed-panel select")?.value ?? null) ===
+         (window.__GRAPHYSX__.state()?.environment?.sky ?? ""),
++      rules: window.__GRAPHYSX__.rules.get(),
++      lapDigits: ballz.filter((entity) => entity.tags?.includes("ballz-lap-digit")).length,
+     };
+   });
+   await page.screenshot({ path: path.join(ART, "levels-played.png"), fullPage: false });
+@@ -228,6 +264,14 @@ const ok =
+   out.startAt === "start" &&
+   out.startCount === 1 &&
+   out.fillOk &&
++  out.raceConfigured?.laps === 3 &&
++  out.raceConfigured?.requireRings === false &&
++  out.raceConfigured?.requireHalfway === true &&
++  out.raceRevisionBumped &&
++  out.raceMeta?.includes("3 laps") &&
++  out.invalidRaceRejected &&
++  out.raceUndo &&
++  out.bridgeRaceParity &&
+   out.asciiRows > 1 &&
+   out.asciiMatchesApi &&
+   out.importCreated &&
+@@ -250,6 +294,10 @@ const ok =
+   out.playButtonExists &&
+   out.played?.entities > 0 &&
+   out.played?.hasFloor &&
++  out.played?.rules?.laps === 3 &&
++  out.played?.rules?.collectibles?.requiredToFinish === false &&
++  out.played?.rules?.checkpoints?.[0]?.label === "Halfway" &&
++  out.played?.lapDigits === 3 &&
+   out.played?.workbenchClosed &&
+   out.played?.skyDropdownAgrees &&
+   out.closed &&
+diff --git a/src/agent-level-library.ts b/src/agent-level-library.ts
+index ad55072..d04e40f 100644
+--- a/src/agent-level-library.ts
++++ b/src/agent-level-library.ts
+@@ -20,6 +20,7 @@ export const GRAPHYSX_AGENT_LEVEL_CAPABILITIES = [
+   "level.patch",
+   "level.fill",
+   "level.resize",
++  "level.race.configure",
+   "level.transaction",
+   "level.undo",
+   "level.ascii.import",
+@@ -43,14 +44,34 @@ export const GRAPHYSX_AGENT_LEVEL_TILE_SEMANTICS: Readonly<Record<MapEditorTile,
+   ice: "Attractive force that preserves ground momentum"
+ };
+ 
++export type AgentLevelRaceDefinition = {
++  /** Number of finish-line crossings required to win. */
++  laps: number;
++  /** Whether every authored ring must be collected before a lap can bank. */
++  requireRings: boolean;
++  /** Whether the authored halfway gate is an ordered checkpoint. */
++  requireHalfway: boolean;
++};
++
++export type AgentLevelRacePatch = Partial<AgentLevelRaceDefinition>;
++
++export const GRAPHYSX_AGENT_LEVEL_DEFAULT_RACE: Readonly<AgentLevelRaceDefinition> = {
++  laps: 1,
++  requireRings: true,
++  requireHalfway: true,
++};
++
+ export type AgentLevelDefinition = MapEditorDraft & {
+   schema: typeof GRAPHYSX_AGENT_LEVEL_SCHEMA;
+   id: string;
+   label: string;
+   cellSize: number;
++  /** Optional for v1 source compatibility; the library resolves the established defaults. */
++  race?: AgentLevelRacePatch;
+ };
+ 
+-export type AgentLevelState = AgentLevelDefinition & {
++export type AgentLevelState = Omit<AgentLevelDefinition, "race"> & {
++  race: AgentLevelRaceDefinition;
+   revision: number;
+ };
+ 
+@@ -60,6 +81,7 @@ export type AgentLevelSummary = {
+   width: number;
+   height: number;
+   cellSize: number;
++  race: AgentLevelRaceDefinition;
+   revision: number;
+   counts: Record<MapEditorTile, number>;
+ };
+@@ -72,6 +94,7 @@ export type AgentLevelCreateOptions = {
+   cellSize?: number;
+   defaultTile?: MapEditorTile;
+   tiles?: MapEditorTile[];
++  race?: AgentLevelRacePatch;
+ };
+ 
+ export type AgentLevelCellPatch = {
+@@ -90,7 +113,8 @@ export type AgentLevelRect = {
+ export type AgentLevelOperation =
+   | { op: "patch"; changes: AgentLevelCellPatch[] }
+   | { op: "fill"; rect: AgentLevelRect; tile: MapEditorTile }
+-  | { op: "resize"; width: number; height: number; defaultTile?: MapEditorTile };
++  | { op: "resize"; width: number; height: number; defaultTile?: MapEditorTile }
++  | { op: "configure-race"; race: AgentLevelRacePatch };
+ 
+ export type AgentLevelTransactionOptions = {
+   expectedRevision?: number;
+@@ -109,6 +133,7 @@ export type AgentLevelAsciiDocument = {
+   width: number;
+   height: number;
+   cellSize: number;
++  race: AgentLevelRaceDefinition;
+   legend: Readonly<Record<MapEditorTile, string>>;
+   rows: string[];
+ };
+@@ -117,6 +142,7 @@ export type AgentLevelAsciiImport = {
+   id: string;
+   label?: string;
+   cellSize?: number;
++  race?: AgentLevelRacePatch;
+   rows: string[];
+ };
+ 
+@@ -144,6 +170,7 @@ export type GraphysXAgentLevelApi = {
+   patch(id: string, changes: AgentLevelCellPatch[], options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState>;
+   fill(id: string, rect: AgentLevelRect, tile: MapEditorTile, options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState>;
+   resize(id: string, width: number, height: number, defaultTile?: MapEditorTile, options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState>;
++  configureRace(id: string, race: AgentLevelRacePatch, options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState>;
+   transaction(id: string, operations: AgentLevelOperation[], options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState>;
+   undo(id: string): AgentLevelResult<AgentLevelState>;
+   importAscii(source: AgentLevelAsciiImport): AgentLevelResult<AgentLevelState>;
+@@ -215,6 +242,7 @@ export class AgentLevelLibrary {
+         width: options.width,
+         height: options.height,
+         cellSize: options.cellSize ?? 2.6,
++        race: resolveRace(options.race),
+         tiles
+       }, 0);
+       this.levels.set(level.id, level);
+@@ -282,6 +310,10 @@ export class AgentLevelLibrary {
+     return this.transaction(id, [{ op: "resize", width, height, defaultTile }], options);
+   }
+ 
++  configureRace(id: string, race: AgentLevelRacePatch, options?: AgentLevelTransactionOptions): AgentLevelResult<AgentLevelState> {
++    return this.transaction(id, [{ op: "configure-race", race }], options);
++  }
++
+   transaction(id: string, operations: AgentLevelOperation[], options: AgentLevelTransactionOptions = {}): AgentLevelResult<AgentLevelState> {
+     try {
+       const current = this.requireLevel(id);
+@@ -337,6 +369,7 @@ export class AgentLevelLibrary {
+         width,
+         height: source.rows.length,
+         cellSize: source.cellSize,
++        race: source.race,
+         tiles
+       });
+     } catch (error) {
+@@ -361,6 +394,7 @@ export class AgentLevelLibrary {
+           width: level.width,
+           height: level.height,
+           cellSize: level.cellSize,
++          race: { ...level.race },
+           legend: ASCII_LEGEND,
+           rows
+         }
+@@ -470,6 +504,11 @@ function applyOperation(level: AgentLevelState, operation: AgentLevelOperation):
+     level.tiles = resized;
+     return;
+   }
++  if (operation.op === "configure-race") {
++    validateRacePatch(operation.race);
++    level.race = resolveRace({ ...level.race, ...operation.race });
++    return;
++  }
+   throw new Error(`Unsupported level operation: ${String((operation as { op?: unknown }).op)}`);
+ }
+ 
+@@ -481,6 +520,7 @@ function resolveDefinition(definition: AgentLevelDefinition, revision: number):
+     width: definition.width,
+     height: definition.height,
+     cellSize: definition.cellSize,
++    race: resolveRace(definition.race),
+     tiles: [...definition.tiles],
+     revision
+   };
+@@ -494,12 +534,39 @@ function validateLevel(level: AgentLevelState): void {
+   if (!level.label?.trim() || level.label.trim().length > 80) throw new Error("Level label must contain 1 to 80 characters");
+   validateDimensions(level.width, level.height);
+   if (!Number.isFinite(level.cellSize) || level.cellSize < 0.25 || level.cellSize > 20) throw new Error("Level cellSize must be between 0.25 and 20");
++  validateRace(level.race);
+   if (!Array.isArray(level.tiles) || level.tiles.length !== level.width * level.height) throw new Error(`Level requires exactly ${level.width * level.height} tiles`);
+   for (const tile of level.tiles) validateTile(tile);
+   validateSingletons(level.tiles);
+   if (!Number.isInteger(level.revision) || level.revision < 0) throw new Error("Level revision must be a non-negative integer");
+ }
+ 
++function resolveRace(race?: AgentLevelRacePatch | null): AgentLevelRaceDefinition {
++  const resolved = {
++    laps: race?.laps ?? GRAPHYSX_AGENT_LEVEL_DEFAULT_RACE.laps,
++    requireRings: race?.requireRings ?? GRAPHYSX_AGENT_LEVEL_DEFAULT_RACE.requireRings,
++    requireHalfway: race?.requireHalfway ?? GRAPHYSX_AGENT_LEVEL_DEFAULT_RACE.requireHalfway,
++  };
++  validateRace(resolved);
++  return resolved;
++}
++
++function validateRacePatch(race: AgentLevelRacePatch): void {
++  if (!race || typeof race !== "object" || Array.isArray(race)) throw new Error("Race configuration must be an object");
++  const allowed = new Set(["laps", "requireRings", "requireHalfway"]);
++  const unknown = Object.keys(race).find((key) => !allowed.has(key));
++  if (unknown) throw new Error(`Unsupported race setting: ${unknown}`);
++  if ("laps" in race && (!Number.isInteger(race.laps) || (race.laps ?? 0) < 1 || (race.laps ?? 10) > 9)) throw new Error("Race laps must be an integer from 1 to 9");
++  if ("requireRings" in race && typeof race.requireRings !== "boolean") throw new Error("Race requireRings must be a boolean");
++  if ("requireHalfway" in race && typeof race.requireHalfway !== "boolean") throw new Error("Race requireHalfway must be a boolean");
++}
++
++function validateRace(race: AgentLevelRaceDefinition): void {
++  if (!race || !Number.isInteger(race.laps) || race.laps < 1 || race.laps > 9) throw new Error("Race laps must be an integer from 1 to 9");
++  if (typeof race.requireRings !== "boolean") throw new Error("Race requireRings must be a boolean");
++  if (typeof race.requireHalfway !== "boolean") throw new Error("Race requireHalfway must be a boolean");
++}
++
+ function validateDimensions(width: number, height: number): void {
+   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) throw new Error("Level width and height must be positive integers");
+   if (width > MAX_DIMENSION || height > MAX_DIMENSION || width * height > MAX_CELLS) {
+@@ -546,6 +613,7 @@ function summarize(level: AgentLevelState): AgentLevelSummary {
+     width: level.width,
+     height: level.height,
+     cellSize: level.cellSize,
++    race: { ...level.race },
+     revision: level.revision,
+     counts
+   };
+@@ -561,7 +629,7 @@ function failure<T = never>(error: unknown, revision = 0): AgentLevelResult<T> {
+ }
+ 
+ function cloneLevel(level: AgentLevelState): AgentLevelState {
+-  return { ...level, tiles: [...level.tiles] };
++  return { ...level, race: { ...level.race }, tiles: [...level.tiles] };
+ }
+ 
+ function cloneValue<T>(value: T): T {
+@@ -570,7 +638,9 @@ function cloneValue<T>(value: T): T {
+ }
+ 
+ function sameContent(left: AgentLevelState, right: AgentLevelState): boolean {
+-  return left.width === right.width && left.height === right.height && left.cellSize === right.cellSize && left.label === right.label && left.tiles.every((tile, index) => right.tiles[index] === tile);
++  return left.width === right.width && left.height === right.height && left.cellSize === right.cellSize && left.label === right.label
++    && left.race.laps === right.race.laps && left.race.requireRings === right.race.requireRings && left.race.requireHalfway === right.race.requireHalfway
++    && left.tiles.every((tile, index) => right.tiles[index] === tile);
+ }
+ 
+ function humanizeId(id: string): string {
+diff --git a/src/agent-world-api.ts b/src/agent-world-api.ts
+index 32face0..ed5f68c 100644
+--- a/src/agent-world-api.ts
++++ b/src/agent-world-api.ts
+@@ -59,6 +59,7 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
+     fill: (id, rect, tile, options) => library.fill(id, rect, tile, options),
+     resize: (id, width, height, defaultTile, options) =>
+       library.resize(id, width, height, defaultTile ?? "floor", options),
++    configureRace: (id, race, options) => library.configureRace(id, race, options),
+     transaction: (id, operations, options) => library.transaction(id, operations, options),
+     undo: (id) => library.undo(id),
+     importAscii: (source) => library.importAscii(source),
+@@ -205,6 +206,7 @@ function createHostFallbackLevel(): AgentLevelDefinition {
+     width,
+     height,
+     cellSize: 2.6,
++    race: { laps: 1, requireRings: true, requireHalfway: true },
+     tiles,
+   };
+ }
+diff --git a/src/agent-world-bridge.ts b/src/agent-world-bridge.ts
+index 3049e3b..a222d22 100644
+--- a/src/agent-world-bridge.ts
++++ b/src/agent-world-bridge.ts
+@@ -15,7 +15,7 @@ const TOOL_PATHS = [
+   "media.schema", "media.status", "media.list", "media.refresh", "media.browse", "media.import", "media.importSky", "media.register", "media.remove", "media.terrainHeights",
+   "levels.schema", "levels.levelSchema", "levels.version", "levels.capabilities",
+   "levels.tiles", "levels.tileSemantics", "levels.active", "levels.list", "levels.get", "levels.create", "levels.remove",
+-  "levels.open", "levels.region", "levels.patch", "levels.fill", "levels.resize", "levels.transaction", "levels.undo",
++  "levels.open", "levels.region", "levels.patch", "levels.fill", "levels.resize", "levels.configureRace", "levels.transaction", "levels.undo",
+   "levels.importAscii", "levels.exportAscii", "levels.play"
+ ] as const;
+ 
+@@ -24,7 +24,7 @@ const MUTATING_TOOLS = new Set<string>([
+   "interact", "steer", "spawnPrefab", "loadStarter", "transaction", "commit", "undo", "pause", "step", "save", "load",
+   "rules.set", "rules.reset",
+   "media.refresh", "media.import", "media.importSky", "media.register", "media.remove",
+-  "levels.create", "levels.remove", "levels.open", "levels.patch", "levels.fill", "levels.resize", "levels.transaction",
++  "levels.create", "levels.remove", "levels.open", "levels.patch", "levels.fill", "levels.resize", "levels.configureRace", "levels.transaction",
+   "levels.undo", "levels.importAscii", "levels.play"
+ ]);
+ 
+@@ -69,6 +69,7 @@ const TOOL_SUMMARIES: Record<string, string> = {
+   "media.remove": "Remove an imported asset from the store and the registries (async).",
+   "media.terrainHeights": "Decode an imported image into a normalized heights grid for `terrain.heights` (async).",
+   "levels.region": "Read a bounded region of a named semantic level.",
++  "levels.configureRace": "Author a level's lap count and ring/halfway requirements.",
+   "levels.transaction": "Apply multiple named-level edits atomically."
+ };
+ 
+diff --git a/src/ballz-level-scene.ts b/src/ballz-level-scene.ts
+index 6030608..e74ef58 100644
+--- a/src/ballz-level-scene.ts
++++ b/src/ballz-level-scene.ts
+@@ -209,7 +209,11 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+   let spawnPosition: [number, number, number] | null = null;
+   const archiveLevel = ARCHIVE_BALLZ_LEVELS.find((entry) => entry.id === level.id);
+   const archiveFacts = archiveLevel?.provenance.levelListFacts;
+-  const archiveLaps = typeof archiveFacts?.["laps"] === "number" ? Math.max(1, Math.floor(archiveFacts["laps"])) : 1;
++  // Recovered facts remain authoritative for the two classic levels. Every other level uses
++  // the race vocabulary authored beside its grid in the workbench/API.
++  const laps = typeof archiveFacts?.["laps"] === "number" ? Math.max(1, Math.floor(archiveFacts["laps"])) : level.race.laps;
++  const requireHalfway = archiveLevel ? true : level.race.requireHalfway;
++  const requireRings = archiveLevel ? true : level.race.requireRings;
+   const classicBinding = classicPlatformBinding(level.id);
+ 
+   // Landmark emitters are *requested* here and allocated after the grid walk, because the
+@@ -692,7 +696,7 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+   // number meshes and switched which duplicate was enabled; this display does exactly that
+   // through entity visibility. The play layer only mirrors `rules.status().lap` — rules stay
+   // authoritative, and the counter remains editable/exportable scene data.
+-  if (finishPosition && archiveLaps > 1 && archiveLaps <= 9) {
++  if (finishPosition && laps > 1 && laps <= 9) {
+     const lapGroupId = "ballz-lap-display";
+     entities.push({
+       id: lapGroupId,
+@@ -724,7 +728,7 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+         tags: ["ballz", "lap-counter", "archive-glyph"],
+       });
+     }
+-    for (let lap = 1; lap <= archiveLaps; lap += 1) {
++    for (let lap = 1; lap <= laps; lap += 1) {
+       entities.push({
+         id: `ballz-lap-digit-${lap}`,
+         parentId: lapGroupId,
+@@ -840,11 +844,13 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+   // The same rule as data is portable. A halfway gate becomes an *ordered checkpoint*, which
+   // is also the thing that makes this generalise past BallZ: a course with four gates and
+   // three laps is the same block with a longer array, which is what the World 1 / Great Slide
+-  // ports need and could not have said before.
++  // ports need and could not have said before. Hand-painted courses now choose whether this
++  // checkpoint and their rings are requirements; the grid and its rule vocabulary travel as
++  // one level document instead of relying on a hardcoded materialiser policy.
+   // The archive's `levelList.xml` sets `nbrTour` = 3 for the classic levels: a course is run
+   // three times around, not once. A level whose recovered facts carry a lap count gets it —
+   // the rules engine re-arms the ordered checkpoints each lap while collected rings stay
+-  // collected, which is exactly the classic structure. Hand-painted levels stay one lap.
++  // collected, which is exactly the classic structure. Hand-painted levels use `level.race`.
+   const rules: AgentWorldRulesDefinition | undefined =
+     finishId || ringIds.length > 0
+       ? {
+@@ -855,13 +861,13 @@ export function composeBallzLevel(api: GraphysXAgentWorldApi, level: AgentLevelS
+           // The halfway gate is the one ordered checkpoint a BallZ grid can express. Crossing
+           // the finish without it does not count, which is what stops a level being won by
+           // rolling straight from the start pad to the goal past everything else.
+-          ...(halfId ? { checkpoints: [{ triggerId: halfId, label: "Halfway" }] } : {}),
++          ...(halfId && requireHalfway ? { checkpoints: [{ triggerId: halfId, label: "Halfway" }] } : {}),
+           // Tag-resolved rather than an id list: the tag is already on every ring, and a
+           // level edited after materialising (an agent spawning another ring) stays correct
+           // because the set resolves when the run arms.
+-          ...(ringIds.length > 0 ? { collectibles: { tag: "collectible", requiredToFinish: true } } : {}),
++          ...(ringIds.length > 0 ? { collectibles: { tag: "collectible", requiredToFinish: requireRings } } : {}),
+           ...(finishId ? { finish: { triggerId: finishId } } : {}),
+-          laps: archiveLaps,
++          laps,
+         }
+       : undefined;
+   if (!rules) {
+diff --git a/src/platform-editor.ts b/src/platform-editor.ts
+index 6116541..80b83b3 100644
+--- a/src/platform-editor.ts
++++ b/src/platform-editor.ts
+@@ -163,6 +163,9 @@ interface LevelsWorkbenchUi {
+   newHeight: HTMLInputElement;
+   resizeWidth: HTMLInputElement;
+   resizeHeight: HTMLInputElement;
++  raceLaps: HTMLInputElement;
++  raceRequireRings: HTMLInputElement;
++  raceRequireHalfway: HTMLInputElement;
+   toolButtons: Map<LevelTool, HTMLButtonElement>;
+ }
+ 
+@@ -2197,9 +2200,35 @@ export class PlatformEditor {
+     canvas.addEventListener("pointerover", this.onLevelPointerOver);
+     main.append(tools, palette, canvas);
+ 
+-    // ---- right column: ASCII ----
++    // ---- right column: race vocabulary + ASCII ----
+     const asciiColumn = document.createElement("div");
+     asciiColumn.className = "gx-lv-ascii";
++    const racePanel = document.createElement("div");
++    racePanel.className = "gx-lv-race";
++    const raceLaps = this.numberInput(1, 1, 1);
++    raceLaps.max = "9";
++    raceLaps.setAttribute("aria-label", "Race laps");
++    const raceRequireRings = document.createElement("input");
++    raceRequireRings.type = "checkbox";
++    raceRequireRings.setAttribute("aria-label", "Require all rings");
++    const raceRequireHalfway = document.createElement("input");
++    raceRequireHalfway.type = "checkbox";
++    raceRequireHalfway.setAttribute("aria-label", "Require halfway checkpoint");
++    const raceRow = document.createElement("div");
++    raceRow.className = "gx-lv-race-row";
++    raceRow.append(this.tinyLabel("Laps"), raceLaps, this.chip("Apply rules", () => this.configureLevelRace(), "Save the authored win conditions"));
++    const raceChecks = document.createElement("div");
++    raceChecks.className = "gx-lv-race-checks";
++    const labelledCheck = (input: HTMLInputElement, text: string): HTMLLabelElement => {
++      const label = document.createElement("label");
++      label.append(input, document.createTextNode(text));
++      return label;
++    };
++    raceChecks.append(
++      labelledCheck(raceRequireRings, "Require all rings"),
++      labelledCheck(raceRequireHalfway, "Require halfway"),
++    );
++    racePanel.append(raceRow, raceChecks);
+     const ascii = document.createElement("textarea");
+     ascii.className = "gx-lv-text";
+     ascii.spellcheck = false;
+@@ -2213,7 +2242,7 @@ export class PlatformEditor {
+       this.chip("Export", () => this.exportLevelAscii(), "Re-read the active level as ASCII"),
+       this.chip("Import", () => this.importLevelAscii(), "Create a level from the ASCII above"),
+     );
+-    asciiColumn.append(this.subhead("ASCII"), ascii, importId, asciiActions);
++    asciiColumn.append(this.subhead("Race rules"), racePanel, this.subhead("ASCII"), ascii, importId, asciiActions);
+ 
+     const body = document.createElement("div");
+     body.className = "gx-lv-body";
+@@ -2225,7 +2254,8 @@ export class PlatformEditor {
+     panel.append(head, body, status);
+     return {
+       panel, meta, list, canvas, palette, status, ascii, importId,
+-      newId, newWidth, newHeight, resizeWidth, resizeHeight, toolButtons,
++      newId, newWidth, newHeight, resizeWidth, resizeHeight,
++      raceLaps, raceRequireRings, raceRequireHalfway, toolButtons,
+     };
+   }
+ 
+@@ -2308,6 +2338,9 @@ export class PlatformEditor {
+     if (level) {
+       this.levelUi.resizeWidth.value = String(level.width);
+       this.levelUi.resizeHeight.value = String(level.height);
++      this.levelUi.raceLaps.value = String(level.race.laps);
++      this.levelUi.raceRequireRings.checked = level.race.requireRings;
++      this.levelUi.raceRequireHalfway.checked = level.race.requireHalfway;
+       this.levelUi.importId.placeholder = `${level.id}-import`;
+     }
+     this.renderLevelGrid(level);
+@@ -2315,7 +2348,7 @@ export class PlatformEditor {
+ 
+   private updateLevelMeta(level: AgentLevelState | null = this.levels.get(this.levelId)): void {
+     this.levelUi.meta.textContent = level
+-      ? `${level.id} · ${level.label} · ${level.width}×${level.height} · rev ${level.revision}`
++      ? `${level.id} · ${level.label} · ${level.width}×${level.height} · ${level.race.laps} lap${level.race.laps === 1 ? "" : "s"} · rev ${level.revision}`
+       : "No level selected";
+   }
+ 
+@@ -2536,6 +2569,7 @@ export class PlatformEditor {
+       id: this.uniqueLevelId(`${source.id}-copy`),
+       label: `${source.label} copy`,
+       cellSize: source.cellSize,
++      race: exported.value.race,
+       rows: exported.value.rows,
+     });
+     if (!result.ok || !result.value) {
+@@ -2574,6 +2608,23 @@ export class PlatformEditor {
+     this.levelMessage(`Resized to ${width}×${height} · rev ${result.revision}`);
+   }
+ 
++  private configureLevelRace(): void {
++    const result = this.levels.configureRace(this.levelId, {
++      laps: Number(this.levelUi.raceLaps.value),
++      requireRings: this.levelUi.raceRequireRings.checked,
++      requireHalfway: this.levelUi.raceRequireHalfway.checked,
++    });
++    if (!result.ok || !result.value) {
++      this.levelMessage(result.error ?? "Could not save race rules", true);
++      this.renderLevels();
++      return;
++    }
++    this.renderLevels();
++    this.syncLevelAscii();
++    const { race } = result.value;
++    this.levelMessage(`Race: ${race.laps} lap${race.laps === 1 ? "" : "s"} · rings ${race.requireRings ? "required" : "optional"} · halfway ${race.requireHalfway ? "required" : "optional"} · rev ${result.revision}`);
++  }
++
+   private undoLevel(): void {
+     const result = this.levels.undo(this.levelId);
+     if (!result.ok) {
+@@ -2622,6 +2673,7 @@ export class PlatformEditor {
+       id,
+       label: source?.label,
+       cellSize: source?.cellSize,
++      race: source?.race,
+       rows,
+     });
+     if (!result.ok || !result.value) {
+@@ -3629,6 +3681,13 @@ const EDITOR_CSS = `
+ .gx-lv-form .gx-ed-chip{flex:none;white-space:nowrap}
+ .gx-lv-tiny{flex:none;font-size:10px;color:var(--gx-muted)}
+ .gx-lv-spacer{flex:1 1 auto}
++.gx-lv-race{display:flex;flex-direction:column;gap:var(--gx-s2);padding:8px;background:rgba(4,14,20,.42);border:1px solid var(--gx-border-soft);border-radius:var(--gx-radius-sm)}
++.gx-lv-race-row{display:flex;align-items:center;gap:var(--gx-s2)}
++.gx-lv-race-row input[type=number]{width:48px}
++.gx-lv-race-row .gx-ed-chip{margin-left:auto;white-space:nowrap}
++.gx-lv-race-checks{display:flex;flex-direction:column;gap:5px;color:#c6e2ea;font:10.5px/1.2 var(--gx-font)}
++.gx-lv-race-checks label{display:flex;align-items:center;gap:6px;cursor:pointer}
++.gx-lv-race-checks input{accent-color:var(--gx-accent)}
+ 
+ .gx-lv-tools{display:flex;align-items:center;flex-wrap:wrap;gap:var(--gx-s1);flex:none}
+ .gx-lv-tools input[type=number]{width:52px}
+diff --git a/src/prototype-app.ts b/src/prototype-app.ts
+index df13d4f..cbecaf4 100644
+--- a/src/prototype-app.ts
++++ b/src/prototype-app.ts
+@@ -3452,6 +3452,7 @@ export class PrototypeApp {
+       patch: (id: string, changes: AgentLevelCellPatch[], options?: AgentLevelTransactionOptions) => this.patchAgentLevel(id, changes, options),
+       fill: (id: string, rect: AgentLevelRect, tile: MapEditorTile, options?: AgentLevelTransactionOptions) => this.fillAgentLevel(id, rect, tile, options),
+       resize: (id: string, width: number, height: number, defaultTile?: MapEditorTile, options?: AgentLevelTransactionOptions) => this.resizeAgentLevel(id, width, height, defaultTile, options),
++      configureRace: (id, race, options?: AgentLevelTransactionOptions) => this.afterAgentLevelMutation(this.levelLibrary.configureRace(id, race, options), id === this.activeEditorLevelId),
+       transaction: (id: string, operations: AgentLevelOperation[], options?: AgentLevelTransactionOptions) => this.transactAgentLevel(id, operations, options),
+       undo: (id: string) => this.undoAgentLevel(id),
+       importAscii: (source: AgentLevelAsciiImport) => this.importAgentLevelAscii(source),
+@@ -5175,6 +5176,7 @@ function createEditorLevelDefinition(id: string, label: string, tiles: MapEditor
+     width: 11,
+     height: 11,
+     cellSize: 2.6,
++    race: { laps: 1, requireRings: true, requireHalfway: true },
+     tiles: [...tiles]
+   };
+ }
+-- 
+2.47.1.windows.1
+
