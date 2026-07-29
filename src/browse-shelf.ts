@@ -1,5 +1,6 @@
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { createSceneThumbnail, SHELF_THUMBNAIL_CSS } from "./shelf-thumbnails";
+import { mountShelfPersonalization, SHELF_PERSONALIZATION_CSS } from "./shelf-personalization";
 
 /**
  * "Browse Scenes" — §5's third front-door destination, beside Scene Editor and Games.
@@ -82,6 +83,9 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     featuredRow.type = "button";
     featuredRow.className = "gx-browse-row gx-browse-row--featured";
     featuredRow.dataset.starterId = featured.id;
+    featuredRow.dataset.shelfKey = `browse:${featured.id}`;
+    featuredRow.dataset.shelfLabel = featured.label;
+    featuredRow.dataset.shelfSearch = `${featured.label} ${featured.summary} ${featuredStarter.eyebrow} ${featuredStarter.badges.join(" ")}`;
 
     const visual = document.createElement("span");
     visual.className = "gx-shelf-visual gx-browse-featured-visual";
@@ -129,6 +133,9 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     row.type = "button";
     row.className = "gx-browse-row";
     row.dataset.sceneId = scene.id;
+    row.dataset.shelfKey = `browse:${scene.id}`;
+    row.dataset.shelfLabel = scene.label;
+    row.dataset.shelfSearch = `${scene.label} ${scene.summary} ${scene.meta}`;
 
     const visual = document.createElement("span");
     visual.className = "gx-shelf-visual";
@@ -164,6 +171,9 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     row.type = "button";
     row.className = "gx-browse-row";
     row.dataset.starterId = starter.id;
+    row.dataset.shelfKey = `browse:${starter.id}`;
+    row.dataset.shelfLabel = starter.label;
+    row.dataset.shelfSearch = `${starter.label} ${starter.summary} ${starter.entityCount} entities ${starter.prefabCount} prefabs`;
 
     const visual = document.createElement("span");
     visual.className = "gx-shelf-visual";
@@ -202,9 +212,9 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     list.append(row);
   }
 
-  card.append(head, blurb);
-  if (featuredRow) card.append(featuredRow);
-  card.append(list);
+  if (featuredRow) list.prepend(featuredRow);
+  card.append(head, blurb, list);
+  mountShelfPersonalization(card, list, { label: "scenes", placeholder: "Search scenes and archives…" });
   overlay.append(card);
   container.append(overlay);
 
@@ -230,6 +240,7 @@ function injectStyleOnce(): void {
 
 const BROWSE_CSS = `
 ${SHELF_THUMBNAIL_CSS}
+${SHELF_PERSONALIZATION_CSS}
 .gx-browse{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
   background:var(--gx-scrim);font-family:var(--gx-font);padding:24px}
 .gx-browse-card{width:min(900px,100%);max-height:86vh;display:flex;flex-direction:column;gap:12px;
@@ -253,6 +264,7 @@ ${SHELF_THUMBNAIL_CSS}
 .gx-browse-summary{color:var(--gx-ink-soft);font-size:12px;line-height:1.4}
 .gx-browse-meta{color:var(--gx-ink-faint);font-size:11px;letter-spacing:.03em;margin-top:2px}
 .gx-browse-row--featured{display:grid;grid-template-columns:minmax(250px,.92fr) minmax(0,1.08fr);gap:16px;
+  grid-column:1 / -1;
   padding:9px;background:linear-gradient(120deg,rgba(18,48,62,.96),rgba(12,30,42,.9));
   border-color:rgba(120,240,208,.48);box-shadow:0 10px 34px rgba(0,0,0,.2)}
 .gx-browse-row--featured:hover{transform:translateY(-1px);box-shadow:0 14px 38px rgba(0,0,0,.28)}

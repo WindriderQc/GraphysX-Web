@@ -1197,6 +1197,7 @@ export type GraphysXAgentWorldApi = {
     reset(): AgentWorldResult<AgentWorldRunStatus | null>;
   };
   undo(): AgentWorldResult<AgentWorldState>;
+  redo(): AgentWorldResult<AgentWorldState>;
   select(ids: string[]): string[];
   query(query?: AgentWorldQuery): AgentWorldEntityState[];
   observe(query?: AgentWorldQuery): AgentWorldObservation | null;
@@ -1398,6 +1399,7 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "scene.select",
   "transaction.atomic",
   "transaction.undo",
+  "transaction.redo",
   "collaboration.commit",
   "collaboration.history",
   "time.pause",
@@ -1462,6 +1464,7 @@ export class AgentWorldRuntime {
   private readonly joints = new Map<string, RuntimeJoint>();
   private readonly savedWorlds = new Map<string, AgentWorldDefinition>();
   private readonly history: AgentWorldDefinition[] = [];
+  private readonly redoHistory: AgentWorldDefinition[] = [];
   private readonly events: AgentWorldEvent[] = [];
   private readonly commits: AgentWorldCommitSummary[] = [];
   /** Trigger id → ids currently inside it, so each crossing fires once rather than per frame. */
@@ -1641,6 +1644,7 @@ export class AgentWorldRuntime {
       this.loadDefinition(definition);
       this.history.push(before);
       if (this.history.length > 40) this.history.shift();
+      this.redoHistory.length = 0;
       this.revision += 1;
       this.recordEvent("world.created", `Created ${this.definition.label}`);
       return this.success(this.getState());
@@ -1771,6 +1775,7 @@ export class AgentWorldRuntime {
       for (const command of commands) outputs.push(this.applyCommand(command));
       this.history.push(before);
       if (this.history.length > 40) this.history.shift();
+      this.redoHistory.length = 0;
       this.revision += 1;
       this.recordEvent("transaction.committed", `${commands.length} command${commands.length === 1 ? "" : "s"}`);
       return this.success(outputs);
@@ -1832,9 +1837,22 @@ export class AgentWorldRuntime {
   undo(): AgentWorldResult<AgentWorldState> {
     const previous = this.history.pop();
     if (!previous) return this.failure("There is no transaction to undo");
+    this.redoHistory.push(this.exportDefinition());
+    if (this.redoHistory.length > 40) this.redoHistory.shift();
     this.loadDefinition(previous);
     this.revision += 1;
     this.recordEvent("transaction.undone", "Restored the previous world definition");
+    return this.success(this.getState());
+  }
+
+  redo(): AgentWorldResult<AgentWorldState> {
+    const next = this.redoHistory.pop();
+    if (!next) return this.failure("There is no transaction to redo");
+    this.history.push(this.exportDefinition());
+    if (this.history.length > 40) this.history.shift();
+    this.loadDefinition(next);
+    this.revision += 1;
+    this.recordEvent("transaction.redone", "Reapplied the next world definition");
     return this.success(this.getState());
   }
 

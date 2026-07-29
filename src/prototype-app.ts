@@ -1168,6 +1168,8 @@ export class PrototypeApp {
           this.raceScene.stepAgentWorld(0.5);
         } else if (action === "undo") {
           this.raceScene.undoAgentWorld();
+        } else if (action === "redo") {
+          this.raceScene.redoAgentWorld();
         } else if (action === "clear") {
           this.raceScene.clearAgentWorld();
         } else if (action === "save") {
@@ -3375,6 +3377,7 @@ export class PrototypeApp {
       agentWorldRaceStandings: () => this.raceScene.agentWorldRaceStandings(),
       resetAgentWorldRun: () => this.raceScene.resetAgentWorldRun(),
       undoAgentWorld: () => this.raceScene.undoAgentWorld(),
+      redoAgentWorld: () => this.raceScene.redoAgentWorld(),
       queryAgentWorld: (query?: AgentWorldQuery) => this.raceScene.queryAgentWorld(query),
       observeAgentWorld: (query?: AgentWorldQuery) => this.raceScene.observeAgentWorld(query),
       pauseAgentWorld: (paused: boolean) => this.raceScene.pauseAgentWorld(paused),
@@ -3522,6 +3525,7 @@ export class PrototypeApp {
         reset: debugApi.resetAgentWorldRun,
       },
       undo: debugApi.undoAgentWorld,
+      redo: debugApi.redoAgentWorld,
       select: debugApi.selectAgentEntities,
       query: debugApi.queryAgentWorld,
       observe: debugApi.observeAgentWorld,
@@ -4952,6 +4956,7 @@ gx.commit({
         <button class="math-preset${state?.paused ? " is-selected" : ""}" data-agent-world-action="pause"><span>${state?.paused ? "Resume" : "Pause"}</span><small>deterministic simulation clock</small></button>
         <button class="math-preset" data-agent-world-action="step"><span>Step 0.5 Seconds</span><small>advance behaviors exactly</small></button>
         <button class="math-preset" data-agent-world-action="undo"><span>Undo</span><small>restore the previous definition</small></button>
+        <button class="math-preset" data-agent-world-action="redo"><span>Redo</span><small>reapply the next definition</small></button>
         <button class="math-preset" data-agent-world-action="save"><span>Save Snapshot</span><small>studio-snapshot · saved: ${savedWorlds}</small></button>
         <button class="math-preset" data-agent-world-action="clear"><span>Clear World</span><small>keep environment, remove entities</small></button>
       </div>

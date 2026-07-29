@@ -11,6 +11,7 @@
     "verify": "node scripts/verify.mjs",
     "smoke:showroom": "node scripts/smoke-showroom.mjs",
     "smoke:editor": "node scripts/smoke-editor.mjs",
+    "smoke:top20": "node scripts/smoke-top20.mjs",
     "smoke:standalone": "node scripts/smoke-standalone.mjs",
     "smoke:levels": "node scripts/smoke-levels.mjs",
     "smoke:archive-cup": "node scripts/smoke-archive-cup.mjs",

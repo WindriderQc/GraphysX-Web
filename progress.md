@@ -2246,3 +2246,53 @@ preview hosts both timed out at navigation before an assertion. The unchanged af
 passed in full against the same `dist/` on a health-checked stable preview, covering chassis
 motion, drive, suspension, steering, finite state, screenshot and zero browser errors. No gate or
 assertion was weakened, and the full matrix was not rerun.
+
+## 2026-07-29 — top-20 production improvements: editor/API foundation
+
+The user expanded the next production package from ten to twenty improvements. The first coherent
+slice is now implemented on `codex/top-20-improvements`: bounded redo complements undo across the
+runtime, public API, legacy debug API and 91-tool bridge; fresh mutations invalidate redo history.
+The human editor adds crash-safe draft autosave/recovery, explicit dirty/saved state, named local
+scene slots, local GraphysX JSON and SceneNET XML import, one-click JSON clipboard export, and a
+keyboard-accessible Ctrl+K command palette. Toolbar status is an ARIA live region and the shortcut
+reference now documents redo and the palette.
+
+`npm run typecheck` is green. The develop-web-game browser client opened the real showroom/editor,
+advanced rendered frames, captured `output/web-game/editor-slice/shot-0.png`, and reported the
+expected editor-mode `render_game_to_text`; the inspected frame shows the new Redo and Import
+controls integrated without obscuring the viewport. The existing exhaustive editor smoke is still
+running under software WebGL before its targeted assertions are extended for this slice.
+
+## 2026-07-29 — top-20 production improvements: discovery, play, accessibility
+
+The remaining release slices are implemented. Browse and Games now share local search with live
+counts, persistent favorites, recent ordering, preference reset and a useful empty state. Play adds
+edge-driven gamepad input, mobile touch arrows/jump, a persistent control-mode hint, a real pause
+dialog (resume/restart/exit), and fullscreen. Global Display settings persist high contrast and
+system/forced reduced motion. The new controls continue to call the public `steer`/interaction,
+pause and level APIs rather than introducing private gameplay state.
+
+The dedicated `smoke-top20.mjs` proves all twenty improvements in one production-build journey:
+draft recovery across reload, redo branch invalidation, 91-tool bridge parity, Ctrl+K, named save,
+JSON/XML import, clipboard copy, accessibility persistence, both shelf helpers, pause/resume,
+touch and mocked gamepad API revisions, fullscreen and stored control preference. It caught and
+fixed one real initialization bug: Restart's handler read its closure before initialization,
+leaving a partial HUD. The built-artifact run is now green with zero console/page errors. The
+unchanged full Games/Browse smoke also passes against `dist/`, including desktop/mobile layouts,
+full countdown, play/return and editor entry. Inspected captures are `output/smoke/top20-editor.png`,
+`top20-play.png`, and `top20-browse-search.png`.
+
+## 2026-07-29 — top-20 production improvements: release gate
+
+The single full release invocation completed 46/47 on its first diagnostic pass. All Top-20
+assertions, legacy gameplay/editor routes, archive fidelity audits, physics, persistence, build
+and type checks passed. The only failure was a real UI timing regression: crash-safe draft status
+replaced the existing SceneNET XML export receipt before its smoke could observe it. Export
+receipts now remain visible for three seconds while autosave continues in the background.
+
+After that targeted fix, `npm run typecheck`, `npm run build`, `npm run smoke:scenenet-xml` and
+`npm run smoke:top20` all pass against the rebuilt production bundle. The XML smoke observes
+`XML 2/2 · 5 warnings`; the Top-20 smoke again proves every new path with zero console or page
+errors. Per release protocol, the expensive full matrix was not restarted after a single isolated
+failure; only the affected check, the consolidated feature check and static build checks were
+repeated.

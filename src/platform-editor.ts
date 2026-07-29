@@ -94,9 +94,19 @@ const SHORTCUTS: ReadonlyArray<[string, string]> = [
   ["F", "Frame the selection"],
   ["Ctrl+D", "Duplicate the selection"],
   ["Ctrl+Z", "Undo the last edit"],
+  ["Ctrl+Shift+Z / Ctrl+Y", "Redo the last undone edit"],
+  ["Ctrl+K", "Open the command palette"],
   ["Del / Backspace", "Delete the selection"],
   ["Esc", "Close a panel, else deselect"],
 ];
+
+const EDITOR_DRAFT_KEY = "graphysx.editor.draft.v1";
+const EDITOR_SLOT_INDEX_KEY = "graphysx.editor.slots.v1";
+
+interface EditorDraft {
+  savedAt: string;
+  definition: AgentWorldDefinition;
+}
 
 /** One glyph per entity type so a scene tree row is scannable without reading the id. */
 const TYPE_GLYPHS: Record<AgentWorldEntityType, string> = {
@@ -228,7 +238,15 @@ export class PlatformEditor {
   /** One shared preview player, so two sound previews never overlap. */
   private mediaAudio: HTMLAudioElement | null = null;
   private helpOverlay: HTMLElement | null = null;
+  private commandOverlay: HTMLElement | null = null;
   private toolbarStatus!: HTMLElement;
+  private recoveryButton!: HTMLButtonElement;
+  private slotSelect!: HTMLSelectElement;
+  private savedSignature = "";
+  private dirty = false;
+  private draftTimer: number | null = null;
+  private toolbarNoticeTimer: number | null = null;
+  private toolbarNotice = "";
   /**
    * Friction/restitution are accepted by `update()` but are not reported back on
    * `AgentWorldEntityState.physics`, so the inspector remembers what the human set
@@ -324,6 +342,10 @@ export class PlatformEditor {
     // rebuilding the DOM per event would rebuild it dozens of times for one logical change.
     this.unsubscribeEvents = deps.world.subscribeEvents((event) => {
       if (event.type === "trigger.enter" || event.type === "trigger.exit") return;
+      // Playing after visiting the editor must not autosave the materialised race as an
+      // authoring draft. Hidden chrome still mirrors the world, but only a visible editor
+      // owns draft persistence.
+      if (this.enabled) this.syncDocumentStatus();
       // The DOM refresh below is rAF-coalesced, but the gizmo cannot wait a frame: a world
       // replacement destroys its attached object, and TransformControls warns (and a
       // rollback throws) on the very next render. Re-sync it synchronously.
@@ -351,6 +373,10 @@ export class PlatformEditor {
     this.renderLibrary();
     this.setLevelTool(this.levelTool);
     this.refresh();
+    this.savedSignature = this.documentSignature();
+    this.syncDocumentStatus();
+    this.refreshSlotOptions();
+    this.offerDraftRecovery();
   }
 
   /** The host skips simulation while the gizmo is being dragged. */
@@ -379,6 +405,8 @@ export class PlatformEditor {
       this.stopMediaPreview();
       this.helpOverlay?.remove();
       this.helpOverlay = null;
+      this.commandOverlay?.remove();
+      this.commandOverlay = null;
     }
   }
 
@@ -452,9 +480,14 @@ export class PlatformEditor {
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (!this.enabled) return;
+    const key = event.key.toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && key === "k") {
+      event.preventDefault();
+      this.toggleCommandPalette();
+      return;
+    }
     const target = event.target as HTMLElement | null;
     if (target && (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
-    const key = event.key.toLowerCase();
     if ((event.ctrlKey || event.metaKey) && key === "d") {
       // Before the browser bookmarks the editor.
       event.preventDefault();
@@ -463,7 +496,14 @@ export class PlatformEditor {
     }
     if ((event.ctrlKey || event.metaKey) && key === "z") {
       event.preventDefault();
-      this.deps.api.undo();
+      if (event.shiftKey) this.deps.api.redo();
+      else this.deps.api.undo();
+      this.select(null);
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && key === "y") {
+      event.preventDefault();
+      this.deps.api.redo();
       this.select(null);
       return;
     }
@@ -476,6 +516,7 @@ export class PlatformEditor {
       case "escape":
         // Most-modal first: the import dialog, then the workbench, then the selection.
         if (this.mediaDialogOpen) this.setMediaDialogOpen(false);
+        else if (this.commandOverlay) this.toggleCommandPalette(false);
         else if (this.helpOverlay) { this.helpOverlay.remove(); this.helpOverlay = null; }
         else if (this.levelsOpen) this.setLevelsOpen(false);
         else this.select(null);
@@ -567,6 +608,118 @@ export class PlatformEditor {
     this.select(null);
   }
 
+  private documentSignature(): string {
+    try {
+      return JSON.stringify(this.deps.api.exportDocument() ?? null);
+    } catch {
+      return "";
+    }
+  }
+
+  private syncDocumentStatus(scheduleDraft = true): void {
+    const signature = this.documentSignature();
+    const wasDirty = this.dirty;
+    this.dirty = !!this.savedSignature && signature !== this.savedSignature;
+    if (!scheduleDraft || !this.savedSignature || (!this.dirty && !wasDirty)) return;
+    if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
+    this.draftTimer = window.setTimeout(() => {
+      this.draftTimer = null;
+      if (!this.dirty) {
+        try { window.localStorage.removeItem(EDITOR_DRAFT_KEY); } catch { /* storage is optional */ }
+        return;
+      }
+      const definition = this.deps.api.exportDocument();
+      if (!definition) return;
+      const draft: EditorDraft = { savedAt: new Date().toISOString(), definition };
+      try {
+        window.localStorage.setItem(EDITOR_DRAFT_KEY, JSON.stringify(draft));
+        // Do not immediately erase a short-lived confirmation such as the legacy XML
+        // export receipt. The dirty marker still updates while that notice is held.
+        if (this.toolbarNoticeTimer === null) this.toolbarNotice = "draft autosaved";
+        this.refresh("skip");
+      } catch {
+        this.toolbarNotice = "draft storage unavailable";
+      }
+    }, 650);
+  }
+
+  private markSaved(notice: string): void {
+    this.savedSignature = this.documentSignature();
+    this.dirty = false;
+    this.toolbarNotice = notice;
+    if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
+    this.draftTimer = null;
+    try { window.localStorage.removeItem(EDITOR_DRAFT_KEY); } catch { /* storage is optional */ }
+    this.recoveryButton.hidden = true;
+    this.refresh("skip");
+  }
+
+  private offerDraftRecovery(): void {
+    try {
+      const draft = JSON.parse(window.localStorage.getItem(EDITOR_DRAFT_KEY) ?? "null") as EditorDraft | null;
+      const valid = !!draft?.definition?.id && Array.isArray(draft.definition.entities);
+      this.recoveryButton.hidden = !valid || JSON.stringify(draft?.definition) === this.documentSignature();
+      if (!this.recoveryButton.hidden && draft?.savedAt) {
+        this.recoveryButton.title = `Recover autosaved draft from ${new Date(draft.savedAt).toLocaleString()}`;
+      }
+    } catch {
+      this.recoveryButton.hidden = true;
+    }
+  }
+
+  private recoverDraft(): void {
+    try {
+      const draft = JSON.parse(window.localStorage.getItem(EDITOR_DRAFT_KEY) ?? "null") as EditorDraft | null;
+      if (!draft?.definition) return;
+      const result = this.deps.api.load(draft.definition);
+      if (!result.ok) throw new Error(result.error ?? "Draft recovery failed");
+      this.toolbarNotice = "draft recovered";
+      this.recoveryButton.hidden = true;
+      this.deps.onEnvironmentChanged?.();
+      this.select(null);
+      this.syncDocumentStatus();
+    } catch (error) {
+      this.toolbarNotice = error instanceof Error ? error.message : "Draft recovery failed";
+      this.refresh("skip");
+    }
+  }
+
+  private localSlotNames(): string[] {
+    const names = new Set<string>();
+    try {
+      const indexed = JSON.parse(window.localStorage.getItem(EDITOR_SLOT_INDEX_KEY) ?? "[]") as unknown;
+      if (Array.isArray(indexed)) indexed.forEach((name) => { if (typeof name === "string" && name.trim()) names.add(name); });
+      for (let index = 0; index < window.localStorage.length; index += 1) {
+        const key = window.localStorage.key(index) ?? "";
+        const prefix = "graphysx.agent-world.v2.";
+        if (key.startsWith(prefix)) names.add(key.slice(prefix.length));
+      }
+    } catch { /* storage is optional */ }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }
+
+  private rememberSlot(name: string): void {
+    const names = new Set(this.localSlotNames());
+    names.add(name);
+    try { window.localStorage.setItem(EDITOR_SLOT_INDEX_KEY, JSON.stringify([...names])); } catch { /* storage is optional */ }
+    this.refreshSlotOptions();
+  }
+
+  private refreshSlotOptions(): void {
+    if (!this.slotSelect) return;
+    this.slotSelect.replaceChildren();
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Open slot…";
+    this.slotSelect.append(placeholder);
+    for (const name of this.localSlotNames()) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      this.slotSelect.append(option);
+    }
+  }
+
   /**
    * @param inspector how to treat the inspector panel:
    * `auto` rebuild unless a field is focused; `force` rebuild regardless (an API call was
@@ -585,12 +738,13 @@ export class PlatformEditor {
     this.syncGizmo();
     const state = this.deps.api.state();
     const entities = state?.entities ?? [];
+    this.syncDocumentStatus(false);
     this.readout.textContent = this.selectedId
       ? `${this.selectedId} · ${this.gizmo.getMode()} · rev ${state?.revision ?? 0}`
       : `${entities.length} entities · rev ${state?.revision ?? 0} · click to select`;
     // The at-a-glance line: what the world is, not what is selected (the readout has that).
     this.toolbarStatus.textContent = state
-      ? `${entities.length} entities · rev ${state.revision} · t ${state.elapsedSeconds.toFixed(0)}s${state.paused ? " · paused" : ""}`
+      ? `${this.dirty ? "● unsaved" : "✓ saved"} · ${entities.length} entities · rev ${state.revision}${state.paused ? " · paused" : ""}${this.toolbarNotice ? ` · ${this.toolbarNotice}` : ""}`
       : "no world";
 
     // Read the world's sky back into the dropdown. Skipped while it has focus, so re-syncing
@@ -1302,6 +1456,8 @@ export class PlatformEditor {
   private buildToolbar(): HTMLElement {
     const toolbar = document.createElement("div");
     toolbar.className = "gx-ed-toolbar";
+    toolbar.setAttribute("role", "toolbar");
+    toolbar.setAttribute("aria-label", "Scene editor tools");
 
     if (this.deps.onExit) {
       const exit = this.toolButton("← Showroom", () => this.deps.onExit?.());
@@ -1370,16 +1526,30 @@ export class PlatformEditor {
       pauseButton,
       this.toolButton("Step", () => { this.deps.api.step(); this.refresh(); }),
       this.toolButton("Undo", () => { this.deps.api.undo(); this.select(null); }),
+      this.toolButton("Redo", () => { this.deps.api.redo(); this.select(null); }),
     ]));
 
     const legacyExport = this.toolButton("Legacy XML", () => this.exportLegacyXml(), "Warning-first flat Scene3D v1.2 compatibility subset");
     legacyExport.dataset.gxExport = "legacy-xml";
+    const importButton = this.toolButton("Import", () => this.importSceneFile(), "Import a GraphysX JSON or SceneNET XML scene file");
+    importButton.dataset.gxImport = "scene";
     toolbar.append(this.group([
       this.toolButton("Save", () => this.saveScene()),
       this.toolButton("Load", () => this.loadScene()),
+      importButton,
       this.toolButton("Export", () => this.exportScene()),
+      this.toolButton("Copy", () => void this.copySceneJson(), "Copy the persistable scene JSON to the clipboard"),
       legacyExport,
     ]));
+
+    this.slotSelect = document.createElement("select");
+    this.slotSelect.title = "Open a named local scene slot";
+    this.slotSelect.setAttribute("aria-label", "Open a named local scene slot");
+    this.slotSelect.addEventListener("change", () => {
+      if (this.slotSelect.value) this.loadScene(this.slotSelect.value);
+      this.slotSelect.value = "";
+    });
+    toolbar.append(this.group([this.slotSelect]));
 
     this.levelsButton = this.toolButton("Levels", () => this.setLevelsOpen(!this.levelsOpen), "Open the BallZ level workbench");
     toolbar.append(this.group([this.levelsButton]));
@@ -1404,10 +1574,16 @@ export class PlatformEditor {
     // The live readout and help sit at the far right, out of the action groups' way.
     const status = document.createElement("span");
     status.className = "gx-ed-status";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
     this.toolbarStatus = status;
+    this.recoveryButton = this.toolButton("Recover draft", () => this.recoverDraft(), "Restore the newest crash-safe editor draft");
+    this.recoveryButton.classList.add("gx-ed-recover");
+    this.recoveryButton.hidden = true;
+    const commands = this.toolButton("Commands", () => this.toggleCommandPalette(), "Command palette (Ctrl+K)");
     const help = this.toolButton("?", () => this.toggleHelp(), "Keyboard shortcuts");
     help.classList.add("gx-ed-help");
-    const tail = this.group([status, help]);
+    const tail = this.group([this.recoveryButton, status, commands, help]);
     tail.classList.add("gx-ed-group--tail");
     toolbar.append(tail);
 
@@ -1425,6 +1601,90 @@ export class PlatformEditor {
       this.gizmo.setRotationSnap(null);
       this.gizmo.setScaleSnap(null);
     }
+  }
+
+  private toggleCommandPalette(open = this.commandOverlay === null): void {
+    if (!open) {
+      this.commandOverlay?.remove();
+      this.commandOverlay = null;
+      return;
+    }
+    this.commandOverlay?.remove();
+    const overlay = document.createElement("div");
+    overlay.className = "gx-ed-command-shade";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Editor command palette");
+    const card = document.createElement("div");
+    card.className = "gx-ed-command-card";
+    const input = document.createElement("input");
+    input.type = "search";
+    input.className = "gx-ed-command-input";
+    input.placeholder = "Type a command…";
+    input.setAttribute("aria-label", "Filter editor commands");
+    const results = document.createElement("div");
+    results.className = "gx-ed-command-results";
+    const actions: ReadonlyArray<{ label: string; hint: string; run: () => void }> = [
+      { label: "Undo", hint: "Ctrl+Z", run: () => { this.deps.api.undo(); this.select(null); } },
+      { label: "Redo", hint: "Ctrl+Shift+Z", run: () => { this.deps.api.redo(); this.select(null); } },
+      { label: "Save scene", hint: "named local slot", run: () => this.saveScene() },
+      { label: "Load scene", hint: "named local slot", run: () => this.loadScene() },
+      { label: "Import scene file", hint: "JSON or SceneNET XML", run: () => this.importSceneFile() },
+      { label: "Export scene JSON", hint: "download", run: () => this.exportScene() },
+      { label: "Copy scene JSON", hint: "clipboard", run: () => void this.copySceneJson() },
+      { label: "Export legacy XML", hint: "SceneNET compatibility", run: () => this.exportLegacyXml() },
+      { label: "Add box", hint: "primitive", run: () => this.addPrimitive("box") },
+      { label: "Add sphere", hint: "primitive", run: () => this.addPrimitive("sphere") },
+      { label: "Add point light", hint: "lighting", run: () => this.addPrimitive("point-light") },
+      { label: "Duplicate selection", hint: "Ctrl+D", run: () => this.duplicateSelected() },
+      { label: "Frame selection", hint: "F", run: () => this.focusSelection() },
+      { label: "Open level workbench", hint: "BallZ authoring", run: () => this.setLevelsOpen(true) },
+      { label: "Show keyboard shortcuts", hint: "help", run: () => this.toggleHelp() },
+    ];
+    const render = (): void => {
+      const query = input.value.trim().toLowerCase();
+      const matches = actions.filter(({ label, hint }) => `${label} ${hint}`.toLowerCase().includes(query));
+      results.replaceChildren(...matches.map((action, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "gx-ed-command";
+        button.dataset.gxCommand = action.label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const label = document.createElement("span");
+        label.textContent = action.label;
+        const hint = document.createElement("small");
+        hint.textContent = action.hint;
+        button.append(label, hint);
+        const run = (): void => {
+          this.toggleCommandPalette(false);
+          action.run();
+        };
+        button.addEventListener("click", run);
+        if (index === 0) button.dataset.gxFirst = "true";
+        return button;
+      }));
+    };
+    input.addEventListener("input", render);
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.toggleCommandPalette(false);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        (results.querySelector<HTMLButtonElement>("button") ?? null)?.click();
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        results.querySelector<HTMLButtonElement>("button")?.focus();
+      }
+    });
+    overlay.addEventListener("pointerdown", (event) => {
+      if (event.target === overlay) this.toggleCommandPalette(false);
+    });
+    card.append(input, results);
+    overlay.append(card);
+    this.deps.container.append(overlay);
+    this.commandOverlay = overlay;
+    render();
+    input.focus();
   }
 
   /** The shortcut card, rendered from the same table the key handler implements. */
@@ -2069,17 +2329,73 @@ export class PlatformEditor {
   private saveScene(): void {
     const name = window.prompt("Save scene as", "editor-scene");
     if (!name) return;
-    this.deps.api.save(name);
+    const result = this.deps.api.save(name);
+    if (result.ok) {
+      this.rememberSlot(name.trim());
+      this.markSaved(`saved to ${name.trim()}`);
+    } else {
+      this.toolbarNotice = result.error ?? "Save failed";
+      this.refresh("skip");
+    }
   }
 
-  private loadScene(): void {
-    const name = window.prompt("Load saved scene", "editor-scene");
+  private loadScene(slotName?: string): void {
+    const name = slotName ?? window.prompt("Load saved scene", "editor-scene");
     if (!name) return;
     const result = this.deps.api.load(name);
     if (result.ok) {
       this.deps.onEnvironmentChanged?.();
+      this.rememberSlot(name);
+      this.markSaved(`loaded ${name}`);
       this.select(null);
+    } else {
+      this.toolbarNotice = result.error ?? `Could not load ${name}`;
+      this.refresh("skip");
     }
+  }
+
+  private importSceneFile(): void {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,.xml,.graphysx.json,.scenenet.xml,application/json,application/xml,text/xml";
+    input.setAttribute("aria-label", "Import scene file");
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const source = await file.text();
+        const isXml = file.name.toLowerCase().endsWith(".xml") || source.trimStart().startsWith("<");
+        const result = isXml
+          ? this.deps.api.importLegacyXml(source, { id: file.name.replace(/\.[^.]+(?:\.xml)?$/i, "") })
+          : this.deps.api.load(JSON.parse(source) as AgentWorldDefinition);
+        if (!result.ok) throw new Error(result.error ?? "Scene import failed");
+        this.deps.onEnvironmentChanged?.();
+        this.savedSignature = "";
+        this.toolbarNotice = `imported ${file.name}`;
+        this.select(null);
+        this.savedSignature = `${this.documentSignature()}#imported`;
+        this.syncDocumentStatus();
+      } catch (error) {
+        this.toolbarNotice = error instanceof Error ? error.message : "Scene import failed";
+        this.refresh("skip");
+      } finally {
+        input.remove();
+      }
+    }, { once: true });
+    this.deps.container.append(input);
+    input.click();
+  }
+
+  private async copySceneJson(): Promise<void> {
+    const definition = this.deps.api.exportDocument();
+    if (!definition) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(definition, null, 2));
+      this.toolbarNotice = "scene JSON copied";
+    } catch {
+      this.toolbarNotice = "clipboard unavailable";
+    }
+    this.refresh("skip");
   }
 
   private exportScene(): void {
@@ -2108,7 +2424,16 @@ export class PlatformEditor {
     link.download = `${definition?.id ?? "scene"}.scenenet.xml`;
     link.click();
     URL.revokeObjectURL(url);
-    this.toolbarStatus.textContent = `XML ${result.value.exportedEntityCount}/${result.value.sourceEntityCount} · ${result.value.warnings.length} warning${result.value.warnings.length === 1 ? "" : "s"}`;
+    const notice = `XML ${result.value.exportedEntityCount}/${result.value.sourceEntityCount} · ${result.value.warnings.length} warning${result.value.warnings.length === 1 ? "" : "s"}`;
+    this.toolbarNotice = notice;
+    if (this.toolbarNoticeTimer !== null) window.clearTimeout(this.toolbarNoticeTimer);
+    this.toolbarNoticeTimer = window.setTimeout(() => {
+      this.toolbarNoticeTimer = null;
+      if (this.toolbarNotice !== notice) return;
+      this.toolbarNotice = this.dirty ? "draft autosaved" : "";
+      this.refresh("skip");
+    }, 3_000);
+    this.refresh("skip");
   }
 
   // ------------------------------------------------------------------ levels
@@ -3491,9 +3816,13 @@ ${preset.provenance.note}`),
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("pointerup", this.onLevelPointerUp);
     this.unsubscribeEvents();
+    if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
+    if (this.toolbarNoticeTimer !== null) window.clearTimeout(this.toolbarNoticeTimer);
     this.stopMediaPreview();
     this.helpOverlay?.remove();
     this.helpOverlay = null;
+    this.commandOverlay?.remove();
+    this.commandOverlay = null;
     this.gizmo.detach();
     this.gizmo.dispose();
     for (const root of this.roots) root.remove();
@@ -3734,10 +4063,22 @@ const EDITOR_CSS = `
 /* ---- toolbar tail: live status + help ---- */
 .gx-ed-group--tail{margin-left:auto;border-left:none !important;padding-left:0 !important}
 .gx-ed-status{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gx-muted);white-space:nowrap}
+.gx-ed-recover{border-color:#d79b35 !important;color:#ffd789 !important;animation:gx-ed-recover-pulse 1.8s ease-in-out infinite}
+@keyframes gx-ed-recover-pulse{50%{box-shadow:0 0 0 3px rgba(215,155,53,.16)}}
 .gx-ed-help{min-width:28px;font-weight:700}
 .gx-ed-helpcard{top:60px;right:calc(296px + 2 * var(--gx-s4));width:280px;z-index:26}
 .gx-ed-helprow{display:flex;align-items:center;gap:var(--gx-s3);font-size:11px}
 .gx-ed-helprow kbd{flex:0 0 108px;background:var(--gx-field);border:1px solid var(--gx-border);border-radius:4px;padding:3px 6px;font:600 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gx-accent);text-align:center}
+
+/* ---- Ctrl+K command palette ---- */
+.gx-ed-command-shade{position:fixed;inset:0;z-index:40;display:flex;justify-content:center;align-items:flex-start;padding-top:min(18vh,150px);background:rgba(0,9,14,.58);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+.gx-ed-command-card{width:min(560px,calc(100vw - 32px));padding:10px;border:1px solid #285062;border-radius:12px;background:rgba(8,23,31,.97);box-shadow:0 24px 80px rgba(0,0,0,.6);font:12px/1.4 var(--gx-font);color:#dbeff5}
+.gx-ed-command-input{width:100%;padding:11px 13px;border:1px solid #285062;border-radius:8px;background:#071a23;color:#eefbff;font:14px/1.2 var(--gx-font);outline:none}
+.gx-ed-command-input:focus{border-color:var(--gx-accent);box-shadow:0 0 0 3px var(--gx-accent-ring)}
+.gx-ed-command-results{display:flex;flex-direction:column;gap:3px;max-height:340px;overflow:auto;margin-top:8px}
+.gx-ed-command{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;padding:9px 11px;border:1px solid transparent;border-radius:7px;background:transparent;color:#dbeff5;text-align:left;cursor:pointer;font:inherit}
+.gx-ed-command:hover,.gx-ed-command:focus-visible{outline:none;background:#12313e;border-color:#2c6174}
+.gx-ed-command small{color:#75a4b3;font-size:10px}
 
 /* ---- scene tree visibility toggle ---- */
 .gx-ed-eye{flex:none;width:16px;text-align:center;color:var(--gx-accent);opacity:.65;cursor:pointer;border-radius:4px}

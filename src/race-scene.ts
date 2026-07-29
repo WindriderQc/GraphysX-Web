@@ -1899,6 +1899,12 @@ export class RaceScene {
     return result;
   }
 
+  redoAgentWorld(): AgentWorldResult<AgentWorldState> {
+    const result = this.agentWorld?.redo() ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
+    this.afterAgentWorldMutation(result.ok, true);
+    return result;
+  }
+
   pauseAgentWorld(paused: boolean): AgentWorldResult<boolean> {
     const result = this.agentWorld?.setPaused(paused) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
     this.afterAgentWorldMutation(result.ok);

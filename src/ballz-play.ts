@@ -39,6 +39,21 @@ export type BallzPlayOptions = {
   screenToGround?: (clientX: number, clientY: number) => [number, number, number] | null;
 };
 
+type PlayControlMode = "auto" | "keyboard" | "touch" | "gamepad";
+const PLAY_PREFERENCES_KEY = "graphysx.play.preferences.v1";
+
+function readPlayControlMode(): PlayControlMode {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(PLAY_PREFERENCES_KEY) ?? "null") as { controlMode?: unknown } | null;
+    if (value?.controlMode === "keyboard" || value?.controlMode === "touch" || value?.controlMode === "gamepad") return value.controlMode;
+  } catch { /* local preferences are optional */ }
+  return "auto";
+}
+
+function writePlayControlMode(controlMode: PlayControlMode): void {
+  try { window.localStorage.setItem(PLAY_PREFERENCES_KEY, JSON.stringify({ controlMode })); } catch { /* optional */ }
+}
+
 export function mountBallzPlay(
   api: GraphysXAgentWorldApi,
   container: HTMLElement,
@@ -65,6 +80,9 @@ export function mountBallzPlay(
   // the just-loaded rules as well as the pristine entity visibility/transforms.
   let pristineDefinition: AgentWorldDefinition | null = null;
   queueMicrotask(() => { pristineDefinition = api.export(); });
+  let menuPaused = false;
+  let controlMode = readPlayControlMode();
+  container.dataset.gxControlMode = controlMode;
 
   // Self-injecting, so playing works on any route. The editor's stylesheet is loaded lazily and
   // only when someone opens the editor — an agent that calls `levels.play()` on the showroom
@@ -100,7 +118,52 @@ export function mountBallzPlay(
   const hasGhost = getPersonalGhostState()?.available ?? false;
   const baseHint = (initial?.collectibleCount ?? 0) > 0 ? "collect the rings, then reach the finish" : "arrow keys to roll";
   hint.textContent = `${baseHint}${hasGhost ? " · race your personal ghost" : ""}`;
-  hud.append(course, status, hint);
+  const actions = document.createElement("div");
+  actions.className = "gx-bz-hud-actions";
+  const controlSelect = document.createElement("select");
+  controlSelect.className = "gx-bz-control-mode";
+  controlSelect.setAttribute("aria-label", "Preferred play controls");
+  controlSelect.title = "Preferred play controls (all connected inputs remain available)";
+  for (const [value, label] of [["auto", "Controls: Auto"], ["keyboard", "Keyboard + mouse"], ["touch", "Touch controls"], ["gamepad", "Gamepad"]] as const) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    controlSelect.append(option);
+  }
+  controlSelect.value = controlMode;
+  const updateHint = (): void => {
+    const suffix = hasGhost ? " · personal ghost active" : "";
+    const modeHint = controlMode === "gamepad"
+      ? "left stick aim/roll · A jump"
+      : controlMode === "touch"
+        ? "touch arrows to aim/roll · jump button"
+        : steerable
+          ? "← → aim · ↑ roll · ↓ brake · space jump"
+          : "arrow keys to roll";
+    hint.textContent = `${modeHint}${suffix}`;
+  };
+  controlSelect.addEventListener("change", () => {
+    controlMode = controlSelect.value as PlayControlMode;
+    container.dataset.gxControlMode = controlMode;
+    writePlayControlMode(controlMode);
+    updateHint();
+  });
+  const pauseButton = document.createElement("button");
+  pauseButton.type = "button";
+  pauseButton.className = "gx-bz-action gx-bz-pause-toggle";
+  pauseButton.textContent = "Ⅱ Pause";
+  const fullscreenButton = document.createElement("button");
+  fullscreenButton.type = "button";
+  fullscreenButton.className = "gx-bz-action gx-bz-fullscreen";
+  fullscreenButton.textContent = "⛶ Fullscreen";
+  const syncFullscreen = (): void => { fullscreenButton.textContent = document.fullscreenElement ? "⛶ Window" : "⛶ Fullscreen"; };
+  fullscreenButton.addEventListener("click", () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void container.requestFullscreen().catch(() => { hint.textContent = "Fullscreen is unavailable in this browser"; });
+  });
+  document.addEventListener("fullscreenchange", syncFullscreen);
+  actions.append(controlSelect, pauseButton, fullscreenButton);
+  hud.append(course, status, hint, actions);
   // Play is a place you can leave. Without this the only way out of a game is a page reload,
   // which is the sort of dead end that makes a mode feel like a trap rather than a surface.
   if (onExit) {
@@ -109,7 +172,7 @@ export function mountBallzPlay(
     exit.className = "gx-bz-exit";
     exit.textContent = "✕ Exit play";
     exit.addEventListener("click", () => onExit());
-    hud.append(exit);
+    actions.append(exit);
   }
   container.append(hud);
 
@@ -139,9 +202,68 @@ export function mountBallzPlay(
   // in both cases, on purpose: the editor already binds W/E/R to gizmo modes and Delete to
   // remove, so WASD would fight it the moment someone plays a level with the editor open.
   const steerable = !!api.query({ ids: [ballId] })[0]?.steering;
-  if (steerable) {
-    hint.textContent = `← → aim · ↑ roll · ↓ brake · space jump${hasGhost ? " · personal ghost active" : ""}`;
+  updateHint();
+
+  const pauseOverlay = buildPauseMenu();
+  container.append(pauseOverlay);
+  const setMenuPaused = (paused: boolean): void => {
+    if (won || menuPaused === paused) return;
+    menuPaused = paused;
+    api.pause(paused);
+    if (paused && steerable) api.steer(ballId, { thrust: 0, turn: 0 });
+    pauseOverlay.hidden = !paused;
+    pauseButton.textContent = paused ? "▶ Resume" : "Ⅱ Pause";
+  };
+  const restart = (): void => {
+    setMenuPaused(false);
+    const worldId = api.state()?.world.id ?? "";
+    const levelId = worldId.startsWith("ballz-level-") ? worldId.slice("ballz-level-".length) : null;
+    if (levelId) api.levels.play(levelId);
+    else if (pristineDefinition) void reloadPristineScene(api, pristineDefinition);
+  };
+  function buildPauseMenu(): HTMLElement {
+    const overlay = document.createElement("div");
+    overlay.className = "gx-bz-pause";
+    overlay.hidden = true;
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Game paused");
+    const panel = document.createElement("div");
+    panel.className = "gx-bz-pause-panel";
+    const title = document.createElement("strong");
+    title.textContent = "Paused";
+    const subtitle = document.createElement("span");
+    subtitle.textContent = "The simulation and race clock are stopped.";
+    const resume = document.createElement("button");
+    resume.type = "button";
+    resume.textContent = "▶ Resume";
+    resume.dataset.gxPauseAction = "resume";
+    resume.addEventListener("click", () => setMenuPaused(false));
+    const again = document.createElement("button");
+    again.type = "button";
+    again.textContent = "↻ Restart course";
+    again.dataset.gxPauseAction = "restart";
+    // The menu is constructed before `restart` is initialised; defer the lookup to the click.
+    again.addEventListener("click", () => restart());
+    panel.append(title, subtitle, resume, again);
+    if (onExit) {
+      const exit = document.createElement("button");
+      exit.type = "button";
+      exit.textContent = "← Exit to games";
+      exit.dataset.gxPauseAction = "exit";
+      exit.addEventListener("click", onExit);
+      panel.append(exit);
+    }
+    overlay.append(panel);
+    return overlay;
   }
+  pauseButton.addEventListener("click", () => setMenuPaused(!menuPaused));
+  const onPauseKey = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || isFormField(event.target)) return;
+    event.preventDefault();
+    setMenuPaused(!menuPaused);
+  };
+  window.addEventListener("keydown", onPauseKey);
   // The race-start countdown: 3 · 2 · 1 · GO, controls locked until GO, and the run clock
   // re-armed AT go so the time on the board measures driving, not staring at the overlay.
   // A programmatic driver must never be held hostage by presentation, so the countdown
@@ -156,8 +278,8 @@ export function mountBallzPlay(
     });
   }
   const teardownControls = steerable
-    ? mountSteerControls(api, ballId, container, () => won || (!raceStarted && !(api.state()?.paused ?? false)), options)
-    : mountLegacyPushControls(api, ballId, () => won);
+    ? mountSteerControls(api, ballId, container, () => won || menuPaused || (!raceStarted && !(api.state()?.paused ?? false)), options)
+    : mountLegacyPushControls(api, ballId, container, () => won || menuPaused);
 
   // Poll the *run*, not the stream. 200 ms is a HUD refresh rate, and the run it reads is
   // advanced inside the simulation tick — so unlike the old cursor-into-`events()` version,
@@ -177,7 +299,10 @@ export function mountBallzPlay(
 
   function win(totalRings: number, seconds: number, desynced: boolean): void {
     won = true;
+    menuPaused = false;
+    api.pause(false);
     hud.remove();
+    pauseOverlay.remove();
     const worldId = api.state()?.world.id ?? "";
     const levelId = worldId.startsWith("ballz-level-") ? worldId.slice("ballz-level-".length) : null;
     const replayDefinition = pristineDefinition;
@@ -193,8 +318,13 @@ export function mountBallzPlay(
     window.clearInterval(poll);
     teardownCountdown?.();
     teardownControls();
+    window.removeEventListener("keydown", onPauseKey);
+    document.removeEventListener("fullscreenchange", syncFullscreen);
+    if (menuPaused) api.pause(false);
     ghostSession?.dispose();
     hud.remove();
+    pauseOverlay.remove();
+    delete container.dataset.gxControlMode;
     container.querySelector(".gx-bz-win")?.remove();
   };
 }
@@ -302,6 +432,70 @@ function isFormField(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
 }
 
+function mountTouchControls(
+  container: HTMLElement,
+  callbacks: { setKey: (key: string, pressed: boolean) => void; jump?: () => void },
+): () => void {
+  const pad = document.createElement("div");
+  pad.className = "gx-bz-touch";
+  pad.setAttribute("aria-label", "Touch play controls");
+  const specs: ReadonlyArray<[string, string, string]> = [
+    ["ArrowUp", "↑", "Roll forward"],
+    ["ArrowLeft", "←", "Turn left"],
+    ["ArrowDown", "↓", "Brake or roll backward"],
+    ["ArrowRight", "→", "Turn right"],
+  ];
+  const active = new Set<string>();
+  for (const [key, label, ariaLabel] of specs) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `gx-bz-touch-btn gx-bz-touch-${key.slice(5).toLowerCase()}`;
+    button.dataset.gxTouch = key;
+    button.textContent = label;
+    button.setAttribute("aria-label", ariaLabel);
+    const press = (event: PointerEvent): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (active.has(key)) return;
+      active.add(key);
+      try { button.setPointerCapture?.(event.pointerId); } catch { /* synthetic/test pointers have no active capture */ }
+      button.classList.add("gx-bz-touch-on");
+      callbacks.setKey(key, true);
+    };
+    const release = (event: PointerEvent): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!active.delete(key)) return;
+      button.classList.remove("gx-bz-touch-on");
+      callbacks.setKey(key, false);
+    };
+    button.addEventListener("pointerdown", press);
+    button.addEventListener("pointerup", release);
+    button.addEventListener("pointercancel", release);
+    button.addEventListener("lostpointercapture", release);
+    pad.append(button);
+  }
+  if (callbacks.jump) {
+    const jump = document.createElement("button");
+    jump.type = "button";
+    jump.className = "gx-bz-touch-btn gx-bz-touch-jump";
+    jump.dataset.gxTouch = "jump";
+    jump.textContent = "JUMP";
+    jump.setAttribute("aria-label", "Jump");
+    jump.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      callbacks.jump?.();
+    });
+    pad.append(jump);
+  }
+  container.append(pad);
+  return () => {
+    for (const key of active) callbacks.setKey(key, false);
+    pad.remove();
+  };
+}
+
 /**
  * The two-body control scheme (the original BallZ model): ←/→ rotate the fire-arrow, ↑/↓
  * thrust and brake along its heading, Space is the vertical hop; the mouse aims the arrow
@@ -321,13 +515,24 @@ function mountSteerControls(
   isWon: () => boolean,
   options: BallzPlayOptions,
 ): () => void {
-  const held = new Set<string>();
+  const keyboardHeld = new Set<string>();
+  const touchHeld = new Set<string>();
+  let gamepadThrust = 0;
+  let gamepadTurn = 0;
   const axisInputs = (): { thrust: number; turn: number } => ({
-    thrust: (held.has("ArrowUp") ? 1 : 0) - (held.has("ArrowDown") ? 1 : 0),
-    turn: (held.has("ArrowRight") ? 1 : 0) - (held.has("ArrowLeft") ? 1 : 0),
+    thrust: keyboardHeld.has("ArrowUp") || touchHeld.has("ArrowUp")
+      ? 1
+      : keyboardHeld.has("ArrowDown") || touchHeld.has("ArrowDown")
+        ? -1
+        : gamepadThrust,
+    turn: keyboardHeld.has("ArrowRight") || touchHeld.has("ArrowRight")
+      ? 1
+      : keyboardHeld.has("ArrowLeft") || touchHeld.has("ArrowLeft")
+        ? -1
+        : gamepadTurn,
   });
   const sendAxes = (): void => {
-    api.steer(ballId, axisInputs());
+    api.steer(ballId, isWon() ? { thrust: 0, turn: 0 } : axisInputs());
   };
 
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -341,18 +546,21 @@ function mountSteerControls(
     }
     if (!/^Arrow(Up|Down|Left|Right)$/.test(event.key)) return;
     event.preventDefault();
-    if (held.has(event.key) || isWon()) return;
-    held.add(event.key);
+    if (keyboardHeld.has(event.key) || isWon()) return;
+    keyboardHeld.add(event.key);
     sendAxes();
   };
   const onKeyUp = (event: KeyboardEvent): void => {
-    if (!held.delete(event.key)) return;
+    if (!keyboardHeld.delete(event.key)) return;
     sendAxes();
   };
   let mouseDriving = false;
   // A defocused tab must not leave a key held: zero every input on blur.
   const onBlur = (): void => {
-    held.clear();
+    keyboardHeld.clear();
+    touchHeld.clear();
+    gamepadThrust = 0;
+    gamepadTurn = 0;
     mouseDriving = false;
     api.steer(ballId, { thrust: 0, turn: 0 });
   };
@@ -410,7 +618,33 @@ function mountSteerControls(
   container.addEventListener("pointermove", onPointerMove);
   container.addEventListener("pointerdown", onPointerDown);
   container.addEventListener("pointerup", onPointerUp);
+  const teardownTouch = mountTouchControls(container, {
+    jump: () => { if (!isWon()) api.steer(ballId, { jump: 1 }); },
+    setKey: (key, pressed) => {
+      if (pressed) touchHeld.add(key); else touchHeld.delete(key);
+      sendAxes();
+    },
+  });
+  let gamepadJumpHeld = false;
+  let gamepadActive = false;
+  const deadzone = (value: number): number => Math.abs(value) < 0.18 ? 0 : Math.max(-1, Math.min(1, value));
+  const gamepadPoll = window.setInterval(() => {
+    const pad = navigator.getGamepads?.().find((candidate) => candidate?.connected) ?? null;
+    const turn = pad ? deadzone((pad.axes[0] ?? 0) + (pad.buttons[15]?.pressed ? 1 : 0) - (pad.buttons[14]?.pressed ? 1 : 0)) : 0;
+    const thrust = pad ? deadzone(-(pad.axes[1] ?? 0) + (pad.buttons[12]?.pressed ? 1 : 0) - (pad.buttons[13]?.pressed ? 1 : 0)) : 0;
+    const jump = !!pad?.buttons[0]?.pressed;
+    if (turn !== gamepadTurn || thrust !== gamepadThrust || gamepadActive !== !!pad) {
+      gamepadTurn = turn;
+      gamepadThrust = thrust;
+      gamepadActive = !!pad;
+      sendAxes();
+    }
+    if (jump && !gamepadJumpHeld && !isWon()) api.steer(ballId, { jump: 1 });
+    gamepadJumpHeld = jump;
+  }, 50);
   return () => {
+    window.clearInterval(gamepadPoll);
+    teardownTouch();
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("blur", onBlur);
@@ -418,7 +652,7 @@ function mountSteerControls(
     container.removeEventListener("pointerdown", onPointerDown);
     container.removeEventListener("pointerup", onPointerUp);
     // Leave nothing thrusting after the layer is gone — the entity outlives the HUD.
-    if (held.size > 0 || mouseDriving) api.steer(ballId, { thrust: 0, turn: 0 });
+    if (keyboardHeld.size > 0 || touchHeld.size > 0 || gamepadActive || mouseDriving) api.steer(ballId, { thrust: 0, turn: 0 });
   };
 }
 
@@ -434,12 +668,14 @@ function mountSteerControls(
  * "fighting" the controls. Capping per-axis means the opposing key always brakes and the
  * perpendicular key always turns; only the already-maxed direction stops adding.
  */
-function mountLegacyPushControls(api: GraphysXAgentWorldApi, ballId: string, isWon: () => boolean): () => void {
+function mountLegacyPushControls(api: GraphysXAgentWorldApi, ballId: string, container: HTMLElement, isWon: () => boolean): () => void {
   const pushBy = new Map<string, string>(PUSH_DIRECTIONS.map((direction) => [direction.key, direction.id]));
   const dirById = new Map<string, readonly [number, number, number]>(
     PUSH_DIRECTIONS.map((direction) => [direction.id, direction.vector]),
   );
-  const held = new Set<string>();
+  const keyboardHeld = new Set<string>();
+  const touchHeld = new Set<string>();
+  const gamepadHeld = new Set<string>();
   const STEER_HZ = 30;
   const SPEED_CAP = 6.5; // m/s along a single axis; the opposing key still brakes past this.
   const pushIfUnderCap = (interactionId: string, velocity: readonly number[] | undefined): void => {
@@ -456,17 +692,18 @@ function mountLegacyPushControls(api: GraphysXAgentWorldApi, ballId: string, isW
     if (!interactionId) return;
     event.preventDefault();
     // Fire once on the initial press (not on OS auto-repeat); the held loop keeps accelerating.
-    if (!held.has(event.key)) {
-      held.add(event.key);
+    if (!keyboardHeld.has(event.key)) {
+      keyboardHeld.add(event.key);
       const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
       pushIfUnderCap(interactionId, velocity);
     }
   };
   const onKeyUp = (event: KeyboardEvent): void => {
-    if (pushBy.has(event.key)) held.delete(event.key);
+    if (pushBy.has(event.key)) keyboardHeld.delete(event.key);
   };
-  const onBlur = (): void => held.clear(); // a defocused tab must not leave a key stuck.
+  const onBlur = (): void => { keyboardHeld.clear(); touchHeld.clear(); gamepadHeld.clear(); }; // a defocused tab must not leave a key stuck.
   const steer = window.setInterval(() => {
+    const held = new Set([...keyboardHeld, ...touchHeld, ...gamepadHeld]);
     if (isWon() || held.size === 0) return;
     const velocity = api.query({ ids: [ballId] })[0]?.physics?.linearVelocity;
     for (const key of held) {
@@ -477,8 +714,31 @@ function mountLegacyPushControls(api: GraphysXAgentWorldApi, ballId: string, isW
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", onBlur);
+  const press = (target: Set<string>, key: string): void => {
+    if (target.has(key) || isWon()) return;
+    target.add(key);
+    const interactionId = pushBy.get(key);
+    if (interactionId) pushIfUnderCap(interactionId, api.query({ ids: [ballId] })[0]?.physics?.linearVelocity);
+  };
+  const teardownTouch = mountTouchControls(container, {
+    setKey: (key, pressed) => { if (pressed) press(touchHeld, key); else touchHeld.delete(key); },
+  });
+  const gamepadPoll = window.setInterval(() => {
+    const pad = navigator.getGamepads?.().find((candidate) => candidate?.connected) ?? null;
+    const x = pad?.axes[0] ?? 0;
+    const y = pad?.axes[1] ?? 0;
+    const wanted = new Set<string>();
+    if (x < -0.28 || pad?.buttons[14]?.pressed) wanted.add("ArrowLeft");
+    if (x > 0.28 || pad?.buttons[15]?.pressed) wanted.add("ArrowRight");
+    if (y < -0.28 || pad?.buttons[12]?.pressed) wanted.add("ArrowUp");
+    if (y > 0.28 || pad?.buttons[13]?.pressed) wanted.add("ArrowDown");
+    for (const key of wanted) press(gamepadHeld, key);
+    for (const key of [...gamepadHeld]) if (!wanted.has(key)) gamepadHeld.delete(key);
+  }, 50);
   return () => {
     window.clearInterval(steer);
+    window.clearInterval(gamepadPoll);
+    teardownTouch();
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("blur", onBlur);
@@ -653,11 +913,26 @@ const BALLZ_PLAY_CSS = `
 .gx-bz-course{color:var(--gx-accent);font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase}
 .gx-bz-status{color:var(--gx-ink);letter-spacing:.08em;font-size:13px;font-weight:650}
 .gx-bz-hint{color:var(--gx-ink-faint);font-size:10px;letter-spacing:.06em}
+.gx-bz-hud-actions{display:flex;align-items:center;justify-content:center;gap:5px;pointer-events:auto;margin-top:3px}
+.gx-bz-control-mode{max-width:145px;padding:4px 6px;border:1px solid var(--gx-accent-ring);border-radius:5px;background:rgba(10,22,30,.8);color:var(--gx-ink-soft);font:10px/1 var(--gx-font)}
 /* The HUD is pointer-events:none so it never eats a click meant for the scene; the one
    interactive child opts back in. */
-.gx-bz-exit{pointer-events:auto;margin-top:4px;background:rgba(10,22,30,.72);border:1px solid var(--gx-accent-glow);
+.gx-bz-exit,.gx-bz-action{pointer-events:auto;background:rgba(10,22,30,.72);border:1px solid var(--gx-accent-glow);
   border-radius:4px;color:var(--gx-ink-soft);cursor:pointer;font:10px/1 var(--gx-font);padding:5px 9px}
-.gx-bz-exit:hover{background:rgba(18,40,52,.86);border-color:var(--gx-accent)}
+.gx-bz-exit:hover,.gx-bz-action:hover{background:rgba(18,40,52,.86);border-color:var(--gx-accent)}
+.gx-bz-pause{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(2,10,16,.7);backdrop-filter:blur(7px);font-family:var(--gx-font)}
+.gx-bz-pause[hidden]{display:none}
+.gx-bz-pause-panel{width:min(330px,calc(100vw - 32px));display:flex;flex-direction:column;gap:10px;padding:26px;border:1px solid var(--gx-accent-glow);border-radius:15px;background:rgba(8,23,31,.97);box-shadow:0 24px 70px rgba(0,0,0,.58);text-align:center}
+.gx-bz-pause-panel strong{color:var(--gx-accent);font-size:26px}.gx-bz-pause-panel span{color:var(--gx-ink-faint);font-size:11px;margin-bottom:4px}
+.gx-bz-pause-panel button{cursor:pointer;padding:10px 14px;border:1px solid var(--gx-accent-ring);border-radius:9px;background:rgba(16,38,50,.92);color:var(--gx-ink);font:600 12px/1.2 var(--gx-font)}
+.gx-bz-pause-panel button:hover,.gx-bz-pause-panel button:focus-visible{outline:none;border-color:var(--gx-accent);background:rgba(25,58,72,.96)}
+.gx-bz-touch{position:absolute;left:18px;bottom:18px;z-index:12;display:none;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(2,58px);gap:7px;pointer-events:auto;touch-action:none;user-select:none}
+[data-gx-control-mode="touch"] .gx-bz-touch{display:grid}
+.gx-bz-touch-btn{border:1px solid rgba(120,240,208,.5);border-radius:14px;background:rgba(7,25,34,.78);color:var(--gx-ink);box-shadow:0 5px 18px rgba(0,0,0,.3);font:800 24px/1 var(--gx-font);touch-action:none;-webkit-tap-highlight-color:transparent}
+.gx-bz-touch-btn.gx-bz-touch-on{background:var(--gx-accent-fill);border-color:var(--gx-accent);transform:scale(.96)}
+.gx-bz-touch-up{grid-column:2;grid-row:1}.gx-bz-touch-left{grid-column:1;grid-row:2}.gx-bz-touch-down{grid-column:2;grid-row:2}.gx-bz-touch-right{grid-column:3;grid-row:2}
+.gx-bz-touch-jump{position:absolute;left:calc(100vw - 120px);bottom:5px;width:84px;height:84px;border-radius:50%;font-size:13px;color:#1b0d02;background:linear-gradient(180deg,#ffd24d,#ff8a2a);border-color:#ffe073}
+@media(pointer:coarse){[data-gx-control-mode="auto"] .gx-bz-touch{display:grid}}
 /* The completion panel. Centred and modal-feeling but not a full backdrop — the level you just
    beat stays visible behind it, which is the reward. */
 .gx-bz-win{position:absolute;left:50%;top:34%;transform:translate(-50%,-50%);z-index:8;
@@ -682,7 +957,7 @@ const BALLZ_PLAY_CSS = `
 .gx-bz-win-btn:hover{background:rgba(24,56,72,.96);border-color:var(--gx-accent)}
 .gx-bz-win-again{background:linear-gradient(180deg,#2f9e7f,var(--gx-accent-fill));border-color:var(--gx-life);color:var(--gx-ink)}
 .gx-bz-win-again:hover{filter:brightness(1.08)}
-@media (max-width:640px){.gx-bz-hud{top:10px;min-width:230px;padding:8px 12px}.gx-bz-status{font-size:11px}}
+@media (max-width:640px){.gx-bz-hud{top:8px;min-width:230px;max-width:calc(100vw - 20px);padding:7px 10px}.gx-bz-status{font-size:11px}.gx-bz-hint{font-size:9px}.gx-bz-hud-actions{flex-wrap:wrap}.gx-bz-touch{left:10px;bottom:10px;grid-template-columns:repeat(3,50px);grid-template-rows:repeat(2,50px)}}
 /* The race-start countdown. Centre of the arena view, never blocking a click (the scene is
    locked anyway), digits popping like a starting light. GO flashes green and fades. */
 .gx-bz-count{position:absolute;inset:0;z-index:7;display:flex;align-items:center;justify-content:center;

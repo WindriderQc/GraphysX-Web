@@ -2,6 +2,7 @@ import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { createLevelThumbnail, createSceneThumbnail, SHELF_THUMBNAIL_CSS } from "./shelf-thumbnails";
 import { BALLZ_MENU_LEVEL_IDS, mountBallzMenu } from "./ballz-menu";
 import { mountArchiveCup, type ArchiveCupCourse } from "./archive-cup";
+import { mountShelfPersonalization, SHELF_PERSONALIZATION_CSS } from "./shelf-personalization";
 
 /**
  * The "Games & Playgrounds" front-door shelf.
@@ -120,6 +121,9 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
     cup.type = "button";
     cup.className = "gx-shelf-cup";
     cup.dataset.gameId = "archive-cup";
+    cup.dataset.shelfKey = "game:archive-cup";
+    cup.dataset.shelfLabel = "Archive Cup";
+    cup.dataset.shelfSearch = "Archive Cup nine recovered courses campaign tour medals personal ghosts";
     const cupMark = document.createElement("span");
     cupMark.className = "gx-shelf-cup-mark";
     cupMark.textContent = "Archive Cup";
@@ -142,6 +146,9 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   hero.type = "button";
   hero.className = "gx-shelf-hero";
   hero.dataset.gameId = "ballz";
+  hero.dataset.shelfKey = "game:ballz";
+  hero.dataset.shelfLabel = "BallZ";
+  hero.dataset.shelfSearch = "BallZ revival fire arrow caged ball rings tours";
   const heroMark = document.createElement("span");
   heroMark.className = "gx-shelf-hero-mark";
   heroMark.textContent = "BallZ";
@@ -169,6 +176,9 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
     row.type = "button";
     row.className = "gx-shelf-row";
     row.dataset.courseId = course.id;
+    row.dataset.shelfKey = `game:${course.id}`;
+    row.dataset.shelfLabel = course.label;
+    row.dataset.shelfSearch = `${course.label} ${course.meta}`;
     const visual = document.createElement("span");
     visual.className = "gx-shelf-visual";
     visual.append(createSceneThumbnail(course.id, course.label));
@@ -215,6 +225,8 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
     row.type = "button";
     row.className = "gx-shelf-row";
     row.dataset.levelId = summary.id;
+    row.dataset.shelfKey = `game:${summary.id}`;
+    row.dataset.shelfLabel = summary.label || summary.id;
 
     const visual = document.createElement("span");
     visual.className = "gx-shelf-visual";
@@ -239,6 +251,7 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
       (summary.counts?.finish ?? 0) > 0 ? "finish" : null,
       playable ? null : "no start — layout only",
     ].filter(Boolean).join("  ·  ");
+    row.dataset.shelfSearch = `${summary.label || summary.id} ${meta.textContent}`;
 
     copy.append(name, meta);
     row.append(visual, copy);
@@ -256,6 +269,7 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   }
 
   card.append(head, blurb, list);
+  mountShelfPersonalization(card, list, { label: "games", placeholder: "Search games, courses, and levels…" });
   overlay.append(card);
   container.append(overlay);
 
@@ -282,6 +296,7 @@ function injectStyleOnce(): void {
 
 const SHELF_CSS = `
 ${SHELF_THUMBNAIL_CSS}
+${SHELF_PERSONALIZATION_CSS}
 .gx-shelf{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
   background:var(--gx-scrim);font-family:var(--gx-font);padding:24px}
 .gx-shelf-card{width:min(900px,100%);max-height:86vh;display:flex;flex-direction:column;gap:12px;

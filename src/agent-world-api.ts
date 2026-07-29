@@ -182,6 +182,7 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
       reset: () => runtime.resetRun(),
     },
     undo: () => runtime.undo(),
+    redo: () => runtime.redo(),
     select: (ids) => runtime.select(ids),
     query: (query) => runtime.query(query),
     observe: (query) => runtime.observe(query),

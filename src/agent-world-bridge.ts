@@ -10,7 +10,7 @@ const TOOL_PATHS = [
   "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "exportLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select",
   "sounds", "flocks", "crowds", "forceFields", "formulas", "dna", "surfaces",
   "attachBehavior", "detachBehavior", "interact", "steer", "prefabs", "spawnPrefab", "starters", "loadStarter",
-  "transaction", "commit", "history", "events", "undo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
+  "transaction", "commit", "history", "events", "undo", "redo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
   "rules.get", "rules.set", "rules.status", "rules.standings", "rules.reset",
   "media.schema", "media.status", "media.list", "media.refresh", "media.browse", "media.import", "media.importSky", "media.register", "media.remove", "media.terrainHeights",
   "levels.schema", "levels.levelSchema", "levels.version", "levels.capabilities",
@@ -21,7 +21,7 @@ const TOOL_PATHS = [
 
 const MUTATING_TOOLS = new Set<string>([
   "open", "demo", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select", "attachBehavior", "detachBehavior",
-  "interact", "steer", "spawnPrefab", "loadStarter", "transaction", "commit", "undo", "pause", "step", "save", "load",
+  "interact", "steer", "spawnPrefab", "loadStarter", "transaction", "commit", "undo", "redo", "pause", "step", "save", "load",
   "rules.set", "rules.reset",
   "media.refresh", "media.import", "media.importSky", "media.register", "media.remove",
   "levels.create", "levels.remove", "levels.open", "levels.patch", "levels.fill", "levels.resize", "levels.configureRace", "levels.transaction",
@@ -55,6 +55,8 @@ const TOOL_SUMMARIES: Record<string, string> = {
   removeJoint: "Remove a scene-authored joint by stable ID without removing its bodies.",
   select: "Select stable entity IDs in the shared human/agent editor.",
   transaction: "Apply multiple world commands atomically.",
+  undo: "Restore the previous world definition and retain the current one for redo.",
+  redo: "Reapply the next undone world definition; any fresh edit clears this branch.",
   commit: "Apply an actor-attributed, revision-guarded change set.",
   query: "Find entities by ID, type, tag, label, or world-space radius.",
   observe: "Read world state with optional query matches.",
