@@ -36,6 +36,8 @@
     "smoke:ppl": "node scripts/smoke-ppl.mjs",
     "smoke:level3": "node scripts/smoke-level3.mjs",
     "audit:revival-debt": "node scripts/audit-revival-debt.mjs",
+    "audit:archive-parity": "node scripts/audit-archive-parity.mjs",
+    "assets:archive-census": "node scripts/generate-archive-parity.mjs",
     "smoke:live-release": "node scripts/smoke-live-release.mjs",
     "smoke:rapier-race": "node scripts/smoke-rapier-race.mjs",
     "smoke:store-auth": "node scripts/smoke-store-auth.mjs",

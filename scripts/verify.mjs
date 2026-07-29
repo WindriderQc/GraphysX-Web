@@ -77,6 +77,7 @@ const SMOKES = [
   { name: "ppl", script: "scripts/smoke-ppl.mjs", covers: "ppl.shade: exact HLSL + ball normal, compiled parallax/Lambert translation, active ring binding, live patch + round-trip" },
   { name: "level3", script: "scripts/smoke-level3.mjs", covers: "Archive Level 3 v2: exact ASCII catwalk census, Alien02 catch floor, NightSky, LINE gates, three laps, round-trip" },
   { name: "revival-ledgers", script: "scripts/audit-revival-debt.mjs", covers: "debt sweep: pinned 22-item register plus all five NOT_REVIVED inventories checked against HEAD" },
+  { name: "archive-parity", script: "scripts/audit-archive-parity.mjs", covers: "complete archive census: every media path and functionality record has a hash-backed disposition" },
   { name: "rapier-race", script: "scripts/smoke-rapier-race.mjs", covers: "Rapier RaceScene: Piste vehicle motion, steering, finite state, browser errors" },
   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
   { name: "dna", script: "scripts/smoke-dna.mjs", covers: "DNA forest: deterministic genome drift, preset fidelity, node-level (no browser)" },
