@@ -5,7 +5,7 @@ import { archiveSkyboxUrls, type ArchiveSkyboxUrls } from "./archive-skybox";
  * (media-library sky sets registered while a store is running) without erasing the
  * literal union from tooling. Same shape as `AgentWorldTextureId`.
  */
-export type AgentWorldSkyId = "clearblue" | "clearblue-hd" | "clearnight" | "lostvalley" | "nightsky" | "skyx" | "winter" | (string & {});
+export type AgentWorldSkyId = "clearblue" | "ballz18-clear-sky" | "clearnight" | "lostvalley" | "nightsky" | "skyx" | "winter" | (string & {});
 
 type AgentWorldSkyCommon = {
   id: string;
@@ -21,6 +21,8 @@ type AgentWorldSkyCommon = {
   horizonColor: string;
   /** Provenance. Curated entries name the archive; imports name their datalake folder. */
   source: string;
+  /** Pixel/axis convention used to turn the six files into Three's cube-map slots. */
+  orientation?: "archive-tv3d" | "native-cubemap";
 };
 
 /**
@@ -35,7 +37,9 @@ type AgentWorldSkyCommon = {
  * **Imported** sets cannot use that form at all: the datalake names faces `Back.jpg` /
  * `up.bmp` / `Clouds_PosX.dds` with inconsistent case, extensions and conventions, and
  * the asset store re-slugs every filename under `/assets/files/{id}/{name}` anyway. They
- * therefore carry six explicit URLs, already in three's `+X,-X,+Y,-Y,+Z,-Z` order.
+ * therefore carry six explicit URLs, already in three's `+X,-X,+Y,-Y,+Z,-Z` order,
+ * plus an orientation tag because directional TV3D faces need pole correction while
+ * axial `_PosX.._NegZ` faces do not.
  *
  * The useful consequence: an imported sky has no `basePath` field to scrape, so it is
  * *structurally* incapable of leaking into the static release manifest — the guarantee
@@ -66,14 +70,15 @@ export const GRAPHYSX_AGENT_WORLD_SKIES = [
     source: "GraphysX archive"
   },
   {
-    id: "clearblue-hd",
-    label: "Clear Blue HD",
-    basePath: "/assets/sky/clearblue-hd",
-    extension: "jpg",
-    description: "The archived ClearBlue through a disclosed 2x clarity pass — classic Level 1's recorded sky, legible at play angles. Adapted pixels; the recovered set stays at clearblue.",
-    resolution: 1024,
-    horizonColor: "#aec8dc",
-    source: "GraphysX archive clearblue, adapted by scripts/vendor-sky-clearblue-hd.mjs (2x upscale, unsharp, mild tone lift)"
+    id: "ballz18-clear-sky",
+    label: "BallZ18 Clear Sky",
+    basePath: "/assets/sky/ballz18-clear-sky",
+    extension: "png",
+    description: "Exact authored 2048² BallZ18 six-sided sky. Its Unity material and face bindings survive; no surviving scene binds that material, so current scene use is explicitly modern.",
+    resolution: 2048,
+    horizonColor: "#b8d5e4",
+    source: "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky (byte-identical PNGs; see PROVENANCE.json)",
+    orientation: "native-cubemap"
   },
   {
     id: "lostvalley",
@@ -161,11 +166,22 @@ export function resolveAgentWorldSky(id: string): AgentWorldSkyDescriptor | null
 /**
  * The six face URLs for a set, in three's `+X,-X,+Y,-Y,+Z,-Z` order.
  *
- * Imports carry theirs explicitly; curated sets derive them through `archiveSkyboxUrls`,
- * which is where the TV3D left/right swap lives. Callers must not rebuild either form by
- * hand — re-deriving that order per call site is how the raw, discontinuous one creeps
- * back in, which is the drift `archive-skybox.ts` was written to stop.
+ * Imports carry theirs explicitly. Curated TV3D sets derive them through
+ * `archiveSkyboxUrls`, where the left/right swap lives; native six-sided sets use the
+ * conventional right/left ordering and retain their already-continuous poles. Callers
+ * must not rebuild either form by hand.
  */
 export function agentWorldSkyFaceUrls(descriptor: AgentWorldSkyDescriptor): ArchiveSkyboxUrls {
-  return descriptor.faceUrls ?? archiveSkyboxUrls(descriptor.basePath, descriptor.extension);
+  if (descriptor.faceUrls) return descriptor.faceUrls;
+  if (descriptor.orientation === "native-cubemap") {
+    return [
+      `${descriptor.basePath}/right.${descriptor.extension}`,
+      `${descriptor.basePath}/left.${descriptor.extension}`,
+      `${descriptor.basePath}/up.${descriptor.extension}`,
+      `${descriptor.basePath}/down.${descriptor.extension}`,
+      `${descriptor.basePath}/front.${descriptor.extension}`,
+      `${descriptor.basePath}/back.${descriptor.extension}`,
+    ];
+  }
+  return archiveSkyboxUrls(descriptor.basePath, descriptor.extension);
 }

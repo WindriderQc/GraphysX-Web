@@ -345,7 +345,7 @@ if (mode === "legacy") {
               id: "archive-day-night-rig",
               label: "Archive Day / Night Observatory",
               summary: "The recovered atmosphere equations driving two scene-authored sky and HDRI looks over an editable celestial instrument.",
-              meta: "12-second cycle  ·  recovered curves  ·  ClearBlue HD ↔ NightSky",
+              meta: "12-second cycle  ·  recovered curves  ·  BallZ18 Clear Sky ↔ NightSky",
               open: async () => {
                 const { composeArchiveDayNight, frameArchiveDayNight } = await import("./archive-day-night-scene");
                 showroomEnvironment?.();

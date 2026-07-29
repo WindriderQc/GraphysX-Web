@@ -1,6 +1,6 @@
 {
   "schema": "graphysx.archive-parity/v1",
-  "generatedAt": "2026-07-29T02:51:15.569Z",
+  "generatedAt": "2026-07-29T03:13:40.685Z",
   "scope": {
     "roots": [
       {
@@ -230,14 +230,14 @@
     "mediaByDisposition": {
       "ALIASED": 2870,
       "OUT OF SCOPE": 1982,
-      "REVIVED": 536,
-      "SOURCE-ONLY": 3430,
+      "REVIVED": 545,
+      "SOURCE-ONLY": 3421,
       "UNRECOVERABLE": 5
     },
-    "functionalityRecords": 70,
+    "functionalityRecords": 71,
     "functionalityByDisposition": {
       "OUT OF SCOPE": 1,
-      "REVIVED": 63,
+      "REVIVED": 64,
       "SOURCE-ONLY": 5,
       "SUPERSEDED": 1
     }
@@ -1277,6 +1277,23 @@
       ],
       "destination": null,
       "note": "Repeated exact filename and parameter searches found no surviving loader, material assignment or input binding."
+    },
+    {
+      "id": "sky-ballz18-authored-clear",
+      "kind": "media:skybox",
+      "label": "Authored high-resolution BallZ18 Clear Sky",
+      "disposition": "REVIVED",
+      "archiveEvidence": [
+        "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky (six 2048px PNGs)",
+        "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky.mat"
+      ],
+      "currentEvidence": [
+        "src/agent-world-skies.ts",
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json",
+        "scripts/smoke-ballz18-sky.mjs"
+      ],
+      "destination": "Scene Editor > Environment > Sky; Browse Scenes > Archive Day / Night Observatory",
+      "note": "All six PNGs ship byte-identically with SHA-256 provenance and the surviving Unity face mapping. No surviving scene binds the Unity material, so the observatory endpoint is explicitly a modern binding."
     },
     {
       "id": "surface-in-world-canvas",
@@ -12608,10 +12625,13 @@
       "sha256": "81d5e7b5e23141a254227b293aa12f7c30b0a1a7b4f7acc7b8a2e19e6908b27b",
       "sourceRole": "authored-or-unresolved",
       "currentDestinations": [],
-      "currentEvidence": [],
+      "currentEvidence": [
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json",
+        "scripts/smoke-ballz18-sky.mjs"
+      ],
       "canonicalSourcePath": "datalake-repo/StockRoom/Left.png",
-      "disposition": "SOURCE-ONLY",
-      "reason": "Unique non-empty archive payload found, but no current registry/destination or defensible player-visible binding was found."
+      "disposition": "REVIVED",
+      "reason": "The current product registry or implementation names this source; conversions/adaptations are documented at that destination."
     },
     {
       "sourcePath": "datalake-repo/StockRoom/Level.Slides.TVM",
@@ -12820,7 +12840,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-ballz.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "src/archive-ballz-levels.ts",
         "src/archive-content.ts",
         "src/archive-level3-scene.ts",
@@ -13254,10 +13273,13 @@
       "sha256": "0161e5bef656418c4cb79e98aa70448adb3c8facf74ae7e5531414d339da4293",
       "sourceRole": "authored-or-unresolved",
       "currentDestinations": [],
-      "currentEvidence": [],
+      "currentEvidence": [
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json",
+        "scripts/smoke-ballz18-sky.mjs"
+      ],
       "canonicalSourcePath": "datalake-repo/StockRoom/Right.png",
-      "disposition": "SOURCE-ONLY",
-      "reason": "Unique non-empty archive payload found, but no current registry/destination or defensible player-visible binding was found."
+      "disposition": "REVIVED",
+      "reason": "The current product registry or implementation names this source; conversions/adaptations are documented at that destination."
     },
     {
       "sourcePath": "datalake-repo/StockRoom/ring.tvm",
@@ -13667,7 +13689,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -13792,7 +13813,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -14034,7 +14054,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -14141,7 +14160,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -14250,7 +14268,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -14391,7 +14408,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -28570,7 +28586,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -28695,7 +28710,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -29143,7 +29157,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -29284,7 +29297,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -40209,7 +40221,10 @@
       "sha256": "81d5e7b5e23141a254227b293aa12f7c30b0a1a7b4f7acc7b8a2e19e6908b27b",
       "sourceRole": "authored-or-unresolved",
       "currentDestinations": [],
-      "currentEvidence": [],
+      "currentEvidence": [
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json",
+        "scripts/smoke-ballz18-sky.mjs"
+      ],
       "canonicalSourcePath": "datalake-repo/StockRoom/Left.png",
       "disposition": "ALIASED",
       "reason": "Byte-identical SHA-256 alias of datalake-repo/StockRoom/Left.png."
@@ -40421,7 +40436,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-ballz.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "src/archive-ballz-levels.ts",
         "src/archive-content.ts",
         "src/archive-level3-scene.ts",
@@ -41079,7 +41093,10 @@
       "sha256": "0161e5bef656418c4cb79e98aa70448adb3c8facf74ae7e5531414d339da4293",
       "sourceRole": "authored-or-unresolved",
       "currentDestinations": [],
-      "currentEvidence": [],
+      "currentEvidence": [
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json",
+        "scripts/smoke-ballz18-sky.mjs"
+      ],
       "canonicalSourcePath": "datalake-repo/StockRoom/Right.png",
       "disposition": "ALIASED",
       "reason": "Byte-identical SHA-256 alias of datalake-repo/StockRoom/Right.png."
@@ -41492,7 +41509,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -41617,7 +41633,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -41859,7 +41874,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -41966,7 +41980,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -42075,7 +42088,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -42216,7 +42228,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -87804,10 +87815,13 @@
       "sha256": "f56ade66672526177f8c6a0e67ef61b0c8b2952610184897f2feabb97f27c55f",
       "sourceRole": "authored-or-unresolved",
       "currentDestinations": [],
-      "currentEvidence": [],
+      "currentEvidence": [
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json",
+        "scripts/archive-parity-scope.mjs"
+      ],
       "canonicalSourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky.mat",
-      "disposition": "SOURCE-ONLY",
-      "reason": "Unique non-empty archive payload found, but no current registry/destination or defensible player-visible binding was found."
+      "disposition": "REVIVED",
+      "reason": "The current product registry or implementation names this source; conversions/adaptations are documented at that destination."
     },
     {
       "sourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outback.png",
@@ -87819,11 +87833,15 @@
       "bytes": 1801656,
       "sha256": "6fe36375a765b977aef5eb4d533ba7c28a6edbe9d5e4789e182649d5d379a2f3",
       "sourceRole": "authored-or-unresolved",
-      "currentDestinations": [],
-      "currentEvidence": [],
+      "currentDestinations": [
+        "public/assets/sky/ballz18-clear-sky/back.png"
+      ],
+      "currentEvidence": [
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json"
+      ],
       "canonicalSourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outback.png",
-      "disposition": "SOURCE-ONLY",
-      "reason": "Unique non-empty archive payload found, but no current registry/destination or defensible player-visible binding was found."
+      "disposition": "REVIVED",
+      "reason": "Exact bytes ship in the current lazy asset/source registry."
     },
     {
       "sourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outdown.png",
@@ -87835,11 +87853,15 @@
       "bytes": 1226155,
       "sha256": "7b399fbe2a4bb670afa3b7ce5353513ea061bf0e850d4dda50ffd150305ee551",
       "sourceRole": "authored-or-unresolved",
-      "currentDestinations": [],
-      "currentEvidence": [],
+      "currentDestinations": [
+        "public/assets/sky/ballz18-clear-sky/down.png"
+      ],
+      "currentEvidence": [
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json"
+      ],
       "canonicalSourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outdown.png",
-      "disposition": "SOURCE-ONLY",
-      "reason": "Unique non-empty archive payload found, but no current registry/destination or defensible player-visible binding was found."
+      "disposition": "REVIVED",
+      "reason": "Exact bytes ship in the current lazy asset/source registry."
     },
     {
       "sourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outfront.png",
@@ -87851,11 +87873,15 @@
       "bytes": 1810087,
       "sha256": "ab9fcdd347782b72eb1e4d64af61f4a7ebaf11c37e243693b014916e465f95d3",
       "sourceRole": "authored-or-unresolved",
-      "currentDestinations": [],
-      "currentEvidence": [],
+      "currentDestinations": [
+        "public/assets/sky/ballz18-clear-sky/front.png"
+      ],
+      "currentEvidence": [
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json"
+      ],
       "canonicalSourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outfront.png",
-      "disposition": "SOURCE-ONLY",
-      "reason": "Unique non-empty archive payload found, but no current registry/destination or defensible player-visible binding was found."
+      "disposition": "REVIVED",
+      "reason": "Exact bytes ship in the current lazy asset/source registry."
     },
     {
       "sourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outleft.png",
@@ -87867,11 +87893,15 @@
       "bytes": 1556101,
       "sha256": "63af16f2b9e7bf063edff0d888382ae2fe56e7b6e2839ee0ad878b676daee21c",
       "sourceRole": "authored-or-unresolved",
-      "currentDestinations": [],
-      "currentEvidence": [],
+      "currentDestinations": [
+        "public/assets/sky/ballz18-clear-sky/left.png"
+      ],
+      "currentEvidence": [
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json"
+      ],
       "canonicalSourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outleft.png",
-      "disposition": "SOURCE-ONLY",
-      "reason": "Unique non-empty archive payload found, but no current registry/destination or defensible player-visible binding was found."
+      "disposition": "REVIVED",
+      "reason": "Exact bytes ship in the current lazy asset/source registry."
     },
     {
       "sourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outright.png",
@@ -87883,11 +87913,15 @@
       "bytes": 1771525,
       "sha256": "bbc085db7c22940ec6364f65ced7cd00112e09f948fdcdf7861222295caff8d6",
       "sourceRole": "authored-or-unresolved",
-      "currentDestinations": [],
-      "currentEvidence": [],
+      "currentDestinations": [
+        "public/assets/sky/ballz18-clear-sky/right.png"
+      ],
+      "currentEvidence": [
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json"
+      ],
       "canonicalSourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outright.png",
-      "disposition": "SOURCE-ONLY",
-      "reason": "Unique non-empty archive payload found, but no current registry/destination or defensible player-visible binding was found."
+      "disposition": "REVIVED",
+      "reason": "Exact bytes ship in the current lazy asset/source registry."
     },
     {
       "sourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outup.png",
@@ -87899,11 +87933,15 @@
       "bytes": 935202,
       "sha256": "dd880ec6d416c478d03671b82c9b9f308b2ddfcb6e985e42f9489a411e8d9914",
       "sourceRole": "authored-or-unresolved",
-      "currentDestinations": [],
-      "currentEvidence": [],
+      "currentDestinations": [
+        "public/assets/sky/ballz18-clear-sky/up.png"
+      ],
+      "currentEvidence": [
+        "public/assets/sky/ballz18-clear-sky/PROVENANCE.json"
+      ],
       "canonicalSourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky/Skybox_Clear_Sky_outup.png",
-      "disposition": "SOURCE-ONLY",
-      "reason": "Unique non-empty archive payload found, but no current registry/destination or defensible player-visible binding was found."
+      "disposition": "REVIVED",
+      "reason": "Exact bytes ship in the current lazy asset/source registry."
     },
     {
       "sourcePath": "unity-ballz18/Assets/Skyboxes/Skybox_Desert.mat",
@@ -108820,7 +108858,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -108945,7 +108982,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -109185,7 +109221,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -109326,7 +109361,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -110290,7 +110324,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -110415,7 +110448,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -110655,7 +110687,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -110796,7 +110827,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -131985,7 +132015,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -132105,7 +132134,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -132884,7 +132912,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -133009,7 +133036,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -133818,7 +133844,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -134137,7 +134162,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -134257,7 +134281,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -134552,7 +134575,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"
@@ -135203,7 +135225,6 @@
       "currentEvidence": [
         "progress.md",
         "scripts/smoke-media.mjs",
-        "scripts/vendor-sky-clearblue-hd.mjs",
         "scripts/vendor-sky-from-hdri.mjs",
         "src/agent-world-media.ts",
         "src/agent-world-skies.ts"

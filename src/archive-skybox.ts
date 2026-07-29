@@ -78,6 +78,15 @@ export function orientArchiveCubeTexture(texture: CubeTexture): CubeTexture {
   return texture;
 }
 
+/** Mark a native +X,-X,+Y,-Y,+Z,-Z cube complete without altering its authored pixels. */
+export function retainNativeCubeTexture(texture: CubeTexture): CubeTexture {
+  if (!Array.isArray(texture.images) || texture.images.length !== 6) {
+    throw new Error("Native skybox did not load all six cube faces.");
+  }
+  texture.userData.graphysxSkyboxOrientation = "native-cubemap";
+  return texture;
+}
+
 /**
  * BoxGeometry uses the same directional face order as CubeTexture. Applying
  * the same conversion keeps the five selector icons continuous as well.

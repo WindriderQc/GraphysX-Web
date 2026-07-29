@@ -3,7 +3,7 @@
  *
  * Faithful: the host runs the recovered sun orbit, daylight ramp and logistic brightness
  * equations on simulation time. Adapted: the archive never named image files for the cycle,
- * so this editable observatory explicitly binds the shipped ClearBlue HD + Lilienstein day
+ * so this editable observatory explicitly binds the shipped BallZ18 Clear Sky + Lilienstein day
  * look and NightSky + Vignaioli night look. The architecture is a modern inspection set, not
  * represented as a recovered level.
  */
@@ -87,7 +87,7 @@ function buildEntities(): AgentWorldEntityDefinition[] {
 export const DAY_NIGHT_PROVENANCE = {
   equations: "AtmelCubx/Atmosphere.cpp and GraphysX_1/Sky.cpp",
   cycle: "faithful sun orbit, daylight ramp, logistic brightness and horizon warmth",
-  endpoints: "adapted scene binding: ClearBlue HD/Lilienstein day; NightSky/Vignaioli night",
+  endpoints: "adapted scene binding: exact BallZ18 Clear Sky/Lilienstein day; NightSky/Vignaioli night",
   showcase: "modern editable observatory; not represented as an archived level",
 } as const;
 
@@ -98,13 +98,13 @@ export function composeArchiveDayNight(api: GraphysXAgentWorldApi) {
     label: "Archive Day / Night Observatory",
     environment: {
       background: "#07101a",
-      sky: "clearblue-hd",
+      sky: "ballz18-clear-sky",
       lighting: { source: "hdri", hdri: "lilienstein", intensity: 1, yawDegrees: 14, backgroundIntensity: 0.95, backgroundBlur: 0.04 },
       dayNight: {
         cycleSeconds: 12,
         phaseOffset: 0.5,
         day: {
-          sky: "clearblue-hd",
+          sky: "ballz18-clear-sky",
           background: "#86b9d2",
           lighting: { source: "hdri", hdri: "lilienstein", intensity: 1.08, yawDegrees: 14, backgroundIntensity: 1, backgroundBlur: 0.03 },
         },

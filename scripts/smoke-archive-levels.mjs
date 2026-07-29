@@ -227,7 +227,7 @@ try {
     check("the rules block armed with 20 collectibles and one ordered checkpoint", built.rulesArmed && built.collectibleCount === 20 && built.checkpointCount === 1, { collectibles: built.collectibleCount, checkpoints: built.checkpointCount });
     check("both gates got a beacon out of the emitter budget", built.hasFinishBeacon && built.hasHalfBeacon, { finish: built.hasFinishBeacon, half: built.hasHalfBeacon });
     const expectedSurface = record.id === "archive-ballz-level1"
-      ? { sky: "clearblue-hd", floor: "classic-alien01", normal: "classic-alien01-normal", repeat: [10, 10], wall: "two-way" }
+      ? { sky: "clearblue", floor: "classic-alien01", normal: "classic-alien01-normal", repeat: [10, 10], wall: "two-way" }
       : { sky: "lostvalley", floor: "classic-checkerboard", normal: null, repeat: [20, 20], wall: "classic-wood03" };
     check("the level owns its archived sky/floor/wall binding", built.sky === expectedSurface.sky
       && built.floorTexture === expectedSurface.floor

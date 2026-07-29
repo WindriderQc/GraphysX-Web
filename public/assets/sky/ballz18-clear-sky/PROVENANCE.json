@@ -1,0 +1,47 @@
+{
+  "schema": "graphysx.archive-sky-provenance/v1",
+  "id": "ballz18-clear-sky",
+  "source": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky",
+  "resolution": [2048, 2048],
+  "copiedByteForByte": true,
+  "sourceMaterial": {
+    "path": "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky.mat",
+    "guid": "82e52ed08f5c46749b66812d2b99e4ec",
+    "rotationDegrees": 268,
+    "leftRightAssessment": "Unity _LeftTex references the source outright face and _RightTex references outleft. The source filenames remain literal; the descriptor loads right/left into Three's +X/-X slots and skips the unrelated TV3D pole rotation. Pixel-edge checks confirm the six native faces meet without transforms."
+  },
+  "survivingSceneBinding": null,
+  "bindingAssessment": "The six-sided material and all six source images survive, but no surviving BallZ18 scene references this material GUID. Product use in the Day/Night Observatory is therefore an explicit modern binding, not a recovered level binding.",
+  "faces": {
+    "back.png": {
+      "sourceName": "Skybox_Clear_Sky_outback.png",
+      "unityGuid": "5f8a052bc2e87474ba479042d59ad86f",
+      "sha256": "6fe36375a765b977aef5eb4d533ba7c28a6edbe9d5e4789e182649d5d379a2f3"
+    },
+    "down.png": {
+      "sourceName": "Skybox_Clear_Sky_outdown.png",
+      "unityGuid": "cacff20494dfcac42877c5bf84d8e973",
+      "sha256": "7b399fbe2a4bb670afa3b7ce5353513ea061bf0e850d4dda50ffd150305ee551"
+    },
+    "front.png": {
+      "sourceName": "Skybox_Clear_Sky_outfront.png",
+      "unityGuid": "6f3853a2973d8654098c5daaa20a68bd",
+      "sha256": "ab9fcdd347782b72eb1e4d64af61f4a7ebaf11c37e243693b014916e465f95d3"
+    },
+    "left.png": {
+      "sourceName": "Skybox_Clear_Sky_outleft.png",
+      "unityGuid": "331e471d8a16c2d45be857a18aea742c",
+      "sha256": "63af16f2b9e7bf063edff0d888382ae2fe56e7b6e2839ee0ad878b676daee21c"
+    },
+    "right.png": {
+      "sourceName": "Skybox_Clear_Sky_outright.png",
+      "unityGuid": "d11376f2c12f11c428535233c47d1dd0",
+      "sha256": "bbc085db7c22940ec6364f65ced7cd00112e09f948fdcdf7861222295caff8d6"
+    },
+    "up.png": {
+      "sourceName": "Skybox_Clear_Sky_outup.png",
+      "unityGuid": "f5fdcf0ab8c3bf040971116a89e9e323",
+      "sha256": "dd880ec6d416c478d03671b82c9b9f308b2ddfcb6e985e42f9489a411e8d9914"
+    }
+  }
+}

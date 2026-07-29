@@ -74,14 +74,14 @@ const pass =
   !out.fatal && out.composed?.ok === true &&
   out.composed?.provenance?.cycle?.includes("faithful") &&
   out.day?.entityCount === 23 && out.day?.world?.id === "archive-day-night-rig" &&
-  out.day?.atmosphere?.activeLook === "day" && out.day?.atmosphere?.sky === "clearblue-hd" &&
+  out.day?.atmosphere?.activeLook === "day" && out.day?.atmosphere?.sky === "ballz18-clear-sky" &&
   out.day?.atmosphere?.hdri === "lilienstein" && out.day?.atmosphere?.sunHeight > 0.99 &&
   out.day?.exported?.cycleSeconds === 12 &&
   out.night?.atmosphere?.activeLook === "night" && out.night?.atmosphere?.sky === "nightsky" &&
   out.night?.atmosphere?.hdri === "vignaioli-night" && out.night?.atmosphere?.sunHeight < -0.99 &&
   out.frozen?.before === out.frozen?.after &&
   out.roundTrip?.ok === true && out.roundTrip?.cycleSeconds === 12 &&
-  out.roundTrip?.daySky === "clearblue-hd" && out.roundTrip?.nightSky === "nightsky" &&
+  out.roundTrip?.daySky === "ballz18-clear-sky" && out.roundTrip?.nightSky === "nightsky" &&
   out.pageErrors.length === 0;
 
 console.log(JSON.stringify(out, null, 2));

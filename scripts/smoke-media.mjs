@@ -438,6 +438,8 @@ try {
       // The axial set maps straight through with NO swap — a different mapping, same API.
       axialSlot0FromPosX: /posx/i.test(axial.value.faceUrls[0]),
       axialSlot1FromNegX: /negx/i.test(axial.value.faceUrls[1]),
+      directionalOrientation: directional.value.orientation,
+      axialOrientation: axial.value.orientation,
       faceCount: directional.value.faceUrls.length,
       // DDS faces convert on the way in, so an axial set is PNG by the time it is a sky.
       axialConverted: axial.value.faceUrls.every((u) => u.endsWith(".png")),
@@ -448,8 +450,8 @@ try {
       registered: api.skies().some((s) => s.id === directional.value.id),
       // Every pre-import id must survive unreplaced, and only the two imports may be new.
       // (This used to count skies whose source string was exactly "GraphysX archive", which
-      // broke — as a stale ledger, not a defect — the day `clearblue-hd` registered with an
-      // honest adapted-provenance source. Identity, not source prose, is the invariant.)
+      // broke — as a stale ledger, not a defect — the day a curated sky registered with a
+      // more specific provenance source. Identity, not source prose, is the invariant.)
       curatedIntact: curatedIds.every((id) => api.skies().some((s) => s.id === id))
         && api.skies().length === curatedCount + 2,
       loadOk: loaded.ok,
@@ -558,6 +560,8 @@ const ok =
   out.sky?.slot1FromRight &&
   out.sky?.axialSlot0FromPosX &&
   out.sky?.axialSlot1FromNegX &&
+  out.sky?.directionalOrientation === "archive-tv3d" &&
+  out.sky?.axialOrientation === "native-cubemap" &&
   out.sky?.axialConverted &&
   out.sky?.hasNoBasePath &&
   out.sky?.horizonSampled &&

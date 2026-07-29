@@ -46,7 +46,7 @@ import { AgentWorldAudioLayer } from "./agent-world-audio";
 import { mountBallzPlay } from "./ballz-play";
 import { createOverlaySketch, type AgentWorldOverlayId, type OverlaySketch } from "./agent-world-overlay";
 import { createGraphysXAgentToolBridge, type GraphysXAgentToolBridge } from "./agent-world-bridge";
-import { orientArchiveCubeTexture } from "./archive-skybox";
+import { orientArchiveCubeTexture, retainNativeCubeTexture } from "./archive-skybox";
 import { agentWorldSkyFaceUrls } from "./agent-world-skies";
 import { resolveAgentWorldHdri } from "./agent-world-hdris";
 import { installPlatformTheme } from "./platform-theme";
@@ -716,9 +716,9 @@ export class PlatformHost {
   }
 
   /**
-   * Resolve `environment.sky` to a cube map. The archive's TV3D sets use a left-handed
-   * face order with quarter-turned poles, so the recovered `archive-skybox` conversion
-   * does the orienting — re-deriving that would be a genuine waste.
+   * Resolve `environment.sky` to a cube map. Each descriptor declares whether its pixels
+   * use the archive's TV3D convention (left/right swap plus quarter-turned poles) or a
+   * native cube convention. Keeping that choice beside the asset prevents silent seams.
    *
    * Loading and the generated image-based lighting are cached per set. A scene that switches
    * while a load is pending records the desired cache key, so a slow response can never
@@ -760,7 +760,8 @@ export class PlatformHost {
     // and an id-keyed cache would then render the old cubemap for the life of the tab.
     // That is the same stale-serve `media-r1` already paid for once at the HTTP layer;
     // this is the in-memory instance of it.
-    const cacheKey = faceUrls.join("|");
+    const orientation = descriptor.orientation ?? "archive-tv3d";
+    const cacheKey = `${orientation}|${faceUrls.join("|")}`;
     this.requestedSkyKey = cacheKey;
     this.requestedSkyHorizon = descriptor.horizonColor;
     if (this.requestedSkyLighting) this.requestedEnvironmentKey = `sky:${cacheKey}`;
@@ -777,9 +778,9 @@ export class PlatformHost {
     const attempt = Symbol(cacheKey);
     this.pendingSkyKeys.set(cacheKey, attempt);
     const loader = new CubeTextureLoader();
-    // Imported faces are served cross-origin from the asset store (a different port),
-    // and `orientArchiveCubeTexture` rotates the poles through a 2D canvas — without
-    // this the canvas is tainted and orienting throws. The store already sends
+    // Imported faces are served cross-origin from the asset store (a different port).
+    // TV3D sets rotate poles through a 2D canvas, so anonymous loading keeps it untainted.
+    // The store already sends
     // `access-control-allow-origin: *`, so anonymous is all that is missing. Harmless
     // for the same-origin curated sets.
     loader.setCrossOrigin("anonymous");
@@ -798,7 +799,9 @@ export class PlatformHost {
         texture.colorSpace = SRGBColorSpace;
         let resource: { background: CubeTexture; environmentTarget: WebGLRenderTarget };
         try {
-          const oriented = orientArchiveCubeTexture(texture);
+          const oriented = orientation === "native-cubemap"
+            ? retainNativeCubeTexture(texture)
+            : orientArchiveCubeTexture(texture);
           // A defensive guard for loader implementations that complete the same request twice.
           const existing = this.skyCache.get(cacheKey);
           if (existing) {

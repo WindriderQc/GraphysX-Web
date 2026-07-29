@@ -697,7 +697,7 @@ export const SCENE_RECOVERY_ITEMS: ArchiveRecoveryItem[] = [
     label: "Day/Night",
     source: "GraphysX_1/Sky.cpp, Archive Atmosphere.cpp",
     status: "ported",
-    detail: "The source Sky.cpp/Atmosphere.cpp orbit, daylight and logistic-brightness curves now run both in the player-visible race worlds and as scene-native `environment.dayNight` vocabulary. The editable observatory binds ClearBlue HD/Lilienstein by day and NightSky/Vignaioli by night; those image endpoints are disclosed adaptations because the archived cycle did not record them."
+    detail: "The source Sky.cpp/Atmosphere.cpp orbit, daylight and logistic-brightness curves now run both in the player-visible race worlds and as scene-native `environment.dayNight` vocabulary. The editable observatory binds the exact authored 2048px BallZ18 Clear Sky/Lilienstein by day and NightSky/Vignaioli by night; those image endpoints are disclosed adaptations because the archived cycle did not record them."
   },
   {
     label: "Spline Flight",

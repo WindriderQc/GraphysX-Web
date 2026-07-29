@@ -356,7 +356,7 @@ function registerRecords(records: AgentWorldMediaDescriptor[]): void {
  * usable textures and no half-registered sky.
  */
 function skySetsFrom(records: readonly AgentWorldMediaDescriptor[]): AgentWorldSkyDescriptor[] {
-  const grouped = new Map<string, { label: string; source: string; horizonColor: string; faces: string[] }>();
+  const grouped = new Map<string, { label: string; source: string; horizonColor: string; orientation: "archive-tv3d" | "native-cubemap"; faces: string[] }>();
   for (const record of records) {
     const setId = record.meta?.skySet;
     const slot = record.meta?.skySlot;
@@ -365,6 +365,7 @@ function skySetsFrom(records: readonly AgentWorldMediaDescriptor[]): AgentWorldS
       label: typeof record.meta?.skySetLabel === "string" ? record.meta.skySetLabel : setId,
       source: typeof record.meta?.skySource === "string" ? `Datalake/${record.meta.skySource}` : record.source,
       horizonColor: typeof record.meta?.skyHorizonColor === "string" ? record.meta.skyHorizonColor : "#8c98a4",
+      orientation: record.meta?.skyOrientation === "native-cubemap" ? "native-cubemap" : "archive-tv3d",
       faces: [],
     };
     entry.faces[slot] = record.url;
@@ -383,6 +384,7 @@ function skySetsFrom(records: readonly AgentWorldMediaDescriptor[]): AgentWorldS
       resolution: 0,
       horizonColor: entry.horizonColor,
       source: entry.source,
+      orientation: entry.orientation,
       faceUrls: entry.faces as [string, string, string, string, string, string],
     });
   }
@@ -619,6 +621,7 @@ async function importSky(
           skySlot: face.slot,
           skySource: folderPath,
           skyHorizonColor: horizonColor,
+          skyOrientation: match.convention === "axial" ? "native-cubemap" : "archive-tv3d",
         },
       });
       if (!imported.ok || !imported.value) throw new Error(imported.error ?? `Could not import sky face ${face.path}`);

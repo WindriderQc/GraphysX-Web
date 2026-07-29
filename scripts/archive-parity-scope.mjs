@@ -96,6 +96,16 @@ export const FUNCTIONALITY_RECORDS = [
     note: "Scene-serializable surface data drives pause-aware CanvasTexture displays in the shared frame loop; the old p5-to-texture limitation is stale.",
   },
   {
+    id: "sky-ballz18-authored-clear",
+    kind: "media:skybox",
+    label: "Authored high-resolution BallZ18 Clear Sky",
+    disposition: "REVIVED",
+    archiveEvidence: ["unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky (six 2048px PNGs)", "unity-ballz18/Assets/Skyboxes/Skybox_Clear_Sky.mat"],
+    currentEvidence: ["src/agent-world-skies.ts", "public/assets/sky/ballz18-clear-sky/PROVENANCE.json", "scripts/smoke-ballz18-sky.mjs"],
+    destination: "Scene Editor > Environment > Sky; Browse Scenes > Archive Day / Night Observatory",
+    note: "All six PNGs ship byte-identically with SHA-256 provenance and the surviving Unity face mapping. No surviving scene binds the Unity material, so the observatory endpoint is explicitly a modern binding.",
+  },
+  {
     id: "overlay-multiple-layers",
     kind: "interactive-media",
     label: "Multiple composited viewport overlays",
