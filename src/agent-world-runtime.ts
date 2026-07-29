@@ -95,6 +95,8 @@ import type {
   PhysicsBodyDefinition,
   PhysicsBodyHandle,
   PhysicsEngine,
+  PhysicsJointDefinition,
+  PhysicsJointHandle,
   PhysicsMaterialDefinition,
   PhysicsShapeDefinition,
   PhysicsVector3,
@@ -333,6 +335,35 @@ export type AgentWorldPhysics = {
   angularVelocity?: AgentWorldVector3;
   /** Model entities only. Trimeshes are static; moving models use a convex hull. */
   collider?: AgentWorldColliderKind;
+};
+
+/**
+ * The smallest joint vocabulary proven useful by the archive Physics Lab. Anchors and axes
+ * live in each body's local frame, matching Rapier and the surviving Newton callsites.
+ */
+export type AgentWorldJointDefinition = {
+  id: string;
+  type: "fixed" | "revolute" | "rope";
+  bodyA: string;
+  bodyB: string;
+  anchorA?: AgentWorldVector3;
+  anchorB?: AgentWorldVector3;
+  /** Revolute joints only; normalized by the runtime. */
+  axis?: AgentWorldVector3;
+  /** Fixed joints only; local frame orientation for body A/B. */
+  frameRotationDegreesA?: AgentWorldVector3;
+  frameRotationDegreesB?: AgentWorldVector3;
+  /** Rope joints only; maximum anchor separation. */
+  length?: number;
+};
+
+export type AgentWorldJointPatch = Partial<Omit<AgentWorldJointDefinition, "id">>;
+
+export type AgentWorldJointState = AgentWorldJointDefinition & {
+  anchorA: AgentWorldVector3;
+  anchorB: AgentWorldVector3;
+  /** False only while an exact model collider is still loading its body. */
+  active: boolean;
 };
 
 export type AgentWorldSpinBehavior = {
@@ -804,6 +835,8 @@ export type AgentWorldDefinition = {
     physics?: Partial<AgentWorldEnvironment["physics"]>;
   };
   entities: AgentWorldEntityDefinition[];
+  /** Scene-authored constraints between root-level physics entities. */
+  joints?: AgentWorldJointDefinition[];
   /**
    * What a crossing *means*: spawn, ordered checkpoints, laps, clock, finish condition.
    *
@@ -820,6 +853,9 @@ export type AgentWorldCommand =
   | { op: "spawn-prefab"; prefabId: AgentWorldPrefabId; options?: AgentWorldPrefabOptions }
   | { op: "update"; id: string; patch: AgentWorldEntityPatch }
   | { op: "remove"; id: string }
+  | { op: "add-joint"; joint: AgentWorldJointDefinition }
+  | { op: "update-joint"; id: string; patch: AgentWorldJointPatch }
+  | { op: "remove-joint"; id: string }
   | { op: "attach-behavior"; id: string; behavior: AgentWorldBehavior }
   | { op: "detach-behavior"; id: string; behaviorId: string }
   | { op: "interact"; id: string; interactionId?: string }
@@ -1009,6 +1045,9 @@ export type AgentWorldStreamEventType =
   | "entity.spawned"
   | "entity.updated"
   | "entity.removed"
+  | "joint.added"
+  | "joint.updated"
+  | "joint.removed"
   | "asset.collider-ready"
   | "asset.collider-error"
   | "asset.ready"
@@ -1047,10 +1086,12 @@ export type AgentWorldState = {
   surfaceRedraws: number;
   paused: boolean;
   entityCount: number;
+  jointCount: number;
   selectedIds: string[];
   environment: AgentWorldEnvironment;
   bounds: { minimum: AgentWorldVector3; maximum: AgentWorldVector3 } | null;
   entities: AgentWorldEntityState[];
+  joints: AgentWorldJointState[];
   recentEvents: AgentWorldEvent[];
   recentCommits: AgentWorldCommitSummary[];
   savedWorlds: string[];
@@ -1119,6 +1160,9 @@ export type GraphysXAgentWorldApi = {
   spawn(entity: AgentWorldEntityDefinition): AgentWorldResult<AgentWorldEntityState>;
   update(id: string, patch: AgentWorldEntityPatch): AgentWorldResult<AgentWorldEntityState>;
   remove(id: string): AgentWorldResult<string[]>;
+  addJoint(joint: AgentWorldJointDefinition): AgentWorldResult<AgentWorldJointState>;
+  updateJoint(id: string, patch: AgentWorldJointPatch): AgentWorldResult<AgentWorldJointState>;
+  removeJoint(id: string): AgentWorldResult<string>;
   attachBehavior(id: string, behavior: AgentWorldBehavior): AgentWorldResult<{ entityId: string; behaviorId: string }>;
   detachBehavior(id: string, behaviorId: string): AgentWorldResult<string>;
   interact(id: string, interactionId?: string): AgentWorldResult<AgentWorldInteractionReceipt>;
@@ -1209,6 +1253,13 @@ type RuntimeEntity = {
   colliderError: string | null;
   colliderLoading: boolean;
   colliderLoadVersion: number;
+};
+
+type ResolvedAgentWorldJoint = Required<AgentWorldJointDefinition>;
+
+type RuntimeJoint = {
+  definition: ResolvedAgentWorldJoint;
+  handle: PhysicsJointHandle | null;
 };
 
 /**
@@ -1322,6 +1373,9 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "force-field.list",
   "simulation.force-fields",
   "physics.rigid-body",
+  "physics.joint.fixed",
+  "physics.joint.revolute",
+  "physics.joint.rope",
   "physics.collider.convex-hull",
   "physics.collider.trimesh",
   "spline.path",
@@ -1401,6 +1455,7 @@ export class AgentWorldRuntime {
   private readonly environmentRoot = new Group();
   private readonly physicsWorld: PhysicsEngine;
   private readonly entities = new Map<string, RuntimeEntity>();
+  private readonly joints = new Map<string, RuntimeJoint>();
   private readonly savedWorlds = new Map<string, AgentWorldDefinition>();
   private readonly history: AgentWorldDefinition[] = [];
   private readonly events: AgentWorldEvent[] = [];
@@ -1620,6 +1675,21 @@ export class AgentWorldRuntime {
     return result.ok ? this.success(removed) : this.failure(result.error ?? "Remove failed");
   }
 
+  addJoint(joint: AgentWorldJointDefinition): AgentWorldResult<AgentWorldJointState> {
+    const result = this.transaction([{ op: "add-joint", joint }]);
+    return result.ok ? this.success(this.getJointState(joint.id)) : this.failure(result.error ?? "Add joint failed");
+  }
+
+  updateJoint(id: string, patch: AgentWorldJointPatch): AgentWorldResult<AgentWorldJointState> {
+    const result = this.transaction([{ op: "update-joint", id, patch }]);
+    return result.ok ? this.success(this.getJointState(id)) : this.failure(result.error ?? "Update joint failed");
+  }
+
+  removeJoint(id: string): AgentWorldResult<string> {
+    const result = this.transaction([{ op: "remove-joint", id }]);
+    return result.ok ? this.success(id) : this.failure(result.error ?? "Remove joint failed");
+  }
+
   attachBehavior(id: string, behavior: AgentWorldBehavior): AgentWorldResult<{ entityId: string; behaviorId: string }> {
     const result = this.transaction([{ op: "attach-behavior", id, behavior }]);
     return result.ok
@@ -1820,6 +1890,7 @@ export class AgentWorldRuntime {
       label: this.definition.label,
       environment: deepClone(this.environment),
       entities: [...this.entities.values()].map(({ definition }) => serializeEntity(definition)),
+      ...(this.joints.size > 0 ? { joints: [...this.joints.values()].map(({ definition }) => serializeJoint(definition)) } : {}),
       ...(this.rules ? { rules: deepClone(this.rules) } : {})
     };
   }
@@ -1847,6 +1918,11 @@ export class AgentWorldRuntime {
       entities: [...this.entities.values()]
         .filter(({ definition }) => !dropped.has(definition.id))
         .map(({ definition }) => serializeEntity(definition)),
+      ...(this.joints.size > 0 ? {
+        joints: [...this.joints.values()]
+          .filter(({ definition }) => !dropped.has(definition.bodyA) && !dropped.has(definition.bodyB))
+          .map(({ definition }) => serializeJoint(definition))
+      } : {}),
       // The rules go with the document, not with the run. What persists is "this course is
       // three laps and needs every ring"; what does not is "you are on lap two".
       ...(this.rules ? { rules: deepClone(this.rules) } : {})
@@ -1903,14 +1979,27 @@ export class AgentWorldRuntime {
       surfaceRedraws: this.surfaceRedraws,
       paused: this.paused,
       entityCount: entityStates.length,
+      jointCount: this.joints.size,
       selectedIds: [...this.selectedIds],
       environment: deepClone(this.environment),
       bounds,
       entities: entityStates,
+      joints: [...this.joints.keys()].map((id) => this.getJointState(id)),
       recentEvents: this.events.slice(-12).map((event) => ({ ...event })),
       recentCommits: this.commits.slice(-10).map((commit) => deepClone(commit)),
       savedWorlds: [...this.savedWorlds.keys()].sort(),
       capabilities: GRAPHYSX_AGENT_CAPABILITIES
+    };
+  }
+
+  private getJointState(id: string): AgentWorldJointState {
+    const runtime = this.joints.get(id);
+    if (!runtime) throw new Error(`Unknown joint: ${id}`);
+    return {
+      ...serializeJoint(runtime.definition),
+      anchorA: [...runtime.definition.anchorA],
+      anchorB: [...runtime.definition.anchorB],
+      active: runtime.handle !== null,
     };
   }
 
@@ -1946,6 +2035,7 @@ export class AgentWorldRuntime {
     this.worldRoot.clear();
     this.environmentRoot.clear();
     this.entities.clear();
+    this.joints.clear();
   }
 
   private applyCommand(command: AgentWorldCommand): unknown {
@@ -1955,6 +2045,9 @@ export class AgentWorldRuntime {
       case "spawn-prefab": return this.spawnPrefabInternal(command.prefabId, command.options);
       case "update": this.updateInternal(command.id, command.patch); return command.id;
       case "remove": this.removeInternal(command.id); return command.id;
+      case "add-joint": return this.addJointInternal(command.joint);
+      case "update-joint": this.updateJointInternal(command.id, command.patch); return command.id;
+      case "remove-joint": this.removeJointInternal(command.id); return command.id;
       case "attach-behavior": return this.attachBehaviorInternal(command.id, command.behavior);
       case "detach-behavior": this.detachBehaviorInternal(command.id, command.behaviorId); return command.behaviorId;
       case "interact": return this.interactInternal(command.id, command.interactionId);
@@ -1962,6 +2055,65 @@ export class AgentWorldRuntime {
       case "set-environment": this.setEnvironmentInternal(command.environment); return this.environment;
       case "select": this.selectedIds = command.ids.filter((id) => this.entities.has(id)); return [...this.selectedIds];
     }
+  }
+
+  private addJointInternal(source: AgentWorldJointDefinition, allowPendingBody = false): string {
+    const definition = resolveJoint(source, this.entities);
+    if (this.joints.has(definition.id)) throw new Error(`Joint id already exists: ${definition.id}`);
+    const runtime: RuntimeJoint = { definition, handle: null };
+    this.joints.set(definition.id, runtime);
+    try {
+      this.refreshJointHandle(runtime, allowPendingBody);
+    } catch (error) {
+      this.joints.delete(definition.id);
+      throw error;
+    }
+    this.emit("joint.added", [definition.bodyA, definition.bodyB], { jointId: definition.id, type: definition.type });
+    return definition.id;
+  }
+
+  private updateJointInternal(id: string, patch: AgentWorldJointPatch): void {
+    const runtime = this.joints.get(id);
+    if (!runtime) throw new Error(`Unknown joint: ${id}`);
+    this.releaseJointHandle(runtime);
+    runtime.definition = resolveJoint({ ...serializeJoint(runtime.definition), ...deepClone(patch), id }, this.entities);
+    this.refreshJointHandle(runtime);
+    this.emit("joint.updated", [runtime.definition.bodyA, runtime.definition.bodyB], { jointId: id, fields: Object.keys(patch) });
+  }
+
+  private removeJointInternal(id: string): void {
+    const runtime = this.joints.get(id);
+    if (!runtime) throw new Error(`Unknown joint: ${id}`);
+    this.releaseJointHandle(runtime);
+    this.joints.delete(id);
+    this.emit("joint.removed", [runtime.definition.bodyA, runtime.definition.bodyB], { jointId: id });
+  }
+
+  private releaseJointHandle(runtime: RuntimeJoint): void {
+    if (!runtime.handle) return;
+    this.physicsWorld.removeJoint(runtime.handle);
+    runtime.handle = null;
+  }
+
+  private refreshJointHandle(runtime: RuntimeJoint, allowPendingBody = false): void {
+    this.releaseJointHandle(runtime);
+    const first = this.entities.get(runtime.definition.bodyA);
+    const second = this.entities.get(runtime.definition.bodyB);
+    if (!first?.body || !second?.body) {
+      if (allowPendingBody && first?.definition.physics && second?.definition.physics) return;
+      throw new Error(`Joint ${runtime.definition.id} requires active physics bodies: ${runtime.definition.bodyA}, ${runtime.definition.bodyB}`);
+    }
+    runtime.handle = this.physicsWorld.createJoint(first.body, second.body, physicsJointDefinition(runtime.definition));
+  }
+
+  private detachJointsForEntity(id: string): RuntimeJoint[] {
+    const affected = [...this.joints.values()].filter(({ definition }) => definition.bodyA === id || definition.bodyB === id);
+    for (const joint of affected) this.releaseJointHandle(joint);
+    return affected;
+  }
+
+  private refreshJointHandles(joints: RuntimeJoint[]): void {
+    for (const joint of joints) this.refreshJointHandle(joint, true);
   }
 
   private spawnInternal(source: AgentWorldEntityDefinition, allowUnresolvedLookAt = false): string {
@@ -2036,6 +2188,9 @@ export class AgentWorldRuntime {
     if (patch.distance !== undefined) definition.distance = clamp(patch.distance, 0, 1000);
     if (patch.marker !== undefined) definition.marker = patch.marker === true;
     if (patch.physics !== undefined) {
+      if (patch.physics === null && [...this.joints.values()].some((joint) => joint.definition.bodyA === id || joint.definition.bodyB === id)) {
+        throw new Error(`Remove joints connected to ${id} before removing its physics body`);
+      }
       definition.physics = patch.physics === null
         ? null
         : resolvePhysics({ ...(definition.physics ?? { mode: "static" }), ...patch.physics }, definition.type, definition.parentId, definition.behaviors);
@@ -2130,6 +2285,12 @@ export class AgentWorldRuntime {
   private removeInternal(id: string): void {
     const runtime = this.requireEntity(id);
     const ids = this.descendantIds(id).reverse();
+    const removedEntityIds = new Set([id, ...ids]);
+    for (const [jointId, joint] of [...this.joints]) {
+      if (removedEntityIds.has(joint.definition.bodyA) || removedEntityIds.has(joint.definition.bodyB)) {
+        this.removeJointInternal(jointId);
+      }
+    }
     for (const descendantId of ids) {
       const descendant = this.entities.get(descendantId);
       if (!descendant) continue;
@@ -2306,6 +2467,8 @@ export class AgentWorldRuntime {
 
   private loadDefinition(source: AgentWorldDefinition): void {
     validateWorldDefinition(source);
+    for (const joint of this.joints.values()) this.releaseJointHandle(joint);
+    this.joints.clear();
     for (const runtime of this.entities.values()) if (runtime.body) this.physicsWorld.removeBody(runtime.body);
     if (this.groundBody) this.physicsWorld.removeBody(this.groundBody);
     this.groundBody = null;
@@ -2333,6 +2496,7 @@ export class AgentWorldRuntime {
       }
     }
     if (pending.length > 0) throw new Error(`Unresolved parent references: ${pending.map((entity) => entity.id ?? entity.label ?? entity.type).join(", ")}`);
+    for (const joint of source.joints ?? []) this.addJointInternal(deepClone(joint), true);
     for (const runtime of this.entities.values()) {
       for (const behavior of runtime.definition.behaviors) validateBehavior(behavior, this.entities);
       for (const interaction of runtime.definition.interactions) validateInteraction(interaction, this.entities);
@@ -3088,6 +3252,7 @@ export class AgentWorldRuntime {
   }
 
   private rebuildPhysicsBody(runtime: RuntimeEntity): void {
+    const affectedJoints = this.detachJointsForEntity(runtime.definition.id);
     if (runtime.body) this.physicsWorld.removeBody(runtime.body);
     // Terrain is the one type whose collider is implied by the entity rather than requested
     // through `physics` — a terrain you can fall through is not terrain.
@@ -3101,6 +3266,7 @@ export class AgentWorldRuntime {
     if (runtime.body || runtime.definition.type === "terrain" || !runtime.definition.physics || runtime.definition.physics.collider === "auto") {
       runtime.colliderError = null;
     }
+    this.refreshJointHandles(affectedJoints);
   }
 
   private startModelLoad(runtime: RuntimeEntity): void {
@@ -4501,6 +4667,80 @@ function validateWorldDefinition(definition: AgentWorldDefinition): void {
   if (!definition || definition.schema !== GRAPHYSX_AGENT_WORLD_SCHEMA) throw new Error(`World schema must be ${GRAPHYSX_AGENT_WORLD_SCHEMA}`);
   if (!definition.id?.trim() || !definition.label?.trim()) throw new Error("World id and label are required");
   if (!Array.isArray(definition.entities)) throw new Error("World entities must be an array");
+  if (definition.joints !== undefined && !Array.isArray(definition.joints)) throw new Error("World joints must be an array");
+}
+
+function resolveJoint(source: AgentWorldJointDefinition, entities: Map<string, RuntimeEntity>): ResolvedAgentWorldJoint {
+  if (!source?.id?.trim()) throw new Error("Joint id is required");
+  const id = source.id.trim();
+  validateStableId(id, "joint id");
+  if (!(["fixed", "revolute", "rope"] as const).includes(source.type)) throw new Error(`Unsupported joint type: ${String(source.type)}`);
+  validateStableId(source.bodyA, "joint bodyA");
+  validateStableId(source.bodyB, "joint bodyB");
+  if (source.bodyA === source.bodyB) throw new Error(`Joint ${id} requires two different bodies`);
+  const first = entities.get(source.bodyA);
+  const second = entities.get(source.bodyB);
+  if (!first || !second) throw new Error(`Joint ${id} references unknown bodies: ${source.bodyA}, ${source.bodyB}`);
+  const firstPhysics = first.definition.physics;
+  const secondPhysics = second.definition.physics;
+  if (!firstPhysics || !secondPhysics) throw new Error(`Joint ${id} requires two physics entities`);
+  if (firstPhysics.mode === "trigger" || secondPhysics.mode === "trigger") throw new Error(`Joint ${id} cannot connect trigger bodies`);
+  if (firstPhysics.mode !== "dynamic" && secondPhysics.mode !== "dynamic") throw new Error(`Joint ${id} requires at least one dynamic body`);
+
+  const anchorA = sanitizeVector(source.anchorA ?? [0, 0, 0], -10000, 10000, `joint ${id} anchorA`);
+  const anchorB = sanitizeVector(source.anchorB ?? [0, 0, 0], -10000, 10000, `joint ${id} anchorB`);
+  const frameRotationDegreesA = sanitizeVector(source.frameRotationDegreesA ?? [0, 0, 0], -360000, 360000, `joint ${id} frameRotationDegreesA`);
+  const frameRotationDegreesB = sanitizeVector(source.frameRotationDegreesB ?? [0, 0, 0], -360000, 360000, `joint ${id} frameRotationDegreesB`);
+  const rawAxis = sanitizeVector(source.axis ?? [0, 1, 0], -1, 1, `joint ${id} axis`);
+  const axisLength = Math.hypot(...rawAxis);
+  if (source.type === "revolute" && axisLength === 0) throw new Error(`Joint ${id} axis cannot be zero`);
+  const axis = axisLength > 0
+    ? rawAxis.map((value) => value / axisLength) as AgentWorldVector3
+    : [0, 1, 0] as AgentWorldVector3;
+  const length = source.type === "rope"
+    ? clampPositive(source.length, 0.001, 10000, `joint ${id} length`)
+    : 0;
+  if (source.type !== "rope" && source.length !== undefined) throw new Error(`Only rope joints accept length: ${id}`);
+  if (source.type !== "revolute" && source.axis !== undefined) throw new Error(`Only revolute joints accept axis: ${id}`);
+  if (source.type !== "fixed" && (source.frameRotationDegreesA !== undefined || source.frameRotationDegreesB !== undefined)) {
+    throw new Error(`Only fixed joints accept frame rotations: ${id}`);
+  }
+  return {
+    id,
+    type: source.type,
+    bodyA: source.bodyA,
+    bodyB: source.bodyB,
+    anchorA,
+    anchorB,
+    axis,
+    frameRotationDegreesA,
+    frameRotationDegreesB,
+    length,
+  };
+}
+
+function clampPositive(value: number | undefined, minimum: number, maximum: number, label: string): number {
+  if (!Number.isFinite(value)) throw new Error(`${label} is required and must be finite`);
+  if ((value as number) < minimum || (value as number) > maximum) throw new Error(`${label} must be between ${minimum} and ${maximum}`);
+  return value as number;
+}
+
+function physicsJointDefinition(source: ResolvedAgentWorldJoint): PhysicsJointDefinition {
+  const anchorOnFirst = vectorFromTuple(source.anchorA);
+  const anchorOnSecond = vectorFromTuple(source.anchorB);
+  if (source.type === "rope") return { kind: "rope", anchorOnFirst, anchorOnSecond, length: source.length };
+  if (source.type === "revolute") return { kind: "revolute", anchorOnFirst, anchorOnSecond, axis: vectorFromTuple(source.axis) };
+  const quaternion = (rotationDegrees: AgentWorldVector3) => {
+    const radians = rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3;
+    return new Quaternion().setFromEuler(new Euler(...radians));
+  };
+  return {
+    kind: "fixed",
+    anchorOnFirst,
+    anchorOnSecond,
+    frameOnFirst: quaternion(source.frameRotationDegreesA),
+    frameOnSecond: quaternion(source.frameRotationDegreesB),
+  };
 }
 
 function resolveActor(actor?: AgentWorldActor): Required<AgentWorldActor> {
@@ -4701,6 +4941,25 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
 function serializePhysics(physics: ResolvedAgentWorldPhysics): AgentWorldPhysics {
   const { collider, ...fields } = deepClone(physics);
   return collider === "auto" ? fields : { ...fields, collider };
+}
+
+function serializeJoint(joint: ResolvedAgentWorldJoint): AgentWorldJointDefinition {
+  const base = {
+    id: joint.id,
+    type: joint.type,
+    bodyA: joint.bodyA,
+    bodyB: joint.bodyB,
+    anchorA: [...joint.anchorA] as AgentWorldVector3,
+    anchorB: [...joint.anchorB] as AgentWorldVector3,
+  };
+  if (joint.type === "rope") return { ...base, type: "rope", length: joint.length };
+  if (joint.type === "revolute") return { ...base, type: "revolute", axis: [...joint.axis] as AgentWorldVector3 };
+  return {
+    ...base,
+    type: "fixed",
+    frameRotationDegreesA: [...joint.frameRotationDegreesA] as AgentWorldVector3,
+    frameRotationDegreesB: [...joint.frameRotationDegreesB] as AgentWorldVector3,
+  };
 }
 
 function roundVector(vector: Vector3): AgentWorldVector3 {

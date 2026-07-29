@@ -7,7 +7,7 @@ export const GRAPHYSX_AGENT_TOOL_EVENT_SCHEMA = "graphysx.agent-tool-event/v1" a
 
 const TOOL_PATHS = [
   "schema", "worldSchema", "levelSchema", "version", "capabilities",
-  "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select",
+  "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select",
   "sounds", "flocks", "crowds", "forceFields", "formulas", "dna", "surfaces",
   "attachBehavior", "detachBehavior", "interact", "steer", "prefabs", "spawnPrefab", "starters", "loadStarter",
   "transaction", "commit", "history", "events", "undo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
@@ -20,7 +20,7 @@ const TOOL_PATHS = [
 ] as const;
 
 const MUTATING_TOOLS = new Set<string>([
-  "open", "demo", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "select", "attachBehavior", "detachBehavior",
+  "open", "demo", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select", "attachBehavior", "detachBehavior",
   "interact", "steer", "spawnPrefab", "loadStarter", "transaction", "commit", "undo", "pause", "step", "save", "load",
   "rules.set", "rules.reset",
   "media.refresh", "media.import", "media.importSky", "media.register", "media.remove",
@@ -49,6 +49,9 @@ const TOOL_SUMMARIES: Record<string, string> = {
   create: "Replace the active world with a complete v2 definition.",
   spawn: "Create one typed 3D entity.",
   update: "Patch an entity by stable ID.",
+  addJoint: "Add a fixed, revolute/hinge, or rope constraint between two physics entities.",
+  updateJoint: "Patch a scene-authored joint by stable ID; the runtime rebuilds it atomically.",
+  removeJoint: "Remove a scene-authored joint by stable ID without removing its bodies.",
   select: "Select stable entity IDs in the shared human/agent editor.",
   transaction: "Apply multiple world commands atomically.",
   commit: "Apply an actor-attributed, revision-guarded change set.",

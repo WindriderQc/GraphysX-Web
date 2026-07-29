@@ -80,6 +80,10 @@ async function currentReferenceIndex() {
   );
   const token = /[A-Za-z0-9_ .()!#@+\-/\\]+\.[A-Za-z0-9]{1,8}/g;
   for (const file of files) {
+    // Never let the generated ledger become evidence for itself on the next run. It contains
+    // every archive basename by design and would otherwise turn almost all SOURCE-ONLY rows
+    // into false REVIVED matches after the first regeneration.
+    if (path.resolve(file.absolute) === output) continue;
     if (!allowed.has(path.extname(file.relative).toLowerCase())) continue;
     const source = await readFile(file.absolute, "utf8").catch(() => "");
     for (const match of source.matchAll(token)) {

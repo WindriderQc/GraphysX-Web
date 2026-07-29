@@ -1,6 +1,7 @@
 import type {
   Collider,
   ColliderDesc,
+  ImpulseJoint,
   RigidBody,
   RigidBodyDesc,
   World,
@@ -15,6 +16,8 @@ import type {
   PhysicsBodyDefinition,
   PhysicsBodyHandle,
   PhysicsEngine,
+  PhysicsJointDefinition,
+  PhysicsJointHandle,
   PhysicsMaterialDefinition,
   PhysicsQuaternion,
   PhysicsShapeDefinition,
@@ -59,6 +62,12 @@ type RapierBodyRecord = {
   colliders: RapierColliderRecord[];
 };
 
+type RapierJointRecord = {
+  joint: ImpulseJoint;
+  first: PhysicsBodyHandle;
+  second: PhysicsBodyHandle;
+};
+
 type PreparedShape = {
   descriptor: ColliderDesc;
   bounds: ShapeBounds;
@@ -76,6 +85,7 @@ type PreparedShape = {
 export class RapierPhysicsEngine implements PhysicsEngine {
   private readonly world: World;
   private readonly bodies = new Map<PhysicsBodyHandle, RapierBodyRecord>();
+  private readonly joints = new Map<PhysicsJointHandle, RapierJointRecord>();
   private readonly forcedBodies = new Set<RigidBody>();
   private readonly materials = new Map<string, PhysicsMaterialDefinition>();
   private readonly defaultMaterial: PhysicsMaterialDefinition;
@@ -174,9 +184,35 @@ export class RapierPhysicsEngine implements PhysicsEngine {
   removeBody(handle: PhysicsBodyHandle): void {
     this.assertLive();
     const record = this.recordFor(handle);
+    for (const [jointHandle, joint] of [...this.joints]) {
+      if (joint.first === handle || joint.second === handle) this.removeJoint(jointHandle);
+    }
     this.forcedBodies.delete(record.body);
     this.world.removeRigidBody(record.body);
     this.bodies.delete(handle);
+  }
+
+  createJoint(first: PhysicsBodyHandle, second: PhysicsBodyHandle, definition: PhysicsJointDefinition): PhysicsJointHandle {
+    this.assertLive();
+    if (first === second) throw new Error("A physics joint requires two different bodies");
+    const firstBody = this.recordFor(first).body;
+    const secondBody = this.recordFor(second).body;
+    const data = createJointData(definition);
+    const joint = this.world.createImpulseJoint(data, firstBody, secondBody, true);
+    // Jointed bodies commonly meet at their anchor. Letting their colliders solve that
+    // intentional contact as a penetration can lock an otherwise free hinge in place.
+    joint.setContactsEnabled(false);
+    const handle = Object.freeze({}) as PhysicsJointHandle;
+    this.joints.set(handle, { joint, first, second });
+    return handle;
+  }
+
+  removeJoint(handle: PhysicsJointHandle): void {
+    this.assertLive();
+    const record = this.joints.get(handle);
+    if (!record) throw new Error("Unknown or removed physics joint handle");
+    if (record.joint.isValid()) this.world.removeImpulseJoint(record.joint, true);
+    this.joints.delete(handle);
   }
 
   step(deltaSeconds: number, options: PhysicsStepOptions = {}): void {
@@ -311,6 +347,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
 
   dispose(): void {
     if (this.disposed) return;
+    this.joints.clear();
     this.bodies.clear();
     this.forcedBodies.clear();
     this.materials.clear();
@@ -342,6 +379,34 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     this.materials.set(definition.id, definition);
     return definition;
   }
+}
+
+function createJointData(definition: PhysicsJointDefinition) {
+  assertVector(definition.anchorOnFirst, "First joint anchor");
+  assertVector(definition.anchorOnSecond, "Second joint anchor");
+  if (definition.kind === "fixed") {
+    return RAPIER.JointData.fixed(
+      toRapierVector(definition.anchorOnFirst),
+      normalizeQuaternion(definition.frameOnFirst, "First fixed-joint frame"),
+      toRapierVector(definition.anchorOnSecond),
+      normalizeQuaternion(definition.frameOnSecond, "Second fixed-joint frame"),
+    );
+  }
+  if (definition.kind === "rope") {
+    return RAPIER.JointData.rope(
+      positive(definition.length, "Rope length"),
+      toRapierVector(definition.anchorOnFirst),
+      toRapierVector(definition.anchorOnSecond),
+    );
+  }
+  assertVector(definition.axis, "Revolute joint axis");
+  const axisLength = Math.hypot(definition.axis.x, definition.axis.y, definition.axis.z);
+  if (axisLength === 0) throw new Error("Revolute joint axis cannot be zero");
+  return RAPIER.JointData.revolute(
+    toRapierVector(definition.anchorOnFirst),
+    toRapierVector(definition.anchorOnSecond),
+    { x: definition.axis.x / axisLength, y: definition.axis.y / axisLength, z: definition.axis.z / axisLength },
+  );
 }
 
 function createBodyDescriptor(definition: PhysicsBodyDefinition): RigidBodyDesc {

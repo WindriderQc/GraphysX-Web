@@ -35,6 +35,7 @@ for (const record of ledger.media) {
     if (hash !== record.sha256) fail(`${destination} drifted from the ledger hash for ${record.sourcePath}`);
   }
   for (const evidence of record.currentEvidence) {
+    if (path.resolve(ROOT, evidence) === ledgerPath) fail(`${record.sourcePath} uses the generated ledger as self-evidence`);
     if (!(await stat(path.join(ROOT, evidence)).catch(() => null))?.isFile()) fail(`${record.sourcePath} points at missing evidence ${evidence}`);
   }
 }

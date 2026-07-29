@@ -26,6 +26,7 @@
     "smoke:media": "node scripts/smoke-media.mjs",
     "smoke:surfaces": "node scripts/smoke-surfaces.mjs",
     "smoke:physics": "node scripts/smoke-physics.mjs",
+    "smoke:joints": "node scripts/smoke-joints.mjs",
     "smoke:mesh-colliders": "node scripts/smoke-mesh-colliders.mjs",
     "smoke:great-slide": "node scripts/smoke-great-slide.mjs",
     "smoke:map1": "node scripts/smoke-map1.mjs",

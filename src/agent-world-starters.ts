@@ -10,7 +10,7 @@ import {
   type AgentWorldPrefabOptions
 } from "./agent-world-prefabs";
 
-export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook" | "living-systems" | "quarantine" | "archive-great-slide";
+export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook" | "constraint-workshop" | "living-systems" | "quarantine" | "archive-great-slide";
 
 export type AgentWorldStarterDescriptor = {
   id: AgentWorldStarterId;
@@ -76,6 +76,13 @@ export const GRAPHYSX_AGENT_WORLD_STARTERS: readonly AgentWorldStarterDescriptor
     entityCount: 45
   },
   {
+    id: "constraint-workshop",
+    label: "Constraint Workshop",
+    summary: "Editable v2 fixed, revolute/hinge, and rope joints: the archive Physics Lab mechanics as ordinary scene data.",
+    prefabCount: 0,
+    entityCount: 9
+  },
+  {
     id: "physics-sketchbook",
     label: "Physics Sketchbook",
     summary: "A readable agent laboratory for ramps, collisions, materials, mass, and planetary motion.",
@@ -98,15 +105,17 @@ export function instantiateAgentWorldStarter(
     label: options.label?.trim() || descriptor.label,
     environment: base.environment,
     entities: base.entities,
+    ...(base.joints ? { joints: base.joints } : {}),
     ...(base.rules ? { rules: base.rules } : {})
   };
 }
 
-function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition, "environment" | "entities" | "rules"> {
+function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition, "environment" | "entities" | "joints" | "rules"> {
   if (starterId === "archive-great-slide") return archiveGreatSlide();
   if (starterId === "living-systems") return livingSystems();
   if (starterId === "quarantine") return quarantine();
   if (starterId === "physics-sketchbook") return physicsSketchbook();
+  if (starterId === "constraint-workshop") return constraintWorkshop();
   if (starterId === "prefab-plaza") {
     return {
       environment: {
@@ -427,6 +436,82 @@ function quarantine(): Pick<AgentWorldDefinition, "environment" | "entities"> {
         castShadow: true, tags: ["focus", "quarantine"],
       },
     ],
+  };
+}
+
+/**
+ * The specialized Physics Lab proved three useful constraint families. This starter makes
+ * those same mechanics ordinary v2 scene data: every body and joint exports, patches,
+ * undoes, stores, and reloads through the public human/agent document.
+ */
+function constraintWorkshop(): Pick<AgentWorldDefinition, "environment" | "entities" | "joints"> {
+  return {
+    environment: {
+      background: "#07131f",
+      ground: { visible: false, size: 34, color: "#111f2b", grid: false, gridColor: "#3f8395" },
+      physics: { gravity: [0, -9.81, 0] },
+      post: { bloom: { strength: 0.12, threshold: 0.92, radius: 0.18 } }
+    },
+    entities: [
+      ...starterLights("constraint", "#b6d8e8", "#fff0c5", [-10, 15, 10]),
+      {
+        id: "constraint-floor", label: "Constraint Test Floor", type: "box",
+        transform: { position: [0, -0.35, 0] }, geometry: { width: 28, height: 0.7, depth: 13 },
+        material: { color: "#314d59", roughness: 0.88, metalness: 0.04, texture: { id: "checker", repeat: [7, 4] } },
+        physics: { mode: "static", material: "ground" }, receiveShadow: true,
+        tags: ["constraint-workshop", "physics:static"]
+      },
+      {
+        id: "hinge-anchor", label: "Hinge Anchor", type: "box",
+        transform: { position: [-6, 4, 0] }, geometry: { width: 0.7, height: 1.6, depth: 1.3 },
+        material: { color: "#61d7ed", emissive: "#145d70", emissiveIntensity: 0.45, metalness: 0.45, roughness: 0.32 },
+        physics: { mode: "static", material: "wall" }, castShadow: true,
+        tags: ["constraint-workshop", "joint:revolute", "physics:static"]
+      },
+      {
+        id: "hinge-plank", label: "Revolute Pendulum", type: "box",
+        transform: { position: [-6, 2.2, 0] }, geometry: { width: 0.55, height: 2, depth: 3.4 },
+        material: { color: "#ffb969", emissive: "#71360f", emissiveIntensity: 0.28, metalness: 0.15, roughness: 0.45 },
+        physics: { mode: "dynamic", mass: 2.4, material: "ball" }, castShadow: true,
+        interactions: [{ id: "swing", label: "Swing hinge", type: "apply-impulse", targetIds: ["hinge-plank"], impulse: [0, 0, 5], relativePoint: [0, -0.8, 0] }],
+        tags: ["constraint-workshop", "joint:revolute", "physics:dynamic", "agent-observable"]
+      },
+      {
+        id: "fixed-anchor", label: "Fixed Anchor", type: "box",
+        transform: { position: [0, 4.2, 0] }, geometry: { width: 1.5, height: 1.2, depth: 1.5 },
+        material: { color: "#9d8cff", emissive: "#403180", emissiveIntensity: 0.38, metalness: 0.38, roughness: 0.34 },
+        physics: { mode: "static", material: "wall" }, castShadow: true,
+        tags: ["constraint-workshop", "joint:fixed", "physics:static"]
+      },
+      {
+        id: "fixed-block", label: "Welded Dynamic Block", type: "box",
+        transform: { position: [0, 2.4, 0] }, geometry: { width: 1.2, height: 1.8, depth: 1.2 },
+        material: { color: "#d5caff", emissive: "#4a3d86", emissiveIntensity: 0.25, metalness: 0.25, roughness: 0.42 },
+        physics: { mode: "dynamic", mass: 1.8, material: "default" }, castShadow: true,
+        interactions: [{ id: "test-weld", label: "Test fixed joint", type: "apply-impulse", targetIds: ["fixed-block"], impulse: [4, 0, 0] }],
+        tags: ["constraint-workshop", "joint:fixed", "physics:dynamic", "agent-observable"]
+      },
+      {
+        id: "rope-anchor", label: "Rope Anchor", type: "sphere",
+        transform: { position: [6, 5, 0] }, geometry: { radius: 0.48, radialSegments: 24 },
+        material: { color: "#73edb8", emissive: "#176c4c", emissiveIntensity: 0.5, metalness: 0.3, roughness: 0.3 },
+        physics: { mode: "static", material: "wall" }, castShadow: true,
+        tags: ["constraint-workshop", "joint:rope", "physics:static"]
+      },
+      {
+        id: "rope-ball", label: "Rope Wrecking Ball", type: "sphere",
+        transform: { position: [6, 1.8, 0] }, geometry: { radius: 0.75, radialSegments: 32 },
+        material: { color: "#ff735d", emissive: "#7e2014", emissiveIntensity: 0.35, metalness: 0.5, roughness: 0.28 },
+        physics: { mode: "dynamic", mass: 3.2, material: "ball" }, castShadow: true,
+        interactions: [{ id: "swing", label: "Swing rope", type: "apply-impulse", targetIds: ["rope-ball"], impulse: [6, 0, 0] }],
+        tags: ["constraint-workshop", "joint:rope", "physics:dynamic", "agent-observable"]
+      }
+    ],
+    joints: [
+      { id: "hinge-joint", type: "revolute", bodyA: "hinge-anchor", bodyB: "hinge-plank", anchorA: [0, -0.8, 0], anchorB: [0, 1, 0], axis: [1, 0, 0] },
+      { id: "fixed-joint", type: "fixed", bodyA: "fixed-anchor", bodyB: "fixed-block", anchorA: [0, -0.9, 0], anchorB: [0, 0.9, 0] },
+      { id: "rope-joint", type: "rope", bodyA: "rope-anchor", bodyB: "rope-ball", anchorA: [0, 0, 0], anchorB: [0, 0, 0], length: 3.2 }
+    ]
   };
 }
 

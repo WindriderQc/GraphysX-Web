@@ -209,6 +209,9 @@ import {
   type AgentWorldEntityPatch,
   type AgentWorldEntityState,
   type AgentWorldInteractionReceipt,
+  type AgentWorldJointDefinition,
+  type AgentWorldJointPatch,
+  type AgentWorldJointState,
   type AgentWorldSteerInput,
   type AgentWorldSteerReceipt,
   type AgentWorldSubjectRun,
@@ -1802,6 +1805,24 @@ export class RaceScene {
 
   removeAgentWorldEntity(id: string): AgentWorldResult<string[]> {
     const result = this.agentWorld?.remove(id) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
+    this.afterAgentWorldMutation(result.ok);
+    return result;
+  }
+
+  addAgentWorldJoint(joint: AgentWorldJointDefinition): AgentWorldResult<AgentWorldJointState> {
+    const result = this.agentWorld?.addJoint(joint) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
+    this.afterAgentWorldMutation(result.ok);
+    return result;
+  }
+
+  updateAgentWorldJoint(id: string, patch: AgentWorldJointPatch): AgentWorldResult<AgentWorldJointState> {
+    const result = this.agentWorld?.updateJoint(id, patch) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
+    this.afterAgentWorldMutation(result.ok);
+    return result;
+  }
+
+  removeAgentWorldJoint(id: string): AgentWorldResult<string> {
+    const result = this.agentWorld?.removeJoint(id) ?? { ok: false, revision: 0, error: "Agent World Studio is not open" };
     this.afterAgentWorldMutation(result.ok);
     return result;
   }

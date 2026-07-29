@@ -508,6 +508,7 @@ if (mode === "legacy") {
         mode: host.mode,
         world: host.api.state()?.world ?? null,
         paused: host.api.state()?.paused ?? false,
+        joints: host.api.state()?.joints ?? [],
         run: host.api.rules.status(),
         archiveCup: getArchiveCupRuntimeState(),
         personalGhost: getPersonalGhostState(),

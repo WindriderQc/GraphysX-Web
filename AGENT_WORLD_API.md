@@ -6,7 +6,7 @@ Open **Build With Agent World API** from the home screen, or call `window.__GRAP
 
 ## Human UI parity
 
-The visible **World Editor** and `window.__GRAPHYSX__` are two interfaces over one runtime. A person can select entities from the outliner; create primitives, semantic agent participants, groups, lights, recovered models, and splines; add static, dynamic, or kinematic physics; choose recovered textures; edit transforms, materials, hierarchy, tags, interactions, and behaviors; remove entities; and save or restore named snapshots. Starter worlds, prefabs, pause, deterministic step, undo, and clear remain available as direct controls.
+The visible **World Editor** and `window.__GRAPHYSX__` are two interfaces over one runtime. A person can select entities from the outliner; create primitives, semantic agent participants, groups, lights, recovered models, and splines; add static, dynamic, or kinematic physics; load a starter containing editable constraints; choose recovered textures; edit transforms, materials, hierarchy, tags, interactions, and behaviors; remove entities; and save or restore named snapshots. Starter worlds, prefabs, pause, deterministic step, undo, and clear remain available as direct controls.
 
 The **Advanced JSON Workbench** completes the parity surface. It accepts a full `graphysx.agent-world/v2` document, an atomic command array, or a revision-guarded actor change set. The editor does not keep a separate UI scene model: every button calls the same validated runtime method and produces the same revision, receipt, event, rollback, and error an agent receives.
 
@@ -90,7 +90,7 @@ gx.starters();
 gx.loadStarter("glow-garden");
 ```
 
-Available starters are `prefab-plaza` (43 entities), `glow-garden` (45), `signal-outpost` (41), the playable `signal-trail` (45), and `physics-sketchbook` (16). The sketchbook demonstrates textured ramps, mass, restitution, collision, impulse interaction, coordinates, orbit, and a visible semantic agent. Pass `{ id, label }` as the optional second argument when the new world needs application-specific identity.
+Available starters include `prefab-plaza` (43 entities), `glow-garden` (45), `signal-outpost` (41), the playable `signal-trail` (45), `constraint-workshop` (9), and `physics-sketchbook` (16). Constraint Workshop demonstrates fixed, revolute/hinge, and rope joints as ordinary v2 data; the sketchbook demonstrates textured ramps, mass, restitution, collision, impulse interaction, coordinates, orbit, and a visible semantic agent. Pass `{ id, label }` as the optional second argument when the new world needs application-specific identity.
 
 `gx.textures()` discovers the eleven stable recovered texture IDs, their source family, browser URL, usage guidance, and repeat defaults. A material stores the stable ID plus repeat, offset, and rotation so world files remain readable and portable.
 
@@ -329,6 +329,34 @@ can be overridden per entity. Set world gravity with `environment.physics.gravit
 rigid-body simulation, and `query()`/`state()` report current velocity and sleep state. Physics
 entities stay at the world root so their transform has one unambiguous coordinate space. The editor
 shows the model collider policy in its Physics section and forces `static` when `trimesh` is chosen.
+
+### Serializable joints
+
+Top-level `joints` connect two physics entities by stable ID. At least one body must be dynamic;
+trigger bodies and unresolved entities are rejected. Anchors are local to each body. Revolute axes
+are expressed in body A's local space, and rope length is the maximum anchor separation.
+
+```js
+gx.addJoint({
+  id: "hinge",
+  type: "revolute",
+  bodyA: "hinge-anchor",
+  bodyB: "door",
+  anchorA: [0, -1, 0],
+  anchorB: [0, 1, 0],
+  axis: [1, 0, 0]
+});
+
+gx.updateJoint("hinge", { axis: [0, 0, 1] });
+gx.removeJoint("hinge");
+```
+
+Fixed joints may optionally set `frameRotationDegreesA` and `frameRotationDegreesB`. Rope joints
+set a positive `length`. `state()` and `render_game_to_text()` report normalized joint definitions
+plus `active`; `export()` retains the definitions without renderer or Rapier handles. Entity
+transform rebuilds reconnect their joints, removing an entity removes its connected joints, and
+removing physics from a connected entity is rejected. All three joint mutations participate in
+revision checks, transactions, undo, the async bridge, and document export/reload.
 
 An entity with `type: "agent"` is a visible participant with a serializable role, status, perception radius, and semantic capability list. This describes who or what is present in a shared spatial explanation; it does not run arbitrary scripts or create a second AI runtime.
 

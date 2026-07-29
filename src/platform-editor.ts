@@ -3521,7 +3521,7 @@ const EDITOR_CSS = `
 .gx-ed-toolbar *,.gx-ed-panel *,.gx-ed-workbench *{box-sizing:border-box}
 
 /* ---- top bar ---- */
-.gx-ed-toolbar{top:var(--gx-s4);left:var(--gx-s4);right:var(--gx-s4);display:flex;flex-wrap:wrap;align-items:center;gap:var(--gx-s3);padding:var(--gx-s2) var(--gx-s3);user-select:none}
+.gx-ed-toolbar{top:var(--gx-s4);left:var(--gx-s4);right:var(--gx-s4);display:flex;flex-wrap:nowrap;align-items:center;gap:var(--gx-s3);padding:var(--gx-s2) var(--gx-s3);overflow-x:auto;overflow-y:hidden;user-select:none}
 .gx-ed-group{display:flex;align-items:center;gap:var(--gx-s1)}
 .gx-ed-group+.gx-ed-group{padding-left:var(--gx-s3);border-left:1px solid var(--gx-border-soft)}
 .gx-ed-toolbar button,.gx-ed-toolbar select{background:var(--gx-field);color:var(--gx-text);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:5px 10px;cursor:pointer;font:inherit;line-height:1.2}

@@ -1,6 +1,6 @@
 {
   "schema": "graphysx.archive-parity/v1",
-  "generatedAt": "2026-07-29T02:28:52.530Z",
+  "generatedAt": "2026-07-29T02:51:15.569Z",
   "scope": {
     "roots": [
       {
@@ -237,8 +237,8 @@
     "functionalityRecords": 70,
     "functionalityByDisposition": {
       "OUT OF SCOPE": 1,
-      "REVIVED": 62,
-      "SOURCE-ONLY": 6,
+      "REVIVED": 63,
+      "SOURCE-ONLY": 5,
       "SUPERSEDED": 1
     }
   },
@@ -394,15 +394,18 @@
       "id": "physics-v2-constraint-authoring",
       "kind": "physics",
       "label": "Serializable scene-authored constraints",
-      "disposition": "SOURCE-ONLY",
+      "disposition": "REVIVED",
       "archiveEvidence": [
         "GraphysX_1 Newton joint callsites"
       ],
       "currentEvidence": [
-        "src/archive-playgrounds.ts"
+        "src/agent-world-runtime.ts",
+        "src/physics/rapier-physics-engine.ts",
+        "src/agent-world-starters.ts",
+        "scripts/smoke-joints.mjs"
       ],
-      "destination": null,
-      "note": "Current v2 documents have rigid bodies but no joint definitions; the specialized lab cannot be cloned or patched as ordinary scene data."
+      "destination": "Scene Editor > Load starter > Constraint Workshop",
+      "note": "Fixed, revolute/hinge, and rope joints are validated v2 scene data with public add/update/remove tools, undo, export/reload, observable state, and a human-loadable starter."
     },
     {
       "id": "scene-1-main-menu",

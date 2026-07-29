@@ -81,10 +81,36 @@ export interface PhysicsStepOptions {
   maxSubSteps?: number;
 }
 
+export type PhysicsJointDefinition =
+  | {
+      kind: "fixed";
+      anchorOnFirst: PhysicsVector3;
+      anchorOnSecond: PhysicsVector3;
+      frameOnFirst: PhysicsQuaternion;
+      frameOnSecond: PhysicsQuaternion;
+    }
+  | {
+      kind: "revolute";
+      anchorOnFirst: PhysicsVector3;
+      anchorOnSecond: PhysicsVector3;
+      axis: PhysicsVector3;
+    }
+  | {
+      kind: "rope";
+      anchorOnFirst: PhysicsVector3;
+      anchorOnSecond: PhysicsVector3;
+      length: number;
+    };
+
 declare const physicsBodyHandleBrand: unique symbol;
 
 /** Identity-only token. Its backing rigid body is private to the active adapter. */
 export type PhysicsBodyHandle = Readonly<{ [physicsBodyHandleBrand]: true }>;
+
+declare const physicsJointHandleBrand: unique symbol;
+
+/** Identity-only token for a constraint owned by one physics adapter. */
+export type PhysicsJointHandle = Readonly<{ [physicsJointHandleBrand]: true }>;
 
 /**
  * Minimal world/body seam needed by AgentWorld today.
@@ -96,6 +122,8 @@ export type PhysicsBodyHandle = Readonly<{ [physicsBodyHandleBrand]: true }>;
 export interface PhysicsEngine {
   createBody(definition: PhysicsBodyDefinition): PhysicsBodyHandle;
   removeBody(body: PhysicsBodyHandle): void;
+  createJoint(first: PhysicsBodyHandle, second: PhysicsBodyHandle, definition: PhysicsJointDefinition): PhysicsJointHandle;
+  removeJoint(joint: PhysicsJointHandle): void;
 
   step(deltaSeconds: number, options?: PhysicsStepOptions): void;
   setGravity(gravity: PhysicsVector3): void;
