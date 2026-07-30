@@ -84,6 +84,8 @@ const SMOKES = [
   { name: "archive-parity", script: "scripts/audit-archive-parity.mjs", covers: "complete archive census: every media path and functionality record has a hash-backed disposition" },
   { name: "rapier-race", script: "scripts/smoke-rapier-race.mjs", covers: "Rapier RaceScene: Piste vehicle motion, steering, finite state, browser errors" },
   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
+  { name: "live-sessions", script: "scripts/smoke-live-sessions.mjs", covers: "live sessions: owner + remote editor + agent on one scene, incremental attributed ops, roles, duplicates, conflicts, reconnect/resume/resync, teardown" },
+  { name: "live-sessions-security", script: "scripts/smoke-live-sessions-security.mjs", covers: "live session security: fail-closed without a store token, cross-session + forged credentials, expired/revoked invites, origin rejection, one-shot stream tickets, payload/rate caps, concurrent burst consistency, token-leak audit" },
   { name: "dna", script: "scripts/smoke-dna.mjs", covers: "DNA forest: deterministic genome drift, preset fidelity, node-level (no browser)" },
 ];
 

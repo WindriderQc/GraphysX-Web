@@ -2296,3 +2296,74 @@ After that targeted fix, `npm run typecheck`, `npm run build`, `npm run smoke:sc
 errors. Per release protocol, the expensive full matrix was not restarted after a single isolated
 failure; only the affected check, the consolidated feature check and static build checks were
 repeated.
+
+## 2026-07-30 — Live Sessions r1: authenticated collaboration core
+
+The next milestone is a session layer over the scene store: two humans and an agent in one
+live scene, sharing one revision line. Reconnaissance first established that a collaboration
+layer already existed — `scene-store-client.ts` applies SSE deltas through `api.transaction`,
+and `api.commit` already carries actor, intent and `expectedRevision`. So this slice is
+identity and hardening on top of that, not a second mechanism beside it.
+
+`server/live-sessions.mjs` adds sessions, members, invitations, roles, incremental
+operations and presence. Every accepted operation applies through `applyCommands` — the same
+validated document path `PUT /scenes` and `/changes` already use, so no actor has a private
+mutation path. Credentials are 32 CSPRNG bytes stored only as sha256 digests, compared with
+`timingSafeEqual`, and shaped `<id>.<secret>` so verification is one compare rather than a
+scan over members. Invitations are a separate, short-lived, revocable, use-capped secret;
+they are exchanged once for a scoped credential and the browser scrubs them out of the
+address bar with `replaceState`. Roles (owner/editor/viewer/agent) are enforced by a
+server-side table, agents additionally by an explicit operation-path capability list, and the
+operation `path` is an allowlist rather than a namespace walk.
+
+Transport stayed HTTP + SSE. The traffic is deltas down and operations up over ordinary POST,
+which is the half of WebSockets we would actually use, and it needs no nginx upgrade block on
+the existing deploy. Because `EventSource` cannot set headers, the stream authenticates with
+a single-use 30-second ticket instead of a credential in the query string.
+
+The layer fails closed: with no `GRAPHYSX_STORE_TOKEN` the store runs in its tokenless LAN
+mode, and session routes answer 503 rather than inherit it. `/health` reports it.
+
+`server/http-util.mjs` was extracted on the way through — `send` and `readJsonBody` existed
+twice and the CORS allow-headers list was written out twice, so adding `x-graphysx-session`
+would have been a two-file edit with a cross-origin-only failure if either was missed.
+
+Three real defects were found by the assertions and fixed rather than argued with. A client
+resuming from a sequence *ahead* of the server was told it was up to date; it is
+desynchronised and now gets a resync. Semantic operation rejections inherited
+`SceneCommandError`'s 400 and were indistinguishable from a malformed envelope; they are 422
+with `code: "operation-rejected"`. A 413 path destroyed the request socket before the status
+could be written, so the client saw a bare "fetch failed". Operations are also now serialised
+per session, because two members submitting in the same tick were both reading revision R and
+the loser took a 409 it did nothing to deserve.
+
+Verification is 137 assertions across three permanent smokes. `smoke-live-sessions` (64)
+drives owner, remote editor and agent over real HTTP and SSE: incremental attributed
+operations, role rejection, agent capability scoping, duplicate-`opId` idempotency, structured
+conflicts, disconnect → resume → replay, dropped history → honest `mustResync`, membership
+revocation, and a teardown that leaves nothing online. `smoke-live-sessions-security` (41)
+covers fail-closed configuration, cross-session and forged credentials, expired and revoked
+invitations, indistinguishable auth failures, origin rejection, ticket replay, payload and
+rate caps, a 20-operation concurrent burst with no lost update, and a credential audit across
+console, response bodies, activity and disk. `smoke-live-sessions-browser` (32) runs the built
+bundle: two browsers plus an external agent, live mutation both directions without a reload,
+presence and remote selection, attributed activity, viewer refusal, offline state, rejoin and
+catch-up, and zero console/page/request errors.
+
+Two of those browser assertions were vacuous before the screenshot was read. `api.query`
+filters on `ids: string[]`; `{ id }` is not a query field, so it was silently ignored and the
+assertions were reading entity[0] — the anchor. Two selectors were also unscoped and matched
+the scene browser's `data-role="live"` and `data-role="dot"` instead of this panel's. And the
+screenshot itself caught what all 29 green assertions missed: the live panel and the scene
+browser both dock top-right and were stacked on top of each other. The panel now measures the
+scene browser's rect and stacks below it — `offsetParent` was the wrong visibility test, since
+it is always null for a `position: fixed` element — and a geometry assertion now guards it.
+
+`docs/LIVE_SESSIONS.md` records the protocol, the transport tradeoff and the threat model,
+including six named limitations: sessions are in-memory and die with the store, rate limits
+are per member rather than per IP, `actorId` is chosen by whoever redeems an invitation,
+store reads stay open, there is no end-to-end encryption, and undo is a boundary rather than
+actor-aware undo. Genuine per-actor undo needs inverse operations the runtime does not have.
+
+Typecheck and production build are green. Not started in this slice: persistent best times,
+leaderboards, ghost sharing, and the five adjacent debt items.

@@ -19,6 +19,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { setTimeout as delay } from "node:timers/promises";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CORS_ALLOW_HEADERS, CORS_ALLOW_METHODS } from "./http-util.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..");
@@ -360,8 +361,8 @@ function sendJson(response, status, payload, cors = { "access-control-allow-orig
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
     ...cors,
-    "access-control-allow-methods": "GET, PUT, POST, DELETE, OPTIONS",
-    "access-control-allow-headers": "authorization, x-graphysx-token, content-type",
+    "access-control-allow-methods": CORS_ALLOW_METHODS,
+    "access-control-allow-headers": CORS_ALLOW_HEADERS,
   });
   response.end(body);
 }
