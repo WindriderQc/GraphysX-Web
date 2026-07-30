@@ -22,6 +22,7 @@ import { applyCommands, describeCommands } from "./scene-commands.mjs";
 import { createAssetStore, handleAssetRequest } from "./asset-store.mjs";
 import { CORS_ALLOW_HEADERS, CORS_ALLOW_METHODS, readJsonBody, sendJson as send } from "./http-util.mjs";
 import { createLiveSessions } from "./live-sessions.mjs";
+import { createResultsStore, handleResultsRequest } from "./results-store.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..");
@@ -331,7 +332,7 @@ function createRelay() {
   };
 }
 
-export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, origins } = {}) {
+export function createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir, token, origins } = {}) {
   const store = createSceneStore({ dir });
   const assets = createAssetStore({
     ...(assetDir !== undefined ? { dir: assetDir } : {}),
@@ -345,6 +346,15 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, orig
   // Identity on top of the store's shared secret. Disabled — 503, not silently open — when
   // the store itself is running tokenless.
   const sessions = createLiveSessions({ store, guard });
+  // Best times, leaderboards and shared ghosts. Client-attested by design — see the header
+  // of results-store.mjs. Reads are open like scene reads; recording needs the store token.
+  // `.results` *inside* the scenes directory, not a sibling of it. A sibling resolves to
+  // `.graphysx-store/results` for the default layout and to `/tmp/results` for a store
+  // pointed at a temp directory — which meant every test run sharing one board directory and
+  // inheriting the previous run's leaderboard. Nesting it makes isolation follow the store
+  // dir automatically. `store.list()` filters on `.json`, so a directory here is invisible
+  // to it.
+  const results = createResultsStore({ dir: resultsDir ?? join(store.dir, ".results") });
 
   const server = createServer((request, response) => {
     void (async () => {
@@ -372,6 +382,7 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, orig
             // Fail-closed status, visible without authenticating: an operator can see at a
             // glance whether live collaboration is available or disabled for lack of a token.
             sessions: { enabled: sessions.enabled, open: sessions.count() },
+            results: { boards: await results.count(), trust: "client-attested" },
           }, cors);
         }
 
@@ -383,6 +394,9 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, orig
         // Live sessions (/sessions/*): identity, roles, incremental operations, presence.
         // Mounted before the scene routes and namespaced so it can never shadow one.
         if (await sessions.handle(request, response, url, path, cors)) return undefined;
+
+        // Results (/results/*): persistent bests, bounded leaderboards, shared ghosts.
+        if (await handleResultsRequest(results, request, response, url, path, guard, cors)) return undefined;
 
         if (path === "/scenes" && request.method === "GET") {
           return send(response, 200, { schema: SCENE_STORE_SCHEMA, scenes: await store.list() }, cors);
@@ -551,11 +565,11 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, orig
     })();
   });
 
-  return { server, store, assets, guard, sessions };
+  return { server, store, assets, guard, sessions, results };
 }
 
-export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, datalakeDir, token, origins } = {}) {
-  const { server, store, assets, guard, sessions } = createSceneStoreServer({ dir, assetDir, datalakeDir, token, origins });
+export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, datalakeDir, resultsDir, token, origins } = {}) {
+  const { server, store, assets, guard, sessions, results } = createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir, token, origins });
   if (!guard.enabled) {
     // One line, every start, on purpose: the open mode is a deliberate LAN convenience
     // and the operator should never discover it by accident.
@@ -580,6 +594,7 @@ export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, data
     assets,
     guard,
     sessions,
+    results,
     // 127.0.0.1 rather than localhost: on Windows, Node's fetch resolves localhost to ::1
     // first, and whether that reaches a listener bound to the IPv4 any-address is a coin
     // flip. It surfaced as an intermittent "scene store unreachable" against a store that

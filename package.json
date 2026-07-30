@@ -47,6 +47,7 @@
     "smoke:store-auth": "node scripts/smoke-store-auth.mjs",
     "smoke:live-sessions": "node scripts/smoke-live-sessions.mjs",
     "smoke:live-sessions-security": "node scripts/smoke-live-sessions-security.mjs",
+    "smoke:results": "node scripts/smoke-results.mjs",
     "smoke:dna": "node scripts/smoke-dna.mjs",
     "serve:staging": "node scripts/staging-server.mjs",
     "serve:scenes": "node server/scene-store.mjs",

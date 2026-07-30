@@ -28,6 +28,12 @@ export function sendJson(response, status, payload, cors = { "access-control-all
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
+    // A 413 is answered *while the client is still uploading*. Whatever is left of that body
+    // is sitting on the socket, and a keep-alive connection would hand it to the next
+    // request on that socket as if it were a new one — which surfaces on the client as a
+    // bare "fetch failed" on the request *after* the one that was too large. Closing is the
+    // only correct answer once we have decided not to read the rest.
+    ...(status === 413 ? { connection: "close" } : {}),
     ...cors,
     "access-control-allow-methods": CORS_ALLOW_METHODS,
     "access-control-allow-headers": CORS_ALLOW_HEADERS,

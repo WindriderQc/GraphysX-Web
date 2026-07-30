@@ -2367,3 +2367,56 @@ actor-aware undo. Genuine per-actor undo needs inverse operations the runtime do
 
 Typecheck and production build are green. Not started in this slice: persistent best times,
 leaderboards, ghost sharing, and the five adjacent debt items.
+
+## 2026-07-30 — Live Sessions r1: results, leaderboards and shared ghosts
+
+`server/results-store.mjs` adds the store-side results concept: persistent personal bests,
+bounded leaderboards and shared ghost recordings, keyed by `(recordId, courseVersion,
+rulesVersion)`. Reconnaissance first established the existing vocabulary so this reuses it
+rather than growing a parallel one — `recordId` from `raceRecordIdForWorld`, `bestMs` as
+integer milliseconds, `medal`, `completedAt`, and the ghost trace shape `src/level-ghosts.ts`
+already persists, so a downloaded ghost plays back through the existing interpolator with no
+conversion.
+
+Two decisions are load-bearing. The layer is **client-attested and says so** on every read
+surface, with a smoke assertion that fails if any response starts implying a time was
+server-verified; verifying one would mean running the physics here and replaying input, which
+is a different product. And results are **separated by compatibility, never compared across
+it**: a board is keyed on a hash of the course and rules versions, so a time set on a
+different version of a course lands on its own board instead of beating one it was never
+racing. `rulesVersion` may be omitted and fingerprinted from the submitted rules block —
+a fingerprint, not a version counter, because `agent-world-rules.ts` records a decision that
+the rules definition must not carry its own revision and that decision stands.
+
+The desync invariant carries to the server: a desynced run is refused outright, as are
+incomplete runs, non-integer times, times below a 250ms floor or beyond six hours, times under
+a course's declared `floorMs`, unknown medals and traversal-shaped ids. Ghost validation is
+deliberately stricter than the client's on one point — sample times must strictly ascend. The
+client never checked, because its playback binary-searches a trace its own recorder produced
+in order; a trace arriving over HTTP has no such guarantee and an unsorted one interpolates to
+silent nonsense.
+
+Four real defects, all found by assertions and fixed rather than argued with. `rankResults`
+sorted on `elapsedMs` while stored entries carry `bestMs`, so every comparison was `NaN` — a
+sort comparator treats that as "leave them alone", and the leaderboard silently stayed in
+insertion order while the retention pass kept arbitrary entries. Both looked plausible. The
+results directory defaulted to a *sibling* of the scenes directory, which resolves to
+`/tmp/results` for a store pointed at a temp dir, so every test run inherited the previous
+run's board; it is now nested inside the store dir and isolation follows automatically. A 413
+was answered on a keep-alive connection while the client was still uploading, so the unread
+body was handed to the next request on that socket and surfaced as a bare "fetch failed" on
+the request *after* the oversized one; 413 now closes the connection. And `courseVersion`
+needed its own pattern — `@` is legitimate in a version token, and unlike `recordId` a version
+never reaches the filesystem because only its hash does.
+
+`scripts/smoke-results.mjs` is 47 assertions covering personal-best replacement, refusal
+classes, ghost validation and round-trip, compatibility separation across both course and
+rules versions, deterministic ordering with stable tiebreaks, bounds, the trust labels,
+survival across a store restart, and a parity check that reads the client's `MAX_SAMPLES` out
+of `src/level-ghosts.ts` and asserts the server's cap matches. `docs/RESULTS.md` records the
+API, the trust model and four limitations.
+
+Not done: browser integration. Nothing in `ballz-play.ts` submits a result and no UI reads a
+leaderboard. The constraint that slice must meet is recorded in the doc — `smoke-archive-cup`
+asserts zero console errors and its harness runs with no store, so any call on the finish path
+must fail completely silently.
