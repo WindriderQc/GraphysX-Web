@@ -85,6 +85,7 @@ const SMOKES = [
   { name: "clean-host", script: "scripts/audit-clean-host.mjs", covers: "dependency direction: no default-host module reaches the legacy race-scene monolith, type-only imports included" },
   { name: "product-assets", script: "scripts/audit-product-assets.mjs", covers: "release completeness: every /assets URL a product-reachable module names ships in the production manifest, with a reasoned allowlist" },
   { name: "asset-guard", script: "scripts/smoke-asset-guard.mjs", covers: "asset-guard fixtures: a missing asset fails, a registered asset passes, base paths/globs/templates/externals are classified, type-only vs runtime edges" },
+  { name: "previews", script: "scripts/audit-previews.mjs", covers: "preview registry: every workshop harness is registered, and every mountable one uses the shared renderer and the shared frame loop" },
   { name: "rapier-race", script: "scripts/smoke-rapier-race.mjs", covers: "Rapier RaceScene: Piste vehicle motion, steering, finite state, browser errors" },
   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
   { name: "live-sessions", script: "scripts/smoke-live-sessions.mjs", covers: "live sessions: owner + remote editor + agent on one scene, incremental attributed ops, roles, duplicates, conflicts, reconnect/resume/resync, teardown" },

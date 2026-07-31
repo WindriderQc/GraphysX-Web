@@ -85,7 +85,17 @@ async function waitForExactCollider(
   throw new Error(`Timed out waiting for ${entityId}'s exact collider`);
 }
 
-if (mode === "legacy") {
+// `?host=previews` — the workshop preview index. Development only, and guarded by
+// `import.meta.env.DEV` rather than a runtime flag so the whole subtree is dead code in a
+// production build: these are restoration harnesses, not product, and shipping them would
+// also drag archive assets into the release manifest the product deliberately prunes.
+if (mode === "previews" && import.meta.env.DEV) {
+  root.style.position = "fixed";
+  root.style.inset = "0";
+  void Promise.all([import("./styles.css"), import("./preview-host")]).then(([, { mountPreviewHost }]) => {
+    Object.assign(window, { __GRAPHYSX_PREVIEW_HOST__: mountPreviewHost(root) });
+  });
+} else if (mode === "legacy") {
   // The archive-revival player on race-scene, kept as a reference fallback only.
   // `styles.css` is entirely prototype-app selectors, so it loads with this route rather
   // than blocking first paint on the default one.

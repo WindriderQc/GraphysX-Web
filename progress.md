@@ -2480,3 +2480,52 @@ including what is deliberately not claimed.
 
 Typecheck, build, `smoke-results`, `smoke-live-sessions` and the two new audits are green.
 Not done: preview harness index (item 3) and preview renderer consolidation (item 4).
+
+## 2026-07-30 — adjacent debt: workshop preview host (items 3 and 4)
+
+The last two queued debt items were the same body of code. All 19 `*-preview.ts` harnesses
+were orphaned — nothing imported them, no route reached them, and each queried a canvas id
+(`#milky-way-preview-canvas`, `#suzanne-preview-canvas`, …) that no HTML in this repo
+provides. They could not run, and nothing said so. Eighteen of nineteen also built their own
+`WebGLRenderer` and their own `requestAnimationFrame` loop, against the product invariant, and
+renderer setup had drifted: eleven wrote `outputColorSpace = "srgb"` as a string, seven used
+`SRGBColorSpace`, and only three touched tone mapping at all, with three different exposures.
+
+`src/preview-bootstrap.ts` now owns one renderer, one frame loop and one disposal path, with
+defaults matching the product host so a recovered material looks the same in a preview as in
+the app. A preview receives a context, adds to a scene, returns `step`/`describe`/`dispose`.
+Archive data was not touched to make previews match each other — consistent renderer setup was
+the goal, and a scene the archive authored differently stays different.
+
+`src/preview-host.ts` is the index at `?host=previews`, guarded by `import.meta.env.DEV` so the
+whole subtree is dead code in production. That guard is not cosmetic: making these
+product-reachable would pull archive assets into the release manifest `product-assets.mjs`
+deliberately prunes, and the new asset audit would have started failing. The smoke asserts the
+host is absent from `dist/`.
+
+Two harnesses are converted and run for the first time: Voie Lactée and the Suzanne 1 ASCII
+arena. Screenshots are `output/smoke/previews-milky-way.png` and `previews-suzanne1.png`;
+both were inspected. The planetary row renders with its recovered radii, the arena renders
+with shadows (its `shadowMap.enabled` override is restored on dispose), and switching between
+them tears the previous scene down completely rather than layering it underneath.
+
+The other 17 are **listed in the index, disabled, showing the canvas id they still query**.
+Hiding them would recreate exactly the problem being fixed. `scripts/audit-previews.mjs` fails
+if a harness file exists that the registry does not list, or if anything marked mountable
+creates a renderer, calls `requestAnimationFrame`, or exports no `mount`. Its own first run
+failed on a false positive — it matched "requestAnimationFrame" inside the comment saying the
+file no longer calls it — so it strips comments before checking. Verified with a negative
+control that real code still fails it.
+
+`scripts/smoke-previews.mjs` drives the index in a browser against the dev server (the route
+is dev-only, so `dist/` is the wrong target) and proves the listing, mounting, teardown, the
+single shared loop, deterministic stepping and on-screen error reporting: 17/17. Two of its
+assertions found real problems rather than cosmetic ones. `advanceTime` was not deterministic
+while the live loop ran — a live frame between the caller's measurement and the call was
+indistinguishable from a step it made, reading 61 instead of 60 — so it now returns the frames
+it stepped and callers assert on that. And the smoke's own console watcher correctly flagged
+the error the unconverted-preview case deliberately triggers; the fix declares that one exact
+message as expected and asserts it actually appeared, rather than blanket-ignoring errors.
+
+`docs/PREVIEWS.md` carries the conversion recipe, the worked example, and the honest status.
+The gate is 52 checks. All five adjacent debt items are now closed.
