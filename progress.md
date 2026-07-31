@@ -2599,3 +2599,24 @@ submission, ranking against seeded rivals, the board's trust label surviving int
 race buttons (offered for a rival with a ghost, withheld for one without and for yourself),
 ghost download, interpolated playback and clean disposal. `smoke-archive-cup` re-run against a
 served build: zero console errors, zero page errors, medals and unlocks unchanged.
+
+## 2026-07-31 — the live panel becomes an editor outliner
+
+Features 16–18 finished. The presence/activity/health panel existed and was tested, but it
+floated over the editor's own right column — the same class of bug as the earlier scene-browser
+collision: a panel covering the thing it is meant to annotate. It now docks *inside*
+`.gx-ed-panel--right` when the editor is open, scrolling with it, and returns to its floating
+placement under the scene browser when the editor closes.
+
+There is no event to listen for — the editor is lazily imported and toggled by `display` — so a
+MutationObserver on the container watches for its arrival and each show/hide. The work per
+notification is one `querySelector` and a comparison.
+
+Six assertions added to `smoke-live-sessions-browser` (now 38): the panel is inside the column
+and carries the docked class, its box no longer overlaps the column, the roster and the ARIA
+live region survive the move, the viewport stays clear, and leaving the editor restores the
+floating placement. `output/smoke/live-session-editor.png` is the evidence.
+
+Noted, not fixed, because it predates this work and is a different component: the scene browser
+is `position: fixed` at the same corner with a higher z-index, so it still overlaps the editor's
+INSPECTOR heading whenever both are open.
