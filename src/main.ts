@@ -50,12 +50,28 @@ const mode = params.get("host");
 // `?store=<url>` points at a store other than the local default.
 const storeScene = params.get("scene");
 const explicitStore = params.get("store");
-const storeUrl = explicitStore ?? "http://localhost:8788";
+
+/**
+ * The store a production visitor talks to, baked in at build time.
+ *
+ * Opt-in, and deliberately empty by default. Set `VITE_GRAPHYSX_STORE_URL` when a store is
+ * actually reachable from the browser and every visitor gets live sessions, leaderboards and
+ * shared ghosts without a `?store=` parameter. Leave it unset and the build behaves exactly
+ * as it always has: no probe, no request, no console error.
+ *
+ * A **same-origin path** (`/store`) is the intended value rather than an absolute URL. It
+ * inherits the site's TLS — an `http://` store on an `https://` page is blocked outright as
+ * mixed content — it needs no CORS allowlist because it is not cross-origin, and it needs no
+ * second certificate. `ops/nginx/graphysx.specialblend.ca` carries the proxy block, and
+ * `docs/DEPLOYING_THE_STORE.md` is the runbook.
+ */
+const configuredStore = (import.meta.env.VITE_GRAPHYSX_STORE_URL ?? "").trim();
+const storeUrl = explicitStore ?? (configuredStore || "http://localhost:8788");
 // Probing a store that isn't there costs a `net::ERR_CONNECTION_REFUSED` in the console —
-// Chromium logs the failed request itself, so no try/catch can swallow it. The production
-// deploy is static with no store behind it, so every visitor would see that error. Probe
-// only when a store was actually asked for, or in dev where one is plausibly running.
-const wantsStore = Boolean(storeScene || explicitStore || import.meta.env.DEV);
+// Chromium logs the failed request itself, so no try/catch can swallow it. A deploy with no
+// store behind it would show that to every visitor. Probe only when a store was actually
+// asked for, configured at build time, or in dev where one is plausibly running.
+const wantsStore = Boolean(storeScene || explicitStore || configuredStore || import.meta.env.DEV);
 
 // `?session=<id>` joins a live collaboration session on the store. The invitation itself
 // arrives in the fragment as `#session=<id>&invite=<code>` — never in the query string,

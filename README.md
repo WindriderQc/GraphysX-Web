@@ -13,7 +13,14 @@ Live application: <https://graphysx.specialblend.ca>
 > fallback. What the product is: **[PRODUCT_SPEC.md](PRODUCT_SPEC.md)**. Where it stands
 > and what's next: **[ROADMAP.md](ROADMAP.md)**.
 >
-> **In progress — Live Sessions** (`codex/live-sessions-r1`, not deployed): authenticated
+> **Live Sessions, leaderboards and shared ghosts are deployed** — but a visitor can only
+> use them when a scene store is reachable from the browser. The build probes one only when
+> `VITE_GRAPHYSX_STORE_URL` is set (or `?store=` is passed), so the default deploy stays
+> storeless and silent. To turn them on:
+> **[docs/DEPLOYING_THE_STORE.md](docs/DEPLOYING_THE_STORE.md)**, then
+> `npm run store:preflight -- --url <store>`.
+>
+> **Previously in progress — Live Sessions** (`codex/live-sessions-r1`, not deployed): authenticated
 > scene-scoped collaboration where two humans and an agent share one revision line, plus
 > persistent best times, leaderboards and shared ghosts. See
 > [docs/LIVE_SESSIONS.md](docs/LIVE_SESSIONS.md) and [docs/RESULTS.md](docs/RESULTS.md).

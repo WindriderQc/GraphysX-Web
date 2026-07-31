@@ -2620,3 +2620,40 @@ floating placement. `output/smoke/live-session-editor.png` is the evidence.
 Noted, not fixed, because it predates this work and is a different component: the scene browser
 is `position: fixed` at the same corner with a higher z-index, so it still overlaps the editor's
 INSPECTOR heading whenever both are open.
+
+## 2026-07-31 — making the collaboration features reachable
+
+The r2 deploy shipped all twenty features and none of them could be used by anyone arriving at
+the site. `main.ts` probes a store only when `?store=`, `?scene=` or dev mode says one exists,
+and the production deploy is static nginx with nothing behind it. Everything built over this
+milestone was correct, verified, live in the bundle, and unreachable. That gap is now closed —
+by configuration and documentation rather than by more features.
+
+`VITE_GRAPHYSX_STORE_URL` bakes a store into the build. Opt-in and empty by default, so an
+unconfigured build behaves exactly as before: no probe, no request, no console error. A
+same-origin path (`/store`) is the intended value rather than an absolute URL, and the reason is
+not aesthetic — an `http://` store on an `https://` page is blocked as mixed content before any
+code runs, which is the wall any LAN-address store hits immediately. Same-origin also means no
+second certificate, no CORS allowlist and no preflight on every mutating request.
+
+`ops/nginx/graphysx.specialblend.ca` carries the proxy block. Three of its settings have no
+visible effect until someone actually collaborates: `proxy_buffering off`, `Connection ""` and a
+one-hour read timeout. A buffered SSE stream returns 200 and then delivers nothing until it
+closes — it passes every status-code check while collaboration silently does not work — and the
+default 60s read timeout severs each session stream once a minute, which the client dutifully
+reconnects from, forever.
+
+`scripts/store-preflight.mjs` exists because of that class of failure. It checks scheme,
+reachability, that a token is configured, that sessions are enabled, that an unauthenticated
+write is refused, and — the one that matters — it opens a real event stream and times the first
+frame. Exercised against both a correct store (8/8) and a tokenless one, where it correctly
+reports three failures including "this store is open to anyone who can reach it".
+
+`docs/DEPLOYING_THE_STORE.md` is the runbook, and states plainly what putting the store behind
+the public hostname exposes: scene reads are open, leaderboards and ghosts are open reads, rate
+limits are per member rather than per IP, `actorId` is self-reported, and times are
+client-attested. None of that is new — it is the same threat model, now with the boundary moved
+from a LAN to the internet, which is exactly when it needs saying out loud.
+
+Both build modes verified: with `VITE_GRAPHYSX_STORE_URL=/store` the value is baked in; without
+it, `smoke-results-browser` still passes 26/26 including the storeless-silence assertions.
