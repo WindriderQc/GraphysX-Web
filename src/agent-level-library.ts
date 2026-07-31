@@ -1,4 +1,4 @@
-import type { MapEditorDraft, MapEditorTile } from "./race-scene";
+import type { MapEditorDraft, MapEditorTile } from "./map-editor-tiles";
 
 export const GRAPHYSX_AGENT_LEVEL_SCHEMA = "graphysx.agent-level/v1" as const;
 export const GRAPHYSX_AGENT_LEVEL_ASCII_SCHEMA = "graphysx.agent-level-ascii/v1" as const;

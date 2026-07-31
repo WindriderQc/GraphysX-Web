@@ -41,10 +41,18 @@
     "smoke:level3": "node scripts/smoke-level3.mjs",
     "audit:revival-debt": "node scripts/audit-revival-debt.mjs",
     "audit:archive-parity": "node scripts/audit-archive-parity.mjs",
+    "audit:clean-host": "node scripts/audit-clean-host.mjs",
+    "audit:product-assets": "node scripts/audit-product-assets.mjs",
+    "audit:previews": "node scripts/audit-previews.mjs",
     "assets:archive-census": "node scripts/generate-archive-parity.mjs",
     "smoke:live-release": "node scripts/smoke-live-release.mjs",
     "smoke:rapier-race": "node scripts/smoke-rapier-race.mjs",
     "smoke:store-auth": "node scripts/smoke-store-auth.mjs",
+    "smoke:live-sessions": "node scripts/smoke-live-sessions.mjs",
+    "smoke:live-sessions-security": "node scripts/smoke-live-sessions-security.mjs",
+    "smoke:results": "node scripts/smoke-results.mjs",
+    "smoke:asset-guard": "node scripts/smoke-asset-guard.mjs",
+    "smoke:previews": "node scripts/smoke-previews.mjs",
     "smoke:dna": "node scripts/smoke-dna.mjs",
     "serve:staging": "node scripts/staging-server.mjs",
     "serve:scenes": "node server/scene-store.mjs",
@@ -58,7 +66,8 @@
     "assets:suzanne-machinery": "node scripts/vendor-suzanne-machinery.mjs && node scripts/build-asset-catalog.mjs",
     "assets:ppl-shader": "node scripts/vendor-ppl-shader.mjs",
     "assets:shelf-thumbnails": "node scripts/capture-shelf-thumbnails.mjs",
-    "qa": "node scripts/qa-agent-entities.mjs"
+    "qa": "node scripts/qa-agent-entities.mjs",
+    "counts": "node scripts/counts.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",

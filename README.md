@@ -12,6 +12,11 @@ Live application: <https://graphysx.specialblend.ca>
 > to a win. The legacy archive player survives behind `?host=legacy` as a reference
 > fallback. What the product is: **[PRODUCT_SPEC.md](PRODUCT_SPEC.md)**. Where it stands
 > and what's next: **[ROADMAP.md](ROADMAP.md)**.
+>
+> **In progress — Live Sessions** (`codex/live-sessions-r1`, not deployed): authenticated
+> scene-scoped collaboration where two humans and an agent share one revision line, plus
+> persistent best times, leaderboards and shared ghosts. See
+> [docs/LIVE_SESSIONS.md](docs/LIVE_SESSIONS.md) and [docs/RESULTS.md](docs/RESULTS.md).
 
 The complete historical source and restoration record lives in the workshop repo,
 [WindriderQc/GraphysX](https://github.com/WindriderQc/GraphysX). That repo is local-dev
@@ -35,6 +40,13 @@ The release gate — typecheck, build, and every headless smoke against the buil
 
 ```bash
 npm run verify
+```
+
+Current sizes — bridge tools, gate checks — are generated rather than written down, because
+a number in prose is wrong the next time it grows:
+
+```bash
+npm run counts
 ```
 
 ## Agent interaction

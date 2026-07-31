@@ -20,7 +20,7 @@ import type {
 import { modelMaterialPresetsFor } from "./agent-world-model-materials";
 import type { AgentLevelState, GraphysXAgentLevelApi } from "./agent-level-library";
 import type { AgentMediaFileEntry, AgentMediaListing, AgentWorldMediaDescriptor } from "./agent-world-media";
-import type { MapEditorTile } from "./race-scene";
+import type { MapEditorTile } from "./map-editor-tiles";
 import { GRAPHYSX_AGENT_WORLD_HDRIS, resolveAgentWorldHdri } from "./agent-world-hdris";
 
 type AgentWorldEnvironmentDefinition = NonNullable<AgentWorldDefinition["environment"]>;

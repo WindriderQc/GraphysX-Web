@@ -57,6 +57,12 @@ const storeUrl = explicitStore ?? "http://localhost:8788";
 // only when a store was actually asked for, or in dev where one is plausibly running.
 const wantsStore = Boolean(storeScene || explicitStore || import.meta.env.DEV);
 
+// `?session=<id>` joins a live collaboration session on the store. The invitation itself
+// arrives in the fragment as `#session=<id>&invite=<code>` — never in the query string,
+// because a query string is what gets pasted, bookmarked and sent as a referrer. The client
+// exchanges the code for a scoped credential and scrubs the fragment on the way in.
+const sessionParam = params.get("session");
+
 /**
  * Exact model colliders resolve asynchronously from their registered asset. Pause before a game
  * load and wait for both layers to say ready so neither gravity nor the rules clock can start
@@ -79,7 +85,17 @@ async function waitForExactCollider(
   throw new Error(`Timed out waiting for ${entityId}'s exact collider`);
 }
 
-if (mode === "legacy") {
+// `?host=previews` — the workshop preview index. Development only, and guarded by
+// `import.meta.env.DEV` rather than a runtime flag so the whole subtree is dead code in a
+// production build: these are restoration harnesses, not product, and shipping them would
+// also drag archive assets into the release manifest the product deliberately prunes.
+if (mode === "previews" && import.meta.env.DEV) {
+  root.style.position = "fixed";
+  root.style.inset = "0";
+  void Promise.all([import("./styles.css"), import("./preview-host")]).then(([, { mountPreviewHost }]) => {
+    Object.assign(window, { __GRAPHYSX_PREVIEW_HOST__: mountPreviewHost(root) });
+  });
+} else if (mode === "legacy") {
   // The archive-revival player on race-scene, kept as a reference fallback only.
   // `styles.css` is entirely prototype-app selectors, so it loads with this route rather
   // than blocking first paint on the default one.
@@ -683,6 +699,46 @@ if (mode === "legacy") {
           },
         });
         Object.assign(window, { __GRAPHYSX_SCENE_BROWSER__: browser, __GRAPHYSX_SCENE_STORE__: { client, browser } });
+
+        // Live sessions: identity, roles, presence and incremental operations on top of the
+        // same store. Loaded only when one was asked for — the panel is meaningless without
+        // a session, and the production deploy has no store behind it at all.
+        const [{ createLiveSessionClient, consumeInviteFromLocation }, { mountLiveSessionPanel }] = await Promise.all([
+          import("./live-session-client"),
+          import("./live-session-panel"),
+        ]);
+        const invitation = consumeInviteFromLocation(window.location, window.history);
+        const joiningSession = invitation?.sessionId ?? sessionParam;
+        if (joiningSession) {
+          const liveClient = createLiveSessionClient({
+            baseUrl: storeUrl,
+            api: host.api,
+            events: {
+              onStatus: (status) => panel?.setStatus(status),
+              onOperation: (operation) => panel?.recordOperation(operation),
+              onResync: (revision) => panel?.announce(`Resynced to revision ${revision}`),
+              onError: (error) => console.warn(`[graphysx] live session: ${error.message}`),
+            },
+          });
+          const panel = mountLiveSessionPanel(root, liveClient);
+          Object.assign(window, { __GRAPHYSX_LIVE_SESSION__: liveClient, __GRAPHYSX_LIVE_PANEL__: panel });
+          const actorId = params.get("actor") ?? `guest-${Math.random().toString(36).slice(2, 8)}`;
+          try {
+            if (invitation) {
+              await liveClient.join(invitation.sessionId, invitation.code, { id: actorId, label: actorId, kind: "human" });
+            }
+            // Without an invitation the tab has no credential of its own; `?session=` alone
+            // is the owner's own route, and the owner attaches with the credential it was
+            // issued at creation. A tab with neither stays in the showroom rather than
+            // silently pretending to be in a session.
+            showroomEnvironment?.();
+            showroomEnvironment = null;
+            document.querySelector(".gx-welcome")?.remove();
+            host.applyEnvironment();
+          } catch (error) {
+            panel.announce(`Could not join the live session: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
       },
     );
   });

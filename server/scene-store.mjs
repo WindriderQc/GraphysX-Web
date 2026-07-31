@@ -20,6 +20,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyCommands, describeCommands } from "./scene-commands.mjs";
 import { createAssetStore, handleAssetRequest } from "./asset-store.mjs";
+import { CORS_ALLOW_HEADERS, CORS_ALLOW_METHODS, readJsonBody, sendJson as send } from "./http-util.mjs";
+import { createLiveSessions } from "./live-sessions.mjs";
+import { createResultsStore, handleResultsRequest } from "./results-store.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..");
@@ -69,6 +72,17 @@ export function createStoreGuard({
       const origin = String(request.headers.origin ?? "").replace(/\/+$/, "");
       if (origin && allowlist.includes(origin)) headers["access-control-allow-origin"] = origin;
       return headers;
+    },
+
+    /**
+     * Whether an Origin is on the allowlist. `corsHeaders` merely withholds a header on a
+     * miss, which stops a browser and does nothing to a script; routes that need to
+     * *reject* an origin (live sessions) ask this instead. No allowlist configured means
+     * no origin policy to enforce, so everything is allowed — same compat rule as CORS.
+     */
+    originAllowed(origin) {
+      if (allowlist.length === 0) return true;
+      return allowlist.includes(String(origin ?? "").replace(/\/+$/, ""));
     },
 
     /** `Authorization: Bearer <token>` or `x-graphysx-token`. Always true in open mode. */
@@ -243,39 +257,13 @@ export function createSceneStore({ dir = DEFAULT_DIR } = {}) {
   };
 }
 
-function send(response, status, payload, cors = { "access-control-allow-origin": "*" }) {
-  const body = `${JSON.stringify(payload, null, 2)}\n`;
-  response.writeHead(status, {
-    "content-type": "application/json; charset=utf-8",
-    "content-length": Buffer.byteLength(body),
-    "cache-control": "no-store",
-    // The page is served by vite/nginx on a different origin than this store, so the
-    // browser client is always cross-origin. `cors` comes from the guard: `*` unless
-    // GRAPHYSX_STORE_ORIGIN narrows it. Without a GRAPHYSX_STORE_TOKEN this is still a
-    // LAN tool with no auth — keep it behind the same boundary as any other AgentX
-    // service, not on the internet.
-    ...cors,
-    "access-control-allow-methods": "GET, PUT, POST, DELETE, OPTIONS",
-    "access-control-allow-headers": "authorization, x-graphysx-token, content-type",
-  });
-  response.end(body);
-}
-
-async function readJsonBody(request, limitBytes = 8 * 1024 * 1024) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of request) {
-    size += chunk.length;
-    if (size > limitBytes) throw Object.assign(new Error("Request body too large"), { status: 413 });
-    chunks.push(chunk);
-  }
-  if (size === 0) throw Object.assign(new Error("A JSON body is required"), { status: 400 });
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } catch {
-    throw Object.assign(new Error("Request body must be valid JSON"), { status: 400 });
-  }
-}
+// `send` and `readJsonBody` now live in http-util.mjs — there were two copies of each in
+// this tree and one allow-headers list per copy. The page is served by vite/nginx on a
+// different origin than this store, so the browser client is always cross-origin; `cors`
+// comes from the guard (`*` unless GRAPHYSX_STORE_ORIGIN narrows it). Without a
+// GRAPHYSX_STORE_TOKEN this is still a LAN tool with no auth for scene routes — keep it
+// behind the same boundary as any other AgentX service, not on the internet. Live session
+// routes refuse to run in that mode at all (live-sessions.mjs).
 
 /**
  * The relay: everyone watching a scene, and the recent deltas they may have missed.
@@ -344,7 +332,7 @@ function createRelay() {
   };
 }
 
-export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, origins } = {}) {
+export function createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir, token, origins } = {}) {
   const store = createSceneStore({ dir });
   const assets = createAssetStore({
     ...(assetDir !== undefined ? { dir: assetDir } : {}),
@@ -355,6 +343,18 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, orig
     ...(origins !== undefined ? { origins } : {}),
   });
   const relay = createRelay();
+  // Identity on top of the store's shared secret. Disabled — 503, not silently open — when
+  // the store itself is running tokenless.
+  const sessions = createLiveSessions({ store, guard });
+  // Best times, leaderboards and shared ghosts. Client-attested by design — see the header
+  // of results-store.mjs. Reads are open like scene reads; recording needs the store token.
+  // `.results` *inside* the scenes directory, not a sibling of it. A sibling resolves to
+  // `.graphysx-store/results` for the default layout and to `/tmp/results` for a store
+  // pointed at a temp directory — which meant every test run sharing one board directory and
+  // inheriting the previous run's leaderboard. Nesting it makes isolation follow the store
+  // dir automatically. `store.list()` filters on `.json`, so a directory here is invisible
+  // to it.
+  const results = createResultsStore({ dir: resultsDir ?? join(store.dir, ".results") });
 
   const server = createServer((request, response) => {
     void (async () => {
@@ -379,6 +379,10 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, orig
             assetCount: await assets.count(),
             datalake: assets.datalakeDir ?? null,
             authenticated: guard.enabled,
+            // Fail-closed status, visible without authenticating: an operator can see at a
+            // glance whether live collaboration is available or disabled for lack of a token.
+            sessions: { enabled: sessions.enabled, open: sessions.count() },
+            results: { boards: await results.count(), trust: "client-attested" },
           }, cors);
         }
 
@@ -386,6 +390,13 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, orig
         // asset handler does not claim falls through to the scene routes below. The guard
         // rides along so those routes enforce the same token.
         if (await handleAssetRequest(assets, request, response, url, path, guard)) return undefined;
+
+        // Live sessions (/sessions/*): identity, roles, incremental operations, presence.
+        // Mounted before the scene routes and namespaced so it can never shadow one.
+        if (await sessions.handle(request, response, url, path, cors)) return undefined;
+
+        // Results (/results/*): persistent bests, bounded leaderboards, shared ghosts.
+        if (await handleResultsRequest(results, request, response, url, path, guard, cors)) return undefined;
 
         if (path === "/scenes" && request.method === "GET") {
           return send(response, 200, { schema: SCENE_STORE_SCHEMA, scenes: await store.list() }, cors);
@@ -539,16 +550,26 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, token, orig
         const status = error?.status ?? 400;
         const payload = { error: error instanceof Error ? error.message : String(error) };
         if (error?.revision !== undefined) payload.revision = error.revision;
+        // Structured fields a client can branch on without parsing prose: `code` names the
+        // failure, `resync` is the path back to a known-good state after a conflict.
+        if (error?.code !== undefined) payload.code = error.code;
+        if (error?.resync !== undefined) payload.resync = error.resync;
+        // Headers are already sent on a stream; writing a JSON body would throw over the
+        // top of the real error and lose it.
+        if (response.headersSent) {
+          try { response.end(); } catch { /* already destroyed */ }
+          return undefined;
+        }
         return send(response, status, payload, cors);
       }
     })();
   });
 
-  return { server, store, assets, guard };
+  return { server, store, assets, guard, sessions, results };
 }
 
-export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, datalakeDir, token, origins } = {}) {
-  const { server, store, assets, guard } = createSceneStoreServer({ dir, assetDir, datalakeDir, token, origins });
+export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, datalakeDir, resultsDir, token, origins } = {}) {
+  const { server, store, assets, guard, sessions, results } = createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir, token, origins });
   if (!guard.enabled) {
     // One line, every start, on purpose: the open mode is a deliberate LAN convenience
     // and the operator should never discover it by accident.
@@ -572,6 +593,8 @@ export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, data
     port: actualPort,
     assets,
     guard,
+    sessions,
+    results,
     // 127.0.0.1 rather than localhost: on Windows, Node's fetch resolves localhost to ::1
     // first, and whether that reaches a listener bound to the IPv4 any-address is a coin
     // flip. It surfaced as an intermittent "scene store unreachable" against a store that
@@ -585,6 +608,10 @@ export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, data
       // above — in-process smokes sat through it every run), and any SSE stream a wedged
       // tab never closed, which waits forever. That tail is part of how a verify hung for
       // 9.5 hours. Closing is a decision, not a negotiation: sever everything, then close.
+      // Session streams first: each one is an open response holding a heartbeat. They are
+      // unref'd so they cannot hold the process open, but ending them politely means a
+      // client sees `closed` rather than a severed socket it will try to resume.
+      sessions.closeAll();
       server.closeIdleConnections?.();
       server.closeAllConnections?.();
       await new Promise((resolveClose) => server.close(() => resolveClose(undefined)));
@@ -603,6 +630,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       console.log(`  assets:   ${assets.dir}`);
       console.log(`  datalake: ${assets.datalakeDir ?? "not configured (set GRAPHYSX_DATALAKE_DIR)"}`);
       console.log(`  auth:     ${guard.enabled ? "token required for writes and /datalake" : "OPEN (set GRAPHYSX_STORE_TOKEN to require a bearer token)"}`);
+      console.log(`  sessions: ${guard.enabled ? "live sessions enabled at /sessions" : "DISABLED (live sessions refuse to run without a token)"}`);
       console.log(`  try:      curl ${url}/scenes`);
     })
     .catch((error) => {

@@ -2296,3 +2296,236 @@ After that targeted fix, `npm run typecheck`, `npm run build`, `npm run smoke:sc
 errors. Per release protocol, the expensive full matrix was not restarted after a single isolated
 failure; only the affected check, the consolidated feature check and static build checks were
 repeated.
+
+## 2026-07-30 — Live Sessions r1: authenticated collaboration core
+
+The next milestone is a session layer over the scene store: two humans and an agent in one
+live scene, sharing one revision line. Reconnaissance first established that a collaboration
+layer already existed — `scene-store-client.ts` applies SSE deltas through `api.transaction`,
+and `api.commit` already carries actor, intent and `expectedRevision`. So this slice is
+identity and hardening on top of that, not a second mechanism beside it.
+
+`server/live-sessions.mjs` adds sessions, members, invitations, roles, incremental
+operations and presence. Every accepted operation applies through `applyCommands` — the same
+validated document path `PUT /scenes` and `/changes` already use, so no actor has a private
+mutation path. Credentials are 32 CSPRNG bytes stored only as sha256 digests, compared with
+`timingSafeEqual`, and shaped `<id>.<secret>` so verification is one compare rather than a
+scan over members. Invitations are a separate, short-lived, revocable, use-capped secret;
+they are exchanged once for a scoped credential and the browser scrubs them out of the
+address bar with `replaceState`. Roles (owner/editor/viewer/agent) are enforced by a
+server-side table, agents additionally by an explicit operation-path capability list, and the
+operation `path` is an allowlist rather than a namespace walk.
+
+Transport stayed HTTP + SSE. The traffic is deltas down and operations up over ordinary POST,
+which is the half of WebSockets we would actually use, and it needs no nginx upgrade block on
+the existing deploy. Because `EventSource` cannot set headers, the stream authenticates with
+a single-use 30-second ticket instead of a credential in the query string.
+
+The layer fails closed: with no `GRAPHYSX_STORE_TOKEN` the store runs in its tokenless LAN
+mode, and session routes answer 503 rather than inherit it. `/health` reports it.
+
+`server/http-util.mjs` was extracted on the way through — `send` and `readJsonBody` existed
+twice and the CORS allow-headers list was written out twice, so adding `x-graphysx-session`
+would have been a two-file edit with a cross-origin-only failure if either was missed.
+
+Three real defects were found by the assertions and fixed rather than argued with. A client
+resuming from a sequence *ahead* of the server was told it was up to date; it is
+desynchronised and now gets a resync. Semantic operation rejections inherited
+`SceneCommandError`'s 400 and were indistinguishable from a malformed envelope; they are 422
+with `code: "operation-rejected"`. A 413 path destroyed the request socket before the status
+could be written, so the client saw a bare "fetch failed". Operations are also now serialised
+per session, because two members submitting in the same tick were both reading revision R and
+the loser took a 409 it did nothing to deserve.
+
+Verification is 137 assertions across three permanent smokes. `smoke-live-sessions` (64)
+drives owner, remote editor and agent over real HTTP and SSE: incremental attributed
+operations, role rejection, agent capability scoping, duplicate-`opId` idempotency, structured
+conflicts, disconnect → resume → replay, dropped history → honest `mustResync`, membership
+revocation, and a teardown that leaves nothing online. `smoke-live-sessions-security` (41)
+covers fail-closed configuration, cross-session and forged credentials, expired and revoked
+invitations, indistinguishable auth failures, origin rejection, ticket replay, payload and
+rate caps, a 20-operation concurrent burst with no lost update, and a credential audit across
+console, response bodies, activity and disk. `smoke-live-sessions-browser` (32) runs the built
+bundle: two browsers plus an external agent, live mutation both directions without a reload,
+presence and remote selection, attributed activity, viewer refusal, offline state, rejoin and
+catch-up, and zero console/page/request errors.
+
+Two of those browser assertions were vacuous before the screenshot was read. `api.query`
+filters on `ids: string[]`; `{ id }` is not a query field, so it was silently ignored and the
+assertions were reading entity[0] — the anchor. Two selectors were also unscoped and matched
+the scene browser's `data-role="live"` and `data-role="dot"` instead of this panel's. And the
+screenshot itself caught what all 29 green assertions missed: the live panel and the scene
+browser both dock top-right and were stacked on top of each other. The panel now measures the
+scene browser's rect and stacks below it — `offsetParent` was the wrong visibility test, since
+it is always null for a `position: fixed` element — and a geometry assertion now guards it.
+
+`docs/LIVE_SESSIONS.md` records the protocol, the transport tradeoff and the threat model,
+including six named limitations: sessions are in-memory and die with the store, rate limits
+are per member rather than per IP, `actorId` is chosen by whoever redeems an invitation,
+store reads stay open, there is no end-to-end encryption, and undo is a boundary rather than
+actor-aware undo. Genuine per-actor undo needs inverse operations the runtime does not have.
+
+Typecheck and production build are green. Not started in this slice: persistent best times,
+leaderboards, ghost sharing, and the five adjacent debt items.
+
+## 2026-07-30 — Live Sessions r1: results, leaderboards and shared ghosts
+
+`server/results-store.mjs` adds the store-side results concept: persistent personal bests,
+bounded leaderboards and shared ghost recordings, keyed by `(recordId, courseVersion,
+rulesVersion)`. Reconnaissance first established the existing vocabulary so this reuses it
+rather than growing a parallel one — `recordId` from `raceRecordIdForWorld`, `bestMs` as
+integer milliseconds, `medal`, `completedAt`, and the ghost trace shape `src/level-ghosts.ts`
+already persists, so a downloaded ghost plays back through the existing interpolator with no
+conversion.
+
+Two decisions are load-bearing. The layer is **client-attested and says so** on every read
+surface, with a smoke assertion that fails if any response starts implying a time was
+server-verified; verifying one would mean running the physics here and replaying input, which
+is a different product. And results are **separated by compatibility, never compared across
+it**: a board is keyed on a hash of the course and rules versions, so a time set on a
+different version of a course lands on its own board instead of beating one it was never
+racing. `rulesVersion` may be omitted and fingerprinted from the submitted rules block —
+a fingerprint, not a version counter, because `agent-world-rules.ts` records a decision that
+the rules definition must not carry its own revision and that decision stands.
+
+The desync invariant carries to the server: a desynced run is refused outright, as are
+incomplete runs, non-integer times, times below a 250ms floor or beyond six hours, times under
+a course's declared `floorMs`, unknown medals and traversal-shaped ids. Ghost validation is
+deliberately stricter than the client's on one point — sample times must strictly ascend. The
+client never checked, because its playback binary-searches a trace its own recorder produced
+in order; a trace arriving over HTTP has no such guarantee and an unsorted one interpolates to
+silent nonsense.
+
+Four real defects, all found by assertions and fixed rather than argued with. `rankResults`
+sorted on `elapsedMs` while stored entries carry `bestMs`, so every comparison was `NaN` — a
+sort comparator treats that as "leave them alone", and the leaderboard silently stayed in
+insertion order while the retention pass kept arbitrary entries. Both looked plausible. The
+results directory defaulted to a *sibling* of the scenes directory, which resolves to
+`/tmp/results` for a store pointed at a temp dir, so every test run inherited the previous
+run's board; it is now nested inside the store dir and isolation follows automatically. A 413
+was answered on a keep-alive connection while the client was still uploading, so the unread
+body was handed to the next request on that socket and surfaced as a bare "fetch failed" on
+the request *after* the oversized one; 413 now closes the connection. And `courseVersion`
+needed its own pattern — `@` is legitimate in a version token, and unlike `recordId` a version
+never reaches the filesystem because only its hash does.
+
+`scripts/smoke-results.mjs` is 47 assertions covering personal-best replacement, refusal
+classes, ghost validation and round-trip, compatibility separation across both course and
+rules versions, deterministic ordering with stable tiebreaks, bounds, the trust labels,
+survival across a store restart, and a parity check that reads the client's `MAX_SAMPLES` out
+of `src/level-ghosts.ts` and asserts the server's cap matches. `docs/RESULTS.md` records the
+API, the trust model and four limitations.
+
+Not done: browser integration. Nothing in `ballz-play.ts` submits a result and no UI reads a
+leaderboard. The constraint that slice must meet is recorded in the doc — `smoke-archive-cup`
+asserts zero console errors and its harness runs with no store, so any call on the finish path
+must fail completely silently.
+
+## 2026-07-30 — adjacent debt: monolith severed, asset guard, generated counts
+
+Three of the five queued debt items.
+
+**`MapEditorTile` extracted (item 2).** `agent-level-library.ts`, `agent-world-api.ts` and
+`platform-editor.ts` imported the type from `race-scene.ts`, the 9,900-line legacy archive
+player. `src/map-editor-tiles.ts` now declares it (with `MapEditorDraft`, the palette order and
+a guard), and `race-scene.ts` re-exports rather than redeclaring, so there is one definition
+and the legacy player is unchanged.
+
+`scripts/audit-clean-host.mjs` proves it stays severed by walking the import graph from
+`main.ts` — treating `prototype-app` and `race-scene` as boundaries it names but does not
+enter — and failing if anything on the default route reaches the monolith. Verified with a
+negative control: reintroducing the old import makes it fail with the trail
+`main → archive-skybox-spiral → platform-host → agent-world-api → race-scene`. It walks the
+graph rather than reading the bundle because `import type` erases at build time, which is
+exactly why a green build never caught this.
+
+**Product-asset URL guard (item 5).** `product-assets.mjs` proved that every manifest entry
+exists on disk; `scripts/audit-product-assets.mjs` proves the other direction — every
+`/assets/...` URL a product-reachable module names is actually claimed by the manifest.
+That is the failure that bites, and it has happened twice here already: the comments in
+product-assets.mjs record the archive sound samples and the BallZ level-style surfaces both
+404ing in production while looking perfect in dev, each fixed by a hand-added line and neither
+covered by a test.
+
+The first run reported 13 findings, all triaged rather than suppressed. Seven were sky
+*directories* whose contents the manifest claims — a base path is satisfied when anything
+ships under it. One was a glob in a comment-like literal. One was `/assets/import`, a
+scene-store HTTP route that shares the prefix by coincidence. The last four were the
+`RaceDefinition.referenceImage` screenshots, and they are the interesting case: the strings do
+ship, because `archive-level3-scene` value-imports `race-definitions` for its ASCII rows, but
+the only consumer is `prototype-app`'s archive-reference figure, which is `?host=legacy`.
+Pruning 1.5 MB the default route never requests is the manifest doing its job, so that is an
+allowlist entry with a reason rather than 1.5 MB of shipped screenshots. Every allowlist entry
+carries a reason on purpose — an allowlist without them becomes the place failures go to be
+silenced.
+
+Both audits share `scripts/module-graph.mjs`, and building it surfaced a real distinction the
+two need opposite answers to. Dependency direction must count a type-only edge: an erased
+import is still a coupling, and that is precisely how the monolith stayed wired to the clean
+host. Runtime reachability must not: a module reached only through `import type` is erased
+from the bundle and cannot fetch anything, and counting it reported those four legacy-only
+screenshots as production 404s that production never requests. `includeTypeOnly` is therefore
+a parameter, not a default, and `scripts/smoke-asset-guard.mjs` fixtures both answers along
+with the pass/fail cases the prompt asked for — a missing asset fails, a registered asset
+passes, base paths, globs, templates and external URLs are each classified.
+
+**Docs (item 1).** `npm run counts` reads the bridge and gate sources; the docs point at it
+instead of pinning numbers, because "a 91-tool bridge" and "a 47-check gate" were true when
+written and wrong the next time either grew. The gate is 51 checks now. ROADMAP's header was
+stale by eleven days and a SHA and still claimed an in-flight working set; Horizon 1's landed
+items are struck with evidence, and the flock ring buffer and the formula decision are
+explicitly *not* struck — both modules exist but neither has a gate entry, so this doc cannot
+honestly claim they are finished. README and ROADMAP both carry the Live Sessions status,
+including what is deliberately not claimed.
+
+Typecheck, build, `smoke-results`, `smoke-live-sessions` and the two new audits are green.
+Not done: preview harness index (item 3) and preview renderer consolidation (item 4).
+
+## 2026-07-30 — adjacent debt: workshop preview host (items 3 and 4)
+
+The last two queued debt items were the same body of code. All 19 `*-preview.ts` harnesses
+were orphaned — nothing imported them, no route reached them, and each queried a canvas id
+(`#milky-way-preview-canvas`, `#suzanne-preview-canvas`, …) that no HTML in this repo
+provides. They could not run, and nothing said so. Eighteen of nineteen also built their own
+`WebGLRenderer` and their own `requestAnimationFrame` loop, against the product invariant, and
+renderer setup had drifted: eleven wrote `outputColorSpace = "srgb"` as a string, seven used
+`SRGBColorSpace`, and only three touched tone mapping at all, with three different exposures.
+
+`src/preview-bootstrap.ts` now owns one renderer, one frame loop and one disposal path, with
+defaults matching the product host so a recovered material looks the same in a preview as in
+the app. A preview receives a context, adds to a scene, returns `step`/`describe`/`dispose`.
+Archive data was not touched to make previews match each other — consistent renderer setup was
+the goal, and a scene the archive authored differently stays different.
+
+`src/preview-host.ts` is the index at `?host=previews`, guarded by `import.meta.env.DEV` so the
+whole subtree is dead code in production. That guard is not cosmetic: making these
+product-reachable would pull archive assets into the release manifest `product-assets.mjs`
+deliberately prunes, and the new asset audit would have started failing. The smoke asserts the
+host is absent from `dist/`.
+
+Two harnesses are converted and run for the first time: Voie Lactée and the Suzanne 1 ASCII
+arena. Screenshots are `output/smoke/previews-milky-way.png` and `previews-suzanne1.png`;
+both were inspected. The planetary row renders with its recovered radii, the arena renders
+with shadows (its `shadowMap.enabled` override is restored on dispose), and switching between
+them tears the previous scene down completely rather than layering it underneath.
+
+The other 17 are **listed in the index, disabled, showing the canvas id they still query**.
+Hiding them would recreate exactly the problem being fixed. `scripts/audit-previews.mjs` fails
+if a harness file exists that the registry does not list, or if anything marked mountable
+creates a renderer, calls `requestAnimationFrame`, or exports no `mount`. Its own first run
+failed on a false positive — it matched "requestAnimationFrame" inside the comment saying the
+file no longer calls it — so it strips comments before checking. Verified with a negative
+control that real code still fails it.
+
+`scripts/smoke-previews.mjs` drives the index in a browser against the dev server (the route
+is dev-only, so `dist/` is the wrong target) and proves the listing, mounting, teardown, the
+single shared loop, deterministic stepping and on-screen error reporting: 17/17. Two of its
+assertions found real problems rather than cosmetic ones. `advanceTime` was not deterministic
+while the live loop ran — a live frame between the caller's measurement and the call was
+indistinguishable from a step it made, reading 61 instead of 60 — so it now returns the frames
+it stepped and callers assert on that. And the smoke's own console watcher correctly flagged
+the error the unconverted-preview case deliberately triggers; the fix declares that one exact
+message as expected and asserts it actually appeared, rather than blanket-ignoring errors.
+
+`docs/PREVIEWS.md` carries the conversion recipe, the worked example, and the honest status.
+The gate is 52 checks. All five adjacent debt items are now closed.

@@ -14,7 +14,7 @@ import {
   type AgentLevelDefinition,
   type GraphysXAgentLevelApi,
 } from "./agent-level-library";
-import type { MapEditorTile } from "./race-scene";
+import type { MapEditorTile } from "./map-editor-tiles";
 import { allAgentWorldAssets } from "./agent-world-assets";
 import { allAgentWorldSounds } from "./agent-world-sounds";
 import { allAgentWorldTextures } from "./agent-world-textures";
