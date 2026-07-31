@@ -95,13 +95,22 @@ export class LiveSessionError extends Error {
   readonly status: number;
   readonly code: string | null;
   readonly revision: number | null;
+  /** Present on an `undo-unsafe` refusal: whose later work is in the way. */
+  readonly blockedBy: { actorId: string; revision: number; opId: string } | null;
 
-  constructor(message: string, status: number, code: string | null = null, revision: number | null = null) {
+  constructor(
+    message: string,
+    status: number,
+    code: string | null = null,
+    revision: number | null = null,
+    blockedBy: { actorId: string; revision: number; opId: string } | null = null,
+  ) {
     super(message);
     this.name = "LiveSessionError";
     this.status = status;
     this.code = code;
     this.revision = revision;
+    this.blockedBy = blockedBy;
   }
 
   get isConflict(): boolean {
@@ -173,8 +182,8 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
    * a *resubmission*; this covers the echo.
    */
   const ownOperations = new Set<string>();
-  /** The shared revision at this actor's most recent accepted operation — see `undo` below. */
-  let lastOwnRevision: number | null = null;
+  /** This actor's most recent accepted operation id — what `undo` reverses. */
+  let lastOwnOpId: string | null = null;
 
   const status = (): LiveSessionStatus => ({
     connection, sessionId, role, actorId, revision, seq, latencyMs, resynced,
@@ -214,7 +223,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     }
     latencyMs = Math.round(performance.now() - startedAt);
     const payload = (await response.json().catch(() => null)) as
-      | (T & { error?: string; code?: string; revision?: number })
+      | (T & { error?: string; code?: string; revision?: number; blockedBy?: { actorId: string; revision: number; opId: string } })
       | null;
     if (!response.ok) {
       throw new LiveSessionError(
@@ -222,6 +231,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         response.status,
         payload?.code ?? null,
         typeof payload?.revision === "number" ? payload.revision : null,
+        payload?.blockedBy ?? null,
       );
     }
     return payload as T;
@@ -363,7 +373,9 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     seq = Math.max(seq, snapshot.seq);
     members = snapshot.session.members;
     resynced = true;
-    lastOwnRevision = null;
+    // After a resync this tab's notion of "my last operation" may predate history the server
+    // still holds but this client can no longer reason about; the undo route decides.
+    lastOwnOpId = null;
     events.onResync?.(revision);
     events.onMembers?.(members);
     announce();
@@ -445,7 +457,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         );
         revision = receipt.revision;
         seq = Math.max(seq, receipt.seq);
-        lastOwnRevision = receipt.revision;
+        lastOwnOpId = opId;
         announce();
         return receipt;
       } catch (error) {
@@ -469,35 +481,42 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     },
 
     /**
-     * Undo, with a collaborative boundary.
+     * Undo.
      *
-     * The runtime's undo stack is global and snapshot-based: undoing pops whatever
-     * transaction was last applied, by *anyone*. In a live session that would silently
-     * revert a colleague's work. So undo is permitted only while the shared revision has not
-     * moved past this actor's own last operation — otherwise it refuses and says why, rather
-     * than doing something destructive and plausible-looking. Outside a live session
-     * (`sessionId === null`) this is untouched local undo.
+     * Outside a live session this is the runtime's ordinary local undo, untouched.
+     *
+     * Inside one it is a different act, because the runtime's undo stack is global and
+     * snapshot-based: popping it reverts whatever transaction was last applied *by anyone*.
+     * So a live undo asks the server to apply the inverse of this actor's own last operation
+     * as a new compensating operation. Shared history moves forward, every other client
+     * applies it through the ordinary path, and if someone has since touched the same
+     * entities the server refuses and names them rather than clobbering their work.
      */
-    undo(): { ok: boolean; reason?: string } {
+    async undo(opId?: string): Promise<{ ok: boolean; reason?: string; blockedBy?: string }> {
       if (!sessionId) {
         const result = api.undo();
         return result.ok ? { ok: true } : { ok: false, reason: result.error };
       }
-      if (lastOwnRevision === null) {
-        return { ok: false, reason: "There is nothing of yours to undo in this session." };
+      const target = opId ?? lastOwnOpId;
+      if (!target) return { ok: false, reason: "There is nothing of yours to undo in this session." };
+      try {
+        const receipt = await call<{ revision: number; seq: number }>(
+          "POST", `/sessions/${sessionId}/ops/${encodeURIComponent(target)}/undo`, {},
+        );
+        revision = receipt.revision;
+        seq = Math.max(seq, receipt.seq);
+        // The inverse arrives over the stream like any other operation and is applied there;
+        // clearing this stops a second press from trying to undo the undo.
+        lastOwnOpId = null;
+        announce();
+        return { ok: true };
+      } catch (error) {
+        if (error instanceof LiveSessionError) {
+          const blockedBy = (error as LiveSessionError & { blockedBy?: { actorId?: string } }).blockedBy?.actorId;
+          return { ok: false, reason: error.message, ...(blockedBy ? { blockedBy } : {}) };
+        }
+        return { ok: false, reason: error instanceof Error ? error.message : String(error) };
       }
-      if (revision !== lastOwnRevision) {
-        return {
-          ok: false,
-          reason: "Cannot safely undo: the shared scene advanced past your last change. Undo would revert someone else's work.",
-        };
-      }
-      const result = api.undo();
-      if (!result.ok) return { ok: false, reason: result.error };
-      lastOwnRevision = null;
-      // The undo is local until it is submitted as its own operation; the caller decides
-      // whether to publish it, because an unpublished undo is a private view of the scene.
-      return { ok: true };
     },
 
     resync,

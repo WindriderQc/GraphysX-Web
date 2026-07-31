@@ -551,9 +551,15 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir,
         const payload = { error: error instanceof Error ? error.message : String(error) };
         if (error?.revision !== undefined) payload.revision = error.revision;
         // Structured fields a client can branch on without parsing prose: `code` names the
-        // failure, `resync` is the path back to a known-good state after a conflict.
-        if (error?.code !== undefined) payload.code = error.code;
-        if (error?.resync !== undefined) payload.resync = error.resync;
+        // failure, `resync` is the path back to a known-good state after a conflict, and
+        // `blockedBy` says which actor's later work is preventing an undo.
+        //
+        // An explicit list, not a spread of the error object: a spread would eventually
+        // carry a stack, an internal path or a captured credential out to a client, and the
+        // day it does nobody will be looking at this line.
+        for (const field of ["code", "resync", "blockedBy"]) {
+          if (error?.[field] !== undefined) payload[field] = error[field];
+        }
         // Headers are already sent on a stream; writing a JSON body would throw over the
         // top of the real error and lose it.
         if (response.headersSent) {

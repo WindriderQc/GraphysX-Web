@@ -25,6 +25,14 @@ const PANEL_CSS = `
   border-radius: 10px; padding: 10px; backdrop-filter: blur(6px);
 }
 .gx-ls[hidden] { display: none; }
+/* Docked into the editor's own right column: it becomes part of that scrolling panel rather
+   than a sheet floating over it. Position, width and backdrop all come from the host. */
+.gx-ls--docked {
+  position: static !important; width: auto !important; max-height: none !important;
+  inset: auto !important; background: transparent; border: 0; padding: 0;
+  backdrop-filter: none; z-index: auto;
+}
+.gx-ls--docked .gx-ls-activity { max-height: 132px; }
 .gx-ls-head { display: flex; align-items: center; gap: 8px; }
 .gx-ls-head strong { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
 .gx-ls-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; flex: none; }
@@ -233,23 +241,58 @@ export function mountLiveSessionPanel(container: HTMLElement, client: LiveSessio
    * class of bug this project keeps screenshots for. `.gx-sb` is `position: fixed`, so its
    * bottom edge in viewport coordinates is the offset this one needs.
    */
-  const stackBelowSceneBrowser = (): void => {
+  /** The editor's right column, when the editor is open and showing. */
+  const editorColumn = (): HTMLElement | null => {
+    const column = document.querySelector<HTMLElement>(".gx-ed-panel--right");
+    if (!column) return null;
+    return column.style.display === "none" ? null : column;
+  };
+
+  /**
+   * Puts the panel where it belongs for the current layout.
+   *
+   * Two placements, because the two modes have different real estate:
+   *
+   *   - **Editor open** → docked *inside* the editor's right column, scrolling with it. The
+   *     floating placement overlapped that column exactly, which is the same class of bug as
+   *     the scene-browser collision: a panel that covers the thing it is meant to annotate.
+   *   - **Otherwise** → a floating sheet under the scene browser.
+   *
+   * Measured by rect, not `offsetParent`: that property is null for every `position: fixed`
+   * element, which the scene browser is — so the "is it there?" test said no while the panel
+   * was plainly on screen, and an earlier version stacked on top of it anyway.
+   */
+  const reposition = (): void => {
+    const column = editorColumn();
+    if (column) {
+      if (panel.parentElement !== column) column.append(panel);
+      panel.classList.add("gx-ls--docked");
+      panel.style.top = "";
+      panel.style.maxHeight = "";
+      return;
+    }
+    if (panel.parentElement !== container) container.append(panel);
+    panel.classList.remove("gx-ls--docked");
     const sibling = document.querySelector<HTMLElement>(".gx-sb");
-    // Measured by rect, not `offsetParent`: that property is null for every
-    // `position: fixed` element, which the scene browser is — so the "is it there?" test
-    // said no while the panel was plainly on screen, and this stacked on top of it anyway.
     const rect = sibling?.getBoundingClientRect() ?? null;
     const top = rect && rect.height > 0 ? Math.round(rect.bottom) + 8 : 12;
     panel.style.top = `${top}px`;
     panel.style.maxHeight = `calc(100vh - ${top + 12}px)`;
   };
-  stackBelowSceneBrowser();
-  window.addEventListener("resize", stackBelowSceneBrowser);
+
+  reposition();
+  window.addEventListener("resize", reposition);
   // The scene browser grows and shrinks as scenes are listed and its save form opens, so a
   // one-shot measurement goes stale within seconds of the first interaction.
-  const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(stackBelowSceneBrowser);
+  const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reposition);
   const sceneBrowser = document.querySelector(".gx-sb");
   if (sceneBrowser && observer) observer.observe(sceneBrowser);
+
+  // The editor is lazily imported and toggled by display, so there is no event to listen for.
+  // Watching the container for structural and style changes catches both its arrival and each
+  // show/hide, and the work is one querySelector plus a comparison.
+  const layoutObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => reposition());
+  layoutObserver?.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
 
   return {
     setStatus,
@@ -260,7 +303,8 @@ export function mountLiveSessionPanel(container: HTMLElement, client: LiveSessio
     },
     dispose: () => {
       observer?.disconnect();
-      window.removeEventListener("resize", stackBelowSceneBrowser);
+      layoutObserver?.disconnect();
+      window.removeEventListener("resize", reposition);
       panel.remove();
       style.remove();
     },

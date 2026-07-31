@@ -248,6 +248,67 @@ try {
   check(results, "the panels leave the middle of the viewport clear",
     layout.live && layout.live.left > layout.viewport.width * 0.55, JSON.stringify(layout.live));
 
+  // --- the editor outliner (features 16-18) --------------------------------------------------
+  //
+  // The floating placement sat exactly on top of the editor's own right column. Docking into
+  // it is what makes this an outliner rather than a sheet covering the thing it annotates.
+
+  await first.page.evaluate(() => window.__GRAPHYSX_HOST__.editorReady());
+  await first.page.evaluate(() => window.__GRAPHYSX_HOST__.setMode?.("editor") ?? window.__GRAPHYSX_HOST__.enterEditor?.());
+  await first.page.waitForFunction(() => {
+    const column = document.querySelector(".gx-ed-panel--right");
+    return Boolean(column) && column.style.display !== "none";
+  });
+  await sleep(400);
+
+  const docked = await first.page.evaluate(() => {
+    const panel = document.querySelector(".gx-ls");
+    const column = document.querySelector(".gx-ed-panel--right");
+    const canvas = document.querySelector("canvas");
+    const box = (node) => {
+      const rect = node.getBoundingClientRect();
+      return { top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left, width: rect.width };
+    };
+    return {
+      insideColumn: Boolean(panel && column && column.contains(panel)),
+      hasDockedClass: panel?.classList.contains("gx-ls--docked") ?? false,
+      panel: panel ? box(panel) : null,
+      column: column ? box(column) : null,
+      canvas: canvas ? box(canvas) : null,
+      members: document.querySelectorAll(".gx-ls .gx-ls-member").length,
+      liveRegion: document.querySelector(".gx-ls [data-role='live']")?.getAttribute("aria-live") ?? null,
+    };
+  });
+
+  check(results, "the panel docks inside the editor's right column when the editor opens",
+    docked.insideColumn && docked.hasDockedClass, JSON.stringify({ inside: docked.insideColumn, cls: docked.hasDockedClass }));
+  check(results, "docked, it no longer overlaps the column it used to cover",
+    docked.panel && docked.column && docked.panel.left >= docked.column.left - 1 && docked.panel.right <= docked.column.right + 1,
+    JSON.stringify({ panel: docked.panel, column: docked.column }));
+  check(results, "the outliner still shows the session members while docked",
+    docked.members >= 2, `${docked.members} members`);
+  check(results, "the live region survives the move",
+    docked.liveRegion === "polite", String(docked.liveRegion));
+  check(results, "the viewport is not covered by the docked outliner",
+    docked.panel && docked.canvas && docked.panel.left > docked.canvas.width * 0.5,
+    JSON.stringify({ panelLeft: docked.panel?.left, canvasWidth: docked.canvas?.width }));
+
+  await first.page.screenshot({ path: path.join(ARTIFACTS, "live-session-editor.png") });
+
+  // Leaving the editor returns it to the floating placement under the scene browser.
+  await first.page.evaluate(() => window.__GRAPHYSX_HOST__.exitEditor?.() ?? window.__GRAPHYSX_HOST__.setMode?.("scene"));
+  await sleep(600);
+  const undocked = await first.page.evaluate(() => {
+    const panel = document.querySelector(".gx-ls");
+    return {
+      docked: panel?.classList.contains("gx-ls--docked") ?? null,
+      inContainer: panel?.parentElement?.id === "app" || panel?.parentElement?.tagName === "DIV",
+      top: panel ? Math.round(panel.getBoundingClientRect().top) : null,
+    };
+  });
+  check(results, "leaving the editor returns the panel to its floating placement",
+    undocked.docked === false && (undocked.top ?? 0) > 0, JSON.stringify(undocked));
+
   const health = await first.page.$eval('.gx-ls [data-role="health"]', (node) => node.textContent ?? "");
   check(results, "the health indicator reports connection, revision, sequence and latency",
     /live/.test(health) && /rev/.test(health) && /seq/.test(health) && /rtt/.test(health), health);

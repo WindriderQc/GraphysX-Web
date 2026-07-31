@@ -2529,3 +2529,94 @@ message as expected and asserts it actually appeared, rather than blanket-ignori
 
 `docs/PREVIEWS.md` carries the conversion recipe, the worked example, and the honest status.
 The gate is 52 checks. All five adjacent debt items are now closed.
+
+## 2026-07-31 — collaborative undo as compensating inverse operations
+
+Feature 15, done properly rather than as a boundary. A live undo no longer refuses whenever
+the shared revision moved; it computes the inverse of one operation and applies it as a NEW
+operation attributed to the same actor. Shared history only moves forward, and every other
+client applies the inverse through the ordinary path like any other change. That also means
+an undo is visible, attributed and itself part of the log — which a rewind never could be.
+
+The inverse is computed at apply time from the pre-operation document and stored on the log
+entry, because recomputing it later is impossible: the pre-state is gone. spawn inverts to
+remove; remove inverts to spawning every entity it deleted, descendants included, in original
+document order so a parent precedes its child; update inverts to the pre-values of exactly the
+keys the patch touched; set-environment restores the previous environment.
+
+Four refusals, each with a code and each a deliberate answer. `undo-unsafe` is the one the
+design exists for — a later operation touched the same entities, so applying the inverse would
+overwrite work done after it; the refusal carries `blockedBy` naming the actor, revision and
+operation in the way so the UI can say who rather than "something went wrong".
+`undo-not-invertible` is also a real answer: an update that introduces a field absent before it
+cannot be reversed through the merge semantics `applyCommands` uses, since no command removes a
+key, and approximating would leave the document subtly different while reporting success.
+`undo-not-yours` and `undo-already-done` cover the rest.
+
+One defect found: the router propagated `code`, `resync` and `revision` but dropped
+`blockedBy`, so the refusal reached the client without the one field that makes it actionable.
+The router now copies an explicit field list rather than spreading the error — a spread would
+eventually carry a stack, an internal path or a captured credential out to a client, and the
+day it does nobody will be looking at that line.
+
+`scripts/smoke-live-undo.mjs` is 27 assertions. The load-bearing ones: undo moves the revision
+forward rather than rewinding, the document returns to exactly its prior state, a second undo
+is refused rather than applied twice, a colleague's later edit survives a refused undo intact,
+a removal's descendants are restored with their parent references, and the undo reaches other
+members as an ordinary attributed operation saying what it undid.
+
+Gate is 53 checks. Typecheck green; live-sessions, security and results all still green.
+
+## 2026-07-31 — results, leaderboards and ghosts reach the player
+
+Features 12–14 stop being server-only. `src/results-client.ts` submits a finished run,
+`src/leaderboard-panel.ts` renders the board on the win panel, and a "Race" button on a rival's
+row downloads their ghost and replays the course against it. `createPersonalGhostSession` now
+takes an optional `challenger` trace that replaces the *playback* source; recording and
+personal-best storage stay entirely your own, which is why the best-time gate compares against
+`own` rather than the loaded trace — gating your personal best on beating someone else's would
+be a different feature.
+
+Two guards shape the whole client, and both are capability checks made *before* acting rather
+than errors handled after. Until `configureResultsClient` runs, this module makes no network
+call at all — not one that fails quietly, one that never happens — because `smoke-archive-cup`
+asserts zero console errors with no store running, and so does every visitor to the static
+production deploy. And submission is gated on holding the store token, because a 401 is not
+silent: Chromium logs "Failed to load resource" itself, before any `try`/`catch` can see it, so
+a tokenless player would paint a console error on every finish. Reads stay open; a visitor
+without a token still sees boards and races ghosts.
+
+The screenshot earned its keep again. Twenty-three assertions were green — including ones
+reading each row's `aria-label` — while the rendered names and times were painted **black on a
+dark panel**: present, correct, screen-reader accessible, invisible. The panel had no colour of
+its own and inherited the document's, which made it legible in exactly one mount point. It now
+sets `color: var(--gx-text, #e9eef5)` so the product token still drives inside the win panel and
+it stays legible anywhere else, and the smoke now reads the *painted* colour's luminance rather
+than the aria-label it built itself from the same data it was checking.
+
+`scripts/smoke-results-browser.mjs` is 26 assertions covering the storeless silence, token-gated
+submission, ranking against seeded rivals, the board's trust label surviving into the UI, per-row
+race buttons (offered for a rival with a ghost, withheld for one without and for yourself),
+ghost download, interpolated playback and clean disposal. `smoke-archive-cup` re-run against a
+served build: zero console errors, zero page errors, medals and unlocks unchanged.
+
+## 2026-07-31 — the live panel becomes an editor outliner
+
+Features 16–18 finished. The presence/activity/health panel existed and was tested, but it
+floated over the editor's own right column — the same class of bug as the earlier scene-browser
+collision: a panel covering the thing it is meant to annotate. It now docks *inside*
+`.gx-ed-panel--right` when the editor is open, scrolling with it, and returns to its floating
+placement under the scene browser when the editor closes.
+
+There is no event to listen for — the editor is lazily imported and toggled by `display` — so a
+MutationObserver on the container watches for its arrival and each show/hide. The work per
+notification is one `querySelector` and a comparison.
+
+Six assertions added to `smoke-live-sessions-browser` (now 38): the panel is inside the column
+and carries the docked class, its box no longer overlaps the column, the roster and the ARIA
+live region survive the move, the viewport stays clear, and leaving the editor restores the
+floating placement. `output/smoke/live-session-editor.png` is the evidence.
+
+Noted, not fixed, because it predates this work and is a different component: the scene browser
+is `position: fixed` at the same corner with a higher z-index, so it still overlaps the editor's
+INSPECTOR heading whenever both are open.

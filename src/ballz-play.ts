@@ -1,7 +1,17 @@
 import { PUSH_DIRECTIONS } from "./ballz-level-scene";
 import { describeRun, formatClock, type AgentWorldDefinition, type GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { archiveReferenceMs, raceRecordIdForWorld } from "./archive-race-records";
-import { createPersonalGhostSession, getPersonalGhostState } from "./level-ghosts";
+import { createPersonalGhostSession, getPersonalGhostState, type GhostTrace } from "./level-ghosts";
+import { buildLeaderboardPanel } from "./leaderboard-panel";
+import {
+  courseVersionFor,
+  fetchGhost,
+  fetchLeaderboard,
+  resultsActorId,
+  resultsCanSubmit,
+  resultsConfigured,
+  submitResult,
+} from "./results-client";
 import {
   LevelRecordStore,
   formatMedal,
@@ -72,7 +82,15 @@ export function mountBallzPlay(
   if (!ball || !subjectId) return () => {};
   const ballId = subjectId;
   const recordId = raceRecordIdForWorld(api.state()?.world.id ?? "");
-  const ghostSession = recordId ? createPersonalGhostSession(api, ballId, recordId) : null;
+  // A "Race" click on the leaderboard parks the rival's trace here and reloads the level;
+  // this view is mounted fresh by `world.loaded`, so the handoff cannot be a local variable.
+  const challenge = recordId ? takeGhostChallenge(recordId) : null;
+  const ghostSession = recordId
+    ? createPersonalGhostSession(api, ballId, recordId, {
+      challenger: challenge?.trace ?? null,
+      challengerLabel: challenge?.label ?? null,
+    })
+    : null;
   // A composed replay reloads the pristine scene so hidden pickups, transforms, velocities,
   // and rules all restart together. Grid levels retain their existing library-backed replay.
   // `world.loaded` mounts this view before the runtime arms the rules block (deliberately: the
@@ -311,7 +329,12 @@ export function mountBallzPlay(
       : replayDefinition
         ? () => { void reloadPristineScene(api, replayDefinition); }
         : undefined;
-    container.append(buildWinPanel(api, totalRings, seconds, desynced, onExit, replay));
+    const panel = buildWinPanel(api, totalRings, seconds, desynced, onExit, replay);
+    container.append(panel);
+    // Results are an enhancement layered onto a finish that has already been recorded
+    // locally and already rendered. Deliberately not awaited, and a complete no-op when no
+    // store is configured — see the header of results-client.ts.
+    void publishAndShowBoard(panel, recordId, seconds, desynced, ghostSession?.recording() ?? null, replay);
   }
 
   return () => {
@@ -812,6 +835,76 @@ function buildWinPanel(
   }
 
   return panel;
+}
+
+
+
+/**
+ * A ghost challenge chosen on the win panel, handed to the next mount of the play view.
+ *
+ * Module state rather than a parameter because "Race this ghost" reloads the level, and the
+ * reload tears this whole layer down and builds a new one. It is consumed on read so a
+ * challenge cannot silently apply to every subsequent run.
+ */
+let pendingChallenge: { recordId: string; label: string; trace: GhostTrace } | null = null;
+
+function takeGhostChallenge(recordId: string): { label: string; trace: GhostTrace } | null {
+  if (!pendingChallenge || pendingChallenge.recordId !== recordId) return null;
+  const { label, trace } = pendingChallenge;
+  pendingChallenge = null;
+  return { label, trace };
+}
+
+/**
+ * Submits the finished run and, if a store answered, appends the leaderboard to the win panel.
+ *
+ * Every step is optional and silent. With no store nothing here makes a request at all; with a
+ * store that refuses the submission the panel simply keeps the local score row it already has.
+ */
+async function publishAndShowBoard(
+  panel: HTMLElement,
+  recordId: string | null,
+  seconds: number,
+  desynced: boolean,
+  ghost: GhostTrace | null,
+  replay: (() => void) | undefined,
+): Promise<void> {
+  if (!recordId || !resultsConfigured()) return;
+  const elapsedMs = Math.round(seconds * 1000);
+  const courseVersion = courseVersionFor(recordId);
+  const rulesVersion = "v1";
+  const actorId = resultsActorId();
+
+  if (!desynced && resultsCanSubmit()) {
+    const record = new LevelRecordStore().getRecord(recordId);
+    await submitResult({
+      recordId,
+      actorId,
+      label: actorId,
+      courseVersion,
+      rulesVersion,
+      elapsedMs,
+      medal: record?.medal ?? null,
+      desynced,
+      // Only offered when it is this run's own trace and it matches the time submitted; the
+      // server rejects a mismatch, and sending one anyway would lose the whole result.
+      ghost: ghost && Math.abs(ghost.elapsedMs - elapsedMs) <= 150 ? ghost : null,
+    });
+  }
+
+  const board = await fetchLeaderboard(recordId, courseVersion, rulesVersion, 8);
+  if (!board || !panel.isConnected) return;
+  const element = buildLeaderboardPanel(board, {
+    actorId,
+    onRaceGhost: (entry) => {
+      void fetchGhost(recordId, entry.actorId, courseVersion, rulesVersion).then((trace) => {
+        if (!trace || !replay) return;
+        pendingChallenge = { recordId, label: entry.label, trace };
+        replay();
+      });
+    },
+  });
+  if (element) panel.append(element);
 }
 
 /**
