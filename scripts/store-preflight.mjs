@@ -63,10 +63,29 @@ try {
   let health;
   try {
     const response = await get("/health");
-    health = await response.json();
+    const body = await response.text();
+    // The SPA shell, not JSON. nginx's `location /` has `try_files $uri $uri/ /index.html`, so
+    // when the /store/ proxy block is missing every store path quietly returns the app's HTML
+    // instead of 404 — and the app then behaves as though no store exists. It is the most
+    // likely first state of this setup and deserves to be named rather than surfaced as a
+    // JSON parse error.
+    if (/^\s*<(!doctype|html)/i.test(body)) {
+      record("fail", "the /store proxy is not installed",
+        "this path returns the app's HTML shell — nginx is falling through to try_files. "
+        + "Install ops/nginx/graphysx.specialblend.ca and reload nginx");
+      throw new Error("proxy not installed");
+    }
+    try {
+      health = JSON.parse(body);
+    } catch {
+      record("fail", "store returned something that is not JSON", `status ${response.status}, ${body.slice(0, 80)}`);
+      throw new Error("non-JSON health");
+    }
     record(response.ok ? "pass" : "fail", "store answers /health", `status ${response.status}`);
   } catch (error) {
-    record("fail", "store is unreachable", error instanceof Error ? error.message : String(error));
+    if (!/proxy not installed|non-JSON health/.test(String(error?.message))) {
+      record("fail", "store is unreachable", error instanceof Error ? error.message : String(error));
+    }
     throw error;
   }
 
