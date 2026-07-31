@@ -671,6 +671,27 @@ if (mode === "previews" && import.meta.env.DEV) {
           configureAgentWorldMedia(storeUrl, client.token);
           void host.api.media.refresh();
         });
+        // Best times, leaderboards and shared ghosts. Configured here and nowhere else:
+        // until this runs the results client makes no request at all, which is what keeps a
+        // storeless production visitor's console clean. `?actor=` names the player on the
+        // board; without one they are anonymous-<n> rather than silently colliding with
+        // every other anonymous player on the same board.
+        void Promise.all([
+          import("./results-client"),
+          import("./leaderboard-panel"),
+          import("./level-ghosts"),
+        ]).then(([resultsClient, { buildLeaderboardPanel }, { createPersonalGhostSession }]) => {
+          const player = params.get("actor") ?? `anon-${Math.random().toString(36).slice(2, 8)}`;
+          resultsClient.configureResultsClient(storeUrl, client.token, player);
+          // Exposed on the same footing as the scene browser and the live-session panel:
+          // leaderboards are public read data, so an agent can ask for one, and a smoke can
+          // drive the real code rather than guessing a hashed chunk filename. Both globals
+          // exist only when a store answered — their absence IS the storeless contract.
+          Object.assign(window, {
+            __GRAPHYSX_RESULTS__: resultsClient,
+            __GRAPHYSX_RESULTS_UI__: { buildLeaderboardPanel, createGhostSession: createPersonalGhostSession },
+          });
+        });
         const browser = mountSceneBrowser(root, {
           api: host.api,
           client,

@@ -2566,3 +2566,36 @@ a removal's descendants are restored with their parent references, and the undo 
 members as an ordinary attributed operation saying what it undid.
 
 Gate is 53 checks. Typecheck green; live-sessions, security and results all still green.
+
+## 2026-07-31 — results, leaderboards and ghosts reach the player
+
+Features 12–14 stop being server-only. `src/results-client.ts` submits a finished run,
+`src/leaderboard-panel.ts` renders the board on the win panel, and a "Race" button on a rival's
+row downloads their ghost and replays the course against it. `createPersonalGhostSession` now
+takes an optional `challenger` trace that replaces the *playback* source; recording and
+personal-best storage stay entirely your own, which is why the best-time gate compares against
+`own` rather than the loaded trace — gating your personal best on beating someone else's would
+be a different feature.
+
+Two guards shape the whole client, and both are capability checks made *before* acting rather
+than errors handled after. Until `configureResultsClient` runs, this module makes no network
+call at all — not one that fails quietly, one that never happens — because `smoke-archive-cup`
+asserts zero console errors with no store running, and so does every visitor to the static
+production deploy. And submission is gated on holding the store token, because a 401 is not
+silent: Chromium logs "Failed to load resource" itself, before any `try`/`catch` can see it, so
+a tokenless player would paint a console error on every finish. Reads stay open; a visitor
+without a token still sees boards and races ghosts.
+
+The screenshot earned its keep again. Twenty-three assertions were green — including ones
+reading each row's `aria-label` — while the rendered names and times were painted **black on a
+dark panel**: present, correct, screen-reader accessible, invisible. The panel had no colour of
+its own and inherited the document's, which made it legible in exactly one mount point. It now
+sets `color: var(--gx-text, #e9eef5)` so the product token still drives inside the win panel and
+it stays legible anywhere else, and the smoke now reads the *painted* colour's luminance rather
+than the aria-label it built itself from the same data it was checking.
+
+`scripts/smoke-results-browser.mjs` is 26 assertions covering the storeless silence, token-gated
+submission, ranking against seeded rivals, the board's trust label surviving into the UI, per-row
+race buttons (offered for a rival with a ghost, withheld for one without and for yourself),
+ghost download, interpolated playback and clean disposal. `smoke-archive-cup` re-run against a
+served build: zero console errors, zero page errors, medals and unlocks unchanged.

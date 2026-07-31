@@ -6,8 +6,10 @@ const SAMPLE_INTERVAL_MS = 150;
 const MAX_SAMPLES = 6_000;
 const GHOST_ID = "personal-best-ghost";
 
-type GhostSample = { tMs: number; position: [number, number, number] };
-type GhostTrace = { elapsedMs: number; samples: GhostSample[] };
+// Exported: the results layer sends and receives exactly this shape, so a downloaded ghost
+// plays back through the interpolator below with no conversion step.
+export type GhostSample = { tMs: number; position: [number, number, number] };
+export type GhostTrace = { elapsedMs: number; samples: GhostSample[] };
 
 export type PersonalGhostState = {
   recordId: string;
@@ -15,6 +17,8 @@ export type PersonalGhostState = {
   visible: boolean;
   bestMs: number | null;
   recordingSamples: number;
+  /** Whose ghost is on track: null for your own, otherwise a leaderboard rival's label. */
+  challengerLabel?: string | null;
 };
 
 let runtimeState: PersonalGhostState | null = null;
@@ -27,12 +31,24 @@ export function createPersonalGhostSession(
   api: GraphysXAgentWorldApi,
   subjectId: string,
   recordId: string,
+  /**
+   * A `challenger` replaces the *playback* source with someone else's recording, so a player
+   * can race a leaderboard rival instead of themselves. Recording and personal-best storage
+   * are untouched by it: whoever you are racing, the trace you produce is still yours, and it
+   * is still only stored when it beats your own best.
+   */
+  options: { challenger?: GhostTrace | null; challengerLabel?: string | null } = {},
 ): {
   tick(elapsedMs: number): void;
   finish(elapsedMs: number, verified: boolean): void;
+  /** The trace recorded this run, once it has at least two samples. For submission. */
+  recording(): GhostTrace | null;
   dispose(): void;
 } {
-  const saved = loadTraces()[recordId] ?? null;
+  const own = loadTraces()[recordId] ?? null;
+  const challenger = options.challenger ?? null;
+  // Playback follows the challenger when there is one; storage always follows your own.
+  const saved = challenger ?? own;
   const recordedBestMs = new LevelRecordStore().getRecord(recordId)?.bestMs ?? null;
   const recorded: GhostSample[] = [];
   let spawned = false;
@@ -44,6 +60,7 @@ export function createPersonalGhostSession(
     visible: false,
     bestMs: saved?.elapsedMs ?? null,
     recordingSamples: 0,
+    challengerLabel: challenger ? options.challengerLabel ?? "rival" : null,
   };
 
   const sampleSubject = (elapsedMs: number, force = false): void => {
@@ -113,7 +130,9 @@ export function createPersonalGhostSession(
     finish(elapsedMs, verified) {
       sampleSubject(elapsedMs, true);
       if (!verified || recorded.length < 2) return;
-      if (saved && elapsedMs >= saved.elapsedMs) return;
+      // `own`, not `saved`: when racing a challenger, `saved` is THEIR time, and gating your
+      // personal best on beating someone else's would be a different feature entirely.
+      if (own && elapsedMs >= own.elapsedMs) return;
       // Older records may predate trajectory capture. Do not label a later, slower run as the
       // personal best just because it is the first one with samples; wait until the player
       // actually matches or improves the stored board time.
@@ -127,7 +146,13 @@ export function createPersonalGhostSession(
         visible: spawned,
         bestMs: Math.round(elapsedMs),
         recordingSamples: recorded.length,
+        challengerLabel: challenger ? options.challengerLabel ?? "rival" : null,
       };
+    },
+    recording() {
+      return recorded.length >= 2
+        ? { elapsedMs: recorded[recorded.length - 1].tMs, samples: recorded.map((sample) => ({ ...sample })) }
+        : null;
     },
     dispose() {
       if (spawned) api.remove(GHOST_ID);

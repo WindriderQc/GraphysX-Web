@@ -84,6 +84,7 @@ const SMOKES = [
   { name: "archive-parity", script: "scripts/audit-archive-parity.mjs", covers: "complete archive census: every media path and functionality record has a hash-backed disposition" },
   { name: "clean-host", script: "scripts/audit-clean-host.mjs", covers: "dependency direction: no default-host module reaches the legacy race-scene monolith, type-only imports included" },
   { name: "product-assets", script: "scripts/audit-product-assets.mjs", covers: "release completeness: every /assets URL a product-reachable module names ships in the production manifest, with a reasoned allowlist" },
+  { name: "results-browser", script: "scripts/smoke-results-browser.mjs", covers: "results through the product: no request at all without a store, token-gated submission, leaderboard read + rendered panel with legible text and trust label, rival ghost download and playback" },
   { name: "asset-guard", script: "scripts/smoke-asset-guard.mjs", covers: "asset-guard fixtures: a missing asset fails, a registered asset passes, base paths/globs/templates/externals are classified, type-only vs runtime edges" },
   { name: "previews", script: "scripts/audit-previews.mjs", covers: "preview registry: every workshop harness is registered, and every mountable one uses the shared renderer and the shared frame loop" },
   { name: "rapier-race", script: "scripts/smoke-rapier-race.mjs", covers: "Rapier RaceScene: Piste vehicle motion, steering, finite state, browser errors" },

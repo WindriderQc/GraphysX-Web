@@ -82,8 +82,24 @@ Writes need the store token; reads are open, matching how scene reads work.
    can post any plausible time.
 3. **Composed archive courses have no real version.** They are keyed by id, so editing one in
    code silently keeps the old board. Grid and scene-store courses do not have this problem.
-4. **No browser integration yet.** The server layer is complete and tested; nothing in
-   `src/ballz-play.ts` submits to it, and no UI reads a leaderboard. That is the next slice.
-   Note the constraint it must meet: `scripts/smoke-archive-cup.mjs` asserts **zero console
-   errors**, and its harness serves the app with no store running — so any call added to the
-   finish path must fail completely silently.
+4. **Recording needs the store token; reading does not.** A browser without one reads
+   leaderboards and races ghosts but does not post. That is a capability check made *before*
+   submitting, not an error handled after: Chromium writes "Failed to load resource: 401" to
+   the console itself, before application code can catch it, and the front door asserts zero
+   console errors. Same reason the client makes no request at all until configured.
+
+## In the browser
+
+`src/results-client.ts` is the client, `src/leaderboard-panel.ts` the board, and
+`src/ballz-play.ts` submits on finish and appends the board to the win panel. A "Race" button
+on a rival's row downloads their ghost and replays the course against it —
+`createPersonalGhostSession` takes a `challenger` trace that replaces the *playback* source
+while recording and personal-best storage stay entirely your own.
+
+Both `window.__GRAPHYSX_RESULTS__` and `window.__GRAPHYSX_RESULTS_UI__` exist only when a
+store answered; their absence is the storeless contract, and the smoke asserts it.
+
+Proof: `scripts/smoke-results-browser.mjs` (26 assertions). It asserts the storeless case
+first, because that is the one that regresses, and it reads the *painted* colour of the
+rendered names and times rather than their aria-labels — the first version of the panel
+inherited black onto a dark surface and 23 green assertions did not notice.
