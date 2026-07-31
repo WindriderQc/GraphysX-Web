@@ -58,6 +58,7 @@
     "smoke:dna": "node scripts/smoke-dna.mjs",
     "serve:staging": "node scripts/staging-server.mjs",
     "serve:scenes": "node server/scene-store.mjs",
+    "store:preflight": "node scripts/store-preflight.mjs",
     "scene": "node tools/graphysx-scene-agent.mjs",
     "agent:stdio": "node tools/graphysx-agent-stdio.mjs --stdio",
     "agent:manifest": "node tools/graphysx-agent-stdio.mjs",

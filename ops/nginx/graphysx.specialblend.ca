@@ -36,6 +36,50 @@ server {
         add_header Cache-Control "no-cache, must-revalidate";
     }
 
+    # --- the scene store -------------------------------------------------------------------
+    #
+    # Same-origin on purpose. The alternative — a second hostname — needs its own certificate,
+    # a CORS allowlist, and preflights on every mutating request; and an `http://` store on an
+    # `https://` page is blocked outright as mixed content, which is the wall any LAN-address
+    # store hits immediately. Proxying under a path costs none of that: the browser sees one
+    # origin, TLS is the one certbot already issued, and `GRAPHYSX_STORE_ORIGIN` has nothing
+    # to allow because nothing is cross-origin.
+    #
+    # Enable by pointing the app at it: build with VITE_GRAPHYSX_STORE_URL=/store. Without
+    # that, nothing requests these paths and this block is inert.
+    #
+    # The upstream is the store from `npm run serve:scenes`, which MUST run with
+    # GRAPHYSX_STORE_TOKEN set — live sessions refuse to run without one (they answer 503
+    # rather than inherit the tokenless LAN mode). See docs/DEPLOYING_THE_STORE.md.
+    location /store/ {
+        proxy_pass http://127.0.0.1:8788/;
+        proxy_http_version 1.1;
+
+        # Server-Sent Events. Without these three the live session and scene streams still
+        # "work" in every test that only checks status codes, and then deliver nothing until
+        # the connection closes — nginx buffers the response, and a stream that is buffered is
+        # a stream that does not exist. The store also sends `X-Accel-Buffering: no`, which
+        # nginx honours; this is the belt to that suspenders.
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_set_header Connection "";
+
+        # A session stream is open for as long as someone is collaborating. The default 60s
+        # read timeout would sever it once a minute, and the client would dutifully reconnect
+        # once a minute, forever.
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Ghost uploads and scene documents. The store caps bodies itself (8 MiB for scenes,
+        # 256 KiB for operations); this only has to be no smaller than the largest of them.
+        client_max_body_size 16m;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }
