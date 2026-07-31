@@ -2,6 +2,8 @@ node_modules/
 dist/
 output/
 .playwright-cli/
+# Explicit local handoff scratch; never commit transfer artifacts.
+_to_delete/
 # Local scene-store data: scenes are content, not source.
 .graphysx-store/
 *.log
