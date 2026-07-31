@@ -42,6 +42,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Build production release
+        env:
+          VITE_GRAPHYSX_STORE_URL: ${{ vars.GRAPHYSX_STORE_URL }}
         run: npm run build
 
       - name: Stamp release identity
