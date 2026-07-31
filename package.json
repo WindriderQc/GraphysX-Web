@@ -50,6 +50,7 @@
     "smoke:store-auth": "node scripts/smoke-store-auth.mjs",
     "smoke:live-sessions": "node scripts/smoke-live-sessions.mjs",
     "smoke:live-sessions-security": "node scripts/smoke-live-sessions-security.mjs",
+    "smoke:live-undo": "node scripts/smoke-live-undo.mjs",
     "smoke:results": "node scripts/smoke-results.mjs",
     "smoke:asset-guard": "node scripts/smoke-asset-guard.mjs",
     "smoke:previews": "node scripts/smoke-previews.mjs",

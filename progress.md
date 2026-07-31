@@ -2529,3 +2529,40 @@ message as expected and asserts it actually appeared, rather than blanket-ignori
 
 `docs/PREVIEWS.md` carries the conversion recipe, the worked example, and the honest status.
 The gate is 52 checks. All five adjacent debt items are now closed.
+
+## 2026-07-31 — collaborative undo as compensating inverse operations
+
+Feature 15, done properly rather than as a boundary. A live undo no longer refuses whenever
+the shared revision moved; it computes the inverse of one operation and applies it as a NEW
+operation attributed to the same actor. Shared history only moves forward, and every other
+client applies the inverse through the ordinary path like any other change. That also means
+an undo is visible, attributed and itself part of the log — which a rewind never could be.
+
+The inverse is computed at apply time from the pre-operation document and stored on the log
+entry, because recomputing it later is impossible: the pre-state is gone. spawn inverts to
+remove; remove inverts to spawning every entity it deleted, descendants included, in original
+document order so a parent precedes its child; update inverts to the pre-values of exactly the
+keys the patch touched; set-environment restores the previous environment.
+
+Four refusals, each with a code and each a deliberate answer. `undo-unsafe` is the one the
+design exists for — a later operation touched the same entities, so applying the inverse would
+overwrite work done after it; the refusal carries `blockedBy` naming the actor, revision and
+operation in the way so the UI can say who rather than "something went wrong".
+`undo-not-invertible` is also a real answer: an update that introduces a field absent before it
+cannot be reversed through the merge semantics `applyCommands` uses, since no command removes a
+key, and approximating would leave the document subtly different while reporting success.
+`undo-not-yours` and `undo-already-done` cover the rest.
+
+One defect found: the router propagated `code`, `resync` and `revision` but dropped
+`blockedBy`, so the refusal reached the client without the one field that makes it actionable.
+The router now copies an explicit field list rather than spreading the error — a spread would
+eventually carry a stack, an internal path or a captured credential out to a client, and the
+day it does nobody will be looking at that line.
+
+`scripts/smoke-live-undo.mjs` is 27 assertions. The load-bearing ones: undo moves the revision
+forward rather than rewinding, the document returns to exactly its prior state, a second undo
+is refused rather than applied twice, a colleague's later edit survives a refused undo intact,
+a removal's descendants are restored with their parent references, and the undo reaches other
+members as an ordinary attributed operation saying what it undid.
+
+Gate is 53 checks. Typecheck green; live-sessions, security and results all still green.

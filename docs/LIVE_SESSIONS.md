@@ -130,14 +130,41 @@ ownership**.
 The runtime's undo stack is global and snapshot-based: `undo()` pops whatever transaction was
 last applied, by anyone. In a live session that would silently revert a colleague's work.
 
-So `LiveSessionClient.undo()` permits an undo only while the shared revision has not advanced
-past this actor's own last operation. Otherwise it refuses with an explicit reason rather than
-doing something destructive and plausible-looking. Outside a live session it is untouched
-local undo.
+So a live undo is not a rewind. `POST /sessions/:id/ops/:opId/undo` computes the **inverse**
+of that operation and applies it as a **new** operation, attributed to the same actor. Shared
+history only ever moves forward, and every other client applies the inverse through the
+ordinary path like any other change.
 
-This is a boundary, not full actor-aware undo. Genuine per-actor undo needs inverse operations
-in the runtime, which the runtime does not have (it snapshots). That is honest remaining work,
-not a solved problem.
+The inverse is computed at apply time, from the document as it was *before* the operation, and
+stored on the log entry — recomputing it later is impossible because the pre-state is gone.
+
+| Command | Inverse |
+|---|---|
+| `spawn` | `remove` the spawned id |
+| `remove` | `spawn` every entity it deleted (descendants included), in original document order so a parent precedes its child |
+| `update` | `update` with the pre-values of exactly the keys the patch touched |
+| `set-environment` | `set-environment` with the previous environment |
+
+Refusals, each with a `code`:
+
+| Case | Code | Status |
+|---|---|---|
+| Not your operation | `undo-not-yours` | 403 |
+| Already undone | `undo-already-done` | 409 |
+| **A later operation touched the same entities** | `undo-unsafe` | 409 |
+| Cannot be inverted exactly | `undo-not-invertible` | 422 |
+| Older than the retained log | `undo-expired` | 410 |
+
+`undo-unsafe` is the case the design exists for. It carries `blockedBy` naming the actor,
+revision and operation in the way, so the UI can say *who* rather than "something went wrong".
+
+`undo-not-invertible` is a real answer, not a failure to try: an `update` that introduces a
+field absent before it cannot be reversed through the merge semantics `applyCommands` uses —
+no command removes a key — and approximating would leave the document subtly different while
+reporting success.
+
+Outside a live session, `LiveSessionClient.undo()` is the runtime's ordinary local undo,
+untouched.
 
 ## Threat model
 

@@ -90,6 +90,7 @@ const SMOKES = [
   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
   { name: "live-sessions", script: "scripts/smoke-live-sessions.mjs", covers: "live sessions: owner + remote editor + agent on one scene, incremental attributed ops, roles, duplicates, conflicts, reconnect/resume/resync, teardown" },
   { name: "live-sessions-security", script: "scripts/smoke-live-sessions-security.mjs", covers: "live session security: fail-closed without a store token, cross-session + forged credentials, expired/revoked invites, origin rejection, one-shot stream tickets, payload/rate caps, concurrent burst consistency, token-leak audit" },
+  { name: "live-undo", script: "scripts/smoke-live-undo.mjs", covers: "collaborative undo: inverse operations appended not rewound, refusal when a later actor touched the same entities, own-operation-only, parent/child restore, non-invertible refusal, viewer denial" },
   { name: "results", script: "scripts/smoke-results.mjs", covers: "results: persistent bests, compatibility-separated leaderboards with client-attested trust labels, deterministic ordering and bounds, shared ghost round-trip, and refusal of desynced/incomplete/implausible/oversized/unsorted submissions" },
   { name: "dna", script: "scripts/smoke-dna.mjs", covers: "DNA forest: deterministic genome drift, preset fidelity, node-level (no browser)" },
 ];

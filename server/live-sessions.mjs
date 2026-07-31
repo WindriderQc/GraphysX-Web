@@ -520,6 +520,101 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     return joined;
   }
 
+
+// --- inverse operations ------------------------------------------------------------------
+//
+// Collaborative undo, done as a *compensating operation* rather than a rewind.
+//
+// The runtime's own undo is a snapshot stack: it pops whatever transaction was last applied,
+// by anyone. In a shared session that silently deletes a colleague's work, which is the one
+// outcome the product may never produce. So undoing here never rewinds shared history — it
+// computes the inverse of one operation and submits it as a NEW operation, attributed to the
+// same actor, which every other client applies like any other change.
+//
+// The inverse is computed at apply time, from the document as it was *before* the operation,
+// and stored on the log entry. Recomputing it later is impossible: the pre-state is gone.
+
+/** Entity ids an operation touched, for the safety check below. */
+function touchedEntityIds(commands, outputs) {
+  const ids = new Set();
+  commands.forEach((command, index) => {
+    if (command.op === "spawn") {
+      const id = outputs[index]?.id;
+      if (id) ids.add(id);
+    } else if (command.op === "update") {
+      ids.add(command.id);
+    } else if (command.op === "remove") {
+      for (const id of outputs[index]?.ids ?? [command.id]) ids.add(id);
+    } else if (command.op === "set-environment") {
+      // The environment is a single shared slot; name it so two environment edits conflict.
+      ids.add("@environment");
+    }
+  });
+  return [...ids];
+}
+
+/**
+ * The commands that undo `commands`, or null when the operation cannot be inverted exactly.
+ *
+ * Null is a real answer, not a failure to try. An `update` that introduced a field absent
+ * before it cannot be inverted through the merge semantics `applyCommands` uses — there is no
+ * command that removes a key — and guessing would leave the document subtly different from
+ * where it started while reporting success.
+ */
+function computeInverseCommands(preDefinition, commands, outputs) {
+  const byId = new Map((preDefinition.entities ?? []).map((entity) => [entity.id, entity]));
+  const order = new Map((preDefinition.entities ?? []).map((entity, index) => [entity.id, index]));
+  const inverse = [];
+
+  for (let index = 0; index < commands.length; index += 1) {
+    const command = commands[index];
+    const output = outputs[index];
+
+    if (command.op === "spawn") {
+      const id = output?.id;
+      if (!id) return null;
+      inverse.push({ op: "remove", id });
+      continue;
+    }
+
+    if (command.op === "remove") {
+      // Removing takes descendants with it, so the inverse restores every id the command
+      // actually deleted — in the document's original order, so a parent is respawned
+      // before the child that references it.
+      const ids = [...(output?.ids ?? [command.id])].sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+      for (const id of ids) {
+        const entity = byId.get(id);
+        if (!entity) return null;
+        inverse.push({ op: "spawn", entity: structuredClone(entity) });
+      }
+      continue;
+    }
+
+    if (command.op === "update") {
+      const entity = byId.get(command.id);
+      if (!entity) return null;
+      const patch = command.patch ?? {};
+      const restore = {};
+      for (const key of Object.keys(patch)) {
+        if (!(key in entity)) return null; // introduced a field; no command removes one
+        restore[key] = structuredClone(entity[key]);
+      }
+      inverse.push({ op: "update", id: command.id, patch: restore });
+      continue;
+    }
+
+    if (command.op === "set-environment") {
+      inverse.push({ op: "set-environment", environment: structuredClone(preDefinition.environment ?? {}) });
+      continue;
+    }
+
+    return null;
+  }
+
+  // Applied in reverse: undoing "remove A then spawn B" must despawn B before restoring A.
+  return inverse.reverse();
+}
+
   // --- operations ---------------------------------------------------------------------
 
   /** Serialises operation application per session. A rejection never poisons the next. */
@@ -611,10 +706,72 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       revision: written.revision,
       at: new Date(now()).toISOString(),
     };
+    // Computed here or never: after this write the pre-state is gone.
+    event.inverse = computeInverseCommands(record.definition, commands, next.outputs);
+    event.touched = touchedEntityIds(commands, next.outputs);
+    event.undone = false;
     push(session, event, { retain: true });
     const receipt = { ok: true, opId, seq: event.seq, revision: written.revision, baseRevision: record.revision, outputs: next.outputs, intent };
     session.applied.set(opId, receipt);
     return receipt;
+  }
+
+  /**
+   * Undoes one of the caller's own operations by applying its inverse as a new operation.
+   *
+   * Refuses, explicitly and with a reason, when it cannot be done safely:
+   *
+   *   - not your operation — undoing someone else's work is a different act, and it is not
+   *     what Ctrl-Z means to the person pressing it
+   *   - already undone — idempotent, so a double-click does not double-apply the inverse
+   *   - not invertible — see computeInverseCommands; some updates cannot be exactly reversed
+   *   - a later operation touched the same entities — this is the case the whole design
+   *     exists for. Applying the inverse now would overwrite work done after it, so the
+   *     answer is a refusal naming who is in the way, not a silent clobber.
+   */
+  async function undoOperation(session, member, opId) {
+    requireCapability(member, "mutate");
+    if (!member.ops()) throw httpError("Operation rate limit exceeded for this member", 429);
+
+    const entry = session.log.find((event) => event.event === "op" && event.opId === opId);
+    if (!entry) {
+      throw httpError("That operation is no longer in this session's history and cannot be undone", 410, {
+        code: "undo-expired",
+      });
+    }
+    if (entry.memberId !== member.id) {
+      throw httpError(`That operation belongs to ${entry.actorLabel}, not you`, 403, { code: "undo-not-yours" });
+    }
+    if (entry.undone) {
+      throw httpError("That operation has already been undone", 409, { code: "undo-already-done" });
+    }
+    if (!entry.inverse) {
+      throw httpError("That change cannot be reversed exactly, so it will not be reversed approximately", 422, {
+        code: "undo-not-invertible",
+      });
+    }
+
+    const touched = new Set(entry.touched ?? []);
+    const blocker = session.log.find((event) =>
+      event.event === "op" && event.seq > entry.seq && !event.undone &&
+      (event.touched ?? []).some((id) => touched.has(id)));
+    if (blocker) {
+      throw httpError(
+        `Cannot safely undo: ${blocker.actorLabel} changed the same thing afterwards (revision ${blocker.revision}). `
+        + "Undoing would revert their work.",
+        409,
+        { code: "undo-unsafe", blockedBy: { actorId: blocker.actorId, revision: blocker.revision, opId: blocker.opId } },
+      );
+    }
+
+    const receipt = await submitOperation(session, member, {
+      opId: `undo-${opId}`,
+      path: "transaction",
+      commands: entry.inverse,
+      intent: `undid: ${entry.intent}`.slice(0, LIMITS.intentChars),
+    });
+    entry.undone = true;
+    return { ...receipt, undoOf: opId };
   }
 
   function submitPresence(session, member, body) {
@@ -804,6 +961,17 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       const body = await readJsonBody(request, LIMITS.opBodyBytes);
       const receipt = await queueOperation(session, () => submitOperation(session, member, body));
       sendJson(response, receipt.duplicate ? 200 : 201, receipt, cors);
+      return true;
+    }
+
+    const undoMatch = /^\/sessions\/([^/]+)\/ops\/([^/]+)\/undo$/.exec(path);
+    if (undoMatch && method === "POST") {
+      const session = requireSession(undoMatch[1]);
+      const member = requireMember(session, request);
+      // Queued on the same chain as ordinary operations: an undo is an operation, and it
+      // must not interleave with one being applied concurrently.
+      const receipt = await queueOperation(session, () => undoOperation(session, member, decodeURIComponent(undoMatch[2])));
+      sendJson(response, 201, receipt, cors);
       return true;
     }
 
