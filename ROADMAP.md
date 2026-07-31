@@ -1,9 +1,13 @@
 # GraphysX Web — Roadmap
 
-*Taken stock 2026-07-19, against the tree at `7c072e6` plus the in-flight working set.
-[PRODUCT_SPEC.md](PRODUCT_SPEC.md) says what the product is and why; this doc says where it
-stands and what comes next, in order. When they disagree, the spec's tenets win and this
-doc is the one that's wrong.*
+*Taken stock 2026-07-30, against `main` at `c9053ab` (the deployed release) plus the
+`codex/live-sessions-r1` branch. [PRODUCT_SPEC.md](PRODUCT_SPEC.md) says what the product is
+and why; this doc says where it stands and what comes next, in order. When they disagree, the
+spec's tenets win and this doc is the one that's wrong.*
+
+*Counts that drift — bridge tools, gate checks — are not written down here. Run `npm run
+counts`; it reads the real sources. A pinned number in prose is wrong the next time either
+grows, and this doc had two of them.*
 
 ## Where we are
 
@@ -52,15 +56,35 @@ longer reachable from any served page.
 5. ~~**Sphere/heightfield cell-seam kick**~~ — fixed by the Rapier migration and guarded with
    `FIX_INTERNAL_EDGES`; **water grey at grazing angles** remains documented.
 
-## Horizon 1 — Land what's in flight, fix what's broken
+## Horizon 1 — Land the working set, fix what's broken
 
-Close the working set before opening anything new.
-
-1. Land BallZ levels (ready), the flock ring buffer (ready), then the vehicle garage
-   chain (catalog + manifest + route + smoke). Decide formula: wire or park.
+1. ~~Land BallZ levels~~ — **Done.** `src/archive-ballz-levels.ts` ships and the
+   `archive-levels` smoke is in the gate. ~~Vehicle garage chain (catalog + manifest + route
+   + smoke)~~ — **Done.** `src/archive-vehicles-manifest.ts` plus the `vehicles` smoke.
+   The **flock ring buffer** and the **formula wire-or-park decision** are not struck here:
+   `src/agent-world-flock.ts` and `src/agent-world-formula.ts` both exist, but neither has a
+   dedicated gate entry, so this doc cannot honestly claim either is finished. Check them
+   against HEAD before working them.
 2. Fix defects 1–3 above. The recentring bug matters most — it silently degrades every
    model the vehicles work will make people look at.
 3. Retire the vehicle verify harness once the garage has a real route.
+
+## Live Sessions — authenticated collaboration
+
+**Core shipped on `codex/live-sessions-r1`, not yet merged to `main` or deployed.**
+
+Sessions scoped to a stored scene, expiring revocable invitations, server-enforced roles
+(owner/editor/viewer/agent), incremental idempotent operations over HTTP + SSE, ephemeral
+presence, actor-attributed activity, reconnect with sequence resume and honest resync, plus
+persistent best times, compatibility-separated leaderboards and shared ghosts. Protocol,
+transport tradeoff and threat model: **[docs/LIVE_SESSIONS.md](docs/LIVE_SESSIONS.md)**.
+Results trust model: **[docs/RESULTS.md](docs/RESULTS.md)**.
+
+Deliberately not claimed: leaderboard times are **client-attested**, not server-verified;
+sessions live in memory and end with the store; collaborative undo is a refusal boundary
+rather than actor-aware undo, because the runtime snapshots and has no inverse operations.
+No browser surface submits a result or shows a leaderboard yet — that layer is server-side
+and tested, and the player cannot feel it.
 
 ## Horizon 2 — Archive ports
 

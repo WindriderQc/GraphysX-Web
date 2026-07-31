@@ -78,6 +78,7 @@ import {
   type SkyboxSelectorState
 } from "./archive-selector-environments";
 import { InputController } from "./engine/input-controller";
+import type { MapEditorDraft, MapEditorTile } from "./map-editor-tiles";
 import { ParticleEmitter } from "./engine/particle-emitter";
 import {
   CommonRoomEnvironment,
@@ -439,14 +440,10 @@ export type MathFormulaParams = {
   formula: "parabola" | "slope";
 };
 
-export type MapEditorTile = "floor" | "wall" | "start" | "ring" | "half" | "finish" | "hazard" | "fire" | "ice";
-
-export type MapEditorDraft = {
-  width: number;
-  height: number;
-  cellSize: number;
-  tiles: MapEditorTile[];
-};
+// Declared in map-editor-tiles.ts and re-exported here so the legacy player's own imports
+// are unchanged. Moving the declaration out is what lets the clean default host stop
+// importing this module for a type; see scripts/audit-clean-host.mjs.
+export type { MapEditorDraft, MapEditorTile } from "./map-editor-tiles";
 
 type RaceSceneOptions = {
   onRaceFinished: (snapshot: RaceSnapshot) => void;

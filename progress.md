@@ -2420,3 +2420,63 @@ Not done: browser integration. Nothing in `ballz-play.ts` submits a result and n
 leaderboard. The constraint that slice must meet is recorded in the doc — `smoke-archive-cup`
 asserts zero console errors and its harness runs with no store, so any call on the finish path
 must fail completely silently.
+
+## 2026-07-30 — adjacent debt: monolith severed, asset guard, generated counts
+
+Three of the five queued debt items.
+
+**`MapEditorTile` extracted (item 2).** `agent-level-library.ts`, `agent-world-api.ts` and
+`platform-editor.ts` imported the type from `race-scene.ts`, the 9,900-line legacy archive
+player. `src/map-editor-tiles.ts` now declares it (with `MapEditorDraft`, the palette order and
+a guard), and `race-scene.ts` re-exports rather than redeclaring, so there is one definition
+and the legacy player is unchanged.
+
+`scripts/audit-clean-host.mjs` proves it stays severed by walking the import graph from
+`main.ts` — treating `prototype-app` and `race-scene` as boundaries it names but does not
+enter — and failing if anything on the default route reaches the monolith. Verified with a
+negative control: reintroducing the old import makes it fail with the trail
+`main → archive-skybox-spiral → platform-host → agent-world-api → race-scene`. It walks the
+graph rather than reading the bundle because `import type` erases at build time, which is
+exactly why a green build never caught this.
+
+**Product-asset URL guard (item 5).** `product-assets.mjs` proved that every manifest entry
+exists on disk; `scripts/audit-product-assets.mjs` proves the other direction — every
+`/assets/...` URL a product-reachable module names is actually claimed by the manifest.
+That is the failure that bites, and it has happened twice here already: the comments in
+product-assets.mjs record the archive sound samples and the BallZ level-style surfaces both
+404ing in production while looking perfect in dev, each fixed by a hand-added line and neither
+covered by a test.
+
+The first run reported 13 findings, all triaged rather than suppressed. Seven were sky
+*directories* whose contents the manifest claims — a base path is satisfied when anything
+ships under it. One was a glob in a comment-like literal. One was `/assets/import`, a
+scene-store HTTP route that shares the prefix by coincidence. The last four were the
+`RaceDefinition.referenceImage` screenshots, and they are the interesting case: the strings do
+ship, because `archive-level3-scene` value-imports `race-definitions` for its ASCII rows, but
+the only consumer is `prototype-app`'s archive-reference figure, which is `?host=legacy`.
+Pruning 1.5 MB the default route never requests is the manifest doing its job, so that is an
+allowlist entry with a reason rather than 1.5 MB of shipped screenshots. Every allowlist entry
+carries a reason on purpose — an allowlist without them becomes the place failures go to be
+silenced.
+
+Both audits share `scripts/module-graph.mjs`, and building it surfaced a real distinction the
+two need opposite answers to. Dependency direction must count a type-only edge: an erased
+import is still a coupling, and that is precisely how the monolith stayed wired to the clean
+host. Runtime reachability must not: a module reached only through `import type` is erased
+from the bundle and cannot fetch anything, and counting it reported those four legacy-only
+screenshots as production 404s that production never requests. `includeTypeOnly` is therefore
+a parameter, not a default, and `scripts/smoke-asset-guard.mjs` fixtures both answers along
+with the pass/fail cases the prompt asked for — a missing asset fails, a registered asset
+passes, base paths, globs, templates and external URLs are each classified.
+
+**Docs (item 1).** `npm run counts` reads the bridge and gate sources; the docs point at it
+instead of pinning numbers, because "a 91-tool bridge" and "a 47-check gate" were true when
+written and wrong the next time either grew. The gate is 51 checks now. ROADMAP's header was
+stale by eleven days and a SHA and still claimed an in-flight working set; Horizon 1's landed
+items are struck with evidence, and the flock ring buffer and the formula decision are
+explicitly *not* struck — both modules exist but neither has a gate entry, so this doc cannot
+honestly claim they are finished. README and ROADMAP both carry the Live Sessions status,
+including what is deliberately not claimed.
+
+Typecheck, build, `smoke-results`, `smoke-live-sessions` and the two new audits are green.
+Not done: preview harness index (item 3) and preview renderer consolidation (item 4).
