@@ -14,6 +14,11 @@
 //     nothing until it closes. Status-code checks pass; collaboration does not work.
 //
 // That third one is why this script opens a real stream and times the first frame.
+//
+// What it CANNOT see: the bind address. Everything here arrives through the proxy, so a store
+// listening on 0.0.0.0 looks exactly like one on 127.0.0.1. Check that on the host with
+// `ss -tlnp | grep 8788`. The run warns about this rather than letting a green result be read
+// as confirmation of something it never tested.
 
 const args = process.argv.slice(2);
 const flag = (name) => {
@@ -160,6 +165,18 @@ try {
   }
 } catch {
   // Individual checks have already reported; this only stops the run.
+}
+
+// What this script structurally cannot see.
+//
+// Every check above reaches the store the way a browser does — through the proxy. That makes
+// it blind to how the store is *bound*: a process listening on 0.0.0.0 and one listening on
+// 127.0.0.1 are indistinguishable from the far side of nginx. A green run here was once read
+// as confirmation that a loopback fix had landed, and it was not evidence of that at all.
+if (!base.startsWith("http://127.0.0.1") && !base.startsWith("http://localhost")) {
+  record("warn", "the bind address is not observable from here",
+    "run `ss -tlnp | grep 8788` on the host — 127.0.0.1:8788 is contained, 0.0.0.0:8788 is "
+    + "reachable on every interface with only the firewall in the way");
 }
 
 const failed = findings.filter((entry) => entry.level === "fail");
