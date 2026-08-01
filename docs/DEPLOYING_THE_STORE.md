@@ -57,16 +57,34 @@ and ghosts are on disk and survive.
 
 ### Updating the store's code
 
-The deploy workflow packages `dist/` and ships it to `/var/www/html/graphysx`. **It does not
-touch the store server.** Server-side changes — anything under `server/` — reach production
-only through whatever channel put the code in the service's `WorkingDirectory`, and they need
-a `systemctl restart graphysx-store` afterwards to take effect.
+`deploy.yml` now ships `server/` alongside `dist/` and restarts the unit — the *Package the
+store server* and *Sync the store server* steps. Before that existed, a change under `server/`
+could be merged, deployed and green while production kept executing the old code, which is
+exactly how a loopback-bind fix sat in `main` looking shipped while the running store was still
+listening on every interface.
 
-That is a real gap: a change to `server/` can be merged, deployed and green while the running
-store is still executing the old code. If the working directory is not a git checkout, there is
-no `git pull` to run, and the update path is whatever originally copied it there. Teaching
-`deploy.yml` to sync `server/` and restart the unit over the SSH connection it already opens
-for activation would close this properly.
+Three properties worth knowing:
+
+- **It runs before activation.** If the store cannot be updated, nothing is swapped. A new
+  bundle against an old server is the state the step exists to prevent.
+- **It restarts only when `server/` actually changed**, compared by checksum. Sessions are
+  in-memory, so every restart drops everyone collaborating; paying that on a deploy that did
+  not touch the server would teach people the feature is flaky.
+- **It reports the listener** (`ss -tlnp | grep :8788`) after restarting — the one thing the
+  remote preflight structurally cannot see.
+
+One host prerequisite, once:
+
+```
+%deploy ALL=(root) NOPASSWD: /bin/systemctl restart graphysx-store
+```
+
+(substituting the deploy user or its group). A host with no `graphysx-store` unit updates the
+code and skips the restart rather than failing. `GRAPHYSX_STORE_PATH` overrides the default
+`/opt/graphysx-web`.
+
+The whole server tree has **zero third-party imports** — every import is either `node:` or
+relative — so no `npm install` runs on the host.
 
 ## 2. Proxy it same-origin
 

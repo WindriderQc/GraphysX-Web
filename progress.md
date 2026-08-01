@@ -2696,3 +2696,29 @@ rather than folded into a UX batch.
 Regression sweep after the bind change: store-auth 22/22, live-sessions 64/64, security 41/41,
 live-undo 27/27, results 47/47, results-browser 26/26, live-sessions-browser 38/38, clean-host
 audit green, typecheck and build green.
+
+## 2026-08-01 — server code gets a deployment path
+
+`ss -tlnp` on the production host showed `*:8788`: the store was still binding every interface,
+with only the firewall containing it. The loopback default had been merged, deployed and
+reported green — and had never reached the machine. `deploy.yml` packages `dist/` and nothing
+else, the store runs from a directory that is not a git checkout, and setting
+`GRAPHYSX_STORE_HOST` in the unit would not have helped because the running code had no such
+option. The gap was the only thing standing between a merged security fix and a live exposure.
+
+Two *Package/Sync the store server* steps now ship `server/` and restart the unit over the SSH
+connection the workflow already opens for activation. Three properties, each deliberate. It
+runs **before** activation, so a store that cannot be updated stops the deploy rather than
+producing a new bundle against an old server. It restarts **only when `server/` actually
+changed**, compared by checksum, because sessions are in-memory and paying a session drop on
+every unrelated deploy would teach people the feature is flaky. And it prints the listener after
+restarting, which is the one thing the remote preflight structurally cannot see.
+
+That blind spot was the other correction. A green preflight had been read — by me — as
+confirmation the bind fix had landed. It is not evidence of that: every check arrives through
+the proxy, where `0.0.0.0` and `127.0.0.1` are indistinguishable. The run now warns and names
+`ss -tlnp | grep 8788` as the real check.
+
+The server tree has zero third-party imports, so nothing needs installing on the host. The one
+prerequisite is a NOPASSWD sudoers line for the restart; a host with no unit updates the code
+and skips it rather than failing.
