@@ -13,8 +13,15 @@ This is the gap between shipped and usable, and closing it is three steps.
 GRAPHYSX_STORE_TOKEN='<32+ random bytes>' \
 GRAPHYSX_STORE_DIR=/var/lib/graphysx/scenes \
 GRAPHYSX_STORE_PORT=8788 \
+GRAPHYSX_STORE_HOST=127.0.0.1 \
 npm run serve:scenes
 ```
+
+`GRAPHYSX_STORE_HOST` defaults to `127.0.0.1`, which is what you want behind nginx: the proxy
+reaches it over loopback and nothing else can. Set it to `0.0.0.0` only for direct LAN access
+without a proxy. The startup banner prints the address actually bound and says plainly when
+that is every interface — it used to print a convenience URL of `http://127.0.0.1:<port>`
+while `listen(port)` bound them all, which is a gap only a firewall was closing.
 
 `GRAPHYSX_STORE_TOKEN` is not optional here. Without it the store runs in its tokenless LAN
 mode, and **live sessions refuse to run at all** — they answer 503 rather than inherit a mode
@@ -35,6 +42,7 @@ After=network-online.target
 [Service]
 WorkingDirectory=/opt/graphysx-web
 EnvironmentFile=/etc/graphysx/store.env      # chmod 600, contains GRAPHYSX_STORE_TOKEN
+Environment=GRAPHYSX_STORE_HOST=127.0.0.1
 ExecStart=/usr/bin/node server/scene-store.mjs
 Restart=always
 RestartSec=5
@@ -149,7 +157,8 @@ Putting the store behind the public hostname makes these reachable from the inte
   unauthenticated flood of join attempts is bounded only by the invitation check. Put a
   `limit_req` zone in front if that matters.
 - **`actorId` is self-reported.** The token says "allowed", not "who". There is no account
-  system behind any of this.
+  system behind any of this. A visitor who brings no `?actor=` gets a generated name like
+  `swift-otter-417` — legible on a roster and on a board, and still not an identity claim.
 - **Times are client-attested.** Validated for shape, consistency and plausibility; never
   replayed. The UI says so on every board.
 

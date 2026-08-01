@@ -70,9 +70,14 @@ try {
     // likely first state of this setup and deserves to be named rather than surfaced as a
     // JSON parse error.
     if (/^\s*<(!doctype|html)/i.test(body)) {
-      record("fail", "the /store proxy is not installed",
-        "this path returns the app's HTML shell — nginx is falling through to try_files. "
-        + "Install ops/nginx/graphysx.specialblend.ca and reload nginx");
+      // Name the path actually tested rather than assuming it is `/store`: this script is
+      // pointed at local stores and alternate mounts too, and telling someone their /store
+      // proxy is missing when they never asked for one wastes the trip.
+      const mount = new URL(base, "http://placeholder").pathname.replace(/\/+$/, "") || "/";
+      record("fail", `no store is proxied at ${mount}`,
+        "this path returns an HTML page, not JSON — nginx is falling through to its SPA "
+        + "try_files. Install the proxy block from ops/nginx/graphysx.specialblend.ca "
+        + "(it mounts /store/) and reload nginx");
       throw new Error("proxy not installed");
     }
     try {
