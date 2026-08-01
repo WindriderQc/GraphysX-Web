@@ -55,17 +55,87 @@ jobs:
       - name: Package release
         run: tar -czf "graphysx-${GITHUB_SHA}.tgz" -C dist .
 
+      # The store server is not part of dist/. Until this step existed, a change under
+      # server/ could be merged, deployed and green while production kept executing the old
+      # code — which is exactly how a loopback-bind fix sat in main looking shipped while the
+      # running store was still listening on every interface.
+      #
+      # The whole server tree has zero third-party imports (checked: every import is either
+      # node: or relative), so this needs no npm install on the host.
+      - name: Package the store server
+        run: |
+          tar -czf "graphysx-server-${GITHUB_SHA}.tgz" server package.json
+          sha256sum "graphysx-server-${GITHUB_SHA}.tgz" | cut -d' ' -f1 > server-checksum.txt
+
       - name: Upload release
         uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: graphysx-${{ github.sha }}.tgz
+          source: "graphysx-${{ github.sha }}.tgz,graphysx-server-${{ github.sha }}.tgz,server-checksum.txt"
           target: /var/www/html/graphysx/incoming
           overwrite: true
           timeout: 120s
           command_timeout: 30m
+
+      # Deliberately BEFORE activation: if the store cannot be updated, nothing should be
+      # swapped. A half-deployed pair — new bundle, old server — is the state this whole step
+      # exists to prevent.
+      #
+      # Restarts only when the code actually changed. Sessions are in-memory, so every restart
+      # drops everyone collaborating; paying that on a deploy that did not touch server/ would
+      # teach people the feature is flaky.
+      #
+      # Requires, once, on the host:
+      #   %deploy ALL=(root) NOPASSWD: /bin/systemctl restart graphysx-store
+      # A box with no graphysx-store unit skips the restart and says so rather than failing.
+      - name: Sync the store server
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -eu
+            store_dir="${GRAPHYSX_STORE_PATH:-/opt/graphysx-web}"
+            incoming=/var/www/html/graphysx/incoming
+            sha='${{ github.sha }}'
+            archive="$incoming/graphysx-server-$sha.tgz"
+            test -f "$archive"
+
+            if ! test -d "$store_dir"; then
+              echo "No store directory at $store_dir — skipping server sync."
+              rm -f -- "$archive" "$incoming/server-checksum.txt"
+              exit 0
+            fi
+
+            new_checksum="$(cat "$incoming/server-checksum.txt")"
+            old_checksum="$(cat "$store_dir/.server-checksum" 2>/dev/null || echo none)"
+
+            if test "$new_checksum" = "$old_checksum"; then
+              echo "Store server unchanged ($new_checksum) — not restarting, so live sessions survive."
+              rm -f -- "$archive" "$incoming/server-checksum.txt"
+              exit 0
+            fi
+
+            echo "Store server changed: $old_checksum -> $new_checksum"
+            tar -xzf "$archive" -C "$store_dir"
+            echo "$new_checksum" > "$store_dir/.server-checksum"
+            rm -f -- "$archive" "$incoming/server-checksum.txt"
+
+            if systemctl list-unit-files | grep -q '^graphysx-store\.service'; then
+              sudo -n systemctl restart graphysx-store
+              # Give it a moment to bind, then prove it came back rather than assuming.
+              sleep 2
+              systemctl is-active --quiet graphysx-store
+              echo "graphysx-store restarted and active."
+              # The one thing the remote preflight structurally cannot see.
+              ss -tlnp 2>/dev/null | grep ":8788" || echo "(no listener on 8788 — check the unit)"
+            else
+              echo "No graphysx-store unit on this host; code updated, nothing to restart."
+            fi
 
       - name: Activate release
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
