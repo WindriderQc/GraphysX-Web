@@ -55,6 +55,19 @@ WantedBy=multi-user.target
 every accepted operation is already a stored scene revision — but members must rejoin. Results
 and ghosts are on disk and survive.
 
+### Updating the store's code
+
+The deploy workflow packages `dist/` and ships it to `/var/www/html/graphysx`. **It does not
+touch the store server.** Server-side changes — anything under `server/` — reach production
+only through whatever channel put the code in the service's `WorkingDirectory`, and they need
+a `systemctl restart graphysx-store` afterwards to take effect.
+
+That is a real gap: a change to `server/` can be merged, deployed and green while the running
+store is still executing the old code. If the working directory is not a git checkout, there is
+no `git pull` to run, and the update path is whatever originally copied it there. Teaching
+`deploy.yml` to sync `server/` and restart the unit over the SSH connection it already opens
+for activation would close this properly.
+
 ## 2. Proxy it same-origin
 
 The proxy block is already in `ops/nginx/graphysx.specialblend.ca` under `location /store/`.
@@ -87,6 +100,16 @@ node scripts/store-preflight.mjs --url https://graphysx.specialblend.ca/store --
 Fix anything it reports before continuing. It checks scheme, reachability, that a token is
 configured, that sessions are enabled, that an unauthenticated write is refused, and that the
 event stream actually delivers.
+
+**It cannot see the bind address.** Everything it checks arrives through the proxy, where a
+store on `0.0.0.0` and one on `127.0.0.1` are indistinguishable. Check that on the host:
+
+```bash
+ss -tlnp | grep 8788     # 127.0.0.1:8788 contained · 0.0.0.0:8788 or *:8788 exposed
+```
+
+A green preflight is not evidence the bind is correct. It has already been misread that way
+once, which is why the run now warns about it explicitly.
 
 Then build with the store baked in:
 
