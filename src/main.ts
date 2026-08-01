@@ -31,6 +31,7 @@ import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { archiveReferenceMs } from "./archive-race-records";
 import { getArchiveCupRuntimeState, type ArchiveCupCourse } from "./archive-cup";
 import { getPersonalGhostState } from "./level-ghosts";
+import { randomPlayerName } from "./player-name";
 import {
   ARCHIVE_BALLZ_LEVELS,
   ARCHIVE_BALLZ_NOT_REVIVED,
@@ -697,7 +698,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           import("./leaderboard-panel"),
           import("./level-ghosts"),
         ]).then(([resultsClient, { buildLeaderboardPanel }, { createPersonalGhostSession }]) => {
-          const player = params.get("actor") ?? `anon-${Math.random().toString(36).slice(2, 8)}`;
+          const player = params.get("actor") ?? randomPlayerName();
           resultsClient.configureResultsClient(storeUrl, client.token, player);
           // Exposed on the same footing as the scene browser and the live-session panel:
           // leaderboards are public read data, so an agent can ask for one, and a smoke can
@@ -759,7 +760,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           });
           const panel = mountLiveSessionPanel(root, liveClient);
           Object.assign(window, { __GRAPHYSX_LIVE_SESSION__: liveClient, __GRAPHYSX_LIVE_PANEL__: panel });
-          const actorId = params.get("actor") ?? `guest-${Math.random().toString(36).slice(2, 8)}`;
+          const actorId = params.get("actor") ?? randomPlayerName();
           try {
             if (invitation) {
               await liveClient.join(invitation.sessionId, invitation.code, { id: actorId, label: actorId, kind: "human" });

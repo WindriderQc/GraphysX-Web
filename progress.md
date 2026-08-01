@@ -2657,3 +2657,42 @@ from a LAN to the internet, which is exactly when it needs saying out loud.
 
 Both build modes verified: with `VITE_GRAPHYSX_STORE_URL=/store` the value is baked in; without
 it, `smoke-results-browser` still passes 26/26 including the storeless-silence assertions.
+
+## 2026-08-01 — dogfood follow-ups
+
+Production dogfooding passed on three real actors — operator owner, live browser editor, and a
+scoped agent — through the deployed store: an attributed agent edit at revision 2, an owner edit
+while the agent was offline at revision 3, a successful resume of the missed event, and a
+collaborative undo at revision 4 that removed only the agent's marker while the unrelated owner
+beacon survived. That last one is the property the inverse-operation design exists for, and it
+is the first time it has been demonstrated outside its own smokes.
+
+Four follow-ups from that run.
+
+**The store bound every interface while claiming loopback.** `server.listen(port)` binds all of
+them; the banner then printed `http://127.0.0.1:<port>`, a client-convenience URL that reads
+exactly like a claim about the bind. Behind nginx the store was reachable on the box's public
+interface with only the firewall containing it. `GRAPHYSX_STORE_HOST` now exists and **defaults
+to loopback**, which is a deliberate change of the old default rather than a new option beside
+it: "LAN tool" was honest when this held scenes, and it stopped being honest when it started
+holding session credentials, invitations and results. LAN use is one env var away, and the
+banner now prints the address actually bound and says plainly when that is every interface.
+
+**Default player names were identifiers, not names.** `guest-1exkcl` is fine as a key and
+useless on a roster, and two of them are indistinguishable at a glance — which is exactly when
+you need to tell people apart. `src/player-name.ts` generates `swift-otter-417`: still random,
+still collision-tolerant, still satisfying the store's actor-id pattern with no escaping
+anywhere it is rendered, and legible.
+
+**The preflight blamed `/store` unconditionally.** It is pointed at local stores and alternate
+mounts too, so it now names the path actually tested.
+
+**The deprecated-initialization warning is upstream and stays.** Our call site is
+`await RAPIER.init()` with no arguments — already the modern form. The warning comes from
+inside the minified `@dimforge/rapier3d-compat@0.19.3` bundle's own wasm-bindgen wrapper.
+Fixing it means a rapier version bump, which belongs in its own change with the physics smokes
+rather than folded into a UX batch.
+
+Regression sweep after the bind change: store-auth 22/22, live-sessions 64/64, security 41/41,
+live-undo 27/27, results 47/47, results-browser 26/26, live-sessions-browser 38/38, clean-host
+audit green, typecheck and build green.

@@ -35,6 +35,20 @@ const NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/;
 
 const DEFAULT_PORT = Number(process.env.GRAPHYSX_STORE_PORT ?? 8788);
 const DEFAULT_DIR = process.env.GRAPHYSX_STORE_DIR ?? join(REPO_ROOT, ".graphysx-store", "scenes");
+/**
+ * Loopback by default.
+ *
+ * `server.listen(port)` binds every interface, and this file used to print
+ * `http://127.0.0.1:<port>` afterwards — a client-convenience URL that reads exactly like a
+ * claim about the bind. Behind nginx that gap meant the store was reachable on the box's
+ * public interface with only the firewall containing it, while the log said otherwise.
+ *
+ * Defaulting to loopback rather than preserving the old behaviour is a deliberate change of
+ * mind: when this was a scene store, "LAN tool" was the honest framing. It now holds session
+ * credentials, invitations and results, so the safe default moved. LAN use is one explicit
+ * env var away, and the banner below names it when you are bound narrowly.
+ */
+const DEFAULT_HOST = process.env.GRAPHYSX_STORE_HOST ?? "127.0.0.1";
 
 /**
  * Auth + CORS for both halves of the store — the asset routes receive this guard from the
@@ -574,7 +588,7 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir,
   return { server, store, assets, guard, sessions, results };
 }
 
-export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, datalakeDir, resultsDir, token, origins } = {}) {
+export async function startSceneStore({ port = DEFAULT_PORT, host = DEFAULT_HOST, dir, assetDir, datalakeDir, resultsDir, token, origins } = {}) {
   const { server, store, assets, guard, sessions, results } = createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir, token, origins });
   if (!guard.enabled) {
     // One line, every start, on purpose: the open mode is a deliberate LAN convenience
@@ -591,12 +605,15 @@ export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, data
 
   await new Promise((resolveListen, rejectListen) => {
     server.once("error", rejectListen);
-    server.listen(port, () => resolveListen(undefined));
+    server.listen(port, host, () => resolveListen(undefined));
   });
   const address = server.address();
   const actualPort = typeof address === "object" && address ? address.port : port;
+  // The address actually bound, not the one we asked for and not a convenience string.
+  const actualHost = typeof address === "object" && address ? address.address : host;
   return {
     port: actualPort,
+    host: actualHost,
     assets,
     guard,
     sessions,
@@ -629,7 +646,7 @@ export async function startSceneStore({ port = DEFAULT_PORT, dir, assetDir, data
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   const dir = DEFAULT_DIR;
   const existed = existsSync(dir);
-  startSceneStore({ port: DEFAULT_PORT, dir })
+  startSceneStore({ port: DEFAULT_PORT, host: DEFAULT_HOST, dir })
     .then(({ url, assets, guard }) => {
       console.log(`graphysx scene store listening on ${url}`);
       console.log(`  scenes:   ${dir}${existed ? "" : " (created)"}`);
@@ -637,6 +654,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       console.log(`  datalake: ${assets.datalakeDir ?? "not configured (set GRAPHYSX_DATALAKE_DIR)"}`);
       console.log(`  auth:     ${guard.enabled ? "token required for writes and /datalake" : "OPEN (set GRAPHYSX_STORE_TOKEN to require a bearer token)"}`);
       console.log(`  sessions: ${guard.enabled ? "live sessions enabled at /sessions" : "DISABLED (live sessions refuse to run without a token)"}`);
+      console.log(`  bound:    ${host}${host === "127.0.0.1" || host === "::1" ? " (loopback only — put a reverse proxy in front to expose it; set GRAPHYSX_STORE_HOST=0.0.0.0 for direct LAN access)" : " — REACHABLE ON EVERY INTERFACE; only your firewall is containing it"}`);
       console.log(`  try:      curl ${url}/scenes`);
     })
     .catch((error) => {
