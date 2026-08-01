@@ -73,15 +73,18 @@ Three properties worth knowing:
 - **It reports the listener** (`ss -tlnp | grep :8788`) after restarting — the one thing the
   remote preflight structurally cannot see.
 
-One host prerequisite, once:
+Two host prerequisites, once. The deploy account owns the application payload, while its only
+passwordless root operation is restarting this one service:
 
-```
-%deploy ALL=(root) NOPASSWD: /bin/systemctl restart graphysx-store
+```bash
+sudo chown -R <deploy-user>:<deploy-group> /opt/graphysx-web
+# /etc/sudoers.d/graphysx-deploy (install with mode 0440 after checking with visudo -cf)
+<deploy-user> ALL=(root) NOPASSWD: /usr/bin/systemctl restart graphysx-store
 ```
 
-(substituting the deploy user or its group). A host with no `graphysx-store` unit updates the
-code and skips the restart rather than failing. `GRAPHYSX_STORE_PATH` overrides the default
-`/opt/graphysx-web`.
+(substituting the real deploy account and group). A host with no `graphysx-store` unit updates
+the code and skips the restart rather than failing. `GRAPHYSX_STORE_PATH` overrides the
+default `/opt/graphysx-web`.
 
 The whole server tree has **zero third-party imports** — every import is either `node:` or
 relative — so no `npm install` runs on the host.

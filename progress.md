@@ -2719,6 +2719,7 @@ confirmation the bind fix had landed. It is not evidence of that: every check ar
 the proxy, where `0.0.0.0` and `127.0.0.1` are indistinguishable. The run now warns and names
 `ss -tlnp | grep 8788` as the real check.
 
-The server tree has zero third-party imports, so nothing needs installing on the host. The one
-prerequisite is a NOPASSWD sudoers line for the restart; a host with no unit updates the code
-and skips it rather than failing.
+The server tree has zero third-party imports, so nothing needs installing on the host. The two
+host prerequisites are ownership of `/opt/graphysx-web` by the deploy account and a NOPASSWD
+sudoers line scoped to restarting `graphysx-store`; a host with no unit updates the code and
+skips the restart rather than failing.

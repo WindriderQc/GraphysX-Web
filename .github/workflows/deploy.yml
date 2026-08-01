@@ -65,7 +65,9 @@ jobs:
       - name: Package the store server
         run: |
           tar -czf "graphysx-server-${GITHUB_SHA}.tgz" server package.json
-          sha256sum "graphysx-server-${GITHUB_SHA}.tgz" | cut -d' ' -f1 > server-checksum.txt
+          # Archive metadata (notably checkout mtimes) changes on every runner. The Git tree
+          # identifies the server payload itself, so unrelated deploys do not drop sessions.
+          git rev-parse HEAD:server > server-checksum.txt
 
       - name: Upload release
         uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
@@ -88,7 +90,8 @@ jobs:
       # teach people the feature is flaky.
       #
       # Requires, once, on the host:
-      #   %deploy ALL=(root) NOPASSWD: /bin/systemctl restart graphysx-store
+      #   sudo chown -R <deploy-user>:<deploy-group> /opt/graphysx-web
+      #   <deploy-user> ALL=(root) NOPASSWD: /usr/bin/systemctl restart graphysx-store
       # A box with no graphysx-store unit skips the restart and says so rather than failing.
       - name: Sync the store server
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
@@ -109,6 +112,12 @@ jobs:
               echo "No store directory at $store_dir — skipping server sync."
               rm -f -- "$archive" "$incoming/server-checksum.txt"
               exit 0
+            fi
+
+            if ! test -w "$store_dir"; then
+              echo "Store directory $store_dir is not writable by $(id -un)." >&2
+              echo "Give the deploy account ownership before syncing the server payload." >&2
+              exit 1
             fi
 
             new_checksum="$(cat "$incoming/server-checksum.txt")"
@@ -223,7 +232,7 @@ jobs:
 
       - name: Upload production smoke evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: production-smoke-${{ github.sha }}
           path: output/production-smoke
