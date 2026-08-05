@@ -134,8 +134,9 @@ try {
   await play.fill(".gx-shelf-search", "definitely-no-such-course");
   const emptyShown = await play.locator(".gx-shelf-empty").isVisible();
   await play.fill(".gx-shelf-search", "");
-  await play.click('[data-shelf-key="game:ballz"] .gx-shelf-favorite');
-  const favorited = await play.locator('[data-shelf-key="game:ballz"]').evaluate((item) => item.classList.contains("gx-shelf-item--favorite"));
+  const ballzItem = play.locator('.gx-shelf-item:has(> [data-shelf-key="game:ballz"])');
+  await ballzItem.locator(".gx-shelf-favorite").click();
+  const favorited = await ballzItem.evaluate((item) => item.classList.contains("gx-shelf-item--favorite"));
   const firstKey = await play.locator("[data-shelf-key]").first().getAttribute("data-shelf-key");
   await play.click(".gx-shelf-reset");
   const reset = await play.evaluate(() => JSON.parse(window.localStorage.getItem("graphysx.shelf.preferences.v1") ?? "null"));
