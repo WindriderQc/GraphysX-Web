@@ -58,15 +58,27 @@ function isAlive(pid) {
  */
 export function killTree(pid) {
   if (!pid) return;
-  try {
-    if (process.platform === "win32") {
+  if (process.platform === "win32") {
+    try {
       // /T whole tree, /F force. Detached so we do not wait on it.
       spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", detached: true }).unref();
-    } else {
-      process.kill(-pid, "SIGKILL");
+    } catch {
+      // Already gone is the outcome we wanted anyway.
     }
+    return;
+  }
+
+  try {
+    // POSIX children are spawned as process-group leaders by verify.mjs.
+    process.kill(-pid, "SIGKILL");
   } catch {
-    // Already gone is the outcome we wanted anyway.
+    // Fall back to the direct child if a caller supplied a non-group-leader pid. This does
+    // not replace group termination, but it prevents the deadline itself becoming inert.
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Already gone is the outcome we wanted anyway.
+    }
   }
 }
 

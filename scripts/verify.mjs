@@ -34,6 +34,12 @@ const LOCK_PATH = machineVerifyLockPath();
 // GREEN CI run (4-core swiftshader ubuntu runner) — a 5-minute deadline failed CI on a
 // smoke that was making steady progress, and the zero-output kill was misread as a hang.
 const SMOKE_DEADLINE_MS = Number(process.env.VERIFY_SMOKE_TIMEOUT_MS || 10 * 60 * 1000);
+// The live browser contract deliberately exercises two full WebGL clients, an external
+// AgentX stream, several frozen-response races, reconnect backoff and terminal recovery.
+// It passed all 94 assertions on the clean Linux runner in 11m51s, so the generic 10-minute
+// smoke bound was killing a healthy run at assertion 89. Keep this one bounded, but give it
+// enough headroom to finish on the software-rendered CI host.
+const LIVE_BROWSER_DEADLINE_MS = Number(process.env.VERIFY_LIVE_BROWSER_TIMEOUT_MS || 15 * 60 * 1000);
 const BUILD_DEADLINE_MS = Number(process.env.VERIFY_BUILD_TIMEOUT_MS || 10 * 60 * 1000);
 
 const argv = process.argv.slice(2);
@@ -91,7 +97,7 @@ const SMOKES = [
   { name: "rapier-race", script: "scripts/smoke-rapier-race.mjs", covers: "Rapier RaceScene: Piste vehicle motion, steering, finite state, browser errors" },
   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
   { name: "live-sessions", script: "scripts/smoke-live-sessions.mjs", covers: "live sessions: owner + remote editor + agent on one scene, incremental attributed ops, roles, duplicates, conflicts, reconnect/resume/resync, teardown" },
-  { name: "live-sessions-browser", script: "scripts/smoke-live-sessions-browser.mjs", localOnly: true, covers: "live sessions through the product: observer boundary, scene-native AgentX presence, Nestor accepted-operation reaction, reconnect and cleanup" },
+  { name: "live-sessions-browser", script: "scripts/smoke-live-sessions-browser.mjs", localOnly: true, deadlineMs: LIVE_BROWSER_DEADLINE_MS, covers: "live sessions through the product: observer boundary, scene-native AgentX presence, Nestor accepted-operation reaction, reconnect and cleanup" },
   { name: "live-sessions-security", script: "scripts/smoke-live-sessions-security.mjs", covers: "live session security: fail-closed without a store token, cross-session + forged credentials, expired/revoked invites, origin rejection, one-shot stream tickets, payload/rate caps, concurrent burst consistency, token-leak audit" },
   { name: "live-undo", script: "scripts/smoke-live-undo.mjs", covers: "collaborative undo: inverse operations appended not rewound, refusal when a later actor touched the same entities, own-operation-only, parent/child restore, non-invertible refusal, viewer denial" },
   { name: "results", script: "scripts/smoke-results.mjs", covers: "results: persistent bests, compatibility-separated leaderboards with client-attested trust labels, deterministic ordering and bounds, shared ghost round-trip, and refusal of desynced/incomplete/implausible/oversized/unsorted submissions" },
@@ -124,7 +130,16 @@ function run(command, args, label) {
   return spawnTracked(
     command,
     args,
-    { cwd: ROOT, shell: process.platform === "win32", stdio: "inherit", env: { ...process.env } },
+    {
+      cwd: ROOT,
+      shell: process.platform === "win32",
+      stdio: "inherit",
+      env: { ...process.env },
+      // On POSIX, killTree targets the child's process group so Chromium descendants cannot
+      // survive a deadline. A detached child becomes that group's leader; we still retain
+      // and await the ChildProcess handle because it is not unref'ed.
+      detached: process.platform !== "win32",
+    },
     label,
     BUILD_DEADLINE_MS,
   );
@@ -134,9 +149,14 @@ function runSmoke(smoke, base) {
   return spawnTracked(
     process.execPath,
     [smoke.script],
-    { cwd: ROOT, stdio: "inherit", env: { ...process.env, SMOKE_BASE: base, SMOKE_ARTIFACTS: ARTIFACTS } },
+    {
+      cwd: ROOT,
+      stdio: "inherit",
+      env: { ...process.env, SMOKE_BASE: base, SMOKE_ARTIFACTS: ARTIFACTS },
+      detached: process.platform !== "win32",
+    },
     smoke.name,
-    SMOKE_DEADLINE_MS,
+    smoke.deadlineMs ?? SMOKE_DEADLINE_MS,
   );
 }
 
