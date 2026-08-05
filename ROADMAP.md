@@ -1,5 +1,10 @@
 # GraphysX Web — Roadmap
 
+> **Current roadmap (2026-08-04): [AgentX Center roadmap](docs/AGENTX_ROADMAP.md).**
+> The inventory below is the 2026-07-30 historical snapshot and contains claims that were
+> subsequently shipped (notably Live Sessions, browser results, formula/flock integration,
+> and the shared preview workshop). Keep it for decision history; do not use it as backlog.
+
 *Taken stock 2026-07-30, against `main` at `c9053ab` (the deployed release) plus the
 `codex/live-sessions-r1` branch. [PRODUCT_SPEC.md](PRODUCT_SPEC.md) says what the product is
 and why; this doc says where it stands and what comes next, in order. When they disagree, the

@@ -232,6 +232,7 @@ export function mountLiveSessionPanel(container: HTMLElement, client: LiveSessio
   });
 
   container.append(style, panel);
+  document.documentElement.dataset.gxLiveSession = "visible";
 
   /**
    * Keeps this panel below the scene browser instead of underneath it.
@@ -300,6 +301,7 @@ export function mountLiveSessionPanel(container: HTMLElement, client: LiveSessio
     announce,
     setVisible: (visible: boolean) => {
       panel.hidden = !visible;
+      document.documentElement.dataset.gxLiveSession = visible ? "visible" : "hidden";
     },
     dispose: () => {
       observer?.disconnect();
@@ -307,6 +309,7 @@ export function mountLiveSessionPanel(container: HTMLElement, client: LiveSessio
       window.removeEventListener("resize", reposition);
       panel.remove();
       style.remove();
+      delete document.documentElement.dataset.gxLiveSession;
     },
   };
 }

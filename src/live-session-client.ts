@@ -175,6 +175,9 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectStep = 0;
   let closed = false;
+  // Every join/attach owns a generation. Leave or a newer claim revokes all fetches,
+  // snapshots and stream callbacks retained by the previous authority.
+  let authorityEpoch = 0;
 
   /**
    * Operation ids this tab submitted. A member's own operation comes back over the stream
@@ -200,7 +203,52 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     announce();
   };
 
+  const hasAuthority = (epoch: number, targetSessionId: string): boolean =>
+    !closed && authorityEpoch === epoch && sessionId === targetSessionId;
+
+  const assertAuthority = (epoch: number, targetSessionId: string): void => {
+    if (!hasAuthority(epoch, targetSessionId)) {
+      throw new LiveSessionError(
+        "Live-session authority changed while a request was in flight",
+        409,
+        "session-authority-revoked",
+      );
+    }
+  };
+
+  /** Claim authority synchronously, before join/attach performs its first network await. */
+  const beginAuthority = (targetSessionId: string, nextCredential: string | null): number => {
+    authorityEpoch += 1;
+    closed = false;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    source?.close();
+    source = null;
+    credential = nextCredential;
+    sessionId = targetSessionId;
+    role = null;
+    actorId = null;
+    seq = 0;
+    revision = 0;
+    latencyMs = null;
+    resynced = false;
+    members = [];
+    lastError = null;
+    reconnectStep = 0;
+    lastOwnOpId = null;
+    ownOperations.clear();
+    connection = "connecting";
+    // This announcement is the authority barrier used by the product shell: local canvas,
+    // Editor, Games, Browse and SceneBrowser are disabled before the request can yield.
+    announce();
+    return authorityEpoch;
+  };
+
   async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const requestAuthority = authorityEpoch;
+    const requestSessionId = sessionId;
     const headers: Record<string, string> = { "content-type": "application/json" };
     // `x-graphysx-session`, never a query parameter: a credential in a URL survives in
     // history, referrers and access logs. The one exception is the stream, which uses a
@@ -221,7 +269,9 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         0,
       );
     }
-    latencyMs = Math.round(performance.now() - startedAt);
+    if (!closed && authorityEpoch === requestAuthority && sessionId === requestSessionId) {
+      latencyMs = Math.round(performance.now() - startedAt);
+    }
     const payload = (await response.json().catch(() => null)) as
       | (T & { error?: string; code?: string; revision?: number; blockedBy?: { actorId: string; revision: number; opId: string } })
       | null;
@@ -279,16 +329,19 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
 
   function openStream(): void {
     if (closed || !sessionId || !credential) return;
+    const targetSessionId = sessionId;
+    const authority = authorityEpoch;
     setConnection(seq > 0 ? "reconnecting" : "connecting");
     void (async () => {
       try {
-        const ticket = await call<{ ticket: string }>("POST", `/sessions/${sessionId}/stream-ticket`, {});
-        if (closed) return;
-        const url = `${root}/sessions/${sessionId}/stream?ticket=${encodeURIComponent(ticket.ticket)}&since=${seq}`;
+        const ticket = await call<{ ticket: string }>("POST", `/sessions/${targetSessionId}/stream-ticket`, {});
+        if (!hasAuthority(authority, targetSessionId)) return;
+        const url = `${root}/sessions/${targetSessionId}/stream?ticket=${encodeURIComponent(ticket.ticket)}&since=${seq}`;
         const stream = new EventSource(url);
         source = stream;
 
         stream.addEventListener("hello", (message) => {
+          if (!hasAuthority(authority, targetSessionId)) return;
           const hello = JSON.parse((message as MessageEvent).data) as {
             revision: number; seq: number; role: LiveSessionRole; mustResync: boolean;
           };
@@ -297,7 +350,10 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
           setConnection("live");
           if (hello.mustResync) {
             // The server cannot prove what we missed. A snapshot is the only honest answer.
-            void resync();
+            void resync().catch((error) => {
+              if (hasAuthority(authority, targetSessionId))
+                events.onError?.(error instanceof Error ? error : new Error(String(error)));
+            });
           } else {
             revision = Math.max(revision, hello.revision);
             announce();
@@ -305,10 +361,12 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         });
 
         stream.addEventListener("op", (message) => {
+          if (!hasAuthority(authority, targetSessionId)) return;
           ingest(JSON.parse((message as MessageEvent).data) as LiveSessionOperation);
         });
 
         stream.addEventListener("presence", (message) => {
+          if (!hasAuthority(authority, targetSessionId)) return;
           const payload = JSON.parse((message as MessageEvent).data) as { seq: number; members: LiveSessionMemberView[] };
           seq = Math.max(seq, payload.seq);
           members = payload.members;
@@ -317,12 +375,14 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         });
 
         stream.addEventListener("member", (message) => {
+          if (!hasAuthority(authority, targetSessionId)) return;
           const payload = JSON.parse((message as MessageEvent).data) as { seq: number };
           seq = Math.max(seq, payload.seq);
           announce();
         });
 
         stream.addEventListener("closed", () => {
+          if (!hasAuthority(authority, targetSessionId)) return;
           closed = true;
           stream.close();
           source = null;
@@ -330,13 +390,14 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         });
 
         stream.onerror = () => {
+          if (!hasAuthority(authority, targetSessionId)) return;
           stream.close();
           source = null;
           if (closed) return;
           scheduleReconnect();
         };
       } catch (error) {
-        if (closed) return;
+        if (!hasAuthority(authority, targetSessionId)) return;
         events.onError?.(error instanceof Error ? error : new Error(String(error)));
         scheduleReconnect(error instanceof Error ? error.message : String(error));
       }
@@ -357,11 +418,15 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
 
   /** Whole-document recovery. Used on join, and whenever continuity cannot be proved. */
   async function resync(): Promise<number> {
-    if (!sessionId) throw new LiveSessionError("Not in a session", 400);
+    const targetSessionId = sessionId;
+    if (!targetSessionId) throw new LiveSessionError("Not in a session", 400);
+    const authority = authorityEpoch;
     const snapshot = await call<{ revision: number; seq: number; definition: AgentWorldDefinition; session: LiveSessionView }>(
-      "GET", `/sessions/${sessionId}/snapshot`,
+      "GET", `/sessions/${targetSessionId}/snapshot`,
     );
+    assertAuthority(authority, targetSessionId);
     const result = api.load(snapshot.definition);
+    assertAuthority(authority, targetSessionId);
     if (!result.ok) {
       // Surfaced on the status, not only thrown: a join that dies here used to leave the
       // panel reading "offline" with no error at all, which is the least useful thing a
@@ -389,11 +454,20 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
 
     /** Exchanges an invitation for a scoped credential, then joins and syncs. */
     async join(targetSessionId: string, code: string, actor: { id: string; label?: string; kind?: "human" | "agent" }) {
-      closed = false;
-      sessionId = targetSessionId;
-      const joined = await call<{ credential: string; member: LiveSessionMemberView; session: LiveSessionView }>(
-        "POST", `/sessions/${targetSessionId}/join`, { code, actor },
-      );
+      const authority = beginAuthority(targetSessionId, null);
+      let joined: { credential: string; member: LiveSessionMemberView; session: LiveSessionView };
+      try {
+        joined = await call<{ credential: string; member: LiveSessionMemberView; session: LiveSessionView }>(
+          "POST", `/sessions/${targetSessionId}/join`, { code, actor },
+        );
+        assertAuthority(authority, targetSessionId);
+      } catch (error) {
+        if (!hasAuthority(authority, targetSessionId)) assertAuthority(authority, targetSessionId);
+        if (hasAuthority(authority, targetSessionId)) {
+          setConnection("offline", error instanceof Error ? error.message : String(error));
+        }
+        throw error;
+      }
       // The invitation is spent from here on; only the scoped credential survives, and it
       // lives in this closure rather than in storage the rest of the page can read.
       credential = joined.credential;
@@ -403,10 +477,14 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       resynced = false;
       try {
         await resync();
+        assertAuthority(authority, targetSessionId);
       } catch (error) {
         // The credential is good but the scene would not load. Report it as the connection
         // failure it is rather than leaving the caller with a half-joined client.
-        setConnection("offline", error instanceof Error ? error.message : String(error));
+        if (!hasAuthority(authority, targetSessionId)) assertAuthority(authority, targetSessionId);
+        if (hasAuthority(authority, targetSessionId)) {
+          setConnection("offline", error instanceof Error ? error.message : String(error));
+        }
         throw error;
       }
       // The initial sync is a join, not a recovery — `resynced` marks "we lost continuity
@@ -418,17 +496,25 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
 
     /** Resumes an already-credentialled session (owner, or a restored client). */
     async attach(targetSessionId: string, memberCredential: string) {
-      closed = false;
-      sessionId = targetSessionId;
-      credential = memberCredential;
-      const view = await call<{ session: LiveSessionView; you: LiveSessionMemberView }>("GET", `/sessions/${targetSessionId}`);
-      role = view.you.role;
-      actorId = view.you.actorId;
-      members = view.session.members;
-      await resync();
-      resynced = false;
-      openStream();
-      return view.you;
+      const authority = beginAuthority(targetSessionId, memberCredential);
+      try {
+        const view = await call<{ session: LiveSessionView; you: LiveSessionMemberView }>("GET", `/sessions/${targetSessionId}`);
+        assertAuthority(authority, targetSessionId);
+        role = view.you.role;
+        actorId = view.you.actorId;
+        members = view.session.members;
+        await resync();
+        assertAuthority(authority, targetSessionId);
+        resynced = false;
+        openStream();
+        return view.you;
+      } catch (error) {
+        if (!hasAuthority(authority, targetSessionId)) assertAuthority(authority, targetSessionId);
+        if (hasAuthority(authority, targetSessionId)) {
+          setConnection("offline", error instanceof Error ? error.message : String(error));
+        }
+        throw error;
+      }
     },
 
     /**
@@ -437,7 +523,9 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
      * rather than leaving this tab holding a change nobody else has.
      */
     async submit(commands: AgentWorldCommand[], options: { intent?: string; path?: string; opId?: string } = {}) {
-      if (!sessionId) throw new LiveSessionError("Not in a session", 400);
+      const targetSessionId = sessionId;
+      if (!targetSessionId) throw new LiveSessionError("Not in a session", 400);
+      const authority = authorityEpoch;
       if (role === "viewer") throw new LiveSessionError("Viewers cannot change the scene", 403, "role-forbidden");
       const opId = options.opId ?? `op-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       ownOperations.add(opId);
@@ -452,9 +540,10 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       }
       try {
         const receipt = await call<{ seq: number; revision: number; duplicate?: boolean }>(
-          "POST", `/sessions/${sessionId}/ops`,
+          "POST", `/sessions/${targetSessionId}/ops`,
           { opId, baseRevision: revision, path: options.path ?? "transaction", commands, intent: options.intent },
         );
+        assertAuthority(authority, targetSessionId);
         revision = receipt.revision;
         seq = Math.max(seq, receipt.seq);
         lastOwnOpId = opId;
@@ -463,8 +552,10 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       } catch (error) {
         // Optimistic application is only honest if the rollback is real. The server is the
         // authority on what happened; take its version rather than keep a private one.
-        ownOperations.delete(opId);
-        await resync().catch(() => undefined);
+        if (hasAuthority(authority, targetSessionId)) {
+          ownOperations.delete(opId);
+          await resync().catch(() => undefined);
+        }
         throw error;
       }
     },
@@ -476,8 +567,12 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       tool?: string | null;
       color?: string | null;
     }) {
-      if (!sessionId || role === null) return null;
-      return call<{ ok: boolean; seq: number }>("POST", `/sessions/${sessionId}/presence`, presence);
+      const targetSessionId = sessionId;
+      if (!targetSessionId || role === null) return null;
+      const authority = authorityEpoch;
+      const receipt = await call<{ ok: boolean; seq: number }>("POST", `/sessions/${targetSessionId}/presence`, presence);
+      assertAuthority(authority, targetSessionId);
+      return receipt;
     },
 
     /**
@@ -497,12 +592,15 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         const result = api.undo();
         return result.ok ? { ok: true } : { ok: false, reason: result.error };
       }
+      const targetSessionId = sessionId;
+      const authority = authorityEpoch;
       const target = opId ?? lastOwnOpId;
       if (!target) return { ok: false, reason: "There is nothing of yours to undo in this session." };
       try {
         const receipt = await call<{ revision: number; seq: number }>(
-          "POST", `/sessions/${sessionId}/ops/${encodeURIComponent(target)}/undo`, {},
+          "POST", `/sessions/${targetSessionId}/ops/${encodeURIComponent(target)}/undo`, {},
         );
+        assertAuthority(authority, targetSessionId);
         revision = receipt.revision;
         seq = Math.max(seq, receipt.seq);
         // The inverse arrives over the stream like any other operation and is applied there;
@@ -522,6 +620,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     resync,
 
     async leave() {
+      authorityEpoch += 1;
       closed = true;
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
@@ -532,8 +631,16 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       credential = null;
       sessionId = null;
       role = null;
+      actorId = null;
       members = [];
-      setConnection("offline");
+      resynced = false;
+      lastOwnOpId = null;
+      ownOperations.clear();
+      connection = "offline";
+      lastError = null;
+      // setConnection intentionally coalesces identical values. Leave also changes sessionId,
+      // so it must announce even when a pending join was already labelled offline/connecting.
+      announce();
     },
   };
 }

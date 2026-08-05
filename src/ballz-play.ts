@@ -81,7 +81,13 @@ export function mountBallzPlay(
   // A level with no controllable subject is a layout rather than something to play.
   if (!ball || !subjectId) return () => {};
   const ballId = subjectId;
-  const recordId = raceRecordIdForWorld(api.state()?.world.id ?? "");
+  const worldId = api.state()?.world.id ?? "";
+  const recordId = raceRecordIdForWorld(worldId);
+  // Snapshot the durable library revision when this materialisation begins. Runtime world
+  // revisions count play interactions and are unrelated, while a post-finish lookup could
+  // mislabel this run if somebody edited the grid while it was being played.
+  const courseRevision = recordId && worldId.startsWith("ballz-level-")
+    ? api.levels.get(recordId)?.revision ?? null : null;
   // A "Race" click on the leaderboard parks the rival's trace here and reloads the level;
   // this view is mounted fresh by `world.loaded`, so the handoff cannot be a local variable.
   const challenge = recordId ? takeGhostChallenge(recordId) : null;
@@ -229,8 +235,15 @@ export function mountBallzPlay(
     menuPaused = paused;
     api.pause(paused);
     if (paused && steerable) api.steer(ballId, { thrust: 0, turn: 0 });
+    const playChrome = [hud, ...container.querySelectorAll<HTMLElement>(".gx-bz-touch")];
+    for (const element of playChrome) element.inert = paused;
     pauseOverlay.hidden = !paused;
     pauseButton.textContent = paused ? "▶ Resume" : "Ⅱ Pause";
+    if (paused) {
+      queueMicrotask(() => pauseOverlay.querySelector<HTMLButtonElement>('[data-gx-pause-action="resume"]')?.focus());
+    } else {
+      pauseButton.focus();
+    }
   };
   const restart = (): void => {
     setMenuPaused(false);
@@ -273,6 +286,19 @@ export function mountBallzPlay(
       panel.append(exit);
     }
     overlay.append(panel);
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab") return;
+      const focusable = [...panel.querySelectorAll<HTMLButtonElement>('button:not(:disabled):not([hidden])')]
+        .filter((element) => element.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first.focus();
+      }
+    });
     return overlay;
   }
   pauseButton.addEventListener("click", () => setMenuPaused(!menuPaused));
@@ -331,10 +357,15 @@ export function mountBallzPlay(
         : undefined;
     const panel = buildWinPanel(api, totalRings, seconds, desynced, onExit, replay);
     container.append(panel);
+    container.querySelector<HTMLElement>(".gx-bz-touch")?.setAttribute("inert", "");
+    queueMicrotask(() => {
+      const action = panel.querySelector<HTMLButtonElement>("button");
+      if (action) action.focus(); else panel.focus();
+    });
     // Results are an enhancement layered onto a finish that has already been recorded
     // locally and already rendered. Deliberately not awaited, and a complete no-op when no
     // store is configured — see the header of results-client.ts.
-    void publishAndShowBoard(panel, recordId, seconds, desynced, ghostSession?.recording() ?? null, replay);
+    void publishAndShowBoard(panel, recordId, courseRevision, seconds, desynced, ghostSession?.recording() ?? null, replay);
   }
 
   return () => {
@@ -783,6 +814,10 @@ function buildWinPanel(
 ): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "gx-bz-win";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-modal", "true");
+  panel.setAttribute("aria-label", "Course complete");
+  panel.tabIndex = -1;
 
   const title = document.createElement("div");
   title.className = "gx-bz-win-title";
@@ -833,6 +868,19 @@ function buildWinPanel(
     back.addEventListener("click", () => onExit());
     actions.append(back);
   }
+  panel.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const focusable = [...panel.querySelectorAll<HTMLButtonElement>('button:not(:disabled):not([hidden])')]
+      .filter((element) => element.getClientRects().length > 0);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first.focus();
+    }
+  });
 
   return panel;
 }
@@ -864,6 +912,7 @@ function takeGhostChallenge(recordId: string): { label: string; trace: GhostTrac
 async function publishAndShowBoard(
   panel: HTMLElement,
   recordId: string | null,
+  courseRevision: number | null,
   seconds: number,
   desynced: boolean,
   ghost: GhostTrace | null,
@@ -871,7 +920,7 @@ async function publishAndShowBoard(
 ): Promise<void> {
   if (!recordId || !resultsConfigured()) return;
   const elapsedMs = Math.round(seconds * 1000);
-  const courseVersion = courseVersionFor(recordId);
+  const courseVersion = courseVersionFor(recordId, courseRevision);
   const rulesVersion = "v1";
   const actorId = resultsActorId();
 

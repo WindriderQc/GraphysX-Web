@@ -11,7 +11,7 @@ import {
   Vector2,
   Vector3,
 } from "three";
-import { Water } from "three/examples/jsm/objects/Water.js";
+import { ManagedWater } from "./managed-water";
 
 /**
  * Reflective water as first-class `graphysx.agent-world/v2` scene vocabulary.
@@ -275,7 +275,7 @@ function waterNormalsTexture(): CanvasTexture {
  * three.js upgrade changes these lines, this throws loudly at build-scene time rather than
  * silently rendering the old look.
  */
-function patchWaterShader(water: Water, config: ResolvedAgentWorldWater): void {
+function patchWaterShader(water: ManagedWater, config: ResolvedAgentWorldWater): void {
   const material = water.material;
   material.uniforms.rf0 = { value: config.reflectance };
   material.uniforms.tintStrength = { value: config.tintStrength };
@@ -309,7 +309,7 @@ function patchWaterShader(water: Water, config: ResolvedAgentWorldWater): void {
  */
 export class AgentWorldWaterSurface {
   readonly object = new Group();
-  private surface: Water | Mesh<PlaneGeometry, MeshPhongMaterial>;
+  private surface: ManagedWater | Mesh<PlaneGeometry, MeshPhongMaterial>;
   private config: ResolvedAgentWorldWater;
   private elapsed = 0;
 
@@ -325,10 +325,15 @@ export class AgentWorldWaterSurface {
     return this.config.reflection;
   }
 
-  private build(config: ResolvedAgentWorldWater): Water | Mesh<PlaneGeometry, MeshPhongMaterial> {
+  /** Gate the next planar-reflection refresh without changing the authored water config. */
+  setReflectionRefreshEnabled(enabled: boolean): void {
+    if (this.surface instanceof ManagedWater) this.surface.setReflectionRefreshEnabled(enabled);
+  }
+
+  private build(config: ResolvedAgentWorldWater): ManagedWater | Mesh<PlaneGeometry, MeshPhongMaterial> {
     const geometry = new PlaneGeometry(config.size, config.size);
     if (config.reflection) {
-      const water = new Water(geometry, {
+      const water = new ManagedWater(geometry, {
         textureWidth: config.reflectionResolution,
         textureHeight: config.reflectionResolution,
         waterNormals: waterNormalsTexture(),
@@ -392,7 +397,7 @@ export class AgentWorldWaterSurface {
       this.object.add(this.surface);
       return;
     }
-    if (this.surface instanceof Water) {
+    if (this.surface instanceof ManagedWater) {
       const uniforms = this.surface.material.uniforms;
       uniforms.waterColor.value.set(config.color);
       uniforms.sunColor.value.set(config.sunColor);
@@ -412,7 +417,7 @@ export class AgentWorldWaterSurface {
 
   update(deltaSeconds: number): void {
     this.elapsed += deltaSeconds * this.config.flowSpeed;
-    if (this.surface instanceof Water) {
+    if (this.surface instanceof ManagedWater) {
       this.surface.material.uniforms.time.value = this.elapsed;
     } else {
       // Scroll the ripples by moving the sampler, NOT by flagging the texture dirty:
@@ -426,8 +431,8 @@ export class AgentWorldWaterSurface {
   private disposeSurface(): void {
     this.surface.removeFromParent();
     this.surface.geometry.dispose();
-    if (this.surface instanceof Water) {
-      this.surface.material.dispose();
+    if (this.surface instanceof ManagedWater) {
+      this.surface.dispose();
     } else {
       this.surface.material.normalMap?.dispose();
       this.surface.material.dispose();

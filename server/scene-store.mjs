@@ -602,6 +602,9 @@ export async function startSceneStore({ port = DEFAULT_PORT, host = DEFAULT_HOST
   // next agent call died on a stale socket. Outliving any realistic client pause fixes it.
   server.keepAliveTimeout = 72_000;
   server.headersTimeout = 75_000;
+  // Keep total request lifetime explicit across Node releases. Overflowing JSON bodies have
+  // their own much tighter five-second discard window in readJsonBody.
+  server.requestTimeout = 300_000;
 
   await new Promise((resolveListen, rejectListen) => {
     server.once("error", rejectListen);

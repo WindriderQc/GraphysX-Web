@@ -30,6 +30,22 @@ try {
     return !t || getComputedStyle(t).display === "none";
   });
   out.entityCount = await page.evaluate(() => window.__GRAPHYSX__.state().entities.length);
+  out.nestorInitial = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const agent = api.query({ ids: ["showroom-nestor"] })[0] ?? null;
+    const consoles = api.state().entities.filter((entity) =>
+      entity.type === "group" && entity.id.startsWith("showroom-nestor-console-"));
+    const rendered = JSON.parse(window.render_game_to_text());
+    return agent ? {
+      type: agent.type,
+      role: agent.agent?.role ?? null,
+      status: agent.agent?.status ?? null,
+      capabilities: agent.agent?.capabilities ?? [],
+      consoleCount: consoles.length,
+      renderedAgentId: rendered.nestor?.agentId ?? null,
+      renderedStatus: rendered.nestor?.status ?? null,
+    } : null;
+  });
 
   const probeCam = () => page.evaluate(() => {
     const h = window.__GRAPHYSX_HOST__;
@@ -142,7 +158,7 @@ try {
     const host = window.__GRAPHYSX_HOST__;
     // Well inside the terrain's 12-unit level stage, clear of the plinth and the braziers,
     // so the dropped ball lands on flat ground rather than near the rim of the blend.
-    const v = new host.camera.position.constructor(0, 0, 6.5);
+    const v = new host.camera.position.constructor(8, 0, 5);
     v.project(host.camera);
     const rect = host.renderer.domElement.getBoundingClientRect();
     return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((-v.y + 1) / 2) * rect.height };
@@ -271,6 +287,104 @@ try {
     orbitRearmed: await page.evaluate(() => window.__GRAPHYSX_HOST__.autoRotating),
   };
 
+  // The focus assertion deliberately moved the camera onto CubX. Return to the authored
+  // composition before testing a different physical subject; otherwise a valid console may
+  // be behind that close-up and the smoke measures sequencing rather than interaction.
+  await page.evaluate(() => window.__GRAPHYSX_HOST__.resetFraming(0.2));
+  await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT });
+
+  // Exercise the actual 3D route as well as the accessible topic controls. The right-hand
+  // Play console sits outside the welcome card and funnels through the same presenter.
+  const playConsoleAt = await screenOf("showroom-nestor-console-play:core");
+  if (playConsoleAt) await page.mouse.click(playConsoleAt.x, playConsoleAt.y);
+  await page.waitForFunction(
+    () => window.__GRAPHYSX_NESTOR__.state().status === "presenting:play",
+    null,
+    { timeout: SMOKE_TIMEOUT },
+  );
+  await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
+  out.nestor3dConsole = await page.evaluate((at) => ({
+    screen: at ? { x: Math.round(at.x), y: Math.round(at.y) } : null,
+    topic: window.__GRAPHYSX_NESTOR__.state().topic,
+    status: window.__GRAPHYSX_NESTOR__.state().status,
+    selected: window.__GRAPHYSX__.state().selectedIds.includes("showroom-plinth"),
+    playCommit: window.__GRAPHYSX__.history().some((entry) =>
+      entry.actor.id === "nestor" && entry.intent.includes("kinetic playground")),
+  }), playConsoleAt);
+
+  // Nestor is not decorative chrome: the Build topic must produce one attributed agent
+  // commit, construct ordinary prefab entities, focus the result, and narrate what happened.
+  const nestorTargetBefore = await page.evaluate(() => window.__GRAPHYSX_HOST__.orbitTarget.toArray());
+  await page.click('[data-nestor-topic="build"]');
+  await page.waitForFunction(() => {
+    const api = window.__GRAPHYSX__;
+    return api.query({ ids: ["showroom-nestor-build"] }).length === 1 &&
+      api.history().some((commit) => commit.actor.id === "nestor" && commit.actor.kind === "agent");
+  }, null, { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
+  out.nestorBuild = await page.evaluate((before) => {
+    const api = window.__GRAPHYSX__;
+    const presenter = window.__GRAPHYSX_NESTOR__.state();
+    const commit = api.history().filter((entry) => entry.actor.id === "nestor").pop() ?? null;
+    const root = api.query({ ids: ["showroom-nestor-build"] })[0] ?? null;
+    const target = window.__GRAPHYSX_HOST__.orbitTarget.toArray();
+    return {
+      topic: presenter.topic,
+      status: presenter.status,
+      label: root?.label ?? null,
+      entityCount: api.state().entities.filter((entity) => entity.id === "showroom-nestor-build" || entity.id.startsWith("showroom-nestor-build:")).length,
+      commitActor: commit?.actor ?? null,
+      commitIntent: commit?.intent ?? null,
+      selected: api.state().selectedIds.includes("showroom-nestor-build"),
+      panelPressed: document.querySelector('[data-nestor-topic="build"]')?.getAttribute("aria-pressed"),
+      panelMentionsCommit: document.querySelector("[data-nestor-commit]")?.textContent?.includes(commit?.id ?? "missing") ?? false,
+      focusMoved: Number(Math.hypot(target[0] - before[0], target[1] - before[1], target[2] - before[2]).toFixed(3)),
+    };
+  }, nestorTargetBefore);
+  await page.screenshot({ path: path.join(ART, "showroom-nestor-build.png"), fullPage: false });
+
+  // A rejected transaction must remain rejected on the next state read. Remove one command
+  // target, retry Build, then restore that edit and ensure scene reconciliation resumes.
+  out.nestorRejected = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const removed = api.remove("showroom-nestor-aura");
+    const rejected = window.__GRAPHYSX_NESTOR__.present("build");
+    const retained = window.__GRAPHYSX_NESTOR__.state();
+    const restored = api.undo();
+    const reconciled = window.__GRAPHYSX_NESTOR__.state();
+    return {
+      removed: removed.ok,
+      rejectedError: rejected.error,
+      rejectedCommit: rejected.commit,
+      retainedStatus: retained.status,
+      retainedError: retained.presentation.error,
+      retainedCommit: retained.lastCommit,
+      restored: restored.ok,
+      reconciledTopic: reconciled.topic,
+      reconciledStatus: reconciled.status,
+      auraPresent: api.query({ ids: ["showroom-nestor-aura"] }).length === 1,
+    };
+  });
+
+  // Availability is visible, not a silent no-op: removing one required center entity swaps the
+  // active Nestor card for a neutral resume door, and restoring it brings the real topics back.
+  await page.evaluate(() => window.__GRAPHYSX__.remove("showroom-nestor-aura"));
+  await page.waitForSelector(".gx-welcome--scene-resume", { timeout: SMOKE_TIMEOUT });
+  const guardedDoor = await page.evaluate(() => ({
+    neutral: !!document.querySelector(".gx-welcome--scene-resume"),
+    topics: document.querySelectorAll("[data-nestor-topic]").length,
+  }));
+  await page.evaluate(() => window.__GRAPHYSX__.undo());
+  await page.waitForFunction(() =>
+    !document.querySelector(".gx-welcome--scene-resume") &&
+    document.querySelectorAll("[data-nestor-topic]").length === 3,
+  null, { timeout: SMOKE_TIMEOUT });
+  out.nestorDoorGuard = await page.evaluate((guarded) => ({
+    ...guarded,
+    restoredTopics: document.querySelectorAll("[data-nestor-topic]").length,
+    restoredAura: window.__GRAPHYSX__.query({ ids: ["showroom-nestor-aura"] }).length,
+  }), guardedDoor);
+
   // A flock has to survive being written out and read back, or it is a runtime toy rather
   // than scene vocabulary. Round-trip the *document* (the persistable form, ephemeral spawns
   // dropped) and assert the flock comes back with its population intact and still flying.
@@ -278,6 +392,8 @@ try {
     const api = window.__GRAPHYSX__;
     const document = api.exportDocument();
     const exported = document.entities.filter((e) => e.type === "flock");
+    const exportedNestor = document.entities.find((e) => e.id === "showroom-nestor") ?? null;
+    const exportedBuild = document.entities.find((e) => e.id === "showroom-nestor-build") ?? null;
     const loaded = api.load(document);
     if (!loaded.ok) return { ok: false, error: loaded.error };
     const after = api.state().entities.filter((e) => e.type === "flock");
@@ -291,6 +407,10 @@ try {
         return Math.hypot(now[0] - was[0], now[1] - was[1], now[2] - was[2]);
       });
     return {
+      nestorProfile: exportedNestor?.agent ?? null,
+      buildExported: !!exportedBuild,
+      nestorReloaded: api.query({ ids: ["showroom-nestor"] })[0]?.agent ?? null,
+      buildReloaded: api.query({ ids: ["showroom-nestor-build"] }).length === 1,
       ok: true,
       exportedCount: exported.length,
       // The `flock` field must be in the serialised document, not just in live state.
@@ -300,8 +420,13 @@ try {
       stillMoving: moved.every((d) => d > 0.05),
     };
   });
+  out.nestorAfterLoad = await page.evaluate(() => ({
+    topic: window.__GRAPHYSX_NESTOR__.state().topic,
+    status: window.__GRAPHYSX_NESTOR__.state().status,
+    buildPresent: window.__GRAPHYSX__.query({ ids: ["showroom-nestor-build"] }).length === 1,
+  }));
 
-  await page.click(".gx-welcome button");
+  await page.click(".gx-go-editor");
   // The editor module is loaded on demand, so wait for it to mount rather than guessing.
   await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
   await page.waitForTimeout(200);
@@ -310,7 +435,93 @@ try {
     return !!t && getComputedStyle(t).display !== "none";
   });
   out.welcomeGone = (await page.$(".gx-welcome")) === null;
+  out.nestorInEditor = (await page.$('[title="showroom-nestor — agent"]')) !== null &&
+    (await page.$('[title="showroom-nestor-build — group"]')) !== null;
   await page.screenshot({ path: path.join(ART, "showroom-editor.png"), fullPage: false });
+
+  // The load above is one undo frame and Build is the next. Rewind until the authoritative
+  // agent leaves presenting mode, then ensure the presenter and remounted card follow it.
+  out.nestorUndo = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const before = window.__GRAPHYSX_NESTOR__.state();
+    let attempts = 0;
+    const results = [];
+    while (api.query({ ids: ["showroom-nestor"] })[0]?.agent?.status?.startsWith("presenting:") && attempts < 4) {
+      const result = api.undo();
+      results.push(result.ok);
+      attempts += 1;
+      if (!result.ok) break;
+    }
+    const after = window.__GRAPHYSX_NESTOR__.state();
+    return {
+      beforeTopic: before.topic,
+      attempts,
+      results,
+      topic: after.topic,
+      status: after.status,
+      buildPresent: api.query({ ids: ["showroom-nestor-build"] }).length === 1,
+      lastCommit: after.lastCommit,
+    };
+  });
+  await page.click(".gx-ed-exit");
+  await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
+  out.nestorAfterEditorExit = await page.evaluate(() => ({
+    topic: window.__GRAPHYSX_NESTOR__.state().topic,
+    status: window.__GRAPHYSX_NESTOR__.state().status,
+    buildPressed: document.querySelector('[data-nestor-topic="build"]')?.getAttribute("aria-pressed"),
+    commitLabel: document.querySelector("[data-nestor-commit]")?.textContent ?? null,
+  }));
+
+  // Browse replaces the document before entering the editor. Its Showroom exit must rebuild
+  // the AgentX Center, not strand Nestor's hard-coded topic UI over the starter world.
+  await page.click(".gx-go-browse");
+  await page.waitForSelector(".gx-browse", { timeout: SMOKE_TIMEOUT });
+  await page.click('[data-starter-id="signal-outpost"]');
+  await page.waitForFunction(() => {
+    const toolbar = document.querySelector(".gx-ed-toolbar");
+    return window.__GRAPHYSX_HOST__.mode === "editor" && !!toolbar && getComputedStyle(toolbar).display !== "none";
+  }, null, { timeout: SMOKE_TIMEOUT });
+  out.browseEditor = await page.evaluate(() => ({
+    mode: window.__GRAPHYSX_HOST__.mode,
+    worldId: window.__GRAPHYSX__.state().world.id,
+    nestorCount: window.__GRAPHYSX__.query({ ids: ["showroom-nestor"] }).length,
+  }));
+  await page.click(".gx-ed-exit");
+  await page.waitForFunction(() =>
+    window.__GRAPHYSX__.query({ ids: ["showroom-nestor"] }).length === 1 &&
+    document.querySelector(".gx-welcome"), null, { timeout: SMOKE_TIMEOUT });
+  out.browseExit = await page.evaluate(() => ({
+    mode: window.__GRAPHYSX_HOST__.mode,
+    worldId: window.__GRAPHYSX__.state().world.id,
+    nestorStatus: window.__GRAPHYSX_NESTOR__.state().status,
+    consoleCount: window.__GRAPHYSX__.query({ tag: "nestor-console" }).filter((entity) => entity.type === "group").length,
+    welcomePresent: !!document.querySelector(".gx-welcome"),
+  }));
+
+  // The entry flag is intentionally false here. Replacing the world from inside the editor must
+  // preserve that in-memory work while the authoritative readiness check prevents Nestor's
+  // controls from being mounted over a world where their scene targets do not exist.
+  await page.click(".gx-go-editor");
+  await page.waitForFunction(() => window.__GRAPHYSX_HOST__.mode === "editor", null, { timeout: SMOKE_TIMEOUT });
+  out.editorWorldSwap = await page.evaluate(() => {
+    const loaded = window.__GRAPHYSX__.loadStarter("signal-outpost");
+    return {
+      ok: loaded.ok,
+      worldId: window.__GRAPHYSX__.state().world.id,
+      nestorCount: window.__GRAPHYSX__.query({ ids: ["showroom-nestor"] }).length,
+    };
+  });
+  await page.click(".gx-ed-exit");
+  await page.waitForFunction(() =>
+    window.__GRAPHYSX__.state().world.id === "graphysx-signal-outpost" &&
+    document.querySelector(".gx-welcome"), null, { timeout: SMOKE_TIMEOUT });
+  out.authoritativeEditorExit = await page.evaluate(() => ({
+    worldId: window.__GRAPHYSX__.state().world.id,
+    nestorCount: window.__GRAPHYSX__.query({ ids: ["showroom-nestor"] }).length,
+    neutralDoor: !!document.querySelector(".gx-welcome--scene-resume"),
+    nestorTopics: document.querySelectorAll("[data-nestor-topic]").length,
+    welcomePresent: !!document.querySelector(".gx-welcome"),
+  }));
 } catch (e) {
   out.fatal = String(e);
 }
@@ -358,6 +569,78 @@ out.flockingIsLive = flockingIsLive;
 const focusWorks = !!out.focus && out.focus.targetMoved > 0.75 && out.focus.orbitRearmed === true;
 out.focusWorks = focusWorks;
 
+const nestorInitial = out.nestorInitial;
+const nestorBuild = out.nestorBuild;
+const nestorIsLive =
+  !!nestorInitial &&
+  nestorInitial.type === "agent" &&
+  nestorInitial.role === "AgentX Center guide" &&
+  nestorInitial.status === "ready" &&
+  ["present", "build", "play", "explore"].every((capability) => nestorInitial.capabilities.includes(capability)) &&
+  nestorInitial.consoleCount === 3 &&
+  nestorInitial.renderedAgentId === "showroom-nestor" &&
+  nestorInitial.renderedStatus === "ready" &&
+  out.nestor3dConsole?.topic === "play" &&
+  out.nestor3dConsole?.status === "presenting:play" &&
+  out.nestor3dConsole?.selected === true &&
+  out.nestor3dConsole?.playCommit === true &&
+  !!nestorBuild &&
+  nestorBuild.topic === "build" &&
+  nestorBuild.status === "presenting:build" &&
+  nestorBuild.entityCount === 8 &&
+  nestorBuild.commitActor?.id === "nestor" &&
+  nestorBuild.commitActor?.kind === "agent" &&
+  nestorBuild.selected === true &&
+  nestorBuild.panelPressed === "true" &&
+  nestorBuild.panelMentionsCommit === true &&
+  nestorBuild.focusMoved > 0.75 &&
+  out.nestorAfterLoad?.topic === "build" &&
+  out.nestorAfterLoad?.status === "presenting:build" &&
+  out.nestorAfterLoad?.buildPresent === true &&
+  out.nestorUndo?.beforeTopic === "build" &&
+  out.nestorUndo?.attempts >= 1 &&
+  out.nestorUndo?.results?.every(Boolean) === true &&
+  out.nestorUndo?.topic === null &&
+  out.nestorUndo?.status === "ready" &&
+  out.nestorUndo?.buildPresent === false &&
+  out.nestorUndo?.lastCommit === null &&
+  out.nestorAfterEditorExit?.topic === null &&
+  out.nestorAfterEditorExit?.status === "ready" &&
+  out.nestorAfterEditorExit?.buildPressed === "false" &&
+  out.nestorRejected?.removed === true &&
+  typeof out.nestorRejected?.rejectedError === "string" &&
+  out.nestorRejected?.rejectedCommit === null &&
+  out.nestorRejected?.retainedStatus === "attention" &&
+  out.nestorRejected?.retainedError === out.nestorRejected?.rejectedError &&
+  out.nestorRejected?.retainedCommit === null &&
+  out.nestorRejected?.restored === true &&
+  out.nestorRejected?.reconciledTopic === "build" &&
+  out.nestorRejected?.reconciledStatus === "presenting:build" &&
+  out.nestorRejected?.auraPresent === true &&
+  out.nestorDoorGuard?.neutral === true &&
+  out.nestorDoorGuard?.topics === 0 &&
+  out.nestorDoorGuard?.restoredTopics === 3 &&
+  out.nestorDoorGuard?.restoredAura === 1;
+out.nestorIsLive = nestorIsLive;
+
+const browseExitWorks =
+  out.browseEditor?.mode === "editor" &&
+  out.browseEditor?.worldId === "graphysx-signal-outpost" &&
+  out.browseEditor?.nestorCount === 0 &&
+  out.browseExit?.mode === "scene" &&
+  out.browseExit?.nestorStatus === "ready" &&
+  out.browseExit?.consoleCount === 3 &&
+  out.browseExit?.welcomePresent === true &&
+  out.editorWorldSwap?.ok === true &&
+  out.editorWorldSwap?.worldId === "graphysx-signal-outpost" &&
+  out.editorWorldSwap?.nestorCount === 0 &&
+  out.authoritativeEditorExit?.worldId === "graphysx-signal-outpost" &&
+  out.authoritativeEditorExit?.nestorCount === 0 &&
+  out.authoritativeEditorExit?.neutralDoor === true &&
+  out.authoritativeEditorExit?.nestorTopics === 0 &&
+  out.authoritativeEditorExit?.welcomePresent === true;
+out.browseExitWorks = browseExitWorks;
+
 out.consoleErrors = consoleErrors;
 out.pageErrors = pageErrors;
 console.log(JSON.stringify(out, null, 2));
@@ -366,7 +649,7 @@ await browser.close();
 const ok =
   out.welcomePresent &&
   out.editorHiddenInitially &&
-  out.entityCount > 15 &&
+  out.entityCount > 100 &&
   out.autoOrbiting &&
   // The entry move ran, landed on the authored framing, and restored full exposure.
   out.introLanded?.completed === true &&
@@ -389,8 +672,17 @@ const ok =
   !!out.water &&
   flockingIsLive &&
   focusWorks &&
-  out.editorVisibleAfterEnter &&
-  out.welcomeGone;
+  nestorIsLive &&
+  roundTrip?.nestorProfile?.role === "AgentX Center guide" &&
+  roundTrip?.nestorProfile?.status === "presenting:build" &&
+  roundTrip?.nestorProfile?.capabilities?.includes("build") &&
+  roundTrip?.buildExported === true &&
+  roundTrip?.nestorReloaded?.role === "AgentX Center guide" &&
+  roundTrip?.nestorReloaded?.status === "presenting:build" &&
+  roundTrip?.buildReloaded === true &&
+  out.nestorInEditor === true &&
+  out.editorVisibleAfterEnter && out.welcomeGone &&
+  browseExitWorks;
 
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
 

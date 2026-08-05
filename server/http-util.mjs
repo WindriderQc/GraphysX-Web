@@ -28,11 +28,11 @@ export function sendJson(response, status, payload, cors = { "access-control-all
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
-    // A 413 is answered *while the client is still uploading*. Whatever is left of that body
-    // is sitting on the socket, and a keep-alive connection would hand it to the next
-    // request on that socket as if it were a new one — which surfaces on the client as a
-    // bare "fetch failed" on the request *after* the one that was too large. Closing is the
-    // only correct answer once we have decided not to read the rest.
+    // Most JSON overflow is bounded-drained before its 413, but other routes may reject early
+    // and an upload can cross a hard drain boundary. Never reuse a socket that might still
+    // carry rejected request bytes: they could be parsed as the next request, surfacing as a
+    // bare "fetch failed" later. Closing after the response is harmless for a drained body and
+    // required for an early rejection.
     ...(status === 413 ? { connection: "close" } : {}),
     ...cors,
     "access-control-allow-methods": CORS_ALLOW_METHODS,
@@ -41,23 +41,48 @@ export function sendJson(response, status, payload, cors = { "access-control-all
   response.end(body);
 }
 
+const MAX_OVERFLOW_DRAIN_BYTES = 2 * 1024 * 1024;
+const OVERFLOW_DRAIN_TIMEOUT_MS = 5_000;
+
 /**
  * Reads a JSON body, refusing anything over `limitBytes`.
  *
- * Overflow stops *reading* and throws, so the router can answer 413. It deliberately does
- * not destroy the request: severing the socket takes the response with it, and the client
- * sees a bare "fetch failed" instead of the status that would tell it what it did wrong.
- * Abandoning the read applies backpressure, which is the part that matters — the process
- * never buffers more than the limit plus one chunk.
+ * On overflow, buffered chunks are released and a small, time-bounded discard window lets a
+ * well-behaved client finish uploading before the router answers 413. Throwing directly from
+ * a request's async iterator aborts the socket on Node 24, which turns that useful response
+ * into an opaque ECONNRESET. Slow or abusive clients still lose the connection after five
+ * seconds or two additional MiB, and the process never buffers beyond the configured limit.
  */
 export async function readJsonBody(request, limitBytes = 8 * 1024 * 1024) {
   const chunks = [];
   let size = 0;
-  for await (const chunk of request) {
-    size += chunk.length;
-    if (size > limitBytes) throw httpError("Request body too large", 413);
-    chunks.push(chunk);
+  let overflow = false;
+  let overflowTimer;
+  try {
+    for await (const chunk of request) {
+      size += chunk.length;
+      if (!overflow && size <= limitBytes) {
+        chunks.push(chunk);
+        continue;
+      }
+      if (!overflow) {
+        overflow = true;
+        chunks.length = 0;
+        overflowTimer = setTimeout(() => {
+          request.destroy(httpError("Request body too large", 413));
+        }, OVERFLOW_DRAIN_TIMEOUT_MS);
+        overflowTimer.unref?.();
+      }
+      if (size > limitBytes + MAX_OVERFLOW_DRAIN_BYTES) {
+        const error = httpError("Request body too large", 413);
+        request.destroy(error);
+        throw error;
+      }
+    }
+  } finally {
+    if (overflowTimer) clearTimeout(overflowTimer);
   }
+  if (overflow) throw httpError("Request body too large", 413);
   if (size === 0) throw httpError("A JSON body is required", 400);
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));

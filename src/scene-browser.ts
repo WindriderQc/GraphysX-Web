@@ -40,6 +40,8 @@ export type SceneBrowserOptions = {
 export type SceneBrowser = {
   readonly element: HTMLElement;
   session(): SceneStoreSession | null;
+  /** Cede scene authority while leaving read-only scene-list refresh available. */
+  setEnabled(enabled: boolean): void;
   open(name: string): Promise<void>;
   save(): Promise<void>;
   /** Store what is on screen under a new name. Create-only: an existing name is refused. */
@@ -78,29 +80,30 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
 
   const panel = document.createElement("aside");
   panel.className = "gx-sb";
+  panel.setAttribute("aria-label", "Stored scenes");
   panel.innerHTML = `
     <header class="gx-sb-head">
       <div class="gx-sb-title">
         <span class="gx-sb-dot" data-role="dot"></span>
         <strong>Scenes</strong>
       </div>
-      <button type="button" class="gx-sb-icon" data-action="collapse" title="Collapse">–</button>
+      <button type="button" class="gx-sb-icon" data-action="collapse" title="Collapse stored scenes" aria-label="Collapse stored scenes" aria-expanded="true" aria-controls="gx-scene-browser-body">–</button>
     </header>
-    <div class="gx-sb-body">
+    <div class="gx-sb-body" id="gx-scene-browser-body">
       <ul class="gx-sb-list" data-role="list"></ul>
-      <div class="gx-sb-live" data-role="live" hidden></div>
+      <div class="gx-sb-live" data-role="live" role="status" aria-live="polite" aria-atomic="true" hidden></div>
       <footer class="gx-sb-foot">
         <button type="button" data-action="save">Save</button>
         <button type="button" data-action="save-as" title="Store what is on screen as a new named scene">Save as…</button>
         <button type="button" data-action="revert" title="Discard local changes and reload the stored scene">Revert</button>
-        <button type="button" data-action="close" title="Stop editing this scene and return to the front door — the store keeps its copy">✕</button>
+        <button type="button" data-action="close" title="Stop following this scene and return to the front door — the store keeps its copy" aria-label="Stop following this scene and return to AgentX Center">✕</button>
       </footer>
-      <form class="gx-sb-saveas" data-role="saveas" hidden>
-        <input data-role="saveas-name" type="text" placeholder="scene-name" spellcheck="false" autocomplete="off" maxlength="80" />
+      <form class="gx-sb-saveas" data-role="saveas" aria-label="Save scene under a new name" hidden>
+        <input data-role="saveas-name" type="text" aria-label="New scene name" placeholder="scene-name" spellcheck="false" autocomplete="off" maxlength="80" />
         <button type="submit">Store</button>
-        <button type="button" data-action="saveas-cancel" title="Cancel">✕</button>
+        <button type="button" data-action="saveas-cancel" title="Cancel Save as" aria-label="Cancel Save as">✕</button>
       </form>
-      <p class="gx-sb-status" data-role="status"></p>
+      <p class="gx-sb-status" data-role="status" role="status" aria-live="polite" aria-atomic="true"></p>
     </div>
   `;
 
@@ -108,6 +111,7 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
   const live = panel.querySelector<HTMLDivElement>("[data-role=live]")!;
   const status = panel.querySelector<HTMLParagraphElement>("[data-role=status]")!;
   const dot = panel.querySelector<HTMLSpanElement>("[data-role=dot]")!;
+  const collapseButton = panel.querySelector<HTMLButtonElement>("[data-action=collapse]")!;
   const saveButton = panel.querySelector<HTMLButtonElement>("[data-action=save]")!;
   const revertButton = panel.querySelector<HTMLButtonElement>("[data-action=revert]")!;
   const closeButton = panel.querySelector<HTMLButtonElement>("[data-action=close]")!;
@@ -120,6 +124,10 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
   let refreshTimer: number | null = null;
   let liveTimer: number | null = null;
   let disposed = false;
+  let enabled = true;
+  // Invalidates delayed work from a store-follow session that was closed, replaced, or
+  // detached when another authority (for example a live session) took over the world.
+  let sessionAuthority = 0;
 
   const setStatus = (message: string, tone: "idle" | "busy" | "error" = "idle"): void => {
     status.textContent = message;
@@ -129,6 +137,16 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
   const setOnline = (online: boolean): void => {
     dot.dataset.online = String(online);
     dot.title = online ? `Connected to ${client.baseUrl}` : `Cannot reach ${client.baseUrl}`;
+    dot.setAttribute("role", "img");
+    dot.setAttribute("aria-label", online ? "Scene store connected" : "Scene store unavailable");
+  };
+
+  const setCollapsed = (collapsed: boolean): void => {
+    panel.classList.toggle("gx-sb-collapsed", collapsed);
+    collapseButton.setAttribute("aria-expanded", String(!collapsed));
+    collapseButton.textContent = collapsed ? "+" : "–";
+    collapseButton.title = collapsed ? "Expand stored scenes" : "Collapse stored scenes";
+    collapseButton.setAttribute("aria-label", collapseButton.title);
   };
 
   /**
@@ -158,6 +176,39 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     revertButton.disabled = openName === null;
     closeButton.disabled = openName === null;
   };
+
+  const hasSessionAuthority = (authority: number): boolean =>
+    enabled && !disposed && authority === sessionAuthority;
+
+  /**
+   * Stopping a store session closes its poller and EventSource, but a fetch already across
+   * the network boundary can still resolve afterward. Gate every API operation that its
+   * retained session handle can use to replace or write a world, so stale pulls, deltas and
+   * pushes are harmless after this browser cedes authority.
+   */
+  const authorityApi = (authority: number): GraphysXAgentWorldApi => new Proxy(api, {
+    get(target, property, receiver) {
+      if (property === "load") {
+        return (...args: Parameters<GraphysXAgentWorldApi["load"]>) => {
+          if (!hasSessionAuthority(authority)) return { ok: false, error: "Scene browser is disabled" };
+          return target.load(...args);
+        };
+      }
+      if (property === "transaction") {
+        return (...args: Parameters<GraphysXAgentWorldApi["transaction"]>) => {
+          if (!hasSessionAuthority(authority)) return { ok: false, error: "Scene browser is disabled" };
+          return target.transaction(...args);
+        };
+      }
+      if (property === "exportDocument") {
+        return (...args: Parameters<GraphysXAgentWorldApi["exportDocument"]>) => {
+          if (!hasSessionAuthority(authority)) return null;
+          return target.exportDocument(...args);
+        };
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
 
   const render = (): void => {
     const activeName = session?.name ?? null;
@@ -196,15 +247,20 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
   };
 
   const open = async (name: string): Promise<void> => {
+    if (!enabled || disposed) return;
     if (session?.name === name) return;
-    session?.stop();
+    const previousSession = session;
+    session = null;
+    const authority = ++sessionAuthority;
+    previousSession?.stop();
     setStatus(`Opening ${name}…`, "busy");
-    session = connectSceneStore({
-      api,
+    const openedSession = connectSceneStore({
+      api: authorityApi(authority),
       client,
       name,
       actor,
       onPulled: (record, remote) => {
+        if (!hasSessionAuthority(authority)) return;
         if (remote) {
           announce(record);
           // A remote write changes the list too — entity counts and attribution move.
@@ -214,34 +270,43 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
         onSceneOpened?.(record);
       },
       onOnlineChange: (online) => {
+        if (!hasSessionAuthority(authority)) return;
         setOnline(online);
         if (!online) setStatus("Scene store offline", "error");
       },
       onError: () => {},
     });
+    session = openedSession;
     try {
-      await session.pull();
+      await openedSession.pull();
+      if (!hasSessionAuthority(authority) || session !== openedSession) return;
       render();
     } catch (error) {
+      if (!hasSessionAuthority(authority) || session !== openedSession) return;
       setStatus(error instanceof Error ? error.message : String(error), "error");
     }
-    syncFooter();
+    if (hasSessionAuthority(authority) && session === openedSession) syncFooter();
   };
 
   const save = async (): Promise<void> => {
+    if (!enabled || disposed) return;
     if (!session) {
       // Reachable through the returned API only — the button is disabled in this state.
       // Saving something new is a naming problem, not an error: hand over to Save as….
       openSaveAs();
       return;
     }
+    const activeSession = session;
+    const authority = sessionAuthority;
     saveButton.disabled = true;
     setStatus("Saving…", "busy");
     try {
-      const result = await session.push("saved from the browser");
+      const result = await activeSession.push("saved from the browser");
+      if (!hasSessionAuthority(authority) || session !== activeSession) return;
       setStatus(`Saved · rev ${result.revision}`);
       await refresh();
     } catch (error) {
+      if (!hasSessionAuthority(authority) || session !== activeSession) return;
       // A conflict here is meaningful: an agent moved the scene under you. Say so plainly
       // rather than reporting a generic failure.
       const conflict = error instanceof SceneStoreError && error.isConflict;
@@ -252,7 +317,7 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
         "error",
       );
     } finally {
-      saveButton.disabled = false;
+      if (enabled && !disposed) syncFooter();
     }
   };
 
@@ -263,17 +328,24 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
   };
 
   const openSaveAs = (): void => {
+    if (!enabled || disposed) return;
     saveAsForm.hidden = false;
     saveAsName.value = suggestName();
     saveAsName.focus();
     saveAsName.select();
   };
 
-  const closeSaveAs = (): void => {
+  const hideSaveAs = (): void => {
     saveAsForm.hidden = true;
   };
 
+  const closeSaveAs = (): void => {
+    if (!enabled || disposed) return;
+    hideSaveAs();
+  };
+
   const saveAs = async (rawName: string): Promise<void> => {
+    if (!enabled || disposed) return;
     const name = rawName.trim().toLowerCase().replace(/\s+/g, "-");
     if (!NAME_RULE.test(name)) {
       setStatus("Start with a letter or digit; then letters, digits, dots, dashes", "error");
@@ -284,17 +356,22 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
       setStatus("Nothing on screen to store yet", "error");
       return;
     }
+    const authority = sessionAuthority;
     setStatus(`Storing ${name}…`, "busy");
     try {
       // expectedRevision 0 makes this create-only: a name that already exists comes back
       // as a 409 instead of being overwritten by a scene that merely shares its name.
       await client.put(name, definition, 0, { actor, intent: "created from the browser" });
-      closeSaveAs();
+      if (!hasSessionAuthority(authority)) return;
+      hideSaveAs();
       await refresh();
+      if (!hasSessionAuthority(authority)) return;
       // Bind the session to what we just stored, so Save and the live stream now target it.
       await open(name);
+      if (!enabled || disposed || session?.name !== name) return;
       setStatus(`Stored as ${name} · rev 1`);
     } catch (error) {
+      if (!hasSessionAuthority(authority)) return;
       setStatus(
         error instanceof SceneStoreError && error.isConflict
           ? `“${name}” already exists — pick another name, or open it and press Save`
@@ -310,10 +387,13 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
    * unsaved local edits stay on screen for the host to replace or keep.
    */
   const close = (): void => {
+    if (!enabled || disposed) return;
     if (!session) return;
-    session.stop();
+    const closingSession = session;
     session = null;
-    closeSaveAs();
+    sessionAuthority += 1;
+    closingSession.stop();
+    hideSaveAs();
     render();
     syncFooter();
     setStatus(`Store: ${storeHost}`);
@@ -321,17 +401,49 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
   };
 
   const revert = async (): Promise<void> => {
-    if (!session) return;
+    if (!enabled || disposed || !session) return;
+    const activeSession = session;
+    const authority = sessionAuthority;
     setStatus("Reloading…", "busy");
     try {
-      await session.pull();
-      setStatus(`Reloaded · rev ${session.revision()}`);
+      await activeSession.pull();
+      if (!hasSessionAuthority(authority) || session !== activeSession) return;
+      setStatus(`Reloaded · rev ${activeSession.revision()}`);
     } catch (error) {
+      if (!hasSessionAuthority(authority) || session !== activeSession) return;
       setStatus(error instanceof Error ? error.message : String(error), "error");
     }
   };
 
+  const setEnabled = (next: boolean): void => {
+    if (disposed || enabled === next) return;
+    enabled = next;
+    panel.hidden = !next;
+    panel.inert = !next;
+    if (next) panel.removeAttribute("aria-hidden");
+    else panel.setAttribute("aria-hidden", "true");
+
+    if (!next) {
+      const activeSession = session;
+      session = null;
+      sessionAuthority += 1;
+      activeSession?.stop();
+      hideSaveAs();
+      live.hidden = true;
+      if (liveTimer !== null) window.clearTimeout(liveTimer);
+      liveTimer = null;
+      render();
+      syncFooter();
+      return;
+    }
+
+    render();
+    syncFooter();
+    setStatus(`Store: ${storeHost}`);
+  };
+
   panel.addEventListener("click", (event) => {
+    if (!enabled || disposed) return;
     const target = event.target as HTMLElement;
     const row = target.closest<HTMLButtonElement>("[data-scene]");
     if (row) {
@@ -344,18 +456,54 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     if (action === "saveas-cancel") closeSaveAs();
     if (action === "revert") void revert();
     if (action === "close") close();
-    if (action === "collapse") panel.classList.toggle("gx-sb-collapsed");
+    if (action === "collapse") setCollapsed(!panel.classList.contains("gx-sb-collapsed"));
   });
 
   saveAsForm.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!enabled || disposed) return;
     void saveAs(saveAsName.value);
   });
   saveAsName.addEventListener("keydown", (event) => {
+    if (!enabled || disposed) return;
     if (event.key === "Escape") closeSaveAs();
   });
 
   container.append(style, panel);
+
+  // Editor chrome already owns the right side of the viewport. While it is visible, Scenes is
+  // another inspector section rather than a floating window over the toolbar. Keeping it as a
+  // child of the right rail also makes the phone surface switcher authoritative: Scenes hides
+  // and reappears with Inspect instead of floating over the viewport while another tab is active.
+  const editorColumn = (): HTMLElement | null => {
+    const column = document.querySelector<HTMLElement>(".gx-ed-panel--right");
+    if (!column || document.documentElement.dataset.gxEditor !== "visible" || column.style.display === "none") {
+      return null;
+    }
+    return column;
+  };
+  const reposition = (): void => {
+    const column = editorColumn();
+    if (column) {
+      if (panel.parentElement !== column) column.append(panel);
+      panel.classList.add("gx-sb--docked");
+      return;
+    }
+    if (panel.parentElement !== container) container.append(panel);
+    panel.classList.remove("gx-sb--docked");
+  };
+  reposition();
+  window.addEventListener("resize", reposition);
+  // The editor is mounted once and toggled with inline display. Observe both its lazy arrival
+  // and later enter/exit transitions without coupling this store module to PlatformEditor.
+  const layoutObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(reposition);
+  layoutObserver?.observe(container, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["style"],
+  });
+
   setOnline(true);
   setStatus(`Store: ${storeHost}`);
   syncFooter();
@@ -366,6 +514,7 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
   return {
     element: panel,
     session: () => session,
+    setEnabled,
     open,
     save,
     saveAs,
@@ -374,9 +523,14 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     dispose() {
       if (disposed) return;
       disposed = true;
+      enabled = false;
+      sessionAuthority += 1;
       session?.stop();
+      session = null;
       if (refreshTimer !== null) window.clearInterval(refreshTimer);
       if (liveTimer !== null) window.clearTimeout(liveTimer);
+      layoutObserver?.disconnect();
+      window.removeEventListener("resize", reposition);
       panel.remove();
       style.remove();
     },
@@ -401,6 +555,8 @@ const BROWSER_CSS = `
   overflow:hidden;
 }
 .gx-sb *{box-sizing:border-box}
+.gx-sb--docked{position:static;inset:auto;width:auto;z-index:auto;flex:none;background:transparent;
+  backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--gx-border-soft);box-shadow:none}
 .gx-sb-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-bottom:1px solid var(--gx-border-soft)}
 .gx-sb-title{display:flex;align-items:center;gap:7px;letter-spacing:.04em;text-transform:uppercase;font-size:11px}
 .gx-sb-dot{width:7px;height:7px;border-radius:50%;background:#4b6572;flex:none;transition:background .2s,box-shadow .2s}

@@ -242,6 +242,9 @@ export class PlatformEditor {
   private toolbarStatus!: HTMLElement;
   private recoveryButton!: HTMLButtonElement;
   private slotSelect!: HTMLSelectElement;
+  private mobileNav!: HTMLElement;
+  private mobilePanels!: { scene: HTMLElement; inspector: HTMLElement; library: HTMLElement };
+  private readonly mobileButtons = new Map<"viewport" | "scene" | "inspector" | "library", HTMLButtonElement>();
   private savedSignature = "";
   private dirty = false;
   private draftTimer: number | null = null;
@@ -363,13 +366,17 @@ export class PlatformEditor {
 
     const ui = this.buildUi();
     this.mediaDialog = this.buildMediaDialog();
-    this.roots = [ui.toolbar, ui.panel, ui.rightRail, ui.drawer, ui.workbench, this.mediaDialog];
+    this.mobileNav = ui.mobileNav;
+    this.mobilePanels = { scene: ui.panel, inspector: ui.rightRail, library: ui.drawer };
+    this.roots = [ui.toolbar, ui.panel, ui.rightRail, ui.drawer, ui.workbench, this.mediaDialog, ui.mobileNav];
     this.outliner = ui.outliner;
     this.readout = ui.readout;
     this.treeCount = ui.treeCount;
     this.inspector = ui.inspector;
     this.libraryChips = ui.libraryChips;
     deps.container.append(ui.style, ...this.roots);
+    document.documentElement.dataset.gxEditor = "visible";
+    this.setMobilePanel("viewport");
     this.renderLibrary();
     this.setLevelTool(this.levelTool);
     this.refresh();
@@ -393,6 +400,7 @@ export class PlatformEditor {
    * disables picking/gizmo so showroom clicks (orbit, future click-to-focus) aren't hijacked. */
   setVisible(visible: boolean): void {
     this.enabled = visible;
+    document.documentElement.dataset.gxEditor = visible ? "visible" : "hidden";
     const display = visible ? "" : "none";
     for (const root of this.roots) root.style.display = display;
     if (!visible) {
@@ -407,6 +415,7 @@ export class PlatformEditor {
       this.helpOverlay = null;
       this.commandOverlay?.remove();
       this.commandOverlay = null;
+      this.setMobilePanel("viewport");
     }
   }
 
@@ -444,6 +453,9 @@ export class PlatformEditor {
     this.deps.api.select(id ? [id] : []);
     this.syncGizmo();
     this.refresh();
+    if (id && window.matchMedia("(max-width: 700px)").matches) {
+      this.setMobilePanel("inspector");
+    }
   }
 
   private syncGizmo(): void {
@@ -1425,6 +1437,7 @@ export class PlatformEditor {
     rightRail: HTMLElement;
     drawer: HTMLElement;
     workbench: HTMLElement;
+    mobileNav: HTMLElement;
     outliner: HTMLElement;
     readout: HTMLElement;
     treeCount: HTMLElement;
@@ -1437,6 +1450,10 @@ export class PlatformEditor {
     const tree = this.buildSceneTree();
     const right = this.buildInspectorRail();
     const drawer = this.buildLibraryDrawer();
+    tree.panel.id = "gx-ed-scene-panel";
+    right.panel.id = "gx-ed-inspector-panel";
+    drawer.panel.id = "gx-ed-library-panel";
+    const mobileNav = this.buildMobileNav();
     this.levelUi = this.buildLevelsWorkbench();
     return {
       style,
@@ -1445,6 +1462,7 @@ export class PlatformEditor {
       rightRail: right.panel,
       drawer: drawer.panel,
       workbench: this.levelUi.panel,
+      mobileNav,
       outliner: tree.outliner,
       readout: right.readout,
       treeCount: tree.count,
@@ -1472,7 +1490,9 @@ export class PlatformEditor {
     };
     const syncModeButtons = (): void => {
       (Object.keys(modeButtons) as TransformControlsMode[]).forEach((mode) => {
-        modeButtons[mode].classList.toggle("gx-ed-on", this.gizmo.getMode() === mode);
+        const active = this.gizmo.getMode() === mode;
+        modeButtons[mode].classList.toggle("gx-ed-on", active);
+        modeButtons[mode].setAttribute("aria-pressed", String(active));
       });
     };
     this.gizmo.addEventListener("change", syncModeButtons);
@@ -1484,8 +1504,10 @@ export class PlatformEditor {
       this.snapEnabled = !this.snapEnabled;
       this.applySnap();
       snapToggle.classList.toggle("gx-ed-on", this.snapEnabled);
+      snapToggle.setAttribute("aria-pressed", String(this.snapEnabled));
     }, "Toggle gizmo snapping");
     snapToggle.classList.toggle("gx-ed-on", this.snapEnabled);
+    snapToggle.setAttribute("aria-pressed", String(this.snapEnabled));
     const snapSelect = document.createElement("select");
     for (const step of SNAP_STEPS) {
       const option = document.createElement("option");
@@ -1521,7 +1543,9 @@ export class PlatformEditor {
       this.deps.api.pause(paused);
       pauseButton.textContent = paused ? "Play" : "Pause";
       pauseButton.classList.toggle("gx-ed-on", paused);
+      pauseButton.setAttribute("aria-pressed", String(paused));
     });
+    pauseButton.setAttribute("aria-pressed", "false");
     toolbar.append(this.group([
       pauseButton,
       this.toolButton("Step", () => { this.deps.api.step(); this.refresh(); }),
@@ -1552,6 +1576,9 @@ export class PlatformEditor {
     toolbar.append(this.group([this.slotSelect]));
 
     this.levelsButton = this.toolButton("Levels", () => this.setLevelsOpen(!this.levelsOpen), "Open the BallZ level workbench");
+    this.levelsButton.setAttribute("aria-pressed", "false");
+    this.levelsButton.setAttribute("aria-expanded", "false");
+    this.levelsButton.setAttribute("aria-controls", "gx-ed-levels-workbench");
     toolbar.append(this.group([this.levelsButton]));
 
     const starter = document.createElement("select");
@@ -1589,6 +1616,41 @@ export class PlatformEditor {
 
     syncModeButtons();
     return toolbar;
+  }
+
+  /** Small screens get one deliberate surface at a time instead of three overlapping rails. */
+  private buildMobileNav(): HTMLElement {
+    const nav = document.createElement("nav");
+    nav.className = "gx-ed-mobile-nav";
+    nav.setAttribute("aria-label", "Mobile editor panels");
+    const entries = [
+      ["viewport", "View", "3D viewport", ""] as const,
+      ["scene", "Scene", "Scene tree", "gx-ed-scene-panel"] as const,
+      ["inspector", "Inspect", "Inspector", "gx-ed-inspector-panel"] as const,
+      ["library", "Library", "Asset library", "gx-ed-library-panel"] as const,
+    ];
+    for (const [panel, label, title, controls] of entries) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.title = title;
+      button.setAttribute("aria-pressed", "false");
+      if (controls) button.setAttribute("aria-controls", controls);
+      button.addEventListener("click", () => this.setMobilePanel(panel));
+      this.mobileButtons.set(panel, button);
+      nav.append(button);
+    }
+    return nav;
+  }
+
+  private setMobilePanel(panel: "viewport" | "scene" | "inspector" | "library"): void {
+    this.mobileNav?.setAttribute("data-panel", panel);
+    this.mobilePanels?.scene.classList.toggle("gx-ed-mobile-visible", panel === "scene");
+    this.mobilePanels?.inspector.classList.toggle("gx-ed-mobile-visible", panel === "inspector");
+    this.mobilePanels?.library.classList.toggle("gx-ed-mobile-visible", panel === "library");
+    for (const [name, button] of this.mobileButtons) {
+      button.setAttribute("aria-pressed", String(name === panel));
+    }
   }
 
   private applySnap(): void {
@@ -1786,11 +1848,17 @@ export class PlatformEditor {
 
     const tabs = document.createElement("div");
     tabs.className = "gx-ed-tabs";
+    tabs.setAttribute("role", "tablist");
+    tabs.setAttribute("aria-label", "Asset library categories");
     for (const tab of LIBRARY_TABS) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "gx-ed-tab";
       button.textContent = tab.label;
+      button.id = `gx-ed-library-tab-${tab.id}`;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-controls", "gx-ed-library-content");
+      button.setAttribute("aria-selected", "false");
       button.addEventListener("click", () => {
         this.libraryTab = tab.id;
         this.renderLibrary();
@@ -1813,16 +1881,23 @@ export class PlatformEditor {
     toggle.className = "gx-ed-collapse";
     toggle.textContent = "▾";
     toggle.title = "Collapse library";
+    toggle.setAttribute("aria-label", "Collapse library");
+    toggle.setAttribute("aria-controls", "gx-ed-library-content");
+    toggle.setAttribute("aria-expanded", "true");
     toggle.addEventListener("click", () => {
       const collapsed = panel.classList.toggle("gx-ed-panel--collapsed");
       toggle.textContent = collapsed ? "▴" : "▾";
       toggle.title = collapsed ? "Expand library" : "Collapse library";
+      toggle.setAttribute("aria-label", toggle.title);
+      toggle.setAttribute("aria-expanded", String(!collapsed));
     });
 
     head.append(title, tabs, filter, toggle);
 
     const chips = document.createElement("div");
     chips.className = "gx-ed-grid gx-ed-grid--drawer";
+    chips.id = "gx-ed-library-content";
+    chips.setAttribute("role", "tabpanel");
     panel.append(head, chips);
     return { panel, chips };
   }
@@ -2454,6 +2529,7 @@ export class PlatformEditor {
   private buildLevelsWorkbench(): LevelsWorkbenchUi {
     const panel = document.createElement("div");
     panel.className = "gx-ed-workbench";
+    panel.id = "gx-ed-levels-workbench";
 
     const head = document.createElement("div");
     head.className = "gx-ed-head";
@@ -2608,6 +2684,8 @@ export class PlatformEditor {
     this.levelsOpen = open;
     this.levelUi.panel.classList.toggle("gx-ed-workbench--open", open);
     this.levelsButton.classList.toggle("gx-ed-on", open);
+    this.levelsButton.setAttribute("aria-pressed", String(open));
+    this.levelsButton.setAttribute("aria-expanded", String(open));
     if (!open) return;
     // Palette glyphs come from the API legend, which needs a level to read, so build it here.
     this.renderLevelPalette();
@@ -3119,7 +3197,12 @@ export class PlatformEditor {
    * picking from the library produces the same revision an agent would.
    */
   private renderLibrary(): void {
-    for (const [id, button] of this.libraryTabButtons) button.classList.toggle("gx-ed-tab--on", id === this.libraryTab);
+    for (const [id, button] of this.libraryTabButtons) {
+      const selected = id === this.libraryTab;
+      button.classList.toggle("gx-ed-tab--on", selected);
+      button.setAttribute("aria-selected", String(selected));
+      if (selected) this.libraryChips.setAttribute("aria-labelledby", button.id);
+    }
     const needle = this.libraryFilter.trim().toLowerCase();
     const chips = this.libraryChipsFor(this.libraryTab).filter((chip) => !needle || chip.textContent!.toLowerCase().includes(needle));
     if (!chips.length) {
@@ -3826,6 +3909,7 @@ ${preset.provenance.note}`),
     this.gizmo.detach();
     this.gizmo.dispose();
     for (const root of this.roots) root.remove();
+    delete document.documentElement.dataset.gxEditor;
   }
 }
 
@@ -3847,7 +3931,7 @@ const readVector = (row: { inputs: HTMLInputElement[] }): [number, number, numbe
  * property, so the rails, drawer and toolbar cannot drift apart.
  */
 const EDITOR_CSS = `
-.gx-ed-toolbar,.gx-ed-panel,.gx-ed-workbench{
+.gx-ed-toolbar,.gx-ed-panel,.gx-ed-workbench,.gx-ed-mobile-nav{
   --gx-panel:rgba(8,20,28,.88);
   --gx-raise:rgba(16,38,49,.9);
   --gx-border:#1b3b49;
@@ -3867,16 +3951,25 @@ const EDITOR_CSS = `
   border:1px solid var(--gx-border);border-radius:var(--gx-radius);
   box-shadow:0 10px 34px rgba(0,10,16,.42);
 }
-.gx-ed-toolbar *,.gx-ed-panel *,.gx-ed-workbench *{box-sizing:border-box}
+.gx-ed-toolbar *,.gx-ed-panel *,.gx-ed-workbench *,.gx-ed-mobile-nav *{box-sizing:border-box}
 
 /* ---- top bar ---- */
 .gx-ed-toolbar{top:var(--gx-s4);left:var(--gx-s4);right:var(--gx-s4);display:flex;flex-wrap:nowrap;align-items:center;gap:var(--gx-s3);padding:var(--gx-s2) var(--gx-s3);overflow-x:auto;overflow-y:hidden;user-select:none}
+.gx-ed-toolbar{scrollbar-width:thin;scrollbar-color:var(--gx-accent-deep) transparent}
+.gx-ed-toolbar::-webkit-scrollbar{height:4px}.gx-ed-toolbar::-webkit-scrollbar-thumb{border-radius:99px;background:var(--gx-accent-deep)}
 .gx-ed-group{display:flex;align-items:center;gap:var(--gx-s1)}
 .gx-ed-group+.gx-ed-group{padding-left:var(--gx-s3);border-left:1px solid var(--gx-border-soft)}
 .gx-ed-toolbar button,.gx-ed-toolbar select{background:var(--gx-field);color:var(--gx-text);border:1px solid var(--gx-border);border-radius:var(--gx-radius-sm);padding:5px 10px;cursor:pointer;font:inherit;line-height:1.2}
 .gx-ed-toolbar button:hover,.gx-ed-toolbar select:hover{background:var(--gx-raise);border-color:var(--gx-accent-deep)}
 .gx-ed-toolbar button.gx-ed-on{background:var(--gx-accent-fill);border-color:var(--gx-accent);color:#fff}
 .gx-ed-exit{background:var(--gx-raise);border-color:var(--gx-accent-deep)}
+
+/* ---- compact-screen surface switcher ---- */
+.gx-ed-mobile-nav{display:none}
+.gx-ed-mobile-nav button{flex:1;min-width:0;padding:9px 5px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--gx-muted);cursor:pointer;font:600 10px/1 var(--gx-font);letter-spacing:.035em}
+.gx-ed-mobile-nav button:hover{color:var(--gx-text);background:var(--gx-raise)}
+.gx-ed-mobile-nav button:focus-visible{outline:none;border-color:var(--gx-accent);box-shadow:0 0 0 2px var(--gx-accent-ring)}
+.gx-ed-mobile-nav button[aria-pressed="true"]{color:#fff;background:var(--gx-accent-fill);border-color:var(--gx-accent)}
 
 /* ---- rails ---- */
 .gx-ed-panel{display:flex;flex-direction:column;gap:var(--gx-s3);padding:var(--gx-s3)}
@@ -4061,7 +4154,7 @@ const EDITOR_CSS = `
 .gx-lv-status--error{color:#ff9fb0}
 
 /* ---- toolbar tail: live status + help ---- */
-.gx-ed-group--tail{margin-left:auto;border-left:none !important;padding-left:0 !important}
+.gx-ed-group--tail{position:sticky;right:0;z-index:2;margin-left:auto;border-left:none !important;padding:3px 0 3px 9px !important;background:rgba(8,20,28,.96);box-shadow:-12px 0 20px rgba(8,20,28,.92)}
 .gx-ed-status{font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--gx-muted);white-space:nowrap}
 .gx-ed-recover{border-color:#d79b35 !important;color:#ffd789 !important;animation:gx-ed-recover-pulse 1.8s ease-in-out infinite}
 @keyframes gx-ed-recover-pulse{50%{box-shadow:0 0 0 3px rgba(215,155,53,.16)}}
@@ -4106,7 +4199,30 @@ const EDITOR_CSS = `
 .gx-md-foot .gx-ed-hint{flex:1 1 auto}
 .gx-md-foot .gx-lv-play:disabled{opacity:.45;cursor:not-allowed}
 
-@media (max-width:1080px){
+@media (max-width:700px){
+  .gx-ed-toolbar{scrollbar-width:none;gap:6px;padding:6px;overscroll-behavior-x:contain}
+  .gx-ed-toolbar::-webkit-scrollbar{display:none}
+  .gx-ed-group--tail{position:static;padding-left:0 !important;background:transparent;box-shadow:none}
+  .gx-ed-toolbar button,.gx-ed-toolbar select{min-height:34px;padding:6px 10px}
+  .gx-ed-panel--left,.gx-ed-panel--right,.gx-ed-panel--drawer{display:none;left:12px;right:12px;width:auto}
+  .gx-ed-panel--left,.gx-ed-panel--right{top:64px;bottom:68px}
+  .gx-ed-panel--drawer{top:auto;bottom:68px;max-height:min(48vh,360px)}
+  .gx-ed-panel.gx-ed-mobile-visible{display:flex}
+  .gx-ed-mobile-nav{left:12px;right:12px;bottom:12px;z-index:27;display:flex;align-items:center;gap:3px;padding:4px}
+  .gx-ed-workbench{top:64px;bottom:68px}
+  .gx-ed-helpcard{left:12px;right:12px;top:64px;bottom:68px;width:auto;overflow-y:auto}
+  .gx-lv-body{flex-direction:column;overflow-y:auto;overscroll-behavior:contain}
+  .gx-lv-side{flex:0 0 250px}
+  .gx-lv-main{flex:0 0 420px}
+  .gx-lv-ascii{flex:0 0 250px}
+  .gx-md-dialog .gx-lv-body{flex-direction:column}
+  .gx-md-dialog .gx-lv-side{flex-basis:180px}
+  .gx-md-dialog .gx-lv-main{flex-basis:360px}
+  .gx-md-foot{align-items:flex-start;flex-wrap:wrap}
+  .gx-md-foot .gx-ed-hint{flex-basis:100%}
+}
+
+@media (min-width:701px) and (max-width:1080px){
   .gx-ed-panel--left{width:200px}
   .gx-ed-panel--right{width:250px}
   .gx-ed-panel--drawer{left:224px;right:274px}

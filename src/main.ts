@@ -28,6 +28,7 @@ import {
 } from "./archive-playgrounds";
 import { composeSkyboxSpiral, frameSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from "./archive-skybox-spiral";
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import type { NestorTopic } from "./showroom-nestor";
 import { archiveReferenceMs } from "./archive-race-records";
 import { getArchiveCupRuntimeState, type ArchiveCupCourse } from "./archive-cup";
 import { getPersonalGhostState } from "./level-ghosts";
@@ -79,6 +80,9 @@ const wantsStore = Boolean(storeScene || explicitStore || configuredStore || imp
 // because a query string is what gets pasted, bookmarked and sent as a referrer. The client
 // exchanges the code for a scoped credential and scrubs the fragment on the way in.
 const sessionParam = params.get("session");
+const liveSessionRequested = Boolean(
+  sessionParam || new URLSearchParams(window.location.hash.replace(/^#/, "")).get("session"),
+);
 
 /**
  * Exact model colliders resolve asynchronously from their registered asset. Pause before a game
@@ -129,10 +133,13 @@ if (mode === "previews" && import.meta.env.DEV) {
     import("./showroom-environment"),
     import("./showroom-welcome"),
     import("./showroom-interaction"),
-  ]).then(([{ PlatformHost }, { composeShowroom }, { mountShowroomEnvironment }, { mountWelcome }, { mountShowroomInteraction }]) => {
+    import("./showroom-nestor"),
+  ]).then(([{ PlatformHost }, { composeShowroom }, { mountShowroomEnvironment }, { mountWelcome }, { mountShowroomInteraction }, { createNestorPresenter, isNestorCenterReady }]) => {
     // Declared up front so the host's exit callback can re-arm it; assigned once the
     // showroom is composed below.
     let interaction: ReturnType<typeof mountShowroomInteraction> | null = null;
+    let welcome: ReturnType<typeof mountWelcome> | null = null;
+    let nestor: ReturnType<typeof createNestorPresenter> | null = null;
     // The showroom's terrain, water and key light are host-mounted objects rather than scene
     // entities, so loading a stored scene replaces the entities and leaves this behind —
     // a ported village would otherwise sit inside the showroom's hills. Kept so opening a
@@ -141,34 +148,138 @@ if (mode === "previews" && import.meta.env.DEV) {
     // A campaign race returns to the standings instead of dropping the player at the generic
     // front door. The flag is armed only by Archive Cup launchers and consumed on exit.
     let resumeArchiveCup = false;
+    // Editors entered from Browse hold a different world. Their Showroom exit must rebuild
+    // the AgentX Center instead of mounting Nestor's controls over unrelated scene targets.
+    let restoreShowroomOnEditorExit = false;
+    // DOM topics and physical consoles share this guard. A live client owns its operation
+    // path and role checks, so Nestor cannot make an unbroadcast local commit while attached.
+    let nestorBlockedByLiveSession = (): boolean => false;
+    let reassertLiveAuthority: (() => Promise<number>) | null = null;
+    let activeShelf: (() => void) | null = null;
+    // Call sites express whether showroom interaction is wanted; this one predicate decides
+    // whether it is actually legal. In particular, no late navigation callback can re-enable
+    // canvas mutations while a live-session snapshot is authoritative.
+    let showroomInteractionRequested = false;
+    const syncShowroomInteraction = (): void => {
+      interaction?.setEnabled(
+        showroomInteractionRequested && host.mode === "scene" && !nestorBlockedByLiveSession(),
+      );
+    };
+    const requestShowroomInteraction = (enabled: boolean): void => {
+      showroomInteractionRequested = enabled;
+      syncShowroomInteraction();
+    };
+    const dismissTransientShelf = (): void => {
+      activeShelf?.();
+      activeShelf = null;
+    };
+    const assertLocalWorldAuthority = (): void => {
+      if (nestorBlockedByLiveSession()) {
+        throw new Error("Leave the live session before changing worlds");
+      }
+    };
+    type WelcomeVariant = "agentx" | "scene-resume" | "live-observer";
+    let mountedWelcomeVariant: WelcomeVariant | null = null;
     const enterEditor = (): void => {
-      interaction?.setEnabled(false);
+      if (nestorBlockedByLiveSession()) {
+        syncFrontDoor();
+        return;
+      }
+      restoreShowroomOnEditorExit = false;
+      requestShowroomInteraction(false);
       void host.enterEditor();
+    };
+    const enterBrowsedEditor = (): void => {
+      if (nestorBlockedByLiveSession()) {
+        // A composed Browse row may have crossed the async join boundary. Restore the
+        // server snapshot instead of leaving that late local composition on screen.
+        void reassertLiveAuthority?.();
+        syncFrontDoor();
+        return;
+      }
+      restoreShowroomOnEditorExit = true;
+      requestShowroomInteraction(false);
+      void host.enterEditor();
+    };
+    const presentNestor = (topic: NestorTopic): void => {
+      if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
+        syncFrontDoor();
+        return;
+      }
+      const next = nestor?.present(topic);
+      if (next) welcome?.present(next);
+    };
+    const desiredWelcomeVariant = (): WelcomeVariant => {
+      if (nestorBlockedByLiveSession()) return "live-observer";
+      return isNestorCenterReady(host.api) ? "agentx" : "scene-resume";
+    };
+    const mountFrontDoor = (): void => {
+      welcome?.dispose();
+      const variant = desiredWelcomeVariant();
+      const agentxDoor = variant === "agentx";
+      welcome = mountWelcome(
+        root,
+        variant === "live-observer" ? undefined : enterEditor,
+        agentxDoor ? openGames : undefined,
+        agentxDoor ? openBrowse : undefined,
+        agentxDoor ? presentNestor : undefined,
+        variant,
+      );
+      mountedWelcomeVariant = variant;
+      if (variant !== "agentx") return;
+      const current = nestor?.state().presentation;
+      // Returning from the editor should keep the last demonstration's explanation beside
+      // the still-inspectable scene change. A freshly recomposed showroom resets below.
+      if (current?.topic || current?.error) welcome.present(current);
+    };
+    const focusFrontDoor = (): void => {
+      queueMicrotask(() => document.querySelector<HTMLButtonElement>(".gx-go-editor")?.focus());
+    };
+    const syncFrontDoor = (): void => {
+      if (host.mode === "editor" || !document.querySelector(".gx-welcome")) return;
+      if (desiredWelcomeVariant() !== mountedWelcomeVariant) mountFrontDoor();
     };
     // Rebuild the front door from scratch. Playing a level REPLACES the world, so coming back
     // cannot just mean un-hiding chrome — the showroom's entities are gone and its host-mounted
     // set was torn down with them. Recomposing is the honest "back", and it is cheap because the
     // showroom is ordinary API calls rather than a retained scene.
     const restoreShowroom = (showWelcome = true): void => {
+      if (nestorBlockedByLiveSession()) {
+        void reassertLiveAuthority?.();
+        syncFrontDoor();
+        return;
+      }
       // Callers can reach here with a welcome card already up (exitEditor mounts one);
       // recomposing must not stack a second card on top of it.
-      document.querySelector(".gx-welcome")?.remove();
+      restoreShowroomOnEditorExit = false;
+      welcome?.dispose();
+      welcome = null;
       composeShowroom(host.api);
+      nestor?.reset();
       host.applyEnvironment();
       showroomEnvironment?.();
       showroomEnvironment = mountShowroomEnvironment(host.scene, host.renderer);
-      interaction?.setEnabled(showWelcome);
-      if (showWelcome) mountWelcome(root, enterEditor, openGames, openBrowse);
+      host.resetFraming();
+      requestShowroomInteraction(showWelcome);
+      if (showWelcome) mountFrontDoor();
     };
     // A composed course may replace the world before a later asynchronous asset step fails.
     // Pause across the whole transaction and restore the showroom background (but keep the
     // Games shelf open with its actionable error) on any rejection.
     const loadComposedGame = async (load: () => void | Promise<void>): Promise<void> => {
+      assertLocalWorldAuthority();
       host.api.pause(true);
       try {
         await load();
+        if (nestorBlockedByLiveSession()) {
+          throw new Error("The live session attached while that game was loading");
+        }
       } catch (error) {
-        restoreShowroom(false);
+        if (nestorBlockedByLiveSession()) {
+          await reassertLiveAuthority?.();
+        } else {
+          restoreShowroom(false);
+        }
         throw error;
       } finally {
         host.api.pause(false);
@@ -178,13 +289,23 @@ if (mode === "previews" && import.meta.env.DEV) {
     // card disposes itself the moment a destination is clicked, so whoever dismisses that
     // destination must put it back or the front door is a dead end.
     const remountFrontDoor = (): void => {
-      document.querySelector(".gx-welcome")?.remove();
-      interaction?.setEnabled(true);
-      mountWelcome(root, enterEditor, openGames, openBrowse);
+      activeShelf = null;
+      requestShowroomInteraction(true);
+      mountFrontDoor();
+      focusFrontDoor();
     };
     const openGamesShelf = (showArchiveCup = false): void => {
-      interaction?.setEnabled(false);
+      if (nestorBlockedByLiveSession()) {
+        mountFrontDoor();
+        return;
+      }
+      requestShowroomInteraction(false);
       void import("./games-shelf").then(({ mountGamesShelf }) => {
+        if (nestorBlockedByLiveSession()) {
+          requestShowroomInteraction(true);
+          mountFrontDoor();
+          return;
+        }
         const composed = [
           // Archive courses composed as whole scenes rather than grid levels. Same deal as
           // the garage row in Browse: main.ts supplies them because composing needs the host.
@@ -194,6 +315,7 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "exact 20×19 ASCII  ·  178 raised platforms  ·  20 checkpoints  ·  3 laps",
               play: () => loadComposedGame(async () => {
                 const { composeArchiveLevel3, frameArchiveLevel3 } = await import("./archive-level3-scene");
+                assertLocalWorldAuthority();
                 const result = composeArchiveLevel3(host.api);
                 if (!result.ok) throw new Error(result.error ?? "Could not compose Archive Level 3");
                 host.applyEnvironment();
@@ -217,6 +339,7 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "8 exact recovered meshes  ·  3 moving obstacles  ·  12-point archive route",
               play: () => loadComposedGame(async () => {
                 const { composeArchiveSuzanneMachinery, frameArchiveSuzanneMachinery } = await import("./archive-suzanne-machinery-scene");
+                assertLocalWorldAuthority();
                 const result = composeArchiveSuzanneMachinery(host.api);
                 if (!result.ok) throw new Error(result.error ?? "Could not compose Suzanne Machinery Run");
                 host.applyEnvironment();
@@ -230,6 +353,7 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "authored 40×40 arena  ·  208 dynamic walls  ·  3 pistons  ·  line gates  ·  3 laps",
               play: () => loadComposedGame(async () => {
                 const { composeSuzanne1, frameSuzanne1 } = await import("./archive-suzanne1-scene");
+                assertLocalWorldAuthority();
                 const result = composeSuzanne1(host.api);
                 if (!result.ok) throw new Error(result.error ?? "Could not compose Suzanne 1");
                 host.applyEnvironment();
@@ -242,6 +366,7 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "authored 40×40 arena  ·  315 dynamic walls  ·  15 rings  ·  shipped any-two rule",
               play: () => loadComposedGame(async () => {
                 const { composeSuzanne2, frameSuzanne2 } = await import("./archive-suzanne2-scene");
+                assertLocalWorldAuthority();
                 const result = composeSuzanne2(host.api);
                 if (!result.ok) throw new Error(result.error ?? "Could not compose Suzanne 2");
                 host.applyEnvironment();
@@ -254,6 +379,7 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "exact recovered mesh  ·  halfway gate  ·  adapted gravity run",
               play: () => loadComposedGame(async () => {
                 const { composeArchiveMap1, frameArchiveMap1 } = await import("./archive-map1-scene");
+                assertLocalWorldAuthority();
                 const result = composeArchiveMap1(host.api);
                 if (!result.ok) throw new Error(result.error ?? "Could not compose Map 1");
                 host.applyEnvironment();
@@ -267,6 +393,7 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "largest recovered mesh, 1:1  ·  2 gates  ·  adapted canyon run",
               play: () => loadComposedGame(async () => {
                 const { composeArchiveLevel12011, frameArchiveLevel12011 } = await import("./archive-level1-2011-scene");
+                assertLocalWorldAuthority();
                 const result = composeArchiveLevel12011(host.api);
                 if (!result.ok) throw new Error(result.error ?? "Could not compose Level1 2011");
                 host.applyEnvironment();
@@ -291,6 +418,7 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "recovered mesh world  ·  descend through both holes  ·  bloom + envelope",
               play: () => loadComposedGame(async () => {
                 const { composeArchiveWorld1, frameArchiveWorld1 } = await import("./archive-world1-scene");
+                assertLocalWorldAuthority();
                 composeArchiveWorld1(host.api);
                 host.applyEnvironment();
                 frameArchiveWorld1(host);
@@ -343,28 +471,40 @@ if (mode === "previews" && import.meta.env.DEV) {
           composedRound("archive-suzanne2"),
         ];
 
-        mountGamesShelf(root, {
+        activeShelf = mountGamesShelf(root, {
           api: host.api,
           composed,
           archiveCup,
+          canNavigate: () => !nestorBlockedByLiveSession(),
           openArchiveCup: showArchiveCup,
           // The level is already materialised by the time this fires; the host has switched to
           // play mode on its own. All that is left is taking the showroom's set down so a
           // course is not sitting inside the showroom's hills.
           onPlay: () => {
+            activeShelf = null;
             showroomEnvironment?.();
             showroomEnvironment = null;
           },
-          onClose: remountFrontDoor,
+          onClose: () => remountFrontDoor(),
         });
       });
     };
     const openGames = (): void => openGamesShelf(false);
     const openBrowse = (): void => {
-      interaction?.setEnabled(false);
+      if (nestorBlockedByLiveSession()) {
+        mountFrontDoor();
+        return;
+      }
+      requestShowroomInteraction(false);
       void import("./browse-shelf").then(({ mountBrowseShelf }) => {
-        mountBrowseShelf(root, {
+        if (nestorBlockedByLiveSession()) {
+          requestShowroomInteraction(true);
+          mountFrontDoor();
+          return;
+        }
+        activeShelf = mountBrowseShelf(root, {
           api: host.api,
+          canNavigate: () => !nestorBlockedByLiveSession(),
           featuredStarter: {
             id: "archive-great-slide",
             eyebrow: "SCENE-NATIVE PHYSICS",
@@ -381,13 +521,14 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "12-second cycle  ·  recovered curves  ·  BallZ18 Clear Sky ↔ NightSky",
               open: async () => {
                 const { composeArchiveDayNight, frameArchiveDayNight } = await import("./archive-day-night-scene");
+                if (nestorBlockedByLiveSession()) return;
                 showroomEnvironment?.();
                 showroomEnvironment = null;
                 const result = composeArchiveDayNight(host.api);
                 if (!result.ok) throw new Error(result.error ?? "Could not compose Archive Day / Night Observatory");
                 host.applyEnvironment();
                 frameArchiveDayNight(host);
-                void host.enterEditor();
+                enterBrowsedEditor();
               },
             },
             {
@@ -397,13 +538,14 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "source HLSL vendored  ·  selectable v2 material  ·  shadow-kernel adaptation disclosed",
               open: async () => {
                 const { composeArchiveMeshlight, frameArchiveMeshlight } = await import("./archive-meshlight-scene");
+                if (nestorBlockedByLiveSession()) return;
                 showroomEnvironment?.();
                 showroomEnvironment = null;
                 const result = composeArchiveMeshlight(host.api);
                 if (!result.ok) throw new Error(result.error ?? "Could not compose Archive meshlight.shade Lab");
                 host.applyEnvironment();
                 frameArchiveMeshlight(host);
-                void host.enterEditor();
+                enterBrowsedEditor();
               },
             },
             {
@@ -413,13 +555,14 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "source HLSL + normal vendored  ·  selectable v2 material  ·  active Anneaux binding",
               open: async () => {
                 const { composeArchivePpl, frameArchivePpl } = await import("./archive-ppl-scene");
+                if (nestorBlockedByLiveSession()) return;
                 showroomEnvironment?.();
                 showroomEnvironment = null;
                 const result = composeArchivePpl(host.api);
                 if (!result.ok) throw new Error(result.error ?? "Could not compose Archive ppl.shade Ring Lab");
                 host.applyEnvironment();
                 frameArchivePpl(host);
-                void host.enterEditor();
+                enterBrowsedEditor();
               },
             },
             // The recovered Nature Lab playgrounds. They open in the editor like any browsed
@@ -432,25 +575,25 @@ if (mode === "previews" && import.meta.env.DEV) {
               showroomEnvironment?.();
               showroomEnvironment = null;
               host.applyEnvironment();
-              void host.enterEditor();
+              enterBrowsedEditor();
             }),
             ...archiveMathBrowseRows(host.api, () => {
               showroomEnvironment?.();
               showroomEnvironment = null;
               host.applyEnvironment();
-              void host.enterEditor();
+              enterBrowsedEditor();
             }),
             ...archiveMilkyWayBrowseRows(host.api, () => {
               showroomEnvironment?.();
               showroomEnvironment = null;
               host.applyEnvironment();
-              void host.enterEditor();
+              enterBrowsedEditor();
             }),
             ...archivePlaygroundBrowseRows(host.api, () => {
               showroomEnvironment?.();
               showroomEnvironment = null;
               host.applyEnvironment();
-              void host.enterEditor();
+              enterBrowsedEditor();
             }),
             {
               id: "archive-garage",
@@ -459,11 +602,13 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "25 entities  ·  3 recovered meshes",
               open: async () => {
                 const { composeArchiveVehicles, frameArchiveVehicles } = await import("./archive-vehicles-scene");
+                if (nestorBlockedByLiveSession()) return;
                 showroomEnvironment?.();
                 showroomEnvironment = null;
                 composeArchiveVehicles(host.api);
                 host.applyEnvironment();
                 frameArchiveVehicles(host);
+                enterBrowsedEditor();
               },
             },
             {
@@ -473,22 +618,26 @@ if (mode === "previews" && import.meta.env.DEV) {
               meta: "6 entities  ·  5 live surfaces  ·  one shared loop",
               open: async () => {
                 const { composeGenerativeSurfaces, frameGenerativeSurfaces } = await import("./surfaces-showcase");
+                if (nestorBlockedByLiveSession()) return;
                 showroomEnvironment?.();
                 showroomEnvironment = null;
                 composeGenerativeSurfaces(host.api);
                 host.applyEnvironment();
                 frameGenerativeSurfaces(host);
+                enterBrowsedEditor();
               },
             },
           ],
           // A starter replaces the world, so take the showroom's host-mounted set down with it,
           // then open the loaded scene in the editor — Browse is "load a scene to work on it".
           onOpen: () => {
+            activeShelf = null;
             showroomEnvironment?.();
             showroomEnvironment = null;
-            void host.enterEditor();
+            host.frameWorld();
+            enterBrowsedEditor();
           },
-          onClose: remountFrontDoor,
+          onClose: () => remountFrontDoor(),
         });
       });
     };
@@ -516,8 +665,15 @@ if (mode === "previews" && import.meta.env.DEV) {
       onExitEditor: editorFirst
         ? undefined
         : () => {
-            interaction?.setEnabled(true);
-            mountWelcome(root, enterEditor, openGames, openBrowse);
+            if (restoreShowroomOnEditorExit) {
+              restoreShowroom();
+              focusFrontDoor();
+              return;
+            }
+            requestShowroomInteraction(true);
+            // Door selection is authoritative: center, live observer, or preserved scene.
+            mountFrontDoor();
+            focusFrontDoor();
           },
       // Leaving a game returns to the front door rather than to a chrome-less view of the level
       // you just finished, which would be a dead end with no way onward.
@@ -527,8 +683,18 @@ if (mode === "previews" && import.meta.env.DEV) {
             const returnToCup = resumeArchiveCup;
             resumeArchiveCup = false;
             restoreShowroom(!returnToCup);
+            if (!returnToCup) focusFrontDoor();
             if (returnToCup) openGamesShelf(true);
           },
+    });
+    let welcomeSyncQueued = false;
+    host.world.subscribeEvents(() => {
+      if (welcomeSyncQueued) return;
+      welcomeSyncQueued = true;
+      queueMicrotask(() => {
+        welcomeSyncQueued = false;
+        syncFrontDoor();
+      });
     });
     Object.assign(window, {
       __GRAPHYSX_HOST__: host,
@@ -545,6 +711,8 @@ if (mode === "previews" && import.meta.env.DEV) {
         run: host.api.rules.status(),
         archiveCup: getArchiveCupRuntimeState(),
         personalGhost: getPersonalGhostState(),
+        nestor: host.api.query({ ids: ["showroom-nestor"] }).length > 0
+          ? nestor?.state() ?? null : null,
         atmosphere: host.dayNightState,
         players: host.api.query({ tag: "player" }).map((entity) => ({
           id: entity.id,
@@ -662,11 +830,18 @@ if (mode === "previews" && import.meta.env.DEV) {
         scene: host.scene,
         world: host.world,
         api: host.api,
+        onNestorTopic: presentNestor,
         // §5's click-to-focus. The host owns the camera and orbit controls, so it does the
         // easing; the interaction layer only decides what is worth looking at.
-        focusOn: (point, radius) => host.focusOn(point, radius),
+        focusOn: (point, radius, direction) => host.focusOn(point, radius, 1.5, 46, direction),
       });
-      mountWelcome(root, enterEditor, openGames, openBrowse);
+      nestor = createNestorPresenter({
+        api: host.api,
+        focusEntity: (id) => interaction?.focusEntity(id, true) ?? false,
+      });
+      requestShowroomInteraction(true);
+      Object.assign(window, { __GRAPHYSX_NESTOR__: nestor });
+      mountFrontDoor();
     }
 
     // Mounted after the showroom composes so there is always something on screen, and only
@@ -712,30 +887,34 @@ if (mode === "previews" && import.meta.env.DEV) {
         const browser = mountSceneBrowser(root, {
           api: host.api,
           client,
-          initialScene: storeScene,
+          initialScene: liveSessionRequested ? null : storeScene,
           actor: "browser",
           onSceneOpened: () => {
+            restoreShowroomOnEditorExit = true;
             // A stored scene replaces the showroom entirely: take down the host-mounted
             // showroom set, hand the pointer back, and apply the environment the incoming
             // document asked for. The welcome card is showroom copy and does not describe
             // whatever just loaded, so it goes too.
             showroomEnvironment?.();
             showroomEnvironment = null;
-            document.querySelector(".gx-welcome")?.remove();
-            interaction?.setEnabled(true);
+            welcome?.dispose();
+            welcome = null;
+            requestShowroomInteraction(true);
             host.applyEnvironment();
+            host.frameWorld();
           },
           // Closing a stored scene is "back to the front door" — the exit that opening
           // took away. The standalone editor routes keep their world; the tab has simply
           // stopped following the store.
           onSceneClosed: () => {
             if (editorFirst) return;
-            // Hides the editor if it was up; its exit callback mounts a welcome card,
-            // which restoreShowroom replaces along with the world.
-            host.exitEditor();
-            restoreShowroom();
+            // When the editor is up its exit callback consumes the stored-scene return flag;
+            // otherwise there is no callback to rebuild the showroom for us.
+            if (host.mode === "editor") host.exitEditor();
+            else restoreShowroom();
           },
         });
+        if (liveSessionRequested) browser.setEnabled(false);
         Object.assign(window, { __GRAPHYSX_SCENE_BROWSER__: browser, __GRAPHYSX_SCENE_STORE__: { client, browser } });
 
         // Live sessions: identity, roles, presence and incremental operations on top of the
@@ -752,12 +931,34 @@ if (mode === "previews" && import.meta.env.DEV) {
             baseUrl: storeUrl,
             api: host.api,
             events: {
-              onStatus: (status) => panel?.setStatus(status),
+              onStatus: (status) => {
+                panel?.setStatus(status);
+                const attached = status.sessionId !== null;
+                browser.setEnabled(!attached);
+                if (attached) {
+                  dismissTransientShelf();
+                  restoreShowroomOnEditorExit = false;
+                  resumeArchiveCup = false;
+                  // A join can resolve after someone entered Editor or Play. Switch surfaces
+                  // without their ordinary exit callbacks, which would rebuild a local world.
+                  if (host.mode !== "scene") host.setMode("scene");
+                  requestShowroomInteraction(true);
+                  // Entering Editor consumes the old door. A later public rejoin has no boot
+                  // continuation to remount it, so attach itself must restore observer chrome.
+                  if (!document.querySelector(".gx-welcome")) mountFrontDoor();
+                  else queueMicrotask(syncFrontDoor);
+                } else {
+                  syncShowroomInteraction();
+                  queueMicrotask(syncFrontDoor);
+                }
+              },
               onOperation: (operation) => panel?.recordOperation(operation),
               onResync: (revision) => panel?.announce(`Resynced to revision ${revision}`),
               onError: (error) => console.warn(`[graphysx] live session: ${error.message}`),
             },
           });
+          nestorBlockedByLiveSession = () => liveClient.status.sessionId !== null;
+          reassertLiveAuthority = () => liveClient.resync();
           const panel = mountLiveSessionPanel(root, liveClient);
           Object.assign(window, { __GRAPHYSX_LIVE_SESSION__: liveClient, __GRAPHYSX_LIVE_PANEL__: panel });
           const actorId = params.get("actor") ?? randomPlayerName();
@@ -769,11 +970,31 @@ if (mode === "previews" && import.meta.env.DEV) {
             // is the owner's own route, and the owner attaches with the credential it was
             // issued at creation. A tab with neither stays in the showroom rather than
             // silently pretending to be in a session.
-            showroomEnvironment?.();
-            showroomEnvironment = null;
-            document.querySelector(".gx-welcome")?.remove();
-            host.applyEnvironment();
+            const attached = liveClient.status.sessionId !== null;
+            browser.setEnabled(!attached);
+            if (attached) {
+              dismissTransientShelf();
+              restoreShowroomOnEditorExit = false;
+              resumeArchiveCup = false;
+              if (host.mode !== "scene") host.setMode("scene");
+              requestShowroomInteraction(true);
+              showroomEnvironment?.();
+              showroomEnvironment = null;
+              welcome?.dispose();
+              welcome = null;
+              host.applyEnvironment();
+              mountFrontDoor();
+            } else {
+              syncShowroomInteraction();
+            }
           } catch (error) {
+            // A public rejoin can supersede the boot invitation while its request is in
+            // flight. That old promise must not leave (and thereby revoke) the newer claim.
+            if ((error as { code?: unknown } | null)?.code === "session-authority-revoked") return;
+            await liveClient.leave();
+            browser.setEnabled(true);
+            syncShowroomInteraction();
+            if (!welcome && host.mode === "scene") mountFrontDoor();
             panel.announce(`Could not join the live session: ${error instanceof Error ? error.message : String(error)}`);
           }
         }

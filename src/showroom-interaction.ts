@@ -1,5 +1,6 @@
 import { Box3, Raycaster, Sphere, Vector2, Vector3, type Camera, type Scene, type WebGLRenderer } from "three";
 import type { AgentWorldRuntime, GraphysXAgentWorldApi } from "./agent-world-runtime";
+import type { NestorTopic } from "./showroom-nestor";
 
 export interface ShowroomInteractionDeps {
   renderer: WebGLRenderer;
@@ -11,7 +12,9 @@ export interface ShowroomInteractionDeps {
    * Ease the camera onto a point. Supplied by the host, which owns the camera and the orbit
    * controls — this module decides *what* to look at, never how the camera is driven.
    */
-  focusOn?: (point: Vector3, subjectRadius: number) => void;
+  focusOn?: (point: Vector3, subjectRadius: number, viewDirection?: Vector3) => void;
+  /** Route scene-native AgentX Center consoles to Nestor's attributed presenter. */
+  onNestorTopic?: (topic: NestorTopic) => void;
 }
 
 /** Dropped spheres are recycled past this many, so a visitor cannot grind the sim down. */
@@ -34,9 +37,10 @@ const MAX_DROPPED = 24;
  */
 export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
   setEnabled: (enabled: boolean) => void;
+  focusEntity: (id: string, authoredView?: boolean) => boolean;
   dispose: () => void;
 } {
-  const { renderer, camera, scene, world, api, focusOn } = deps;
+  const { renderer, camera, scene, world, api, focusOn, onNestorTopic } = deps;
 
   /** Climb `parentId` to the outermost entity, so a prefab frames as one object. */
   const rootEntityId = (id: string): string => {
@@ -80,6 +84,29 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
   const passThroughIds = (): Set<string> =>
     new Set([...api.query({ type: "water" }), ...api.query({ type: "emitter" })].map((entity) => entity.id));
 
+  const focusEntity = (id: string, authoredView = false): boolean => {
+    if (!focusOn) return false;
+    const rootId = rootEntityId(id);
+    const object = world.getEntityObject(rootId) ?? world.getEntityObject(id);
+    if (!object) return false;
+    const bounds = new Box3().setFromObject(object).getBoundingSphere(new Sphere());
+    const radius = Number.isFinite(bounds.radius) && bounds.radius > 0.05 ? bounds.radius : 1.5;
+    // Nestor demonstrations need a repeatable, authored reveal. Ordinary scene clicks retain
+    // the visitor's current direction so manual exploration never snaps unexpectedly.
+    const direction = authoredView ? new Vector3(0.45, 0.32, 1).normalize() : undefined;
+    focusOn(bounds.center.clone(), radius, direction);
+    return true;
+  };
+
+  const nestorTopicFor = (id: string): NestorTopic | null => {
+    const root = api.query({ ids: [rootEntityId(id)] })[0];
+    const topicTag = root?.tags.find((tag) => tag.startsWith("nestor-topic:"));
+    const topic = topicTag?.slice("nestor-topic:".length);
+    if (topic === "build" || topic === "play" || topic === "explore") return topic;
+    if (root?.tags.includes("nestor-home")) return "build";
+    return null;
+  };
+
   const onPointerDown = (event: PointerEvent): void => {
     down = { x: event.clientX, y: event.clientY };
   };
@@ -100,6 +127,11 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
     for (const hit of raycaster.intersectObjects(scene.children, true)) {
       const entityId = world.findEntityId(hit.object);
       if (entityId && passThrough.has(entityId)) continue;
+      const nestorTopic = entityId ? nestorTopicFor(entityId) : null;
+      if (nestorTopic && onNestorTopic) {
+        onNestorTopic(nestorTopic);
+        return;
+      }
       if (entityId && world.findInteractiveEntityId(hit.object)) {
         // Interactive bodies carry their own impulse.
         api.interact(entityId);
@@ -108,14 +140,9 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
       // Scenery: focus the camera on it. A prefab is many entities under one root, so climb
       // to the root first — clicking a tree's canopy should frame the tree, not the canopy.
       if (entityId && !terrain.has(entityId)) {
-        if (!focusOn) continue;
         const rootId = rootEntityId(entityId);
-        const object = world.getEntityObject(rootId) ?? hit.object;
-        const bounds = new Box3().setFromObject(object).getBoundingSphere(new Sphere());
-        // A degenerate bound (a light marker, an empty group) still deserves a sane framing.
-        const radius = Number.isFinite(bounds.radius) && bounds.radius > 0.05 ? bounds.radius : 1.5;
-        focusOn(bounds.center.clone(), radius);
-        return;
+        if (focusEntity(rootId)) return;
+        continue;
       }
       if (entityId && terrain.has(entityId)) {
         dropCount += 1;
@@ -158,6 +185,7 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
       enabled = value;
       down = null;
     },
+    focusEntity,
     dispose: () => {
       dom.removeEventListener("pointerdown", onPointerDown);
       dom.removeEventListener("pointerup", onPointerUp);

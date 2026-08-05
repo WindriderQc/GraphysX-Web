@@ -58,7 +58,9 @@ export function mountArchiveCup(
   overlay.className = "gx-cup";
   const card = document.createElement("section");
   card.className = "gx-cup-card";
-  card.setAttribute("aria-label", "Archive Cup campaign");
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-modal", "true");
+  card.setAttribute("aria-labelledby", "gx-cup-title");
 
   const head = document.createElement("header");
   head.className = "gx-cup-head";
@@ -67,6 +69,7 @@ export function mountArchiveCup(
   eyebrow.className = "gx-cup-eyebrow";
   eyebrow.textContent = "GRAPHYSX REVIVAL TOUR";
   const title = document.createElement("h2");
+  title.id = "gx-cup-title";
   title.textContent = "Archive Cup";
   const blurb = document.createElement("p");
   blurb.textContent = "Nine recovered courses. Clear each round to unlock the next; your best run returns as a personal ghost.";
@@ -149,6 +152,28 @@ export function mountArchiveCup(
   back.addEventListener("click", () => {
     dispose();
     onBack?.();
+  });
+  overlay.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      back.click();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...card.querySelectorAll<HTMLButtonElement>('button:not(:disabled):not([hidden])')]
+      .filter((element) => element.getClientRects().length > 0);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first.focus();
+    }
+  });
+  queueMicrotask(() => {
+    const firstRound = list.querySelector<HTMLButtonElement>(".gx-cup-round:not(:disabled)");
+    (firstRound ?? action).focus();
   });
   return () => dispose();
 }

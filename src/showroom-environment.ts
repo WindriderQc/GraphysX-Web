@@ -19,7 +19,7 @@ import { DirectionalLight, Group, HemisphereLight, type Scene, type WebGLRendere
  * the inspector can pull any object out of the shadow pass with an ordinary `api.update`.
  * This rig only owns the light and the quality of its map.
  */
-export function mountShowroomEnvironment(scene: Scene, _renderer: WebGLRenderer): () => void {
+export function mountShowroomEnvironment(scene: Scene, renderer: WebGLRenderer): () => void {
   const group = new Group();
   group.name = "ShowroomEnvironment";
 
@@ -42,7 +42,16 @@ export function mountShowroomEnvironment(scene: Scene, _renderer: WebGLRenderer)
   // ±22 in x/z and the murmuration within ±13, so ±26 covers every caster with margin; at
   // 2048² that is ~2.5 cm per texel. Stretching it over the full 150-unit terrain instead
   // would cost 3x the texel footprint to shadow distant ground that is fogged out anyway.
-  sun.shadow.mapSize.set(2048, 2048);
+  const applyShadowQuality = () => {
+    const mapSize = renderer.domElement.dataset.gxRenderProfile === "high" ? 2048 : 1024;
+    if (sun.shadow.mapSize.x === mapSize) return;
+    sun.shadow.mapSize.set(mapSize, mapSize);
+    // A map that has already rendered keeps its old allocation until explicitly released.
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+  };
+  applyShadowQuality();
+  renderer.domElement.addEventListener("graphysx-render-profile-change", applyShadowQuality);
   const extent = 26;
   sun.shadow.camera.left = -extent;
   sun.shadow.camera.right = extent;
@@ -72,6 +81,7 @@ export function mountShowroomEnvironment(scene: Scene, _renderer: WebGLRenderer)
   scene.add(group);
 
   return () => {
+    renderer.domElement.removeEventListener("graphysx-render-profile-change", applyShadowQuality);
     scene.remove(group);
   };
 }

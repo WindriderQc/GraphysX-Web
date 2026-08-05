@@ -1,6 +1,7 @@
 import {
   ACESFilmicToneMapping,
   AdditiveBlending,
+  Box3,
   Clock,
   Color,
   CubeTexture,
@@ -15,6 +16,7 @@ import {
   PMREMGenerator,
   Raycaster,
   Scene,
+  Sphere,
   Sprite,
   SpriteMaterial,
   SRGBColorSpace,
@@ -50,6 +52,7 @@ import { orientArchiveCubeTexture, retainNativeCubeTexture } from "./archive-sky
 import { agentWorldSkyFaceUrls } from "./agent-world-skies";
 import { resolveAgentWorldHdri } from "./agent-world-hdris";
 import { installPlatformTheme } from "./platform-theme";
+import { findWaterSurface, type AgentWorldWaterSurface } from "./agent-world-water";
 // Type-only: the editor module (and the ~348 KB TransformControls gizmo stack it pulls in)
 // is loaded on demand, so the showroom front door never pays for chrome it keeps hidden.
 import type { PlatformEditor } from "./platform-editor";
@@ -122,6 +125,38 @@ const MAX_SKY_CACHE_ENTRIES = 8;
 /** HDR PMREMs are larger than cube backdrops; the curated library is intentionally tighter. */
 const MAX_HDRI_CACHE_ENTRIES = 4;
 
+export type PlatformRenderProfileName = "high" | "balanced" | "mobile";
+
+export type PlatformRenderProfile = Readonly<{
+  name: PlatformRenderProfileName;
+  maxDpr: number;
+  shadowHz: number;
+  reflectionHz: number;
+  shadowMapSize: number;
+}>;
+
+const RENDER_PROFILES: Record<PlatformRenderProfileName, PlatformRenderProfile> = {
+  high: Object.freeze({ name: "high", maxDpr: 2, shadowHz: 30, reflectionHz: 30, shadowMapSize: 2048 }),
+  balanced: Object.freeze({ name: "balanced", maxDpr: 1.5, shadowHz: 30, reflectionHz: 20, shadowMapSize: 1024 }),
+  mobile: Object.freeze({ name: "mobile", maxDpr: 1.5, shadowHz: 20, reflectionHz: 0, shadowMapSize: 1024 }),
+};
+
+/**
+ * Choose from stable, inspectable tiers rather than continuously degrading authored scene data.
+ * Width makes the result deterministic in browser QA; explicit low-memory/CPU signals also keep
+ * a large but modest device out of the expensive desktop path.
+ */
+function chooseRenderProfile(width: number): PlatformRenderProfile {
+  const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches === true;
+  if (width <= 700 || coarsePointer) return RENDER_PROFILES.mobile;
+  const navigatorWithMemory = navigator as Navigator & { deviceMemory?: number };
+  const constrainedHardware =
+    (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4) ||
+    (navigatorWithMemory.deviceMemory !== undefined && navigatorWithMemory.deviceMemory <= 4);
+  if (width <= 1180 || constrainedHardware) return RENDER_PROFILES.balanced;
+  return RENDER_PROFILES.high;
+}
+
 /**
  * Standalone renderer/host for the `graphysx.agent-world/v2` scene model.
  *
@@ -192,6 +227,13 @@ export class PlatformHost {
   private readonly controls: OrbitControls;
   private readonly clock = new Clock();
   private readonly onResize = () => this.resize();
+  private readonly resizeObserver: ResizeObserver | null;
+  private renderProfile: PlatformRenderProfile;
+  private shadowRefreshElapsed = Number.POSITIVE_INFINITY;
+  private reflectionRefreshElapsed = Number.POSITIVE_INFINITY;
+  private auxiliaryPassTurn: "shadow" | "reflection" = "shadow";
+  /** Cached on entity topology changes so the frame scheduler never traverses the scene. */
+  private waterSurfaces: AgentWorldWaterSurface[] = [];
   /** Post stack — exists only while the scene's `environment.post` (or the host override) asks for one. */
   private composer: EffectComposer | null = null;
   private bloomPass: UnrealBloomPass | null = null;
@@ -238,6 +280,8 @@ export class PlatformHost {
   private overlayHeight = 0;
   /** Frames the overlay has drawn — smoke proves this tracks frameCount, i.e. one shared loop. */
   private overlayFrame = 0;
+  private readonly homePosition = new Vector3();
+  private readonly homeTarget = new Vector3();
   private currentMode: PlatformMode = "scene";
   /** Where to return when play ends — you came from somewhere, and should go back to it. */
   private modeBeforePlay: PlatformMode = "scene";
@@ -257,11 +301,21 @@ export class PlatformHost {
   } | null = null;
 
   constructor(private readonly container: HTMLElement, options: PlatformHostOptions = {}) {
+    document.documentElement.dataset.gxMode = "scene";
     // Tokens + brand font for every DOM module this host mounts. Idempotent, so the host
     // is the one place that guarantees it rather than each overlay hoping another did.
     installPlatformTheme();
+    this.renderProfile = chooseRenderProfile(this.container.clientWidth || window.innerWidth);
     this.renderer = new WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // `setSize(..., false)` deliberately leaves CSS sizing alone. The clean-host route does
+    // not load the legacy `.viewport canvas` stylesheet, so without an explicit client size a
+    // DPR 1.5 mobile backing buffer also became a 585×1266 CSS box and was cropped by the
+    // 390×844 viewport. Keep CSS pixels and drawing-buffer pixels as separate concerns.
+    Object.assign(this.renderer.domElement.style, {
+      display: "block", width: "100%", height: "100%", touchAction: "none",
+    });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.renderProfile.maxDpr));
+    this.publishRenderProfile();
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.08;
@@ -289,11 +343,13 @@ export class PlatformHost {
 
     this.camera = new PerspectiveCamera(55, 1, 0.1, 260);
     this.camera.position.set(...(options.framing?.position ?? [0, 24, 34]));
+    this.homePosition.copy(this.camera.position);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
     this.controls.target.set(...(options.framing?.target ?? [0, 3, 0]));
+    this.homeTarget.copy(this.controls.target);
     this.controls.autoRotate = options.autoOrbit === true;
     this.controls.autoRotateSpeed = 0.6;
     if (options.intro === true) this.beginIntro();
@@ -319,13 +375,14 @@ export class PlatformHost {
 
     this.dayNightSun.visible = false;
     this.dayNightSun.castShadow = true;
-    this.dayNightSun.shadow.mapSize.set(2048, 2048);
+    this.dayNightSun.shadow.mapSize.set(this.renderProfile.shadowMapSize, this.renderProfile.shadowMapSize);
     this.dayNightMoon.visible = false;
     this.dayNightHemi.visible = false;
     this.scene.add(this.dayNightSun, this.dayNightMoon, this.dayNightHemi);
 
     this.world = new AgentWorldRuntime(options.world ?? GRAPHYSX_AGENT_DEMO_WORLD);
     this.scene.add(this.world.group);
+    this.refreshWaterSurfaces();
     this.audio = new AgentWorldAudioLayer(this.camera, this.world);
     // Before the first applyEnvironment, so an opted-in host renders its very first frame
     // through the composer rather than flickering the bare path for one frame.
@@ -343,6 +400,9 @@ export class PlatformHost {
     // Subscribing to `world.loaded` fixes it for every caller at once rather than asking each
     // one to remember. Push-based, so it costs nothing per frame.
     this.unsubscribeEvents = this.world.subscribeEvents((event) => {
+      if (event.type === "entity.spawned" || event.type === "entity.removed" || event.type === "world.loaded") {
+        this.refreshWaterSurfaces();
+      }
       // `environment.changed` is the same fix for a second entry point: an agent editing the
       // environment through `api.transaction([{ op: "set-environment" }])` never emits
       // `world.loaded`, so without this its new sky/background would be stored and never
@@ -398,6 +458,8 @@ export class PlatformHost {
     }
 
     window.addEventListener("resize", this.onResize);
+    this.resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(this.onResize);
+    this.resizeObserver?.observe(this.container);
     this.resize();
     this.renderer.setAnimationLoop(() => this.tick());
   }
@@ -405,6 +467,11 @@ export class PlatformHost {
   /** Frames rendered since construction (used by smoke tests to prove the loop runs). */
   get frameCount(): number {
     return this.frame;
+  }
+
+  /** Active renderer budget, exposed so diagnostics can verify the adaptive path. */
+  get qualityProfile(): PlatformRenderProfile {
+    return this.renderProfile;
   }
 
   /** Frames the 2D overlay has drawn. Tracks frameCount when an overlay is active — the proof
@@ -499,13 +566,13 @@ export class PlatformHost {
    * resumes circling the *new* subject. That is the whole point of the feature — click a
    * thing and the showroom starts showing you that thing.
    */
-  focusOn(point: Vector3, subjectRadius = 2, duration = 1.5, maxDistance = 46): void {
+  focusOn(point: Vector3, subjectRadius = 2, duration = 1.5, maxDistance = 46, viewDirection?: Vector3): void {
     const target = point.clone();
     // Interactive showroom focus stays capped at 46 by default. Large authored courses can
     // raise the cap explicitly so the camera does not land inside a mesh whose span is wider
     // than the showroom itself.
     const distance = Math.min(Math.max(46, maxDistance), Math.max(5.5, subjectRadius * 3.4 + 3));
-    const direction = this.camera.position.clone().sub(this.controls.target);
+    const direction = viewDirection?.clone() ?? this.camera.position.clone().sub(this.controls.target);
     if (direction.lengthSq() < 1e-6) direction.set(0, 0.45, 1);
     direction.normalize();
     // Never dive below a shallow rake: the showroom's ground is a heightfield, and a focus
@@ -523,6 +590,53 @@ export class PlatformHost {
       elapsed: 0,
       duration: Math.max(0.15, duration),
     };
+  }
+
+  /** Move to an explicit authored view through the same eased camera path as click focus. */
+  frameView(
+    position: [number, number, number],
+    target: [number, number, number],
+    duration = 0.9,
+  ): void {
+    const toPosition = new Vector3(...position);
+    const toTarget = new Vector3(...target);
+    this.controls.autoRotate = false;
+    this.focusMove = {
+      fromPosition: this.camera.position.clone(),
+      toPosition,
+      fromTarget: this.controls.target.clone(),
+      toTarget,
+      elapsed: 0,
+      duration: Math.max(0.15, duration),
+    };
+  }
+
+  /** Return to the product's authored front-door composition after Editor or Play. */
+  resetFraming(duration = 0.9): void {
+    this.frameView(
+      [this.homePosition.x, this.homePosition.y, this.homePosition.z],
+      [this.homeTarget.x, this.homeTarget.y, this.homeTarget.z],
+      duration,
+    );
+  }
+
+  /** Fit an arbitrary loaded scene before its editor opens, so Browse never lands on empty sky. */
+  frameWorld(duration = 0.9): boolean {
+    const box = new Box3().setFromObject(this.world.group);
+    if (box.isEmpty()) return false;
+    const bounds = box.getBoundingSphere(new Sphere());
+    if (!Number.isFinite(bounds.radius) || bounds.radius <= 0.01) return false;
+    const verticalFov = MathUtils.degToRad(this.camera.fov);
+    const distance = Math.max(8, bounds.radius / Math.sin(verticalFov / 2)) * 1.08;
+    const direction = new Vector3(0.62, 0.48, 1).normalize();
+    const position = bounds.center.clone().addScaledVector(direction, distance);
+    position.y = Math.max(position.y, bounds.center.y + bounds.radius * 0.32);
+    this.frameView(
+      [position.x, position.y, position.z],
+      [bounds.center.x, bounds.center.y, bounds.center.z],
+      duration,
+    );
+    return true;
   }
 
   /** True while the entry move is still playing. Goes false when it lands or is interrupted. */
@@ -711,6 +825,10 @@ export class PlatformHost {
     this.overlayId = overlay;
     this.overlaySketch = overlay ? createOverlaySketch(overlay) : null;
     this.overlayElapsed = 0;
+    // An inactive transparent canvas does not need a full-DPR backing store. Re-size when the
+    // state changes so active generative overlays remain crisp while ordinary 3D scenes keep
+    // only a one-CSS-pixel buffer behind the invisible layer.
+    this.resize();
     // A removed overlay must leave nothing behind; a new one starts from a clean frame.
     if (this.overlayCtx) this.overlayCtx.clearRect(0, 0, this.overlayWidth, this.overlayHeight);
   }
@@ -1020,6 +1138,7 @@ export class PlatformHost {
     if (this.disposed || mode === this.currentMode) return;
     if (mode === "play") this.modeBeforePlay = this.currentMode;
     this.currentMode = mode;
+    document.documentElement.dataset.gxMode = mode;
 
     // Idle orbit is a screensaver for an unattended scene; it fights both authoring and play.
     this.controls.autoRotate = this.autoOrbit && mode === "scene";
@@ -1196,9 +1315,13 @@ export class PlatformHost {
     // subject; every other surface keeps OrbitControls exactly as before.
     if (this.currentMode === "play" && this.chaseTargetId) this.updateChase(delta);
     else this.controls.update();
-    // Arm one shadow rebuild per frame (see `autoUpdate = false` in the constructor). The
-    // first `render()` below consumes it; any nested pass a scene entity triggers reuses it.
-    this.renderer.shadowMap.needsUpdate = true;
+    const auxiliaryPasses = this.scheduleAuxiliaryPasses(delta);
+    // Shadow maps and planar water both re-render scene geometry. Their independent budgets
+    // are arbitrated here so they never land on the same main frame and create a long spike.
+    this.renderer.shadowMap.needsUpdate = auxiliaryPasses.shadow;
+    for (const surface of this.waterSurfaces) {
+      surface.setReflectionRefreshEnabled(auxiliaryPasses.reflection);
+    }
     // One render call either way — the composer's RenderPass is the same scene/camera
     // draw, followed by the passes the scene opted into.
     if (this.composer) this.composer.render();
@@ -1235,16 +1358,99 @@ export class PlatformHost {
     }
   }
 
+  /** Keep the small water list in sync with topology changes, not by traversing every frame. */
+  private refreshWaterSurfaces(): void {
+    const surfaces: AgentWorldWaterSurface[] = [];
+    this.world.group.traverse((object) => {
+      const surface = findWaterSurface(object);
+      if (surface) surfaces.push(surface);
+    });
+    this.waterSurfaces = surfaces;
+  }
+
+  /**
+   * Independent target rates with one arbitration rule: a shadow rebuild and a planar
+   * reflection never share a main frame. If both are due, the deferred pass remains due and
+   * wins on the next frame instead of losing its accumulated time.
+   */
+  private scheduleAuxiliaryPasses(delta: number): { shadow: boolean; reflection: boolean } {
+    const shadowInterval = 1 / this.renderProfile.shadowHz;
+    const hasReflectiveWater =
+      this.renderProfile.reflectionHz > 0 && this.waterSurfaces.some((surface) => surface.reflecting);
+    const reflectionInterval = hasReflectiveWater ? 1 / this.renderProfile.reflectionHz : Number.POSITIVE_INFINITY;
+
+    this.shadowRefreshElapsed += delta;
+    if (hasReflectiveWater) this.reflectionRefreshElapsed += delta;
+    else this.reflectionRefreshElapsed = 0;
+
+    let shadow = this.shadowRefreshElapsed >= shadowInterval;
+    let reflection = hasReflectiveWater && this.reflectionRefreshElapsed >= reflectionInterval;
+    if (shadow && reflection) {
+      if (this.auxiliaryPassTurn === "shadow") reflection = false;
+      else shadow = false;
+      this.auxiliaryPassTurn = this.auxiliaryPassTurn === "shadow" ? "reflection" : "shadow";
+    }
+
+    if (shadow) {
+      this.shadowRefreshElapsed = Number.isFinite(this.shadowRefreshElapsed)
+        ? this.shadowRefreshElapsed % shadowInterval
+        : 0;
+    }
+    if (reflection) {
+      this.reflectionRefreshElapsed = Number.isFinite(this.reflectionRefreshElapsed)
+        ? this.reflectionRefreshElapsed % reflectionInterval
+        : 0;
+    }
+    return { shadow, reflection };
+  }
+
+  /** Apply a new tier without editing or exporting any scene/entity field. */
+  private applyRenderProfile(profile: PlatformRenderProfile): void {
+    const profileChanged = profile.name !== this.renderProfile.name;
+    this.renderProfile = profile;
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, profile.maxDpr);
+    if (this.renderer.getPixelRatio() !== pixelRatio) {
+      this.renderer.setPixelRatio(pixelRatio);
+      this.composer?.setPixelRatio(pixelRatio);
+    }
+    if (!profileChanged) return;
+
+    if (this.dayNightSun.shadow.mapSize.x !== profile.shadowMapSize) {
+      this.dayNightSun.shadow.mapSize.set(profile.shadowMapSize, profile.shadowMapSize);
+      this.dayNightSun.shadow.map?.dispose();
+      this.dayNightSun.shadow.map = null;
+    }
+    this.shadowRefreshElapsed = Number.POSITIVE_INFINITY;
+    this.reflectionRefreshElapsed = Number.POSITIVE_INFINITY;
+    this.publishRenderProfile();
+  }
+
+  /** Publish to both JS diagnostics and the canvas-owned showroom lighting rig. */
+  private publishRenderProfile(): void {
+    document.documentElement.dataset.gxRenderProfile = this.renderProfile.name;
+    this.renderer.domElement.dataset.gxRenderProfile = this.renderProfile.name;
+    this.renderer.domElement.dispatchEvent(new CustomEvent("graphysx-render-profile-change"));
+  }
+
   private resize(): void {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
+    this.applyRenderProfile(chooseRenderProfile(width));
     this.renderer.setSize(width, height, false);
     this.composer?.setSize(width, height);
     this.camera.aspect = width / height || 1;
     this.camera.updateProjectionMatrix();
     // Match the overlay buffer to the viewport at device resolution, then scale the context so
     // sketches draw in CSS pixels and stay crisp on hi-dpi. A resize reseeds size-derived state.
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (!this.overlaySketch) {
+      this.overlayCanvas.width = 1;
+      this.overlayCanvas.height = 1;
+      this.overlayWidth = 1;
+      this.overlayHeight = 1;
+      this.overlayCtx?.setTransform(1, 0, 0, 1, 0, 0);
+      return;
+    }
+    const dpr = this.renderer.getPixelRatio();
     this.overlayCanvas.width = Math.round(width * dpr);
     this.overlayCanvas.height = Math.round(height * dpr);
     this.overlayWidth = width;
@@ -1258,12 +1464,17 @@ export class PlatformHost {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    delete document.documentElement.dataset.gxMode;
+    if (document.documentElement.dataset.gxRenderProfile === this.renderProfile.name) {
+      delete document.documentElement.dataset.gxRenderProfile;
+    }
     this.renderer.setAnimationLoop(null);
     this.unsubscribeEvents();
     this.audio.dispose();
     this.playLayer?.();
     this.overlayCanvas.remove();
     window.removeEventListener("resize", this.onResize);
+    this.resizeObserver?.disconnect();
     this.editor?.dispose();
     this.bridge.dispose();
     this.controls.dispose();

@@ -471,7 +471,7 @@ await browser.close();
 
 const ok =
   out.listed?.present === true &&
-  out.scene?.mode === "scene" &&
+  out.scene?.mode === "editor" &&
   out.scene?.shelfGone === true &&
   out.scene?.entities === 25 &&
   out.scene?.showroomEntities === 0 &&

@@ -20,10 +20,10 @@ Live application: <https://graphysx.specialblend.ca>
 > **[docs/DEPLOYING_THE_STORE.md](docs/DEPLOYING_THE_STORE.md)**, then
 > `npm run store:preflight -- --url <store>`.
 >
-> **Previously in progress — Live Sessions** (`codex/live-sessions-r1`, not deployed): authenticated
-> scene-scoped collaboration where two humans and an agent share one revision line, plus
-> persistent best times, leaderboards and shared ghosts. See
-> [docs/LIVE_SESSIONS.md](docs/LIVE_SESSIONS.md) and [docs/RESULTS.md](docs/RESULTS.md).
+> **Current product direction: AgentX Center.** The showroom is becoming a living 3D hub
+> where Nestor demonstrates Build, Play, and Explore through attributed scene commands whose
+> results remain editable. Execution order and guardrails:
+> **[docs/AGENTX_ROADMAP.md](docs/AGENTX_ROADMAP.md)**.
 
 The complete historical source and restoration record lives in the workshop repo,
 [WindriderQc/GraphysX](https://github.com/WindriderQc/GraphysX). That repo is local-dev

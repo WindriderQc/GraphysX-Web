@@ -40,9 +40,13 @@ export function mountBallzMenu(container: HTMLElement, options: BallzMenuOptions
 
   const card = document.createElement("div");
   card.className = "gx-bzmenu-card";
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-modal", "true");
+  card.setAttribute("aria-labelledby", "gx-bzmenu-title");
 
   const mark = document.createElement("div");
   mark.className = "gx-bzmenu-mark";
+  mark.id = "gx-bzmenu-title";
   mark.textContent = "BallZ";
   const sub = document.createElement("div");
   sub.className = "gx-bzmenu-sub";
@@ -50,6 +54,7 @@ export function mountBallzMenu(container: HTMLElement, options: BallzMenuOptions
 
   const presetPicker = document.createElement("div");
   presetPicker.className = "gx-bzmenu-presets";
+  presetPicker.setAttribute("role", "group");
   presetPicker.setAttribute("aria-label", "Ball appearance");
   let selectedPreset = loadBallzBallPreset();
   const presetButtons: HTMLButtonElement[] = [];
@@ -62,9 +67,14 @@ export function mountBallzMenu(container: HTMLElement, options: BallzMenuOptions
     button.title = preset.summary;
     button.addEventListener("click", () => {
       selectedPreset = saveBallzBallPreset(preset.id);
-      for (const candidate of presetButtons) candidate.classList.toggle("is-selected", candidate.dataset.ballPreset === selectedPreset.id);
+      for (const candidate of presetButtons) {
+        const selected = candidate.dataset.ballPreset === selectedPreset.id;
+        candidate.classList.toggle("is-selected", selected);
+        candidate.setAttribute("aria-pressed", String(selected));
+      }
     });
     button.classList.toggle("is-selected", preset.id === selectedPreset.id);
+    button.setAttribute("aria-pressed", String(preset.id === selectedPreset.id));
     presetButtons.push(button);
     presetPicker.append(button);
   }
@@ -128,6 +138,25 @@ export function mountBallzMenu(container: HTMLElement, options: BallzMenuOptions
   const dispose = (): void => {
     overlay.remove();
   };
+  overlay.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      back.click();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...card.querySelectorAll<HTMLButtonElement>('button:not(:disabled):not([hidden])')]
+      .filter((element) => element.getClientRects().length > 0);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first.focus();
+    }
+  });
+  queueMicrotask(() => start.focus());
   return dispose;
 }
 

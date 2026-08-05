@@ -2723,3 +2723,166 @@ The server tree has zero third-party imports, so nothing needs installing on the
 host prerequisites are ownership of `/opt/graphysx-web` by the deploy account and a NOPASSWD
 sudoers line scoped to restarting `graphysx-store`; a host with no unit updates the code and
 skips the restart rather than failing.
+
+## 2026-08-04 — AgentX Center: Nestor's first live demo
+
+The old handoff was audited against `main` before more work began. Its two headline blockers
+were historical: Live Sessions plus browser leaderboards/ghosts are merged, and the preview
+host is landed. Seventeen preview harness conversions remain, but `?host=previews` is a
+development workshop and those conversions are content cleanup, not a product gate. The
+canonical next-work document is now `docs/AGENTX_ROADMAP.md`; the older root roadmap is marked
+as a historical snapshot.
+
+The default showroom is now the first AgentX Center milestone. `src/showroom-nestor.ts` adds a
+scene-native Nestor agent, holographic dais, signal aura/light, and three physical Build, Play,
+and Explore consoles. The welcome chrome became an accessible AgentX Center briefing panel with
+matching topic controls. Clicking either surface routes to a small presenter controller, which
+uses one ordinary `api.commit()` with actor `{ id: "nestor", kind: "agent" }`:
+
+- Build atomically replaces/assembles an eight-entity `signal-beacon` prefab and selects it.
+- Play invokes the authored impulse interactions on the kinetic stack and orbs.
+- Explore retunes both scene-native flock systems and selects them.
+
+Every result remains in the document and editor. Nestor's role, status, perception, and
+capabilities are serialized scene data; the panel reports the actual commit id/revision; camera
+focus goes through `PlatformHost`; `render_game_to_text()` now includes presenter state. There is
+no fake LLM response, backend dependency, second renderer, or second frame loop.
+
+The kinetic stack moved to a side exhibit so Nestor owns the visual center. The guide was scaled
+up after the first screenshot pass; the Play framing now lands with Nestor, the active physics
+exhibit, CubX, and the living backdrop all legible in one shot.
+
+`scripts/smoke-showroom.mjs` now proves the whole vertical slice: 111 initial entities, a real
+agent profile/capability set, three consoles, text-render projection, an attributed agent commit,
+eight built entities, selection, narration, camera focus, export/load survival, and both Nestor
+and the built beacon in the editor outliner. The same run still proves the prior terrain rest,
+triggered chime, live flock, click-to-focus, and editor behavior. The final run passed against the
+built production server with zero console/page errors; typecheck and production build passed too.
+The required game-client choreography produced two clean captures and matching Nestor state.
+Separate in-app visual passes exercised Build, Play, and Explore and confirmed their pressed/narration/commit states.
+
+One adjacent correctness fix went with the truth reset: grid BallZ play now snapshots the
+durable `AgentLevelState.revision` at materialization and passes it to `courseVersionFor`, so
+browser submissions no longer collapse editable revisions onto `code:<id>` boards.
+
+No production workflow mutation was made. A real deploy edge remains: `.server-checksum` is
+written before restart/listener proof, and the listener probe is non-failing. Harden that and
+verify the actual host shows only a loopback listener before calling production containment
+closed.
+
+The post-implementation architecture pass closed three lifecycle gaps before handoff. Nestor's
+panel now derives its topic/status from the scene after load, undo, and redo; Browse and stored
+scene editors return by recomposing the AgentX Center instead of mounting dead topic controls
+over an unrelated world; and one shared callback gates both DOM and 3D Nestor actions whenever
+a live-session client has a session id. Failed joins clear that id. The production showroom
+smoke now clicks a physical Play console, builds through the DOM control, round-trips the scene,
+rewinds the presentations in the editor, verifies the remounted card is ready, opens the real
+Signal Outpost starter, and proves Showroom returns with Nestor plus exactly three console roots.
+A second adversarial pass removes a required Nestor entity, proves the rejected presentation
+retains its error and no stale commit, and restores the scene. It then swaps to a starter from
+inside the editor and proves authoritative readiness removes every Nestor topic control while a
+neutral resume door preserves the in-memory starter. This keeps unsaved editor work across
+exit/re-entry without pretending Nestor's missing 3D targets are available. Browse-launched
+editors still return to a freshly composed center.
+
+The editable-grid result fix now has browser proof too: `smoke-results-browser` materializes a
+revision-1 grid, finishes it through the real play layer with a valid ghost trace, finds Ada on
+`level:smoke-results-grid@1`, and proves the fallback `code:` board stayed empty. A final timing
+edge is pinned too: when the 200 ms poll and forced finish observe the same elapsed time, the
+recorder replaces that last sample instead of submitting duplicate timestamps and losing the
+otherwise valid result (30/30 checks).
+
+The broad `verify --no-build` pass completed 50/54 checks. Its four failures were then reduced
+instead of waved away: the editor smoke clicked the first welcome button after Nestor added
+three earlier actions; the Garage smoke still expected passive scene mode after Browse was made
+editor-first; meshlight was a transient Chromium/SwiftShader transport failure and passed three
+focused runs; and Node 24 reset the result-store socket while the async body iterator tried to
+throw a 413. The first two expectations now target the explicit product contracts.
+
+The deeper editor rerun exposed an important lifecycle distinction. Normal editor work now stays
+loaded behind a neutral, Nestor-free resume door and survives re-entry; Browse-launched worlds
+still return to the full AgentX Center. The editor and showroom production-browser smokes both
+pass that behavior with zero browser errors.
+
+The welcome door now follows those predicates continuously, not only on editor exit. Removing a
+required center entity swaps active Nestor topics for the neutral resume door; undo restores the
+three topics. A live-attached complete center uses explicit observer copy with no local action
+buttons—including Editor, Games, and Browse—so the shared-operation guard never presents as dead
+UI or offers a local world replacement beside an attached collaborative session. The showroom
+interaction layer is disabled at the same boundary, preventing body/terrain clicks from invoking
+`api.interact` or `api.spawn` outside the live operation stream.
+
+Oversized JSON now drains only inside a bounded safety window (at most two extra MiB and five
+seconds), then returns a reliable 413 to well-behaved clients; stalled or abusive uploads still
+lose the socket. The Node result smoke passes 47/47, live-session security 41/41, store auth
+22/22, results-browser 30/30, vehicles and meshlight both pass focused production runs, and the
+final typecheck/build are green. The full 54-check matrix was not repeated after those focused
+closures because its remaining signal had been isolated and the machine's 94 Chrome processes
+were already producing unrelated GPU/transport noise.
+
+The live boundary then received a generation-based authority pass. Join and attach claim the
+session before their first network await; Leave or a newer claim revokes delayed snapshots,
+streams, scene-store sessions, and late submit/undo receipts. SceneBrowser is hidden and inert,
+Games/Browse re-check after dynamic imports, and an editor/play race yields to observer mode
+without running local exit callbacks. `smoke-live-sessions-browser` now freezes a valid snapshot
+response, leaves, creates new local editor work, and releases the stale response: that response
+is rejected without touching the draft. A fresh invite then restores the authoritative scene.
+The final production-bundle run passed 45/45 with zero console/page/request errors.
+
+Follow-up prompt: "once your done, you insure another all around loop on UI navigation and
+aesthetics, and then another loop all around on graphycs aesthetics and performances"
+
+The dedicated UI/navigation loop found and fixed real responsive failures before touching
+renderer quality. At phone widths the editor's left tree, right inspector, and library drawer
+overlapped; the library could collapse to 18px. The editor now exposes one intentional mobile
+surface at a time through View / Scene / Inspect / Library, and selecting an entity advances to
+Inspect. The toolbar remains horizontally navigable without letting its three rails collide.
+
+The AgentX door now has a balanced action hierarchy (Editor primary; Games and Browse paired),
+scroll-safe short-phone layout, readable hint copy, and visible keyboard focus. Games and Browse
+are labelled modal dialogs with search focus, Escape, focus wrapping, restored front-door focus,
+and sibling favorite controls instead of nested interactive targets. Their mobile hero cards no
+longer crush three columns of copy into one line.
+
+The same audit pinned two cross-surface continuity bugs: live-observer chrome competed with the
+live-session bottom sheet, and Editor/Play/Browse inherited arbitrary camera poses. Mobile live
+observer copy is now a compact top sheet while session activity owns the bottom. The host has
+authored home reset and fit-to-world moves; returning to AgentX resets its composition, starter
+and stored scenes frame before editing, and Nestor demonstrations use a repeatable reveal angle.
+
+The follow-up graphics/aesthetics loop is now complete. Nestor owns the right-hand safe area
+as a larger scene-native AgentX guide with a face display, eyes, chest signal, two-arm
+silhouette, presenting hand, halo, cyan fill and warm key. The three existing interactive
+console roots and their core ids are preserved, but each now reads as a distinct emissive
+screen bay. CubX is smaller and behind-left as the object Nestor presents rather than a
+competing hero. The physics set moved into its own demo lane. Starlings dropped from 76 dark,
+large silhouettes to 52 smaller blue-gray background actors; the CubX swarm dropped from 40
+to 28 with shorter trails, and both decorative flocks no longer cast shadows.
+
+A mobile Nestor action now compacts the welcome card into a 310px top-left command sheet while
+keeping every topic and destination available. This gives the focused Build, Play or Explore
+scene most of the phone viewport instead of describing a 3D interaction behind a full-height
+card. Browser evidence exercised Play: the card measured 310x336, the pressed state stayed
+true, and the focused kinetic scene remained visible below it.
+
+The renderer now chooses inspectable high / balanced / mobile profiles without mutating the
+scene document. They cap DPR at 2 / 1.5 / 1.5, choose 2048 / 1024 / 1024 shadow maps, and
+budget shadow/reflection refreshes at 30/30, 30/20 and 20/0 Hz. One scheduler arbitrates the
+two auxiliary passes so a shadow rebuild and planar reflection never land on the same main
+frame. In the final 1280x720 scene, the old combined refresh costs 315 draw calls; the shipping
+high profile averaged 217.2 calls/frame and never needs the 315-call stack. At 390x844 DPR2,
+the mobile profile renders a 585x1266 buffer (43.8% fewer pixels than DPR2), preserves the
+authored reflective-water flag, disables only the runtime reflection refresh, and measured
+152.4 calls/frame versus the previous 217-call combined mobile frame.
+
+Reflective water now uses an owned ManagedWater target instead of Three Water's closure-private
+target. Six rebuild cycles across 128/256/512 resolutions each rose from 9 to 10 textures and
+returned to 9; the final release did too. The inactive 2D overlay now keeps a 1x1 backing store.
+A renderer probe also caught and fixed CSS/backing-buffer coupling: the mobile canvas client
+box stays 390x844 while its drawing buffer is 585x1266.
+
+Final gates: production typecheck/build green; renderer-profile probe green; managed-water
+lifecycle probe green; showroom production smoke green with zero console/page errors; live
+session protocol smoke 64/64; and the develop-web-game deterministic capture produced a valid
+showroom/Nestor state with no error file. Desktop and mobile screenshots were inspected after
+resetting the temporary viewport override.

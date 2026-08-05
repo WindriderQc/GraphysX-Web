@@ -30,7 +30,19 @@ export function mountShelfPersonalization(
   options: { label: string; placeholder: string },
 ): () => void {
   let preferences = readPreferences();
-  const items = Array.from(list.querySelectorAll<HTMLElement>("[data-shelf-key]"));
+  const actions = Array.from(list.querySelectorAll<HTMLElement>("[data-shelf-key]"));
+  const actionByItem = new Map<HTMLElement, HTMLElement>();
+  const items = actions.map((action) => {
+    const item = document.createElement("div");
+    item.className = "gx-shelf-item";
+    if (action.matches(".gx-shelf-hero,.gx-shelf-cup,.gx-browse-row--featured")) {
+      item.classList.add("gx-shelf-item--wide");
+    }
+    action.before(item);
+    item.append(action);
+    actionByItem.set(item, action);
+    return item;
+  });
   const originalOrder = new Map(items.map((item, index) => [item, index]));
 
   const controls = document.createElement("div");
@@ -59,14 +71,15 @@ export function mountShelfPersonalization(
   const update = (): void => {
     const favoriteSet = new Set(preferences.favorites);
     for (const item of items) {
-      const key = item.dataset.shelfKey ?? "";
+      const action = actionByItem.get(item)!;
+      const key = action.dataset.shelfKey ?? "";
       const favorite = favoriteSet.has(key);
       item.classList.toggle("gx-shelf-item--favorite", favorite);
       const star = item.querySelector<HTMLElement>(".gx-shelf-favorite");
       if (star) {
         star.textContent = favorite ? "★" : "☆";
         star.title = favorite ? "Remove from favorites" : "Add to favorites";
-        star.setAttribute("aria-label", `${favorite ? "Remove" : "Add"} ${item.dataset.shelfLabel ?? "item"} ${favorite ? "from" : "to"} favorites`);
+        star.setAttribute("aria-label", `${favorite ? "Remove" : "Add"} ${action.dataset.shelfLabel ?? "item"} ${favorite ? "from" : "to"} favorites`);
         star.setAttribute("aria-pressed", String(favorite));
       }
       const tag = item.querySelector<HTMLElement>(".gx-shelf-personal-tag");
@@ -77,8 +90,8 @@ export function mountShelfPersonalization(
       }
     }
     items.sort((a, b) => {
-      const aKey = a.dataset.shelfKey ?? "";
-      const bKey = b.dataset.shelfKey ?? "";
+      const aKey = actionByItem.get(a)?.dataset.shelfKey ?? "";
+      const bKey = actionByItem.get(b)?.dataset.shelfKey ?? "";
       const favoriteDelta = Number(favoriteSet.has(bKey)) - Number(favoriteSet.has(aKey));
       if (favoriteDelta) return favoriteDelta;
       const recentDelta = Number(preferences.recent[bKey] ?? 0) - Number(preferences.recent[aKey] ?? 0);
@@ -92,7 +105,8 @@ export function mountShelfPersonalization(
     const query = search.value.trim().toLocaleLowerCase();
     let visible = 0;
     for (const item of items) {
-      const searchable = item.dataset.shelfSearch ?? item.textContent ?? "";
+      const action = actionByItem.get(item)!;
+      const searchable = action.dataset.shelfSearch ?? action.textContent ?? "";
       item.hidden = !!query && !searchable.toLocaleLowerCase().includes(query);
       if (!item.hidden) visible += 1;
     }
@@ -101,17 +115,17 @@ export function mountShelfPersonalization(
   };
 
   for (const item of items) {
-    const star = document.createElement("span");
+    const action = actionByItem.get(item)!;
+    const star = document.createElement("button");
+    star.type = "button";
     star.className = "gx-shelf-favorite";
-    star.setAttribute("role", "button");
-    star.tabIndex = 0;
     const tag = document.createElement("span");
     tag.className = "gx-shelf-personal-tag";
     tag.hidden = true;
     const toggleFavorite = (event: Event): void => {
       event.preventDefault();
       event.stopPropagation();
-      const key = item.dataset.shelfKey ?? "";
+      const key = action.dataset.shelfKey ?? "";
       const favorites = new Set(preferences.favorites);
       if (favorites.has(key)) favorites.delete(key); else favorites.add(key);
       preferences.favorites = [...favorites];
@@ -120,12 +134,9 @@ export function mountShelfPersonalization(
       star.focus();
     };
     star.addEventListener("click", toggleFavorite);
-    star.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") toggleFavorite(event);
-    });
-    item.addEventListener("click", (event) => {
+    action.addEventListener("click", (event) => {
       if ((event.target as Element | null)?.closest(".gx-shelf-favorite")) return;
-      const key = item.dataset.shelfKey ?? "";
+      const key = action.dataset.shelfKey ?? "";
       preferences.recent[key] = Date.now();
       writePreferences(preferences);
     }, { capture: true });
@@ -152,8 +163,10 @@ export const SHELF_PERSONALIZATION_CSS = `
 .gx-shelf-count{color:var(--gx-ink-faint);font:10.5px/1 var(--gx-font);white-space:nowrap}
 .gx-shelf-reset{padding:7px 9px;border:1px solid rgba(120,240,208,.25);border-radius:7px;background:transparent;color:var(--gx-ink-soft);cursor:pointer;font:10.5px/1 var(--gx-font)}
 .gx-shelf-reset:hover,.gx-shelf-reset:focus-visible{border-color:var(--gx-accent);color:var(--gx-ink);outline:none}
-[data-shelf-key]{position:relative}
-[data-shelf-key][hidden]{display:none}
+.gx-shelf-item{position:relative;min-width:0}
+.gx-shelf-item--wide{grid-column:1/-1}
+.gx-shelf-item>[data-shelf-key]{width:100%;height:100%}
+.gx-shelf-item[hidden]{display:none}
 .gx-shelf-favorite{position:absolute;z-index:3;right:8px;top:7px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(120,240,208,.25);border-radius:999px;background:rgba(4,16,23,.82);color:#ffcd4d;cursor:pointer;font:17px/1 sans-serif}
 .gx-shelf-favorite:hover,.gx-shelf-favorite:focus-visible{outline:none;border-color:#ffcd4d;transform:scale(1.06)}
 .gx-shelf-personal-tag{position:absolute;z-index:2;left:9px;top:8px;padding:3px 7px;border-radius:999px;background:rgba(4,16,23,.86);border:1px solid rgba(255,205,77,.42);color:#ffdc7a;font:700 8.5px/1 var(--gx-font);letter-spacing:.06em;text-transform:uppercase}

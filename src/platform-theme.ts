@@ -53,6 +53,7 @@ export function installPlatformTheme(): void {
       --gx-bg:#000914;--gx-scrim:rgba(0,0,0,.84);--gx-panel:rgba(0,10,17,.96)
     }
     :root[data-gx-contrast="high"] button:focus-visible,
+    :root[data-gx-contrast="high"] summary:focus-visible,
     :root[data-gx-contrast="high"] input:focus-visible,
     :root[data-gx-contrast="high"] select:focus-visible{outline:3px solid #ffe45e !important;outline-offset:2px !important}
     :root[data-gx-motion="reduce"] *,:root[data-gx-motion="reduce"] *::before,:root[data-gx-motion="reduce"] *::after{
@@ -61,10 +62,19 @@ export function installPlatformTheme(): void {
     .gx-display-settings{position:fixed;right:12px;bottom:12px;z-index:120;font:11px/1.35 var(--gx-font);color:var(--gx-ink)}
     .gx-display-settings>summary{list-style:none;cursor:pointer;padding:7px 10px;border:1px solid rgba(120,240,208,.34);border-radius:8px;background:rgba(5,18,26,.9);box-shadow:0 6px 22px rgba(0,0,0,.35)}
     .gx-display-settings>summary::-webkit-details-marker{display:none}
+    .gx-display-settings>summary:focus-visible{outline:2px solid var(--gx-accent);outline-offset:2px}
     .gx-display-settings[open]>summary{border-radius:0 0 8px 8px;border-top-color:transparent}
     .gx-display-panel{position:absolute;right:0;bottom:100%;width:220px;display:flex;flex-direction:column;gap:9px;padding:12px;border:1px solid rgba(120,240,208,.34);border-radius:10px 10px 0 10px;background:rgba(5,18,26,.97);box-shadow:0 14px 38px rgba(0,0,0,.5)}
     .gx-display-panel strong{font-size:12px}.gx-display-panel label{display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--gx-ink-soft)}
     .gx-display-panel select{padding:5px 7px;border:1px solid rgba(120,240,208,.3);border-radius:6px;background:#081e28;color:var(--gx-ink);font:inherit}
+    .gx-display-panel select:focus-visible{outline:2px solid var(--gx-accent);outline-offset:2px}
+    @media(max-width:640px){
+      .gx-display-settings{right:8px;bottom:8px}
+      :root[data-gx-editor="visible"] .gx-display-settings,:root[data-gx-live-session="visible"] .gx-display-settings,:root[data-gx-mode="play"] .gx-display-settings{top:8px;bottom:auto}
+      .gx-display-panel{width:min(220px,calc(100vw - 16px))}
+      :root[data-gx-editor="visible"] .gx-display-panel,:root[data-gx-live-session="visible"] .gx-display-panel,:root[data-gx-mode="play"] .gx-display-panel{top:100%;bottom:auto;border-radius:0 10px 10px 10px}
+      :root[data-gx-editor="visible"] .gx-display-settings[open]>summary,:root[data-gx-live-session="visible"] .gx-display-settings[open]>summary,:root[data-gx-mode="play"] .gx-display-settings[open]>summary{border-radius:8px 8px 0 0;border-top-color:rgba(120,240,208,.34);border-bottom-color:transparent}
+    }
   `;
     document.head.append(style);
   }

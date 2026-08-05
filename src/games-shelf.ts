@@ -61,6 +61,8 @@ export type GamesShelfComposedRow = {
 
 export type GamesShelfOptions = {
   api: GraphysXAgentWorldApi;
+  /** Re-checked at every play boundary so a live-session attach cannot replace its world. */
+  canNavigate?: () => boolean;
   /** Archive courses and other composed playables, listed above the level library. */
   composed?: GamesShelfComposedRow[];
   /** Ordered campaign rounds. When present the shelf promotes them as the Archive Cup. */
@@ -74,7 +76,7 @@ export type GamesShelfOptions = {
 };
 
 export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptions): () => void {
-  const { api, composed, archiveCup, openArchiveCup, onPlay, onClose } = options;
+  const { api, canNavigate = () => true, composed, archiveCup, openArchiveCup, onPlay, onClose } = options;
   injectStyleOnce();
 
   // Seed once. A returning visitor who edited or deleted this course keeps their version —
@@ -86,16 +88,21 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
 
   const card = document.createElement("div");
   card.className = "gx-shelf-card";
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-modal", "true");
+  card.setAttribute("aria-labelledby", "gx-games-shelf-title");
 
   const head = document.createElement("div");
   head.className = "gx-shelf-head";
   const title = document.createElement("h2");
+  title.id = "gx-games-shelf-title";
   title.textContent = "Games & Playgrounds";
   const close = document.createElement("button");
   close.type = "button";
   close.className = "gx-shelf-close";
   close.textContent = "✕";
   close.title = "Back to the showroom";
+  close.setAttribute("aria-label", "Close games and return to AgentX Center");
   head.append(title, close);
 
   const blurb = document.createElement("p");
@@ -105,13 +112,64 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   const list = document.createElement("div");
   list.className = "gx-shelf-list";
 
+  const navigationBlocked = "Leave the live session before changing worlds.";
+  let disposed = false;
+  let nestedDispose: (() => void) | null = null;
+  let cupTrigger: HTMLButtonElement | null = null;
+  const setShelfCovered = (covered: boolean): void => {
+    card.inert = covered;
+    if (covered) card.setAttribute("aria-hidden", "true");
+    else card.removeAttribute("aria-hidden");
+  };
+  const disposeNested = (): void => {
+    const nested = nestedDispose;
+    nestedDispose = null;
+    nested?.();
+  };
+  const mayNavigate = (feedback?: HTMLElement, row?: HTMLElement): boolean => {
+    if (!disposed && canNavigate()) return true;
+    if (feedback) feedback.textContent = navigationBlocked;
+    row?.classList.add("gx-shelf-row--error");
+    return false;
+  };
+  // BallZ owns its own menu, so guard the level API it receives as well as the shelf entry.
+  // The predicate is evaluated when Start/Course is clicked, not when the menu was mounted.
+  const ballzApi: GraphysXAgentWorldApi = {
+    ...api,
+    levels: {
+      ...api.levels,
+      play: (levelId) => mayNavigate()
+        ? api.levels.play(levelId)
+        : {
+            ok: false,
+            revision: api.levels.get(levelId)?.revision ?? 0,
+            error: navigationBlocked,
+          },
+    },
+  };
+
   const openCup = (): void => {
-    if (!archiveCup?.length) return;
-    mountArchiveCup(container, {
-      courses: archiveCup,
+    if (!archiveCup?.length || !mayNavigate()) return;
+    disposeNested();
+    setShelfCovered(true);
+    nestedDispose = mountArchiveCup(container, {
+      // A cup can stay open while the live-session join finishes. Re-check at the actual
+      // round action; throwing uses the cup's existing per-round status surface.
+      courses: archiveCup.map((course) => ({
+        ...course,
+        play: async () => {
+          if (!mayNavigate()) throw new Error(navigationBlocked);
+          await course.play();
+        },
+      })),
       onPlay: (course) => {
         dispose();
         onPlay?.(course.id);
+      },
+      onBack: () => {
+        nestedDispose = null;
+        setShelfCovered(false);
+        cupTrigger?.focus();
       },
     });
   };
@@ -119,6 +177,7 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   if (archiveCup?.length) {
     const cup = document.createElement("button");
     cup.type = "button";
+    cupTrigger = cup;
     cup.className = "gx-shelf-cup";
     cup.dataset.gameId = "archive-cup";
     cup.dataset.shelfKey = "game:archive-cup";
@@ -160,13 +219,21 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   heroCta.textContent = "▶ Play";
   hero.append(heroMark, heroCopy, heroCta);
   hero.addEventListener("click", () => {
-    mountBallzMenu(container, {
-      api,
+    if (!mayNavigate()) return;
+    disposeNested();
+    setShelfCovered(true);
+    nestedDispose = mountBallzMenu(container, {
+      api: ballzApi,
       onPlay: (levelId) => {
         dispose();
         onPlay?.(levelId);
       },
       // Back from the title screen lands on the shelf, which never went away.
+      onClose: () => {
+        nestedDispose = null;
+        setShelfCovered(false);
+        hero.focus();
+      },
     });
   });
   list.append(hero);
@@ -194,6 +261,7 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
     row.append(visual, copy);
     row.addEventListener("click", async () => {
       if (row.disabled) return;
+      if (!mayNavigate(meta, row)) return;
       row.disabled = true;
       row.classList.add("gx-shelf-row--busy");
       const originalMeta = meta.textContent;
@@ -256,6 +324,7 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
     copy.append(name, meta);
     row.append(visual, copy);
     row.addEventListener("click", () => {
+      if (!mayNavigate(meta, row)) return;
       const result = api.levels.play(summary.id);
       if (!result.ok) {
         meta.textContent = result.error ?? "Could not play that level";
@@ -274,12 +343,38 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   container.append(overlay);
 
   const dispose = (): void => {
+    if (disposed) return;
+    disposed = true;
+    disposeNested();
     overlay.remove();
   };
-  close.addEventListener("click", () => {
+  const closeShelf = (): void => {
     dispose();
     onClose?.();
+  };
+  close.addEventListener("click", closeShelf);
+  overlay.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeShelf();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...card.querySelectorAll<HTMLElement>(
+      'button:not(:disabled):not([hidden]),input:not(:disabled):not([hidden]),select:not(:disabled):not([hidden]),[tabindex]:not([tabindex="-1"]):not([hidden])',
+    )].filter((element) => element.getClientRects().length > 0);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   });
+  queueMicrotask(() => card.querySelector<HTMLInputElement>(".gx-shelf-search")?.focus());
   if (openArchiveCup) queueMicrotask(openCup);
   return dispose;
 }
@@ -299,7 +394,7 @@ ${SHELF_THUMBNAIL_CSS}
 ${SHELF_PERSONALIZATION_CSS}
 .gx-shelf{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
   background:var(--gx-scrim);font-family:var(--gx-font);padding:24px}
-.gx-shelf-card{width:min(900px,100%);max-height:86vh;display:flex;flex-direction:column;gap:12px;
+.gx-shelf-card{box-sizing:border-box;width:min(900px,100%);max-height:86vh;display:flex;flex-direction:column;gap:12px;
   background:rgba(9,22,31,.96);border:1px solid rgba(79,208,230,.34);border-radius:14px;
   padding:20px 22px;box-shadow:0 18px 60px rgba(0,0,0,.5)}
 .gx-shelf-head{display:flex;align-items:center;gap:12px}
@@ -307,9 +402,12 @@ ${SHELF_PERSONALIZATION_CSS}
 .gx-shelf-close{background:transparent;border:1px solid rgba(120,240,208,.3);border-radius:6px;
   color:var(--gx-ink-soft);cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px}
 .gx-shelf-close:hover{border-color:var(--gx-accent);color:var(--gx-ink)}
+.gx-shelf-close:focus-visible{outline:2px solid var(--gx-accent);outline-offset:2px}
 .gx-shelf-blurb{margin:0;color:var(--gx-ink-faint);font-size:12.5px;line-height:1.5}
 .gx-shelf-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;overflow-y:auto;
   padding:1px 5px 1px 1px}
+.gx-shelf-list{scrollbar-width:thin;scrollbar-color:rgba(79,208,230,.52) transparent}
+.gx-shelf-list::-webkit-scrollbar{width:7px}.gx-shelf-list::-webkit-scrollbar-thumb{border-radius:99px;background:rgba(79,208,230,.42)}
 .gx-shelf-hero{grid-column:1 / -1;display:flex;align-items:center;gap:16px;cursor:pointer;text-align:left;
   padding:16px 20px;border-radius:12px;border:1px solid rgba(255,138,54,.45);
   background:
@@ -339,5 +437,10 @@ ${SHELF_PERSONALIZATION_CSS}
 .gx-shelf-name{color:var(--gx-ink);font-size:14px;font-weight:600}
 .gx-shelf-meta{color:var(--gx-ink-faint);font-size:11.5px;letter-spacing:.03em}
 @media (max-width:640px){.gx-shelf{padding:12px}.gx-shelf-card{padding:16px;max-height:92vh}
-  .gx-shelf-list{grid-template-columns:1fr}}
+  .gx-shelf-list{grid-template-columns:1fr}
+  .gx-shelf-cup,.gx-shelf-hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;padding:14px 16px}
+  .gx-shelf-cup-mark,.gx-shelf-hero-mark{grid-column:1 / -1;padding-right:34px}
+  .gx-shelf-hero-copy{grid-column:1;min-width:0}
+  .gx-shelf-cup-cta,.gx-shelf-hero-cta{grid-column:2;align-self:end}
+}
 `;

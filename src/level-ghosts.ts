@@ -66,8 +66,28 @@ export function createPersonalGhostSession(
   const sampleSubject = (elapsedMs: number, force = false): void => {
     if (!force && elapsedMs - lastSampleAt < SAMPLE_INTERVAL_MS) return;
     const position = api.query({ ids: [subjectId] })[0]?.position;
-    if (!position || recorded.length >= MAX_SAMPLES) return;
-    recorded.push({ tMs: Math.max(0, Math.round(elapsedMs)), position: [...position] });
+    if (!position) return;
+    const tMs = Math.max(0, Math.round(elapsedMs));
+    const last = recorded[recorded.length - 1];
+    // The play layer polls once and then force-samples when it observes completion. Both calls
+    // can carry the same elapsed time; appending both made an otherwise valid run fail the
+    // server's strictly-increasing ghost contract. Keep the finish position, not a duplicate.
+    if (last && tMs <= last.tMs) {
+      if (force && tMs === last.tMs) last.position = [...position];
+      lastSampleAt = Math.max(lastSampleAt, elapsedMs);
+      return;
+    }
+    if (recorded.length >= MAX_SAMPLES) {
+      // Preserve the fixed cap but let the forced finish replace the final sample, so the
+      // trace duration still describes the submitted run.
+      if (force && last) {
+        last.tMs = tMs;
+        last.position = [...position];
+        lastSampleAt = elapsedMs;
+      }
+      return;
+    }
+    recorded.push({ tMs, position: [...position] });
     lastSampleAt = elapsedMs;
     if (runtimeState?.recordId === recordId) runtimeState.recordingSamples = recorded.length;
   };

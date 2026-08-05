@@ -4,6 +4,7 @@ import {
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
 import { instantiateAgentWorldPrefab } from "./agent-world-prefabs";
+import { buildNestorCenter } from "./showroom-nestor";
 
 const CLUSTER = "showroom-cubx";
 
@@ -68,24 +69,23 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
    * verbatim, wrapping the CubX assembly in a shell that circulates around it — the
    * nature-lab lesson, in the front door, as an ordinary entity anyone can select and edit.
    *
-   * 128 members between them, two instanced draw calls, ~9k neighbour tests per step.
+   * 80 members between them, two instanced draw calls, and plenty of life without masking the hosts.
    */
   const flocks: AgentWorldEntityDefinition[] = [
     {
       id: "showroom-starlings",
       type: "flock",
       label: "Starling Murmuration",
-      // High and back, so it reads against the sky and the far ridges rather than tangling
-      // with the props. Trails stay off here: at 88 members they are the expensive half.
-      transform: { position: [-2, 10.5, -11] },
+      // High, left and well behind Nestor. The lighter flock is atmospheric motion now,
+      // not a black silhouette competing with the guide or the CubX object he presents.
+      transform: { position: [-8.5, 12.5, -18] },
       flock: {
         preset: "starlings",
-        count: 76,
-        // Half-extents, so this is a 22 x 7 x 18 volume. It was twice that, and 88 birds
-        // spread over 40 units of sky read as scattered dots rather than as a murmuration —
-        // a flock is legible because it is *dense*.
-        size: [11, 3.4, 9],
-        speed: 5,
+        count: 52,
+        // Half-extents: dense enough to read as a murmuration while staying clear of the
+        // AgentX Center's presentation lane.
+        size: [10, 2.8, 7.5],
+        speed: 4.2,
         // Cohesion and separation are balanced against each other rather than maximised. At
         // cohesion 1.7 the whole flock collapsed into a single dense blob within a few
         // seconds — legible as *a thing*, but not as a murmuration. Raising separation with it
@@ -96,12 +96,13 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
         neighborDistance: 4.5,
         // Pale members vanished against a bright sky. Birds read as *silhouettes*; the
         // legible choice is the dark one, and it happens to be the truthful one too.
-        memberSize: 0.62,
-        color: "#2d3a46",
-        emissive: "#0b1219",
-        emissiveIntensity: 0.25,
+        memberSize: 0.48,
+        color: "#7897a3",
+        emissive: "#18313d",
+        emissiveIntensity: 0.34,
         seed: 11,
       },
+      castShadow: false,
       tags: ["showroom", "life", "flock"],
     },
     {
@@ -113,16 +114,17 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
       parentId: CLUSTER,
       flock: {
         preset: "orbital-swarm",
-        count: 40,
-        radius: 3.6,
-        speed: 1.35,
-        memberSize: 0.3,
+        count: 28,
+        radius: 3.1,
+        speed: 1.15,
+        memberSize: 0.26,
         trails: true,
-        trailLength: 22,
+        trailLength: 14,
         color: "#bff3ff",
         emissive: "#1c86ad",
         trailColor: "#5fe0ff",
       },
+      castShadow: false,
       tags: ["showroom", "life", "flock"],
     },
   ];
@@ -133,6 +135,8 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
   // and an agent nudge this stack exactly the same way. This is the showroom earning the word
   // "physics" instead of asserting it.
   const STACK_Y = 0.62;
+  const STACK_X = -6.2;
+  const STACK_Z = 2.4;
   const stack: AgentWorldEntityDefinition[] = [
     // rows of 3, then 2, then 1 — a pyramid that topples legibly.
     ...[-1.15, 0, 1.15].map((x, i) => ({ x, y: STACK_Y + 0.45, i })),
@@ -143,7 +147,7 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     type: "box",
     label: `Kinetic Block ${i + 1}`,
     geometry: { width: 0.86, height: 0.86, depth: 0.86 },
-    transform: { position: [x, y, 2.6] },
+    transform: { position: [STACK_X + x, y, STACK_Z] },
     material: { color: "#8ce8ff", emissive: "#0d4d61", emissiveIntensity: 0.55, roughness: 0.22, metalness: 0.6 },
     physics: { mode: "dynamic", mass: 0.9, material: "default" },
     interactions: [{ id: `nudge-${i}`, type: "apply-impulse", targetIds: [`showroom-block-${i}`], impulse: [0, 2.6, -3.4] }],
@@ -172,7 +176,7 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     // edge-on line and nothing passes through the hole. The trigger fired either way,
     // because a torus collider is an axis-aligned box — the assertions could not tell the
     // two apart, only the screenshot could.
-    transform: { position: [0, 1.45, 0.5] },
+    transform: { position: [STACK_X, 1.45, STACK_Z - 2.1] },
     material: { color: "#ffe6a3", emissive: "#6b4a10", emissiveIntensity: 0.85, roughness: 0.3, metalness: 0.4 },
     physics: { mode: "trigger" },
     interactions: [{ id: "ring-chime", type: "play-sound", sound: "coin", volume: 0.55 }],
@@ -184,7 +188,7 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     type: "sphere",
     label: `Kinetic Orb ${i + 1}`,
     geometry: { radius: 0.52 },
-    transform: { position: [x, STACK_Y + 0.52, 3.4] },
+    transform: { position: [STACK_X + x * 0.78, STACK_Y + 0.52, STACK_Z + 0.8] },
     material: { color: i === 0 ? "#ffb457" : "#ff8f7a", emissive: "#3a1405", emissiveIntensity: 0.5, roughness: 0.24, metalness: 0.5 },
     physics: { mode: "dynamic", mass: 1.4, material: "ball", restitution: 0.55 },
     interactions: [{ id: `nudge-orb-${i}`, type: "apply-impulse", targetIds: [`showroom-orb-${i}`], impulse: [i === 0 ? 3.2 : -3.2, 3.4, -1.6] }],
@@ -204,7 +208,7 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
       ground: { visible: false, size: 60, color: "#123039", grid: false, gridColor: "#2a7d8f" },
     },
     entities: [
-      { id: "fill-light", type: "ambient-light", intensity: 0.5, material: { color: "#cfe9ff" } },
+      { id: "fill-light", type: "ambient-light", intensity: 0.4, material: { color: "#cfe9ff" } },
       // The ground. This used to be sine-displaced host decoration with no collider, so
       // anything dropped on it fell through the world forever. It is now an ordinary
       // `terrain` entity on a recovered archive heightmap, carrying a static Rapier
@@ -289,6 +293,7 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
         tags: ["showroom", "water"],
       },
       ...braziers,
+      ...buildNestorCenter(),
       {
         id: "showroom-cubx-core",
         type: "emitter",
@@ -297,7 +302,7 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
         // A cyan crown burning off the top of the rotating assembly. It sits above the cubes
         // rather than inside them — the cubes are opaque, so a centred emitter is simply hidden.
         transform: { position: [0, 1.5, 0] },
-        emitter: { preset: "firetrail", sizeScale: 5, speed: 2.2, spread: 2.5, color: "#5fe0ff", maxParticles: 110 },
+        emitter: { preset: "firetrail", sizeScale: 3.6, speed: 2.2, spread: 2.5, color: "#5fe0ff", maxParticles: 64 },
         tags: ["showroom", "effect"],
       },
       {
@@ -308,18 +313,17 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
         // Co-located with the crown for the same reason: emitted from the centre, the stars
         // spend their first frames occluded by the cubes and read as a streak.
         transform: { position: [0, 1.5, 0] },
-        emitter: { preset: "energy-orb", sizeScale: 4.5, speed: 3.4, spread: 3, maxParticles: 30, rate: 55 },
+        emitter: { preset: "energy-orb", sizeScale: 3.2, speed: 2.6, spread: 2.2, maxParticles: 18, rate: 32 },
         tags: ["showroom", "effect"],
       },
       {
         id: CLUSTER,
         type: "group",
         label: "CubX Assembly",
-        // Lifted and set back behind the plinth so the two centrepieces stack in depth
-        // instead of overlapping: physics you can knock over in front, the hero assembly and
-        // its swarm floating above and behind it.
-        transform: { position: [0, 5.8, -3.4], rotationDegrees: [24, 0, 16], scale: [1.55, 1.55, 1.55] },
-        behaviors: [{ id: "cubx-spin", type: "spin", axis: "y", speedDegrees: 12 }],
+        // A presented object behind and left of Nestor: still unmistakably CubX, but no longer
+        // the visual host of the AgentX Center.
+        transform: { position: [0.5, 4.4, -6.2], rotationDegrees: [18, 0, 12], scale: [0.96, 0.96, 0.96] },
+        behaviors: [{ id: "cubx-spin", type: "spin", axis: "y", speedDegrees: 8 }],
         tags: ["showroom", "cubx"],
       },
       ...cubes,
@@ -328,7 +332,7 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
         type: "box",
         label: "Plinth",
         geometry: { width: 6.2, height: 0.62, depth: 3.4 },
-        transform: { position: [0, 0.31, 2.8] },
+        transform: { position: [STACK_X, 0.31, STACK_Z + 0.2] },
         material: { color: "#20404a", roughness: 0.85, metalness: 0.12 },
         physics: { mode: "static", material: "default" },
         tags: ["showroom", "kinetic"],
@@ -348,10 +352,10 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
   // Foreground wings, close and at the frame edges — these are what create depth, by being
   // large and cropped while the centrepiece sits small and complete behind them.
   api.spawnPrefab("luminous-tree", { position: [-10.5, 0, 8.5], scale: [1.5, 1.6, 1.5] });
-  api.spawnPrefab("luminous-tree", { position: [11, 0, 8], scale: [1.1, 1.15, 1.1] });
+  api.spawnPrefab("luminous-tree", { position: [13.5, 0, 10.5], scale: [0.86, 0.94, 0.86] });
   // Midground, flanking the plinth.
   api.spawnPrefab("orbital-sculpture", { position: [-11, 0, 0.5] });
-  api.spawnPrefab("orbital-sculpture", { position: [12.5, 0, -8.5] });
+  api.spawnPrefab("orbital-sculpture", { position: [14, 0, -10.5], scale: [0.78, 0.78, 0.78] });
   // Background, framing the gap the camera looks through to the lake and the ridges.
   api.spawnPrefab("portal-arch", { position: [6.5, 0, -10] });
   api.spawnPrefab("luminous-tree", { position: [-10, 0, -8], scale: [0.85, 0.9, 0.85] });

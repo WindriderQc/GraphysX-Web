@@ -20,6 +20,8 @@
     "probe:rapier-heightfield": "node scripts/probe-rapier-heightfield.mjs",
     "probe:rapier-materials": "node scripts/probe-rapier-material-parity.mjs",
     "probe:water-cost": "node scripts/probe-water-cost.mjs",
+    "probe:water-lifecycle": "node scripts/probe-water-lifecycle.mjs",
+    "probe:render-profiles": "node scripts/probe-render-profiles.mjs",
     "smoke:scene-store": "node scripts/smoke-scene-store.mjs",
     "smoke:triggers": "node scripts/smoke-triggers.mjs",
     "smoke:roundtrip": "node scripts/smoke-roundtrip.mjs",

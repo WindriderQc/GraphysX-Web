@@ -28,7 +28,7 @@ try {
   await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: SMOKE_TIMEOUT });
   await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
-  await page.click(".gx-welcome button");
+  await page.click(".gx-welcome .gx-go-editor");
   await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
 
   // Keep the real showroom -> editor navigation contract above, then author inside a small
@@ -570,6 +570,11 @@ try {
     const t = document.querySelector(".gx-ed-toolbar");
     return !t || getComputedStyle(t).display === "none";
   });
+  out.sceneResume = await page.evaluate(() => ({
+    worldId: window.__GRAPHYSX__.state().world.id,
+    neutralDoor: !!document.querySelector(".gx-welcome--scene-resume"),
+    nestorTopics: document.querySelectorAll("[data-nestor-topic]").length,
+  }));
   await page.screenshot({ path: path.join(ART, "editor-exit.png"), fullPage: false });
   await page.click(".gx-welcome .gx-go-editor");
   await page.waitForSelector(".gx-ed-toolbar", { timeout: SMOKE_TIMEOUT });
@@ -751,6 +756,9 @@ const ok =
   out.treeFilterWorks &&
   out.welcomeBack &&
   out.editorHiddenAgain &&
+  out.sceneResume?.worldId === "editor-smoke-lab" &&
+  out.sceneResume?.neutralDoor === true &&
+  out.sceneResume?.nestorTopics === 0 &&
   out.overrideAfterReentry?.state === true &&
   out.overrideAfterReentry?.status === true &&
   out.badResponses.length === 0 &&

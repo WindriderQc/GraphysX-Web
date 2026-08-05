@@ -23,6 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ARTIFACTS = process.env.SMOKE_ARTIFACTS || path.join(ROOT, "output", "smoke");
 const TOKEN = "results-browser-token";
 const COURSE = "archive-ballz-level1";
+const VERSIONED_GRID = "smoke-results-grid";
 
 const results = [];
 const problems = [];
@@ -256,9 +257,15 @@ try {
     const spawned = api.query({ tag: "personal-ghost" });
     const state = window.__GRAPHYSX_HOST__ ? null : null;
     const position = spawned[0]?.position ?? null;
+    const finishSession = createPersonalGhostSession(api, subject.id, "smoke-finish-dedupe");
+    finishSession.tick(500);
+    finishSession.tick(1_000);
+    finishSession.finish(1_000, true);
+    const finishTimes = finishSession.recording()?.samples.map((sample) => sample.tMs) ?? null;
+    finishSession.dispose();
     session.dispose();
     const afterDispose = api.query({ tag: "personal-ghost" }).length;
-    return { spawnedCount: spawned.length, position, afterDispose, state };
+    return { spawnedCount: spawned.length, position, afterDispose, state, finishTimes };
   }, { ghost });
 
   check(results, "racing a rival's ghost spawns exactly one ghost entity",
@@ -268,8 +275,97 @@ try {
     && Math.abs(playable.position[0] - 1.8) < 0.6,
     JSON.stringify(playable.position));
   check(results, "disposing the session removes the ghost", playable.afterDispose === 0, String(playable.afterDispose));
+  check(results, "a finish sampled on the same poll keeps strictly increasing ghost times",
+    JSON.stringify(playable.finishTimes) === JSON.stringify([500, 1_000]),
+    JSON.stringify(playable.finishTimes));
 
   await player.page.screenshot({ path: path.join(ARTIFACTS, "results-leaderboard.png") });
+
+  // --- 5. editable grid revision through the real play/finish path ---------------------------
+
+  const grid = await player.page.evaluate((id) => {
+    const api = window.__GRAPHYSX__;
+    const created = api.levels.create({
+      id,
+      label: "Results revision grid",
+      width: 3,
+      height: 1,
+      tiles: ["start", "wall", "finish"],
+      race: { laps: 1, requireRings: false, requireHalfway: false },
+    });
+    if (!created.ok) return { error: created.error };
+
+    // Creation is revision 0; changing a real cell makes the materialized course revision 1.
+    const edited = api.levels.patch(
+      id,
+      [{ x: 1, y: 0, tile: "floor" }],
+      { expectedRevision: created.revision },
+    );
+    if (!edited.ok) return { error: edited.error };
+
+    const played = api.levels.play(id);
+    return {
+      revision: edited.revision,
+      played: played.ok,
+      error: played.ok ? null : played.error,
+    };
+  }, VERSIONED_GRID);
+  check(results, "an editable grid is patched to revision 1 and played through the product",
+    grid.revision === 1 && grid.played === true, JSON.stringify(grid));
+
+  await player.page.waitForFunction((id) =>
+    window.__GRAPHYSX__.state()?.world.id === `ballz-level-${id}`
+    && window.__GRAPHYSX__.rules.status()?.phase === "running"
+    && Boolean(document.querySelector(".gx-bz-hud")),
+  VERSIONED_GRID);
+
+  // Pausing cancels the presentation countdown on its next 800 ms tick. Waiting for that tick
+  // prevents its later GO reset from racing this deterministic finish.
+  await player.page.evaluate(() => window.__GRAPHYSX__.pause(true));
+  await sleep(900);
+  // Let the ordinary 200 ms play-layer poll observe two increasing simulation times. That
+  // produces a structurally valid personal ghost; finishing in one synchronous evaluate
+  // would give the store a one-sample trace and correctly reject the entire result.
+  await player.page.evaluate(() => window.__GRAPHYSX__.step(0.5));
+  await sleep(250);
+  await player.page.evaluate(() => window.__GRAPHYSX__.step(0.5));
+  await sleep(250);
+  await player.page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const gate = api.query({ ids: ["ballz-finish-gate"] })[0];
+    if (!gate) throw new Error("the versioned grid has no finish gate");
+    const moved = api.update("ballz-ball", { transform: { position: [...gate.position] } });
+    if (!moved.ok) throw new Error(moved.error ?? "could not move the ball to the finish");
+    for (let index = 0; index < 30; index += 1) api.step(1 / 60);
+  });
+  await player.page.waitForFunction(() => window.__GRAPHYSX__.rules.status()?.phase === "complete");
+
+  const readGridBoard = async (version) => {
+    const query = new URLSearchParams({ courseVersion: version, rulesVersion: "v1" });
+    const response = await fetch(`${store.url}/results/${VERSIONED_GRID}/leaderboard?${query}`);
+    return response.json();
+  };
+  const levelVersion = `level:${VERSIONED_GRID}@1`;
+  let revisionBoard = { entries: [] };
+  let codeBoard = { entries: [] };
+  const gridBoardDeadline = Date.now() + SMOKE_TIMEOUT;
+  // The product submits from the 200 ms play-layer poll and intentionally does not await it.
+  // Poll the authority rather than coupling this version check to the panel's paint timing.
+  while (Date.now() < gridBoardDeadline) {
+    [revisionBoard, codeBoard] = await Promise.all([
+      readGridBoard(levelVersion),
+      readGridBoard(`code:${VERSIONED_GRID}`),
+    ]);
+    if (revisionBoard.entries.some((entry) => entry.actorId === "ada")) break;
+    await sleep(200);
+  }
+  check(results, "the editable grid records Ada on its revision-1 board",
+    revisionBoard.courseVersion === levelVersion
+    && revisionBoard.entries.some((entry) => entry.actorId === "ada"),
+    JSON.stringify(revisionBoard));
+  check(results, "the editable grid does not fall back to the code-version board",
+    codeBoard.total === 0 && codeBoard.entries.length === 0,
+    JSON.stringify(codeBoard));
 
   check(results, "no console errors, page errors or failed requests in any browser",
     problems.length === 0, problems.slice(0, 4).join(" | "));

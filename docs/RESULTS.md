@@ -34,7 +34,9 @@ version of a course does not beat a board it was never racing.
 Both are **opaque strings supplied by the client**, because the two kinds of course version
 themselves differently and it is not this server's place to invent one:
 
-- Grid levels have `AgentLevelState.revision` → `level:<id>@<revision>`
+- Grid levels have `AgentLevelState.revision` → `level:<id>@<revision>`. The play layer
+  snapshots that durable library revision when the course is materialized, so an edit made
+  during a run cannot relabel the finished run onto a newer board.
 - Scene-store courses have the record revision → `scene:<name>@<revision>`
 - Code-composed archive courses have **neither**, and their only honest version signal is
   their id (e.g. `archive-level3-v2`). Plumbing a real version through those is open work.
@@ -56,6 +58,10 @@ One rule is **stricter** than the client: sample times must strictly ascend. The
 checked, because its playback binary-searches a trace its own recorder produced in order. A
 trace arriving over HTTP has no such guarantee, and an unsorted one produces silently wrong
 interpolation.
+
+The recorder preserves that contract at the finish edge: if the HUD poll and forced finish
+observe the same elapsed time, the finish position replaces the last sample instead of adding
+a duplicate timestamp that would invalidate an otherwise recordable result.
 
 Retention is bounded: the top 50 results per board, ghosts for the top 10.
 
@@ -99,7 +105,7 @@ while recording and personal-best storage stay entirely your own.
 Both `window.__GRAPHYSX_RESULTS__` and `window.__GRAPHYSX_RESULTS_UI__` exist only when a
 store answered; their absence is the storeless contract, and the smoke asserts it.
 
-Proof: `scripts/smoke-results-browser.mjs` (26 assertions). It asserts the storeless case
+Proof: `scripts/smoke-results-browser.mjs` (30 assertions). It asserts the storeless case
 first, because that is the one that regresses, and it reads the *painted* colour of the
 rendered names and times rather than their aria-labels — the first version of the panel
 inherited black onto a dark surface and 23 green assertions did not notice.

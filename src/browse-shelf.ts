@@ -34,6 +34,8 @@ export type ComposedSceneEntry = {
 
 export type BrowseShelfOptions = {
   api: GraphysXAgentWorldApi;
+  /** Re-checked at every open boundary so a live-session attach cannot replace its world. */
+  canNavigate?: () => boolean;
   /** One editorial spotlight above the scrolling gallery; scene data remains unchanged. */
   featuredStarter?: { id: string; eyebrow: string; badges: readonly string[] };
   /** Called after a starter is loaded, so the caller can take the showroom down and open the editor. */
@@ -45,7 +47,7 @@ export type BrowseShelfOptions = {
 };
 
 export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOptions): () => void {
-  const { api, featuredStarter, onOpen, composed = [], onClose } = options;
+  const { api, canNavigate = () => true, featuredStarter, onOpen, composed = [], onClose } = options;
   injectStyleOnce();
 
   const overlay = document.createElement("div");
@@ -53,16 +55,21 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
 
   const card = document.createElement("div");
   card.className = "gx-browse-card";
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-modal", "true");
+  card.setAttribute("aria-labelledby", "gx-browse-shelf-title");
 
   const head = document.createElement("div");
   head.className = "gx-browse-head";
   const title = document.createElement("h2");
+  title.id = "gx-browse-shelf-title";
   title.textContent = "Browse Scenes";
   const close = document.createElement("button");
   close.type = "button";
   close.className = "gx-browse-close";
   close.textContent = "✕";
   close.title = "Back to the showroom";
+  close.setAttribute("aria-label", "Close scene browser and return to AgentX Center");
   head.append(title, close);
 
   const blurb = document.createElement("p");
@@ -71,6 +78,15 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
 
   const list = document.createElement("div");
   list.className = "gx-browse-list";
+
+  const navigationBlocked = "Leave the live session before changing worlds.";
+  let disposed = false;
+  const mayNavigate = (feedback?: HTMLElement, row?: HTMLElement): boolean => {
+    if (!disposed && canNavigate()) return true;
+    if (feedback) feedback.textContent = navigationBlocked;
+    row?.classList.add("gx-browse-row--error");
+    return false;
+  };
 
   const starters = api.starters();
   const featured = featuredStarter
@@ -116,6 +132,7 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     copy.append(eyebrow, name, badges, summary, meta);
     featuredRow.append(visual, copy);
     featuredRow.addEventListener("click", () => {
+      if (!mayNavigate(summary, featuredRow ?? undefined)) return;
       const result = api.loadStarter(featured.id);
       if (!result.ok) {
         summary.textContent = result.error ?? "Could not open that scene";
@@ -159,6 +176,7 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     copy.append(name, summary, meta);
     row.append(visual, copy);
     row.addEventListener("click", () => {
+      if (!mayNavigate(summary, row)) return;
       dispose();
       void scene.open();
     });
@@ -200,6 +218,7 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     copy.append(name, summary, meta);
     row.append(visual, copy);
     row.addEventListener("click", () => {
+      if (!mayNavigate(summary, row)) return;
       const result = api.loadStarter(starter.id);
       if (!result.ok) {
         summary.textContent = result.error ?? "Could not open that scene";
@@ -219,12 +238,37 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
   container.append(overlay);
 
   const dispose = (): void => {
+    if (disposed) return;
+    disposed = true;
     overlay.remove();
   };
-  close.addEventListener("click", () => {
+  const closeShelf = (): void => {
     dispose();
     onClose?.();
+  };
+  close.addEventListener("click", closeShelf);
+  overlay.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeShelf();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...card.querySelectorAll<HTMLElement>(
+      'button:not(:disabled):not([hidden]),input:not(:disabled):not([hidden]),select:not(:disabled):not([hidden]),[tabindex]:not([tabindex="-1"]):not([hidden])',
+    )].filter((element) => element.getClientRects().length > 0);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   });
+  queueMicrotask(() => card.querySelector<HTMLInputElement>(".gx-shelf-search")?.focus());
   return dispose;
 }
 
@@ -243,7 +287,7 @@ ${SHELF_THUMBNAIL_CSS}
 ${SHELF_PERSONALIZATION_CSS}
 .gx-browse{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
   background:var(--gx-scrim);font-family:var(--gx-font);padding:24px}
-.gx-browse-card{width:min(900px,100%);max-height:86vh;display:flex;flex-direction:column;gap:12px;
+.gx-browse-card{box-sizing:border-box;width:min(900px,100%);max-height:86vh;display:flex;flex-direction:column;gap:12px;
   background:rgba(9,22,31,.96);border:1px solid rgba(79,208,230,.34);border-radius:14px;
   padding:20px 22px;box-shadow:0 18px 60px rgba(0,0,0,.5)}
 .gx-browse-head{display:flex;align-items:center;gap:12px}
@@ -251,9 +295,12 @@ ${SHELF_PERSONALIZATION_CSS}
 .gx-browse-close{background:transparent;border:1px solid rgba(120,240,208,.3);border-radius:6px;
   color:var(--gx-ink-soft);cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px}
 .gx-browse-close:hover{border-color:var(--gx-accent);color:var(--gx-ink)}
+.gx-browse-close:focus-visible{outline:2px solid var(--gx-accent);outline-offset:2px}
 .gx-browse-blurb{margin:0;color:var(--gx-ink-faint);font-size:12.5px;line-height:1.5}
 .gx-browse-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;overflow-y:auto;
   padding:1px 5px 1px 1px}
+.gx-browse-list{scrollbar-width:thin;scrollbar-color:rgba(79,208,230,.52) transparent}
+.gx-browse-list::-webkit-scrollbar{width:7px}.gx-browse-list::-webkit-scrollbar-thumb{border-radius:99px;background:rgba(79,208,230,.42)}
 .gx-browse-row{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
   background:rgba(16,38,50,.8);border:1px solid rgba(79,208,230,.2);border-radius:10px;
   padding:7px;cursor:pointer;color:inherit;min-width:0}
