@@ -1,3 +1,6 @@
+import { request as requestHttp } from "node:http";
+import { request as requestHttps } from "node:https";
+
 // Shared test client for the live-session smokes: an HTTP client plus a real SSE reader.
 //
 // Node-level rather than browser-level on purpose. The protocol — credentials, roles,
@@ -26,14 +29,92 @@ export function report(results, label) {
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** One-shot Node HTTP request with no shared Undici pool. */
+export function requestText(url, {
+  method = "GET",
+  headers = {},
+  body,
+  timeoutMs = 12_000,
+} = {}) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(url);
+    let settled = false;
+    let deadline = null;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      if (deadline) clearTimeout(deadline);
+      callback(value);
+    };
+    const fail = (error) => finish(reject, error instanceof Error ? error : new Error(String(error)));
+    const request = (target.protocol === "https:" ? requestHttps : requestHttp)(target, {
+      method,
+      headers,
+      agent: false,
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      response.once("aborted", () => fail(new Error(`Response aborted for ${method} ${target.pathname}`)));
+      response.once("error", fail);
+      response.on("end", () => {
+        const responseHeaders = new Headers();
+        for (const [name, value] of Object.entries(response.headers)) {
+          if (Array.isArray(value)) value.forEach((entry) => responseHeaders.append(name, entry));
+          else if (value !== undefined) responseHeaders.set(name, value);
+        }
+        const status = response.statusCode ?? 0;
+        finish(resolve, {
+          status,
+          ok: status >= 200 && status < 300,
+          headers: responseHeaders,
+          text: Buffer.concat(chunks).toString("utf8"),
+        });
+      });
+    });
+    request.once("error", fail);
+    deadline = setTimeout(() => {
+      const error = new Error(`Request timed out after ${timeoutMs} ms for ${method} ${target.pathname}`);
+      request.destroy(error);
+      fail(error);
+    }, timeoutMs);
+    request.end(body);
+  });
+}
+
+/**
+ * Windows can briefly refuse a newly assigned loopback port after a long browser run even
+ * though `listen()` has completed. Prove the store is reachable before a smoke starts making
+ * assertions so transport churn is not mistaken for a product/auth failure.
+ */
+export async function waitForStore(baseUrl, { timeoutMs = 12_000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let attempt = 0;
+  let lastError = null;
+  while (Date.now() <= deadline) {
+    try {
+      const response = await requestText(`${baseUrl}/health`, { timeoutMs: Math.min(2_000, timeoutMs) });
+      if (response.status === 200) return;
+      lastError = new Error(`Store readiness returned ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    attempt += 1;
+    await sleep(Math.min(1_000, 50 * 2 ** attempt));
+  }
+  throw lastError ?? new Error(`Store readiness failed for ${baseUrl}`);
+}
+
 /** One actor's view of a session: its credential, its stream, and what it has received. */
 export function createActor(baseUrl, { credential = null, storeToken = null, origin = null } = {}) {
   let stream = null;
-  const received = { ops: [], presence: [], members: [], hello: null, closed: null };
+  const received = { ops: [], presence: [], members: [], hello: null, closed: null, revoked: null };
   let lastSeq = 0;
 
   const headers = (extra = {}) => {
-    const out = { "content-type": "application/json", ...extra };
+    // These Node-only actors frequently pause behind real browser/WebGL work for longer than
+    // the store's keep-alive window. A fresh loopback connection avoids Undici selecting a
+    // pooled socket the server has already retired; production browser clients are untouched.
+    const out = { "content-type": "application/json", connection: "close", ...extra };
     if (credential) out["x-graphysx-session"] = credential;
     if (storeToken) out.authorization = `Bearer ${storeToken}`;
     if (origin) out.origin = origin;
@@ -41,13 +122,29 @@ export function createActor(baseUrl, { credential = null, storeToken = null, ori
   };
 
   const call = async (method, path, body, { rawBody = null, extraHeaders = {} } = {}) => {
-    const response = await fetch(`${baseUrl}${path}`, {
-      method,
-      cache: "no-store",
-      headers: headers(extraHeaders),
-      ...(rawBody !== null ? { body: rawBody } : body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
-    const text = await response.text();
+    const retryableTransport = method === "GET"
+      || /\/stream-ticket$/.test(path)
+      || (/\/ops$/.test(path) && typeof body?.opId === "string");
+    let response;
+    let lastError = null;
+    for (let attempt = 0; attempt < (retryableTransport ? 3 : 1); attempt += 1) {
+      try {
+        response = await requestText(`${baseUrl}${path}`, {
+          method,
+          headers: headers(extraHeaders),
+          body: rawBody !== null ? rawBody : body !== undefined ? JSON.stringify(body) : undefined,
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!retryableTransport || attempt === 2) break;
+        await sleep(100 * (attempt + 1));
+      }
+    }
+    if (!response) {
+      throw new Error(`Live-session harness ${method} ${path} transport failed`, { cause: lastError });
+    }
+    const text = response.text;
     let payload = null;
     try {
       payload = text ? JSON.parse(text) : null;
@@ -86,7 +183,7 @@ export function createActor(baseUrl, { credential = null, storeToken = null, ori
       const controller = new AbortController();
       const response = await fetch(
         `${baseUrl}/sessions/${sessionId}/stream?ticket=${encodeURIComponent(ticket)}&since=${since}`,
-        { headers: origin ? { origin } : {}, signal: controller.signal },
+        { headers: { connection: "close", ...(origin ? { origin } : {}) }, signal: controller.signal },
       );
       if (!response.ok) {
         controller.abort();
@@ -119,6 +216,7 @@ export function createActor(baseUrl, { credential = null, storeToken = null, ori
               else if (event === "presence") received.presence.push(parsed);
               else if (event === "member") received.members.push(parsed);
               else if (event === "closed") received.closed = parsed;
+              else if (event === "revoked") received.revoked = parsed;
             }
           }
         } catch {

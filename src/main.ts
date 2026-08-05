@@ -28,6 +28,7 @@ import {
 } from "./archive-playgrounds";
 import { composeSkyboxSpiral, frameSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from "./archive-skybox-spiral";
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { NestorTopic } from "./showroom-nestor";
 import { archiveReferenceMs } from "./archive-race-records";
 import { getArchiveCupRuntimeState, type ArchiveCupCourse } from "./archive-cup";
@@ -140,6 +141,7 @@ if (mode === "previews" && import.meta.env.DEV) {
     let interaction: ReturnType<typeof mountShowroomInteraction> | null = null;
     let welcome: ReturnType<typeof mountWelcome> | null = null;
     let nestor: ReturnType<typeof createNestorPresenter> | null = null;
+    let livePresence: LiveAgentPresenceController | null = null;
     // The showroom's terrain, water and key light are host-mounted objects rather than scene
     // entities, so loading a stored scene replaces the entities and leaves this behind —
     // a ported village would otherwise sit inside the showroom's hills. Kept so opening a
@@ -226,6 +228,10 @@ if (mode === "previews" && import.meta.env.DEV) {
         variant,
       );
       mountedWelcomeVariant = variant;
+      if (variant === "live-observer") {
+        welcome.observeLiveActivity(livePresence?.state().activity ?? null);
+        return;
+      }
       if (variant !== "agentx") return;
       const current = nestor?.state().presentation;
       // Returning from the editor should keep the last demonstration's explanation beside
@@ -713,6 +719,7 @@ if (mode === "previews" && import.meta.env.DEV) {
         personalGhost: getPersonalGhostState(),
         nestor: host.api.query({ ids: ["showroom-nestor"] }).length > 0
           ? nestor?.state() ?? null : null,
+        livePresence: livePresence?.state() ?? null,
         atmosphere: host.dayNightState,
         players: host.api.query({ tag: "player" }).map((entity) => ({
           id: entity.id,
@@ -920,19 +927,30 @@ if (mode === "previews" && import.meta.env.DEV) {
         // Live sessions: identity, roles, presence and incremental operations on top of the
         // same store. Loaded only when one was asked for — the panel is meaningless without
         // a session, and the production deploy has no store behind it at all.
-        const [{ createLiveSessionClient, consumeInviteFromLocation }, { mountLiveSessionPanel }] = await Promise.all([
+        const [
+          { createLiveSessionClient, consumeInviteFromLocation },
+          { mountLiveSessionPanel },
+          { createLiveAgentPresenceController },
+        ] = await Promise.all([
           import("./live-session-client"),
           import("./live-session-panel"),
+          import("./live-agent-presence"),
         ]);
         const invitation = consumeInviteFromLocation(window.location, window.history);
         const joiningSession = invitation?.sessionId ?? sessionParam;
         if (joiningSession) {
+          const reflectLivePresence = (state: LiveAgentPresenceState): void => {
+            if (mountedWelcomeVariant === "live-observer") welcome?.observeLiveActivity(state.activity);
+          };
+          livePresence = createLiveAgentPresenceController({ runtime: host.world, onState: reflectLivePresence });
           const liveClient = createLiveSessionClient({
             baseUrl: storeUrl,
             api: host.api,
             events: {
               onStatus: (status) => {
                 panel?.setStatus(status);
+                livePresence?.setSession(status.sessionId);
+                livePresence?.setConnection(status.connection);
                 const attached = status.sessionId !== null;
                 browser.setEnabled(!attached);
                 if (attached) {
@@ -952,7 +970,11 @@ if (mode === "previews" && import.meta.env.DEV) {
                   queueMicrotask(syncFrontDoor);
                 }
               },
-              onOperation: (operation) => panel?.recordOperation(operation),
+              onMembers: (members) => livePresence?.syncMembers(members),
+              onOperation: (operation) => {
+                panel?.recordOperation(operation);
+                livePresence?.recordOperation(operation);
+              },
               onResync: (revision) => panel?.announce(`Resynced to revision ${revision}`),
               onError: (error) => console.warn(`[graphysx] live session: ${error.message}`),
             },
@@ -960,7 +982,11 @@ if (mode === "previews" && import.meta.env.DEV) {
           nestorBlockedByLiveSession = () => liveClient.status.sessionId !== null;
           reassertLiveAuthority = () => liveClient.resync();
           const panel = mountLiveSessionPanel(root, liveClient);
-          Object.assign(window, { __GRAPHYSX_LIVE_SESSION__: liveClient, __GRAPHYSX_LIVE_PANEL__: panel });
+          Object.assign(window, {
+            __GRAPHYSX_LIVE_SESSION__: liveClient,
+            __GRAPHYSX_LIVE_PANEL__: panel,
+            __GRAPHYSX_LIVE_PRESENCE__: livePresence,
+          });
           const actorId = params.get("actor") ?? randomPlayerName();
           try {
             if (invitation) {

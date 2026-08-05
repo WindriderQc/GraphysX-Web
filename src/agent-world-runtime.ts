@@ -1461,6 +1461,15 @@ export class AgentWorldRuntime {
   private readonly environmentRoot = new Group();
   private readonly physicsWorld: PhysicsEngine;
   private readonly entities = new Map<string, RuntimeEntity>();
+  /**
+   * Host-owned, non-authoring entity sets such as live-session presence avatars.
+   *
+   * These are ordinary runtime entities (and therefore render/update in the one shared
+   * loop), but reconciling them must not advance the authored revision or enter undo/redo
+   * snapshots. `ephemeral` alone is intentionally not enough for that distinction: a ball
+   * thrown during a visit is ephemeral too, and ordinary undo must preserve that live state.
+   */
+  private readonly transientEntityScopes = new Map<string, Set<string>>();
   private readonly joints = new Map<string, RuntimeJoint>();
   private readonly savedWorlds = new Map<string, AgentWorldDefinition>();
   private readonly history: AgentWorldDefinition[] = [];
@@ -1636,7 +1645,7 @@ export class AgentWorldRuntime {
   }
 
   create(definition: AgentWorldDefinition): AgentWorldResult<AgentWorldState> {
-    const before = this.exportDefinition();
+    const before = this.exportHistoryDefinition();
     const beforeSelection = [...this.selectedIds];
     const beforeElapsedSeconds = this.elapsedSeconds;
     try {
@@ -1670,6 +1679,98 @@ export class AgentWorldRuntime {
     return result.ok
       ? this.success(this.getEntityState(String(result.value?.[0])))
       : this.failure(result.error ?? "Spawn failed");
+  }
+
+  /**
+   * Replaces one host-owned set of ephemeral entities without creating authored history.
+   *
+   * Live membership and presence are transport state, not scene edits. They still use the
+   * exact same entity resolver, scene graph, materials, behaviors, disposal, and frame loop
+   * as authored entities; this method changes only their revision/history semantics. A
+   * stable scope lets the owner reconcile a complete set after reconnect or `world.loaded`.
+   */
+  reconcileTransientEntities(
+    scope: string,
+    definitions: AgentWorldEntityDefinition[],
+  ): AgentWorldResult<AgentWorldEntityState[]> {
+    const safeScope = scope.trim();
+    if (!safeScope || safeScope.length > 80) return this.failure("A transient entity scope must be 1 to 80 characters");
+    if (!Array.isArray(definitions)) return this.failure("Transient entities must be an array");
+
+    const previousIds = new Set(this.transientEntityScopes.get(safeScope) ?? []);
+    const previousDefinitions = [...previousIds]
+      .map((id) => this.entities.get(id)?.definition)
+      .filter((definition): definition is ResolvedEntity => Boolean(definition))
+      .map((definition) => serializeEntity(definition));
+    const desiredIds = new Set<string>();
+
+    try {
+      for (const definition of definitions) {
+        const id = definition?.id?.trim();
+        if (!id) throw new Error("Transient entities require stable ids");
+        validateStableId(id, "transient entity id");
+        if (desiredIds.has(id)) throw new Error(`Duplicate transient entity id: ${id}`);
+        if (definition.ephemeral !== true) throw new Error(`Transient entity must set ephemeral: true (${id})`);
+        const existing = this.entities.get(id);
+        if (existing && !previousIds.has(id)) throw new Error(`Transient entity id collides with the active world: ${id}`);
+        desiredIds.add(id);
+      }
+      this.assertNoAuthoredReferencesToTransientIds(desiredIds);
+
+      this.clearTransientScopeInternal(safeScope);
+      const spawned = this.spawnTransientDefinitions(definitions);
+      this.transientEntityScopes.set(safeScope, new Set(spawned));
+      return this.success(spawned.map((id) => this.getEntityState(id)));
+    } catch (error) {
+      this.clearTransientScopeInternal(safeScope);
+      // Reconciliation is atomic for its own scope. The surrounding authored world is never
+      // reloaded, so an invalid presence payload cannot disturb collaborators' scene state.
+      try {
+        const restored = this.spawnTransientDefinitions(previousDefinitions);
+        if (restored.length > 0) this.transientEntityScopes.set(safeScope, new Set(restored));
+      } catch {
+        // The authored world may have been replaced between reconciliations. In that case the
+        // previous transient parent no longer exists; leaving the scope empty is the only safe
+        // answer, and the owner will reconcile again from the latest membership snapshot.
+      }
+      return this.failure(error);
+    }
+  }
+
+  /** Updates one entity owned by a transient scope without recreating its GPU resources. */
+  updateTransientEntity(
+    scope: string,
+    id: string,
+    patch: AgentWorldEntityPatch,
+  ): AgentWorldResult<AgentWorldEntityState> {
+    const safeScope = scope.trim();
+    const scopedIds = this.transientEntityScopes.get(safeScope);
+    if (!safeScope || !scopedIds?.has(id) || !this.entities.has(id)) {
+      return this.failure(`Transient entity is not owned by scope ${safeScope || "(empty)"}: ${id}`);
+    }
+    if (patch.ephemeral === false) return this.failure(`Transient entity must remain ephemeral: ${id}`);
+    if (patch.parentId) {
+      const owner = this.transientScopeFor(patch.parentId);
+      if (owner && owner !== safeScope) {
+        return this.failure(`Transient entity cannot move beneath another scope: ${patch.parentId}`);
+      }
+    }
+    try {
+      this.updateInternal(id, { ...deepClone(patch), ephemeral: true });
+      return this.success(this.getEntityState(id));
+    } catch (error) {
+      return this.failure(error);
+    }
+  }
+
+  /** Clears one host-owned transient set without touching revision, history, or commits. */
+  clearTransientEntities(scope: string): AgentWorldResult<string[]> {
+    const safeScope = scope.trim();
+    if (!safeScope) return this.failure("A transient entity scope is required");
+    const removed = [...(this.transientEntityScopes.get(safeScope) ?? [])]
+      .filter((id) => this.entities.has(id));
+    this.clearTransientScopeInternal(safeScope);
+    return this.success(removed);
   }
 
   updateEntity(id: string, patch: AgentWorldEntityPatch): AgentWorldResult<AgentWorldEntityState> {
@@ -1768,7 +1869,16 @@ export class AgentWorldRuntime {
     if (!Array.isArray(commands) || commands.length === 0) {
       return this.failure("A transaction requires at least one command");
     }
-    const before = this.exportDefinition();
+    try {
+      // Reject host-transient targets before taking a rollback snapshot. Besides being
+      // safer, this avoids reloading the whole authored world for a command that was never
+      // allowed to touch it in the first place.
+      for (const command of commands) this.assertCommandTransientBoundary(command);
+    } catch (error) {
+      this.recordEvent("transaction.rejected", error instanceof Error ? error.message : String(error));
+      return this.failure(error);
+    }
+    const before = this.exportHistoryDefinition();
     const beforeSelection = [...this.selectedIds];
     const outputs: unknown[] = [];
     try {
@@ -1837,7 +1947,7 @@ export class AgentWorldRuntime {
   undo(): AgentWorldResult<AgentWorldState> {
     const previous = this.history.pop();
     if (!previous) return this.failure("There is no transaction to undo");
-    this.redoHistory.push(this.exportDefinition());
+    this.redoHistory.push(this.exportHistoryDefinition());
     if (this.redoHistory.length > 40) this.redoHistory.shift();
     this.loadDefinition(previous);
     this.revision += 1;
@@ -1848,7 +1958,7 @@ export class AgentWorldRuntime {
   redo(): AgentWorldResult<AgentWorldState> {
     const next = this.redoHistory.pop();
     if (!next) return this.failure("There is no transaction to redo");
-    this.history.push(this.exportDefinition());
+    this.history.push(this.exportHistoryDefinition());
     if (this.history.length > 40) this.history.shift();
     this.loadDefinition(next);
     this.revision += 1;
@@ -1857,7 +1967,8 @@ export class AgentWorldRuntime {
   }
 
   select(ids: string[]): string[] {
-    this.selectedIds = uniqueStrings(Array.isArray(ids) ? ids : []).filter((id) => this.entities.has(id));
+    this.selectedIds = uniqueStrings(Array.isArray(ids) ? ids : [])
+      .filter((id) => this.entities.has(id) && !this.isScopedTransientEntity(id));
     return [...this.selectedIds];
   }
 
@@ -1901,20 +2012,56 @@ export class AgentWorldRuntime {
   }
 
   /**
-   * Full-fidelity export, ephemeral entities included. This is the *runtime* snapshot:
-   * `transaction()` and `undo()` depend on it round-tripping everything, otherwise undoing
-   * an edit would quietly delete every ball anyone had thrown.
+   * Full-fidelity authored/runtime export, including ordinary ephemeral play state such as
+   * thrown balls. Host-owned transient scopes are deliberately absent: they belong to a live
+   * transport owner and cannot be reloaded without that ownership becoming orphaned.
    */
   exportDefinition(): AgentWorldDefinition {
+    const dropped = this.scopedTransientEntityIds();
     return {
       schema: GRAPHYSX_AGENT_WORLD_SCHEMA,
       id: this.definition.id,
       label: this.definition.label,
       environment: deepClone(this.environment),
-      entities: [...this.entities.values()].map(({ definition }) => serializeEntity(definition)),
-      ...(this.joints.size > 0 ? { joints: [...this.joints.values()].map(({ definition }) => serializeJoint(definition)) } : {}),
+      entities: [...this.entities.values()]
+        .filter(({ definition }) => !dropped.has(definition.id))
+        .map(({ definition }) => serializeEntity(definition)),
+      ...(this.joints.size > 0 ? {
+        joints: [...this.joints.values()]
+          .filter(({ definition }) => !dropped.has(definition.bodyA) && !dropped.has(definition.bodyB))
+          .map(({ definition }) => serializeJoint(definition)),
+      } : {}),
       ...(this.rules ? { rules: deepClone(this.rules) } : {})
     };
+  }
+
+  /**
+   * Undo/redo and transaction rollback snapshot authored plus ordinary live state, but not
+   * host-owned presence visuals. Otherwise leaving a session and then pressing Undo could
+   * resurrect an avatar captured by an earlier remote operation.
+   */
+  private exportHistoryDefinition(): AgentWorldDefinition {
+    return this.exportDefinition();
+  }
+
+  private transientScopeFor(id: string): string | null {
+    for (const [scope, ids] of this.transientEntityScopes) if (ids.has(id)) return scope;
+    return null;
+  }
+
+  private isScopedTransientEntity(id: string): boolean {
+    return this.transientScopeFor(id) !== null;
+  }
+
+  private scopedTransientEntityIds(): Set<string> {
+    const dropped = new Set<string>();
+    for (const ids of this.transientEntityScopes.values()) {
+      for (const id of ids) {
+        dropped.add(id);
+        if (this.entities.has(id)) for (const descendant of this.descendantIds(id)) dropped.add(descendant);
+      }
+    }
+    return dropped;
   }
 
   /**
@@ -2057,25 +2204,148 @@ export class AgentWorldRuntime {
     this.worldRoot.clear();
     this.environmentRoot.clear();
     this.entities.clear();
+    this.transientEntityScopes.clear();
     this.joints.clear();
   }
 
   private applyCommand(command: AgentWorldCommand): unknown {
     if (!command || typeof command !== "object" || !("op" in command)) throw new Error("Invalid world command");
     switch (command.op) {
-      case "spawn": return this.spawnInternal(command.entity);
+      case "spawn":
+        this.assertEntityTransientBoundary(command.entity);
+        return this.spawnInternal(command.entity);
       case "spawn-prefab": return this.spawnPrefabInternal(command.prefabId, command.options);
-      case "update": this.updateInternal(command.id, command.patch); return command.id;
-      case "remove": this.removeInternal(command.id); return command.id;
-      case "add-joint": return this.addJointInternal(command.joint);
-      case "update-joint": this.updateJointInternal(command.id, command.patch); return command.id;
+      case "update":
+        this.assertNotScopedTransient(command.id, "update");
+        this.assertPatchTransientBoundary(command.patch);
+        this.updateInternal(command.id, command.patch);
+        return command.id;
+      case "remove":
+        this.assertNotScopedTransient(command.id, "remove");
+        this.removeInternal(command.id);
+        return command.id;
+      case "add-joint":
+        this.assertNotScopedTransient(command.joint.bodyA, "attach a joint to");
+        this.assertNotScopedTransient(command.joint.bodyB, "attach a joint to");
+        return this.addJointInternal(command.joint);
+      case "update-joint":
+        if (command.patch.bodyA) this.assertNotScopedTransient(command.patch.bodyA, "attach a joint to");
+        if (command.patch.bodyB) this.assertNotScopedTransient(command.patch.bodyB, "attach a joint to");
+        this.updateJointInternal(command.id, command.patch);
+        return command.id;
       case "remove-joint": this.removeJointInternal(command.id); return command.id;
-      case "attach-behavior": return this.attachBehaviorInternal(command.id, command.behavior);
-      case "detach-behavior": this.detachBehaviorInternal(command.id, command.behaviorId); return command.behaviorId;
-      case "interact": return this.interactInternal(command.id, command.interactionId);
-      case "steer": return this.steerInternal(command.id, command.input);
+      case "attach-behavior":
+        this.assertNotScopedTransient(command.id, "attach authored behavior to");
+        this.assertBehaviorTransientBoundary(command.behavior);
+        return this.attachBehaviorInternal(command.id, command.behavior);
+      case "detach-behavior":
+        this.assertNotScopedTransient(command.id, "detach authored behavior from");
+        this.detachBehaviorInternal(command.id, command.behaviorId);
+        return command.behaviorId;
+      case "interact":
+        this.assertNotScopedTransient(command.id, "interact with");
+        return this.interactInternal(command.id, command.interactionId);
+      case "steer":
+        this.assertNotScopedTransient(command.id, "steer");
+        return this.steerInternal(command.id, command.input);
       case "set-environment": this.setEnvironmentInternal(command.environment); return this.environment;
-      case "select": this.selectedIds = command.ids.filter((id) => this.entities.has(id)); return [...this.selectedIds];
+      case "select":
+        this.selectedIds = command.ids.filter((id) => this.entities.has(id) && !this.isScopedTransientEntity(id));
+        return [...this.selectedIds];
+    }
+  }
+
+  private assertNotScopedTransient(id: string, action: string): void {
+    if (this.isScopedTransientEntity(id)) {
+      throw new Error(`Authored commands cannot ${action} host-owned transient entity: ${id}`);
+    }
+  }
+
+  private assertBehaviorTransientBoundary(behavior: AgentWorldBehavior): void {
+    if (behavior.type === "look-at") {
+      this.assertNotScopedTransient(behavior.targetId, "reference as a look-at target");
+    }
+    if (behavior.type === "follow-spline") {
+      this.assertNotScopedTransient(behavior.splineId, "reference as a spline");
+    }
+  }
+
+  private assertInteractionTransientBoundary(interaction: AgentWorldInteraction): void {
+    for (const targetId of interaction.targetIds ?? []) {
+      this.assertNotScopedTransient(targetId, "reference as an interaction target");
+    }
+  }
+
+  private assertEntityTransientBoundary(entity: AgentWorldEntityDefinition): void {
+    if (entity.parentId) this.assertNotScopedTransient(entity.parentId, "parent authored content beneath");
+    if (entity.steering?.arrowId) this.assertNotScopedTransient(entity.steering.arrowId, "reference as a steering arrow");
+    for (const behavior of entity.behaviors ?? []) this.assertBehaviorTransientBoundary(behavior);
+    for (const interaction of entity.interactions ?? []) this.assertInteractionTransientBoundary(interaction);
+  }
+
+  private assertPatchTransientBoundary(patch: AgentWorldEntityPatch): void {
+    if (patch.parentId) this.assertNotScopedTransient(patch.parentId, "parent authored content beneath");
+    if (patch.steering?.arrowId) this.assertNotScopedTransient(patch.steering.arrowId, "reference as a steering arrow");
+    for (const interaction of patch.interactions ?? []) this.assertInteractionTransientBoundary(interaction);
+  }
+
+  private assertNoAuthoredReferencesToTransientIds(transientIds: Set<string>): void {
+    for (const runtime of this.entities.values()) {
+      const definition = runtime.definition;
+      if (this.isScopedTransientEntity(definition.id)) continue;
+      if (definition.steering?.arrowId && transientIds.has(definition.steering.arrowId)) {
+        throw new Error(`Authored steering cannot reference host-owned transient entity: ${definition.steering.arrowId}`);
+      }
+      for (const behavior of definition.behaviors) {
+        if (behavior.type === "look-at" && transientIds.has(behavior.targetId)) {
+          throw new Error(`Authored look-at cannot reference host-owned transient entity: ${behavior.targetId}`);
+        }
+        if (behavior.type === "follow-spline" && transientIds.has(behavior.splineId)) {
+          throw new Error(`Authored behavior cannot reference host-owned transient entity: ${behavior.splineId}`);
+        }
+      }
+      for (const interaction of definition.interactions) {
+        for (const targetId of interaction.targetIds ?? []) {
+          if (transientIds.has(targetId)) {
+            throw new Error(`Authored interaction cannot reference host-owned transient entity: ${targetId}`);
+          }
+        }
+      }
+    }
+  }
+
+  private assertCommandTransientBoundary(command: AgentWorldCommand): void {
+    if (!command || typeof command !== "object" || !("op" in command)) return;
+    switch (command.op) {
+      case "spawn":
+        this.assertEntityTransientBoundary(command.entity);
+        break;
+      case "update":
+        this.assertNotScopedTransient(command.id, "update");
+        this.assertPatchTransientBoundary(command.patch);
+        break;
+      case "remove":
+        this.assertNotScopedTransient(command.id, "remove");
+        break;
+      case "add-joint":
+        this.assertNotScopedTransient(command.joint.bodyA, "attach a joint to");
+        this.assertNotScopedTransient(command.joint.bodyB, "attach a joint to");
+        break;
+      case "update-joint":
+        if (command.patch.bodyA) this.assertNotScopedTransient(command.patch.bodyA, "attach a joint to");
+        if (command.patch.bodyB) this.assertNotScopedTransient(command.patch.bodyB, "attach a joint to");
+        break;
+      case "attach-behavior":
+        this.assertNotScopedTransient(command.id, "attach behavior");
+        this.assertBehaviorTransientBoundary(command.behavior);
+        break;
+      case "detach-behavior":
+      case "interact":
+      case "steer":
+        this.assertNotScopedTransient(command.id, `${command.op.replaceAll("-", " ")}`);
+        break;
+      default:
+        break;
     }
   }
 
@@ -2326,6 +2596,10 @@ export class AgentWorldRuntime {
     disposeObjectTree(runtime.object);
     this.entities.delete(id);
     this.selectedIds = this.selectedIds.filter((selectedId) => selectedId !== id && !ids.includes(selectedId));
+    for (const [scope, scopedIds] of this.transientEntityScopes) {
+      for (const removedId of removedEntityIds) scopedIds.delete(removedId);
+      if (scopedIds.size === 0) this.transientEntityScopes.delete(scope);
+    }
     // Descendants go with the parent, so the event names all of them — a consumer that only
     // heard about the root would leave orphans on screen.
     this.emit("entity.removed", [id, ...ids], { rootId: id });
@@ -2361,6 +2635,9 @@ export class AgentWorldRuntime {
       : runtime.definition.interactions[0];
     if (!interaction) {
       throw new Error(interactionId ? `Unknown interaction on ${id}: ${interactionId}` : `Entity has no interactions: ${id}`);
+    }
+    for (const targetId of interaction.targetIds ?? []) {
+      this.assertNotScopedTransient(targetId, "target through an authored interaction");
     }
     validateInteraction(interaction, this.entities);
 
@@ -2475,7 +2752,11 @@ export class AgentWorldRuntime {
   }
 
   private setEnvironmentInternal(environment: AgentWorldDefinition["environment"]): void {
-    this.environment = resolveEnvironment(environment);
+    // `set-environment` is a top-level patch in the document command layer. Resolve that
+    // same merged value here: resolving the supplied fragment alone reset every omitted
+    // top-level field to a default and made an optimistic live runtime disagree with the
+    // authoritative document until its next snapshot.
+    this.environment = resolveEnvironment({ ...this.environment, ...environment });
     this.buildEnvironment();
     // The runtime owns the ground mesh and gravity — `buildEnvironment` just updated both.
     // But `background`, `fog` and `sky` are applied by the *host*, off the runtime's scene
@@ -2489,6 +2770,10 @@ export class AgentWorldRuntime {
 
   private loadDefinition(source: AgentWorldDefinition): void {
     validateWorldDefinition(source);
+    // A wholesale world replacement owns the graph. Host presence controllers keep their
+    // membership snapshot and reconcile after `world.loaded`; stale scope ownership must not
+    // claim ids in the incoming authored document.
+    this.transientEntityScopes.clear();
     for (const joint of this.joints.values()) this.releaseJointHandle(joint);
     this.joints.clear();
     for (const runtime of this.entities.values()) if (runtime.body) this.physicsWorld.removeBody(runtime.body);
@@ -2533,6 +2818,51 @@ export class AgentWorldRuntime {
     // have the runtime's own evaluator immediately read that event and idle the run it had
     // just started. Arming last puts the cursor past it.
     this.applyRules(source.rules ?? null);
+  }
+
+  /** Spawns a complete transient set in parent-safe order, returning every installed id. */
+  private spawnTransientDefinitions(definitions: AgentWorldEntityDefinition[]): string[] {
+    const pending = definitions.map((definition) => deepClone(definition));
+    const spawned: string[] = [];
+    try {
+      let previousPending = pending.length + 1;
+      while (pending.length > 0 && pending.length < previousPending) {
+        previousPending = pending.length;
+        for (let index = pending.length - 1; index >= 0; index -= 1) {
+          const definition = pending[index];
+          if (!definition.parentId || this.entities.has(definition.parentId)) {
+            spawned.push(this.spawnInternal(definition, true));
+            pending.splice(index, 1);
+          }
+        }
+      }
+      if (pending.length > 0) {
+        throw new Error(`Unresolved transient parent references: ${pending.map((entity) => entity.id ?? entity.label ?? entity.type).join(", ")}`);
+      }
+      for (const id of spawned) {
+        const runtime = this.entities.get(id);
+        if (!runtime) continue;
+        for (const behavior of runtime.definition.behaviors) validateBehavior(behavior, this.entities);
+        for (const interaction of runtime.definition.interactions) validateInteraction(interaction, this.entities);
+      }
+      return spawned;
+    } catch (error) {
+      for (const id of this.rootIdsWithin(new Set(spawned))) if (this.entities.has(id)) this.removeInternal(id);
+      throw error;
+    }
+  }
+
+  private clearTransientScopeInternal(scope: string): void {
+    const ids = new Set(this.transientEntityScopes.get(scope) ?? []);
+    this.transientEntityScopes.delete(scope);
+    for (const id of this.rootIdsWithin(ids)) if (this.entities.has(id)) this.removeInternal(id);
+  }
+
+  private rootIdsWithin(ids: Set<string>): string[] {
+    return [...ids].filter((id) => {
+      const parentId = this.entities.get(id)?.definition.parentId;
+      return !parentId || !ids.has(parentId);
+    });
   }
 
   /**

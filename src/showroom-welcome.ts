@@ -1,4 +1,5 @@
 import type { NestorPresentation, NestorTopic } from "./showroom-nestor";
+import type { LiveAgentActivity } from "./live-agent-presence";
 
 /**
  * The welcome overlay for the showroom front door.
@@ -15,6 +16,7 @@ export type ShowroomWelcomeVariant = "agentx" | "scene-resume" | "live-observer"
 
 export interface ShowroomWelcomeHandle {
   present: (presentation: NestorPresentation) => void;
+  observeLiveActivity: (activity: LiveAgentActivity | null) => void;
   reset: () => void;
   dispose: () => void;
 }
@@ -138,8 +140,40 @@ export function mountWelcome(
     overlay.querySelector(".gx-nestor-topics")?.remove();
   }
   const dispose = () => { overlay.remove(); style.remove(); };
+  const observeLiveActivity = (activity: LiveAgentActivity | null): void => {
+    if (variant !== "live-observer") return;
+    const eyebrow = overlay.querySelector<HTMLElement>("[data-nestor-eyebrow]");
+    const title = overlay.querySelector<HTMLElement>("[data-nestor-title]");
+    const briefing = overlay.querySelector<HTMLElement>("[data-nestor-briefing]");
+    const commit = overlay.querySelector<HTMLElement>("[data-nestor-commit]");
+    if (!activity) {
+      delete overlay.dataset.liveAgentActor;
+      delete overlay.dataset.liveAgentRevision;
+      if (eyebrow) eyebrow.textContent = "AgentX Center · live session attached";
+      if (title) title.textContent = "NESTOR IS OBSERVING.";
+      if (briefing) briefing.textContent = "This live session owns scene operations. Nestor's local demonstrations are paused so every collaborator sees the same history.";
+      if (commit) commit.textContent = "Live operation path active";
+      return;
+    }
+    overlay.dataset.liveAgentActor = activity.actorId;
+    if (activity.revision === null) delete overlay.dataset.liveAgentRevision;
+    else overlay.dataset.liveAgentRevision = String(activity.revision);
+    if (eyebrow) eyebrow.textContent = activity.kind === "joined"
+      ? `AgentX Center · ${activity.actorLabel} online`
+      : `AgentX Center · accepted ${activity.actorLabel}`;
+    if (title) title.textContent = activity.kind === "joined"
+      ? `${activity.actorLabel.toUpperCase()} IS HERE.`
+      : "NESTOR ACKNOWLEDGED IT.";
+    if (briefing) briefing.textContent = activity.intent;
+    if (commit) commit.textContent = activity.revision === null
+      ? `${activity.actorKind} presence · online`
+      : `${activity.actorKind} operation · revision ${activity.revision}`;
+  };
   const reset = (): void => {
-    if (!nestorEnabled) return;
+    if (!nestorEnabled) {
+      observeLiveActivity(null);
+      return;
+    }
     overlay.classList.remove("gx-welcome--presenting");
     const eyebrow = overlay.querySelector<HTMLElement>("[data-nestor-eyebrow]");
     const title = overlay.querySelector<HTMLElement>("[data-nestor-title]");
@@ -202,5 +236,5 @@ export function mountWelcome(
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);
-  return { present, reset, dispose };
+  return { present, observeLiveActivity, reset, dispose };
 }

@@ -44,6 +44,9 @@ try {
       consoleCount: consoles.length,
       renderedAgentId: rendered.nestor?.agentId ?? null,
       renderedStatus: rendered.nestor?.status ?? null,
+      renderedLivePresence: rendered.livePresence ?? null,
+      runtimeLiveAgents: api.query({ tag: "live-agent" }).length,
+      runtimeLiveActivity: api.query({ tag: "nestor-live-activity" }).length,
     } : null;
   });
 
@@ -580,6 +583,9 @@ const nestorIsLive =
   nestorInitial.consoleCount === 3 &&
   nestorInitial.renderedAgentId === "showroom-nestor" &&
   nestorInitial.renderedStatus === "ready" &&
+  nestorInitial.renderedLivePresence === null &&
+  nestorInitial.runtimeLiveAgents === 0 &&
+  nestorInitial.runtimeLiveActivity === 0 &&
   out.nestor3dConsole?.topic === "play" &&
   out.nestor3dConsole?.status === "presenting:play" &&
   out.nestor3dConsole?.selected === true &&

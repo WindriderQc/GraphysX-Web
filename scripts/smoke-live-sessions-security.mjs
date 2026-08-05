@@ -12,7 +12,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { startSceneStore } from "../server/scene-store.mjs";
-import { check, createActor, report, seedDefinition, sleep, spawnCommand } from "./live-session-harness.mjs";
+import { check, createActor, report, requestText, seedDefinition, sleep, spawnCommand, waitForStore } from "./live-session-harness.mjs";
 
 const TOKEN = "live-session-security-token";
 const ORIGIN = "https://graphysx.specialblend.ca";
@@ -34,7 +34,7 @@ let openStore = null;
 let dir = null;
 let openDir = null;
 
-const seed = async (base, name) => fetch(`${base}/scenes/${name}`, {
+const seed = async (base, name) => requestText(`${base}/scenes/${name}`, {
   method: "PUT",
   headers: { "content-type": "application/json", authorization: `Bearer ${TOKEN}` },
   body: JSON.stringify({ definition: seedDefinition(name), actor: "smoke" }),
@@ -49,17 +49,18 @@ try {
 
   openDir = await mkdtemp(path.join(tmpdir(), "graphysx-open-"));
   openStore = await startSceneStore({ port: 0, dir: openDir, token: null, origins: null, datalakeDir: null });
-  const openHealth = await (await fetch(`${openStore.url}/health`)).json();
+  await waitForStore(openStore.url);
+  const openHealth = JSON.parse((await requestText(`${openStore.url}/health`)).text);
   check(results, "a tokenless store reports live sessions disabled", openHealth.sessions?.enabled === false, JSON.stringify(openHealth.sessions));
-  const openCreate = await fetch(`${openStore.url}/sessions`, {
+  const openCreate = await requestText(`${openStore.url}/sessions`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ sceneName: "anything", owner: { id: "mallory" } }),
   });
-  const openBody = await openCreate.json();
+  const openBody = JSON.parse(openCreate.text);
   check(results, "session creation on a tokenless store -> 503, not open",
     openCreate.status === 503 && openBody.code === "sessions-disabled", `status ${openCreate.status}`);
-  const openOps = await fetch(`${openStore.url}/sessions/gxs-anything/ops`, {
+  const openOps = await requestText(`${openStore.url}/sessions/gxs-anything/ops`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ opId: "x", commands: [spawnCommand("x")] }),
@@ -73,6 +74,7 @@ try {
   dir = await mkdtemp(path.join(tmpdir(), "graphysx-sec-"));
   store = await startSceneStore({ port: 0, dir, token: TOKEN, origins: ORIGIN, datalakeDir: null });
   const base = store.url;
+  await waitForStore(base);
   await seed(base, SCENE);
   await seed(base, "second-fixture");
 
@@ -298,7 +300,7 @@ try {
   const leakedToActivity = secrets.filter((secret) => JSON.stringify(activity).includes(secret));
   check(results, "no credential appears in the activity stream", leakedToActivity.length === 0, leakedToActivity.length ? "secret in activity" : "");
 
-  const storedScene = await (await fetch(`${base}/scenes/${SCENE}`)).text();
+  const storedScene = (await requestText(`${base}/scenes/${SCENE}`)).text;
   check(results, "no credential is persisted to disk with the scene",
     secrets.every((secret) => !storedScene.includes(secret)), "secret persisted");
 

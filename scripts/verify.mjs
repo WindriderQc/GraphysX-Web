@@ -49,6 +49,7 @@ const SMOKES = [
   { name: "levels", script: "scripts/smoke-levels.mjs", covers: "levels workbench: paint, fill, ASCII round trip, undo, create" },
   { name: "foundation", script: "scripts/smoke-foundation.mjs", covers: "?host=legacy: archive player still boots" },
   { name: "scene-store", script: "scripts/smoke-scene-store.mjs", covers: "?scene=: stored scene loads, outside agent edits land in the tab" },
+  { name: "scene-command-validation", script: "scripts/smoke-scene-command-validation.mjs", covers: "untrusted scene commands: strict ids/types/configs/references, runtime-parity merges, atomic rejection, cumulative budgets" },
   { name: "triggers", script: "scripts/smoke-triggers.mjs", covers: "trigger volumes: enter/exit events, interactions fire, no collision response" },
   { name: "roundtrip", script: "scripts/smoke-roundtrip.mjs", covers: "write-only-state sweep: every settable v2 property set then read back through state/export/reload/object" },
   { name: "rules", script: "scripts/smoke-rules.mjs", covers: "rules layer: ordered checkpoints, laps, sim-time clock, document round-trip, dropped -> resync" },
@@ -90,6 +91,7 @@ const SMOKES = [
   { name: "rapier-race", script: "scripts/smoke-rapier-race.mjs", covers: "Rapier RaceScene: Piste vehicle motion, steering, finite state, browser errors" },
   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
   { name: "live-sessions", script: "scripts/smoke-live-sessions.mjs", covers: "live sessions: owner + remote editor + agent on one scene, incremental attributed ops, roles, duplicates, conflicts, reconnect/resume/resync, teardown" },
+  { name: "live-sessions-browser", script: "scripts/smoke-live-sessions-browser.mjs", localOnly: true, covers: "live sessions through the product: observer boundary, scene-native AgentX presence, Nestor accepted-operation reaction, reconnect and cleanup" },
   { name: "live-sessions-security", script: "scripts/smoke-live-sessions-security.mjs", covers: "live session security: fail-closed without a store token, cross-session + forged credentials, expired/revoked invites, origin rejection, one-shot stream tickets, payload/rate caps, concurrent burst consistency, token-leak audit" },
   { name: "live-undo", script: "scripts/smoke-live-undo.mjs", covers: "collaborative undo: inverse operations appended not rewound, refusal when a later actor touched the same entities, own-operation-only, parent/child restore, non-invertible refusal, viewer denial" },
   { name: "results", script: "scripts/smoke-results.mjs", covers: "results: persistent bests, compatibility-separated leaderboards with client-attested trust labels, deterministic ordering and bounds, shared ghost round-trip, and refusal of desynced/incomplete/implausible/oversized/unsorted submissions" },
@@ -189,6 +191,10 @@ try {
   } else {
     console.log(`\n=== smokes against ${externalBase ?? "isolated local servers"} ===`);
     for (const smoke of SMOKES) {
+      if (externalBase && smoke.localOnly) {
+        console.log(`\n--- ${smoke.name}: skipped against an external page (requires its isolated loopback store) ---`);
+        continue;
+      }
       console.log(`\n--- ${smoke.name}: ${smoke.covers} ---`);
       let result;
       for (let attempt = 1; attempt <= 2; attempt += 1) {

@@ -62,6 +62,8 @@ const LIMITS = {
   inviteMaxUses: 16,
   /** A stream ticket is a one-shot, near-instant handoff. It is not a credential. */
   streamTicketMs: 30 * 1000,
+  /** Outstanding one-shot tickets. Consumed/expired tickets leave this map immediately. */
+  ticketsPerSession: 32,
   presenceTtlMs: 45 * 1000,
   labelChars: 80,
   intentChars: 240,
@@ -92,6 +94,17 @@ const ROLES = {
 const OP_PATHS = new Set(["transaction", "spawn", "update", "remove", "set-environment"]);
 
 const digest = (value) => createHash("sha256").update(String(value)).digest();
+
+/** Stable JSON for binding an idempotency key to one semantic request body. */
+function canonicalJson(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) =>
+    `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+}
+
+const operationFingerprint = (value) =>
+  createHash("sha256").update(canonicalJson(value)).digest("hex");
 
 /** Constant-time compare of two secrets via their digests (equal length by construction). */
 function secretMatches(presented, expectedDigest) {
@@ -181,8 +194,12 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     const at = now();
     for (const [id, session] of sessions) {
       if (session.expiresAt <= at) {
-        closeSession(session, "expired");
+        // Stop new admissions synchronously, then retire behind work already admitted to the
+        // session chain. Fire-and-observe is intentional: `sweep` is used from synchronous
+        // authentication helpers, while the terminal stream is completed asynchronously.
+        session.closing = true;
         sessions.delete(id);
+        void retireSession(session, "expired").catch(() => closeSession(session, "expired"));
         continue;
       }
       for (const [inviteId, invite] of session.invites) {
@@ -194,16 +211,73 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     }
   }
 
-  function closeSession(session, reason) {
-    for (const subscriber of session.subscribers) {
+  function endSubscriber(session, subscriber, event, payload) {
+    // Remove it before writing the terminal frame. A synchronous operation broadcast that
+    // follows this call must never be able to reach a revoked/closed stream, even if Node's
+    // close notification is delivered on a later turn.
+    subscriber.cleanup?.({ broadcast: false });
+    try {
+      subscriber.response.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
+      subscriber.response.end();
+    } catch {
+      // The stream is already gone; cleanup above is intentionally idempotent.
+    }
+  }
+
+  function closeSession(session, reason, authoritative = null) {
+    session.closing = true;
+    session.closed = true;
+    const finalCut = authoritative ?? (session.authoritative ? {
+      revision: session.authoritative.revision,
+      seq: session.seq,
+      definition: session.authoritative.definition,
+    } : null);
+    const payload = {
+      schema: LIVE_SESSION_SCHEMA,
+      event: "closed",
+      sessionId: session.id,
+      reason,
+      seq: session.seq,
+      revision: session.revision,
+      ...(finalCut ?? {}),
+    };
+    for (const subscriber of [...session.subscribers.values()]) {
       try {
-        subscriber.write(`event: closed\ndata: ${JSON.stringify({ sessionId: session.id, reason })}\n\n`);
-        subscriber.end();
+        endSubscriber(session, subscriber, "closed", payload);
       } catch {
         // The stream is already gone; nothing to clean up beyond dropping the reference.
       }
     }
     session.subscribers.clear();
+  }
+
+  /** Finish a session only after every task admitted before `closing` has settled. */
+  function retireSession(session, reason) {
+    return queueSessionTask(session, async () => {
+      if (session.closed) return;
+      try {
+        const record = await store.get(session.sceneName);
+        if (!record) {
+          closeSession(session, reason);
+          return;
+        }
+        session.revision = record.revision;
+        session.authoritative = {
+          definition: structuredClone(record.definition),
+          revision: record.revision,
+        };
+        closeSession(session, reason, {
+          revision: record.revision,
+          seq: session.seq,
+          definition: record.definition,
+        });
+      } catch (error) {
+        // Fail closed and carry the last proven cut. A store outage may turn the DELETE into
+        // a 500, but it must never leave an already-revoked stream alive and receiving ops.
+        closeSession(session, reason);
+        throw error;
+      }
+    }, { allowClosed: true });
   }
 
   // --- broadcast -------------------------------------------------------------------
@@ -228,9 +302,11 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       }
     }
     const frame = `id: ${event.seq}\nevent: ${event.event}\ndata: ${JSON.stringify(event)}\n\n`;
-    for (const subscriber of session.subscribers) {
+    for (const subscriber of session.subscribers.values()) {
+      const subscribedMember = session.members.get(subscriber.memberId);
+      if (!subscribedMember || subscribedMember.revokedAt) continue;
       try {
-        subscriber.write(frame);
+        subscriber.response.write(frame);
       } catch {
         // Cleanup is driven by the request's close handler, never from the write path.
       }
@@ -265,7 +341,7 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       role: member.role,
       capabilities: member.role === "agent" ? [...member.capabilities] : null,
       joinedAt: new Date(member.joinedAt).toISOString(),
-      online: member.streams > 0,
+      online: !member.revokedAt && member.streams > 0,
       lastSeenAt: member.lastSeenAt ? new Date(member.lastSeenAt).toISOString() : null,
       presence: presence
         ? { cursor: presence.cursor, selection: [...presence.selection], tool: presence.tool, color: presence.color }
@@ -280,7 +356,7 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       sceneName: session.sceneName,
       label: session.label,
       ownerActorId: session.ownerActorId,
-      status: session.expiresAt <= now() ? "expired" : "open",
+      status: session.expiresAt <= now() ? "expired" : session.closing || session.closed ? "closed" : "open",
       createdAt: new Date(session.createdAt).toISOString(),
       expiresAt: new Date(session.expiresAt).toISOString(),
       revision: session.revision,
@@ -305,7 +381,7 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
   function requireSession(sessionId) {
     sweep();
     const session = sessions.get(sessionId);
-    if (!session) throw httpError(`Unknown session: ${sessionId}`, 404);
+    if (!session || session.closing || session.closed) throw httpError(`Unknown session: ${sessionId}`, 404);
     return session;
   }
 
@@ -378,10 +454,15 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       members: new Map(),
       invites: new Map(),
       tickets: new Map(),
-      subscribers: new Set(),
+      /** Response → member-bound stream record. Binding is what makes revocation terminal. */
+      subscribers: new Map(),
       log: [],
-      /** opId → receipt, for idempotent replay. Pruned with the log. */
+      /** opId → originating member, canonical request fingerprint and receipt. */
       applied: new Map(),
+      /** Last store-proven document, used only if a terminal store read itself fails. */
+      authoritative: { definition: structuredClone(record.definition), revision: record.revision },
+      closing: false,
+      closed: false,
       /**
        * Operations apply one at a time per session.
        *
@@ -425,6 +506,9 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       presence: null,
       ops: createBucket(40, 10, now),
       presenceHits: createBucket(30, 8, now),
+      // Separate from mutation tokens: a reconnect storm must not consume authoring budget,
+      // and a ticket-minting attack must not be able to allocate without bound.
+      ticketHits: createBucket(8, 2, now),
     };
     session.members.set(member.id, member);
     return { member, credential: `${member.id}.${secret}` };
@@ -564,7 +648,7 @@ function touchedEntityIds(commands, outputs) {
 function computeInverseCommands(preDefinition, commands, outputs) {
   const byId = new Map((preDefinition.entities ?? []).map((entity) => [entity.id, entity]));
   const order = new Map((preDefinition.entities ?? []).map((entity, index) => [entity.id, index]));
-  const inverse = [];
+  const inverseGroups = [];
 
   for (let index = 0; index < commands.length; index += 1) {
     const command = commands[index];
@@ -573,7 +657,7 @@ function computeInverseCommands(preDefinition, commands, outputs) {
     if (command.op === "spawn") {
       const id = output?.id;
       if (!id) return null;
-      inverse.push({ op: "remove", id });
+      inverseGroups.push([{ op: "remove", id }]);
       continue;
     }
 
@@ -582,11 +666,13 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       // actually deleted — in the document's original order, so a parent is respawned
       // before the child that references it.
       const ids = [...(output?.ids ?? [command.id])].sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+      const restores = [];
       for (const id of ids) {
         const entity = byId.get(id);
         if (!entity) return null;
-        inverse.push({ op: "spawn", entity: structuredClone(entity) });
+        restores.push({ op: "spawn", entity: structuredClone(entity) });
       }
+      inverseGroups.push(restores);
       continue;
     }
 
@@ -599,12 +685,12 @@ function computeInverseCommands(preDefinition, commands, outputs) {
         if (!(key in entity)) return null; // introduced a field; no command removes one
         restore[key] = structuredClone(entity[key]);
       }
-      inverse.push({ op: "update", id: command.id, patch: restore });
+      inverseGroups.push([{ op: "update", id: command.id, patch: restore }]);
       continue;
     }
 
     if (command.op === "set-environment") {
-      inverse.push({ op: "set-environment", environment: structuredClone(preDefinition.environment ?? {}) });
+      inverseGroups.push([{ op: "set-environment", environment: structuredClone(preDefinition.environment ?? {}) }]);
       continue;
     }
 
@@ -612,14 +698,32 @@ function computeInverseCommands(preDefinition, commands, outputs) {
   }
 
   // Applied in reverse: undoing "remove A then spawn B" must despawn B before restoring A.
-  return inverse.reverse();
+  return inverseGroups.reverse().flat();
 }
 
   // --- operations ---------------------------------------------------------------------
 
-  /** Serialises operation application per session. A rejection never poisons the next. */
-  function queueOperation(session, task) {
-    const next = session.chain.then(task, task);
+  /**
+   * Serialises every task that must observe the authored document and the session's
+   * operation clock as one cut. A rejection never poisons the next task.
+   *
+   * Snapshots belong on this chain too: reading the store outside it can capture revision
+   * R, yield while an operation commits R+1 and increments `session.seq`, then return the
+   * definition from R labelled with the sequence after R+1. A client reconnecting from
+   * that sequence would never be offered the operation it is missing.
+   */
+  function queueSessionTask(session, task, { allowClosed = false } = {}) {
+    // Admission is captured when the task is appended, not when it eventually runs. A close
+    // flips `closing` synchronously: older admitted operations finish before its terminal
+    // snapshot, while anything attempting to append afterwards is rejected.
+    const admitted = allowClosed || (!session.closing && !session.closed);
+    const run = () => {
+      if (!admitted) {
+        throw httpError("This live session is closed", 410, { code: "session-closed" });
+      }
+      return task();
+    };
+    const next = session.chain.then(run, run);
     session.chain = next.then(() => undefined, () => undefined);
     return next;
   }
@@ -636,7 +740,6 @@ function computeInverseCommands(preDefinition, commands, outputs) {
    */
   async function submitOperation(session, member, body) {
     requireCapability(member, "mutate");
-    if (!member.ops()) throw httpError("Operation rate limit exceeded for this member", 429);
 
     const opId = assertId(body?.opId, "opId");
     const path = body?.path ?? "transaction";
@@ -645,20 +748,61 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       throw httpError(`This agent is not scoped to '${path}'`, 403);
     }
 
-    const previous = session.applied.get(opId);
-    if (previous) return { ...previous, duplicate: true };
-
     const commands = Array.isArray(body?.commands) ? body.commands : null;
     if (!commands || commands.length === 0) throw httpError("An operation requires at least one command", 400);
     if (commands.length > LIMITS.commandsPerOp) throw httpError(`An operation may carry at most ${LIMITS.commandsPerOp} commands`, 400);
+    if (path !== "transaction" && commands.some((command) => command?.op !== path)) {
+      throw httpError(`Operation path '${path}' may only carry '${path}' commands`, member.role === "agent" ? 403 : 400, {
+        code: "operation-path-mismatch",
+      });
+    }
+    const hasStableId = (value) => typeof value === "string" && Boolean(value.trim());
+    const missingGeneratedId = commands.some((command) => {
+      if (command?.op === "spawn") {
+        return !hasStableId(command.entity?.id)
+          || (command.entity?.behaviors ?? []).some((behavior) => !hasStableId(behavior?.id))
+          || (command.entity?.interactions ?? []).some((interaction) => !hasStableId(interaction?.id));
+      }
+      if (command?.op === "update" && Array.isArray(command.patch?.interactions)) {
+        return command.patch.interactions.some((interaction) => !hasStableId(interaction?.id));
+      }
+      return false;
+    });
+    if (missingGeneratedId) {
+      throw httpError("Live-session spawns, behaviors, and interactions require explicit stable ids", 422, {
+        code: "live-spawn-id-required",
+      });
+    }
+
+    const baseRevision = body?.baseRevision;
+    if (baseRevision !== undefined && baseRevision !== null
+      && (!Number.isInteger(baseRevision) || baseRevision < 0)) {
+      throw httpError("baseRevision must be a non-negative integer", 400);
+    }
+    const requestFingerprint = operationFingerprint({
+      baseRevision: baseRevision ?? null,
+      path,
+      commands,
+      intent: body?.intent ?? null,
+    });
+    const previous = session.applied.get(opId);
+    if (previous) {
+      if (previous.memberId !== member.id || previous.requestFingerprint !== requestFingerprint) {
+        throw httpError("Operation id is already bound to a different member or request", 409, {
+          code: "op-id-conflict",
+        });
+      }
+      return { ...previous.receipt, duplicate: true };
+    }
+    // Exact idempotent reads above are free: retrying an accepted operation must keep
+    // returning its receipt even after the member's write bucket is empty.
+    if (!member.ops()) throw httpError("Operation rate limit exceeded for this member", 429);
 
     const record = await store.get(session.sceneName);
     if (!record) throw httpError(`The scene backing this session is gone: ${session.sceneName}`, 410);
     session.revision = record.revision;
 
-    const baseRevision = body?.baseRevision;
     if (baseRevision !== undefined && baseRevision !== null) {
-      if (!Number.isInteger(baseRevision) || baseRevision < 0) throw httpError("baseRevision must be a non-negative integer", 400);
       if (baseRevision !== record.revision) {
         throw httpError(`Revision conflict: expected ${baseRevision}, current ${record.revision}`, 409, {
           code: "revision-conflict",
@@ -710,9 +854,13 @@ function computeInverseCommands(preDefinition, commands, outputs) {
     event.inverse = computeInverseCommands(record.definition, commands, next.outputs);
     event.touched = touchedEntityIds(commands, next.outputs);
     event.undone = false;
+    session.authoritative = {
+      definition: structuredClone(next.definition),
+      revision: written.revision,
+    };
     push(session, event, { retain: true });
     const receipt = { ok: true, opId, seq: event.seq, revision: written.revision, baseRevision: record.revision, outputs: next.outputs, intent };
-    session.applied.set(opId, receipt);
+    session.applied.set(opId, { memberId: member.id, requestFingerprint, receipt });
     return receipt;
   }
 
@@ -764,8 +912,14 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       );
     }
 
+    // Source operation ids may already occupy the full 80-character public id budget.
+    // Hash into a deterministic bounded id rather than prefixing past the validator cap.
+    const undoOpId = `undo-${createHash("sha256")
+      .update(`${session.id}\0${opId}`)
+      .digest("hex")
+      .slice(0, 40)}`;
     const receipt = await submitOperation(session, member, {
-      opId: `undo-${opId}`,
+      opId: undoOpId,
       path: "transaction",
       commands: entry.inverse,
       intent: `undid: ${entry.intent}`.slice(0, LIMITS.intentChars),
@@ -858,8 +1012,12 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       const session = requireSession(idMatch[1]);
       const member = requireMember(session, request);
       requireCapability(member, "manage");
-      closeSession(session, "closed");
+      // Closing participates in the same document/sequence chain as operations and
+      // snapshots. The terminal frame carries that exact final cut so a browser can replace
+      // any optimistic write whose request loses this race before dropping its authority.
+      session.closing = true;
       sessions.delete(session.id);
+      await retireSession(session, "closed");
       sendJson(response, 200, { ok: true, sessionId: session.id, closed: true }, cors);
       return true;
     }
@@ -869,6 +1027,9 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       const member = requireMember(session, request);
       requireCapability(member, "invite");
       const body = await readJsonBody(request, LIMITS.joinBodyBytes);
+      if (session.closing || session.closed || sessions.get(session.id) !== session || member.revokedAt) {
+        throw httpError("This live session is closed", 410, { code: "session-closed" });
+      }
       const { invite, code } = createInvite(session, body);
       sendJson(response, 201, {
         invite: inviteView(invite),
@@ -907,17 +1068,57 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       const target = session.members.get(memberMatch[2]);
       if (!target) throw httpError("Unknown member", 404);
       if (target.role === "owner") throw httpError("The session owner cannot be removed", 400);
+      if (target.revokedAt) throw httpError("Unknown member", 404);
+      // Authentication after this line fails immediately. Tasks already appended to the
+      // session chain retain their admission and finish before the removal's final cut.
       target.revokedAt = now();
-      session.members.delete(target.id);
-      push(session, {
-        schema: LIVE_SESSION_SCHEMA,
-        event: "member",
-        seq: nextSeq(session),
-        sessionId: session.id,
-        change: "removed",
-        member: memberView(session, target),
-        at: new Date(now()).toISOString(),
-      }, { retain: true });
+      await queueSessionTask(session, async () => {
+        if (session.members.get(target.id) !== target) {
+          throw httpError("Unknown member", 404);
+        }
+        let record = null;
+        let readFailure = null;
+        try {
+          record = await store.get(session.sceneName);
+          if (!record) readFailure = httpError(`The scene backing this session is gone: ${session.sceneName}`, 410);
+          else {
+            session.revision = record.revision;
+            session.authoritative = {
+              definition: structuredClone(record.definition),
+              revision: record.revision,
+            };
+          }
+        } catch (error) {
+          readFailure = error;
+        }
+        session.members.delete(target.id);
+        for (const [ticketId, ticket] of session.tickets) {
+          if (ticket.memberId === target.id) session.tickets.delete(ticketId);
+        }
+        push(session, {
+          schema: LIVE_SESSION_SCHEMA,
+          event: "member",
+          seq: nextSeq(session),
+          sessionId: session.id,
+          change: "removed",
+          member: memberView(session, target),
+          at: new Date(now()).toISOString(),
+        }, { retain: true });
+        const terminal = {
+          schema: LIVE_SESSION_SCHEMA,
+          event: "revoked",
+          sessionId: session.id,
+          memberId: target.id,
+          reason: "revoked",
+          seq: session.seq,
+          revision: record?.revision ?? session.authoritative.revision,
+          definition: record?.definition ?? session.authoritative.definition,
+        };
+        for (const subscriber of [...session.subscribers.values()]) {
+          if (subscriber.memberId === target.id) endSubscriber(session, subscriber, "revoked", terminal);
+        }
+        if (readFailure) throw readFailure;
+      });
       sendJson(response, 200, { ok: true, memberId: target.id, removed: true }, cors);
       return true;
     }
@@ -927,6 +1128,9 @@ function computeInverseCommands(preDefinition, commands, outputs) {
     if (joinMatch && method === "POST") {
       const session = requireSession(joinMatch[1]);
       const body = await readJsonBody(request, LIMITS.joinBodyBytes);
+      if (session.closing || session.closed || sessions.get(session.id) !== session) {
+        throw httpError("This live session is closed", 410, { code: "session-closed" });
+      }
       const joined = redeemInvite(session, body);
       const record = await store.get(session.sceneName);
       sendJson(response, 201, {
@@ -943,23 +1147,37 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       const session = requireSession(snapshotMatch[1]);
       const member = requireMember(session, request);
       requireCapability(member, "read");
-      const record = await store.get(session.sceneName);
-      if (!record) throw httpError(`The scene backing this session is gone: ${session.sceneName}`, 410);
-      session.revision = record.revision;
-      sendJson(response, 200, {
-        session: sessionView(session),
-        revision: record.revision,
-        seq: session.seq,
-        definition: record.definition,
-      }, cors);
+      // Construct the entire payload while holding the same chain as operation apply. Do
+      // not read here and inspect `session.seq` later: those two values are one recovery
+      // checkpoint and must never describe different instants.
+      const snapshot = await queueSessionTask(session, async () => {
+        const record = await store.get(session.sceneName);
+        if (!record) throw httpError(`The scene backing this session is gone: ${session.sceneName}`, 410);
+        session.revision = record.revision;
+        session.authoritative = {
+          definition: structuredClone(record.definition),
+          revision: record.revision,
+        };
+        return {
+          session: sessionView(session),
+          revision: record.revision,
+          seq: session.seq,
+          definition: record.definition,
+        };
+      });
+      sendJson(response, 200, snapshot, cors);
       return true;
     }
 
     if (opsMatch && method === "POST") {
       const session = requireSession(opsMatch[1]);
       const member = requireMember(session, request);
-      const body = await readJsonBody(request, LIMITS.opBodyBytes);
-      const receipt = await queueOperation(session, () => submitOperation(session, member, body));
+      // Reserve this operation's place synchronously. That makes "already admitted" exact:
+      // a close/removal arriving while the bounded body is still being read queues behind it,
+      // while every later request fails admission before it can append work.
+      const bodyPromise = readJsonBody(request, LIMITS.opBodyBytes);
+      const receipt = await queueSessionTask(session, async () =>
+        submitOperation(session, member, await bodyPromise));
       sendJson(response, receipt.duplicate ? 200 : 201, receipt, cors);
       return true;
     }
@@ -970,7 +1188,7 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       const member = requireMember(session, request);
       // Queued on the same chain as ordinary operations: an undo is an operation, and it
       // must not interleave with one being applied concurrently.
-      const receipt = await queueOperation(session, () => undoOperation(session, member, decodeURIComponent(undoMatch[2])));
+      const receipt = await queueSessionTask(session, () => undoOperation(session, member, decodeURIComponent(undoMatch[2])));
       sendJson(response, 201, receipt, cors);
       return true;
     }
@@ -979,6 +1197,10 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       const session = requireSession(presenceMatch[1]);
       const member = requireMember(session, request);
       const body = await readJsonBody(request, LIMITS.presenceBodyBytes);
+      if (session.closing || session.closed || sessions.get(session.id) !== session
+        || session.members.get(member.id) !== member || member.revokedAt) {
+        throw httpError("This session membership has been revoked", 403, { code: "membership-revoked" });
+      }
       sendJson(response, 200, submitPresence(session, member, body), cors);
       return true;
     }
@@ -991,6 +1213,12 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       const session = requireSession(ticketMatch[1]);
       const member = requireMember(session, request);
       requireCapability(member, "read");
+      if (!member.ticketHits()) {
+        throw httpError("Stream ticket rate limit exceeded for this member", 429, { code: "stream-ticket-rate-limit" });
+      }
+      if (session.tickets.size >= LIMITS.ticketsPerSession) {
+        throw httpError("Too many outstanding stream tickets for this session", 429, { code: "stream-ticket-limit" });
+      }
       const secret = newSecret();
       const ticket = { id: newId("t"), memberId: member.id, secretDigest: digest(secret), expiresAt: now() + LIMITS.streamTicketMs };
       session.tickets.set(ticket.id, ticket);
@@ -1048,7 +1276,8 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       }
 
       member.streams += 1;
-      session.subscribers.add(response);
+      const subscriber = { response, memberId: member.id, cleanup: null };
+      session.subscribers.set(response, subscriber);
       // A fresh presence snapshot on every connect: presence is not replayed from the log,
       // so this is how a resuming client learns who is here now.
       push(session, presenceEvent(session));
@@ -1064,13 +1293,17 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       // verify run was once found alive for 9.5 hours behind exactly this shape of handle.
       heartbeat.unref?.();
 
-      const cleanup = () => {
+      let cleaned = false;
+      const cleanup = ({ broadcast = true } = {}) => {
+        if (cleaned) return;
+        cleaned = true;
         clearInterval(heartbeat);
         if (!session.subscribers.delete(response)) return;
         member.streams = Math.max(0, member.streams - 1);
         member.lastSeenAt = now();
-        if (sessions.has(session.id)) push(session, presenceEvent(session));
+        if (broadcast && sessions.has(session.id) && !session.closed) push(session, presenceEvent(session));
       };
+      subscriber.cleanup = cleanup;
       request.on("close", cleanup);
       response.on("close", cleanup);
       return true;
@@ -1092,9 +1325,13 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       const session = sessions.get(sessionId);
       return session ? sessionView(session) : null;
     },
-    closeAll: () => {
-      for (const session of sessions.values()) closeSession(session, "shutdown");
+    closeAll: async () => {
+      const retiring = [...sessions.values()];
+      // Block admission for every session before awaiting any one chain.
+      for (const session of retiring) session.closing = true;
       sessions.clear();
+      await Promise.all(retiring.map((session) =>
+        retireSession(session, "shutdown").catch(() => closeSession(session, "shutdown"))));
     },
   };
 }

@@ -637,7 +637,7 @@ export async function startSceneStore({ port = DEFAULT_PORT, host = DEFAULT_HOST
       // Session streams first: each one is an open response holding a heartbeat. They are
       // unref'd so they cannot hold the process open, but ending them politely means a
       // client sees `closed` rather than a severed socket it will try to resume.
-      sessions.closeAll();
+      await sessions.closeAll();
       server.closeIdleConnections?.();
       server.closeAllConnections?.();
       await new Promise((resolveClose) => server.close(() => resolveClose(undefined)));

@@ -18,6 +18,7 @@ const PANEL_CSS = `
      same corner, and a fixed offset here would either overlap it or leave a gap when it is
      absent. Measuring is the only thing that stays correct in both cases. */
   position: fixed; top: 12px; right: 12px; width: 264px; max-height: calc(100vh - 24px);
+  box-sizing: border-box; overflow-y: auto;
   z-index: 24;
   display: flex; flex-direction: column; gap: 8px;
   font: 12px/1.45 "Space Grotesk", system-ui, sans-serif; color: #e9eef5;
@@ -64,7 +65,7 @@ const PANEL_CSS = `
 @media (max-width: 720px) {
   /* Phone: the viewport is the product, so the panel becomes a short bottom sheet rather
      than a column eating a third of the screen. \`top\` from the script is overridden. */
-  .gx-ls { inset: auto 8px 8px 8px !important; width: auto; max-height: 45vh; }
+  .gx-ls { inset: auto 8px 8px 8px !important; width: auto; max-height: min(45vh, 400px) !important; }
 }
 @media (prefers-reduced-motion: reduce) { .gx-ls { backdrop-filter: none; } }
 `;
@@ -149,6 +150,17 @@ export function mountLiveSessionPanel(container: HTMLElement, client: LiveSessio
   };
 
   const setStatus = (status: LiveSessionStatus): void => {
+    // Rejoining creates a fresh scoped membership while the old one remains as an offline
+    // audit record. The panel is a presence view, so render one freshest row per actor rather
+    // than letting reconnect history crowd the scene—especially on phones.
+    const visibleMembers = [...status.members.reduce((byActor, member) => {
+      const current = byActor.get(member.actorId);
+      const shouldReplace = !current
+        || (member.online && !current.online)
+        || (member.online === current.online && member.joinedAt.localeCompare(current.joinedAt) > 0);
+      if (shouldReplace) byActor.set(member.actorId, member);
+      return byActor;
+    }, new Map<string, LiveSessionMemberView>()).values()];
     dot.dataset.state = status.connection;
     const latency = status.latencyMs === null ? "—" : `${status.latencyMs} ms`;
     health.innerHTML = [
@@ -160,7 +172,7 @@ export function mountLiveSessionPanel(container: HTMLElement, client: LiveSessio
     ].filter(Boolean).join("");
     panel.setAttribute("aria-label", `Live session — ${status.connection}, revision ${status.revision}`);
 
-    memberList.replaceChildren(...status.members.map((member: LiveSessionMemberView) => {
+    memberList.replaceChildren(...visibleMembers.map((member: LiveSessionMemberView) => {
       const item = document.createElement("li");
       item.className = "gx-ls-member";
       item.dataset.online = String(member.online);
@@ -198,7 +210,7 @@ export function mountLiveSessionPanel(container: HTMLElement, client: LiveSessio
       lastConnection = status.connection;
       announce(`Live session ${status.connection}`);
     }
-    const memberIds = status.members.map((member) => `${member.actorId}:${member.online}`).join(",");
+    const memberIds = visibleMembers.map((member) => `${member.actorId}:${member.online}`).join(",");
     if (memberIds !== lastMemberIds && lastMemberIds !== "") announce("Session members changed");
     lastMemberIds = memberIds;
   };

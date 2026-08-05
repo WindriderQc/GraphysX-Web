@@ -1,7 +1,7 @@
 # AgentX Center roadmap
 
-*Truth reset: 2026-08-04. Baseline was clean `main` at `64af273`; this document includes the
-current local AgentX Center slice. [PRODUCT_SPEC.md](../PRODUCT_SPEC.md) remains the product
+*Truth reset: 2026-08-05. Baseline was clean `main` at `0187569`; this document includes the
+current AgentX live-presence release. [PRODUCT_SPEC.md](../PRODUCT_SPEC.md) remains the product
 contract. This is the execution order.*
 
 ## The product direction
@@ -47,28 +47,28 @@ Already shipped on `main`:
 - A dev-only shared preview workshop. Two of nineteen preview harnesses are converted; the other
   seventeen are content cleanup, not a product prerequisite.
 
-Still needs external proof:
+Production release proof:
 
-- The real production host must show port 8788 bound only to loopback. Repository defaults are
-  loopback-safe, but browser health cannot prove the listener address.
-- The deploy workflow should advance `.server-checksum` only after restart and a failing
-  loopback-listener check. This is a bounded ops hardening task, separate from AgentX product
-  work.
+- The production host was verified with port 8788 bound only to loopback. Every deploy now
+  repeats that host-level proof and fails on missing, wildcard, public, or mixed listeners.
+- `.server-checksum` advances only after extraction, required restart of changed code, active
+  service proof, and the listener proof. Static activation cannot proceed past a failed server
+  deployment.
 
 ## Execution order
 
-| Slice | Outcome | Done when |
-|---|---|---|
-| 1. Nestor's first demo | AgentX Center replaces the passive showroom | Build/Play/Explore are attributed, visible, persistent, editor-ready, and browser-tested |
-| 2. Live presence binding | A connected AgentX actor visibly inhabits the center | Session member/operation events update an ephemeral avatar and Nestor activity without polluting saved scene JSON |
-| 3. Guided co-authoring | A human can ask for a bounded scene change and inspect it before/after | Proposal, actor, intent, command set, result, undo, and rejection are all visible; no hidden mutation |
-| 4. Nestor tours | Nestor can sequence highlights across scenes and games | Camera cues, short narration, entity highlighting, cancellation, reduced-motion behavior, and destination handoff are deterministic |
-| 5. Agent gameplay | AgentX can demonstrate and coach a BallZ course inside the product | A deterministic baseline run, ghost comparison, attributed input, and honest capability/offline states are visible in-browser |
-| 6. Center expansion | The front door becomes a compact world hub | Build lab, living-systems overlook, play arena, and portals share one performance budget and remain editable scene vocabulary |
+| Slice | Status | Outcome | Done when |
+|---|---|---|---|
+| 1. Nestor's first demo | Complete | AgentX Center replaces the passive showroom | Build/Play/Explore are attributed, visible, persistent, editor-ready, and browser-tested |
+| 2. Live presence binding | Complete in this release | A connected AgentX actor visibly inhabits the center | Session member/operation events update an ephemeral avatar and Nestor activity without polluting either export path |
+| 3. Guided co-authoring | Next | A human can ask for a bounded scene change and inspect it before/after | Proposal, actor, intent, command set, result, undo, and rejection are all visible; no hidden mutation |
+| 4. Nestor tours | Queued | Nestor can sequence highlights across scenes and games | Camera cues, short narration, entity highlighting, cancellation, reduced-motion behavior, and destination handoff are deterministic |
+| 5. Agent gameplay | Queued | AgentX can demonstrate and coach a BallZ course inside the product | A deterministic baseline run, ghost comparison, attributed input, and honest capability/offline states are visible in-browser |
+| 6. Center expansion | Queued | The front door becomes a compact world hub | Build lab, living-systems overlook, play arena, and portals share one performance budget and remain editable scene vocabulary |
 
 ## Next three work sessions
 
-### A. Ship the first center slice
+### A. First center slice — complete
 
 1. Keep the current Nestor composition and accessible panel visually polished at desktop and
    narrow widths.
@@ -76,16 +76,17 @@ Still needs external proof:
    release gate.
 3. Review the local diff, then commit/push/deploy only when explicitly requested.
 
-### B. Bind real AgentX presence
+### B. Real AgentX presence — complete
 
 1. Map `LiveSessionEvents.onMembers` and `onOperation` into a small presence controller.
-2. Spawn one `ephemeral: true` agent avatar per online agent actor, keyed by actor id.
+2. Project one scoped transient avatar per online agent actor, keyed by actor id and kept out of
+   authored runtime state, history, selection, and both export paths.
 3. Illuminate Nestor and show the accepted intent when an agent operation lands.
 4. Remove avatars on disconnect; never export them or create a second animation loop.
 5. Extend `smoke-live-sessions-browser.mjs` with presence, operation, reconnect, and cleanup
    assertions.
 
-### C. Add the co-author command queue
+### C. Add the co-author command queue — next
 
 1. Define a proposal record around the existing `actor`, `intent`, `expectedRevision`, and typed
    command list.
@@ -100,9 +101,11 @@ Still needs external proof:
 These are real, bounded tasks. None should block the next AgentX visual slice unless it touches
 the same code:
 
-1. Harden deploy restart/checksum/listener ordering and verify the real production listener.
-2. Fix the Scene Browser/Editor INSPECTOR overlap.
-3. Give code-composed archive courses a durable explicit result-version signal.
+1. **Complete:** harden deploy restart/checksum/listener ordering and verify the real production listener.
+2. **Complete:** the mobile Scene Browser/Editor overlap now resolves to one intentional
+   Scene, Inspect, or Library surface at a time.
+3. **Complete:** code-composed archive courses now snapshot an explicit durable level revision
+   when play mounts.
 4. Convert old preview harnesses only when their content is being revived; keep the workshop
    dev-only.
 5. Reconcile `README.md`, the historical `ROADMAP.md`, and `HANDOFF.md` with current `main`.
@@ -119,5 +122,7 @@ the same code:
   commands, revision, visible result, and undo path.
 - Prefer one impressive vertical slice with browser proof over many disconnected panels.
 
-No product decision is required to start Slice 2. The existing live-session actor model,
-ephemeral entity flag, commit attribution, and Nestor stage provide the seams.
+No product decision is required to start Slice 3. The proposal queue should wrap the existing
+`actor`, `intent`, `expectedRevision`, and typed command list, then expose preview, accept,
+reject, edit, result, and undo as one visible flow before any model-provider integration is
+added.

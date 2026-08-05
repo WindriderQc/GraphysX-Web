@@ -82,9 +82,19 @@ sudo chown -R <deploy-user>:<deploy-group> /opt/graphysx-web
 <deploy-user> ALL=(root) NOPASSWD: /usr/bin/systemctl restart graphysx-store
 ```
 
-(substituting the real deploy account and group). A host with no `graphysx-store` unit updates
-the code and skips the restart rather than failing. `GRAPHYSX_STORE_PATH` overrides the
+(substituting the real deploy account and group). A managed `graphysx-store.service` unit is
+required whenever the `server/` payload changes. If the unit is missing, the deployment fails
+before activation instead of publishing a web bundle against server code that cannot be
+restarted and verified. An unchanged server payload can still be reused, but its loopback-only
+listener is proved before the web release is activated. `GRAPHYSX_STORE_PATH` overrides the
 default `/opt/graphysx-web`.
+
+Server and web activation are one paired transaction. The new server tree is staged and its
+Git-tree checksum is compared with the prior deployment marker, the active server directory is
+replaced by an atomic rename, and the prior tree is retained through the public release smoke.
+The web `current` symlink is the final
+activation command. If restart, listener proof, activation, or the public smoke fails, both the
+server tree and the original `current`/`previous` release pointers are restored.
 
 The whole server tree has **zero third-party imports** — every import is either `node:` or
 relative — so no `npm install` runs on the host.

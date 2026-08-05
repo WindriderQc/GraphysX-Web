@@ -13,7 +13,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { startSceneStore } from "../server/scene-store.mjs";
-import { check, createActor, report, seedDefinition, spawnCommand } from "./live-session-harness.mjs";
+import { check, createActor, report, requestText, seedDefinition, spawnCommand, waitForStore } from "./live-session-harness.mjs";
 
 const TOKEN = "live-undo-smoke-token";
 const SCENE = "undo-fixture";
@@ -25,8 +25,9 @@ try {
   dir = await mkdtemp(path.join(tmpdir(), "graphysx-undo-"));
   store = await startSceneStore({ port: 0, dir, token: TOKEN, origins: null, datalakeDir: null });
   const base = store.url;
+  await waitForStore(base);
 
-  await fetch(`${base}/scenes/${SCENE}`, {
+  await requestText(`${base}/scenes/${SCENE}`, {
     method: "PUT",
     headers: { "content-type": "application/json", authorization: `Bearer ${TOKEN}` },
     body: JSON.stringify({ definition: seedDefinition(SCENE), actor: "smoke" }),
@@ -132,9 +133,9 @@ try {
   // --- 5. what cannot be inverted is refused, not approximated -------------------------------
 
   await submit(owner, "op-plain", [{ op: "spawn", entity: { id: "plain-crate", type: "box", label: "Plain" } }]);
-  // `tag` is absent before this patch, and no command removes a key — so the inverse cannot
-  // restore the original exactly and the server must say so.
-  const introduces = await submit(owner, "op-introduce", [{ op: "update", id: "plain-crate", patch: { tag: "new-field" } }]);
+  // `visible` is a valid patch field but absent before this patch, and no command removes a
+  // key — so the inverse cannot restore the original exactly and the server must say so.
+  const introduces = await submit(owner, "op-introduce", [{ op: "update", id: "plain-crate", patch: { visible: false } }]);
   check(results, "an operation that introduces a field applies normally", introduces.status === 201, `status ${introduces.status}`);
   const cannot = await undo(owner, "op-introduce");
   check(results, "an operation that cannot be inverted exactly is refused, not approximated",
@@ -155,9 +156,9 @@ try {
   await bob.connect(sessionId);
   await submit(owner, "op-watched", [spawnCommand("watched-crate")]);
   await bob.waitFor((r) => r.ops.some((op) => op.opId === "op-watched"), { label: "bob sees the spawn" });
-  await undo(owner, "op-watched");
-  await bob.waitFor((r) => r.ops.some((op) => op.opId === "undo-op-watched"), { label: "bob sees the undo" });
-  const relayed = bob.received.ops.find((op) => op.opId === "undo-op-watched");
+  const watchedUndo = await undo(owner, "op-watched");
+  await bob.waitFor((r) => r.ops.some((op) => op.opId === watchedUndo.body.opId), { label: "bob sees the undo" });
+  const relayed = bob.received.ops.find((op) => op.opId === watchedUndo.body.opId);
   check(results, "an undo reaches other members as an ordinary attributed operation",
     relayed?.actorId === "ada" && Array.isArray(relayed.commands), JSON.stringify(relayed?.intent));
   check(results, "the relayed undo says what it undid", /undid:/.test(relayed?.intent ?? ""), relayed?.intent);

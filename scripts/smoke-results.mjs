@@ -14,7 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startSceneStore } from "../server/scene-store.mjs";
 import { GHOST_MAX_SAMPLES } from "../server/ghost-trace.mjs";
-import { check, report } from "./live-session-harness.mjs";
+import { check, report, requestText, waitForStore } from "./live-session-harness.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TOKEN = "results-smoke-token";
@@ -41,18 +41,22 @@ try {
   dir = await mkdtemp(path.join(tmpdir(), "graphysx-results-"));
   store = await startSceneStore({ port: 0, dir, token: TOKEN, origins: null, datalakeDir: null });
   const base = store.url;
+  await waitForStore(base);
 
   const post = async (body, token = TOKEN) => {
-    const response = await fetch(`${base}/results`, {
+    const response = await requestText(`${base}/results`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(body),
     });
-    return { status: response.status, body: await response.json().catch(() => null) };
+    return { status: response.status, body: response.text ? JSON.parse(response.text) : null };
   };
   const get = async (suffix) => {
-    const response = await fetch(`${base}${suffix}`);
-    return { status: response.status, body: await response.json().catch(() => null) };
+    const response = await requestText(`${base}${suffix}`);
+    return { status: response.status, body: response.text ? JSON.parse(response.text) : null };
   };
 
   const run = (overrides = {}) => ({
@@ -160,7 +164,7 @@ try {
   } }));
   check(results, "a ghost over the sample cap is refused", oversizedSamples.status === 422, `status ${oversizedSamples.status}`);
 
-  const oversizedBody = await fetch(`${base}/results`, {
+  const oversizedBody = await requestText(`${base}/results`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${TOKEN}` },
     body: JSON.stringify(run({ actorId: "bo", label: "x".repeat(2 * 1024 * 1024) })),
@@ -254,7 +258,11 @@ try {
 
   await store.close();
   store = await startSceneStore({ port: 0, dir, token: TOKEN, origins: null, datalakeDir: null });
-  const afterRestart = await (await fetch(`${store.url}/results/${COURSE}/leaderboard?courseVersion=${encodeURIComponent(V1)}&rulesVersion=${RULES}`)).json();
+  await waitForStore(store.url);
+  const afterRestartResponse = await requestText(
+    `${store.url}/results/${COURSE}/leaderboard?courseVersion=${encodeURIComponent(V1)}&rulesVersion=${RULES}`,
+  );
+  const afterRestart = JSON.parse(afterRestartResponse.text);
   check(results, "results survive a store restart",
     afterRestart.entries[0]?.bestMs === 29_000 && afterRestart.total === 6, JSON.stringify(afterRestart.entries.map((e) => e.actorId)));
 

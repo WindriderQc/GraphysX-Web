@@ -60,7 +60,8 @@ POST /sessions/:id/ops        x-graphysx-session: <memberId>.<secret>
   "intent": "added a crate"
 }
 → 201 { ok, opId, seq, revision, baseRevision, outputs, intent }
-→ 200 { ..., duplicate: true }             // same opId already applied; original receipt
+→ 200 { ..., duplicate: true }             // same member + same request; original receipt
+→ 409 { error, code: "op-id-conflict" }    // opId belongs to another member/request
 → 409 { error, code: "revision-conflict", revision, resync: "/sessions/:id/snapshot" }
 → 422 { error, code: "operation-rejected" }  // well-formed, authorised, semantically refused
 ```
@@ -77,8 +78,10 @@ Optimistic concurrency with explicit revisions. Not a CRDT — a CRDT would be a
 of machinery to avoid a conflict dialog that, at this scale, is both rare and more honest
 than an automatic merge nobody asked for. Revisit if evidence shows otherwise.
 
-1. **Idempotency first.** A repeated `opId` returns the original receipt. Network retries
-   are safe; the operation applies exactly once.
+1. **Idempotency is bound, not global.** A repeated `opId` returns the original receipt only
+   for the same member and the same canonical request. Reuse by another member, or with a
+   different revision/path/command/intent envelope, is a structured `op-id-conflict` 409.
+   Honest network retries are safe; caller-controlled ids cannot impersonate another result.
 2. **Serialised per session.** Operations queue on a per-session chain. Two members
    submitting in the same tick both succeed, in arrival order. Without this they would both
    read revision R and the loser would get a 409 it did nothing to deserve.
@@ -103,6 +106,12 @@ That last row is not a formality. A client claiming a sequence the server never 
 desynchronised — against a different session, or a restarted server. Answering "you are up
 to date" would leave it silently wrong forever. This was a real defect, caught by
 `smoke-live-sessions.mjs`.
+
+Snapshots are queued on the same per-session chain as operations. Their definition, revision,
+and sequence therefore describe one atomic cut. During an already-connected resync the client
+invalidates its current stream, loads that cut, and reconnects from the snapshot sequence;
+operations on either side are represented in the snapshot or replayed after it, never skipped
+because an event was applied just before the whole document was replaced.
 
 Presence is **not** replayed. It is a full snapshot every time, so a resuming client gets one
 fresh presence event on connect rather than a queue of stale cursors. A presence gap is

@@ -2886,3 +2886,53 @@ lifecycle probe green; showroom production smoke green with zero console/page er
 session protocol smoke 64/64; and the develop-web-game deterministic capture produced a valid
 showroom/Nestor state with no error file. Desktop and mobile screenshots were inspected after
 resetting the temporary viewport override.
+
+## 2026-08-05 — AgentX live presence, final UI/graphics loops, deploy hardening
+
+Slice 2 now binds the real live-session stream into the AgentX Center. One actor-keyed,
+scene-native `ephemeral: true` agent avatar is projected for each online agent; cursor/color
+presence patches that existing object in place. Accepted agent operations illuminate Nestor,
+render a short signal/aura/light response, and paint the exact actor, intent, and server
+revision into the observer card. Disconnect, reconnect, member removal, session leave, and
+world reload all reconcile from authoritative membership without duplicate avatars or stale
+copy.
+
+Live visuals use a runtime-owned transient scope so they share the existing resolver, scene
+graph, behavior scheduler, disposal path, and single frame loop while remaining non-authoring.
+They advance neither scene revision nor commit history, are excluded from both full and
+portable exports, cannot be selected or targeted by authored commands, and cannot become a
+parent for authored content. Undo after cleanup cannot resurrect them. Agent-client optimistic
+commits now retain the joined member's kind/label and surface their own accepted operation to
+the same reaction path.
+
+The UI/navigation sweep fixed the live sheet rather than relaxing its phone assertion. It now
+uses border-box sizing, internal scrolling, a hard 400px mobile cap, and one freshest presence
+row per actor so reconnect audit records do not crowd the viewport. Desktop, phone, observer,
+leave/rejoin, editor-authority, viewer-refusal, and SceneBrowser boundaries are covered by the
+same browser smoke.
+
+The deploy path now preflights upload, release-staging, and store extraction space per resolved
+filesystem; cleans only validated GraphysX transient names; fails closed when the store path is
+missing; requires the managed service to activate changed server code; accepts only IPv4/IPv6
+loopback listeners on port 8788; and advances the server checksum atomically only after restart,
+active-state, and listener proof. The server tar/checksum covers only the dependency-free
+`server/` tree, so client-only releases preserve in-memory sessions.
+
+The release-candidate gates are green: production typecheck/build, strict scene-command
+validation 77/77, live-session protocol 88/88, live-session security 41/41, live undo 27/27,
+results persistence 47/47, and the real multi-browser live-session run 94/94 with zero unexpected
+console/page/request errors. The production showroom navigation/aesthetics run is also clean:
+Nestor, all three consoles, Build/Play/Browse, editor transitions, starter-world continuity,
+terrain, sound, flocks, water, focus, undo, and round-trip loading all passed with no console or
+page errors. The deterministic web-game client produced matching Nestor-ready desktop/mobile
+captures, and the live-agent, phone, and normal-showroom captures were visually inspected.
+
+The final graphics/performance rerun measured 218.6 calls / 141,693 triangles per high-profile
+software frame versus 152.4 / 86,504 on mobile. Mobile keeps the 390x844 CSS viewport, limits
+the drawing buffer to 585x1266 at DPR 1.5, caps shadows at 1024, and disables only runtime
+reflection refresh. Six ManagedWater rebuilds across 128/256/512 resolutions each moved texture
+count from 9 to 10 and returned it to 9; the final release returned to 9 as well.
+
+Release status at this checkpoint: the implementation, both requested product sweeps, focused
+release evidence, and final independent source review are complete. Commit, push, the clean
+GitHub gate, production deployment, and exact live-SHA verification follow next.

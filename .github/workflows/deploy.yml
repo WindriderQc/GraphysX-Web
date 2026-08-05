@@ -64,10 +64,160 @@ jobs:
       # node: or relative), so this needs no npm install on the host.
       - name: Package the store server
         run: |
-          tar -czf "graphysx-server-${GITHUB_SHA}.tgz" server package.json
+          tar -czf "graphysx-server-${GITHUB_SHA}.tgz" server
           # Archive metadata (notably checkout mtimes) changes on every runner. The Git tree
           # identifies the server payload itself, so unrelated deploys do not drop sessions.
           git rev-parse HEAD:server > server-checksum.txt
+
+      - name: Calculate remote disk budget
+        id: disk_budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          static_archive="graphysx-${GITHUB_SHA}.tgz"
+          server_archive="graphysx-server-${GITHUB_SHA}.tgz"
+          static_payload_bytes="$(du -sb -- dist | awk '{print $1}')"
+          server_payload_bytes="$(du -sb -- server | awk '{print $1}')"
+          upload_bytes="$((
+            $(stat -c '%s' "$static_archive") +
+            $(stat -c '%s' "$server_archive") +
+            $(stat -c '%s' server-checksum.txt)
+          ))"
+
+          # Budget each destination independently; the remote preflight combines these
+          # values whenever incoming, releases, and the store share a filesystem. Fixed
+          # reserves cover tar metadata, filesystem allocation granularity, and logs.
+          upload_required_bytes="$((upload_bytes + 16 * 1024 * 1024))"
+          release_required_bytes="$((static_payload_bytes + 48 * 1024 * 1024))"
+          store_required_bytes="$((server_payload_bytes + 32 * 1024 * 1024))"
+          echo "upload_required_bytes=$upload_required_bytes" >> "$GITHUB_OUTPUT"
+          echo "release_required_bytes=$release_required_bytes" >> "$GITHUB_OUTPUT"
+          echo "store_required_bytes=$store_required_bytes" >> "$GITHUB_OUTPUT"
+
+      # Clean only GraphysX's validated transient names. This runs before SCP so an
+      # interrupted older deploy cannot consume the space needed by the next upload.
+      - name: Prepare remote release space
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -eu
+            base=/var/www/html/graphysx
+            incoming="$base/incoming"
+            releases="$base/releases"
+            store_dir="${GRAPHYSX_STORE_PATH:-/opt/graphysx-web}"
+            upload_required='${{ steps.disk_budget.outputs.upload_required_bytes }}'
+            release_required='${{ steps.disk_budget.outputs.release_required_bytes }}'
+            store_required='${{ steps.disk_budget.outputs.store_required_bytes }}'
+
+            for budget in "$upload_required" "$release_required" "$store_required"; do
+              case "$budget" in ''|*[!0-9]*) echo 'Invalid remote disk budget' >&2; exit 1 ;; esac
+            done
+
+            mkdir -p -- "$incoming" "$releases"
+            test -w "$incoming"
+            test -w "$releases"
+            if ! test -d "$store_dir"; then
+              echo "Required store directory is missing: $store_dir" >&2
+              exit 1
+            fi
+            if ! test -w "$store_dir"; then
+              echo "Store directory $store_dir is not writable by $(id -un)." >&2
+              exit 1
+            fi
+
+            # Release archives always end in a full hexadecimal Git SHA. Validate the
+            # basename before removal so the cleanup cannot widen beyond our own payloads.
+            for archive in "$incoming"/graphysx-*.tgz; do
+              if ! test -e "$archive" && ! test -L "$archive"; then
+                continue
+              fi
+              name="${archive##*/}"
+              case "$name" in
+                graphysx-server-*.tgz) token="${name#graphysx-server-}" ;;
+                graphysx-*.tgz) token="${name#graphysx-}" ;;
+                *) continue ;;
+              esac
+              token="${token%.tgz}"
+              test "${#token}" -eq 40 || continue
+              case "$token" in *[!0-9a-f]*) continue ;; esac
+              rm -f -- "$archive"
+            done
+            rm -f -- "$incoming/server-checksum.txt"
+
+            for staging in "$releases"/.staging-*; do
+              if ! test -d "$staging" && ! test -L "$staging"; then
+                continue
+              fi
+              name="${staging##*/}"
+              token="${name#.staging-}"
+              test "${#token}" -eq 40 || continue
+              case "$token" in *[!0-9a-f]*) continue ;; esac
+              rm -rf -- "$staging"
+            done
+
+            # Failed smoke releases are complete SHA directories rather than staging paths.
+            # Protect the two symlink targets explicitly and remove only validated, inactive
+            # GraphysX releases before measuring the space available for this attempt.
+            current_target="$(readlink "$base/current" 2>/dev/null || true)"
+            previous_target="$(readlink "$base/previous" 2>/dev/null || true)"
+            for candidate in "$releases"/*; do
+              test -d "$candidate" || continue
+              test ! -L "$candidate" || continue
+              candidate_sha="${candidate##*/}"
+              test "${#candidate_sha}" -eq 40 || continue
+              case "$candidate_sha" in *[!0-9a-f]*) continue ;; esac
+              candidate_target="releases/$candidate_sha"
+              if test "$candidate_target" != "$current_target" && test "$candidate_target" != "$previous_target"; then
+                rm -rf -- "$candidate"
+              fi
+            done
+            rm -f -- "$base/current.next" "$base/previous.next" "$base/current.rollback" "$base/previous.rollback"
+
+            available_bytes() {
+              df -Pk -- "$1" | awk 'NR == 2 { printf "%.0f\n", $4 * 1024 }'
+            }
+            require_capacity() {
+              capacity_label="$1"
+              capacity_path="$2"
+              capacity_required="$3"
+              capacity_available="$(available_bytes "$capacity_path")"
+              case "$capacity_available" in
+                *[!0-9]*|'') echo "Could not determine free space for $capacity_path" >&2; exit 1 ;;
+              esac
+              if test "$capacity_available" -lt "$capacity_required"; then
+                echo "Insufficient $capacity_label disk: need $capacity_required bytes, have $capacity_available bytes on $capacity_path" >&2
+                exit 1
+              fi
+              echo "$capacity_label disk ready: $capacity_available bytes free; $capacity_required required."
+            }
+
+            incoming_path="$(readlink -f -- "$incoming")"
+            releases_path="$(readlink -f -- "$releases")"
+            store_path="$(readlink -f -- "$store_dir")"
+            incoming_device="$(stat -Lc '%d' -- "$incoming_path")"
+            releases_device="$(stat -Lc '%d' -- "$releases_path")"
+            store_device="$(stat -Lc '%d' -- "$store_path")"
+
+            if test "$incoming_device" = "$releases_device" && test "$incoming_device" = "$store_device"; then
+              require_capacity 'combined incoming/releases/store' "$incoming_path" "$((upload_required + release_required + store_required))"
+            elif test "$incoming_device" = "$releases_device"; then
+              require_capacity 'combined incoming/releases' "$incoming_path" "$((upload_required + release_required))"
+              require_capacity store "$store_path" "$store_required"
+            elif test "$incoming_device" = "$store_device"; then
+              require_capacity 'combined incoming/store' "$incoming_path" "$((upload_required + store_required))"
+              require_capacity releases "$releases_path" "$release_required"
+            elif test "$releases_device" = "$store_device"; then
+              require_capacity incoming "$incoming_path" "$upload_required"
+              require_capacity 'combined releases/store' "$releases_path" "$((release_required + store_required))"
+            else
+              require_capacity incoming "$incoming_path" "$upload_required"
+              require_capacity releases "$releases_path" "$release_required"
+              require_capacity store "$store_path" "$store_required"
+            fi
 
       - name: Upload release
         uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
@@ -81,9 +231,9 @@ jobs:
           timeout: 120s
           command_timeout: 30m
 
-      # Deliberately BEFORE activation: if the store cannot be updated, nothing should be
-      # swapped. A half-deployed pair — new bundle, old server — is the state this whole step
-      # exists to prevent.
+      # Deliberately BEFORE web activation: if the store cannot be updated, no web release is
+      # swapped. The complete server tree is extracted off to the side, then directory-renamed
+      # into place; the prior tree remains beside it until the public release passes its smoke.
       #
       # Restarts only when the code actually changed. Sessions are in-memory, so every restart
       # drops everyone collaborating; paying that on a deploy that did not touch server/ would
@@ -92,8 +242,10 @@ jobs:
       # Requires, once, on the host:
       #   sudo chown -R <deploy-user>:<deploy-group> /opt/graphysx-web
       #   <deploy-user> ALL=(root) NOPASSWD: /usr/bin/systemctl restart graphysx-store
-      # A box with no graphysx-store unit skips the restart and says so rather than failing.
+      # A changed payload requires the managed unit: otherwise an old process could keep
+      # answering on the right port and make the new files look deployed when they are not.
       - name: Sync the store server
+        id: sync_store
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -105,13 +257,30 @@ jobs:
             store_dir="${GRAPHYSX_STORE_PATH:-/opt/graphysx-web}"
             incoming=/var/www/html/graphysx/incoming
             sha='${{ github.sha }}'
+            run_id='${{ github.run_id }}'
+            run_attempt='${{ github.run_attempt }}'
+            transaction_id="$run_id-$run_attempt"
             archive="$incoming/graphysx-server-$sha.tgz"
+            active="$store_dir/server"
+            staging="$store_dir/.server-staging-$transaction_id"
+            backup="$store_dir/.server-rollback-$transaction_id"
+            failed="$store_dir/.server-failed-$transaction_id"
+            transaction="$store_dir/.server-transaction-$transaction_id"
+            transaction_next="$store_dir/.server-transaction-$transaction_id.next"
+            checksum_file="$store_dir/.server-checksum"
+            checksum_next="$store_dir/.server-checksum.next"
+
+            case "$sha" in
+              *[!0-9a-f]*|'') echo 'Invalid release SHA' >&2; exit 1 ;;
+            esac
+            test "${#sha}" -eq 40
+            case "$run_id" in ''|*[!0-9]*) echo 'Invalid deployment run id' >&2; exit 1 ;; esac
+            case "$run_attempt" in ''|*[!0-9]*) echo 'Invalid deployment attempt' >&2; exit 1 ;; esac
             test -f "$archive"
 
             if ! test -d "$store_dir"; then
-              echo "No store directory at $store_dir — skipping server sync."
-              rm -f -- "$archive" "$incoming/server-checksum.txt"
-              exit 0
+              echo "Required store directory is missing: $store_dir" >&2
+              exit 1
             fi
 
             if ! test -w "$store_dir"; then
@@ -119,34 +288,164 @@ jobs:
               echo "Give the deploy account ownership before syncing the server payload." >&2
               exit 1
             fi
+            if ! test -d "$active" || test -L "$active"; then
+              echo "Expected the active store payload to be a real directory: $active" >&2
+              exit 1
+            fi
+            test -f "$active/scene-store.mjs"
 
-            new_checksum="$(cat "$incoming/server-checksum.txt")"
-            old_checksum="$(cat "$store_dir/.server-checksum" 2>/dev/null || echo none)"
+            new_checksum="$(tr -d '\r\n' < "$incoming/server-checksum.txt")"
+            test "${#new_checksum}" -eq 40
+            case "$new_checksum" in
+              *[!0-9a-f]*) echo 'Invalid server checksum' >&2; exit 1 ;;
+            esac
+            old_checksum="$(tr -d '\r\n' < "$checksum_file" 2>/dev/null || echo none)"
+            if test "${#old_checksum}" -ne 40; then
+              old_checksum=none
+            else
+              case "$old_checksum" in *[!0-9a-f]*) old_checksum=none ;; esac
+            fi
 
             if test "$new_checksum" = "$old_checksum"; then
               echo "Store server unchanged ($new_checksum) — not restarting, so live sessions survive."
-              rm -f -- "$archive" "$incoming/server-checksum.txt"
-              exit 0
+              server_changed=0
+            else
+              server_changed=1
+              echo "Store server changed: $old_checksum -> $new_checksum"
             fi
 
-            echo "Store server changed: $old_checksum -> $new_checksum"
-            tar -xzf "$archive" -C "$store_dir"
-            echo "$new_checksum" > "$store_dir/.server-checksum"
-            rm -f -- "$archive" "$incoming/server-checksum.txt"
-
             if systemctl list-unit-files | grep -q '^graphysx-store\.service'; then
-              sudo -n systemctl restart graphysx-store
-              # Give it a moment to bind, then prove it came back rather than assuming.
-              sleep 2
-              systemctl is-active --quiet graphysx-store
-              echo "graphysx-store restarted and active."
-              # The one thing the remote preflight structurally cannot see.
-              ss -tlnp 2>/dev/null | grep ":8788" || echo "(no listener on 8788 — check the unit)"
+              unit_present=1
             else
-              echo "No graphysx-store unit on this host; code updated, nothing to restart."
+              unit_present=0
+              if test "$server_changed" -eq 1; then
+                echo 'graphysx-store.service is required to activate a changed server payload.' >&2
+                exit 1
+              fi
+            fi
+
+            # A listener must exist, and every address bound to 8788 must be loopback. This
+            # rejects 0.0.0.0, [::], *, LAN addresses, and a mixed safe/public bind.
+            if ! command -v ss >/dev/null 2>&1; then
+              echo 'Cannot prove the store bind: ss is not installed.' >&2
+              exit 1
+            fi
+            prove_loopback_listener() {
+              listener_report=''
+              for attempt in 1 2 3 4 5 6 7 8 9 10; do
+                listener_report="$(ss -H -ltn 'sport = :8788' 2>/dev/null || true)"
+                test -n "$listener_report" && break
+                sleep 1
+              done
+              printf '%s\n' "$listener_report" | awk '
+                BEGIN { safe = 0; rejected = 0 }
+                {
+                  address = $4
+                  if (address == "127.0.0.1:8788" || address == "[::1]:8788") {
+                    safe = 1
+                  } else {
+                    printf "Rejected non-loopback GraphysX listener: %s\n", address > "/dev/stderr"
+                    rejected = 1
+                  }
+                }
+                END {
+                  if (!safe) print "No loopback listener found on port 8788" > "/dev/stderr"
+                  if (!safe || rejected) exit 1
+                }
+              '
+            }
+
+            for transient in "$staging" "$backup" "$failed" "$transaction" "$transaction_next"; do
+              if test -e "$transient" || test -L "$transient"; then
+                echo "Deployment transaction path already exists: $transient" >&2
+                exit 1
+              fi
+            done
+
+            mkdir -- "$transaction_next"
+            printf '%s\n' "$server_changed" > "$transaction_next/server-changed"
+            printf '%s\n' "$old_checksum" > "$transaction_next/previous-checksum"
+            printf '%s\n' "$new_checksum" > "$transaction_next/new-checksum"
+            mv -- "$transaction_next" "$transaction"
+
+            if test "$server_changed" -eq 1; then
+              mkdir -- "$staging"
+              tar -xzf "$archive" -C "$staging"
+              test -f "$staging/server/scene-store.mjs"
+
+              # If anything after the first rename fails, put the complete old tree back,
+              # restart it, and leave no success marker. The job-level rollback below is a
+              # second line of defence for SSH/action failures that happen outside this shell.
+              rollback_store_on_error() {
+                status=$?
+                trap - EXIT
+                if test "$status" -ne 0; then
+                  set +e
+                  restored=1
+                  if test -d "$backup" && ! test -L "$backup"; then
+                    rm -f -- "$checksum_file" "$checksum_next"
+                    rm -rf -- "$failed"
+                    if test -e "$active" || test -L "$active"; then
+                      mv -- "$active" "$failed" || restored=0
+                    fi
+                    if test "$restored" -eq 1; then
+                      mv -- "$backup" "$active" || restored=0
+                    fi
+                    if test "$restored" -eq 1; then
+                      sudo -n systemctl restart graphysx-store || restored=0
+                      systemctl is-active --quiet graphysx-store || restored=0
+                      prove_loopback_listener || restored=0
+                    fi
+                    if test "$restored" -eq 1; then
+                      if test "$old_checksum" = none; then
+                        rm -f -- "$checksum_file"
+                      else
+                        printf '%s\n' "$old_checksum" > "$checksum_next" || restored=0
+                        test "$restored" -eq 0 || mv -f -- "$checksum_next" "$checksum_file" || restored=0
+                      fi
+                    fi
+                  fi
+                  rm -rf -- "$staging"
+                  if test "$restored" -eq 1; then
+                    rm -rf -- "$failed" "$transaction"
+                  fi
+                fi
+                exit "$status"
+              }
+              trap rollback_store_on_error EXIT
+
+              # Both paths live on the same filesystem. The running process continues on the
+              # old inode while these directory renames switch the complete next tree into the
+              # stable WorkingDirectory expected by systemd and by the store's default data paths.
+              mv -- "$active" "$backup"
+              mv -- "$staging/server" "$active"
+              rmdir -- "$staging"
+              sudo -n systemctl restart graphysx-store
+              systemctl is-active --quiet graphysx-store
+            elif test "$unit_present" -eq 1; then
+              systemctl is-active --quiet graphysx-store
+            else
+              echo 'No graphysx-store unit found; proving the unchanged running listener only.'
+            fi
+
+            prove_loopback_listener
+            echo 'Port 8788 listener proof passed (loopback only).'
+
+            # Advance the marker only after extraction, restart, active-state proof, and the
+            # listener proof. The retained transaction still owns the prior tree until the
+            # web smoke succeeds, so any later failure can restore both code and checksum.
+            if test "$server_changed" -eq 1; then
+              rm -f -- "$checksum_next"
+              printf '%s\n' "$new_checksum" > "$checksum_next"
+              mv -f -- "$checksum_next" "$store_dir/.server-checksum"
+            fi
+            rm -f -- "$archive" "$incoming/server-checksum.txt"
+            if test "$server_changed" -eq 1; then
+              trap - EXIT
             fi
 
       - name: Activate release
+        id: activate_release
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -157,50 +456,99 @@ jobs:
             set -eu
             base=/var/www/html/graphysx
             sha='${{ github.sha }}'
+            run_id='${{ github.run_id }}'
+            run_attempt='${{ github.run_attempt }}'
+            transaction_id="$run_id-$run_attempt"
             case "$sha" in
               *[!0-9a-f]*|'') echo 'Invalid release SHA' >&2; exit 1 ;;
             esac
+            test "${#sha}" -eq 40
+            case "$run_id" in ''|*[!0-9]*) echo 'Invalid deployment run id' >&2; exit 1 ;; esac
+            case "$run_attempt" in ''|*[!0-9]*) echo 'Invalid deployment attempt' >&2; exit 1 ;; esac
             archive="$base/incoming/graphysx-$sha.tgz"
             releases="$base/releases"
             staging="$releases/.staging-$sha"
             release="$releases/$sha"
+            new_target="releases/$sha"
+            transaction_root="$base/.deploy-transactions"
+            transaction="$transaction_root/web-$transaction_id"
+            transaction_next="$transaction_root/.web-$transaction_id.next"
             previous_target="$(readlink "$base/current" 2>/dev/null || true)"
+            original_previous_target="$(readlink "$base/previous" 2>/dev/null || true)"
             test -f "$archive"
             mkdir -p "$releases"
+
+            validate_release_target() {
+              candidate="$1"
+              candidate_sha="${candidate#releases/}"
+              test "$candidate" = "releases/$candidate_sha"
+              test "${#candidate_sha}" -eq 40
+              case "$candidate_sha" in *[!0-9a-f]*) return 1 ;; esac
+              test -d "$base/$candidate"
+              test ! -L "$base/$candidate"
+              test -f "$base/$candidate/index.html"
+            }
+            if test -n "$previous_target"; then
+              validate_release_target "$previous_target"
+            fi
+            if test -n "$original_previous_target"; then
+              validate_release_target "$original_previous_target"
+            fi
+
+            for transient in "$transaction" "$transaction_next"; do
+              if test -e "$transient" || test -L "$transient"; then
+                echo "Deployment transaction path already exists: $transient" >&2
+                exit 1
+              fi
+            done
+            mkdir -p -- "$transaction_root"
+            mkdir -- "$transaction_next"
+            printf '%s\n' "$previous_target" > "$transaction_next/previous-target"
+            printf '%s\n' "$original_previous_target" > "$transaction_next/original-previous-target"
+            printf '%s\n' "$new_target" > "$transaction_next/new-target"
+
+            # Re-running the exact SHA is deliberately a no-op. The live directory and the
+            # previous rollback pointer remain untouched, so a retry cannot create an outage
+            # or replace a useful rollback target with itself.
+            if test "$previous_target" = "$new_target"; then
+              validate_release_target "$new_target"
+              printf '0\n' > "$transaction_next/web-changed"
+              mv -- "$transaction_next" "$transaction"
+              rm -f -- "$archive"
+              exit 0
+            fi
+
             rm -rf -- "$staging"
-            mkdir -p "$staging"
-            tar -xzf "$archive" -C "$staging"
-            test -f "$staging/index.html"
-            rm -rf -- "$release"
-            mv -- "$staging" "$release"
-            ln -sfn "releases/$sha" "$base/current.next"
-            mv -Tf "$base/current.next" "$base/current"
-            # Keep a validated rollback pointer before retention removes old releases. The
-            # public smoke below is the authority on whether this activation stays live.
-            previous_sha="${previous_target#releases/}"
-            if test "$previous_target" = "releases/$previous_sha"; then
-              case "$previous_sha" in
-                *[!0-9a-f]*|'') ;;
-                *)
-                  if test -d "$base/$previous_target"; then
-                    # Retention sorts by directory mtime. Mark the actual rollback target as
-                    # recently relevant so a manual older-release activation cannot prune it.
-                    touch -- "$base/$previous_target"
-                    ln -sfn "$previous_target" "$base/previous.next"
-                    mv -Tf "$base/previous.next" "$base/previous"
-                  fi
-                  ;;
-              esac
+            if test -e "$release" || test -L "$release"; then
+              # A retained content-addressed release (normally the previous target) is safe
+              # to reuse. Never delete it before the current swap: doing so would damage the
+              # rollback path if a later pre-swap command failed.
+              validate_release_target "$new_target"
+            else
+              mkdir -p "$staging"
+              tar -xzf "$archive" -C "$staging"
+              test -f "$staging/index.html"
+              mv -- "$staging" "$release"
+            fi
+            printf '1\n' > "$transaction_next/web-changed"
+            mv -- "$transaction_next" "$transaction"
+
+            # Prepare rollback before changing current. Every other fallible command also
+            # happens before the swap; mv is intentionally the final command in this shell.
+            if test -n "$previous_target"; then
+              rm -f -- "$base/previous.next"
+              ln -s "$previous_target" "$base/previous.next"
+              mv -Tf "$base/previous.next" "$base/previous"
+            else
+              rm -f -- "$base/previous"
             fi
             rm -f -- "$archive"
-            find "$releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\0' \
-              | sort -z -nr \
-              | tail -z -n +3 \
-              | cut -z -d ' ' -f 2- \
-              | xargs -0r rm -rf --
+            rm -f -- "$base/current.next"
+            ln -s "$new_target" "$base/current.next"
+            mv -Tf "$base/current.next" "$base/current"
 
       - name: Smoke the activated production release
-        id: live-smoke
+        id: live_smoke
         timeout-minutes: 5
         env:
           SMOKE_BASE: https://graphysx.specialblend.ca/
@@ -208,8 +556,8 @@ jobs:
           SMOKE_ARTIFACTS: output/production-smoke
         run: npm run smoke:live-release
 
-      - name: Roll back a failed production activation
-        if: ${{ failure() && steps.live-smoke.outcome == 'failure' }}
+      - name: Roll back an incomplete production transaction
+        if: ${{ always() && steps.sync_store.outcome != 'skipped' && (steps.sync_store.outcome != 'success' || steps.activate_release.outcome != 'success' || steps.live_smoke.outcome != 'success') }}
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -217,18 +565,266 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           command_timeout: 5m
           script: |
+            set -u
+            base=/var/www/html/graphysx
+            store_dir="${GRAPHYSX_STORE_PATH:-/opt/graphysx-web}"
+            run_id='${{ github.run_id }}'
+            run_attempt='${{ github.run_attempt }}'
+            transaction_id="$run_id-$run_attempt"
+            web_transaction="$base/.deploy-transactions/web-$transaction_id"
+            store_transaction="$store_dir/.server-transaction-$transaction_id"
+            rollback_status=0
+
+            case "$run_id" in ''|*[!0-9]*) echo 'Invalid deployment run id' >&2; exit 1 ;; esac
+            case "$run_attempt" in ''|*[!0-9]*) echo 'Invalid deployment attempt' >&2; exit 1 ;; esac
+
+            # Restore the complete store tree first. If the sync shell had already restored
+            # itself, its transaction is absent and this is a no-op.
+            if ! (
+              set -eu
+              test -d "$store_transaction" || exit 0
+              server_changed="$(tr -d '\r\n' < "$store_transaction/server-changed")"
+              previous_checksum="$(tr -d '\r\n' < "$store_transaction/previous-checksum")"
+              new_checksum="$(tr -d '\r\n' < "$store_transaction/new-checksum")"
+              case "$server_changed" in 0|1) ;; *) exit 1 ;; esac
+              test "${#new_checksum}" -eq 40
+              case "$new_checksum" in *[!0-9a-f]*) exit 1 ;; esac
+              if test "$previous_checksum" != none; then
+                test "${#previous_checksum}" -eq 40
+                case "$previous_checksum" in *[!0-9a-f]*) exit 1 ;; esac
+              fi
+
+              staging="$store_dir/.server-staging-$transaction_id"
+              backup="$store_dir/.server-rollback-$transaction_id"
+              failed="$store_dir/.server-failed-$transaction_id"
+              active="$store_dir/server"
+              checksum_file="$store_dir/.server-checksum"
+              checksum_next="$store_dir/.server-checksum.next"
+
+              prove_loopback_listener() {
+                listener_report=''
+                for attempt in 1 2 3 4 5 6 7 8 9 10; do
+                  listener_report="$(ss -H -ltn 'sport = :8788' 2>/dev/null || true)"
+                  test -n "$listener_report" && break
+                  sleep 1
+                done
+                printf '%s\n' "$listener_report" | awk '
+                  BEGIN { safe = 0; rejected = 0 }
+                  {
+                    address = $4
+                    if (address == "127.0.0.1:8788" || address == "[::1]:8788") safe = 1
+                    else rejected = 1
+                  }
+                  END { if (!safe || rejected) exit 1 }
+                '
+              }
+
+              if test "$server_changed" -eq 1; then
+                if test -d "$backup" && ! test -L "$backup"; then
+                  rm -f -- "$checksum_file" "$checksum_next"
+                  rm -rf -- "$failed"
+                  # An SSH/action interruption may land after active -> backup but before
+                  # staging/server -> active. In that state the missing active path is the
+                  # reason this rollback exists, not a reason to refuse the rollback.
+                  if test -e "$active" || test -L "$active"; then
+                    test -d "$active"
+                    test ! -L "$active"
+                    mv -- "$active" "$failed"
+                  fi
+                  if ! mv -- "$backup" "$active"; then
+                    if test -d "$failed" && ! test -L "$failed" && ! test -e "$active" && ! test -L "$active"; then
+                      mv -- "$failed" "$active" || true
+                    fi
+                    exit 1
+                  fi
+                  sudo -n systemctl restart graphysx-store
+                  systemctl is-active --quiet graphysx-store
+                  prove_loopback_listener
+                  if test "$previous_checksum" = none; then
+                    rm -f -- "$checksum_file"
+                  else
+                    printf '%s\n' "$previous_checksum" > "$checksum_next"
+                    mv -f -- "$checksum_next" "$checksum_file"
+                  fi
+                  rm -rf -- "$failed"
+                elif test -d "$failed" && ! test -L "$failed" && test -d "$active" && ! test -L "$active"; then
+                  # A previous rollback attempt already restored backup -> active, then was
+                  # interrupted before restarting or restoring the checksum marker. The
+                  # retained failed tree proves that exact state, so finish it idempotently.
+                  test -f "$active/scene-store.mjs"
+                  sudo -n systemctl restart graphysx-store
+                  systemctl is-active --quiet graphysx-store
+                  prove_loopback_listener
+                  if test "$previous_checksum" = none; then
+                    rm -f -- "$checksum_file" "$checksum_next"
+                  else
+                    printf '%s\n' "$previous_checksum" > "$checksum_next"
+                    mv -f -- "$checksum_next" "$checksum_file"
+                  fi
+                  rm -rf -- "$failed"
+                else
+                  # No backup means the sync failed before its switch, or its local trap
+                  # already restored the old tree. Restart and prove that tree before restoring
+                  # its marker. A completed new marker without a backup is not safely
+                  # recoverable and must remain a hard failure.
+                  current_checksum="$(tr -d '\r\n' < "$checksum_file" 2>/dev/null || echo none)"
+                  test "$current_checksum" != "$new_checksum"
+                  test -f "$active/scene-store.mjs"
+                  systemctl list-unit-files | grep -q '^graphysx-store\.service'
+                  sudo -n systemctl restart graphysx-store
+                  systemctl is-active --quiet graphysx-store
+                  prove_loopback_listener
+                  if test "$previous_checksum" = none; then
+                    rm -f -- "$checksum_file" "$checksum_next"
+                  else
+                    printf '%s\n' "$previous_checksum" > "$checksum_next"
+                    mv -f -- "$checksum_next" "$checksum_file"
+                  fi
+                fi
+              fi
+              rm -rf -- "$staging"
+              rm -rf -- "$store_transaction"
+            ); then
+              echo 'Store rollback failed; transaction evidence was preserved.' >&2
+              rollback_status=1
+            fi
+
+            # Roll the web symlink only when this run actually changed it. Exact-SHA retries
+            # record web-changed=0, preserving both the live release and its previous pointer.
+            if ! (
+              set -eu
+              test -d "$web_transaction" || exit 0
+              web_changed="$(tr -d '\r\n' < "$web_transaction/web-changed")"
+              previous_target="$(tr -d '\r\n' < "$web_transaction/previous-target")"
+              original_previous_target="$(tr -d '\r\n' < "$web_transaction/original-previous-target")"
+              new_target="$(tr -d '\r\n' < "$web_transaction/new-target")"
+              case "$web_changed" in 0|1) ;; *) exit 1 ;; esac
+              if test "$web_changed" -eq 1; then
+                current_target="$(readlink "$base/current" 2>/dev/null || true)"
+                if test "$current_target" = "$new_target"; then
+                  if test -n "$previous_target"; then
+                    previous_sha="${previous_target#releases/}"
+                    test "$previous_target" = "releases/$previous_sha"
+                    test "${#previous_sha}" -eq 40
+                    case "$previous_sha" in *[!0-9a-f]*) exit 1 ;; esac
+                    test -d "$base/$previous_target"
+                    test ! -L "$base/$previous_target"
+                    test -f "$base/$previous_target/index.html"
+                    rm -f -- "$base/current.rollback"
+                    ln -s "$previous_target" "$base/current.rollback"
+                    mv -Tf "$base/current.rollback" "$base/current"
+                  else
+                    # Bootstrap deployment: the exact pre-activation state was no current
+                    # pointer. Remove only the symlink this transaction installed.
+                    test -L "$base/current"
+                    rm -f -- "$base/current"
+                  fi
+                elif test -n "$previous_target"; then
+                  if test "$current_target" != "$previous_target"; then
+                    echo "Unexpected current web target: $current_target" >&2
+                    exit 1
+                  fi
+                elif test -e "$base/current" || test -L "$base/current"; then
+                  echo "Expected no current web target during bootstrap rollback" >&2
+                  exit 1
+                fi
+                # Activation advances `previous` to the pre-deploy current target. Restore
+                # the pointer that existed before this transaction as part of the same
+                # rollback, or a failed release would silently erase one recovery generation.
+                if test -n "$original_previous_target"; then
+                  original_previous_sha="${original_previous_target#releases/}"
+                  test "$original_previous_target" = "releases/$original_previous_sha"
+                  test "${#original_previous_sha}" -eq 40
+                  case "$original_previous_sha" in *[!0-9a-f]*) exit 1 ;; esac
+                  test -d "$base/$original_previous_target"
+                  test ! -L "$base/$original_previous_target"
+                  test -f "$base/$original_previous_target/index.html"
+                  rm -f -- "$base/previous.rollback"
+                  ln -s "$original_previous_target" "$base/previous.rollback"
+                  mv -Tf "$base/previous.rollback" "$base/previous"
+                else
+                  rm -f -- "$base/previous"
+                fi
+              fi
+              rm -rf -- "$web_transaction"
+            ); then
+              echo 'Web rollback failed; transaction evidence was preserved.' >&2
+              rollback_status=1
+            fi
+
+            exit "$rollback_status"
+
+      - name: Finalize verified production transaction
+        id: finalize_release
+        if: ${{ always() && steps.sync_store.outcome == 'success' && steps.activate_release.outcome == 'success' && steps.live_smoke.outcome == 'success' }}
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 10m
+          script: |
             set -eu
             base=/var/www/html/graphysx
-            target="$(readlink "$base/previous" 2>/dev/null || true)"
-            rollback_sha="${target#releases/}"
-            test "$target" = "releases/$rollback_sha"
-            case "$rollback_sha" in
-              *[!0-9a-f]*|'') echo 'No valid previous release to roll back to' >&2; exit 1 ;;
-            esac
-            test -d "$base/$target"
-            ln -sfn "$target" "$base/current.rollback"
-            mv -Tf "$base/current.rollback" "$base/current"
-            echo "Rolled production back to $rollback_sha"
+            store_dir="${GRAPHYSX_STORE_PATH:-/opt/graphysx-web}"
+            sha='${{ github.sha }}'
+            run_id='${{ github.run_id }}'
+            run_attempt='${{ github.run_attempt }}'
+            transaction_id="$run_id-$run_attempt"
+            web_transaction="$base/.deploy-transactions/web-$transaction_id"
+            store_transaction="$store_dir/.server-transaction-$transaction_id"
+            backup="$store_dir/.server-rollback-$transaction_id"
+            failed="$store_dir/.server-failed-$transaction_id"
+            staging="$store_dir/.server-staging-$transaction_id"
+
+            case "$run_id" in ''|*[!0-9]*) echo 'Invalid deployment run id' >&2; exit 1 ;; esac
+            case "$run_attempt" in ''|*[!0-9]*) echo 'Invalid deployment attempt' >&2; exit 1 ;; esac
+            test "${#sha}" -eq 40
+            case "$sha" in *[!0-9a-f]*) echo 'Invalid release SHA' >&2; exit 1 ;; esac
+            test -d "$web_transaction"
+            test -d "$store_transaction"
+            server_changed="$(tr -d '\r\n' < "$store_transaction/server-changed")"
+            new_checksum="$(tr -d '\r\n' < "$store_transaction/new-checksum")"
+            case "$server_changed" in 0|1) ;; *) exit 1 ;; esac
+            test "${#new_checksum}" -eq 40
+            case "$new_checksum" in *[!0-9a-f]*) exit 1 ;; esac
+            test "$(tr -d '\r\n' < "$store_dir/.server-checksum")" = "$new_checksum"
+            test -f "$store_dir/server/scene-store.mjs"
+
+            web_changed="$(tr -d '\r\n' < "$web_transaction/web-changed")"
+            web_target="$(tr -d '\r\n' < "$web_transaction/new-target")"
+            case "$web_changed" in 0|1) ;; *) exit 1 ;; esac
+            test "$web_target" = "releases/$sha"
+            current_target="$(readlink "$base/current" 2>/dev/null || true)"
+            test "$current_target" = "$web_target"
+            test -d "$base/$current_target"
+            test ! -L "$base/$current_target"
+            test -f "$base/$current_target/index.html"
+
+            # Validation is complete. Discard the two rollback transactions only after both
+            # active halves are proven to be the release that passed the public smoke.
+            if test "$server_changed" -eq 1; then
+              test -d "$backup"
+              test ! -L "$backup"
+              rm -rf -- "$backup"
+            fi
+            rm -rf -- "$failed" "$staging" "$store_transaction"
+            rm -rf -- "$web_transaction"
+
+            # Retain exactly the verified current release and its validated rollback target.
+            # Invalid/non-release directories are never candidates for deletion.
+            previous_target="$(readlink "$base/previous" 2>/dev/null || true)"
+            for candidate in "$base/releases"/*; do
+              test -d "$candidate" || continue
+              test ! -L "$candidate" || continue
+              candidate_sha="${candidate##*/}"
+              test "${#candidate_sha}" -eq 40 || continue
+              case "$candidate_sha" in *[!0-9a-f]*) continue ;; esac
+              candidate_target="releases/$candidate_sha"
+              if test "$candidate_target" != "$current_target" && test "$candidate_target" != "$previous_target"; then
+                rm -rf -- "$candidate"
+              fi
+            done
 
       - name: Upload production smoke evidence
         if: always()
@@ -240,7 +836,7 @@ jobs:
           retention-days: 14
 
       - name: Record production verification
-        if: steps.live-smoke.outcome == 'success'
+        if: steps.finalize_release.outcome == 'success'
         run: |
           echo '### Production verified' >> "$GITHUB_STEP_SUMMARY"
           echo 'Commit `${{ github.sha }}` is live at <https://graphysx.specialblend.ca/>.' >> "$GITHUB_STEP_SUMMARY"
