@@ -890,7 +890,7 @@ try {
     await waitForLive(page, label, Math.max(SMOKE_TIMEOUT, 90_000));
     if (!suppliedBase) {
       // Keep one finite same-origin HTTP connection active beside the long-lived SSE stream.
-      // This stabilises Chromium's Windows loopback pool during the ten-minute software-WebGL
+      // This stabilises Chromium's Windows loopback pool during the long-running software-WebGL
       // smoke; failures remain visible to the strict request/console sentinel. Product requests
       // are never retried, and production/external-base runs do not install this harness probe.
       await page.evaluate(async (healthUrl) => {

@@ -3131,3 +3131,16 @@ error on a runtime rollback with an attached gizmo (`13aba57`).
 - Focused validation is green: syntax, scoped ESLint, and diff checks passed; the complete
   full-motion live browser gate passed 131/131 in 555.4 seconds with zero unexpected console
   errors, page errors, or failed requests.
+
+## 2026-08-06 — Clean-run live-browser deadline correction
+
+- Exact-SHA workflow run 31101305440 emitted 115 successful live-browser checks and no failed
+  assertion before the verify harness killed it at exactly 900.018 seconds. Its last PASS landed
+  only 10.7 seconds before termination, and live security subsequently passed; deploy again
+  stayed skipped. This was a slow progressing suite, not a deadlock or product failure.
+- The 15-minute policy still documented a historical 94-check contract. The current 131-check
+  suite finishes locally in 555.4 seconds and projects to roughly 16m40–16m55 on the clean
+  software-rendered runner. Only its dedicated outer cap moves to 20 minutes, leaving about
+  three minutes of observed headroom while remaining far below the historical 7.7–9.5-hour
+  wedges. Generic smoke/build caps, per-assertion waits, retry classification and budgets,
+  strict browser-error sentinels, workflow configuration, and product behavior are unchanged.

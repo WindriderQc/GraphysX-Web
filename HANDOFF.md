@@ -122,7 +122,7 @@ belongs in `scripts/`.
   or drop the station/stage and cross-client projection checks.
 - **A wedged run used to hang forever.** `runSmoke` awaited `close` with nothing bounding it, and
   two verify parents were found alive **9.5 and 7.7 hours** after launch holding Chromium trees.
-  There are now deadlines (10 min/smoke, 15 for the live browser contract, 10 min/build; all
+  There are now deadlines (10 min/smoke, 20 for the live browser contract, 10 min/build; all
   env-overridable) and signal cleanup, so Ctrl-C kills the tree instead of orphaning it.
 - **Judge liveness from `output/verify/*.png` mtimes**, not from elapsed time, and run the gate
   backgrounded.
