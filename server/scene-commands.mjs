@@ -159,10 +159,21 @@ function requireVector(value, length, label, minimum = -Infinity, maximum = Infi
   value.forEach((component, index) => requireFinite(component, `${label}[${index}]`, minimum, maximum));
 }
 
+/**
+ * Every other string here has a length cap; this one did not, so an array bounded at 128
+ * *entries* was unbounded in bytes. Tags, agent capabilities and force-field tag filters are
+ * all short labels — the longest in the shipped vocabulary is around 30 characters — and an
+ * entity carrying 128 megabyte-long "tags" is not authoring, it is a way to fill the store's
+ * 8 MB document budget and the live session's retained operation log with one command.
+ */
+const MAX_ARRAY_STRING_CHARS = 128;
+
 function requireStringArray(value, label, maximum = 128) {
   if (!Array.isArray(value) || value.length > maximum || value.some((entry) => typeof entry !== "string")) {
     reject(`${label} must be an array of at most ${maximum} strings`);
   }
+  const index = value.findIndex((entry) => entry.length > MAX_ARRAY_STRING_CHARS);
+  if (index !== -1) reject(`${label}[${index}] must be ${MAX_ARRAY_STRING_CHARS} characters or fewer`);
 }
 
 function validateJsonValue(value, label, depth = 0) {

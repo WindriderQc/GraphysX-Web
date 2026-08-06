@@ -14,8 +14,9 @@
 // Zero dependencies, same as scene-store.mjs, and mounted into the same server so
 // one `npm run serve:scenes` gives you both.
 
-import { createReadStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -107,9 +108,7 @@ function safeFileName(fileName) {
 const RENAME_ATTEMPTS = 5;
 const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
 
-async function writeAtomic(target, contents) {
-  const temporary = `${target}.${process.pid}.tmp`;
-  await writeFile(temporary, contents);
+async function renameWithRetry(temporary, target) {
   for (let attempt = 1; ; attempt += 1) {
     try {
       await rename(temporary, target);
@@ -122,6 +121,47 @@ async function writeAtomic(target, contents) {
       await delay(20 * attempt);
     }
   }
+}
+
+async function writeAtomic(target, contents) {
+  const temporary = `${target}.${process.pid}.tmp`;
+  await writeFile(temporary, contents);
+  await renameWithRetry(temporary, target);
+}
+
+/**
+ * The same atomic write, fed from a stream instead of a buffer.
+ *
+ * Uploads used to be read into memory in full before anything was written — up to the 192 MB
+ * limit, per request, with nothing stopping two of them overlapping. The limit was doing its
+ * job and the peak was still 192 MB of resident buffer for a file that was always going to
+ * end up on disk. Piping holds one chunk at a time, and the cap is enforced as the bytes go
+ * past rather than after they have all arrived.
+ */
+async function writeStreamAtomic(target, source, limitBytes) {
+  const temporary = `${target}.${process.pid}.tmp`;
+  let size = 0;
+  try {
+    await pipeline(
+      source,
+      async function* enforceLimit(chunks) {
+        for await (const chunk of chunks) {
+          size += chunk.length;
+          if (size > limitBytes) throw badRequest("Upload too large", 413);
+          yield chunk;
+        }
+      },
+      createWriteStream(temporary),
+    );
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+  if (size === 0) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw badRequest("An upload requires a request body");
+  }
+  await renameWithRetry(temporary, target);
 }
 
 function badRequest(message, status = 400) {
@@ -142,23 +182,56 @@ export function createAssetStore({ dir = DEFAULT_ASSET_DIR, datalakeDir = DEFAUL
     return next;
   };
 
+  /**
+   * The parsed manifest, kept until the file underneath it changes.
+   *
+   * `storedFile` consults the manifest to authorise every single asset GET, so serving one
+   * texture meant reading and parsing the whole file — for a page that requests thirty of
+   * them, thirty full reads and parses of a document that had not changed. `stat` is the
+   * cheap question, and every write here goes through `writeManifest`, which drops the entry
+   * outright rather than trusting mtime granularity to notice a same-millisecond rewrite.
+   */
+  let manifestCache = null;
+
   async function readManifest() {
     try {
+      const info = await stat(manifestPath);
+      if (manifestCache && manifestCache.mtimeMs === info.mtimeMs && manifestCache.size === info.size) {
+        // A copy: callers push and splice this to build the next manifest, and handing them
+        // the cached array would let a half-finished edit become what everyone else reads.
+        return [...manifestCache.assets];
+      }
       const parsed = JSON.parse(await readFile(manifestPath, "utf8"));
-      return Array.isArray(parsed?.assets) ? parsed.assets : [];
+      const assets = Array.isArray(parsed?.assets) ? parsed.assets : [];
+      manifestCache = { mtimeMs: info.mtimeMs, size: info.size, assets };
+      return [...assets];
     } catch (error) {
-      if (error && error.code === "ENOENT") return [];
+      if (error && error.code === "ENOENT") {
+        manifestCache = null;
+        return [];
+      }
       throw error;
     }
   }
 
   async function writeManifest(assets) {
+    manifestCache = null;
     await writeAtomic(manifestPath, `${JSON.stringify({ schema: ASSET_STORE_SCHEMA, assets }, null, 2)}\n`);
   }
 
   /**
    * Any datalake path a request names must land back inside the datalake root once
-   * resolved — `..`, absolute paths and drive changes all fail the prefix check.
+   * resolved — `..`, absolute paths and drive changes all fail the prefix check. (Checked on
+   * Windows too: a drive-relative `C:foo` resolves onto that drive's working directory and
+   * therefore fails the prefix, rather than sneaking past a separator-only check.)
+   *
+   * **Symlinks are deliberately not resolved.** Adding `realpath` here would make the check
+   * stricter, and would also break the ordinary way a media library is actually assembled —
+   * a datalake root that is itself a link, or one whose subfolders are links onto other
+   * drives, is normal on the machine this exists for, and every one of those would start
+   * failing. The residual exposure is a link *inside* the datalake pointing outside it, which
+   * requires write access to the datalake to create, is reachable only with the store token,
+   * and only ever reads. That trade is worth writing down rather than discovering later.
    */
   function resolveDatalakePath(relative) {
     // 503, not 404: the routes exist, the backing directory does not. A clear "not
@@ -249,8 +322,14 @@ export function createAssetStore({ dir = DEFAULT_ASSET_DIR, datalakeDir = DEFAUL
       );
     },
 
-    /** Store an uploaded body (drag-drop, or a browser-converted mesh JSON). */
-    async upload({ fileName, id, kind, label, category, source, meta }, body) {
+    /**
+     * Store an uploaded body (drag-drop, or a browser-converted mesh JSON).
+     *
+     * `body` is the request stream, not a buffer. It is consumed inside the manifest queue,
+     * so a second upload waiting its turn holds an open socket rather than a second copy of
+     * its payload in memory — which is the trade this is making on purpose.
+     */
+    async upload({ fileName, id, kind, label, category, source, meta }, body, limitBytes = UPLOAD_LIMIT_BYTES) {
       if (!fileName || typeof fileName !== "string") throw badRequest("An upload requires ?filename=");
       return addAsset(
         {
@@ -262,7 +341,7 @@ export function createAssetStore({ dir = DEFAULT_ASSET_DIR, datalakeDir = DEFAUL
           source: source ?? `Upload/${fileName}`,
           meta,
         },
-        (target) => writeAtomic(target, body),
+        (target) => writeStreamAtomic(target, body, limitBytes),
       );
     },
 
@@ -333,7 +412,10 @@ export function createAssetStore({ dir = DEFAULT_ASSET_DIR, datalakeDir = DEFAUL
   };
 }
 
-async function readRawBody(request, limitBytes = 192 * 1024 * 1024) {
+/** A recovered mesh or texture can be large; anything past this is not media. */
+const UPLOAD_LIMIT_BYTES = 192 * 1024 * 1024;
+
+async function readRawBody(request, limitBytes) {
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
@@ -376,6 +458,11 @@ async function streamFile(response, absolutePath, { cache, cors } = {}) {
   response.writeHead(200, {
     "content-type": mimeFor(absolutePath),
     "content-length": info.size,
+    // Everything served here is a file somebody uploaded, and its content type is guessed
+    // from an extension the uploader chose. Unknown extensions fall through to
+    // `application/octet-stream`, and without this a browser is free to disagree with that
+    // guess and interpret the bytes as something executable instead.
+    "x-content-type-options": "nosniff",
     // `no-cache`, not a long max-age: remove-then-reimport legitimately reuses a freed id
     // at the same URL, and a day-long cache served the OLD payload to the runtime (found
     // the hard way — a re-imported model kept rendering without its baked textures). The
@@ -427,7 +514,6 @@ export async function handleAssetRequest(store, request, response, url, path, gu
 
   if (path === "/assets/upload" && method === "POST") {
     if (denied()) return true;
-    const body = await readRawBody(request);
     let meta;
     const rawMeta = url.searchParams.get("meta");
     if (rawMeta) {
@@ -445,7 +531,9 @@ export async function handleAssetRequest(store, request, response, url, path, gu
       category: url.searchParams.get("category") ?? undefined,
       source: url.searchParams.get("source") ?? undefined,
       meta,
-    }, body);
+      // Every query parameter is read before the body is touched, so a malformed request is
+      // rejected without reading a single byte of what could be 192 MB of it.
+    }, request, UPLOAD_LIMIT_BYTES);
     sendJson(response, 201, record, cors);
     return true;
   }

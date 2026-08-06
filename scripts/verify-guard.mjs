@@ -161,6 +161,54 @@ export function withDeadline(child, ms, label) {
 }
 
 /**
+ * Failure signatures that mean the harness broke, not the product.
+ *
+ * These are the two transport bugs recorded in HANDOFF.md and the family they belong to: a
+ * static server resetting on its largest chunk, and undici reusing sockets Node had already
+ * closed. A smoke that dies this way proved nothing and is worth one more attempt. A smoke
+ * whose *assertion* failed proved something, and retrying it is how a real regression gets
+ * laundered into a green gate.
+ */
+export const HARNESS_FAILURE_SIGNATURES = [
+  "net::ERR_",
+  "ERR_CONNECTION_",
+  "fetch failed",
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EADDRINUSE",
+  "socket hang up",
+  "REQFAIL",
+  "Target page, context or browser has been closed",
+];
+
+/**
+ * Watches a stream for those signatures as it passes through.
+ *
+ * Incremental rather than a buffered tail: a transport failure can happen early and be
+ * followed by thousands of lines, which a fixed-size tail would have thrown away — and a
+ * classifier that silently misses its signal degrades to the unconditional retry this
+ * replaced. The carry-over keeps a signature that straddles two chunks visible.
+ */
+export function createFailureClassifier() {
+  const longest = Math.max(...HARNESS_FAILURE_SIGNATURES.map((entry) => entry.length));
+  let carry = "";
+  const matched = new Set();
+  return {
+    inspect(text) {
+      const window = carry + text;
+      for (const signature of HARNESS_FAILURE_SIGNATURES) {
+        if (window.includes(signature)) matched.add(signature);
+      }
+      carry = window.slice(-longest);
+    },
+    get signatures() {
+      return [...matched];
+    },
+  };
+}
+
+/**
  * Kill tracked children when this process is asked to stop. Without this, Ctrl-C on a
  * verify run leaves the Chromium tree behind — which is how orphans accumulate.
  */

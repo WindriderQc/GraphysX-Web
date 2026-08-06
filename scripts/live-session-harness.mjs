@@ -10,10 +10,20 @@ import { Agent as HttpsAgent, request as requestHttps } from "node:https";
 // smoke proves the *product* path; this proves the *protocol*.
 
 // Native keep-alive agents retire closed sockets correctly and avoid exhausting Windows'
-// loopback ephemeral ports during the long real-browser lifecycle. SSE still owns a
-// dedicated one-shot socket because aborting a retained stream is part of its contract.
-const requestHttpAgent = new HttpAgent({ keepAlive: true, keepAliveMsecs: 1_000, maxSockets: 48, maxFreeSockets: 8, scheduling: "lifo" });
-const requestHttpsAgent = new HttpsAgent({ keepAlive: true, keepAliveMsecs: 1_000, maxSockets: 48, maxFreeSockets: 8, scheduling: "lifo" });
+// loopback ephemeral ports during the long real-browser lifecycle. Eight sockets preserve
+// real request concurrency while forcing larger smoke bursts to queue on proven connections;
+// keeping maxFreeSockets equal to maxSockets prevents the pool from churning the other 40.
+// SSE borrows one of these sockets and removes it from the pool for its retained lifetime.
+const requestAgentOptions = {
+  keepAlive: true,
+  keepAliveMsecs: 1_000,
+  maxSockets: 8,
+  maxTotalSockets: 8,
+  maxFreeSockets: 8,
+  scheduling: "lifo",
+};
+const requestHttpAgent = new HttpAgent(requestAgentOptions);
+const requestHttpsAgent = new HttpsAgent(requestAgentOptions);
 
 export function check(results, name, ok, detail = "") {
   results.push({ name, ok: Boolean(ok), detail });
@@ -312,6 +322,64 @@ export function createActor(baseUrl, { credential = null, storeToken = null, ori
         if (Date.now() > deadline) throw new Error(`timed out waiting for ${label}`);
         await sleep(20);
       }
+    },
+  };
+}
+
+/**
+ * Opens a session stream and then deliberately stops reading it.
+ *
+ * This is the one client behaviour `createActor` cannot express: its pump consumes the
+ * socket continuously, which is exactly what keeps the server's send buffer empty. Here the
+ * response is paused the instant its headers arrive and never iterated, so TCP's window
+ * closes and the server's `ServerResponse.writableLength` grows with every broadcast — the
+ * shape of a suspended laptop or a throttled background tab, which TCP never reports as a
+ * close.
+ *
+ * `drain()` finally reads whatever the server managed to queue, so a test can assert what it
+ * decided to do about it.
+ */
+export async function openStalledStream(baseUrl, sessionId, { credential, origin = null, since = 0 } = {}) {
+  const headers = { "content-type": "application/json", "x-graphysx-session": credential, ...(origin ? { origin } : {}) };
+  let ticketResponse = null;
+  let ticketError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      ticketResponse = await requestText(`${baseUrl}/sessions/${sessionId}/stream-ticket`, { method: "POST", headers, body: "{}" });
+      break;
+    } catch (error) {
+      ticketError = error;
+      if (attempt < 2) await sleep(100 * (attempt + 1));
+    }
+  }
+  if (!ticketResponse) throw ticketError ?? new Error("stream-ticket transport failed");
+  if (ticketResponse.status !== 201) throw new Error(`stream-ticket failed: ${ticketResponse.status} ${ticketResponse.text}`);
+  const ticket = JSON.parse(ticketResponse.text).ticket;
+  // Publish the completed ticket response as free, then borrow that proven connection and
+  // detach it from the finite-request pool for the deliberately retained stream.
+  await new Promise((resolve) => setImmediate(resolve));
+  const opened = await openEventStream(
+    `${baseUrl}/sessions/${sessionId}/stream?ticket=${encodeURIComponent(ticket)}&since=${since}`,
+    { headers: { connection: "close", ...(origin ? { origin } : {}) }, borrowRequestSocket: true },
+  );
+  // Before any `data` listener or async iteration exists, so nothing has been consumed.
+  opened.response.pause();
+  return {
+    response: opened.response,
+    /** Reads to EOF, or until `timeoutMs` proves the server is still holding the stream open. */
+    async drain({ timeoutMs = 4_000 } = {}) {
+      const chunks = [];
+      let ended = false;
+      opened.response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      const finished = new Promise((resolve) => {
+        opened.response.once("end", () => { ended = true; resolve(); });
+        opened.response.once("close", resolve);
+        opened.response.once("error", resolve);
+      });
+      opened.response.resume();
+      await Promise.race([finished, sleep(timeoutMs)]);
+      opened.request.destroy();
+      return { ended, text: Buffer.concat(chunks).toString("utf8") };
     },
   };
 }

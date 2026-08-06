@@ -20,6 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyCommands, describeCommands } from "./scene-commands.mjs";
 import { assertAuthoredWorldEntityNamespaces } from "./host-entity-id-policy.mjs";
+import { decodeStoreName, encodeStoreName } from "./store-paths.mjs";
 import { createAssetStore, handleAssetRequest } from "./asset-store.mjs";
 import { CORS_ALLOW_HEADERS, CORS_ALLOW_METHODS, readJsonBody, sendJson as send } from "./http-util.mjs";
 import { createLiveSessions } from "./live-sessions.mjs";
@@ -123,12 +124,26 @@ function queueWrite(name, task) {
   const previous = writeChains.get(name) ?? Promise.resolve();
   const next = previous.then(task, task);
   // Keep the chain alive but never let a rejection poison the next writer.
-  writeChains.set(name, next.then(() => undefined, () => undefined));
+  const settled = next.then(() => undefined, () => undefined);
+  writeChains.set(name, settled);
+  // Release the entry once this is both the tail and finished. Without this the map gained a
+  // permanent entry per scene name ever written and lost none — small individually, unbounded
+  // in aggregate, and keyed by a name a client chooses. Re-reading the map rather than
+  // deleting unconditionally is what makes it safe: if another writer appended in the
+  // meantime, the tail is theirs and dropping it would let a third writer race them.
+  void settled.then(() => {
+    if (writeChains.get(name) === settled) writeChains.delete(name);
+  });
   return next;
 }
 
+/**
+ * The store's ids are not filenames. `:` is legal in a scene name and illegal on NTFS, where
+ * it opens an alternate data stream instead — see server/store-paths.mjs for the measurement
+ * and for why this is not a migration.
+ */
 function scenePath(dir, name) {
-  return join(dir, `${name}.json`);
+  return join(dir, `${encodeStoreName(name)}.json`);
 }
 
 /**
@@ -203,7 +218,10 @@ export function createSceneStore({ dir = DEFAULT_DIR } = {}) {
       const files = (await readdir(dir)).filter((file) => file.endsWith(".json"));
       const scenes = [];
       for (const file of files) {
-        const record = await readRecord(dir, file.slice(0, -5));
+        // Decoded back to the public name before it goes near `readRecord`, which encodes
+        // again on the way in. Passing the on-disk name straight through would double-encode
+        // and make every escaped scene invisible to its own listing.
+        const record = await readRecord(dir, decodeStoreName(file.slice(0, -5)));
         if (!record) continue;
         scenes.push({
           name: record.name,
@@ -296,12 +314,32 @@ export function createSceneStore({ dir = DEFAULT_DIR } = {}) {
  * event stream already uses. The traffic is deltas down and commands up over ordinary POST,
  * so the half of WebSockets we would use is the half SSE already gives us.
  */
-function createRelay() {
+function createRelay({ now = () => Date.now() } = {}) {
   /** scene name → set of open response streams. */
   const subscribers = new Map();
-  /** scene name → recent deltas, so a reconnecting client can catch up rather than reload. */
+  /** scene name → { entries, bytes, touchedAt }, so a reconnect catches up rather than reloads. */
   const backlog = new Map();
   const BACKLOG = 128;
+  /**
+   * Three bounds, because the count alone was none of them.
+   *
+   * A delta carries the whole submitted command list, so 128 of them is bounded only by the
+   * body limit — and the map itself was keyed by scene name and never pruned, so a store
+   * that had served a few thousand distinct scenes held a few thousand backlogs forever,
+   * every one of them for a scene nobody was watching. The map is the leak; the bytes are
+   * the size of it; the idle sweep is what makes both self-correcting.
+   */
+  const BACKLOG_BYTES = 4 * 1024 * 1024;
+  const BACKLOG_IDLE_MS = 30 * 60 * 1000;
+
+  /** Drops backlogs for scenes with no subscriber that nobody has published to in a while. */
+  function sweepIdle() {
+    const at = now();
+    for (const [name, held] of backlog) {
+      if (subscribers.has(name)) continue;
+      if (at - held.touchedAt > BACKLOG_IDLE_MS) backlog.delete(name);
+    }
+  }
 
   return {
     subscribe(name, response) {
@@ -310,32 +348,65 @@ function createRelay() {
       subscribers.set(name, set);
       return () => {
         set.delete(response);
-        if (set.size === 0) subscribers.delete(name);
+        if (set.size === 0) {
+          subscribers.delete(name);
+          // Losing the last watcher is the moment a backlog stops being worth anything to
+          // anyone but a client that reconnects shortly; the idle sweep collects it after.
+          sweepIdle();
+        }
       };
     },
 
-    /** Deltas after `sinceRevision`, or null when the gap is too old to bridge. */
+    /**
+     * Deltas after `sinceRevision`, or null when the gap is too old to bridge.
+     *
+     * Retained entries wrap the delta rather than extending it. A `bytes` field written onto
+     * the delta itself would be serialized into replayed frames but not into the live ones —
+     * the live frame is stringified before retention — so a reconnecting client would receive
+     * a different object than everyone else saw.
+     */
     catchUp(name, sinceRevision) {
-      const entries = backlog.get(name) ?? [];
+      const entries = backlog.get(name)?.entries ?? [];
       if (entries.length === 0) return [];
       const oldest = entries[0].revision;
       // The client is further behind than we can prove; it must reload rather than be told
       // a partial story.
       if (sinceRevision + 1 < oldest) return null;
-      return entries.filter((entry) => entry.revision > sinceRevision);
+      return entries.filter((entry) => entry.revision > sinceRevision).map((entry) => entry.delta);
     },
 
     publish(name, delta) {
-      const entries = backlog.get(name) ?? [];
-      entries.push(delta);
-      while (entries.length > BACKLOG) entries.shift();
-      backlog.set(name, entries);
+      const payload = JSON.stringify(delta);
+      const bytes = Buffer.byteLength(payload);
+      const held = backlog.get(name) ?? { entries: [], bytes: 0, touchedAt: now() };
+      held.entries.push({ revision: delta.revision, bytes, delta });
+      held.bytes += bytes;
+      held.touchedAt = now();
+      // Keep the newest even when it alone exceeds the budget: it is what a client
+      // reconnecting right now needs, and dropping it would empty the backlog for everyone.
+      while (held.entries.length > BACKLOG || (held.bytes > BACKLOG_BYTES && held.entries.length > 1)) {
+        held.bytes = Math.max(0, held.bytes - (held.entries.shift()?.bytes ?? 0));
+      }
+      backlog.set(name, held);
 
-      const payload = `id: ${delta.revision}\ndata: ${JSON.stringify(delta)}\n\n`;
-      for (const response of subscribers.get(name) ?? []) {
+      const frame = `id: ${delta.revision}\ndata: ${payload}\n\n`;
+      // Snapshotted: ending a stalled stream removes it from this set mid-iteration.
+      for (const response of [...(subscribers.get(name) ?? [])]) {
+        // A subscriber further behind than the whole backlog cannot be caught up by it, so
+        // every byte still queued for it is data it would discard on arrival. End the stream
+        // instead; EventSource reconnects and takes the reload the hello frame will offer.
+        // See the same reasoning, at length, in live-sessions.mjs.
+        if ((response.writableLength ?? 0) > BACKLOG_BYTES) {
+          try {
+            response.end();
+          } catch {
+            // Already gone; the 'close' handler unsubscribes it either way.
+          }
+          continue;
+        }
         // A dead socket must not take the write path down with it.
         try {
-          response.write(payload);
+          response.write(frame);
         } catch {
           // The 'close' handler will unsubscribe it.
         }
@@ -344,6 +415,13 @@ function createRelay() {
 
     subscriberCount(name) {
       return subscribers.get(name)?.size ?? 0;
+    },
+
+    /** Diagnostic only: names held, and the bytes they hold. Never a delta body. */
+    backlogStats() {
+      let bytes = 0;
+      for (const held of backlog.values()) bytes += held.bytes;
+      return { names: backlog.size, bytes };
     },
   };
 }

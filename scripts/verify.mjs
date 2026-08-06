@@ -3,7 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startStaticServer } from "./static-server.mjs";
-import { acquireVerifyLock, installSignalCleanup, machineVerifyLockPath, withDeadline } from "./verify-guard.mjs";
+import { acquireVerifyLock, createFailureClassifier, installSignalCleanup, machineVerifyLockPath, withDeadline } from "./verify-guard.mjs";
 
 // One command that proves a release is shippable: typecheck, build, then drive the
 // built output in a real headless browser through every product route.
@@ -108,9 +108,21 @@ const SMOKES = [
 // child is an orphaned Chromium waiting to happen.
 const children = new Set();
 
-function spawnTracked(command, args, options, label, deadlineMs) {
-  const child = spawn(command, args, options);
+function spawnTracked(command, args, options, label, deadlineMs, { classify = false } = {}) {
+  // Output is piped only when it has to be classified, and is written straight through, so
+  // the live view of a running smoke is unchanged.
+  const child = spawn(command, args, classify ? { ...options, stdio: ["ignore", "pipe", "pipe"] } : options);
   children.add(child);
+  const classifier = classify ? createFailureClassifier() : null;
+  if (classifier) {
+    for (const [stream, sink] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
+      stream?.setEncoding("utf8");
+      stream?.on("data", (chunk) => {
+        classifier.inspect(chunk);
+        sink.write(chunk);
+      });
+    }
+  }
   const { timedOut, clear } = withDeadline(child, deadlineMs, label);
   const finished = new Promise((resolve) => {
     child.on("close", (code) => resolve({ label, code: code ?? 1 }));
@@ -120,10 +132,12 @@ function spawnTracked(command, args, options, label, deadlineMs) {
     });
   });
   // Whichever lands first wins: a real exit, or the deadline killing the tree.
-  return Promise.race([finished, timedOut]).finally(() => {
-    clear();
-    children.delete(child);
-  });
+  return Promise.race([finished, timedOut])
+    .then((result) => ({ ...result, signatures: classifier?.signatures ?? [] }))
+    .finally(() => {
+      clear();
+      children.delete(child);
+    });
 }
 
 function run(command, args, label) {
@@ -157,8 +171,19 @@ function runSmoke(smoke, base) {
     },
     smoke.name,
     smoke.deadlineMs ?? SMOKE_DEADLINE_MS,
+    { classify: true },
   );
 }
+
+/**
+ * Retries are a cost, not a free pass, so the gate counts them and eventually says no.
+ *
+ * The retry itself is right — the transport failures it covers are real and documented — but
+ * it used to fire on *any* failure and report the eventual pass as a plain `PASS`. A check
+ * that fails half the time then passes the gate three runs in four, invisibly, which is the
+ * same outcome as weakening its assertion. Above this floor the flakiness is the result.
+ */
+const MAX_RETRIES = Number(process.env.VERIFY_MAX_RETRIES ?? 3);
 
 const results = [];
 let server = null;
@@ -184,9 +209,26 @@ try {
   await rm(ARTIFACTS, { recursive: true, force: true });
   await mkdir(ARTIFACTS, { recursive: true });
 
+  // First, and unconditionally: sub-second, node-only, no server, no browser, no lock
+  // contention. If a pure function's contract broke there is no reason to spend forty
+  // minutes of software-rasterised WebGL finding out.
+  console.log("\n=== unit tests ===");
+  // The glob, not the bare directory: `node --test test/` resolves the path as a module on
+  // Node 24 and dies with MODULE_NOT_FOUND before running anything. Node expands this
+  // pattern itself, so it behaves the same whether or not a shell is in the way.
+  // `node`, not `process.execPath`: `run` uses a shell on Windows and the interpreter's own
+  // path contains a space, which the shell then splits into a command that does not exist.
+  // The neighbouring probes below already invoke it this way.
+  results.push(await run("node", ["--test", "test/*.test.mjs"], "unit"));
+
   if (!externalBase && !noBuild) {
     console.log("\n=== typecheck ===");
     results.push(await run("npx", ["tsc", "--noEmit"], "typecheck"));
+
+    // `--max-warnings 0` so an unused disable directive cannot quietly accumulate; that is
+    // how the config found a directive for a rule nothing had ever enabled.
+    console.log("\n=== lint ===");
+    results.push(await run("npx", ["eslint", ".", "--max-warnings", "0"], "lint"));
 
     console.log("\n=== build ===");
     results.push(await run("npx", ["vite", "build"], "build"));
@@ -217,6 +259,7 @@ try {
       }
       console.log(`\n--- ${smoke.name}: ${smoke.covers} ---`);
       let result;
+      let retried = null;
       for (let attempt = 1; attempt <= 2; attempt += 1) {
         let base = externalBase;
         if (!base) {
@@ -234,9 +277,20 @@ try {
           }
         }
         if (result.code === 0 || attempt === 2) break;
-        console.warn(`\n${smoke.name}: first attempt failed; retrying once on a fresh server.`);
+        // A deadline kill is not a transport failure. It already spent the full deadline
+        // proving something is wedged, and spending it again teaches nothing.
+        if (result.timedOut) {
+          console.warn(`\n${smoke.name}: failed on its deadline — not retried.`);
+          break;
+        }
+        if (result.signatures.length === 0) {
+          console.warn(`\n${smoke.name}: failed an assertion — not retried. Diagnose it.`);
+          break;
+        }
+        retried = result.signatures.join(", ");
+        console.warn(`\n${smoke.name}: transport failure (${retried}); retrying once on a fresh server.`);
       }
-      results.push(result);
+      results.push({ ...result, retried: result.code === 0 ? retried : null });
     }
   }
 } finally {
@@ -245,10 +299,29 @@ try {
 }
 
 const failed = results.filter((r) => r.code !== 0);
+const retried = results.filter((r) => r.retried);
 console.log("\n=== verify summary ===");
-for (const r of results) console.log(`${r.code === 0 ? "PASS" : "FAIL"}  ${r.label}`);
+for (const r of results) {
+  // A retried pass is not the same result as a first-attempt pass, and the summary is the
+  // thing people actually read. Say so on the line itself.
+  const suffix = r.retried ? ` (retried: ${r.retried})` : "";
+  console.log(`${r.code === 0 ? "PASS" : "FAIL"}  ${r.label}${suffix}`);
+}
 if (failed.length) {
   console.error(`\n${failed.length} check(s) failed: ${failed.map((f) => f.label).join(", ")}`);
   process.exit(1);
+}
+if (retried.length > MAX_RETRIES) {
+  console.error(
+    `\nEvery check passed, but ${retried.length} needed a retry (limit ${MAX_RETRIES}): ` +
+    `${retried.map((r) => r.label).join(", ")}.\n` +
+    "  That much transport flakiness is a result, not noise — this run does not count as green.\n" +
+    "  Usually: another verify, a build, or several sessions sharing this machine. See CLAUDE.md.\n" +
+    "  Raise the floor deliberately with VERIFY_MAX_RETRIES if you know why.",
+  );
+  process.exit(1);
+}
+if (retried.length) {
+  console.log(`\nNote: ${retried.length} check(s) passed only after a transport retry: ${retried.map((r) => r.label).join(", ")}`);
 }
 console.log(`\nAll ${results.length} checks passed. Screenshots: ${ARTIFACTS}`);

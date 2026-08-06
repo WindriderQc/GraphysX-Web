@@ -263,7 +263,11 @@ import {
 // Legacy archive datasets are lazy-loaded so the initial bundle stays small.
 // Each module variable fills in when its chunk arrives; ensureLegacyData()
 // triggers loads and the scene rebuilds itself when data lands.
-/* eslint-disable @typescript-eslint/no-explicit-any */
+// `any` is deliberate for the whole block below, and it is the one place in the product tree
+// where that is true: these hold recovered archive JSON whose shape is the archive's, not
+// ours, and typing them would mean inventing a schema for data we are adapting rather than
+// authoring. (This used to carry an `eslint-disable` for `@typescript-eslint/no-explicit-any`,
+// which was a directive for a rule no config ever enabled — see eslint.config.mjs.)
 let suzanne1Level: any = null;
 let assetCatalog: any = null;
 let tvmCatalog: any = null;

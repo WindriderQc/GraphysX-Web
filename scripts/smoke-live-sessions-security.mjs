@@ -12,7 +12,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { startSceneStore } from "../server/scene-store.mjs";
-import { check, createActor, report, requestText, seedDefinition, sleep, spawnCommand, waitForStore } from "./live-session-harness.mjs";
+import { check, createActor, openStalledStream, report, requestText, seedDefinition, sleep, spawnCommand, waitForStore } from "./live-session-harness.mjs";
 
 const TOKEN = "live-session-security-token";
 const ORIGIN = "https://graphysx.specialblend.ca";
@@ -328,7 +328,151 @@ try {
   check(results, "every receipt carries a distinct, ordered sequence",
     new Set(accepted.map((r) => r.body.seq)).size === accepted.length, "sequence collision");
 
-  // --- 10. token-leak audit ------------------------------------------------------------
+  // --- 10. cumulative retention --------------------------------------------------------
+  //
+  // Every other limit in section 7 bounds ONE request. This one bounds what survives them.
+  //
+  // The retained operation ring used to be bounded by count alone, which is not a memory
+  // bound: a retained operation carries its raw commands *and* the inverse computed from the
+  // pre-state, and 512 of those at the per-request cap is gigabytes per session — reachable
+  // by any member holding `mutate`, inside the ordinary refill rate, with no single request
+  // ever exceeding a limit.
+  //
+  // Asserted through the contract rather than through internals: when the ring evicts, a
+  // client resuming from before the eviction is told `mustResync` instead of being handed a
+  // partial story. Sixteen operations is far under the 512-event bound, so if this resyncs,
+  // the byte budget is the only thing that can have evicted.
+
+  const retentionCreate = await founder.call("POST", "/sessions", {
+    sceneName: "second-fixture", owner: { id: "owner-ada", label: "Ada" },
+  });
+  const retentionId = retentionCreate.body.session.sessionId;
+  const retentionOwner = createActor(base, { credential: retentionCreate.body.credential, origin: ORIGIN });
+
+  // 128 tags at the 128-character cap: the largest an entity may legally carry, and the
+  // reason `update` is used rather than `spawn` — updating the same entities keeps the
+  // document small while making each operation's inverse a full clone of the tags it
+  // replaced. That inverse is the half of the retained cost a count bound cannot see.
+  const fatTags = (salt) => Array.from({ length: 128 }, (_, index) => `${salt}-${index}-`.padEnd(128, "t").slice(0, 128));
+  const FAT_ENTITIES = 12;
+  const FAT_OPS = 16;
+
+  await retentionOwner.call("POST", `/sessions/${retentionId}/ops`, {
+    opId: "retention-seed",
+    commands: Array.from({ length: FAT_ENTITIES }, (_, index) => ({
+      op: "spawn",
+      entity: { id: `fat-${index}`, type: "box", transform: { position: [index, 0.5, 0] }, tags: fatTags("seed") },
+    })),
+  });
+
+  const retentionHello = await retentionOwner.connect(retentionId);
+  const resumeSeq = retentionHello.seq;
+  let retentionAccepted = 0;
+  for (let round = 0; round < FAT_OPS; round += 1) {
+    const response = await retentionOwner.call("POST", `/sessions/${retentionId}/ops`, {
+      opId: `retention-${round}`,
+      commands: Array.from({ length: FAT_ENTITIES }, (_, index) => ({
+        op: "update",
+        id: `fat-${index}`,
+        patch: { tags: fatTags(`r${round}`) },
+      })),
+    });
+    if (response.status === 201) retentionAccepted += 1;
+  }
+  check(results, "the retention fixture is accepted without tripping a per-request limit",
+    retentionAccepted === FAT_OPS, `accepted ${retentionAccepted}/${FAT_OPS}`);
+
+  await retentionOwner.disconnect();
+  const evictedHello = await retentionOwner.connect(retentionId, { since: resumeSeq });
+  check(results, "cumulative retention is bounded in bytes, not only in events",
+    evictedHello.mustResync === true,
+    `resuming from seq ${resumeSeq} after ${FAT_OPS} operations gave mustResync=${evictedHello.mustResync}`);
+  check(results, "that eviction cannot be explained by the event-count bound",
+    FAT_OPS + 1 < 512, `${FAT_OPS + 1} retained events`);
+  await retentionOwner.disconnect();
+
+  // The control. A byte budget that resyncs everybody proves nothing; an ordinary session
+  // must still bridge an ordinary reconnect from the ring.
+  const thinCreate = await founder.call("POST", "/sessions", {
+    sceneName: "second-fixture", owner: { id: "owner-ada", label: "Ada" },
+  });
+  const thinId = thinCreate.body.session.sessionId;
+  const thinOwner = createActor(base, { credential: thinCreate.body.credential, origin: ORIGIN });
+  await thinOwner.connect(thinId);
+  // Resume from a sequence the server has actually issued. A brand-new session's hello
+  // carries seq 0, and `since=0` means "I have nothing", not "resume me" — which is a
+  // resume assertion that can never fail and therefore proves nothing.
+  await thinOwner.call("POST", `/sessions/${thinId}/ops`, {
+    opId: "thin-anchor", commands: [spawnCommand("thin-crate-anchor")],
+  });
+  await thinOwner.waitFor((received) => received.ops.length >= 1, { label: "the anchor operation" });
+  const resumeFrom = thinOwner.lastSeq;
+  await thinOwner.disconnect();
+
+  // Three operations land while nobody is listening. These are what the ring owes on return.
+  const MISSED = 3;
+  for (let index = 0; index < MISSED; index += 1) {
+    await thinOwner.call("POST", `/sessions/${thinId}/ops`, {
+      opId: `thin-${index}`, commands: [spawnCommand(`thin-crate-${index}`)],
+    });
+  }
+  const thinResume = await thinOwner.connect(thinId, { since: resumeFrom });
+  check(results, "an ordinary reconnect is still bridged from the retained ring",
+    thinResume.mustResync === false && thinResume.resumed === true,
+    `resuming from seq ${resumeFrom}: mustResync=${thinResume.mustResync} resumed=${thinResume.resumed}`);
+  await thinOwner.waitFor((received) => received.ops.length >= 1 + MISSED, { label: "replayed operations" });
+  check(results, "the bridged reconnect replays exactly the operations it missed",
+    thinOwner.received.ops.length === 1 + MISSED
+      && thinOwner.received.ops.slice(1).every((event) => event.seq > resumeFrom),
+    `${thinOwner.received.ops.length} received for ${MISSED} missed`);
+  await thinOwner.disconnect();
+
+  // --- 11. a subscriber that stops reading -----------------------------------------------
+  //
+  // The other half of the same problem. Retention bounds what the session keeps; this bounds
+  // what one stream can make the process hold on its behalf. `response.write()` reports
+  // backpressure through its return value and nothing was reading it, so a client that stops
+  // reading — and TCP never reports that as a close — accumulated every subsequent broadcast
+  // in this process indefinitely.
+
+  const stallCreate = await founder.call("POST", "/sessions", {
+    sceneName: "second-fixture", owner: { id: "owner-ada", label: "Ada" },
+  });
+  const stallId = stallCreate.body.session.sessionId;
+  const stallOwner = createActor(base, { credential: stallCreate.body.credential, origin: ORIGIN });
+  await stallOwner.call("POST", `/sessions/${stallId}/ops`, {
+    opId: "stall-seed",
+    commands: Array.from({ length: FAT_ENTITIES }, (_, index) => ({
+      op: "spawn",
+      entity: { id: `stall-${index}`, type: "box", transform: { position: [index, 0.5, 0] }, tags: fatTags("seed") },
+    })),
+  });
+
+  const stalled = await openStalledStream(base, stallId, { credential: stallCreate.body.credential, origin: ORIGIN });
+  const beforeStallMembers = (await stallOwner.call("GET", `/sessions/${stallId}`)).body.session.members;
+  for (let round = 0; round < FAT_OPS; round += 1) {
+    await stallOwner.call("POST", `/sessions/${stallId}/ops`, {
+      opId: `stall-${round}`,
+      commands: Array.from({ length: FAT_ENTITIES }, (_, index) => ({
+        op: "update",
+        id: `stall-${index}`,
+        patch: { tags: fatTags(`r${round}`) },
+      })),
+    });
+  }
+
+  const drained = await stalled.drain();
+  check(results, "a subscriber that stops reading is dropped rather than buffered forever",
+    drained.ended === true, "the server was still holding the stalled stream open");
+  check(results, "the dropped subscriber is told to resync rather than silently severed",
+    drained.text.includes("event: resync") && drained.text.includes("stream-too-slow"),
+    drained.text.slice(-240));
+  check(results, "dropping a stalled stream leaves the session serving everyone else",
+    (await stallOwner.call("GET", `/sessions/${stallId}/snapshot`)).status === 200
+      && beforeStallMembers.length === 1,
+    "session unusable after dropping a stalled subscriber");
+
+  // --- 12. token-leak audit ------------------------------------------------------------
 
   const secrets = [
     TOKEN,

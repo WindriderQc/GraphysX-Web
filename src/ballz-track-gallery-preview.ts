@@ -310,7 +310,12 @@ previewWindow.__BALLZ_TRACK_GALLERY_HARNESS__ = {
   displayToSourceWorld: (id, position) => environment.displayToSourceWorld(id, position).toArray()
 };
 
-environment.ready.then(() => render());
+// A rejection here means the gallery never loaded, which is the one thing worth knowing about
+// this harness. Without a handler it became an unhandled rejection with no route back to the
+// operator.
+environment.ready.then(() => render()).catch((error: unknown) => {
+  console.error("ballz-track-gallery preview failed to load", error);
+});
 applyCamera("overview");
 resize();
 requestAnimationFrame(animationFrame);

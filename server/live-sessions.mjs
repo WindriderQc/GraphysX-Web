@@ -61,6 +61,22 @@ const LIMITS = {
   invitesPerSession: 32,
   /** Replayable operation events retained per session. Beyond this, a client must resync. */
   opLog: 512,
+  /**
+   * Serialized bytes retained in that ring, whichever bound binds first.
+   *
+   * The count alone is not a memory bound. A retained operation carries its raw `commands`
+   * (up to `opBodyBytes`) *and* its computed `inverse`, which for a `remove` is a clone of
+   * every deleted entity — up to the 8 MB whole-document cap in scene-commands.mjs. 512 of
+   * those is gigabytes, per session, reachable by any member holding `mutate` inside the
+   * ordinary 10-ops/second refill. Every other limit here bounds one request; this one
+   * bounds what survives them.
+   *
+   * 4 MiB is generous for the ring's actual job — bridging a brief disconnect, where a
+   * typical operation is a few hundred bytes. Exceeding it costs a client the replay and
+   * gives it `mustResync`, which is a supported, already-tested path and strictly better
+   * than an unbounded process.
+   */
+  opLogBytes: 4 * 1024 * 1024,
   /** Operation bodies. A document command list is small; a 256KB one is already suspect. */
   opBodyBytes: 256 * 1024,
   presenceBodyBytes: 8 * 1024,
@@ -198,6 +214,108 @@ function createBucket(capacity, refillPerSecond, now) {
   };
 }
 
+// --- inverse operations ------------------------------------------------------------------
+//
+// Collaborative undo, done as a *compensating operation* rather than a rewind.
+//
+// The runtime's own undo is a snapshot stack: it pops whatever transaction was last applied,
+// by anyone. In a shared session that silently deletes a colleague's work, which is the one
+// outcome the product may never produce. So undoing here never rewinds shared history — it
+// computes the inverse of one operation and submits it as a NEW operation, attributed to the
+// same actor, which every other client applies like any other change.
+//
+// The inverse is computed at apply time, from the document as it was *before* the operation,
+// and stored on the log entry. Recomputing it later is impossible: the pre-state is gone.
+
+/**
+ * Entity ids an operation touched, for the safety check below.
+ *
+ * Exported for `test/inverse-operations.test.mjs`. This and `computeInverseCommands` decide
+ * whether collaborative undo reverts the right thing or silently destroys a colleague's work,
+ * and every branch of them was previously reachable only by driving a live HTTP session.
+ */
+export function touchedEntityIds(commands, outputs) {
+  const ids = new Set();
+  commands.forEach((command, index) => {
+    if (command.op === "spawn") {
+      const id = outputs[index]?.id;
+      if (id) ids.add(id);
+    } else if (command.op === "update") {
+      ids.add(command.id);
+    } else if (command.op === "remove") {
+      for (const id of outputs[index]?.ids ?? [command.id]) ids.add(id);
+    } else if (command.op === "set-environment") {
+      // The environment is a single shared slot; name it so two environment edits conflict.
+      ids.add("@environment");
+    }
+  });
+  return [...ids];
+}
+
+/**
+ * The commands that undo `commands`, or null when the operation cannot be inverted exactly.
+ *
+ * Null is a real answer, not a failure to try. An `update` that introduced a field absent
+ * before it cannot be inverted through the merge semantics `applyCommands` uses — there is no
+ * command that removes a key — and guessing would leave the document subtly different from
+ * where it started while reporting success.
+ */
+export function computeInverseCommands(preDefinition, commands, outputs) {
+  const byId = new Map((preDefinition.entities ?? []).map((entity) => [entity.id, entity]));
+  const order = new Map((preDefinition.entities ?? []).map((entity, index) => [entity.id, index]));
+  const inverseGroups = [];
+
+  for (let index = 0; index < commands.length; index += 1) {
+    const command = commands[index];
+    const output = outputs[index];
+
+    if (command.op === "spawn") {
+      const id = output?.id;
+      if (!id) return null;
+      inverseGroups.push([{ op: "remove", id }]);
+      continue;
+    }
+
+    if (command.op === "remove") {
+      // Removing takes descendants with it, so the inverse restores every id the command
+      // actually deleted — in the document's original order, so a parent is respawned
+      // before the child that references it.
+      const ids = [...(output?.ids ?? [command.id])].sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+      const restores = [];
+      for (const id of ids) {
+        const entity = byId.get(id);
+        if (!entity) return null;
+        restores.push({ op: "spawn", entity: structuredClone(entity) });
+      }
+      inverseGroups.push(restores);
+      continue;
+    }
+
+    if (command.op === "update") {
+      const entity = byId.get(command.id);
+      if (!entity) return null;
+      const patch = command.patch ?? {};
+      const restore = {};
+      for (const key of Object.keys(patch)) {
+        if (!(key in entity)) return null; // introduced a field; no command removes one
+        restore[key] = structuredClone(entity[key]);
+      }
+      inverseGroups.push([{ op: "update", id: command.id, patch: restore }]);
+      continue;
+    }
+
+    if (command.op === "set-environment") {
+      inverseGroups.push([{ op: "set-environment", environment: structuredClone(preDefinition.environment ?? {}) }]);
+      continue;
+    }
+
+    return null;
+  }
+
+  // Applied in reverse: undoing "remove A then spawn B" must despawn B before restoring A.
+  return inverseGroups.reverse().flat();
+}
+
 /**
  * The session engine. `now` is injectable so expiry and rate limits are testable without
  * sleeping through them — an expiry test that sleeps is a flaky test.
@@ -312,22 +430,83 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     return session.seq;
   }
 
-  function push(session, event, { retain = false } = {}) {
-    if (retain) {
-      session.log.push(event);
-      while (session.log.length > LIMITS.opLog) {
-        const dropped = session.log.shift();
-        if (dropped?.opId) session.applied.delete(dropped.opId);
-        // Presence consumes sequence numbers but is intentionally not retained. A resume is
-        // impossible only when a retained event was actually dropped, not merely because a
-        // non-retained presence sequence sits between two retained events.
-        if (Number.isInteger(dropped?.seq)) session.replayFloorSeq = Math.max(session.replayFloorSeq, dropped.seq);
-      }
+  /**
+   * Retained size per event, kept beside the log rather than on it.
+   *
+   * A `retainedBytes` field on the event itself would be serialized into replayed frames but
+   * not into the live ones — the live frame is stringified before the event is retained — so
+   * a resuming client would receive a different object than everyone else saw. A WeakMap
+   * measures the same thing and disappears with the event it describes.
+   */
+  const retainedBytes = new WeakMap();
+
+  function retainEvent(session, event, bytes) {
+    session.log.push(event);
+    retainedBytes.set(event, bytes);
+    session.logBytes += bytes;
+    // Both bounds evict from the same end, but the byte bound always keeps the newest event:
+    // an operation larger than the whole budget is still the one a reconnecting client is
+    // most likely to need, and dropping it would empty the ring for every other member too.
+    while (session.log.length > LIMITS.opLog
+      || (session.logBytes > LIMITS.opLogBytes && session.log.length > 1)) {
+      const dropped = session.log.shift();
+      session.logBytes = Math.max(0, session.logBytes - (retainedBytes.get(dropped) ?? 0));
+      retainedBytes.delete(dropped);
+      // Eviction also drops the idempotency receipt, exactly as the count bound already did.
+      // A retry of an evicted opId is re-applied rather than answered from the receipt, which
+      // is why `baseRevision` is the check that actually stops a double-apply — it will no
+      // longer match. Clients that omit it were already taking that risk.
+      if (dropped?.opId) session.applied.delete(dropped.opId);
+      // Presence consumes sequence numbers but is intentionally not retained. A resume is
+      // impossible only when a retained event was actually dropped, not merely because a
+      // non-retained presence sequence sits between two retained events.
+      if (Number.isInteger(dropped?.seq)) session.replayFloorSeq = Math.max(session.replayFloorSeq, dropped.seq);
     }
-    const frame = `id: ${event.seq}\nevent: ${event.event}\ndata: ${JSON.stringify(event)}\n\n`;
-    for (const subscriber of session.subscribers.values()) {
+  }
+
+  /**
+   * When a subscriber's socket buffer exceeds the replay ring's own budget, drop it.
+   *
+   * `response.write()` returns false under backpressure and nothing here was reading that.
+   * A client that has stopped reading — a suspended laptop, a throttled background tab, a
+   * paused debugger — is never reported by TCP as a close, so its cleanup never runs and
+   * every subsequent broadcast accumulates in this process. Measured: a stalled reader took
+   * a `ServerResponse` to 3.5 MB of buffered output in 1.5 seconds.
+   *
+   * The threshold is `opLogBytes` rather than a number chosen for feel, and that identity is
+   * the justification: a subscriber further behind than the entire retained ring can no
+   * longer be caught up *by* that ring — the events it is missing are already evicted — so
+   * every byte still queued for it is data it would have to discard on arrival. Dropping it
+   * now loses nothing and costs it one reconnect.
+   *
+   * It needs no new client vocabulary either. `resync` is the marker `adoptExternalRecord`
+   * already sends and the client already handles by taking a snapshot, and EventSource
+   * reconnects on its own once the stream ends.
+   */
+  const slowSubscriberBytes = () => LIMITS.opLogBytes;
+
+  function push(session, event, { retain = false } = {}) {
+    // Serialized once: the frame needs it, and the retention budget is denominated in the
+    // same bytes rather than in a second, differently-shaped estimate.
+    const data = JSON.stringify(event);
+    if (retain) retainEvent(session, event, Buffer.byteLength(data));
+    const frame = `id: ${event.seq}\nevent: ${event.event}\ndata: ${data}\n\n`;
+    // Snapshotted: dropping a slow subscriber mutates `session.subscribers` mid-loop.
+    for (const subscriber of [...session.subscribers.values()]) {
       const subscribedMember = session.members.get(subscriber.memberId);
       if (!subscribedMember || subscribedMember.revokedAt) continue;
+      if ((subscriber.response.writableLength ?? 0) > slowSubscriberBytes()) {
+        // `broadcast: false` inside endSubscriber, so this cannot recurse back into push().
+        endSubscriber(session, subscriber, "resync", {
+          schema: LIVE_SESSION_SCHEMA,
+          event: "resync",
+          sessionId: session.id,
+          reason: "stream-too-slow",
+          seq: session.seq,
+          revision: session.revision,
+        });
+        continue;
+      }
       try {
         subscriber.response.write(frame);
       } catch {
@@ -510,6 +689,8 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       /** Response → member-bound stream record. Binding is what makes revocation terminal. */
       subscribers: new Map(),
       log: [],
+      /** Serialized bytes currently held in `log`, bounded by LIMITS.opLogBytes. */
+      logBytes: 0,
       /** Highest retained-event sequence evicted from the replay ring. */
       replayFloorSeq: 0,
       /** opId → originating member, canonical request fingerprint, receipt and canonical event. */
@@ -666,103 +847,6 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     }, { retain: true });
     return joined;
   }
-
-
-// --- inverse operations ------------------------------------------------------------------
-//
-// Collaborative undo, done as a *compensating operation* rather than a rewind.
-//
-// The runtime's own undo is a snapshot stack: it pops whatever transaction was last applied,
-// by anyone. In a shared session that silently deletes a colleague's work, which is the one
-// outcome the product may never produce. So undoing here never rewinds shared history — it
-// computes the inverse of one operation and submits it as a NEW operation, attributed to the
-// same actor, which every other client applies like any other change.
-//
-// The inverse is computed at apply time, from the document as it was *before* the operation,
-// and stored on the log entry. Recomputing it later is impossible: the pre-state is gone.
-
-/** Entity ids an operation touched, for the safety check below. */
-function touchedEntityIds(commands, outputs) {
-  const ids = new Set();
-  commands.forEach((command, index) => {
-    if (command.op === "spawn") {
-      const id = outputs[index]?.id;
-      if (id) ids.add(id);
-    } else if (command.op === "update") {
-      ids.add(command.id);
-    } else if (command.op === "remove") {
-      for (const id of outputs[index]?.ids ?? [command.id]) ids.add(id);
-    } else if (command.op === "set-environment") {
-      // The environment is a single shared slot; name it so two environment edits conflict.
-      ids.add("@environment");
-    }
-  });
-  return [...ids];
-}
-
-/**
- * The commands that undo `commands`, or null when the operation cannot be inverted exactly.
- *
- * Null is a real answer, not a failure to try. An `update` that introduced a field absent
- * before it cannot be inverted through the merge semantics `applyCommands` uses — there is no
- * command that removes a key — and guessing would leave the document subtly different from
- * where it started while reporting success.
- */
-function computeInverseCommands(preDefinition, commands, outputs) {
-  const byId = new Map((preDefinition.entities ?? []).map((entity) => [entity.id, entity]));
-  const order = new Map((preDefinition.entities ?? []).map((entity, index) => [entity.id, index]));
-  const inverseGroups = [];
-
-  for (let index = 0; index < commands.length; index += 1) {
-    const command = commands[index];
-    const output = outputs[index];
-
-    if (command.op === "spawn") {
-      const id = output?.id;
-      if (!id) return null;
-      inverseGroups.push([{ op: "remove", id }]);
-      continue;
-    }
-
-    if (command.op === "remove") {
-      // Removing takes descendants with it, so the inverse restores every id the command
-      // actually deleted — in the document's original order, so a parent is respawned
-      // before the child that references it.
-      const ids = [...(output?.ids ?? [command.id])].sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
-      const restores = [];
-      for (const id of ids) {
-        const entity = byId.get(id);
-        if (!entity) return null;
-        restores.push({ op: "spawn", entity: structuredClone(entity) });
-      }
-      inverseGroups.push(restores);
-      continue;
-    }
-
-    if (command.op === "update") {
-      const entity = byId.get(command.id);
-      if (!entity) return null;
-      const patch = command.patch ?? {};
-      const restore = {};
-      for (const key of Object.keys(patch)) {
-        if (!(key in entity)) return null; // introduced a field; no command removes one
-        restore[key] = structuredClone(entity[key]);
-      }
-      inverseGroups.push([{ op: "update", id: command.id, patch: restore }]);
-      continue;
-    }
-
-    if (command.op === "set-environment") {
-      inverseGroups.push([{ op: "set-environment", environment: structuredClone(preDefinition.environment ?? {}) }]);
-      continue;
-    }
-
-    return null;
-  }
-
-  // Applied in reverse: undoing "remove A then spawn B" must despawn B before restoring A.
-  return inverseGroups.reverse().flat();
-}
 
   // --- operations ---------------------------------------------------------------------
 

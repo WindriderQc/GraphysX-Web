@@ -237,7 +237,12 @@ previewWindow.__STOCKROOM_XML_ARTIFACT_HARNESS__ = {
   }
 };
 
-environment.ready.then(() => render());
+// A rejection here means the artifact never loaded, which is the one thing worth knowing
+// about this harness. Without a handler it became an unhandled rejection with no route back
+// to the operator.
+environment.ready.then(() => render()).catch((error: unknown) => {
+  console.error("stockroom-xml-artifact preview failed to load", error);
+});
 applyCamera();
 resize();
 requestAnimationFrame(animationFrame);
