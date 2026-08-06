@@ -120,6 +120,12 @@ belongs in `scripts/`.
   leave Y to the following animation-envelope assertion; polling all three axes waits for a
   timing-dependent sine zero crossing. Do not widen one scalar tolerance, disable animation,
   or drop the station/stage and cross-client projection checks.
+- **Mint expiring fixture invitations at their point of use.** The browser fixture deliberately
+  gives invites a 600-second TTL. A clean Linux run reached Carol's late initial-join race after
+  977.5 seconds, so a startup-minted code was correctly rejected before the client could request
+  the held snapshot. Keep the TTL and barrier strict; create late-phase one-use credentials
+  immediately before arming their race instead of coupling coverage to total suite duration.
+  A longer invite would hide this fixture bug and weaken the policy being exercised.
 - **A wedged run used to hang forever.** `runSmoke` awaited `close` with nothing bounding it, and
   two verify parents were found alive **9.5 and 7.7 hours** after launch holding Chromium trees.
   There are now deadlines (10 min/smoke, 20 for the live browser contract, 10 min/build; all

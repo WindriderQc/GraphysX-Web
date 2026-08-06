@@ -3144,3 +3144,19 @@ error on a runtime rollback with an attached gizmo (`13aba57`).
   three minutes of observed headroom while remaining far below the historical 7.7–9.5-hour
   wedges. Generic smoke/build caps, per-assertion waits, retry classification and budgets,
   strict browser-error sentinels, workflow configuration, and product behavior are unchanged.
+
+## 2026-08-06 — Clean-run late-invite correction
+
+- Exact-SHA workflow run 31106365942 reached 116 successful live-browser checks before Carol's
+  held initial join never requested its snapshot. Every other verification check passed and
+  deploy stayed skipped, so production again remained unchanged.
+- The fixture minted Carol's one-use viewer invitation at suite startup with the intentional
+  600-second TTL, then redeemed it 977.5 seconds later on the slower clean runner. The server
+  correctly rejected the expired `/join` before the client could issue `/snapshot`; the armed
+  snapshot barrier therefore reported the secondary timeout. Local 555-second runs narrowly
+  stayed inside the TTL and could not expose that age dependency.
+- Carol's invitation is now minted after Bob reaches offline and immediately before the existing
+  hold → join → raced owner operation → release sequence. TTL, join behavior, barrier timeout,
+  authority assertions, and product/server code are unchanged. The complete full-motion browser
+  gate passes 131/131 in 558.2 seconds with zero unexpected console errors, page errors, or
+  failed requests.

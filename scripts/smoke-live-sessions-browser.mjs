@@ -679,7 +679,6 @@ try {
 
   const alice = await inviteFor("editor");
   const bob = await inviteFor("editor");
-  const carolViewer = await inviteFor("viewer");
   const agentInvite = await inviteFor("agent", ["transaction", "spawn"]);
 
   const openTab = async (label, invite, actorId, viewport) => {
@@ -3285,6 +3284,9 @@ try {
   await second.page.evaluate(() => window.__GRAPHYSX_LIVE_SESSION__.leave());
   await second.page.waitForFunction(() => window.__GRAPHYSX_LIVE_SESSION__.status.connection === "offline");
   const viewerPage = second.page;
+  // Invitations intentionally expire after ten minutes. Mint this late-phase credential at
+  // its point of use so a slower clean runner tests the held snapshot, not invite expiry.
+  const carolViewer = await inviteFor("viewer");
   const viewerInitialCut = await holdSnapshot(viewerPage);
   await viewerPage.evaluate((args) => {
     window.__GRAPHYSX_TEST_INITIAL_JOIN__ = window.__GRAPHYSX_LIVE_SESSION__.join(
