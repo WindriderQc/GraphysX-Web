@@ -172,7 +172,13 @@ export function withDeadline(child, ms, label) {
 export const HARNESS_FAILURE_SIGNATURES = [
   "net::ERR_",
   "ERR_CONNECTION_",
+  // Node's undici says "fetch failed". A browser says "Failed to fetch" — different words,
+  // different order, same event. Listing only the first was a real gap, found by the gate on
+  // its first run: `live-sessions-browser` died with "Live session server unreachable …
+  // Failed to fetch" before a single assertion ran, was classified as an assertion failure,
+  // and so was reported as a product failure without ever being retried.
   "fetch failed",
+  "Failed to fetch",
   "ECONNRESET",
   "ECONNREFUSED",
   "ETIMEDOUT",
@@ -206,6 +212,33 @@ export function createFailureClassifier() {
       return [...matched];
     },
   };
+}
+
+/**
+ * Resolve how many transport-retried smokes a verify run may still call green.
+ *
+ * CI is deliberately strict: a retry can help the suite finish and preserve its
+ * diagnostics, but the resulting run must fail so a flaky deploy is never promoted.
+ * Local runs retain the historical allowance unless the caller opts into another
+ * explicit non-negative integer budget.
+ */
+export function resolveVerifyRetryBudget(rawValue, { ci = false } = {}) {
+  if (rawValue === undefined) return ci ? 0 : 3;
+
+  const text = typeof rawValue === "string" ? rawValue : String(rawValue);
+  if (!/^\d+$/.test(text)) {
+    throw new TypeError(
+      `VERIFY_MAX_RETRIES must be a non-negative integer; received ${JSON.stringify(rawValue)}.`,
+    );
+  }
+
+  const budget = Number(text);
+  if (!Number.isSafeInteger(budget)) {
+    throw new TypeError(
+      `VERIFY_MAX_RETRIES must be a safe non-negative integer; received ${JSON.stringify(rawValue)}.`,
+    );
+  }
+  return budget;
 }
 
 /**

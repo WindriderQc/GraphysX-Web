@@ -368,15 +368,22 @@ try {
   const retentionHello = await retentionOwner.connect(retentionId);
   const resumeSeq = retentionHello.seq;
   let retentionAccepted = 0;
+  let evictedRequest = null;
+  let evictedReceipt = null;
   for (let round = 0; round < FAT_OPS; round += 1) {
-    const response = await retentionOwner.call("POST", `/sessions/${retentionId}/ops`, {
+    const request = {
       opId: `retention-${round}`,
       commands: Array.from({ length: FAT_ENTITIES }, (_, index) => ({
         op: "update",
         id: `fat-${index}`,
         patch: { tags: fatTags(`r${round}`) },
       })),
-    });
+    };
+    const response = await retentionOwner.call("POST", `/sessions/${retentionId}/ops`, request);
+    if (round === 0) {
+      evictedRequest = request;
+      evictedReceipt = response.body;
+    }
     if (response.status === 201) retentionAccepted += 1;
   }
   check(results, "the retention fixture is accepted without tripping a per-request limit",
@@ -389,6 +396,34 @@ try {
     `resuming from seq ${resumeSeq} after ${FAT_OPS} operations gave mustResync=${evictedHello.mustResync}`);
   check(results, "that eviction cannot be explained by the event-count bound",
     FAT_OPS + 1 < 512, `${FAT_OPS + 1} retained events`);
+
+  const beforeEvictedRetry = await retentionOwner.call("GET", `/sessions/${retentionId}/snapshot`);
+  const exactEvictedRetry = await retentionOwner.call("POST", `/sessions/${retentionId}/ops`, evictedRequest);
+  const changedEvictedRetry = await retentionOwner.call("POST", `/sessions/${retentionId}/ops`, {
+    ...evictedRequest, intent: "changed collision body",
+  });
+  const collisionInvite = await retentionOwner.call("POST", `/sessions/${retentionId}/invites`, {
+    role: "editor", ttlSeconds: 60,
+  });
+  const collisionJoin = await founder.call("POST", `/sessions/${retentionId}/join`, {
+    code: collisionInvite.body.code,
+    actor: { id: "retention-peer", label: "Retention peer", kind: "human" },
+  });
+  const retentionPeer = createActor(base, { credential: collisionJoin.body.credential, origin: ORIGIN });
+  const crossMemberRetry = await retentionPeer.call("POST", `/sessions/${retentionId}/ops`, evictedRequest);
+  const afterEvictedRetries = await retentionOwner.call("GET", `/sessions/${retentionId}/snapshot`);
+  check(results, "byte eviction preserves the exact idempotency receipt",
+    exactEvictedRetry.status === 200 && exactEvictedRetry.body.duplicate === true
+      && exactEvictedRetry.body.seq === evictedReceipt.seq
+      && exactEvictedRetry.body.revision === evictedReceipt.revision,
+    JSON.stringify(exactEvictedRetry.body));
+  check(results, "an evicted operation id remains bound against body and member collisions",
+    changedEvictedRetry.status === 409 && crossMemberRetry.status === 409,
+    `changed ${changedEvictedRetry.status}, cross-member ${crossMemberRetry.status}`);
+  check(results, "evicted retries leave revision and document byte-identical",
+    afterEvictedRetries.body.revision === beforeEvictedRetry.body.revision
+      && JSON.stringify(afterEvictedRetries.body.definition) === JSON.stringify(beforeEvictedRetry.body.definition),
+    `revision ${beforeEvictedRetry.body.revision} -> ${afterEvictedRetries.body.revision}`);
   await retentionOwner.disconnect();
 
   // The control. A byte budget that resyncs everybody proves nothing; an ordinary session
@@ -448,8 +483,12 @@ try {
     })),
   });
 
-  const stalled = await openStalledStream(base, stallId, { credential: stallCreate.body.credential, origin: ORIGIN });
-  const beforeStallMembers = (await stallOwner.call("GET", `/sessions/${stallId}`)).body.session.members;
+  const stallResumeSeq = (await stallOwner.call("GET", `/sessions/${stallId}`)).body.session.seq;
+  const stalled = await openStalledStream(base, stallId, {
+    credential: stallCreate.body.credential,
+    origin: ORIGIN,
+    since: stallResumeSeq,
+  });
   for (let round = 0; round < FAT_OPS; round += 1) {
     await stallOwner.call("POST", `/sessions/${stallId}/ops`, {
       opId: `stall-${round}`,
@@ -461,16 +500,72 @@ try {
     });
   }
 
-  const drained = await stalled.drain();
-  check(results, "a subscriber that stops reading is dropped rather than buffered forever",
-    drained.ended === true, "the server was still holding the stalled stream open");
-  check(results, "the dropped subscriber is told to resync rather than silently severed",
-    drained.text.includes("event: resync") && drained.text.includes("stream-too-slow"),
-    drained.text.slice(-240));
-  check(results, "dropping a stalled stream leaves the session serving everyone else",
-    (await stallOwner.call("GET", `/sessions/${stallId}/snapshot`)).status === 200
-      && beforeStallMembers.length === 1,
-    "session unusable after dropping a stalled subscriber");
+  const afterStallSession = await stallOwner.call("GET", `/sessions/${stallId}`);
+  const afterStallSnapshot = await stallOwner.call("GET", `/sessions/${stallId}/snapshot`);
+  check(results, "a nonreading stream is removed server-side without a cooperative drain",
+    afterStallSession.body.session.members.length === 1
+      && afterStallSession.body.session.members[0].online === false,
+    JSON.stringify(afterStallSession.body.session.members));
+  check(results, "dropping a stalled stream leaves the authoritative snapshot available",
+    afterStallSnapshot.status === 200, `status ${afterStallSnapshot.status}`);
+
+  const recoveredStall = await stallOwner.connect(stallId, { since: stallResumeSeq });
+  check(results, "a dropped stalled reader reconnects through mustResync after byte eviction",
+    recoveredStall.mustResync === true,
+    JSON.stringify(recoveredStall));
+  await stallOwner.disconnect();
+  stalled.close();
+
+  // --- 11b. a subscriber that keeps up ---------------------------------------------------
+  //
+  // The control for the section above, and the direction that would hurt real people. A drop
+  // rule with no false-positive test is one bad threshold away from disconnecting everyone on
+  // a slow link, and it would look exactly like "the collaboration feature is flaky."
+  //
+  // Same burst, same session shape, one difference: this reader reads. It must receive every
+  // operation, must never be handed a resync, and must still be live at the end.
+
+  const keepUpCreate = await founder.call("POST", "/sessions", {
+    sceneName: "second-fixture", owner: { id: "owner-ada", label: "Ada" },
+  });
+  const keepUpId = keepUpCreate.body.session.sessionId;
+  const keepUpOwner = createActor(base, { credential: keepUpCreate.body.credential, origin: ORIGIN });
+  await keepUpOwner.call("POST", `/sessions/${keepUpId}/ops`, {
+    opId: "keepup-seed",
+    commands: Array.from({ length: FAT_ENTITIES }, (_, index) => ({
+      op: "spawn",
+      entity: { id: `keepup-${index}`, type: "box", transform: { position: [index, 0.5, 0] }, tags: fatTags("seed") },
+    })),
+  });
+  await keepUpOwner.connect(keepUpId);
+  for (let round = 0; round < FAT_OPS; round += 1) {
+    await keepUpOwner.call("POST", `/sessions/${keepUpId}/ops`, {
+      opId: `keepup-${round}`,
+      commands: Array.from({ length: FAT_ENTITIES }, (_, index) => ({
+        op: "update",
+        id: `keepup-${index}`,
+        patch: { tags: fatTags(`r${round}`) },
+      })),
+    });
+  }
+  await keepUpOwner.waitFor((received) => received.ops.length >= FAT_OPS, {
+    timeoutMs: 15_000,
+    label: "every operation delivered to a reader that keeps up",
+  });
+  check(results, "a subscriber that keeps up is never dropped by the backpressure guard",
+    keepUpOwner.received.ops.length === FAT_OPS && keepUpOwner.received.resync.length === 0,
+    `${keepUpOwner.received.ops.length}/${FAT_OPS} ops, ${keepUpOwner.received.resync.length} resync`);
+
+  // Still live afterwards: the guard must not have half-closed a stream it kept.
+  await keepUpOwner.call("POST", `/sessions/${keepUpId}/ops`, {
+    opId: "keepup-final", commands: [spawnCommand("keepup-final-crate")],
+  });
+  await keepUpOwner.waitFor((received) => received.ops.some((event) => event.opId === "keepup-final"), {
+    label: "the stream is still delivering after the burst",
+  });
+  check(results, "that stream is still live after the same burst that dropped the stalled one",
+    keepUpOwner.received.ops.at(-1).opId === "keepup-final", "the surviving stream stopped delivering");
+  await keepUpOwner.disconnect();
 
   // --- 12. token-leak audit ------------------------------------------------------------
 
