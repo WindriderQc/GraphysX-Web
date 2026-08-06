@@ -3160,3 +3160,16 @@ error on a runtime rollback with an attached gizmo (`13aba57`).
   authority assertions, and product/server code are unchanged. The complete full-motion browser
   gate passes 131/131 in 558.2 seconds with zero unexpected console errors, page errors, or
   failed requests.
+
+## 2026-08-06 — Measured live-browser deadline headroom
+
+- Exact-SHA workflow run 31112624360 emitted 108 successful live-browser checks and no failed
+  assertion before the dedicated 1,200-second cap killed it. Its last PASS landed only 16.9
+  seconds before termination; every other verification check passed and deploy stayed skipped.
+  The suite was progressing, not wedged.
+- Check 108 at 19m43s projects a roughly 23m55s finish for the 131-check contract. A 25-minute
+  cap would leave only about 65 seconds; the dedicated cap is therefore 30 minutes, providing
+  about six minutes / 25% measured headroom while remaining 15–19× below the historical
+  7.7–9.5-hour hangs. Generic smoke/build caps, per-assertion waits, no-retry-on-deadline policy,
+  retry classification and budgets, workflow configuration, and product/browser code remain
+  unchanged.

@@ -43,11 +43,11 @@ const LOCK_PATH = machineVerifyLockPath();
 const SMOKE_DEADLINE_MS = Number(process.env.VERIFY_SMOKE_TIMEOUT_MS || 10 * 60 * 1000);
 // The live browser contract deliberately exercises two full WebGL clients, an external
 // AgentX stream, several frozen-response races, reconnect backoff and terminal recovery.
-// The current 131-check contract passed locally in 9m15s. A clean Linux runner was still
-// advancing at 14m49s with 115 checks green when the old 15-minute bound killed it. Twenty
-// minutes keeps the process sharply bounded while leaving measured headroom for the remaining
-// reconnect, revocation, screenshot and terminal-recovery checks on the software-rendered host.
-const LIVE_BROWSER_DEADLINE_MS = Number(process.env.VERIFY_LIVE_BROWSER_TIMEOUT_MS || 20 * 60 * 1000);
+// The current 131-check contract passed locally in 9m15s. Clean Linux runners were still
+// advancing at both 15 and 20 minutes; the slower run reached check 108 at 19m43s, projecting
+// a roughly 24-minute finish. Thirty minutes keeps the process sharply bounded while leaving
+// measured headroom for the remaining authority and terminal-recovery checks on shared hosts.
+const LIVE_BROWSER_DEADLINE_MS = Number(process.env.VERIFY_LIVE_BROWSER_TIMEOUT_MS || 30 * 60 * 1000);
 const BUILD_DEADLINE_MS = Number(process.env.VERIFY_BUILD_TIMEOUT_MS || 10 * 60 * 1000);
 
 const argv = process.argv.slice(2);
