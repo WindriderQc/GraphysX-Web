@@ -54,6 +54,11 @@ export {
 } from "./agent-world-rules";
 
 import {
+  assertAuthoredSceneCommandNamespaces,
+  assertAuthoredWorldEntityNamespaces,
+} from "../server/host-entity-id-policy.mjs";
+
+import {
   AmbientLight,
   BoxGeometry,
   BufferGeometry,
@@ -892,6 +897,8 @@ export type AgentWorldEntityState = {
   receiveShadow: boolean;
   /** True when this entity is session-only and will not survive a save or a reload. */
   ephemeral: boolean;
+  /** True only for a host-owned transient projection, which authoring tools must ignore. */
+  runtimeOwnedTransient: boolean;
   /**
    * For a `trigger`, the ids currently inside it. Absent on everything else. Lets an agent
    * poll "is anything on the finish pad" without replaying the event log.
@@ -1873,7 +1880,10 @@ export class AgentWorldRuntime {
       // Reject host-transient targets before taking a rollback snapshot. Besides being
       // safer, this avoids reloading the whole authored world for a command that was never
       // allowed to touch it in the first place.
-      for (const command of commands) this.assertCommandTransientBoundary(command);
+      for (const command of commands) {
+        assertAuthoredSceneCommandNamespaces(command);
+        this.assertCommandTransientBoundary(command);
+      }
     } catch (error) {
       this.recordEvent("transaction.rejected", error instanceof Error ? error.message : String(error));
       return this.failure(error);
@@ -2770,6 +2780,7 @@ export class AgentWorldRuntime {
 
   private loadDefinition(source: AgentWorldDefinition): void {
     validateWorldDefinition(source);
+    assertAuthoredWorldEntityNamespaces(source);
     // A wholesale world replacement owns the graph. Host presence controllers keep their
     // membership snapshot and reconcile after `world.loaded`; stale scope ownership must not
     // claim ids in the incoming authored document.
@@ -3973,6 +3984,7 @@ export class AgentWorldRuntime {
       castShadow: runtime.definition.castShadow,
       receiveShadow: runtime.definition.receiveShadow,
       ephemeral: runtime.definition.ephemeral,
+      runtimeOwnedTransient: this.isScopedTransientEntity(id),
       ...(runtime.definition.physics?.mode === "trigger" ? { occupants: this.triggerOccupantIds(id) } : {}),
       tags: [...runtime.definition.tags],
       behaviors: runtime.definition.behaviors.map((behavior) => ({ id: behavior.id, type: behavior.type })),

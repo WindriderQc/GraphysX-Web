@@ -1,8 +1,8 @@
 # AgentX Center roadmap
 
-*Truth reset: 2026-08-05. Baseline was clean `main` at `0187569`; this document includes the
-current AgentX live-presence release. [PRODUCT_SPEC.md](../PRODUCT_SPEC.md) remains the product
-contract. This is the execution order.*
+*Truth reset: 2026-08-06. The AgentX Center v2 slice began from clean `main` at `9ea9da3`;
+this document includes the completed spatial mission-director work in the current release.
+[PRODUCT_SPEC.md](../PRODUCT_SPEC.md) remains the product contract. This is the execution order.*
 
 ## The product direction
 
@@ -33,6 +33,10 @@ The default showroom is now the first AgentX Center milestone:
   Nestor controls appear only when the complete AgentX Center is authoritative. Browse entries
   still return to a freshly composed center.
 - The showroom smoke proves the complete path, not just the panel.
+- A bounded server-authoritative Analyze → Build → Validate mission now coordinates at least
+  two online AgentX actors through the physical Explore, Build, and Play stations. Mission
+  boards, evidence cards, and completion effects are transient projections; accepted Build
+  work remains an ordinary attributed scene operation.
 
 ## Ground truth before the next slice
 
@@ -60,31 +64,38 @@ Production release proof:
 | Slice | Status | Outcome | Done when |
 |---|---|---|---|
 | 1. Nestor's first demo | Complete | AgentX Center replaces the passive showroom | Build/Play/Explore are attributed, visible, persistent, editor-ready, and browser-tested |
-| 2. Live presence binding | Complete in this release | A connected AgentX actor visibly inhabits the center | Session member/operation events update an ephemeral avatar and Nestor activity without polluting either export path |
-| 3. Guided co-authoring | Next | A human can ask for a bounded scene change and inspect it before/after | Proposal, actor, intent, command set, result, undo, and rejection are all visible; no hidden mutation |
-| 4. Nestor tours | Queued | Nestor can sequence highlights across scenes and games | Camera cues, short narration, entity highlighting, cancellation, reduced-motion behavior, and destination handoff are deterministic |
-| 5. Agent gameplay | Queued | AgentX can demonstrate and coach a BallZ course inside the product | A deterministic baseline run, ghost comparison, attributed input, and honest capability/offline states are visible in-browser |
-| 6. Center expansion | Queued | The front door becomes a compact world hub | Build lab, living-systems overlook, play arena, and portals share one performance budget and remain editable scene vocabulary |
+| 2. Live presence binding | Complete | A connected AgentX actor visibly inhabits the center | Session member/operation events update an ephemeral avatar and Nestor activity without polluting either export path |
+| 3. Spatial mission director | Complete in this release | A live owner directs multiple AgentX actors through one scene-native mission | Analyze → Build → Validate is server-authoritative, ordered, evidence-backed, reconnect-safe, spatially projected, accessible, and absent from authored exports |
+| 4. Guided co-authoring | Next | A human can ask for a bounded scene change and inspect it before/after | Proposal, actor, intent, command set, result, undo, and rejection are all visible; no hidden mutation |
+| 5. Nestor tours | Queued | Nestor can sequence highlights across scenes and games | Camera cues, short narration, entity highlighting, cancellation, reduced-motion behavior, and destination handoff are deterministic |
+| 6. Agent gameplay | Queued | AgentX can demonstrate and coach a BallZ course inside the product | A deterministic baseline run, ghost comparison, attributed input, and honest capability/offline states are visible in-browser |
+| 7. Center expansion | Queued | The front door becomes a compact world hub | Build lab, living-systems overlook, play arena, and portals share one performance budget and remain editable scene vocabulary |
 
 ## Next three work sessions
 
-### A. First center slice — complete
+### A. Center foundation and live presence — complete
 
-1. Keep the current Nestor composition and accessible panel visually polished at desktop and
-   narrow widths.
-2. Run typecheck, build, the extended showroom smoke, required game-client automation, and the
-   release gate.
-3. Review the local diff, then commit/push/deploy only when explicitly requested.
+1. Keep Nestor's scene-native Build, Play, and Explore demonstrations attributed, persistent,
+   editor-ready, and visually polished across desktop and narrow layouts.
+2. Project one actor-keyed transient avatar per online AgentX member and route accepted agent
+   intent/revision reactions through Nestor without creating authored state or another frame loop.
+3. Reconcile disconnect, reconnect, removal, leave, and world reload from authoritative session
+   membership; keep transient actors out of history, selection, and both export paths.
+4. Preserve the completed showroom, live-session browser, typecheck, build, graphics, and release
+   proofs as the foundation for later slices.
 
-### B. Real AgentX presence — complete
+### B. AgentX Center v2 spatial mission director — complete
 
-1. Map `LiveSessionEvents.onMembers` and `onOperation` into a small presence controller.
-2. Project one scoped transient avatar per online agent actor, keyed by actor id and kept out of
-   authored runtime state, history, selection, and both export paths.
-3. Illuminate Nestor and show the accepted intent when an agent operation lands.
-4. Remove avatars on disconnect; never export them or create a second animation loop.
-5. Extend `smoke-live-sessions-browser.mjs` with presence, operation, reconnect, and cleanup
-   assertions.
+1. Keep the bounded mission model on the existing live-session authority, sequence, snapshot,
+   replay, resync, credential, and rate-limit path; it never revisions the scene document.
+2. Require eligible online assignments spanning at least two AgentX actors before activation,
+   ordered Analyze → Build → Validate progress, authoritative evidence, and safe interruption,
+   reassignment, resume, cancellation, and terminal cuts.
+3. Project accepted assignments into Explore, Build, and Play choreography with a runtime-only
+   mission board, evidence holograms, completion response, camera focus, and accessible owner
+   controls—without adding a renderer, animation loop, or exportable entity.
+4. Keep deterministic protocol, hostile-input, multi-browser, transient/export, resource, mobile,
+   reduced-motion, and navigation proof attached to the slice.
 
 ### C. Add the co-author command queue — next
 
@@ -122,7 +133,7 @@ the same code:
   commands, revision, visible result, and undo path.
 - Prefer one impressive vertical slice with browser proof over many disconnected panels.
 
-No product decision is required to start Slice 3. The proposal queue should wrap the existing
+No product decision is required to start Slice 4. The proposal queue should wrap the existing
 `actor`, `intent`, `expectedRevision`, and typed command list, then expose preview, accept,
 reject, edit, result, and undo as one visible flow before any model-provider integration is
 added.

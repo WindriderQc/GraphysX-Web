@@ -5,6 +5,11 @@
 // An untrusted live member must never be able to commit JSON that every browser subsequently
 // refuses to load; declining an unproven command is safer than persisting it.
 
+import {
+  assertAuthoredSceneCommandNamespaces,
+  assertAuthoredWorldEntityNamespaces,
+} from "./host-entity-id-policy.mjs";
+
 const WORLD_SCHEMA = "graphysx.agent-world/v2";
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/;
 const MAX_AUTHORED_ENTITIES = 1_024;
@@ -954,6 +959,12 @@ export function applyCommands(definition, commands) {
   if (!isRecord(definition)) reject("Scene definition must be an object");
   if (definition.schema !== WORLD_SCHEMA) reject(`Scene schema must be ${WORLD_SCHEMA}`);
   if (!Array.isArray(definition.entities)) reject("Scene entities must be an array");
+  try {
+    assertAuthoredWorldEntityNamespaces(definition);
+    for (const command of commands) assertAuthoredSceneCommandNamespaces(command);
+  } catch (error) {
+    reject(error instanceof Error ? error.message : String(error));
+  }
   const next = structuredClone(definition);
   entityMap(next.entities);
   const outputs = commands.map((command) => applyCommand(next, command));

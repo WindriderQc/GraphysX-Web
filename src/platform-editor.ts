@@ -440,7 +440,10 @@ export class PlatformEditor {
     for (const hit of this.raycaster.intersectObject(world.group, true)) {
       const entityId = world.findEntityId(hit.object);
       if (entityId) {
+        // Runtime projections share the scene graph for rendering, but are not authorable.
+        if (world.query({ ids: [entityId] })[0]?.runtimeOwnedTransient) continue;
         this.select(entityId);
+        if (this.selectedId !== entityId) continue;
         if (world.findInteractiveEntityId(hit.object)) this.deps.api.interact(entityId);
         return;
       }
@@ -449,16 +452,18 @@ export class PlatformEditor {
   }
 
   private select(id: string | null): void {
-    this.selectedId = id;
-    this.deps.api.select(id ? [id] : []);
+    const accepted = this.deps.api.select(id ? [id] : []);
+    this.selectedId = accepted[0] ?? null;
     this.syncGizmo();
     this.refresh();
-    if (id && window.matchMedia("(max-width: 700px)").matches) {
+    if (this.selectedId && window.matchMedia("(max-width: 700px)").matches) {
       this.setMobilePanel("inspector");
     }
   }
 
   private syncGizmo(): void {
+    const accepted = this.deps.api.state()?.selectedIds ?? [];
+    if (this.selectedId && !accepted.includes(this.selectedId)) this.selectedId = null;
     const object = this.selectedId ? this.deps.world.getEntityObject(this.selectedId) : null;
     if (!this.selectedId || !object) {
       this.gizmo.detach();
@@ -749,7 +754,7 @@ export class PlatformEditor {
     // new object — so a selection now survives a reload instead of wedging it.
     this.syncGizmo();
     const state = this.deps.api.state();
-    const entities = state?.entities ?? [];
+    const entities = (state?.entities ?? []).filter((entity) => !entity.runtimeOwnedTransient);
     this.syncDocumentStatus(false);
     this.readout.textContent = this.selectedId
       ? `${this.selectedId} · ${this.gizmo.getMode()} · rev ${state?.revision ?? 0}`

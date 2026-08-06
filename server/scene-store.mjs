@@ -19,6 +19,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyCommands, describeCommands } from "./scene-commands.mjs";
+import { assertAuthoredWorldEntityNamespaces } from "./host-entity-id-policy.mjs";
 import { createAssetStore, handleAssetRequest } from "./asset-store.mjs";
 import { CORS_ALLOW_HEADERS, CORS_ALLOW_METHODS, readJsonBody, sendJson as send } from "./http-util.mjs";
 import { createLiveSessions } from "./live-sessions.mjs";
@@ -141,6 +142,7 @@ function assertDefinition(definition) {
   if (typeof definition.id !== "string" || !definition.id.trim()) throw new Error("Scene definition requires an id");
   if (typeof definition.label !== "string" || !definition.label.trim()) throw new Error("Scene definition requires a label");
   if (!Array.isArray(definition.entities)) throw new Error("Scene entities must be an array");
+  assertAuthoredWorldEntityNamespaces(definition);
   // A stored scene is the document — what the scene *is*. Entities marked ephemeral are
   // session state, so a document containing them is a contradiction and almost always means
   // a client pushed `export()` where it meant `exportDocument()`.
@@ -504,6 +506,7 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir,
             commands,
             outputs,
           });
+          await sessions.publishExternalCut(name, { revision: written.revision, definition });
           return send(response, 200, { ...written, outputs, subscribers: relay.subscriberCount(name) }, cors);
         }
 
@@ -555,6 +558,7 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir,
               intent: result.intent,
               replaced: true,
             });
+            await sessions.publishExternalCut(name, { revision: result.revision, definition });
             return send(response, result.created ? 201 : 200, result, cors);
           }
         }

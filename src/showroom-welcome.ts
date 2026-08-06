@@ -1,5 +1,6 @@
 import type { NestorPresentation, NestorTopic } from "./showroom-nestor";
 import type { LiveAgentActivity } from "./live-agent-presence";
+import type { LiveMissionRuntimeState } from "./live-mission-runtime";
 
 /**
  * The welcome overlay for the showroom front door.
@@ -17,6 +18,7 @@ export type ShowroomWelcomeVariant = "agentx" | "scene-resume" | "live-observer"
 export interface ShowroomWelcomeHandle {
   present: (presentation: NestorPresentation) => void;
   observeLiveActivity: (activity: LiveAgentActivity | null) => void;
+  observeMission: (state: LiveMissionRuntimeState | null) => void;
   reset: () => void;
   dispose: () => void;
 }
@@ -130,9 +132,14 @@ export function mountWelcome(
     const hint = overlay.querySelector<HTMLElement>(".gx-hint");
     if (eyebrow) eyebrow.textContent = liveObserver ? "AgentX Center · live session attached" : "Scene workspace · draft preserved";
     if (title) title.textContent = liveObserver ? "NESTOR IS OBSERVING." : "YOUR WORLD IS STILL HERE.";
-    if (briefing) briefing.textContent = liveObserver
-      ? "This live session owns scene operations. Nestor's local demonstrations are paused so every collaborator sees the same history."
-      : "Your in-memory scene is preserved. Re-enter the editor to keep building; the AgentX Center stays separate from this world.";
+    if (briefing) {
+      briefing.textContent = liveObserver
+        ? "This live session owns scene operations. Nestor's local demonstrations are paused so every collaborator sees the same history."
+        : "Your in-memory scene is preserved. Re-enter the editor to keep building; the AgentX Center stays separate from this world.";
+      // The mission panel owns the live announcement channel in observer mode; this visual
+      // copy mirrors it without creating a second, conflicting screen-reader announcement.
+      if (liveObserver) briefing.setAttribute("aria-live", "off");
+    }
     if (commit) commit.textContent = liveObserver ? "Live operation path active" : "No scene was replaced";
     if (hint) hint.textContent = liveObserver
       ? "use the live session panel for shared activity"
@@ -140,8 +147,12 @@ export function mountWelcome(
     overlay.querySelector(".gx-nestor-topics")?.remove();
   }
   const dispose = () => { overlay.remove(); style.remove(); };
+  let liveMissionState: LiveMissionRuntimeState | null = null;
+  let liveActivityState: LiveAgentActivity | null = null;
   const observeLiveActivity = (activity: LiveAgentActivity | null): void => {
     if (variant !== "live-observer") return;
+    liveActivityState = activity;
+    if (liveMissionState && liveMissionState.director.mode !== "neutral") return;
     const eyebrow = overlay.querySelector<HTMLElement>("[data-nestor-eyebrow]");
     const title = overlay.querySelector<HTMLElement>("[data-nestor-title]");
     const briefing = overlay.querySelector<HTMLElement>("[data-nestor-briefing]");
@@ -169,9 +180,56 @@ export function mountWelcome(
       ? `${activity.actorKind} presence · online`
       : `${activity.actorKind} operation · revision ${activity.revision}`;
   };
+  const observeMission = (state: LiveMissionRuntimeState | null): void => {
+    if (variant !== "live-observer") return;
+    liveMissionState = state;
+    const mission = state?.mission ?? null;
+    const director = state?.director ?? null;
+    if (!mission || !director || director.mode === "neutral") {
+      delete overlay.dataset.mission;
+      delete overlay.dataset.missionAction;
+      delete overlay.dataset.missionStage;
+      delete overlay.dataset.missionState;
+      liveMissionState = null;
+      const terminal = mission?.status === "completed" || mission?.status === "cancelled";
+      if (terminal) liveActivityState = null;
+      observeLiveActivity(state?.connection !== "live" || terminal ? null : liveActivityState);
+      return;
+    }
+    const stage = director.stageId
+      ? mission.stages.find((entry) => entry.stageId === director.stageId) ?? null
+      : null;
+    const participants = [...new Set(mission.stages.map((entry) => entry.assignment?.actorLabel).filter((label): label is string => Boolean(label)))];
+    const eyebrow = overlay.querySelector<HTMLElement>("[data-nestor-eyebrow]");
+    const title = overlay.querySelector<HTMLElement>("[data-nestor-title]");
+    const briefing = overlay.querySelector<HTMLElement>("[data-nestor-briefing]");
+    const commit = overlay.querySelector<HTMLElement>("[data-nestor-commit]");
+    overlay.dataset.mission = mission.missionId;
+    overlay.dataset.missionState = mission.status;
+    if (director.action) overlay.dataset.missionAction = director.action;
+    else delete overlay.dataset.missionAction;
+    if (director.stageId) overlay.dataset.missionStage = director.stageId;
+    else delete overlay.dataset.missionStage;
+    if (director.actorId) overlay.dataset.liveAgentActor = director.actorId;
+    else delete overlay.dataset.liveAgentActor;
+    if (director.revision >= 0) overlay.dataset.liveAgentRevision = String(director.revision);
+    if (eyebrow) eyebrow.textContent = `Nestor · ${director.mode} · sequence ${director.seq}`;
+    if (title) title.textContent = director.mode === "briefing" ? "MISSION BRIEFED."
+      : director.mode === "blocked" ? "MISSION NEEDS DIRECTION."
+        : director.mode === "paused" ? "MISSION PAUSED."
+          : director.mode === "completed" ? "MISSION COMPLETE."
+            : director.mode === "failed" ? "MISSION NEEDS REVIEW."
+              : `${(director.actorLabel ?? "AgentX").toUpperCase()} ${director.stageStatus === "completed" ? "DELIVERED." : "AT WORK."}`;
+    if (briefing) briefing.textContent = director.mode === "briefing"
+      ? participants.length > 0
+        ? `${mission.title}. ${participants.join(" and ")} ${participants.length === 1 ? "is" : "are"} assigned across Analyze, Build, and Validate.`
+        : `${mission.title}. Awaiting two eligible AgentX actors across Analyze, Build, and Validate.`
+      : director.message;
+    if (commit) commit.textContent = `${stage?.title ?? mission.title} · ${mission.status} · seq ${director.seq} · revision ${director.revision}`;
+  };
   const reset = (): void => {
     if (!nestorEnabled) {
-      observeLiveActivity(null);
+      observeMission(null);
       return;
     }
     overlay.classList.remove("gx-welcome--presenting");
@@ -236,5 +294,5 @@ export function mountWelcome(
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);
-  return { present, observeLiveActivity, reset, dispose };
+  return { present, observeLiveActivity, observeMission, reset, dispose };
 }

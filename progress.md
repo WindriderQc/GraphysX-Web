@@ -2936,3 +2936,58 @@ count from 9 to 10 and returned it to 9; the final release returned to 9 as well
 Release status at this checkpoint: the implementation, both requested product sweeps, focused
 release evidence, and final independent source review are complete. Commit, push, the clean
 GitHub gate, production deployment, and exact live-SHA verification follow next.
+
+## 2026-08-06 — AgentX Center v2 mission director
+
+- Verified the continuation baseline before editing: the worktree is clean on `main`, fetched
+  `origin/main` matches `9ea9da3e6a3593443b5c882753264eb8cd3f7bf5`, production
+  `release.json` reports that exact SHA and deploy run `31056745699`, and the run succeeded.
+- Read the repository/session guardrails, AgentX roadmap, live-session contract, current presence
+  controller, runtime transient ownership seam, and production deployment workflow. The current
+  live projection already provides stable actor-keyed ephemeral avatars and Nestor operation
+  reactions; the mission slice will extend that seam rather than add a renderer or ordering loop.
+- Implemented a bounded server-authoritative `agentx-center-artifact-v1` mission on the existing
+  session chain: one owner briefs and activates eligible assignments spanning two online AgentX
+  actors; Analyze → Build → Validate advances in order; Build evidence is copied from an accepted,
+  actor-bound, not-undone operation receipt; Validate must pass at the current revision. Pause,
+  disconnect, revocation, reassignment, resume, cancel, snapshots, replay, and terminal cuts all
+  use the session's existing authority and sequence.
+- Added runtime-only mission boards, station signals, bounded evidence miniatures/cards/connectors,
+  completion response, Nestor narration, and deterministic Explore/Build/Play choreography. They
+  share the host's single frame subscription and adaptive quality profile. Accessible owner
+  controls expose roles, stage progress, evidence inspection, keyboard focus, Escape collapse,
+  reduced motion, and a bounded 390px sheet without exposing local world replacement actions.
+- Mission/presence/Nestor entities remain runtime-owned transients: they change no scene revision
+  or history, never enter either export, cannot be selected or authored, dispose on disconnect,
+  cancellation, completion, load, leave, or session close, and cannot return through Undo. The
+  shared authored namespace policy now reserves `live-agent:`, `live-mission:`, and
+  `live-nestor:` across local/live ids and all reference-bearing fields, with byte-identical
+  refusal proof.
+- Reconnect handling now caches retained mission events while non-live and projects/announces only
+  after the terminal presence cut proves continuity. The real-browser regression drops a stream,
+  receives a retained mission event, drops again before that cut, proves zero projections, then
+  restores exactly one board after the next proven live cut.
+- Dedicated visual inspection covered the desktop active mission, 390px active mission, and 390px
+  evidence state. The 3D center remains dominant; Nestor, boards, avatars, station work, and
+  evidence stay legible around bounded desktop/mobile live-session chrome with no clipping.
+- Final same-browser mission measurements stayed inside the requested budget. High: 191.04 →
+  206.72 calls/frame (+8.21%) and 119,645 → 127,545 triangles/frame (+6.60%). Mobile: 81.48 →
+  76.58 calls/frame (-6.01%) and 41,324 → 41,748 triangles/frame (+1.03%). Primed renderer
+  invariants proved exact texture recovery and the expected single durable authored geometry after
+  completion, plus exact geometry/texture recovery after cancellation. The general profile probe
+  preserved high DPR/shadow/reflection policy, mobile DPR 1.5 / 1024 shadows / zero runtime
+  reflections, and the 1x1 inactive overlay. Six managed-water cycles each returned 10 textures
+  to the exact baseline of 9.
+- Final focused gates: typecheck/build green (209 modules; 345 product assets / 78.3 MB), live
+  protocol 113/113, real multi-browser lifecycle 127/127 with zero unexpected console/page/request
+  errors, live security 46/46, scene-command validation 115/115, live undo 27/27, results 47/47,
+  showroom production smoke green, render-profile probe green, and water lifecycle green. The
+  browser gate drove the real Pause/Resume and board/evidence focus controls, emulated the OS
+  reduced-motion preference through the product Display setting, and proved stale-revision
+  validation refusal after an out-of-band store advance. The required develop-web-game client loop
+  produced two matching Nestor-ready states with no errors.
+- Independent runtime/UI and browser-failure audits found and closed the retained-event reconnect
+  race, transient narration overwrite, host-namespace takeover surface, stale validation authority,
+  Windows harness socket exhaustion, renderer-registration nondeterminism, and the final render-call
+  overage. Commit, push, the clean GitHub production gate, deployment, and exact production-SHA
+  verification follow next.

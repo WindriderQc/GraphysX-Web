@@ -1,5 +1,5 @@
-import { request as requestHttp } from "node:http";
-import { request as requestHttps } from "node:https";
+import { Agent as HttpAgent, request as requestHttp } from "node:http";
+import { Agent as HttpsAgent, request as requestHttps } from "node:https";
 
 // Shared test client for the live-session smokes: an HTTP client plus a real SSE reader.
 //
@@ -9,7 +9,11 @@ import { request as requestHttps } from "node:https";
 // something that is fundamentally three HTTP clients talking to one server. The browser
 // smoke proves the *product* path; this proves the *protocol*.
 
-const decoder = new TextDecoder();
+// Native keep-alive agents retire closed sockets correctly and avoid exhausting Windows'
+// loopback ephemeral ports during the long real-browser lifecycle. SSE still owns a
+// dedicated one-shot socket because aborting a retained stream is part of its contract.
+const requestHttpAgent = new HttpAgent({ keepAlive: true, keepAliveMsecs: 1_000, maxSockets: 48, maxFreeSockets: 8, scheduling: "lifo" });
+const requestHttpsAgent = new HttpsAgent({ keepAlive: true, keepAliveMsecs: 1_000, maxSockets: 48, maxFreeSockets: 8, scheduling: "lifo" });
 
 export function check(results, name, ok, detail = "") {
   results.push({ name, ok: Boolean(ok), detail });
@@ -29,7 +33,12 @@ export function report(results, label) {
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** One-shot Node HTTP request with no shared Undici pool. */
+const isClientMissionEventId = (value) =>
+  typeof value === "string"
+  && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/.test(value)
+  && !value.startsWith("me-system-");
+
+/** Native Node HTTP request with a bounded keep-alive pool; never touches Undici. */
 export function requestText(url, {
   method = "GET",
   headers = {},
@@ -50,7 +59,7 @@ export function requestText(url, {
     const request = (target.protocol === "https:" ? requestHttps : requestHttp)(target, {
       method,
       headers,
-      agent: false,
+      agent: target.protocol === "https:" ? requestHttpsAgent : requestHttpAgent,
     }, (response) => {
       const chunks = [];
       response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
@@ -81,6 +90,41 @@ export function requestText(url, {
   });
 }
 
+/** A real streaming response on its own socket; abort and replay are test behavior here. */
+function openEventStream(url, { headers = {}, timeoutMs = 12_000, borrowRequestSocket = false } = {}) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(url);
+    let settled = false;
+    let deadline = null;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      if (deadline) clearTimeout(deadline);
+      callback(value);
+    };
+    const fail = (error) => finish(reject, error instanceof Error ? error : new Error(String(error)));
+    const request = (target.protocol === "https:" ? requestHttps : requestHttp)(target, {
+      method: "GET",
+      headers,
+      agent: borrowRequestSocket
+        ? target.protocol === "https:" ? requestHttpsAgent : requestHttpAgent
+        : false,
+    }, (response) => finish(resolve, { request, response }));
+    if (borrowRequestSocket) {
+      // Node's documented long-lived request pattern: reuse the ticket POST's proven
+      // connection, then remove the retained SSE socket from the finite-request pool.
+      request.once("socket", (socket) => socket.emit("agentRemove"));
+    }
+    request.once("error", fail);
+    deadline = setTimeout(() => {
+      const error = new Error("Stream timed out after " + timeoutMs + " ms for " + target.pathname);
+      request.destroy(error);
+      fail(error);
+    }, timeoutMs);
+    request.end();
+  });
+}
+
 /**
  * Windows can briefly refuse a newly assigned loopback port after a long browser run even
  * though `listen()` has completed. Prove the store is reachable before a smoke starts making
@@ -107,14 +151,13 @@ export async function waitForStore(baseUrl, { timeoutMs = 12_000 } = {}) {
 /** One actor's view of a session: its credential, its stream, and what it has received. */
 export function createActor(baseUrl, { credential = null, storeToken = null, origin = null } = {}) {
   let stream = null;
-  const received = { ops: [], presence: [], members: [], hello: null, closed: null, revoked: null };
+  const received = { ops: [], missions: [], resync: [], presence: [], members: [], hello: null, closed: null, revoked: null };
   let lastSeq = 0;
 
   const headers = (extra = {}) => {
-    // These Node-only actors frequently pause behind real browser/WebGL work for longer than
-    // the store's keep-alive window. A fresh loopback connection avoids Undici selecting a
-    // pooled socket the server has already retired; production browser clients are untouched.
-    const out = { "content-type": "application/json", connection: "close", ...extra };
+    // These actors share the bounded native pool above. Node removes retired sockets from
+    // that pool, while reusing healthy loopback sockets avoids long-smoke port exhaustion.
+    const out = { "content-type": "application/json", ...extra };
     if (credential) out["x-graphysx-session"] = credential;
     if (storeToken) out.authorization = `Bearer ${storeToken}`;
     if (origin) out.origin = origin;
@@ -122,9 +165,17 @@ export function createActor(baseUrl, { credential = null, storeToken = null, ori
   };
 
   const call = async (method, path, body, { rawBody = null, extraHeaders = {} } = {}) => {
+    // Mission writes carry the same member/body-bound idempotency contract as scene ops.
+    // Retry only when the validated key is the one this call will actually serialize.
+    const retryableMissionEvent = method === "POST"
+      && rawBody === null
+      && isClientMissionEventId(body?.eventId)
+      && (/^\/sessions\/[^/]+\/missions$/.test(path)
+        || /^\/sessions\/[^/]+\/missions\/[^/]+\/events$/.test(path));
     const retryableTransport = method === "GET"
       || /\/stream-ticket$/.test(path)
-      || (/\/ops$/.test(path) && typeof body?.opId === "string");
+      || (/\/ops$/.test(path) && typeof body?.opId === "string")
+      || retryableMissionEvent;
     let response;
     let lastError = null;
     for (let attempt = 0; attempt < (retryableTransport ? 3 : 1); attempt += 1) {
@@ -142,7 +193,7 @@ export function createActor(baseUrl, { credential = null, storeToken = null, ori
       }
     }
     if (!response) {
-      throw new Error(`Live-session harness ${method} ${path} transport failed`, { cause: lastError });
+      throw new Error(`Live-session harness ${method} ${path} transport failed: ${lastError?.message ?? "unknown transport error"}`, { cause: lastError });
     }
     const text = response.text;
     let payload = null;
@@ -180,23 +231,26 @@ export function createActor(baseUrl, { credential = null, storeToken = null, ori
       const ticketResponse = await call("POST", `/sessions/${sessionId}/stream-ticket`, {});
       if (ticketResponse.status !== 201) throw new Error(`stream-ticket failed: ${ticketResponse.status} ${ticketResponse.text}`);
       const ticket = ticketResponse.body.ticket;
-      const controller = new AbortController();
-      const response = await fetch(
+      // Let the Agent publish the completed ticket response as free before the SSE
+      // borrows that exact loopback connection and detaches it for its retained lifetime.
+      await new Promise((resolve) => setImmediate(resolve));
+      const opened = await openEventStream(
         `${baseUrl}/sessions/${sessionId}/stream?ticket=${encodeURIComponent(ticket)}&since=${since}`,
-        { headers: { connection: "close", ...(origin ? { origin } : {}) }, signal: controller.signal },
+        { headers: { connection: "close", ...(origin ? { origin } : {}) }, borrowRequestSocket: true },
       );
-      if (!response.ok) {
-        controller.abort();
-        throw new Error(`stream failed: ${response.status} ${await response.text()}`);
+      const status = opened.response.statusCode ?? 0;
+      if (status < 200 || status >= 300) {
+        const chunks = [];
+        for await (const chunk of opened.response) chunks.push(Buffer.from(chunk));
+        opened.request.destroy();
+        throw new Error(`stream failed: ${status} ${Buffer.concat(chunks).toString("utf8")}`);
       }
-      const reader = response.body.getReader();
+      const streamDecoder = new TextDecoder();
       let buffer = "";
       const pump = (async () => {
         try {
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
+          for await (const value of opened.response) {
+            buffer += streamDecoder.decode(value, { stream: true });
             let split;
             while ((split = buffer.indexOf("\n\n")) !== -1) {
               const frame = buffer.slice(0, split);
@@ -213,6 +267,8 @@ export function createActor(baseUrl, { credential = null, storeToken = null, ori
               if (typeof parsed.seq === "number") lastSeq = Math.max(lastSeq, parsed.seq);
               if (event === "hello") received.hello = parsed;
               else if (event === "op") received.ops.push(parsed);
+              else if (event === "mission") received.missions.push(parsed);
+              else if (event === "resync") received.resync.push(parsed);
               else if (event === "presence") received.presence.push(parsed);
               else if (event === "member") received.members.push(parsed);
               else if (event === "closed") received.closed = parsed;
@@ -225,7 +281,8 @@ export function createActor(baseUrl, { credential = null, storeToken = null, ori
       })();
       stream = {
         close: () => {
-          controller.abort();
+          opened.response.destroy();
+          opened.request.destroy();
           return pump;
         },
       };

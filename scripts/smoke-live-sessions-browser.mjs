@@ -14,6 +14,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import { startSceneStore } from "../server/scene-store.mjs";
 import { startStaticServer } from "./static-server.mjs";
 import { applySmokeTimeout, launchSmokeBrowser, SMOKE_TIMEOUT } from "./smoke-harness.mjs";
@@ -34,6 +35,7 @@ let statics = null;
 let browser = null;
 let dir = null;
 let agentActor = null;
+const missionActors = [];
 
 function expectHttpConsoleErrors(page, label, specifications) {
   const scope = {
@@ -156,6 +158,22 @@ const waitForAgentCount = async (page, expected, label) => {
   }
 };
 
+const waitForQuietAgentProjection = async (page, expected, label) => {
+  const deadline = Date.now() + SMOKE_TIMEOUT;
+  let last = null;
+  for (;;) {
+    last = await page.evaluate(() => ({
+      presence: window.__GRAPHYSX_LIVE_PRESENCE__?.state() ?? null,
+      reactions: window.__GRAPHYSX__?.query({ tag: "nestor-live-activity" }).length ?? -1,
+    }));
+    if (last.presence?.agents.length === expected && !last.presence.signalVisible && last.reactions === 0) return last;
+    if (Date.now() > deadline) {
+      throw new Error(label + ": live-agent projection did not settle; last state " + JSON.stringify(last));
+    }
+    await sleep(100);
+  }
+};
+
 // Node-side polling remains responsive when multiple software-WebGL tabs saturate Chromium;
 // requestAnimationFrame-based waits can stall even though the session transport is healthy.
 const waitForLive = async (page, label, timeout = SMOKE_TIMEOUT) => {
@@ -239,6 +257,199 @@ const readPresenceInvariant = (page) => page.evaluate(() => {
   };
 });
 
+const readMissionInvariant = (page) => page.evaluate(() => {
+  const api = window.__GRAPHYSX__;
+  const state = api.state();
+  const projection = JSON.parse(window.render_game_to_text());
+  return {
+    liveRevision: window.__GRAPHYSX_LIVE_SESSION__.status.revision,
+    runtimeRevision: state?.revision ?? -1,
+    history: JSON.stringify(api.history()),
+    document: JSON.stringify(api.exportDocument()),
+    fullExport: JSON.stringify(api.export()),
+    selectedIds: [...(state?.selectedIds ?? [])].sort(),
+    missionIds: api.query({ tag: "live-mission" }).map((entity) => entity.id).sort(),
+    boardIds: api.query({ tag: "mission-board" }).map((entity) => entity.id).sort(),
+    artifactIds: api.query({ tag: "mission-artifact" }).map((entity) => entity.id).sort(),
+    completionIds: api.query({ tag: "mission-completion" }).map((entity) => entity.id).sort(),
+    mission: window.__GRAPHYSX_LIVE_MISSION__?.state() ?? null,
+    presence: window.__GRAPHYSX_LIVE_PRESENCE__?.state() ?? null,
+    projectedMission: projection.liveMission ?? null,
+    resources: {
+      geometries: window.__GRAPHYSX_HOST__.renderer.info.memory.geometries,
+      textures: window.__GRAPHYSX_HOST__.renderer.info.memory.textures,
+    },
+  };
+});
+
+const readMissionMotionInvariant = (page) => page.evaluate(() => {
+  const api = window.__GRAPHYSX__;
+  const missionEntities = api.query({ tag: "live-mission" });
+  const agentEntities = api.query({ tag: "live-agent" });
+  return {
+    motionPreference: document.documentElement.dataset.gxMotion ?? null,
+    missionIds: missionEntities.map((entity) => entity.id).sort(),
+    animatedMissionIds: missionEntities
+      .filter((entity) => (entity.behaviors?.length ?? 0) > 0)
+      .map((entity) => entity.id)
+      .sort(),
+    agentIds: agentEntities.map((entity) => entity.id).sort(),
+    animatedAgentIds: agentEntities
+      .filter((entity) => (entity.behaviors?.length ?? 0) > 0)
+      .map((entity) => entity.id)
+      .sort(),
+    boardIds: api.query({ tag: "mission-board" }).map((entity) => entity.id).sort(),
+    artifactIds: api.query({ tag: "mission-artifact" }).map((entity) => entity.id).sort(),
+    runtime: window.__GRAPHYSX_LIVE_MISSION__?.state() ?? null,
+  };
+});
+
+const primeRendererResources = (page, label, timeout = SMOKE_TIMEOUT) => page.evaluate(async ({ sampleLabel, timeoutMs }) => {
+  const host = window.__GRAPHYSX_HOST__;
+  const previous = [];
+  host.scene.traverse((object) => {
+    if (!object.visible || !(object.isMesh || object.isLine || object.isPoints)) return;
+    previous.push([object, object.frustumCulled]);
+    object.frustumCulled = false;
+  });
+  const startFrame = host.frameCount;
+  try {
+    await new Promise((resolve, reject) => {
+      const startedAt = performance.now();
+      const poll = () => {
+        if (host.frameCount > startFrame) resolve();
+        else if (performance.now() - startedAt >= timeoutMs) reject(new Error(`${sampleLabel}: host frame did not advance`));
+        else window.setTimeout(poll, 50);
+      };
+      poll();
+    });
+    return {
+      geometries: host.renderer.info.memory.geometries,
+      textures: host.renderer.info.memory.textures,
+    };
+  } finally {
+    for (const [object, frustumCulled] of previous) object.frustumCulled = frustumCulled;
+  }
+}, { sampleLabel: label, timeoutMs: timeout });
+
+const readPrimedMissionInvariant = async (page, label) => {
+  const resources = await primeRendererResources(page, label);
+  const invariant = await readMissionInvariant(page);
+  return { ...invariant, resources };
+};
+
+const waitForMission = async (page, missionId, predicate, label, timeout = SMOKE_TIMEOUT) => {
+  const deadline = Date.now() + timeout;
+  let last = null;
+  for (;;) {
+    last = await page.evaluate((id) =>
+      window.__GRAPHYSX_LIVE_SESSION__?.status.missions.find((mission) => mission.missionId === id) ?? null,
+    missionId);
+    if (last && predicate(last)) return last;
+    if (Date.now() > deadline) {
+      throw new Error(label + ": mission " + missionId + " did not converge; last state " + JSON.stringify(last));
+    }
+    await sleep(100);
+  }
+};
+
+const waitForMissionRuntime = async (page, predicate, label, timeout = SMOKE_TIMEOUT) => {
+  const deadline = Date.now() + timeout;
+  let last = null;
+  for (;;) {
+    last = await page.evaluate(() => window.__GRAPHYSX_LIVE_MISSION__?.state() ?? null);
+    if (last && predicate(last)) return last;
+    if (Date.now() > deadline) {
+      throw new Error(label + ": mission runtime did not converge; last state " + JSON.stringify(last));
+    }
+    await sleep(100);
+  }
+};
+
+const waitForMissionProjection = async (page, missionId, artifactCount, label, timeout = SMOKE_TIMEOUT) => {
+  const deadline = Date.now() + timeout;
+  let last = null;
+  for (;;) {
+    last = await page.evaluate(() => JSON.parse(window.render_game_to_text()).liveMission ?? null);
+    if (last?.mission?.missionId === missionId && last.boardVisible && last.artifacts.length === artifactCount) return last;
+    if (Date.now() > deadline) {
+      throw new Error(label + ": rendered mission projection did not converge; last state " + JSON.stringify(last));
+    }
+    await sleep(100);
+  }
+};
+
+const settleRenderProfile = async (page, viewport, expectedProfile) => {
+  const startFrame = await page.evaluate(() => window.__GRAPHYSX_HOST__.frameCount);
+  await page.setViewportSize(viewport);
+  await page.waitForFunction(({ frame, profile }) => {
+    const host = window.__GRAPHYSX_HOST__;
+    return host?.qualityProfile?.name === profile
+      && document.documentElement.dataset.gxRenderProfile === profile
+      && host.frameCount > frame;
+  }, { frame: startFrame, profile: expectedProfile });
+};
+
+const sampleRendererBudget = async (page, label, viewport, expectedProfile) => {
+  await settleRenderProfile(page, viewport, expectedProfile);
+  return page.evaluate(async ({ sampleLabel, profileName, timeoutMs }) => {
+    const host = window.__GRAPHYSX_HOST__;
+    const renderer = host.renderer;
+    const previousAutoReset = renderer.info.autoReset;
+    let reading = null;
+    try {
+      renderer.info.autoReset = false;
+      renderer.info.reset();
+      const startFrame = host.frameCount;
+      const startedAt = performance.now();
+      let timedOut = false;
+      await new Promise((resolve) => {
+        const poll = () => {
+          if (host.frameCount - startFrame >= 24) resolve();
+          else if (performance.now() - startedAt >= timeoutMs) {
+            timedOut = true;
+            resolve();
+          } else window.setTimeout(poll, 16);
+        };
+        poll();
+      });
+      const elapsedMs = performance.now() - startedAt;
+      const frames = host.frameCount - startFrame;
+      const render = { ...renderer.info.render };
+      const runtime = window.__GRAPHYSX_LIVE_MISSION__?.state() ?? null;
+      const evidenceCount = runtime?.mission?.stages.reduce((count, stage) => count + stage.evidence.length, 0) ?? 0;
+      const artifactCap = profileName === "mobile" ? 2 : 4;
+      reading = {
+        label: sampleLabel,
+        expectedProfile: profileName,
+        profile: { ...host.qualityProfile },
+        rootProfile: document.documentElement.dataset.gxRenderProfile ?? null,
+        viewport: { width: innerWidth, height: innerHeight },
+        timedOut,
+        elapsedMs: Number(elapsedMs.toFixed(1)),
+        frames,
+        totals: { calls: render.calls, triangles: render.triangles },
+        callsPerFrame: frames ? Number((render.calls / frames).toFixed(2)) : null,
+        trianglesPerFrame: frames ? Number((render.triangles / frames).toFixed(1)) : null,
+        actorId: window.__GRAPHYSX_LIVE_SESSION__.status.actorId,
+        agentCount: window.__GRAPHYSX_LIVE_PRESENCE__?.state().agents.length ?? -1,
+        reactionRootCount: window.__GRAPHYSX__.query({ tag: "nestor-live-activity" }).length,
+        missionStatus: runtime?.mission?.status ?? null,
+        boardRootCount: window.__GRAPHYSX__.query({ tag: "mission-board" }).length,
+        artifactRootCount: window.__GRAPHYSX__.query({ tag: "mission-artifact" }).length,
+        artifactViewCount: runtime?.artifacts.length ?? 0,
+        evidenceCount,
+        artifactCap,
+        expectedArtifactCount: Math.min(evidenceCount, artifactCap),
+      };
+    } finally {
+      renderer.info.reset();
+      renderer.info.autoReset = previousAutoReset;
+    }
+    return reading;
+  }, { sampleLabel: label, profileName: expectedProfile, timeoutMs: SMOKE_TIMEOUT });
+};
+
 const api = async (base, method, path_, body, credential) => {
   const retryableTransport = method === "GET"
     || (/\/ops$/.test(path_) && typeof body?.opId === "string");
@@ -261,7 +472,7 @@ const api = async (base, method, path_, body, credential) => {
       await sleep(100 * (attempt + 1));
     }
   }
-  if (!response) throw new Error(`Browser smoke ${method} ${path_} transport failed`, { cause: lastError });
+  if (!response) throw new Error(`Browser smoke ${method} ${path_} transport failed: ${lastError?.message ?? "unknown transport error"}`, { cause: lastError });
   let payload = null;
   try {
     payload = response.text ? JSON.parse(response.text) : null;
@@ -272,6 +483,13 @@ const api = async (base, method, path_, body, credential) => {
 };
 
 const acceptedOperationStatus = (status) => status === 200 || status === 201;
+const acceptedMissionStatus = (status) => status === 200 || status === 201;
+
+const normalizeSerializedDocument = (serialized) => {
+  const definition = JSON.parse(serialized);
+  definition.entities = [...definition.entities].sort((left, right) => left.id.localeCompare(right.id));
+  return definition;
+};
 
 const putFixture = async (url, definition) => {
   let lastError = null;
@@ -468,12 +686,27 @@ try {
       let activeSource = null;
       let lastOperationData = null;
       let submitOnNextHello = null;
+      let dropAfterNextMission = false;
+      let missionCatchupDropCount = 0;
+      let resyncMarkerCount = 0;
       class TrackedEventSource extends NativeEventSource {
         constructor(url, init) {
           super(url, init);
           activeSource = this;
           super.addEventListener("op", (event) => {
             lastOperationData = event.data;
+          });
+          super.addEventListener("resync", () => { resyncMarkerCount += 1; });
+          super.addEventListener("mission", () => {
+            if (!dropAfterNextMission) return;
+            dropAfterNextMission = false;
+            // This listener precedes the product listener. The microtask lets the retained
+            // mission event be cached first, then drops this catch-up stream before its
+            // terminal presence cut can prove continuity.
+            queueMicrotask(() => {
+              missionCatchupDropCount += 1;
+              this.dispatchEvent(new Event("error"));
+            });
           });
           super.addEventListener("hello", () => {
             if (!submitOnNextHello) return;
@@ -524,6 +757,12 @@ try {
         activeSource.dispatchEvent(new Event("error"));
         return true;
       };
+      window.__GRAPHYSX_TEST_DROP_NEXT_MISSION_CATCHUP__ = () => {
+        dropAfterNextMission = true;
+        return true;
+      };
+      window.__GRAPHYSX_TEST_MISSION_CATCHUP_DROP_COUNT__ = () => missionCatchupDropCount;
+      window.__GRAPHYSX_TEST_RESYNC_MARKER_COUNT__ = () => resyncMarkerCount;
     });
     // The invitation rides in the fragment, exactly as a shared join link would.
     const url = `${pageBase}/?store=${encodeURIComponent(store.url)}&actor=${actorId}#session=${sessionId}&invite=${encodeURIComponent(invite.code)}`;
@@ -1241,6 +1480,1013 @@ try {
   // Presence is not in the document — the invariant the whole design rests on.
   check(results, "presence never entered the portable document",
     !documents[0].includes("presence") && !documents[0].includes("cursor"), documents[0].slice(0, 200));
+
+  // An authenticated store write is outside the session operation chain. Every attached
+  // browser must gate immediately on its retained marker and load the same atomic document cut.
+  const externalMarkerBaseline = await Promise.all([first.page, second.page].map((page) => page.evaluate(() =>
+    window.__GRAPHYSX_TEST_RESYNC_MARKER_COUNT__?.() ?? -1)));
+  const externalBefore = await api(store.url, "GET", `/sessions/${sessionId}/snapshot`, undefined, ownerCredential);
+  const externalDefinition = structuredClone(externalBefore.body.definition);
+  externalDefinition.entities.push({
+    id: "browser-external-cut", type: "box", label: "External authority cut",
+    transform: { position: [5, 0.5, -4] },
+  });
+  const externalWrite = await api(store.url, "PUT", `/scenes/${SCENE}`, {
+    definition: externalDefinition, expectedRevision: externalBefore.body.revision,
+    actor: "store-writer", intent: "replace the live scene outside its operation chain",
+  });
+  await Promise.all([first.page, second.page].map((page) => page.waitForFunction((targetRevision) =>
+    window.__GRAPHYSX_LIVE_SESSION__.status.connection === "live"
+      && window.__GRAPHYSX_LIVE_SESSION__.status.revision === targetRevision
+      && window.__GRAPHYSX__.query({ ids: ["browser-external-cut"] }).length === 1,
+  externalWrite.body.revision)));
+  const externalCutProof = await Promise.all([first.page, second.page].map((page) => page.evaluate(() => ({
+    markerCount: window.__GRAPHYSX_TEST_RESYNC_MARKER_COUNT__?.() ?? -1,
+    connection: window.__GRAPHYSX_LIVE_SESSION__.status.connection,
+    revision: window.__GRAPHYSX_LIVE_SESSION__.status.revision,
+    externalCount: window.__GRAPHYSX__.query({ ids: ["browser-external-cut"] }).length,
+    document: JSON.stringify(window.__GRAPHYSX__.exportDocument()),
+  }))));
+  check(results, "an external store cut forces exactly one atomic resync in every attached browser",
+    externalWrite.status === 200 && externalCutProof.every((state, index) =>
+      state.markerCount === externalMarkerBaseline[index] + 1 && state.connection === "live"
+      && state.revision === externalWrite.body.revision && state.externalCount === 1)
+      && isDeepStrictEqual(normalizeSerializedDocument(externalCutProof[0].document),
+        normalizeSerializedDocument(externalCutProof[1].document)),
+    JSON.stringify({ write: externalWrite, baseline: externalMarkerBaseline, clients: externalCutProof.map((state) => ({ ...state, document: "omitted" })) }));
+
+  const afterExternalReceipt = await second.page.evaluate(() => window.__GRAPHYSX_LIVE_SESSION__.submit([
+    { op: "spawn", entity: { id: "browser-after-external-cut", type: "sphere", label: "After external cut" } },
+  ], { opId: "browser-after-external-cut-op", intent: "extend the embodied external cut" }));
+  await Promise.all([first.page, second.page].map((page) => page.waitForFunction(() =>
+    window.__GRAPHYSX__.query({ ids: ["browser-after-external-cut"] }).length === 1)));
+  const afterExternalServer = await api(store.url, "GET", `/sessions/${sessionId}/snapshot`, undefined, ownerCredential);
+  const afterExternalProof = await Promise.all([first.page, second.page].map((page) => page.evaluate(() => ({
+    revision: window.__GRAPHYSX_LIVE_SESSION__.status.revision,
+    externalCount: window.__GRAPHYSX__.query({ ids: ["browser-external-cut"] }).length,
+    authoredCount: window.__GRAPHYSX__.query({ ids: ["browser-after-external-cut"] }).length,
+    document: JSON.stringify(window.__GRAPHYSX__.exportDocument()),
+  }))));
+  check(results, "the next browser operation extends the embodied external document without a stale base",
+    afterExternalReceipt.baseRevision === externalWrite.body.revision
+      && afterExternalServer.body.revision === afterExternalReceipt.revision
+      && ["browser-external-cut", "browser-after-external-cut"].every((id) =>
+        afterExternalServer.body.definition.entities.filter((entity) => entity.id === id).length === 1)
+      && afterExternalProof.every((state) => state.revision === afterExternalReceipt.revision
+        && state.externalCount === 1 && state.authoredCount === 1)
+      && isDeepStrictEqual(normalizeSerializedDocument(afterExternalProof[0].document),
+        normalizeSerializedDocument(afterExternalProof[1].document)),
+    JSON.stringify({ receipt: afterExternalReceipt, serverRevision: afterExternalServer.body.revision, clients: afterExternalProof.map((state) => ({ ...state, document: "omitted" })) }));
+
+  // --- AgentX mission director ------------------------------------------------------------
+
+  // Reuse Alice's already-warm renderer for owner controls. Attaching the real owner
+  // credential exercises the same client and DOM panel as a human owner without allocating a
+  // third software-WebGL context.
+  const ownerAttach = await first.page.evaluate(async (args) => {
+    await window.__GRAPHYSX_LIVE_SESSION__.attach(args.sessionId, args.credential);
+    return window.__GRAPHYSX_LIVE_SESSION__.status;
+  }, { sessionId, credential: ownerCredential });
+  await waitForLive(first.page, "owner mission director attach");
+  check(results, "the warm owner browser exposes the curated mission controls",
+    ownerAttach.sessionId === sessionId
+      && (await first.page.evaluate(() => window.__GRAPHYSX_LIVE_SESSION__.status.role)) === "owner"
+      && await first.page.isVisible('.gx-ms [data-action="start"]'),
+    JSON.stringify(ownerAttach));
+
+  const explorerInvite = await inviteFor("agent", [
+    "transaction", "spawn", "mission:explore", "mission:build",
+  ]);
+  const validatorInvite = await inviteFor("agent", ["mission:validate"]);
+  const explorerJoin = await api(store.url, "POST", "/sessions/" + sessionId + "/join", {
+    code: explorerInvite.code,
+    actor: { id: "mission-scout", label: "Scout", kind: "agent" },
+  });
+  const validatorJoin = await api(store.url, "POST", "/sessions/" + sessionId + "/join", {
+    code: validatorInvite.code,
+    actor: { id: "mission-validator", label: "Verifier", kind: "agent" },
+  });
+  const explorerActor = createActor(store.url, { credential: explorerJoin.body.credential });
+  const validatorActor = createActor(store.url, { credential: validatorJoin.body.credential });
+  missionActors.push(explorerActor, validatorActor);
+  const [explorerHello, validatorHello] = await Promise.all([
+    explorerActor.connect(sessionId),
+    validatorActor.connect(sessionId),
+  ]);
+  await Promise.all([
+    waitForAgentCount(first.page, 2, "owner mission agents"),
+    waitForAgentCount(second.page, 2, "peer mission agents"),
+  ]);
+  check(results, "two real capability-scoped AgentX actors join the mission session",
+    explorerJoin.status === 201 && validatorJoin.status === 201
+      && explorerHello.role === "agent" && validatorHello.role === "agent",
+    JSON.stringify({ explorer: explorerHello, validator: validatorHello }));
+
+  await Promise.all([first.page, second.page].map((page, index) =>
+    waitForQuietAgentProjection(page, 2, `two-agent render baseline tab ${index + 1}`)));
+  const missionRenderBaseline = {
+    high: await sampleRendererBudget(first.page, "two-agent-baseline-high", { width: 1280, height: 800 }, "high"),
+    mobile: await sampleRendererBudget(first.page, "two-agent-baseline-mobile", { width: 390, height: 844 }, "mobile"),
+  };
+  await settleRenderProfile(first.page, { width: 1280, height: 800 }, "high");
+
+  const missionBaseline = await Promise.all([first.page, second.page].map((page, index) =>
+    readPrimedMissionInvariant(page, `pre-mission resources tab ${index + 1}`)));
+  const startSelection = await first.page.evaluate((assignments) => {
+    for (const assignment of assignments) {
+      const select = document.querySelector('[data-start-stage="' + assignment.stageId + '"]');
+      if (!(select instanceof HTMLSelectElement)) return { ok: false, missing: assignment.stageId };
+      if (![...select.options].some((option) => option.value === assignment.memberId)) {
+        return { ok: false, ineligible: assignment.stageId, memberId: assignment.memberId };
+      }
+      select.value = assignment.memberId;
+    }
+    const start = document.querySelector('.gx-ms [data-action="start"]');
+    if (!(start instanceof HTMLButtonElement)) return { ok: false, missing: "start" };
+    start.click();
+    return { ok: true };
+  }, [
+    { stageId: "analyze", memberId: explorerJoin.body.member.memberId },
+    { stageId: "build", memberId: explorerJoin.body.member.memberId },
+    { stageId: "validate", memberId: validatorJoin.body.member.memberId },
+  ]);
+  const missionStartDeadline = Date.now() + SMOKE_TIMEOUT;
+  let missionId = null;
+  while (!missionId && Date.now() <= missionStartDeadline) {
+    missionId = await first.page.evaluate(() =>
+      window.__GRAPHYSX_LIVE_SESSION__.status.missions.find((mission) => mission.status === "briefing")?.missionId ?? null);
+    if (!missionId) await sleep(100);
+  }
+  if (!missionId) throw new Error("owner mission start did not create a briefing mission");
+  const briefingMissions = await Promise.all([
+    waitForMission(first.page, missionId, (mission) => mission.status === "briefing", "owner briefing"),
+    waitForMission(second.page, missionId, (mission) => mission.status === "briefing", "peer briefing"),
+  ]);
+  await Promise.all([
+    waitForMissionRuntime(first.page, (state) => state.mission?.missionId === missionId && state.boardVisible, "owner mission board"),
+    waitForMissionRuntime(second.page, (state) => state.mission?.missionId === missionId && state.boardVisible, "peer mission board"),
+  ]);
+  const briefingProof = await Promise.all([
+    readMissionInvariant(first.page),
+    readMissionInvariant(second.page),
+  ]);
+  check(results, "the owner starts one authoritative three-stage briefing from the product panel",
+    startSelection.ok && briefingMissions.every((mission) => mission.stages.length === 3
+      && mission.stages.map((stage) => stage.stageId).join(",") === "analyze,build,validate")
+      && briefingProof.every((state) => state.boardIds.length === 1
+        && state.presence.agents.length === 2
+        && state.presence.agents.every((agent) => agent.station === "briefing")),
+    JSON.stringify({
+      selection: startSelection,
+      missions: briefingMissions,
+      stations: briefingProof.map((state) => state.presence.agents.map((agent) => ({ actorId: agent.actorId, station: agent.station }))),
+    }));
+  check(results, "briefing projects exactly one board without authoring scene state",
+    briefingProof.every((state, index) => state.liveRevision === missionBaseline[index].liveRevision
+      && state.runtimeRevision === missionBaseline[index].runtimeRevision
+      && state.history === missionBaseline[index].history
+      && state.document === missionBaseline[index].document
+      && state.fullExport === missionBaseline[index].fullExport
+      && JSON.stringify(state.selectedIds) === JSON.stringify(missionBaseline[index].selectedIds)
+      && state.boardIds.length === 1 && state.missionIds.length >= 6
+      && !state.document.includes("live-mission:") && !state.fullExport.includes("live-mission:")),
+    JSON.stringify(briefingProof.map((state) => ({ board: state.boardIds, missionIds: state.missionIds.length }))));
+
+  await first.page.click('.gx-ms [data-action="activate"]');
+  const activeMissions = await Promise.all([
+    waitForMission(first.page, missionId, (mission) => mission.status === "active", "owner activation"),
+    waitForMission(second.page, missionId, (mission) => mission.status === "active", "peer activation"),
+  ]);
+  check(results, "mission activation binds three ordered stages across two distinct AgentX actors",
+    activeMissions.every((mission) => mission.stages[0].assignment?.actorId === "mission-scout"
+      && mission.stages[1].assignment?.actorId === "mission-scout"
+      && mission.stages[2].assignment?.actorId === "mission-validator"
+      && new Set(mission.stages.map((stage) => stage.assignment?.actorId)).size === 2),
+    JSON.stringify(activeMissions));
+
+  const stationProof = await Promise.all([first.page, second.page].map((page) => page.evaluate(() =>
+    window.__GRAPHYSX_LIVE_PRESENCE__.state().agents
+      .map((agent) => ({ actorId: agent.actorId, avatarId: agent.avatarId, station: agent.station, stageId: agent.stageId, position: agent.position }))
+      .sort((left, right) => left.actorId.localeCompare(right.actorId)))));
+  const stableStationSlots = stationProof.map((agents) => agents.map((agent) => ({
+    actorId: agent.actorId, avatarId: agent.avatarId, station: agent.station, stageId: agent.stageId,
+    x: Number(agent.position[0].toFixed(3)), z: Number(agent.position[2].toFixed(3)),
+  })));
+  check(results, "mission assignments place both avatars at deterministic capability stations",
+    stationProof.every((agents) => agents.length === 2
+      && agents.every((agent) => agent.position[1] >= 0.25 && agent.position[1] <= 0.45)
+      && agents.find((agent) => agent.actorId === "mission-scout")?.station === "explore"
+      && agents.find((agent) => agent.actorId === "mission-scout")?.stageId === "analyze"
+      && agents.find((agent) => agent.actorId === "mission-validator")?.station === "play"
+      && agents.find((agent) => agent.actorId === "mission-validator")?.stageId === "validate")
+      && JSON.stringify(stableStationSlots[0]) === JSON.stringify(stableStationSlots[1]),
+    JSON.stringify({ slots: stableStationSlots, animated: stationProof }));
+
+  const desktopMissionUi = await first.page.evaluate(() => {
+    const panel = document.querySelector(".gx-ls");
+    const section = document.querySelector(".gx-ms");
+    const header = document.querySelector(".gx-ms-head");
+    const controlled = header?.getAttribute("aria-controls");
+    const panelRect = panel?.getBoundingClientRect();
+    const sectionRect = section?.getBoundingClientRect();
+    return {
+      viewport: { width: innerWidth, height: innerHeight },
+      panel: panelRect ? { left: panelRect.left, right: panelRect.right, top: panelRect.top, bottom: panelRect.bottom } : null,
+      section: sectionRect ? { left: sectionRect.left, right: sectionRect.right, top: sectionRect.top, bottom: sectionRect.bottom } : null,
+      sectionLabel: section?.getAttribute("aria-label") ?? null,
+      expanded: header?.getAttribute("aria-expanded") ?? null,
+      controlsTarget: controlled ? document.getElementById(controlled)?.className ?? null : null,
+      progressbars: [...document.querySelectorAll('.gx-ms [role="progressbar"]')].map((node) => ({
+        now: node.getAttribute("aria-valuenow"), min: node.getAttribute("aria-valuemin"), max: node.getAttribute("aria-valuemax"),
+      })),
+      live: {
+        role: document.querySelector(".gx-ms-sr")?.getAttribute("role") ?? null,
+        aria: document.querySelector(".gx-ms-sr")?.getAttribute("aria-live") ?? null,
+      },
+    };
+  });
+  check(results, "the desktop mission DOM is bounded and exposes its complete accessible structure",
+    desktopMissionUi.panel && desktopMissionUi.section
+      && desktopMissionUi.panel.right <= desktopMissionUi.viewport.width + 1
+      && desktopMissionUi.panel.bottom <= desktopMissionUi.viewport.height + 1
+      && desktopMissionUi.section.left >= desktopMissionUi.panel.left - 1
+      && desktopMissionUi.section.right <= desktopMissionUi.panel.right + 1
+      && desktopMissionUi.sectionLabel === "AgentX mission director"
+      && desktopMissionUi.expanded === "true"
+      && /gx-ms-body/.test(desktopMissionUi.controlsTarget ?? "")
+      && desktopMissionUi.progressbars.length === 3
+      && desktopMissionUi.progressbars.every((bar) => bar.min === "0" && bar.max === "100" && bar.now === "0")
+      && desktopMissionUi.live.role === "status" && desktopMissionUi.live.aria === "polite",
+    JSON.stringify(desktopMissionUi));
+  await first.page.screenshot({ path: path.join(ARTIFACTS, "live-mission-active-desktop.png"), fullPage: false });
+
+  await first.page.setViewportSize({ width: 390, height: 844 });
+  await sleep(300);
+  const phoneMissionUi = await first.page.evaluate(() => {
+    const panel = document.querySelector(".gx-ls");
+    const section = document.querySelector(".gx-ms");
+    const panelRect = panel?.getBoundingClientRect();
+    const sectionRect = section?.getBoundingClientRect();
+    const style = panel ? getComputedStyle(panel) : null;
+    return {
+      panel: panelRect ? { width: panelRect.width, height: panelRect.height, right: panelRect.right, bottom: panelRect.bottom } : null,
+      section: sectionRect ? { width: sectionRect.width, right: sectionRect.right } : null,
+      maxHeight: Number.parseFloat(style?.maxHeight ?? "0"),
+      overflowY: style?.overflowY ?? null,
+      scrollWidth: document.documentElement.scrollWidth,
+    };
+  });
+  await first.page.screenshot({ path: path.join(ARTIFACTS, "live-mission-active-390.png"), fullPage: false });
+  await first.page.focus('.gx-ms [data-action="pause"]');
+  await first.page.keyboard.press("Escape");
+  const escapeProof = await first.page.evaluate(() => ({
+    expanded: document.querySelector(".gx-ms-head")?.getAttribute("aria-expanded") ?? null,
+    hidden: document.querySelector(".gx-ms-body")?.hidden ?? false,
+    focusClass: document.activeElement?.className ?? null,
+  }));
+  check(results, "the 390px mission sheet stays bounded and Escape collapses it with focus restoration",
+    phoneMissionUi.panel && phoneMissionUi.section
+      && phoneMissionUi.panel.right <= 391 && phoneMissionUi.panel.bottom <= 845
+      && phoneMissionUi.panel.width <= 390 && phoneMissionUi.panel.height <= phoneMissionUi.maxHeight + 1
+      && phoneMissionUi.maxHeight <= 400 && phoneMissionUi.overflowY === "auto"
+      && phoneMissionUi.section.right <= 391 && phoneMissionUi.scrollWidth <= 390
+      && escapeProof.expanded === "false" && escapeProof.hidden === true
+      && /gx-ms-head/.test(String(escapeProof.focusClass)),
+    JSON.stringify({ phoneMissionUi, escapeProof }));
+  await first.page.click(".gx-ms-head");
+  await first.page.setViewportSize({ width: 1280, height: 800 });
+  await sleep(200);
+
+  const pauseBaseline = await Promise.all([
+    readMissionInvariant(first.page),
+    readMissionInvariant(second.page),
+  ]);
+  await first.page.click('.gx-ms [data-action="pause"]');
+  const pausedMissions = await Promise.all([
+    waitForMission(first.page, missionId, (mission) => mission.status === "paused", "owner mission pause"),
+    waitForMission(second.page, missionId, (mission) => mission.status === "paused", "peer mission pause"),
+  ]);
+  const pausedDirectors = await Promise.all([first.page, second.page].map((page) =>
+    waitForMissionRuntime(page, (state) => state.director.action === "pause"
+      && state.director.missionStatus === "paused", "mission pause narration")));
+  await first.page.click('.gx-ms [data-action="resume"]');
+  const resumedMissions = await Promise.all([
+    waitForMission(first.page, missionId, (mission) => mission.status === "active", "owner mission resume control"),
+    waitForMission(second.page, missionId, (mission) => mission.status === "active", "peer mission resume control"),
+  ]);
+  const resumedDirectors = await Promise.all([first.page, second.page].map((page) =>
+    waitForMissionRuntime(page, (state) => state.director.action === "resume"
+      && state.director.missionStatus === "active", "mission resume narration")));
+  const pauseResumeProof = await Promise.all([
+    readMissionInvariant(first.page),
+    readMissionInvariant(second.page),
+  ]);
+  check(results, "owner Pause and Resume controls converge without authoring or duplicating the mission board",
+    isDeepStrictEqual(pausedMissions[0], pausedMissions[1])
+      && pausedMissions.every((mission) => mission.stages[0].status === "assigned")
+      && pausedDirectors.every((state) => state.director.stageId === "analyze"
+        && state.director.stageStatus === "assigned")
+      && isDeepStrictEqual(resumedMissions[0], resumedMissions[1])
+      && resumedMissions.every((mission) => mission.stages[0].status === "assigned")
+      && resumedDirectors.every((state) => state.director.stageId === "analyze"
+        && state.director.stageStatus === "assigned")
+      && pauseResumeProof.every((state, index) => state.boardIds.length === 1
+        && state.liveRevision === pauseBaseline[index].liveRevision
+        && state.runtimeRevision === pauseBaseline[index].runtimeRevision
+        && state.history === pauseBaseline[index].history
+        && state.document === pauseBaseline[index].document
+        && state.fullExport === pauseBaseline[index].fullExport),
+    JSON.stringify({ paused: pausedMissions, resumed: resumedMissions,
+      directors: { paused: pausedDirectors.map((state) => state.director),
+        resumed: resumedDirectors.map((state) => state.director) } }));
+
+  const catchupDropArmed = await first.page.evaluate(() => window.__GRAPHYSX_TEST_DROP_NEXT_MISSION_CATCHUP__());
+  const initialStreamDropped = await first.page.evaluate(() => window.__GRAPHYSX_TEST_FORCE_STREAM_ERROR__());
+  await first.page.waitForFunction(() => window.__GRAPHYSX_LIVE_SESSION__.status.connection === "reconnecting");
+  const workingReceipt = await explorerActor.call("POST", "/sessions/" + sessionId + "/missions/" + missionId + "/events", {
+    eventId: "me-browser-analyze-working",
+    action: "progress",
+    stageId: "analyze",
+    state: "working",
+    progress: 0.25,
+  });
+  await first.page.waitForFunction(() => window.__GRAPHYSX_TEST_MISSION_CATCHUP_DROP_COUNT__() === 1);
+  const catchupDropProof = await readMissionInvariant(first.page);
+  check(results, "a second stream drop after a retained mission event projects nothing before the terminal live cut",
+    catchupDropArmed && initialStreamDropped && acceptedMissionStatus(workingReceipt.status)
+      && catchupDropProof.mission.connection === "reconnecting"
+      && catchupDropProof.mission.director.mode === "neutral"
+      && catchupDropProof.missionIds.length === 0 && catchupDropProof.boardIds.length === 0
+      && catchupDropProof.artifactIds.length === 0 && catchupDropProof.completionIds.length === 0,
+    JSON.stringify({ receipt: workingReceipt.body, runtime: catchupDropProof.mission,
+      ids: { mission: catchupDropProof.missionIds, board: catchupDropProof.boardIds } }));
+  await waitForLive(first.page, "owner mission catch-up retry");
+  await Promise.all([
+    waitForMission(first.page, missionId, (mission) => mission.stages[0].status === "working", "owner analyze working"),
+    waitForMission(second.page, missionId, (mission) => mission.stages[0].status === "working", "peer analyze working"),
+  ]);
+  const catchupLiveProof = await readMissionInvariant(first.page);
+  check(results, "the proven live cut reprojects the retained mission exactly once",
+    catchupLiveProof.mission.connection === "live"
+      && catchupLiveProof.mission.mission?.stages[0].status === "working"
+      && catchupLiveProof.boardIds.length === 1
+      && catchupLiveProof.missionIds.filter((id) => id.endsWith(":board")).length === 1,
+    JSON.stringify({ runtime: catchupLiveProof.mission, board: catchupLiveProof.boardIds }));
+  const explorerResumeSeq = explorerActor.lastSeq;
+  await explorerActor.disconnect();
+  const interruptedMissions = await Promise.all([
+    waitForMission(first.page, missionId, (mission) => mission.status === "blocked" && mission.stages[0].status === "interrupted", "owner disconnect interruption"),
+    waitForMission(second.page, missionId, (mission) => mission.status === "blocked" && mission.stages[0].status === "interrupted", "peer disconnect interruption"),
+  ]);
+  const disconnectDirectors = await Promise.all([first.page, second.page].map((page) =>
+    waitForMissionRuntime(page, (state) => state.director.action === "interrupt" && state.director.reason === "disconnected", "disconnect narration")));
+  await Promise.all([
+    waitForAgentCount(first.page, 1, "owner mission disconnect"),
+    waitForAgentCount(second.page, 1, "peer mission disconnect"),
+  ]);
+  check(results, "disconnect interrupts the exact assigned stage and Nestor reports the real actor and reason",
+    acceptedMissionStatus(workingReceipt.status) && interruptedMissions.every((mission) => mission.updatedSeq > workingReceipt.body.seq)
+      && disconnectDirectors.every((state) => state.director.mode === "blocked"
+        && state.director.actorId === "mission-scout" && state.director.actorLabel === "Scout"
+        && state.director.stageId === "analyze" && state.director.stageStatus === "interrupted"
+        && state.director.reason === "disconnected"),
+    JSON.stringify(disconnectDirectors.map((state) => state.director)));
+
+  let explorerResume = null;
+  let explorerResumeError = null;
+  for (let attempt = 0; attempt < 3 && !explorerResume; attempt += 1) {
+    try {
+      explorerResume = await explorerActor.connect(sessionId, { since: explorerResumeSeq });
+    } catch (error) {
+      explorerResumeError = error;
+      await explorerActor.disconnect();
+      await sleep(250 * (attempt + 1));
+    }
+  }
+  if (!explorerResume) throw explorerResumeError ?? new Error("mission explorer reconnect failed");
+  const reconnectedMissionAgents = await Promise.all([
+    waitForAgentCount(first.page, 2, "owner mission reconnect"),
+    waitForAgentCount(second.page, 2, "peer mission reconnect"),
+  ]);
+  await first.page.click('.gx-ms [data-action="resume"]');
+  await Promise.all([
+    waitForMission(first.page, missionId, (mission) => mission.status === "active" && mission.stages[0].status === "assigned", "owner mission resume"),
+    waitForMission(second.page, missionId, (mission) => mission.status === "active" && mission.stages[0].status === "assigned", "peer mission resume"),
+  ]);
+  check(results, "reconnect resumes one actor-keyed avatar and owner recovery without duplicate mission projections",
+    explorerResume.resumed === true && reconnectedMissionAgents.every((state) => state.agents.length === 2
+      && new Set(state.agents.map((agent) => agent.actorId)).size === 2)
+      && (await Promise.all([readMissionInvariant(first.page), readMissionInvariant(second.page)]))
+        .every((state) => state.boardIds.length === 1),
+    JSON.stringify({ hello: explorerResume, agents: reconnectedMissionAgents.map((state) => state.agents) }));
+
+  const analysisSummary = "Scout traced the signal to a missing calibration artifact.";
+  const analysisReceipt = await explorerActor.call("POST", "/sessions/" + sessionId + "/missions/" + missionId + "/events", {
+    eventId: "me-browser-analyze-complete",
+    action: "progress",
+    stageId: "analyze",
+    state: "completed",
+    evidence: { evidenceId: "evidence-browser-analyze", kind: "observation", summary: analysisSummary },
+  });
+  const analysisDirectors = await Promise.all([first.page, second.page].map((page) =>
+    waitForMissionRuntime(page, (state) => state.director.seq === analysisReceipt.body.seq, "analysis narration")));
+  const analysisProof = await Promise.all([readMissionInvariant(first.page), readMissionInvariant(second.page)]);
+  check(results, "accepted analysis drives the exact Nestor actor, stage, evidence and sequence",
+    acceptedMissionStatus(analysisReceipt.status) && analysisDirectors.every((state) => state.director.action === "progress"
+      && state.director.actorId === "mission-scout" && state.director.actorLabel === "Scout"
+      && state.director.stageId === "analyze" && state.director.stageStatus === "completed"
+      && state.director.evidenceId === "evidence-browser-analyze"
+      && state.director.intent === analysisSummary && state.director.seq === analysisReceipt.body.seq),
+    JSON.stringify(analysisDirectors.map((state) => state.director)));
+  check(results, "all mission-only activity through analysis preserves document, revision, history and selection byte-for-byte",
+    analysisProof.every((state, index) => state.liveRevision === missionBaseline[index].liveRevision
+      && state.runtimeRevision === missionBaseline[index].runtimeRevision
+      && state.history === missionBaseline[index].history
+      && state.document === missionBaseline[index].document
+      && state.fullExport === missionBaseline[index].fullExport
+      && JSON.stringify(state.selectedIds) === JSON.stringify(missionBaseline[index].selectedIds)),
+    JSON.stringify(analysisProof.map((state, index) => ({
+      live: missionBaseline[index].liveRevision + "->" + state.liveRevision,
+      runtime: missionBaseline[index].runtimeRevision + "->" + state.runtimeRevision,
+    }))));
+
+  const missionAuthoringBoundary = await Promise.all([first.page, second.page].map((page) => page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const transientIds = [
+      api.query({ tag: "mission-board" })[0]?.id ?? null,
+      api.query({ tag: "mission-artifact" })[0]?.id ?? null,
+    ].filter(Boolean);
+    const beforeRevision = api.state().revision;
+    const beforeHistory = JSON.stringify(api.history());
+    const beforeDocument = JSON.stringify(api.exportDocument());
+    const beforeExport = JSON.stringify(api.export());
+    const beforeSelection = [...api.state().selectedIds];
+    const attempts = transientIds.map((id, index) => ({
+      id,
+      update: api.update(id, { label: "authored mission takeover" }),
+      child: api.spawn({ id: "illegal-mission-child-" + index, parentId: id, type: "box" }),
+      reference: api.attachBehavior("showroom-nestor", { type: "look-at", targetId: id }),
+      selected: api.select([id]),
+    }));
+    api.select(beforeSelection);
+    return {
+      transientIds, attempts,
+      selectionRestored: JSON.stringify([...api.state().selectedIds]) === JSON.stringify(beforeSelection),
+      revisionStable: api.state().revision === beforeRevision,
+      historyStable: JSON.stringify(api.history()) === beforeHistory,
+      documentStable: JSON.stringify(api.exportDocument()) === beforeDocument,
+      exportStable: JSON.stringify(api.export()) === beforeExport,
+      missionIds: api.query({ tag: "live-mission" }).map((entity) => entity.id),
+    };
+  })));
+  check(results, "mission boards and artifacts cannot be selected, mutated, parented, referenced or exported",
+    missionAuthoringBoundary.every((state) => state.transientIds.length === 2
+      && state.attempts.every((attempt) => !attempt.update.ok && !attempt.child.ok
+        && !attempt.reference.ok && attempt.selected.length === 0)
+      && state.selectionRestored && state.revisionStable && state.historyStable
+      && state.documentStable && state.exportStable && state.missionIds.length > 0),
+    JSON.stringify(missionAuthoringBoundary));
+
+  // Force the owner browser through a real snapshot/world reload while mission evidence is
+  // active. The retained observation must reproject once, never duplicate through world.loaded.
+  const activeMissionResync = await first.page.evaluate(async () => {
+    const before = window.__GRAPHYSX_LIVE_SESSION__.status;
+    const resync = window.__GRAPHYSX_LIVE_SESSION__.resync();
+    const during = window.__GRAPHYSX_LIVE_SESSION__.status.connection;
+    const revision = await resync;
+    return { beforeRevision: before.revision, during, revision };
+  });
+  await waitForLive(first.page, "owner active-mission resync");
+  await waitForMissionRuntime(first.page, (state) => state.mission?.missionId === missionId
+    && state.mission.status === "active" && state.boardVisible && state.artifacts.length === 1,
+  "owner active-mission reprojection");
+  await Promise.all([
+    waitForMissionProjection(first.page, missionId, 1, "owner rendered mission reprojection"),
+    waitForMissionProjection(second.page, missionId, 1, "peer rendered mission projection"),
+  ]);
+  const activeMissionResyncProof = await Promise.all([readMissionInvariant(first.page), readMissionInvariant(second.page)]);
+  check(results, "an owner resync restores exactly one active board and evidence artifact in both warm tabs",
+    activeMissionResync.during === "reconnecting"
+      && activeMissionResync.revision === activeMissionResync.beforeRevision
+      && activeMissionResyncProof.every((state) => state.liveRevision === activeMissionResync.beforeRevision
+        && state.boardIds.length === 1 && state.artifactIds.length === 1
+        && state.mission?.mission?.missionId === missionId && state.mission.mission.status === "active"
+        && state.mission.artifacts.length === 1
+        && state.projectedMission?.mission?.missionId === missionId
+        && state.projectedMission.boardVisible && state.projectedMission.artifacts.length === 1
+        && !state.document.includes("live-mission:") && !state.fullExport.includes("live-mission:"))
+      && isDeepStrictEqual(
+        normalizeSerializedDocument(activeMissionResyncProof[0].document),
+        normalizeSerializedDocument(activeMissionResyncProof[1].document),
+      ),
+    JSON.stringify({ transition: activeMissionResync, projection: activeMissionResyncProof.map((state) => ({
+      boardIds: state.boardIds, artifactIds: state.artifactIds, runtime: state.mission,
+    })) }));
+
+  const buildIntent = "Scout fabricates the accepted browser calibration artifact";
+  const buildOperation = await explorerActor.call("POST", "/sessions/" + sessionId + "/ops", {
+    opId: "op-browser-mission-artifact",
+    path: "spawn",
+    commands: [{ op: "spawn", entity: {
+      id: "browser-mission-artifact",
+      type: "icosahedron",
+      label: "Browser mission calibration artifact",
+      transform: { position: [-1.5, 1.1, -3.5] },
+    } }],
+    intent: buildIntent,
+  });
+  await Promise.all([first.page, second.page].map((page) => page.waitForFunction(() =>
+    window.__GRAPHYSX__.query({ ids: ["browser-mission-artifact"] }).length === 1)));
+  const buildReceipt = await explorerActor.call("POST", "/sessions/" + sessionId + "/missions/" + missionId + "/events", {
+    eventId: "me-browser-build-complete",
+    action: "progress",
+    stageId: "build",
+    state: "completed",
+    evidence: { evidenceId: "evidence-browser-build", kind: "operation", opId: "op-browser-mission-artifact" },
+  });
+  const buildDirectors = await Promise.all([first.page, second.page].map((page) =>
+    waitForMissionRuntime(page, (state) => state.director.seq === buildReceipt.body.seq, "build narration")));
+  await Promise.all([first.page, second.page].map((page) => page.waitForFunction((revision) =>
+    window.__GRAPHYSX_LIVE_SESSION__.status.revision === revision, buildOperation.body.revision)));
+  const buildProof = await Promise.all([readMissionInvariant(first.page), readMissionInvariant(second.page)]);
+  check(results, "build completion copies the stable accepted operation receipt into bounded evidence",
+    acceptedOperationStatus(buildOperation.status) && acceptedMissionStatus(buildReceipt.status)
+      && buildReceipt.body.evidence.operation.opId === buildOperation.body.opId
+      && buildReceipt.body.evidence.operation.seq === buildOperation.body.seq
+      && buildReceipt.body.evidence.operation.revision === buildOperation.body.revision
+      && buildReceipt.body.evidence.operation.intent === buildIntent
+      && buildReceipt.body.evidence.operation.touched.includes("browser-mission-artifact"),
+    JSON.stringify({ operation: buildOperation.body, evidence: buildReceipt.body.evidence }));
+  check(results, "Nestor reports the exact build actor, intent, stage and authoritative state in both browsers",
+    buildDirectors.every((state) => state.director.action === "progress"
+      && state.director.actorId === "mission-scout" && state.director.actorLabel === "Scout"
+      && state.director.stageId === "build" && state.director.stageStatus === "completed"
+      && state.director.missionStatus === "active"
+      && state.director.evidenceId === "evidence-browser-build"
+      && state.director.intent === buildIntent
+      && state.director.seq === buildReceipt.body.seq
+      && state.director.revision === buildOperation.body.revision),
+    JSON.stringify(buildDirectors.map((state) => state.director)));
+  check(results, "both runtimes project inspectable operation evidence without serializing the holograms",
+    buildProof.every((state) => {
+      const artifact = state.mission?.artifacts.find((entry) => entry.evidenceId === "evidence-browser-build");
+      return state.boardIds.length === 1 && state.artifactIds.length === 2
+        && artifact?.actorId === "mission-scout" && artifact?.opId === "op-browser-mission-artifact"
+        && artifact?.operationPath === "spawn" && artifact?.operationIntent === buildIntent
+        && artifact?.targetIds.includes("browser-mission-artifact")
+        && state.document.includes("browser-mission-artifact")
+        && !state.document.includes("live-mission:") && !state.fullExport.includes("live-mission:");
+    }),
+    JSON.stringify(buildProof.map((state) => state.mission)));
+
+  await waitForQuietAgentProjection(first.page, 2, "active-evidence render sample");
+  const missionRenderActiveEvidence = {
+    high: await sampleRendererBudget(first.page, "active-evidence-high", { width: 1280, height: 800 }, "high"),
+    mobile: await sampleRendererBudget(first.page, "active-evidence-mobile", { width: 390, height: 844 }, "mobile"),
+  };
+  await first.page.screenshot({
+    path: path.join(ARTIFACTS, "live-mission-evidence-390.png"),
+    fullPage: false,
+  });
+  await settleRenderProfile(first.page, { width: 1280, height: 800 }, "high");
+  const missionRenderMetrics = {
+    schema: "graphysx.live-mission-render-budget/v1",
+    sampleFrames: 24,
+    tolerance: { ratio: 1.1, rounding: 0.5 },
+    baseline: missionRenderBaseline,
+    activeEvidence: missionRenderActiveEvidence,
+  };
+  console.log(JSON.stringify(missionRenderMetrics));
+  const withinMissionRenderBudget = (active, baseline, key) =>
+    Number.isFinite(active[key]) && Number.isFinite(baseline[key])
+      && active[key] <= baseline[key] * 1.1 + 0.5;
+  check(results, "active mission evidence stays within ten percent of its same-browser live-agent render baseline",
+    [missionRenderBaseline.high, missionRenderBaseline.mobile,
+      missionRenderActiveEvidence.high, missionRenderActiveEvidence.mobile]
+      .every((sample) => !sample.timedOut && sample.frames >= 24
+        && sample.profile.name === sample.expectedProfile && sample.rootProfile === sample.expectedProfile
+        && sample.actorId === "owner-ada"
+        && sample.agentCount === 2 && sample.reactionRootCount === 0
+        && sample.callsPerFrame > 0 && sample.trianglesPerFrame > 0)
+      && [missionRenderBaseline.high, missionRenderActiveEvidence.high]
+        .every((sample) => sample.viewport.width === 1280 && sample.viewport.height === 800)
+      && [missionRenderBaseline.mobile, missionRenderActiveEvidence.mobile]
+        .every((sample) => sample.viewport.width === 390 && sample.viewport.height === 844)
+      && missionRenderBaseline.high.missionStatus === null
+      && missionRenderBaseline.mobile.missionStatus === null
+      && missionRenderBaseline.high.boardRootCount === 0 && missionRenderBaseline.mobile.boardRootCount === 0
+      && missionRenderBaseline.high.artifactRootCount === 0 && missionRenderBaseline.mobile.artifactRootCount === 0
+      && missionRenderActiveEvidence.high.missionStatus === "active"
+      && missionRenderActiveEvidence.mobile.missionStatus === "active"
+      && missionRenderActiveEvidence.high.boardRootCount === 1
+      && missionRenderActiveEvidence.mobile.boardRootCount === 1
+      && missionRenderActiveEvidence.high.evidenceCount === 2
+      && missionRenderActiveEvidence.mobile.evidenceCount === 2
+      && missionRenderActiveEvidence.high.artifactCap === 4
+      && missionRenderActiveEvidence.mobile.artifactCap === 2
+      && [missionRenderActiveEvidence.high, missionRenderActiveEvidence.mobile].every((sample) =>
+        sample.expectedArtifactCount === 2
+          && sample.artifactRootCount === sample.expectedArtifactCount
+          && sample.artifactViewCount === sample.expectedArtifactCount)
+      && withinMissionRenderBudget(missionRenderActiveEvidence.high, missionRenderBaseline.high, "callsPerFrame")
+      && withinMissionRenderBudget(missionRenderActiveEvidence.high, missionRenderBaseline.high, "trianglesPerFrame")
+      && withinMissionRenderBudget(missionRenderActiveEvidence.mobile, missionRenderBaseline.mobile, "callsPerFrame")
+      && withinMissionRenderBudget(missionRenderActiveEvidence.mobile, missionRenderBaseline.mobile, "trianglesPerFrame"),
+    JSON.stringify(missionRenderMetrics));
+
+  const missionFocusOrigin = await first.page.evaluate(() => ({
+    camera: window.__GRAPHYSX_HOST__.camera.position.toArray(),
+    target: window.__GRAPHYSX_HOST__.orbitTarget.toArray(),
+  }));
+  const captureMissionFocus = async (selector) => {
+    const started = await first.page.evaluate((buttonSelector) => {
+      const host = window.__GRAPHYSX_HOST__;
+      const originalFocusOn = host.focusOn;
+      let capturedTarget = null;
+      host.focusOn = function(point, ...args) {
+        capturedTarget = point.toArray();
+        return originalFocusOn.call(host, point, ...args);
+      };
+      try {
+        const button = document.querySelector(buttonSelector);
+        if (!(button instanceof HTMLButtonElement)) return { clicked: false, capturedTarget, focusing: host.focusing };
+        button.click();
+        return { clicked: true, capturedTarget, focusing: host.focusing };
+      } finally {
+        host.focusOn = originalFocusOn;
+      }
+    }, selector);
+    await first.page.waitForFunction(() => window.__GRAPHYSX_HOST__.focusing === false);
+    const landed = await first.page.evaluate(() => window.__GRAPHYSX_HOST__.orbitTarget.toArray());
+    const distance = started.capturedTarget
+      ? Math.hypot(...landed.map((value, index) => value - started.capturedTarget[index]))
+      : Number.POSITIVE_INFINITY;
+    return { ...started, landed, distance };
+  };
+  const boardFocusProof = await captureMissionFocus('.gx-ms [data-action="focus"]');
+  const evidenceFocusProof = await captureMissionFocus('.gx-ms [data-evidence="evidence-browser-build"]');
+  await first.page.evaluate(({ camera, target }) => {
+    window.__GRAPHYSX_HOST__.frameView(camera, target, 0.15);
+  }, missionFocusOrigin);
+  await first.page.waitForFunction(() => window.__GRAPHYSX_HOST__.focusing === false);
+  check(results, "owner mission and evidence controls focus the exact projected board and artifact targets",
+    boardFocusProof.clicked && boardFocusProof.focusing && boardFocusProof.distance < 0.05
+      && evidenceFocusProof.clicked && evidenceFocusProof.focusing && evidenceFocusProof.distance < 0.05
+      && Math.hypot(...boardFocusProof.landed.map((value, index) => value - evidenceFocusProof.landed[index])) > 1,
+    JSON.stringify({ board: boardFocusProof, evidence: evidenceFocusProof }));
+
+  const fullMotionProjection = await readMissionMotionInvariant(first.page);
+  await first.page.emulateMedia({ reducedMotion: "reduce" });
+  await first.page.evaluate(() => {
+    const motion = document.querySelector('select[aria-label="Motion preference"]');
+    if (!(motion instanceof HTMLSelectElement)) throw new Error("Motion preference control is unavailable");
+    motion.value = "auto";
+    motion.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await first.page.waitForFunction(() => {
+    const api = window.__GRAPHYSX__;
+    const projected = [...api.query({ tag: "live-mission" }), ...api.query({ tag: "live-agent" })];
+    return document.documentElement.dataset.gxMotion === "reduce"
+      && projected.length > 0
+      && projected.every((entity) => (entity.behaviors?.length ?? 0) === 0)
+      && window.__GRAPHYSX_LIVE_MISSION__?.state().boardVisible === true;
+  });
+  const reducedMotionProjection = await readMissionMotionInvariant(first.page);
+  await first.page.emulateMedia({ reducedMotion: "no-preference" });
+  await first.page.evaluate(() => {
+    const motion = document.querySelector('select[aria-label="Motion preference"]');
+    if (!(motion instanceof HTMLSelectElement)) throw new Error("Motion preference control is unavailable");
+    motion.value = "auto";
+    motion.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await first.page.waitForFunction(() => {
+    const api = window.__GRAPHYSX__;
+    const agents = api.query({ tag: "live-agent" });
+    return document.documentElement.dataset.gxMotion === "full"
+      && api.query({ tag: "live-mission" }).some((entity) => (entity.behaviors?.length ?? 0) > 0)
+      && agents.length === 2
+      && agents.every((entity) => (entity.behaviors?.length ?? 0) > 0);
+  });
+  const restoredMotionProjection = await readMissionMotionInvariant(first.page);
+  check(results, "reduced-motion preference reprojects stable mission and agent ids without animated behaviors",
+    fullMotionProjection.motionPreference === "full"
+      && fullMotionProjection.animatedMissionIds.length > 0
+      && fullMotionProjection.animatedAgentIds.length === 2
+      && reducedMotionProjection.motionPreference === "reduce"
+      && reducedMotionProjection.animatedMissionIds.length === 0
+      && reducedMotionProjection.animatedAgentIds.length === 0
+      && reducedMotionProjection.boardIds.length === 1
+      && reducedMotionProjection.artifactIds.length === 2
+      && reducedMotionProjection.runtime?.mission?.status === "active"
+      && reducedMotionProjection.runtime.boardVisible
+      && isDeepStrictEqual(reducedMotionProjection.missionIds, fullMotionProjection.missionIds)
+      && isDeepStrictEqual(reducedMotionProjection.agentIds, fullMotionProjection.agentIds)
+      && isDeepStrictEqual(restoredMotionProjection.missionIds, fullMotionProjection.missionIds)
+      && isDeepStrictEqual(restoredMotionProjection.agentIds, fullMotionProjection.agentIds)
+      && restoredMotionProjection.animatedMissionIds.length === fullMotionProjection.animatedMissionIds.length
+      && restoredMotionProjection.animatedAgentIds.length === fullMotionProjection.animatedAgentIds.length,
+    JSON.stringify({ full: fullMotionProjection, reduced: reducedMotionProjection,
+      restored: restoredMotionProjection }));
+
+  const buildMissionViews = await Promise.all([first.page, second.page].map((page) => page.evaluate((id) =>
+    window.__GRAPHYSX_LIVE_SESSION__.status.missions.find((mission) => mission.missionId === id), missionId)));
+  const buildServerCut = await api(store.url, "GET", "/sessions/" + sessionId + "/snapshot", undefined, ownerCredential);
+  const buildServerMission = buildServerCut.body.missions.find((mission) => mission.missionId === missionId);
+  const buildConvergence = {
+    clientMissions: isDeepStrictEqual(buildMissionViews[0], buildMissionViews[1]),
+    serverMission: isDeepStrictEqual(buildMissionViews[0], buildServerMission),
+    documents: isDeepStrictEqual(
+      normalizeSerializedDocument(buildProof[0].document),
+      normalizeSerializedDocument(buildProof[1].document),
+    ),
+    revisions: buildProof.map((state) => state.liveRevision),
+  };
+  check(results, "both browsers and the atomic server cut converge on the same mission, document and revision",
+    buildConvergence.clientMissions && buildConvergence.serverMission && buildConvergence.documents
+      && buildConvergence.revisions.every((revision) => revision === buildOperation.body.revision),
+    JSON.stringify({ proof: buildConvergence, clients: buildMissionViews, server: buildServerMission }));
+  const postBuildBaseline = buildProof;
+
+  const revokeValidator = await api(store.url, "DELETE",
+    "/sessions/" + sessionId + "/members/" + validatorJoin.body.member.memberId,
+    undefined, ownerCredential);
+  const revokedMissions = await Promise.all([
+    waitForMission(first.page, missionId, (mission) => mission.status === "blocked" && mission.stages[2].status === "interrupted", "owner validator revocation"),
+    waitForMission(second.page, missionId, (mission) => mission.status === "blocked" && mission.stages[2].status === "interrupted", "peer validator revocation"),
+  ]);
+  const revokedDirectors = await Promise.all([first.page, second.page].map((page) =>
+    waitForMissionRuntime(page, (state) => state.director.action === "interrupt" && state.director.reason === "revoked", "revocation narration")));
+  await Promise.all([
+    waitForAgentCount(first.page, 1, "owner validator revocation"),
+    waitForAgentCount(second.page, 1, "peer validator revocation"),
+  ]);
+  check(results, "revocation immediately blocks validation and Nestor names the revoked actor without inventing success",
+    revokeValidator.status === 200 && revokedMissions.every((mission) => mission.status === "blocked")
+      && revokedDirectors.every((state) => state.director.mode === "blocked"
+        && state.director.actorId === "mission-validator" && state.director.actorLabel === "Verifier"
+        && state.director.stageId === "validate" && state.director.stageStatus === "interrupted"
+        && state.director.reason === "revoked"),
+    JSON.stringify(revokedDirectors.map((state) => state.director)));
+
+  const missionViewerInvite = await inviteFor("viewer");
+  const missionViewerJoin = await api(store.url, "POST", "/sessions/" + sessionId + "/join", {
+    code: missionViewerInvite.code,
+    actor: { id: "mission-viewer", label: "Mission viewer", kind: "human" },
+  });
+  const missionSeqBeforeViewer = revokedMissions[0].updatedSeq;
+  const viewerMissionAttempt = await api(store.url, "POST", "/sessions/" + sessionId + "/missions/" + missionId + "/events", {
+    eventId: "me-browser-viewer-progress",
+    action: "progress",
+    stageId: "validate",
+    state: "completed",
+    evidence: {
+      evidenceId: "evidence-browser-viewer",
+      kind: "validation",
+      outcome: "passed",
+      summary: "A viewer cannot certify the result.",
+      inspectedRevision: buildOperation.body.revision,
+    },
+  }, missionViewerJoin.body.credential);
+  const afterViewerRefusal = await api(store.url, "GET", "/sessions/" + sessionId + "/snapshot", undefined, ownerCredential);
+  check(results, "viewer mission progress is refused without advancing authoritative state",
+    missionViewerJoin.status === 201 && viewerMissionAttempt.status === 403
+      && afterViewerRefusal.body.missions.find((mission) => mission.missionId === missionId).updatedSeq === missionSeqBeforeViewer,
+    JSON.stringify({ join: missionViewerJoin.status, refusal: viewerMissionAttempt.body }));
+
+  const replacementInvite = await inviteFor("agent", ["mission:validate"]);
+  const replacementJoin = await api(store.url, "POST", "/sessions/" + sessionId + "/join", {
+    code: replacementInvite.code,
+    actor: { id: "mission-validator-2", label: "Verifier Two", kind: "agent" },
+  });
+  const replacementActor = createActor(store.url, { credential: replacementJoin.body.credential });
+  missionActors.push(replacementActor);
+  await replacementActor.connect(sessionId);
+  await Promise.all([
+    waitForAgentCount(first.page, 2, "owner replacement validator"),
+    waitForAgentCount(second.page, 2, "peer replacement validator"),
+  ]);
+  await first.page.waitForFunction((memberId) => [...document.querySelectorAll('select[data-assign-stage="validate"] option')]
+    .some((option) => option.value === memberId), replacementJoin.body.member.memberId);
+  await first.page.selectOption('select[data-assign-stage="validate"]', replacementJoin.body.member.memberId);
+  await Promise.all([
+    waitForMission(first.page, missionId, (mission) => mission.stages[2].assignment?.memberId === replacementJoin.body.member.memberId, "owner validation reassignment"),
+    waitForMission(second.page, missionId, (mission) => mission.stages[2].assignment?.memberId === replacementJoin.body.member.memberId, "peer validation reassignment"),
+  ]);
+  await first.page.click('.gx-ms [data-action="resume"]');
+  const reassignedMissions = await Promise.all([
+    waitForMission(first.page, missionId, (mission) => mission.status === "active" && mission.stages[2].status === "assigned", "owner validation resume"),
+    waitForMission(second.page, missionId, (mission) => mission.status === "active" && mission.stages[2].status === "assigned", "peer validation resume"),
+  ]);
+  const replacementStations = await Promise.all([first.page, second.page].map((page) => page.evaluate(() =>
+    window.__GRAPHYSX_LIVE_PRESENCE__.state().agents.find((agent) => agent.actorId === "mission-validator-2") ?? null)));
+  check(results, "owner reassignment resumes validation at the deterministic play station in both browsers",
+    replacementJoin.status === 201 && reassignedMissions.every((mission) => mission.stages[2].assignment.actorId === "mission-validator-2")
+      && replacementStations.every((agent) => agent?.station === "play" && agent.stageId === "validate"),
+    JSON.stringify({ missions: reassignedMissions, stations: replacementStations }));
+
+  const validationSummary = "Verifier Two inspected the accepted artifact at the authoritative revision.";
+  const completedDirectorWaiters = [first.page, second.page].map((page) => waitForMissionRuntime(page, (state) =>
+    state.mission?.missionId === missionId
+      && state.director.mode === "completed"
+      && state.director.actorId === "mission-validator-2"
+      && state.director.stageId === "validate",
+  "completion narration"));
+  const validationReceipt = await replacementActor.call("POST", "/sessions/" + sessionId + "/missions/" + missionId + "/events", {
+    eventId: "me-browser-validation-complete",
+    action: "progress",
+    stageId: "validate",
+    state: "completed",
+    evidence: {
+      evidenceId: "evidence-browser-validation",
+      kind: "validation",
+      outcome: "passed",
+      summary: validationSummary,
+      inspectedRevision: buildOperation.body.revision,
+    },
+  });
+  const [completedMissions, completedDirectors] = await Promise.all([
+    Promise.all([
+      waitForMission(first.page, missionId, (mission) => mission.status === "completed", "owner mission completion"),
+      waitForMission(second.page, missionId, (mission) => mission.status === "completed", "peer mission completion"),
+    ]),
+    Promise.all(completedDirectorWaiters),
+  ]);
+  const completedServerCut = await api(store.url, "GET", "/sessions/" + sessionId + "/snapshot", undefined, ownerCredential);
+  const completedServerMission = completedServerCut.body.missions.find((mission) => mission.missionId === missionId);
+  check(results, "passed current-revision validation completes all three stages and converges with the server cut",
+    acceptedMissionStatus(validationReceipt.status) && completedMissions.every((mission) => mission.stages.every((stage) => stage.status === "completed")
+      && mission.stages[0].latestEvidence.kind === "observation"
+      && mission.stages[1].latestEvidence.operation.opId === "op-browser-mission-artifact"
+      && mission.stages[2].latestEvidence.outcome === "passed"
+      && mission.stages[2].latestEvidence.inspectedRevision === buildOperation.body.revision)
+      && JSON.stringify(completedMissions[0]) === JSON.stringify(completedMissions[1])
+      && JSON.stringify(completedMissions[0]) === JSON.stringify(completedServerMission)
+      && completedDirectors.every((state) => state.director.mode === "completed"
+        && state.director.action === "progress"
+        && state.director.actorId === "mission-validator-2"
+        && state.director.actorLabel === "Verifier Two"
+        && state.director.stageId === "validate"
+        && state.director.stageStatus === "completed"
+        && state.director.missionStatus === "completed"
+        && state.director.evidenceId === "evidence-browser-validation"
+        && state.director.intent === validationSummary
+        && /passed/i.test(state.director.message)
+        && state.director.seq === validationReceipt.body.seq
+        && state.director.revision === buildOperation.body.revision),
+    JSON.stringify({ receipt: validationReceipt.body, mission: completedServerMission,
+      directors: completedDirectors.map((state) => state.director) }));
+
+  await Promise.all([first.page, second.page].map((page) =>
+    waitForMissionRuntime(page, (state) => state.mission?.missionId === missionId
+      && state.mission.status === "completed" && !state.boardVisible
+      && !state.completionVisible && state.artifacts.length === 0, "completion cleanup", Math.max(SMOKE_TIMEOUT, 10_000))));
+  await Promise.all([first.page, second.page].map((page, index) =>
+    waitForQuietAgentProjection(page, 2, `completion resources tab ${index + 1}`)));
+  const completedCleanup = await Promise.all([first.page, second.page].map((page, index) =>
+    readPrimedMissionInvariant(page, `completion cleanup tab ${index + 1}`)));
+  check(results, "completion removes every mission projection and returns resources while preserving the accepted document",
+    completedCleanup.every((state, index) => state.missionIds.length === 0
+      && state.boardIds.length === 0 && state.artifactIds.length === 0 && state.completionIds.length === 0
+      && state.liveRevision === postBuildBaseline[index].liveRevision
+      && state.runtimeRevision === postBuildBaseline[index].runtimeRevision
+      && state.history === postBuildBaseline[index].history
+      && state.document === postBuildBaseline[index].document
+      && state.fullExport === postBuildBaseline[index].fullExport
+      && state.resources.textures === missionBaseline[index].resources.textures
+      && state.resources.geometries === missionBaseline[index].resources.geometries + 1),
+    JSON.stringify({ baseline: missionBaseline.map((state) => state.resources),
+      cleanup: completedCleanup.map((state) => ({ missionIds: state.missionIds, resources: state.resources })) }));
+
+  const terminalReconnectStart = await first.page.evaluate(() => ({
+    forced: window.__GRAPHYSX_TEST_FORCE_STREAM_ERROR__?.() ?? false,
+    connection: window.__GRAPHYSX_LIVE_SESSION__.status.connection,
+  }));
+  await waitForLive(first.page, "owner completed-mission reconnect");
+  const terminalReconnectRuntime = await waitForMissionRuntime(first.page, (state) =>
+    state.mission?.missionId === missionId && state.mission.status === "completed"
+      && state.director.mode === "neutral" && !state.boardVisible
+      && !state.completionVisible && state.artifacts.length === 0,
+  "completed mission neutral reconnect");
+  const terminalReconnectProof = await readMissionInvariant(first.page);
+  const terminalNestorChrome = await first.page.evaluate(() => {
+    const observer = document.querySelector(".gx-welcome--live-observer");
+    return {
+      action: observer?.getAttribute("data-mission-action") ?? null,
+      stage: observer?.getAttribute("data-mission-stage") ?? null,
+      title: observer?.querySelector("[data-nestor-title]")?.textContent ?? "",
+    };
+  });
+  check(results, "a terminal mission reconnect cannot leave Nestor completed or resurrect projections",
+    terminalReconnectStart.forced && terminalReconnectStart.connection === "reconnecting"
+      && terminalReconnectRuntime.director.mode === "neutral"
+      && terminalReconnectProof.missionIds.length === 0
+      && terminalReconnectProof.boardIds.length === 0
+      && terminalReconnectProof.artifactIds.length === 0
+      && terminalReconnectProof.completionIds.length === 0
+      && terminalReconnectProof.projectedMission?.director.mode === "neutral"
+      && terminalNestorChrome.action === null && terminalNestorChrome.stage === null
+      && !/mission complete/i.test(terminalNestorChrome.title),
+    JSON.stringify({ start: terminalReconnectStart, runtime: terminalReconnectRuntime, chrome: terminalNestorChrome }));
+
+  const missionUndoProof = await first.page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    const undo = api.undo();
+    return {
+      ok: undo.ok,
+      artifactPresent: api.query({ ids: ["browser-mission-artifact"] }).length,
+      missionIds: api.query({ tag: "live-mission" }).map((entity) => entity.id),
+      export: JSON.stringify(api.export()),
+    };
+  });
+  check(results, "Undo after cleanup cannot resurrect mission boards, artifacts or completion effects",
+    missionUndoProof.ok && missionUndoProof.artifactPresent === 0 && missionUndoProof.missionIds.length === 0
+      && !missionUndoProof.export.includes("live-mission:"),
+    JSON.stringify(missionUndoProof));
+  await first.page.evaluate(() => window.__GRAPHYSX_LIVE_SESSION__.resync());
+  await waitForLive(first.page, "owner after mission undo resync");
+  await first.page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["browser-mission-artifact"] }).length === 1);
+
+  await Promise.all([first.page, second.page].map((page, index) =>
+    waitForQuietAgentProjection(page, 2, `cancel baseline tab ${index + 1}`)));
+  const cancelBaseline = await Promise.all([first.page, second.page].map((page, index) =>
+    readPrimedMissionInvariant(page, `cancel baseline resources tab ${index + 1}`)));
+  const cancelMissionId = "mission-browser-cancel";
+  const cancelAssignments = [
+    { stageId: "analyze", memberId: explorerJoin.body.member.memberId },
+    { stageId: "build", memberId: explorerJoin.body.member.memberId },
+    { stageId: "validate", memberId: replacementJoin.body.member.memberId },
+  ];
+  await first.page.evaluate(async (request) => window.__GRAPHYSX_LIVE_SESSION__.startMission(request), {
+    eventId: "me-browser-cancel-start",
+    missionId: cancelMissionId,
+    templateId: "agentx-center-artifact-v1",
+    assignments: cancelAssignments,
+  });
+  await Promise.all([
+    waitForMission(first.page, cancelMissionId, (mission) => mission.status === "briefing", "owner cancel briefing"),
+    waitForMission(second.page, cancelMissionId, (mission) => mission.status === "briefing", "peer cancel briefing"),
+  ]);
+  await first.page.evaluate(async (id) => window.__GRAPHYSX_LIVE_SESSION__.controlMission(id, "activate", "me-browser-cancel-activate"), cancelMissionId);
+  await Promise.all([
+    waitForMission(first.page, cancelMissionId, (mission) => mission.status === "active", "owner cancel activation"),
+    waitForMission(second.page, cancelMissionId, (mission) => mission.status === "active", "peer cancel activation"),
+  ]);
+  await Promise.all([first.page, second.page].map((page) =>
+    waitForMissionRuntime(page, (state) => state.mission?.missionId === cancelMissionId
+      && state.mission.status === "active" && state.boardVisible, "cancel cycle projection")));
+  const secondCycleProjection = await Promise.all([readMissionInvariant(first.page), readMissionInvariant(second.page)]);
+  await first.page.evaluate(async (id) => window.__GRAPHYSX_LIVE_SESSION__.controlMission(id, "cancel", "me-browser-cancel-terminal"), cancelMissionId);
+  const cancelledMissions = await Promise.all([
+    waitForMission(first.page, cancelMissionId, (mission) => mission.status === "cancelled", "owner cancellation"),
+    waitForMission(second.page, cancelMissionId, (mission) => mission.status === "cancelled", "peer cancellation"),
+  ]);
+  await Promise.all([first.page, second.page].map((page) =>
+    waitForMissionRuntime(page, (state) => state.mission?.missionId === cancelMissionId
+      && state.mission.status === "cancelled" && !state.boardVisible
+      && !state.completionVisible && state.artifacts.length === 0, "cancel cleanup")));
+  await Promise.all([first.page, second.page].map((page, index) =>
+    waitForQuietAgentProjection(page, 2, `cancel cleanup tab ${index + 1}`)));
+  const cancelCleanup = await Promise.all([first.page, second.page].map((page, index) =>
+    readPrimedMissionInvariant(page, `cancel cleanup resources tab ${index + 1}`)));
+  check(results, "a second start/cancel cycle projects once and returns renderer resources exactly to baseline",
+    secondCycleProjection.every((state) => state.boardIds.length === 1)
+      && cancelledMissions.every((mission) => mission.stages.every((stage) => stage.status === "cancelled"))
+      && cancelCleanup.every((state, index) => state.missionIds.length === 0
+        && state.liveRevision === cancelBaseline[index].liveRevision
+        && state.runtimeRevision === cancelBaseline[index].runtimeRevision
+        && state.history === cancelBaseline[index].history
+        && state.document === cancelBaseline[index].document
+        && state.fullExport === cancelBaseline[index].fullExport
+        && state.resources.geometries === cancelBaseline[index].resources.geometries
+        && state.resources.textures === cancelBaseline[index].resources.textures),
+    JSON.stringify({ missions: cancelledMissions, projection: secondCycleProjection.map((state) => state.boardIds),
+      baseline: cancelBaseline.map((state) => state.resources),
+      cleanup: cancelCleanup.map((state) => state.resources) }));
+
+  const missionMemberIds = [
+    explorerJoin.body.member.memberId,
+    replacementJoin.body.member.memberId,
+    missionViewerJoin.body.member.memberId,
+  ];
+  const missionRemovalStatuses = [];
+  for (const memberId of missionMemberIds) {
+    const removal = await api(store.url, "DELETE", "/sessions/" + sessionId + "/members/" + memberId, undefined, ownerCredential);
+    missionRemovalStatuses.push(removal.status);
+  }
+  for (const actor of missionActors.splice(0)) await actor.disconnect().catch(() => undefined);
+  await Promise.all([
+    waitForAgentCount(first.page, 0, "owner mission actor cleanup"),
+    waitForAgentCount(second.page, 0, "peer mission actor cleanup"),
+  ]);
+  const missionFinalCleanup = await Promise.all([readMissionInvariant(first.page), readMissionInvariant(second.page)]);
+  check(results, "mission actor removal leaves no avatars, holograms, duplicate boards or authored mission data",
+    missionRemovalStatuses.every((status) => status === 200)
+      && missionFinalCleanup.every((state) => state.presence.agents.length === 0
+        && state.missionIds.length === 0 && state.boardIds.length === 0 && state.artifactIds.length === 0
+        && !state.document.includes("live-mission:") && !state.fullExport.includes("live-mission:")),
+    JSON.stringify({ removals: missionRemovalStatuses, cleanup: missionFinalCleanup.map((state) => ({
+      agents: state.presence.agents, missionIds: state.missionIds,
+    })) }));
 
   // Nested entity configs are patches in the runtime, so the document arbiter must preserve
   // the same siblings. Exercise it through the real client/server/SSE path, not only the pure
@@ -2080,6 +3326,7 @@ try {
 } catch (error) {
   check(results, "smoke-live-sessions-browser threw", false, error instanceof Error ? error.stack : String(error));
 } finally {
+  for (const actor of missionActors.splice(0)) await actor.disconnect().catch(() => undefined);
   if (agentActor) await agentActor.disconnect().catch(() => undefined);
   if (browser) await browser.close();
   if (statics) await statics.close();

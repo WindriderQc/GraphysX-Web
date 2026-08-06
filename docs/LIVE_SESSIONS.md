@@ -18,6 +18,7 @@ scene, sharing one revision line.
 | Member | Joined via an invitation, revocable | Server memory |
 | Invitation | Short-lived (default 15m, max 24h), revocable, use-capped | Server memory |
 | Operation | Permanent — it *is* a scene write | Scene store, on disk |
+| Mission | Session-scoped coordination; never a scene write | Server memory |
 | Presence | ~45s TTL, never persisted | Server memory |
 | Stream ticket | 30s, single use | Server memory |
 
@@ -72,6 +73,66 @@ Broadcast to every other member as `event: op` with the same fields plus `actorI
 `path` is an **allowlist, not a namespace walk**. A remote actor naming an arbitrary dotted
 path is how "call any function on the API" bugs happen.
 
+## AgentX mission coordination
+
+Missions are typed, bounded session state. They coordinate AgentX actors around a scene but
+never enter the portable scene document or increment its revision. They use the same session
+authority, serial chain, monotonic `seq`, retained SSE log, snapshot, replay, and resync path
+as operations; there is no second ordering system. Every `event: mission` carries a bounded
+full replacement of that mission.
+
+The server currently owns one fixed template, `agentx-center-artifact-v1`
+(**Signal Forge Calibration**):
+
+| Stage | Station | Required agent capability | Completion evidence |
+|---|---|---|---|
+| `analyze` | Explore | `mission:explore` | `observation` |
+| `build` | Build | `mission:build` | accepted `operation` receipt |
+| `validate` | Play | `mission:validate` | current-revision passed `validation` |
+
+The routes are:
+
+~~~text
+GET  /sessions/:id/missions
+POST /sessions/:id/missions
+     { eventId, missionId, templateId, assignments: [{ stageId, memberId }] }
+POST /sessions/:id/missions/:missionId/events
+     owner: { eventId, action: activate | pause | resume | cancel }
+     owner: { eventId, action: assign, stageId, memberId }
+     agent: { eventId, action: progress, stageId, state, progress?, evidence? }
+~~~
+
+Activation is a server gate, not a UI convention: every stage must resolve to a currently
+online, capability-eligible AgentX member, and the assignments must span at least two distinct
+AgentX `actorId` values. Resume re-resolves every unfinished assignment, so a retained
+`memberId` cannot revive a disconnected or revoked authority. Reassigning a running mission
+also requires an online eligible agent. Client event ids beginning with `me-system-` are
+reserved for disconnect/revocation lifecycle events.
+
+Stages advance in template order. In an active or blocked mission, a disconnect or revocation
+marks every unfinished stage assigned to that member `interrupted`. Losing the current
+assignee blocks immediately; a future interruption is retained while the current stage
+continues, then blocks safely at the
+stage handoff unless the assignee has returned. Cancelling changes every unfinished stage to
+`cancelled`, making the snapshot terminal and self-consistent.
+
+Evidence is authoritative and bounded (8 records per stage, 240-character summaries). An
+`operation` claim supplies only an `opId`; the server copies attribution, revision, intent,
+path, touched ids, and bounded command outputs from its retained accepted operation event. The
+operation must belong to the assigned member, remain not-undone, and have been accepted after
+the Build stage became available or was reassigned. Validation must inspect the current scene
+revision and report `passed` before it can complete its stage.
+
+Per session, mission state is capped at 4 missions and 192 accepted client mission events;
+mission request bodies are capped at 16 KiB and mission events use a separate per-member token
+bucket. These bounds apply before broadcast and snapshot serialization.
+
+The runtime reserves the prefixes `live-agent:`, `live-mission:`, and `live-nestor:`
+for host-owned transient projections. The shared authored-namespace policy rejects those
+prefixes in entity ids and every entity reference (parent, steering, look-at, spline,
+interaction, joint, and rule subjects) on local commits, live operations, and whole-document
+writes. A refusal leaves revision, history, and the authoritative document byte-identical.
+
 ## Conflicts, duplicates, ordering
 
 Optimistic concurrency with explicit revisions. Not a CRDT — a CRDT would be a large amount
@@ -94,7 +155,7 @@ than an automatic merge nobody asked for. Revisit if evidence shows otherwise.
 ## Reconnect and resync
 
 The client reconnects with capped backoff (0.5s → 15s) and resumes from its last `seq`. The
-server retains 512 operation events per session and answers three ways:
+server retains 512 ordered durable events (operations, missions, membership) and answers three ways:
 
 | Case | Answer |
 |---|---|
@@ -127,9 +188,11 @@ therefore never a resync trigger.
 | agent | ✓ | scoped | ✓ | | |
 
 Enforced server-side in `ROLES`. The UI hides what a role cannot do; this table is what
-stops it. An **agent** additionally carries an explicit capability list naming the operation
-paths it may call — an agent invitation without one is refused at creation, and an agent with
-an empty list can read and be present but not mutate.
+stops it. The owner alone can start and direct missions; agents alone can report assigned
+mission progress. An **agent** additionally carries an explicit capability list naming the
+operation paths and mission stages it may use — an agent invitation without one is refused at
+creation, and an agent with an empty list can read and be present but cannot mutate or advance
+a mission.
 
 Only an owner may invite, remove members or close a session, and **an invitation cannot grant
 ownership**.
@@ -208,8 +271,8 @@ anyone who can reach the port mint an owner credential. Session routes answer `5
 | Stolen/leaked invite link | expiry + revocation + use cap + single exchange | security smoke |
 | Long-lived secret in a URL | one-shot 30s stream ticket | security smoke |
 | Hostile origin | `403`, not merely a withheld CORS header | security smoke |
-| Oversized payload | 256KB ops, 8KB presence, 64 commands, 32 selection ids | security smoke |
-| Request flooding | per-member token buckets on ops and presence | security smoke |
+| Oversized payload | 256KB ops, 16KB missions, 8KB presence, 64 commands, 32 selection ids | security smoke |
+| Request flooding | separate per-member token buckets on ops, missions, tickets, and presence | security smoke |
 | Path traversal / arbitrary tool call | operation `path` allowlist; id regex on every name | both smokes |
 | Non-finite coordinates | finite check on every presence vector | protocol smoke |
 | Credential leaking into logs/UI/disk | audited across console, bodies, activity, scene files | security smoke |

@@ -33,6 +33,18 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { applyCommands, describeCommands } from "./scene-commands.mjs";
 import { httpError, readJsonBody, sendJson } from "./http-util.mjs";
+import {
+  LIVE_MISSION_EVENT_SCHEMA,
+  LIVE_MISSION_SCHEMA,
+  MISSION_CAPABILITIES,
+  MISSION_LIMITS,
+  applyMissionEvent,
+  createMission,
+  interruptMissionForMember,
+  missionView,
+  normalizeMissionEvent,
+  normalizeMissionStart,
+} from "./live-missions.mjs";
 
 export const LIVE_SESSION_SCHEMA = "graphysx.live-session/v1";
 export const LIVE_OP_SCHEMA = "graphysx.live-op/v1";
@@ -68,6 +80,11 @@ const LIMITS = {
   labelChars: 80,
   intentChars: 240,
   subscribersPerSession: 32,
+  missionBodyBytes: MISSION_LIMITS.bodyBytes,
+  missionsPerSession: MISSION_LIMITS.missionsPerSession,
+  missionEventsPerSession: MISSION_LIMITS.clientEventsPerSession,
+  missionEventsPerMember: MISSION_LIMITS.clientEventsPerMember,
+  missionOwnerEventReserve: MISSION_LIMITS.ownerEventReserve,
 };
 
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/;
@@ -80,10 +97,10 @@ const ACTOR_KINDS = new Set(["human", "agent", "system"]);
  * and an agent with no capabilities can read and be present but cannot mutate.
  */
 const ROLES = {
-  owner: { read: true, mutate: true, present: true, invite: true, manage: true },
-  editor: { read: true, mutate: true, present: true, invite: false, manage: false },
-  viewer: { read: true, mutate: false, present: true, invite: false, manage: false },
-  agent: { read: true, mutate: true, present: true, invite: false, manage: false },
+  owner: { read: true, mutate: true, present: true, invite: true, manage: true, missionManage: true, missionProgress: false },
+  editor: { read: true, mutate: true, present: true, invite: false, manage: false, missionManage: false, missionProgress: false },
+  viewer: { read: true, mutate: false, present: true, invite: false, manage: false, missionManage: false, missionProgress: false },
+  agent: { read: true, mutate: true, present: true, invite: false, manage: false, missionManage: false, missionProgress: true },
 };
 
 /**
@@ -92,6 +109,7 @@ const ROLES = {
  * bugs happen. Every entry maps to document commands `applyCommands` already validates.
  */
 const OP_PATHS = new Set(["transaction", "spawn", "update", "remove", "set-environment"]);
+const AGENT_CAPABILITIES = new Set([...OP_PATHS, ...MISSION_CAPABILITIES]);
 
 const digest = (value) => createHash("sha256").update(String(value)).digest();
 
@@ -227,11 +245,12 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
   function closeSession(session, reason, authoritative = null) {
     session.closing = true;
     session.closed = true;
-    const finalCut = authoritative ?? (session.authoritative ? {
+    const documentCut = authoritative ?? (session.authoritative ? {
       revision: session.authoritative.revision,
       seq: session.seq,
       definition: session.authoritative.definition,
     } : null);
+    const finalCut = documentCut ? { ...documentCut, missions: missionViews(session) } : null;
     const payload = {
       schema: LIVE_SESSION_SCHEMA,
       event: "closed",
@@ -299,6 +318,10 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       while (session.log.length > LIMITS.opLog) {
         const dropped = session.log.shift();
         if (dropped?.opId) session.applied.delete(dropped.opId);
+        // Presence consumes sequence numbers but is intentionally not retained. A resume is
+        // impossible only when a retained event was actually dropped, not merely because a
+        // non-retained presence sequence sits between two retained events.
+        if (Number.isInteger(dropped?.seq)) session.replayFloorSeq = Math.max(session.replayFloorSeq, dropped.seq);
       }
     }
     const frame = `id: ${event.seq}\nevent: ${event.event}\ndata: ${JSON.stringify(event)}\n\n`;
@@ -313,6 +336,33 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     }
   }
 
+  /**
+   * Installs a store cut that did not originate as a live-session operation.
+   * The retained marker is the ordering barrier; the queued snapshot carries the document.
+   */
+  function adoptExternalRecord(session, record) {
+    // A delayed notifier for R must not roll a session back after another writer reached R+1.
+    if (record.revision < session.revision) return null;
+    const previousRevision = session.revision;
+    session.revision = record.revision;
+    session.authoritative = {
+      definition: structuredClone(record.definition),
+      revision: record.revision,
+    };
+    if (record.revision === previousRevision) return null;
+    const event = {
+      schema: LIVE_SESSION_SCHEMA,
+      event: "resync",
+      reason: "external-revision",
+      seq: nextSeq(session),
+      sessionId: session.id,
+      revision: record.revision,
+      at: new Date(now()).toISOString(),
+    };
+    push(session, event, { retain: true });
+    return event;
+  }
+
   /** Missed retained events, or null when the gap cannot be bridged honestly. */
   function catchUp(session, sinceSeq) {
     if (!Number.isFinite(sinceSeq) || sinceSeq <= 0) return [];
@@ -320,9 +370,7 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     // desynchronised, most likely against a different session or a restarted server. It
     // gets a resync, not an empty catch-up that would leave it silently wrong forever.
     if (sinceSeq > session.seq) return null;
-    if (session.log.length === 0) return [];
-    const oldest = session.log[0].seq;
-    if (sinceSeq + 1 < oldest) return null;
+    if (sinceSeq < session.replayFloorSeq) return null;
     return session.log.filter((entry) => entry.seq > sinceSeq);
   }
 
@@ -349,6 +397,10 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     };
   }
 
+  function missionViews(session) {
+    return [...session.missions.values()].map((mission) => missionView(mission));
+  }
+
   function sessionView(session) {
     return {
       schema: LIVE_SESSION_SCHEMA,
@@ -362,6 +414,7 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       revision: session.revision,
       seq: session.seq,
       members: [...session.members.values()].map((member) => memberView(session, member)),
+      missions: missionViews(session),
     };
   }
 
@@ -457,8 +510,16 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       /** Response → member-bound stream record. Binding is what makes revocation terminal. */
       subscribers: new Map(),
       log: [],
-      /** opId → originating member, canonical request fingerprint and receipt. */
+      /** Highest retained-event sequence evicted from the replay ring. */
+      replayFloorSeq: 0,
+      /** opId → originating member, canonical request fingerprint, receipt and canonical event. */
       applied: new Map(),
+      /** Mission state is session-authoritative and shares this session's sequence/replay. */
+      missions: new Map(),
+      /** Client event id → member/fingerprint/original receipt; bounded for the session lifetime. */
+      missionApplied: new Map(),
+      /** Accepted client mission events per member; bounded by members × the member cap. */
+      missionAcceptedByMember: new Map(),
       /** Last store-proven document, used only if a terminal store read itself fails. */
       authoritative: { definition: structuredClone(record.definition), revision: record.revision },
       closing: false,
@@ -509,6 +570,8 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       // Separate from mutation tokens: a reconnect storm must not consume authoring budget,
       // and a ticket-minting attack must not be able to allocate without bound.
       ticketHits: createBucket(8, 2, now),
+      // Mission coordination has its own budget; scene authoring and reconnects cannot starve it.
+      missionHits: createBucket(24, 4, now),
     };
     session.members.set(member.id, member);
     return { member, credential: `${member.id}.${secret}` };
@@ -517,7 +580,7 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
   function createInvite(session, { role, ttlSeconds, maxUses, capabilities, label }) {
     sweep();
     if (session.invites.size >= LIMITS.invitesPerSession) throw httpError("Too many open invitations", 429);
-    if (!ROLES[role] || role === "owner") throw httpError(`Invitations may grant editor, viewer or agent — not '${String(role)}'`, 400);
+    if (!Object.hasOwn(ROLES, role) || role === "owner") throw httpError(`Invitations may grant editor, viewer or agent — not '${String(role)}'`, 400);
     const uses = maxUses === undefined ? 1 : maxUses;
     if (!Number.isInteger(uses) || uses < 1 || uses > LIMITS.inviteMaxUses) {
       throw httpError(`maxUses must be an integer between 1 and ${LIMITS.inviteMaxUses}`, 400);
@@ -525,10 +588,10 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     let scoped = [];
     if (role === "agent") {
       if (!Array.isArray(capabilities)) throw httpError("An agent invitation requires an explicit capabilities array", 400);
-      scoped = capabilities.map((entry) => {
-        if (!OP_PATHS.has(entry)) throw httpError(`Unsupported agent capability: ${String(entry)}`, 400);
+      scoped = [...new Set(capabilities.map((entry) => {
+        if (!AGENT_CAPABILITIES.has(entry)) throw httpError(`Unsupported agent capability: ${String(entry)}`, 400);
         return entry;
-      });
+      }))];
     } else if (capabilities !== undefined) {
       throw httpError("capabilities may only be scoped on an agent invitation", 400);
     }
@@ -800,7 +863,7 @@ function computeInverseCommands(preDefinition, commands, outputs) {
 
     const record = await store.get(session.sceneName);
     if (!record) throw httpError(`The scene backing this session is gone: ${session.sceneName}`, 410);
-    session.revision = record.revision;
+    adoptExternalRecord(session, record);
 
     if (baseRevision !== undefined && baseRevision !== null) {
       if (baseRevision !== record.revision) {
@@ -860,7 +923,10 @@ function computeInverseCommands(preDefinition, commands, outputs) {
     };
     push(session, event, { retain: true });
     const receipt = { ok: true, opId, seq: event.seq, revision: written.revision, baseRevision: record.revision, outputs: next.outputs, intent };
-    session.applied.set(opId, { memberId: member.id, requestFingerprint, receipt });
+    // Mission operation evidence resolves this canonical server event. A client may submit
+    // only the opId; actor, intent, revision and touched ids are copied from here, never from
+    // a caller-provided completion claim.
+    session.applied.set(opId, { memberId: member.id, requestFingerprint, receipt, event });
     return receipt;
   }
 
@@ -928,6 +994,192 @@ function computeInverseCommands(preDefinition, commands, outputs) {
     return { ...receipt, undoOf: opId };
   }
 
+  function missionReceipt(event) {
+    const stage = event.stageId
+      ? event.mission.stages.find((entry) => entry.stageId === event.stageId)
+      : null;
+    return {
+      ok: true,
+      schema: LIVE_MISSION_EVENT_SCHEMA,
+      eventId: event.eventId,
+      missionId: event.missionId,
+      action: event.action,
+      seq: event.seq,
+      revision: event.revision,
+      state: event.mission.status,
+      ...(event.stageId ? { stageId: event.stageId } : {}),
+      ...(stage?.latestEvidence ? { evidence: stage.latestEvidence } : {}),
+      mission: event.mission,
+    };
+  }
+
+  function duplicateMissionReceipt(session, member, eventId, requestFingerprint) {
+    const previous = session.missionApplied.get(eventId);
+    if (!previous) return null;
+    if (previous.memberId !== member.id || previous.requestFingerprint !== requestFingerprint) {
+      throw httpError("Mission event id is already bound to a different member or request", 409, {
+        code: "mission-event-id-conflict",
+      });
+    }
+    return { ...previous.receipt, duplicate: true };
+  }
+
+  function requireMissionEventCapacity(session, member) {
+    const acceptedByMember = session.missionAcceptedByMember.get(member.id) ?? 0;
+    if (member.role !== "owner" && acceptedByMember >= LIMITS.missionEventsPerMember) {
+      throw httpError("This member has reached its mission event limit", 429, {
+        code: "mission-member-event-limit",
+      });
+    }
+    const nonOwnerCeiling = LIMITS.missionEventsPerSession - LIMITS.missionOwnerEventReserve;
+    if (member.role !== "owner" && session.missionApplied.size >= nonOwnerCeiling) {
+      throw httpError("The remaining mission event capacity is reserved for owner controls", 429, {
+        code: "mission-event-owner-reserve",
+      });
+    }
+    if (session.missionApplied.size >= LIMITS.missionEventsPerSession) {
+      throw httpError("This session has reached its mission event limit", 429, {
+        code: "mission-event-limit",
+      });
+    }
+  }
+
+  function admitMissionEvent(session, member, eventId, requestFingerprint, receipt) {
+    session.missionApplied.set(eventId, { memberId: member.id, requestFingerprint, receipt });
+    session.missionAcceptedByMember.set(
+      member.id,
+      (session.missionAcceptedByMember.get(member.id) ?? 0) + 1,
+    );
+  }
+
+  function submitMissionStart(session, member, body) {
+    const normalized = normalizeMissionStart(body);
+    const requestFingerprint = operationFingerprint({ kind: "mission-start", ...normalized });
+    const duplicate = duplicateMissionReceipt(session, member, normalized.eventId, requestFingerprint);
+    if (duplicate) return duplicate;
+    requireCapability(member, "missionManage");
+    if (!member.missionHits()) {
+      throw httpError("Mission event rate limit exceeded for this member", 429, {
+        code: "mission-event-rate-limit",
+      });
+    }
+    requireMissionEventCapacity(session, member);
+    if (session.missions.has(normalized.missionId)) {
+      throw httpError(`Mission id is already in use: ${normalized.missionId}`, 409, {
+        code: "mission-id-conflict",
+      });
+    }
+    if (session.missions.size >= LIMITS.missionsPerSession) {
+      throw httpError("This session has reached its mission limit", 429, { code: "mission-limit" });
+    }
+    const active = [...session.missions.values()].find((mission) =>
+      !["completed", "failed", "cancelled"].includes(mission.status));
+    if (active) {
+      throw httpError(`Mission '${active.missionId}' is already in progress`, 409, {
+        code: "mission-active-conflict",
+      });
+    }
+    const seq = session.seq + 1;
+    const at = new Date(now()).toISOString();
+    const created = createMission({
+      normalized,
+      member,
+      members: session.members,
+      sessionId: session.id,
+      at,
+      seq,
+      revision: session.revision,
+    });
+    nextSeq(session);
+    session.missions.set(created.mission.missionId, created.mission);
+    const receipt = missionReceipt(created.event);
+    admitMissionEvent(session, member, normalized.eventId, requestFingerprint, receipt);
+    push(session, created.event, { retain: true });
+    return receipt;
+  }
+
+  async function submitMissionEvent(session, member, missionId, body) {
+    const normalized = normalizeMissionEvent(body);
+    const requestFingerprint = operationFingerprint({ kind: "mission-event", missionId, ...normalized });
+    const duplicate = duplicateMissionReceipt(session, member, normalized.eventId, requestFingerprint);
+    if (duplicate) return duplicate;
+    if (normalized.action === "progress") requireCapability(member, "missionProgress");
+    else requireCapability(member, "missionManage");
+    if (!member.missionHits()) {
+      throw httpError("Mission event rate limit exceeded for this member", 429, {
+        code: "mission-event-rate-limit",
+      });
+    }
+    requireMissionEventCapacity(session, member);
+    const mission = session.missions.get(missionId);
+    if (!mission) throw httpError(`Unknown mission: ${missionId}`, 404, { code: "mission-unknown" });
+    if (normalized.evidence?.kind === "validation") {
+      // Validation is a claim about the scene that exists now, not merely the last scene
+      // revision a live-session operation happened to cache. Whole-document writes and the
+      // store's ordinary /changes route remain supported alongside live sessions, so they can
+      // advance the backing record without touching `session.revision`. Refuse that split cut
+      // until the caller takes the queued snapshot; otherwise a validator could complete a
+      // mission against a document the live session has never loaded.
+      const record = await store.get(session.sceneName);
+      if (!record) throw httpError(`The scene backing this session is gone: ${session.sceneName}`, 410);
+      if (record.revision !== session.revision) {
+        const previousRevision = session.revision;
+        adoptExternalRecord(session, record);
+        throw httpError(
+          `Mission validation requires a resync: session revision ${previousRevision}, current ${record.revision}`,
+          409,
+          {
+            code: "mission-revision-conflict",
+            revision: record.revision,
+            resync: `/sessions/${session.id}/snapshot`,
+          },
+        );
+      }
+    }
+    const operationEvent = normalized.evidence?.kind === "operation"
+      ? session.applied.get(normalized.evidence.opId)?.event ?? null
+      : null;
+    const seq = session.seq + 1;
+    const at = new Date(now()).toISOString();
+    const applied = applyMissionEvent({
+      mission,
+      normalized,
+      member,
+      members: session.members,
+      operationEvent,
+      sessionId: session.id,
+      at,
+      seq,
+      revision: session.revision,
+    });
+    nextSeq(session);
+    session.missions.set(missionId, applied.mission);
+    const receipt = missionReceipt(applied.event);
+    admitMissionEvent(session, member, normalized.eventId, requestFingerprint, receipt);
+    push(session, applied.event, { retain: true });
+    return receipt;
+  }
+
+  /** Marks this member's unfinished assigned stages interrupted in one retained event. */
+  function interruptMemberMissions(session, member, reason) {
+    for (const [missionId, mission] of session.missions) {
+      const seq = session.seq + 1;
+      const interrupted = interruptMissionForMember({
+        mission,
+        member,
+        reason,
+        sessionId: session.id,
+        at: new Date(now()).toISOString(),
+        seq,
+        revision: session.revision,
+      });
+      if (!interrupted) continue;
+      nextSeq(session);
+      session.missions.set(missionId, interrupted.mission);
+      push(session, interrupted.event, { retain: true });
+    }
+  }
+
   function submitPresence(session, member, body) {
     requireCapability(member, "present");
     if (!member.presenceHits()) throw httpError("Presence rate limit exceeded for this member", 429);
@@ -978,6 +1230,8 @@ function computeInverseCommands(preDefinition, commands, outputs) {
     const inviteOne = /^\/sessions\/([^/]+)\/invites\/([^/]+)$/.exec(path);
     const joinMatch = /^\/sessions\/([^/]+)\/join$/.exec(path);
     const snapshotMatch = /^\/sessions\/([^/]+)\/snapshot$/.exec(path);
+    const missionRoot = /^\/sessions\/([^/]+)\/missions$/.exec(path);
+    const missionEventMatch = /^\/sessions\/([^/]+)\/missions\/([^/]+)\/events$/.exec(path);
     const opsMatch = /^\/sessions\/([^/]+)\/ops$/.exec(path);
     const presenceMatch = /^\/sessions\/([^/]+)\/presence$/.exec(path);
     const ticketMatch = /^\/sessions\/([^/]+)\/stream-ticket$/.exec(path);
@@ -1082,15 +1336,14 @@ function computeInverseCommands(preDefinition, commands, outputs) {
           record = await store.get(session.sceneName);
           if (!record) readFailure = httpError(`The scene backing this session is gone: ${session.sceneName}`, 410);
           else {
-            session.revision = record.revision;
-            session.authoritative = {
-              definition: structuredClone(record.definition),
-              revision: record.revision,
-            };
+            adoptExternalRecord(session, record);
           }
         } catch (error) {
           readFailure = error;
         }
+        // Revocation is also an authoritative mission lifecycle event. It shares the same
+        // chain and sequence as the member removal, so no later progress can overtake it.
+        interruptMemberMissions(session, target, "revoked");
         session.members.delete(target.id);
         for (const [ticketId, ticket] of session.tickets) {
           if (ticket.memberId === target.id) session.tickets.delete(ticketId);
@@ -1113,6 +1366,7 @@ function computeInverseCommands(preDefinition, commands, outputs) {
           seq: session.seq,
           revision: record?.revision ?? session.authoritative.revision,
           definition: record?.definition ?? session.authoritative.definition,
+          missions: missionViews(session),
         };
         for (const subscriber of [...session.subscribers.values()]) {
           if (subscriber.memberId === target.id) endSubscriber(session, subscriber, "revoked", terminal);
@@ -1153,19 +1407,54 @@ function computeInverseCommands(preDefinition, commands, outputs) {
       const snapshot = await queueSessionTask(session, async () => {
         const record = await store.get(session.sceneName);
         if (!record) throw httpError(`The scene backing this session is gone: ${session.sceneName}`, 410);
-        session.revision = record.revision;
-        session.authoritative = {
-          definition: structuredClone(record.definition),
-          revision: record.revision,
-        };
+        adoptExternalRecord(session, record);
         return {
           session: sessionView(session),
           revision: record.revision,
           seq: session.seq,
           definition: record.definition,
+          missions: missionViews(session),
         };
       });
       sendJson(response, 200, snapshot, cors);
+      return true;
+    }
+
+    if (missionRoot && method === "GET") {
+      const session = requireSession(missionRoot[1]);
+      const member = requireMember(session, request);
+      requireCapability(member, "read");
+      const cut = await queueSessionTask(session, () => ({
+        schema: LIVE_MISSION_SCHEMA,
+        sessionId: session.id,
+        seq: session.seq,
+        revision: session.revision,
+        missions: missionViews(session),
+      }));
+      sendJson(response, 200, cut, cors);
+      return true;
+    }
+
+    if (missionRoot && method === "POST") {
+      const session = requireSession(missionRoot[1]);
+      const member = requireMember(session, request);
+      // Reserve admission before the bounded body read, exactly like scene operations.
+      const bodyPromise = readJsonBody(request, LIMITS.missionBodyBytes);
+      const receipt = await queueSessionTask(session, async () =>
+        submitMissionStart(session, member, await bodyPromise));
+      sendJson(response, receipt.duplicate ? 200 : 201, receipt, cors);
+      return true;
+    }
+
+    if (missionEventMatch && method === "POST") {
+      const session = requireSession(missionEventMatch[1]);
+      const member = requireMember(session, request);
+      const missionId = decodeURIComponent(missionEventMatch[2]);
+      assertId(missionId, "mission id");
+      const bodyPromise = readJsonBody(request, LIMITS.missionBodyBytes);
+      const receipt = await queueSessionTask(session, async () =>
+        submitMissionEvent(session, member, missionId, await bodyPromise));
+      sendJson(response, receipt.duplicate ? 200 : 201, receipt, cors);
       return true;
     }
 
@@ -1301,7 +1590,19 @@ function computeInverseCommands(preDefinition, commands, outputs) {
         if (!session.subscribers.delete(response)) return;
         member.streams = Math.max(0, member.streams - 1);
         member.lastSeenAt = now();
-        if (broadcast && sessions.has(session.id) && !session.closed) push(session, presenceEvent(session));
+        if (broadcast && sessions.has(session.id) && !session.closed) {
+          push(session, presenceEvent(session));
+          if (member.streams === 0 && !member.revokedAt) {
+            // Re-check inside the chain: a fast reconnect that arrives before this task runs
+            // keeps its assignment, while a genuine disconnect becomes a retained mission
+            // interruption rather than a client-local guess.
+            void queueSessionTask(session, () => {
+              if (sessions.get(session.id) !== session || session.members.get(member.id) !== member
+                || member.revokedAt || member.streams !== 0) return;
+              interruptMemberMissions(session, member, "disconnected");
+            }).catch(() => undefined);
+          }
+        }
       };
       subscriber.cleanup = cleanup;
       request.on("close", cleanup);
@@ -1314,11 +1615,29 @@ function computeInverseCommands(preDefinition, commands, outputs) {
 
   return {
     schema: LIVE_SESSION_SCHEMA,
+    missionSchema: LIVE_MISSION_SCHEMA,
+    missionEventSchema: LIVE_MISSION_EVENT_SCHEMA,
     enabled,
     limits: LIMITS,
     roles: ROLES,
     opPaths: [...OP_PATHS],
+    missionCapabilities: [...MISSION_CAPABILITIES],
     handle,
+    /** Notify matching sessions immediately after an authenticated non-session store write. */
+    publishExternalCut: async (sceneName, record) => {
+      const matching = [...sessions.values()].filter((session) =>
+        session.sceneName === sceneName && !session.closing && !session.closed);
+      const adopted = await Promise.all(matching.map(async (session) => {
+        try {
+          return await queueSessionTask(session, () => Boolean(adoptExternalRecord(session, record)));
+        } catch {
+          // The write is durable. Closing sessions have a full terminal cut; open
+          // sessions retain mismatch detection on op, validation, and snapshot.
+          return false;
+        }
+      }));
+      return adopted.filter(Boolean).length;
+    },
     /** Test and diagnostic surface. Never returns a secret. */
     count: () => sessions.size,
     view: (sessionId) => {

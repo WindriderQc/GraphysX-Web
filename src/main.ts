@@ -29,6 +29,7 @@ import {
 import { composeSkyboxSpiral, frameSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from "./archive-skybox-spiral";
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
+import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
 import type { NestorTopic } from "./showroom-nestor";
 import { archiveReferenceMs } from "./archive-race-records";
 import { getArchiveCupRuntimeState, type ArchiveCupCourse } from "./archive-cup";
@@ -142,6 +143,7 @@ if (mode === "previews" && import.meta.env.DEV) {
     let welcome: ReturnType<typeof mountWelcome> | null = null;
     let nestor: ReturnType<typeof createNestorPresenter> | null = null;
     let livePresence: LiveAgentPresenceController | null = null;
+    let liveMission: LiveMissionRuntimeController | null = null;
     // The showroom's terrain, water and key light are host-mounted objects rather than scene
     // entities, so loading a stored scene replaces the entities and leaves this behind —
     // a ported village would otherwise sit inside the showroom's hills. Kept so opening a
@@ -230,6 +232,7 @@ if (mode === "previews" && import.meta.env.DEV) {
       mountedWelcomeVariant = variant;
       if (variant === "live-observer") {
         welcome.observeLiveActivity(livePresence?.state().activity ?? null);
+        welcome.observeMission(liveMission?.state() ?? null);
         return;
       }
       if (variant !== "agentx") return;
@@ -720,6 +723,7 @@ if (mode === "previews" && import.meta.env.DEV) {
         nestor: host.api.query({ ids: ["showroom-nestor"] }).length > 0
           ? nestor?.state() ?? null : null,
         livePresence: livePresence?.state() ?? null,
+        liveMission: liveMission?.state() ?? null,
         atmosphere: host.dayNightState,
         players: host.api.query({ tag: "player" }).map((entity) => ({
           id: entity.id,
@@ -930,11 +934,15 @@ if (mode === "previews" && import.meta.env.DEV) {
         const [
           { createLiveSessionClient, consumeInviteFromLocation },
           { mountLiveSessionPanel },
+          { mountLiveMissionPanel },
           { createLiveAgentPresenceController },
+          { createLiveMissionRuntime },
         ] = await Promise.all([
           import("./live-session-client"),
           import("./live-session-panel"),
+          import("./live-mission-panel"),
           import("./live-agent-presence"),
+          import("./live-mission-runtime"),
         ]);
         const invitation = consumeInviteFromLocation(window.location, window.history);
         const joiningSession = invitation?.sessionId ?? sessionParam;
@@ -942,15 +950,34 @@ if (mode === "previews" && import.meta.env.DEV) {
           const reflectLivePresence = (state: LiveAgentPresenceState): void => {
             if (mountedWelcomeVariant === "live-observer") welcome?.observeLiveActivity(state.activity);
           };
-          livePresence = createLiveAgentPresenceController({ runtime: host.world, onState: reflectLivePresence });
+          const reflectLiveMission = (state: LiveMissionRuntimeState): void => {
+            if (mountedWelcomeVariant === "live-observer") welcome?.observeMission(state);
+          };
+          livePresence = createLiveAgentPresenceController({
+            runtime: host.world,
+            subscribeFrame: host.subscribeFrame.bind(host),
+            onState: reflectLivePresence,
+          });
+          liveMission = createLiveMissionRuntime({
+            runtime: host.world,
+            presence: livePresence,
+            focusEntity: (id) => interaction?.focusEntity(id, true) ?? false,
+            qualityProfile: () => host.qualityProfile.name,
+            subscribeFrame: host.subscribeFrame.bind(host),
+            onState: reflectLiveMission,
+          });
           const liveClient = createLiveSessionClient({
             baseUrl: storeUrl,
             api: host.api,
             events: {
               onStatus: (status) => {
                 panel?.setStatus(status);
+                missionPanel?.setStatus(status);
                 livePresence?.setSession(status.sessionId);
                 livePresence?.setConnection(status.connection);
+                liveMission?.setSession(status.sessionId);
+                liveMission?.setConnection(status.connection);
+                liveMission?.syncMissions(status.missions);
                 const attached = status.sessionId !== null;
                 browser.setEnabled(!attached);
                 if (attached) {
@@ -970,10 +997,24 @@ if (mode === "previews" && import.meta.env.DEV) {
                   queueMicrotask(syncFrontDoor);
                 }
               },
-              onMembers: (members) => livePresence?.syncMembers(members),
+              onMembers: (members) => {
+                livePresence?.syncMembers(members);
+                liveMission?.syncMembers(members);
+              },
               onOperation: (operation) => {
                 panel?.recordOperation(operation);
                 livePresence?.recordOperation(operation);
+                liveMission?.recordOperation(operation);
+              },
+              onMissions: (missions) => liveMission?.syncMissions(missions),
+              onMission: (event) => {
+                liveMission?.recordEvent(event);
+                // Catch-up events are cached while reconnecting. Announce only after the
+                // terminal presence cut marks this session live and its projection valid.
+                if (liveMission?.state().connection !== "live") return;
+                const directorMessage = liveMission.state().director.message
+                  ?? `${event.mission.title} is ${event.mission.status}`;
+                missionPanel?.announce(`${directorMessage}. Mission ${event.mission.status}, server sequence ${event.seq}`);
               },
               onResync: (revision) => panel?.announce(`Resynced to revision ${revision}`),
               onError: (error) => console.warn(`[graphysx] live session: ${error.message}`),
@@ -982,10 +1023,16 @@ if (mode === "previews" && import.meta.env.DEV) {
           nestorBlockedByLiveSession = () => liveClient.status.sessionId !== null;
           reassertLiveAuthority = () => liveClient.resync();
           const panel = mountLiveSessionPanel(root, liveClient);
+          const missionPanel = mountLiveMissionPanel(root, liveClient, {
+            focusMission: (missionId) => { liveMission?.focusMission(missionId); },
+            inspectEvidence: (_missionId, evidenceId) => { liveMission?.inspectEvidence(evidenceId); },
+          });
           Object.assign(window, {
             __GRAPHYSX_LIVE_SESSION__: liveClient,
             __GRAPHYSX_LIVE_PANEL__: panel,
+            __GRAPHYSX_LIVE_MISSION_PANEL__: missionPanel,
             __GRAPHYSX_LIVE_PRESENCE__: livePresence,
+            __GRAPHYSX_LIVE_MISSION__: liveMission,
           });
           const actorId = params.get("actor") ?? randomPlayerName();
           try {

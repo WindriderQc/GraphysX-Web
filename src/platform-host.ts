@@ -127,6 +127,9 @@ const MAX_HDRI_CACHE_ENTRIES = 4;
 
 export type PlatformRenderProfileName = "high" | "balanced" | "mobile";
 
+/** A lightweight observer driven by the host's one animation loop. */
+export type PlatformFrameListener = (deltaSeconds: number) => void;
+
 export type PlatformRenderProfile = Readonly<{
   name: PlatformRenderProfileName;
   maxDpr: number;
@@ -228,6 +231,7 @@ export class PlatformHost {
   private readonly clock = new Clock();
   private readonly onResize = () => this.resize();
   private readonly resizeObserver: ResizeObserver | null;
+  private readonly frameListeners = new Set<PlatformFrameListener>();
   private renderProfile: PlatformRenderProfile;
   private shadowRefreshElapsed = Number.POSITIVE_INFINITY;
   private reflectionRefreshElapsed = Number.POSITIVE_INFINITY;
@@ -472,6 +476,16 @@ export class PlatformHost {
   /** Active renderer budget, exposed so diagnostics can verify the adaptive path. */
   get qualityProfile(): PlatformRenderProfile {
     return this.renderProfile;
+  }
+
+  /**
+   * Subscribe work that must advance with the renderer without creating another rAF loop.
+   * The returned disposer is idempotent.
+   */
+  subscribeFrame(listener: PlatformFrameListener): () => void {
+    if (this.disposed) return () => undefined;
+    this.frameListeners.add(listener);
+    return () => this.frameListeners.delete(listener);
   }
 
   /** Frames the 2D overlay has drawn. Tracks frameCount when an overlay is active — the proof
@@ -1305,6 +1319,13 @@ export class PlatformHost {
     const delta = this.clock.getDelta();
     // Freeze simulation while the gizmo is dragging (matches the reference behavior).
     if (!this.editor?.isTransforming()) this.world.update(delta);
+    for (const listener of this.frameListeners) {
+      try {
+        listener(delta);
+      } catch (error) {
+        console.error("GraphysX frame listener failed", error);
+      }
+    }
     this.updateDayNight();
     this.audio.sync();
     this.advanceFocus(delta);
@@ -1469,6 +1490,7 @@ export class PlatformHost {
       delete document.documentElement.dataset.gxRenderProfile;
     }
     this.renderer.setAnimationLoop(null);
+    this.frameListeners.clear();
     this.unsubscribeEvents();
     this.audio.dispose();
     this.playLayer?.();

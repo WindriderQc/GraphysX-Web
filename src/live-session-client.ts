@@ -13,6 +13,14 @@
 // See docs/LIVE_SESSIONS.md for the protocol and the threat model.
 
 import type { AgentWorldCommand, AgentWorldDefinition, GraphysXAgentWorldApi } from "./agent-world-runtime";
+import type {
+  LiveMissionEvent,
+  LiveMissionProgressRequest,
+  LiveMissionReceipt,
+  LiveMissionStartRequest,
+  LiveMissionView,
+} from "./live-mission-types";
+export * from "./live-mission-types";
 
 export const LIVE_SESSION_SCHEMA = "graphysx.live-session/v1";
 export const LIVE_OP_SCHEMA = "graphysx.live-op/v1";
@@ -49,6 +57,7 @@ export type LiveSessionView = {
   revision: number;
   seq: number;
   members: LiveSessionMemberView[];
+  missions: LiveMissionView[];
 };
 
 /** One accepted mutation, as every other member sees it. */
@@ -89,6 +98,7 @@ export type LiveSessionStatus = {
   /** True once a resync has happened, so the UI can say so rather than imply continuity. */
   resynced: boolean;
   members: LiveSessionMemberView[];
+  missions: LiveMissionView[];
   error: string | null;
 };
 
@@ -124,6 +134,10 @@ export type LiveSessionEvents = {
   /** An accepted mutation, after it has been applied to this tab's runtime. */
   onOperation?: (operation: LiveSessionOperation) => void;
   onMembers?: (members: LiveSessionMemberView[]) => void;
+  /** Full authoritative replacements from snapshots and ordered mission events. */
+  onMissions?: (missions: LiveMissionView[]) => void;
+  /** One accepted transition in the shared live-session sequence. */
+  onMission?: (event: LiveMissionEvent) => void;
   onResync?: (revision: number) => void;
   onError?: (error: Error) => void;
 };
@@ -175,6 +189,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
   let resynced = false;
   let connection: LiveSessionConnection = "offline";
   let members: LiveSessionMemberView[] = [];
+  let missions: LiveMissionView[] = [];
   let lastError: string | null = null;
   let source: EventSource | null = null;
   // Invalidates callbacks (and ticket requests) retained by a stream we deliberately
@@ -206,6 +221,9 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
   /** Operation callbacks are a product event, not a transport event: receipt and SSE echo
    *  may arrive in either order, but consumers must observe an accepted operation once. */
   const announcedOperations = new Set<string>();
+  /** Mission events share the server replay window and use explicit idempotency ids. */
+  const announcedMissionEvents = new Set<string>();
+  const missionEventWaiters = new Map<string, Set<(observed: boolean) => void>>();
   /** Authoritative own-operation echoes retained long enough to recover a receipt that a
    *  proxy lost after the server committed. */
   const ownOperationEchoes = new Map<string, LiveSessionOperation>();
@@ -249,9 +267,12 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     refreshLastOwnOperation();
   };
 
+  const cloneMissions = (): LiveMissionView[] => structuredClone(missions);
+
   const status = (): LiveSessionStatus => ({
     connection, sessionId, role, actorId, revision, seq, latencyMs, resynced,
     members: members.map((member) => ({ ...member })),
+    missions: cloneMissions(),
     error: lastError,
   });
 
@@ -270,6 +291,50 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     // session cannot turn exactly-once bookkeeping into an unbounded browser allocation.
     rememberBoundedOperation(announcedOperations, operation.opId);
     events.onOperation?.(operation);
+  };
+
+  const installMissionEvent = (event: LiveMissionEvent): void => {
+    if (announcedMissionEvents.has(event.eventId)) return;
+    rememberBoundedOperation(announcedMissionEvents, event.eventId);
+    const waiters = missionEventWaiters.get(event.eventId);
+    missionEventWaiters.delete(event.eventId);
+    for (const resolve of waiters ?? []) resolve(true);
+    const next = structuredClone(event.mission);
+    const index = missions.findIndex((mission) => mission.missionId === next.missionId);
+    if (index < 0) missions = [...missions, next];
+    else missions = missions.map((mission, missionIndex) => missionIndex === index ? next : mission);
+    seq = Math.max(seq, event.seq);
+    // Mission state is ordered beside the document but never embodies a document cut.
+    // Only an op frame or snapshot may advance the scene revision this runtime owns.
+    events.onMission?.(structuredClone(event));
+    events.onMissions?.(cloneMissions());
+    announce();
+  };
+
+  const waitForMissionEvent = (eventId: string, timeoutMs = 3_000): Promise<boolean> => {
+    if (announcedMissionEvents.has(eventId)) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      let timer: ReturnType<typeof setTimeout>;
+      const waiter = (observed: boolean): void => {
+        clearTimeout(timer);
+        resolve(observed);
+      };
+      const waiters = missionEventWaiters.get(eventId) ?? new Set();
+      waiters.add(waiter);
+      missionEventWaiters.set(eventId, waiters);
+      timer = setTimeout(() => {
+        const active = missionEventWaiters.get(eventId);
+        active?.delete(waiter);
+        if (active?.size === 0) missionEventWaiters.delete(eventId);
+        resolve(false);
+      }, timeoutMs);
+    });
+  };
+
+  const clearMissionWaiters = (): void => {
+    const waiters = [...missionEventWaiters.values()].flatMap((group) => [...group]);
+    missionEventWaiters.clear();
+    for (const resolve of waiters) resolve(false);
   };
 
   const rememberOwnOperationEcho = (operation: LiveSessionOperation): void => {
@@ -377,6 +442,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     seq?: number;
     revision?: number;
     definition?: AgentWorldDefinition;
+    missions?: LiveMissionView[];
   };
 
   /**
@@ -399,6 +465,10 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         revision = payload.revision as number;
         seq = payload.seq as number;
         latestSnapshotSeq = seq;
+        if (Array.isArray(payload.missions)) {
+          missions = structuredClone(payload.missions);
+          events.onMissions?.(cloneMissions());
+        }
         events.onResync?.(revision);
       } else {
         // Preserve the last proven runtime when an invalid terminal payload is received.
@@ -428,6 +498,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     actorKind = null;
     memberId = null;
     members = [];
+    missions = [];
     resynced = false;
     lastOwnOpId = null;
     ownOperationCandidates.clear();
@@ -435,14 +506,17 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     ownOperations.clear();
     ownOperationLoadEpoch.clear();
     announcedOperations.clear();
+    announcedMissionEvents.clear();
     ownOperationEchoes.clear();
     embodiedOperations.clear();
     clearOwnEchoWaiters();
     clearEmbodimentWaiters();
+    clearMissionWaiters();
     reconnectStep = 0;
     connection = "offline";
     lastError = message;
     events.onMembers?.([]);
+    events.onMissions?.([]);
     announce();
   };
 
@@ -528,6 +602,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     latencyMs = null;
     resynced = false;
     members = [];
+    missions = [];
     lastError = null;
     reconnectStep = 0;
     lastOwnOpId = null;
@@ -538,10 +613,12 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     runtimeLoadEpoch = 0;
     latestSnapshotSeq = 0;
     announcedOperations.clear();
+    announcedMissionEvents.clear();
     ownOperationEchoes.clear();
     embodiedOperations.clear();
     clearOwnEchoWaiters();
     clearEmbodimentWaiters();
+    clearMissionWaiters();
     connection = "connecting";
     // This announcement is the authority barrier used by the product shell: local canvas,
     // Editor, Games, Browse and SceneBrowser are disabled before the request can yield.
@@ -589,6 +666,56 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     }
     return payload as T;
   }
+
+  const submitMissionRequest = async (
+    targetMissionId: string,
+    body: Record<string, unknown>,
+  ): Promise<LiveMissionReceipt> => {
+    const targetSessionId = sessionId;
+    if (!targetSessionId || role === null) throw new LiveSessionError("Not in a session", 400);
+    if (connection !== "live") throw new LiveSessionError("The live session is still synchronizing", 409, "session-not-ready");
+    const eventId = typeof body.eventId === "string" ? body.eventId : "";
+    if (!eventId) throw new LiveSessionError("Mission events require an explicit eventId", 400, "mission-event-id-required");
+    const authority = authorityEpoch;
+    const request = () => {
+      assertAuthority(authority, targetSessionId);
+      return call<LiveMissionReceipt>(
+        "POST",
+        targetMissionId
+          ? "/sessions/" + encodeURIComponent(targetSessionId) + "/missions/" + encodeURIComponent(targetMissionId) + "/events"
+          : "/sessions/" + encodeURIComponent(targetSessionId) + "/missions",
+        body,
+      );
+    };
+    let receipt: LiveMissionReceipt;
+    try {
+      receipt = await request();
+    } catch (firstError) {
+      const ambiguous = !(firstError instanceof LiveSessionError) || firstError.status === 0 || firstError.status >= 500;
+      if (!ambiguous) throw firstError;
+      receipt = await request();
+    }
+    assertAuthority(authority, targetSessionId);
+    if (!receipt || receipt.eventId !== eventId || !Number.isInteger(receipt.seq) || receipt.seq < 0) {
+      throw new LiveSessionError("The mission response was unreadable", 0, "mission-receipt-unreadable");
+    }
+    // The HTTP response is not an ordering channel. Wait for the shared SSE sequence before
+    // advancing local mission state; otherwise an earlier scene op could be skipped on replay.
+    const observed = await waitForMissionEvent(eventId);
+    assertAuthority(authority, targetSessionId);
+    if (!observed) {
+      await resync();
+      assertAuthority(authority, targetSessionId);
+      if (latestSnapshotSeq < receipt.seq) {
+        await resync();
+        assertAuthority(authority, targetSessionId);
+      }
+    }
+    if (!announcedMissionEvents.has(eventId) && latestSnapshotSeq < receipt.seq) {
+      throw new LiveSessionError("The accepted mission event could not be recovered", 409, "mission-event-not-embodied");
+    }
+    return receipt;
+  };
 
   /**
    * Applies a remote operation through the public commit path.
@@ -686,6 +813,21 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         stream.addEventListener("op", (message) => {
           if (!isCurrentStream()) return;
           ingest(JSON.parse((message as MessageEvent).data) as LiveSessionOperation);
+        });
+
+        stream.addEventListener("resync", () => {
+          if (!isCurrentStream()) return;
+          // Do not advance seq/revision from the marker. Detaching is synchronous, so
+          // queued frames from this old document are ignored until an atomic cut loads.
+          void resync().catch((error) => {
+            if (hasAuthority(authority, targetSessionId))
+              events.onError?.(error instanceof Error ? error : new Error(String(error)));
+          });
+        });
+
+        stream.addEventListener("mission", (message) => {
+          if (!isCurrentStream()) return;
+          installMissionEvent(JSON.parse((message as MessageEvent).data) as LiveMissionEvent);
         });
 
         stream.addEventListener("presence", (message) => {
@@ -831,6 +973,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       // not a maximum with events applied to the document that `api.load` just replaced.
       seq = snapshot.seq;
       members = snapshot.session.members;
+      missions = structuredClone(snapshot.session.missions ?? []);
       sceneName = snapshot.session.sceneName;
       resynced = true;
       // After a resync this tab's notion of "my last operation" may predate history the server
@@ -838,6 +981,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       refreshLastOwnOperation();
       events.onResync?.(revision);
       events.onMembers?.(members);
+      events.onMissions?.(cloneMissions());
       announce();
       loaded = true;
       return revision;
@@ -892,6 +1036,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       actorKind = joined.member.kind;
       memberId = joined.member.memberId;
       members = joined.session.members;
+      missions = structuredClone(joined.session.missions ?? []);
       resynced = false;
       try {
         await resyncWithStreamPolicy(false);
@@ -925,6 +1070,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         actorKind = view.you.kind;
         memberId = view.you.memberId;
         members = view.session.members;
+        missions = structuredClone(view.session.missions ?? []);
         await resyncWithStreamPolicy(false);
         assertAuthority(authority, targetSessionId);
         resynced = false;
@@ -1177,6 +1323,39 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       }
     },
 
+    /** Starts the curated server-owned mission template. Owner authority is enforced again server-side. */
+    async startMission(request: LiveMissionStartRequest): Promise<LiveMissionReceipt> {
+      if (role !== "owner") throw new LiveSessionError("Only the owner can start a mission", 403, "mission-owner-required");
+      return submitMissionRequest("", request as unknown as Record<string, unknown>);
+    },
+
+    async controlMission(
+      missionId: string,
+      action: "activate" | "pause" | "resume" | "cancel",
+      eventId: string,
+    ): Promise<LiveMissionReceipt> {
+      if (role !== "owner") throw new LiveSessionError("Only the owner can direct a mission", 403, "mission-owner-required");
+      return submitMissionRequest(missionId, { action, eventId });
+    },
+
+    async assignMissionStage(
+      missionId: string,
+      stageId: string,
+      memberIdToAssign: string,
+      eventId: string,
+    ): Promise<LiveMissionReceipt> {
+      if (role !== "owner") throw new LiveSessionError("Only the owner can assign mission work", 403, "mission-owner-required");
+      return submitMissionRequest(missionId, { action: "assign", eventId, stageId, memberId: memberIdToAssign });
+    },
+
+    async publishMissionProgress(
+      missionId: string,
+      progress: LiveMissionProgressRequest,
+    ): Promise<LiveMissionReceipt> {
+      if (role !== "agent") throw new LiveSessionError("Only an assigned AgentX member can publish mission progress", 403, "mission-agent-required");
+      return submitMissionRequest(missionId, { action: "progress", ...progress });
+    },
+
     /** Publishes ephemeral presence. Never revisioned, never persisted. */
     async publishPresence(presence: {
       cursor?: { x: number; y: number; z: number } | null;
@@ -1277,6 +1456,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       actorKind = null;
       memberId = null;
       members = [];
+      missions = [];
       resynced = false;
       lastOwnOpId = null;
       ownOperationCandidates.clear();
@@ -1286,12 +1466,15 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       runtimeLoadEpoch = 0;
       latestSnapshotSeq = 0;
       announcedOperations.clear();
+      announcedMissionEvents.clear();
       ownOperationEchoes.clear();
       embodiedOperations.clear();
       clearOwnEchoWaiters();
       clearEmbodimentWaiters();
+      clearMissionWaiters();
       connection = "offline";
       lastError = null;
+      events.onMissions?.([]);
       // setConnection intentionally coalesces identical values. Leave also changes sessionId,
       // so it must announce even when a pending join was already labelled offline/connecting.
       announce();

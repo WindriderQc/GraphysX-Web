@@ -201,10 +201,74 @@ try {
   });
   check(results, "an oversized presence body -> 413", oversizedPresence.status === 413, `status ${oversizedPresence.status}`);
 
+  const oversizedMission = await owner.call("POST", `/sessions/${sessionId}/missions`, undefined, {
+    rawBody: JSON.stringify({
+      eventId: "me-huge",
+      missionId: "mission-huge",
+      templateId: "agentx-center-artifact-v1",
+      assignments: [],
+      padding: "x".repeat(20 * 1024),
+    }),
+  });
+  check(results, "an oversized mission event body -> 413", oversizedMission.status === 413, `status ${oversizedMission.status}`);
+
   const tooMuchSelection = await owner.call("POST", `/sessions/${sessionId}/presence`, {
     selection: Array.from({ length: 64 }, (_, index) => `sel-${index}`),
   });
   check(results, "an unbounded presence selection is rejected", tooMuchSelection.status === 400, `status ${tooMuchSelection.status}`);
+
+  const beforeHostNamespace = await owner.call("GET", `/sessions/${sessionId}/snapshot`);
+  const hostNamespaceAttempts = [];
+  for (const [index, prefix] of ["live-agent:", "live-mission:", "live-nestor:"].entries()) {
+    hostNamespaceAttempts.push(await owner.call("POST", `/sessions/${sessionId}/ops`, {
+      opId: `op-host-prefix-${index}`,
+      commands: [spawnCommand(`${prefix}authored-collision`)],
+    }));
+  }
+  hostNamespaceAttempts.push(await owner.call("POST", `/sessions/${sessionId}/ops`, {
+    opId: "op-host-parent-reference",
+    commands: [{
+      op: "spawn",
+      entity: { id: "host-parent-child", type: "box", parentId: "live-agent:remote" },
+    }],
+  }));
+  const afterHostNamespace = await owner.call("GET", `/sessions/${sessionId}/snapshot`);
+  check(results, "remote operations cannot claim or reference host-only transient namespaces",
+    hostNamespaceAttempts.every((response) =>
+      response.status === 422
+      && response.body.code === "operation-rejected"
+      && response.body.error.includes("host-only entity namespace")),
+    JSON.stringify(hostNamespaceAttempts.map((response) => ({ status: response.status, body: response.body }))));
+  check(results, "host-only namespace refusals leave the authoritative session cut byte-identical",
+    afterHostNamespace.body.revision === beforeHostNamespace.body.revision
+      && JSON.stringify(afterHostNamespace.body.definition) === JSON.stringify(beforeHostNamespace.body.definition),
+    `revision ${beforeHostNamespace.body.revision} -> ${afterHostNamespace.body.revision}`);
+
+  const storedBeforeHostNamespace = JSON.parse((await requestText(`${base}/scenes/${SCENE}`)).text);
+  const hostileReplacement = structuredClone(storedBeforeHostNamespace.definition);
+  hostileReplacement.entities.push({ id: "live-mission:stored-collision", type: "group" });
+  const hostileReplacementWrite = await requestText(`${base}/scenes/${SCENE}`, {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${TOKEN}`,
+      origin: ORIGIN,
+    },
+    body: JSON.stringify({
+      definition: hostileReplacement,
+      expectedRevision: storedBeforeHostNamespace.revision,
+      actor: "security-smoke",
+    }),
+  });
+  const storedAfterHostNamespace = JSON.parse((await requestText(`${base}/scenes/${SCENE}`)).text);
+  check(results, "whole-document writes cannot persist a host-only transient namespace",
+    hostileReplacementWrite.status === 400
+      && hostileReplacementWrite.text.includes("host-only entity namespace"),
+    `status ${hostileReplacementWrite.status}: ${hostileReplacementWrite.text}`);
+  check(results, "rejected host-only document replacement leaves stored authority byte-identical",
+    storedAfterHostNamespace.revision === storedBeforeHostNamespace.revision
+      && JSON.stringify(storedAfterHostNamespace.definition) === JSON.stringify(storedBeforeHostNamespace.definition),
+    `revision ${storedBeforeHostNamespace.revision} -> ${storedAfterHostNamespace.revision}`);
 
   const traversal = await createActor(base, { credential: ownerCredential, origin: ORIGIN })
     .call("GET", `/sessions/${sessionId}/../../scenes/${SCENE}`);
@@ -284,6 +348,7 @@ try {
   const surfaces = {
     session: await owner.call("GET", `/sessions/${sessionId}`),
     snapshot: await owner.call("GET", `/sessions/${sessionId}/snapshot`),
+    missions: await owner.call("GET", `/sessions/${sessionId}/missions`),
     invites: await owner.call("GET", `/sessions/${sessionId}/invites`),
     scene: await owner.call("GET", `/scenes/${SCENE}`),
     health: await owner.call("GET", "/health"),
@@ -296,7 +361,7 @@ try {
   }
   check(results, "no credential appears in any readable session surface", leakedToBodies.length === 0, leakedToBodies.join(", "));
 
-  const activity = owner.received.ops.concat(owner.received.presence, owner.received.members);
+  const activity = owner.received.ops.concat(owner.received.missions, owner.received.presence, owner.received.members);
   const leakedToActivity = secrets.filter((secret) => JSON.stringify(activity).includes(secret));
   check(results, "no credential appears in the activity stream", leakedToActivity.length === 0, leakedToActivity.length ? "secret in activity" : "");
 

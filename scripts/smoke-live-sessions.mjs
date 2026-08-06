@@ -7,6 +7,7 @@
 // dropped connection, an evicted history) has a defined, tested outcome rather than a
 // silent divergence.
 
+import { EventEmitter } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -62,10 +63,51 @@ const callEngine = async (engine, method, route, body, headers = {}) => {
       error: error instanceof Error ? error.message : String(error),
       ...(error?.code ? { code: error.code } : {}),
       ...(error?.revision !== undefined ? { revision: error.revision } : {}),
+      ...(error?.resync ? { resync: error.resync } : {}),
     });
   }
   return { status, body: text ? JSON.parse(text) : null, text };
 };
+
+/** Opens one deterministic in-memory SSE stream so member online state is real authority. */
+const openEngineStream = async (engine, sessionId, headers) => {
+  const ticket = await callEngine(engine, "POST", `/sessions/${sessionId}/stream-ticket`, {}, headers);
+  if (ticket.status !== 201) throw new Error(`stream ticket failed: ${ticket.status} ${ticket.text}`);
+  const route = `/sessions/${sessionId}/stream?ticket=${encodeURIComponent(ticket.body.ticket)}`;
+  const request = Object.assign(new EventEmitter(), { method: "GET", url: route, headers: {} });
+  let status = 0;
+  let frames = "";
+  const response = Object.assign(new EventEmitter(), {
+    headersSent: false,
+    writeHead(nextStatus) {
+      status = nextStatus;
+      this.headersSent = true;
+    },
+    write(chunk) {
+      frames += String(chunk ?? "");
+      return true;
+    },
+    end(chunk) {
+      frames += String(chunk ?? "");
+    },
+  });
+  const url = new URL(route, "http://session.test");
+  await engine.handle(request, response, url, url.pathname, {});
+  if (status !== 200) throw new Error(`stream open failed: ${status}`);
+  return {
+    close: () => response.emit("close"),
+    frames: () => frames,
+  };
+};
+
+/** Parsed retained frames from the deterministic in-memory SSE response. */
+const engineEvents = (stream, eventName) => stream.frames().split("\n\n").flatMap((frame) => {
+  const lines = frame.split("\n");
+  const event = lines.find((line) => line.startsWith("event: "))?.slice(7);
+  const data = lines.filter((line) => line.startsWith("data: "))
+    .map((line) => line.slice(6)).join("\n");
+  return event === eventName && data ? [JSON.parse(data)] : [];
+});
 
 /**
  * Deterministic regression for the old-definition/new-sequence snapshot race. The op's
@@ -237,8 +279,528 @@ const proveSerializedClose = async () => {
     JSON.stringify({ accepted: accepted.status, closed: closedResponse.status, revision: record.revision }));
 };
 
+/** Typed mission state shares session authority while leaving the authored document alone. */
+const proveMissionProtocol = async () => {
+  let clock = 10_000;
+  let record = { name: "mission-fixture", revision: 1, definition: seedDefinition("mission-fixture") };
+  const controlledStore = {
+    async get() { return structuredClone(record); },
+    async put(name, definition, expectedRevision, attribution = {}) {
+      if (expectedRevision !== record.revision) throw Object.assign(new Error("controlled conflict"), { status: 409 });
+      record = {
+        name,
+        revision: record.revision + 1,
+        definition: structuredClone(definition),
+        actor: attribution.actor ?? null,
+        intent: attribution.intent ?? null,
+      };
+      return { name, revision: record.revision };
+    },
+  };
+  const engine = createLiveSessions({
+    store: controlledStore,
+    guard: { enabled: true, authorized: () => true, originAllowed: () => true },
+    now: () => clock,
+  });
+  const created = await callEngine(engine, "POST", "/sessions", {
+    sceneName: "mission-fixture",
+    owner: { id: "mission-owner", label: "Mission owner" },
+  });
+  const sessionId = created.body.session.sessionId;
+  const ownerHeaders = { "x-graphysx-session": created.body.credential };
+
+  const join = async (role, capabilities, actor) => {
+    const invitation = await callEngine(engine, "POST", `/sessions/${sessionId}/invites`, {
+      role,
+      ...(capabilities ? { capabilities } : {}),
+    }, ownerHeaders);
+    const joined = await callEngine(engine, "POST", `/sessions/${sessionId}/join`, {
+      code: invitation.body.code,
+      actor,
+    });
+    return {
+      ...joined.body,
+      headers: { "x-graphysx-session": joined.body.credential },
+    };
+  };
+
+  const explorer = await join("agent", ["spawn", "transaction", "mission:explore", "mission:build", "mission:validate"], {
+    id: "mission-explorer", label: "Scout", kind: "agent",
+  });
+  const validator = await join("agent", ["mission:validate"], {
+    id: "mission-validator", label: "Verifier", kind: "agent",
+  });
+  const relief = await join("agent", ["spawn", "mission:explore", "mission:build"], {
+    id: "mission-relief", label: "Relief", kind: "agent",
+  });
+  const viewer = await join("viewer", null, { id: "mission-viewer", label: "Observer", kind: "human" });
+  const startBody = {
+    eventId: "me-start-1",
+    missionId: "mission-1",
+    templateId: "agentx-center-artifact-v1",
+    assignments: [
+      { stageId: "analyze", memberId: explorer.member.memberId },
+      { stageId: "build", memberId: explorer.member.memberId },
+      { stageId: "validate", memberId: validator.member.memberId },
+    ],
+  };
+  const inheritedTemplate = await callEngine(engine, "POST", `/sessions/${sessionId}/missions`, {
+    ...startBody, eventId: "me-start-inherited-template", missionId: "mission-inherited", templateId: "toString",
+  }, ownerHeaders);
+  check(results, "inherited object properties are not accepted as mission templates",
+    inheritedTemplate.status === 400 && inheritedTemplate.body.code === "mission-template-unknown",
+    JSON.stringify(inheritedTemplate.body));
+
+  const documentBeforeMission = JSON.stringify(record.definition);
+  const start = await callEngine(engine, "POST", `/sessions/${sessionId}/missions`, startBody, ownerHeaders);
+  check(results, "owner starts one bounded briefing mission",
+    start.status === 201 && start.body.mission.status === "briefing" && start.body.mission.stages.length === 3,
+    JSON.stringify(start.body));
+
+  const duplicateStart = await callEngine(engine, "POST", `/sessions/${sessionId}/missions`, startBody, ownerHeaders);
+  const conflictingStart = await callEngine(engine, "POST", `/sessions/${sessionId}/missions`, {
+    ...startBody, missionId: "mission-collision",
+  }, ownerHeaders);
+  check(results, "mission event ids are member/body-bound and idempotent",
+    duplicateStart.status === 200 && duplicateStart.body.duplicate === true
+      && duplicateStart.body.seq === start.body.seq
+      && conflictingStart.status === 409 && conflictingStart.body.code === "mission-event-id-conflict",
+    JSON.stringify({ duplicate: duplicateStart.body, conflict: conflictingStart.body }));
+
+  const viewerStarts = await callEngine(engine, "POST", `/sessions/${sessionId}/missions`, {
+    ...startBody, eventId: "me-viewer-start", missionId: "viewer-mission",
+  }, viewer.headers);
+  const viewerReads = await callEngine(engine, "GET", `/sessions/${sessionId}/missions`, undefined, viewer.headers);
+  check(results, "viewers may inspect but not direct mission state",
+    viewerStarts.status === 403 && viewerReads.status === 200 && viewerReads.body.missions.length === 1,
+    JSON.stringify({ write: viewerStarts.status, read: viewerReads.status }));
+
+  const reservedEventId = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-system-123", action: "activate",
+  }, ownerHeaders);
+  check(results, "client mission event ids cannot collide with the server lifecycle namespace",
+    reservedEventId.status === 400 && reservedEventId.body.code === "mission-event-id-reserved",
+    JSON.stringify(reservedEventId.body));
+
+  const offlineActivate = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-activate-offline", action: "activate",
+  }, ownerHeaders);
+  const explorerStream = await openEngineStream(engine, sessionId, explorer.headers);
+  let validatorStream = await openEngineStream(engine, sessionId, validator.headers);
+  const reliefStream = await openEngineStream(engine, sessionId, relief.headers);
+  const singleActorAssignment = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-assign-single-actor", action: "assign", stageId: "validate", memberId: explorer.member.memberId,
+  }, ownerHeaders);
+  const singleActorActivate = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-activate-single-actor", action: "activate",
+  }, ownerHeaders);
+  const restoreValidator = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-restore-validator", action: "assign", stageId: "validate", memberId: validator.member.memberId,
+  }, ownerHeaders);
+  const activate = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-activate-1", action: "activate",
+  }, ownerHeaders);
+  check(results, "activation requires online assignments spanning two distinct AgentX actors",
+    offlineActivate.status === 409 && offlineActivate.body.code === "mission-assignee-offline"
+      && singleActorAssignment.status === 201
+      && singleActorActivate.status === 409 && singleActorActivate.body.code === "mission-participants-required"
+      && restoreValidator.status === 201 && activate.status === 201,
+    JSON.stringify({ offline: offlineActivate.body, single: singleActorActivate.body, activate: activate.status }));
+
+  const unassignedProgress = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-wrong-agent", action: "progress", stageId: "analyze", state: "working", progress: 0.1,
+  }, validator.headers);
+  check(results, "only the assigned capable AgentX member may advance the ordered stage",
+    unassignedProgress.status === 403 && unassignedProgress.body.code === "mission-stage-not-assigned",
+    JSON.stringify(unassignedProgress.body));
+
+  validatorStream.close();
+  const futureDisconnectSnapshot = await callEngine(engine, "GET", `/sessions/${sessionId}/snapshot`, undefined, ownerHeaders);
+  const missionAfterFutureDisconnect = futureDisconnectSnapshot.body.missions[0];
+  check(results, "a future-stage disconnect is retained without stopping the live current stage",
+    missionAfterFutureDisconnect.status === "active"
+      && missionAfterFutureDisconnect.stages.find((stage) => stage.stageId === "validate").status === "interrupted",
+    JSON.stringify(missionAfterFutureDisconnect));
+
+  const earlyBuildOperation = await callEngine(engine, "POST", `/sessions/${sessionId}/ops`, {
+    opId: "op-build-too-early",
+    baseRevision: 1,
+    path: "spawn",
+    commands: [spawnCommand("early-build-artifact")],
+    intent: "This receipt predates the Build stage",
+  }, explorer.headers);
+
+  const analyze = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-analyze-complete",
+    action: "progress",
+    stageId: "analyze",
+    state: "completed",
+    evidence: { evidenceId: "evidence-analyze", kind: "observation", summary: "The anchor needs a visible calibration partner." },
+  }, explorer.headers);
+  check(results, "an assigned explorer completes analysis with bounded attributed evidence",
+    analyze.status === 201 && analyze.body.state === "active"
+      && analyze.body.evidence.actorId === "mission-explorer"
+      && analyze.body.evidence.revision === 2,
+    JSON.stringify(analyze.body));
+
+  const earlyBuild = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-build-early",
+    action: "progress",
+    stageId: "build",
+    state: "completed",
+    evidence: { evidenceId: "evidence-build-early", kind: "operation", opId: "op-build-too-early" },
+  }, explorer.headers);
+  check(results, "Build rejects an operation accepted before the stage became available",
+    earlyBuildOperation.status === 201 && earlyBuild.status === 409
+      && earlyBuild.body.code === "mission-operation-too-early",
+    JSON.stringify({ operation: earlyBuildOperation.body, evidence: earlyBuild.body }));
+
+  const fakeBuild = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-build-fake",
+    action: "progress",
+    stageId: "build",
+    state: "completed",
+    evidence: { evidenceId: "evidence-build-fake", kind: "operation", opId: "op-not-accepted" },
+  }, explorer.headers);
+  check(results, "a client completion claim cannot replace an accepted operation receipt",
+    fakeBuild.status === 410 && fakeBuild.body.code === "mission-operation-receipt-missing",
+    JSON.stringify(fakeBuild.body));
+
+  const wrongMemberOperation = await callEngine(engine, "POST", `/sessions/${sessionId}/ops`, {
+    opId: "op-wrong-member-build",
+    baseRevision: 2,
+    path: "spawn",
+    commands: [spawnCommand("wrong-member-artifact")],
+  }, relief.headers);
+  const wrongMemberBuild = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-build-wrong-member", action: "progress", stageId: "build", state: "completed",
+    evidence: { evidenceId: "evidence-build-wrong-member", kind: "operation", opId: "op-wrong-member-build" },
+  }, explorer.headers);
+  check(results, "Build rejects another member's otherwise-valid operation receipt",
+    wrongMemberOperation.status === 201 && wrongMemberBuild.status === 403
+      && wrongMemberBuild.body.code === "mission-operation-not-yours",
+    JSON.stringify(wrongMemberBuild.body));
+
+  const undoneOperation = await callEngine(engine, "POST", `/sessions/${sessionId}/ops`, {
+    opId: "op-undone-build",
+    baseRevision: 3,
+    path: "spawn",
+    commands: [spawnCommand("undone-build-artifact")],
+  }, explorer.headers);
+  const undoReceipt = await callEngine(engine, "POST",
+    `/sessions/${sessionId}/ops/op-undone-build/undo`, {}, explorer.headers);
+  const undoneBuild = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-build-undone", action: "progress", stageId: "build", state: "completed",
+    evidence: { evidenceId: "evidence-build-undone", kind: "operation", opId: "op-undone-build" },
+  }, explorer.headers);
+  check(results, "Build rejects an operation receipt whose authoritative change was undone",
+    undoneOperation.status === 201 && undoReceipt.status === 201 && undoneBuild.status === 409
+      && undoneBuild.body.code === "mission-operation-undone",
+    JSON.stringify({ undo: undoReceipt.body, evidence: undoneBuild.body }));
+
+  const buildOperation = await callEngine(engine, "POST", `/sessions/${sessionId}/ops`, {
+    opId: "op-mission-artifact",
+    baseRevision: 5,
+    path: "spawn",
+    commands: [spawnCommand("mission-artifact")],
+    intent: "Scout fabricates the calibration artifact",
+  }, explorer.headers);
+  const build = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-build-complete",
+    action: "progress",
+    stageId: "build",
+    state: "completed",
+    evidence: { evidenceId: "evidence-build", kind: "operation", opId: "op-mission-artifact" },
+  }, explorer.headers);
+  check(results, "build evidence is copied from the stable server operation receipt",
+    buildOperation.status === 201 && build.status === 201
+      && build.body.evidence.operation.opId === buildOperation.body.opId
+      && build.body.evidence.operation.seq === buildOperation.body.seq
+      && build.body.evidence.operation.revision === buildOperation.body.revision
+      && build.body.evidence.operation.intent === "Scout fabricates the calibration artifact"
+      && build.body.evidence.operation.touched.includes("mission-artifact")
+      && build.body.evidence.operation.outputs.some((output) =>
+        output.op === "spawn" && output.id === "mission-artifact")
+      && build.body.state === "blocked",
+    JSON.stringify({ operation: buildOperation.body, evidence: build.body.evidence }));
+
+  const offlineResume = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-resume-validator-offline", action: "resume",
+  }, ownerHeaders);
+  validatorStream = await openEngineStream(engine, sessionId, validator.headers);
+  const resumed = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-resume-validator-online", action: "resume",
+  }, ownerHeaders);
+  check(results, "a blocked mission cannot resume until every remaining assignee is live again",
+    offlineResume.status === 409 && offlineResume.body.code === "mission-assignee-offline"
+      && resumed.status === 201 && resumed.body.state === "active",
+    JSON.stringify({ offline: offlineResume.body, resumed: resumed.body }));
+
+  const failedValidation = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-validation-failed-outcome",
+    action: "progress",
+    stageId: "validate",
+    state: "completed",
+    evidence: { evidenceId: "evidence-validation-failed", kind: "validation", outcome: "failed", summary: "The artifact is not valid yet.", inspectedRevision: 6 },
+  }, validator.headers);
+  const staleValidation = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-validation-stale",
+    action: "progress",
+    stageId: "validate",
+    state: "completed",
+    evidence: { evidenceId: "evidence-validation-stale", kind: "validation", outcome: "passed", summary: "stale", inspectedRevision: 5 },
+  }, validator.headers);
+  // The scene store deliberately still supports direct whole-document and /changes writes.
+  // Advance that authority without touching the live-session cache: validation must refuse
+  // the stale split cut and make the validator resync before it can claim completion.
+  record = {
+    ...record,
+    revision: record.revision + 1,
+    definition: {
+      ...structuredClone(record.definition),
+      entities: [...record.definition.entities, spawnCommand("out-of-band-artifact").entity],
+    },
+    actor: "store-writer",
+    intent: "out-of-band authoritative change",
+  };
+  const outOfBandValidation = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-validation-out-of-band",
+    action: "progress",
+    stageId: "validate",
+    state: "completed",
+    evidence: { evidenceId: "evidence-validation-out-of-band", kind: "validation", outcome: "passed", summary: "cached cut", inspectedRevision: 6 },
+  }, validator.headers);
+  const externalResyncEvents = [explorerStream, validatorStream, reliefStream]
+    .map((stream) => engineEvents(stream, "resync"));
+  const externalResyncSeq = externalResyncEvents[0]?.[0]?.seq ?? null;
+  check(results, "out-of-band authority emits one retained document-resync barrier to every live peer",
+    externalResyncEvents.every((events) => events.length === 1
+      && events[0].reason === "external-revision" && events[0].revision === 7
+      && events[0].seq === externalResyncSeq && !("definition" in events[0])),
+    JSON.stringify(externalResyncEvents));
+  check(results, "validation refuses an out-of-band store revision until the session resyncs",
+    outOfBandValidation.status === 409
+      && outOfBandValidation.body.code === "mission-revision-conflict"
+      && outOfBandValidation.body.revision === 7
+      && outOfBandValidation.body.resync === `/sessions/${sessionId}/snapshot`,
+    JSON.stringify(outOfBandValidation.body));
+  const validationResync = await callEngine(engine, "GET", `/sessions/${sessionId}/snapshot`, undefined, validator.headers);
+  const validation = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-1/events`, {
+    eventId: "me-validation-complete",
+    action: "progress",
+    stageId: "validate",
+    state: "completed",
+    evidence: { evidenceId: "evidence-validation", kind: "validation", outcome: "passed", summary: "The artifact is present at the authoritative revision.", inspectedRevision: 7 },
+  }, validator.headers);
+  check(results, "validation refuses failed and stale claims before accepting current passed evidence",
+    failedValidation.status === 422 && failedValidation.body.code === "mission-validation-failed"
+      && staleValidation.status === 409 && staleValidation.body.code === "mission-revision-conflict"
+      && validationResync.status === 200 && validationResync.body.revision === 7
+      && validationResync.body.seq === externalResyncSeq
+      && validation.status === 201 && validation.body.state === "completed"
+      && validation.body.seq === externalResyncSeq + 1,
+    JSON.stringify({ failed: failedValidation.body, stale: staleValidation.body, accepted: validation.body }));
+
+  const completedSnapshot = await callEngine(engine, "GET", `/sessions/${sessionId}/snapshot`, undefined, ownerHeaders);
+  check(results, "mission snapshot, sequence and scene revision form one recovery cut",
+    completedSnapshot.status === 200 && completedSnapshot.body.missions.length === 1
+      && completedSnapshot.body.missions[0].status === "completed"
+      && completedSnapshot.body.missions[0].updatedSeq === validation.body.seq
+      && completedSnapshot.body.seq === validation.body.seq
+      && completedSnapshot.body.revision === 7
+      && completedSnapshot.body.definition.entities.some((entity) => entity.id === "mission-artifact")
+      && completedSnapshot.body.definition.entities.some((entity) => entity.id === "out-of-band-artifact"),
+    JSON.stringify({ seq: completedSnapshot.body.seq, revision: completedSnapshot.body.revision }));
+  check(results, "mission-only events never enter or revision the authored document",
+    record.revision === 7 && JSON.stringify(record.definition) !== documentBeforeMission
+      && !JSON.stringify(record.definition).includes("mission-1")
+      && !JSON.stringify(record.definition).includes("evidence-build"),
+    JSON.stringify({ revision: record.revision, ids: record.definition.entities.map((entity) => entity.id) }));
+
+  const postResyncOperation = await callEngine(engine, "POST", `/sessions/${sessionId}/ops`, {
+    opId: "op-after-external-resync",
+    baseRevision: completedSnapshot.body.revision,
+    commands: [spawnCommand("post-resync-authored")],
+    intent: "author only after the external cut is embodied",
+  }, ownerHeaders);
+  const postResyncSnapshot = await callEngine(engine, "GET", `/sessions/${sessionId}/snapshot`, undefined, ownerHeaders);
+  check(results, "the next authored operation extends the external cut instead of skipping its document",
+    postResyncOperation.status === 201 && postResyncOperation.body.baseRevision === 7
+      && postResyncOperation.body.seq === externalResyncSeq + 2
+      && postResyncSnapshot.body.revision === 8
+      && ["out-of-band-artifact", "post-resync-authored"].every((id) =>
+        postResyncSnapshot.body.definition.entities.some((entity) => entity.id === id)),
+    JSON.stringify({ operation: postResyncOperation.body, revision: postResyncSnapshot.body.revision }));
+
+  const secondStart = await callEngine(engine, "POST", `/sessions/${sessionId}/missions`, {
+    ...startBody, eventId: "me-start-2", missionId: "mission-2",
+  }, ownerHeaders);
+  await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-2/events`, {
+    eventId: "me-activate-2", action: "activate",
+  }, ownerHeaders);
+  const workingBody = {
+    eventId: "me-working-0", action: "progress", stageId: "analyze", state: "working", progress: 0.1,
+  };
+  const firstWorking = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-2/events`, workingBody, explorer.headers);
+  let throttled = null;
+  for (let index = 1; index < 30; index += 1) {
+    const response = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-2/events`, {
+      ...workingBody, eventId: `me-working-${index}`,
+    }, explorer.headers);
+    if (response.status === 429) { throttled = response; break; }
+  }
+  const duplicateAfterThrottle = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-2/events`, workingBody, explorer.headers);
+  check(results, "mission events have a separate deterministic member rate bound with free exact retries",
+    secondStart.status === 201 && firstWorking.status === 201
+      && throttled?.body.code === "mission-event-rate-limit"
+      && duplicateAfterThrottle.status === 200 && duplicateAfterThrottle.body.duplicate === true,
+    JSON.stringify({ throttled: throttled?.body, duplicate: duplicateAfterThrottle.body }));
+
+  const revoked = await callEngine(engine, "DELETE",
+    `/sessions/${sessionId}/members/${explorer.member.memberId}`, undefined, ownerHeaders);
+  const afterRevocation = await callEngine(engine, "GET", `/sessions/${sessionId}/snapshot`, undefined, ownerHeaders);
+  const interrupted = afterRevocation.body.missions.find((mission) => mission.missionId === "mission-2");
+  const revokedProgress = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-2/events`, {
+    eventId: "me-after-revocation", action: "progress", stageId: "analyze", state: "working", progress: 0.2,
+  }, explorer.headers);
+  check(results, "revocation interrupts every incomplete assignment and removes mission authority",
+    revoked.status === 200 && interrupted.status === "blocked"
+      && interrupted.stages[0].status === "interrupted"
+      && interrupted.stages[1].status === "interrupted"
+      && revokedProgress.status === 401,
+    JSON.stringify({ revoked: revoked.status, mission: interrupted, progress: revokedProgress.status }));
+
+  const deadResume = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-2/events`, {
+    eventId: "me-resume-dead", action: "resume",
+  }, ownerHeaders);
+  const reassignAnalyze = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-2/events`, {
+    eventId: "me-reassign-analyze", action: "assign", stageId: "analyze", memberId: relief.member.memberId,
+  }, ownerHeaders);
+  const reassignBuild = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-2/events`, {
+    eventId: "me-reassign-build", action: "assign", stageId: "build", memberId: relief.member.memberId,
+  }, ownerHeaders);
+  const resumeAfterReassignment = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-2/events`, {
+    eventId: "me-resume-reassigned", action: "resume",
+  }, ownerHeaders);
+  check(results, "resume re-resolves dead assignments and succeeds only after online reassignment",
+    deadResume.status === 404 && deadResume.body.code === "mission-member-unavailable"
+      && reassignAnalyze.status === 201 && reassignBuild.status === 201
+      && resumeAfterReassignment.status === 201 && resumeAfterReassignment.body.state === "active",
+    JSON.stringify({ dead: deadResume.body, analyze: reassignAnalyze.status, build: reassignBuild.status }));
+
+  const cancelled = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-2/events`, {
+    eventId: "me-cancel-2", action: "cancel",
+  }, ownerHeaders);
+  const cancelledSnapshot = await callEngine(engine, "GET", `/sessions/${sessionId}/snapshot`, undefined, ownerHeaders);
+  const cancelledMission = cancelledSnapshot.body.missions.find((mission) => mission.missionId === "mission-2");
+  check(results, "cancellation makes every unfinished stage terminal in the authoritative cut",
+    cancelled.status === 201 && cancelled.body.state === "cancelled"
+      && cancelledMission.status === "cancelled"
+      && cancelledMission.stages.every((stage) => stage.status === "cancelled")
+      && cancelledSnapshot.body.seq === cancelled.body.seq,
+    JSON.stringify(cancelledMission));
+
+  // Keep the in-memory handles referenced through the end of the fixture; closeAll performs
+  // the same idempotent subscriber cleanup used by the real server.
+  void explorerStream;
+  void validatorStream;
+  void reliefStream;
+  await engine.closeAll();
+};
+
+/** An AgentX member cannot consume the owner's terminal mission-control capacity. */
+const proveMissionCapacity = async () => {
+  let clock = 50_000;
+  let record = { name: "mission-capacity", revision: 1, definition: seedDefinition("mission-capacity") };
+  const store = {
+    async get() { return structuredClone(record); },
+    async put(name, definition, expectedRevision) {
+      if (expectedRevision !== record.revision) throw Object.assign(new Error("capacity conflict"), { status: 409 });
+      record = { name, revision: record.revision + 1, definition: structuredClone(definition) };
+      return { name, revision: record.revision };
+    },
+  };
+  const engine = createLiveSessions({
+    store, guard: { enabled: true, authorized: () => true, originAllowed: () => true }, now: () => clock,
+  });
+  const created = await callEngine(engine, "POST", "/sessions", {
+    sceneName: "mission-capacity", owner: { id: "capacity-owner", label: "Capacity owner" },
+  });
+  const sessionId = created.body.session.sessionId;
+  const ownerHeaders = { "x-graphysx-session": created.body.credential };
+  const joinAgent = async (actorId) => {
+    const invitation = await callEngine(engine, "POST", `/sessions/${sessionId}/invites`, {
+      role: "agent", capabilities: ["mission:explore", "mission:build", "mission:validate"],
+    }, ownerHeaders);
+    const joined = await callEngine(engine, "POST", `/sessions/${sessionId}/join`, {
+      code: invitation.body.code, actor: { id: actorId, label: actorId, kind: "agent" },
+    });
+    return { ...joined.body, headers: { "x-graphysx-session": joined.body.credential } };
+  };
+  const agents = await Promise.all(["capacity-a", "capacity-b", "capacity-c"].map(joinAgent));
+  const streams = await Promise.all(agents.map((agent) => openEngineStream(engine, sessionId, agent.headers)));
+  const started = await callEngine(engine, "POST", `/sessions/${sessionId}/missions`, {
+    eventId: "me-capacity-start", missionId: "mission-capacity", templateId: "agentx-center-artifact-v1",
+    assignments: [
+      { stageId: "analyze", memberId: agents[0].member.memberId },
+      { stageId: "build", memberId: agents[0].member.memberId },
+      { stageId: "validate", memberId: agents[1].member.memberId },
+    ],
+  }, ownerHeaders);
+  const activated = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-capacity/events`, {
+    eventId: "me-capacity-activate", action: "activate",
+  }, ownerHeaders);
+  const fillMember = async (agent, prefix, limit = 80) => {
+    const accepted = [];
+    let refused = null;
+    for (let index = 0; index < limit; index += 1) {
+      clock += 250;
+      const body = { eventId: `me-${prefix}-${index}`, action: "progress", stageId: "analyze", state: "working", progress: 0.1 };
+      const response = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-capacity/events`, body, agent.headers);
+      if (response.status === 201) accepted.push({ body, response });
+      else { refused = response; break; }
+    }
+    return { accepted, refused };
+  };
+  const first = await fillMember(agents[0], "capacity-a");
+  const duplicateFirst = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-capacity/events`,
+    first.accepted.at(-1).body, agents[0].headers);
+  check(results, "one AgentX member has a hard accepted-event cap with free exact retries",
+    started.status === 201 && activated.status === 201 && first.accepted.length === 64
+      && first.refused?.status === 429 && first.refused.body.code === "mission-member-event-limit"
+      && duplicateFirst.status === 200 && duplicateFirst.body.duplicate === true,
+    JSON.stringify({ accepted: first.accepted.length, refused: first.refused?.body, duplicate: duplicateFirst.status }));
+
+  clock += 1_000;
+  await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-capacity/events`, {
+    eventId: "me-capacity-assign-b", action: "assign", stageId: "analyze", memberId: agents[1].member.memberId,
+  }, ownerHeaders);
+  const second = await fillMember(agents[1], "capacity-b");
+  clock += 1_000;
+  await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-capacity/events`, {
+    eventId: "me-capacity-assign-c", action: "assign", stageId: "analyze", memberId: agents[2].member.memberId,
+  }, ownerHeaders);
+  const third = await fillMember(agents[2], "capacity-c");
+  const duplicateThird = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-capacity/events`,
+    third.accepted.at(-1).body, agents[2].headers);
+  clock += 1_000;
+  const cancelled = await callEngine(engine, "POST", `/sessions/${sessionId}/missions/mission-capacity/events`, {
+    eventId: "me-capacity-owner-cancel", action: "cancel",
+  }, ownerHeaders);
+  check(results, "non-owner saturation preserves a reserved owner terminal-control budget",
+    second.accepted.length === 64 && third.accepted.length === 44
+      && third.refused?.status === 429 && third.refused.body.code === "mission-event-owner-reserve"
+      && duplicateThird.status === 200 && duplicateThird.body.duplicate === true
+      && cancelled.status === 201 && cancelled.body.state === "cancelled",
+    JSON.stringify({ second: second.accepted.length, third: third.accepted.length, refused: third.refused?.body, cancelled: cancelled.body }));
+  for (const stream of streams) stream.close();
+  await engine.closeAll();
+};
+
 try {
   await proveAtomicSnapshotCut();
+  await proveMissionProtocol();
+  await proveMissionCapacity();
   await proveTicketBounds();
   await proveSerializedClose();
   dir = await mkdtemp(path.join(tmpdir(), "graphysx-live-"));
@@ -256,6 +818,91 @@ try {
 
   const health = JSON.parse((await requestText(`${base}/health`)).text);
   check(results, "health reports live sessions enabled", health.sessions?.enabled === true, JSON.stringify(health.sessions));
+
+  // A retained event after only non-retained presence gaps remains honestly replayable.
+  // This is the exact case the old oldest-sequence check misclassified as mustResync.
+  const gapFounder = createActor(base, { storeToken: TOKEN });
+  const gapCreated = await gapFounder.call("POST", "/sessions", {
+    sceneName: SCENE, owner: { id: "gap-owner", label: "Gap owner" },
+  });
+  const gapSessionId = gapCreated.body.session.sessionId;
+  const gapOwner = createActor(base, { credential: gapCreated.body.credential });
+  await gapOwner.connect(gapSessionId);
+  const beforePresenceGap = gapOwner.lastSeq;
+  await gapOwner.disconnect();
+  const gapMission = await gapOwner.call("POST", `/sessions/${gapSessionId}/missions`, {
+    eventId: "me-gap-start",
+    missionId: "mission-gap",
+    templateId: "agentx-center-artifact-v1",
+    assignments: [],
+  });
+  const gapHello = await gapOwner.connect(gapSessionId, { since: beforePresenceGap });
+  await gapOwner.waitFor((received) => received.missions.some((event) => event.eventId === "me-gap-start"), {
+    label: "mission replay after presence-only gap",
+  });
+  check(results, "presence-only sequence gaps do not force an unnecessary resync",
+    gapMission.status === 201 && gapHello.resumed === true && gapHello.mustResync === false,
+    JSON.stringify(gapHello));
+  check(results, "a retained mission event replays across the presence-only gap exactly once",
+    gapOwner.received.missions.filter((event) => event.eventId === "me-gap-start").length === 1,
+    JSON.stringify(gapOwner.received.missions));
+
+  await gapOwner.call("POST", `/sessions/${gapSessionId}/missions/mission-gap/events`, {
+    eventId: "me-gap-cancel", action: "cancel",
+  });
+  const disconnectInvite = await gapOwner.call("POST", `/sessions/${gapSessionId}/invites`, {
+    role: "agent",
+    capabilities: ["mission:explore", "mission:build", "mission:validate"],
+  });
+  const disconnectJoin = await createActor(base).call("POST", `/sessions/${gapSessionId}/join`, {
+    code: disconnectInvite.body.code,
+    actor: { id: "disconnect-agent", label: "Disconnect agent", kind: "agent" },
+  });
+  const disconnectMemberId = disconnectJoin.body.member.memberId;
+  const supportInvite = await gapOwner.call("POST", `/sessions/${gapSessionId}/invites`, {
+    role: "agent",
+    capabilities: ["mission:validate"],
+  });
+  const supportJoin = await createActor(base).call("POST", `/sessions/${gapSessionId}/join`, {
+    code: supportInvite.body.code,
+    actor: { id: "disconnect-support", label: "Disconnect support", kind: "agent" },
+  });
+  const disconnectAgent = createActor(base, { credential: disconnectJoin.body.credential });
+  const supportAgent = createActor(base, { credential: supportJoin.body.credential });
+  await disconnectAgent.connect(gapSessionId);
+  await supportAgent.connect(gapSessionId);
+  await gapOwner.call("POST", `/sessions/${gapSessionId}/missions`, {
+    eventId: "me-disconnect-start",
+    missionId: "mission-disconnect",
+    templateId: "agentx-center-artifact-v1",
+    assignments: [
+      { stageId: "analyze", memberId: disconnectMemberId },
+      { stageId: "build", memberId: disconnectMemberId },
+      { stageId: "validate", memberId: supportJoin.body.member.memberId },
+    ],
+  });
+  const disconnectActivation = await gapOwner.call(
+    "POST", `/sessions/${gapSessionId}/missions/mission-disconnect/events`,
+    { eventId: "me-disconnect-activate", action: "activate" },
+  );
+  if (disconnectActivation.status !== 201) {
+    throw new Error(`disconnect mission activation failed: ${JSON.stringify(disconnectActivation.body)}`);
+  }
+  await disconnectAgent.disconnect();
+  await gapOwner.waitFor((received) => received.missions.some((event) =>
+    event.missionId === "mission-disconnect" && event.action === "interrupt" && event.reason === "disconnected"), {
+    label: "server-authored mission interruption after disconnect",
+  });
+  const disconnectEvent = gapOwner.received.missions.findLast((event) =>
+    event.missionId === "mission-disconnect" && event.action === "interrupt");
+  check(results, "an assigned AgentX disconnect becomes one retained interrupted mission state",
+    disconnectEvent?.mission.status === "blocked"
+      && disconnectEvent.mission.stages[0].status === "interrupted"
+      && disconnectEvent.reason === "disconnected",
+    JSON.stringify(disconnectEvent));
+
+  await gapOwner.call("DELETE", `/sessions/${gapSessionId}`);
+  await gapOwner.disconnect();
 
   // --- 1. session lifecycle ------------------------------------------------------------
 
@@ -295,6 +942,9 @@ try {
   check(results, "agent invitation without capabilities -> 400", unscopedAgent.status === 400, `status ${unscopedAgent.status}`);
   const ownerInvite = await owner.call("POST", `/sessions/${sessionId}/invites`, { role: "owner", ttlSeconds: 300 });
   check(results, "an invitation cannot grant ownership", ownerInvite.status === 400, `status ${ownerInvite.status}`);
+  const inheritedRoleInvite = await owner.call("POST", `/sessions/${sessionId}/invites`, { role: "toString", ttlSeconds: 300 });
+  check(results, "inherited object properties are not accepted as invitation roles",
+    inheritedRoleInvite.status === 400, `status ${inheritedRoleInvite.status}`);
 
   // An editor may not mint invitations — checked after they join, below.
 

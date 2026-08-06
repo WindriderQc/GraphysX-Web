@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import { applyCommands, SceneCommandError } from "../server/scene-commands.mjs";
+import {
+  HOST_ONLY_ENTITY_ID_PREFIXES,
+  assertAuthoredSceneCommandNamespaces,
+  assertAuthoredWorldEntityNamespaces,
+} from "../server/host-entity-id-policy.mjs";
 
 const results = [];
 
@@ -108,6 +113,36 @@ function rejectWithoutMutation(name, commands) {
   rejectDefinitionWithoutMutation(name, base, commands);
 }
 
+function rejectSharedValueWithoutMutation(name, value, assertion) {
+  const before = JSON.stringify(value);
+  let error = null;
+  try {
+    assertion(value);
+  } catch (caught) {
+    error = caught;
+  }
+  check(`${name} is rejected by the shared authored namespace policy`,
+    error instanceof Error && error.message.includes("host-only entity namespace"), String(error));
+  check(`${name} leaves its input byte-identical`, JSON.stringify(value) === before);
+}
+
+function rejectHostNamespaceDefinitionWithoutMutation(name, definition, commands) {
+  const before = JSON.stringify(definition);
+  let error = null;
+  try {
+    applyCommands(definition, commands);
+  } catch (caught) {
+    error = caught;
+  }
+  check(`${name} is rejected`,
+    error instanceof SceneCommandError && error.message.includes("host-only entity namespace"), String(error));
+  check(`${name} leaves the original definition byte-identical`, JSON.stringify(definition) === before);
+}
+
+function rejectHostNamespaceWithoutMutation(name, commands) {
+  rejectHostNamespaceDefinitionWithoutMutation(name, base, commands);
+}
+
 rejectWithoutMutation("unsupported entity type", [
   { op: "spawn", entity: { id: "hostile-type", type: "totally-not-an-entity" } },
 ]);
@@ -120,6 +155,90 @@ rejectWithoutMutation("missing stable behavior id", [
 rejectWithoutMutation("missing stable interaction id", [
   { op: "update", id: "anchor", patch: { interactions: [{ type: "toggle-visibility", targetIds: ["root"] }] } },
 ]);
+
+for (const prefix of HOST_ONLY_ENTITY_ID_PREFIXES) {
+  rejectHostNamespaceWithoutMutation(`host-only entity prefix ${prefix}`, [
+    { op: "spawn", entity: { id: `${prefix}authored-collision`, type: "box" } },
+  ]);
+}
+rejectHostNamespaceWithoutMutation("whitespace-normalized host-only entity prefix", [
+  { op: "spawn", entity: { id: "  live-agent:trimmed-collision  ", type: "box" } },
+]);
+rejectHostNamespaceWithoutMutation("host-only update target", [
+  { op: "update", id: "live-mission:board", patch: { visible: false } },
+]);
+rejectHostNamespaceWithoutMutation("host-only parent reference", [
+  { op: "spawn", entity: { id: "reserved-parent-child", type: "box", parentId: "live-agent:remote" } },
+]);
+rejectHostNamespaceWithoutMutation("host-only steering reference", [
+  { op: "update", id: "driver", patch: { steering: { arrowId: "live-nestor:signal-ring" } } },
+]);
+rejectHostNamespaceWithoutMutation("host-only look-at reference", [
+  {
+    op: "spawn",
+    entity: {
+      id: "reserved-look-at",
+      type: "box",
+      behaviors: [{ id: "reserved-look", type: "look-at", targetId: "live-agent:remote" }],
+    },
+  },
+]);
+rejectHostNamespaceWithoutMutation("host-only spline reference", [
+  {
+    op: "spawn",
+    entity: {
+      id: "reserved-spline-follower",
+      type: "box",
+      behaviors: [{ id: "reserved-follow", type: "follow-spline", splineId: "live-mission:path" }],
+    },
+  },
+]);
+rejectHostNamespaceWithoutMutation("host-only interaction reference", [
+  {
+    op: "update",
+    id: "anchor",
+    patch: { interactions: [{ id: "reserved-target", type: "toggle-visibility", targetIds: ["live-nestor:signal-aura"] }] },
+  },
+]);
+rejectHostNamespaceDefinitionWithoutMutation("host-only entity id in an incoming document", {
+  ...base,
+  entities: [...base.entities, { id: "live-mission:loaded-board", type: "group" }],
+}, [{ op: "set-environment", environment: { background: "#101820" } }]);
+rejectHostNamespaceDefinitionWithoutMutation("whitespace-normalized host-only id in an incoming document", {
+  ...base,
+  entities: [...base.entities, { id: "  live-nestor:loaded-effect  ", type: "torus" }],
+}, [{ op: "set-environment", environment: { background: "#101820" } }]);
+rejectHostNamespaceDefinitionWithoutMutation("host-only joint body reference", {
+  ...base,
+  joints: [{ id: "reserved-joint", type: "fixed", bodyA: "dynamic-ball", bodyB: "live-agent:remote" }],
+}, [{ op: "set-environment", environment: { background: "#101820" } }]);
+rejectHostNamespaceDefinitionWithoutMutation("host-only rules subject reference", {
+  ...base,
+  rules: {
+    schema: "graphysx.agent-rules/v1",
+    subjectId: "live-agent:remote",
+    finish: { triggerId: "anchor" },
+  },
+}, [{ op: "set-environment", environment: { background: "#101820" } }]);
+
+rejectSharedValueWithoutMutation("local prefab host-only id prefix", {
+  op: "spawn-prefab",
+  prefabId: "signal-beacon",
+  options: { idPrefix: "live-agent:prefab" },
+}, assertAuthoredSceneCommandNamespaces);
+for (const prefix of HOST_ONLY_ENTITY_ID_PREFIXES) {
+  const generatedPrefix = prefix.slice(0, -1);
+  rejectSharedValueWithoutMutation(`local prefab-generated host-only id prefix ${generatedPrefix}`, {
+    op: "spawn-prefab",
+    prefabId: "signal-beacon",
+    options: { idPrefix: generatedPrefix },
+  }, assertAuthoredSceneCommandNamespaces);
+}
+rejectSharedValueWithoutMutation("local whole-document host-only id", {
+  ...base,
+  entities: [...base.entities, { id: "live-nestor:loaded-effect", type: "torus" }],
+}, assertAuthoredWorldEntityNamespaces);
+
 rejectWithoutMutation("non-finite transform", [
   { op: "spawn", entity: { id: "nan-box", type: "box", transform: { position: [0, Number.NaN, 0] } } },
 ]);
