@@ -2991,3 +2991,69 @@ GitHub gate, production deployment, and exact live-SHA verification follow next.
   Windows harness socket exhaustion, renderer-registration nondeterminism, and the final render-call
   overage. Commit, push, the clean GitHub production gate, deployment, and exact production-SHA
   verification follow next.
+
+## 2026-08-06 — peer-review follow-up (`review-bounds-r1`)
+
+An external review of the whole project. The full findings and the reasoning behind each
+decision are in the commits; what follows is the record, plus two resolved defects that had
+only ever been written down as strikethroughs in `HANDOFF.md` and would otherwise have been
+lost when that file was rewritten as a current-state document.
+
+### Preserved from the old HANDOFF defect register
+
+- **Spheres landing within ~0.1 units of a heightfield cell seam got a lateral kick.** Fixed by
+  the Rapier migration. The legacy solver represented cells as closed triangular prisms, so a
+  penetrating sphere could catch a neighbouring rim and receive a tilted contact normal. Rapier
+  heightfields use `FIX_INTERNAL_EDGES`, and the deterministic seam probe guards against that
+  lateral impulse on a perfectly flat field.
+- **Water read grey at grazing angles.** Fixed in `agent-world-water.ts`: Fresnel `rf0` as a
+  uniform defaulting to the physical 0.02, distance tint attenuation, adjustable sun specular.
+  Screenshot-verified at a deliberately grazing camera (1.6 units over a 240-unit sea): the
+  surface mirrors the actual skyline, the near field tints, no pale wash. The "still mirrors a
+  pale sky" tail of the original entry described the pre-tint state.
+
+Also resolved, and already recorded above in their own entries: the bounded `rename` retry in
+`scene-store.mjs`, evolutionary/DNA entities (`dna-r2`), crowds (`crowd-r1`), the editor
+Prefabs tab, audio (`audio-r1`/`r2`), CubX recovered geometry (`cubx-r1`), and the uncaught
+error on a runtime rollback with an attached gizmo (`13aba57`).
+
+### What this pass changed
+
+- **Retention is bounded in bytes, not only in events.** A retained live-session operation
+  carries its raw commands *and* the inverse computed from the pre-state, so the 512-event ring
+  was bounded only by the per-request cap times 512 — gigabytes per session, reachable by any
+  member holding `mutate`, inside the ordinary refill rate, with no single request ever
+  exceeding a limit. `opLogBytes` bounds what survives. The scene store's relay had the same
+  shape and gained the same budget plus an idle sweep; its backlog map was keyed by scene name
+  and never pruned. The security smoke asserts it through `mustResync`, and was verified failing
+  without the fix.
+- **SSE broadcast honours backpressure.** `response.write()`'s return value was discarded, so a
+  subscriber that stopped reading — never reported by TCP as a close — accumulated every
+  subsequent broadcast in the process. Measured: a stalled reader took a `ServerResponse` to
+  3.5 MB of buffered output in 1.5 seconds. The threshold is `opLogBytes`, and that identity is
+  the argument.
+- **Public ids no longer reach the filesystem.** `:` is legal in a scene name and opens an
+  alternate data stream on NTFS; reproduced as an `EINVAL` rename plus a stray zero-byte file,
+  against a request that succeeds on Linux. `server/store-paths.mjs` encodes both stores' path
+  segments. Not a migration — every ordinary name still encodes to itself.
+- **`npm test`: 92 unit checks, `node:test`, no dependency, under a second.** The first fast
+  feedback loop this project has had. It covers the pure logic that was previously reachable
+  only over HTTP: inverse operations, the mission reducer, ghost validation, leaderboard
+  ordering, store path encoding, and the gate's own retry classifier. Writing them found that
+  `computeInverseCommands` and `touchedEntityIds` were nested inside the session factory despite
+  being pure. The smokes are unchanged; this is additive.
+- **`npm run lint`: ESLint, 17 findings across 79k lines.** Two real floating promises fixed, a
+  disable directive for a rule no config had ever enabled removed. `no-misused-promises` and
+  `require-atomic-updates` are deliberately off, with the reasoning in `eslint.config.mjs`.
+- **The verify gate no longer retries silently.** It retried *any* failed smoke once and printed
+  a bare `PASS`, so a check failing half the time passed the gate three runs in four — the same
+  outcome as weakening its assertion. The retry now fires only on a transport signature, never
+  on a deadline kill or an assertion failure, the summary says `PASS (retried: …)`, and more
+  than `VERIFY_MAX_RETRIES` (3) retries fails the run.
+- **Asset store**: uploads stream to disk instead of buffering up to 192 MB, the manifest is
+  cached against its own mtime instead of re-parsed per file GET, served uploads carry
+  `nosniff`, and the decision not to `realpath` datalake symlinks is now written down.
+- **`patches/` removed** — 27 MB of transfer artifacts duplicating content already in history
+  and in `public/`, including a 12.4 MB patch that base64-encoded the BallZ18 sky PNGs. All 24
+  patch subjects were checked against history first; all 24 were already there. The objects
+  remain in the pack, so this reclaims checkout size, not `.git` size.

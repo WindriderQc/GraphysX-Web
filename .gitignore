@@ -4,6 +4,14 @@ output/
 .playwright-cli/
 # Explicit local handoff scratch; never commit transfer artifacts.
 _to_delete/
+# Bundles and patch series used to move work between checkouts. `patches/` held 27 MB of
+# these — including a 12.4 MB patch that base64-encoded the BallZ18 sky PNGs, which are also
+# in public/ and also in the commits the patch series reproduced. Every one of its 24 patches
+# was checked against history before removal; all 24 were already there. Transfer artifacts
+# are a delivery mechanism, not source, and git already stores the thing they were carrying.
+patches/
+*.patch
+*.bundle
 # Local scene-store data: scenes are content, not source.
 .graphysx-store/
 *.log

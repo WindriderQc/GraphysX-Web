@@ -1122,9 +1122,17 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       });
     }
     if (session.missionApplied.size >= LIMITS.missionEventsPerSession) {
-      throw httpError("This session has reached its mission event limit", 429, {
-        code: "mission-event-limit",
-      });
+      // Naming the remedy, because this is the one limit here that does not clear on its own.
+      // The ledger is retained for the session's whole lifetime by design — that is what lets
+      // a retried event keep returning its original receipt instead of applying twice — so
+      // waiting does not help and the honest answer is a new session.
+      throw httpError(
+        "This session has reached its mission event limit. The ledger is kept for the whole "
+        + "session so retries stay idempotent, so this does not recover with time — close "
+        + "this session and open a new one.",
+        429,
+        { code: "mission-event-limit" },
+      );
     }
   }
 
