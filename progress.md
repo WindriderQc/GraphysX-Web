@@ -3096,3 +3096,23 @@ error on a runtime rollback with an attached gizmo (`13aba57`).
 - Slice 3 remains complete in `docs/AGENTX_ROADMAP.md`; Slice 4, Guided Co-authoring, is the next
   cohesive AgentX milestone. Commit, clean CI deployment, and exact production-SHA proof follow
   this release-candidate record.
+
+## 2026-08-06 — Clean-Linux release gate corrections
+
+- The first exact-SHA workflow exposed an npm 10 lockfile compatibility gap before any
+  project test ran: `@emnapi/core`, `@emnapi/runtime`, and `@emnapi/wasi-threads` peer entries
+  were absent. The lockfile was regenerated with npm 10 and then proved by isolated clean
+  installs under both npm 10 and npm 11 (133 packages each, install scripts disabled).
+- The replacement clean Linux run crossed `npm ci` and then found two harness assumptions.
+  `ubuntu-latest` exposes four CPUs, so the product legitimately selected `balanced` while the
+  mission budget smoke waited for `high`; the two real tabs now pin the same 16-core / 8 GiB
+  test device as the established render-profile probe. Separately, the old stalled-reader
+  burst fit inside Linux's TCP receive/send windows before the 4 MiB server guard; the fixture
+  now crosses the finite combined envelope while its healthy-reader control remains identical.
+- No product selector, stream limit, performance budget, browser-error assertion, or retry
+  allowance changed. Focused evidence: security 59/59; unit suite 113 total / 112 passed / one
+  expected Windows skip; syntax, full lint, and diff checks clean; render-profile probe green.
+  The combined live browser gate is 131/131 with zero console/page/request failures. High
+  baseline → active: 196.50 → 212.00 calls/frame (+7.89%) and 122,217 → 130,214 triangles/frame
+  (+6.54%). Mobile: 82.13 → 78.83 calls/frame (-4.02%) and 41,969 → 42,395 triangles/frame
+  (+1.02%).

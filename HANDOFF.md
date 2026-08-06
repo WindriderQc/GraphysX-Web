@@ -104,6 +104,16 @@ belongs in `scripts/`.
   `Content-Length` (reset on the largest chunk), and servers not setting `keepAliveTimeout`, so
   undici reused sockets Node had closed after 5s. These signatures are exactly what the gate's
   retry classifier matches.
+- **The live mission render-budget smoke pins its test-device hardware signals.** The product
+  correctly selects `balanced` on GitHub's four-vCPU runner, while that smoke deliberately
+  compares the `high` and `mobile` budgets. Its pre-navigation harness therefore reports 16
+  cores / 8 GiB, exactly like `probe-render-profiles.mjs`; do not remove the pin or change the
+  product selector to make the test environment fit the assertion.
+- **The stalled-reader security burst is intentionally about 19 MiB.** A clean Linux runner
+  can absorb roughly 6 MiB in receive buffering plus 4 MiB in send buffering before the
+  server's own 4 MiB retained-stream guard becomes observable. Fifteen maximal entities over
+  38 operations crosses that finite envelope, and the healthy-reader control consumes the
+  identical burst; seed + burst + final control operation exactly fits the 40-operation bucket.
 - **A wedged run used to hang forever.** `runSmoke` awaited `close` with nothing bounding it, and
   two verify parents were found alive **9.5 and 7.7 hours** after launch holding Chromium trees.
   There are now deadlines (10 min/smoke, 15 for the live browser contract, 10 min/build; all

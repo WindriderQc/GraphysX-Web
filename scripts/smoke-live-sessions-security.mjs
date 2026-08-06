@@ -340,7 +340,7 @@ try {
   //
   // Asserted through the contract rather than through internals: when the ring evicts, a
   // client resuming from before the eviction is told `mustResync` instead of being handed a
-  // partial story. Sixteen operations is far under the 512-event bound, so if this resyncs,
+  // partial story. Thirty-eight operations is far under the 512-event bound, so if this resyncs,
   // the byte budget is the only thing that can have evicted.
 
   const retentionCreate = await founder.call("POST", "/sessions", {
@@ -354,8 +354,11 @@ try {
   // document small while making each operation's inverse a full clone of the tags it
   // replaced. That inverse is the half of the retained cost a count bound cannot see.
   const fatTags = (salt) => Array.from({ length: 128 }, (_, index) => `${salt}-${index}-`.padEnd(128, "t").slice(0, 128));
-  const FAT_ENTITIES = 12;
-  const FAT_OPS = 16;
+  // Cross Linux CI's combined receive/send socket windows before reaching the server's
+  // own 4 MiB retained-stream cap. Seed + burst + the healthy-reader final op still fits
+  // exactly within the existing 40-operation owner bucket.
+  const FAT_ENTITIES = 15;
+  const FAT_OPS = 38;
 
   await retentionOwner.call("POST", `/sessions/${retentionId}/ops`, {
     opId: "retention-seed",

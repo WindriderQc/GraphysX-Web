@@ -688,6 +688,11 @@ try {
     // EventSource is an EventTarget, so redispatching the captured server payload exercises
     // the real registered client listener rather than a test-only operation path.
     await page.addInitScript(() => {
+      // Render-budget sampling needs a deterministic capable-desktop baseline. GitHub's
+      // four-core runner otherwise selects the product's legitimate balanced profile,
+      // making the later high/mobile comparison impossible rather than merely slower.
+      Object.defineProperty(navigator, "hardwareConcurrency", { configurable: true, get: () => 16 });
+      Object.defineProperty(navigator, "deviceMemory", { configurable: true, get: () => 8 });
       const nativeFetch = window.fetch.bind(window);
       let snapshotHoldSerial = 0;
       const snapshotHolds = new Map();
