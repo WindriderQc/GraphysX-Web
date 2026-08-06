@@ -192,6 +192,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
   let missions: LiveMissionView[] = [];
   let lastError: string | null = null;
   let source: EventSource | null = null;
+  const retiredStreams = new Set<EventSource>();
   // Invalidates callbacks (and ticket requests) retained by a stream we deliberately
   // detached. `EventSource.close()` stops future network delivery, but a message already
   // queued on the browser task queue can otherwise still run after a snapshot load starts.
@@ -426,11 +427,21 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
   const hasAuthority = (epoch: number, targetSessionId: string): boolean =>
     !closed && authorityEpoch === epoch && sessionId === targetSessionId;
 
-  const detachStream = (): void => {
+  const closeRetiredStreams = (): void => {
+    const pending = [...retiredStreams];
+    retiredStreams.clear();
+    for (const retired of pending) retired.close();
+  };
+
+  const retireActiveStream = (): void => {
     streamEpoch += 1;
-    const active = source;
+    if (source) retiredStreams.add(source);
     source = null;
-    active?.close();
+  };
+
+  const detachStream = (): void => {
+    retireActiveStream();
+    closeRetiredStreams();
   };
 
   type LiveSessionTerminal = {
@@ -581,14 +592,28 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
   };
 
   /** Claim authority synchronously, before join/attach performs its first network await. */
-  const beginAuthority = (targetSessionId: string, nextCredential: string | null): number => {
+  const beginAuthority = (
+    targetSessionId: string,
+    nextCredential: string | null,
+  ): { authority: number; finishStreamHandoff: () => void } => {
     authorityEpoch += 1;
+    const claimedAuthority = authorityEpoch;
     closed = false;
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
-    detachStream();
+    // Invalidate the old stream synchronously so none of its callbacks can cross the
+    // authority barrier. Keep its transport alive until the first request and snapshot
+    // for the new authority finish: closing EventSource immediately before fetch can
+    // strand that fetch behind the browser's connection teardown on Windows.
+    retireActiveStream();
+    const finishStreamHandoff = (): void => {
+      // A superseded request cannot tear down the transport retained by its successor.
+      // The newest authority closes every retired stream once its snapshot is settled.
+      if (!hasAuthority(claimedAuthority, targetSessionId)) return;
+      closeRetiredStreams();
+    };
     credential = nextCredential;
     sessionId = targetSessionId;
     sceneName = null;
@@ -623,7 +648,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     // This announcement is the authority barrier used by the product shell: local canvas,
     // Editor, Games, Browse and SceneBrowser are disabled before the request can yield.
     announce();
-    return authorityEpoch;
+    return { authority: claimedAuthority, finishStreamHandoff };
   };
 
   async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -925,13 +950,23 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
   /**
    * Whole-document recovery. Used on join, and whenever continuity cannot be proved.
    *
-   * A connected resync first detaches the stream, then reconnects from the snapshot's
-   * exact sequence. That turns operations racing the fetch/load into one of two honest
-   * outcomes: they are already represented by the atomic snapshot, or their retained SSE
-   * events replay after it. In particular, no event can be applied to the old runtime,
-   * overwritten by `api.load`, and still advance `seq` far enough to suppress its replay.
+   * A connected resync invalidates the old stream's callbacks immediately, retains its
+   * transport through the atomic snapshot request, then lets only the current authority close
+   * it and reconnect from the snapshot's exact sequence. That turns operations racing the
+   * fetch/load into one of two honest outcomes: they are already represented by the snapshot,
+   * or their retained SSE events replay after it. In particular, no event can be applied to the
+   * old runtime, overwritten by `api.load`, and still advance `seq` enough to suppress replay.
    */
-  function resyncWithStreamPolicy(resumeStream: boolean): Promise<number> {
+  function resyncWithStreamPolicy(
+    resumeStream: boolean,
+    captureSnapshot?: (snapshot: {
+      revision: number;
+      seq: number;
+      definition: AgentWorldDefinition;
+      session: LiveSessionView;
+      you: LiveSessionMemberView;
+    }) => void,
+  ): Promise<number> {
     const targetSessionId = sessionId;
     if (!targetSessionId) return Promise.reject(new LiveSessionError("Not in a session", 400));
     const authority = authorityEpoch;
@@ -946,16 +981,25 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         reconnectTimer = null;
       }
       setConnection("reconnecting");
-      detachStream();
+      // Invalidate delivery now, but keep the established transport through the snapshot
+      // request. Closing EventSource immediately before fetch can strand that fetch behind
+      // the browser's connection teardown on Windows.
+      retireActiveStream();
     }
 
     let loaded = false;
     let failureReason = "Snapshot resync failed";
     const flight = { authority, sessionId: targetSessionId, promise: Promise.resolve(0) };
     flight.promise = (async () => {
-      const snapshot = await call<{ revision: number; seq: number; definition: AgentWorldDefinition; session: LiveSessionView }>(
-        "GET", `/sessions/${targetSessionId}/snapshot`,
-      );
+      const snapshot = await call<{
+        revision: number;
+        seq: number;
+        definition: AgentWorldDefinition;
+        session: LiveSessionView;
+        you: LiveSessionMemberView;
+      }>("GET", `/sessions/${targetSessionId}/snapshot`);
+      assertAuthority(authority, targetSessionId);
+      captureSnapshot?.(snapshot);
       assertAuthority(authority, targetSessionId);
       const result = api.load(snapshot.definition);
       assertAuthority(authority, targetSessionId);
@@ -991,6 +1035,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
     }).finally(() => {
       if (resyncFlight === flight) resyncFlight = null;
       if (resumeStream && hasAuthority(authority, targetSessionId)) {
+        closeRetiredStreams();
         if (loaded) openStream();
         // Keep the last known runtime and resume from its last honest sequence. If the
         // server cannot bridge that gap it will answer mustResync again, now behind the
@@ -1012,7 +1057,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
 
     /** Exchanges an invitation for a scoped credential, then joins and syncs. */
     async join(targetSessionId: string, code: string, actor: { id: string; label?: string; kind?: "human" | "agent" }) {
-      const authority = beginAuthority(targetSessionId, null);
+      const { authority, finishStreamHandoff } = beginAuthority(targetSessionId, null);
       let joined: { credential: string; member: LiveSessionMemberView; session: LiveSessionView };
       try {
         joined = await call<{ credential: string; member: LiveSessionMemberView; session: LiveSessionView }>(
@@ -1020,6 +1065,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
         );
         assertAuthority(authority, targetSessionId);
       } catch (error) {
+        finishStreamHandoff();
         if (!hasAuthority(authority, targetSessionId)) assertAuthority(authority, targetSessionId);
         if (hasAuthority(authority, targetSessionId)) {
           setConnection("offline", error instanceof Error ? error.message : String(error));
@@ -1044,6 +1090,7 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       } catch (error) {
         // The credential is good but the scene would not load. Report it as the connection
         // failure it is rather than leaving the caller with a half-joined client.
+        finishStreamHandoff();
         if (!hasAuthority(authority, targetSessionId)) assertAuthority(authority, targetSessionId);
         if (hasAuthority(authority, targetSessionId)) {
           setConnection("offline", error instanceof Error ? error.message : String(error));
@@ -1053,30 +1100,42 @@ export function createLiveSessionClient({ baseUrl, api, events = {}, fetchImpl =
       // The initial sync is a join, not a recovery — `resynced` marks "we lost continuity
       // and had to reload", and saying that on the way in would be a lie.
       resynced = false;
+      finishStreamHandoff();
       openStream();
       return joined.member;
     },
 
     /** Resumes an already-credentialled session (owner, or a restored client). */
     async attach(targetSessionId: string, memberCredential: string) {
-      const authority = beginAuthority(targetSessionId, memberCredential);
+      const { authority, finishStreamHandoff } = beginAuthority(targetSessionId, memberCredential);
+      const captured = { member: null as LiveSessionMemberView | null };
       try {
-        const view = await call<{ session: LiveSessionView; you: LiveSessionMemberView }>("GET", `/sessions/${targetSessionId}`);
+        // The authenticated snapshot is already the atomic document/session cut. It also
+        // carries this credential's member view, so attach needs one read rather than a
+        // separate session view followed by the snapshot that supersedes it.
+        await resyncWithStreamPolicy(false, (snapshot) => {
+          captured.member = snapshot.you ?? null;
+        });
         assertAuthority(authority, targetSessionId);
-        role = view.you.role;
-        sceneName = view.session.sceneName;
-        actorId = view.you.actorId;
-        actorLabel = view.you.label;
-        actorKind = view.you.kind;
-        memberId = view.you.memberId;
-        members = view.session.members;
-        missions = structuredClone(view.session.missions ?? []);
-        await resyncWithStreamPolicy(false);
-        assertAuthority(authority, targetSessionId);
+        const attachedMember = captured.member;
+        if (!attachedMember) {
+          throw new LiveSessionError(
+            "The live-session snapshot omitted this member's authority",
+            422,
+            "snapshot-member-missing",
+          );
+        }
+        role = attachedMember.role;
+        actorId = attachedMember.actorId;
+        actorLabel = attachedMember.label;
+        actorKind = attachedMember.kind;
+        memberId = attachedMember.memberId;
         resynced = false;
+        finishStreamHandoff();
         openStream();
-        return view.you;
+        return attachedMember;
       } catch (error) {
+        finishStreamHandoff();
         if (!hasAuthority(authority, targetSessionId)) assertAuthority(authority, targetSessionId);
         if (hasAuthority(authority, targetSessionId)) {
           setConnection("offline", error instanceof Error ? error.message : String(error));

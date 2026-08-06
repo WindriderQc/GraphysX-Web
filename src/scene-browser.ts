@@ -122,6 +122,7 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
   let session: SceneStoreSession | null = null;
   let scenes: SceneStoreSummary[] = [];
   let refreshTimer: number | null = null;
+  let refreshInFlight: Promise<void> | null = null;
   let liveTimer: number | null = null;
   let disposed = false;
   let enabled = true;
@@ -233,17 +234,29 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
       .join("");
   };
 
-  const refresh = async (): Promise<void> => {
-    try {
-      scenes = await client.list();
-      setOnline(true);
-      render();
-    } catch (error) {
-      if (error instanceof SceneStoreError && error.status === 0) {
-        setOnline(false);
-        setStatus("Scene store offline", "error");
+  const refresh = (): Promise<void> => {
+    // Live observer mode makes this browser deliberately inert. Do not keep opening store
+    // connections behind the hidden panel, and do not let a slow poll overlap the next tick.
+    if (!enabled || disposed) return Promise.resolve();
+    if (refreshInFlight) return refreshInFlight;
+    refreshInFlight = (async () => {
+      try {
+        const listed = await client.list();
+        if (!enabled || disposed) return;
+        scenes = listed;
+        setOnline(true);
+        render();
+      } catch (error) {
+        if (!enabled || disposed) return;
+        if (error instanceof SceneStoreError && error.status === 0) {
+          setOnline(false);
+          setStatus("Scene store offline", "error");
+        }
+      } finally {
+        refreshInFlight = null;
       }
-    }
+    })();
+    return refreshInFlight;
   };
 
   const open = async (name: string): Promise<void> => {
@@ -432,6 +445,8 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
       live.hidden = true;
       if (liveTimer !== null) window.clearTimeout(liveTimer);
       liveTimer = null;
+      if (refreshTimer !== null) window.clearInterval(refreshTimer);
+      refreshTimer = null;
       render();
       syncFooter();
       return;
@@ -440,6 +455,8 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     render();
     syncFooter();
     setStatus(`Store: ${storeHost}`);
+    void refresh();
+    if (refreshTimer === null) refreshTimer = window.setInterval(() => void refresh(), REFRESH_MS);
   };
 
   panel.addEventListener("click", (event) => {

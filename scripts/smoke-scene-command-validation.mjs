@@ -113,6 +113,31 @@ function rejectWithoutMutation(name, commands) {
   rejectDefinitionWithoutMutation(name, base, commands);
 }
 
+const acceptedStringArrayBoundary = { revision: 17, document: structuredClone(base) };
+const acceptedStringArrayBoundaryBefore = JSON.stringify(acceptedStringArrayBoundary);
+const acceptedStringArrayResult = applyCommands(acceptedStringArrayBoundary.document, [
+  { op: "update", id: "anchor", patch: { tags: ["x".repeat(128)] } },
+]);
+check("128-character string-array entry is accepted without caller document or revision mutation",
+  acceptedStringArrayResult.definition.entities.find((entity) => entity.id === "anchor")?.tags?.[0]?.length === 128
+    && JSON.stringify(acceptedStringArrayBoundary) === acceptedStringArrayBoundaryBefore);
+
+const rejectedStringArrayBoundary = { revision: 17, document: structuredClone(base) };
+const rejectedStringArrayBoundaryBefore = JSON.stringify(rejectedStringArrayBoundary);
+let rejectedStringArrayBoundaryError = null;
+try {
+  applyCommands(rejectedStringArrayBoundary.document, [
+    { op: "update", id: "anchor", patch: { tags: ["x".repeat(129)] } },
+  ]);
+} catch (caught) {
+  rejectedStringArrayBoundaryError = caught;
+}
+check("129-character string-array entry is rejected without caller document or revision mutation",
+  rejectedStringArrayBoundaryError instanceof SceneCommandError
+    && rejectedStringArrayBoundaryError.message.includes("128 characters or fewer")
+    && JSON.stringify(rejectedStringArrayBoundary) === rejectedStringArrayBoundaryBefore,
+  String(rejectedStringArrayBoundaryError));
+
 function rejectSharedValueWithoutMutation(name, value, assertion) {
   const before = JSON.stringify(value);
   let error = null;

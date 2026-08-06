@@ -62,7 +62,7 @@ Three layers, cheapest first. Use them in that order.
 
 | Command | Cost | What it proves |
 | --- | --- | --- |
-| `npm test` | < 1s | Pure logic: inverse operations, the mission reducer, ghost validation, leaderboard ordering, store path encoding, the gate's retry classifier. No browser, no server, no port, no lock. |
+| `npm test` | < 1s | Fast authority/resource contracts: inverse operations, missions, streams, stores, results, assets, and the gate itself. No browser, server, port, or lock. |
 | `npm run lint` | ~70s | What the type checker cannot see — principally floating promises. |
 | `npm run verify` | ~40min+ | Typecheck, lint, build, then every product route driven through headless Chromium against the **built** output. The same gate CI runs before a production deploy. |
 
@@ -86,8 +86,9 @@ belongs in `scripts/`.
   truncated. Redirect to a file and read the `=== verify summary ===` block.
 - **A retried check says so.** The gate retries a smoke that died on a transport signature, and
   only that: never on a deadline kill, never on an assertion failure. The summary prints
-  `PASS (retried: …)`, and more than `VERIFY_MAX_RETRIES` (3) retries fails the run. If you see
-  retries, suspect the machine before the product.
+  `PASS (retried: …)`. CI tolerates zero retried passes by default; local runs retain the
+  historical allowance of 3, and an explicit non-negative `VERIFY_MAX_RETRIES` overrides either.
+  If you see retries, suspect the machine before the product.
 - **If the app freezes while you work, check for a running gate before suspecting the app.** A
   whole session went to a "lag" that was a concurrent verify. The tell: the freeze is a *total*
   stall — camera, animation, everything resumes together — and a CPU profile shows V8 getting a
@@ -169,15 +170,16 @@ Nothing here blocks a release; pick by value rather than by order.
   encoding faults against a ~1/255 JPEG floor. What remains is curation: download the panoramas
   (blocked from the build sandbox), run the tool per set, and add registry entries with real
   provenance to `agent-world-skies.ts`.
-- **Splitting the two large product files.** `agent-world-runtime.ts` (5,161 lines) and
-  `platform-editor.ts` (3,956) are past comfortable navigability. The runtime has already been
+- **Splitting the two large product files.** `agent-world-runtime.ts` and
+  `platform-editor.ts` are past comfortable navigability. The runtime has already been
   decomposed at its edges — terrain, water, flock, crowd, dna, particles, force fields all live
   in their own modules — so the seams exist; what remains is entity resolution, physics rebuild,
   simulation and serialization, which is roughly four more files. This is a multi-session
-  refactor and should be its own change, not a rider on something else. `race-scene.ts` (9,190)
-  and `prototype-app.ts` (5,338) are legacy and correctly quarantined; leave them.
-- `scripts/smoke-live-sessions-browser.mjs` is 3,127 lines. A test that needs its own review to
-  change safely is a test that eventually gets deleted instead of fixed.
+  refactor and should be its own change, not a rider on something else. `race-scene.ts` and
+  `prototype-app.ts` are legacy and correctly quarantined; leave them.
+- `scripts/smoke-live-sessions-browser.mjs` is large enough to need its own review before
+  changes. A test that cannot be reviewed safely is a test that eventually gets deleted instead
+  of fixed.
 
 ## Ops
 

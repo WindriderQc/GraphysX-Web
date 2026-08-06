@@ -50,6 +50,18 @@ export const LIVE_SESSION_SCHEMA = "graphysx.live-session/v1";
 export const LIVE_OP_SCHEMA = "graphysx.live-op/v1";
 export const LIVE_PRESENCE_SCHEMA = "graphysx.live-presence/v1";
 
+/** Pure projected-buffer guard, exported for the sub-second resource-bound unit contract. */
+export function exceedsRetainedStreamBudget(response, frameBytes, limitBytes) {
+  return (response?.writableLength ?? 0) + frameBytes > limitBytes;
+}
+
+/** Hard release for a peer that is not reading; graceful end would retain its queued bytes. */
+export function destroyRetainedStream(response) {
+  const socket = response?.socket;
+  response?.destroy?.();
+  socket?.destroy?.();
+}
+
 // --- caps ------------------------------------------------------------------------------
 // Every one of these is a bound on something an untrusted client controls. They are
 // deliberately small: this is a collaboration tool for a handful of people in one scene,
@@ -61,6 +73,8 @@ const LIMITS = {
   invitesPerSession: 32,
   /** Replayable operation events retained per session. Beyond this, a client must resync. */
   opLog: 512,
+  /** Lightweight idempotency receipts retained independently of replay/undo event bodies. */
+  appliedReceipts: 512,
   /**
    * Serialized bytes retained in that ring, whichever bound binds first.
    *
@@ -349,14 +363,20 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
 
   function endSubscriber(session, subscriber, event, payload) {
     // Remove it before writing the terminal frame. A synchronous operation broadcast that
-    // follows this call must never be able to reach a revoked/closed stream, even if Node's
-    // close notification is delivered on a later turn.
+    // follows this call must never reach a revoked/closed stream on a later turn.
     subscriber.cleanup?.({ broadcast: false });
+    const frame = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+    if (exceedsRetainedStreamBudget(subscriber.response, Buffer.byteLength(frame), LIMITS.opLogBytes)) {
+      // A terminal frame is best-effort. Graceful end keeps a nonreader's queued bytes alive;
+      // destroy the underlying socket so those bytes cannot survive an ended response.
+      destroyRetainedStream(subscriber.response);
+      return;
+    }
     try {
-      subscriber.response.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
+      subscriber.response.write(frame);
       subscriber.response.end();
     } catch {
-      // The stream is already gone; cleanup above is intentionally idempotent.
+      subscriber.response.destroy();
     }
   }
 
@@ -444,75 +464,71 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
     session.log.push(event);
     retainedBytes.set(event, bytes);
     session.logBytes += bytes;
-    // Both bounds evict from the same end, but the byte bound always keeps the newest event:
-    // an operation larger than the whole budget is still the one a reconnecting client is
-    // most likely to need, and dropping it would empty the ring for every other member too.
-    while (session.log.length > LIMITS.opLog
-      || (session.logBytes > LIMITS.opLogBytes && session.log.length > 1)) {
+    // Count and byte horizons are strict. A single event larger than the byte budget is not
+    // secretly retained; live peers may receive it, but reconnect/undo/evidence must resync.
+    while (session.log.length > LIMITS.opLog || session.logBytes > LIMITS.opLogBytes) {
       const dropped = session.log.shift();
       session.logBytes = Math.max(0, session.logBytes - (retainedBytes.get(dropped) ?? 0));
       retainedBytes.delete(dropped);
-      // Eviction also drops the idempotency receipt, exactly as the count bound already did.
-      // A retry of an evicted opId is re-applied rather than answered from the receipt, which
-      // is why `baseRevision` is the check that actually stops a double-apply — it will no
-      // longer match. Clients that omit it were already taking that risk.
-      if (dropped?.opId) session.applied.delete(dropped.opId);
-      // Presence consumes sequence numbers but is intentionally not retained. A resume is
-      // impossible only when a retained event was actually dropped, not merely because a
-      // non-retained presence sequence sits between two retained events.
-      if (Number.isInteger(dropped?.seq)) session.replayFloorSeq = Math.max(session.replayFloorSeq, dropped.seq);
+      if (dropped?.opId) {
+        const applied = session.applied.get(dropped.opId);
+        // Preserve the bounded receipt/id binding without retaining the heavy commands and
+        // inverse through a second pointer. Mission evidence intentionally expires here.
+        if (applied?.event === dropped) applied.event = null;
+      }
+      if (Number.isInteger(dropped?.seq)) {
+        session.replayFloorSeq = Math.max(session.replayFloorSeq, dropped.seq);
+      }
     }
   }
 
-  /**
-   * When a subscriber's socket buffer exceeds the replay ring's own budget, drop it.
-   *
-   * `response.write()` returns false under backpressure and nothing here was reading that.
-   * A client that has stopped reading — a suspended laptop, a throttled background tab, a
-   * paused debugger — is never reported by TCP as a close, so its cleanup never runs and
-   * every subsequent broadcast accumulates in this process. Measured: a stalled reader took
-   * a `ServerResponse` to 3.5 MB of buffered output in 1.5 seconds.
-   *
-   * The threshold is `opLogBytes` rather than a number chosen for feel, and that identity is
-   * the justification: a subscriber further behind than the entire retained ring can no
-   * longer be caught up *by* that ring — the events it is missing are already evicted — so
-   * every byte still queued for it is data it would have to discard on arrival. Dropping it
-   * now loses nothing and costs it one reconnect.
-   *
-   * It needs no new client vocabulary either. `resync` is the marker `adoptExternalRecord`
-   * already sends and the client already handles by taking a snapshot, and EventSource
-   * reconnects on its own once the stream ends.
-   */
+  const eventFrame = (event, data = JSON.stringify(event)) =>
+    `id: ${event.seq}\nevent: ${event.event}\ndata: ${data}\n\n`;
+
   const slowSubscriberBytes = () => LIMITS.opLogBytes;
 
+  function announceDisconnectedMembers(session, members) {
+    if (members.size === 0 || !sessions.has(session.id) || session.closed) return;
+    push(session, presenceEvent(session));
+    for (const member of members) {
+      if (member.streams !== 0 || member.revokedAt) continue;
+      // Re-check inside the session chain: a fast reconnect preserves its assignment, while
+      // a genuine disconnect becomes one retained mission interruption.
+      void queueSessionTask(session, () => {
+        if (sessions.get(session.id) !== session || session.members.get(member.id) !== member
+          || member.revokedAt || member.streams !== 0) return;
+        interruptMemberMissions(session, member, "disconnected");
+      }).catch(() => undefined);
+    }
+  }
+
+  function destroySlowSubscriber(session, subscriber, disconnected) {
+    const member = session.members.get(subscriber.memberId);
+    subscriber.cleanup?.({ broadcast: false });
+    destroyRetainedStream(subscriber.response);
+    if (member && !member.revokedAt) disconnected.add(member);
+  }
+
   function push(session, event, { retain = false } = {}) {
-    // Serialized once: the frame needs it, and the retention budget is denominated in the
-    // same bytes rather than in a second, differently-shaped estimate.
     const data = JSON.stringify(event);
     if (retain) retainEvent(session, event, Buffer.byteLength(data));
-    const frame = `id: ${event.seq}\nevent: ${event.event}\ndata: ${data}\n\n`;
-    // Snapshotted: dropping a slow subscriber mutates `session.subscribers` mid-loop.
+    const frame = eventFrame(event, data);
+    const frameBytes = Buffer.byteLength(frame);
+    const disconnected = new Set();
     for (const subscriber of [...session.subscribers.values()]) {
       const subscribedMember = session.members.get(subscriber.memberId);
       if (!subscribedMember || subscribedMember.revokedAt) continue;
-      if ((subscriber.response.writableLength ?? 0) > slowSubscriberBytes()) {
-        // `broadcast: false` inside endSubscriber, so this cannot recurse back into push().
-        endSubscriber(session, subscriber, "resync", {
-          schema: LIVE_SESSION_SCHEMA,
-          event: "resync",
-          sessionId: session.id,
-          reason: "stream-too-slow",
-          seq: session.seq,
-          revision: session.revision,
-        });
+      if (exceedsRetainedStreamBudget(subscriber.response, frameBytes, slowSubscriberBytes())) {
+        destroySlowSubscriber(session, subscriber, disconnected);
         continue;
       }
       try {
         subscriber.response.write(frame);
       } catch {
-        // Cleanup is driven by the request's close handler, never from the write path.
+        destroySlowSubscriber(session, subscriber, disconnected);
       }
     }
+    announceDisconnectedMembers(session, disconnected);
   }
 
   /**
@@ -1005,12 +1021,14 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       definition: structuredClone(next.definition),
       revision: written.revision,
     };
-    push(session, event, { retain: true });
     const receipt = { ok: true, opId, seq: event.seq, revision: written.revision, baseRevision: record.revision, outputs: next.outputs, intent };
-    // Mission operation evidence resolves this canonical server event. A client may submit
-    // only the opId; actor, intent, revision and touched ids are copied from here, never from
-    // a caller-provided completion claim.
+    // Store the lightweight idempotency binding before retention: if this event alone exceeds
+    // the replay budget, retainEvent can clear its heavy pointer without losing the receipt.
     session.applied.set(opId, { memberId: member.id, requestFingerprint, receipt, event });
+    while (session.applied.size > LIMITS.appliedReceipts) {
+      session.applied.delete(session.applied.keys().next().value);
+    }
+    push(session, event, { retain: true });
     return receipt;
   }
 
@@ -1502,6 +1520,9 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
         adoptExternalRecord(session, record);
         return {
           session: sessionView(session),
+          // Attach consumes this same atomic cut; a separate session-view request would
+          // add a redundant transport boundary and could describe a different roster.
+          you: memberView(session, member),
           revision: record.revision,
           seq: session.seq,
           definition: record.definition,
@@ -1631,7 +1652,11 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       if (session.subscribers.size >= LIMITS.subscribersPerSession) throw httpError("Too many open streams for this session", 429);
 
       const sinceParam = Number(request.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0);
-      const missed = catchUp(session, sinceParam);
+      let missed = catchUp(session, sinceParam);
+      if (missed !== null) {
+        const replayBytes = missed.reduce((total, event) => total + Buffer.byteLength(eventFrame(event)), 0);
+        if (replayBytes > slowSubscriberBytes()) missed = null;
+      }
 
       response.writeHead(200, {
         "content-type": "text/event-stream; charset=utf-8",
@@ -1663,15 +1688,22 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
       // so this is how a resuming client learns who is here now.
       push(session, presenceEvent(session));
 
+      const heartbeatFrame = ": ping\n\n";
       const heartbeat = setInterval(() => {
+        if (exceedsRetainedStreamBudget(response, Buffer.byteLength(heartbeatFrame), slowSubscriberBytes())) {
+          const disconnected = new Set();
+          destroySlowSubscriber(session, subscriber, disconnected);
+          announceDisconnectedMembers(session, disconnected);
+          return;
+        }
         try {
-          response.write(": ping\n\n");
+          response.write(heartbeatFrame);
         } catch {
-          // Cleanup runs from the close handler.
+          const disconnected = new Set();
+          destroySlowSubscriber(session, subscriber, disconnected);
+          announceDisconnectedMembers(session, disconnected);
         }
       }, 20_000);
-      // Unref'd: an open stream must never be the reason this process refuses to exit. A
-      // verify run was once found alive for 9.5 hours behind exactly this shape of handle.
       heartbeat.unref?.();
 
       let cleaned = false;
@@ -1682,19 +1714,7 @@ export function createLiveSessions({ store, guard, now = () => Date.now() } = {}
         if (!session.subscribers.delete(response)) return;
         member.streams = Math.max(0, member.streams - 1);
         member.lastSeenAt = now();
-        if (broadcast && sessions.has(session.id) && !session.closed) {
-          push(session, presenceEvent(session));
-          if (member.streams === 0 && !member.revokedAt) {
-            // Re-check inside the chain: a fast reconnect that arrives before this task runs
-            // keeps its assignment, while a genuine disconnect becomes a retained mission
-            // interruption rather than a client-local guess.
-            void queueSessionTask(session, () => {
-              if (sessions.get(session.id) !== session || session.members.get(member.id) !== member
-                || member.revokedAt || member.streams !== 0) return;
-              interruptMemberMissions(session, member, "disconnected");
-            }).catch(() => undefined);
-          }
-        }
+        if (broadcast) announceDisconnectedMembers(session, new Set([member]));
       };
       subscriber.cleanup = cleanup;
       request.on("close", cleanup);

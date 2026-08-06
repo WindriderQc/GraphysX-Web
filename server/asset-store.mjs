@@ -15,7 +15,8 @@
 // one `npm run serve:scenes` gives you both.
 
 import { createReadStream, createWriteStream } from "node:fs";
-import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
@@ -143,10 +144,10 @@ async function writeStreamAtomic(target, source, limitBytes) {
   let size = 0;
   try {
     await pipeline(
-      source,
+      typeof source === "string" || ArrayBuffer.isView(source) ? Readable.from([source]) : source,
       async function* enforceLimit(chunks) {
         for await (const chunk of chunks) {
-          size += chunk.length;
+          size += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.byteLength;
           if (size > limitBytes) throw badRequest("Upload too large", 413);
           yield chunk;
         }
@@ -199,12 +200,12 @@ export function createAssetStore({ dir = DEFAULT_ASSET_DIR, datalakeDir = DEFAUL
       if (manifestCache && manifestCache.mtimeMs === info.mtimeMs && manifestCache.size === info.size) {
         // A copy: callers push and splice this to build the next manifest, and handing them
         // the cached array would let a half-finished edit become what everyone else reads.
-        return [...manifestCache.assets];
+        return structuredClone(manifestCache.assets);
       }
       const parsed = JSON.parse(await readFile(manifestPath, "utf8"));
       const assets = Array.isArray(parsed?.assets) ? parsed.assets : [];
       manifestCache = { mtimeMs: info.mtimeMs, size: info.size, assets };
-      return [...assets];
+      return structuredClone(assets);
     } catch (error) {
       if (error && error.code === "ENOENT") {
         manifestCache = null;
@@ -266,9 +267,17 @@ export function createAssetStore({ dir = DEFAULT_ASSET_DIR, datalakeDir = DEFAUL
       const storedName = safeFileName(fileName);
       const finalId = await uniqueId(assets, id && ID_PATTERN.test(id) ? id : slugForFile(fileName));
       const assetDir = join(filesDir, finalId);
-      await mkdir(assetDir, { recursive: true });
+      const createdAssetDir = (await mkdir(assetDir, { recursive: true })) !== undefined;
       const target = join(assetDir, storedName);
-      await writeBody(target);
+      try {
+        await writeBody(target);
+      } catch (error) {
+        // The streaming writer removes its own temporary file. If this call also created
+        // the candidate directory, remove it only when it is now empty. A pre-existing
+        // orphan (or a writer that left diagnostic content) is never recursively erased.
+        if (createdAssetDir) await rmdir(assetDir).catch(() => undefined);
+        throw error;
+      }
       const info = await stat(target);
       const record = {
         id: finalId,

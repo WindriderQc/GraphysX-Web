@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
-import { startSceneStore } from "../server/scene-store.mjs";
+import { createSceneStoreServer, startSceneStore } from "../server/scene-store.mjs";
 import { startStaticServer } from "./static-server.mjs";
 import { applySmokeTimeout, launchSmokeBrowser, SMOKE_TIMEOUT } from "./smoke-harness.mjs";
 import { check, createActor, report, requestText, seedDefinition, sleep, waitForStore } from "./live-session-harness.mjs";
@@ -30,12 +30,43 @@ const results = [];
 const browserProblems = [];
 const expectedHttpConsoleScopes = [];
 const expectedHttpConsoleByPage = new WeakMap();
+let browserStorePathPrefix = "";
 let store = null;
 let statics = null;
 let browser = null;
 let dir = null;
 let agentActor = null;
 const missionActors = [];
+
+// On loaded Windows hosts, listen(0) can occasionally return a lease whose loopback TCP
+// handshake never finishes (the server remains in SYN_RECEIVED). A real health response is
+// the readiness boundary. Discard an unreachable lease before Chromium or any assertion
+// exists; never retry a product request after the contract starts.
+const startReachableLocalServer = async (label, start, connectionCount = 1) => {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let candidate = null;
+    try {
+      candidate = await start();
+      await waitForStore(candidate.url, { timeoutMs: 5_000 });
+      // Create every request synchronously before the event loop can return a response, so
+      // the Agent must establish the requested number of distinct keep-alive sockets.
+      const probes = await Promise.all(Array.from({ length: connectionCount }, () =>
+        requestText(candidate.url + "/health", { timeoutMs: 5_000 })));
+      if (probes.some((response) => response.status !== 200)) {
+        throw new Error(label + " socket reserve did not pass health readiness");
+      }
+      return candidate;
+    } catch (error) {
+      lastError = error;
+      await candidate?.close().catch(() => undefined);
+      if (attempt < 3) {
+        console.warn(`[live-browser] ${label} lease failed readiness; requesting a fresh ephemeral port (${attempt}/3)`);
+      }
+    }
+  }
+  throw lastError ?? new Error(label + " could not acquire a reachable local port");
+};
 
 function expectHttpConsoleErrors(page, label, specifications) {
   const scope = {
@@ -65,6 +96,11 @@ function consumeExpectedHttpConsoleError(page, message, text) {
   if (locationUrl) {
     try {
       locationPath = new URL(locationUrl).pathname;
+      if (browserStorePathPrefix
+        && (locationPath === browserStorePathPrefix
+          || locationPath.startsWith(browserStorePathPrefix + "/"))) {
+        locationPath = locationPath.slice(browserStorePathPrefix.length) || "/";
+      }
     } catch {
       return false;
     }
@@ -109,7 +145,12 @@ function watch(page, label) {
   page.on("requestfailed", (request) => {
     const failure = request.failure()?.errorText ?? "";
     if (/ERR_ABORTED/.test(failure)) return; // navigation away from an open SSE stream
-    browserProblems.push(`${label} requestfailed: ${request.url()} ${failure}`);
+    const opId = (() => {
+      try { return JSON.parse(request.postData() ?? "null")?.opId ?? null; } catch { return null; }
+    })();
+    browserProblems.push(
+      `${label} requestfailed: ${request.method()} ${request.url()} ${failure}${opId ? ` opId=${opId}` : ""}`,
+    );
   });
 }
 
@@ -223,14 +264,14 @@ const waitForAgentReaction = async (page, revision, label) => {
   }
 };
 
-const waitForAgentAt = async (page, actorId, expected, label) => {
+const waitForAgentAt = async (page, actorId, expected, label, tolerance = 0.02) => {
   const deadline = Date.now() + SMOKE_TIMEOUT;
   let last = null;
   for (;;) {
     last = await page.evaluate((id) => window.__GRAPHYSX_LIVE_PRESENCE__?.state().agents.find(
       (agent) => agent.actorId === id,
     ) ?? null, actorId);
-    if (last && expected.every((value, index) => Math.abs(last.position[index] - value) < 0.02)) return last;
+    if (last && expected.every((value, index) => Math.abs(last.position[index] - value) < tolerance)) return last;
     if (Date.now() > deadline) throw new Error(`${label}: avatar did not reach ${expected.join(",")}; last ${JSON.stringify(last)}`);
     await sleep(100);
   }
@@ -524,11 +565,58 @@ const navigate = async (page, url, label) => {
 try {
   await mkdir(ARTIFACTS, { recursive: true });
   dir = await mkdtemp(path.join(tmpdir(), "graphysx-live-browser-"));
-  store = await startSceneStore({ port: 0, dir, token: TOKEN, origins: null, datalakeDir: null });
-  await waitForStore(store.url);
   const suppliedBase = process.env.SMOKE_BASE?.replace(/\/+$/, "") || null;
-  if (!suppliedBase) statics = await startStaticServer({ root: path.join(ROOT, "dist"), port: 0 });
-  const pageBase = suppliedBase ?? statics.url.replace(/\/+$/, "");
+  let pageBase;
+  if (suppliedBase) {
+    // A supplied web deployment is external to this process, so retain the standalone local
+    // store path used by explicit staging runs.
+    store = await startReachableLocalServer("scene store", () => startSceneStore({
+      port: 0,
+      dir,
+      token: TOKEN,
+      origins: null,
+      datalakeDir: null,
+      keepAliveTimeoutMs: 15 * 60 * 1000,
+    }), 8);
+    pageBase = suppliedBase;
+    await waitForStore(pageBase, { timeoutMs: 60_000 });
+  } else {
+    // Production proxies the real store at same-origin /store. Mount the exact store request
+    // handler under that path too: no mock, no CORS preflight, and no second browser TCP
+    // origin that exists only in the smoke.
+    const engine = createSceneStoreServer({
+      dir,
+      token: TOKEN,
+      origins: null,
+      datalakeDir: null,
+    });
+    const storeRequest = engine.server.listeners("request")[0];
+    if (typeof storeRequest !== "function") throw new Error("scene store has no request handler");
+    const routeStore = (request, response) => {
+      const rawUrl = request.url ?? "/";
+      const pathname = new URL(rawUrl, "http://localhost").pathname;
+      if (pathname !== "/store" && !pathname.startsWith("/store/")) return false;
+      const tail = rawUrl.slice("/store".length);
+      request.url = tail.startsWith("?") ? "/" + tail : tail || "/";
+      storeRequest(request, response);
+      return true;
+    };
+    // This contract spans several minutes under software WebGL. Keep browser and Node
+    // keep-alive sockets valid for its lifecycle; production retains its normal 72 seconds.
+    statics = await startReachableLocalServer("same-origin web/store server", () => startStaticServer({
+      root: path.join(ROOT, "dist"),
+      routeRequest: routeStore,
+      port: 0,
+      keepAliveTimeoutMs: 15 * 60 * 1000,
+    }), 8);
+    pageBase = statics.url.replace(/\/+$/, "");
+    browserStorePathPrefix = "/store";
+    store = {
+      url: pageBase + browserStorePathPrefix,
+      close: () => engine.sessions.closeAll(),
+    };
+    await waitForStore(store.url, { timeoutMs: 5_000 });
+  }
 
   browser = await launchSmokeBrowser({ args: ["--no-sandbox", "--use-gl=swiftshader", "--disable-dev-shm-usage"] });
 
@@ -602,13 +690,13 @@ try {
     await page.addInitScript(() => {
       const nativeFetch = window.fetch.bind(window);
       let snapshotHoldSerial = 0;
-      let snapshotHold = null;
+      const snapshotHolds = new Map();
       let operationResponseSerial = 0;
       const operationResponses = new Map();
       window.fetch = async (...args) => {
         const response = await nativeFetch(...args);
         const requestUrl = String(args[0] instanceof Request ? args[0].url : args[0]);
-        const hold = snapshotHold;
+        const hold = [...snapshotHolds.values()].find((candidate) => candidate.armed);
         if (hold?.armed && /\/sessions\/[^/]+\/snapshot(?:\?|$)/.test(requestUrl)) {
           hold.armed = false;
           hold.captured = true;
@@ -645,15 +733,15 @@ try {
         const id = ++snapshotHoldSerial;
         let release = () => undefined;
         const gate = new Promise((resolve) => { release = resolve; });
-        snapshotHold = { id, armed: true, captured: false, gate, release };
+        snapshotHolds.set(id, { id, armed: true, captured: false, gate, release });
         return id;
       };
       window.__GRAPHYSX_TEST_SNAPSHOT_CAPTURED__ = (id) =>
-        snapshotHold?.id === id && snapshotHold.captured;
+        snapshotHolds.get(id)?.captured ?? false;
       window.__GRAPHYSX_TEST_RELEASE_SNAPSHOT__ = (id) => {
-        if (snapshotHold?.id !== id) return false;
-        const hold = snapshotHold;
-        snapshotHold = null;
+        const hold = snapshotHolds.get(id);
+        if (!hold) return false;
+        snapshotHolds.delete(id);
         hold.release();
         return true;
       };
@@ -683,6 +771,9 @@ try {
         return true;
       };
       const NativeEventSource = window.EventSource;
+      let sourceSerial = 0;
+      const sourceIds = new WeakMap();
+      const sourceCloseCounts = new Map();
       let activeSource = null;
       let lastOperationData = null;
       let submitOnNextHello = null;
@@ -692,6 +783,9 @@ try {
       class TrackedEventSource extends NativeEventSource {
         constructor(url, init) {
           super(url, init);
+          const sourceId = ++sourceSerial;
+          sourceIds.set(this, sourceId);
+          sourceCloseCounts.set(sourceId, 0);
           activeSource = this;
           super.addEventListener("op", (event) => {
             lastOperationData = event.data;
@@ -724,8 +818,20 @@ try {
             });
           });
         }
+
+        close() {
+          const sourceId = sourceIds.get(this);
+          if (sourceId !== undefined) {
+            sourceCloseCounts.set(sourceId, (sourceCloseCounts.get(sourceId) ?? 0) + 1);
+          }
+          super.close();
+        }
       }
       window.EventSource = TrackedEventSource;
+      window.__GRAPHYSX_TEST_STREAM_STATE__ = () => ({
+        activeSourceId: activeSource ? (sourceIds.get(activeSource) ?? null) : null,
+        closeCounts: Object.fromEntries(sourceCloseCounts),
+      });
       window.__GRAPHYSX_TEST_REPLAY_LAST_OP__ = () => {
         if (!activeSource || !lastOperationData) return false;
         activeSource.dispatchEvent(new MessageEvent("op", { data: lastOperationData }));
@@ -775,6 +881,41 @@ try {
     // fixture this smoke used to load. Give software WebGL a full cold-start window; the
     // global verify deadline still catches an actually wedged tab.
     await waitForLive(page, label, Math.max(SMOKE_TIMEOUT, 90_000));
+    if (!suppliedBase) {
+      // Keep one finite same-origin HTTP connection active beside the long-lived SSE stream.
+      // This stabilises Chromium's Windows loopback pool during the ten-minute software-WebGL
+      // smoke; failures remain visible to the strict request/console sentinel. Product requests
+      // are never retried, and production/external-base runs do not install this harness probe.
+      await page.evaluate(async (healthUrl) => {
+        const probe = async () => {
+          const response = await fetch(healthUrl, { cache: "no-store" });
+          if (!response.ok) {
+            throw new Error(`GraphysX smoke store keepalive returned ${response.status}`);
+          }
+        };
+        await probe();
+        let inFlight = null;
+        let timer = null;
+        const tick = () => {
+          if (inFlight) return;
+          inFlight = probe().catch((error) => {
+            if (timer !== null) clearInterval(timer);
+            console.error("GraphysX smoke store keepalive failed", error);
+          }).finally(() => {
+            inFlight = null;
+          });
+        };
+        timer = setInterval(tick, 1_000);
+        window.__GRAPHYSX_TEST_STOP_STORE_KEEPALIVE__ = async () => {
+          if (timer !== null) clearInterval(timer);
+          timer = null;
+          if (inFlight) await inFlight;
+          // End with a directly awaited probe: cleanup cannot hide a late transport failure.
+          await probe();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        };
+      }, `${store.url}/health`);
+    }
     return { context, page };
   };
 
@@ -1540,14 +1681,70 @@ try {
 
   // --- AgentX mission director ------------------------------------------------------------
 
-  // Reuse Alice's already-warm renderer for owner controls. Attaching the real owner
-  // credential exercises the same client and DOM panel as a human owner without allocating a
-  // third software-WebGL context.
-  const ownerAttach = await first.page.evaluate(async (args) => {
-    await window.__GRAPHYSX_LIVE_SESSION__.attach(args.sessionId, args.credential);
-    return window.__GRAPHYSX_LIVE_SESSION__.status;
+  // Reuse Alice's already-warm renderer for owner controls. Hold two overlapping owner
+  // attaches at their snapshot responses: completion of stale handoff A must not close the
+  // stream retained for current handoff B. B alone retires it, exactly once, before opening
+  // its replacement. This is the Windows EventSource-close/fetch regression.
+  const waitForHeldSnapshot = async (page, id, label) => {
+    const deadline = Date.now() + SMOKE_TIMEOUT;
+    while (!(await page.evaluate((holdId) =>
+      window.__GRAPHYSX_TEST_SNAPSHOT_CAPTURED__(holdId), id))) {
+      if (Date.now() > deadline) throw new Error(label + " did not reach its snapshot barrier");
+      await sleep(50);
+    }
+  };
+  const streamBeforeOwnerHandoff = await first.page.evaluate(() =>
+    window.__GRAPHYSX_TEST_STREAM_STATE__());
+  const handoffAId = await first.page.evaluate(() => window.__GRAPHYSX_TEST_HOLD_SNAPSHOT__());
+  await first.page.evaluate((args) => {
+    window.__GRAPHYSX_TEST_HANDOFF_A__ = window.__GRAPHYSX_LIVE_SESSION__
+      .attach(args.sessionId, args.credential)
+      .then(() => ({ state: "fulfilled" }), (error) => ({
+        state: "rejected",
+        code: error?.code ?? null,
+        message: String(error?.message ?? error),
+      }));
   }, { sessionId, credential: ownerCredential });
+  await waitForHeldSnapshot(first.page, handoffAId, "authority handoff A");
+
+  const handoffBId = await first.page.evaluate(() => window.__GRAPHYSX_TEST_HOLD_SNAPSHOT__());
+  await first.page.evaluate((args) => {
+    window.__GRAPHYSX_TEST_HANDOFF_B__ = window.__GRAPHYSX_LIVE_SESSION__
+      .attach(args.sessionId, args.credential)
+      .then(() => ({ state: "fulfilled" }), (error) => ({
+        state: "rejected",
+        code: error?.code ?? null,
+        message: String(error?.message ?? error),
+      }));
+  }, { sessionId, credential: ownerCredential });
+  await waitForHeldSnapshot(first.page, handoffBId, "authority handoff B");
+
+  await first.page.evaluate((id) => window.__GRAPHYSX_TEST_RELEASE_SNAPSHOT__(id), handoffAId);
+  const handoffAOutcome = await first.page.evaluate(() => window.__GRAPHYSX_TEST_HANDOFF_A__);
+  const streamDuringOwnerHandoff = await first.page.evaluate(() =>
+    window.__GRAPHYSX_TEST_STREAM_STATE__());
+  await first.page.evaluate((id) => window.__GRAPHYSX_TEST_RELEASE_SNAPSHOT__(id), handoffBId);
+  const handoffBOutcome = await first.page.evaluate(() => window.__GRAPHYSX_TEST_HANDOFF_B__);
   await waitForLive(first.page, "owner mission director attach");
+  const streamAfterOwnerHandoff = await first.page.evaluate(() =>
+    window.__GRAPHYSX_TEST_STREAM_STATE__());
+  const originalSourceId = streamBeforeOwnerHandoff.activeSourceId;
+  check(results, "overlapping authority handoffs retire the previous stream once under the current owner",
+    originalSourceId !== null
+      && handoffAOutcome.state === "rejected" && handoffAOutcome.code === "session-authority-revoked"
+      && handoffBOutcome.state === "fulfilled"
+      && streamDuringOwnerHandoff.activeSourceId === originalSourceId
+      && streamDuringOwnerHandoff.closeCounts[originalSourceId] === 0
+      && streamAfterOwnerHandoff.activeSourceId !== originalSourceId
+      && streamAfterOwnerHandoff.closeCounts[originalSourceId] === 1,
+    JSON.stringify({
+      originalSourceId,
+      handoffAOutcome,
+      handoffBOutcome,
+      during: streamDuringOwnerHandoff,
+      after: streamAfterOwnerHandoff,
+    }));
+  const ownerAttach = await first.page.evaluate(() => window.__GRAPHYSX_LIVE_SESSION__.status);
   check(results, "the warm owner browser exposes the curated mission controls",
     ownerAttach.sessionId === sessionId
       && (await first.page.evaluate(() => window.__GRAPHYSX_LIVE_SESSION__.status.role)) === "owner"
@@ -1663,6 +1860,16 @@ try {
       && mission.stages[2].assignment?.actorId === "mission-validator"
       && new Set(mission.stages.map((stage) => stage.assignment?.actorId)).size === 2),
     JSON.stringify(activeMissions));
+
+  // Mission activation and avatar travel are deliberately separate: the authoritative
+  // assignment arrives before each renderer completes its station choreography. Prove both
+  // real runtimes reach the exact capability slots before comparing their stable projection.
+  await Promise.all([
+    waitForAgentAt(first.page, "mission-scout", [8.4, 0.36, -0.05], "owner scout station", 0.0005),
+    waitForAgentAt(first.page, "mission-validator", [8.2, 0.36, 3.85], "owner validator station", 0.0005),
+    waitForAgentAt(second.page, "mission-scout", [8.4, 0.36, -0.05], "peer scout station", 0.0005),
+    waitForAgentAt(second.page, "mission-validator", [8.2, 0.36, 3.85], "peer validator station", 0.0005),
+  ]);
 
   const stationProof = await Promise.all([first.page, second.page].map((page) => page.evaluate(() =>
     window.__GRAPHYSX_LIVE_PRESENCE__.state().agents
@@ -2628,9 +2835,13 @@ try {
     { opId: "op-resync-own-crate", intent: "alice writes across resync" },
   ));
   await waitForBarrier(ownRequestHeld, "own operation before manual resync");
+  const manualStreamBefore = await first.page.evaluate(() =>
+    window.__GRAPHYSX_TEST_STREAM_STATE__());
   const manualCut = await holdSnapshot(first.page);
   const manualResync = first.page.evaluate(() => window.__GRAPHYSX_LIVE_SESSION__.resync());
   await waitForBarrier(manualCut.captured, "manual resync");
+  const manualStreamDuring = await first.page.evaluate(() =>
+    window.__GRAPHYSX_TEST_STREAM_STATE__());
   releaseOwnRequest();
   const ownDuringResync = await ownDuringResyncPromise;
   const remoteDuringResync = await ownerSpawn("resync-remote-crate", "Ada writes across resync");
@@ -2647,6 +2858,17 @@ try {
     remoteCount: window.__GRAPHYSX__.query({ ids: ["resync-remote-crate"] }).length,
   }))));
   const manualServer = await api(store.url, "GET", `/sessions/${sessionId}/snapshot`, undefined, ownerCredential);
+  await waitForLive(first.page, "Alice after held manual resync");
+  const manualStreamAfter = await first.page.evaluate(() =>
+    window.__GRAPHYSX_TEST_STREAM_STATE__());
+  const manualSourceId = manualStreamBefore.activeSourceId;
+  check(results, "manual resync retires its previous stream only after the held snapshot",
+    manualSourceId !== null
+      && manualStreamDuring.activeSourceId === manualSourceId
+      && manualStreamDuring.closeCounts[manualSourceId] === 0
+      && manualStreamAfter.activeSourceId !== manualSourceId
+      && manualStreamAfter.closeCounts[manualSourceId] === 1,
+    JSON.stringify({ sourceId: manualSourceId, during: manualStreamDuring, after: manualStreamAfter }));
   check(results, "manual resync replays snapshot-straddling own and remote operations exactly once",
     manualRecovery.every((state) => state.revision === manualServer.body.revision
       && state.ownCount === 1 && state.remoteCount === 1)
@@ -3318,6 +3540,17 @@ try {
   check(results, "intentional terminal-recovery HTTP errors match exact endpoint/status counts",
     missingExpectedHttpErrors.length === 0, JSON.stringify(missingExpectedHttpErrors));
 
+  if (!suppliedBase) {
+    // Stop, drain, and directly re-probe before reading the strict failure sentinel. Context
+    // cleanup therefore cannot abort an in-flight keepalive after the assertion has passed.
+    await Promise.all([first.page, second.page].map((page) => page.evaluate(async () => {
+      const stop = window.__GRAPHYSX_TEST_STOP_STORE_KEEPALIVE__;
+      if (typeof stop !== "function") throw new Error("GraphysX smoke store keepalive is missing");
+      await stop();
+    })));
+    await sleep(50);
+  }
+
   check(results, "no console errors, page errors or failed requests in any browser",
     browserProblems.length === 0, browserProblems.slice(0, 5).join(" | "));
 
@@ -3329,8 +3562,8 @@ try {
   for (const actor of missionActors.splice(0)) await actor.disconnect().catch(() => undefined);
   if (agentActor) await agentActor.disconnect().catch(() => undefined);
   if (browser) await browser.close();
-  if (statics) await statics.close();
   if (store) await store.close();
+  if (statics) await statics.close();
   if (dir) await rm(dir, { recursive: true, force: true });
 }
 

@@ -42,7 +42,9 @@ The cost, stated honestly: one extra HTTP round trip per operation compared to a
 a per-client connection that holds a response open. At the scale this is bounded to (32
 streams per session, 16 members) that is not a problem. If sub-50ms cursor streaming for
 dozens of simultaneous participants ever becomes a requirement, WebSockets become the right
-answer and this document is the reason to revisit.
+answer and this document is the reason to revisit. The older public scene relay is bounded
+separately at 32 streams per scene and 256 per process; excess readers receive a finite `429`
+before the server owns an SSE response, socket, or heartbeat.
 
 **EventSource cannot set headers.** That is why `POST /sessions/:id/stream-ticket` exists: a
 member credential is exchanged for a single-use 30-second ticket, and only the ticket goes
@@ -124,14 +126,20 @@ the Build stage became available or was reassigned. Validation must inspect the 
 revision and report `passed` before it can complete its stage.
 
 Per session, mission state is capped at 4 missions and 192 accepted client mission events;
-mission request bodies are capped at 16 KiB and mission events use a separate per-member token
-bucket. These bounds apply before broadcast and snapshot serialization.
+each member may contribute at most 64, and the final 16 global slots are reserved for owner
+direction so non-owner saturation cannot strand a mission. Exact member/body-bound retries are
+answered from their original receipt before any cap and consume no second slot. Mission request
+bodies are capped at 16 KiB and mission events use a separate per-member token bucket. These
+bounds apply before broadcast and snapshot serialization.
 
 The runtime reserves the prefixes `live-agent:`, `live-mission:`, and `live-nestor:`
 for host-owned transient projections. The shared authored-namespace policy rejects those
 prefixes in entity ids and every entity reference (parent, steering, look-at, spline,
 interaction, joint, and rule subjects) on local commits, live operations, and whole-document
-writes. A refusal leaves revision, history, and the authoritative document byte-identical.
+writes. Checks use the runtime's trimmed id value, and prefab roots are also checked as the
+generated `${idPrefix.trim()}:child` namespace, so whitespace or generated descendants cannot
+claim a host prefix indirectly. A refusal leaves revision, history, and the authoritative
+document byte-identical.
 
 ## Conflicts, duplicates, ordering
 
@@ -155,7 +163,8 @@ than an automatic merge nobody asked for. Revisit if evidence shows otherwise.
 ## Reconnect and resync
 
 The client reconnects with capped backoff (0.5s → 15s) and resumes from its last `seq`. The
-server retains 512 ordered durable events (operations, missions, membership) and answers three ways:
+server retains at most 512 ordered durable events and 4 MiB, whichever binds first. Operations,
+missions, membership, and external-document resync barriers share that one replay line:
 
 | Case | Answer |
 |---|---|
@@ -169,10 +178,26 @@ to date" would leave it silently wrong forever. This was a real defect, caught b
 `smoke-live-sessions.mjs`.
 
 Snapshots are queued on the same per-session chain as operations. Their definition, revision,
-and sequence therefore describe one atomic cut. During an already-connected resync the client
+sequence, session view, and credential-scoped `you` member therefore describe one atomic cut.
+Attach consumes that single response rather than fetching a transient session view and then a
+second snapshot. During an already-connected resync the client
 invalidates its current stream, loads that cut, and reconnects from the snapshot sequence;
 operations on either side are represented in the snapshot or replayed after it, never skipped
 because an event was applied just before the whole document was replaced.
+
+An authenticated scene write outside the session operation route is adopted on that same serial
+chain. The server retains a document-resync barrier (without duplicating the document in every
+frame), updates its authoritative cut, and refuses stale validation until clients load the queued
+snapshot and reconnect from its sequence. The browser invalidates old stream callbacks before
+loading but retains that transport through the snapshot request; only the newest authority closes
+the retired stream, exactly once, before reconnecting. It does not report `live` until the terminal
+presence cut proves replay continuity; a revision mismatch falls back to another snapshot instead
+of allowing an operation against an unembodied document.
+
+Replay/undo bodies and idempotency receipts have separate bounded horizons. The heavy event ring
+may evict an operation at 512 events or 4 MiB, expiring replay, mission evidence, and undo that
+need its canonical event. A separate 512-entry lightweight receipt map still returns the original
+receipt for an exact retry and keeps the op id bound against another member or request body.
 
 Presence is **not** replayed. It is a full snapshot every time, so a resuming client gets one
 fresh presence event on connect rather than a queue of stale cursors. A presence gap is
@@ -276,7 +301,8 @@ anyone who can reach the port mint an owner credential. Session routes answer `5
 | Path traversal / arbitrary tool call | operation `path` allowlist; id regex on every name | both smokes |
 | Non-finite coordinates | finite check on every presence vector | protocol smoke |
 | Credential leaking into logs/UI/disk | audited across console, bodies, activity, scene files | security smoke |
-| Unbounded memory | caps on sessions, members, invites, log, subscribers | caps table above |
+| Unbounded memory | count + byte caps on sessions, receipts, replay logs, scene relay names/bytes, missions, tickets, and subscribers | unit + security smokes |
+| Stalled SSE reader | projected-buffer check and hard response/socket destruction before the next frame can cross the retained budget | unit + security smokes |
 | Connection leak wedging shutdown | unref'd heartbeats, cleanup on close, `closeAll()` on shutdown | teardown assertions |
 
 ### Known limitations — stated, not hidden
@@ -293,7 +319,9 @@ anyone who can reach the port mint an owner credential. Session routes answer `5
    Anyone who can reach the store can still read a stored scene, as before.
 5. **No end-to-end encryption.** Transport security is whatever fronts the store — TLS at
    nginx in production, nothing on a bare LAN port.
-6. **Undo is bounded, not actor-aware** (see above).
+6. **Undo evidence is bounded.** Once the originating retained event expires, its exact
+   inverse and touched-id proof are gone, so the server returns `undo-expired` rather than
+   reconstructing an approximation.
 
 ## Running it
 

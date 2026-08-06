@@ -3057,3 +3057,42 @@ error on a runtime rollback with an attached gizmo (`13aba57`).
   and in `public/`, including a 12.4 MB patch that base64-encoded the BallZ18 sky PNGs. All 24
   patch subjects were checked against history first; all 24 were already there. The objects
   remain in the pack, so this reclaims checkout size, not `.git` size.
+
+## 2026-08-06 — AgentX Center v2 release-candidate hardening
+
+- Made recovery authority and transport ownership explicit. Authenticated snapshots now return
+  the session plus credential-scoped `you` in one serial-chain cut, so attach needs one read.
+  Attach and manual resync invalidate obsolete callbacks immediately, retain the established
+  EventSource while the snapshot is in flight, and let only the newest authority close retired
+  streams exactly once before replay resumes. Overlapping held-snapshot regressions prove a stale
+  handoff cannot close the current authority's transport or overwrite its world.
+- Bounded the rest of the live/store surfaces: 512 events / 4 MiB retained live history, a
+  lightweight idempotency-receipt horizon, projected-byte hard teardown for stalled SSE readers,
+  bounded scene-relay names, bytes, and readers, and case-fold-safe `~<hex>` filesystem components with
+  raw and percent-era migration reads. Asset uploads clean up only their own candidates and the
+  manifest cache keeps value semantics. Unit coverage locks every one of those contracts.
+- The real browser harness now serves the production topology in one process: the built app and
+  real scene store share an origin with the store mounted at `/store`, matching nginx routing.
+  Its bounded native socket pool and pre-assertion lease readiness avoid accepting unreachable
+  Windows loopback leases. A local-only health keepalive preserves one finite Chromium connection
+  through long software-WebGL quiet periods; it never retries a product request, remains visible
+  to the strict failure sentinel, and is stopped, drained, and directly re-probed before that
+  sentinel is read.
+- Final real-browser evidence is 131/131 with zero unexpected console errors, page errors, or
+  failed requests. It covers two live browsers and two capability-scoped AgentX actors, exact
+  station arrival, owner controls, accessible desktop/390px layout, focus and Escape restoration,
+  reduced motion, receipt-bound evidence, disconnect/revocation/reassignment, held attach/resync
+  races, cancellation/completion cleanup, byte-identical transient boundaries, and Undo isolation.
+- Same-browser mission budget stayed within the ten-percent target. High: 196.50 → 212.50
+  calls/frame (+8.14%) and 122,217 → 130,243 triangles/frame (+6.57%). Mobile: 82.25 →
+  77.58 calls/frame (-5.68%) and 41,972 → 42,536 triangles/frame (+1.34%). The general profile
+  probe remains high/2048/reflections and mobile DPR 1.5 / 1024 shadows / zero reflection refresh
+  with the inactive overlay at 1×1. Six water cycles return exactly to the nine-texture baseline.
+- Final focused gates: `npm test` 113 total / 112 passed / one expected Windows skip; typecheck,
+  full lint, and production build green (209 modules; 345 product assets / 78.3 MB); live protocol
+  119/119; live browser 131/131; live security 59/59; live undo 27/27; scene-command validation
+  117/117; results 47/47; showroom, render-profile, and water-lifecycle probes green. Independent
+  authority, persistence/relay, browser-failure, and final harness audits report no blocker.
+- Slice 3 remains complete in `docs/AGENTX_ROADMAP.md`; Slice 4, Guided Co-authoring, is the next
+  cohesive AgentX milestone. Commit, clean CI deployment, and exact production-SHA proof follow
+  this release-candidate record.

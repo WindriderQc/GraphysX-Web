@@ -3,7 +3,14 @@ import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startStaticServer } from "./static-server.mjs";
-import { acquireVerifyLock, createFailureClassifier, installSignalCleanup, machineVerifyLockPath, withDeadline } from "./verify-guard.mjs";
+import {
+  acquireVerifyLock,
+  createFailureClassifier,
+  installSignalCleanup,
+  machineVerifyLockPath,
+  resolveVerifyRetryBudget,
+  withDeadline,
+} from "./verify-guard.mjs";
 
 // One command that proves a release is shippable: typecheck, build, then drive the
 // built output in a real headless browser through every product route.
@@ -183,7 +190,9 @@ function runSmoke(smoke, base) {
  * that fails half the time then passes the gate three runs in four, invisibly, which is the
  * same outcome as weakening its assertion. Above this floor the flakiness is the result.
  */
-const MAX_RETRIES = Number(process.env.VERIFY_MAX_RETRIES ?? 3);
+const MAX_RETRIES = resolveVerifyRetryBudget(process.env.VERIFY_MAX_RETRIES, {
+  ci: Boolean(process.env.CI),
+});
 
 const results = [];
 let server = null;

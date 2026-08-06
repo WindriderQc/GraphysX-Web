@@ -1007,7 +1007,10 @@ try {
   // --- 4. live collaboration -----------------------------------------------------------
 
   const snapshot = await owner.call("GET", `/sessions/${sessionId}/snapshot`);
-  check(results, "a member can take a snapshot", snapshot.status === 200 && snapshot.body.definition.schema === "graphysx.agent-world/v2", `status ${snapshot.status}`);
+  check(results, "a member can take a snapshot with its atomic authority view",
+    snapshot.status === 200 && snapshot.body.definition.schema === "graphysx.agent-world/v2"
+      && snapshot.body.you.actorId === "owner-ada" && snapshot.body.you.role === "owner",
+    `status ${snapshot.status}`);
   let revision = snapshot.body.revision;
 
   const ownerOp = await owner.call("POST", `/sessions/${sessionId}/ops`, {

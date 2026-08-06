@@ -20,7 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyCommands, describeCommands } from "./scene-commands.mjs";
 import { assertAuthoredWorldEntityNamespaces } from "./host-entity-id-policy.mjs";
-import { decodeStoreName, encodeStoreName } from "./store-paths.mjs";
+import { decodeStoreName, encodeStoreName, legacyStoreNameCandidates } from "./store-paths.mjs";
 import { createAssetStore, handleAssetRequest } from "./asset-store.mjs";
 import { CORS_ALLOW_HEADERS, CORS_ALLOW_METHODS, readJsonBody, sendJson as send } from "./http-util.mjs";
 import { createLiveSessions } from "./live-sessions.mjs";
@@ -172,12 +172,21 @@ function assertName(name) {
 }
 
 async function readRecord(dir, name) {
-  try {
-    return JSON.parse(await readFile(scenePath(dir, name), "utf8"));
-  } catch (error) {
-    if (error && error.code === "ENOENT") return null;
-    throw error;
+  const diskNames = [
+    encodeStoreName(name),
+    ...legacyStoreNameCandidates(name, { suffixBytes: Buffer.byteLength(".json") }),
+  ];
+  for (const diskName of diskNames) {
+    try {
+      const record = JSON.parse(await readFile(join(dir, `${diskName}.json`), "utf8"));
+      // This exact check prevents a legacy Foo.json from aliasing foo.json on a
+      // case-insensitive filesystem. New marker paths are case-fold-stable by construction.
+      if (record?.name === name) return record;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
   }
+  return null;
 }
 
 /**
@@ -216,14 +225,13 @@ export function createSceneStore({ dir = DEFAULT_DIR } = {}) {
     async list() {
       await ready;
       const files = (await readdir(dir)).filter((file) => file.endsWith(".json"));
-      const scenes = [];
+      const scenes = new Map();
       for (const file of files) {
-        // Decoded back to the public name before it goes near `readRecord`, which encodes
-        // again on the way in. Passing the on-disk name straight through would double-encode
-        // and make every escaped scene invisible to its own listing.
-        const record = await readRecord(dir, decodeStoreName(file.slice(0, -5)));
+        const name = decodeStoreName(file.slice(0, -5));
+        if (!NAME_PATTERN.test(name)) continue;
+        const record = await readRecord(dir, name);
         if (!record) continue;
-        scenes.push({
+        scenes.set(record.name, {
           name: record.name,
           revision: record.revision,
           updatedAt: record.updatedAt,
@@ -233,7 +241,7 @@ export function createSceneStore({ dir = DEFAULT_DIR } = {}) {
           entityCount: Array.isArray(record.definition?.entities) ? record.definition.entities.length : 0,
         });
       }
-      return scenes.sort((a, b) => a.name.localeCompare(b.name));
+      return [...scenes.values()].sort((a, b) => a.name.localeCompare(b.name));
     },
 
     async get(name) {
@@ -314,119 +322,157 @@ export function createSceneStore({ dir = DEFAULT_DIR } = {}) {
  * event stream already uses. The traffic is deltas down and commands up over ordinary POST,
  * so the half of WebSockets we would use is the half SSE already gives us.
  */
-function createRelay({ now = () => Date.now() } = {}) {
-  /** scene name → set of open response streams. */
+export function createRelay({
+  now = () => Date.now(),
+  limits = {},
+} = {}) {
   const subscribers = new Map();
-  /** scene name → { entries, bytes, touchedAt }, so a reconnect catches up rather than reloads. */
   const backlog = new Map();
-  const BACKLOG = 128;
-  /**
-   * Three bounds, because the count alone was none of them.
-   *
-   * A delta carries the whole submitted command list, so 128 of them is bounded only by the
-   * body limit — and the map itself was keyed by scene name and never pruned, so a store
-   * that had served a few thousand distinct scenes held a few thousand backlogs forever,
-   * every one of them for a scene nobody was watching. The map is the leak; the bytes are
-   * the size of it; the idle sweep is what makes both self-correcting.
-   */
-  const BACKLOG_BYTES = 4 * 1024 * 1024;
-  const BACKLOG_IDLE_MS = 30 * 60 * 1000;
+  const maxEntries = limits.entries ?? 128;
+  const maxSceneBytes = limits.sceneBytes ?? 4 * 1024 * 1024;
+  const maxTotalBytes = limits.totalBytes ?? 16 * 1024 * 1024;
+  const maxNames = limits.names ?? 256;
+  const idleMs = limits.idleMs ?? 30 * 60 * 1000;
+  const streamBytes = limits.streamBytes ?? maxSceneBytes;
+  // Scene streams are public reads, but public must not mean an unbounded number of
+  // retained ServerResponse/socket pairs. Keep a useful collaboration-sized allowance per
+  // scene and a process-wide ceiling for clients spreading themselves across scene names.
+  const admissionLimit = (value, fallback) =>
+    Number.isSafeInteger(value) && value >= 0 ? value : fallback;
+  const maxSubscribersPerScene = admissionLimit(limits.subscribersPerScene, 32);
+  const maxSubscribersTotal = admissionLimit(limits.subscribersTotal, 256);
+  let totalBytes = 0;
+  let totalSubscribers = 0;
 
-  /** Drops backlogs for scenes with no subscriber that nobody has published to in a while. */
-  function sweepIdle() {
+  const removeBacklog = (name) => {
+    const held = backlog.get(name);
+    if (!held) return;
+    totalBytes = Math.max(0, totalBytes - held.bytes);
+    backlog.delete(name);
+  };
+
+  const enforceGlobalBounds = () => {
     const at = now();
     for (const [name, held] of backlog) {
-      if (subscribers.has(name)) continue;
-      if (at - held.touchedAt > BACKLOG_IDLE_MS) backlog.delete(name);
+      if (!subscribers.has(name) && at - held.touchedAt > idleMs) removeBacklog(name);
     }
-  }
+    while (backlog.size > maxNames || totalBytes > maxTotalBytes) {
+      const oldest = backlog.keys().next().value;
+      if (oldest === undefined) break;
+      removeBacklog(oldest);
+    }
+  };
+
+  const removeSubscriber = (name, response) => {
+    const set = subscribers.get(name);
+    if (!set || !set.delete(response)) return;
+    totalSubscribers = Math.max(0, totalSubscribers - 1);
+    if (set.size === 0) subscribers.delete(name);
+  };
+
+  const destroySubscriber = (name, response) => {
+    removeSubscriber(name, response);
+    try { response.destroy?.(); } catch { /* already gone */ }
+    try { response.socket?.destroy?.(); } catch { /* already gone */ }
+  };
+
+  const writeFrame = (name, response, frame) => {
+    const bytes = Buffer.byteLength(frame);
+    if ((response.writableLength ?? 0) + bytes > streamBytes) {
+      destroySubscriber(name, response);
+      return false;
+    }
+    try {
+      response.write(frame);
+      return true;
+    } catch {
+      destroySubscriber(name, response);
+      return false;
+    }
+  };
 
   return {
     subscribe(name, response) {
       const set = subscribers.get(name) ?? new Set();
+      // A duplicate registration owns no additional capacity; return the same idempotent
+      // release shape without incrementing the global count.
+      if (set.has(response)) return () => removeSubscriber(name, response);
+      if (set.size >= maxSubscribersPerScene || totalSubscribers >= maxSubscribersTotal) return null;
       set.add(response);
       subscribers.set(name, set);
-      return () => {
-        set.delete(response);
-        if (set.size === 0) {
-          subscribers.delete(name);
-          // Losing the last watcher is the moment a backlog stops being worth anything to
-          // anyone but a client that reconnects shortly; the idle sweep collects it after.
-          sweepIdle();
-        }
-      };
+      totalSubscribers += 1;
+      return () => removeSubscriber(name, response);
     },
 
-    /**
-     * Deltas after `sinceRevision`, or null when the gap is too old to bridge.
-     *
-     * Retained entries wrap the delta rather than extending it. A `bytes` field written onto
-     * the delta itself would be serialized into replayed frames but not into the live ones —
-     * the live frame is stringified before retention — so a reconnecting client would receive
-     * a different object than everyone else saw.
-     */
-    catchUp(name, sinceRevision) {
+    /** Frames after sinceRevision, or null when a complete replay cannot be proven. */
+    catchUp(name, sinceRevision, currentRevision) {
+      enforceGlobalBounds();
+      if (!Number.isInteger(sinceRevision) || sinceRevision < 0
+        || !Number.isInteger(currentRevision) || sinceRevision > currentRevision) return null;
+      if (sinceRevision === currentRevision) return [];
       const entries = backlog.get(name)?.entries ?? [];
-      if (entries.length === 0) return [];
-      const oldest = entries[0].revision;
-      // The client is further behind than we can prove; it must reload rather than be told
-      // a partial story.
-      if (sinceRevision + 1 < oldest) return null;
-      return entries.filter((entry) => entry.revision > sinceRevision).map((entry) => entry.delta);
+      if (entries.length === 0 || entries.at(-1).revision !== currentRevision) return null;
+      if (sinceRevision + 1 < entries[0].revision) return null;
+      const missed = entries.filter((entry) => entry.revision > sinceRevision);
+      let expected = sinceRevision + 1;
+      for (const entry of missed) {
+        if (entry.revision !== expected) return null;
+        expected += 1;
+      }
+      return expected - 1 === currentRevision ? missed.map((entry) => entry.frame) : null;
     },
 
     publish(name, delta) {
-      const payload = JSON.stringify(delta);
-      const bytes = Buffer.byteLength(payload);
-      const held = backlog.get(name) ?? { entries: [], bytes: 0, touchedAt: now() };
-      held.entries.push({ revision: delta.revision, bytes, delta });
+      const frame = `id: ${delta.revision}\ndata: ${JSON.stringify(delta)}\n\n`;
+      const bytes = Buffer.byteLength(frame);
+      const previous = backlog.get(name);
+      if (previous) {
+        totalBytes = Math.max(0, totalBytes - previous.bytes);
+        backlog.delete(name);
+      }
+      const held = previous ?? { entries: [], bytes: 0, touchedAt: now() };
+      held.entries.push({ revision: delta.revision, frame, bytes });
       held.bytes += bytes;
       held.touchedAt = now();
-      // Keep the newest even when it alone exceeds the budget: it is what a client
-      // reconnecting right now needs, and dropping it would empty the backlog for everyone.
-      while (held.entries.length > BACKLOG || (held.bytes > BACKLOG_BYTES && held.entries.length > 1)) {
+      while (held.entries.length > maxEntries || held.bytes > maxSceneBytes) {
         held.bytes = Math.max(0, held.bytes - (held.entries.shift()?.bytes ?? 0));
       }
-      backlog.set(name, held);
-
-      const frame = `id: ${delta.revision}\ndata: ${payload}\n\n`;
-      // Snapshotted: ending a stalled stream removes it from this set mid-iteration.
-      for (const response of [...(subscribers.get(name) ?? [])]) {
-        // A subscriber further behind than the whole backlog cannot be caught up by it, so
-        // every byte still queued for it is data it would discard on arrival. End the stream
-        // instead; EventSource reconnects and takes the reload the hello frame will offer.
-        // See the same reasoning, at length, in live-sessions.mjs.
-        if ((response.writableLength ?? 0) > BACKLOG_BYTES) {
-          try {
-            response.end();
-          } catch {
-            // Already gone; the 'close' handler unsubscribes it either way.
-          }
-          continue;
-        }
-        // A dead socket must not take the write path down with it.
-        try {
-          response.write(frame);
-        } catch {
-          // The 'close' handler will unsubscribe it.
-        }
+      if (held.entries.length > 0) {
+        backlog.set(name, held);
+        totalBytes += held.bytes;
       }
+      enforceGlobalBounds();
+
+      for (const response of [...(subscribers.get(name) ?? [])]) {
+        writeFrame(name, response, frame);
+      }
+    },
+
+    write(name, response, frame) {
+      return writeFrame(name, response, frame);
     },
 
     subscriberCount(name) {
       return subscribers.get(name)?.size ?? 0;
     },
 
-    /** Diagnostic only: names held, and the bytes they hold. Never a delta body. */
     backlogStats() {
-      let bytes = 0;
-      for (const held of backlog.values()) bytes += held.bytes;
-      return { names: backlog.size, bytes };
+      return { names: backlog.size, bytes: totalBytes };
     },
   };
 }
 
-export function createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir, token, origins } = {}) {
+export function createSceneStoreServer({
+  dir,
+  assetDir,
+  datalakeDir,
+  resultsDir,
+  token,
+  origins,
+  relayLimits,
+  setStreamInterval = setInterval,
+  clearStreamInterval = clearInterval,
+} = {}) {
   const store = createSceneStore({ dir });
   const assets = createAssetStore({
     ...(assetDir !== undefined ? { dir: assetDir } : {}),
@@ -436,7 +482,7 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir,
     ...(token !== undefined ? { token } : {}),
     ...(origins !== undefined ? { origins } : {}),
   });
-  const relay = createRelay();
+  const relay = createRelay({ limits: relayLimits ?? {} });
   // Identity on top of the store's shared secret. Disabled — 503, not silently open — when
   // the store itself is running tokenless.
   const sessions = createLiveSessions({ store, guard });
@@ -505,14 +551,53 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir,
         if (streamMatch && request.method === "GET") {
           const name = decodeURIComponent(streamMatch[1]);
           assertName(name);
+
+          // Install the disconnect sentinel before the disk read. Otherwise a client can
+          // leave while get() is pending, and the continuation would subscribe a response
+          // whose close event had already passed — permanently owning capacity and a timer.
+          let heartbeat = null;
+          let unsubscribe = null;
+          let clientGone = request.aborted || response.destroyed;
+          const cleanup = () => {
+            clientGone = true;
+            if (heartbeat !== null) {
+              clearStreamInterval(heartbeat);
+              heartbeat = null;
+            }
+            const release = unsubscribe;
+            unsubscribe = null;
+            release?.();
+          };
+          request.once("aborted", cleanup);
+          response.once("close", cleanup);
+          response.once("error", cleanup);
+
           // The stream is a scene read and stays open even when writes are token-protected.
           const record = await store.get(name);
+          if (clientGone || request.aborted || response.destroyed) return undefined;
           if (!record) return send(response, 404, { error: `Unknown scene: ${name}` }, cors);
 
           // EventSource replays its last id on reconnect; honour it so a dropped
           // connection resumes rather than forcing a reload.
           const lastEventId = Number(request.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0);
-          const missed = Number.isFinite(lastEventId) && lastEventId > 0 ? relay.catchUp(name, lastEventId) : [];
+          const missed = Number.isFinite(lastEventId) && lastEventId > 0 ? relay.catchUp(name, lastEventId, record.revision) : [];
+
+          // Admission precedes SSE headers, the hello frame, and the heartbeat. A refused
+          // public reader gets an ordinary finite 429 response and never owns a retained
+          // response, socket, or timer.
+          unsubscribe = relay.subscribe(name, response);
+          if (!unsubscribe) {
+            return send(response, 429, {
+              error: "Scene stream capacity reached; retry later",
+              code: "scene-stream-capacity",
+            }, { ...cors, "retry-after": "5" });
+          }
+          // No asynchronous work separates the pre-admission check from subscription, but
+          // retain the invariant explicitly in case that section gains an await later.
+          if (clientGone || request.aborted || response.destroyed) {
+            cleanup();
+            return undefined;
+          }
 
           response.writeHead(200, {
             "content-type": "text/event-stream; charset=utf-8",
@@ -526,28 +611,30 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir,
 
           // The client needs to know where it stands before any delta arrives, and whether
           // catching up was even possible.
-          response.write(`event: hello\ndata: ${JSON.stringify({
+          const helloFrame = `event: hello\ndata: ${JSON.stringify({
             name,
             revision: record.revision,
             resumed: missed !== null && lastEventId > 0,
             mustReload: missed === null,
-          })}\n\n`);
-          for (const delta of missed ?? []) response.write(`id: ${delta.revision}\ndata: ${JSON.stringify(delta)}\n\n`);
+          })}\n\n`;
+          if (!relay.write(name, response, helloFrame)) {
+            cleanup();
+            return undefined;
+          }
+          for (const frame of missed ?? []) {
+            if (!relay.write(name, response, frame)) {
+              cleanup();
+              return undefined;
+            }
+          }
 
           // Idle connections get closed by intermediaries; a comment line is a no-op that
           // keeps them open without being delivered as an event.
-          const heartbeat = setInterval(() => {
-            try {
-              response.write(": ping\n\n");
-            } catch {
-              // Cleanup happens on close.
-            }
+          const heartbeatFrame = ": ping\n\n";
+          heartbeat = setStreamInterval(() => {
+            if (!relay.write(name, response, heartbeatFrame)) cleanup();
           }, 25000);
-          const unsubscribe = relay.subscribe(name, response);
-          request.on("close", () => {
-            clearInterval(heartbeat);
-            unsubscribe();
-          });
+          heartbeat.unref?.();
           return undefined;
         }
 
@@ -667,10 +754,10 @@ export function createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir,
     })();
   });
 
-  return { server, store, assets, guard, sessions, results };
+  return { server, store, assets, guard, sessions, results, relay };
 }
 
-export async function startSceneStore({ port = DEFAULT_PORT, host = DEFAULT_HOST, dir, assetDir, datalakeDir, resultsDir, token, origins } = {}) {
+export async function startSceneStore({ port = DEFAULT_PORT, host = DEFAULT_HOST, dir, assetDir, datalakeDir, resultsDir, token, origins, keepAliveTimeoutMs = 72_000 } = {}) {
   const { server, store, assets, guard, sessions, results } = createSceneStoreServer({ dir, assetDir, datalakeDir, resultsDir, token, origins });
   if (!guard.enabled) {
     // One line, every start, on purpose: the open mode is a deliberate LAN convenience
@@ -682,8 +769,11 @@ export async function startSceneStore({ port = DEFAULT_PORT, host = DEFAULT_HOST
   // server has already closed and fails with a bare "fetch failed". That is what made the
   // scene-store smoke fail after its browser phase: seeding worked, the page loaded, and the
   // next agent call died on a stale socket. Outliving any realistic client pause fixes it.
-  server.keepAliveTimeout = 72_000;
-  server.headersTimeout = 75_000;
+  const boundedKeepAliveMs = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs >= 1_000
+    ? Math.floor(keepAliveTimeoutMs)
+    : 72_000;
+  server.keepAliveTimeout = boundedKeepAliveMs;
+  server.headersTimeout = Math.max(75_000, boundedKeepAliveMs + 3_000);
   // Keep total request lifetime explicit across Node releases. Overflowing JSON bodies have
   // their own much tighter five-second discard window in readJsonBody.
   server.requestTimeout = 300_000;

@@ -65,12 +65,23 @@ async function resolveFile(root, urlPath) {
  * @param {string} [options.root] Fixed directory to serve.
  * @param {() => Promise<string|null>} [options.resolveRoot] Resolved per request instead of
  *   `root`, so a staging host can be repointed at a new release without a restart.
+ * @param {(request: import("node:http").IncomingMessage, response: import("node:http").ServerResponse) => boolean} [options.routeRequest]
+ *   Optional same-process route mounted before static resolution. Returning true means the
+ *   route owns the response (including long-lived streaming responses).
  */
-export function startStaticServer({ root, resolveRoot, port = 4188, host = "127.0.0.1" }) {
+export function startStaticServer({
+  root,
+  resolveRoot,
+  routeRequest,
+  port = 4188,
+  host = "127.0.0.1",
+  keepAliveTimeoutMs = 72_000,
+}) {
   const fixedRoot = root ? path.resolve(root) : null;
   const currentRoot = resolveRoot ?? (async () => fixedRoot);
 
   const server = http.createServer(async (req, res) => {
+    if (routeRequest?.(req, res)) return;
     const rootAbs = await currentRoot();
     if (!rootAbs) {
       res.writeHead(503, { "content-type": "text/plain; charset=utf-8" });
@@ -117,8 +128,11 @@ export function startStaticServer({ root, resolveRoot, port = 4188, host = "127.
   // Headless Chromium opens many keep-alive connections and can leave one idle while it
   // parses a multi-megabyte chunk. Node's 5s default would close it underneath the browser
   // mid-page-load, producing a spurious connection reset.
-  server.keepAliveTimeout = 72_000;
-  server.headersTimeout = 75_000;
+  const boundedKeepAliveMs = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs >= 1_000
+    ? Math.floor(keepAliveTimeoutMs)
+    : 72_000;
+  server.keepAliveTimeout = boundedKeepAliveMs;
+  server.headersTimeout = Math.max(75_000, boundedKeepAliveMs + 3_000);
   server.requestTimeout = 0;
 
   // A malformed or half-open client connection makes Node destroy the socket by default,

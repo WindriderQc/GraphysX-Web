@@ -10,16 +10,17 @@ import { Agent as HttpsAgent, request as requestHttps } from "node:https";
 // smoke proves the *product* path; this proves the *protocol*.
 
 // Native keep-alive agents retire closed sockets correctly and avoid exhausting Windows'
-// loopback ephemeral ports during the long real-browser lifecycle. Eight sockets preserve
+// loopback ephemeral ports during the long real-browser lifecycle. Twelve sockets preserve
 // real request concurrency while forcing larger smoke bursts to queue on proven connections;
-// keeping maxFreeSockets equal to maxSockets prevents the pool from churning the other 40.
-// SSE borrows one of these sockets and removes it from the pool for its retained lifetime.
+// keeping maxFreeSockets equal to maxSockets prevents the pool from churning the other 36.
+// SSE borrows one of these proven sockets and removes it from the pool for its retained
+// lifetime. Long browser smokes prewarm eight, leaving capacity for their static origin.
 const requestAgentOptions = {
   keepAlive: true,
   keepAliveMsecs: 1_000,
-  maxSockets: 8,
-  maxTotalSockets: 8,
-  maxFreeSockets: 8,
+  maxSockets: 12,
+  maxTotalSockets: 12,
+  maxFreeSockets: 12,
   scheduling: "lifo",
 };
 const requestHttpAgent = new HttpAgent(requestAgentOptions);
@@ -242,7 +243,7 @@ export function createActor(baseUrl, { credential = null, storeToken = null, ori
       if (ticketResponse.status !== 201) throw new Error(`stream-ticket failed: ${ticketResponse.status} ${ticketResponse.text}`);
       const ticket = ticketResponse.body.ticket;
       // Let the Agent publish the completed ticket response as free before the SSE
-      // borrows that exact loopback connection and detaches it for its retained lifetime.
+      // borrows that exact proven connection and detaches it for its retained lifetime.
       await new Promise((resolve) => setImmediate(resolve));
       const opened = await openEventStream(
         `${baseUrl}/sessions/${sessionId}/stream?ticket=${encodeURIComponent(ticket)}&since=${since}`,
@@ -336,8 +337,8 @@ export function createActor(baseUrl, { credential = null, storeToken = null, ori
  * shape of a suspended laptop or a throttled background tab, which TCP never reports as a
  * close.
  *
- * `drain()` finally reads whatever the server managed to queue, so a test can assert what it
- * decided to do about it.
+ * `waitForClose()` never resumes the response: the test proves the server releases a
+ * nonreader rather than making the client cooperate with its own cleanup.
  */
 export async function openStalledStream(baseUrl, sessionId, { credential, origin = null, since = 0 } = {}) {
   const headers = { "content-type": "application/json", "x-graphysx-session": credential, ...(origin ? { origin } : {}) };
@@ -364,22 +365,23 @@ export async function openStalledStream(baseUrl, sessionId, { credential, origin
   );
   // Before any `data` listener or async iteration exists, so nothing has been consumed.
   opened.response.pause();
+  const socket = opened.response.socket;
+  const closed = new Promise((resolve) => {
+    opened.response.once("aborted", () => resolve(true));
+    opened.response.once("close", () => resolve(true));
+    opened.response.once("error", () => resolve(true));
+    socket?.once("close", () => resolve(true));
+  });
   return {
     response: opened.response,
-    /** Reads to EOF, or until `timeoutMs` proves the server is still holding the stream open. */
-    async drain({ timeoutMs = 4_000 } = {}) {
-      const chunks = [];
-      let ended = false;
-      opened.response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-      const finished = new Promise((resolve) => {
-        opened.response.once("end", () => { ended = true; resolve(); });
-        opened.response.once("close", resolve);
-        opened.response.once("error", resolve);
-      });
-      opened.response.resume();
-      await Promise.race([finished, sleep(timeoutMs)]);
+    socket,
+    async waitForClose({ timeoutMs = 6_000 } = {}) {
+      if (opened.response.destroyed || socket?.destroyed) return true;
+      return Promise.race([closed, sleep(timeoutMs).then(() => false)]);
+    },
+    close() {
+      opened.response.destroy();
       opened.request.destroy();
-      return { ended, text: Buffer.concat(chunks).toString("utf8") };
     },
   };
 }
