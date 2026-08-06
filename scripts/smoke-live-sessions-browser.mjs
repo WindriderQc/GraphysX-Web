@@ -264,15 +264,17 @@ const waitForAgentReaction = async (page, revision, label) => {
   }
 };
 
-const waitForAgentAt = async (page, actorId, expected, label, tolerance = 0.02) => {
+const waitForAgentAt = async (page, actorId, expected, label, tolerance = 0.02, axes = [0, 1, 2]) => {
   const deadline = Date.now() + SMOKE_TIMEOUT;
   let last = null;
   for (;;) {
     last = await page.evaluate((id) => window.__GRAPHYSX_LIVE_PRESENCE__?.state().agents.find(
       (agent) => agent.actorId === id,
     ) ?? null, actorId);
-    if (last && expected.every((value, index) => Math.abs(last.position[index] - value) < tolerance)) return last;
-    if (Date.now() > deadline) throw new Error(`${label}: avatar did not reach ${expected.join(",")}; last ${JSON.stringify(last)}`);
+    if (last && axes.every((index) => Math.abs(last.position[index] - expected[index]) < tolerance)) return last;
+    if (Date.now() > deadline) {
+      throw new Error(`${label}: avatar did not reach ${expected.join(",")} on axes ${axes.join(",")}; last ${JSON.stringify(last)}`);
+    }
     await sleep(100);
   }
 };
@@ -1868,12 +1870,13 @@ try {
 
   // Mission activation and avatar travel are deliberately separate: the authoritative
   // assignment arrives before each renderer completes its station choreography. Prove both
-  // real runtimes reach the exact capability slots before comparing their stable projection.
+  // real runtimes reach the exact horizontal capability slots before comparing their stable
+  // projection. Y is intentionally animated by the avatar's bob behavior and is bounded below.
   await Promise.all([
-    waitForAgentAt(first.page, "mission-scout", [8.4, 0.36, -0.05], "owner scout station", 0.0005),
-    waitForAgentAt(first.page, "mission-validator", [8.2, 0.36, 3.85], "owner validator station", 0.0005),
-    waitForAgentAt(second.page, "mission-scout", [8.4, 0.36, -0.05], "peer scout station", 0.0005),
-    waitForAgentAt(second.page, "mission-validator", [8.2, 0.36, 3.85], "peer validator station", 0.0005),
+    waitForAgentAt(first.page, "mission-scout", [8.4, 0.36, -0.05], "owner scout station", 0.0005, [0, 2]),
+    waitForAgentAt(first.page, "mission-validator", [8.2, 0.36, 3.85], "owner validator station", 0.0005, [0, 2]),
+    waitForAgentAt(second.page, "mission-scout", [8.4, 0.36, -0.05], "peer scout station", 0.0005, [0, 2]),
+    waitForAgentAt(second.page, "mission-validator", [8.2, 0.36, 3.85], "peer validator station", 0.0005, [0, 2]),
   ]);
 
   const stationProof = await Promise.all([first.page, second.page].map((page) => page.evaluate(() =>

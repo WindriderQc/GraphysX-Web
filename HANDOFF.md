@@ -114,6 +114,12 @@ belongs in `scripts/`.
   server's own 4 MiB retained-stream guard becomes observable. Fifteen maximal entities over
   38 operations crosses that finite envelope, and the healthy-reader control consumes the
   identical burst; seed + burst + final control operation exactly fits the 40-operation bucket.
+- **Mission station Y is animated state, not the authored anchor.** AgentX station targets use
+  Y = 0.36, but `state().agents[].position` exposes the rendered transform and its intentional
+  bob (up to 0.09 while working). Arrival waits must retain the 0.0005 tolerance on X/Z and
+  leave Y to the following animation-envelope assertion; polling all three axes waits for a
+  timing-dependent sine zero crossing. Do not widen one scalar tolerance, disable animation,
+  or drop the station/stage and cross-client projection checks.
 - **A wedged run used to hang forever.** `runSmoke` awaited `close` with nothing bounding it, and
   two verify parents were found alive **9.5 and 7.7 hours** after launch holding Chromium trees.
   There are now deadlines (10 min/smoke, 15 for the live browser contract, 10 min/build; all

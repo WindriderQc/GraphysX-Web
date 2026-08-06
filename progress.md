@@ -3116,3 +3116,18 @@ error on a runtime rollback with an attached gizmo (`13aba57`).
   baseline → active: 196.50 → 212.00 calls/frame (+7.89%) and 122,217 → 130,214 triangles/frame
   (+6.54%). Mobile: 82.13 → 78.83 calls/frame (-4.02%) and 41,969 → 42,395 triangles/frame
   (+1.02%).
+
+## 2026-08-06 — Animated station gate correction
+
+- Exact-SHA workflow run 31095958017 reached every release check but the live browser gate.
+  All other verification, including live security 59/59, passed and deploy correctly stayed
+  skipped. The browser failure sampled a scout at `[8.4, 0.368, -0.05]` against its authored
+  `[8.4, 0.36, -0.05]` anchor with a 0.0005 all-axis tolerance.
+- Presence snapshots intentionally expose the rendered transform: working avatars bob by up to
+  0.09 on Y. The station arrival helper now masks only Y for the four station waits, preserving
+  the 0.0005 X/Z test; the immediately following proof still bounds animated Y, checks exact
+  station/stage semantics, and compares stable cross-client slots. Product animation, navigation,
+  performance budgets, browser-error sentinels, and retry policy are unchanged.
+- Focused validation is green: syntax, scoped ESLint, and diff checks passed; the complete
+  full-motion live browser gate passed 131/131 in 555.4 seconds with zero unexpected console
+  errors, page errors, or failed requests.
