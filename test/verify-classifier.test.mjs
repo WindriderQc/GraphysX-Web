@@ -6,8 +6,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DEADLINE_WARN_FRACTION,
   HARNESS_FAILURE_SIGNATURES,
   createFailureClassifier,
+  describeDeadlineUsage,
+  formatDuration,
   resolveVerifyRetryBudget,
 } from "../scripts/verify-guard.mjs";
 
@@ -41,6 +44,23 @@ describe("harness failure classification", () => {
       classify("FAIL  smoke threw — page.evaluate: LiveSessionError: Live session server unreachable at http://127.0.0.1:3736: Failed to fetch"),
       ["Failed to fetch"],
     );
+  });
+
+  it("retries a navigation timeout but never an assertion timeout", () => {
+    // Both are Playwright TimeoutError. The difference is which call timed out, and that is the
+    // whole distinction: `page.goto` never reached the app, so nothing was proved and a retry
+    // costs nothing. `waitForSelector` means the page loaded and the product did not do what it
+    // promised — retrying that is exactly how a real regression is laundered into a green gate.
+    assert.deepEqual(
+      classify('"fatal": "TimeoutError: page.goto: Timeout 45000ms exceeded. - navigating to http://127.0.0.1:21806/"'),
+      ["page.goto: Timeout"],
+    );
+    assert.deepEqual(
+      classify("TimeoutError: page.waitForSelector: Timeout 45000ms exceeded waiting for .gx-welcome"),
+      [],
+      "an assertion timeout must never be retried",
+    );
+    assert.deepEqual(classify("TimeoutError: page.waitForFunction: Timeout 30000ms exceeded"), []);
   });
 
   it("stays silent on an ordinary assertion failure", () => {
@@ -113,5 +133,68 @@ describe("verify retry budget", () => {
         /VERIFY_MAX_RETRIES must be .*non-negative integer/,
       );
     }
+  });
+});
+
+describe("deadline headroom reporting", () => {
+  // The measurement that motivated this: on a clean runner, live-sessions-browser took
+  // 1,397,000 ms against a 1,800,000 ms deadline. Nothing reported that until it went red and
+  // blocked production for a day, and the four commits that followed adjusted the number by
+  // guesswork because nobody had the figure in front of them.
+  const LIVE_BROWSER_MS = 1_397_000;
+  const LIVE_BROWSER_DEADLINE_MS = 30 * 60 * 1000;
+
+  it("formats a duration the way a person reads a gate summary", () => {
+    assert.equal(formatDuration(0), "0s");
+    assert.equal(formatDuration(4_400), "4s");
+    assert.equal(formatDuration(59_000), "59s");
+    assert.equal(formatDuration(60_000), "1m00s");
+    assert.equal(formatDuration(LIVE_BROWSER_MS), "23m17s");
+    assert.equal(formatDuration(LIVE_BROWSER_DEADLINE_MS), "30m00s");
+  });
+
+  it("returns a readable, non-lying description for a missing measurement", () => {
+    assert.equal(describeDeadlineUsage(undefined, 1000), null);
+    assert.equal(describeDeadlineUsage(-1, 1000), null);
+    assert.equal(formatDuration(Number.NaN), "?");
+  });
+
+  it("reports cost even when a check has no deadline to be near", () => {
+    const noDeadline = describeDeadlineUsage(5_000, undefined);
+    assert.equal(noDeadline.fraction, null);
+    assert.equal(noDeadline.warn, false, "a check with no deadline can never be close to one");
+    assert.equal(noDeadline.text, "5s");
+  });
+
+  it("warns on the exact run that blocked production", () => {
+    const spent = describeDeadlineUsage(LIVE_BROWSER_MS, LIVE_BROWSER_DEADLINE_MS);
+    assert.equal(spent.text, "23m17s of 30m00s (78%)");
+    assert.equal(spent.warn, true, "78% of the deadline must be visible before it becomes 101%");
+  });
+
+  it("stays quiet for a check with real headroom", () => {
+    // `editor`, the next largest smoke, at 421s against the standard 10-minute deadline.
+    const spent = describeDeadlineUsage(421_000, 10 * 60 * 1000);
+    assert.equal(spent.warn, false);
+    assert.equal(spent.text, "7m01s of 10m00s (70%)");
+  });
+
+  it("treats the threshold as inclusive, so the boundary case is reported", () => {
+    assert.equal(describeDeadlineUsage(750, 1000, { warnAtFraction: 0.75 }).warn, true);
+    assert.equal(describeDeadlineUsage(749, 1000, { warnAtFraction: 0.75 }).warn, false);
+  });
+
+  it("reports a check that ran past its deadline rather than clamping it", () => {
+    // The 20-minute deadline this smoke was killed on. A clamp to 100% would hide how far
+    // over it actually went, which is exactly the number needed to resize it.
+    const spent = describeDeadlineUsage(LIVE_BROWSER_MS, 20 * 60 * 1000);
+    assert.ok(spent.fraction > 1);
+    assert.equal(spent.text, "23m17s of 20m00s (116%)");
+    assert.equal(spent.warn, true);
+  });
+
+  it("ships a threshold that leaves room to act", () => {
+    assert.ok(DEADLINE_WARN_FRACTION > 0 && DEADLINE_WARN_FRACTION < 1);
+    assert.ok(DEADLINE_WARN_FRACTION <= 0.8, "a threshold above 80% warns too late to be useful");
   });
 });

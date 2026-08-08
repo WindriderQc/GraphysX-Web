@@ -179,6 +179,15 @@ export const HARNESS_FAILURE_SIGNATURES = [
   // and so was reported as a product failure without ever being retried.
   "fetch failed",
   "Failed to fetch",
+  // Navigation only, and deliberately not any timeout. `page.goto` timing out means the
+  // harness never reached the app it was going to make assertions about — the loopback
+  // static server this run started itself did not answer. Observed three times in one local
+  // run against servers that CI had served fine minutes earlier.
+  //
+  // An assertion timeout (`waitForSelector`, `waitForFunction`) is the opposite: the page
+  // loaded and the product did not do what it promised. Those must stay non-retryable, which
+  // is why this matches the navigation call by name rather than the word "Timeout".
+  "page.goto: Timeout",
   "ECONNRESET",
   "ECONNREFUSED",
   "ETIMEDOUT",
@@ -239,6 +248,45 @@ export function resolveVerifyRetryBudget(rawValue, { ci = false } = {}) {
     );
   }
   return budget;
+}
+
+/**
+ * How close a check ran to its deadline.
+ *
+ * This exists because a whole day of production downtime was invisible until it was red.
+ * `live-sessions-browser` grew from 94 assertions to about 127; on a clean runner it now takes
+ * 23m17s against a 30-minute deadline — 78% — and consumes 31% of the entire 75-minute gate.
+ * Nothing reported that. The first anyone knew was a killed process tree, and the four commits
+ * that followed raised the number by guesswork because nobody had the measurement.
+ *
+ * Deliberately a warning and never a failure. A deadline catches a wedged smoke; it is not a
+ * performance budget, and turning "slower than I expected" into a red gate would block
+ * production on a busy runner. The point is that the next person sees the headroom shrinking
+ * while there is still time to act.
+ */
+export const DEADLINE_WARN_FRACTION = Number(process.env.VERIFY_DEADLINE_WARN_FRACTION || 0.75);
+
+export function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return "?";
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+export function describeDeadlineUsage(elapsedMs, deadlineMs, { warnAtFraction = DEADLINE_WARN_FRACTION } = {}) {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return null;
+  // A check with no deadline still reports its cost; it just has no fraction to be near.
+  if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) {
+    return { elapsedMs, deadlineMs: null, fraction: null, warn: false, text: formatDuration(elapsedMs) };
+  }
+  const fraction = elapsedMs / deadlineMs;
+  return {
+    elapsedMs,
+    deadlineMs,
+    fraction,
+    warn: fraction >= warnAtFraction,
+    text: `${formatDuration(elapsedMs)} of ${formatDuration(deadlineMs)} (${Math.round(fraction * 100)}%)`,
+  };
 }
 
 /**

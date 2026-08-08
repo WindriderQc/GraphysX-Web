@@ -4,8 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startStaticServer } from "./static-server.mjs";
 import {
+  DEADLINE_WARN_FRACTION,
   acquireVerifyLock,
   createFailureClassifier,
+  describeDeadlineUsage,
   installSignalCleanup,
   machineVerifyLockPath,
   resolveVerifyRetryBudget,
@@ -132,6 +134,7 @@ function spawnTracked(command, args, options, label, deadlineMs, { classify = fa
     }
   }
   const { timedOut, clear } = withDeadline(child, deadlineMs, label);
+  const startedAt = Date.now();
   const finished = new Promise((resolve) => {
     child.on("close", (code) => resolve({ label, code: code ?? 1 }));
     child.on("error", (err) => {
@@ -141,7 +144,14 @@ function spawnTracked(command, args, options, label, deadlineMs, { classify = fa
   });
   // Whichever lands first wins: a real exit, or the deadline killing the tree.
   return Promise.race([finished, timedOut])
-    .then((result) => ({ ...result, signatures: classifier?.signatures ?? [] }))
+    .then((result) => ({
+      ...result,
+      signatures: classifier?.signatures ?? [],
+      // Carried so the summary can report headroom rather than only pass/fail. A check that
+      // is quietly approaching its deadline is the shape of the next red gate.
+      elapsedMs: Date.now() - startedAt,
+      deadlineMs,
+    }))
     .finally(() => {
       clear();
       children.delete(child);
@@ -294,7 +304,10 @@ try {
           break;
         }
         if (result.signatures.length === 0) {
-          console.warn(`\n${smoke.name}: failed an assertion — not retried. Diagnose it.`);
+          // Not "failed an assertion" — the gate cannot know that. All it knows is that no
+          // transport signature matched, and saying more than that sent me looking for a
+          // product bug in a smoke whose harness had simply never reached an assertion.
+          console.warn(`\n${smoke.name}: failed with no known transport signature — not retried. Diagnose it.`);
           break;
         }
         retried = result.signatures.join(", ");
@@ -310,12 +323,29 @@ try {
 
 const failed = results.filter((r) => r.code !== 0);
 const retried = results.filter((r) => r.retried);
+const usage = new Map(results.map((r) => [r, describeDeadlineUsage(r.elapsedMs, r.deadlineMs)]));
+const widest = Math.max(...results.map((r) => r.label.length));
 console.log("\n=== verify summary ===");
 for (const r of results) {
   // A retried pass is not the same result as a first-attempt pass, and the summary is the
-  // thing people actually read. Say so on the line itself.
+  // thing people actually read. Say so on the line itself — and say what it cost.
   const suffix = r.retried ? ` (retried: ${r.retried})` : "";
-  console.log(`${r.code === 0 ? "PASS" : "FAIL"}  ${r.label}${suffix}`);
+  const spent = usage.get(r);
+  const timing = spent ? `  ${spent.warn ? "!" : " "}${spent.text}` : "";
+  console.log(`${r.code === 0 ? "PASS" : "FAIL"}  ${r.label.padEnd(widest)}${timing}${suffix}`);
+}
+
+// Reported before the pass/fail verdict below, because it is the one line that matters on a
+// run that is about to stop being green.
+const tight = results.filter((r) => usage.get(r)?.warn);
+if (tight.length) {
+  console.warn(
+    `\nHeadroom warning — ${tight.length} check(s) used ${Math.round(DEADLINE_WARN_FRACTION * 100)}% or more of the deadline:\n` +
+    tight.map((r) => `  ${r.label}: ${usage.get(r).text}`).join("\n") +
+    "\n  This is a warning, never a failure: a deadline catches a wedged smoke, it is not a\n" +
+    "  performance budget. But a check this close is the next red gate. Split it, or raise its\n" +
+    "  deadline deliberately with the measurement in hand — not after it has blocked a deploy.",
+  );
 }
 if (failed.length) {
   console.error(`\n${failed.length} check(s) failed: ${failed.map((f) => f.label).join(", ")}`);
