@@ -379,6 +379,42 @@ try {
     };
   }, beforeProposal);
 
+  // Narrowing: unchecking the command that creates an entity must take everything that needs
+  // it, and the commit must contain what the person left rather than what the agent composed.
+  await page.click('[data-nestor-topic="build"]');
+  await page.waitForSelector(".gx-welcome--proposing", { timeout: SMOKE_TIMEOUT });
+  await page.click("[data-proposal-toggle]");
+  const prefabIndex = await page.evaluate(() =>
+    window.__GRAPHYSX_NESTOR__.state().proposal.commands.findIndex((command) => command.op === "spawn-prefab"));
+  await page.click(`[data-proposal-command="${prefabIndex}"]`);
+  const narrowed = await page.evaluate((index) => {
+    const proposal = window.__GRAPHYSX_NESTOR__.state().proposal;
+    const boxes = [...document.querySelectorAll("[data-proposal-command]")];
+    return {
+      cascaded: proposal.excluded.length > 1,
+      excludedTheCreator: proposal.excluded.includes(index),
+      // The checkboxes must agree with the model; a cascade the person cannot see is a
+      // silent edit to their decision.
+      uncheckedInDom: boxes.filter((box) => !box.checked).length,
+      excludedInModel: proposal.excluded.length,
+      metaSaysRemoved: (document.querySelector("[data-proposal-meta]")?.textContent ?? "").includes("removed"),
+    };
+  }, prefabIndex);
+  const revisionBeforeNarrowAccept = await page.evaluate(() => window.__GRAPHYSX__.state().revision);
+  await page.click("[data-proposal-accept]");
+  await page.waitForFunction((before) => window.__GRAPHYSX__.state().revision > before,
+    revisionBeforeNarrowAccept, { timeout: SMOKE_TIMEOUT });
+  out.nestorNarrowed = await page.evaluate((input) => ({
+    ...input.narrowed,
+    // The excluded prefab created this id, so a commit honouring the exclusion cannot have it.
+    excludedWorkAbsent: window.__GRAPHYSX__.query({ ids: ["showroom-nestor-build"] }).length === 0,
+    includedWorkApplied: window.__GRAPHYSX__.query({ ids: ["showroom-nestor"] })[0]?.agent?.status === "presenting:build",
+  }), { narrowed });
+  // Return to a clean slate so the full-accept path below starts where it always did.
+  await page.evaluate(() => window.__GRAPHYSX__.undo());
+  await page.waitForFunction((before) => window.__GRAPHYSX__.state().revision === before,
+    revisionBeforeNarrowAccept, { timeout: SMOKE_TIMEOUT }).catch(() => {});
+
   // Now the accepted path: propose, apply, and the original commit contract still holds.
   await page.click('[data-nestor-topic="build"]');
   await page.waitForSelector(".gx-welcome--proposing", { timeout: SMOKE_TIMEOUT });
@@ -670,7 +706,15 @@ const coauthorGateHolds =
   discard.commitsUnchanged === true &&
   discard.proposalCleared === true &&
   discard.outcome === "discarded" &&
-  (discard.outcomeText ?? "").includes("not changed");
+  (discard.outcomeText ?? "").includes("not changed") &&
+  // Narrowing: the dependency cascade is visible, and the commit honours the exclusion.
+  !!out.nestorNarrowed &&
+  out.nestorNarrowed.cascaded === true &&
+  out.nestorNarrowed.excludedTheCreator === true &&
+  out.nestorNarrowed.uncheckedInDom === out.nestorNarrowed.excludedInModel &&
+  out.nestorNarrowed.metaSaysRemoved === true &&
+  out.nestorNarrowed.excludedWorkAbsent === true &&
+  out.nestorNarrowed.includedWorkApplied === true;
 out.coauthorGateHolds = coauthorGateHolds;
 
 const nestorIsLive =

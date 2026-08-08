@@ -9,8 +9,11 @@ import {
   commandEntityId,
   createProposal,
   describeCommand,
+  includedCommands,
+  isProposalEmpty,
   isProposalStale,
   summarizeProposal,
+  toggleCommandInclusion,
 } from "../src/coauthor-proposal.ts";
 
 const actor = { id: "nestor", label: "Nestor", kind: "agent" };
@@ -148,6 +151,98 @@ describe("what a person actually reads", () => {
     assert.equal(
       summarizeProposal(propose([{ op: "set-environment", environment: {} }])),
       "1 change · from revision 12",
+    );
+  });
+});
+
+describe("narrowing a proposal", () => {
+  const beacon = [
+    { op: "spawn", entity: { id: "beacon", type: "box", label: "Beacon" } },
+    { op: "update", id: "beacon", patch: { visible: true } },
+    { op: "update", id: "showroom-nestor", patch: { agent: {} } },
+  ];
+
+  it("starts as the whole thing the agent asked for", () => {
+    const proposal = propose(beacon);
+    assert.deepEqual(proposal.excluded, []);
+    assert.equal(includedCommands(proposal).length, 3);
+    assert.equal(isProposalEmpty(proposal), false);
+  });
+
+  it("removes only the chosen command when nothing depends on it", () => {
+    const narrowed = toggleCommandInclusion(propose(beacon), 2);
+    assert.deepEqual(narrowed.excluded, [2]);
+    assert.deepEqual(includedCommands(narrowed).map((c) => c.op), ["spawn", "update"]);
+  });
+
+  it("takes dependents out with the command that creates them", () => {
+    // api.commit is atomic, so keeping "update beacon" without "spawn beacon" would fail
+    // whole rather than corrupt anything — but failing whole after someone carefully
+    // unchecked one line is a bad answer to hand them.
+    const narrowed = toggleCommandInclusion(propose(beacon), 0);
+    assert.deepEqual(narrowed.excluded, [0, 1]);
+    assert.deepEqual(includedCommands(narrowed).map((c) => c.id), ["showroom-nestor"]);
+  });
+
+  it("brings the creator back when a dependent is re-included", () => {
+    // The cascade has to work both ways, or the person can assemble a selection that cannot
+    // commit — exactly what offering this control is supposed to prevent.
+    const narrowed = toggleCommandInclusion(propose(beacon), 0);
+    const restored = toggleCommandInclusion(narrowed, 1);
+    assert.deepEqual(restored.excluded, [], "re-including the update must restore its spawn");
+  });
+
+  it("treats prefab children as dependents of the prefab", () => {
+    const proposal = propose([
+      { op: "spawn-prefab", prefabId: "signal-beacon", options: { idPrefix: "sig" } },
+      { op: "update", id: "sig:ring", patch: { visible: true } },
+      { op: "update", id: "other", patch: { visible: true } },
+    ]);
+    assert.deepEqual(toggleCommandInclusion(proposal, 0).excluded, [0, 1]);
+  });
+
+  it("treats both joint bodies as dependencies", () => {
+    const proposal = propose([
+      { op: "spawn", entity: { id: "anchor", type: "box" } },
+      { op: "add-joint", joint: { id: "j1", bodyA: "anchor", bodyB: "weight" } },
+    ]);
+    assert.deepEqual(toggleCommandInclusion(proposal, 0).excluded, [0, 1]);
+  });
+
+  it("is its own inverse for an independent command", () => {
+    const proposal = propose(beacon);
+    const off = toggleCommandInclusion(proposal, 2);
+    const on = toggleCommandInclusion(off, 2);
+    assert.deepEqual(on.excluded, []);
+  });
+
+  it("never mutates the proposal it was given", () => {
+    const proposal = propose(beacon);
+    toggleCommandInclusion(proposal, 0);
+    assert.deepEqual(proposal.excluded, [], "the original selection was modified in place");
+  });
+
+  it("ignores an index that is not a command", () => {
+    const proposal = propose(beacon);
+    assert.equal(toggleCommandInclusion(proposal, -1), proposal);
+    assert.equal(toggleCommandInclusion(proposal, 99), proposal);
+  });
+
+  it("knows when nothing is left to apply", () => {
+    let proposal = propose(beacon);
+    for (const index of [0, 2]) proposal = toggleCommandInclusion(proposal, index);
+    assert.equal(isProposalEmpty(proposal), true);
+    assert.deepEqual(includedCommands(proposal), []);
+  });
+
+  it("summarises what would be sent, not what was composed", () => {
+    const proposal = propose(beacon);
+    assert.equal(summarizeProposal(proposal), "3 changes · 2 entities · from revision 12");
+    const narrowed = toggleCommandInclusion(proposal, 2);
+    assert.equal(
+      summarizeProposal(narrowed),
+      "2 changes · 1 entity · 1 removed · from revision 12",
+      "a narrowed proposal must not read like a smaller one that arrived that way",
     );
   });
 });

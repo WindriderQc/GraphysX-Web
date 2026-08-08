@@ -4,7 +4,7 @@ import type {
   AgentWorldEntityDefinition,
   GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
-import { createProposal, isProposalStale } from "./coauthor-proposal";
+import { createProposal, includedCommands, isProposalEmpty, isProposalStale, toggleCommandInclusion } from "./coauthor-proposal";
 import type { CoauthorOutcome, CoauthorProposal } from "./coauthor-proposal";
 
 export type NestorTopic = "build" | "play" | "explore";
@@ -89,6 +89,12 @@ export interface NestorPresenter {
    * the scene does not move — this is the whole point of the co-author queue.
    */
   propose: (topic: NestorTopic) => CoauthorProposal;
+  /**
+   * Include or exclude one command of the pending proposal, keeping the selection consistent:
+   * dropping a command that creates an entity drops what needs it, and restoring a dependent
+   * restores its creator.
+   */
+  toggleProposalCommand: (index: number) => CoauthorProposal | null;
   /**
    * Commit the held proposal, at the revision it was composed against. Sending the original
    * `expectedRevision` is deliberate: if the world moved while the human was reading, the
@@ -544,6 +550,13 @@ export function createNestorPresenter(options: {
     return proposal;
   };
 
+  /** Include or exclude one command of the pending proposal. Returns the updated proposal. */
+  const toggleProposalCommand = (index: number): CoauthorProposal | null => {
+    if (!proposal) return null;
+    proposal = toggleCommandInclusion(proposal, index);
+    return proposal;
+  };
+
   const discard = (): NestorPresentation => {
     if (proposal) lastOutcome = { status: "discarded", proposal };
     proposal = null;
@@ -566,6 +579,14 @@ export function createNestorPresenter(options: {
       proposedTopic = null;
       return clonePresentation(presentation);
     }
+    if (isProposalEmpty(held)) {
+      // Narrowed to nothing. That is a discard expressed a different way, and calling it one
+      // is more honest than committing an empty transaction to say the same thing.
+      lastOutcome = { status: "discarded", proposal: held };
+      proposal = null;
+      proposedTopic = null;
+      return clonePresentation(presentation);
+    }
     proposal = null;
     proposedTopic = null;
     const outcome = present(topic, held);
@@ -582,7 +603,9 @@ export function createNestorPresenter(options: {
   const present = (topic: NestorTopic, held?: CoauthorProposal): NestorPresentation => {
     reconcile();
     const targetId = TOPIC_TARGET[topic];
-    const commands = held?.commands ?? presentationCommands(api, topic);
+    // `includedCommands`, not `commands`: if the person took lines out, the commit is what
+    // they left in. Sending the original set would apply changes they explicitly removed.
+    const commands = held ? includedCommands(held) : presentationCommands(api, topic);
     const result = api.commit({
       actor: NESTOR_ACTOR,
       intent: intentFor(topic),
@@ -621,6 +644,7 @@ export function createNestorPresenter(options: {
 
   return {
     propose,
+    toggleProposalCommand,
     accept,
     discard,
     present: (topic: NestorTopic) => present(topic),

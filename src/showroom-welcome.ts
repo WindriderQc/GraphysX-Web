@@ -36,7 +36,7 @@ export function mountWelcome(
   onBrowse?: () => void,
   onNestorTopic?: (topic: NestorTopic) => void,
   variant: ShowroomWelcomeVariant = onNestorTopic ? "agentx" : "scene-resume",
-  coauthor?: { onAccept?: () => void; onDiscard?: () => void },
+  coauthor?: { onAccept?: () => void; onDiscard?: () => void; onToggleCommand?: (index: number) => void },
 ): ShowroomWelcomeHandle {
   const nestorEnabled = variant === "agentx" && typeof onNestorTopic === "function";
   const style = document.createElement("style");
@@ -96,7 +96,15 @@ export function mountWelcome(
      * the middle of its text — which reads as a rendering fault rather than as "there is
      * more below". One scroll region, on the card.
      */
-    .gx-welcome .gx-proposal-lines{margin:6px 0 0;padding-left:18px;color:var(--gx-ink-soft);font-size:12.5px;line-height:1.6}
+    .gx-welcome .gx-proposal-lines{margin:6px 0 0;padding-left:2px;list-style:none;color:var(--gx-ink-soft);font-size:12.5px;line-height:1.5}
+    .gx-welcome .gx-proposal-lines li{margin:0 0 2px}
+    .gx-welcome .gx-proposal-lines label{display:flex;align-items:flex-start;gap:8px;padding:3px 4px;border-radius:6px;cursor:pointer}
+    .gx-welcome .gx-proposal-lines label:hover{background:rgba(120,233,255,.08)}
+    .gx-welcome .gx-proposal-lines input{accent-color:#4fd6ee;margin:2px 0 0;flex:none;width:14px;height:14px;cursor:pointer}
+    .gx-welcome .gx-proposal-lines input:focus-visible{outline:2px solid #fff;outline-offset:2px}
+    /* Struck through and dimmed, not removed: seeing what you took out is part of deciding. */
+    .gx-welcome .gx-proposal-lines li.is-excluded span{text-decoration:line-through;opacity:.5}
+    .gx-welcome [data-proposal-accept]:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.5)}
     .gx-welcome .gx-proposal-actions{display:flex;gap:8px;flex-wrap:wrap}
     .gx-welcome .gx-proposal-actions button{padding:9px 16px;border-radius:10px;font-size:13px;min-height:40px;box-shadow:none}
     .gx-welcome [data-proposal-discard]{background:rgba(14,38,50,.9);border-color:rgba(140,170,185,.4);color:#cfe6ee}
@@ -390,11 +398,31 @@ export function mountWelcome(
         : `Show all ${proposal.commandCount} commands`;
     }
     if (lines) {
-      lines.replaceChildren(...proposal.lines.map((line) => {
+      // A real checkbox per command, not a styled div: it is a genuine choice, and the
+      // keyboard, the screen reader and the label-click target all come free from the element
+      // that already means this. The list carries the checked state, so nothing here needs to
+      // know how the dependency cascade decided it.
+      lines.replaceChildren(...proposal.lines.map((line, index) => {
         const item = document.createElement("li");
-        item.textContent = line;
+        const label = document.createElement("label");
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = !proposal.excluded.includes(index);
+        box.dataset.proposalCommand = String(index);
+        const text = document.createElement("span");
+        text.textContent = line;
+        label.append(box, text);
+        item.append(label);
+        item.classList.toggle("is-excluded", !box.checked);
         return item;
       }));
+    }
+    const accept = overlay.querySelector<HTMLButtonElement>("[data-proposal-accept]");
+    if (accept) {
+      const empty = proposal.excluded.length >= proposal.commandCount;
+      // Nothing left to apply is not an error to explain after the fact; the button says so.
+      accept.disabled = empty || stale;
+      accept.textContent = empty ? "Nothing selected" : "Apply change";
     }
     // Announced on arrival rather than only on decision: the proposal *is* the notification,
     // and a screen-reader user should not have to go looking for it.
@@ -442,6 +470,14 @@ export function mountWelcome(
       proposalOrigin = button;
       onNestorTopic?.(topic);
     });
+  });
+  // Delegated: the rows are rebuilt on every render, so per-row listeners would have to be
+  // re-attached each time and would leak the ones they replaced.
+  overlay.querySelector<HTMLElement>("[data-proposal-lines]")?.addEventListener("change", (event) => {
+    const box = event.target as HTMLInputElement | null;
+    const index = Number(box?.dataset.proposalCommand);
+    if (!Number.isInteger(index)) return;
+    coauthor?.onToggleCommand?.(index);
   });
   overlay.querySelector<HTMLButtonElement>("[data-proposal-accept]")?.addEventListener("click", () => {
     coauthor?.onAccept?.();

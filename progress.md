@@ -3222,3 +3222,43 @@ same answer. The accepted path keeps every assertion it had.
 
 Not built, and not claimed: editing a proposal before accepting it, and the model/provider
 adapter. Nestor composes these locally; the center still needs no backend or API key.
+
+## 2026-08-08 — narrowing a proposal (`coauthor-r2`)
+
+The half of Slice 4 the previous entry said was not built. A proposal was all-or-nothing:
+accept the nine commands the agent composed, or take none of them. Every line is now a
+checkbox.
+
+The interesting part is not the checkbox, it is keeping the selection **committable by
+construction**. `api.commit` is atomic, so a subset that updates something it no longer creates
+fails whole rather than corrupting anything — but failing whole *after* someone has carefully
+unchecked one line is a bad answer to hand them. So the dependency is resolved before the
+commit instead of reported after it: dropping a command that introduces an entity drops
+everything later that needs it, and re-including a dependent brings its creator back. Both
+directions are required. A cascade that only ran one way would let a person assemble a
+selection that cannot commit, which is exactly what offering the control is meant to prevent.
+
+Prefab children (`${idPrefix}:part`) count as dependents of the prefab, and both bodies of a
+joint count as dependencies of it.
+
+- **The header counts what would be sent**, not what was composed, and says how many were
+  removed — otherwise a narrowed proposal reads like a smaller one that simply arrived that way.
+- **Excluded lines stay visible**, struck through, because seeing what you took out is part of
+  deciding — and it is how the cascade explains itself when two rows go grey after one click.
+- **Narrowing to nothing is a discard**, reported as one. Committing an empty transaction to say
+  the same thing would put a revision in the history for a decision to do nothing.
+- Real `<input type="checkbox">` elements: the keyboard, the screen reader and the label hit
+  target all come free from the element that already means this.
+
+Measured on the built output: unchecking "Assemble the signal-beacon prefab" also drops
+"Change showroom-nestor-build: label", the header moves from `9 changes · 7 entities` to
+`7 changes · 6 entities · 2 removed`, and the accepted commit contains no
+`showroom-nestor-build` while the material changes the person kept do land.
+
+Coverage: 11 more unit checks (146 total), and `smoke-showroom` proves the exclusion reaches
+the *document* — the DOM checkbox count matches the model's excluded set, the entity created by
+the excluded command is absent after the commit, and the included work applied. Full showroom
+smoke green in 146s with zero console or page errors.
+
+Still not built: the model/provider adapter. Nestor composes these locally; the center needs no
+backend or API key.

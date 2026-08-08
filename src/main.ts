@@ -237,6 +237,15 @@ if (mode === "previews" && import.meta.env.DEV) {
       welcome?.showOutcome(outcome);
       if (next && outcome?.status === "accepted") welcome?.present(next);
     };
+    /**
+     * Narrowing the proposal redraws it from the presenter rather than from the checkbox that
+     * was clicked: the dependency cascade may have taken other rows with it, and the checkbox
+     * only knows about itself.
+     */
+    const toggleNestorProposalCommand = (index: number): void => {
+      const updated = nestor?.toggleProposalCommand(index);
+      if (updated) welcome?.showProposal(updated, nestor?.state().proposalStale ?? false);
+    };
     const discardNestorProposal = (): void => {
       nestor?.discard();
       welcome?.showProposal(null);
@@ -257,7 +266,9 @@ if (mode === "previews" && import.meta.env.DEV) {
         agentxDoor ? openBrowse : undefined,
         agentxDoor ? presentNestor : undefined,
         variant,
-        agentxDoor ? { onAccept: acceptNestorProposal, onDiscard: discardNestorProposal } : undefined,
+        agentxDoor
+          ? { onAccept: acceptNestorProposal, onDiscard: discardNestorProposal, onToggleCommand: toggleNestorProposalCommand }
+          : undefined,
       );
       mountedWelcomeVariant = variant;
       if (variant === "live-observer") {

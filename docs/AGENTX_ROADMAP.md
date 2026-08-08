@@ -66,7 +66,7 @@ Production release proof:
 | 1. Nestor's first demo | Complete | AgentX Center replaces the passive showroom | Build/Play/Explore are attributed, visible, persistent, editor-ready, and browser-tested |
 | 2. Live presence binding | Complete | A connected AgentX actor visibly inhabits the center | Session member/operation events update an ephemeral avatar and Nestor activity without polluting either export path |
 | 3. Spatial mission director | Complete in this release | A live owner directs multiple AgentX actors through one scene-native mission | Analyze → Build → Validate is server-authoritative, ordered, evidence-backed, reconnect-safe, spatially projected, accessible, and absent from authored exports |
-| 4. Guided co-authoring | Queue shipped; editing and providers remain | A human can ask for a bounded scene change and inspect it before/after | Proposal, actor, intent, command set, result, undo, and rejection are all visible; no hidden mutation |
+| 4. Guided co-authoring | Queue and editing shipped; provider adapter remains | A human can ask for a bounded scene change and inspect it before/after | Proposal, actor, intent, command set, result, undo, and rejection are all visible; no hidden mutation |
 | 5. Nestor tours | Queued | Nestor can sequence highlights across scenes and games | Camera cues, short narration, entity highlighting, cancellation, reduced-motion behavior, and destination handoff are deterministic |
 | 6. Agent gameplay | Queued | AgentX can demonstrate and coach a BallZ course inside the product | A deterministic baseline run, ghost comparison, attributed input, and honest capability/offline states are visible in-browser |
 | 7. Center expansion | Queued | The front door becomes a compact world hub | Build lab, living-systems overlook, play arena, and portals share one performance budget and remain editable scene vocabulary |
@@ -105,16 +105,20 @@ Production release proof:
    translation layer to drift.
 2. **Done.** The card shows actor, intent, command count, touched entity ids in first-touch
    order, the composing revision, and every command as a sentence behind one disclosure.
-3. **Accept and reject: done.** Both DOM topics and the physical 3D consoles now compose rather
-   than commit, so there is one path from "a human asked" to "the scene changed" and it always
-   stops for an answer. Accepting sends the *original* `expectedRevision`, so a world that moved
-   while the person was reading refuses the commit instead of applying a decision made against a
-   stale view; the panel says so before they press it. Discard touches nothing at all.
-   **Editing a proposal is not built** — the person can accept or discard what was composed.
+3. **Accept, reject and edit: done.** Both DOM topics and the physical 3D consoles now compose
+   rather than commit, so there is one path from "a human asked" to "the scene changed" and it
+   always stops for an answer. Accepting sends the *original* `expectedRevision`, so a world that
+   moved while the person was reading refuses the commit instead of applying a decision made
+   against a stale view; the panel says so before they press it. Discard touches nothing at all.
+   Editing is per-command inclusion: every line is a checkbox, and the selection stays
+   committable by construction — dropping a command that creates an entity drops what needs it,
+   and restoring a dependent restores its creator. The header counts what would be *sent*, and
+   an accept sends exactly that. Narrowing to nothing is reported as a discard rather than
+   committed as an empty transaction.
 4. **Not started.** Model/provider integration behind an adapter. The center remains fully useful
    with no backend or API key, which is still true: Nestor composes these proposals locally.
 
-Remaining for this slice: proposal editing, and the provider adapter.
+Remaining for this slice: the provider adapter.
 
 ## Parallel correctness lane
 
