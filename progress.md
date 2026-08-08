@@ -3173,3 +3173,52 @@ error on a runtime rollback with an attached gizmo (`13aba57`).
   7.7–9.5-hour hangs. Generic smoke/build caps, per-assertion waits, no-retry-on-deadline policy,
   retry classification and budgets, workflow configuration, and product/browser code remain
   unchanged.
+
+## 2026-08-08 — the co-author queue: asking is not doing (`coauthor-r1`)
+
+AgentX Center Slice 4, partly. Nestor's demonstrations went straight from "the human pressed a
+button" to `api.commit()`. Everything about that commit was inspectable *afterwards* — actor,
+intent, revision, undo — which is a real property and still the wrong moment: the person
+watching had no way to know what was about to change until it already had.
+
+A topic now composes a proposal and stops. `src/coauthor-proposal.ts` holds the exact
+`commit()` argument list rather than sending it, plus the summary needed to read it at a
+glance. It is not a second command format — accepting is a plain `api.commit()` of the same
+typed `AgentWorldCommand[]`, so there is nothing to drift — and it is not an approval record:
+nothing is persisted, and a discarded proposal leaves no trace because nothing happened.
+
+- **Both routes are gated.** The DOM topics and the physical 3D consoles funnel through one
+  `presentNestor`, so there is a single path from "a human asked" to "the scene changed". Two
+  routes with different safety properties would make "no hidden mutation" a claim about one of
+  them rather than about the product.
+- **Accepting sends the original `expectedRevision`.** If the world moved while the person was
+  reading, the runtime refuses it rather than applying a decision made against a stale view.
+  The card says so first, so they are told rather than handed a rejection they did not cause.
+- **`present()` is retained** for the pre-proposal path and the existing rejection test.
+
+Measured on the built output: Build composes 9 commands over 7 entities at revision 7, and the
+revision, the exported document and the commit history are byte-identical until accepted.
+
+UI faults found by screenshotting it, not by reasoning about it:
+
+- The aria-live announcement was *visible*, duplicating the card immediately beneath it. On a
+  390px phone that cost two lines of a viewport §5 reserves for the 3D scene. It is now
+  screen-reader-only while a proposal is pending.
+- The welcome card had no height bound. Expanding a nine-command list pushed the eyebrow and
+  half the title off the top of a 1280x800 viewport. The card is now bounded and scrolls, which
+  is also what let the command list drop its own `max-height` — capping the list had produced a
+  command clipped through the middle of its text, which reads as a rendering fault rather than
+  as "there is more below". One scroll region, not two nested ones.
+- On mobile the card filled the viewport and left the scene as a sliver. While proposing, the
+  standing briefing and the interaction hint now stand down for it.
+- Closing the card removed the focused button and dropped focus to the top of the document. The
+  topic button that asked for the proposal is remembered and refocused.
+
+Coverage: 14 unit checks on the proposal model (`test/coauthor-proposal.test.mjs`, 135 total),
+and `smoke-showroom` now proves the gate on the document rather than on the panel — revision,
+exported document and commit history unchanged after proposing and after discarding, the
+rendered command count matching the held commands, and the 3D console route stopping for the
+same answer. The accepted path keeps every assertion it had.
+
+Not built, and not claimed: editing a proposal before accepting it, and the model/provider
+adapter. Nestor composes these locally; the center still needs no backend or API key.

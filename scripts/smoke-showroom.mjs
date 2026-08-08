@@ -299,26 +299,90 @@ try {
   // Exercise the actual 3D route as well as the accessible topic controls. The right-hand
   // Play console sits outside the welcome card and funnels through the same presenter.
   const playConsoleAt = await screenOf("showroom-nestor-console-play:core");
+  const beforeConsole = await page.evaluate(() => window.__GRAPHYSX__.state().revision);
   if (playConsoleAt) await page.mouse.click(playConsoleAt.x, playConsoleAt.y);
+  // The physical console is gated exactly like the DOM button. Two routes into the same
+  // presenter with different safety properties would make "no hidden mutation" a claim about
+  // one of them, so this proves the 3D route also stops for a human.
+  await page.waitForSelector(".gx-welcome--proposing", { timeout: SMOKE_TIMEOUT });
+  const consoleGate = await page.evaluate((before) => ({
+    proposedTopicIntent: window.__GRAPHYSX_NESTOR__.state().proposal?.intent ?? null,
+    revisionUnchanged: window.__GRAPHYSX__.state().revision === before,
+    statusStillReady: window.__GRAPHYSX_NESTOR__.state().status === "ready",
+  }), beforeConsole);
+  await page.click("[data-proposal-accept]");
   await page.waitForFunction(
     () => window.__GRAPHYSX_NESTOR__.state().status === "presenting:play",
     null,
     { timeout: SMOKE_TIMEOUT },
   );
   await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
-  out.nestor3dConsole = await page.evaluate((at) => ({
-    screen: at ? { x: Math.round(at.x), y: Math.round(at.y) } : null,
+  out.nestor3dConsole = await page.evaluate((input) => ({
+    screen: input.at ? { x: Math.round(input.at.x), y: Math.round(input.at.y) } : null,
+    ...input.gate,
     topic: window.__GRAPHYSX_NESTOR__.state().topic,
     status: window.__GRAPHYSX_NESTOR__.state().status,
     selected: window.__GRAPHYSX__.state().selectedIds.includes("showroom-plinth"),
     playCommit: window.__GRAPHYSX__.history().some((entry) =>
       entry.actor.id === "nestor" && entry.intent.includes("kinetic playground")),
-  }), playConsoleAt);
+  }), { at: playConsoleAt, gate: consoleGate });
 
   // Nestor is not decorative chrome: the Build topic must produce one attributed agent
   // commit, construct ordinary prefab entities, focus the result, and narrate what happened.
   const nestorTargetBefore = await page.evaluate(() => window.__GRAPHYSX_HOST__.orbitTarget.toArray());
+
+  // Asking is not doing. A topic now composes a proposal and the scene must be byte-identical
+  // until a human answers it — that boundary is the whole feature, so it is asserted on the
+  // document and the history rather than on the panel that describes them.
+  const beforeProposal = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__;
+    return { revision: api.state().revision, document: JSON.stringify(api.exportDocument()), commits: api.history().length };
+  });
   await page.click('[data-nestor-topic="build"]');
+  await page.waitForSelector(".gx-welcome--proposing", { timeout: SMOKE_TIMEOUT });
+  out.nestorProposal = await page.evaluate((before) => {
+    const api = window.__GRAPHYSX__;
+    const proposal = window.__GRAPHYSX_NESTOR__.state().proposal;
+    const card = document.querySelector("[data-nestor-proposal]");
+    return {
+      revisionUnchanged: api.state().revision === before.revision,
+      documentUnchanged: JSON.stringify(api.exportDocument()) === before.document,
+      commitsUnchanged: api.history().length === before.commits,
+      buildAbsent: api.query({ ids: ["showroom-nestor-build"] }).length === 0,
+      actor: proposal?.actor.id ?? null,
+      intent: proposal?.intent ?? null,
+      expectedRevision: proposal?.expectedRevision ?? null,
+      commandCount: proposal?.commandCount ?? 0,
+      // The preview must describe the commands that are actually held, not a summary that
+      // drifted from them: a person consenting to "9 changes" must be consenting to these.
+      linesMatchCommands: (proposal?.lines?.length ?? -1) === (proposal?.commands?.length ?? -2),
+      touchesBuild: proposal?.touches?.some((touch) => touch.id === "showroom-nestor-build") ?? false,
+      metaText: card?.querySelector("[data-proposal-meta]")?.textContent ?? null,
+      renderedLines: card?.querySelectorAll("[data-proposal-lines] li").length ?? 0,
+      acceptVisible: !!card?.querySelector("[data-proposal-accept]"),
+      discardVisible: !!card?.querySelector("[data-proposal-discard]"),
+    };
+  }, beforeProposal);
+
+  // Discarding must leave no trace at all — not a revision, not a commit, not an entity.
+  await page.click("[data-proposal-discard]");
+  await page.waitForFunction(() => !document.querySelector(".gx-welcome--proposing"), null, { timeout: SMOKE_TIMEOUT });
+  out.nestorDiscard = await page.evaluate((before) => {
+    const api = window.__GRAPHYSX__;
+    return {
+      revisionUnchanged: api.state().revision === before.revision,
+      documentUnchanged: JSON.stringify(api.exportDocument()) === before.document,
+      commitsUnchanged: api.history().length === before.commits,
+      proposalCleared: window.__GRAPHYSX_NESTOR__.state().proposal === null,
+      outcome: document.querySelector("[data-proposal-outcome]")?.dataset.outcome ?? null,
+      outcomeText: document.querySelector("[data-proposal-outcome]")?.textContent ?? null,
+    };
+  }, beforeProposal);
+
+  // Now the accepted path: propose, apply, and the original commit contract still holds.
+  await page.click('[data-nestor-topic="build"]');
+  await page.waitForSelector(".gx-welcome--proposing", { timeout: SMOKE_TIMEOUT });
+  await page.click("[data-proposal-accept]");
   await page.waitForFunction(() => {
     const api = window.__GRAPHYSX__;
     return api.query({ ids: ["showroom-nestor-build"] }).length === 1 &&
@@ -574,7 +638,43 @@ out.focusWorks = focusWorks;
 
 const nestorInitial = out.nestorInitial;
 const nestorBuild = out.nestorBuild;
+const proposal = out.nestorProposal;
+const discard = out.nestorDiscard;
+/**
+ * The co-author boundary: an agent may compose a change, and only a human may apply it.
+ *
+ * Asserted on the document, the revision and the commit history rather than on the panel,
+ * because the panel is a description of those and this is the one property the feature
+ * exists to provide. A discard is checked the same way — "nothing happened" is a claim about
+ * the scene, not about the absence of a card.
+ */
+const coauthorGateHolds =
+  !!proposal &&
+  proposal.revisionUnchanged === true &&
+  proposal.documentUnchanged === true &&
+  proposal.commitsUnchanged === true &&
+  proposal.buildAbsent === true &&
+  proposal.actor === "nestor" &&
+  typeof proposal.intent === "string" && proposal.intent.length > 0 &&
+  Number.isInteger(proposal.expectedRevision) &&
+  proposal.commandCount > 0 &&
+  proposal.linesMatchCommands === true &&
+  proposal.touchesBuild === true &&
+  proposal.renderedLines === proposal.commandCount &&
+  typeof proposal.metaText === "string" && proposal.metaText.includes("from revision") &&
+  proposal.acceptVisible === true &&
+  proposal.discardVisible === true &&
+  !!discard &&
+  discard.revisionUnchanged === true &&
+  discard.documentUnchanged === true &&
+  discard.commitsUnchanged === true &&
+  discard.proposalCleared === true &&
+  discard.outcome === "discarded" &&
+  (discard.outcomeText ?? "").includes("not changed");
+out.coauthorGateHolds = coauthorGateHolds;
+
 const nestorIsLive =
+  coauthorGateHolds &&
   !!nestorInitial &&
   nestorInitial.type === "agent" &&
   nestorInitial.role === "AgentX Center guide" &&
@@ -586,6 +686,9 @@ const nestorIsLive =
   nestorInitial.renderedLivePresence === null &&
   nestorInitial.runtimeLiveAgents === 0 &&
   nestorInitial.runtimeLiveActivity === 0 &&
+  out.nestor3dConsole?.revisionUnchanged === true &&
+  out.nestor3dConsole?.statusStillReady === true &&
+  typeof out.nestor3dConsole?.proposedTopicIntent === "string" &&
   out.nestor3dConsole?.topic === "play" &&
   out.nestor3dConsole?.status === "presenting:play" &&
   out.nestor3dConsole?.selected === true &&

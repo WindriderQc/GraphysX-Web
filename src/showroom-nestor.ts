@@ -4,8 +4,13 @@ import type {
   AgentWorldEntityDefinition,
   GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
+import { createProposal, isProposalStale } from "./coauthor-proposal";
+import type { CoauthorOutcome, CoauthorProposal } from "./coauthor-proposal";
 
 export type NestorTopic = "build" | "play" | "explore";
+
+/** One identity for every commit Nestor makes, whether proposed first or not. */
+const NESTOR_ACTOR = { id: "nestor", label: "Nestor", kind: "agent" } as const;
 
 export const NESTOR_AGENT_ID = "showroom-nestor";
 export const NESTOR_STAGE_ID = "showroom-nestor-stage";
@@ -70,9 +75,33 @@ export type NestorPresenterState = {
   presentation: NestorPresentation;
   agent: ReturnType<GraphysXAgentWorldApi["query"]>[number]["agent"] | null;
   lastCommit: AgentWorldCommitSummary | null;
+  /** The change awaiting a human decision, or null when nothing is pending. */
+  proposal: CoauthorProposal | null;
+  /** True when the world moved after the proposal was composed, so accepting cannot work. */
+  proposalStale: boolean;
+  /** What happened to the last decided proposal, so the panel can report it honestly. */
+  lastOutcome: CoauthorOutcome | null;
 };
 
 export interface NestorPresenter {
+  /**
+   * Compose a topic's change set and hold it for a human decision. Nothing is committed and
+   * the scene does not move — this is the whole point of the co-author queue.
+   */
+  propose: (topic: NestorTopic) => CoauthorProposal;
+  /**
+   * Commit the held proposal, at the revision it was composed against. Sending the original
+   * `expectedRevision` is deliberate: if the world moved while the human was reading, the
+   * runtime refuses it rather than applying a change that was decided against a stale view.
+   */
+  accept: () => NestorPresentation;
+  /** Drop the held proposal. Nothing was committed, so there is nothing to undo. */
+  discard: () => NestorPresentation;
+  /**
+   * The pre-proposal path: compose and commit in one step, with no human gate. Retained for
+   * the physical console route and the existing showroom smoke; the DOM buttons go through
+   * `propose` so the person sees the change before it happens.
+   */
   present: (topic: NestorTopic) => NestorPresentation;
   reset: () => NestorPresentation;
   state: () => NestorPresenterState;
@@ -428,6 +457,10 @@ export function createNestorPresenter(options: {
   let presentation = clonePresentation(READY_PRESENTATION);
   let status = "ready";
   let lastCommit: AgentWorldCommitSummary | null = null;
+  /** The change composed and waiting for a human decision. Never touches the scene. */
+  let proposal: CoauthorProposal | null = null;
+  let proposedTopic: NestorTopic | null = null;
+  let lastOutcome: CoauthorOutcome | null = null;
   let failedPresentation: {
     revision: number;
     agentStatus: string | undefined;
@@ -492,14 +525,68 @@ export function createNestorPresenter(options: {
     return agent;
   };
 
-  const present = (topic: NestorTopic): NestorPresentation => {
+  /**
+   * Compose without committing.
+   *
+   * Reconciles first so the proposal is built against the world as it is right now — a
+   * proposal composed from a stale read would be born stale and refuse itself on accept.
+   */
+  const propose = (topic: NestorTopic): CoauthorProposal => {
     reconcile();
-    const targetId = TOPIC_TARGET[topic];
-    const commands = presentationCommands(api, topic);
-    const result = api.commit({
-      actor: { id: "nestor", label: "Nestor", kind: "agent" },
+    lastOutcome = null;
+    proposal = createProposal({
+      actor: NESTOR_ACTOR,
       intent: intentFor(topic),
       expectedRevision: api.state()?.revision ?? 0,
+      commands: presentationCommands(api, topic),
+    });
+    proposedTopic = topic;
+    return proposal;
+  };
+
+  const discard = (): NestorPresentation => {
+    if (proposal) lastOutcome = { status: "discarded", proposal };
+    proposal = null;
+    proposedTopic = null;
+    // Deliberately no scene call of any kind. A discarded proposal must leave the document,
+    // the revision and the history exactly as they were, because nothing happened.
+    return clonePresentation(presentation);
+  };
+
+  const accept = (): NestorPresentation => {
+    if (!proposal || !proposedTopic) return clonePresentation(presentation);
+    const held = proposal;
+    const topic = proposedTopic;
+    const currentRevision = api.state()?.revision ?? 0;
+    if (isProposalStale(held, currentRevision)) {
+      // Reported before the commit is attempted, so the person is told the world moved rather
+      // than handed a rejection they did not cause. The commit below would refuse it anyway.
+      lastOutcome = { status: "stale", proposal: held, currentRevision };
+      proposal = null;
+      proposedTopic = null;
+      return clonePresentation(presentation);
+    }
+    proposal = null;
+    proposedTopic = null;
+    const outcome = present(topic, held);
+    lastOutcome = outcome.error
+      ? { status: "rejected", proposal: held, error: outcome.error }
+      : { status: "accepted", proposal: held, commit: outcome.commit };
+    return outcome;
+  };
+
+  /**
+   * `held` is supplied when this is an accepted proposal, so the commit carries the revision
+   * the human actually saw rather than one re-read a moment later.
+   */
+  const present = (topic: NestorTopic, held?: CoauthorProposal): NestorPresentation => {
+    reconcile();
+    const targetId = TOPIC_TARGET[topic];
+    const commands = held?.commands ?? presentationCommands(api, topic);
+    const result = api.commit({
+      actor: NESTOR_ACTOR,
+      intent: intentFor(topic),
+      expectedRevision: held?.expectedRevision ?? api.state()?.revision ?? 0,
       commands,
     });
 
@@ -533,11 +620,17 @@ export function createNestorPresenter(options: {
   };
 
   return {
-    present,
+    propose,
+    accept,
+    discard,
+    present: (topic: NestorTopic) => present(topic),
     reset: () => {
       failedPresentation = null;
       status = "ready";
       lastCommit = null;
+      proposal = null;
+      proposedTopic = null;
+      lastOutcome = null;
       presentation = clonePresentation(READY_PRESENTATION);
       return clonePresentation(presentation);
     },
@@ -551,6 +644,9 @@ export function createNestorPresenter(options: {
         presentation: clonePresentation(presentation),
         agent,
         lastCommit: lastCommit ? { ...lastCommit, actor: { ...lastCommit.actor } } : null,
+        proposal,
+        proposalStale: proposal ? isProposalStale(proposal, api.state()?.revision ?? 0) : false,
+        lastOutcome,
       };
     },
   };

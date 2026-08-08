@@ -205,13 +205,42 @@ if (mode === "previews" && import.meta.env.DEV) {
       requestShowroomInteraction(false);
       void host.enterEditor();
     };
+    /**
+     * Asking Nestor for a capability now composes a proposal instead of committing.
+     *
+     * Both routes go through here — the DOM buttons and clicking a physical console in 3D —
+     * so there is exactly one path from "a human asked" to "the scene changed", and it always
+     * passes a human decision. Two routes with different safety properties would make "no
+     * hidden mutation" a claim about one of them rather than about the product.
+     */
     const presentNestor = (topic: NestorTopic): void => {
       if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
         syncFrontDoor();
         return;
       }
-      const next = nestor?.present(topic);
-      if (next) welcome?.present(next);
+      const proposal = nestor?.propose(topic);
+      welcome?.showOutcome(null);
+      if (proposal) welcome?.showProposal(proposal, false);
+    };
+    const acceptNestorProposal = (): void => {
+      // Re-checked at the moment of the decision, not when the card was drawn: a live session
+      // may have attached while the person was reading, and that path owns scene operations.
+      if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
+        nestor?.discard();
+        welcome?.showProposal(null);
+        syncFrontDoor();
+        return;
+      }
+      const next = nestor?.accept();
+      const outcome = nestor?.state().lastOutcome ?? null;
+      welcome?.showProposal(null);
+      welcome?.showOutcome(outcome);
+      if (next && outcome?.status === "accepted") welcome?.present(next);
+    };
+    const discardNestorProposal = (): void => {
+      nestor?.discard();
+      welcome?.showProposal(null);
+      welcome?.showOutcome(nestor?.state().lastOutcome ?? null);
     };
     const desiredWelcomeVariant = (): WelcomeVariant => {
       if (nestorBlockedByLiveSession()) return "live-observer";
@@ -228,6 +257,7 @@ if (mode === "previews" && import.meta.env.DEV) {
         agentxDoor ? openBrowse : undefined,
         agentxDoor ? presentNestor : undefined,
         variant,
+        agentxDoor ? { onAccept: acceptNestorProposal, onDiscard: discardNestorProposal } : undefined,
       );
       mountedWelcomeVariant = variant;
       if (variant === "live-observer") {
@@ -236,10 +266,15 @@ if (mode === "previews" && import.meta.env.DEV) {
         return;
       }
       if (variant !== "agentx") return;
-      const current = nestor?.state().presentation;
+      const nestorState = nestor?.state();
+      const current = nestorState?.presentation;
       // Returning from the editor should keep the last demonstration's explanation beside
       // the still-inspectable scene change. A freshly recomposed showroom resets below.
       if (current?.topic || current?.error) welcome.present(current);
+      // A proposal survives a front-door remount, because the person never answered it. It is
+      // redrawn with freshly evaluated staleness: the round trip they just took is exactly the
+      // kind of thing that moves the revision out from under it.
+      if (nestorState?.proposal) welcome.showProposal(nestorState.proposal, nestorState.proposalStale);
     };
     const focusFrontDoor = (): void => {
       queueMicrotask(() => document.querySelector<HTMLButtonElement>(".gx-go-editor")?.focus());
