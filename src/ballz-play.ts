@@ -1,4 +1,5 @@
 import { PUSH_DIRECTIONS } from "./ballz-level-scene";
+import { coachProgramFor, describeCoachRun, runCoachProgram } from "./agent-coach";
 import { describeRun, formatClock, type AgentWorldDefinition, type GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { archiveReferenceMs, raceRecordIdForWorld } from "./archive-race-records";
 import { createPersonalGhostSession, getPersonalGhostState, type GhostTrace } from "./level-ghosts";
@@ -155,7 +156,11 @@ export function mountBallzPlay(
     controlSelect.append(option);
   }
   controlSelect.value = controlMode;
+  // News from the agent's own run, if it just took one. Held rather than written straight into
+  // `hint`, because `updateHint` rewrites that line on every control-mode change.
+  const coachNote = recordId ? takeCoachNote(recordId) : null;
   const updateHint = (): void => {
+    if (coachNote) { hint.textContent = coachNote; return; }
     const suffix = hasGhost ? " · personal ghost active" : "";
     const modeHint = controlMode === "gamepad"
       ? "left stick aim/roll · A jump"
@@ -187,6 +192,27 @@ export function mountBallzPlay(
   });
   document.addEventListener("fullscreenchange", syncFullscreen);
   actions.append(controlSelect, pauseButton, fullscreenButton);
+
+  // Racing the agent, but only on a course it has actually driven. A button offering a
+  // baseline that does not exist would be the coach guessing, which is the one thing this
+  // whole layer is built not to do — so on an uncoached course there is simply no button.
+  const playableLevelId = worldId.startsWith("ballz-level-") ? worldId.slice("ballz-level-".length) : null;
+  if (recordId && playableLevelId && coachProgramFor(recordId)) {
+    const agentButton = document.createElement("button");
+    agentButton.type = "button";
+    agentButton.className = "gx-bz-action gx-bz-race-agent";
+    agentButton.dataset.gxRaceAgent = recordId;
+    agentButton.textContent = "◈ Race AgentX";
+    agentButton.title = "AgentX drives this course through the same controls you use, then you race its ghost";
+    agentButton.addEventListener("click", () => {
+      // Disabled rather than removed: this element is about to be torn down by the reload, and
+      // a second click in the meantime would start a second agent run over the first one.
+      agentButton.disabled = true;
+      hint.textContent = "AgentX is driving…";
+      void raceTheAgent(api, recordId, playableLevelId);
+    });
+    actions.append(agentButton);
+  }
   hud.append(course, status, hint, actions);
   // Play is a place you can leave. Without this the only way out of a game is a page reload,
   // which is the sort of dead end that makes a mode feel like a trap rather than a surface.
@@ -904,6 +930,59 @@ function takeGhostChallenge(recordId: string): { label: string; trace: GhostTrac
 }
 
 /**
+ * A line of AgentX news for the next mount of the play view, for the same reason as
+ * `pendingChallenge`: racing the agent reloads the level twice, and this view does not survive
+ * either reload. Consumed on read, so old news never reappears under a later run.
+ */
+let pendingCoachNote: { recordId: string; text: string } | null = null;
+
+function takeCoachNote(recordId: string): string | null {
+  if (!pendingCoachNote || pendingCoachNote.recordId !== recordId) return null;
+  const { text } = pendingCoachNote;
+  pendingCoachNote = null;
+  return text;
+}
+
+/** The agent needs a moment of armed run before it can drive; `levels.play` returns before that. */
+async function waitForArmedRun(api: GraphysXAgentWorldApi, attempts = 60): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (api.rules.status()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return false;
+}
+
+/**
+ * Runs the agent's baseline for this course and hands its trace back as a ghost to race.
+ *
+ * Two reloads, and both are load-bearing. The first is so the agent drives from the spawn
+ * rather than from wherever the player left the ball — a demonstration that started mid-course
+ * would be a different run wearing the baseline's name. The second is so the player's own
+ * attempt starts clean, with the agent's trace as the challenger.
+ *
+ * Between them the world really is stepped by the agent, 11 seconds of simulation inside one
+ * synchronous loop. No frame renders while that happens, so what a player sees is the level
+ * reloading twice, not the ball skating around on its own.
+ */
+async function raceTheAgent(api: GraphysXAgentWorldApi, recordId: string, levelId: string): Promise<void> {
+  const program = coachProgramFor(recordId);
+  if (!program) return;
+  pendingCoachNote = { recordId, text: "AgentX is driving…" };
+  api.levels.play(levelId);
+  if (!await waitForArmedRun(api)) {
+    pendingCoachNote = { recordId, text: "The course did not start, so AgentX could not drive it." };
+    api.levels.play(levelId);
+    return;
+  }
+  const run = runCoachProgram(api, program);
+  // `describeCoachRun` refuses to call an unfinished run a baseline, which is the whole point
+  // of routing the message through it rather than writing a cheerful one here.
+  pendingCoachNote = { recordId, text: describeCoachRun(run) };
+  if (run.completed) pendingChallenge = { recordId, label: "AgentX", trace: run.trace };
+  api.levels.play(levelId);
+}
+
+/**
  * Submits the finished run and, if a store answered, appends the leaderboard to the win panel.
  *
  * Every step is optional and silent. With no store nothing here makes a request at all; with a
@@ -1062,6 +1141,11 @@ const BALLZ_PLAY_CSS = `
 .gx-bz-exit,.gx-bz-action{pointer-events:auto;background:rgba(10,22,30,.72);border:1px solid var(--gx-accent-glow);
   border-radius:4px;color:var(--gx-ink-soft);cursor:pointer;font:10px/1 var(--gx-font);padding:5px 9px}
 .gx-bz-exit:hover,.gx-bz-action:hover{background:rgba(18,40,52,.86);border-color:var(--gx-accent)}
+/* The agent's button reads as an offer rather than a control, so it carries the AgentX tint
+   the rest of the product uses for "this is Nestor doing something", not the HUD's steel. */
+.gx-bz-race-agent{border-color:rgba(150,124,255,.55);color:#d9d2ff}
+.gx-bz-race-agent:hover:not(:disabled){background:rgba(46,34,84,.88);border-color:#967cff}
+.gx-bz-race-agent:disabled{cursor:progress;opacity:.6}
 .gx-bz-pause{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(2,10,16,.7);backdrop-filter:blur(7px);font-family:var(--gx-font)}
 .gx-bz-pause[hidden]{display:none}
 .gx-bz-pause-panel{width:min(330px,calc(100vw - 32px));display:flex;flex-direction:column;gap:10px;padding:26px;border:1px solid var(--gx-accent-glow);border-radius:15px;background:rgba(8,23,31,.97);box-shadow:0 24px 70px rgba(0,0,0,.58);text-align:center}

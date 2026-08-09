@@ -3380,3 +3380,42 @@ Steering constants, measured: heading is degrees clockwise from −z (`0 = −z`
 
 Roadmap row 6 now reads "Harness landed, no driving line yet" rather than "Queued", which is
 the honest state: the harness is proven, the route is not.
+
+## Slice 6, part two — Race AgentX
+
+The harness has a driving line, and the product has a button. On the starter course the play
+HUD carries **◈ Race AgentX**: press it and the agent drives the course through the same
+`api.steer` calls a keyboard produces, finishes in 11.35s, and hands its trajectory back as the
+ghost you race. The HUD line reads `AgentX baseline · 11.35s` and the ghost is labelled AgentX,
+not "rival".
+
+**How the route was found, and why the shipped thing is different from it.** A pilot
+(`output/coauthor/pilot.mjs`) drove closed-loop — reading the ball's position and re-aiming at
+the next waypoint sixty times a second — and recorded every input it issued. What ships is that
+recording, replayed blind. A coach that read positions while it drove would be a driving aid,
+and the "baseline" it produced would be a time no player could match. Open-loop replay finishes
+in 11.35s, twice, agreeing to 2mm.
+
+**Two measurements that went against the intuition.** The rings *are* the course:
+`collectibleTarget: 2` puts them at `[-7.8, 5.2]` and `[7.8, -2.6]`, nowhere near the x = 0 line
+between the gates, so every straight out-and-back cleared both gates and never finished — which
+is all the earlier probes were reporting, and nothing about the driving. And full thrust
+throughout beats braking: thrust scaled by cos(heading error) took 19.8s, cutting thrust when
+travelling away from the target took 16.5s, never lifting off took 11.4s.
+
+**Two reloads, both load-bearing.** The first is so the agent drives from the spawn rather than
+from wherever the player left the ball; the second is so the player's own attempt starts clean
+with the agent's trace as the challenger. Between them the world really is stepped 11 seconds
+inside one synchronous loop, and because no frame renders during it, what a player sees is the
+level reloading twice — not a ball skating around on its own.
+
+**Honest states, by construction.** There is no button at all on a course the agent has not
+driven; the smoke asserts its absence on `smoke-ballz`. An unfinished run is reported through
+`describeCoachRun`, which refuses to call it a baseline. Driving before the run is armed returns
+`not-armed` rather than a full-length failure that was never about the driving.
+
+Cheap guards: five unit tests hold the shipped 255-entry table to the shape that makes it a
+program (time order, inside the bound, full thrust, no hardcoded subject), and `smoke-ballz` now
+drives the button end to end — absence on the uncoached course, the note, the AgentX challenger
+label, a time in the 10–13s window, the ghost actually spawned, and the ball back at the start
+pad rather than wherever the agent parked it.

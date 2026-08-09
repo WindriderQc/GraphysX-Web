@@ -625,6 +625,54 @@ try {
   });
   await page.waitForTimeout(250);
   await page.screenshot({ path: path.join(ART, "ballz-ball-presets.png") });
+
+  // --- Racing AgentX --------------------------------------------------------------------
+  // The agent drives the course through `api.steer` and hands its trace over as the ghost you
+  // race. Two things are worth a smoke rather than a unit test: that the offer appears ONLY on
+  // a course the agent has actually driven, and that the two reloads leave the player's own
+  // run clean at the spawn rather than wherever the agent parked the ball.
+  await page.evaluate(() => { window.__GRAPHYSX__.pause(false); window.__GRAPHYSX__.levels.play("smoke-ballz"); });
+  await page.waitForSelector(".gx-bz-hud", { timeout: SMOKE_TIMEOUT });
+  await page.waitForTimeout(300);
+  out.agentRace = {
+    // No baseline for this course, so no button. A coach that offered a time it does not have
+    // would be guessing, which is the failure this whole layer is shaped to avoid.
+    offeredOnUncoachedCourse: (await page.$("[data-gx-race-agent]")) !== null,
+  };
+
+  await page.evaluate(() => window.__GRAPHYSX__.levels.play("starter-level"));
+  await page.waitForSelector("[data-gx-race-agent]", { timeout: SMOKE_TIMEOUT });
+  await page.waitForTimeout(400);
+  await page.click("[data-gx-race-agent]");
+  await page.waitForFunction(
+    () => /baseline|did not finish|could not/.test(document.querySelector(".gx-bz-hint")?.textContent ?? ""),
+    null,
+    { timeout: SMOKE_TIMEOUT },
+  );
+  // The ghost is spawned by the first tick of a STARTED race, not by the reload, so this waits
+  // for the countdown rather than guessing a delay.
+  await page.waitForFunction(
+    () => window.__GRAPHYSX__.query({ tag: "personal-ghost" }).length > 0,
+    null,
+    { timeout: SMOKE_TIMEOUT },
+  );
+  Object.assign(out.agentRace, await page.evaluate(async () => {
+    const api = window.__GRAPHYSX__;
+    const ghosts = await import("/src/level-ghosts.ts");
+    const ghost = ghosts.getPersonalGhostState();
+    const ball = api.query({ ids: ["ballz-ball"] })[0]?.position ?? null;
+    return {
+      note: document.querySelector(".gx-bz-hint")?.textContent?.trim() ?? null,
+      challengerLabel: ghost?.challengerLabel ?? null,
+      challengerMs: ghost?.bestMs ?? null,
+      ghostVisible: ghost?.visible ?? false,
+      // The player's attempt is theirs: fresh run, ball at the start pad.
+      phase: api.rules.status()?.phase ?? null,
+      spawnX: ball ? Number(ball[0].toFixed(2)) : null,
+      spawnZ: ball ? Number(ball[2].toFixed(2)) : null,
+    };
+  }));
+  await page.screenshot({ path: path.join(ART, "ballz-race-agentx.png") });
 } catch (error) {
   out.fatal = String(error);
 }
@@ -744,7 +792,19 @@ const ok =
   out.win?.shown === true &&
   /Complete/.test(out.win?.title ?? "") &&
   out.win?.hasReplay === true &&
-  out.win?.hudGone === true;
+  out.win?.hudGone === true &&
+  out.agentRace?.offeredOnUncoachedCourse === false &&
+  /AgentX baseline/.test(out.agentRace?.note ?? "") &&
+  out.agentRace?.challengerLabel === "AgentX" &&
+  // The measured baseline is 11.35s. Asserted as a window rather than an equality because the
+  // time is computed on the viewer's machine, never shipped as data — but a window this tight
+  // still catches a program that stopped driving the course it was recorded on.
+  out.agentRace?.challengerMs > 10_000 &&
+  out.agentRace?.challengerMs < 13_000 &&
+  out.agentRace?.ghostVisible === true &&
+  out.agentRace?.phase === "running" &&
+  Math.abs(out.agentRace?.spawnX ?? 99) < 0.5 &&
+  Math.abs((out.agentRace?.spawnZ ?? 99) - 10.4) < 0.5;
 
 process.exit(out.fatal || pageErrors.length || consoleErrors.length || !ok ? 1 : 0);
 
