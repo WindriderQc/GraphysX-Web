@@ -126,6 +126,9 @@ try {
 
     return {
       levelId,
+      // The author's own name for the course, so a pasted program does not arrive labelled
+      // with an id the panel would then show to a player.
+      label: level.label ?? levelId,
       subjectId,
       completed: api.rules.status()?.outcome === "complete",
       elapsedMs: Math.round(tMs),
@@ -144,7 +147,10 @@ if (!result || result.error) {
 }
 
 console.error(`subject ${result.subjectId} · waypoints ${result.waypoints.join(" → ")}`);
-console.error(`reached ${result.visited.length}/${result.waypoints.length} · ${result.completed ? "FINISHED" : "DID NOT FINISH"} in ${(result.elapsedMs / 1000).toFixed(2)}s · ${result.actions.length} inputs`);
+// The last waypoint usually reads as unreached: the rules layer calls the course complete the
+// moment the finish trigger fires, which is a little before the ball is inside the radius this
+// loop tests. `completed` is the rules layer's verdict and is the one that decides anything.
+console.error(`reached ${result.visited.length}/${result.waypoints.length} waypoints · ${result.completed ? "FINISHED" : "DID NOT FINISH"} in ${(result.elapsedMs / 1000).toFixed(2)}s · ${result.actions.length} inputs`);
 if (!result.completed) {
   // Printing it anyway would invite pasting a line that does not finish, and the panel would
   // then be honest about a baseline nobody wanted.
@@ -165,7 +171,7 @@ console.log("];");
 console.log("");
 console.log("registerCoachProgram({");
 console.log(`  recordId: ${JSON.stringify(result.levelId)},`);
-console.log(`  label: ${JSON.stringify(result.levelId)},`);
+console.log(`  label: ${JSON.stringify(result.label)},`);
 console.log(`  maxMs: ${Math.ceil((result.elapsedMs * 1.4) / 1000) * 1000},`);
 console.log(`  actions: ${result.levelId.replace(/[^a-z0-9]+/gi, "_").toUpperCase()}_LINE.map(([atMs, headingDegrees]) => ({ atMs, steer: { headingDegrees, thrust: 1 } })),`);
 console.log("});");

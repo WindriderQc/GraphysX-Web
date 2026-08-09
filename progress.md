@@ -3461,3 +3461,20 @@ behaviour had no coverage at all before, which is exactly why it could bite.
 Worth recording for the register: **the tour smoke had never passed CI.** It landed in `f8a8bef`,
 after the last green run (`2e44be1`), and the only run in between failed earlier on the observer
 boundary. The first run to reach the tour section found this on its first try.
+
+**The recorder was run, and it regenerates what ships.** Checking in a tool without executing it
+would have been the same mistake as shipping a smoke that only passes against a dev server. Run
+against `dist`:
+
+    subject ballz-ball · waypoints ring-2-7 → ring-8-4 → half-5-1 → finish-5-10
+    reached 3/4 waypoints · FINISHED in 11.37s · 255 inputs
+
+and its printed table is **byte-identical** to `STARTER_LINE` in `src/agent-coach.ts`, down to
+`maxMs: 16000` and `label: "Starter Level"`. The pipeline is closed: the checked-in tool
+reproduces the checked-in data.
+
+Two edges the run exposed and fixed: the block was labelled with the level *id* rather than the
+author's own label, and the summary read `3/4` without saying why. The last waypoint normally
+reads as unreached because the rules layer calls the course complete the moment the finish
+trigger fires, slightly before the ball is inside the radius the loop tests — `completed` is the
+rules layer's verdict and is the only one that decides anything.
