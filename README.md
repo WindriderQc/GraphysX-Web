@@ -20,9 +20,15 @@ Live application: <https://graphysx.specialblend.ca>
 > **[docs/DEPLOYING_THE_STORE.md](docs/DEPLOYING_THE_STORE.md)**, then
 > `npm run store:preflight -- --url <store>`.
 >
-> **Current product direction: AgentX Center.** The showroom is becoming a living 3D hub
-> where Nestor demonstrates Build, Play, and Explore through attributed scene commands whose
-> results remain editable. Execution order and guardrails:
+> **Current product direction: AgentX Center.** The showroom is a living 3D hub where Nestor
+> demonstrates Build, Play, and Explore through attributed scene commands whose results remain
+> editable. Shipped so far: live sessions with a server-authoritative mission director; a
+> co-authoring queue where Nestor **proposes** and a human accepts, discards, or takes
+> individual lines out before anything touches the scene; guided tours that move the camera and
+> highlight entities without changing the document by a byte; and an agent that drives a BallZ
+> course through the same `api.steer` calls a keyboard produces, then hands its trajectory over
+> as the ghost you race. Still open: a model/provider adapter, and the Center's expansion into
+> distinct places. Execution order and guardrails:
 > **[docs/AGENTX_ROADMAP.md](docs/AGENTX_ROADMAP.md)**.
 
 The complete historical source and restoration record lives in the workshop repo,
