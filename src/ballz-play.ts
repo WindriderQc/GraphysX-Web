@@ -157,8 +157,10 @@ export function mountBallzPlay(
   }
   controlSelect.value = controlMode;
   // News from the agent's own run, if it just took one. Held rather than written straight into
-  // `hint`, because `updateHint` rewrites that line on every control-mode change.
-  const coachNote = recordId ? takeCoachNote(recordId) : null;
+  // `hint`, because `updateHint` rewrites that line whenever the control mode changes — and
+  // then dropped the moment the player asks for the control help by changing modes, so the
+  // agent's news cannot squat on the only line that tells you which keys to press.
+  let coachNote = recordId ? takeCoachNote(recordId) : null;
   const updateHint = (): void => {
     if (coachNote) { hint.textContent = coachNote; return; }
     const suffix = hasGhost ? " · personal ghost active" : "";
@@ -175,6 +177,7 @@ export function mountBallzPlay(
     controlMode = controlSelect.value as PlayControlMode;
     container.dataset.gxControlMode = controlMode;
     writePlayControlMode(controlMode);
+    coachNote = null;
     updateHint();
   });
   const pauseButton = document.createElement("button");
