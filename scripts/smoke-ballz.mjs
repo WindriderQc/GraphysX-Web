@@ -656,10 +656,13 @@ try {
     null,
     { timeout: SMOKE_TIMEOUT },
   );
-  Object.assign(out.agentRace, await page.evaluate(async () => {
+  Object.assign(out.agentRace, await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
-    const ghosts = await import("/src/level-ghosts.ts");
-    const ghost = ghosts.getPersonalGhostState();
+    // Through `render_game_to_text`, not a dynamic import of `/src/level-ghosts.ts`. The dev
+    // server serves raw TypeScript and the built page does not, so an import like that passes
+    // against Vite and fails against the artifact the gate actually ships — which is what it
+    // did here, and is the reason this smoke runs against `dist`.
+    const ghost = JSON.parse(window.render_game_to_text()).personalGhost;
     const ball = api.query({ ids: ["ballz-ball"] })[0]?.position ?? null;
     return {
       note: document.querySelector(".gx-bz-hint")?.textContent?.trim() ?? null,

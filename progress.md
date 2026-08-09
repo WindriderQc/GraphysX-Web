@@ -3427,3 +3427,37 @@ level's own tile grid (rings nearest-first from the spawn, then the half gate, t
 and prints a paste-able `registerCoachProgram` block. It refuses to print a line that did not
 finish, because a program that does not complete the course is not worth shipping and the panel
 would only be honest about a baseline nobody wanted.
+
+## Two smoke defects the gate caught, and what each was really about
+
+**`smoke-ballz` imported TypeScript that only a dev server serves.** The AgentX race section read
+the ghost state with `await import("/src/level-ghosts.ts")`. That works against Vite, which
+serves raw TS, and fails against `dist`, which does not — `Failed to fetch dynamically imported
+module`. It passed every local iteration because the iterations used a dev server and the gate
+uses the built artifact. It now reads `window.render_game_to_text()`, which is the public,
+build-independent projection the rest of the product already exposes. The lesson is narrow and
+worth keeping: **iterate against `dist`, or at least confirm against it, when the smoke is going
+to run there.**
+
+**`smoke-showroom` asserted cancellation against a tour that had already ended.** CI failed with
+`locator resolved to <button data-tour-stop>End tour</button> … element is not visible`, and the
+smoke was right — the button really was unclickable. A tour advances on a 4200ms wall clock, so
+between the smoke's Next click and its End click (two `waitForFunction` round-trips and a camera
+settle) a loaded runner gives the tour enough time to walk itself to the last stop and finish;
+`.gx-welcome--touring` comes off, `.gx-tour` goes `display:none`, and the button has no box.
+Measured directly against `dist`:
+
+    0s   touring=true   stop=host    endButton=86x38
+    +5s  touring=true   stop=play    endButton=86x38
+    +10s touring=true   stop=flock   endButton=86x38
+    +15s touring=false  stop=null    endButton=no box
+
+The fix does not relax anything. The smoke now asserts the autoplay explicitly — still touring
+AND on a different stop, so it cannot pass by the tour having ended — and then restarts the tour
+and cancels it with no round-trip in between, so the cancel assertion is made against a tour that
+is definitely running. `autoAdvanced` joins the `tourGuidesWithoutAuthoring` chain; that
+behaviour had no coverage at all before, which is exactly why it could bite.
+
+Worth recording for the register: **the tour smoke had never passed CI.** It landed in `f8a8bef`,
+after the last green run (`2e44be1`), and the only run in between failed earlier on the observer
+boundary. The first run to reach the tour section found this on its first try.

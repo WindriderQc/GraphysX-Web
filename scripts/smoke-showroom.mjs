@@ -485,17 +485,43 @@ try {
     highlightIsOneEntity: window.__GRAPHYSX__.state().selectedIds.length === 1,
   }), tourFirst);
 
+  // A tour walks itself: pressing "Show me around" starts a walkthrough on a 4200ms dwell, not
+  // a slideshow you have to click through. That is asserted here rather than left implicit,
+  // because it is also what made the next step subtle. A tour left alone long enough reaches
+  // its last stop and finishes, and the End-tour button then sits inside a `display:none`
+  // panel — which is exactly how CI failed: several seconds of round-trips between advancing
+  // the tour and ending it, on a runner slow enough that the tour had already walked itself to
+  // the end. The button was found and was genuinely unclickable, and the smoke was right to say
+  // so; what was wrong was asserting cancellation against a tour that was no longer running.
+  await page.click("[data-tour-start]");
+  await page.waitForSelector(".gx-welcome--touring", { timeout: SMOKE_TIMEOUT });
+  const dwellStop = await page.evaluate(() => document.querySelector(".gx-welcome")?.dataset.tourStopId ?? null);
+  const autoAdvanced = await page.waitForFunction(
+    (known) => {
+      const card = document.querySelector(".gx-welcome");
+      // Still touring AND on a different stop: an advance, never a tour that simply ended.
+      return !!card?.classList.contains("gx-welcome--touring") && (card.dataset.tourStopId ?? null) !== known;
+    },
+    dwellStop,
+    { timeout: SMOKE_TIMEOUT },
+  ).then(() => true).catch(() => false);
+
+  // Restart so the cancel below is made against a tour that is definitely running, with no
+  // round-trip in between to let the dwell clock get ahead of the assertion.
+  await page.click("[data-tour-start]");
+  await page.waitForSelector(".gx-welcome--touring", { timeout: SMOKE_TIMEOUT });
   await page.click("[data-tour-stop]");
   await page.waitForFunction(() => !document.querySelector(".gx-welcome--touring"), null, { timeout: SMOKE_TIMEOUT });
   out.nestorTour = await page.evaluate((input) => ({
     ...input.first,
     ...input.second,
+    autoAdvanced: input.autoAdvanced,
     // A tour that left an entity selected would hand the editor a selection nobody made.
     selectionReleased: window.__GRAPHYSX__.state().selectedIds.length === 0,
     documentUnchanged: JSON.stringify(window.__GRAPHYSX__.exportDocument()) === input.before.document,
     commitsUnchanged: window.__GRAPHYSX__.history().length === input.before.commits,
     endedRevisionUnchanged: window.__GRAPHYSX__.state().revision === input.before.revision,
-  }), { first: tourFirst, second: tourSecond, before: beforeTour });
+  }), { first: tourFirst, second: tourSecond, before: beforeTour, autoAdvanced });
   await page.screenshot({ path: path.join(ART, "showroom-nestor-tour.png"), fullPage: false });
 
   // A rejected transaction must remain rejected on the next state read. Remove one command
@@ -799,6 +825,9 @@ const tourGuidesWithoutAuthoring =
   tour.backEnabled === true &&
   tour.selectionFollowed === true &&
   tour.highlightIsOneEntity === true &&
+  // It walks itself. A tour that only moved when clicked would be a slideshow, and "Show me
+  // around" would be asking the visitor to do the showing.
+  tour.autoAdvanced === true &&
   tour.selectionReleased === true &&
   tour.documentUnchanged === true &&
   tour.commitsUnchanged === true &&
