@@ -149,6 +149,51 @@ describe("courses without a baseline", () => {
   });
 });
 
+describe("the starter course baseline", () => {
+  // Whether it finishes is a browser question and is checked there. What is checkable here is
+  // that the shipped recording is still a well-formed program — the ways a careless edit to a
+  // 255-entry table breaks it silently.
+  const starter = coachProgramFor("starter-level");
+
+  it("is registered", () => {
+    assert.ok(starter, "the starter course must ship a baseline");
+    assert.ok(coachedCourseIds().includes("starter-level"));
+  });
+
+  it("names no subject, so it drives whatever the course declares the player is", () => {
+    // A hardcoded id would make the program about one course's entity naming rather than
+    // about a driving line.
+    assert.equal(starter.subjectId, undefined);
+  });
+
+  it("keeps every input inside the bound it ships with", () => {
+    // An action past maxMs is dropped by the schedule, so it would silently stop driving.
+    for (const action of starter.actions) {
+      assert.ok(action.atMs >= 0 && action.atMs <= starter.maxMs, `action at ${action.atMs}ms is outside 0..${starter.maxMs}`);
+    }
+    assert.equal(scheduledActionCount(planCoachTicks(starter)), starter.actions.length);
+  });
+
+  it("is in time order and drives at full thrust throughout", () => {
+    // Braking was measured and is worse; a stray fractional thrust would be someone
+    // re-litigating that by accident.
+    let previous = -1;
+    for (const action of starter.actions) {
+      assert.ok(action.atMs >= previous, `action at ${action.atMs}ms goes backwards`);
+      previous = action.atMs;
+      assert.equal(action.steer.thrust, 1);
+      assert.ok(action.steer.headingDegrees >= 0 && action.steer.headingDegrees <= 360);
+    }
+  });
+
+  it("leaves headroom over the measured time rather than ending on the bound", () => {
+    // Measured 11.35s. A maxMs sitting on that would turn any small regression into a run cut
+    // short, which reads as "did not finish" for the wrong reason.
+    assert.ok(starter.maxMs >= 11350 * 1.25, "the bound must not sit on the measured time");
+    assert.ok(starter.actions.at(-1).atMs < 11350 * 1.1, "the recording should end near its measured finish");
+  });
+});
+
 describe("what the panel says", () => {
   const run = (over) => ({ recordId: "c", completed: true, elapsedMs: 12340, trace: { elapsedMs: 12340, samples: [] }, ending: "finished", ...over });
 

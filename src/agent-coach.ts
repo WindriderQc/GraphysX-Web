@@ -121,22 +121,88 @@ export function scheduledActionCount(ticks: CoachTick[]): number {
  */
 const PROGRAMS: Record<string, CoachProgram> = {};
 
-// Nothing registered yet, and the map is empty on purpose rather than by omission. What a
-// completing program needs was measured on `starter-level` and is written down here so the
-// next attempt starts from facts instead of rediscovering them:
-//
-//   - Heading is degrees clockwise from -z:  0 = -z,  90 = +x,  180 = +z,  270 = -x.
-//   - Ball spawns at [0, 0.78, 10.4]; the half gate is at [0, 0.806, -10.4] and the finish at
-//     [0, 0.806, 13], so the out-and-back leg is a straight line along x = 0.
-//   - Steering: force 30, speed cap 7.02, kickImpulse 9.36, turn rate 240 deg/s.
-//   - `levels.play` is ASYNCHRONOUS. The run is unarmed when it returns and reads
-//     `phase: "running"` about 800ms later; drive before that and every run is a full-length
-//     "did not finish" regardless of the driving.
-//   - Completion is not just the gates. `starter-level` declares `collectibleTarget: 2`
-//     (`ballz-ring-2-7`, `ballz-ring-8-4`), so a straight out-and-back passes both gates and
-//     still does not finish. A driving line has to route through both rings.
-//
-// The last one is why there is no program here yet: the harness is proven, the route is not.
+/**
+ * The starter course, driven.
+ *
+ * This is a recording, not a hand-written line, and the distinction is the design. Finding a
+ * route was done closed-loop — a pilot that could read the ball's position and re-aim at the
+ * next waypoint sixty times a second (`output/coauthor/pilot.mjs`). What ships is the list of
+ * inputs that pilot issued, replayed blind. A coach that read positions while it drove would
+ * be a driving aid, and its "baseline" would be something no player could match.
+ *
+ * The facts the route had to satisfy, all measured rather than assumed:
+ *
+ *   - Heading is degrees clockwise from -z:  0 = -z,  90 = +x,  180 = +z,  270 = -x.
+ *   - The grid is 11x11 at cellSize 2.6, origin -13, so a cell centre is `-13 + index * 2.6`.
+ *     Start (5,9) = [0, 10.4]; half gate (5,1) = [0, -10.4]; finish (5,10) = [0, 13].
+ *   - Completion is NOT just the gates. `starter-level` declares `collectibleTarget: 2`, and
+ *     the rings sit at (2,7) = [-7.8, 5.2] and (8,4) = [7.8, -2.6], nowhere near the x = 0
+ *     line between the gates. A straight out-and-back clears both gates and never finishes,
+ *     which is what every earlier probe was actually reporting.
+ *   - Full thrust throughout beats braking, which is the opposite of the intuition. Thrust
+ *     scaled by cos(heading error) drove it in 19.8s; cutting thrust when travelling away from
+ *     the target, 16.5s; never lifting off, 11.4s. Bleeding speed costs more than a wide line.
+ *   - `levels.play` is ASYNCHRONOUS: the run is unarmed when it returns and reads
+ *     `phase: "running"` about 800ms later, so the runner refuses to drive early rather than
+ *     reporting a full-length failure that was never about the driving.
+ *
+ * Replayed open-loop it finishes in 11.35s, twice, agreeing to 2mm. `maxMs` is 16000 — half
+ * again the measured time, so a real regression shows up as a run that did not finish rather
+ * than as a run the bound cut short.
+ */
+const STARTER_LINE: ReadonlyArray<readonly [number, number]> = [
+  [0, 304], [1300, 302], [1467, 300], [1483, 62], [1583, 64], [1683, 66],
+  [1783, 68], [1883, 70], [1983, 72], [2083, 74], [2183, 76], [2283, 78],
+  [2367, 80], [2450, 82], [2533, 84], [2600, 86], [2667, 88], [2733, 90],
+  [2800, 92], [2850, 94], [2900, 96], [2950, 98], [3000, 100], [3050, 102],
+  [3100, 104], [3133, 106], [3183, 108], [3217, 110], [3250, 112], [3283, 114],
+  [3317, 116], [3350, 118], [3383, 121], [3417, 123], [3450, 126], [3483, 128],
+  [3500, 130], [3533, 133], [3567, 136], [3600, 139], [3633, 142], [3650, 144],
+  [3667, 146], [3700, 149], [3717, 151], [3733, 153], [3750, 155], [3767, 157],
+  [3783, 159], [3800, 161], [3817, 164], [3833, 166], [3850, 168], [3867, 170],
+  [3883, 172], [3900, 174], [3917, 177], [3933, 179], [3950, 181], [3967, 183],
+  [3983, 186], [4000, 188], [4017, 190], [4033, 192], [4050, 194], [4067, 196],
+  [4083, 198], [4100, 201], [4117, 203], [4133, 205], [4167, 208], [4183, 210],
+  [4350, 208], [4500, 206], [4600, 204], [4667, 202], [4733, 200], [4767, 198],
+  [4817, 196], [4850, 194], [4867, 192], [4900, 189], [4933, 185], [4950, 183],
+  [4967, 181], [4983, 179], [5000, 177], [5017, 175], [5033, 172], [5050, 168],
+  [5067, 164], [5083, 159], [5100, 153], [5117, 314], [5150, 316], [5200, 318],
+  [5267, 320], [5333, 322], [5383, 324], [5450, 326], [5517, 328], [5583, 330],
+  [5650, 332], [5717, 334], [5767, 336], [5833, 338], [5900, 340], [5950, 342],
+  [6000, 344], [6050, 346], [6100, 348], [6150, 350], [6200, 352], [6250, 354],
+  [6283, 356], [6317, 358], [6350, 360], [6367, 1], [6400, 3], [6433, 5],
+  [6467, 7], [6500, 9], [6517, 11], [6550, 13], [6567, 15], [6600, 18],
+  [6633, 21], [6667, 24], [6683, 26], [6700, 28], [6717, 30], [6733, 32],
+  [6750, 34], [6767, 36], [6783, 38], [6800, 40], [6817, 43], [6833, 45],
+  [6850, 47], [6867, 50], [6883, 53], [6900, 55], [6917, 58], [6933, 61],
+  [6950, 63], [6967, 66], [6983, 69], [7000, 72], [7017, 75], [7033, 77],
+  [7050, 80], [7067, 83], [7083, 86], [7100, 89], [7117, 91], [7133, 94],
+  [7150, 96], [7167, 99], [7183, 101], [7233, 99], [7300, 97], [7367, 95],
+  [7417, 93], [7483, 91], [7517, 89], [7567, 87], [7600, 85], [7633, 83],
+  [7667, 80], [7700, 77], [7733, 74], [7750, 72], [7767, 69], [7783, 67],
+  [7800, 64], [7817, 61], [7833, 57], [7850, 52], [7867, 47], [7883, 42],
+  [7900, 35], [7917, 179], [8000, 181], [8100, 183], [8200, 185], [8300, 187],
+  [8400, 189], [8483, 191], [8583, 193], [8667, 195], [8750, 197], [8833, 199],
+  [8917, 201], [8983, 203], [9067, 205], [9133, 207], [9183, 209], [9250, 211],
+  [9300, 213], [9367, 215], [9417, 217], [9467, 219], [9517, 221], [9550, 223],
+  [9600, 225], [9650, 227], [9683, 229], [9717, 231], [9750, 233], [9800, 235],
+  [9833, 237], [9867, 240], [9900, 242], [9933, 244], [9967, 246], [9983, 248],
+  [10017, 250], [10050, 253], [10083, 255], [10100, 257], [10250, 255], [10350, 253],
+  [10417, 251], [10500, 249], [10567, 247], [10617, 245], [10667, 243], [10717, 241],
+  [10750, 239], [10800, 237], [10833, 235], [10850, 233], [10883, 231], [10917, 229],
+  [10933, 227], [10967, 225], [11000, 222], [11033, 220], [11067, 217], [11100, 214],
+  [11117, 212], [11133, 210], [11150, 208], [11167, 206], [11183, 204], [11200, 201],
+  [11217, 198], [11233, 195], [11250, 192], [11267, 188], [11283, 184], [11300, 179],
+  [11317, 175], [11333, 169], [11350, 164],
+];
+
+registerCoachProgram({
+  recordId: "starter-level",
+  label: "Starter Level",
+  maxMs: 16000,
+  // Thrust is 1 on every input: see the note above about braking measuring worse.
+  actions: STARTER_LINE.map(([atMs, headingDegrees]) => ({ atMs, steer: { headingDegrees, thrust: 1 } })),
+});
 
 /** The program for a course, or null. Null is the answer the UI must be able to say out loud. */
 export function coachProgramFor(recordId: string | null | undefined): CoachProgram | null {
