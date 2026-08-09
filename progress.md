@@ -3345,3 +3345,38 @@ Two lessons worth keeping:
 Cheap guards added: `smoke-showroom` now asserts the neutral door removes the proposal, the tour
 panel and the tour button — the same shape the observer smoke checks, in a two-minute run rather
 than a twenty-two-minute one.
+
+## Slice 6, part one — the coach harness, and the three things it measured
+
+`src/agent-coach.ts` lands the machinery for an agent that drives a BallZ course through the
+same `api.steer` calls a keyboard produces. It is **not** Slice 6 complete: `PROGRAMS` is empty,
+so nothing is user-visible yet. What is done is the part that is provable without a driving
+line — the schedule, the sampling, the run comparison — plus three facts measured against real
+physics that would otherwise cost the next session a day.
+
+**Bit-identical determinism is false.** The obvious claim — same program, same run — was
+measured, not assumed. Two back-to-back runs of one program on one page stay exactly equal for
+2250 ms and then part by **1.4 mm** over three seconds. Step count and elapsed time match
+exactly; only positions drift, at the scale of the solver's last bits. The likely cause is the
+rest of the scene: emitters and flocks advance with their own randomness and the contact
+ordering is not identical run to run. So `coachRunsAgree` checks *reproducible within a
+tolerance* (`COACH_AGREEMENT_TOLERANCE = 0.05`). That is not a weakened assertion: the smallest
+real fault available — dropping one `kick` — moves the ball several units, three orders of
+magnitude clear of the noise.
+
+**`api.levels.play` is asynchronous.** It returns before the run is armed; `phase` reads
+`"running"` about 800 ms later. An earlier draft auto-armed the rules to work around this, which
+was papering over readiness — removed. The runner now reports `ending: "not-armed"` and says so,
+because a run that drove before the course started is not a slow run, it is no run.
+
+**The starter course is not an out-and-back.** Ball spawns at `[0, 0.78, 10.4]`, half-gate at
+`[0, 0.806, -10.4]`, finish at `[0, 0.806, 13]` — but `starter-level` also declares
+`collectibleTarget: 2` (`ballz-ring-2-7`, `ballz-ring-8-4`). A straight line down x = 0 passes
+both gates and still does not finish. Every probe run ended `ran-out-of-time` for this reason
+and nothing else. A completing program has to route through both rings.
+
+Steering constants, measured: heading is degrees clockwise from −z (`0 = −z`, `90 = +x`,
+`180 = +z`, `270 = −x`), force 30, speed cap 7.02, kickImpulse 9.36, turn rate 240 deg/s.
+
+Roadmap row 6 now reads "Harness landed, no driving line yet" rather than "Queued", which is
+the honest state: the harness is proven, the route is not.
