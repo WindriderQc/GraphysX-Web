@@ -3478,3 +3478,30 @@ author's own label, and the summary read `3/4` without saying why. The last wayp
 reads as unreached because the rules layer calls the course complete the moment the finish
 trigger fires, slightly before the ball is inside the radius the loop tests — `completed` is the
 rules layer's verdict and is the only one that decides anything.
+
+### The same race, one step earlier
+
+The first fix was incomplete. CI then failed with `stopId: "build"`, `"Stop 2 of 5 · Build
+console"`, `backDisabled: false` — the tour had auto-advanced *before the smoke read stop 1*,
+because between the start click and the read sat a camera-settle wait longer than the 4200ms
+dwell. Ending the tour was fixed; reading it was not.
+
+The real repair is structural rather than faster: **every reading of which stop the tour is on
+now happens in the same synchronous evaluate that does the clicking.** `start()` renders the
+panel inside the click handler, so a click-then-read in one turn is exact, not merely quick.
+The Next assertion gained real force from the same change — with the click and both readings in
+one turn, `movedOn` can only be true because the click advanced the tour, where read across a
+round-trip it would have gone true on its own.
+
+Only the camera cue is still measured after a wait, and it no longer cares which stop the tour
+has reached: `cameraMoved` was 3.875 on a fast run and 5.888 on a deliberately slowed one, and
+the assertion is that the tour moved the camera at all.
+
+Proved rather than assumed, by injecting 12 seconds of dead time — nearly three dwell periods —
+at the two places CI was slow. Twice, every field came back exact: `stopId: "host"`,
+`Stop 1 of 5`, `backDisabled: true`, `autoAdvanced: true`, tour cancelled, document unchanged.
+Under the old code that same injection is what CI reported.
+
+One run of that slowed variant died on an unrelated 45s `waitForFunction` timeout and did not
+reproduce across three further runs; on this box that is the documented starvation signature,
+not a finding.

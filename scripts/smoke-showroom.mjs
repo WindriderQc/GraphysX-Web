@@ -454,36 +454,53 @@ try {
     commits: window.__GRAPHYSX__.history().length,
     target: window.__GRAPHYSX_HOST__.orbitTarget.toArray(),
   }));
-  await page.click("[data-tour-start]");
-  await page.waitForSelector(".gx-welcome--touring", { timeout: SMOKE_TIMEOUT });
+  // Everything about *which stop this is* is captured in the same evaluate that does the
+  // clicking, never across a round-trip. The tour advances on a 4200ms dwell, and CI read
+  // "Stop 2 of 5" here because the camera-settle wait between clicking and reading is longer
+  // than the dwell on a loaded runner. `start()` renders the panel synchronously inside the
+  // click handler, so a click-then-read in one turn is exact rather than merely quick.
+  const tourFirstDom = await page.evaluate(() => {
+    document.querySelector("[data-tour-start]").click();
+    const card = document.querySelector(".gx-welcome");
+    return {
+      touring: card?.classList.contains("gx-welcome--touring") === true,
+      stopId: card?.dataset.tourStopId ?? null,
+      position: document.querySelector("[data-tour-position]")?.textContent ?? "",
+      line: (document.querySelector("[data-tour-line]")?.textContent ?? "").length,
+      dots: document.querySelectorAll("[data-tour-dots] i").length,
+      backDisabled: document.querySelector("[data-tour-previous]")?.disabled === true,
+      // Highlighting goes through api.select, which sets selectedIds and nothing else.
+      selected: window.__GRAPHYSX__.state().selectedIds.join(","),
+    };
+  });
+  // The camera cue eases, so it is measured after it settles. That reading does not care which
+  // stop the tour has reached by then — only that the tour moved the camera at all.
   await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
-  const tourFirst = await page.evaluate((before) => ({
-    stopId: document.querySelector(".gx-welcome")?.dataset.tourStopId ?? null,
-    position: document.querySelector("[data-tour-position]")?.textContent ?? "",
-    line: (document.querySelector("[data-tour-line]")?.textContent ?? "").length,
-    dots: document.querySelectorAll("[data-tour-dots] i").length,
-    backDisabled: document.querySelector("[data-tour-previous]")?.disabled === true,
-    // Highlighting goes through api.select, which sets selectedIds and nothing else.
-    selected: window.__GRAPHYSX__.state().selectedIds.join(","),
-    revisionUnchanged: window.__GRAPHYSX__.state().revision === before.revision,
-    cameraMoved: Number(Math.hypot(
-      ...window.__GRAPHYSX_HOST__.orbitTarget.toArray().map((value, index) => value - before.target[index]),
-    ).toFixed(3)),
-  }), beforeTour);
+  const tourFirst = {
+    ...tourFirstDom,
+    ...(await page.evaluate((before) => ({
+      revisionUnchanged: window.__GRAPHYSX__.state().revision === before.revision,
+      cameraMoved: Number(Math.hypot(
+        ...window.__GRAPHYSX_HOST__.orbitTarget.toArray().map((value, index) => value - before.target[index]),
+      ).toFixed(3)),
+    }), beforeTour)),
+  };
 
-  await page.click("[data-tour-next]");
-  await page.waitForFunction(
-    (first) => document.querySelector(".gx-welcome")?.dataset.tourStopId !== first,
-    tourFirst.stopId,
-    { timeout: SMOKE_TIMEOUT },
-  );
-  await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
-  const tourSecond = await page.evaluate((first) => ({
-    movedOn: (document.querySelector(".gx-welcome")?.dataset.tourStopId ?? null) !== first.stopId,
-    backEnabled: document.querySelector("[data-tour-previous]")?.disabled === false,
-    selectionFollowed: window.__GRAPHYSX__.state().selectedIds.join(",") !== first.selected,
-    highlightIsOneEntity: window.__GRAPHYSX__.state().selectedIds.length === 1,
-  }), tourFirst);
+  // Same reason, and here it is the difference between a real assertion and a vacuous one: with
+  // the click and both readings in one synchronous turn, `movedOn` can only be true because the
+  // click advanced the tour. Read across a round-trip it would also go true on its own.
+  const tourSecond = await page.evaluate(() => {
+    const card = document.querySelector(".gx-welcome");
+    const before = { stop: card?.dataset.tourStopId ?? null, selected: window.__GRAPHYSX__.state().selectedIds.join(",") };
+    document.querySelector("[data-tour-next]").click();
+    const after = card?.dataset.tourStopId ?? null;
+    return {
+      movedOn: after !== null && after !== before.stop,
+      backEnabled: document.querySelector("[data-tour-previous]")?.disabled === false,
+      selectionFollowed: window.__GRAPHYSX__.state().selectedIds.join(",") !== before.selected,
+      highlightIsOneEntity: window.__GRAPHYSX__.state().selectedIds.length === 1,
+    };
+  });
 
   // A tour walks itself: pressing "Show me around" starts a walkthrough on a 4200ms dwell, not
   // a slideshow you have to click through. That is asserted here rather than left implicit,
@@ -813,6 +830,7 @@ out.coauthorGateHolds = coauthorGateHolds;
 const tour = out.nestorTour;
 const tourGuidesWithoutAuthoring =
   !!tour &&
+  tour.touring === true &&
   tour.stopId === "host" &&
   tour.position.startsWith("Stop 1 of ") &&
   tour.line > 20 &&
