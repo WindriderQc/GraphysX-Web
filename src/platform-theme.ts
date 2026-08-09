@@ -19,6 +19,22 @@ import "@fontsource/space-grotesk/500.css";
 import "@fontsource/space-grotesk/600.css";
 import "@fontsource/space-grotesk/700.css";
 
+/**
+ * Whether the visitor has asked for less motion — the product's Display setting first, the OS
+ * preference when that says "auto".
+ *
+ * Lives here because this module is what *writes* `data-gx-motion`, so the reader belongs
+ * beside the writer. (`live-agent-presence.ts` and `live-mission-runtime.ts` each carry a
+ * private copy of this logic from before there was a shared home; they are correct, and folding
+ * them in is a tidy-up for whoever next touches those files.)
+ */
+export function motionIsReduced(): boolean {
+  const preference = typeof document === "undefined" ? undefined : document.documentElement.dataset.gxMotion;
+  if (preference === "reduce") return true;
+  if (preference === "full") return false;
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
+
 export function installPlatformTheme(): void {
   if (!document.getElementById("gx-theme")) {
     const style = document.createElement("style");

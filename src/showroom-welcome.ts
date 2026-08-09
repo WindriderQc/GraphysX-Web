@@ -1,5 +1,7 @@
 import type { NestorPresentation, NestorTopic } from "./showroom-nestor";
 import { summarizeProposal } from "./coauthor-proposal";
+import { describeTourPosition } from "./nestor-tour";
+import type { NestorTourState } from "./nestor-tour";
 import type { CoauthorOutcome, CoauthorProposal } from "./coauthor-proposal";
 import type { LiveAgentActivity } from "./live-agent-presence";
 import type { LiveMissionRuntimeState } from "./live-mission-runtime";
@@ -25,6 +27,8 @@ export interface ShowroomWelcomeHandle {
   showProposal: (proposal: CoauthorProposal | null, stale?: boolean) => void;
   /** Report what happened to the last decided proposal, including a discard. */
   showOutcome: (outcome: CoauthorOutcome | null) => void;
+  /** Render the tour's current stop, or clear it when the tour is not running. */
+  showTour: (state: NestorTourState) => void;
   reset: () => void;
   dispose: () => void;
 }
@@ -36,7 +40,10 @@ export function mountWelcome(
   onBrowse?: () => void,
   onNestorTopic?: (topic: NestorTopic) => void,
   variant: ShowroomWelcomeVariant = onNestorTopic ? "agentx" : "scene-resume",
-  coauthor?: { onAccept?: () => void; onDiscard?: () => void; onToggleCommand?: (index: number) => void },
+  hooks?: {
+    coauthor?: { onAccept?: () => void; onDiscard?: () => void; onToggleCommand?: (index: number) => void };
+    tour?: { onStart?: () => void; onNext?: () => void; onPrevious?: () => void; onStop?: () => void };
+  },
 ): ShowroomWelcomeHandle {
   const nestorEnabled = variant === "agentx" && typeof onNestorTopic === "function";
   const style = document.createElement("style");
@@ -66,6 +73,31 @@ export function mountWelcome(
     .gx-welcome .gx-go-games{background:linear-gradient(180deg,#2f9e7f,#1d6f5a);border-color:var(--gx-life);box-shadow:0 8px 30px rgba(29,111,90,.42)}
     .gx-welcome .gx-go-browse{background:linear-gradient(180deg,#5a6fb0,#3a4a80);border-color:var(--gx-violet);box-shadow:0 8px 30px rgba(58,74,128,.42)}
     .gx-welcome .gx-commit{min-height:15px;color:#69ddec;font:600 10px/1.4 var(--gx-font);letter-spacing:.08em;text-transform:uppercase}
+    /*
+     * The tour. A visitor was previously told "click Nestor or a glowing console in 3D" and
+     * left to find them; this is the guided read of the same room.
+     *
+     * Warm amber against the cyan the rest of the centre uses, because a tour is a different
+     * kind of act from asking for a change — nothing is being proposed and nothing will be
+     * committed, and the colour is the fastest way to say so.
+     */
+    .gx-welcome .gx-tour-start{border-color:rgba(255,206,122,.34)!important;color:#ffdba4!important;background:rgba(58,42,16,.72)!important}
+    .gx-welcome .gx-tour-start:hover{color:#fff!important;border-color:#ffce7a!important;background:rgba(120,84,26,.68)!important;box-shadow:0 0 24px rgba(255,206,122,.22)!important}
+    .gx-welcome .gx-tour{display:none;width:100%;box-sizing:border-box;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid rgba(255,206,122,.3);border-left:3px solid #ffce7a;border-radius:13px;background:rgba(38,28,12,.62);pointer-events:auto}
+    .gx-welcome--touring .gx-tour{display:flex}
+    /* While a tour is running the topic pills stand down; the tour owns the camera. */
+    .gx-welcome--touring .gx-nestor-topics{opacity:.42;pointer-events:none}
+    .gx-welcome .gx-tour-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .gx-welcome .gx-tour-position{color:#ffdba4;font:800 10.5px var(--gx-font);letter-spacing:.13em;text-transform:uppercase}
+    .gx-welcome .gx-tour-dots{display:flex;gap:5px}
+    .gx-welcome .gx-tour-dots i{width:6px;height:6px;border-radius:50%;background:rgba(255,219,164,.28)}
+    .gx-welcome .gx-tour-dots i.is-current{background:#ffce7a;box-shadow:0 0 10px rgba(255,206,122,.7)}
+    .gx-welcome .gx-tour-dots i.is-done{background:rgba(255,219,164,.62)}
+    .gx-welcome .gx-tour-line{margin:0;color:var(--gx-ink);font-size:13.5px;line-height:1.5}
+    .gx-welcome .gx-tour-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .gx-welcome .gx-tour-actions button{padding:8px 15px;border-radius:10px;font-size:13px;min-height:38px;box-shadow:none;background:rgba(20,40,50,.9);border-color:rgba(140,170,185,.4);color:#cfe6ee}
+    .gx-welcome [data-tour-next]{background:linear-gradient(180deg,#b5822f,#8a5f18)!important;border-color:#ffce7a!important;color:#fff!important}
+    .gx-welcome [data-tour-previous]:disabled{opacity:.4;cursor:not-allowed}
     /*
      * The co-author card: what an agent is about to do, before it does it.
      *
@@ -166,6 +198,26 @@ export function mountWelcome(
        * 390px viewport and left the scene as a sliver at the edges — and §5 says the 3D scene
        * stays dominant, which is not a rule that bends for my own new panel.
        */
+      /*
+       * A tour on a phone collapses to the tour itself.
+       *
+       * This is a *camera* feature — the whole point is watching the scene move — so a card
+       * that fills a 390px viewport does not merely crowd the subject, it defeats the thing
+       * the person pressed the button for. The title, briefing, hint, destinations and topic
+       * pills all stand down; they come back the moment the tour ends. Anchored to the bottom
+       * so the upper frame, where the camera puts the subject, stays clear.
+       */
+      .gx-welcome--touring{align-items:flex-end;padding:10px calc(10px + env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom))}
+      .gx-welcome--touring .gx-welcome-card{width:100%;max-height:44vh;gap:0;padding:0;border:0;background:none;box-shadow:none;backdrop-filter:none}
+      .gx-welcome--touring .gx-eyebrow,
+      .gx-welcome--touring h1,
+      .gx-welcome--touring .gx-nestor-briefing,
+      .gx-welcome--touring .gx-nestor-topics,
+      .gx-welcome--touring .gx-commit,
+      .gx-welcome--touring .gx-actions,
+      .gx-welcome--touring .gx-hint,
+      .gx-welcome--touring .gx-proposal-outcome{display:none}
+      .gx-welcome--touring .gx-tour{background:rgba(20,15,6,.9);backdrop-filter:blur(14px)}
       .gx-welcome--proposing .gx-nestor-briefing{display:none}
       .gx-welcome--proposing .gx-hint{display:none}
       .gx-welcome--proposing .gx-welcome-card{gap:9px}
@@ -193,6 +245,19 @@ export function mountWelcome(
         <button type="button" data-nestor-topic="build" aria-pressed="false">Build something</button>
         <button type="button" data-nestor-topic="play" aria-pressed="false">Wake the physics</button>
         <button type="button" data-nestor-topic="explore" aria-pressed="false">Reveal living systems</button>
+        <button type="button" class="gx-tour-start" data-tour-start>Show me around</button>
+      </div>
+      <div class="gx-tour" data-nestor-tour role="group" aria-labelledby="gx-tour-position">
+        <div class="gx-tour-head">
+          <span class="gx-tour-position" id="gx-tour-position" data-tour-position></span>
+          <div class="gx-tour-dots" data-tour-dots aria-hidden="true"></div>
+        </div>
+        <p class="gx-tour-line" data-tour-line></p>
+        <div class="gx-tour-actions">
+          <button type="button" data-tour-previous aria-label="Previous stop">Back</button>
+          <button type="button" data-tour-next>Next</button>
+          <button type="button" data-tour-stop>End tour</button>
+        </div>
       </div>
       <div class="gx-proposal" data-nestor-proposal role="group" aria-labelledby="gx-proposal-actor">
         <div class="gx-proposal-head">
@@ -460,6 +525,60 @@ export function mountWelcome(
     }
   };
 
+  /**
+   * Renders the tour's current stop, or clears it.
+   *
+   * `textContent` throughout. The narration is authored copy today, but the stop list is data
+   * and data eventually comes from somewhere else.
+   */
+  const showTour = (state: NestorTourState): void => {
+    if (!nestorEnabled) return;
+    const running = state.status === "running" && state.stop !== null;
+    overlay.classList.toggle("gx-welcome--touring", running);
+    const position = overlay.querySelector<HTMLElement>("[data-tour-position]");
+    const line = overlay.querySelector<HTMLElement>("[data-tour-line]");
+    const dots = overlay.querySelector<HTMLElement>("[data-tour-dots]");
+    const previous = overlay.querySelector<HTMLButtonElement>("[data-tour-previous]");
+    const next = overlay.querySelector<HTMLButtonElement>("[data-tour-next]");
+    if (!running) {
+      // `tourStopId`, not `tourStop`: the End-tour button already owns `data-tour-stop`, and
+      // one attribute meaning both "which stop is showing" and "the control that ends it"
+      // makes `[data-tour-stop]` resolve to two unrelated elements.
+      delete overlay.dataset.tourStopId;
+      // The button that started it takes the keyboard back, exactly as the proposal card does.
+      if (tourWasFocused()) overlay.querySelector<HTMLButtonElement>("[data-tour-start]")?.focus();
+      return;
+    }
+    overlay.dataset.tourStopId = state.stop!.id;
+    if (position) position.textContent = describeTourPosition(state);
+    if (line) line.textContent = state.stop!.line;
+    if (previous) previous.disabled = state.index === 0;
+    // The last stop ends the tour rather than pretending there is somewhere else to go.
+    if (next) next.textContent = state.atLast ? "Finish" : "Next";
+    if (dots) {
+      dots.replaceChildren(...Array.from({ length: state.total }, (_, index) => {
+        const dot = document.createElement("i");
+        if (index === state.index) dot.className = "is-current";
+        else if (index < state.index) dot.className = "is-done";
+        return dot;
+      }));
+    }
+  };
+  const tourWasFocused = (): boolean => {
+    const card = overlay.querySelector<HTMLElement>("[data-nestor-tour]");
+    return card !== null && card.contains(document.activeElement);
+  };
+
+  overlay.querySelector<HTMLButtonElement>("[data-tour-start]")?.addEventListener("click", () => hooks?.tour?.onStart?.());
+  overlay.querySelector<HTMLButtonElement>("[data-tour-next]")?.addEventListener("click", () => hooks?.tour?.onNext?.());
+  overlay.querySelector<HTMLButtonElement>("[data-tour-previous]")?.addEventListener("click", () => hooks?.tour?.onPrevious?.());
+  overlay.querySelector<HTMLButtonElement>("[data-tour-stop]")?.addEventListener("click", () => hooks?.tour?.onStop?.());
+  overlay.querySelector<HTMLElement>("[data-nestor-tour]")?.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key !== "Escape") return;
+    event.stopPropagation();
+    hooks?.tour?.onStop?.();
+  });
+
   overlay.querySelectorAll<HTMLButtonElement>("[data-nestor-topic]").forEach((button) => {
     button.disabled = !onNestorTopic;
     button.addEventListener("click", () => {
@@ -477,20 +596,20 @@ export function mountWelcome(
     const box = event.target as HTMLInputElement | null;
     const index = Number(box?.dataset.proposalCommand);
     if (!Number.isInteger(index)) return;
-    coauthor?.onToggleCommand?.(index);
+    hooks?.coauthor?.onToggleCommand?.(index);
   });
   overlay.querySelector<HTMLButtonElement>("[data-proposal-accept]")?.addEventListener("click", () => {
-    coauthor?.onAccept?.();
+    hooks?.coauthor?.onAccept?.();
   });
   overlay.querySelector<HTMLButtonElement>("[data-proposal-discard]")?.addEventListener("click", () => {
-    coauthor?.onDiscard?.();
+    hooks?.coauthor?.onDiscard?.();
   });
   // Escape discards, matching every other dismissible surface in the product. Bound on the
   // card rather than the document so it cannot swallow Escape from the editor or a dialog.
   overlay.querySelector<HTMLElement>("[data-nestor-proposal]")?.addEventListener("keydown", (event) => {
     if ((event as KeyboardEvent).key !== "Escape") return;
     event.stopPropagation();
-    coauthor?.onDiscard?.();
+    hooks?.coauthor?.onDiscard?.();
   });
   const editor = overlay.querySelector(".gx-go-editor");
   if (onEnter) {
@@ -519,5 +638,5 @@ export function mountWelcome(
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);
-  return { present, observeLiveActivity, observeMission, showProposal, showOutcome, reset, dispose };
+  return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showTour, reset, dispose };
 }

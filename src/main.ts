@@ -31,6 +31,9 @@ import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
 import type { NestorTopic } from "./showroom-nestor";
+import { IDLE_TOUR_STATE, createNestorTourController } from "./nestor-tour";
+import type { NestorTourController } from "./nestor-tour";
+import { motionIsReduced } from "./platform-theme";
 import { archiveReferenceMs } from "./archive-race-records";
 import { getArchiveCupRuntimeState, type ArchiveCupCourse } from "./archive-cup";
 import { getPersonalGhostState } from "./level-ghosts";
@@ -144,6 +147,7 @@ if (mode === "previews" && import.meta.env.DEV) {
     let nestor: ReturnType<typeof createNestorPresenter> | null = null;
     let livePresence: LiveAgentPresenceController | null = null;
     let liveMission: LiveMissionRuntimeController | null = null;
+    let tourController: NestorTourController | null = null;
     // The showroom's terrain, water and key light are host-mounted objects rather than scene
     // entities, so loading a stored scene replaces the entities and leaves this behind —
     // a ported village would otherwise sit inside the showroom's hills. Kept so opening a
@@ -218,6 +222,7 @@ if (mode === "previews" && import.meta.env.DEV) {
         syncFrontDoor();
         return;
       }
+      stopNestorTour();
       const proposal = nestor?.propose(topic);
       welcome?.showOutcome(null);
       if (proposal) welcome?.showProposal(proposal, false);
@@ -246,6 +251,32 @@ if (mode === "previews" && import.meta.env.DEV) {
       const updated = nestor?.toggleProposalCommand(index);
       if (updated) welcome?.showProposal(updated, nestor?.state().proposalStale ?? false);
     };
+    /**
+     * The tour owns the camera while it runs, so anything that would fight it for the camera —
+     * asking for a change, leaving the front door — ends it first. It is a guided read of the
+     * room, not a mode to get stuck in.
+     */
+    const startNestorTour = (): void => {
+      if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
+        syncFrontDoor();
+        return;
+      }
+      discardNestorProposal();
+      tourController ??= createNestorTourController({
+        entityExists: (id) => host.api.query({ ids: [id] }).length === 1,
+        focusEntity: (id) => { interaction?.focusEntity(id, true); },
+        // `api.select` sets selectedIds and nothing else — no revision, no history, no export.
+        // A tour that authored anything would be a tour that changed the room it is describing.
+        highlight: (ids) => { host.api.select(ids); },
+        reducedMotion: motionIsReduced,
+        onChange: (state) => welcome?.showTour(state),
+      });
+      welcome?.showTour(tourController.start());
+    };
+    const stopNestorTour = (): void => {
+      if (!tourController) return;
+      welcome?.showTour(tourController.cancel());
+    };
     const discardNestorProposal = (): void => {
       nestor?.discard();
       welcome?.showProposal(null);
@@ -267,7 +298,19 @@ if (mode === "previews" && import.meta.env.DEV) {
         agentxDoor ? presentNestor : undefined,
         variant,
         agentxDoor
-          ? { onAccept: acceptNestorProposal, onDiscard: discardNestorProposal, onToggleCommand: toggleNestorProposalCommand }
+          ? {
+            coauthor: {
+              onAccept: acceptNestorProposal,
+              onDiscard: discardNestorProposal,
+              onToggleCommand: toggleNestorProposalCommand,
+            },
+            tour: {
+              onStart: startNestorTour,
+              onNext: () => welcome?.showTour(tourController?.next() ?? IDLE_TOUR_STATE),
+              onPrevious: () => welcome?.showTour(tourController?.previous() ?? IDLE_TOUR_STATE),
+              onStop: stopNestorTour,
+            },
+          }
           : undefined,
       );
       mountedWelcomeVariant = variant;

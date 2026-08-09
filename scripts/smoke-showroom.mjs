@@ -446,6 +446,58 @@ try {
   }, nestorTargetBefore);
   await page.screenshot({ path: path.join(ART, "showroom-nestor-build.png"), fullPage: false });
 
+  // The tour: Nestor moves the camera and says what each thing is. It reads the room and must
+  // not change it, so the boundary is asserted on the document exactly like the proposal gate.
+  const beforeTour = await page.evaluate(() => ({
+    revision: window.__GRAPHYSX__.state().revision,
+    document: JSON.stringify(window.__GRAPHYSX__.exportDocument()),
+    commits: window.__GRAPHYSX__.history().length,
+    target: window.__GRAPHYSX_HOST__.orbitTarget.toArray(),
+  }));
+  await page.click("[data-tour-start]");
+  await page.waitForSelector(".gx-welcome--touring", { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
+  const tourFirst = await page.evaluate((before) => ({
+    stopId: document.querySelector(".gx-welcome")?.dataset.tourStopId ?? null,
+    position: document.querySelector("[data-tour-position]")?.textContent ?? "",
+    line: (document.querySelector("[data-tour-line]")?.textContent ?? "").length,
+    dots: document.querySelectorAll("[data-tour-dots] i").length,
+    backDisabled: document.querySelector("[data-tour-previous]")?.disabled === true,
+    // Highlighting goes through api.select, which sets selectedIds and nothing else.
+    selected: window.__GRAPHYSX__.state().selectedIds.join(","),
+    revisionUnchanged: window.__GRAPHYSX__.state().revision === before.revision,
+    cameraMoved: Number(Math.hypot(
+      ...window.__GRAPHYSX_HOST__.orbitTarget.toArray().map((value, index) => value - before.target[index]),
+    ).toFixed(3)),
+  }), beforeTour);
+
+  await page.click("[data-tour-next]");
+  await page.waitForFunction(
+    (first) => document.querySelector(".gx-welcome")?.dataset.tourStopId !== first,
+    tourFirst.stopId,
+    { timeout: SMOKE_TIMEOUT },
+  );
+  await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
+  const tourSecond = await page.evaluate((first) => ({
+    movedOn: (document.querySelector(".gx-welcome")?.dataset.tourStopId ?? null) !== first.stopId,
+    backEnabled: document.querySelector("[data-tour-previous]")?.disabled === false,
+    selectionFollowed: window.__GRAPHYSX__.state().selectedIds.join(",") !== first.selected,
+    highlightIsOneEntity: window.__GRAPHYSX__.state().selectedIds.length === 1,
+  }), tourFirst);
+
+  await page.click("[data-tour-stop]");
+  await page.waitForFunction(() => !document.querySelector(".gx-welcome--touring"), null, { timeout: SMOKE_TIMEOUT });
+  out.nestorTour = await page.evaluate((input) => ({
+    ...input.first,
+    ...input.second,
+    // A tour that left an entity selected would hand the editor a selection nobody made.
+    selectionReleased: window.__GRAPHYSX__.state().selectedIds.length === 0,
+    documentUnchanged: JSON.stringify(window.__GRAPHYSX__.exportDocument()) === input.before.document,
+    commitsUnchanged: window.__GRAPHYSX__.history().length === input.before.commits,
+    endedRevisionUnchanged: window.__GRAPHYSX__.state().revision === input.before.revision,
+  }), { first: tourFirst, second: tourSecond, before: beforeTour });
+  await page.screenshot({ path: path.join(ART, "showroom-nestor-tour.png"), fullPage: false });
+
   // A rejected transaction must remain rejected on the next state read. Remove one command
   // target, retry Build, then restore that edit and ensure scene reconciliation resumes.
   out.nestorRejected = await page.evaluate(() => {
@@ -717,7 +769,33 @@ const coauthorGateHolds =
   out.nestorNarrowed.includedWorkApplied === true;
 out.coauthorGateHolds = coauthorGateHolds;
 
+/**
+ * The tour reads the room without changing it: a camera cue, a highlight and a sentence per
+ * stop, and a document that is byte-identical when it ends.
+ */
+const tour = out.nestorTour;
+const tourGuidesWithoutAuthoring =
+  !!tour &&
+  tour.stopId === "host" &&
+  tour.position.startsWith("Stop 1 of ") &&
+  tour.line > 20 &&
+  tour.dots >= 4 &&
+  tour.backDisabled === true &&
+  tour.selected === "showroom-nestor" &&
+  tour.revisionUnchanged === true &&
+  tour.cameraMoved > 0.5 &&
+  tour.movedOn === true &&
+  tour.backEnabled === true &&
+  tour.selectionFollowed === true &&
+  tour.highlightIsOneEntity === true &&
+  tour.selectionReleased === true &&
+  tour.documentUnchanged === true &&
+  tour.commitsUnchanged === true &&
+  tour.endedRevisionUnchanged === true;
+out.tourGuidesWithoutAuthoring = tourGuidesWithoutAuthoring;
+
 const nestorIsLive =
+  tourGuidesWithoutAuthoring &&
   coauthorGateHolds &&
   !!nestorInitial &&
   nestorInitial.type === "agent" &&

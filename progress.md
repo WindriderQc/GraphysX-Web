@@ -3262,3 +3262,45 @@ smoke green in 146s with zero console or page errors.
 
 Still not built: the model/provider adapter. Nestor composes these locally; the center needs no
 backend or API key.
+
+## 2026-08-08 — Nestor shows you around (`tour-r1`)
+
+Slice 5, for the AgentX Center. The front door told a first-time visitor to "click Nestor or a
+glowing console in 3D" and left them to find them. A tour is the guided read of the same room:
+stop at the thing, frame it, say what it is in one sentence, move on.
+
+Five stops — Nestor, the three consoles, the starlings — with a camera cue, a highlight and a
+line each, progress dots, Back/Next/End, and auto-advance on a dwell.
+
+**It reads the room without changing it.** Highlighting goes through `api.select`, which sets
+`selectedIds` and nothing else — no revision, no history, no export. Dwell is a `setTimeout`;
+the only thing animating is the camera, and the host was already doing that, so there is no
+second frame loop. Proved on the built output: revision, exported document and commit history
+byte-identical after a tour, and the selection released on the way out — a tour that left an
+entity selected would hand the editor a selection nobody made.
+
+Deliberate choices:
+
+- **A missing entity is skipped, never narrated.** The one thing a guided tour must not do is
+  describe something that is not there while the camera sits on empty space. `entityExists` is
+  injected, so a scene edited away from the composed centre degrades by skipping stops.
+- **Reduced motion holds each stop *longer*, not shorter.** Without the camera easing there is
+  no travel time, so the same sentence arrives with less room to read it.
+- **Warm amber against the centre's cyan**, because a tour is a different kind of act from
+  asking for a change: nothing is proposed and nothing will be committed.
+- **Asking for a change ends the tour.** The tour owns the camera while it runs; two things
+  driving it would fight.
+
+Two faults found by looking rather than reasoning:
+
+- `data-tour-stop` named both the End-tour button and the overlay's current-stop marker, so
+  `[data-tour-stop]` resolved to two unrelated elements and a click landed on the wrong one.
+  The marker is now `data-tour-stop-id`.
+- On a 390px phone the card filled the viewport and left the scene a sliver. For a *camera*
+  feature that does not merely crowd the subject, it defeats the thing the person pressed the
+  button for. While touring, the title, briefing, hint, destinations and topic pills stand down
+  and the tour becomes a compact bottom bar over a full-bleed scene.
+
+Coverage: 29 unit checks on the sequencing and the controller (175 total), driven through an
+injected clock so no test sleeps. `smoke-showroom` proves the camera moved, the highlight
+followed, and the document did not change.
