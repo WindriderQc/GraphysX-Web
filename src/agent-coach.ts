@@ -126,7 +126,7 @@ const PROGRAMS: Record<string, CoachProgram> = {};
  *
  * This is a recording, not a hand-written line, and the distinction is the design. Finding a
  * route was done closed-loop — a pilot that could read the ball's position and re-aim at the
- * next waypoint sixty times a second (`output/coauthor/pilot.mjs`). What ships is the list of
+ * next waypoint sixty times a second (`scripts/record-coach-line.mjs`). What ships is the list of
  * inputs that pilot issued, replayed blind. A coach that read positions while it drove would
  * be a driving aid, and its "baseline" would be something no player could match.
  *

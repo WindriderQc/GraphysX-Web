@@ -149,7 +149,25 @@ collaboration sessions with server-authoritative missions.
 All three front-door destinations (§5) are live: the showroom, **Games & Playgrounds** (every
 row is `api.levels.play(id)`) and **Browse Scenes** (curated starters that open in the editor).
 BallZ is a finished game — the original two-body control model as scene vocabulary, driven by
-the same `api.steer` call an agent makes.
+the same `api.steer` call an agent makes. On the starter course that is not a figure of speech:
+the play HUD carries **◈ Race AgentX**, which drives the course through those same calls,
+finishes in 11.35s and hands its trajectory back as the ghost you race.
+
+`src/agent-coach.ts` is the whole of it, and two of its properties are load-bearing:
+
+- **A program is inputs at times, never a recorded time.** Rapier is deterministic for a build
+  and platform and not across them, so a baseline shipped as data would quietly stop being true
+  on someone else's machine. The run is computed where it is shown.
+- **Adding a course means recording one, not writing one.**
+  `node scripts/record-coach-line.mjs --level <id>` drives closed-loop — reading the ball's
+  position and re-aiming sixty times a second — and prints the inputs it issued as a paste-able
+  `registerCoachProgram` block. It refuses to print a line that did not finish. `PROGRAMS` is a
+  small explicit map, and a course that is not in it gets no button at all, because a coach that
+  guessed a driving line would be offering advice it has no basis for.
+
+Bit-identical replay is *false* and was measured: two runs of one program on one page part by
+1.4mm over three seconds, so `coachRunsAgree` checks reproducible-within-5cm. The gap to a real
+fault is three orders of magnitude — dropping a single `kick` moves the ball units.
 
 `scripts/smoke-roundtrip.mjs` is 99 property and rejection checks set through the public API and
 read back four ways. It exists because the same bug kept recurring in different clothes: **a

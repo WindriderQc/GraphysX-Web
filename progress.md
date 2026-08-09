@@ -3390,7 +3390,7 @@ ghost you race. The HUD line reads `AgentX baseline · 11.35s` and the ghost is 
 not "rival".
 
 **How the route was found, and why the shipped thing is different from it.** A pilot
-(`output/coauthor/pilot.mjs`) drove closed-loop — reading the ball's position and re-aiming at
+(now checked in as `scripts/record-coach-line.mjs`) drove closed-loop — reading the ball's position and re-aiming at
 the next waypoint sixty times a second — and recorded every input it issued. What ships is that
 recording, replayed blind. A coach that read positions while it drove would be a driving aid,
 and the "baseline" it produced would be a time no player could match. Open-loop replay finishes
@@ -3419,3 +3419,11 @@ program (time order, inside the bound, full thrust, no hardcoded subject), and `
 drives the button end to end — absence on the uncoached course, the note, the AgentX challenger
 label, a time in the 10–13s window, the ghost actually spawned, and the ball back at the start
 pad rather than wherever the agent parked it.
+
+The pilot itself is now `scripts/record-coach-line.mjs` rather than a scratch file under
+`output/` — which is gitignored, so the tool that makes this feature extensible would have
+vanished with the session that wrote it. It takes `--level <id>`, derives its waypoints from the
+level's own tile grid (rings nearest-first from the spawn, then the half gate, then the finish),
+and prints a paste-able `registerCoachProgram` block. It refuses to print a line that did not
+finish, because a program that does not complete the course is not worth shipping and the panel
+would only be honest about a baseline nobody wanted.
