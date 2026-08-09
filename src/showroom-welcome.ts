@@ -81,8 +81,19 @@ export function mountWelcome(
      * kind of act from asking for a change — nothing is being proposed and nothing will be
      * committed, and the colour is the fastest way to say so.
      */
-    .gx-welcome .gx-tour-start{border-color:rgba(255,206,122,.34)!important;color:#ffdba4!important;background:rgba(58,42,16,.72)!important}
-    .gx-welcome .gx-tour-start:hover{color:#fff!important;border-color:#ffce7a!important;background:rgba(120,84,26,.68)!important;box-shadow:0 0 24px rgba(255,206,122,.22)!important}
+    /*
+     * The tour affordance rides in the eyebrow row, which had free width, rather than as a
+     * fourth capability pill.
+     *
+     * That is not a layout preference. As a pill it wrapped the topics row to two lines, and
+     * the card is bottom-anchored — so growing pushed its top edge up by ~37px, over a kinetic
+     * block that a visitor could previously click. The showroom smoke caught it as a physics
+     * impulse that never happened; the real cost was a scene object going dead behind chrome.
+     * Anything added here must not change the card's height.
+     */
+    .gx-welcome .gx-eyebrow{justify-content:flex-start}
+    .gx-welcome .gx-tour-start{margin-left:auto;padding:3px 10px;border-radius:999px;font:800 9.5px var(--gx-font);letter-spacing:.12em;text-transform:uppercase;pointer-events:auto;border:1px solid rgba(255,206,122,.36);color:#ffdba4;background:rgba(58,42,16,.72);box-shadow:none}
+    .gx-welcome .gx-tour-start:hover{color:#fff;border-color:#ffce7a;background:rgba(120,84,26,.72);box-shadow:0 0 18px rgba(255,206,122,.24)}
     .gx-welcome .gx-tour{display:none;width:100%;box-sizing:border-box;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid rgba(255,206,122,.3);border-left:3px solid #ffce7a;border-radius:13px;background:rgba(38,28,12,.62);pointer-events:auto}
     .gx-welcome--touring .gx-tour{display:flex}
     /* While a tour is running the topic pills stand down; the tour owns the camera. */
@@ -238,14 +249,13 @@ export function mountWelcome(
   overlay.className = "gx-welcome";
   overlay.innerHTML = `
     <div class="gx-welcome-card">
-      <div class="gx-eyebrow"><span class="gx-online-dot"></span><span data-nestor-eyebrow>AgentX Center · Nestor online</span></div>
+      <div class="gx-eyebrow"><span class="gx-online-dot"></span><span data-nestor-eyebrow>AgentX Center · Nestor online</span><button type="button" class="gx-tour-start" data-tour-start>Show me around</button></div>
       <h1 data-nestor-title>MAKE THE WORLD MOVE.</h1>
       <p class="gx-nestor-briefing" data-nestor-briefing aria-live="polite">Pick a live demo. Nestor will change this scene with the same inspectable commands available to every AgentX collaborator.</p>
       <div class="gx-nestor-topics" aria-label="Ask Nestor to show a capability">
         <button type="button" data-nestor-topic="build" aria-pressed="false">Build something</button>
         <button type="button" data-nestor-topic="play" aria-pressed="false">Wake the physics</button>
         <button type="button" data-nestor-topic="explore" aria-pressed="false">Reveal living systems</button>
-        <button type="button" class="gx-tour-start" data-tour-start>Show me around</button>
       </div>
       <div class="gx-tour" data-nestor-tour role="group" aria-labelledby="gx-tour-position">
         <div class="gx-tour-head">
@@ -305,6 +315,20 @@ export function mountWelcome(
       ? "use the live session panel for shared activity"
       : "your scene remains loaded · re-enter when you are ready";
     overlay.querySelector(".gx-nestor-topics")?.remove();
+    // The co-author card and the tour panel go with it.
+    //
+    // Both are siblings of the topics row rather than children, so removing that row left
+    // their five buttons in the DOM — hidden by CSS, but present. CI caught it: the observer
+    // boundary check counts *buttons*, not visible buttons, and it is right to. A control that
+    // exists is reachable, and this variant's whole contract is that a live session owns scene
+    // operations and the local paths are not merely styled away.
+    overlay.querySelector("[data-nestor-proposal]")?.remove();
+    overlay.querySelector("[data-proposal-outcome]")?.remove();
+    overlay.querySelector("[data-nestor-tour]")?.remove();
+    // Separately, because this one lives in the eyebrow rather than in the tour panel — it
+    // moved there so it would stop making the card taller, and moving it took it outside the
+    // subtree the line above removes. The guard caught that within one run of adding it.
+    overlay.querySelector("[data-tour-start]")?.remove();
   }
   const dispose = () => { overlay.remove(); style.remove(); };
   /** The topic button that asked for the pending proposal, for focus restoration. */

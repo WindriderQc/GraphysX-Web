@@ -3304,3 +3304,44 @@ Two faults found by looking rather than reasoning:
 Coverage: 29 unit checks on the sequencing and the controller (175 total), driven through an
 injected clock so no test sleeps. `smoke-showroom` proves the camera moved, the highlight
 followed, and the document did not change.
+
+## 2026-08-09 — the card grew and a block went dead (`tour-r1` follow-up)
+
+CI failed the co-author deploy with `live-sessions-browser` 128/131. Three assertions, one
+cause: `welcomeButtons: 2` where the observer boundary requires 0. The proposal card is a
+*sibling* of the topics row, so the existing "remove the Nestor controls" step missed it and
+its two buttons stayed in the DOM — hidden by CSS, but present. The observer check counts
+buttons, not visible buttons, and it is right to: a control that exists is reachable, and this
+variant's contract is that the local paths are gone rather than styled away. The tour commit
+would have added three more.
+
+Then the showroom smoke failed twice on `impulseMoved: 0`, measured at line 126 — three hundred
+lines before anything new. It looked exactly like the loaded-box flakiness that has been
+failing runs all week, and it was not:
+
+    clickPoint: (402, 464)   hitTag: "BUTTON"   hitsCanvas: false
+    topicsRect.top: 463
+
+The tour's "Show me around" pill wrapped the topics row to two lines. The card is
+bottom-anchored, so growing pushed its top edge up ~37px, over a kinetic block. The smoke saw
+a physics impulse that never happened; the real cost was a scene object going dead behind
+chrome — a visitor could no longer click it either.
+
+Fixed by not growing the card: the tour affordance moved into the eyebrow row, which had free
+width. Topics back to one line, card 36px shorter, `hitsCanvas: true`, `impulseMoved: 0.647`.
+
+That move then broke the removal again — the button now lives outside the tour panel's subtree —
+and the guard added in the same change caught it on the very next run.
+
+Two lessons worth keeping:
+
+- **A bottom-anchored panel grows upward, over the scene.** Anything added to the welcome card
+  must not change its height. There is now a comment saying so beside the tour button.
+- **A failure that looks like the known flake still deserves the two-minute check.** Everything
+  about `impulseMoved: 0` matched the pattern — early, physics, silent `.catch()`, a box that
+  had failed three runs at three different points. `document.elementFromPoint` settled it in
+  thirty seconds.
+
+Cheap guards added: `smoke-showroom` now asserts the neutral door removes the proposal, the tour
+panel and the tour button — the same shape the observer smoke checks, in a two-minute run rather
+than a twenty-two-minute one.

@@ -525,10 +525,21 @@ try {
   // active Nestor card for a neutral resume door, and restoring it brings the real topics back.
   await page.evaluate(() => window.__GRAPHYSX__.remove("showroom-nestor-aura"));
   await page.waitForSelector(".gx-welcome--scene-resume", { timeout: SMOKE_TIMEOUT });
-  const guardedDoor = await page.evaluate(() => ({
-    neutral: !!document.querySelector(".gx-welcome--scene-resume"),
-    topics: document.querySelectorAll("[data-nestor-topic]").length,
-  }));
+  const guardedDoor = await page.evaluate(() => {
+    const welcome = document.querySelector(".gx-welcome");
+    return {
+      neutral: !!welcome?.classList.contains("gx-welcome--scene-resume"),
+      topics: document.querySelectorAll("[data-nestor-topic]").length,
+      // The Nestor surfaces are *removed* on the non-AgentX doors, not merely hidden. They
+      // were added as siblings of the topics row, so the existing removal missed them and
+      // five buttons stayed in the DOM of a variant whose whole contract is that the local
+      // paths are gone. The live-observer smoke caught it; this guards the same shape in a
+      // two-minute check instead of a twenty-two-minute one.
+      proposalPresent: !!welcome?.querySelector("[data-nestor-proposal]"),
+      tourPresent: !!welcome?.querySelector("[data-nestor-tour]"),
+      tourStartPresent: !!welcome?.querySelector("[data-tour-start]"),
+    };
+  });
   await page.evaluate(() => window.__GRAPHYSX__.undo());
   await page.waitForFunction(() =>
     !document.querySelector(".gx-welcome--scene-resume") &&
@@ -850,6 +861,10 @@ const nestorIsLive =
   out.nestorRejected?.auraPresent === true &&
   out.nestorDoorGuard?.neutral === true &&
   out.nestorDoorGuard?.topics === 0 &&
+  // Removed, not hidden: a control that exists in the DOM is reachable.
+  out.nestorDoorGuard?.proposalPresent === false &&
+  out.nestorDoorGuard?.tourPresent === false &&
+  out.nestorDoorGuard?.tourStartPresent === false &&
   out.nestorDoorGuard?.restoredTopics === 3 &&
   out.nestorDoorGuard?.restoredAura === 1;
 out.nestorIsLive = nestorIsLive;
