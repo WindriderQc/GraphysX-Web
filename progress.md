@@ -3771,3 +3771,34 @@ started, which is the actual claim rather than a tighter-looking one.
 question becomes real there, because those cost entities. The headless median frame is not the
 instrument for it: software rasterisation reports ~290ms, which says nothing about a visitor.
 HANDOFF records the showroom's real median at 13.3ms, and that is the number to hold.
+
+## The ghost that outlived its entity
+
+CI failed `ballz` on a commit whose diff did not touch ghosts:
+
+    TimeoutError: waiting for locator('[data-gx-race-agent]') to be visible
+    pageErrors: ["Error: Unknown entity: personal-best-ghost"]
+
+Both lines are one bug. `createPersonalGhostSession` keeps a `spawned` boolean, and the ghost it
+names is **ephemeral** — a level reload removes the entity without telling the session. The next
+tick drives an entity that no longer exists, `requireEntity` throws, and because that tick runs
+inside the play view's mount, the exception aborted the rest of the mount. The Race AgentX button
+was never built, so the smoke waited 45 seconds for something nothing was going to create. The
+missing button was the symptom; the stale boolean was the cause.
+
+It hid locally for a mundane reason: the ghost only spawns once a race is actually ticking, and
+this box moves on before that happens. CI is slower, so the ghost existed to be orphaned. That is
+the same local-versus-CI asymmetry as the tour dwell, arriving from the other direction — there
+the fast box was too fast to see a timer fire, here too fast to see one start.
+
+The fix re-checks the fact instead of trusting the memory, and lets `ensureGhost` put the ghost
+back. Proved by forcing the exact state — session believes spawned, entity removed — and running
+it against both versions:
+
+    old code   Error: Unknown entity: personal-best-ghost  (at requireEntity)
+    fixed      no throw · ghost respawned · Race AgentX button present
+
+The first attempt at that reproduction was worthless and worth recording as a method note: it
+tried to orphan the ghost by loading another course, that reload happened to *keep* the ghost, and
+the probe reported `threw: null` — passing while proving nothing. A test for "what happens in
+state X" has to establish state X, not hope an operation produces it.

@@ -143,6 +143,16 @@ export function createPersonalGhostSession(
   return {
     tick(elapsedMs) {
       sampleSubject(elapsedMs);
+      // `spawned` is a memory, and a level reload makes it a lie: the ghost is ephemeral, so
+      // loading another course removes it without telling this session. Driving an entity that
+      // is gone throws `Unknown entity: personal-best-ghost`, and because this runs inside the
+      // play view's mount, that exception aborted the rest of the mount — measured on CI, the
+      // Race AgentX button was simply never built. Re-check the fact instead of trusting the
+      // memory, and let `ensureGhost` put it back.
+      if (spawned && api.query({ ids: [GHOST_ID] }).length === 0) {
+        spawned = false;
+        if (runtimeState?.recordId === recordId) runtimeState.visible = false;
+      }
       ensureGhost();
       const position = playbackPosition(elapsedMs);
       if (spawned && position) api.update(GHOST_ID, { transform: { position } });
