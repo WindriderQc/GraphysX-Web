@@ -94,7 +94,7 @@ export interface NestorPresenter {
    * tell the difference, which is the point: a provider gets no path the local composer lacks,
    * and no path around the human gate.
    */
-  proposeExternal: (intent: string, commands: AgentWorldCommand[]) => CoauthorProposal;
+  proposeExternal: (topic: NestorTopic, intent: string, commands: AgentWorldCommand[]) => CoauthorProposal;
   /**
    * Include or exclude one command of the pending proposal, keeping the selection consistent:
    * dropping a command that creates an entity drops what needs it, and restoring a dependent
@@ -569,7 +569,7 @@ export function createNestorPresenter(options: {
    * not re-check them: a second validator would drift from the first, and the runtime refuses
    * anything malformed on commit regardless.
    */
-  const proposeExternal = (intent: string, commands: AgentWorldCommand[]): CoauthorProposal => {
+  const proposeExternal = (topic: NestorTopic, intent: string, commands: AgentWorldCommand[]): CoauthorProposal => {
     reconcile();
     lastOutcome = null;
     proposal = createProposal({
@@ -578,7 +578,11 @@ export function createNestorPresenter(options: {
       expectedRevision: api.state()?.revision ?? 0,
       commands,
     });
-    proposedTopic = null;
+    // The topic is retained even though the commands did not come from it. `accept` refuses a
+    // proposal with no topic, and the narration and camera cue after a successful commit are
+    // still the topic's — a provider composing in answer to "Build something" is still
+    // answering that button. Leaving it null shipped a card whose Apply did nothing at all.
+    proposedTopic = topic;
     return proposal;
   };
 
@@ -640,7 +644,11 @@ export function createNestorPresenter(options: {
     const commands = held ? includedCommands(held) : presentationCommands(api, topic);
     const result = api.commit({
       actor: NESTOR_ACTOR,
-      intent: intentFor(topic),
+      // The held proposal's own intent, not the topic's. For a locally composed proposal these
+      // are the same string. For one a model composed they are not, and committing the topic's
+      // intent would file the change in history under a description nobody wrote and the card
+      // never showed — the commit log would disagree with what the person agreed to.
+      intent: held?.intent ?? intentFor(topic),
       expectedRevision: held?.expectedRevision ?? api.state()?.revision ?? 0,
       commands,
     });

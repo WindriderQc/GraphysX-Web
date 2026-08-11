@@ -289,7 +289,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           showLocally();
           return;
         }
-        const proposal = nestor?.proposeExternal(result.proposal.intent, result.proposal.commands);
+        const proposal = nestor?.proposeExternal(topic, result.proposal.intent, result.proposal.commands);
         welcome?.showOutcome(null);
         if (proposal) welcome?.showProposal(proposal, false);
       })();

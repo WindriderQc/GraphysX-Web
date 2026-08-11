@@ -3555,9 +3555,9 @@ shipped feature still reads `AgentX baseline · 11.35s` through `smoke-ballz` ag
 - New request: prepare a flexible 3D scene for LEGO MINDSTORMS Education EV3 construction concepts and missions.
 - Added a scene-native `ev3-robotics-lab` starter built from editable GraphysX primitives. Its seven representative construction families are the drive base, sensor base, gripper, forklift, tank/stair-climber, robot arm, and color sorter; its seven mission zones follow LEGO Education's Robot Trainer sequence from Moves and Turns through the Guided Mission.
 - Kept the representation explicitly stylized rather than claiming brick-by-brick CAD fidelity. The starter uses existing physics, steering, interaction, tagging, export, and Browse vocabulary; no special host state or proprietary model assets were introduced.
-- Added a focused browser smoke and thumbnail capture registration. Typecheck, all 233 node-only contract tests, focused lint, and the 11-check EV3 browser smoke pass. The smoke proves discovery, exact construction/mission counts, both interactions, agent steering motion, v2 export/reload parity, and zero browser/page errors.
+- Added a focused browser smoke and thumbnail capture registration. Typecheck, all 270 current node-only contract tests, focused lint, and the 11-check EV3 browser smoke pass. The smoke proves discovery, exact construction/mission counts, both interactions, agent steering motion, v2 export/reload parity, and zero browser/page errors.
 - Inspected the rendered scene after two visual iterations: removed the generic BallZ `player` semantic from the steerable drive base, raised its invisible collider so the visible wheels rest on the mat, darkened the base mat for readable station contrast, and used `host.frameWorld()` for the overview. Generated and inspected `public/assets/shelf-thumbnails/ev3-robotics-lab.jpg`; the capture harness now also hides the global Display control so future scene thumbnails stay clean.
-- Built-output verification remains queued behind another shared-session release gate; do not run a bare build while it owns shared `dist/`.
+- A production bundle built cleanly into isolated `output/ev3-dist` while another session owned shared `dist/`; the same 11-check browser smoke passed against that bundle with zero console/page errors, and its rendered screenshot was inspected. The focused change is complete without disturbing the other release gate.
 
 ## Slice 4's last piece — where a proposal can come from
 
@@ -3607,3 +3607,36 @@ way to ask for something today, so a provider composes against one of three fixe
 (`nestorTopicRequest`). Phrased as requests rather than as the finished intent — handing a model
 the intent would make it a paraphrase engine, and the result would be Nestor's idea wearing a
 model's name.
+
+### Two bugs the browser check caught that the unit tests could not
+
+The provider seam passed 37 unit tests and then failed the first thing a person would do with it.
+
+**Apply did nothing.** `accept()` opens with `if (!proposal || !proposedTopic) return`, and
+`proposeExternal` had set `proposedTopic = null` on the grounds that a provider's commands do not
+come from a topic. The result was a card with a working-looking Apply button that silently
+returned — measured: `revision: 7 → 7`, the spawned entity absent, no commit. The topic is
+retained now. A provider composing in answer to "Build something" *is* answering that button,
+and the narration and camera cue after a successful commit are still the topic's.
+
+**The commit would have lied about what it was.** `present()` committed with
+`intent: intentFor(topic)` — Nestor's phrasing for the button. For a locally composed proposal
+that is the same string the card showed, so it was invisible. For a provider-composed one the
+card said "Set a lantern above the plinth" and history would have recorded "Assemble a signal
+beacon in the AgentX Center": the log disagreeing with what the person actually agreed to. It now
+commits `held?.intent ?? intentFor(topic)`, which is unchanged for every local proposal.
+
+Verified end to end against a stub endpoint, four cases:
+
+    composed     intent "Set a lantern above the plinth" · 2 changes · revision 7 · commits 0
+    afterAccept  revision 8 · entity present · history intent "Set a lantern above the plinth"
+    forged       live-agent: reply refused → Nestor's local proposal · forged entity absent
+    unreachable  provider down → Nestor's local proposal · front door unaffected
+    noProvider   "Nestor composes proposals locally. No model provider is configured."
+
+`commits: 0` while the card is on screen is the assertion that matters most: the provider's
+commands sat in front of a human and touched nothing until the human pressed Apply.
+
+One deployment note the probe surfaced: a **cross-origin** provider gets a CORS preflight,
+because the request is JSON. Production endpoints are same-origin and never see one; a loopback
+dev endpoint has to answer `OPTIONS`.
