@@ -357,6 +357,16 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
   api.spawnPrefab("orbital-sculpture", { position: [-11, 0, 0.5] });
   api.spawnPrefab("orbital-sculpture", { position: [14, 0, -10.5], scale: [0.78, 0.78, 0.78] });
   // Background, framing the gap the camera looks through to the lake and the ridges.
-  api.spawnPrefab("portal-arch", { position: [6.5, 0, -10] });
+  // The arch has stood here as scenery since it was placed. It is a portal now: clicking it
+  // takes the camera to the murmuration over the lake, which is the thing in this scene most
+  // worth looking at and the easiest to miss, because nothing tells you to look up.
+  //
+  // The destination is a tag rather than host code, so it survives export and reload, an author
+  // can retarget it in the inspector, and an agent can build another one with `api.spawn`.
+  api.spawnPrefab("portal-arch", {
+    idPrefix: "showroom-portal-overlook",
+    position: [6.5, 0, -10],
+    tags: ["showroom", "portal", "portal-to:showroom-starlings"],
+  });
   api.spawnPrefab("luminous-tree", { position: [-10, 0, -8], scale: [0.85, 0.9, 0.85] });
 }

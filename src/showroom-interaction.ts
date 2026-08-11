@@ -107,6 +107,33 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
     return null;
   };
 
+  /**
+   * A portal is an entity that says where it goes, in its own tags.
+   *
+   * `portal-to:<entityId>`, read exactly the way `nestor-topic:<topic>` above already is. That
+   * precedent is the whole argument for the design: the destination lives in the scene, so it
+   * survives export and reload, an author can retarget a portal in the inspector without
+   * touching code, and an agent can build one with an ordinary `api.spawn`. The host only
+   * interprets the tag — it holds no destination of its own, which is the invariant that would
+   * be broken by a table of portals living in TypeScript.
+   *
+   * Travel is a camera move rather than a scene load, and that is what the slice asks for: the
+   * Center's places "share one performance budget", which they can only do by coexisting in one
+   * scene. A portal that loaded a different world would be the Games shelf, which already
+   * exists.
+   *
+   * A portal naming a destination that is not in the scene is not a portal. It falls through to
+   * the ordinary focus-on-what-you-clicked below rather than doing nothing, because a dead click
+   * on scenery is the exact failure this module was built to remove.
+   */
+  const portalDestination = (id: string): string | null => {
+    const root = api.query({ ids: [rootEntityId(id)] })[0];
+    const tag = root?.tags.find((entry) => entry.startsWith("portal-to:"));
+    const destination = tag?.slice("portal-to:".length).trim();
+    if (!destination || destination === root?.id) return null;
+    return api.query({ ids: [destination] }).length === 1 ? destination : null;
+  };
+
   const onPointerDown = (event: PointerEvent): void => {
     down = { x: event.clientX, y: event.clientY };
   };
@@ -132,6 +159,11 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
         onNestorTopic(nestorTopic);
         return;
       }
+      // Before the ordinary focus, because a portal's whole point is that it frames somewhere
+      // else. Checked after the Nestor consoles so a console that was also tagged a portal
+      // still presents rather than travelling.
+      const destination = entityId ? portalDestination(entityId) : null;
+      if (destination && focusEntity(destination, true)) return;
       if (entityId && world.findInteractiveEntityId(hit.object)) {
         // Interactive bodies carry their own impulse.
         api.interact(entityId);

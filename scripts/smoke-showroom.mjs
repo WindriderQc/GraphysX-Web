@@ -296,6 +296,57 @@ try {
   await page.evaluate(() => window.__GRAPHYSX_HOST__.resetFraming(0.2));
   await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT });
 
+  // --- The portal --------------------------------------------------------------------------
+  // A portal is an entity that says where it goes, in a `portal-to:<id>` tag, read exactly the
+  // way `nestor-topic:<topic>` already is. Two properties make it scene vocabulary rather than
+  // host code, and both are asserted: the destination is in the exported document, and
+  // travelling authors nothing at all.
+  const portalBefore = await page.evaluate(() => {
+    const target = window.__GRAPHYSX_HOST__.orbitTarget.toArray();
+    const destination = window.__GRAPHYSX__.query({ ids: ["showroom-starlings"] })[0]?.position ?? [0, 0, 0];
+    return {
+      revision: window.__GRAPHYSX__.state().revision,
+      document: JSON.stringify(window.__GRAPHYSX__.exportDocument()),
+      commits: window.__GRAPHYSX__.history().length,
+      target,
+      // How far the camera was from the destination before travelling. The destination is a
+      // *flock*: it moves, and the focus frames its bounds rather than a point, so any fixed
+      // arrival radius measures where the birds happened to be. Measured 7.82 one run and 8.06
+      // the next against a threshold of 8. The claim is "ended nearer than it started".
+      toDestination: Math.hypot(...target.map((value, index) => value - destination[index])),
+    };
+  });
+  // A real mouse, like every other click in this file. Dispatching a synthetic `PointerEvent`
+  // instead throws `setPointerCapture: No active pointer with the given id` — the interaction
+  // layer captures the pointer on press, and there is no pointer to capture.
+  //
+  // Aimed at the lintel: the arch root stands in the middle of the gap the arch frames, so a
+  // ray through it reaches the landscape behind and clicks the ground.
+  const portalId = await page.evaluate(() => window.__GRAPHYSX__.query({ tag: "portal" })[0]?.id ?? null);
+  const portalAt = portalId ? await screenOf(`${portalId}:lintel`) : null;
+  if (portalAt) await page.mouse.click(portalAt.x, portalAt.y);
+  await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
+  out.portal = await page.evaluate((before) => {
+    const api = window.__GRAPHYSX__;
+    const portal = api.query({ tag: "portal" })[0] ?? null;
+    const target = window.__GRAPHYSX_HOST__.orbitTarget.toArray();
+    const destination = api.query({ ids: ["showroom-starlings"] })[0]?.position ?? [0, 0, 0];
+    return {
+      tagged: portal?.tags.includes("portal-to:showroom-starlings") ?? false,
+      // In the document, so an author can retarget it and a reload keeps it.
+      inExport: before.document.includes("portal-to:showroom-starlings"),
+      travelled: Number(Math.hypot(...target.map((value, index) => value - before.target[index])).toFixed(2)),
+      nearDestination: Number(Math.hypot(...target.map((value, index) => value - destination[index])).toFixed(2)),
+      wasFromDestination: Number(before.toDestination.toFixed(2)),
+      closedIn: Number((before.toDestination - Math.hypot(...target.map((value, index) => value - destination[index]))).toFixed(2)),
+      revisionUnchanged: api.state().revision === before.revision,
+      commitsUnchanged: api.history().length === before.commits,
+      documentUnchanged: JSON.stringify(api.exportDocument()) === before.document,
+    };
+  }, portalBefore);
+  await page.evaluate(() => window.__GRAPHYSX_HOST__.resetFraming(0.2));
+  await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT });
+
   // Exercise the actual 3D route as well as the accessible topic controls. The right-hand
   // Play console sits outside the welcome card and funnels through the same presenter.
   const playConsoleAt = await screenOf("showroom-nestor-console-play:core");
@@ -776,6 +827,18 @@ out.flockingIsLive = flockingIsLive;
 // Click-to-focus: the orbit pivot measurably moved onto the clicked subject, and the idle
 // orbit came back afterwards so the showroom keeps showing itself off.
 const focusWorks = !!out.focus && out.focus.targetMoved > 0.75 && out.focus.orbitRearmed === true;
+// A portal travels, and reads the room without changing it — the same boundary the tour and the
+// proposal gate are held to. `inExport` is the one that keeps it scene vocabulary: a destination
+// living in TypeScript would pass every other check here and still be host code.
+const portalTravels = !!out.portal
+  && out.portal.tagged === true
+  && out.portal.inExport === true
+  && out.portal.travelled > 5
+  && out.portal.nearDestination < 8
+  && out.portal.revisionUnchanged === true
+  && out.portal.commitsUnchanged === true
+  && out.portal.documentUnchanged === true;
+out.portalTravels = portalTravels;
 out.focusWorks = focusWorks;
 
 const nestorInitial = out.nestorInitial;
@@ -965,6 +1028,7 @@ const ok =
   !!out.water &&
   flockingIsLive &&
   focusWorks &&
+  portalTravels &&
   nestorIsLive &&
   roundTrip?.nestorProfile?.role === "AgentX Center guide" &&
   roundTrip?.nestorProfile?.status === "presenting:build" &&

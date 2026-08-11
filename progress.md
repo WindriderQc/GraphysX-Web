@@ -3731,3 +3731,43 @@ change here). What is left is the specific leg from the half gate at (19,2) back
 (5,16), and nothing yet tried touches it. The next attempt should instrument *that leg* — where
 the ball actually goes, and what it hits — before changing anything, because four rounds of
 plausible general fixes have now produced one that helped and two that did not.
+
+## Slice 7 opens: a portal is an entity that says where it goes
+
+The slice's own criterion settled the design question I was about to ask. "Build lab,
+living-systems overlook, play arena, and portals **share one performance budget**" — budgets are
+only shared by things that coexist, so the Center's places live in one scene and a portal is a
+camera move, not a scene load. A portal that loaded a different world would be the Games shelf,
+which already exists.
+
+So a portal carries `portal-to:<entityId>` in its tags, read exactly the way
+`nestor-topic:<topic>` already is. That precedent is the whole argument: the destination lives in
+the scene, so it survives export and reload, an author can retarget it in the inspector without
+touching code, and an agent can build another with an ordinary `api.spawn`. The host interprets
+the tag and holds no destination of its own — a table of portals in TypeScript would have passed
+every behavioural check here and still been host code, which is why `inExport` is asserted.
+
+The arch at `[6.5, 0, -10]` has stood as scenery since it was placed. It is a portal now, to the
+murmuration over the lake — the thing in the scene most worth looking at and the easiest to miss,
+because nothing tells you to look up. Measured through a real click on the lintel:
+
+    travelled 23.2 · closed 9.93 of 17.77 units to the destination
+    revision, history and document all unchanged
+    130 entities before and after — the mechanism costs none
+
+Zero new entities is the point for a slice whose criterion is a shared budget: the mechanism is
+spent before any place exists, and it spent nothing.
+
+**Three things this cost, all mine, all caught by driving it rather than asserting it.** Aiming
+the click at the arch *root* put the ray through the gap the arch frames and dropped a ball on
+the landscape behind — the root of an arch is not on the arch. Dispatching a synthetic
+`PointerEvent` threw `setPointerCapture: No active pointer with the given id`, because the
+interaction layer captures on press; the rest of the file uses a real mouse and so does this now.
+And the first arrival assertion was a fixed radius around a **moving flock**, which read 7.82 one
+run and 8.06 the next against a threshold of 8. It now asserts the camera ended nearer than it
+started, which is the actual claim rather than a tighter-looking one.
+
+**Next for this slice** is the places themselves — build lab, overlook, arena — and the budget
+question becomes real there, because those cost entities. The headless median frame is not the
+instrument for it: software rasterisation reports ~290ms, which says nothing about a visitor.
+HANDOFF records the showroom's real median at 13.3ms, and that is the number to hold.
