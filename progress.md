@@ -3640,3 +3640,31 @@ commands sat in front of a human and touched nothing until the human pressed App
 One deployment note the probe surfaced: a **cross-origin** provider gets a CORS preflight,
 because the request is JSON. Production endpoints are same-origin and never see one; a loopback
 dev endpoint has to answer `OPTIONS`.
+
+### Correction: what is actually wrong with a `--maze` recording
+
+The note above says the maze heuristics produce inputs that "do not finish when replayed blind".
+**That is wrong, and the measurement behind it was contaminated.** It was taken before the
+recorder learned to re-play the course before driving, so the pilot was recording from a ball
+that had sat in a live simulation for a second while replay starts from a freshly loaded course.
+That initial-condition mismatch was the failure, not the heuristics.
+
+Re-measured with that fixed, recording the starter course both ways against one page and
+replaying each blind twice:
+
+    plain  255 inputs · finished 11350ms · both runs agree · max drift 0.002
+    maze   235 inputs · finished 19133ms · and 10633ms · "elapsed differed"
+
+So a maze recording **does** finish. What it does not do is *reproduce*: the same inputs from the
+same fresh course produced runs 8.5 seconds apart. That is not solver noise at the scale the
+tolerance was built for — it is a line driving close enough to its margins that where the ball
+ends up after a bounce decides the route it then takes.
+
+The conclusion is unchanged and the reason is now the right one. `--maze` stays off by default
+because **a baseline that reports a different time each time it is computed is not a baseline**,
+and the coach ships a time. It remains the right tool for exploring whether a course is drivable
+at all, which is what it was added for.
+
+This also sets the bar for a driving model: reproducibility, not speed. A controller that shaves
+a second off but drives near the margins is worse than one that is slower and lands the same run
+every time.
