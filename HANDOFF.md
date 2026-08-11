@@ -179,6 +179,27 @@ hashes, 5,688,234,500 examined bytes. Its 71 functionality records resolve to 66
 SOURCE-ONLY, 1 SUPERSEDED and 1 OUT OF SCOPE. The checked-in generator and the CI audit reject
 stale output, invalid evidence, unclassified rows and ledger self-evidence.
 
+### Portals, and why the destination is a tag
+
+A portal in the showroom is an entity carrying `portal-to:<entityId>` in its tags, read by
+`showroom-interaction.ts` the same way `nestor-topic:<topic>` already is. Clicking it moves the
+camera to that entity.
+
+- **Travel is a camera move, not a scene load.** Slice 7 requires the Center's places to share one
+  performance budget, and only things that coexist can. A portal that loaded a different world
+  would be the Games shelf, which already exists.
+- **The destination lives in the scene**, so it survives export and reload, an author can retarget
+  it in the inspector, and an agent can build another with an ordinary `api.spawn`. The host
+  interprets the tag and holds no destination of its own. `smoke-showroom` asserts the tag is in
+  the *exported document* specifically, because a table of portals in TypeScript would pass every
+  behavioural check and still be host code.
+- A portal naming a destination that is not in the scene falls through to ordinary focus rather
+  than doing nothing — a dead click on scenery is the failure that module exists to remove.
+
+Adding one costs no entities: tag an existing prefab. Adding a *place* does cost entities, and the
+budget to hold is the showroom's real median frame of 13.3ms — not the headless number, which is
+software-rasterised and reports roughly 290ms regardless.
+
 ### Where proposals come from
 
 `src/coauthor-provider.ts` is the seam that lets a model compose a proposal instead of Nestor.

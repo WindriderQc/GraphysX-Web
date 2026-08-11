@@ -69,7 +69,7 @@ Production release proof:
 | 4. Guided co-authoring | Complete in this release | A human can ask for a bounded scene change and inspect it before/after | Proposal, actor, intent, command set, result, undo, and rejection are all visible; no hidden mutation |
 | 5. Nestor tours | Shipped for the AgentX Center | Nestor can sequence highlights across scenes and games | Camera cues, short narration, entity highlighting, cancellation, reduced-motion behavior, and destination handoff are deterministic |
 | 6. Agent gameplay | Complete in this release | AgentX can demonstrate and coach a BallZ course inside the product | A deterministic baseline run, ghost comparison, attributed input, and honest capability/offline states are visible in-browser |
-| 7. Center expansion | Queued | The front door becomes a compact world hub | Build lab, living-systems overlook, play arena, and portals share one performance budget and remain editable scene vocabulary |
+| 7. Center expansion | Portals shipped; the places remain | The front door becomes a compact world hub | Build lab, living-systems overlook, play arena, and portals share one performance budget and remain editable scene vocabulary |
 
 ## Next three work sessions
 
