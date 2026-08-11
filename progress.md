@@ -3802,3 +3802,33 @@ The first attempt at that reproduction was worthless and worth recording as a me
 tried to orphan the ghost by loading another course, that reload happened to *keep* the ghost, and
 the probe reported `threw: null` — passing while proving nothing. A test for "what happens in
 state X" has to establish state X, not hope an operation produces it.
+
+### The fix that fixed the wrong path, and the probe that agreed with it
+
+`e76f6cf` guarded the tick and CI failed again with the identical error. The stale boolean lives
+in **two** places, and the one that actually bit is `dispose()`:
+
+```
+if (spawned) api.remove(GHOST_ID);
+```
+
+Teardown runs *during* the level reload that removed the ephemeral ghost, so `remove` on an
+entity already gone threw while the next play view was mounting — which is why the button was
+never built. The tick path was real too, just not the one CI was hitting.
+
+**The probe agreed with the wrong diagnosis, and that is the part worth keeping.** It called
+`session.dispose()` outside its `try`, so the throw surfaced as a generic probe error rather than
+as a dispose failure, and got credited to the tick. Then the tick fix *re-spawned* the ghost,
+which left `dispose` a live entity to remove — so the probe went green for a reason that had
+nothing to do with the bug. A passing test that passes for the wrong reason is worse than a
+failing one.
+
+Rewritten to report both paths separately, against both versions:
+
+    e76f6cf   tickThrew null · disposeThrew "Unknown entity: personal-best-ghost"
+    fixed     tickThrew null · disposeThrew null · button present
+
+Both call sites now ask `ghostIsInScene()` instead of trusting `spawned`. The general shape is
+worth remembering: a boolean that mirrors scene state is a cache, an `ephemeral` entity is
+invalidated by things that never tell the cache, and every reader of that cache is a bug until
+it re-checks.

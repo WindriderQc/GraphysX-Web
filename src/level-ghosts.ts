@@ -92,6 +92,16 @@ export function createPersonalGhostSession(
     if (runtimeState?.recordId === recordId) runtimeState.recordingSamples = recorded.length;
   };
 
+  /**
+   * Whether the ghost entity is really there, as opposed to remembered.
+   *
+   * `spawned` is a memory and the ghost is `ephemeral`, so any level reload can invalidate it
+   * without telling this session. Both the tick and the teardown have to ask rather than trust:
+   * driving or removing an entity that is gone throws, and both of those run inside the play
+   * view's lifecycle, where an exception takes the whole mount down with it.
+   */
+  const ghostIsInScene = (): boolean => api.query({ ids: [GHOST_ID] }).length > 0;
+
   const ensureGhost = (): void => {
     if (!saved || spawned || saved.samples.length === 0) return;
     const first = saved.samples[0];
@@ -149,7 +159,7 @@ export function createPersonalGhostSession(
       // play view's mount, that exception aborted the rest of the mount — measured on CI, the
       // Race AgentX button was simply never built. Re-check the fact instead of trusting the
       // memory, and let `ensureGhost` put it back.
-      if (spawned && api.query({ ids: [GHOST_ID] }).length === 0) {
+      if (spawned && !ghostIsInScene()) {
         spawned = false;
         if (runtimeState?.recordId === recordId) runtimeState.visible = false;
       }
@@ -185,7 +195,12 @@ export function createPersonalGhostSession(
         : null;
     },
     dispose() {
-      if (spawned) api.remove(GHOST_ID);
+      // The same stale boolean as the tick, and this is the path that actually bit. Teardown
+      // runs *during* the level reload that removed the ephemeral ghost, so `remove` on an
+      // entity already gone threw while the next play view was mounting — which is why the
+      // Race AgentX button was never built.
+      if (spawned && ghostIsInScene()) api.remove(GHOST_ID);
+      spawned = false;
       if (runtimeState?.recordId === recordId) runtimeState = null;
     },
   };
