@@ -12,11 +12,14 @@ import {
   cellsOf,
   findPath,
   hasLineOfSight,
+  improveRingOrder,
   isWalkable,
   orderRings,
   pathCorners,
   pathLength,
   planCoachRoute,
+  routeDistanceMatrix,
+  routeLength,
   smoothPath,
 } from "../src/coach-route.ts";
 
@@ -331,5 +334,99 @@ describe("dropping corners the grid invented", () => {
         `leg ${index} is not drivable: ${JSON.stringify(smoothed[index - 1])} → ${JSON.stringify(smoothed[index])}`,
       );
     }
+  });
+});
+
+describe("shortening the ring order", () => {
+  it("measures the length of an order from the start", () => {
+    const matrix = [[0, 3, 9], [3, 0, 4], [9, 4, 0]];
+    assert.equal(routeLength(matrix, [1, 2]), 7);
+    assert.equal(routeLength(matrix, [2, 1]), 13);
+  });
+
+  it("reverses a segment when that is shorter", () => {
+    // A route that crosses itself is always improved by reversing between the crossings; this
+    // is the class greedy nearest-first gets wrong.
+    const matrix = [[0, 3, 9], [3, 0, 4], [9, 4, 0]];
+    assert.deepEqual(improveRingOrder(matrix, [2, 1]), [1, 2]);
+  });
+
+  it("leaves an order that is already shortest alone", () => {
+    const matrix = [[0, 3, 9], [3, 0, 4], [9, 4, 0]];
+    assert.deepEqual(improveRingOrder(matrix, [1, 2]), [1, 2]);
+  });
+
+  it("does nothing to a single stop, where there is nothing to rearrange", () => {
+    assert.deepEqual(improveRingOrder([[0, 1], [1, 0]], [1]), [1]);
+    assert.deepEqual(improveRingOrder([], []), []);
+  });
+
+  it("reverses even a pair, because the start is fixed", () => {
+    // [b, a] and [a, b] are different routes when you must begin at the start; a guard that
+    // required three stops left the commonest improvement on the table.
+    assert.deepEqual(improveRingOrder([[0, 9, 3], [9, 0, 4], [3, 4, 0]], [1, 2]), [2, 1]);
+  });
+
+  it("builds a symmetric matrix with the start at index zero", () => {
+    const map = grid(["S..o", "....", "o..."]);
+    const rings = cellsOf(map, "ring");
+    const matrix = routeDistanceMatrix(map, { x: 0, y: 0 }, rings);
+    assert.equal(matrix.length, 3);
+    assert.equal(matrix[0][0], 0);
+    for (let a = 0; a < 3; a += 1) for (let b = 0; b < 3; b += 1) assert.equal(matrix[a][b], matrix[b][a]);
+    assert.equal(matrix[0][1], 3, "start to the ring at (3,0)");
+  });
+
+  it("records an unreachable pair as Infinity rather than omitting it", () => {
+    const map = grid(["S#o"]);
+    const matrix = routeDistanceMatrix(map, { x: 0, y: 0 }, cellsOf(map, "ring"));
+    assert.equal(matrix[0][1], Infinity);
+  });
+
+  it("beats greedy on a course where greedy strands itself", () => {
+    // Greedy takes the ring one step away first and then has to cross the whole corridor twice.
+    // Going to the far end first and sweeping back is shorter.
+    const map = grid([
+      "S.o.....o",
+      "#########",
+      "o........",
+    ]);
+    const rings = cellsOf(map, "ring");
+    const start = { x: 0, y: 0 };
+    const matrix = routeDistanceMatrix(map, start, rings);
+    const greedy = [];
+    {
+      const remaining = rings.map((_, index) => index + 1);
+      let at = 0;
+      while (remaining.length > 0) {
+        let best = 0;
+        for (let index = 1; index < remaining.length; index += 1) {
+          if (matrix[at][remaining[index]] < matrix[at][remaining[best]]) best = index;
+        }
+        at = remaining.splice(best, 1)[0];
+        greedy.push(at);
+      }
+    }
+    const improved = improveRingOrder(matrix, greedy);
+    assert.ok(
+      routeLength(matrix, improved) <= routeLength(matrix, greedy),
+      `2-opt must never lengthen a route: ${routeLength(matrix, improved)} vs ${routeLength(matrix, greedy)}`,
+    );
+  });
+
+  it("never returns an order that drops or repeats a ring", () => {
+    // The property a resequencer breaks silently: a course missing one ring can never finish.
+    const map = grid([
+      "S..o..o",
+      ".#####.",
+      "o..o..o",
+    ]);
+    const rings = cellsOf(map, "ring");
+    const { ordered, unreachable } = orderRings(map, { x: 0, y: 0 }, rings);
+    assert.deepEqual(unreachable, []);
+    assert.equal(ordered.length, rings.length);
+    const seen = new Set(ordered.map((cell) => `${cell.x},${cell.y}`));
+    assert.equal(seen.size, rings.length);
+    for (const ring of rings) assert.ok(seen.has(`${ring.x},${ring.y}`), `ring ${ring.x},${ring.y} was dropped`);
   });
 });

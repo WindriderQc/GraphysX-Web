@@ -3702,3 +3702,32 @@ rings and the gate under `--maze` and cannot hold the line home, and the fix is 
 carefully". Anything that keeps the ball on the course longer is working against the property the
 baseline needs. A route that is *shorter* — fewer, straighter legs rather than slower ones — is
 the direction the measurements point, and that is a router change, not a controller.
+
+## A shorter route, and why it changed nothing here
+
+The easing result pointed at shortening the route rather than slowing the driver, so the router
+now runs 2-opt over the ring order: greedy nearest-first is routinely wrong — it takes a close
+ring and strands the driver at the far end — and reversing any segment that helps fixes exactly
+the class where a route crosses itself. Distances come from one precomputed BFS matrix, the start
+is pinned at index 0 because the driver begins where the course puts them, and the pass is
+bounded so a pathological grid cannot spin.
+
+**On both courses in the catalogue it changed nothing.** `starter-level` has two rings and
+regenerates its shipped line byte-identically; `archive-ballz-level1` came back with the same 39
+waypoints and the same 26 objectives in the same order — greedy was already 2-opt-optimal there.
+That is worth stating rather than hiding: the ordering was never the bottleneck, and it is only
+knowable that greedy was optimal *because* something now checks.
+
+It ships anyway, on a narrow argument. It is pure, it is nine unit tests including "never
+lengthens a route" and "never drops or repeats a ring", and it removes a class of failure from
+the router rather than adding a knob. It is insurance with a proven bound, not a tuning option —
+which is the opposite of the corner easing that was reverted.
+
+**Where Level 1 actually stands.** All twenty rings and the half gate by 62 seconds, then 118
+seconds failing to reach the finish. Three directions have now been tried and measured: route
+around the walls (worked — 3 objectives to 21), aim through a chased target (worked — 20 seconds
+per ring to under one), ease into corners (measured worse, reverted), shorten the ring order (no
+change here). What is left is the specific leg from the half gate at (19,2) back to the finish at
+(5,16), and nothing yet tried touches it. The next attempt should instrument *that leg* — where
+the ball actually goes, and what it hits — before changing anything, because four rounds of
+plausible general fixes have now produced one that helped and two that did not.

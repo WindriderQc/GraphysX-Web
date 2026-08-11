@@ -205,6 +205,71 @@ export function pathLength(grid: CoachGrid, from: CoachCell, to: CoachCell): num
  * is metres away and minutes away. Rings with no route at all are dropped rather than left to
  * strand the run, and reported by `planCoachRoute` so the omission is visible.
  */
+/**
+ * Walking distance between every pair, plus from `start` to each. Index 0 is `start`.
+ *
+ * Computed once because 2-opt asks for the same distances thousands of times, and a BFS per
+ * question would make the improvement cost more than the route it saves.
+ */
+export function routeDistanceMatrix(grid: CoachGrid, start: CoachCell, rings: readonly CoachCell[]): number[][] {
+  const cells = [start, ...rings];
+  const matrix = cells.map(() => cells.map(() => Infinity));
+  for (let from = 0; from < cells.length; from += 1) {
+    matrix[from][from] = 0;
+    for (let to = from + 1; to < cells.length; to += 1) {
+      const distance = pathLength(grid, cells[from], cells[to]) ?? Infinity;
+      matrix[from][to] = distance;
+      matrix[to][from] = distance;
+    }
+  }
+  return matrix;
+}
+
+/** Total walking distance of an order, starting from index 0 of the matrix. */
+export function routeLength(matrix: readonly (readonly number[])[], order: readonly number[]): number {
+  let total = 0;
+  let at = 0;
+  for (const next of order) {
+    total += matrix[at][next];
+    at = next;
+  }
+  return total;
+}
+
+/**
+ * Shortens a visiting order by repeatedly reversing any segment that helps.
+ *
+ * Nearest-first is a greedy choice and greedy is routinely wrong: it will happily take a close
+ * ring that strands it at the far end of the map. 2-opt fixes exactly that class — a route that
+ * crosses itself is always improved by reversing the segment between the crossings — and it is
+ * the right amount of machinery here, because the measurements say a *shorter* route is what a
+ * reproducible baseline needs and an optimal one is not required to get one.
+ *
+ * The start is fixed at index 0 and never moved: the driver begins where the course puts them.
+ */
+export function improveRingOrder(matrix: readonly (readonly number[])[], order: readonly number[]): number[] {
+  const best = [...order];
+  // Two is enough to be worth reversing: the start is fixed, so [b, a] and [a, b] are genuinely
+  // different routes. Only a single stop has nothing to rearrange.
+  if (best.length < 2) return best;
+  // Bounded so a pathological grid cannot spin: each pass is O(n^2) and passes stop improving
+  // quickly in practice.
+  for (let pass = 0; pass < 40; pass += 1) {
+    let improved = false;
+    for (let left = 0; left < best.length - 1; left += 1) {
+      for (let right = left + 1; right < best.length; right += 1) {
+        const candidate = [...best.slice(0, left), ...best.slice(left, right + 1).reverse(), ...best.slice(right + 1)];
+        if (routeLength(matrix, candidate) < routeLength(matrix, best) - 1e-9) {
+          best.splice(0, best.length, ...candidate);
+          improved = true;
+        }
+      }
+    }
+    if (!improved) break;
+  }
+  return best;
+}
+
 export function orderRings(grid: CoachGrid, start: CoachCell, rings: readonly CoachCell[]): {
   ordered: CoachCell[];
   unreachable: CoachCell[];
@@ -231,6 +296,16 @@ export function orderRings(grid: CoachGrid, start: CoachCell, rings: readonly Co
     const next = remaining.splice(bestIndex, 1)[0];
     ordered.push(next);
     from = next;
+  }
+
+  // Then shorten it. Greedy is routinely wrong — it takes a close ring that strands the driver
+  // at the far end of the map — and a shorter route is the thing the measurements say a
+  // reproducible baseline needs: less time on the course is less time accumulating divergence
+  // from a scene whose emitters and flocks advance on their own randomness.
+  if (ordered.length >= 3) {
+    const matrix = routeDistanceMatrix(grid, start, ordered);
+    const improved = improveRingOrder(matrix, ordered.map((_, index) => index + 1));
+    return { ordered: improved.map((index) => ordered[index - 1]), unreachable };
   }
   return { ordered, unreachable };
 }
