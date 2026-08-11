@@ -3505,3 +3505,47 @@ Under the old code that same injection is what CI reported.
 One run of that slowed variant died on an unrelated 45s `waitForFunction` timeout and did not
 reproduce across three further runs; on this box that is the documented starvation signature,
 not a finding.
+
+## Routing the coach through a maze — what worked, and what is still open
+
+The recorder could only drive an open room. Pointed at `archive-ballz-level1` it reached **3 of
+22 objectives in 45 seconds**, which was never a driving problem: it aimed straight at the next
+ring, and no sequence of headings gets through a wall.
+
+`src/coach-route.ts` plans on the tile grid instead, where walls are known — BFS between
+objectives, four-neighbour so a diagonal never clips a wall corner, rings ordered by *walking*
+distance rather than straight line, and unroutable objectives reported rather than silently
+stranding the drive. 29 unit tests, no renderer or physics needed.
+
+Three things it had to learn, each measured:
+
+- **Smoothing is not a nicety.** A grid path across open floor is a staircase whose corners
+  belong to the grid, not the course. Without line-of-sight smoothing the starter course went
+  from 11.4s to **24.5s**, chasing three right-angles across a room it could cross diagonally
+  and overshooting two of them. Segments are tested as a ribbon `CLEARANCE_CELLS` wide, because
+  the ball is not a point and a line that grazes a wall corner is a collision.
+- **Pure pursuit orbits.** At full thrust the ball circles a target inside its own turning
+  circle: 20 seconds to reach a ring one cell away. Aiming at a point *past* the target turns
+  the circle into a pass, and took Level 1 from 3 objectives to **21 of 26**.
+- **Laps come from the run, not the level.** `archive-ballz-level1` declares `laps: 1` and its
+  armed run reports **3**, because the archive race records override it. A one-lap route drove
+  all twenty rings and the gate in 54 seconds and then never finished, because the course was
+  not over.
+
+**What is still open.** Level 1 collects every ring and the gate and then cannot hold the line
+back to the finish: the pilot overshoots corners at speed cap, and once off-route it degrades to
+aiming straight at the goal through walls. Finishing a 22×22 archive maze needs speed control
+into corners and a recovery when off-route. That is a driving model, not a router, and it is not
+built.
+
+**The trap that nearly shipped.** The maze heuristics make the closed-loop drive *faster* on the
+starter course — 10.77s against 11.37s — and the resulting inputs **do not finish when replayed
+blind**. A line that does not replay is not a baseline, so both heuristics are behind `--maze`
+and off by default. Related, and subtler: planning across a round-trip lets the frame loop run,
+so the driving pass started from a ball that had been sitting in a live simulation. A recording
+made from that state is not a recording of what `runCoachProgram` replays from a freshly loaded
+course — measured, 11.32s recorded against 13.50s replayed. The driving pass now re-plays the
+course first.
+
+With both fixed, the recorder reproduces `STARTER_LINE` **byte-identically** again, and the
+shipped feature still reads `AgentX baseline · 11.35s` through `smoke-ballz` against `dist`.

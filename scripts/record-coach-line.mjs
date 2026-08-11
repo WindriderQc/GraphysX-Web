@@ -16,6 +16,7 @@
 // recording by replaying it — `runCoachProgram` twice and `coachRunsAgree` — before pasting it.
 
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
+import { planCoachRoute } from "../src/coach-route.ts";
 
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
 const argv = process.argv.slice(2);
@@ -27,6 +28,13 @@ if (!levelId || levelId.startsWith("--")) {
 // Generous by default: an 11x11 grid finishes in 12s, but a course is allowed to be long, and
 // a recorder that gave up early would print a line that does not finish.
 const maxMs = Number(argv.includes("--max-ms") ? argv[argv.indexOf("--max-ms") + 1] : 45_000);
+// Two heuristics that help a pilot get AROUND a maze and hurt the thing that makes a recording
+// shippable. Measured on the starter course: with them the closed-loop drive is faster (10.77s
+// against 11.37s) and the resulting inputs DO NOT finish the course when replayed blind. Off by
+// default, because a line that does not replay is not a baseline.
+//
+//   --maze  advance on the rules layer's verdict, and aim through a target being chased.
+const maze = argv.includes("--maze");
 
 const browser = await launchSmokeBrowser();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
@@ -35,54 +43,60 @@ let result = null;
 try {
   await page.goto(`${BASE}?host=standalone`, { waitUntil: "load" });
   await page.waitForFunction(() => !!window.__GRAPHYSX__, null, { timeout: SMOKE_TIMEOUT });
-  result = await page.evaluate(async ({ levelId, maxMs }) => {
+  // Arm the course FIRST, then plan. The lap count has to come from the armed run rather than
+  // the level definition: `archive-ballz-level1` declares `laps: 1` and its run reports 3,
+  // because the archive race records override it. Planning from the definition produced a
+  // one-lap route that drove twenty rings and a gate perfectly and then never finished.
+  //
+  // The grid is read from the page and the route is planned HERE, in Node, against the same
+  // module the unit tests cover. Planning inside `page.evaluate` would mean either shipping a
+  // second copy of the router or importing raw TypeScript the built page does not serve.
+  const level = await page.evaluate(async (id) => {
+    const api = window.__GRAPHYSX__;
+    const found = api.levels.get(id);
+    if (!found) return null;
+    api.levels.play(id);
+    // `levels.play` is asynchronous — the run is unarmed when it returns and reads
+    // `phase: "running"` about 800ms later.
+    for (let wait = 0; wait < 80 && !api.rules.status(); wait += 1) await new Promise((resolve) => setTimeout(resolve, 100));
+    const run = api.rules.status();
+    return {
+      width: found.width, height: found.height, cellSize: found.cellSize, tiles: found.tiles,
+      label: found.label, laps: run?.laps ?? found.race?.laps ?? 1, armed: !!run,
+    };
+  }, levelId);
+  if (!level) {
+    console.error(`Could not record a line: no level "${levelId}"`);
+    process.exit(1);
+  }
+  if (!level.armed) {
+    console.error("Could not record a line: the run never armed");
+    process.exit(1);
+  }
+  const route = planCoachRoute(level, { laps: level.laps });
+  console.error(`${level.label} · ${level.width}x${level.height} · ${level.laps} lap${level.laps === 1 ? "" : "s"}`);
+  if (route.unreachable.length > 0) {
+    // Not fatal on its own — a course can be completable with an unroutable decoration — but
+    // it is never a detail, because an uncollectable ring makes the course uncompletable.
+    console.error(`No walkable route to: ${route.unreachable.join(", ")}`);
+  }
+  if (route.waypoints.length === 0) {
+    console.error("Could not record a line: the level has nothing to drive to");
+    process.exit(1);
+  }
+
+  result = await page.evaluate(async ({ levelId, maxMs, ordered, label, maze }) => {
     const api = window.__GRAPHYSX__;
     const TICK = 1000 / 60;
 
-    const level = api.levels.get(levelId);
-    if (!level) return { error: `no level "${levelId}"` };
-    const { width, height, cellSize, tiles } = level;
-    // The same origin the scene builder uses, so a waypoint is the centre of the cell the
-    // author drew rather than an approximation of where the ring ended up.
-    const originX = -((width - 1) * cellSize) / 2;
-    const originZ = -((height - 1) * cellSize) / 2;
-    const centres = (tile) => {
-      const found = [];
-      for (let y = 0; y < height; y += 1) {
-        for (let x = 0; x < width; x += 1) {
-          if (tiles[y * width + x] === tile) found.push({ name: `${tile}-${x}-${y}`, at: [originX + x * cellSize, originZ + y * cellSize] });
-        }
-      }
-      return found;
-    };
-
-    const start = centres("start")[0];
-    if (!start) return { error: "the level has no start tile" };
-    // Rings first and in nearest-first order from the spawn, because the rules layer will not
-    // open the finish until every collectible is in. Order is a heuristic, not a solve: a
-    // course where the greedy order drives badly wants its waypoints listed by hand.
-    const rings = centres("ring");
-    const ordered = [];
-    let from = start.at;
-    const remaining = [...rings];
-    while (remaining.length > 0) {
-      let best = 0;
-      for (let index = 1; index < remaining.length; index += 1) {
-        const near = Math.hypot(remaining[index].at[0] - from[0], remaining[index].at[1] - from[1]);
-        if (near < Math.hypot(remaining[best].at[0] - from[0], remaining[best].at[1] - from[1])) best = index;
-      }
-      const next = remaining.splice(best, 1)[0];
-      ordered.push({ ...next, radius: cellSize * 0.27 });
-      from = next.at;
-    }
-    for (const half of centres("half")) ordered.push({ ...half, radius: cellSize * 0.46 });
-    for (const finish of centres("finish")) ordered.push({ ...finish, radius: cellSize * 0.54 });
-    if (ordered.length === 0) return { error: "the level has nothing to drive to" };
-
+    // Re-play the course before driving, even though the planning pass already armed it.
+    //
+    // This is not belt and braces. Planning happens across a round-trip, and the frame loop
+    // keeps running: by the time the driving pass starts, the ball has been sitting in a live
+    // simulation for a second or two. A recording made from *that* state is not a recording of
+    // what `runCoachProgram` will replay, which starts from a course just loaded. Measured:
+    // recording without this reported 11.32s and its own replay took 13.50s.
     api.levels.play(levelId);
-    // `levels.play` is asynchronous — the run is unarmed when it returns and reads
-    // `phase: "running"` about 800ms later. Driving early produces a full-length failure that
-    // is not about the driving at all.
     for (let wait = 0; wait < 80 && !api.rules.status(); wait += 1) await new Promise((resolve) => setTimeout(resolve, 100));
     if (!api.rules.status()) return { error: "the run never armed" };
 
@@ -96,21 +110,61 @@ try {
 
     const actions = [];
     const visited = [];
+    const skipped = [];
     let target = 0;
+    let targetSince = 0;
+    let targetMark = { lap: api.rules.status()?.lap ?? 0, checkpoint: api.rules.status()?.checkpointIndex ?? 0 };
     let lastHeading = null;
     let tMs = 0;
     while (tMs < maxMs && target < ordered.length) {
       const position = positionOf();
       if (!position) return { error: "the subject vanished mid-run" };
       const goal = ordered[target];
-      if (Math.hypot(goal.at[0] - position[0], goal.at[1] - position[2]) <= goal.radius) {
+      const reach = Math.hypot(goal.at[0] - position[0], goal.at[1] - position[2]);
+      // A ring is collected when the ring says so. Proximity was a proxy for that, and a bad
+      // one: the trigger is a hoop with a shape, and a ball can be inside 0.65 units of the
+      // centre without having gone through it. Asking the rules layer removes the proxy.
+      const run = api.rules.status();
+      const collected = maze && goal.kind === "ring" && (run?.collected ?? []).includes(`ballz-${goal.name}`);
+      // Gates the same way. A finish gate is a wide box you cross, not a point you arrive at,
+      // so "the lap counter moved" is the event; insisting the ball centre come within a metre
+      // of the tile centre missed a crossing that had already happened.
+      const gated = maze && ((goal.kind === "half" && (run?.checkpointIndex ?? 0) > targetMark.checkpoint)
+        || (goal.kind === "finish" && (run?.lap ?? 0) > targetMark.lap));
+      if (collected || gated || reach <= goal.radius) {
         visited.push({ name: goal.name, atMs: Math.round(tMs) });
         target += 1;
+        targetSince = tMs;
+        targetMark = { lap: run?.lap ?? 0, checkpoint: run?.checkpointIndex ?? 0 };
         continue;
       }
+      // A corner the ball overshot would otherwise be chased until the clock ran out. Corners
+      // are hints about which way the corridor goes, so give up on one and aim at the next.
+      // Objectives are never skipped: a ring you did not pass through is a course you did not
+      // finish, and the run must report that rather than drive on pretending otherwise.
+      if (goal.kind === "turn" && tMs - targetSince > 4000) {
+        skipped.push({ name: goal.name, atMs: Math.round(tMs) });
+        target += 1;
+        targetSince = tMs;
+        continue;
+      }
+      // Aim THROUGH a target the ball has been chasing, not at it. Pure pursuit at full thrust
+      // orbits a target inside its own turning circle: measured on `archive-ballz-level1`, the
+      // ball took 20 seconds to reach a ring one cell away, circling it the whole time. Aiming
+      // at a point past the target turns the circle into a pass.
+      const chasing = maze && tMs - targetSince > 1500;
+      const aim = chasing
+        ? (() => {
+          const dx = goal.at[0] - position[0];
+          const dz = goal.at[1] - position[2];
+          const span = Math.hypot(dx, dz) || 1;
+          const lead = goal.radius * 3;
+          return [goal.at[0] + (dx / span) * lead, goal.at[1] + (dz / span) * lead];
+        })()
+        : goal.at;
       // Re-aim only when the heading has actually moved. Restating the same heading sixty
       // times a second would record the loop rather than the driving.
-      const heading = Math.round(headingTo(position, goal.at));
+      const heading = Math.round(headingTo(position, aim));
       if (lastHeading === null || Math.abs(heading - lastHeading) >= 2) {
         // Full thrust throughout, which is measured rather than intuitive: on `starter-level`,
         // thrust scaled by cos(heading error) drove it in 19.8s and cutting thrust when
@@ -128,15 +182,18 @@ try {
       levelId,
       // The author's own name for the course, so a pasted program does not arrive labelled
       // with an id the panel would then show to a player.
-      label: level.label ?? levelId,
+      label,
       subjectId,
       completed: api.rules.status()?.outcome === "complete",
       elapsedMs: Math.round(tMs),
+      objectives: ordered.filter((goal) => goal.kind !== "turn").length,
+      reachedObjectives: visited.filter((goal) => !goal.name.startsWith("turn-")).length,
+      turnsSkipped: skipped.length,
       waypoints: ordered.map((goal) => goal.name),
       visited,
       actions,
     };
-  }, { levelId, maxMs });
+  }, { levelId, maxMs, ordered: route.waypoints, label: level.label ?? levelId, maze });
 } finally {
   await browser.close();
 }
@@ -146,11 +203,12 @@ if (!result || result.error) {
   process.exit(1);
 }
 
-console.error(`subject ${result.subjectId} · waypoints ${result.waypoints.join(" → ")}`);
+console.error(`subject ${result.subjectId} · ${result.waypoints.length} waypoints, ${result.objectives} of them objectives`);
 // The last waypoint usually reads as unreached: the rules layer calls the course complete the
 // moment the finish trigger fires, which is a little before the ball is inside the radius this
 // loop tests. `completed` is the rules layer's verdict and is the one that decides anything.
-console.error(`reached ${result.visited.length}/${result.waypoints.length} waypoints · ${result.completed ? "FINISHED" : "DID NOT FINISH"} in ${(result.elapsedMs / 1000).toFixed(2)}s · ${result.actions.length} inputs`);
+if (argv.includes("--verbose")) console.error(`visited: ${result.visited.map((v) => `${v.name}@${(v.atMs/1000).toFixed(1)}s`).join(", ")}`);
+console.error(`reached ${result.reachedObjectives}/${result.objectives} objectives · ${result.turnsSkipped} corners overshot · ${result.completed ? "FINISHED" : "DID NOT FINISH"} in ${(result.elapsedMs / 1000).toFixed(2)}s · ${result.actions.length} inputs`);
 if (!result.completed) {
   // Printing it anyway would invite pasting a line that does not finish, and the panel would
   // then be honest about a baseline nobody wanted.
