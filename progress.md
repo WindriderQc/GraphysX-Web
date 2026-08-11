@@ -3668,3 +3668,37 @@ at all, which is what it was added for.
 This also sets the bar for a driving model: reproducibility, not speed. A controller that shaves
 a second off but drives near the margins is worse than one that is slower and lands the same run
 every time.
+
+## Corner easing was tried, measured, and is not shipped
+
+The correction above set the bar for a driving model at **reproducibility, not speed**, and
+proposed the obvious controller: ease off into corners so the ball stops bouncing off walls, on
+the theory that wall contact is the amplifier turning the scene's own tiny nondeterminism into a
+different route.
+
+Built it — thrust falling with how sharp the next turn is and how close the corner already is,
+braking outright above 80° — and measured it on the starter course. Three consecutive blind
+replays of each line:
+
+    plain        finished 11350ms · 11350ms · 11350ms · agree · drift 0.002
+    eased        did not finish (26017ms cap) ×3      · disagree · drift 0.078
+
+**The hypothesis was wrong, and not marginally.** Easing made reproducibility about forty times
+worse and stopped the line finishing at all when replayed blind, even though the closed-loop
+recording that produced it finished in 17.33s.
+
+The likely reason is the opposite of the theory: reproducibility favours *shorter* exposure, not
+gentler driving. The plain line is on the course for 11.3 seconds; the eased one for 17.3 closed
+loop and past 26 blind. Every extra second is more time accumulating divergence from emitters and
+flocks advancing on their own randomness. Braking also spends that extra time *near* walls at low
+speed, which is more contact, not less.
+
+So the controller is reverted rather than shipped behind a flag — an option measured worse than
+the default is a trap for whoever finds it next, not a tool. The recorder is back at the version
+that reproduces to two millimetres.
+
+**What this leaves for the archive courses.** `archive-ballz-level1` still collects all twenty
+rings and the gate under `--maze` and cannot hold the line home, and the fix is not "drive more
+carefully". Anything that keeps the ball on the course longer is working against the property the
+baseline needs. A route that is *shorter* — fewer, straighter legs rather than slower ones — is
+the direction the measurements point, and that is a router change, not a controller.
