@@ -179,6 +179,25 @@ hashes, 5,688,234,500 examined bytes. Its 71 functionality records resolve to 66
 SOURCE-ONLY, 1 SUPERSEDED and 1 OUT OF SCOPE. The checked-in generator and the CI audit reject
 stale output, invalid evidence, unclassified rows and ledger self-evidence.
 
+### Where proposals come from
+
+`src/coauthor-provider.ts` is the seam that lets a model compose a proposal instead of Nestor.
+Two things about it are worth knowing before touching it:
+
+- **No provider is configured by default, and none is required.** With nothing set the page makes
+  no request at all. `VITE_GRAPHYSX_PROPOSAL_URL` bakes one in; `?propose=<url>` sets one for a
+  session. The endpoint is expected to be same-origin and to hold its own credentials — a key in
+  the bundle is a key handed to every visitor.
+- **A provider's reply is hostile input.** It returns commands that mutate the user's scene, so
+  it is validated before a card exists: unknown ops refused, size bounded to what a person can
+  review, and host-only id namespaces refused through `server/host-entity-id-policy.mjs` — the
+  same module the runtime enforces on commit. A provider that could claim `live-agent:` could
+  forge a teammate, and it would look authentic because it would BE an ordinary entity.
+
+What makes it safe to offer at all is structural rather than careful: the output becomes an
+ordinary `CoauthorProposal`, which cannot commit itself. Downstream, nothing can tell a
+provider-composed proposal from a local one, because there is nothing to tell apart.
+
 ## Known evidence boundaries — limits, not placeholders
 
 - The **Projection effect** and the **BallZ fluid-layer shader** stay SOURCE-ONLY: exhaustive

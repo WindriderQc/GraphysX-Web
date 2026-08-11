@@ -3549,3 +3549,61 @@ course first.
 
 With both fixed, the recorder reproduces `STARTER_LINE` **byte-identically** again, and the
 shipped feature still reads `AgentX baseline · 11.35s` through `smoke-ballz` against `dist`.
+
+## 2026-08-11 — `ev3-robotics-lab-r1` (complete)
+
+- New request: prepare a flexible 3D scene for LEGO MINDSTORMS Education EV3 construction concepts and missions.
+- Added a scene-native `ev3-robotics-lab` starter built from editable GraphysX primitives. Its seven representative construction families are the drive base, sensor base, gripper, forklift, tank/stair-climber, robot arm, and color sorter; its seven mission zones follow LEGO Education's Robot Trainer sequence from Moves and Turns through the Guided Mission.
+- Kept the representation explicitly stylized rather than claiming brick-by-brick CAD fidelity. The starter uses existing physics, steering, interaction, tagging, export, and Browse vocabulary; no special host state or proprietary model assets were introduced.
+- Added a focused browser smoke and thumbnail capture registration. Typecheck, all 233 node-only contract tests, focused lint, and the 11-check EV3 browser smoke pass. The smoke proves discovery, exact construction/mission counts, both interactions, agent steering motion, v2 export/reload parity, and zero browser/page errors.
+- Inspected the rendered scene after two visual iterations: removed the generic BallZ `player` semantic from the steerable drive base, raised its invisible collider so the visible wheels rest on the mat, darkened the base mat for readable station contrast, and used `host.frameWorld()` for the overview. Generated and inspected `public/assets/shelf-thumbnails/ev3-robotics-lab.jpg`; the capture harness now also hides the global Display control so future scene thumbnails stay clean.
+- Built-output verification remains queued behind another shared-session release gate; do not run a bare build while it owns shared `dist/`.
+
+## Slice 4's last piece — where a proposal can come from
+
+`src/coauthor-provider.ts` is the adapter that lets a model compose a proposal instead of Nestor.
+It is a seam rather than an integration, and the difference is the point: **no provider is
+configured by default, none is required, and with nothing set the page makes no request at all.**
+A front door that needed an API key to open would not be a front door.
+
+The security posture is the whole design, because a provider is a remote party returning
+*commands to mutate the user's scene*. Three things make that offerable:
+
+- **A provider proposes; it cannot commit.** Its output becomes an ordinary `CoauthorProposal`
+  through `proposeExternal`, which is inert until a human presses Apply, narrowable line by
+  line, and refused on a stale revision. Downstream nothing can tell a provider-composed
+  proposal from a local one, because there is nothing to tell apart — the provider gets no path
+  the local composer lacks.
+- **The reply is validated before a card exists.** Unknown ops refused; size bounded to what a
+  person can actually review (40 commands, 200 intent characters, 256 KiB); replies that are not
+  command lists refused with a sentence rather than a status code.
+- **Host-only namespaces are refused**, through `server/host-entity-id-policy.mjs` — the same
+  module the runtime enforces on commit. A provider that could claim `live-agent:` could forge a
+  live teammate, and it would look authentic because it would *be* an ordinary entity. The walk
+  is recursive and depth-bounded, so a forged id nested inside an interaction's `targetIds` is
+  caught too.
+
+**`?propose=<url>` is attacker-supplied, and is treated that way.** A crafted link is a link
+somebody can be sent, and without a check it would make the visitor's browser POST a summary of
+their scene to a host of the attacker's choosing and then render the attacker's command list as
+a card inviting them to press Apply. Session overrides must therefore be **same-origin or
+loopback**: same-origin is the shape production uses anyway, loopback is what keeps the seam
+exercisable in development. A build-time `VITE_GRAPHYSX_PROPOSAL_URL` is not checked, because
+whoever built the site is already trusted with the whole bundle. No key ever reaches the
+browser: the endpoint is expected to hold its own credentials, as the scene store does.
+
+What leaves the page is bounded too — ids, types and labels for at most sixty entities, never
+the document. A provider does not need the geometry of everything to add a lamp.
+
+A provider that refuses, times out or answers with nonsense falls back to Nestor composing
+locally, which is what the product does with no provider at all. The fallback is the default,
+not a degraded mode.
+
+37 unit tests, written from the attacker's side: not "does a good reply work" but "what does a
+bad one get away with".
+
+**Still open for this slice:** a free-text request surface. The three topic buttons are the only
+way to ask for something today, so a provider composes against one of three fixed requests
+(`nestorTopicRequest`). Phrased as requests rather than as the finished intent — handing a model
+the intent would make it a paraphrase engine, and the result would be Nestor's idea wearing a
+model's name.

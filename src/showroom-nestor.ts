@@ -90,6 +90,12 @@ export interface NestorPresenter {
    */
   propose: (topic: NestorTopic) => CoauthorProposal;
   /**
+   * Compose from a command list somebody else wrote — a model provider. Downstream nothing can
+   * tell the difference, which is the point: a provider gets no path the local composer lacks,
+   * and no path around the human gate.
+   */
+  proposeExternal: (intent: string, commands: AgentWorldCommand[]) => CoauthorProposal;
+  /**
    * Include or exclude one command of the pending proposal, keeping the selection consistent:
    * dropping a command that creates an entity drops what needs it, and restoring a dependent
    * restores its creator.
@@ -550,6 +556,32 @@ export function createNestorPresenter(options: {
     return proposal;
   };
 
+  /**
+   * Compose from commands somebody else wrote — a model provider, today.
+   *
+   * Identical to `propose` in every way that matters: the actor is still Nestor, the revision
+   * is still read at the moment of composing, and the result is still inert until a human
+   * accepts it. The only difference is where the command list came from, and that difference
+   * is deliberately invisible to everything downstream — the card, the per-line narrowing, the
+   * stale check and the undo path cannot tell, because there is nothing for them to tell apart.
+   *
+   * The commands are expected to have been validated by `coauthor-provider.ts` first. This does
+   * not re-check them: a second validator would drift from the first, and the runtime refuses
+   * anything malformed on commit regardless.
+   */
+  const proposeExternal = (intent: string, commands: AgentWorldCommand[]): CoauthorProposal => {
+    reconcile();
+    lastOutcome = null;
+    proposal = createProposal({
+      actor: NESTOR_ACTOR,
+      intent,
+      expectedRevision: api.state()?.revision ?? 0,
+      commands,
+    });
+    proposedTopic = null;
+    return proposal;
+  };
+
   /** Include or exclude one command of the pending proposal. Returns the updated proposal. */
   const toggleProposalCommand = (index: number): CoauthorProposal | null => {
     if (!proposal) return null;
@@ -644,6 +676,7 @@ export function createNestorPresenter(options: {
 
   return {
     propose,
+    proposeExternal,
     toggleProposalCommand,
     accept,
     discard,
@@ -756,6 +789,20 @@ function presentationCommands(api: GraphysXAgentWorldApi, topic: NestorTopic): A
     );
   }
   return commands;
+}
+
+/**
+ * What to ask a model for, when one is composing instead of Nestor.
+ *
+ * The topic buttons are the only request surface the Center has today, so each one carries the
+ * sentence a person would have typed. Phrased as a request rather than as the intent, because
+ * a provider is being asked to decide *what* to do — handing it the finished intent would make
+ * it a paraphrase engine and the result would be Nestor's idea wearing a model's name.
+ */
+export function nestorTopicRequest(topic: NestorTopic): string {
+  if (topic === "build") return "Build something small and inspectable in this scene, and say what you built.";
+  if (topic === "play") return "Make something in this scene move or react, using the entities that are already here.";
+  return "Reveal the living systems in this scene — the flocks, emitters and lights — by changing how they read.";
 }
 
 function intentFor(topic: NestorTopic): string {

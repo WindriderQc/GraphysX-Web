@@ -27,8 +27,10 @@ Live application: <https://graphysx.specialblend.ca>
 > individual lines out before anything touches the scene; guided tours that move the camera and
 > highlight entities without changing the document by a byte; and an agent that drives a BallZ
 > course through the same `api.steer` calls a keyboard produces, then hands its trajectory over
-> as the ghost you race. Still open: a model/provider adapter, and the Center's expansion into
-> distinct places. Execution order and guardrails:
+> as the ghost you race. A model provider can compose those proposals instead of Nestor — the
+> adapter ships, no provider is configured by default, and **none is required**: with nothing
+> set the page makes no request at all. Still open: a free-text way to ask for something, and
+> the Center's expansion into distinct places. Execution order and guardrails:
 > **[docs/AGENTX_ROADMAP.md](docs/AGENTX_ROADMAP.md)**.
 
 The complete historical source and restoration record lives in the workshop repo,

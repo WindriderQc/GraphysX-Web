@@ -30,13 +30,21 @@ import { composeSkyboxSpiral, frameSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
-import type { NestorTopic } from "./showroom-nestor";
+import { nestorTopicRequest, type NestorTopic } from "./showroom-nestor";
 import { IDLE_TOUR_STATE, createNestorTourController } from "./nestor-tour";
 import type { NestorTourController } from "./nestor-tour";
 import { motionIsReduced } from "./platform-theme";
 import { archiveReferenceMs } from "./archive-race-records";
 import { getArchiveCupRuntimeState, type ArchiveCupCourse } from "./archive-cup";
 import { getPersonalGhostState } from "./level-ghosts";
+import {
+  createHttpProposalProvider,
+  describeProposalSource,
+  isAllowedSessionProviderUrl,
+  proposalProvider,
+  setProposalProvider,
+  summarizeSceneForProvider,
+} from "./coauthor-provider";
 import { randomPlayerName } from "./player-name";
 import {
   ARCHIVE_BALLZ_LEVELS,
@@ -79,6 +87,29 @@ const storeUrl = explicitStore ?? (configuredStore || "http://localhost:8788");
 // store behind it would show that to every visitor. Probe only when a store was actually
 // asked for, configured at build time, or in dev where one is plausibly running.
 const wantsStore = Boolean(storeScene || explicitStore || configuredStore || import.meta.env.DEV);
+
+/**
+ * Where proposals are composed, if not here.
+ *
+ * Same shape as the store: opt-in, same-origin by intent, and absent by default. With nothing
+ * configured Nestor composes the three demonstrations locally and the page makes no request at
+ * all — the roadmap guardrail is explicit that the front door must not require a model, an
+ * account or a key. `?propose=<url>` overrides it for a session, which is how the seam gets
+ * exercised without a deploy.
+ */
+const sessionProposalUrl = (params.get("propose") ?? "").trim();
+// A session override is attacker-supplied — a crafted link is a link someone can be sent — so it
+// must be same-origin or loopback. The build-time value is not checked: whoever built the site
+// is already trusted with the whole bundle.
+const allowedSessionProposalUrl = sessionProposalUrl
+  && isAllowedSessionProviderUrl(sessionProposalUrl, window.location.origin) ? sessionProposalUrl : "";
+if (sessionProposalUrl && !allowedSessionProposalUrl) {
+  console.warn("Ignoring ?propose= — a session provider must be same-origin or loopback.");
+}
+const configuredProposalUrl = allowedSessionProposalUrl || (import.meta.env.VITE_GRAPHYSX_PROPOSAL_URL ?? "").trim();
+if (configuredProposalUrl) {
+  setProposalProvider(createHttpProposalProvider({ url: configuredProposalUrl, label: "Model provider" }));
+}
 
 // `?session=<id>` joins a live collaboration session on the store. The invitation itself
 // arrives in the fragment as `#session=<id>&invite=<code>` — never in the query string,
@@ -223,9 +254,45 @@ if (mode === "previews" && import.meta.env.DEV) {
         return;
       }
       stopNestorTour();
-      const proposal = nestor?.propose(topic);
-      welcome?.showOutcome(null);
-      if (proposal) welcome?.showProposal(proposal, false);
+      const showLocally = (): void => {
+        const proposal = nestor?.propose(topic);
+        welcome?.showOutcome(null);
+        if (proposal) welcome?.showProposal(proposal, false);
+      };
+
+      const provider = proposalProvider();
+      if (!provider) {
+        showLocally();
+        return;
+      }
+      // With a provider configured the composing is remote, and everything after it is
+      // unchanged: the same card, the same per-line narrowing, the same accept at the same
+      // revision. A provider gets no path around the human gate because there is no second
+      // path to give it.
+      void (async () => {
+        const state = host.api.state();
+        const result = await provider.propose({
+          request: nestorTopicRequest(topic),
+          revision: state?.revision ?? 0,
+          scene: {
+            id: state?.world.id ?? "",
+            label: state?.world.label ?? "",
+            entities: summarizeSceneForProvider(host.api.query()),
+          },
+        });
+        // A provider that refuses, times out or answers with nonsense must not leave the
+        // Center unable to demonstrate itself. Nestor composes locally instead, which is what
+        // the product does with no provider at all — the fallback is the default, not a
+        // degraded mode.
+        if (!result.ok) {
+          console.warn(`Proposal provider declined: ${result.reason}`);
+          showLocally();
+          return;
+        }
+        const proposal = nestor?.proposeExternal(result.proposal.intent, result.proposal.commands);
+        welcome?.showOutcome(null);
+        if (proposal) welcome?.showProposal(proposal, false);
+      })();
     };
     const acceptNestorProposal = (): void => {
       // Re-checked at the moment of the decision, not when the card was drawn: a live session
@@ -809,6 +876,7 @@ if (mode === "previews" && import.meta.env.DEV) {
         run: host.api.rules.status(),
         archiveCup: getArchiveCupRuntimeState(),
         personalGhost: getPersonalGhostState(),
+        proposalSource: describeProposalSource(),
         nestor: host.api.query({ ids: ["showroom-nestor"] }).length > 0
           ? nestor?.state() ?? null : null,
         livePresence: livePresence?.state() ?? null,
