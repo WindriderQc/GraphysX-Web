@@ -16,7 +16,7 @@
 // recording by replaying it — `runCoachProgram` twice and `coachRunsAgree` — before pasting it.
 
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
-import { planCoachRoute } from "../src/coach-route.ts";
+import { cellCentre, findPath, pathCorners, planCoachRoute, smoothPath } from "../src/coach-route.ts";
 
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
 const argv = process.argv.slice(2);
@@ -85,73 +85,95 @@ try {
     process.exit(1);
   }
 
-  result = await page.evaluate(async ({ levelId, maxMs, ordered, label, maze }) => {
+  // Drive in resumable chunks so the router can be consulted mid-run.
+  //
+  // The reason is measured. Instrumenting the leg that failed on `archive-ballz-level1` found the
+  // ball **stationary against a wall for 133 seconds** — median speed 0.00 over 892 samples, 888
+  // of them with a wall in an adjacent cell, 26 units from the finish. The old pilot skipped a
+  // corner it could not reach, then aimed straight at the next objective *through the walls* and
+  // pushed into one at full thrust until the clock ran out. Skipping a corner is what turned a
+  // route into a straight line at a wall.
+  //
+  // So a corner that times out, or a ball that has stopped moving, now asks for a new route from
+  // where the ball actually is. That has to happen in Node, because the router lives there and a
+  // second copy in the page is exactly the drift this project has paid for before — hence chunks
+  // rather than one long `evaluate`.
+  //
+  // The simulation is PAUSED for the whole drive and advanced only by `api.step`, so the frame
+  // loop cannot move the ball while a chunk boundary is in flight. Without that, wall-clock spent
+  // in a round-trip would land in the recording as time the inputs do not account for — the same
+  // failure that made an 11.32s recording replay in 13.50s.
+  let waypoints = route.waypoints;
+  let state = { tMs: 0, target: 0, targetSince: 0, targetMark: { lap: 0, checkpoint: 0 }, lastHeading: null, stillSince: 0 };
+  const actions = [];
+  const visited = [];
+  const replans = [];
+  let outcome = null;
+
+  const drive = async (current, plan) => page.evaluate(async ({ levelId, maxMs, ordered, maze, state }) => {
     const api = window.__GRAPHYSX__;
     const TICK = 1000 / 60;
 
-    // Re-play the course before driving, even though the planning pass already armed it.
-    //
-    // This is not belt and braces. Planning happens across a round-trip, and the frame loop
-    // keeps running: by the time the driving pass starts, the ball has been sitting in a live
-    // simulation for a second or two. A recording made from *that* state is not a recording of
-    // what `runCoachProgram` will replay, which starts from a course just loaded. Measured:
-    // recording without this reported 11.32s and its own replay took 13.50s.
-    api.levels.play(levelId);
-    for (let wait = 0; wait < 80 && !api.rules.status(); wait += 1) await new Promise((resolve) => setTimeout(resolve, 100));
-    if (!api.rules.status()) return { error: "the run never armed" };
+    if (state.tMs === 0) {
+      // Re-play the course before the first chunk. Planning happened across a round-trip and the
+      // frame loop kept running, so the ball has been sitting in a live simulation; a recording
+      // made from that state is not a recording of what `runCoachProgram` replays.
+      api.levels.play(levelId);
+      for (let wait = 0; wait < 80 && !api.rules.status(); wait += 1) await new Promise((resolve) => setTimeout(resolve, 100));
+      if (!api.rules.status()) return { reason: "never-armed" };
+      api.pause(true);
+    }
 
     const rules = api.rules.get();
     const subjectId = rules?.subjectId ?? rules?.spawn?.entityId ?? null;
-    if (!subjectId) return { error: "the level declares no subject to drive" };
+    if (!subjectId) return { reason: "no-subject" };
     const positionOf = () => api.query({ ids: [subjectId] })[0]?.position ?? null;
-
-    // Degrees clockwise from -z: 0 = -z, 90 = +x, 180 = +z, 270 = -x.
     const headingTo = (from, to) => ((Math.atan2(to[0] - from[0], -(to[1] - from[2])) * 180) / Math.PI + 360) % 360;
 
+    let { tMs, target, targetSince, targetMark, lastHeading, stillSince } = state;
     const actions = [];
     const visited = [];
-    const skipped = [];
-    let target = 0;
-    let targetSince = 0;
-    let targetMark = { lap: api.rules.status()?.lap ?? 0, checkpoint: api.rules.status()?.checkpointIndex ?? 0 };
-    let lastHeading = null;
-    let tMs = 0;
+
     while (tMs < maxMs && target < ordered.length) {
       const position = positionOf();
-      if (!position) return { error: "the subject vanished mid-run" };
+      if (!position) return { reason: "subject-vanished" };
       const goal = ordered[target];
       const reach = Math.hypot(goal.at[0] - position[0], goal.at[1] - position[2]);
-      // A ring is collected when the ring says so. Proximity was a proxy for that, and a bad
-      // one: the trigger is a hoop with a shape, and a ball can be inside 0.65 units of the
-      // centre without having gone through it. Asking the rules layer removes the proxy.
       const run = api.rules.status();
-      const collected = maze && goal.kind === "ring" && (run?.collected ?? []).includes(`ballz-${goal.name}`);
-      // Gates the same way. A finish gate is a wide box you cross, not a point you arrive at,
-      // so "the lap counter moved" is the event; insisting the ball centre come within a metre
-      // of the tile centre missed a crossing that had already happened.
+      // A ring is collected when the ring says so, and a gate is crossed when the counter moves.
+      // Proximity was a proxy for both and a bad one: the trigger has a shape, and a finish gate
+      // is a wide box you cross rather than a point you arrive at.
+      const collected = maze && goal.kind === "ring" && (run?.collected ?? []).includes("ballz-" + goal.name);
       const gated = maze && ((goal.kind === "half" && (run?.checkpointIndex ?? 0) > targetMark.checkpoint)
         || (goal.kind === "finish" && (run?.lap ?? 0) > targetMark.lap));
       if (collected || gated || reach <= goal.radius) {
         visited.push({ name: goal.name, atMs: Math.round(tMs) });
         target += 1;
         targetSince = tMs;
+        stillSince = tMs;
         targetMark = { lap: run?.lap ?? 0, checkpoint: run?.checkpointIndex ?? 0 };
         continue;
       }
-      // A corner the ball overshot would otherwise be chased until the clock ran out. Corners
-      // are hints about which way the corridor goes, so give up on one and aim at the next.
-      // Objectives are never skipped: a ring you did not pass through is a course you did not
-      // finish, and the run must report that rather than drive on pretending otherwise.
-      if (goal.kind === "turn" && tMs - targetSince > 4000) {
-        skipped.push({ name: goal.name, atMs: Math.round(tMs) });
-        target += 1;
-        targetSince = tMs;
-        continue;
+
+      // Two ways to be lost, and both now ask for a route instead of pressing on.
+      const stalled = maze && tMs - stillSince > 1500;
+      // Objectives get a longer leash than corners, and both now re-plan rather than skip.
+      // Measured: with the guard on corners only, the pilot completed laps 1 and 2 and then
+      // circled the lap-3 finish for 170 seconds — moving, so never stalled, and not a corner,
+      // so never overdue. Nothing was watching it. Re-planning to the *same* objective is the
+      // point: fresh corners change the approach angle, which is what a circling ball needs.
+      const overdue = maze && tMs - targetSince > (goal.kind === "turn" ? 4000 : 8000);
+      if (stalled || overdue) {
+        return {
+          reason: "replan",
+          why: stalled ? "not-moving" : "corner-overdue",
+          at: [position[0], position[2]],
+          state: { tMs, target, targetSince: tMs, targetMark, lastHeading, stillSince: tMs },
+          actions,
+          visited,
+        };
       }
-      // Aim THROUGH a target the ball has been chasing, not at it. Pure pursuit at full thrust
-      // orbits a target inside its own turning circle: measured on `archive-ballz-level1`, the
-      // ball took 20 seconds to reach a ring one cell away, circling it the whole time. Aiming
-      // at a point past the target turns the circle into a pass.
+
       const chasing = maze && tMs - targetSince > 1500;
       const aim = chasing
         ? (() => {
@@ -162,38 +184,88 @@ try {
           return [goal.at[0] + (dx / span) * lead, goal.at[1] + (dz / span) * lead];
         })()
         : goal.at;
-      // Re-aim only when the heading has actually moved. Restating the same heading sixty
-      // times a second would record the loop rather than the driving.
       const heading = Math.round(headingTo(position, aim));
       if (lastHeading === null || Math.abs(heading - lastHeading) >= 2) {
-        // Full thrust throughout, which is measured rather than intuitive: on `starter-level`,
-        // thrust scaled by cos(heading error) drove it in 19.8s and cutting thrust when
-        // travelling away from the target took 16.5s, against 11.4s for never lifting off.
+        // Full thrust throughout, which is measured rather than intuitive: thrust scaled by
+        // cos(heading error) drove the starter course in 19.8s and cutting thrust when travelling
+        // away from the target took 16.5s, against 11.4s for never lifting off. Easing into
+        // corners was tried too, and made the recording irreproducible.
         api.steer(subjectId, { headingDegrees: heading, thrust: 1 });
         actions.push([Math.round(tMs), heading]);
         lastHeading = heading;
       }
       api.step(TICK / 1000);
+      const moved = positionOf();
+      if (moved && Math.hypot(moved[0] - position[0], moved[2] - position[2]) * 60 > 0.4) stillSince = tMs;
       tMs += TICK;
       if (api.rules.status()?.outcome === "complete") break;
     }
 
+    const final = api.rules.status();
+    api.pause(false);
     return {
-      levelId,
-      // The author's own name for the course, so a pasted program does not arrive labelled
-      // with an id the panel would then show to a player.
-      label,
+      reason: final?.outcome === "complete" ? "complete" : tMs >= maxMs ? "out-of-time" : "route-exhausted",
       subjectId,
-      completed: api.rules.status()?.outcome === "complete",
-      elapsedMs: Math.round(tMs),
-      objectives: ordered.filter((goal) => goal.kind !== "turn").length,
+      completed: final?.outcome === "complete",
+      state: { tMs, target, targetSince, targetMark, lastHeading, stillSince },
+      actions,
+      visited,
+    };
+  }, { levelId, maxMs, ordered: plan, maze, state: current });
+
+  // Bounded: a course needing more rescues than this is not one a recording should be wrung out
+  // of, and saying so is better than looping.
+  for (let chunk = 0; chunk < 40; chunk += 1) {
+    outcome = await drive(state, waypoints);
+    if (outcome.reason === "never-armed" || outcome.reason === "no-subject" || outcome.reason === "subject-vanished") break;
+    actions.push(...(outcome.actions ?? []));
+    visited.push(...(outcome.visited ?? []));
+    state = outcome.state ?? state;
+    if (outcome.reason !== "replan") break;
+
+    // Re-route from where the ball actually is to the objective it is trying to reach, and put
+    // the corners of that route in front of it. Intermediate corners from the old plan are
+    // dropped: they described a way there from somewhere the ball no longer is.
+    const objectiveIndex = waypoints.findIndex((point, index) => index >= state.target && point.kind !== "turn");
+    if (objectiveIndex === -1) break;
+    const objective = waypoints[objectiveIndex];
+    const originX = -((level.width - 1) * level.cellSize) / 2;
+    const originZ = -((level.height - 1) * level.cellSize) / 2;
+    const from = {
+      x: Math.round((outcome.at[0] - originX) / level.cellSize),
+      y: Math.round((outcome.at[1] - originZ) / level.cellSize),
+    };
+    const rescue = findPath(level, from, objective.cell);
+    replans.push({ atMs: Math.round(state.tMs), why: outcome.why, from, to: objective.cell, routed: Boolean(rescue) });
+    if (!rescue) break;
+    const corners = smoothPath(level, pathCorners(rescue)).slice(1, -1).map((cell) => ({
+      kind: "turn",
+      name: "turn-" + cell.x + "-" + cell.y + "@" + Math.round(state.tMs),
+      cell,
+      at: cellCentre(level, cell),
+      radius: level.cellSize * 0.42,
+    }));
+    waypoints = [...waypoints.slice(0, state.target), ...corners, ...waypoints.slice(objectiveIndex)];
+    state = { ...state, targetSince: state.tMs, stillSince: state.tMs, lastHeading: null };
+  }
+
+  result = outcome && !outcome.subjectId
+    ? { error: outcome.reason ?? "the drive produced no result" }
+    : {
+      levelId,
+      label: level.label ?? levelId,
+      subjectId: outcome.subjectId,
+      completed: Boolean(outcome.completed),
+      elapsedMs: Math.round(state.tMs),
+      objectives: waypoints.filter((goal) => goal.kind !== "turn").length,
       reachedObjectives: visited.filter((goal) => !goal.name.startsWith("turn-")).length,
-      turnsSkipped: skipped.length,
-      waypoints: ordered.map((goal) => goal.name),
+      turnsSkipped: 0,
+      replans,
+      waypoints: waypoints.map((goal) => goal.name),
       visited,
       actions,
     };
-  }, { levelId, maxMs, ordered: route.waypoints, label: level.label ?? levelId, maze });
+
 } finally {
   await browser.close();
 }
@@ -207,6 +279,7 @@ console.error(`subject ${result.subjectId} · ${result.waypoints.length} waypoin
 // The last waypoint usually reads as unreached: the rules layer calls the course complete the
 // moment the finish trigger fires, which is a little before the ball is inside the radius this
 // loop tests. `completed` is the rules layer's verdict and is the one that decides anything.
+if (argv.includes("--verbose")) console.error("replans: " + JSON.stringify(result.replans));
 if (argv.includes("--verbose")) console.error(`visited: ${result.visited.map((v) => `${v.name}@${(v.atMs/1000).toFixed(1)}s`).join(", ")}`);
 console.error(`reached ${result.reachedObjectives}/${result.objectives} objectives · ${result.turnsSkipped} corners overshot · ${result.completed ? "FINISHED" : "DID NOT FINISH"} in ${(result.elapsedMs / 1000).toFixed(2)}s · ${result.actions.length} inputs`);
 if (!result.completed) {

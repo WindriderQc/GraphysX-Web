@@ -3832,3 +3832,55 @@ Both call sites now ask `ghostIsInScene()` instead of trusting `spawned`. The ge
 worth remembering: a boolean that mirrors scene state is a cache, an `ephemeral` entity is
 invalidated by things that never tell the cache, and every reader of that cache is a bug until
 it re-checks.
+
+## The leg that failed, and the ceiling it revealed
+
+Instrumenting rather than guessing was the right call. On `archive-ballz-level1`, from the moment
+the half gate is crossed:
+
+    turn-17-16     3.8s ·  26 samples · minReach 10.65 · median speed 6.61
+    finish-5-16  133.7s · 892 samples · minReach 26.03 · median speed 0.00 · wall adjacent 888/892
+
+The ball was **stationary against a wall for 133 seconds**. Not orbiting, not off-route: the pilot
+skipped a corner it could not reach, aimed straight at the next objective *through the walls*, and
+pushed into one at full thrust until the clock ran out. Skipping a corner is what turned a route
+into a straight line at a wall.
+
+**The fix is re-planning rather than skipping.** A corner that times out, a ball that has stopped,
+or an objective chased too long now asks the router for a fresh way there from where the ball
+actually is. That meant restructuring the drive into resumable chunks, because the router lives in
+Node and a second copy in the page is the drift this project has paid for before. The simulation is
+paused for the whole drive and advanced only by `api.step`, so a chunk boundary cannot let the
+frame loop move the ball — the same trap that once made an 11.32s recording replay in 13.50s.
+
+It works. `archive-ballz-level1` — 22×22, three laps, twenty rings — now **finishes in 150.8s**,
+against a previous best of 21 of 26 objectives and no finish. Twelve re-plans, all routed.
+
+One guard was missing at first and is worth keeping in mind: `overdue` applied only to corners, so
+once the pilot was chasing the lap-3 *finish* it was moving (never stalled) and not a corner (never
+overdue), and nothing was watching. It circled for 170 seconds. Objectives now get a longer leash
+and the same treatment — re-planning to the *same* objective is the point, because fresh corners
+change the approach angle, which is exactly what a circling ball needs.
+
+### And then the ceiling
+
+The line finishes closed-loop and **does not replay**. Two blind replays of those 3025 inputs both
+failed to finish, and diverged **from each other** by 36.7 units at 160s.
+
+That is not a driving problem and no amount of pilot work will fix it. Replay-versus-replay
+divergence is the *scene* being nondeterministic — emitters and flocks advance on their own
+randomness, and contact ordering differs run to run. The drift is real but tiny at first and
+compounds with exposure:
+
+    starter-level    11.35s recording → replays agree to 0.002 units
+    archive-level1  150.80s recording → replays disagree by 36.672 units
+
+**So open-loop replay has a time horizon, and it is well under 150 seconds.** The coach works on
+courses short enough that drift stays inside the tolerance. Making a long course coachable needs
+one of two things this session did not do: a scene whose living systems are deterministic during a
+run, or a closed-loop coach — and a coach that reads positions while driving is a driving aid whose
+"baseline" is a time no player could match, which is the thing the whole module exists not to be.
+
+The re-planning pilot ships anyway. It is what makes the recorder able to drive a maze at all, the
+starter line still regenerates byte-identically through every change here, and the next person to
+try a long course should know the ceiling exists before spending a day under it.
