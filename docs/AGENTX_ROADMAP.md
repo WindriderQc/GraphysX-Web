@@ -68,8 +68,8 @@ Production release proof:
 | 3. Spatial mission director | Complete in this release | A live owner directs multiple AgentX actors through one scene-native mission | Analyze → Build → Validate is server-authoritative, ordered, evidence-backed, reconnect-safe, spatially projected, accessible, and absent from authored exports |
 | 4. Guided co-authoring | Complete in this release | A human can ask for a bounded scene change and inspect it before/after | Proposal, actor, intent, command set, result, undo, and rejection are all visible; no hidden mutation |
 | 5. Nestor tours | Shipped for the AgentX Center | Nestor can sequence highlights across scenes and games | Camera cues, short narration, entity highlighting, cancellation, reduced-motion behavior, and destination handoff are deterministic |
-| 6. Agent gameplay | Complete in this release | AgentX can demonstrate and coach a BallZ course inside the product | A deterministic baseline run, ghost comparison, attributed input, and honest capability/offline states are visible in-browser |
-| 7. Center expansion | Portals shipped; the places remain | The front door becomes a compact world hub | Build lab, living-systems overlook, play arena, and portals share one performance budget and remain editable scene vocabulary |
+| 6. Agent gameplay | Complete for short courses | AgentX can demonstrate and coach a BallZ course inside the product | A deterministic baseline run, ghost comparison, attributed input, and honest capability/offline states are visible in-browser |
+| 7. Center expansion | Doorways shipped; authored places remain | The front door becomes a compact world hub | Build lab, living-systems overlook, play arena, and portals share one performance budget and remain editable scene vocabulary |
 
 ## Next three work sessions
 
@@ -115,10 +115,27 @@ Production release proof:
    and restoring a dependent restores its creator. The header counts what would be *sent*, and
    an accept sends exactly that. Narrowing to nothing is reported as a discard rather than
    committed as an empty transaction.
-4. **Not started.** Model/provider integration behind an adapter. The center remains fully useful
-   with no backend or API key, which is still true: Nestor composes these proposals locally.
+4. **Done.** `src/coauthor-provider.ts` is the adapter. A provider returns `{ intent, commands }`
+   and gets no path the local composer lacks: its output becomes an ordinary `CoauthorProposal`,
+   inert until a human accepts it, narrowable line by line, refused on a stale revision. Its reply
+   is treated as hostile input — unknown ops refused, size bounded to what a person can actually
+   review, and host-only id namespaces (`live-agent:`, `live-mission:`, `live-nestor:`) refused
+   through the same policy module the runtime enforces on commit, so a provider cannot forge a
+   live teammate or a mission board. `createHttpProposalProvider` is the one implementation; which
+   model sits behind the endpoint is the endpoint's business.
 
-Remaining for this slice: the provider adapter.
+   **No provider is configured by default and none is required.** With nothing set the page makes
+   no request at all and Nestor composes locally — the guardrail, not a degraded mode. A provider
+   that refuses, times out or answers with nonsense falls back to exactly that.
+   `VITE_GRAPHYSX_PROPOSAL_URL` bakes one in; `?propose=<url>` sets one for a session and is
+   restricted to same-origin or loopback, because a crafted link would otherwise POST a summary of
+   the visitor's scene to a host of the attacker's choosing. No key reaches the browser.
+
+Remaining for this slice: **a free-text request surface.** The three topic buttons are the only
+way to ask for anything today, so a provider composes against one of three fixed requests
+(`nestorTopicRequest`). Note the layout hazard before building it: the welcome card is
+bottom-anchored and grows *upward* over the scene, and adding to it has already killed a kinetic
+block's clickable area once.
 
 ## Parallel correctness lane
 
@@ -150,3 +167,32 @@ No product decision is required to start Slice 4. The proposal queue should wrap
 `actor`, `intent`, `expectedRevision`, and typed command list, then expose preview, accept,
 reject, edit, result, and undo as one visible flow before any model-provider integration is
 added.
+
+## What is actually left
+
+Everything above is shipped except these, and each is bounded by something measured rather than
+by someone's estimate.
+
+1. **A free-text request surface** (slice 4). The provider adapter composes against three fixed
+   topic requests because buttons are the only way to ask for anything. The hazard is layout, not
+   plumbing: the welcome card grows upward over the scene.
+2. **Authored places** (slice 7). Three doorways make the Center navigable, but they lead to
+   content that already existed rather than to a build lab, an overlook and an arena someone
+   designed. Those cost entities, and the budget to hold is the showroom's real median frame of
+   **13.3ms** — not the headless number, which is software-rasterised and reports ~330ms
+   regardless. Nobody has measured the current 144 entities on hardware; do that before adding a
+   fourth place.
+3. **Long courses for the coach** (slice 6). Race AgentX is limited to courses short enough for an
+   open-loop recording to reproduce, and that limit is measured: a starter-course recording of
+   11.35s replays to **0.002 units**, a 150.8s archive-course recording replays **36.672 units**
+   apart from itself. The blocker is scene nondeterminism — emitters and flocks advancing on their
+   own randomness — not the driving, which now completes `archive-ballz-level1`. Fixing it means
+   either deterministic living systems during a run, or accepting a closed-loop coach, which would
+   be a driving aid whose "baseline" is a time no player could match.
+4. **Preview harness conversion** — deliberately not a task. Convert one only when its content is
+   being revived; the workshop stays dev-only.
+
+`progress.md` carries the measurements behind each of these, including three approaches that were
+tried and abandoned with numbers: corner easing (reproducibility ~40x worse), 2-opt ring ordering
+(no change on the current catalogue), and skipping unreachable corners (drove the ball into a wall
+for 133 seconds).
