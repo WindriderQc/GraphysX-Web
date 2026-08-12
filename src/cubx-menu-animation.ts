@@ -1,5 +1,5 @@
 import { Quaternion } from "three";
-import cubxAnimationData from "./legacy/cubx-anim.json";
+import cubxAnimationData from "./content/cubx-anim.json";
 
 type PositionKey = [time: number, x: number, y: number, z: number];
 type RotationKey = [time: number, x: number, y: number, z: number, w: number];

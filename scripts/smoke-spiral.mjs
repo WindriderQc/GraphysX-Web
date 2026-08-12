@@ -26,13 +26,13 @@ page.on("pageerror", (e) => pageErrors.push(String(e)));
 
 try {
   await page.goto(`${BASE}?host=standalone`, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
-  await page.waitForFunction(() => !!window.__GRAPHYSX__ && !!window.__GRAPHYSX_ARCHIVE__, { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !!window.__GRAPHYSX__ && !!window.__GRAPHYSX_CONTENT__, { timeout: SMOKE_TIMEOUT });
 
   out.run = await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
     const host = window.__GRAPHYSX_HOST__;
 
-    const created = window.__GRAPHYSX_ARCHIVE__.composeSkyboxSpiral();
+    const created = window.__GRAPHYSX_CONTENT__.composeSkyboxSpiral();
     if (!created.ok) return { composeError: created.error };
 
     const state = () => api.state();

@@ -1,8 +1,8 @@
 // Graduate the recovered BallZ 2011 Level1 mega-world mesh into the v2 model vocabulary.
 //
-// The decoded geometry lives in `src/legacy/level1-2011-level.json` — one terrain object,
+// The decoded geometry lives in `src/content/level1-2011-level.json` — one terrain object,
 // proven complete two ways: the legacy RaceScene drives a ball down it (`level1-2011-race`,
-// `?host=legacy`), and the richer inspection decode (`src/legacy/ballz2011-level1.json`)
+// `?host=legacy`), and the richer inspection decode (`src/content/ballz2011-level1.json`)
 // audits the same 828 vertices as two adjacent closed two-manifold solids with a 0.018-unit
 // seam. This deterministic vendor step changes only the container format; positions, UVs,
 // indices, and bounds remain the recovered values.
@@ -29,7 +29,7 @@ const OUT = join(OUT_DIR, "archive-level1-2011.json");
 const sourceBytes = readFileSync(SOURCE);
 const decoded = JSON.parse(sourceBytes.toString("utf8"));
 const source = decoded.objects?.find((object) => object.source?.endsWith("Media/Level1.TVM"));
-if (!source) throw new Error("Level1.TVM is missing from src/legacy/level1-2011-level.json");
+if (!source) throw new Error("Level1.TVM is missing from src/content/level1-2011-level.json");
 if (source.positions.length % 3 !== 0 || source.indices.length % 3 !== 0) {
   throw new Error("Level1 geometry is not triangle-aligned");
 }
@@ -57,7 +57,7 @@ const payload = {
   bounds,
   provenance: {
     archiveSource: source.source,
-    decodedCatalog: "src/legacy/level1-2011-level.json",
+    decodedCatalog: "src/content/level1-2011-level.json",
     decodedCatalogSha256: createHash("sha256").update(sourceBytes).digest("hex"),
     vendoredBy: "scripts/vendor-level1-2011.mjs",
     fidelity: {

@@ -1,7 +1,7 @@
 // GENERATES public/assets/worlds/world1-*.json + src/archive-world1-manifest.ts
 //
 // World 1 is the first true MESH world port (§14.5): six decoded objects in one shared
-// coordinate space (src/legacy/world1-level.json — terrain, core, elevator, finish,
+// coordinate space (src/content/world1-level.json — terrain, core, elevator, finish,
 // hole-1, hole-2). Visuals ship as graphysx-mesh-json payloads at native span, like the
 // vehicles. Collision cannot be a heightfield — the course descends THROUGH two stacked
 // hole rings over the same footprint — so this script derives it from the same data the
@@ -54,7 +54,7 @@ for (const object of level.objects) {
   const payload = {
     meshes: [{ name: object.source, positions: object.positions, uvs: object.uvs ?? null, indices: object.indices }],
     bounds,
-    provenance: { source: `src/legacy/world1-level.json :: ${object.source}`, sha256 },
+    provenance: { source: `src/content/world1-level.json :: ${object.source}`, sha256 },
   };
   const json = JSON.stringify(payload);
   writeFileSync(join(OUT_DIR, `${id}.json`), json);

@@ -28,7 +28,7 @@ import {
   Texture,
   TextureLoader
 } from "three";
-import suzanne2Json from "./legacy/suzanne2-ascii-scene.json";
+import suzanne2Json from "./content/suzanne2-ascii-scene.json";
 
 type Tuple3 = readonly [number, number, number];
 type Tuple4 = readonly [number, number, number, number];

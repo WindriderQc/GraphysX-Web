@@ -748,60 +748,6 @@ export const ARCHIVE_MILKYWAY_SCENES: readonly ArchiveMilkyWayScene[] = [
  * one. Exported as data so the reasoning ships with the code instead of living in a commit
  * message — the same shape as `ARCHIVE_PLAYGROUNDS_NOT_REVIVED`.
  */
-export const ARCHIVE_MILKYWAY_NOT_REVIVED = [
-  {
-    record: "The 2015 BallZ profile (`Archive/bckup/VoieLactee.cpp`, `BallZ2015.bckup/VoieLactee.cpp`)",
-    what:
-      "The same five bodies at a different layout — Earth and clouds at (-10, 15, 0), the Moon at (-8, 14, -10), " +
-      "Mars at -25, Venus at -35 — with the Earth tilt commented out, plus the update routine that is the only " +
-      "source of motion anywhere in the record.",
-    verdict: "revivable, deliberately not shipped as a second scene",
-    why:
-      "It would be the same nine spheres, the same five maps and the same one orbit at slightly different x " +
-      "coordinates: a second thin scene rather than one good one. The 2017 profile wins on asset binding — the " +
-      "record's own `graphysx2017AllExact: true` against `ballz2015MissingExactCloudAlphaMap` and " +
-      "`ballz2015EarthCandidateOnly` — so it is the profile whose textures are the recovered ones. The 2015 " +
-      "positions are preserved in `ARCHIVE_MILKYWAY_SCENES[0].fidelity.deliberatelyAbsent` and in " +
-      "`src/milky-way-environment.ts`'s evidence block, and its motion rates are what the shipped scene runs on.",
-  },
-  {
-    record: "A day/night Earth using `EarthNight.jpg`",
-    what:
-      "The 2015 constructor loads a night-lights Earth map into `iEarthNightTex` and never binds it, recorded " +
-      "as `earthNightTextureLoadedButUnused: true`.",
-    verdict: "not revivable — the vocabulary has one texture slot",
-    why:
-      "A day/night Earth is a terminator-blended two-map shader. `AgentWorldMaterial` carries exactly one " +
-      "texture and there is no custom shader slot, so the second map has nowhere to go. This is the same wall " +
-      "`orbital-observatory` hit, and it needs the same platform work: a second texture channel plus a blend " +
-      "term. The map is also not registered, so it would be pruned out of `dist/` even if it could be used.",
-  },
-  {
-    record: "An authored Voie Lactée camera, sky, or host scene",
-    what:
-      "`CreateVoieLactee` is called from `GamePlayScreen.cpp:390` and `EditorScreen.cpp:176` — the vignette is " +
-      "a sub-scene dropped into whatever scene is already active. No standalone composition survives.",
-    verdict: "does not exist to revive",
-    why:
-      "The record says so directly: `renderingUnknowns` lists 'No Voie Lactee-specific camera, sky, lighting " +
-      "rig, or standalone menu is defined.' Every framing and lighting decision in the shipped scene is " +
-      "therefore labelled inferred rather than dressed up as recovery. What the archive actually authored is " +
-      "five bodies, five maps, one tilt, two spins and one orbit — and all of that ships.",
-  },
-  {
-    record: "The Newton rigid bodies the archive constructed",
-    what:
-      "Every `CL3DObject` in `VoieLactee.cpp` is built with a `NewtonWorld*` argument, so each body was " +
-      "registered with the physics world.",
-    verdict: "not revivable as simulation — nothing ever read them",
-    why:
-      "`Update()` assigns transforms directly: `Rotate`, `Rotate`, `RotateAround`. No force, no integration, no " +
-      "collision. The Newton handles are vestigial — the objects are in the world because the constructor takes " +
-      "one, not because anything simulates them. Giving these spheres `physics: { mode: 'dynamic' }` would add " +
-      "simulation the archive never ran, and would immediately break the recovered transforms, since a dynamic " +
-      "body ignores behaviors.",
-  },
-] as const;
 
 // ---------------------------------------------------------------------------------------
 // The three things a caller needs

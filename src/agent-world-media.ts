@@ -13,7 +13,7 @@
 // Foreign model formats (OBJ/GLTF/GLB/FBX/STL/3DS) are converted HERE, in the browser,
 // with three's own battle-tested loaders, then uploaded as `graphysx-mesh-json` — the
 // runtime keeps exactly one model format, and the server stays a dependency-free file
-// store that never parses geometry. TVM/.x stay offline-decode (see src/legacy/*).
+// store that never parses geometry. TVM/.x stay offline-decode (see src/content/*).
 //
 // Everything is store-backed: no store, no imports — the same honest gating the scene
 // browser uses. Production static deploys are untouched.

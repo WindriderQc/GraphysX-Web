@@ -34,7 +34,7 @@ const BALL_RADIUS = 0.42;
 const SPAWN: AgentWorldVector3 = [0, 10, 30];
 
 export const MAP1_PROVENANCE = {
-  source: "BallZ 2011/Release/Media/Map1.TVM via src/legacy/map1-level.json",
+  source: "BallZ 2011/Release/Media/Map1.TVM via src/content/map1-level.json",
   decodedCatalogSha256: "bbdfb9b3ac59d2c316084ed63141be6aa2b235a82c0b61a7380b53c13063e185",
   faithful:
     "699 decoded vertices, 1456 triangles, UVs and native bounds; rendered and collided from the same exact vendored payload",

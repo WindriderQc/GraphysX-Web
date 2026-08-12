@@ -18,7 +18,7 @@ import {
   TextureLoader,
   Vector3
 } from "three";
-import xmlSceneJson from "./legacy/xml-myworld-copy-scene.json";
+import xmlSceneJson from "./content/xml-myworld-copy-scene.json";
 
 type LoadStatus = "loading" | "ready" | "error" | "disposed";
 type Tuple3 = [number, number, number];

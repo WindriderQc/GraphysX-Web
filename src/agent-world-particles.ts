@@ -23,7 +23,7 @@ import {
  *    and its soft radial-gradient `CanvasTexture` glow trick are the basis of this module. That
  *    emitter is burst-only and takes a `Scene` in its constructor, so it could not be reused
  *    verbatim; it is adapted, not replaced, and it still serves the legacy race scene.
- *  - `src/legacy/particle-preset-library.json` — the decoded TV3D `.TVPJ` archive library
+ *  - `src/content/particle-preset-library.json` — the decoded TV3D `.TVPJ` archive library
  *    (16 readable presets / 29 emitters). Every preset below is derived from a *real* record in
  *    that file: spawn interval, lifetime, emission power, gravity, blend mode, spawn volume and
  *    the colour/size keyframe ramp are carried across, and each preset cites its source path,

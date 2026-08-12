@@ -20,7 +20,7 @@ import {
   Vector3
 } from "three";
 import { DDSLoader } from "three/examples/jsm/loaders/DDSLoader.js";
-import libraryJson from "./legacy/particle-preset-library.json";
+import libraryJson from "./content/particle-preset-library.json";
 
 type Tuple3 = readonly [number, number, number];
 type Tuple4 = readonly [number, number, number, number];

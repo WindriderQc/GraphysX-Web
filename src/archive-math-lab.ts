@@ -109,15 +109,6 @@ export const ARCHIVE_MATH_SCENES: readonly ArchiveMathScene[] = [
 ];
 
 /** Records considered for this surface and deliberately not revived, with reasons. */
-export const ARCHIVE_MATH_NOT_REVIVED = [
-  {
-    id: "arduino-math-screen",
-    source: "GraphysX/ArduinoGUI/.../MathScreen.cs",
-    verdict: "not-revived",
-    reason:
-      "The archive's own revival note already says it is 'covered by the Math Game workbench, without exact screen composition'. Its distinguishing content is a hardware-input panel, not a 3D scene, and inventing a composition for it would be exactly the fabrication §11 forbids.",
-  },
-] as const;
 
 const line = (
   id: string,

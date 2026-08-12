@@ -23,7 +23,7 @@ import {
   TextureLoader,
   Vector3
 } from "three";
-import catalogJson from "./legacy/object-library-catalog.json";
+import catalogJson from "./content/object-library-catalog.json";
 
 type Tuple3 = [number, number, number];
 type LoadStatus = "loading" | "ready" | "error" | "disposed";

@@ -32,7 +32,7 @@ import {
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
 import type { PlatformHost } from "./platform-host";
-import suzanne2 from "./legacy/suzanne2-ascii-scene.json";
+import suzanne2 from "./content/suzanne2-ascii-scene.json";
 
 const S = 2.4;
 const CENTER = 20;

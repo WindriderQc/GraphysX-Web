@@ -1,6 +1,6 @@
 // Graduate the decoded TrueVision3D catalog into ordinary v2 model assets.
 //
-// `src/legacy/tvm-catalog.json` already contains exact positions, indices and UVs for
+// `src/content/tvm-catalog.json` already contains exact positions, indices and UVs for
 // fourteen recovered props/course pieces plus the complete 0-9 / A-Z mesh alphabet. The
 // legacy host could draw them, but the editor, agent API and production asset manifest could
 // not discover them. This script republishes those decoded bytes as
@@ -74,8 +74,8 @@ function payloadFor(mesh, options) {
     },
     provenance: {
       archiveSource: options.archiveSource,
-      catalogSource: "src/legacy/tvm-catalog.json",
-      decodedBy: "TrueVision3D TVM decode preserved in src/legacy/tvm-catalog.json; republished by scripts/vendor-tvm-meshes.mjs",
+      catalogSource: "src/content/tvm-catalog.json",
+      decodedBy: "TrueVision3D TVM decode preserved in src/content/tvm-catalog.json; republished by scripts/vendor-tvm-meshes.mjs",
       geometryFidelity: "faithful — positions, UVs and indices copied unmodified; normals derived by the v2 loader",
       presentationFidelity: "adapted — the compact decoded catalog preserved no material groups, so the vendored mesh carries a disclosed neutral material",
     },

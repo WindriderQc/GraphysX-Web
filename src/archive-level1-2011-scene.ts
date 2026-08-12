@@ -59,7 +59,7 @@ const BALL_RADIUS = 4.2;
 const SPAWN: AgentWorldVector3 = [0, 200, 440];
 
 export const LEVEL1_2011_PROVENANCE = {
-  source: "BallZ 2011/Release/Media/Level1.TVM via src/legacy/level1-2011-level.json",
+  source: "BallZ 2011/Release/Media/Level1.TVM via src/content/level1-2011-level.json",
   decodedCatalogSha256: "9e53fb7014551d8460a7f7990f013466d97abd68ab4bfc23182d3d2f9d26957f",
   faithful:
     "828 decoded vertices, 1648 triangles, UVs and native bounds at 1:1 scale; rendered and collided from the same exact vendored payload",

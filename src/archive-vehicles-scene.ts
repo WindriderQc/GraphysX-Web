@@ -25,7 +25,7 @@ import { archiveVehicleMesh } from "./archive-vehicles-manifest";
  * `Vector3` import exists only to hand a point to the *host's* camera helper.
  *
  * What genuinely graduated is the **asset**: `scripts/vendor-vehicle-meshes.mjs` rewrites the
- * decoded geometry in `src/legacy/cars-catalog.json` into the `graphysx-mesh-json` payload the
+ * decoded geometry in `src/content/cars-catalog.json` into the `graphysx-mesh-json` payload the
  * v2 `model` entity already loads, under `public/assets/vehicles/`. Provenance (archive path +
  * SHA-256 + the workshop decoder that produced the catalog) travels with it in
  * `src/archive-vehicles-manifest.ts` and inside each payload's `provenance` block.

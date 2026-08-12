@@ -24,10 +24,10 @@ page.on("pageerror", (e) => pageErrors.push(String(e)));
 
 try {
   await page.goto(`${BASE}?host=standalone`, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
-  await page.waitForFunction(() => !!window.__GRAPHYSX__ && !!window.__GRAPHYSX_ARCHIVE__, { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !!window.__GRAPHYSX__ && !!window.__GRAPHYSX_CONTENT__, { timeout: SMOKE_TIMEOUT });
 
   out.compose = await page.evaluate(async () => {
-    const created = await window.__GRAPHYSX_ARCHIVE__.composeArchiveWorld1();
+    const created = await window.__GRAPHYSX_CONTENT__.composeArchiveWorld1();
     return created.ok ? { ok: true, provenance: Boolean(created.provenance) } : { ok: false, error: created.error };
   });
 

@@ -5,10 +5,9 @@ import { startStaticServer } from "./static-server.mjs";
 import {
   ARCHIVE_BUILDINGS,
   ARCHIVE_BUILDINGS_CONSTANTS,
-  ARCHIVE_BUILDINGS_NOT_REVIVED,
   buildArchiveBuilding,
 } from "../src/archive-buildings.ts";
-import MAISON_RECORD from "../src/legacy/inspection-maison.json" with { type: "json" };
+import MAISON_RECORD from "../src/content/inspection-maison.json" with { type: "json" };
 
 /**
  * Proves the recovered Maison in `src/archive-buildings.ts` is a living scene rather than
@@ -30,7 +29,7 @@ import MAISON_RECORD from "../src/legacy/inspection-maison.json" with { type: "j
  * ## What is asserted, and why each one
  *
  * - **The scene really is the archive record.** This file re-reads
- *   `src/legacy/inspection-maison.json` itself and re-derives every expected position and size
+ *   `src/content/inspection-maison.json` itself and re-derives every expected position and size
  *   independently of the scene builder, then checks the LIVE runtime state against it. The
  *   fidelity claim is "the transforms are the record's under one axis change", so it is
  *   checked object by object against the record rather than against a constant in the module.
@@ -136,9 +135,6 @@ try {
   check("the shipped hash matches the imported record",
     ARCHIVE_BUILDINGS[0].provenance.sourceSha256 === MAISON_RECORD.source.sha256,
     MAISON_RECORD.source.sha256);
-  check("rejections are recorded with reasons", ARCHIVE_BUILDINGS_NOT_REVIVED.length >= 3 &&
-    ARCHIVE_BUILDINGS_NOT_REVIVED.every((r) => r.verdict && r.why && r.why.length > 80),
-    ARCHIVE_BUILDINGS_NOT_REVIVED.map((r) => r.verdict));
 
   // ---- 1. The record is a box massing model, which is the whole argument ---------------
   console.log("\n# the record is primitives, not a mesh archive");

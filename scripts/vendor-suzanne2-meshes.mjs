@@ -56,7 +56,7 @@ for (const [key, id, label, role] of ASSETS) {
       archiveSource: asset.source.path,
       sourceSha256: asset.source.sha256,
       sourceBytes: asset.source.bytes,
-      catalogSource: "src/legacy/suzanne2-ascii-scene.json",
+      catalogSource: "src/content/suzanne2-ascii-scene.json",
       decodedBy: "tools/convert-suzanne2-ascii.mjs DirectX text .x parser; republished by scripts/vendor-suzanne2-meshes.mjs",
       geometryFidelity: "faithful — decoded source-space positions, UVs, indices and material groups copied without simplification; normals derived by the v2 loader",
       animationFidelity: asset.animation?.present

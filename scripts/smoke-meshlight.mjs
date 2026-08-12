@@ -20,9 +20,9 @@ out.vendoredSha256 = createHash("sha256").update(readFileSync("public/assets/sha
 
 try {
   await page.goto(`${BASE}?host=standalone`, { waitUntil: "load" });
-  await page.waitForFunction(() => !!window.__GRAPHYSX__ && !!window.__GRAPHYSX_HOST__ && !!window.__GRAPHYSX_ARCHIVE__, null, { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !!window.__GRAPHYSX__ && !!window.__GRAPHYSX_HOST__ && !!window.__GRAPHYSX_CONTENT__, null, { timeout: SMOKE_TIMEOUT });
   out.composed = await page.evaluate(async () => {
-    const result = await window.__GRAPHYSX_ARCHIVE__.composeArchiveMeshlight();
+    const result = await window.__GRAPHYSX_CONTENT__.composeArchiveMeshlight();
     return { ok: result.ok, error: result.error ?? null, provenance: result.provenance ?? null };
   });
   await page.waitForFunction(() => {

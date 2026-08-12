@@ -2,7 +2,7 @@
 // `agent-world-terrain.ts`'s bare JSON import, this module is imported by
 // `scripts/smoke-buildings.mjs` in *Node*, which refuses a JSON module without it. Vite and
 // tsc both accept the attribute, so one import serves the bundle and the harness.
-import MAISON_RECORD from "./legacy/inspection-maison.json" with { type: "json" };
+import MAISON_RECORD from "./content/inspection-maison.json" with { type: "json" };
 import type {
   AgentWorldDefinition,
   AgentWorldEntityDefinition,
@@ -35,7 +35,7 @@ import type {
  * vocabulary cannot author". That judgement is correct for every candidate in the list
  * **except this one**, and the reason is specific and checkable rather than a matter of taste:
  *
- * `src/legacy/inspection-maison.json` records 24 meshes totalling **216 vertices and 148
+ * `src/content/inspection-maison.json` records 24 meshes totalling **216 vertices and 148
  * polygons** — an average of 9 vertices per object. Twenty of the twenty-four are exactly 8
  * vertices; the outliers are 12, 16, 24 and 4. This is not a mesh archive at all. It is a
  * Blender **massing model**: a house blocked out from axis-aligned cubes, each carrying a
@@ -48,7 +48,6 @@ import type {
  * and converted by a coordinate change and nothing else. See {@link MAISON_FIDELITY}.
  *
  * The Arena and the Cuisine were examined and rejected; see
- * {@link ARCHIVE_BUILDINGS_NOT_REVIVED} for the full record and the reasoning.
  */
 
 /** Where a scene's numbers came from, and where the authoritative bytes actually live. */
@@ -139,7 +138,7 @@ type MaisonInspection = {
   readonly objects: readonly BlenderObject[];
 };
 
-/** The decoded `maison.blend` inspection, exactly as it sits in `src/legacy/`. */
+/** The decoded `maison.blend` inspection, exactly as it sits in `src/content/`. */
 export const MAISON_INSPECTION = MAISON_RECORD as unknown as MaisonInspection;
 
 const MESHES = MAISON_INSPECTION.objects.filter((object) => object.type === "MESH");
@@ -524,10 +523,10 @@ export const ARCHIVE_BUILDINGS: readonly ArchiveBuilding[] = [
       sourcePaths: ["blenderModel/Maison/maison.blend"],
       sourceLocation:
         "E:\\Media\\Datalake\\blenderModel\\Maison\\maison.blend — 576,596 bytes, Blender 2.79. " +
-        "Decoded in-repo at src/legacy/inspection-maison.json; an FBX conversion of the same file " +
+        "Decoded in-repo at src/content/inspection-maison.json; an FBX conversion of the same file " +
         "sits at public/assets/maison-explorer/maison-best.fbx and is NOT used (see deviations).",
       sourceSha256: "8C9E95FDC5DE981BA451F0C05ACA9B94D347FE0DEE701D557F4CEDA595AC9237",
-      transcribedFrom: ["src/legacy/inspection-maison.json", "src/legacy/maison-export.json"],
+      transcribedFrom: ["src/content/inspection-maison.json", "src/content/maison-export.json"],
       supersedes: ["src/archive-content.ts (mode `maison-explorer`)", "src/race-scene.ts (?host=legacy route)"],
       nativeUnits:
         "Blender metres, Z-up. 24 meshes spanning x −9.48…3.71, y −8.28…8.28, z −0.87…4.58; " +
@@ -661,49 +660,6 @@ export const ARCHIVE_BUILDINGS: readonly ArchiveBuilding[] = [
  * at and a candidate that was looked at and refused are very different facts, and only one of
  * them is worth anything to the next person.
  */
-export const ARCHIVE_BUILDINGS_NOT_REVIVED = [
-  {
-    record: "The Unity Arena — `public/assets/arena-archive/Arena.obj`, `src/arena-archive-environment.ts`",
-    what:
-      "A complete, scriptless 2017 Unity project: one 40 × 2 × 40 octagonal slab (48 vertices, 42 " +
-      "face records — 40 quads and 2 octagons, not the 44 the environment's constant block claims), " +
-      "one hand-painted 1024² atlas, one Standard material at metallic 0 / smoothness 0.5, one " +
-      "object transform, one camera at (0, 1, −10) on a 60° lens, and one directional light.",
-    verdict: "revived on the archive surface; deliberately not duplicated as a v2 primitive scene",
-    why:
-      "HEAD now has the player-visible `arena-archive` visit: exact OBJ/atlas, Unity Standard values, " +
-      "authored transform, source 60° camera and directional light. The no-gameplay conclusion still " +
-      "stands — the Unity project has no scripts, input, rigidbody or objective — so it is correctly " +
-      "an inspectable recovered environment rather than an invented ball course. A second v2 primitive " +
-      "copy would add no content and would lose the baked topology/UVs that make the asset worth keeping.",
-  },
-  {
-    record: "The Cuisine — `src/legacy/inspection-cuisine.json`, `public/assets/maison-explorer/cuisine-best.fbx`",
-    what:
-      "The kitchen from the same `blenderModel/Maison` folder: 87 objects (76 meshes, 3 lamps, 7 " +
-      "empties, 1 camera) totalling 4,244 vertices and 3,676 polygons — cabinets, drawers, doors, " +
-      "a sink and worktops, with parented children carrying local transforms.",
-    verdict: "revived in Maison Explorer; deliberately not approximated with v2 boxes",
-    why:
-      "The canonical `maison-explorer` now exposes the full kitchen subspace: 87 authored objects, " +
-      "76 meshes, seven hierarchy empties, saved camera and three lights. The one absent unpacked " +
-      "Desktop JPG remains explicitly missing instead of receiving a fabricated replacement. It is " +
-      "not duplicated in this v2 massing module because its lathed handles, drawers and cabinet " +
-      "topology are the content; approximating them with boxes would reduce a faithful restoration.",
-  },
-  {
-    record: "The Maison's room interiors — the hollow shells inside `inspection-maison.json`",
-    what:
-      "Six of the upper volumes are open shells (5, 10 and 14 polygons where a closed box has 6) " +
-      "and three carry extra vertex loops (12, 16 and 24 vertices) where door openings are cut.",
-    verdict: "exact interiors are player-visible in Maison Explorer; v2 massing keeps this honest limit",
-    why:
-      "The source-mesh Maison Explorer carries the actual open shells and door cuts. This separate v2 " +
-      "massing scene intentionally stops at inspection-record bounds because that record stores " +
-      "per-object totals, not the missing-face topology. Its translucent storeys and lift interaction " +
-      "remain a disclosed massing adapter, while the exact source visit is the fidelity destination.",
-  },
-] as const;
 
 /**
  * Builds the recovered scene as an ordinary v2 document.

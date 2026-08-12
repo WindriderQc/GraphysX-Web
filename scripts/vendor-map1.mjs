@@ -1,6 +1,6 @@
 // Graduate the recovered BallZ 2011 Map1 mesh into the ordinary v2 model vocabulary.
 //
-// The decoded geometry already lives in `src/legacy/map1-level.json` — a single terrain
+// The decoded geometry already lives in `src/content/map1-level.json` — a single terrain
 // object proven complete by the legacy RaceScene, which drives a ball down it at
 // `?host=legacy` (race `map1-2011`). That payload is not discoverable through `assets()`
 // and cannot be used by an agent-world `model`. This deterministic vendor step changes
@@ -24,7 +24,7 @@ const OUT = join(OUT_DIR, "archive-map1.json");
 const sourceBytes = readFileSync(SOURCE);
 const decoded = JSON.parse(sourceBytes.toString("utf8"));
 const source = decoded.objects?.find((object) => object.source?.endsWith("Media/Map1.TVM"));
-if (!source) throw new Error("Map1.TVM is missing from src/legacy/map1-level.json");
+if (!source) throw new Error("Map1.TVM is missing from src/content/map1-level.json");
 if (source.positions.length % 3 !== 0 || source.indices.length % 3 !== 0) {
   throw new Error("Map1 geometry is not triangle-aligned");
 }
@@ -51,7 +51,7 @@ const payload = {
   bounds,
   provenance: {
     archiveSource: source.source,
-    decodedCatalog: "src/legacy/map1-level.json",
+    decodedCatalog: "src/content/map1-level.json",
     decodedCatalogSha256: createHash("sha256").update(sourceBytes).digest("hex"),
     vendoredBy: "scripts/vendor-map1.mjs",
     fidelity: {

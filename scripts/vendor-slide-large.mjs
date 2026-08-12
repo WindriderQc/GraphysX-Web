@@ -1,6 +1,6 @@
 // Graduate the recovered BallZ SlideLarge mesh into the ordinary v2 model vocabulary.
 //
-// The decoded geometry already lives in `src/legacy/slide-level.json`, but that legacy
+// The decoded geometry already lives in `src/content/slide-level.json`, but that legacy
 // payload is not discoverable through `assets()` and cannot be used by an agent-world
 // `model`. This deterministic vendor step changes only the container format; positions,
 // UVs, indices, and bounds remain the recovered values.
@@ -21,7 +21,7 @@ const OUT = join(OUT_DIR, "archive-slide-large.json");
 const sourceBytes = readFileSync(SOURCE);
 const decoded = JSON.parse(sourceBytes.toString("utf8"));
 const source = decoded.objects?.find((object) => object.source === "Media/SlideLarge.TVM");
-if (!source) throw new Error("SlideLarge.TVM is missing from src/legacy/slide-level.json");
+if (!source) throw new Error("SlideLarge.TVM is missing from src/content/slide-level.json");
 if (source.positions.length % 3 !== 0 || source.indices.length % 3 !== 0) {
   throw new Error("SlideLarge geometry is not triangle-aligned");
 }
@@ -46,7 +46,7 @@ const payload = {
   bounds,
   provenance: {
     archiveSource: source.source,
-    decodedCatalog: "src/legacy/slide-level.json",
+    decodedCatalog: "src/content/slide-level.json",
     decodedCatalogSha256: createHash("sha256").update(sourceBytes).digest("hex"),
     vendoredBy: "scripts/vendor-slide-large.mjs",
     fidelity: {

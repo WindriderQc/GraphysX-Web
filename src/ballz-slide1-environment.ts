@@ -14,7 +14,7 @@ import {
   MeshPhongMaterial,
   Vector3
 } from "three";
-import familyJson from "./legacy/ballz-slide-track-family.json";
+import familyJson from "./content/ballz-slide-track-family.json";
 
 type Tuple3 = readonly [number, number, number];
 type CameraProfile = "overview" | "source-chase";

@@ -1,21 +1,21 @@
 import { PlaneGeometry } from "three";
 import type { PhysicsShapeDefinition } from "./physics/physics-engine";
-import HEIGHTMAP_ARCHIVE from "./legacy/heightmaps-archive.json";
-import TERRAIN_CARX from "./legacy/terrain-carx.json";
+import HEIGHTMAP_ARCHIVE from "./content/heightmaps-archive.json";
+import TERRAIN_CARX from "./content/terrain-carx.json";
 
 /**
  * Heightmap-backed terrain as first-class `graphysx.agent-world/v2` scene vocabulary.
  *
  * Two pieces of recovered material meet here:
  *
- *  - `src/legacy/heightmaps-archive.json` — three Windows BMP heightmaps from the GraphysX
+ *  - `src/content/heightmaps-archive.json` — three Windows BMP heightmaps from the GraphysX
  *    workshop (`Media/textures n else/Heightmaps`), decoded once at authoring time by
  *    `scripts/vendor-heightmaps.mjs`. The bitmaps themselves are deliberately not vendored:
  *    decoding an image at runtime costs a loader plus a `getImageData` readback on the
  *    first frame, and every source is 8-bit luminance anyway, so a byte-per-sample grid is
  *    the source's own precision at 3% of the size. Each record carries the source path,
  *    SHA-256, native dimensions and bit depth.
- *  - `src/legacy/terrain-carx.json` — the already-recovered 96×96 CarX field, decoded from
+ *  - `src/content/terrain-carx.json` — the already-recovered 96×96 CarX field, decoded from
  *    `Heightmaps/CarHeightmap.bmp` via `CarScene.cpp CLLand(2,2,-400)`. It predates this
  *    module and is carried across unchanged rather than re-decoded.
  *
@@ -151,7 +151,7 @@ export const GRAPHYSX_AGENT_WORLD_HEIGHTMAPS: readonly AgentWorldHeightmapDescri
     provenance: {
       sourcePath: "Heightmaps/CarHeightmap.bmp",
       sourceRepo: "WindriderQc/GraphysX",
-      sourceSha256: "(carried from src/legacy/terrain-carx.json)",
+      sourceSha256: "(carried from src/content/terrain-carx.json)",
       nativeSize: [TERRAIN_CARX.size, TERRAIN_CARX.size],
       bitsPerPixel: 24,
       note: TERRAIN_CARX.source,

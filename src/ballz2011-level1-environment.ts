@@ -15,7 +15,7 @@ import {
   MeshBasicMaterial,
   Vector3
 } from "three";
-import levelJson from "./legacy/ballz2011-level1.json";
+import levelJson from "./content/ballz2011-level1.json";
 
 type Tuple3 = readonly [number, number, number];
 

@@ -1,6 +1,6 @@
 // Graduate the decoded Suzanne 1 machinery from RaceScene-only JSON into ordinary v2 assets.
 //
-// `src/legacy/suzanne1-level.json` contains the exact decoded vertices, indices, UVs, source
+// `src/content/suzanne1-level.json` contains the exact decoded vertices, indices, UVs, source
 // colours and bounds for the complete eight-part 2015 scene. Nothing needs a speculative GLB
 // conversion: the v2 loader already consumes this `graphysx-mesh-json` shape. Each output keeps
 // source-space positions byte-for-value; scene composition uses native `fitSize` and the source
@@ -108,8 +108,8 @@ for (const [index, [expectedSource, expectedRole]] of EXPECTED.entries()) {
     },
     provenance: {
       archiveSource,
-      catalogSource: "src/legacy/suzanne1-level.json",
-      decodedBy: "DirectX .x decode preserved in src/legacy/suzanne1-level.json; republished by scripts/vendor-suzanne-machinery.mjs",
+      catalogSource: "src/content/suzanne1-level.json",
+      decodedBy: "DirectX .x decode preserved in src/content/suzanne1-level.json; republished by scripts/vendor-suzanne-machinery.mjs",
       geometryFidelity: "faithful — source-space positions, UVs and indices copied unmodified; normals derived by the v2 loader",
       materialFidelity: "faithful where recorded — decoded source colour and recorded texture binding retained; no unrecorded texture inferred",
       sourcePhysicsRole: object.physics,

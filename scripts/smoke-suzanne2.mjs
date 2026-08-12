@@ -21,9 +21,9 @@ const out = {};
 
 try {
   await page.goto(`${BASE}?host=standalone`, { waitUntil: "load" });
-  await page.waitForFunction(() => !!window.__GRAPHYSX__ && !!window.__GRAPHYSX_HOST__ && !!window.__GRAPHYSX_ARCHIVE__, null, { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !!window.__GRAPHYSX__ && !!window.__GRAPHYSX_HOST__ && !!window.__GRAPHYSX_CONTENT__, null, { timeout: SMOKE_TIMEOUT });
   out.composed = await page.evaluate(async () => {
-    const result = await window.__GRAPHYSX_ARCHIVE__.composeSuzanne2();
+    const result = await window.__GRAPHYSX_CONTENT__.composeSuzanne2();
     return { ok: result.ok, error: result.error ?? null, provenance: result.provenance ?? null };
   });
   await page.waitForFunction(() => window.__GRAPHYSX__.query({ tag: "suzanne2" }).length > 360, null, { timeout: SMOKE_TIMEOUT });

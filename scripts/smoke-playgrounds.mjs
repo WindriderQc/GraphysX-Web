@@ -4,7 +4,6 @@ import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-ha
 import { startStaticServer } from "./static-server.mjs";
 import {
   ARCHIVE_PLAYGROUNDS,
-  ARCHIVE_PLAYGROUNDS_NOT_REVIVED,
   ARCHIVE_PLAYGROUND_CONSTANTS,
   buildArchivePlayground,
 } from "../src/archive-playgrounds.ts";
@@ -99,10 +98,6 @@ try {
     check(`${record.id}: names the presets it leans on`, record.provenance.graduatedPresets.length > 0,
       record.provenance.graduatedPresets.map((p) => p.preset));
   }
-  check("not-revived record is populated", ARCHIVE_PLAYGROUNDS_NOT_REVIVED.length >= 6,
-    ARCHIVE_PLAYGROUNDS_NOT_REVIVED.length);
-  check("every not-revived entry gives a verdict and a reason",
-    ARCHIVE_PLAYGROUNDS_NOT_REVIVED.every((r) => r.verdict && r.why && r.why.length > 80));
 
   // ---- 1. The graduated presets still carry the archive numbers ------------------------
   console.log("\n# the presets the fidelity claims rest on");

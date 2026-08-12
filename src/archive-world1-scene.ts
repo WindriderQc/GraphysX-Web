@@ -2,7 +2,7 @@
  * World 1 — the first true MESH world port (§14.5), composed as pure v2 vocabulary.
  *
  * Source: six decoded objects in one shared coordinate space
- * (`src/legacy/world1-level.json`, sha256 in the manifest): terrain (Level3.TVM), core,
+ * (`src/content/world1-level.json`, sha256 in the manifest): terrain (Level3.TVM), core,
  * elevator, finish, and two stacked hole rings. The bounds tell the design: the world
  * descends 30 units, and the two holes sit over the same footprint at y ≈ −0.75 and
  * −5.15 — you fall THROUGH them. That rules out a heightfield collider and is why the
@@ -68,7 +68,7 @@ const MIRROR_Z = (terrain.bounds.min[2] + terrain.bounds.max[2]) / 2;
 const flipZ = (z: number): number => 2 * MIRROR_Z - z;
 
 export const WORLD1_PROVENANCE = {
-  source: "src/legacy/world1-level.json (Level3.TVM assembly)",
+  source: "src/content/world1-level.json (Level3.TVM assembly)",
   sha256: ARCHIVE_WORLD1_SHA256,
   faithful: "all six decoded meshes at native span; anchors computed from decoded bounds",
   adapted:

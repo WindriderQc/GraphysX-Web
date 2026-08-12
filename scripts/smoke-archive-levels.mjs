@@ -9,7 +9,7 @@ import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-ha
  * Drives the BUILT output like every other smoke. It first ran a vite dev server, because the
  * module was seed content nothing imported and a dist smoke could only have re-typed its rows
  * and tested a copy. `main.ts` now seeds it on every platform-host route and publishes the
- * records on `window.__GRAPHYSX_ARCHIVE__`, so the real module is in the bundle and this reads
+ * records on `window.__GRAPHYSX_CONTENT__`, so the real module is in the bundle and this reads
  * the shipped artifact — no second server, no dev/prod divergence.
  *
  * ## What is asserted, and why each one
@@ -101,11 +101,11 @@ try {
   await page.waitForFunction(() => !!window.__GRAPHYSX__, null, { timeout: SMOKE_TIMEOUT });
 
   // The real records, read off the shipped bundle via the discoverable archive global.
-  await page.waitForFunction(() => !!window.__GRAPHYSX_ARCHIVE__, null, { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !!window.__GRAPHYSX_CONTENT__, null, { timeout: SMOKE_TIMEOUT });
 
   console.log("\n# module + record fidelity");
   const records = await page.evaluate(() => {
-    const mod = window.__GRAPHYSX_ARCHIVE__;
+    const mod = window.__GRAPHYSX_CONTENT__;
     return mod.levels.map((level) => ({
       id: level.id,
       label: level.label,
@@ -122,8 +122,6 @@ try {
     }));
   });
   check("two recovered levels are exported", records.length === 2, records.map((r) => r.id));
-  const notRevived = await page.evaluate(() => window.__GRAPHYSX_ARCHIVE__.notRevived.map((r) => r.verdict));
-  check("skipped records carry a verdict each", notRevived.length >= 5, notRevived);
 
   for (const record of records) {
     console.log(`\n# ${record.id} — ${record.label}`);
@@ -170,12 +168,12 @@ try {
   console.log("\n# seeding");
   const seed = await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
-    for (const level of window.__GRAPHYSX_ARCHIVE__.levels) {
+    for (const level of window.__GRAPHYSX_CONTENT__.levels) {
       // A previous run's localStorage would make this a no-op and hide a real failure.
       if (api.levels.get(level.id)) api.levels.remove(level.id);
     }
-    const first = window.__GRAPHYSX_ARCHIVE__.seed(api);
-    const second = window.__GRAPHYSX_ARCHIVE__.seed(api);
+    const first = window.__GRAPHYSX_CONTENT__.seed(api);
+    const second = window.__GRAPHYSX_CONTENT__.seed(api);
     const listed = api.levels.list().filter((s) => s.id.startsWith("archive-ballz-"));
     return { first, second, listed };
   });

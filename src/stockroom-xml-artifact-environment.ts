@@ -14,7 +14,7 @@ import {
   TextureLoader,
   Vector3
 } from "three";
-import archiveJson from "./legacy/stockroom-xml-artifacts.json";
+import archiveJson from "./content/stockroom-xml-artifacts.json";
 
 export type StockroomXmlArtifactId = "base-scene" | "test1";
 

@@ -47,7 +47,7 @@ const SOURCE_PARTS: readonly SourcePart[] = [
   { role: "rotator-cube", label: "Recovered Rotator Cube", bounds: { min: [2.257, 0.1332, -3.0112], max: [3.0241, 0.9003, -2.2441] }, physics: "rotator-cube" },
 ] as const;
 
-// Exact `ringPath` from src/legacy/suzanne1-level.json. The Z sign conversion happens below.
+// Exact `ringPath` from src/content/suzanne1-level.json. The Z sign conversion happens below.
 const SOURCE_RING_PATH: readonly AgentWorldVector3[] = [
   [-3, 0.1, 1.5],
   [-2.5399, 0.1, -1.3593],
@@ -67,7 +67,7 @@ const BALL_ID = "suzanne-machinery-ball";
 const SPAWN: AgentWorldVector3 = [-3.85, 0.58, -1.5];
 
 export const SUZANNE_MACHINERY_PROVENANCE = {
-  source: "Archive/bckup/BallZ2015.bckup/Media/Suzanne1.*.x via src/legacy/suzanne1-level.json",
+  source: "Archive/bckup/BallZ2015.bckup/Media/Suzanne1.*.x via src/content/suzanne1-level.json",
   faithful:
     "eight decoded objects at native scale and source-relative placement; 38,646 vertices, 20,036 triangles; source colours, recorded textures and twelve ring-path coordinates",
   adapted:

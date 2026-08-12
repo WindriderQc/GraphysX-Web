@@ -17,7 +17,7 @@ import {
   Vector3
 } from "three";
 import { DDSLoader } from "three/examples/jsm/loaders/DDSLoader.js";
-import commonScenesJson from "./legacy/common-scenes.json";
+import commonScenesJson from "./content/common-scenes.json";
 
 export type CommonArchiveSpaceId = "room1" | "sky-component";
 type LoadStatus = "loading" | "ready" | "error" | "disposed";

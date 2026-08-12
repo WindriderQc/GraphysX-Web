@@ -22,8 +22,8 @@ import {
   TextureLoader,
   Vector3
 } from "three";
-import assetManifestJson from "./legacy/dominus-asset-gallery.json";
-import familyAuditJson from "./legacy/dominus-family-audit.json";
+import assetManifestJson from "./content/dominus-asset-gallery.json";
+import familyAuditJson from "./content/dominus-family-audit.json";
 
 type Tuple3 = [number, number, number];
 type LoadStatus = "loading" | "ready" | "error" | "disposed";

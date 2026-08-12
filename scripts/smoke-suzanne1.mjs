@@ -27,9 +27,9 @@ try {
   await page.waitForFunction(() => !!window.__GRAPHYSX__ && !!window.__GRAPHYSX_HOST__, null, { timeout: SMOKE_TIMEOUT });
 
   // Compose through the discoverable archive global, the spiral smoke's own pattern.
-  await page.waitForFunction(() => !!window.__GRAPHYSX_ARCHIVE__, null, { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => !!window.__GRAPHYSX_CONTENT__, null, { timeout: SMOKE_TIMEOUT });
   out.composed = await page.evaluate(async () => {
-    const created = await window.__GRAPHYSX_ARCHIVE__.composeSuzanne1();
+    const created = await window.__GRAPHYSX_CONTENT__.composeSuzanne1();
     return created.ok ? { ok: true } : { composeError: created.error };
   });
   await page.waitForFunction(() => window.__GRAPHYSX__.query({ tag: "suzanne1" }).length > 300, null, { timeout: SMOKE_TIMEOUT });

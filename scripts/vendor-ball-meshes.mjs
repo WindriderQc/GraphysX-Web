@@ -6,7 +6,7 @@
 // The original BallZ player was never a wireframe primitive: it is BallShell.tvm (the open
 // cage the player sees) around an inner controller ball wearing FireArrow800.JPG — the
 // arrow TEXTURE on the inner ball is the aim indicator. All three meshes were decoded long
-// ago into `src/legacy/tvm-catalog.json` and used only by the legacy race path; this script
+// ago into `src/content/tvm-catalog.json` and used only by the legacy race path; this script
 // re-publishes them as `graphysx-mesh-json` payloads under `public/assets/ports/`, where
 // `build-asset-catalog.mjs` picks them up as spawnable, discoverable assets. Faithful
 // recovery, not adaptation: positions, UVs and indices are copied verbatim (the loader
@@ -84,7 +84,7 @@ for (const part of PARTS) {
     source: part.source,
     provenance: {
       archiveSource: part.source,
-      decodedBy: "TVM decode into src/legacy/tvm-catalog.json; republished verbatim by scripts/vendor-ball-meshes.mjs",
+      decodedBy: "TVM decode into src/content/tvm-catalog.json; republished verbatim by scripts/vendor-ball-meshes.mjs",
       fidelity: part.fidelity ?? "faithful — positions, UVs and indices copied unmodified; normals derived by the loader",
     },
     meshCount: 1,

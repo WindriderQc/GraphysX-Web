@@ -26,7 +26,7 @@ import {
   TorusGeometry,
   Vector3
 } from "three";
-import quakeCatalog from "./legacy/sbqc-quakes.json";
+import quakeCatalog from "./content/sbqc-quakes.json";
 import type { GraphysXWorldLayer, GraphysXWorldObserver, GraphysXWorldParameter } from "./world-recipes";
 
 const EARTH_RADIUS = 4.5;

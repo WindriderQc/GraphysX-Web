@@ -1,19 +1,16 @@
 import {
   ARCHIVE_BUILDINGS,
-  ARCHIVE_BUILDINGS_NOT_REVIVED,
   archiveBuildingBrowseRows,
   buildArchiveBuilding,
   composeArchiveBuilding,
 } from "./archive-buildings";
 import {
-  ARCHIVE_MATH_NOT_REVIVED,
   ARCHIVE_MATH_SCENES,
   archiveMathBrowseRows,
   buildArchiveMathLab,
   composeArchiveMathLab,
 } from "./archive-math-lab";
 import {
-  ARCHIVE_MILKYWAY_NOT_REVIVED,
   ARCHIVE_MILKYWAY_SCENES,
   archiveMilkyWayBrowseRows,
   buildArchiveMilkyWay,
@@ -21,7 +18,6 @@ import {
 } from "./archive-milkyway";
 import {
   ARCHIVE_PLAYGROUNDS,
-  ARCHIVE_PLAYGROUNDS_NOT_REVIVED,
   archivePlaygroundBrowseRows,
   buildArchivePlayground,
   composeArchivePlayground,
@@ -48,7 +44,6 @@ import {
 import { randomPlayerName } from "./player-name";
 import {
   ARCHIVE_BALLZ_LEVELS,
-  ARCHIVE_BALLZ_NOT_REVIVED,
   seedArchiveBallzLevels,
   toPlatformRows,
 } from "./archive-ballz-levels";
@@ -906,23 +901,18 @@ if (mode === "previews" && import.meta.env.DEV) {
     // what was faithful vs inferred, and what was deliberately NOT revived are all discoverable
     // rather than buried in a source comment. An agent can read why a record was skipped.
     Object.assign(window, {
-      __GRAPHYSX_ARCHIVE__: {
+      __GRAPHYSX_CONTENT__: {
         levels: ARCHIVE_BALLZ_LEVELS,
-        notRevived: ARCHIVE_BALLZ_NOT_REVIVED,
         buildings: ARCHIVE_BUILDINGS,
-        buildingsNotRevived: ARCHIVE_BUILDINGS_NOT_REVIVED,
         buildBuilding: buildArchiveBuilding,
         composeBuilding: composeArchiveBuilding,
         math: ARCHIVE_MATH_SCENES,
-        mathNotRevived: ARCHIVE_MATH_NOT_REVIVED,
         buildMathLab: buildArchiveMathLab,
         composeMathLab: composeArchiveMathLab,
         milkyway: ARCHIVE_MILKYWAY_SCENES,
-        milkywayNotRevived: ARCHIVE_MILKYWAY_NOT_REVIVED,
         buildMilkyWay: buildArchiveMilkyWay,
         composeMilkyWay: composeArchiveMilkyWay,
         playgrounds: ARCHIVE_PLAYGROUNDS,
-        playgroundsNotRevived: ARCHIVE_PLAYGROUNDS_NOT_REVIVED,
         buildPlayground: buildArchivePlayground,
         composePlayground: composeArchivePlayground,
         // The first §14.5 course port. Published so an agent (and the smoke) can compose

@@ -21,7 +21,7 @@ import {
 import { TeapotGeometry } from "three/examples/jsm/geometries/TeapotGeometry.js";
 import { DDSLoader } from "three/examples/jsm/loaders/DDSLoader.js";
 import { applyArchiveMeshlightShader, ARCHIVE_MESHLIGHT_PROVENANCE } from "./archive-meshlight-material";
-import commonScenesJson from "./legacy/common-scenes.json";
+import commonScenesJson from "./content/common-scenes.json";
 
 type Tuple3 = readonly [number, number, number];
 type CommonRoomCamera = PerspectiveCamera | OrthographicCamera;

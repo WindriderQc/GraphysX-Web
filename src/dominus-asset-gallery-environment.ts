@@ -19,7 +19,7 @@ import {
   TextureLoader,
   Vector3
 } from "three";
-import manifestJson from "./legacy/dominus-asset-gallery.json";
+import manifestJson from "./content/dominus-asset-gallery.json";
 
 type Tuple3 = [number, number, number];
 type LoadStatus = "loading" | "ready" | "error" | "disposed";

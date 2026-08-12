@@ -7,7 +7,7 @@ import {
   type GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
 import type { PlatformHost } from "./platform-host";
-import suzanne1 from "./legacy/suzanne1-ascii-scene.json";
+import suzanne1 from "./content/suzanne1-ascii-scene.json";
 
 /**
  * Suzanne 1 — the authored 40×40 arena, composed as a v2 scene.

@@ -15,7 +15,7 @@ import {
   TextureLoader,
   Vector3
 } from "three";
-import familyJson from "./legacy/ballz-slide-track-family.json";
+import familyJson from "./content/ballz-slide-track-family.json";
 
 export const BALLZ_TRACK_GALLERY_ASSET_IDS = [
   "slide1a-legacy-active",

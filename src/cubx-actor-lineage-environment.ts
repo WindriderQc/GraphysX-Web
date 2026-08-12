@@ -10,8 +10,8 @@ import {
   Quaternion,
   Vector3
 } from "three";
-import lineageJson from "./legacy/cubx-actor-lineage.json";
-import geometryJson from "./legacy/cubx-actor-inspection-geometry.json";
+import lineageJson from "./content/cubx-actor-lineage.json";
+import geometryJson from "./content/cubx-actor-inspection-geometry.json";
 
 export type CubxActorClipFamily = "closed" | "get" | "rot" | "open-full" | "open-solo";
 export type CubxActorPlaybackDirection = 1 | -1;

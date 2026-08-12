@@ -1,4 +1,4 @@
-import auditJson from "./legacy/cubz-tva-animations.json";
+import auditJson from "./content/cubz-tva-animations.json";
 
 export type CubzQuaternion = readonly [x: number, y: number, z: number, w: number];
 export type CubzRotationSelection = 1 | 2 | 3 | 4 | 5 | 6 | 7;

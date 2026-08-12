@@ -7,7 +7,7 @@
  * `getImageData` on a large bitmap is exactly the kind of work that stalls a first frame.
  * Instead this script decodes each source once, at authoring time, downsamples it to a
  * modest grid, and writes a plain JSON heights array — the same shape as the already
- * recovered `src/legacy/terrain-carx.json`.
+ * recovered `src/content/terrain-carx.json`.
  *
  * Provenance is carried across verbatim: source path, SHA-256 of the original file, native
  * dimensions, bit depth, and the sample grid we reduced to. Nothing is invented.

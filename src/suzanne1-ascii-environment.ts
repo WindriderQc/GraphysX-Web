@@ -23,7 +23,7 @@ import {
   Texture,
   TextureLoader
 } from "three";
-import suzanneAsciiJson from "./legacy/suzanne1-ascii-scene.json";
+import suzanneAsciiJson from "./content/suzanne1-ascii-scene.json";
 
 type Tuple3 = readonly [number, number, number];
 type LoadStatus = "loading" | "ready" | "error" | "disposed";

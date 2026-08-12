@@ -4,7 +4,6 @@ import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-ha
 import { startStaticServer } from "./static-server.mjs";
 import {
   ARCHIVE_MILKYWAY_CONSTANTS,
-  ARCHIVE_MILKYWAY_NOT_REVIVED,
   ARCHIVE_MILKYWAY_SCENES,
   buildArchiveMilkyWay,
 } from "../src/archive-milkyway.ts";
@@ -117,10 +116,6 @@ try {
   check("names the five registered textures it leans on",
     record.provenance.graduatedTextures.length === 5,
     record.provenance.graduatedTextures.map((t) => t.texture));
-  check("not-revived record is populated and every entry gives a verdict and a reason",
-    ARCHIVE_MILKYWAY_NOT_REVIVED.length >= 4 &&
-    ARCHIVE_MILKYWAY_NOT_REVIVED.every((r) => r.verdict && r.why && r.why.length > 80),
-    ARCHIVE_MILKYWAY_NOT_REVIVED.length);
 
   // ---- 1. The registered textures the whole fidelity claim rests on ---------------------
   console.log("\n# the textures four of five bodies ARE");

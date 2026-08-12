@@ -186,7 +186,7 @@ export function instantiateAgentWorldPrefab(
     case "cubx-assembly": {
       // The recovered CubX assembly, re-authored as v2 primitives.
       //
-      // Source: `src/legacy/cubx-actor-lineage.json` (decoded `CubXOpen.tva` hierarchy) and
+      // Source: `src/content/cubx-actor-lineage.json` (decoded `CubXOpen.tva` hierarchy) and
       // `cubx-actor-inspection-geometry.json`. The record is in TV3D units where the cube module
       // is 25; dividing by 25 gives the clean 1-unit module used here, so corner cubes sit on
       // ±1 and every strut spans exactly the 1-unit gap between two neighbours.

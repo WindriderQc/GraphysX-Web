@@ -19,7 +19,7 @@ import {
   TextureLoader,
   Vector3
 } from "three";
-import manifestJson from "./legacy/ballz-xml-worlds.json";
+import manifestJson from "./content/ballz-xml-worlds.json";
 
 type Tuple3 = [number, number, number];
 type SceneId = "myworld" | "testworld";
