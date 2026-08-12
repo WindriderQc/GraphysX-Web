@@ -3884,3 +3884,32 @@ run, or a closed-loop coach — and a coach that reads positions while driving i
 The re-planning pilot ships anyway. It is what makes the recorder able to drive a maze at all, the
 starter line still regenerates byte-identically through every change here, and the next person to
 try a long course should know the ceiling exists before spending a day under it.
+
+## Slice 7: the Center becomes a hub
+
+Three doorways, one per place the slice names. The places already existed as content — Nestor's
+consoles, the murmuration over the lake, the kinetic stack — but nothing said so or took you
+there. Each arch is tinted to the topic its destination belongs to (build cyan, play green,
+explore violet) so the doorway and the demonstration behind it read as the same thing.
+
+Cost, which is the question the slice actually poses:
+
+    130 → 144 entities   (three arches at 7 each, one of which already existed)
+    every destination exists, and every `portal-to:` tag is in the exported document
+
+**Placement took three attempts, and only the screenshots caught the failures.** First pass put
+the lab arch beside Nestor's stage and the arena arch beside the kinetic stack — spatially
+correct, and both were behind the welcome card, which owns the left of the frame at the authored
+framing. Second pass moved the arena arch left to balance the composition: it passed *every
+assertion*, including `onScreen: true`, and was invisible. A projection check reads NDC bounds and
+knows nothing about a DOM card sitting on top of them.
+
+So the doorways sit in the clear right-hand arc, and the source says why. A doorway does not have
+to stand at its destination — but it does have to be somewhere a visitor can see it.
+
+On the performance budget: the headless median frame is **not** the instrument. It reports ~330ms
+either way because Chromium software-rasterises WebGL, and the real showroom median is 13.3ms.
+What is comparable is the same page measured twice in the same conditions, and the honest summary
+is that fourteen static entities and two point lights is a small addition to a scene that already
+carries eleven lights — but nobody has measured it on hardware, and that is the check to run
+before adding a fourth place.

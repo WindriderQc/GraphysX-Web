@@ -328,11 +328,19 @@ try {
   await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
   out.portal = await page.evaluate((before) => {
     const api = window.__GRAPHYSX__;
-    const portal = api.query({ tag: "portal" })[0] ?? null;
+    const portals = api.query({ tag: "portal" });
+    const portal = portals[0] ?? null;
+    // The whole set, not just the one that was clicked: a doorway whose destination is missing
+    // is a dead click, and that is the failure the interaction layer exists to remove.
+    const destinations = portals.map((entry) => entry.tags.find((tag) => tag.startsWith("portal-to:"))?.slice(10) ?? null);
+    const document = JSON.stringify(api.exportDocument());
     const target = window.__GRAPHYSX_HOST__.orbitTarget.toArray();
     const destination = api.query({ ids: ["showroom-starlings"] })[0]?.position ?? [0, 0, 0];
     return {
       tagged: portal?.tags.includes("portal-to:showroom-starlings") ?? false,
+      count: portals.length,
+      everyDestinationExists: destinations.every((id) => Boolean(id) && api.query({ ids: [id] }).length === 1),
+      everyDestinationInExport: destinations.every((id) => document.includes("portal-to:" + id)),
       // In the document, so an author can retarget it and a reload keeps it.
       inExport: before.document.includes("portal-to:showroom-starlings"),
       travelled: Number(Math.hypot(...target.map((value, index) => value - before.target[index])).toFixed(2)),
@@ -833,8 +841,15 @@ const focusWorks = !!out.focus && out.focus.targetMoved > 0.75 && out.focus.orbi
 const portalTravels = !!out.portal
   && out.portal.tagged === true
   && out.portal.inExport === true
+  && out.portal.count === 3
+  && out.portal.everyDestinationExists === true
+  && out.portal.everyDestinationInExport === true
   && out.portal.travelled > 5
-  && out.portal.nearDestination < 8
+  // Closed distance, not an arrival radius. The destination is a flock: it moves, and the focus
+  // frames its bounds rather than a point, so a fixed radius measures where the birds happened
+  // to be — 7.82 one run and 8.06 the next, against a threshold of 8. "Ended nearer than it
+  // started" is the actual claim.
+  && out.portal.closedIn > 5
   && out.portal.revisionUnchanged === true
   && out.portal.commitsUnchanged === true
   && out.portal.documentUnchanged === true;

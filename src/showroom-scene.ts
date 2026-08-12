@@ -357,16 +357,45 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
   api.spawnPrefab("orbital-sculpture", { position: [-11, 0, 0.5] });
   api.spawnPrefab("orbital-sculpture", { position: [14, 0, -10.5], scale: [0.78, 0.78, 0.78] });
   // Background, framing the gap the camera looks through to the lake and the ridges.
-  // The arch has stood here as scenery since it was placed. It is a portal now: clicking it
-  // takes the camera to the murmuration over the lake, which is the thing in this scene most
-  // worth looking at and the easiest to miss, because nothing tells you to look up.
+  // The Center's three places, as doorways you can see from the front door.
   //
-  // The destination is a tag rather than host code, so it survives export and reload, an author
-  // can retarget it in the inspector, and an agent can build another one with `api.spawn`.
-  api.spawnPrefab("portal-arch", {
-    idPrefix: "showroom-portal-overlook",
-    position: [6.5, 0, -10],
-    tags: ["showroom", "portal", "portal-to:showroom-starlings"],
-  });
+  // Slice 7 asks for a build lab, a living-systems overlook and a play arena that "share one
+  // performance budget". They already exist as content — Nestor's consoles, the murmuration over
+  // the lake, the kinetic stack — but nothing said so or took you there. These arches do both.
+  //
+  // Each is tinted to the topic its destination belongs to (build cyan, play green, explore
+  // violet), so the doorway and the demonstration behind it read as the same thing. The
+  // destination is a `portal-to:` tag rather than host code, so it survives export and reload, an
+  // author can retarget one in the inspector, and an agent can build another with `api.spawn`.
+  const PLACES = [
+    {
+      // The murmuration: the thing in this scene most worth looking at and the easiest to miss,
+      // because nothing tells you to look up.
+      idPrefix: "showroom-portal-overlook",
+      position: [6.5, 0, -10] as [number, number, number],
+      destination: "showroom-starlings",
+      palette: { primary: "#bd9cff", secondary: "#2c2350", accent: "#d9c6ff", emissive: "#4c328d" },
+    },
+    {
+      idPrefix: "showroom-portal-lab",
+      position: [12.4, 0, -4.5] as [number, number, number],
+      destination: "showroom-nestor-console-build",
+      palette: { primary: "#63e6ff", secondary: "#123a47", accent: "#b6f4ff", emissive: "#126b80" },
+    },
+    {
+      idPrefix: "showroom-portal-arena",
+      position: [14.0, 0, 4.2] as [number, number, number],
+      destination: "showroom-plinth",
+      palette: { primary: "#76f0ae", secondary: "#123f2c", accent: "#c2ffdd", emissive: "#176b4a" },
+    },
+  ];
+  for (const place of PLACES) {
+    api.spawnPrefab("portal-arch", {
+      idPrefix: place.idPrefix,
+      position: place.position,
+      palette: place.palette,
+      tags: ["showroom", "portal", `portal-to:${place.destination}`],
+    });
+  }
   api.spawnPrefab("luminous-tree", { position: [-10, 0, -8], scale: [0.85, 0.9, 0.85] });
 }
