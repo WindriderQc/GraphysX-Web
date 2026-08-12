@@ -31,6 +31,14 @@ export const EV3_ROBOTICS_LAB_MISSION_IDS = [
   "guided-launch",
 ] as const;
 
+/** Scene-declared vocabulary for the first child-facing mission surface. */
+export const EV3_FIRST_MISSION_SUBJECT_ID = "ev3-drive-base";
+export const EV3_FIRST_MISSION_FINISH_ID = "ev3-first-mission-finish";
+export const EV3_FIRST_MISSION_MISS_TAG = "mission-miss:first-drive";
+export const EV3_FIRST_MISSION_TIME_LIMIT_SECONDS = 30;
+
+const EV3_FIRST_MISSION_SPAWN: AgentWorldVector3 = [0, 0.83, 17];
+
 const PALETTE = {
   white: "#dce3e6",
   light: "#aeb9bd",
@@ -46,7 +54,7 @@ const PALETTE = {
 
 type RoverVariant = "drive" | "sensor" | "gripper" | "forklift" | "tank";
 
-export function ev3RoboticsLab(): Pick<AgentWorldDefinition, "environment" | "entities"> {
+export function ev3RoboticsLab(): Pick<AgentWorldDefinition, "environment" | "entities" | "rules"> {
   const entities: AgentWorldEntityDefinition[] = [
     ...labLights(),
     {
@@ -82,6 +90,15 @@ export function ev3RoboticsLab(): Pick<AgentWorldDefinition, "environment" | "en
       post: { bloom: { strength: 0.08, threshold: 0.94, radius: 0.12 } },
     },
     entities,
+    // One deliberately small, real mission. The finish condition and clock travel with the
+    // scene, so an agent sees exactly the same run the child-facing surface narrates.
+    rules: {
+      schema: "graphysx.agent-rules/v1",
+      subjectId: EV3_FIRST_MISSION_SUBJECT_ID,
+      spawn: { entityId: EV3_FIRST_MISSION_SUBJECT_ID, position: [...EV3_FIRST_MISSION_SPAWN] },
+      finish: { triggerId: EV3_FIRST_MISSION_FINISH_ID },
+      timer: { limitSeconds: EV3_FIRST_MISSION_TIME_LIMIT_SECONDS },
+    },
   };
 }
 
@@ -333,6 +350,7 @@ function buildColorSorter(position: AgentWorldVector3): AgentWorldEntityDefiniti
 
 function missionField(): AgentWorldEntityDefinition[] {
   return [
+    ...firstDriveMission(),
     ...missionPad("moves-and-turns", "Mission 1 · Moves and Turns", [-17, 0.1, 11], [8, 0.12, 8], PALETTE.blue),
     ...missionPad("objects-and-obstacles", "Mission 2 · Objects and Obstacles", [-17, 0.1, 2], [8, 0.12, 8], "#697c83"),
     ...missionPad("grab-and-release", "Mission 3 · Grab and Release", [-8.5, 0.1, 8], [7.5, 0.12, 14], PALETTE.red),
@@ -347,7 +365,54 @@ function missionField(): AgentWorldEntityDefinition[] {
     ...angleMission(),
     ...factoryMission(),
     ...launchMission(),
-    ...buildRover("ev3-drive-base", "Drive Base Simulator", [0, 0.05, 17], "drive", { driveable: true }),
+    ...buildRover(EV3_FIRST_MISSION_SUBJECT_ID, "Drive Base Simulator", [0, 0.05, 17], "drive", { driveable: true }),
+  ];
+}
+
+/**
+ * A short first run that fits inside the application's opening camera.
+ *
+ * The blue pad is the rules-layer finish. The two red lanes are ordinary triggers tagged as
+ * misses; they do not invent a second failure system or stop the run. Nestor can therefore
+ * coach a child back toward the target after a mistake, while timeout remains the one terminal
+ * failure condition declared by the scene.
+ */
+function firstDriveMission(): AgentWorldEntityDefinition[] {
+  const miss = (id: string, x: number): AgentWorldEntityDefinition => ({
+    id,
+    label: x < 0 ? "Left Red Miss Zone" : "Right Red Miss Zone",
+    type: "box",
+    transform: { position: [x, 0.3, 12.5] },
+    geometry: { width: 2.5, height: 0.22, depth: 8 },
+    material: { color: PALETTE.red, emissive: "#741a17", emissiveIntensity: 0.3, opacity: 0.72, roughness: 0.58 },
+    physics: { mode: "trigger" },
+    tags: ["ev3-lab", "mission-attempt-zone", "mission:first-drive", EV3_FIRST_MISSION_MISS_TAG],
+  });
+
+  return [
+    {
+      id: EV3_FIRST_MISSION_FINISH_ID,
+      label: "First Drive Blue Target",
+      type: "box",
+      transform: { position: [0, 0.3, 10.5] },
+      // Narrower than the rover body plus either miss zone. Trigger overlap is AABB-based, so
+      // touching edges count; generous visual spacing prevents one position meaning both verdicts.
+      geometry: { width: 3, height: 0.22, depth: 2.4 },
+      material: { color: PALETTE.blue, emissive: "#0e4f9a", emissiveIntensity: 0.52, opacity: 0.78, roughness: 0.42 },
+      physics: { mode: "trigger" },
+      tags: ["ev3-lab", "mission-attempt-zone", "mission-goal", "mission:first-drive"],
+    },
+    {
+      id: "ev3-first-mission-goal-ring",
+      label: "First Drive Blue Goal Ring",
+      type: "torus",
+      transform: { position: [0, 2.75, 10.5] },
+      geometry: { radius: 2.5, tube: 0.16, radialSegments: 32 },
+      material: { color: PALETTE.blue, emissive: "#1269c8", emissiveIntensity: 0.85, roughness: 0.3 },
+      tags: ["ev3-lab", "mission-goal-marker", "mission:first-drive"],
+    },
+    miss("ev3-first-mission-miss-left", -5),
+    miss("ev3-first-mission-miss-right", 5),
   ];
 }
 

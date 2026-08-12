@@ -3958,3 +3958,42 @@ rather than asserted by a diagram.
 
 **Not built, deliberately:** mission selection, block programming, hardware, scoring, Nestor
 coaching. This is the smallest thing that makes the lab usable by the person it was built for.
+
+## KidX slice two: First Drive becomes a real mission
+
+The previous surface proved that a child could move the rover. It did not give that movement a
+purpose: there was no goal, no verdict, and no response to a mistake. First Drive is the smallest
+end-to-end mission that can measure those three things without inventing the later block language.
+
+**The scene owns the mission.** `ev3RoboticsLab()` now declares `graphysx.agent-rules/v1` with the
+drive base as subject, its authored spawn, a 30-second timer and a blue finish trigger. Two red
+miss lanes are ordinary trigger entities tagged `mission-miss:first-drive`. The surface polls
+`api.rules.status()` and `api.events()` inside the host's shared frame loop; it owns only narration
+and controls. An out-of-process agent therefore sees the same timer, trigger crossings and finish
+the child sees, and drives through the same `api.steer` call.
+
+At 800×480 the application now presents one sentence — **Reach the blue target before time runs
+out** — a clock, Nestor, and Left / Go / Right. Crossing red does not counterfeit a failure or
+secretly reset the world; Nestor says to steer back toward blue and the run continues. A finish or
+timeout stops the drive inputs and offers Try again, which is `api.rules.reset()` rather than a
+private save state.
+
+**The collider found the first bug.** The driveable root is 4.6 units wide. With the first target
+layout, parking at red also touched blue at an AABB edge, so the smoke observed a miss and a win in
+the same step. The blue trigger is now narrower and the red lanes sit farther out, with visible
+space between verdicts. Trigger overlap is the product fact; checking only the authored centers
+would have blessed a contradictory mission.
+
+**The previous camera fix was not enough.** Settled screenshots still showed the room from the
+showroom's diagonal direction. The rover was visible, but "blue is straight ahead" was not
+visually true: the low target disappeared among seven neighbouring pads. First Drive now uses an
+authored behind-the-rover `frameView`, and the finish has a luminous blue goal ring. The start and
+completion captures show the rover in the foreground, blue centered ahead and red on either side.
+
+Verification: `npm run check` is green (278 pass / 0 fail, one skipped), `npm run lint` is green,
+and `npm run smoke:ev3-lab` passes with zero console/page errors. The focused smoke proves scene
+rules survive document round-trip, red remains nonterminal, blue completes, Nestor reacts, retry
+appears, every live control is at least 72px, and — without teleporting — holding the rendered Go
+button moves the dynamic rover z=17 → 13.33 and finishes in 2.3 seconds. One rerun died at
+navigation with the known local `ERR_CONNECTION_RESET` harness signature; the unchanged rerun
+passed. The branch-wide 50-check browser gate remains unrun.

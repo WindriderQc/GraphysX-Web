@@ -6,21 +6,23 @@
 // aimed at the wrong person. A seven-year-old on a Raspberry Pi touchscreen needs a handful of
 // targets big enough to hit with a thumb, and nothing else.
 //
-// Every control here is an ordinary `api.*` call on vocabulary the scene already declares —
-// `api.steer` on the drive base, `api.interact` on the gripper and the launch button. There is no
-// bespoke host state and no second command path, which is the invariant that lets an agent do
-// anything a child can do and vice versa.
+// Every control here is an ordinary `api.*` call on vocabulary the scene already declares. The
+// run is evaluated by `api.rules`, red-zone misses arrive through `api.events`, and motion is
+// `api.steer` on the drive base. There is no bespoke host state and no second command path,
+// which is the invariant that lets an agent do anything a child can do and vice versa.
 //
-// Deliberately NOT here: mission selection, block programming, hardware, scoring, Nestor. Those
-// are the rest of the KidX slice. This is the smallest thing that makes the lab usable by the
-// person it was built for.
+// Deliberately NOT here: mission selection, block programming, hardware or a scoring system.
+// This is one real mission — enough to measure the model before generalising it.
 
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import {
+  EV3_FIRST_MISSION_MISS_TAG,
+  EV3_FIRST_MISSION_SUBJECT_ID,
+  EV3_FIRST_MISSION_TIME_LIMIT_SECONDS,
+} from "./ev3-robotics-lab";
 
-/** The scene ids this surface drives. All three are declared by `ev3-robotics-lab.ts`. */
-export const EV3_DRIVE_BASE_ID = "ev3-drive-base";
-export const EV3_GRIPPER_CONTROL_ID = "ev3-gripper-bot:gripper-control";
-export const EV3_LAUNCH_BUTTON_ID = "ev3-launch-button";
+/** The scene id this surface drives, re-exported for callers that only know the surface. */
+export const EV3_DRIVE_BASE_ID = EV3_FIRST_MISSION_SUBJECT_ID;
 
 /**
  * Minimum touch target.
@@ -33,8 +35,13 @@ export const EV3_TOUCH_TARGET_PX = 72;
 
 export type Ev3MissionStrip = {
   dispose: () => void;
-  /** What the strip is currently telling the child, so a smoke can read it. */
+  /** What Nestor is currently telling the child, so a smoke can read it. */
   status: () => string;
+};
+
+export type Ev3MissionStripOptions = {
+  /** Joins the host's one frame loop; the surface must never create its own rAF loop. */
+  subscribeFrame: (listener: (deltaSeconds: number) => void) => () => void;
 };
 
 const STYLE_ID = "gx-ev3-strip-style";
@@ -56,21 +63,37 @@ const injectStyleOnce = (): void => {
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;backdrop-filter:blur(8px)}
 .gx-ev3 button span.gx-ev3-glyph{font-size:26px;line-height:1}
 .gx-ev3 button:active,.gx-ev3 button[data-held="true"]{background:rgba(38,120,150,.95);border-color:#7fe6ff;transform:scale(.96)}
+.gx-ev3 button:disabled{cursor:default;opacity:.45;transform:none}
+.gx-ev3 button[hidden]{display:none!important}
 .gx-ev3 button:focus-visible{outline:3px solid #7fe6ff;outline-offset:3px}
 .gx-ev3-wide{width:auto!important;min-width:${EV3_TOUCH_TARGET_PX * 2}px;padding:0 18px}
-.gx-ev3-status{position:fixed;left:14px;top:14px;z-index:30;max-width:min(60vw,520px);pointer-events:none;
-  padding:10px 14px;border-radius:12px;background:rgba(9,26,36,.82);color:#dff4ff;font:600 15px/1.25 var(--gx-font);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;backdrop-filter:blur(8px)}
+.gx-ev3-mission{position:fixed;left:14px;top:14px;z-index:30;width:min(66vw,560px);pointer-events:none;
+  padding:13px 15px 14px;border:1px solid rgba(120,220,255,.38);border-radius:16px;
+  background:rgba(9,26,36,.88);color:#eaf7ff;font-family:var(--gx-font);backdrop-filter:blur(10px)}
+.gx-ev3-mission-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px}
+.gx-ev3-kicker{color:#7fe6ff;font:800 11px/1 var(--gx-font);letter-spacing:.12em;text-transform:uppercase}
+.gx-ev3-clock{min-width:48px;text-align:center;padding:5px 8px;border-radius:999px;background:rgba(46,120,208,.28);
+  color:#fff;font:800 14px/1 var(--gx-font);font-variant-numeric:tabular-nums}
+.gx-ev3-objective{font:800 19px/1.18 var(--gx-font)}
+.gx-ev3-nestor{display:flex;align-items:center;gap:9px;margin-top:10px;color:#dff4ff;font:600 14px/1.25 var(--gx-font)}
+.gx-ev3-nestor-mark{display:grid;place-items:center;flex:0 0 30px;height:30px;border-radius:50%;background:#7fe6ff;color:#08202b;
+  font:900 16px/1 var(--gx-font);box-shadow:0 0 18px rgba(127,230,255,.28)}
+.gx-ev3-nestor-copy{min-width:0}.gx-ev3-nestor-name{display:block;color:#7fe6ff;font:800 10px/1 var(--gx-font);letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px}
+.gx-ev3-status{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gx-ev3-mission[data-phase="complete"]{border-color:rgba(94,235,151,.72)}
+.gx-ev3-mission[data-phase="expired"]{border-color:rgba(255,174,92,.72)}
 .gx-ev3-exit{position:fixed;right:14px;top:14px;z-index:30;pointer-events:auto;
   min-height:48px;padding:0 16px;border-radius:12px;border:2px solid rgba(120,220,255,.45);
   background:rgba(9,26,36,.82);color:#dff4ff;font:700 14px/1 var(--gx-font);cursor:pointer;touch-action:manipulation}
-/* The render-settings disclosure is pinned bottom-right at z-index 120 and lands on top of the
-   Launch button, clipping it to "Laun". It is a developer control and a child has no use for it,
-   so the application surface hides it rather than dodging around it. */
+/* The render-settings disclosure is pinned bottom-right at z-index 120 and competes with the
+   mission's controls. It is a developer control and a child has no use for it, so the
+   application surface hides it rather than dodging around it. */
 body:has(.gx-ev3) .gx-display-settings{display:none}
 @media (max-height:520px){
   .gx-ev3{padding:8px 10px calc(8px + env(safe-area-inset-bottom))}
-  .gx-ev3-status{font-size:13px;padding:8px 11px}
+  .gx-ev3-mission{left:10px;top:10px;padding:9px 11px 10px;width:min(65vw,520px)}
+  .gx-ev3-objective{font-size:16px}.gx-ev3-nestor{margin-top:7px;font-size:12px}.gx-ev3-nestor-mark{height:26px;flex-basis:26px}
+  .gx-ev3-exit{right:10px;top:10px}
 }`;
   document.head.append(style);
 };
@@ -85,17 +108,49 @@ export function mountEv3MissionStrip(
   root: HTMLElement,
   api: GraphysXAgentWorldApi,
   onExit: () => void,
+  options: Ev3MissionStripOptions,
 ): Ev3MissionStrip {
   injectStyleOnce();
 
   const has = (id: string): boolean => api.query({ ids: [id] }).length === 1;
   const driveable = has(EV3_DRIVE_BASE_ID);
 
-  const status = document.createElement("div");
+  const mission = document.createElement("section");
+  mission.className = "gx-ev3-mission";
+  mission.dataset.ev3Mission = "first-drive";
+  mission.setAttribute("aria-label", "First Drive mission");
+  const missionHead = document.createElement("div");
+  missionHead.className = "gx-ev3-mission-head";
+  const kicker = document.createElement("span");
+  kicker.className = "gx-ev3-kicker";
+  kicker.textContent = "Mission 01 · First Drive";
+  const clock = document.createElement("span");
+  clock.className = "gx-ev3-clock";
+  clock.dataset.ev3Clock = "";
+  missionHead.append(kicker, clock);
+  const objective = document.createElement("div");
+  objective.className = "gx-ev3-objective";
+  objective.dataset.ev3Objective = "";
+  objective.textContent = "Reach the blue target before time runs out.";
+  const nestor = document.createElement("div");
+  nestor.className = "gx-ev3-nestor";
+  const nestorMark = document.createElement("span");
+  nestorMark.className = "gx-ev3-nestor-mark";
+  nestorMark.textContent = "N";
+  const nestorCopy = document.createElement("div");
+  nestorCopy.className = "gx-ev3-nestor-copy";
+  const nestorName = document.createElement("span");
+  nestorName.className = "gx-ev3-nestor-name";
+  nestorName.textContent = "Nestor";
+  const status = document.createElement("span");
   status.className = "gx-ev3-status";
+  status.dataset.ev3Nestor = "";
   status.setAttribute("role", "status");
   const say = (text: string): void => { status.textContent = text; };
-  say(driveable ? "Drive the robot. Hold a button." : "This lab has no drive base loaded.");
+  say(driveable ? "Blue is straight ahead. Hold Go to reach it!" : "This lab has no drive base loaded.");
+  nestorCopy.append(nestorName, status);
+  nestor.append(nestorMark, nestorCopy);
+  mission.append(missionHead, objective, nestor);
 
   const exit = document.createElement("button");
   exit.type = "button";
@@ -161,36 +216,104 @@ export function mountEv3MissionStrip(
     return button;
   };
 
-  if (driveable) {
-    pad.append(
-      held("Left", "◀", () => { api.steer(EV3_DRIVE_BASE_ID, { turn: -1, thrust: 0.6 }); say("Turning left."); }),
-      held("Go", "▲", () => { api.steer(EV3_DRIVE_BASE_ID, { headingDegrees: 0, thrust: 1 }); say("Driving forward."); }),
-      held("Right", "▶", () => { api.steer(EV3_DRIVE_BASE_ID, { turn: 1, thrust: 0.6 }); say("Turning right."); }),
-    );
+  const driveButtons = driveable ? [
+    held("Left", "◀", () => { api.steer(EV3_DRIVE_BASE_ID, { turn: -1, thrust: 0.6 }); }),
+    held("Go", "▲", () => { api.steer(EV3_DRIVE_BASE_ID, { headingDegrees: 0, thrust: 1 }); }),
+    held("Right", "▶", () => { api.steer(EV3_DRIVE_BASE_ID, { turn: 1, thrust: 0.6 }); }),
+  ] : [];
+  pad.append(...driveButtons);
+
+  let eventCursor = 0;
+  let lastPhase = "idle";
+  let misses = 0;
+  const missIds = new Set(api.query({ tag: EV3_FIRST_MISSION_MISS_TAG }).map((entity) => entity.id));
+  const missionRules = api.rules.get();
+  const timeLimit = missionRules?.timer?.limitSeconds ?? EV3_FIRST_MISSION_TIME_LIMIT_SECONDS;
+  const missionReady = driveable && Boolean(missionRules?.finish) && missIds.size > 0;
+  const setDriveEnabled = (enabled: boolean): void => {
+    for (const button of driveButtons) button.disabled = !enabled;
+    if (!enabled && driveable) api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
+  };
+  const formatClock = (seconds: number): string => `0:${Math.max(0, Math.ceil(seconds)).toString().padStart(2, "0")}`;
+  const renderRun = (): void => {
+    const run = api.rules.status();
+    if (!run) {
+      clock.textContent = "--:--";
+      mission.dataset.phase = "idle";
+      return;
+    }
+    clock.textContent = formatClock(timeLimit - run.elapsedSeconds);
+    mission.dataset.phase = run.phase;
+    mission.dataset.misses = String(misses);
+    if (run.phase !== lastPhase) {
+      if (run.phase === "complete") {
+        say(`You did it! Blue target reached in ${run.elapsedSeconds.toFixed(1)} seconds.`);
+        setDriveEnabled(false);
+        retry.hidden = false;
+      } else if (run.phase === "expired") {
+        say("Time's up. Good try — tap Try again and aim for blue.");
+        setDriveEnabled(false);
+        retry.hidden = false;
+      }
+      lastPhase = run.phase;
+    }
+  };
+
+  const retry = tap("Try again", "↻", () => {
+    const reset = api.rules.reset();
+    misses = 0;
+    lastPhase = reset.value?.phase ?? "idle";
+    eventCursor = api.events().sequence;
+    retry.hidden = true;
+    setDriveEnabled(true);
+    say("Blue is straight ahead. Hold Go to reach it!");
+    renderRun();
+  });
+  retry.dataset.ev3Retry = "";
+  retry.hidden = true;
+  actions.append(retry);
+
+  if (missionReady) {
+    // Start when the instructions appear, not while the application's dynamic import is still
+    // loading. Reset is itself public rules vocabulary and returns the robot to the scene's spawn.
+    const reset = api.rules.reset();
+    lastPhase = reset.value?.phase ?? "idle";
+    eventCursor = api.events().sequence;
+    renderRun();
+  } else {
+    say(driveable ? "This lab has no First Drive mission loaded." : "This lab has no drive base loaded.");
+    clock.textContent = "--:--";
   }
 
-  // Both of these fire an interaction the scene declares. If a lab is loaded without one of
-  // them the button is not offered, rather than offered and dead.
-  if (has(EV3_GRIPPER_CONTROL_ID)) {
-    actions.append(tap("Grab", "✊", () => {
-      const result = api.interact(EV3_GRIPPER_CONTROL_ID, "toggle-gripper");
-      say(result.ok ? "The gripper opened and closed." : "The gripper did not answer.");
-    }));
-  }
-  if (has(EV3_LAUNCH_BUTTON_ID)) {
-    actions.append(tap("Launch", "🚀", () => {
-      const result = api.interact(EV3_LAUNCH_BUTTON_ID, "initiate-launch");
-      say(result.ok ? "Rocket away — the Mars outpost is lit." : "The launch button did not answer.");
-    }));
-  }
+  const unsubscribeFrame = options.subscribeFrame(() => {
+    const page = api.events(eventCursor);
+    eventCursor = page.sequence;
+    const run = api.rules.status();
+    if (run?.phase === "running") {
+      for (const event of page.events) {
+        if (
+          event.type === "trigger.enter"
+          && event.data.entityId === EV3_DRIVE_BASE_ID
+          && missIds.has(String(event.data.triggerId ?? ""))
+        ) {
+          misses += 1;
+          say(misses === 1
+            ? "That was a red zone. Steer back toward blue — you've still got this!"
+            : "Red again. Ease toward the middle, then hold Go for blue.");
+        }
+      }
+    }
+    renderRun();
+  });
 
-  root.append(status, exit, strip);
+  root.append(mission, exit, strip);
 
   return {
     status: () => status.textContent ?? "",
     dispose: () => {
+      unsubscribeFrame();
       if (driveable) api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
-      status.remove();
+      mission.remove();
       exit.remove();
       strip.remove();
     },

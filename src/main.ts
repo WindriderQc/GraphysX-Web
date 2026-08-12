@@ -365,23 +365,31 @@ if (mode === "previews" && import.meta.env.DEV) {
       if (id !== "ev3-lab") return false;
       const loaded = host.api.loadStarter("ev3-robotics-lab");
       if (!loaded.ok) return false;
-      // Frame the robot, not the room. `frameWorld()` fits every entity, which at 800x480 puts
-      // the whole lab in the middle third of the screen and leaves the thing the child is
-      // driving a few pixels tall. Focus on the drive base with a radius that keeps its
-      // neighbours in shot, and fall back to the whole world if the lab ever loads without one.
+      // Frame the attempt, not the room. A subject-only orbit focus still inherits the
+      // showroom's diagonal viewing direction; at 800x480 the blue target then disappears into
+      // seven neighbouring mission pads. This authored application view sits behind the rover
+      // and looks down its short lane, so "blue is straight ahead" is also visually true.
       const rover = host.api.query({ ids: ["ev3-drive-base"] })[0];
-      // The host owns three.js here; borrowing the constructor off a live vector keeps `main.ts`
-      // from taking a direct three import it otherwise does not need.
-      const Vec = host.camera.position.constructor as new (x: number, y: number, z: number) => typeof host.camera.position;
-      if (rover) host.focusOn(new Vec(rover.position[0], rover.position[1], rover.position[2]), 7.5, 0.9, 30);
-      else host.frameWorld();
+      const goal = host.api.query({ ids: ["ev3-first-mission-finish"] })[0];
+      if (rover && goal) {
+        host.frameView(
+          [rover.position[0], rover.position[1] + 7.5, rover.position[2] + 10],
+          [goal.position[0], goal.position[1] + 1, (rover.position[2] + goal.position[2]) / 2],
+          0.9,
+        );
+      } else host.frameWorld();
       requestShowroomInteraction(false);
       void import("./ev3-mission-strip").then(({ mountEv3MissionStrip }) => {
-        appSurface = mountEv3MissionStrip(root, host.api, () => {
-          appSurface?.dispose();
-          appSurface = null;
-          window.location.search = "";
-        });
+        appSurface = mountEv3MissionStrip(
+          root,
+          host.api,
+          () => {
+            appSurface?.dispose();
+            appSurface = null;
+            window.location.search = "";
+          },
+          { subscribeFrame: host.subscribeFrame.bind(host) },
+        );
       });
       return true;
     };

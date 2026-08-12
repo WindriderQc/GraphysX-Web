@@ -16,7 +16,8 @@ cost real sessions real hours.
 ## Start here — where the work actually is (2026-08-12)
 
 **The interesting work is on `refactor/lean-platform`, not on `main`.** Production serves
-`fa51b47`, which is `main` and has none of it. The branch is pushed and the tree is clean.
+`fa51b47`, which is `main` and has none of it. The branch is pushed through `5c4ddc8`; the
+working tree now contains the verified, uncommitted First Drive mission slice described below.
 
     de3c7ba  preserve the EV3 robotics mission lab
     aebfe71  retire the archived legacy host
@@ -25,6 +26,7 @@ cost real sessions real hours.
     85f1842  reorganize verification around retained products  (tiers; 56 → 50 checks)
     d789aab  stop telling contributors to maintain deleted code
     539d7a8  give the EV3 mission lab a surface a child can use
+    worktree  make First Drive a real EV3 mission with scene rules and Nestor coaching
 
 What this branch did, in one line: the old GraphysX runtime is archived in another repo, so the
 legacy host, the archive UI, the revival tooling and the parity ledger left. **The asset library
@@ -32,9 +34,9 @@ stayed** — 24.5 MB under `src/content/`, renamed rather than deleted, because 
 runtime. Every converted experience, EV3, BallZ, the Center and AgentX stayed.
 
 **Before merging this to `main`, run the full gate. It has never run on this branch.**
-`npm test` and `npm run check` are green (278 unit tests) and single smokes were run while
-building, but the 50-check browser gate has not. It is ~40 minutes and it is the thing standing
-between this branch and a deploy.
+`npm run check` and `npm run lint` are green (278 unit tests), and the focused EV3 browser smoke
+passes the scene rules, miss, success, retry and actual held-Go path. The 50-check browser gate
+has not run. It is ~40 minutes and it is the thing standing between this branch and a deploy.
 
 ```bash
 npm run verify -- --wait > output/verify-lean.txt 2>&1
@@ -45,13 +47,11 @@ by exit code alone.
 
 **Next, in the order that adds the most:**
 
-1. **One real EV3 mission** — a goal, a success condition, and Nestor saying something when the
-   child misses it. This is the step that turns the mission model from speculative into
-   measured, and it is the natural second consumer of the `?app=<id>` seam.
+1. **Phase 6, the KidX vertical slice** — blocks → program → simulation → EV3 → Nestor feedback.
+   First Drive now supplies the measured mission and feedback loop this can build on.
 2. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`
-   is one `if` in `main.ts`. Generalize it when a *second* application asks for it, not before.
-3. **Phase 6, the KidX vertical slice** — blocks → program → simulation → EV3 → Nestor feedback.
-4. **Phase 7, Raspberry Pi validation.** Needs the actual hardware; the surface was built and
+   remains one `if` in `main.ts`. Generalize it when a *second* application asks for it, not before.
+3. **Phase 7, Raspberry Pi validation.** Needs the actual hardware; the surface was built and
    measured at 800×480 in anticipation of it.
 
 Do not expand the Center, and do not extract an npm package or split the repository yet — both
@@ -85,7 +85,7 @@ legacy host; everything here now goes through the API.
 | `src/agent-world-runtime.ts` | The v2 runtime: entities, Rapier physics, behaviours, deterministic `update(dt)`. |
 | `src/agent-world-api.ts` | The one implementation of `GraphysXAgentWorldApi`. There used to be a second on the retired legacy route, and a new method had to land in both; it now lands in one place. |
 | `src/platform-editor.ts` | Top bar, left scene tree, right inspector, bottom tabbed library, Levels workbench, media import dialog. |
-| `src/ev3-mission-strip.ts` | The first *application surface*: five 72px controls over the EV3 lab, reached by `?app=ev3-lab`. Every control is an `api.steer` / `api.interact` call. |
+| `src/ev3-mission-strip.ts` | The first *application surface*: First Drive's objective, clock and Nestor card over three 72px steering controls, reached by `?app=ev3-lab`. It consumes `api.rules` / `api.events` and drives through `api.steer`. |
 | `src/content/` | The asset library — 24.5 MB of converted scenes and media, read by the runtime. Formerly `src/legacy/`, renamed because the name was describing its origin instead of its job. |
 | `server/scene-store.mjs` | The store server: scenes, relay, and the router that mounts everything below. |
 | `server/live-sessions.mjs` + `server/live-missions.mjs` | Authenticated scene-scoped collaboration, and the pure mission reducer on top of it. |
@@ -235,12 +235,16 @@ of this one.
 The editor is a correct tool aimed at the wrong person. Reaching the EV3 lab through Browse
 Scenes was measured at desktop, 1024×600 and 800×480: **218 controls, every one under 44px**,
 four authoring panels around a postage stamp of the lab. `?app=ev3-lab` opens the same scene in
-its own surface instead — 5 controls, none under 72px, and nothing else.
+its own surface instead — First Drive's mission card and 3 controls, none under 72px.
 
-- **The surface holds no scene state.** Left/Go/Right are `api.steer` on the drive base; Grab and
-  Launch are `api.interact` on ids the scene already declares. If a lab loads without a gripper,
-  the button is not offered rather than offered and dead. The invariant holds: an agent can do
-  everything the child can.
+- **The surface holds no scene state.** Left/Go/Right are `api.steer` on the drive base. The EV3
+  document declares the 30-second run, drive-base subject and blue finish through `rules`; red
+  miss lanes are trigger entities. Nestor reads `api.events` and `api.rules.status()` in the
+  host's shared frame loop. An agent sees and drives the same attempt the child does.
+- **First Drive is real, and deliberately one mission.** Hold Go and the dynamic rover reaches
+  the luminous blue ring in about 2.3 seconds. A red crossing keeps the attempt alive and makes
+  Nestor coach toward the middle; success or timeout stops steering and offers Try again. The
+  focused smoke proves both forced verdicts and the actual held-button path at 800×480.
 - **It is keyed by id, not by a boolean**, because it is the seam a second application uses. That
   is the entire architectural claim so far, and it is deliberately still one `if` in `main.ts` —
   generalize it into a composition surface when a second application exists to reveal what the
@@ -248,7 +252,8 @@ its own surface instead — 5 controls, none under 72px, and nothing else.
 - **`onExit` is required, not optional.** The surface covers the whole screen, and a mode a child
   cannot leave is a trap.
 - The render-settings disclosure is hidden while a surface is mounted (it is pinned bottom-right
-  at z-index 120 and lands on the Launch button). Dodging around it would have been the worse fix.
+  at z-index 120 and competes with the surface controls). Dodging around it would have been the
+  worse fix.
 
 ### Portals, and why the destination is a tag
 
