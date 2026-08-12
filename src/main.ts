@@ -152,11 +152,6 @@ if (mode === "previews" && import.meta.env.DEV) {
   void Promise.all([import("./styles.css"), import("./preview-host")]).then(([, { mountPreviewHost }]) => {
     Object.assign(window, { __GRAPHYSX_PREVIEW_HOST__: mountPreviewHost(root) });
   });
-} else if (mode === "legacy") {
-  // The archive-revival player on race-scene, kept as a reference fallback only.
-  // `styles.css` is entirely prototype-app selectors, so it loads with this route rather
-  // than blocking first paint on the default one.
-  void Promise.all([import("./styles.css"), import("./prototype-app")]).then(([, { PrototypeApp }]) => new PrototypeApp(root));
 } else {
   // Default product: the clean PlatformHost. No param → welcome showroom; `?host=editor`
   // (or `standalone`) opens straight into the Scene Editor on the demo world.

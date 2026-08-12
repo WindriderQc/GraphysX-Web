@@ -63,7 +63,6 @@ const SMOKES = [
   { name: "top20", script: "scripts/smoke-top20.mjs", covers: "top-20 release: redo, draft recovery, import/copy/slots/palette, shelf personalization, accessible display, touch/gamepad/pause/fullscreen" },
   { name: "standalone", script: "scripts/smoke-standalone.mjs", covers: "?host=standalone: agent API, tool bridge, human editor" },
   { name: "levels", script: "scripts/smoke-levels.mjs", covers: "levels workbench: paint, fill, ASCII round trip, undo, create" },
-  { name: "foundation", script: "scripts/smoke-foundation.mjs", covers: "?host=legacy: archive player still boots" },
   { name: "scene-store", script: "scripts/smoke-scene-store.mjs", covers: "?scene=: stored scene loads, outside agent edits land in the tab" },
   { name: "scene-command-validation", script: "scripts/smoke-scene-command-validation.mjs", covers: "untrusted scene commands: strict ids/types/configs/references, runtime-parity merges, atomic rejection, cumulative budgets" },
   { name: "triggers", script: "scripts/smoke-triggers.mjs", covers: "trigger volumes: enter/exit events, interactions fire, no collision response" },
@@ -98,14 +97,20 @@ const SMOKES = [
   { name: "meshlight", script: "scripts/smoke-meshlight.mjs", covers: "meshlight.shade: vendored HLSL, compiled parallax/Lyon translation, exact Room 2 maps, live patch + round-trip" },
   { name: "ppl", script: "scripts/smoke-ppl.mjs", covers: "ppl.shade: exact HLSL + ball normal, compiled parallax/Lambert translation, active ring binding, live patch + round-trip" },
   { name: "level3", script: "scripts/smoke-level3.mjs", covers: "Archive Level 3 v2: exact ASCII catwalk census, Alien02 catch floor, NightSky, LINE gates, three laps, round-trip" },
-  { name: "revival-ledgers", script: "scripts/audit-revival-debt.mjs", covers: "debt sweep: pinned 22-item register plus all five NOT_REVIVED inventories checked against HEAD" },
-  { name: "archive-parity", script: "scripts/audit-archive-parity.mjs", covers: "complete archive census: every media path and functionality record has a hash-backed disposition" },
-  { name: "clean-host", script: "scripts/audit-clean-host.mjs", covers: "dependency direction: no default-host module reaches the legacy race-scene monolith, type-only imports included" },
+  // PAUSED by the legacy retirement: both audits validate the archive-revival project, whose
+  // evidence lived in `race-scene.ts` / `prototype-app.ts` / `archive-content.ts`. The ledger
+  // carries 615 citations of files this branch deleted. Re-enable after deciding whether the
+  // ledger moves to the archive repository or is regenerated against retained content only.
+  // { name: "revival-ledgers", script: "scripts/audit-revival-debt.mjs", covers: "debt sweep: pinned 22-item register plus all five NOT_REVIVED inventories checked against HEAD" },
+  // PAUSED by the legacy retirement: both audits validate the archive-revival project, whose
+  // evidence lived in `race-scene.ts` / `prototype-app.ts` / `archive-content.ts`. The ledger
+  // carries 615 citations of files this branch deleted. Re-enable after deciding whether the
+  // ledger moves to the archive repository or is regenerated against retained content only.
+  // { name: "archive-parity", script: "scripts/audit-archive-parity.mjs", covers: "complete archive census: every media path and functionality record has a hash-backed disposition" },
   { name: "product-assets", script: "scripts/audit-product-assets.mjs", covers: "release completeness: every /assets URL a product-reachable module names ships in the production manifest, with a reasoned allowlist" },
   { name: "results-browser", script: "scripts/smoke-results-browser.mjs", covers: "results through the product: no request at all without a store, token-gated submission, leaderboard read + rendered panel with legible text and trust label, rival ghost download and playback" },
   { name: "asset-guard", script: "scripts/smoke-asset-guard.mjs", covers: "asset-guard fixtures: a missing asset fails, a registered asset passes, base paths/globs/templates/externals are classified, type-only vs runtime edges" },
   { name: "previews", script: "scripts/audit-previews.mjs", covers: "preview registry: every workshop harness is registered, and every mountable one uses the shared renderer and the shared frame loop" },
-  { name: "rapier-race", script: "scripts/smoke-rapier-race.mjs", covers: "Rapier RaceScene: Piste vehicle motion, steering, finite state, browser errors" },
   { name: "store-auth", script: "scripts/smoke-store-auth.mjs", covers: "store auth: token gate on writes + datalake, CORS allowlist, tokenless compat mode" },
   { name: "live-sessions", script: "scripts/smoke-live-sessions.mjs", covers: "live sessions: owner + remote editor + agent on one scene, incremental attributed ops, roles, duplicates, conflicts, reconnect/resume/resync, teardown" },
   { name: "live-sessions-browser", script: "scripts/smoke-live-sessions-browser.mjs", localOnly: true, deadlineMs: LIVE_BROWSER_DEADLINE_MS, covers: "live sessions through the product: observer boundary, scene-native AgentX presence, Nestor accepted-operation reaction, reconnect and cleanup" },
