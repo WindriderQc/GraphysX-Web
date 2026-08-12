@@ -44,8 +44,6 @@
     "smoke:meshlight": "node scripts/smoke-meshlight.mjs",
     "smoke:ppl": "node scripts/smoke-ppl.mjs",
     "smoke:level3": "node scripts/smoke-level3.mjs",
-    "audit:revival-debt": "node scripts/audit-revival-debt.mjs",
-    "audit:archive-parity": "node scripts/audit-archive-parity.mjs",
     "audit:product-assets": "node scripts/audit-product-assets.mjs",
     "audit:previews": "node scripts/audit-previews.mjs",
     "assets:archive-census": "node scripts/generate-archive-parity.mjs",

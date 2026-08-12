@@ -97,16 +97,6 @@ const SMOKES = [
   { name: "meshlight", script: "scripts/smoke-meshlight.mjs", covers: "meshlight.shade: vendored HLSL, compiled parallax/Lyon translation, exact Room 2 maps, live patch + round-trip" },
   { name: "ppl", script: "scripts/smoke-ppl.mjs", covers: "ppl.shade: exact HLSL + ball normal, compiled parallax/Lambert translation, active ring binding, live patch + round-trip" },
   { name: "level3", script: "scripts/smoke-level3.mjs", covers: "Archive Level 3 v2: exact ASCII catwalk census, Alien02 catch floor, NightSky, LINE gates, three laps, round-trip" },
-  // PAUSED by the legacy retirement: both audits validate the archive-revival project, whose
-  // evidence lived in `race-scene.ts` / `prototype-app.ts` / `archive-content.ts`. The ledger
-  // carries 615 citations of files this branch deleted. Re-enable after deciding whether the
-  // ledger moves to the archive repository or is regenerated against retained content only.
-  // { name: "revival-ledgers", script: "scripts/audit-revival-debt.mjs", covers: "debt sweep: pinned 22-item register plus all five NOT_REVIVED inventories checked against HEAD" },
-  // PAUSED by the legacy retirement: both audits validate the archive-revival project, whose
-  // evidence lived in `race-scene.ts` / `prototype-app.ts` / `archive-content.ts`. The ledger
-  // carries 615 citations of files this branch deleted. Re-enable after deciding whether the
-  // ledger moves to the archive repository or is regenerated against retained content only.
-  // { name: "archive-parity", script: "scripts/audit-archive-parity.mjs", covers: "complete archive census: every media path and functionality record has a hash-backed disposition" },
   { name: "product-assets", script: "scripts/audit-product-assets.mjs", covers: "release completeness: every /assets URL a product-reachable module names ships in the production manifest, with a reasoned allowlist" },
   { name: "results-browser", script: "scripts/smoke-results-browser.mjs", covers: "results through the product: no request at all without a store, token-gated submission, leaderboard read + rendered panel with legible text and trust label, rival ghost download and playback" },
   { name: "asset-guard", script: "scripts/smoke-asset-guard.mjs", covers: "asset-guard fixtures: a missing asset fails, a registered asset passes, base paths/globs/templates/externals are classified, type-only vs runtime edges" },
