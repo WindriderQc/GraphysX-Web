@@ -13,6 +13,50 @@ Read `PRODUCT_SPEC.md` §8.1 (the honest status table) for what ships versus wha
 as the v1 target. Read `CLAUDE.md` for the short list of rules that exist because breaking them
 cost real sessions real hours.
 
+## Start here — where the work actually is (2026-08-12)
+
+**The interesting work is on `refactor/lean-platform`, not on `main`.** Production serves
+`fa51b47`, which is `main` and has none of it. The branch is pushed and the tree is clean.
+
+    de3c7ba  preserve the EV3 robotics mission lab
+    aebfe71  retire the archived legacy host
+    f41b5d4  move the revival provenance record out of the product
+    824fb92  name the asset library for what it is  (src/legacy → src/content)
+    85f1842  reorganize verification around retained products  (tiers; 56 → 50 checks)
+    d789aab  stop telling contributors to maintain deleted code
+    539d7a8  give the EV3 mission lab a surface a child can use
+
+What this branch did, in one line: the old GraphysX runtime is archived in another repo, so the
+legacy host, the archive UI, the revival tooling and the parity ledger left. **The asset library
+stayed** — 24.5 MB under `src/content/`, renamed rather than deleted, because it is read by the
+runtime. Every converted experience, EV3, BallZ, the Center and AgentX stayed.
+
+**Before merging this to `main`, run the full gate. It has never run on this branch.**
+`npm test` and `npm run check` are green (278 unit tests) and single smokes were run while
+building, but the 50-check browser gate has not. It is ~40 minutes and it is the thing standing
+between this branch and a deploy.
+
+```bash
+npm run verify -- --wait > output/verify-lean.txt 2>&1
+```
+
+Then read the `=== verify summary ===` block in that file — do not pipe it, and do not judge it
+by exit code alone.
+
+**Next, in the order that adds the most:**
+
+1. **One real EV3 mission** — a goal, a success condition, and Nestor saying something when the
+   child misses it. This is the step that turns the mission model from speculative into
+   measured, and it is the natural second consumer of the `?app=<id>` seam.
+2. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`
+   is one `if` in `main.ts`. Generalize it when a *second* application asks for it, not before.
+3. **Phase 6, the KidX vertical slice** — blocks → program → simulation → EV3 → Nestor feedback.
+4. **Phase 7, Raspberry Pi validation.** Needs the actual hardware; the surface was built and
+   measured at 800×480 in anticipation of it.
+
+Do not expand the Center, and do not extract an npm package or split the repository yet — both
+are explicit product decisions, not oversights.
+
 ## What this is
 
 A browser 3D scene engine where humans and AI agents co-author **one validated scene**. The
@@ -41,6 +85,8 @@ legacy host; everything here now goes through the API.
 | `src/agent-world-runtime.ts` | The v2 runtime: entities, Rapier physics, behaviours, deterministic `update(dt)`. |
 | `src/agent-world-api.ts` | The one implementation of `GraphysXAgentWorldApi`. There used to be a second on the retired legacy route, and a new method had to land in both; it now lands in one place. |
 | `src/platform-editor.ts` | Top bar, left scene tree, right inspector, bottom tabbed library, Levels workbench, media import dialog. |
+| `src/ev3-mission-strip.ts` | The first *application surface*: five 72px controls over the EV3 lab, reached by `?app=ev3-lab`. Every control is an `api.steer` / `api.interact` call. |
+| `src/content/` | The asset library — 24.5 MB of converted scenes and media, read by the runtime. Formerly `src/legacy/`, renamed because the name was describing its origin instead of its job. |
 | `server/scene-store.mjs` | The store server: scenes, relay, and the router that mounts everything below. |
 | `server/live-sessions.mjs` + `server/live-missions.mjs` | Authenticated scene-scoped collaboration, and the pure mission reducer on top of it. |
 | `server/asset-store.mjs` + `src/agent-world-media.ts` | Runtime media imports: datalake browse/import/upload; the browser converts foreign models to `graphysx-mesh-json` and registers them through `api.media.*`. |
@@ -177,10 +223,32 @@ read back four ways. It exists because the same bug kept recurring in different 
 surface that writes state without ever reading it back.** Run it after adding any settable
 field, and prefer an object-verified check over a storage round-trip where one is possible.
 
-`docs/archive-parity-ledger.json` inventories the whole archive: 8,823 media paths, 5,949 unique
-hashes, 5,688,234,500 examined bytes. Its 71 functionality records resolve to 66 REVIVED, 3
-SOURCE-ONLY, 1 SUPERSEDED and 1 OUT OF SCOPE. The checked-in generator and the CI audit reject
-stale output, invalid evidence, unclassified rows and ledger self-evidence.
+**The archive parity ledger and its audits are gone** (`f41b5d4`). They inventoried a 5.7 GB
+archive to prove the revival was faithful; that job finished, the old application lives in its
+own repository, and a 7.1 MB ledger plus four audit scripts were being carried by a product that
+no longer answers to it. What was kept is the thing with ongoing value: the asset library, now
+`src/content/`. If you need the provenance record, it is in the archive repo and in the history
+of this one.
+
+### Applications, and why `?app=` takes an id
+
+The editor is a correct tool aimed at the wrong person. Reaching the EV3 lab through Browse
+Scenes was measured at desktop, 1024×600 and 800×480: **218 controls, every one under 44px**,
+four authoring panels around a postage stamp of the lab. `?app=ev3-lab` opens the same scene in
+its own surface instead — 5 controls, none under 72px, and nothing else.
+
+- **The surface holds no scene state.** Left/Go/Right are `api.steer` on the drive base; Grab and
+  Launch are `api.interact` on ids the scene already declares. If a lab loads without a gripper,
+  the button is not offered rather than offered and dead. The invariant holds: an agent can do
+  everything the child can.
+- **It is keyed by id, not by a boolean**, because it is the seam a second application uses. That
+  is the entire architectural claim so far, and it is deliberately still one `if` in `main.ts` —
+  generalize it into a composition surface when a second application exists to reveal what the
+  shape should be, not from a diagram.
+- **`onExit` is required, not optional.** The surface covers the whole screen, and a mode a child
+  cannot leave is a trap.
+- The render-settings disclosure is hidden while a surface is mounted (it is pinned bottom-right
+  at z-index 120 and lands on the Launch button). Dodging around it would have been the worse fix.
 
 ### Portals, and why the destination is a tag
 
@@ -236,8 +304,10 @@ provider-composed proposal from a local one, because there is nothing to tell ap
 
 - **Ball drop retuned 9 m/0.52 → 6 m/0.34** partly for test stability. Real justification, mixed
   motive.
-- **`?host=legacy` in a production build shows missing archive textures and meshes.** Deliberate
-  — it is a reference fallback, fully intact in `vite dev`, and was costing ~76 MB per push.
+- ~~`?host=legacy` shows missing archive textures~~ — **fixed by removal** (`aebfe71`). The
+  legacy host route is gone. Comments in `agent-world-flock.ts`, `agent-world-formula.ts` and the
+  `archive-*` modules still mention `?host=legacy` when describing where that code came from;
+  those are provenance notes about the past, not live routes.
 - **A live session's mission event ledger does not clear.** It is retained for the session's
   whole lifetime so a retried event keeps returning its original receipt. At the cap the only
   remedy is a new session, and the error now says so. Owner controls hold a reserve so a session
@@ -283,9 +353,15 @@ Nothing here blocks a release; pick by value rather than by order.
 - **Verify claims against the running system, not the docs.** This ledger has been wrong: it
   once claimed work was unpushed and DNS unconfigured; all three claims were false. Before
   working any register or roadmap entry, check it against HEAD with two search methods.
-- **Adapt recovered archive code, don't rewrite it.** `archive-skybox.ts` already solved TV3D
-  face reordering; `nature-lab.ts` already had working boids. The pivot's mistake was reading
-  "not v2-expressible" as "rebuild from zero" instead of "wrap behind a v2 interface".
+- **Adapt recovered code, don't rewrite it.** `archive-skybox.ts` already solved TV3D face
+  reordering; the retired `nature-lab.ts` already had working boids, and `agent-world-flock.ts`
+  is that code graduated rather than reinvented. The pivot's mistake was reading "not
+  v2-expressible" as "rebuild from zero" instead of "wrap behind a v2 interface".
+- **Look at it before you believe it.** The EV3 surface passed on every number it was measured
+  by while the camera framed the room instead of the robot and the render-settings widget
+  clipped the Launch button to "Laun". Both were obvious in a screenshot and invisible to the
+  assertions. This is the third time on this project that green checks coexisted with a visibly
+  broken scene.
 - **Stage commits by explicit path. Never `git add -A`.** Several sessions have shared this tree
   concurrently, and a broad add has already swept one session's work into another's commit under
   an unrelated message — twice.
