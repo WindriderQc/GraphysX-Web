@@ -15,9 +15,9 @@ cost real sessions real hours.
 
 ## Start here — where the work actually is (2026-08-12)
 
-**The interesting work is on `refactor/lean-platform`, not on `main`.** Production serves
-`fa51b47`, which is `main` and has none of it. The branch is pushed through `5c4ddc8`; the
-working tree now contains the verified, uncommitted First Drive mission slice described below.
+**The lean platform and First Drive are the current release on `main`.** The integration branch
+`refactor/lean-platform` preserves the same release line for provenance. Production previously
+served `fa51b47`; this handoff accompanies the release that replaces it.
 
     de3c7ba  preserve the EV3 robotics mission lab
     aebfe71  retire the archived legacy host
@@ -26,24 +26,19 @@ working tree now contains the verified, uncommitted First Drive mission slice de
     85f1842  reorganize verification around retained products  (tiers; 56 → 50 checks)
     d789aab  stop telling contributors to maintain deleted code
     539d7a8  give the EV3 mission lab a surface a child can use
-    worktree  make First Drive a real EV3 mission with scene rules and Nestor coaching
+    2477b81  make First Drive a real EV3 mission with scene rules and Nestor coaching
 
 What this branch did, in one line: the old GraphysX runtime is archived in another repo, so the
 legacy host, the archive UI, the revival tooling and the parity ledger left. **The asset library
 stayed** — 24.5 MB under `src/content/`, renamed rather than deleted, because it is read by the
 runtime. Every converted experience, EV3, BallZ, the Center and AgentX stayed.
 
-**Before merging this to `main`, run the full gate. It has never run on this branch.**
-`npm run check` and `npm run lint` are green (278 unit tests), and the focused EV3 browser smoke
-passes the scene rules, miss, success, retry and actual held-Go path. The 50-check browser gate
-has not run. It is ~40 minutes and it is the thing standing between this branch and a deploy.
-
-```bash
-npm run verify -- --wait > output/verify-lean.txt 2>&1
-```
-
-Then read the `=== verify summary ===` block in that file — do not pipe it, and do not judge it
-by exit code alone.
+**Release verification is complete.** `npm run check` and `npm run lint` are green (278 unit
+tests), and the focused EV3 browser smoke passes the scene rules, miss, success, retry and actual
+held-Go path. The complete local release gate passed all 56 checks on 2026-08-12 in 42 minutes.
+Three transport failures (`rules`, `physics`, `live-sessions-browser`) passed on the verifier's
+fresh-server retry, exactly meeting the documented local allowance of 3; no product assertion
+failed. CI still applies its normal zero-retry authority to the deployment.
 
 **Next, in the order that adds the most:**
 

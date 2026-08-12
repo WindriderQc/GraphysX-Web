@@ -3997,3 +3997,13 @@ appears, every live control is at least 72px, and — without teleporting — ho
 button moves the dynamic rover z=17 → 13.33 and finishes in 2.3 seconds. One rerun died at
 navigation with the known local `ERR_CONNECTION_RESET` harness signature; the unchanged rerun
 passed. The branch-wide 50-check browser gate remains unrun.
+
+## 2026-08-12 — lean-platform release gate
+
+The complete release gate is no longer unknown. `npm run verify -- --wait` completed in 42
+minutes with **all 56 checks passing**. `rules`, `physics`, and `live-sessions-browser` each passed
+on the verifier's fresh-server transport retry, using the full documented local allowance of 3;
+no assertion failure was retried. The live-session retry completed all 131 product checks. An
+earlier loaded-machine run had failed `scene-store` and `live-sessions-browser`; both unchanged
+checks passed when run alone, and both passed in the authoritative full rerun. The final summary
+is preserved in `output/verify-lean-rerun.txt` (ignored release evidence, not a tracked artifact).
