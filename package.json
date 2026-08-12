@@ -72,7 +72,10 @@
     "assets:ppl-shader": "node scripts/vendor-ppl-shader.mjs",
     "assets:shelf-thumbnails": "node scripts/capture-shelf-thumbnails.mjs",
     "qa": "node scripts/qa-agent-entities.mjs",
-    "counts": "node scripts/counts.mjs"
+    "counts": "node scripts/counts.mjs",
+    "check": "npm run typecheck && npm test",
+    "verify:core": "node scripts/verify.mjs --tier=core",
+    "verify:apps": "node scripts/verify.mjs --tier=apps"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",

@@ -64,7 +64,10 @@ Three layers, cheapest first. Use them in that order.
 | --- | --- | --- |
 | `npm test` | < 1s | Fast authority/resource contracts: inverse operations, missions, streams, stores, results, assets, and the gate itself. No browser, server, port, or lock. |
 | `npm run lint` | ~70s | What the type checker cannot see — principally floating promises. |
-| `npm run verify` | ~40min+ | Typecheck, lint, build, then every product route driven through headless Chromium against the **built** output. The same gate CI runs before a production deploy. |
+| `npm run check` | ~13s | Typecheck + unit tests. The loop to run while building. |
+| `npm run verify -- --tier=core` | ~10min | The platform and its front door: showroom, editor, standalone, levels, rules, triggers, round-trip, command validation, asset guards. |
+| `npm run verify -- --tier=apps` | ~15min | One application or content family per check. Run when you touch one. |
+| `npm run verify` | ~40min+ | Everything, including the deep protocol tier. What a release runs. |
 
 Screenshots land in `output/verify/`. For any visual change, actually look at them.
 
