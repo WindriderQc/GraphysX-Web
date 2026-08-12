@@ -7,6 +7,7 @@ const OUTPUT = path.resolve("public/assets/shelf-thumbnails");
 const PORT = Number(process.env.SHELF_THUMBNAIL_PORT || 4197);
 const BASE = `http://127.0.0.1:${PORT}/?intro=0`;
 const BROWSE_IDS = [
+  "ev3-robotics-lab",
   "archive-maison",
   "archive-math-lab",
   "archive-voie-lactee",
@@ -61,7 +62,7 @@ async function capture(id, shelf, selector) {
   // The editor is deliberately mounted over the same renderer after Browse opens a scene.
   // Capture the scene, not its authoring chrome: the renderer canvas is the one direct app
   // child we keep. This also strips the play HUD and win panel for course previews.
-  await page.addStyleTag({ content: "#app > :not(canvas){display:none!important}" });
+  await page.addStyleTag({ content: "#app > :not(canvas),.gx-display-settings{display:none!important}" });
   await page.locator("#app canvas").first().screenshot({
     path: path.join(OUTPUT, `${id}.jpg`),
     type: "jpeg",

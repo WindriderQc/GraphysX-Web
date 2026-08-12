@@ -9,8 +9,12 @@ import {
   type AgentWorldPrefabId,
   type AgentWorldPrefabOptions
 } from "./agent-world-prefabs";
+import {
+  EV3_ROBOTICS_LAB_ENTITY_COUNT,
+  ev3RoboticsLab,
+} from "./ev3-robotics-lab";
 
-export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook" | "constraint-workshop" | "living-systems" | "quarantine" | "archive-great-slide";
+export type AgentWorldStarterId = "prefab-plaza" | "glow-garden" | "signal-outpost" | "signal-trail" | "physics-sketchbook" | "constraint-workshop" | "living-systems" | "quarantine" | "archive-great-slide" | "ev3-robotics-lab";
 
 export type AgentWorldStarterDescriptor = {
   id: AgentWorldStarterId;
@@ -26,6 +30,13 @@ export type AgentWorldStarterOptions = {
 };
 
 export const GRAPHYSX_AGENT_WORLD_STARTERS: readonly AgentWorldStarterDescriptor[] = [
+  {
+    id: "ev3-robotics-lab",
+    label: "EV3 Robotics Mission Lab",
+    summary: "An editable EV3-inspired training arena: seven construction families, seven Robot Trainer mission zones, sensors, attachments, cargo, a factory, and an interactive launch.",
+    prefabCount: 0,
+    entityCount: EV3_ROBOTICS_LAB_ENTITY_COUNT
+  },
   {
     id: "archive-great-slide",
     label: "Great Slide: Gravity Run",
@@ -111,6 +122,7 @@ export function instantiateAgentWorldStarter(
 }
 
 function starterBase(starterId: AgentWorldStarterId): Pick<AgentWorldDefinition, "environment" | "entities" | "joints" | "rules"> {
+  if (starterId === "ev3-robotics-lab") return ev3RoboticsLab();
   if (starterId === "archive-great-slide") return archiveGreatSlide();
   if (starterId === "living-systems") return livingSystems();
   if (starterId === "quarantine") return quarantine();

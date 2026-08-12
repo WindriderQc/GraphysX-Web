@@ -33,6 +33,7 @@
     "smoke:surfaces": "node scripts/smoke-surfaces.mjs",
     "smoke:physics": "node scripts/smoke-physics.mjs",
     "smoke:joints": "node scripts/smoke-joints.mjs",
+    "smoke:ev3-lab": "node scripts/smoke-ev3-lab.mjs",
     "smoke:ballz18-sky": "node scripts/smoke-ballz18-sky.mjs",
     "smoke:scenenet-xml": "node scripts/smoke-scenenet-xml.mjs",
     "smoke:mesh-colliders": "node scripts/smoke-mesh-colliders.mjs",
