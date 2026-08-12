@@ -40,8 +40,8 @@ of rules that exist because breaking them has already cost real sessions real ho
 ## Product invariants (the short version)
 
 - Every editor control and showroom interaction is an ordinary `api.*` call. No bespoke host
-  code holding scene state. New API methods go on BOTH `agent-world-api.ts` and
-  `prototype-app.ts` or the build breaks (this is deliberate).
+  code holding scene state. There is one implementation of the API now — `agent-world-api.ts`.
+  The second one lived on the legacy route and retired with it.
 - Entity types thread through the full map in `HANDOFF.md` ("Adding an entity type").
 - One shared frame loop. Never a second `requestAnimationFrame`.
 - Recovered archive material is adapted behind v2 vocabulary, never rewritten, and

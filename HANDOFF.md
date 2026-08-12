@@ -30,16 +30,16 @@ Every editor control and every showroom interaction is an ordinary API call (`ap
 edits land in the same revision history.
 
 If you find yourself mutating the three.js scene graph directly to get something done, you are
-breaking the product, not taking a shortcut. The archive modules do exactly that, which is why
-they are legacy-only and unreachable from the editor and the agent API.
+breaking the product, not taking a shortcut. The modules that used to do that left with the
+legacy host; everything here now goes through the API.
 
 ## Architecture
 
 | File | Role |
 | --- | --- |
-| `src/platform-host.ts` | Renderer, camera, OrbitControls, ONE animation loop. Zero race-scene dependency. |
+| `src/platform-host.ts` | Renderer, camera, OrbitControls, ONE animation loop. |
 | `src/agent-world-runtime.ts` | The v2 runtime: entities, Rapier physics, behaviours, deterministic `update(dt)`. |
-| `src/agent-world-api.ts` **and** `src/prototype-app.ts` | **Both** satisfy `GraphysXAgentWorldApi`. A new API method must be added to both or the build breaks. The second is a ~65-line adapter onto the legacy route's `debugApi`, not a second implementation. |
+| `src/agent-world-api.ts` | The one implementation of `GraphysXAgentWorldApi`. There used to be a second on the retired legacy route, and a new method had to land in both; it now lands in one place. |
 | `src/platform-editor.ts` | Top bar, left scene tree, right inspector, bottom tabbed library, Levels workbench, media import dialog. |
 | `server/scene-store.mjs` | The store server: scenes, relay, and the router that mounts everything below. |
 | `server/live-sessions.mjs` + `server/live-missions.mjs` | Authenticated scene-scoped collaboration, and the pure mission reducer on top of it. |
@@ -47,13 +47,13 @@ they are legacy-only and unreachable from the editor and the agent API.
 | `server/host-entity-id-policy.mjs` | The one source of truth for the `live-agent:` / `live-mission:` / `live-nestor:` namespaces, imported by both trees. |
 | `server/store-paths.mjs` | The one place a public id is allowed to become a filename. |
 
-`verbatimModuleSyntax` is on specifically so the two remaining type-only `race-scene` edges
-cannot silently become runtime imports and drag the 1.4 MB monolith onto the default bundle
-with a green build.
+`verbatimModuleSyntax` stays on as ordinary hygiene. Its original reason — stopping two type-only
+`race-scene` edges from silently becoming runtime imports and dragging a 1.4 MB monolith onto the
+default bundle — retired with the monolith.
 
 **Adding an entity type** — thread it through: the type union, `resolveEntity` (+guards),
 `createEntityObject`, `rebuildPhysicsBody`, `updateSimulation`, `applyResolvedEntity`, the patch
-path, `serializeEntity`, disposal, capabilities, **both** API implementations, and the editor
+path, `serializeEntity`, disposal, capabilities, the API, and the editor
 palette. Follow how `emitter`, `terrain`, `water` and `flock` did it.
 
 ## Verification — read before running anything
@@ -258,8 +258,7 @@ Nothing here blocks a release; pick by value rather than by order.
   decomposed at its edges — terrain, water, flock, crowd, dna, particles, force fields all live
   in their own modules — so the seams exist; what remains is entity resolution, physics rebuild,
   simulation and serialization, which is roughly four more files. This is a multi-session
-  refactor and should be its own change, not a rider on something else. `race-scene.ts` and
-  `prototype-app.ts` are legacy and correctly quarantined; leave them.
+  refactor and should be its own change, not a rider on something else.
 - `scripts/smoke-live-sessions-browser.mjs` is large enough to need its own review before
   changes. A test that cannot be reviewed safely is a test that eventually gets deleted instead
   of fixed.
