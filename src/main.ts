@@ -110,6 +110,12 @@ if (configuredProposalUrl) {
 // arrives in the fragment as `#session=<id>&invite=<code>` — never in the query string,
 // because a query string is what gets pasted, bookmarked and sent as a referrer. The client
 // exchanges the code for a scoped credential and scrubs the fragment on the way in.
+// `?app=<id>` opens one application surface instead of the front door. Today the only one is
+// the EV3 lab, whose child-facing strip exists because the editor is unusable at 800x480 by the
+// person the lab was built for. This is the seam a second application would use, not a special
+// case for EV3 — hence a value, not a boolean.
+const appParam = (params.get("app") ?? "").trim();
+
 const sessionParam = params.get("session");
 const liveSessionRequested = Boolean(
   sessionParam || new URLSearchParams(window.location.hash.replace(/^#/, "")).get("session"),
@@ -343,7 +349,45 @@ if (mode === "previews" && import.meta.env.DEV) {
       if (nestorBlockedByLiveSession()) return "live-observer";
       return isNestorCenterReady(host.api) ? "agentx" : "scene-resume";
     };
+    /**
+     * Open one application surface instead of the front door.
+     *
+     * Loads the starter, frames it, and mounts that application's own controls. The scene is
+     * loaded through the ordinary `api.loadStarter`; framing is a host concern and happens here
+     * rather than inside the API, which is why calling `loadStarter` from a probe leaves the
+     * camera where it was.
+     *
+     * Keyed by id rather than a boolean because this is the seam a second application uses, not
+     * a special case for EV3.
+     */
+    let appSurface: { dispose: () => void } | null = null;
+    const openApplication = (id: string): boolean => {
+      if (id !== "ev3-lab") return false;
+      const loaded = host.api.loadStarter("ev3-robotics-lab");
+      if (!loaded.ok) return false;
+      // Frame the robot, not the room. `frameWorld()` fits every entity, which at 800x480 puts
+      // the whole lab in the middle third of the screen and leaves the thing the child is
+      // driving a few pixels tall. Focus on the drive base with a radius that keeps its
+      // neighbours in shot, and fall back to the whole world if the lab ever loads without one.
+      const rover = host.api.query({ ids: ["ev3-drive-base"] })[0];
+      // The host owns three.js here; borrowing the constructor off a live vector keeps `main.ts`
+      // from taking a direct three import it otherwise does not need.
+      const Vec = host.camera.position.constructor as new (x: number, y: number, z: number) => typeof host.camera.position;
+      if (rover) host.focusOn(new Vec(rover.position[0], rover.position[1], rover.position[2]), 7.5, 0.9, 30);
+      else host.frameWorld();
+      requestShowroomInteraction(false);
+      void import("./ev3-mission-strip").then(({ mountEv3MissionStrip }) => {
+        appSurface = mountEv3MissionStrip(root, host.api, () => {
+          appSurface?.dispose();
+          appSurface = null;
+          window.location.search = "";
+        });
+      });
+      return true;
+    };
+
     const mountFrontDoor = (): void => {
+      if (appSurface) return;
       welcome?.dispose();
       const variant = desiredWelcomeVariant();
       const agentxDoor = variant === "agentx";
@@ -416,6 +460,10 @@ if (mode === "previews" && import.meta.env.DEV) {
       showroomEnvironment = mountShowroomEnvironment(host.scene, host.renderer);
       host.resetFraming();
       requestShowroomInteraction(showWelcome);
+      // `?app=<id>` replaces the front door with one application surface. Checked here rather
+      // than at boot so it survives the showroom composition that runs first — the app loads its
+      // own starter over the top, exactly as a Browse row does.
+      if (appParam && openApplication(appParam)) return;
       if (showWelcome) mountFrontDoor();
     };
     // A composed course may replace the world before a later asynchronous asset step fails.
@@ -994,7 +1042,10 @@ if (mode === "previews" && import.meta.env.DEV) {
       });
       requestShowroomInteraction(true);
       Object.assign(window, { __GRAPHYSX_NESTOR__: nestor });
-      mountFrontDoor();
+      // `?app=<id>` replaces the front door with one application surface. Checked after the
+      // showroom composes so there is always something on screen if the application refuses to
+      // load, and so the app loads its own starter over the top exactly as a Browse row does.
+      if (!appParam || !openApplication(appParam)) mountFrontDoor();
     }
 
     // Mounted after the showroom composes so there is always something on screen, and only

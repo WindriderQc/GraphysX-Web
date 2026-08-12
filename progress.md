@@ -3913,3 +3913,48 @@ What is comparable is the same page measured twice in the same conditions, and t
 is that fourteen static entities and two point lights is a small addition to a scene that already
 carries eleven lights — but nobody has measured it on hardware, and that is the check to run
 before adding a fourth place.
+
+## KidX slice one: the lab gets a surface a child can use
+
+Phase 5 was meant to be a visual review and turned into a product finding, because the review was
+done by looking rather than reasoning.
+
+**First finding was mine and wrong.** Loading the lab with `api.loadStarter()` showed an unframed
+camera and 35 of 166 entities off screen. That was the harness: `loadStarter` is a scene operation
+and framing is a host concern, so the Browse row calls `host.frameWorld()` itself. Through the
+real route the lab frames 166/166 at every viewport. Reporting the API path as a product defect
+would have sent someone chasing nothing.
+
+**The real defect is the surface, not the scene.** Browse Scenes → EV3 opens the Scene Editor:
+
+    desktop, 1024x600 and 800x480, identical
+    world graphysx-ev3-robotics-lab · 166/166 on screen · editor open
+    218 controls · 218 of them under 44px · tab chips 21px tall
+
+At 800x480 that is four authoring panels around a postage stamp of the lab. The editor is a
+correct tool aimed at the wrong person, and no amount of tuning it fixes that.
+
+So `?app=ev3-lab` opens the lab in its own surface: five controls, none under 72px, and nothing
+else. Left / Go / Right hold to steer through `api.steer`; Grab and Launch fire the interactions
+the scene already declares (`toggle-gripper`, `initiate-launch`). No bespoke host state, no second
+command path — an agent can do everything the child can and the reverse.
+
+Two defects the screenshots caught after the first build:
+
+- **The camera framed the room, not the robot.** `frameWorld()` fits every entity, which put the
+  whole lab in the middle third and left the drive base a few pixels tall. It focuses the rover at
+  radius 7.5 now, falling back to the world if a lab ever loads without one.
+- **The render-settings disclosure sat on the Launch button**, clipping it to "Laun". It is pinned
+  bottom-right at z-index 120. The application surface hides it — a child has no use for render
+  settings, and dodging around it would have been the worse fix.
+
+Measured after, at all three viewports: 165/166 entities on screen, 5 controls, **0 below the
+touch minimum**, the rover moves when Go is held, the gripper toggles, and the rocket lights the
+Mars outpost. Zero page errors; the one console error is the absent scene store in dev.
+
+`?app=<id>` is keyed by id rather than a boolean because it is the seam a second application uses.
+That is the whole architectural claim so far — small, and now demonstrated by one real consumer
+rather than asserted by a diagram.
+
+**Not built, deliberately:** mission selection, block programming, hardware, scoring, Nestor
+coaching. This is the smallest thing that makes the lab usable by the person it was built for.
