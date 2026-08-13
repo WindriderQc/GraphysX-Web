@@ -13,20 +13,19 @@ Read `PRODUCT_SPEC.md` §8.1 (the honest status table) for what ships versus wha
 as the v1 target. Read `CLAUDE.md` for the short list of rules that exist because breaking them
 cost real sessions real hours.
 
-## Start here — where the work actually is (2026-08-12)
+## Start here — where the work actually is (2026-08-13)
 
-**The lean platform and First Drive are the current release on `main`.** The integration branch
-`refactor/lean-platform` preserves the same release line for provenance. Production previously
-served `fa51b47`; this handoff accompanies the release that replaces it.
+**The lean platform and KidX First Drive are the current production release on `main`.** The
+feature landed in `5bddf69`; the live visual follow-up landed in `ecd130b`, and the current release
+line includes both. `refactor/lean-platform` remains the pre-KidX integration line for provenance.
 
-**The next KidX slice is implemented on `codex/kidx-first-program`.** It adds a bounded four-block
-language, runs those blocks through the same steering API as a child or agent, and lets the existing
-First Drive scene rules and Nestor judge the result. The all-around audit's turn blocker is fixed:
-Left / Right produce opposite physical routes, Forward preserves heading, every attempt restores
-north, and a scene-authored cyan marker makes direction visible. Focused browser/game-client/static
-checks are green. Two complete local matrices passed every product assertion but were rejected for
-exceeding the local transport-retry budget (7 and then 4 retries); production's clean Linux gate is
-the zero-retry release authority and must pass before activation.
+**KidX First Drive is shipped, not pending.** It adds a bounded four-block language, runs those
+blocks through the same steering API as a child or agent, and lets the existing First Drive scene
+rules and Nestor judge the result. Left / Right produce opposite physical routes, Forward preserves
+heading, every attempt restores north, and a scene-authored cyan marker makes direction visible.
+The final live visual audit also caught and removed scene-store authoring chrome from the kid-facing
+application route. The wide production capture has complete copy, no overlap or clipping, a clearly
+framed robot and target, and state that agrees with the success screen.
 
     de3c7ba  preserve the EV3 robotics mission lab
     aebfe71  retire the archived legacy host
@@ -36,18 +35,21 @@ the zero-retry release authority and must pass before activation.
     d789aab  stop telling contributors to maintain deleted code
     539d7a8  give the EV3 mission lab a surface a child can use
     2477b81  make First Drive a real EV3 mission with scene rules and Nestor coaching
+    5bddf69  add the first KidX program
+    ecd130b  keep authoring chrome out of the app
 
 What this branch did, in one line: the old GraphysX runtime is archived in another repo, so the
 legacy host, the archive UI, the revival tooling and the parity ledger left. **The asset library
 stayed** — 24.5 MB under `src/content/`, renamed rather than deleted, because it is read by the
 runtime. Every converted experience, EV3, BallZ, the Center and AgentX stayed.
 
-**Release verification is complete.** `npm run check` and `npm run lint` are green (278 unit
-tests), and the focused EV3 browser smoke passes the scene rules, miss, success, retry and actual
-held-Go path. The complete local release gate passed all 56 checks on 2026-08-12 in 42 minutes.
-Three transport failures (`rules`, `physics`, `live-sessions-browser`) passed on the verifier's
-fresh-server retry, exactly meeting the documented local allowance of 3; no product assertion
-failed. CI still applies its normal zero-retry authority to the deployment.
+**Release verification is complete.** `npm run check` and `npm run lint` are green (278 passing
+unit tests, one intentional skip). The focused EV3 browser smoke covers 171 entities, mission miss
+and success, retry, held-Go driving, the six-block cap, deterministic programs, left/right physical
+routes, heading repeatability, 72 px controls, and the absence of authoring chrome. The required
+game client and screenshots were inspected at both 800×480 and 1280×720. The final clean Linux
+release gate passed on its first workflow attempt in 1h21m, the atomic deploy and its production
+smoke passed, and an independent live smoke found zero bad responses, console errors or page errors.
 
 **Next, in the order that adds the most:**
 
