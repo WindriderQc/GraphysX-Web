@@ -362,10 +362,15 @@ if (mode === "previews" && import.meta.env.DEV) {
      * a special case for EV3.
      */
     let appSurface: Ev3MissionStrip | null = null;
+    // Application surfaces own the whole play viewport. Keep this separate from the lazy
+    // surface module so later host chrome (notably the asynchronously mounted scene browser)
+    // can respect the route before the application's import has finished.
+    let applicationOpen = false;
     const openApplication = (id: string): boolean => {
       if (id !== "ev3-lab") return false;
       const loaded = host.api.loadStarter("ev3-robotics-lab");
       if (!loaded.ok) return false;
+      applicationOpen = true;
       // Frame the attempt, not the room. A subject-only orbit focus still inherits the
       // showroom's diagonal viewing direction; at 800x480 the blue target then disappears into
       // seven neighbouring mission pads. This authored application view sits behind the rover
@@ -387,6 +392,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           () => {
             appSurface?.dispose();
             appSurface = null;
+            applicationOpen = false;
             window.location.search = "";
           },
           { subscribeFrame: host.subscribeFrame.bind(host) },
@@ -1129,7 +1135,10 @@ if (mode === "previews" && import.meta.env.DEV) {
             else restoreShowroom();
           },
         });
-        if (liveSessionRequested) browser.setEnabled(false);
+        // A play/application route is one coherent surface, not an editor with game controls
+        // layered over it. The store can answer after the application is already open, so the
+        // browser must cede its chrome here at mount time as well as live-session authority.
+        if (liveSessionRequested || applicationOpen) browser.setEnabled(false);
         Object.assign(window, { __GRAPHYSX_SCENE_BROWSER__: browser, __GRAPHYSX_SCENE_STORE__: { client, browser } });
 
         // Live sessions: identity, roles, presence and incremental operations on top of the

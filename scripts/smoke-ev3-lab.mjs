@@ -160,11 +160,20 @@ try {
   await page.setViewportSize({ width: 800, height: 480 });
   await page.goto(`${base}?app=ev3-lab`, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await page.waitForSelector("[data-ev3-mission='first-drive']", { timeout: SMOKE_TIMEOUT });
+  // Give optional host services time to answer. A connected scene store used to mount its
+  // authoring panel over this kid-facing app after the mission surface had already appeared.
+  await page.waitForTimeout(750);
   const appInitial = await page.evaluate(() => ({
     objective: document.querySelector("[data-ev3-objective]")?.textContent ?? "",
     nestor: document.querySelector("[data-ev3-nestor]")?.textContent ?? "",
     clock: document.querySelector("[data-ev3-clock]")?.textContent ?? "",
     mode: document.querySelector("[data-ev3-mission]")?.getAttribute("data-mode"),
+    sceneBrowserVisible: (() => {
+      const panel = document.querySelector("[aria-label='Stored scenes']");
+      if (!(panel instanceof HTMLElement)) return false;
+      const style = getComputedStyle(panel);
+      return !panel.hidden && style.display !== "none" && style.visibility !== "hidden";
+    })(),
     rendered: JSON.parse(window.render_game_to_text()).application,
     controls: [...document.querySelectorAll("[data-ev3]:not([hidden])")].map((button) => ({
       label: button.getAttribute("aria-label"),
@@ -180,6 +189,8 @@ try {
       && appInitial.rendered?.mode === "program"
       && appInitial.rendered?.program?.blocks?.length === 0
       && appInitial.rendered?.mission?.phase === "running", appInitial);
+  check("the kid-facing application hides scene-store authoring chrome",
+    appInitial.sceneBrowserVisible === false, appInitial.sceneBrowserVisible);
   check("the first program exposes seven thumb-sized controls and no hardware actions",
     appInitial.controls.length === 7
       && ["Add Forward block", "Add Left block", "Add Right block", "Add Stop block", "Undo block", "Run program", "Drive mode"]

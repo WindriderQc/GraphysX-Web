@@ -4131,3 +4131,11 @@ assertion failed, EV3 passed its expanded route contract in both full matrices, 
 had no competing GraphysX/Playwright processes. Do not relabel either run green: production's clean
 Linux workflow runs the same gate with zero retries and remains the authority that either activates
 or blocks the release.
+
+# Production visual follow-up — 2026-08-13
+
+- The first production activation of KidX First Drive passed the full GitHub release gate and live-release smoke.
+- The required live screenshot then caught one host-level presentation leak: when the production scene store answered, its Scenes/save panel floated over the kid-facing EV3 application.
+- `main.ts` now records application ownership before its lazy UI import and disables the asynchronously mounted scene browser while that application is open. This preserves the platform rule that an app/play surface has no authoring chrome.
+- `smoke-ev3-lab.mjs` now waits for optional host services and asserts the Stored scenes panel is not visible on `?app=ev3-lab`.
+- Verification is green on the stable preview: build; the full EV3 browser suite with 171 entities, both mission modes, program limits, deterministic playback, turns, repeatability, and zero browser errors; 278/278 unit tests (one intentional skip); and lint. The required game client also completed the two-Forward program, and the inspected 1280×720 settled screenshot has full copy, no clipping, and no Scenes panel.
