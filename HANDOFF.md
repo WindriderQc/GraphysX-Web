@@ -19,6 +19,15 @@ cost real sessions real hours.
 `refactor/lean-platform` preserves the same release line for provenance. Production previously
 served `fa51b47`; this handoff accompanies the release that replaces it.
 
+**The next KidX slice is implemented on `codex/kidx-first-program`.** It adds a bounded four-block
+language, runs those blocks through the same steering API as a child or agent, and lets the existing
+First Drive scene rules and Nestor judge the result. The all-around audit's turn blocker is fixed:
+Left / Right produce opposite physical routes, Forward preserves heading, every attempt restores
+north, and a scene-authored cyan marker makes direction visible. Focused browser/game-client/static
+checks are green. Two complete local matrices passed every product assertion but were rejected for
+exceeding the local transport-retry budget (7 and then 4 retries); production's clean Linux gate is
+the zero-retry release authority and must pass before activation.
+
     de3c7ba  preserve the EV3 robotics mission lab
     aebfe71  retire the archived legacy host
     f41b5d4  move the revival provenance record out of the product
@@ -42,12 +51,13 @@ failed. CI still applies its normal zero-retry authority to the deployment.
 
 **Next, in the order that adds the most:**
 
-1. **Phase 6, the KidX vertical slice** — blocks → program → simulation → EV3 → Nestor feedback.
-   First Drive now supplies the measured mission and feedback loop this can build on.
-2. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`
+1. **Finish Phase 6 on real EV3 hardware.** All four blocks now work in simulation; add the narrow
+   adapter that sends that same compiled input sequence to EV3; do not invent a second program
+   model for the robot.
+2. **Phase 7, Raspberry Pi validation.** Run the child surface and hardware path on the actual Pi;
+   the Build / Run surface is measured at 800×480 in anticipation of it.
+3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`
    remains one `if` in `main.ts`. Generalize it when a *second* application asks for it, not before.
-3. **Phase 7, Raspberry Pi validation.** Needs the actual hardware; the surface was built and
-   measured at 800×480 in anticipation of it.
 
 Do not expand the Center, and do not extract an npm package or split the repository yet — both
 are explicit product decisions, not oversights.
@@ -80,7 +90,8 @@ legacy host; everything here now goes through the API.
 | `src/agent-world-runtime.ts` | The v2 runtime: entities, Rapier physics, behaviours, deterministic `update(dt)`. |
 | `src/agent-world-api.ts` | The one implementation of `GraphysXAgentWorldApi`. There used to be a second on the retired legacy route, and a new method had to land in both; it now lands in one place. |
 | `src/platform-editor.ts` | Top bar, left scene tree, right inspector, bottom tabbed library, Levels workbench, media import dialog. |
-| `src/ev3-mission-strip.ts` | The first *application surface*: First Drive's objective, clock and Nestor card over three 72px steering controls, reached by `?app=ev3-lab`. It consumes `api.rules` / `api.events` and drives through `api.steer`. |
+| `src/ev3-first-program.ts` | The DOM-free first KidX language and runner: Forward, Left, Right and Stop, capped at six timed blocks and compiled only to steering inputs. |
+| `src/ev3-mission-strip.ts` | The first *application surface*: First Drive's objective, clock, Nestor and Build / Run / Drive controls, reached by `?app=ev3-lab`. It consumes `api.rules` / `api.events`; both manual play and programs drive through `api.steer`. |
 | `src/content/` | The asset library — 24.5 MB of converted scenes and media, read by the runtime. Formerly `src/legacy/`, renamed because the name was describing its origin instead of its job. |
 | `server/scene-store.mjs` | The store server: scenes, relay, and the router that mounts everything below. |
 | `server/live-sessions.mjs` + `server/live-missions.mjs` | Authenticated scene-scoped collaboration, and the pure mission reducer on top of it. |
@@ -230,16 +241,24 @@ of this one.
 The editor is a correct tool aimed at the wrong person. Reaching the EV3 lab through Browse
 Scenes was measured at desktop, 1024×600 and 800×480: **218 controls, every one under 44px**,
 four authoring panels around a postage stamp of the lab. `?app=ev3-lab` opens the same scene in
-its own surface instead — First Drive's mission card and 3 controls, none under 72px.
+its own surface instead — First Drive's mission card and seven Build-mode actions, none under
+72px at 800×480.
 
-- **The surface holds no scene state.** Left/Go/Right are `api.steer` on the drive base. The EV3
-  document declares the 30-second run, drive-base subject and blue finish through `rules`; red
-  miss lanes are trigger entities. Nestor reads `api.events` and `api.rules.status()` in the
-  host's shared frame loop. An agent sees and drives the same attempt the child does.
+- **The surface holds no scene state.** Manual controls and the four-block program runner both
+  reduce to `api.steer` on the drive base. The EV3 document declares the 30-second run,
+  drive-base subject and blue finish through `rules`; red miss lanes are trigger entities.
+  Nestor reads `api.events` and `api.rules.status()` in the host's shared frame loop. An agent
+  sees and drives the same attempt the child does.
 - **First Drive is real, and deliberately one mission.** Hold Go and the dynamic rover reaches
   the luminous blue ring in about 2.3 seconds. A red crossing keeps the attempt alive and makes
   Nestor coach toward the middle; success or timeout stops steering and offers Try again. The
   focused smoke proves both forced verdicts and the actual held-button path at 800×480.
+- **The first program is deliberately not a framework.** Forward, Left, Right and Stop are timed
+  inputs, programs stop at six blocks, and three Forward blocks solve First Drive in about 1.8
+  seconds. A program that stops early leaves the scene's mission alive and makes Nestor recommend
+  the missing Forward block. Build mode pauses the clock and rover until Run. Left / Right make
+  repeatable opposite quarter-turn routes, Forward preserves that heading, and the cyan direction
+  marker keeps the logical program visible on the rover.
 - **It is keyed by id, not by a boolean**, because it is the seam a second application uses. That
   is the entire architectural claim so far, and it is deliberately still one `if` in `main.ts` —
   generalize it into a composition surface when a second application exists to reveal what the

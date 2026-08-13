@@ -199,12 +199,22 @@ function buildRover(
       material: { color: PALETTE.dark, roughness: 0.48, metalness: 0.15, ...(driveable ? { opacity: 0.015 } : {}) },
       ...(driveable ? {
         physics: { mode: "dynamic" as const, mass: 3.2, material: "default" as const, friction: 0.84, restitution: 0.04 },
-        steering: { headingDegrees: 0, force: 34, speedCap: 5.4, turnRateDegrees: 160, kickImpulse: 5, jumpImpulse: 0 },
+        steering: {
+          headingDegrees: 0,
+          force: 34,
+          speedCap: 5.4,
+          turnRateDegrees: 160,
+          kickImpulse: 5,
+          jumpImpulse: 0,
+          arrowId: `${prefix}:heading`,
+          arrowLift: 2.65,
+        },
       } : {}),
       castShadow: true,
       tags: rootTags,
     },
     ...(driveable ? [
+      directionIndicator(prefix, position),
       roverPart(prefix, "chassis", "Drive Base Chassis", "box", [0, 0, 0], { width: 4.6, height: 0.58, depth: 3.8 }, PALETTE.dark),
     ] : []),
     roverPart(prefix, "brick", "EV3 Intelligent Brick", "box", [0, 1.02, 0.42], { width: 2.35, height: 1.45, depth: 1.62 }, PALETTE.white),
@@ -268,6 +278,30 @@ function buildRover(
   }
 
   return parts;
+}
+
+function directionIndicator(prefix: string, position: AgentWorldVector3): AgentWorldEntityDefinition {
+  return {
+    id: `${prefix}:heading`,
+    label: "Drive Direction",
+    type: "cone",
+    transform: {
+      position: [position[0], position[1] + 3.43, position[2]],
+      // ConeGeometry points along +Y; -90° around X makes its tip point north (-Z).
+      rotationDegrees: [-90, 0, 0],
+    },
+    geometry: { radius: 0.38, height: 1.3, radialSegments: 3 },
+    material: {
+      color: "#7fe6ff",
+      emissive: "#1a718b",
+      emissiveIntensity: 0.8,
+      roughness: 0.28,
+      metalness: 0.08,
+    },
+    marker: false,
+    castShadow: false,
+    tags: ["ev3-lab", "heading-indicator", "agent-observable"],
+  };
 }
 
 function roverPart(

@@ -4007,3 +4007,127 @@ no assertion failure was retried. The live-session retry completed all 131 produ
 earlier loaded-machine run had failed `scene-store` and `live-sessions-browser`; both unchanged
 checks passed when run alone, and both passed in the authoritative full rerun. The final summary
 is preserved in `output/verify-lean-rerun.txt` (ignored release evidence, not a tracked artifact).
+
+## KidX slice three — First Drive gets a first program
+
+Work began on a deliberately bounded blocks → program → simulation loop. The child surface now
+opens in Build mode with four timed motion blocks (Forward, Left, Right, Stop), Undo, Run and a
+Drive escape hatch. Programs are capped at six blocks and execute only through `api.steer`; the
+existing scene rules still own the timer, red misses and blue finish. Three Forward blocks are the
+known First Drive solution. `src/ev3-first-program.ts` holds the DOM-free runner, while the surface
+owns only the block list, narration and touch controls. `render_game_to_text` now includes the
+active application state, and the app supplies a deterministic `advanceTime(ms)` path that pauses
+the ambient loop and advances physics plus the program in 1/60 slices. Initial typecheck is green.
+
+TODO for this slice: extend the focused EV3 browser smoke, run the required web-game client,
+inspect the Build/Run/completion screenshots at 800×480, and correct any layout or interaction
+defects before static checks.
+
+The first stable-preview smoke exposed one real runner/UI coupling defect: block highlighting
+called the generic disabled-state refresh, whose old implementation also issued a stop command.
+The program index advanced while the rover stayed at z=17. The stop is now edge-triggered only
+when controls change from enabled to disabled; repainting an already-disabled block tray cannot
+cancel the runner's live input. The earlier ephemeral-server attempt never reached assertions due
+to the known `ERR_CONNECTION_RESET` transport signature.
+
+Visual review then caught a separate product-boundary problem: Build mode let the mission clock
+and dynamic scene run while the child was still composing. The runtime's `rules.reset()` already
+zeros rigid-body velocity; the missing action was pausing at the authoring boundary. Build now
+resets and pauses at the start line, Run resumes simulation, Drive resumes direct play, and a
+finished/terminal program pauses again. This keeps 0:30 and the rover stable until the child says
+the program is ready, using public pause/reset vocabulary rather than a private UI save state.
+
+The rover still appeared absent in the first post-fix 800×480 evidence. A direct scene-graph probe
+showed the reset was correct (root plus visible chassis/brick/wheel children at the authored spawn,
+zero linear/angular velocity), and a screenshot after 500ms showed it. The smoke had captured DOM
+immediately after reset while SwiftShader's canvas still held the previous frame. Ready, running
+and completion captures now include intentional paint pauses; DOM assertions remain immediate.
+
+The longer paint wait stayed blank, and the decisive probe was material state: a transform-only
+`api.update` on `ev3-drive-base` reapplied the root's 0.015-opacity material to every descendant
+mesh. Parent/child transforms and visibility were all correct; the rover was literally rendered
+at 1.5% opacity. `applyResolvedEntity` traversed straight through nested scene-entity roots. It now
+applies visual fields only to the current entity root and its unregistered implementation meshes;
+nested scene entities retain their own definitions. The EV3 smoke pins the white brick at opacity
+1 after both forced parent transforms so this shared-runtime regression cannot hide again.
+
+Final verification is green on the exact current build. `npm run check` reports 278 pass, 0 fail
+and one skip; lint is green. The expanded EV3 browser smoke covers all four block families, Undo,
+the six-block cap, early-stop coaching, live block highlighting, actual-physics completion with
+three Forward blocks, deterministic `advanceTime`, touch sizing and the nested-material regression,
+with zero console or page errors. The required web-game client independently built and ran the
+three-Forward program to the blue target, and the document round-trip smoke preserved all 99
+entities with 66 object checks. Ready, running and complete screenshots were inspected at 800×480.
+The full 56-check release gate remains deliberately unrun for this feature branch.
+
+Next: feed the same bounded input program to a real EV3 through a narrow hardware adapter, then
+validate the complete child interaction on the Raspberry Pi. Do not generalize the application
+mount or invent a second program representation before hardware supplies a concrete requirement.
+
+## 2026-08-13 — all-around KidX first-program audit
+
+An independent step-back review exercised the feature as a lesson, not only as a happy-path
+smoke. The required web-game client again built three Forward blocks and reached blue in 1.85s,
+with matching `render_game_to_text` state and no console/page errors. Fresh screenshots and DOM
+measurements at 800×480, 1024×600 and 640×360 show no clipped or overlapping controls, no mission
+card collision, and no target below 72px. The visible timeout state and Try again path also work.
+
+The full 56-check release matrix completed 54/56. EV3 passed in full. `scene-store` and `world1`
+failed only on local transport (`fetch failed` / `ERR_CONNECTION_RESET`), not assertions; both
+unchanged scripts then passed against the same build on a quiet stable host with zero browser
+errors. This is strong product evidence but the authoritative full gate is still red and must not
+be reported as a clean 56/56 run.
+
+**Release blocker found by the broader interaction audit:** Left and Right are present, authorable
+and highlighted, but they do not yet form a meaningful motion language. Each turn block changes
+the runtime's logical heading while applying a very small curved thrust; the following Forward
+block explicitly writes `headingDegrees: 0`, discarding the turn. A rendered Left → Forward run
+therefore went almost straight north (`x=-0.007`, `z=15.977`, final heading 0) instead of following
+the left turn. The rover mesh also keeps physical yaw near zero, so the child has no visual heading
+cue. The focused smoke only proved that Left/Right appear in the authored program; it never ran
+either through physics, which is why the suite stayed green.
+
+TODO before release:
+
+1. Define real, repeatable block semantics: Forward must preserve the current heading; turn blocks
+   should produce a clearly visible, intentional heading change; every new Run must restore the
+   authored start heading as well as position and velocity.
+2. Make the logical direction visible by rotating the directional rover or adding an unambiguous
+   heading indicator. A sideways-sliding robot is not an informative robotics lesson.
+3. Extend the EV3 smoke to run Left → Forward and Right → Forward through physics, assert opposite
+   lateral outcomes, and run the same turn-containing program twice to prove repeatability.
+4. Rerun the focused visual/game-client loop and then obtain one clean 56/56 release gate.
+
+Apart from that blocker, this is a coherent and polished *first sequence lesson*: clear start,
+active-step feedback, actionable early-stop coaching, success, timeout, retry, manual Drive and
+exit are all present. It is not yet the full KidX/EV3 product—hardware execution, Pi validation,
+mission selection, saved programs and curriculum progression remain explicit later boundaries.
+
+### Turn blocker resolved
+
+Forward now preserves the current steering heading. Left and Right are in-place 0.55s turns at
+the scene's authored 160°/s, producing readable 88° quarter-turns, and every attempt boundary
+restores heading 0 together with the scene-owned spawn and velocity reset. The same rule also
+fixes manual Drive: Go no longer silently discards a preceding turn.
+
+The scene now declares `ev3-drive-base:heading`, a saturated cyan triangular direction marker
+connected through the runtime's existing `steering.arrowId` vocabulary. It follows the dynamic
+rover, rotates with logical heading, round-trips as ordinary scene data, and the concise game text
+now reports `rover.headingDegrees`.
+
+The focused browser contract is green with 171 entities and zero console/page errors. It now runs
+Left → Forward to `x=-1.024`, heading 272°, repeats the identical program with zero positional
+drift, and runs Right → Forward to `x=+1.024`, heading 88°. The marker rotation and text state are
+pinned to the same heading. Fresh 800×480 frames for both routes were inspected and remain clear.
+The required independent game client also passed straight success and Left → Forward against the
+exact production bundle. Its first turn screenshot caught a transient partial DOM paint; a settled
+1.1s rerun rendered the complete card and controls, matching the focused smoke. Full release gate
+is the remaining pre-production step.
+
+Two complete local release matrices then passed every product assertion on the exact build. The
+first was rejected because seven checks used the verifier's transport-only fresh-server retry; the
+second was stopped after reaching four, already beyond the documented limit of three. No product
+assertion failed, EV3 passed its expanded route contract in both full matrices, and the second run
+had no competing GraphysX/Playwright processes. Do not relabel either run green: production's clean
+Linux workflow runs the same gate with zero retries and remains the authority that either activates
+or blocks the release.

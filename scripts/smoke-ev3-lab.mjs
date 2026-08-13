@@ -68,6 +68,11 @@ try {
     gx.update("ev3-drive-base", { transform: { position: [0, 0.83, 10.5] } });
     gx.step(1 / 60);
     const missionAfterGoal = gx.rules.status();
+    const brickMaterial = window.__GRAPHYSX_HOST__.world.getEntityObject("ev3-drive-base:brick")?.material ?? null;
+    const childLookAfterParentTransforms = brickMaterial ? {
+      color: `#${brickMaterial.color.getHexString()}`,
+      opacity: brickMaterial.opacity,
+    } : null;
     const document = gx.exportDocument();
     const reload = gx.load(document);
     const afterReload = gx.state();
@@ -81,6 +86,7 @@ try {
       missionAtStart,
       missionAfterMiss,
       missionAfterGoal,
+      childLookAfterParentTransforms,
       missEventCount: missEvents.length,
       roverBefore: roverBefore ? {
         position: roverBefore.position,
@@ -126,6 +132,9 @@ try {
   check("crossing the blue target completes the scene-native run",
     result.missionAfterGoal?.phase === "complete" && result.missionAfterGoal?.outcome === "complete",
     result.missionAfterGoal);
+  check("transforming a composite parent preserves its child-authored materials",
+    result.childLookAfterParentTransforms?.color === "#dce3e6"
+      && result.childLookAfterParentTransforms?.opacity === 1, result.childLookAfterParentTransforms);
 
   console.log("\n# interactions and simulation");
   check("gripper starts open and toggles closed", result.visibilityBefore.open === true && result.visibilityBefore.closed === false
@@ -155,6 +164,8 @@ try {
     objective: document.querySelector("[data-ev3-objective]")?.textContent ?? "",
     nestor: document.querySelector("[data-ev3-nestor]")?.textContent ?? "",
     clock: document.querySelector("[data-ev3-clock]")?.textContent ?? "",
+    mode: document.querySelector("[data-ev3-mission]")?.getAttribute("data-mode"),
+    rendered: JSON.parse(window.render_game_to_text()).application,
     controls: [...document.querySelectorAll("[data-ev3]:not([hidden])")].map((button) => ({
       label: button.getAttribute("aria-label"),
       width: button.getBoundingClientRect().width,
@@ -163,9 +174,16 @@ try {
   }));
   check("the child sees one explicit objective and a full 30 second clock",
     appInitial.objective === "Reach the blue target before time runs out."
-      && appInitial.clock === "0:30" && appInitial.nestor.includes("Blue is straight ahead"), appInitial);
-  check("First Drive keeps three thumb-sized controls and no unrelated mission actions",
-    appInitial.controls.length === 3
+      && appInitial.clock === "0:30" && appInitial.nestor.includes("Build a program"), appInitial);
+  check("First Drive opens in Build mode with empty text state that matches the screen",
+    appInitial.mode === "program"
+      && appInitial.rendered?.mode === "program"
+      && appInitial.rendered?.program?.blocks?.length === 0
+      && appInitial.rendered?.mission?.phase === "running", appInitial);
+  check("the first program exposes seven thumb-sized controls and no hardware actions",
+    appInitial.controls.length === 7
+      && ["Add Forward block", "Add Left block", "Add Right block", "Add Stop block", "Undo block", "Run program", "Drive mode"]
+        .every((label) => appInitial.controls.some((control) => control.label === label))
       && appInitial.controls.every((control) => control.width >= 72 && control.height >= 72), appInitial.controls);
   // The application opens with a 0.9s camera move; evidence captured before it settles is a
   // picture of a transition, not the surface a child actually receives.
@@ -209,10 +227,11 @@ try {
   await page.waitForTimeout(1_100);
   await page.screenshot({ path: path.join(ART, "ev3-first-mission-800x480.png"), fullPage: false });
 
-  // Finally prove the child path itself, not just the evaluator: reset, hold the rendered Go
-  // control, and wait for the dynamic rover to cross the finish under simulation.
+  // Preserve the direct-drive escape hatch: reset, switch modes, hold the rendered Go control,
+  // and wait for the dynamic rover to cross the finish under simulation.
   await page.evaluate(() => window.__GRAPHYSX__.pause(false));
   await page.locator("[data-ev3-retry]").click();
+  await page.locator("[data-ev3-mode='drive']").click();
   const go = page.locator("[data-ev3='go']");
   const goBox = await go.boundingBox();
   if (!goBox) throw new Error("First Drive Go control has no hit box");
@@ -230,10 +249,177 @@ try {
     rover: window.__GRAPHYSX__.query({ ids: ["ev3-drive-base"] })[0]?.position ?? null,
     nestor: document.querySelector("[data-ev3-nestor]")?.textContent ?? "",
   }));
-  check("holding the real Go control drives the rover into a real successful finish",
+  check("Drive mode still moves the rover through the real held-Go control",
     drivenSuccess.run?.phase === "complete"
       && drivenSuccess.rover?.[2] < 14
       && drivenSuccess.nestor.includes("You did it!"), drivenSuccess);
+
+  // Build mode is the new product loop. Touch every block family, undo back to empty, prove the
+  // six-block bound, then leave the known three-Forward solution in the tray.
+  await page.locator("[data-ev3-retry]").click();
+  await page.locator("[data-ev3-mode='program']").click();
+  for (const id of ["left", "right", "stop"]) await page.locator(`[data-ev3-block='${id}']`).click();
+  const everyBlock = await page.evaluate(() => ({
+    dom: [...document.querySelectorAll("[data-ev3-program-block]")].map((chip) => chip.getAttribute("data-ev3-program-block")),
+    text: JSON.parse(window.render_game_to_text()).application?.program?.blocks ?? [],
+  }));
+  check("Left, Right and Stop author the same ordered program in DOM and text state",
+    JSON.stringify(everyBlock.dom) === JSON.stringify(["left", "right", "stop"])
+      && JSON.stringify(everyBlock.text) === JSON.stringify(everyBlock.dom), everyBlock);
+  for (let index = 0; index < 3; index += 1) await page.locator("[data-ev3-undo]").click();
+  await page.locator("[data-ev3-block='stop']").click();
+  await page.locator("[data-ev3-run]").click();
+  await page.waitForFunction(() => {
+    const app = JSON.parse(window.render_game_to_text()).application;
+    return app?.program?.running === false && app?.mission?.phase === "running";
+  }, { timeout: 5_000 });
+  const stoppedShort = await page.evaluate(() => JSON.parse(window.render_game_to_text()).application);
+  check("Nestor explains a program that ends before the scene reports success",
+    stoppedShort?.mission?.phase === "running"
+      && stoppedShort?.program?.running === false
+      && stoppedShort?.nestor?.includes("stopped before blue")
+      && stoppedShort?.nestor?.includes("Forward"), stoppedShort);
+  await page.locator("[data-ev3-undo]").click();
+  await page.evaluate(() => {
+    const forward = document.querySelector("[data-ev3-block='forward']");
+    for (let index = 0; index < 7; index += 1) forward?.click();
+  });
+  const cappedProgram = await page.evaluate(() => ({
+    blocks: JSON.parse(window.render_game_to_text()).application?.program?.blocks ?? [],
+    atLimit: JSON.parse(window.render_game_to_text()).application?.program?.atLimit ?? false,
+    addDisabled: [...document.querySelectorAll("[data-ev3-block]")].every((button) => button.disabled),
+  }));
+  check("the first language stops at six blocks and disables every add target",
+    cappedProgram.blocks.length === 6 && cappedProgram.atLimit && cappedProgram.addDisabled, cappedProgram);
+  for (let index = 0; index < 3; index += 1) await page.locator("[data-ev3-undo]").click();
+  const readyProgram = await page.evaluate(() => ({
+    blocks: JSON.parse(window.render_game_to_text()).application?.program?.blocks ?? [],
+    chips: [...document.querySelectorAll("[data-ev3-program-block]")].map((chip) => ({
+      id: chip.getAttribute("data-ev3-program-block"),
+      active: chip.getAttribute("data-active"),
+    })),
+    runDisabled: document.querySelector("[data-ev3-run]")?.disabled ?? true,
+    controls: [...document.querySelectorAll("[data-ev3]:not([hidden])")].map((button) => ({
+      label: button.getAttribute("aria-label"),
+      width: button.getBoundingClientRect().width,
+      height: button.getBoundingClientRect().height,
+    })),
+  }));
+  check("Undo leaves the known three-Forward solution ready to run",
+    JSON.stringify(readyProgram.blocks) === JSON.stringify(["forward", "forward", "forward"])
+      && readyProgram.chips.length === 3 && !readyProgram.runDisabled, readyProgram);
+  check("Build mode remains thumb-sized after authoring",
+    readyProgram.controls.length === 7
+      && readyProgram.controls.every((control) => control.width >= 72 && control.height >= 72), readyProgram.controls);
+  // SwiftShader can render the DOM several frames ahead of the WebGL canvas. Wait for the reset
+  // start line to be painted so this is evidence of Build mode, not a stale frame from Drive.
+  await page.waitForTimeout(1_100);
+  await page.screenshot({ path: path.join(ART, "ev3-first-program-ready-800x480.png"), fullPage: false });
+
+  await page.locator("[data-ev3-run]").click();
+  await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application?.program?.activeIndex === 1, {
+    timeout: 5_000,
+  });
+  const runningProgram = await page.evaluate(() => ({
+    text: JSON.parse(window.render_game_to_text()).application,
+    activeChip: document.querySelector("[data-ev3-program-block][data-active='true']")?.getAttribute("data-ev3-program-block") ?? null,
+    authoringDisabled: [...document.querySelectorAll("[data-ev3]:not([data-ev3-retry])")].every((button) => button.disabled),
+  }));
+  check("Run highlights the active block and disables authoring while motion is live",
+    runningProgram.text?.program?.running
+      && runningProgram.text.program.activeIndex === 1
+      && runningProgram.activeChip === "forward"
+      && runningProgram.authoringDisabled, runningProgram);
+  await page.waitForTimeout(550);
+  await page.screenshot({ path: path.join(ART, "ev3-first-program-running-800x480.png"), fullPage: false });
+  await page.waitForFunction(() => document.querySelector("[data-ev3-mission]")?.getAttribute("data-phase") === "complete", {
+    timeout: 10_000,
+  });
+  const programmedSuccess = await page.evaluate(() => ({
+    text: JSON.parse(window.render_game_to_text()).application,
+    run: window.__GRAPHYSX__.rules.status(),
+    rover: window.__GRAPHYSX__.query({ ids: ["ev3-drive-base"] })[0]?.position ?? null,
+    nestor: document.querySelector("[data-ev3-nestor]")?.textContent ?? "",
+    retryVisible: !document.querySelector("[data-ev3-retry]")?.hidden,
+  }));
+  check("three rendered Forward blocks drive through physics to the scene-owned blue finish",
+    programmedSuccess.text?.mission?.phase === "complete"
+      && programmedSuccess.text?.program?.running === false
+      && programmedSuccess.run?.phase === "complete"
+      && programmedSuccess.rover?.[2] < 14
+      && programmedSuccess.nestor.includes("You did it!")
+      && programmedSuccess.retryVisible, programmedSuccess);
+  await page.waitForTimeout(1_100);
+  await page.screenshot({ path: path.join(ART, "ev3-first-program-complete-800x480.png"), fullPage: false });
+
+  // The required game-driver hook must advance the same program and physics without waiting on
+  // wall-clock rAF timing. The program stays authored across retry by design.
+  await page.locator("[data-ev3-retry]").click();
+  await page.locator("[data-ev3-run]").click();
+  const deterministicSuccess = await page.evaluate(() => ({
+    stepped: window.advanceTime(3_000),
+    rendered: JSON.parse(window.render_game_to_text()).application,
+    run: window.__GRAPHYSX__.rules.status(),
+  }));
+  check("advanceTime deterministically runs the same program to the same verdict",
+    deterministicSuccess.stepped?.mission?.phase === "complete"
+      && deterministicSuccess.rendered?.mission?.phase === "complete"
+      && deterministicSuccess.run?.phase === "complete", deterministicSuccess);
+
+  // A language with named turn blocks has to prove routes, not only tray contents. Run the same
+  // Left → Forward program twice from the public reset boundary, then its mirrored Right route.
+  await page.locator("[data-ev3-retry]").click();
+  for (let index = 0; index < 3; index += 1) await page.locator("[data-ev3-undo]").click();
+  const runTurnProgram = async (screenshotName) => {
+    await page.locator("[data-ev3-run]").click();
+    const result = await page.evaluate(() => {
+      const stepped = window.advanceTime(1_700);
+      const rover = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base"] })[0] ?? null;
+      const indicator = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base:heading"] })[0] ?? null;
+      return {
+        stepped,
+        position: rover?.position ?? null,
+        headingDegrees: rover?.steering?.headingDegrees ?? null,
+        indicator: indicator ? {
+          visible: indicator.visible,
+          position: indicator.position,
+          rotationDegrees: indicator.rotationDegrees,
+        } : null,
+        rendered: JSON.parse(window.render_game_to_text()).application,
+      };
+    });
+    await page.waitForTimeout(1_100);
+    await page.screenshot({ path: path.join(ART, screenshotName), fullPage: false });
+    return result;
+  };
+  await page.locator("[data-ev3-block='left']").click();
+  await page.locator("[data-ev3-block='forward']").click();
+  const leftFirst = await runTurnProgram("ev3-first-program-left-800x480.png");
+  const leftSecond = await runTurnProgram("ev3-first-program-left-repeat-800x480.png");
+  const repeatDelta = leftFirst.position && leftSecond.position
+    ? Math.max(...leftFirst.position.map((value, index) => Math.abs(value - leftSecond.position[index])))
+    : Number.POSITIVE_INFINITY;
+  check("Left then Forward preserves the turn and exposes the same heading visually and in text",
+    leftFirst.position?.[0] < -0.5
+      && leftFirst.headingDegrees > 250 && leftFirst.headingDegrees < 290
+      && leftFirst.rendered?.rover?.headingDegrees === leftFirst.headingDegrees
+      && leftFirst.indicator?.visible
+      && Math.abs(leftFirst.indicator.rotationDegrees?.[1] + leftFirst.headingDegrees) < 1,
+    leftFirst);
+  check("the same turn-containing program repeats from the same heading and spawn",
+    repeatDelta < 0.03 && Math.abs(leftFirst.headingDegrees - leftSecond.headingDegrees) < 0.01,
+    { repeatDelta, first: leftFirst, second: leftSecond });
+
+  await page.locator("[data-ev3-undo]").click();
+  await page.locator("[data-ev3-undo]").click();
+  await page.locator("[data-ev3-block='right']").click();
+  await page.locator("[data-ev3-block='forward']").click();
+  const right = await runTurnProgram("ev3-first-program-right-800x480.png");
+  check("Right then Forward produces the opposite physical route",
+    right.position?.[0] > 0.5
+      && right.headingDegrees > 70 && right.headingDegrees < 110
+      && leftFirst.position?.[0] < 0,
+    { left: leftFirst, right });
 } catch (error) {
   failures.push(String(error));
 } finally {
@@ -247,4 +433,4 @@ if (failures.length > 0) {
   console.error(`\n${failures.length} EV3 lab smoke failure(s):\n${failures.join("\n")}`);
   process.exit(1);
 }
-console.log("\nEV3 Robotics Mission Lab smoke passed. Screenshots: ev3-robotics-lab.png, ev3-first-mission-start-800x480.png, ev3-first-mission-800x480.png");
+console.log("\nEV3 Robotics Mission Lab smoke passed. Screenshots include Build ready/running/complete at 800x480.");

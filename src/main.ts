@@ -24,6 +24,7 @@ import {
 } from "./archive-playgrounds";
 import { composeSkyboxSpiral, frameSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from "./archive-skybox-spiral";
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import type { Ev3MissionStrip } from "./ev3-mission-strip";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
 import { nestorTopicRequest, type NestorTopic } from "./showroom-nestor";
@@ -360,7 +361,7 @@ if (mode === "previews" && import.meta.env.DEV) {
      * Keyed by id rather than a boolean because this is the seam a second application uses, not
      * a special case for EV3.
      */
-    let appSurface: { dispose: () => void } | null = null;
+    let appSurface: Ev3MissionStrip | null = null;
     const openApplication = (id: string): boolean => {
       if (id !== "ev3-lab") return false;
       const loaded = host.api.loadStarter("ev3-robotics-lab");
@@ -927,6 +928,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           ? nestor?.state() ?? null : null,
         livePresence: livePresence?.state() ?? null,
         liveMission: liveMission?.state() ?? null,
+        application: appSurface?.state() ?? null,
         atmosphere: host.dayNightState,
         players: host.api.query({ tag: "player" }).map((entity) => ({
           id: entity.id,
@@ -938,6 +940,7 @@ if (mode === "previews" && import.meta.env.DEV) {
         if (!Number.isFinite(milliseconds) || milliseconds < 0) {
           throw new RangeError("advanceTime requires non-negative milliseconds");
         }
+        if (appSurface) return appSurface.advanceTime(milliseconds);
         // Zero means zero. Positive sub-frame requests intentionally advance the runtime's
         // minimum 1/60 quantum, matching the public `api.step()` contract.
         if (milliseconds === 0) return { ok: true, revision: host.api.state()?.revision ?? 0, value: 0 };

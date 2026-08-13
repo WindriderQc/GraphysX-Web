@@ -3738,6 +3738,21 @@ export class AgentWorldRuntime {
     object.rotation.set(...definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3);
     object.scale.set(...definition.transform.scale);
     object.traverse((child) => {
+      // A scene entity can parent other scene entities. `traverse` still walks through those
+      // roots, but their meshes belong to their own definitions and must keep their own look.
+      // Only apply this entity's visual fields to its root and unregistered implementation
+      // children (agent markers, loaded-model meshes, particle internals, and similar).
+      let owner = child;
+      let belongsToRuntime = true;
+      while (owner !== object) {
+        if (typeof owner.userData.graphysxEntityId === "string") {
+          belongsToRuntime = false;
+          break;
+        }
+        if (!owner.parent) break;
+        owner = owner.parent;
+      }
+      if (!belongsToRuntime) return;
       if (child instanceof Mesh) {
         child.castShadow = definition.castShadow;
         child.receiveShadow = definition.receiveShadow;
