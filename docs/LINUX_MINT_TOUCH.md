@@ -4,6 +4,71 @@ The owner's Linux Mint PC replaces the planned Raspberry Pi target. The PC runs 
 and, once selected and implemented, the local EV3 transport. First Drive still uses its existing
 four blocks and steering runner. No real PC or EV3 hardware has been qualified yet.
 
+## Session handoff: verified access, touch still unresolved (2026-09-10)
+
+The owner requested a fresh session at this point. SSH setup is complete: passwordless key
+authentication from the Windows workstation to `yb@192.168.2.116` succeeds and returns
+hostname `ugKid`. This is the repurposed old PC, not production UGFrank at `.99`.
+The owner authorized access and touchscreen diagnosis; EV3 remains unplugged.
+
+From Windows PowerShell, the verified connection is:
+
+```powershell
+ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=5 -o IdentitiesOnly=yes -i C:/Users/Yanik/.ssh/id_ed25519 yb@192.168.2.116 hostname
+```
+
+The existing private key stays on Windows; do not print or copy it. The server ED25519
+fingerprint was checked against the owner's installation photo before adding it to Windows
+`known_hosts`: `SHA256:1EexzJWB6ZLzKS0TRrkxMKxFO/O2VYAsHRbmSeHjolQ`.
+No SSH alias was configured. `sudo -n true` requires a password; privileged steps, if needed,
+must use a concrete command the owner runs locally, without requesting a password in chat.
+
+Live inventory and configuration:
+
+| Item | Observed value |
+| --- | --- |
+| OS | Linux Mint 22.3 Zena, Cinnamon; kernel `7.0.0-31-generic` |
+| Memory / GPU | `free -h`: 23 GiB total; NVIDIA GeForce GTX 1080 |
+| Desktop | Active local X11 session `c1`, display `:0`, user `yb` |
+| Display | One active screen, 1920 x 1080 at 60 Hz, primary output `DP-2`, normal orientation |
+| Physical connection | Owner reports external HDMI display plus USB; exact display model remains unconfirmed |
+| Touch USB | `1fd2:0064`, `LG Display LGD-MultiTouch` |
+| Kernel driver | HID device `0003:1FD2:0064.0003` bound to `hid-multitouch` |
+| Input classification | `/dev/input/event6`, `ID_INPUT_TOUCHSCREEN=1` |
+| XInput | Device id `6`, direct touch, maximum two touches |
+| Live configuration | Device Enabled = 1; send-events disabled mode off; coordinate and calibration matrices both identity |
+| Diagnostic tools | `xinput`, `xrandr`, Python 3 present; `libinput` CLI and `evtest` absent |
+
+The kernel and desktop recognize and enable the touchscreen. This does **not** establish
+that touching the panel generates events. No interactive event capture has been performed,
+and no driver, calibration, kernel or desktop setting was changed. Device ids and event paths
+can change on reboot or reconnection; rediscover them before using the commands below.
+
+**Next action:** coordinate a short tap-and-drag test with the owner while monitoring only
+the identified touchscreen. The installed `xinput --help` confirms the syntax
+`test-xi2 [--root] <device>`. As the desktop user, the intended remote command is:
+
+```bash
+timeout 30s env DISPLAY=:0 XAUTHORITY=/home/yb/.Xauthority stdbuf -oL xinput test-xi2 --root 6
+```
+
+Run that through SSH after confirming the current device id and that the owner is ready.
+An empty capture without confirmed physical interaction is inconclusive. If events arrive,
+check desktop response and browser input. If none arrive during confirmed touches, inspect
+the specific raw input device and driver before choosing a fix. The raw event node currently
+has no user ACL for `yb`, so raw capture may require a local privileged command.
+
+After touch works, complete the actual-PC KidX acceptance below. Only then identify EV3
+firmware, connection and motor wiring and implement the narrow transport adapter.
+No EV3 motor test, application deployment, push or merge occurred during this setup.
+
+The completed application work remains in local commits `e3dccae` (review corrections),
+`9dc076f` (saved programs) and `6e0f6ab` (Mint target documentation). The saved-program full
+gate passed 58/58 checks with zero retries; no product code changed afterward. Local detailed
+reports remain in `output/peer-review-2026-09-10/REVIEW.fr.md`,
+`output/review-fixes-2026-09-10/CLOSEOUT.fr.md` and
+`output/playwright/kidx-saved-programs/DELIVERY.fr.md`.
+
 ## Identify the device before choosing a fix
 
 Record the PC/display model, Mint version and edition, whether the display is integrated or

@@ -4195,3 +4195,10 @@ or blocks the release.
 ## 2026-09-10 — Linux Mint touchscreen target
 
 - Owner replaced the Raspberry Pi target with a freshly installed Linux Mint touchscreen PC and reported non-working touch input. Updated the active priorities while retaining historical Pi measurements. Added docs/LINUX_MINT_TOUCH.md with read-only inventory, device-scoped event diagnosis and real-PC acceptance steps, grounded in libinput and Mint documentation. No driver installation, kernel change or hardware connection has been attempted. Device model, Mint version, connection/access details and EV3 firmware/motor configuration remain to be established before transport implementation and physical qualification.
+
+## 2026-09-10 — ugKid SSH and fresh-session handoff
+
+- Owner installed OpenSSH and authorized the existing Windows public key. Verified the server ED25519 fingerprint against the supplied installation photo, preserved existing Windows known-host entries and confirmed passwordless SSH to yb@192.168.2.116 (ugKid). Noninteractive sudo is unavailable. Production UGFrank at .99 was not accessed.
+- Read-only diagnosis confirms Mint 22.3 Cinnamon/X11, kernel 7.0.0-31-generic, GTX 1080 and a single 1920x1080 display. The LG Display 1fd2:0064 touchscreen binds to hid-multitouch, is classified as touch by udev and appears enabled in XInput with identity calibration and coordinate matrices. No touch-event capture or physical acceptance has occurred; the user's reported failure remains unresolved.
+- Paused diagnosis at the owner's request for a fresh session. HANDOFF.md and docs/LINUX_MINT_TOUCH.md now record verified access, live evidence, remaining uncertainty and the next device-scoped tap/drag test. No driver/kernel/calibration change, EV3 connection, motor command or product-code change was made.
+- Handoff verification: git diff --check passes; npm test passes 293 tests with one existing skip. The prior full application gate remains the product-code receipt; no full browser gate was rerun for this documentation-only update.
