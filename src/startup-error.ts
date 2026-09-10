@@ -35,5 +35,6 @@ export function showStartupError(root: HTMLElement, error: unknown): void {
   details.append(summary, diagnostic);
   panel.append(title, explanation, retry, details);
   root.replaceChildren(panel);
+  document.querySelector<HTMLElement>(".gx-display-settings")?.remove();
   panel.focus();
 }

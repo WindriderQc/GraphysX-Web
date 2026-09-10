@@ -398,7 +398,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           },
           { subscribeFrame: host.subscribeFrame.bind(host) },
         );
-      });
+      }).catch((error: unknown) => showStartupError(root, error));
       return true;
     };
 
@@ -416,6 +416,7 @@ if (mode === "previews" && import.meta.env.DEV) {
         variant,
         agentxDoor
           ? {
+            onOpenKidX: () => { window.location.search = "?app=ev3-lab"; },
             coauthor: {
               onAccept: acceptNestorProposal,
               onDiscard: discardNestorProposal,

@@ -4170,3 +4170,5 @@ or blocks the release.
 - R6 compatibility: all ten released starter documents, exported by the browser runtime, pass complete store validation. The store smoke now publishes each through HTTP to retain this coverage for future schema changes.
 
 - R6 imported-media compatibility: full documents retain registered texture/sky references and HTTP assets from local stores. This is distinct from the existing curated-only live-command policy, which remains unchanged. A regression proves both acceptance and continued command rejection.
+
+- KidX discovery: the welcome card links to First Drive and its Exit returns to the same front door. Startup recovery also covers the application's lazy chunk. The expanded startup smoke passes all three injected failures, both working retries and the welcome → KidX → welcome journey; portrait screenshots were inspected. The strict showroom smoke passes with zero console/page errors.

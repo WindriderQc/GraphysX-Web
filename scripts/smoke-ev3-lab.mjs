@@ -453,6 +453,7 @@ try {
       layout.buttons.length === 7 && layout.buttons.every((button) => button.width >= 72 && button.height >= 72
         && button.left >= 0 && button.right <= width && button.bottom <= 844 && button.reachable)
         && layout.mission.top >= layout.exit.bottom && layout.mission.right <= width, layout);
+    await page.screenshot({ path: path.join(ART, `ev3-first-program-ready-${width}x844.png`), fullPage: false });
   }
   await page.locator("[data-ev3-undo]").click();
   await page.locator("[data-ev3-undo]").click();

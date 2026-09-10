@@ -41,6 +41,7 @@ export function mountWelcome(
   onNestorTopic?: (topic: NestorTopic) => void,
   variant: ShowroomWelcomeVariant = onNestorTopic ? "agentx" : "scene-resume",
   hooks?: {
+    onOpenKidX?: () => void;
     coauthor?: { onAccept?: () => void; onDiscard?: () => void; onToggleCommand?: (index: number) => void };
     tour?: { onStart?: () => void; onNext?: () => void; onPrevious?: () => void; onStop?: () => void };
   },
@@ -659,6 +660,15 @@ export function mountWelcome(
     browse.textContent = "Browse Scenes";
     browse.addEventListener("click", () => { onBrowse(); dispose(); });
     overlay.querySelector(".gx-actions")?.append(browse);
+  }
+  if (hooks?.onOpenKidX) {
+    const kidX = document.createElement("button");
+    kidX.type = "button";
+    kidX.className = "gx-go-kidx";
+    kidX.style.gridColumn = "1 / -1";
+    kidX.textContent = "KidX · First Drive";
+    kidX.addEventListener("click", hooks.onOpenKidX);
+    overlay.querySelector(".gx-actions")?.append(kidX);
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);
