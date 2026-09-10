@@ -4168,3 +4168,5 @@ or blocks the release.
 - Dependency maintenance: updated only the existing compatible js-yaml, nanoid and postcss resolutions. npm reports zero known vulnerabilities; typecheck and 285 unit tests pass, with the existing Windows skip.
 
 - R6 compatibility: all ten released starter documents, exported by the browser runtime, pass complete store validation. The store smoke now publishes each through HTTP to retain this coverage for future schema changes.
+
+- R6 imported-media compatibility: full documents retain registered texture/sky references and HTTP assets from local stores. This is distinct from the existing curated-only live-command policy, which remains unchanged. A regression proves both acceptance and continued command rejection.

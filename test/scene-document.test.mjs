@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSceneStore } from "../server/scene-store.mjs";
-import { validateStoredSceneDefinition } from "../server/scene-commands.mjs";
+import { applyCommands, validateStoredSceneDefinition } from "../server/scene-commands.mjs";
 import { assertWorldDefinition } from "../server/scene-document.mjs";
 
 const scene = () => ({
@@ -49,4 +49,15 @@ it("shares entity vocabulary and validates forward references without reordering
   doc.entities[0].type = "unknown";
   assert.throws(() => assertWorldDefinition(doc), /Unsupported entity type/);
   assert.throws(() => validateStoredSceneDefinition(doc), /Unsupported entity type/);
+});
+
+it("preserves imported media in full documents without broadening live commands", () => {
+  const doc = scene();
+  doc.environment = { sky: "imported-sky" };
+  doc.entities[0].material = { texture: { id: "imported-texture" } };
+  doc.entities.push({ id: "model", type: "model", asset: { id: "imported-model", url: "http://127.0.0.1:4199/assets/files/model/mesh.json", format: "graphysx-mesh-json" } });
+  validateStoredSceneDefinition(doc);
+  assert.throws(() => applyCommands(scene(), [{ op: "set-environment", environment: doc.environment }]), /Unknown/);
+  assert.throws(() => applyCommands(scene(), [{ op: "spawn", entity: doc.entities[2] }]), /HTTPS/);
+  assert.throws(() => applyCommands(scene(), [{ op: "update", id: "box", patch: { material: doc.entities[0].material } }]), /curated/);
 });

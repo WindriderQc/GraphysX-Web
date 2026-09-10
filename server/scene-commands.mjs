@@ -195,16 +195,17 @@ function validateTransform(value, label) {
   if (value.scale !== undefined) requireVector(value.scale, 3, `${label}.scale`, 0.001, 1_000);
 }
 
-function validateTexture(value, label) {
+function validateTexture(value, label, allowImportedMedia = false) {
   if (value === null) return;
   allowedKeys(value, new Set(["id", "repeat", "offset", "rotationDegrees"]), label);
-  if (!TEXTURE_IDS.has(value.id)) reject(`${label}.id is not a curated live texture: ${String(value.id)}`);
+  requireString(value.id, `${label}.id`, { maximum: 160 });
+  if (!allowImportedMedia && !TEXTURE_IDS.has(value.id)) reject(`${label}.id is not a curated live texture: ${String(value.id)}`);
   if (value.repeat !== undefined) requireVector(value.repeat, 2, `${label}.repeat`, 0.01, 128);
   if (value.offset !== undefined) requireVector(value.offset, 2, `${label}.offset`, -128, 128);
   if (value.rotationDegrees !== undefined) requireFinite(value.rotationDegrees, `${label}.rotationDegrees`, -360_000, 360_000);
 }
 
-function validateShader(value, label) {
+function validateShader(value, label, allowImportedMedia = false) {
   if (value === null) return;
   requireRecord(value, label);
   if (value.id === "archive-ppl") {
@@ -219,7 +220,7 @@ function validateShader(value, label) {
     ]), label);
     requireFinite(value.parallaxStrength, `${label}.parallaxStrength`, 0, 0.5);
     requireFinite(value.specularMultiplier, `${label}.specularMultiplier`, 0, 20);
-    validateTexture(value.specularTexture, `${label}.specularTexture`);
+    validateTexture(value.specularTexture, `${label}.specularTexture`, allowImportedMedia);
     requireVector(value.lightPosition, 3, `${label}.lightPosition`, -100_000, 100_000);
     requireString(value.lightColor, `${label}.lightColor`, { maximum: 128 });
     return;
@@ -227,7 +228,7 @@ function validateShader(value, label) {
   reject(`Unknown ${label}.id: ${String(value.id)}`);
 }
 
-function validateMaterial(value, label) {
+function validateMaterial(value, label, allowImportedMedia = false) {
   allowedKeys(value, new Set([
     "color", "emissive", "emissiveIntensity", "roughness", "metalness", "opacity", "wireframe", "texture",
     "normalTexture", "normalScale", "shader",
@@ -236,10 +237,10 @@ function validateMaterial(value, label) {
   if (value.emissiveIntensity !== undefined) requireFinite(value.emissiveIntensity, `${label}.emissiveIntensity`, 0, 100);
   for (const key of ["roughness", "metalness", "opacity"]) if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`, 0, 1);
   if (value.wireframe !== undefined) requireBoolean(value.wireframe, `${label}.wireframe`);
-  if (value.texture !== undefined) validateTexture(value.texture, `${label}.texture`);
-  if (value.normalTexture !== undefined) validateTexture(value.normalTexture, `${label}.normalTexture`);
+  if (value.texture !== undefined) validateTexture(value.texture, `${label}.texture`, allowImportedMedia);
+  if (value.normalTexture !== undefined) validateTexture(value.normalTexture, `${label}.normalTexture`, allowImportedMedia);
   if (value.normalScale !== undefined) requireFinite(value.normalScale, `${label}.normalScale`, 0, 8);
-  if (value.shader !== undefined) validateShader(value.shader, `${label}.shader`);
+  if (value.shader !== undefined) validateShader(value.shader, `${label}.shader`, allowImportedMedia);
 }
 
 const MODEL_OVERRIDE_KEYS = new Set([
@@ -285,12 +286,13 @@ function validatePath(value, label) {
   if (value.tension !== undefined) requireFinite(value.tension, `${label}.tension`, 0, 1);
 }
 
-function validateAsset(value, label) {
+function validateAsset(value, label, allowImportedMedia = false) {
   allowedKeys(value, new Set(["id", "url", "format", "fitSize", "alphaTest", "colorKey", "colorKeyTolerance"]), label);
   if (value.id !== undefined) requireString(value.id, `${label}.id`, { maximum: 160 });
   if (value.url !== undefined) {
     requireString(value.url, `${label}.url`, { maximum: 2_048 });
-    if (!/^(?:\/|https:\/\/)/i.test(value.url)) reject(`${label}.url must be root-relative or HTTPS`);
+    const protocols = allowImportedMedia ? /^(?:\/|https?:\/\/)/i : /^(?:\/|https:\/\/)/i;
+    if (!protocols.test(value.url)) reject(`${label}.url must be root-relative or ${allowImportedMedia ? "HTTP(S)" : "HTTPS"}`);
   }
   if (!value.url && !MODEL_ASSET_IDS.has(value.id)) reject(`${label} requires a curated asset id or a root-relative/HTTPS URL`);
   if (value.format !== undefined && value.format !== "graphysx-mesh-json") reject(`Unsupported ${label}.format: ${String(value.format)}`);
@@ -604,14 +606,14 @@ function validateTypedConfig(entity, key, value, label, { merged = false } = {})
   else if (key === "forceField") validateForceField(value, label);
 }
 
-function validateEntityFields(entity, label) {
+function validateEntityFields(entity, label, allowImportedMedia = false) {
   allowedKeys(entity, ENTITY_KEYS, label);
   requireStableId(entity.id, `${label}.id`);
   if (!ENTITY_TYPES.has(entity.type)) reject(`Unsupported entity type: ${String(entity.type)}`);
   if (entity.label !== undefined) requireString(entity.label, `${label}.label`, { maximum: 240 });
   if (entity.parentId !== undefined) requireStableId(entity.parentId, `${label}.parentId`);
   if (entity.transform !== undefined) validateTransform(entity.transform, `${label}.transform`);
-  if (entity.material !== undefined) validateMaterial(entity.material, `${label}.material`);
+  if (entity.material !== undefined) validateMaterial(entity.material, `${label}.material`, allowImportedMedia);
   if (entity.modelMaterialOverrides !== undefined) {
     if (entity.type !== "model") reject("Only model entities accept modelMaterialOverrides");
     validateModelMaterialOverrides(entity.modelMaterialOverrides, `${label}.modelMaterialOverrides`);
@@ -619,7 +621,7 @@ function validateEntityFields(entity, label) {
   if (entity.geometry !== undefined) validateGeometry(entity.geometry, `${label}.geometry`);
   if (entity.type === "spline") validatePath(entity.path, `${label}.path`);
   else if (entity.path !== undefined) reject("Only spline entities accept a path");
-  if (entity.type === "model") validateAsset(entity.asset, `${label}.asset`);
+  if (entity.type === "model") validateAsset(entity.asset, `${label}.asset`, allowImportedMedia);
   else if (entity.asset !== undefined) reject("Only model entities accept an asset");
   for (const key of ["agent", "emitter", "sound", "terrain", "water", "flock", "crowd", "formula", "dna", "forceField"]) {
     if (entity[key] !== undefined) validateTypedConfig(entity, key, entity[key], `${label}.${key}`, { merged: true });
@@ -740,10 +742,13 @@ function validateUpdatedEntity(entity, label) {
   }
 }
 
-function validateEnvironmentBlock(value, label) {
+function validateEnvironmentBlock(value, label, allowImportedMedia = false) {
   allowedKeys(value, ENVIRONMENT_KEYS, label);
   if (value.background !== undefined) requireString(value.background, `${label}.background`, { maximum: 128 });
-  if (value.sky !== undefined && value.sky !== null && !SKY_IDS.has(value.sky)) reject(`Unknown ${label}.sky: ${String(value.sky)}`);
+  if (value.sky !== undefined && value.sky !== null) {
+    requireString(value.sky, `${label}.sky`, { maximum: 160 });
+    if (!allowImportedMedia && !SKY_IDS.has(value.sky)) reject(`Unknown ${label}.sky: ${String(value.sky)}`);
+  }
   if (value.overlay !== undefined && value.overlay !== null && !OVERLAY_IDS.has(value.overlay)) reject(`Unknown ${label}.overlay: ${String(value.overlay)}`);
   if (value.ground !== undefined) {
     allowedKeys(value.ground, new Set(["visible", "size", "color", "grid", "gridColor"]), `${label}.ground`);
@@ -776,7 +781,10 @@ function validateEnvironmentBlock(value, label) {
     for (const key of ["day", "night"]) {
       const look = value.dayNight[key];
       allowedKeys(look, new Set(["sky", "lighting", "background"]), `${label}.dayNight.${key}`);
-      if (look.sky !== null && !SKY_IDS.has(look.sky)) reject(`Unknown ${label}.dayNight.${key}.sky: ${String(look.sky)}`);
+      if (look.sky !== null) {
+        requireString(look.sky, `${label}.dayNight.${key}.sky`, { maximum: 160 });
+        if (!allowImportedMedia && !SKY_IDS.has(look.sky)) reject(`Unknown ${label}.dayNight.${key}.sky: ${String(look.sky)}`);
+      }
       validateLighting(look.lighting, `${label}.dayNight.${key}.lighting`);
       requireString(look.background, `${label}.dayNight.${key}.background`, { maximum: 128 });
     }
@@ -982,8 +990,10 @@ function applyCommand(definition, command) {
 export function validateStoredSceneDefinition(definition) {
   assertWorldDefinition(definition);
   validateJsonValue(definition, "scene");
-  if (definition.environment !== undefined) validateEnvironmentBlock(definition.environment, "scene.environment");
-  for (const entity of definition.entities) validateEntityFields(entity, `entity ${entity.id}`);
+  // A complete authored document may refer to imported media registered by its store. The
+  // browser resolves those resources; the curated-only live-command policy stays separate.
+  if (definition.environment !== undefined) validateEnvironmentBlock(definition.environment, "scene.environment", true);
+  for (const entity of definition.entities) validateEntityFields(entity, `entity ${entity.id}`, true);
   validateGraph(definition);
 }
 
