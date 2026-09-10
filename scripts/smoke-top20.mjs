@@ -248,6 +248,28 @@ try {
   const browseEmpty = await play.locator(".gx-browse .gx-shelf-empty").isVisible();
   out.browse = { totalScenes, physicsMatches, browseEmpty };
   await play.screenshot({ path: path.join(ART, "top20-browse-search.png") });
+  await play.fill(".gx-browse .gx-shelf-search", "physics sketchbook");
+  await play.locator('.gx-browse [data-shelf-key]:visible').click();
+  await play.waitForSelector('.gx-ed-toolbar');
+  // Dispatch the actual exit button in the same task as the edit, before its 650ms debounce.
+  await play.evaluate(() => {
+    window.__GRAPHYSX__.spawn({ id: "quick-exit-probe", type: "box" });
+    [...document.querySelectorAll('.gx-ed-toolbar button')].find((button) => button.textContent === "← Showroom").click();
+  });
+  await play.waitForTimeout(850);
+  out.quickExit = await play.evaluate(() => {
+    const draft = JSON.parse(localStorage.getItem("graphysx.editor.draft.v1") ?? "null");
+    return {
+      currentWorld: window.__GRAPHYSX__.state().world.id,
+      draftWorld: draft?.definition?.id,
+      retained: draft?.definition?.entities.some((entity) => entity.id === "quick-exit-probe"),
+    };
+  });
+  await play.reload({ waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
+  await play.click('.gx-welcome .gx-go-editor');
+  await play.waitForSelector('.gx-ed-recover:not([hidden])');
+  await play.click('.gx-ed-recover');
+  out.quickExit.recoveredAfterReload = await play.evaluate(() => window.__GRAPHYSX__.query({ ids: ["quick-exit-probe"] }).length === 1);
   await context.close();
 } catch (error) {
   out.fatal = String(error);
@@ -272,6 +294,8 @@ const ok =
   out.shelf?.totalGames > 5 && out.shelf?.ballzMatches >= 1 && out.shelf?.ballzMatches < out.shelf?.totalGames && out.shelf?.emptyShown === true &&
   out.shelf?.favorited === true && out.shelf?.firstKey === "game:ballz" && out.shelf?.reset?.favorites?.length === 0 && out.recent === true &&
   out.browse?.totalScenes > 5 && out.browse?.physicsMatches === 1 && out.browse?.browseEmpty === true &&
+  out.quickExit?.currentWorld === "showroom" && out.quickExit?.draftWorld === "graphysx-physics-sketchbook" &&
+  out.quickExit?.retained === true && out.quickExit?.recoveredAfterReload === true &&
   out.play?.paused === true && out.play?.resumed === true && out.play?.touchVisible === true && out.play?.touchDroveApi === true &&
   out.play?.gamepadDroveApi === true && out.play?.fullscreen === true && out.play?.controlStored === "touch" && /touch arrows/.test(out.play?.hint ?? "") && out.play?.pauseActions >= 3;
 

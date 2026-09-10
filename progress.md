@@ -4145,3 +4145,5 @@ or blocks the release.
 
 - R1: `save()` now succeeds only after the named scene reaches browser storage. A rejected write leaves the current scene and recovery draft intact and returns an actionable error; it no longer creates a misleading in-memory saved slot.
 - Added a browser regression for quota failure, retained dirty state, rejected cache load and recovery after reload. Typecheck and existing unit suite pass (278 passed, one intentional Windows skip); combined browser validation follows the editor corrections.
+
+- R2: deferred drafts now capture their authored document and flush before editor exit, page hide and disposal. A world replacement cannot redirect a pending write into the showroom. Added a quick-exit/reload regression through the real exit control.

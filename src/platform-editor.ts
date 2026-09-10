@@ -248,6 +248,8 @@ export class PlatformEditor {
   private savedSignature = "";
   private dirty = false;
   private draftTimer: number | null = null;
+  private pendingDraftWrite: (() => void) | null = null;
+  private readonly flushDraft = (): void => { this.pendingDraftWrite?.(); };
   private toolbarNoticeTimer: number | null = null;
   private toolbarNotice = "";
   /**
@@ -333,6 +335,7 @@ export class PlatformEditor {
     dom.addEventListener("pointerdown", this.onPointerDown);
     dom.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("keydown", this.onKeyDown);
+    window.addEventListener("pagehide", this.flushDraft);
 
     // The outliner and inspector must reflect the world, not just this panel's own actions.
     // Before this, every editor control called refresh() itself, so the UI was correct after a
@@ -399,6 +402,7 @@ export class PlatformEditor {
   /** Show or hide the editor chrome (the showroom starts with it hidden). Hiding also
    * disables picking/gizmo so showroom clicks (orbit, future click-to-focus) aren't hijacked. */
   setVisible(visible: boolean): void {
+    if (!visible) this.flushDraft();
     this.enabled = visible;
     document.documentElement.dataset.gxEditor = visible ? "visible" : "hidden";
     const display = visible ? "" : "none";
@@ -639,15 +643,18 @@ export class PlatformEditor {
     this.dirty = !!this.savedSignature && signature !== this.savedSignature;
     if (!scheduleDraft || !this.savedSignature || (!this.dirty && !wasDirty)) return;
     if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
-    this.draftTimer = window.setTimeout(() => {
+    // Bind the deferred write to this document. The host may replace the world before
+    // the timeout fires; reading the live API then would save a showroom or played level.
+    const definition = this.dirty && signature ? JSON.parse(signature) as AgentWorldDefinition : null;
+    const draft: EditorDraft | null = definition ? { savedAt: new Date().toISOString(), definition } : null;
+    this.pendingDraftWrite = () => {
+      if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
       this.draftTimer = null;
-      if (!this.dirty) {
+      this.pendingDraftWrite = null;
+      if (!draft) {
         try { window.localStorage.removeItem(EDITOR_DRAFT_KEY); } catch { /* storage is optional */ }
         return;
       }
-      const definition = this.deps.api.exportDocument();
-      if (!definition) return;
-      const draft: EditorDraft = { savedAt: new Date().toISOString(), definition };
       try {
         window.localStorage.setItem(EDITOR_DRAFT_KEY, JSON.stringify(draft));
         // Do not immediately erase a short-lived confirmation such as the legacy XML
@@ -657,7 +664,8 @@ export class PlatformEditor {
       } catch {
         this.toolbarNotice = "draft storage unavailable";
       }
-    }, 650);
+    };
+    this.draftTimer = window.setTimeout(this.flushDraft, 650);
   }
 
   private markSaved(notice: string): void {
@@ -666,6 +674,7 @@ export class PlatformEditor {
     this.toolbarNotice = notice;
     if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
     this.draftTimer = null;
+    this.pendingDraftWrite = null;
     try { window.localStorage.removeItem(EDITOR_DRAFT_KEY); } catch { /* storage is optional */ }
     this.recoveryButton.hidden = true;
     this.refresh("skip");
@@ -3898,10 +3907,12 @@ ${preset.provenance.note}`),
   }
 
   dispose(): void {
+    this.flushDraft();
     const dom = this.deps.renderer.domElement;
     dom.removeEventListener("pointerdown", this.onPointerDown);
     dom.removeEventListener("pointerup", this.onPointerUp);
     window.removeEventListener("keydown", this.onKeyDown);
+    window.removeEventListener("pagehide", this.flushDraft);
     window.removeEventListener("pointerup", this.onLevelPointerUp);
     this.unsubscribeEvents();
     if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
