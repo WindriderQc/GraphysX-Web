@@ -2488,7 +2488,7 @@ export class PlatformEditor {
   }
 
   private exportScene(): void {
-    const definition = this.deps.api.export();
+    const definition = this.deps.api.exportDocument();
     if (!definition) return;
     const blob = new Blob([JSON.stringify(definition, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);

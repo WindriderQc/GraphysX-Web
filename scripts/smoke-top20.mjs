@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 
@@ -147,6 +147,17 @@ try {
     const copied = JSON.parse(await navigator.clipboard.readText());
     return { schema: copied.schema, id: copied.id };
   });
+  await editor.evaluate(() => window.__GRAPHYSX__.spawn({ id: "session-only-export-probe", type: "box", ephemeral: true }));
+  const [sceneDownload] = await Promise.all([
+    editor.waitForEvent("download"),
+    editor.locator('.gx-ed-toolbar').getByRole('button', { name: 'Export', exact: true }).click(),
+  ]);
+  const exportedDocument = JSON.parse(readFileSync(await sceneDownload.path(), "utf8"));
+  out.exported = {
+    id: exportedDocument.id,
+    documentOnly: !exportedDocument.entities.some((entity) => entity.id === "session-only-export-probe" || entity.ephemeral),
+  };
+  await editor.evaluate(() => window.__GRAPHYSX__.remove("session-only-export-probe"));
 
   await editor.locator(".gx-display-settings summary").click();
   await editor.selectOption('select[aria-label="Contrast preference"]', "high");
@@ -299,6 +310,7 @@ const ok =
   out.palette?.dialog === "dialog" && out.palette?.commands?.some((command) => /Redo/.test(command)) &&
   out.slot?.option === true && out.slot?.stored === true && out.slot?.liveStatus === "polite" && /saved/.test(out.slot?.status ?? "") &&
   out.imports?.json === true && out.imports?.xml === true && out.copy?.schema === "graphysx.agent-world/v2" && out.copy?.id === "top20-import" &&
+  out.exported?.id === out.copy?.id && out.exported?.documentOnly === true &&
   out.accessibility?.contrast === "high" && out.accessibility?.motion === "reduce" && out.accessibility?.stored?.contrast === "high" &&
   out.shelf?.totalGames > 5 && out.shelf?.ballzMatches >= 1 && out.shelf?.ballzMatches < out.shelf?.totalGames && out.shelf?.emptyShown === true &&
   out.shelf?.favorited === true && out.shelf?.firstKey === "game:ballz" && out.shelf?.reset?.favorites?.length === 0 && out.recent === true &&

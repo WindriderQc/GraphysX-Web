@@ -4149,3 +4149,5 @@ or blocks the release.
 - R2: deferred drafts now capture their authored document and flush before editor exit, page hide and disposal. A world replacement cannot redirect a pending write into the showroom. Added a quick-exit/reload regression through the real exit control.
 
 - R4: the editor Pause control now derives its label, pressed state and next action from the runtime. Added an agent-pause → human-resume regression.
+
+- R5: the editor JSON download now exports the authored document, matching Save and Copy. The lower-level runtime snapshot API remains available. The browser smoke reads the downloaded file and checks that session-only entities are excluded.
