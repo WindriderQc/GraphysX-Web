@@ -19,12 +19,10 @@
  * fixed is one where nothing told anybody anything.
  */
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-/** A run older than this is assumed dead even if its pid was recycled onto something else. */
-const STALE_AFTER_MS = 60 * 60 * 1000;
 
 /**
  * The lock lives at a MACHINE-GLOBAL path, not under the repo's `output/`. The per-checkout
@@ -85,60 +83,68 @@ export function killTree(pid) {
 /**
  * Take the verify lock, or throw explaining who holds it.
  *
- * A lock whose owner is dead, or which is older than STALE_AFTER_MS, is taken over rather
- * than respected — a crashed run must not wedge the gate for everyone who comes after.
+ * Exclusive creation prevents simultaneous claims. Only a dead owner is reclaimed;
+ * a live gate can legitimately take longer than an hour on a software renderer.
  */
 export async function acquireVerifyLock(lockPath, { force = false, wait = false } = {}) {
   const readHolder = async () => {
     try {
       return JSON.parse(await readFile(lockPath, "utf8"));
-    } catch {
-      return null; // absent or unreadable — treat as free
+    } catch (error) {
+      return error.code === "ENOENT" ? undefined : null;
     }
   };
-  const isLive = (held) =>
-    Boolean(held?.pid && isAlive(held.pid) && Date.now() - (held.started ?? 0) < STALE_AFTER_MS);
-
-  if (!force) {
-    let held = await readHolder();
-    if (isLive(held) && wait) {
-      // `--wait` queues instead of failing. Agents retry a refused gate anyway; polling here
-      // turns that retry storm into an orderly queue, and the machine only ever runs one.
-      const waitStarted = Date.now();
-      const WAIT_CAP_MS = 45 * 60 * 1000;
-      console.log(`verify: waiting for the running gate (pid ${held.pid}) to finish...`);
-      while (isLive(held)) {
-        if (Date.now() - waitStarted > WAIT_CAP_MS) {
-          const error = new Error("verify: waited 45 minutes for the lock; giving up. Investigate the holder.");
-          error.code = "EVERIFYLOCKED";
-          throw error;
-        }
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 15_000));
-        held = await readHolder();
+  const isDead = (held) => Number.isSafeInteger(held?.pid) && held.pid > 0 && !isAlive(held.pid);
+  const owner = { pid: process.pid, started: Date.now(), token: randomUUID() };
+  const waitStarted = Date.now();
+  let waiting = false;
+  await mkdir(join(lockPath, ".."), { recursive: true });
+  for (;;) {
+    try {
+      await writeFile(lockPath, JSON.stringify(owner), { encoding: "utf8", flag: "wx" });
+      break;
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    const held = await readHolder();
+    if (held === undefined) continue; // The previous owner released during our read.
+    if (force || isDead(held)) {
+      // Serialize stale cleanup as well: two reapers must not unlink a fresh claim
+      // published between their reads. A malformed/initializing owner is never evicted.
+      const recoveryPath = `${lockPath}.reclaim`;
+      let recovering = false;
+      try {
+        await writeFile(recoveryPath, JSON.stringify(owner), { encoding: "utf8", flag: "wx" });
+        recovering = true;
+        const latest = await readHolder();
+        if (force || isDead(latest)) await rm(lockPath, { force: true });
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+      } finally {
+        if (recovering) await rm(recoveryPath, { force: true });
       }
-      console.log("verify: lock freed, starting.");
-    } else if (isLive(held)) {
-      const mins = Math.round((Date.now() - (held.started ?? 0)) / 60000);
+      if (recovering) continue;
+    }
+    const detail = held?.pid ? `pid ${held.pid}` : "owner record initializing or unreadable";
+    if (!wait || Date.now() - waitStarted > 45 * 60 * 1000) {
       const error = new Error(
-        `verify is already running (pid ${held.pid}, started ${mins} min ago).\n` +
-          `  Concurrent runs software-rasterise WebGL and will starve the machine.\n` +
-          `  Queue behind it with: npm run verify -- --wait\n` +
-          `  Or if you are sure it is dead: npm run verify -- --force-lock`,
+        `verify lock is held (${detail}).\n` +
+        "  Queue with npm run verify -- --wait; confirm the owner is dead before --force-lock.\n" +
+        `  Lock: ${lockPath}`,
       );
       error.code = "EVERIFYLOCKED";
       throw error;
-    } else if (held?.pid) {
-      console.warn(`verify: taking over a stale lock (pid ${held.pid}, ${Math.round((Date.now() - (held.started ?? 0)) / 60000)} min old)`);
     }
+    if (!waiting) console.log(`verify: waiting for the running gate (${detail}) to finish...`);
+    waiting = true;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 15_000));
   }
-
-  await mkdir(join(lockPath, ".."), { recursive: true }).catch(() => undefined);
-  await writeFile(lockPath, JSON.stringify({ pid: process.pid, started: Date.now() }), "utf8");
+  if (waiting) console.log("verify: lock freed, starting.");
   let released = false;
   return async () => {
     if (released) return;
     released = true;
-    await rm(lockPath, { force: true });
+    if ((await readHolder())?.token === owner.token) await rm(lockPath, { force: true });
   };
 }
 

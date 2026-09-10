@@ -4153,3 +4153,5 @@ or blocks the release.
 - R5: the editor JSON download now exports the authored document, matching Save and Copy. The lower-level runtime snapshot API remains available. The browser smoke reads the downloaded file and checks that session-only entities are excluded.
 
 - R3: showroom console errors now participate in its exit status, consistent with the other product smokes. No error allowlist, assertion relaxation or timeout change was added. The full gate must now account for the shader errors observed during review.
+
+- R7: verify claims use exclusive file creation, keep live owners regardless of age, serialize dead-owner reclamation, and release only their own token. Unknown/partially written records fail closed. Five lock regressions plus existing classifier/deadline tests pass (28/28).
