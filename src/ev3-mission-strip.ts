@@ -11,11 +11,12 @@
 // `api.steer` on the drive base. There is no bespoke host state and no second command path,
 // which is the invariant that lets an agent do anything a child can do and vice versa.
 //
-// Deliberately NOT here: mission selection, hardware, persistence or a scoring system. This is
+// Deliberately NOT here: mission selection, hardware or a scoring system. This is
 // one real mission and one tiny motion language — enough to measure blocks → program → simulation
 // before generalising either the application surface or the hardware bridge.
 
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import { mountEv3ProgramLibrary } from "./ev3-program-library";
 import {
   EV3_FIRST_MISSION_MISS_TAG,
   EV3_FIRST_MISSION_SUBJECT_ID,
@@ -68,6 +69,7 @@ export type Ev3MissionStripState = {
     running: boolean;
     activeIndex: number | null;
     atLimit: boolean;
+    library: { open: boolean; savedName: string | null; unsavedChanges: boolean };
   };
   nestor: string;
 };
@@ -113,7 +115,6 @@ const injectStyleOnce = (): void => {
 .gx-ev3-nestor-copy{min-width:0}.gx-ev3-nestor-name{display:block;color:#7fe6ff;font:800 10px/1 var(--gx-font);letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px}
 .gx-ev3-status{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gx-ev3-program-readout{display:flex;align-items:center;gap:9px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(127,230,255,.18)}
-.gx-ev3-program-label{flex:0 0 auto;color:#9bdff3;font:800 10px/1 var(--gx-font);letter-spacing:.1em;text-transform:uppercase}
 .gx-ev3-program-blocks{display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden;list-style:none;margin:0;padding:0}
 .gx-ev3-program-chip{display:flex;align-items:center;gap:4px;min-width:0;padding:5px 7px;border-radius:8px;
   background:rgba(45,118,151,.42);color:#eaf7ff;font:800 11px/1 var(--gx-font);white-space:nowrap}
@@ -206,13 +207,10 @@ export function mountEv3MissionStrip(
   programReadout.className = "gx-ev3-program-readout";
   programReadout.dataset.ev3Program = "";
   programReadout.setAttribute("aria-label", "Your program");
-  const programLabel = document.createElement("span");
-  programLabel.className = "gx-ev3-program-label";
-  programLabel.textContent = "Your program";
   const programBlocks = document.createElement("ol");
   programBlocks.className = "gx-ev3-program-blocks";
   programBlocks.setAttribute("aria-live", "polite");
-  programReadout.append(programLabel, programBlocks);
+  programReadout.append(programBlocks);
   mission.append(missionHead, objective, nestor, programReadout);
 
   const exit = document.createElement("button");
@@ -420,6 +418,26 @@ export function mountEv3MissionStrip(
   retry.dataset.ev3Retry = "";
   retry.hidden = true;
 
+  const library = mountEv3ProgramLibrary(root, () => program, (blocks) => {
+    runner.stop();
+    activeProgramIndex = null;
+    program = blocks;
+    mode = "program";
+    const reset = resetAttempt();
+    misses = 0;
+    lastPhase = reset.value?.phase ?? "idle";
+    eventCursor = api.events().sequence;
+    retry.hidden = true;
+    api.pause(true);
+    setControlsEnabled(true);
+    refreshProgram();
+    refreshControls();
+    renderRun();
+    say("Program opened. Add blocks or tap Run to try it.");
+  });
+  programReadout.prepend(library.button);
+  library.button.disabled = !missionReady;
+
   setControlsEnabled = (enabled: boolean): void => {
     const wasEnabled = controlsEnabled;
     controlsEnabled = enabled;
@@ -429,11 +447,14 @@ export function mountEv3MissionStrip(
     runProgram.disabled = !enabled || program.length === 0;
     driveMode.disabled = !enabled;
     buildMode.disabled = !enabled;
+    // A completed attempt disables driving, but its winning program can still be saved.
+    library.button.disabled = !missionReady || mode !== "program" || runner.state().running;
     // Stop a held manual input on the enabled → disabled edge. Re-rendering disabled program
     // controls must not emit another stop: doing so would cancel the block the runner just set.
     if (!enabled && wasEnabled && driveable) api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
   };
   refreshProgram = (): void => {
+    library.refresh();
     programBlocks.replaceChildren();
     if (program.length === 0) {
       const empty = document.createElement("li");
@@ -454,6 +475,7 @@ export function mountEv3MissionStrip(
     setControlsEnabled(controlsEnabled);
   };
   refreshControls = (): void => {
+    library.button.disabled = !missionReady || mode !== "program" || runner.state().running;
     pad.replaceChildren();
     actions.replaceChildren();
     mission.dataset.mode = mode;
@@ -576,6 +598,7 @@ export function mountEv3MissionStrip(
         running: runnerState.running,
         activeIndex: runnerState.activeIndex,
         atLimit: program.length >= EV3_FIRST_PROGRAM_MAX_BLOCKS,
+        library: library.state(),
       },
       nestor: status.textContent ?? "",
     };
@@ -603,6 +626,7 @@ export function mountEv3MissionStrip(
     dispose: () => {
       unsubscribeFrame();
       runner.stop();
+      library.dispose();
       mission.remove();
       exit.remove();
       strip.remove();

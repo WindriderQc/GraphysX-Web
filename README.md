@@ -25,6 +25,12 @@ Live application: <https://graphysx.specialblend.ca>
 > API used by a human or agent. Real EV3 execution and Raspberry Pi qualification remain to
 > be completed on the target hardware. The current order is in **[HANDOFF.md](HANDOFF.md)**.
 >
+> **In the current source:** First Drive's **Programs** button saves named block sequences in
+> this browser. Build a program, open Programs, enter a name and save. After reloading, open
+> Programs and select a saved name; **Run** uses the same simulator. Editing an opened program
+> enables **Update saved program**; entering another name saves a copy. Browser data clearing
+> removes this library. Programs are not synced to a scene store or another device.
+>
 > The retained AgentX showroom is a 3D hub where Nestor
 > demonstrates Build, Play, and Explore through attributed scene commands whose results remain
 > editable. Shipped so far: live sessions with a server-authoritative mission director; a

@@ -4,6 +4,9 @@
 `PlatformHost`; the editor and agents share one v2 runtime and API. The archive host and
 `?host=legacy` have retired. Converted content lives under `src/content/` and remains part of
 the product. KidX First Drive (`?app=ev3-lab`) is the first application built on that runtime.
+The current source includes a browser-local named-program library: save, reopen, update, copy
+and delete the existing six-block sequences. Opening a program resets the simulation for Run;
+this does not add hardware execution or cross-device persistence.
 Read §8.1 for shipped capabilities and `HANDOFF.md` for the current execution order. The
 implementation notes below retain historical measurements; they are not a production receipt
 for later changes. Generate current API and gate counts with `npm run counts`.

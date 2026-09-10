@@ -26,6 +26,26 @@ These changes require their own release evidence. The production receipts below 
 August release, not automatic activation of this follow-up. See the latest `progress.md` entry
 for validation. Hardware priorities below are unchanged; no EV3/Pi qualification is implied.
 
+## KidX program library (current source, 2026-09-10)
+
+First Drive now has a **Programs** disclosure above the unchanged seven play controls. Named
+programs can be saved, opened after reload, explicitly updated, copied under another name and
+deleted. Opening resets the attempt and heading, pauses the rover and preserves the existing
+Run path. The library remains accessible on success so the child can save the winning program.
+Unsaved blocks require an explicit replacement; duplicate names and stale updates are refused.
+
+The versioned library is browser-local, under `graphysx:kidx:first-drive:programs:v1`; it stores
+the same four block ids, one to six per program. Names are limited to 40 characters. No cloud,
+store server or hardware is involved. A fresh page starts with an empty working program and
+the saved list available through Programs. Storage errors leave current blocks and previous
+data intact; malformed or future-version data is not overwritten. This is manual persistence,
+not draft recovery, export/import or cross-device synchronization.
+
+`test/ev3-programs.test.mjs` tests the store without a browser. The registered
+`scripts/smoke-ev3-programs.mjs` covers save/reload/physical replay, editing/deletion protections,
+failed storage, and touch/keyboard behavior at 320/390px portrait and 800/1280px landscape.
+See `progress.md` for this change's validation; the August production receipt is separate.
+
 ## Production baseline (2026-08-13)
 
 **The lean platform and KidX First Drive are the current production release on `main`.** The
@@ -105,7 +125,8 @@ legacy host; everything here now goes through the API.
 | `src/agent-world-runtime.ts` | The v2 runtime: entities, Rapier physics, behaviours, deterministic `update(dt)`. |
 | `src/agent-world-api.ts` | The one implementation of `GraphysXAgentWorldApi`. There used to be a second on the retired legacy route, and a new method had to land in both; it now lands in one place. |
 | `src/platform-editor.ts` | Top bar, left scene tree, right inspector, bottom tabbed library, Levels workbench, media import dialog. |
-| `src/ev3-first-program.ts` | The DOM-free first KidX language and runner: Forward, Left, Right and Stop, capped at six timed blocks and compiled only to steering inputs. |
+| `src/ev3-first-program.ts` | The DOM-free first KidX language, runner and versioned browser-local program store: Forward, Left, Right and Stop, capped at six timed blocks and compiled only to steering inputs. |
+| `src/ev3-program-library.ts` | Named-program dialog, explicit save/update/copy/delete, storage errors, unsaved edits and native modal focus behavior. |
 | `src/ev3-mission-strip.ts` | The first *application surface*: First Drive's objective, clock, Nestor and Build / Run / Drive controls, reached by `?app=ev3-lab`. It consumes `api.rules` / `api.events`; both manual play and programs drive through `api.steer`. |
 | `src/content/` | The asset library — 24.5 MB of converted scenes and media, read by the runtime. Formerly `src/legacy/`, renamed because the name was describing its origin instead of its job. |
 | `server/scene-store.mjs` | The store server: scenes, relay, and the router that mounts everything below. |
