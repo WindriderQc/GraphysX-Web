@@ -24,6 +24,7 @@ import {
 } from "./archive-playgrounds";
 import { composeSkyboxSpiral, frameSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from "./archive-skybox-spiral";
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import { showStartupError } from "./startup-error";
 import type { Ev3MissionStrip } from "./ev3-mission-strip";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
@@ -153,7 +154,7 @@ if (mode === "previews" && import.meta.env.DEV) {
   root.style.inset = "0";
   void Promise.all([import("./styles.css"), import("./preview-host")]).then(([, { mountPreviewHost }]) => {
     Object.assign(window, { __GRAPHYSX_PREVIEW_HOST__: mountPreviewHost(root) });
-  });
+  }).catch((error: unknown) => showStartupError(root, error));
 } else {
   // Default product: the clean PlatformHost. No param → welcome showroom; `?host=editor`
   // (or `standalone`) opens straight into the Scene Editor on the demo world.
@@ -1286,5 +1287,5 @@ if (mode === "previews" && import.meta.env.DEV) {
         }
       },
     );
-  });
+  }).catch((error: unknown) => showStartupError(root, error));
 }

@@ -9,6 +9,7 @@ export const VERIFY_STATIC_CHECKS = {
 };
 
 export const VERIFY_SMOKES = [
+  { name: "startup", tier: "core", script: "scripts/smoke-startup.mjs", covers: "renderer and lazy-import failures: accessible recovery page and working retry" },
   { name: "showroom", tier: "core", script: "scripts/smoke-showroom.mjs", covers: "default route: welcome showroom, gated editor, auto-orbit" },
   { name: "editor", tier: "core", script: "scripts/smoke-editor.mjs", covers: "editor: library palette, model + texture + behaviour, bloom authoring, exit path" },
   { name: "top20", tier: "deep", script: "scripts/smoke-top20.mjs", covers: "top-20 release: redo, draft recovery, import/copy/slots/palette, shelf personalization, accessible display, touch/gamepad/pause/fullscreen" },

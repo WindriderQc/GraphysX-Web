@@ -4161,3 +4161,4 @@ or blocks the release.
 
 - R6: full scene writes now use the existing authored-field and graph validators before persistence. Entity vocabulary, world shape and mission-rule validation are shared with the browser; graph checks also reject invalid/duplicate joints and impossible collectible targets. Browser resource loading remains a separate concern.
 - New store tests prove malformed types, duplicates, parent cycles, transforms, physics and rules cannot replace an accepted revision. The 117 command-validation checks and typecheck pass; full runtime/document round-trips are included in the final gate.
+`n- R9: both lazy startup paths now catch renderer/import failures and display an accessible recovery page with diagnostic details and Retry. A new core smoke injects WebGL and chunk failures, verifies focus/no unhandled rejection, and restores the chunk route to prove retry succeeds. Both cases pass at 390x844.
