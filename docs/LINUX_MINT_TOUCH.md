@@ -25,7 +25,9 @@ confirms the setting. Mozilla's [GTK startup implementation](https://github.com/
 uses this variable to control XInput2 multidevice support. No system environment, desktop
 launcher, driver, calibration or browser preference was changed. **The repeat test now confirms
 native `pointerType=touch`**: five trusted finger clicks and a trace with ten sampled points
-arrived after the restart. The owner confirms Firefox works. Programs scrolling is still untested.
+arrived after the restart. The owner confirms this central Firefox probe works. Subsequent
+wider-area testing below finds missed contacts in Firefox too; the whole touchscreen is not
+qualified. Programs scrolling is still untested.
 
 The diagnostic server runs on Windows loopback `127.0.0.1:4175`, through an SSH reverse
 forward bound to ugKid loopback `127.0.0.1:4175`. Firefox opens
@@ -46,7 +48,7 @@ Local receipts, outside git:
 the actual-PC KidX checklist, including touch scrolling and held-Go release/cancellation.
 The review and saved-program implementation are already complete.
 
-### Firefox works; Cinnamon desktop remains unresolved
+### Central Firefox input works; wider touch reliability remains unresolved
 
 The owner reports that touch still does not work in the Mint desktop and explicitly confirms
 that a finger tap on the Mint Menu button does not open it. The same hardware reportedly worked
@@ -63,9 +65,8 @@ no events, but physical gestures during that window were not confirmed. That emp
 **inconclusive**. A second bounded five-minute capture was armed at 18:48:38 EDT to compare
 three taps on the Mint logo with one on the clock. The observer only retains LG touchscreen
 touch/button events, always propagates them, and automatically disconnects at the deadline.
-Retrieve `output/mint-touch-2026-09-10/xinput-menu-03.log` and the temporary observer result
-before drawing conclusions. The script on ugKid is `/tmp/kidx-cinnamon-touch-probe.py`;
-`python3 /tmp/kidx-cinnamon-touch-probe.py show` reads its bounded buffer, and `stop` detaches it.
+That second capture also remained empty. A later paired positive control below proves the
+observer can receive the LG device's events. Neither empty capture establishes the failing layer.
 
 An inspected actual-desktop screenshot, including the successful native Firefox touch probe,
 is `output/playwright/mint-touch/mint-desktop.png`. Native browser input success does not
@@ -91,16 +92,69 @@ the exact cause, and opening the menu remotely is not a successful physical Menu
 To test for stale input state, the touchscreen was disabled and re-enabled once through XInput
 (about 0.3 seconds, with re-enable in a `finally` block). Readback confirms Device Enabled=1,
 identity calibration/coordinate matrices, and the original button map `1 2 3 4 5 6 7`.
-The Menu was closed to restore the test's starting state. **The owner's Menu-button retest
-after this reset is pending.** No persistent input configuration or Cinnamon source was changed.
+The Menu was closed to restore the test's starting state. **The owner reports that the reset
+did not fix the Menu button.** No persistent input configuration or Cinnamon source was changed.
+
+Cinnamon was then restarted through its existing `RestartCinnamon(true)` D-Bus method.
+Its diagnostic global disappeared, confirming re-execution; Firefox and the active X11 session
+remained open, the touchscreen stayed enabled, and automatic locking stayed disabled.
+The owner can now select categories, launch favorites and some application entries, but the
+Mint Menu logo still does not open the menu. This is partial observed behavior, not a repair.
+
+#### Edge trace and wider Firefox probe
+
+The owner performed a slide toward the bottom-left logo and a tap. The XInput capture contains
+three contacts: two short contacts, then a slide from approximately (344,476) to (31,1016).
+There is no separate subsequent contact on the Menu logo at y=1040..1080. The capture was
+explicitly stopped after the owner reported completion; its interrupted status is expected.
+This warrants checking contact coverage, rather than assuming Cinnamon receives every failed tap.
+
+A temporary fullscreen measurement page at `/measure.html` displays six targets and records
+trusted touch coordinates anywhere on the page, so any touch can advance it. The first target
+at (192,162) received (189,165), only three pixels off on each axis. The owner reports difficulty
+activating Start and no response at the second target in the upper-right. The next contact,
+which advanced the page to target 3, was at (564,341), not near target 2 at (1728,162).
+It cannot be used as a calibration pair. The owner also reports Firefox's top menus work well.
+Together these observations do not justify applying a global calibration matrix, and they
+show the failure is not established as specific to Cinnamon.
+
+A read-only evdev probe was run locally with administrator authentication. It verified the LG
+identity and read axis ranges (X 0..1920, Y 0..1080, two slots), but its bounded capture contains
+no events. Without a confirmed positive control within that window, the empty buffer does not
+establish a kernel or hardware failure. No driver replacement or calibration was applied.
+The owner subsequently disconnected only the display's USB cable for ten seconds and
+reconnected it. XInput redetected the enabled LG device as id 6, `/dev/input/event6`, with
+identity coordinate/calibration matrices. The owner still could not activate Start after
+reconnection; the six-target retest did not complete.
+
+#### Mini-keyboard touchpad comparison and next kernel test
+
+The owner uses a mini-keyboard with an integrated touchpad and reported a disappearing mouse
+cursor. XInput identifies its pointer as `  mini keyboard Mouse`, id 8, `/dev/input/event3`,
+enabled with identity coordinates and normal button state. Both devices share the virtual
+core pointer. During a temporary touchscreen disable, the owner confirmed the touchpad worked;
+its scoped XInput capture also recorded motion. The inverse test enabled touch and disabled
+only the mini-keyboard's mouse function, leaving keyboard input available. The owner reports
+that touchscreen behavior did not improve. This does not establish the mini-keyboard as the
+cause. Both devices were re-enabled; the temporary helpers also completed their automatic restores.
+
+The running kernel is `7.0.0-31-generic`. The installed `6.14.0-37-generic` kernel, its initramfs
+and Nouveau module are present; the current graphics driver is Nouveau. SSH is enabled at boot.
+A helper at `/tmp/kidx-boot-614.py` is prepared for an owner-approved, one-time boot comparison.
+It locates the actual existing non-recovery GRUB entry, refuses an existing one-time selection,
+uses `grub-reboot`, verifies the selection and only then reboots. Syntax was checked, but the
+helper has **not been executed**. Reboot confirmation is pending because it closes the Mint session.
+No kernel was installed, removed or selected yet; no kernel regression is established.
 
 Relevant local evidence: `xinput-firefox-menu-04.log`, `cinnamon-firefox-menu-04.json`,
 `xinput-open-menu-05.log` and `xinput-reset-06.log` under
 `output/mint-touch-2026-09-10/`, plus the inspected
 `output/playwright/mint-touch/mint-menu-open.png` screenshot.
-The scoped Cinnamon observer was explicitly stopped before the reset. A direct evdev probe
-was prepared at `/tmp/kidx-raw-touch-probe.py` but has **not** been run; it would require a
-local privileged command. Do not report any raw kernel-event result from that unexecuted probe.
+Further local receipts are `cinnamon-edge-08.json`, `xinput-edge-08.log` and
+`evdev-touch-09.json` in the same diagnostic directory. The evdev result on ugKid is
+`/tmp/kidx-raw-touch-845po5i5.json`. `output/playwright/mint-touch/measure-stalled.png`
+shows the inspected upper-right target. The temporary Cinnamon observer is stopped; a later
+probe revision observed only pointer/touch events, including virtual devices, never keyboard input.
 
 ### Automatic session locking disabled at the owner's request
 
