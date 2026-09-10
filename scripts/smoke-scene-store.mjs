@@ -256,6 +256,24 @@ applySmokeTimeout(page);
   out.switchedScene = await page.evaluate(() => window.__GRAPHYSX__.state()?.world.id === "second-scene");
 
   await page.screenshot({ path: path.join(ART, "scene-browser.png"), fullPage: false });
+
+  // Complete-document validation must accept the browser's own authored exports, including
+  // resolved defaults and richer entities that a minimal command fixture cannot cover.
+  await page.goto(`${BASE}?host=standalone`, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => Boolean(window.__GRAPHYSX__));
+  const starters = await page.evaluate(() => window.__GRAPHYSX__.starters().map((starter) => starter.id));
+  out.catalogWrites = [];
+  for (const id of starters) {
+    const authored = await page.evaluate((id) => {
+      const api = window.__GRAPHYSX__;
+      api.pause(true);
+      const loaded = api.loadStarter(id);
+      if (!loaded.ok) throw new Error(loaded.error);
+      return api.exportDocument();
+    }, id);
+    const stored = await putScene(store.url, `catalog-${id}`, authored);
+    out.catalogWrites.push({ id, revision: stored.revision });
+  }
 } catch (e) {
   out.fatal = String(e);
 } finally {
@@ -292,7 +310,8 @@ const ok =
   out.browserListsScene &&
   out.announcesActor &&
   out.secondSceneListed &&
-  out.switchedScene;
+  out.switchedScene &&
+  out.catalogWrites?.length > 0 && out.catalogWrites.every((entry) => entry.revision === 1);
 process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
 
 

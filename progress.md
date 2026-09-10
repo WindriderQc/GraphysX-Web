@@ -4166,3 +4166,5 @@ or blocks the release.
 - R8: KidX keeps 72px controls in a two-row portrait layout, separates the mission card from Exit, and exposes complete coaching text. The existing EV3 browser suite passes, including new 320/390px hit tests and a successful three-Forward run in portrait; the 390x844 capture was inspected.
 
 - Dependency maintenance: updated only the existing compatible js-yaml, nanoid and postcss resolutions. npm reports zero known vulnerabilities; typecheck and 285 unit tests pass, with the existing Windows skip.
+
+- R6 compatibility: all ten released starter documents, exported by the browser runtime, pass complete store validation. The store smoke now publishes each through HTTP to retain this coverage for future schema changes.
