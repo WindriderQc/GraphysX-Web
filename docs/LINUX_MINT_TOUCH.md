@@ -45,6 +45,22 @@ Local receipts, outside git:
 type, then perform the actual-PC KidX checklist below, including touch scrolling and held-Go
 release/cancellation. The review and saved-program implementation are already complete.
 
+### Automatic session locking disabled at the owner's request
+
+The owner subsequently requested removal of automatic logoff. Live settings showed Cinnamon
+automatic screen locking after 900 seconds, with automatic suspend already disabled. For user
+`yb`, the following persistent settings were applied through the active user D-Bus session and
+read back successfully:
+
+- `org.cinnamon.desktop.screensaver lock-enabled`: `false` (previously `true`).
+- `org.cinnamon.desktop.screensaver idle-activation-enabled`: `false` (previously `true`).
+- `org.cinnamon.desktop.session idle-delay`: `uint32 0` (previously `uint32 900`).
+
+The original values are retained on ugKid at
+`/home/yb/.local/state/kidx/auto-lock-before-E0QcLJ.txt`. These changes disable the automatic
+lock; they do not establish that a session logout was occurring. Display power settings were
+not changed. Readback is the configuration receipt; no 15-minute idle soak has been performed.
+
 ## Earlier session handoff: access and initial inventory (2026-09-10)
 
 The owner requested a fresh session at this point. SSH setup is complete: passwordless key

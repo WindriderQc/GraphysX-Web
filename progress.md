@@ -4210,3 +4210,8 @@ or blocks the release.
 - Restarted the diagnostic Firefox process with session-only `MOZ_USE_XINPUT2=1`, based on Mozilla's current GTK startup implementation, and verified its environment. The repeat physical test is pending. No persistent desktop/browser configuration, calibration or kernel change was made.
 - Prepared the actual-PC acceptance page through a loopback-only SSH reverse tunnel, serving an isolated copy of the existing application build and passive browser receipts. The source since the saved-program commit differs only in documentation. KidX's physical acceptance and EV3 work remain unqualified.
 - Local evidence is under `output/mint-touch-2026-09-10/` and `output/playwright/mint-touch/`. Inspected the real Firefox captures. Existing unit tests pass: 293 passed, one existing Windows skip. No product-code change, full-gate rerun, push, merge or production deployment.
+
+## 2026-09-10 — disable automatic ugKid session locking
+
+- Owner explicitly requested removal of automatic logoff while the touch acceptance remains in progress. Live Cinnamon settings showed a 900-second idle delay and automatic screensaver locking, with automatic suspend already disabled.
+- Persistently set `lock-enabled=false`, `idle-activation-enabled=false` and session `idle-delay=0` for `yb` through the active user D-Bus session. Read back all three values successfully; original settings are retained in `/home/yb/.local/state/kidx/auto-lock-before-E0QcLJ.txt`. No reboot or privileged command was needed. Display power settings were not changed, and no 15-minute idle soak is claimed.
