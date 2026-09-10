@@ -4155,3 +4155,6 @@ or blocks the release.
 - R3: showroom console errors now participate in its exit status, consistent with the other product smokes. No error allowlist, assertion relaxation or timeout change was added. The full gate must now account for the shader errors observed during review.
 
 - R7: verify claims use exclusive file creation, keep live owners regardless of age, serialize dead-owner reclamation, and release only their own token. Unknown/partially written records fail closed. Five lock regressions plus existing classifier/deadline tests pass (28/28).
+
+- R10: the verifier and counts command share a side-effect-free manifest, including all six static checks. Counts now reports 56 total checks and 50 smokes/audits; bridge entries are described as API paths. Test tiers and deadlines are unchanged.
+- Editor browser validation passed with zero console/page errors: quota failure and reload recovery, quick-exit/reload recovery, agent pause followed by human resume, and downloaded document semantics, plus the existing Top 20 workflows.

@@ -7,6 +7,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { VERIFY_SMOKES, VERIFY_STATIC_CHECKS } from "./verify-manifest.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -17,18 +18,14 @@ export async function projectCounts() {
   const toolBlock = bridge.split("const TOOL_PATHS = [")[1]?.split("] as const")[0] ?? "";
   const tools = [...toolBlock.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
 
-  const verify = await read("scripts/verify.mjs");
-  const smokes = [...verify.matchAll(/\{ name: "([^"]+)", script:/g)].map((match) => match[1]);
-
   const packageJson = JSON.parse(await read("package.json"));
   const smokeScripts = Object.keys(packageJson.scripts).filter((name) => name.startsWith("smoke:"));
   const audits = Object.keys(packageJson.scripts).filter((name) => name.startsWith("audit:"));
 
   return {
     bridgeTools: tools.length,
-    // The gate is the smoke list plus the static checks verify always runs (typecheck, build).
-    gateChecks: smokes.length + 2,
-    gateSmokes: smokes.length,
+    gateChecks: VERIFY_SMOKES.length + Object.keys(VERIFY_STATIC_CHECKS).length,
+    gateSmokes: VERIFY_SMOKES.length,
     smokeScripts: smokeScripts.length,
     audits: audits.length,
   };
@@ -36,8 +33,8 @@ export async function projectCounts() {
 
 if (process.argv[1]?.endsWith("counts.mjs")) {
   const counts = await projectCounts();
-  console.log(`agent bridge tools:   ${counts.bridgeTools}`);
-  console.log(`release gate checks:  ${counts.gateChecks} (${counts.gateSmokes} smokes + typecheck + build)`);
+  console.log(`agent bridge paths:   ${counts.bridgeTools}`);
+  console.log(`release gate checks:  ${counts.gateChecks} (${counts.gateSmokes} smokes/audits + ${Object.keys(VERIFY_STATIC_CHECKS).join(", ")})`);
   console.log(`smoke scripts:        ${counts.smokeScripts}`);
   console.log(`standalone audits:    ${counts.audits}`);
 }
