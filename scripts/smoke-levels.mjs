@@ -302,6 +302,6 @@ const ok =
   out.played?.skyDropdownAgrees &&
   out.closed &&
   out.toolbarStillThere;
-process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
+process.exit(out.fatal || consoleErrors.length || pageErrors.length || !ok ? 1 : 0);
 
 

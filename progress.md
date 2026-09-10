@@ -4175,3 +4175,9 @@ or blocks the release.
 - KidX discovery: the welcome card links to First Drive and its Exit returns to the same front door. Startup recovery also covers the application's lazy chunk. The expanded startup smoke passes all three injected failures, both working retries and the welcome → KidX → welcome journey; portrait screenshots were inspected. The strict showroom smoke passes with zero console/page errors.
 
 - Documentation: aligned README, Product Spec, Roadmap and AgentX roadmap with the retired legacy host, current editor workflows and the existing KidX/EV3 → Pi priorities. Historical production evidence remains dated separately in HANDOFF.
+
+- Final product matrix: npm run verify -- --wait passed all 57 checks on 140ee56 with zero retries, including 286 passing unit tests (one intentional Windows skip) and 131/131 two-browser collaboration checks. The renderer/game captures were inspected at 320/390px portrait and 800/1280px landscape. npm audit reports zero known vulnerabilities.
+
+- R3 follow-through: a final scan found the same missing console-error predicate in nine other smokes (levels, scene-store, triggers, rules, spiral, world1, suzanne1, suzanne2, day-night). Only their exit conditions changed after the full matrix. All nine passed again with strict console handling; a separate injected console error made an otherwise working triggers smoke exit 1 as expected. Scoped lint passes. No product or bundle change followed the full matrix.
+
+- Closeout artifacts: output/peer-review-2026-09-10/REVIEW.fr.md contains the original detailed assessment; output/review-fixes-2026-09-10/CLOSEOUT.fr.md maps corrections, commits, proof and remaining features. Logs and inspected captures are retained beside it. Work is local only: no push, merge, deployment or EV3/Pi hardware claim.

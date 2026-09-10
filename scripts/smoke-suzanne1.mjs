@@ -155,7 +155,7 @@ const pass =
   out.roundTrip?.ok === true &&
   out.roundTrip?.before === out.roundTrip?.after &&
   out.roundTrip?.lapsSurvived === 3 &&
-  out.pageErrors.length === 0;
+  consoleErrors.length === 0 && out.pageErrors.length === 0;
 
 console.log(JSON.stringify(out, null, 2));
 console.log(pass ? "SMOKE PASS" : "SMOKE FAIL");

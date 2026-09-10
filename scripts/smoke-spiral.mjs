@@ -165,5 +165,5 @@ const ok =
   r.reloadOk === true &&
   r.reloadEntityCount === 44 &&
   r.rulesSurviveReload === true &&
-  pageErrors.length === 0;
+  consoleErrors.length === 0 && pageErrors.length === 0;
 process.exit(ok ? 0 : 1);

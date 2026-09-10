@@ -343,4 +343,4 @@ const ok =
   t.afterAnyTwo?.phase === "complete" && t.afterAnyTwo?.collected === 2 &&
   t.afterAnyTwo?.inventory === 3 && t.afterAnyTwo?.target === 2;
 
-process.exit(out.fatal || pageErrors.length || !ok ? 1 : 0);
+process.exit(out.fatal || consoleErrors.length || pageErrors.length || !ok ? 1 : 0);

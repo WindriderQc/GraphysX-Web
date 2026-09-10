@@ -131,5 +131,5 @@ const ok =
   r.docCarriesRules === true &&
   r.reloadOk === true &&
   r.reloadEntityCount === r.entityCount &&
-  pageErrors.length === 0;
+  consoleErrors.length === 0 && pageErrors.length === 0;
 process.exit(ok ? 0 : 1);
