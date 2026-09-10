@@ -72,6 +72,36 @@ is `output/playwright/mint-touch/mint-desktop.png`. Native browser input success
 qualify Cinnamon's panel, its menus or KidX. No kernel, input driver or compositor replacement
 has been attempted, and no regression cause is established yet.
 
+#### Paired test and open-menu test
+
+The next paired capture has a positive control: the owner advanced Firefox's counter to
+11/5, and matching trusted native touch events appear in the browser receipts. XInput and
+the temporary Cinnamon observer both received those contacts. The observer also sees Firefox
+chrome contacts, so its earlier empty buffers are not evidence that it cannot receive events.
+No matching bottom-panel contact was observed in this capture.
+
+The Menu was then opened through Cinnamon's existing diagnostic D-Bus interface. The owner
+reports that pressing entries does not activate them; only sliding changes the selected category.
+In this phase, **Cinnamon does receive emulated button press/release events from the LG device**.
+Recorded contacts around x=230..284, y=663..808 target the categories' `StScrollView`, while
+direct actor picking at those positions resolves the visible, reactive category buttons.
+This narrows the investigation to event targeting/activation in the desktop. It does not prove
+the exact cause, and opening the menu remotely is not a successful physical Menu-button test.
+
+To test for stale input state, the touchscreen was disabled and re-enabled once through XInput
+(about 0.3 seconds, with re-enable in a `finally` block). Readback confirms Device Enabled=1,
+identity calibration/coordinate matrices, and the original button map `1 2 3 4 5 6 7`.
+The Menu was closed to restore the test's starting state. **The owner's Menu-button retest
+after this reset is pending.** No persistent input configuration or Cinnamon source was changed.
+
+Relevant local evidence: `xinput-firefox-menu-04.log`, `cinnamon-firefox-menu-04.json`,
+`xinput-open-menu-05.log` and `xinput-reset-06.log` under
+`output/mint-touch-2026-09-10/`, plus the inspected
+`output/playwright/mint-touch/mint-menu-open.png` screenshot.
+The scoped Cinnamon observer was explicitly stopped before the reset. A direct evdev probe
+was prepared at `/tmp/kidx-raw-touch-probe.py` but has **not** been run; it would require a
+local privileged command. Do not report any raw kernel-event result from that unexecuted probe.
+
 ### Automatic session locking disabled at the owner's request
 
 The owner subsequently requested removal of automatic logoff. Live settings showed Cinnamon
