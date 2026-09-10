@@ -89,8 +89,11 @@ smoke passed, and an independent live smoke found zero bad responses, console er
 1. **Finish Phase 6 on real EV3 hardware.** All four blocks now work in simulation; add the narrow
    adapter that sends that same compiled input sequence to EV3; do not invent a second program
    model for the robot.
-2. **Phase 7, Raspberry Pi validation.** Run the child surface and hardware path on the actual Pi;
-   the Build / Run surface is measured at 800×480 in anticipation of it.
+2. **Phase 7, Linux Mint touchscreen PC validation.** The owner replaced the Raspberry Pi
+   target with a freshly installed Linux Mint PC on 2026-09-10. Touch input is currently
+   reported not working; the model, Mint version and physical connection still need identification.
+   Follow [the diagnostic and acceptance guide](docs/LINUX_MINT_TOUCH.md). The existing
+   800×480 browser measurements remain compact-layout evidence, not hardware qualification.
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`
    remains one `if` in `main.ts`. Generalize it when a *second* application asks for it, not before.
 

@@ -2,7 +2,7 @@
 
 **Priority update — 2026-09-10.** This document records the retained Center capabilities and
 their technical limitations. It does not supersede `../HANDOFF.md`: the active product order
-is KidX/EV3 hardware integration, Raspberry Pi qualification, then application composition
+is KidX/EV3 hardware integration, Linux Mint touchscreen PC qualification, then application composition
 when a second application requires it. Center expansion and package extraction are deferred.
 
 *Truth reset: 2026-08-06. The AgentX Center v2 slice began from clean `main` at `9ea9da3`;

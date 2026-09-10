@@ -22,8 +22,10 @@ Live application: <https://graphysx.specialblend.ca>
 >
 > **Current product direction: a lean platform and KidX First Drive.** Open KidX from the
 > welcome card or `?app=ev3-lab` to build and run a six-block program through the same steering
-> API used by a human or agent. Real EV3 execution and Raspberry Pi qualification remain to
-> be completed on the target hardware. The current order is in **[HANDOFF.md](HANDOFF.md)**.
+> API used by a human or agent. Real EV3 execution and qualification on the Linux Mint
+> touchscreen PC remain to be completed on the target hardware. That PC replaces the earlier
+> Raspberry Pi target. See **[HANDOFF.md](HANDOFF.md)** and the
+> **[Linux Mint touchscreen guide](docs/LINUX_MINT_TOUCH.md)**.
 >
 > **In the current source:** First Drive's **Programs** button saves named block sequences in
 > this browser. Build a program, open Programs, enter a name and save. After reloading, open
