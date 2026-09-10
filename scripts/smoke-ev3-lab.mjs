@@ -431,6 +431,37 @@ try {
       && right.headingDegrees > 70 && right.headingDegrees < 110
       && leftFirst.position?.[0] < 0,
     { left: leftFirst, right });
+
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    const layout = await page.evaluate(() => {
+      const rect = (element) => {
+        const box = element.getBoundingClientRect();
+        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height };
+      };
+      return {
+        buttons: [...document.querySelectorAll(".gx-ev3 button")].filter((button) => !button.hidden).map((button) => {
+          const box = rect(button);
+          const hit = document.elementFromPoint((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+          return { label: button.getAttribute("aria-label"), ...box, reachable: button === hit || button.contains(hit) };
+        }),
+        mission: rect(document.querySelector(".gx-ev3-mission")),
+        exit: rect(document.querySelector(".gx-ev3-exit")),
+      };
+    });
+    check(`all portrait controls remain visible and reachable at ${width}px`,
+      layout.buttons.length === 7 && layout.buttons.every((button) => button.width >= 72 && button.height >= 72
+        && button.left >= 0 && button.right <= width && button.bottom <= 844 && button.reachable)
+        && layout.mission.top >= layout.exit.bottom && layout.mission.right <= width, layout);
+  }
+  await page.locator("[data-ev3-undo]").click();
+  await page.locator("[data-ev3-undo]").click();
+  for (let index = 0; index < 3; index += 1) await page.locator("[data-ev3-block='forward']").click();
+  await page.locator("[data-ev3-run]").click();
+  const portraitRun = await page.evaluate(() => window.advanceTime(3_000));
+  check("portrait Run reaches the same First Drive verdict", portraitRun?.mission?.phase === "complete", portraitRun);
+  await page.waitForTimeout(1_100);
+  await page.screenshot({ path: path.join(ART, "ev3-first-program-complete-390x844.png"), fullPage: false });
 } catch (error) {
   failures.push(String(error));
 } finally {

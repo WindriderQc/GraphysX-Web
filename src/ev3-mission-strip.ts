@@ -86,9 +86,7 @@ const injectStyleOnce = (): void => {
   style.textContent = `
 .gx-ev3{position:fixed;inset:auto 0 0 0;z-index:30;display:flex;align-items:flex-end;justify-content:space-between;
   gap:12px;padding:12px 14px calc(12px + env(safe-area-inset-bottom));pointer-events:none;font-family:var(--gx-font)}
-/* The strip is a fixed band at the bottom. It must never grow upward: a bottom-anchored panel
-   that changes height covers the scene behind it, which has already cost this project a dead
-   click on a kinetic block. Status text is one line and clips rather than wrapping. */
+/* Keep a stable control band within each viewport layout, including while a run changes state. */
 .gx-ev3-pad,.gx-ev3-actions{display:flex;gap:12px;pointer-events:auto}
 .gx-ev3[data-mode="program"] .gx-ev3-pad,.gx-ev3[data-mode="program"] .gx-ev3-actions{gap:8px}
 .gx-ev3 button{width:${EV3_TOUCH_TARGET_PX}px;height:${EV3_TOUCH_TARGET_PX}px;border-radius:18px;border:2px solid rgba(120,220,255,.5);
@@ -137,6 +135,17 @@ body:has(.gx-ev3) .gx-display-settings{display:none}
   .gx-ev3-objective{font-size:16px}.gx-ev3-nestor{margin-top:7px;font-size:12px}.gx-ev3-nestor-mark{height:26px;flex-basis:26px}
   .gx-ev3-program-readout{margin-top:7px;padding-top:6px}
   .gx-ev3-exit{right:10px;top:10px}
+}
+@media (max-width:700px){
+  .gx-ev3{display:grid;grid-template-columns:repeat(4,${EV3_TOUCH_TARGET_PX}px);justify-content:center;
+    align-items:end;gap:8px;padding:8px 4px calc(8px + env(safe-area-inset-bottom));min-height:160px}
+  .gx-ev3 .gx-ev3-pad,.gx-ev3 .gx-ev3-actions{display:contents}
+  .gx-ev3 button{pointer-events:auto}
+  .gx-ev3-wide{grid-column:span 2}
+  .gx-ev3-mission{box-sizing:border-box;left:14px;top:74px;width:calc(100vw - 28px)}
+  .gx-ev3-status{white-space:normal}
+  .gx-ev3-program-blocks{flex-wrap:wrap;overflow:visible}
+  .gx-ev3-program-readout{align-items:flex-start}
 }`;
   document.head.append(style);
 };
