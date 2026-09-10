@@ -92,8 +92,10 @@ smoke passed, and an independent live smoke found zero bad responses, console er
 2. **Phase 7, Linux Mint touchscreen PC validation.** The owner replaced the Raspberry Pi
    target with a freshly installed Linux Mint PC on 2026-09-10. Touch input is currently
    reported not working. SSH key access to ugKid is verified; Mint 22.3 Cinnamon/X11 detects
-   the LG Display USB touchscreen with `hid-multitouch`, and XInput enables it. Actual touch
-   events have not yet been tested. The next session starts with the live diagnostic receipt in
+   the LG Display USB touchscreen with `hid-multitouch`. Physical taps/drags now produce X11
+   events, and the owner confirmed five taps and a trace in Firefox. Firefox initially reported
+   mouse compatibility events; the repeat test after a session-only `MOZ_USE_XINPUT2=1`
+   restart remains pending. Full KidX hardware acceptance is still open. Continue from
    [the diagnostic and acceptance guide](docs/LINUX_MINT_TOUCH.md). The existing
    800×480 browser measurements remain compact-layout evidence, not hardware qualification.
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`

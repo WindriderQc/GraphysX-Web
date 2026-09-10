@@ -2,9 +2,50 @@
 
 The owner's Linux Mint PC replaces the planned Raspberry Pi target. The PC runs the browser
 and, once selected and implemented, the local EV3 transport. First Drive still uses its existing
-four blocks and steering runner. No real PC or EV3 hardware has been qualified yet.
+four blocks and steering runner. Touch input has now been exercised on the real PC; complete
+KidX acceptance and EV3 hardware qualification remain open.
 
-## Session handoff: verified access, touch still unresolved (2026-09-10)
+## Live touch diagnosis (2026-09-10, resumed session)
+
+The owner confirmed physical interaction during a device-scoped XInput capture on ugKid.
+The capture received **6 RawTouchBegin, 79 RawTouchUpdate and 6 RawTouchEnd events** from
+device 6. The 45-second capture ended with the expected timeout status 124. The owner
+observed text selection when dragging inside the terminal. The input path therefore reaches
+X11 and an application; lack of visible reaction to other desktop taps does not establish
+a broken kernel driver or justify recalibration.
+
+A local diagnostic page was then opened in Firefox **155.0.1**, on the actual Mint desktop.
+The owner confirmed that five finger taps advanced its counter and a traced line followed
+the finger. Browser receipts recorded trusted pointer/click events, but their `pointerType`
+was **mouse**. This confirms working compatibility input, not native browser touch handling
+or touch scrolling in Programs.
+
+Firefox was restarted with **session-only `MOZ_USE_XINPUT2=1`**. The live process environment
+confirms the setting. Mozilla's [GTK startup implementation](https://github.com/mozilla-firefox/firefox/blob/main/toolkit/xre/nsAppRunner.cpp)
+uses this variable to control XInput2 multidevice support. No system environment, desktop
+launcher, driver, calibration or browser preference was changed. **The owner's repeat test
+with this setting is pending**; do not label native `pointerType=touch` or scrolling verified.
+
+The diagnostic server runs on Windows loopback `127.0.0.1:4175`, through an SSH reverse
+forward bound to ugKid loopback `127.0.0.1:4175`. Firefox opens
+`http://127.0.0.1:4175/touch.html`. Its **Ouvrir KidX** link leads to the welcome page, served
+from an isolated copy of the existing saved-program build with a passive diagnostic observer.
+There is no public or LAN HTTP listener, production deployment or EV3 connection.
+This temporary origin and server are for acceptance; saved programs remain origin-specific.
+
+Local receipts, outside git:
+
+- `output/mint-touch-2026-09-10/xinput-touch-01.log`: the scoped X11 event capture.
+- `output/mint-touch-2026-09-10/unit-tests.log`: 293 passing tests, one existing Windows skip.
+- `output/playwright/mint-touch/browser-receipts.jsonl`: browser environment and physical input.
+- `output/playwright/mint-touch/browser-initial.png`: inspected Firefox trace and text selection.
+- `output/playwright/mint-touch/browser-xinput2.png`: inspected page after the session-only restart.
+
+**Next:** confirm finger taps and a trace after the XInput2 restart, inspect their pointer
+type, then perform the actual-PC KidX checklist below, including touch scrolling and held-Go
+release/cancellation. The review and saved-program implementation are already complete.
+
+## Earlier session handoff: access and initial inventory (2026-09-10)
 
 The owner requested a fresh session at this point. SSH setup is complete: passwordless key
 authentication from the Windows workstation to `yb@192.168.2.116` succeeds and returns
@@ -39,12 +80,13 @@ Live inventory and configuration:
 | Live configuration | Device Enabled = 1; send-events disabled mode off; coordinate and calibration matrices both identity |
 | Diagnostic tools | `xinput`, `xrandr`, Python 3 present; `libinput` CLI and `evtest` absent |
 
-The kernel and desktop recognize and enable the touchscreen. This does **not** establish
-that touching the panel generates events. No interactive event capture has been performed,
+At this earlier handoff, the kernel and desktop recognized and enabled the touchscreen.
+That inventory alone did **not** establish that touching the panel generated events.
+No interactive event capture had yet been performed,
 and no driver, calibration, kernel or desktop setting was changed. Device ids and event paths
 can change on reboot or reconnection; rediscover them before using the commands below.
 
-**Next action:** coordinate a short tap-and-drag test with the owner while monitoring only
+**Original next action, now completed above:** coordinate a short tap-and-drag test with the owner while monitoring only
 the identified touchscreen. The installed `xinput --help` confirms the syntax
 `test-xi2 [--root] <device>`. As the desktop user, the intended remote command is:
 
