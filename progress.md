@@ -4147,3 +4147,5 @@ or blocks the release.
 - Added a browser regression for quota failure, retained dirty state, rejected cache load and recovery after reload. Typecheck and existing unit suite pass (278 passed, one intentional Windows skip); combined browser validation follows the editor corrections.
 
 - R2: deferred drafts now capture their authored document and flush before editor exit, page hide and disposal. A world replacement cannot redirect a pending write into the showroom. Added a quick-exit/reload regression through the real exit control.
+
+- R4: the editor Pause control now derives its label, pressed state and next action from the runtime. Added an agent-pause → human-resume regression.

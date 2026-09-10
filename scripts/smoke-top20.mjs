@@ -84,6 +84,14 @@ try {
   await editor.click(".gx-ed-recover");
   out.quota.recoveredAfterReload = await editor.evaluate(() => window.__GRAPHYSX__.query({ ids: ["quota-probe"] }).length === 1);
 
+  await editor.evaluate(() => window.__GRAPHYSX__.pause(true));
+  const editorPause = editor.locator('.gx-ed-toolbar').getByRole('button', { name: 'Play', exact: true });
+  await editorPause.waitFor();
+  out.editorPause = { pressed: await editorPause.getAttribute('aria-pressed') };
+  await editorPause.click();
+  out.editorPause.resumed = await editor.evaluate(() => window.__GRAPHYSX__.state().paused === false);
+  out.editorPause.label = await editor.locator('.gx-ed-toolbar').getByRole('button', { name: 'Pause', exact: true }).textContent();
+
   out.redo = await editor.evaluate(() => {
     const api = window.__GRAPHYSX__;
     api.spawn({ id: "redo-probe", type: "box" });
@@ -285,6 +293,7 @@ const ok =
   out.draft?.draftWorld === "top20-editor" && out.draft?.recovered === true &&
   /unsaved/.test(out.quota?.status ?? "") && /Save failed/.test(out.quota?.status ?? "") &&
   out.quota?.stored === null && out.quota?.draftRetained === true && out.quota?.cacheRejected === true && out.quota?.recoveredAfterReload === true &&
+  out.editorPause?.pressed === "true" && out.editorPause?.resumed === true && out.editorPause?.label === "Pause" &&
   out.redo?.spawned === true && out.redo?.undone === true && out.redo?.redone === true && out.redo?.invalidated === true &&
   out.redo?.bridgeRedo === true && out.redo?.parity?.missing?.length === 0 && out.redo?.parity?.extra?.length === 0 &&
   out.palette?.dialog === "dialog" && out.palette?.commands?.some((command) => /Redo/.test(command)) &&

@@ -240,6 +240,7 @@ export class PlatformEditor {
   private helpOverlay: HTMLElement | null = null;
   private commandOverlay: HTMLElement | null = null;
   private toolbarStatus!: HTMLElement;
+  private pauseButton!: HTMLButtonElement;
   private recoveryButton!: HTMLButtonElement;
   private slotSelect!: HTMLSelectElement;
   private mobileNav!: HTMLElement;
@@ -764,6 +765,10 @@ export class PlatformEditor {
     this.syncGizmo();
     const state = this.deps.api.state();
     const entities = (state?.entities ?? []).filter((entity) => !entity.runtimeOwnedTransient);
+    const paused = state?.paused === true;
+    this.pauseButton.textContent = paused ? "Play" : "Pause";
+    this.pauseButton.classList.toggle("gx-ed-on", paused);
+    this.pauseButton.setAttribute("aria-pressed", String(paused));
     this.syncDocumentStatus(false);
     this.readout.textContent = this.selectedId
       ? `${this.selectedId} · ${this.gizmo.getMode()} · rev ${state?.revision ?? 0}`
@@ -1551,17 +1556,12 @@ export class PlatformEditor {
       this.toolButton("Delete", () => this.removeSelected(), "Delete selection (Del)"),
     ]));
 
-    let paused = false;
-    const pauseButton = this.toolButton("Pause", () => {
-      paused = !paused;
-      this.deps.api.pause(paused);
-      pauseButton.textContent = paused ? "Play" : "Pause";
-      pauseButton.classList.toggle("gx-ed-on", paused);
-      pauseButton.setAttribute("aria-pressed", String(paused));
+    this.pauseButton = this.toolButton("Pause", () => {
+      this.deps.api.pause(!this.deps.api.state()?.paused);
+      this.refresh("skip");
     });
-    pauseButton.setAttribute("aria-pressed", "false");
     toolbar.append(this.group([
-      pauseButton,
+      this.pauseButton,
       this.toolButton("Step", () => { this.deps.api.step(); this.refresh(); }),
       this.toolButton("Undo", () => { this.deps.api.undo(); this.select(null); }),
       this.toolButton("Redo", () => { this.deps.api.redo(); this.select(null); }),
