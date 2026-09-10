@@ -1,6 +1,8 @@
 # GraphysX Web — Roadmap
 
-> **Current roadmap (2026-08-04): [AgentX Center roadmap](docs/AGENTX_ROADMAP.md).**
+> **Current priorities (2026-09-10): [session handoff](HANDOFF.md).** KidX/EV3 hardware,
+> Raspberry Pi qualification, then composition when a second application requires it.
+> The [AgentX Center roadmap](docs/AGENTX_ROADMAP.md) records retained capabilities; expansion is deferred.
 > The inventory below is the 2026-07-30 historical snapshot and contains claims that were
 > subsequently shipped (notably Live Sessions, browser results, formula/flock integration,
 > and the shared preview workshop). Keep it for decision history; do not use it as backlog.

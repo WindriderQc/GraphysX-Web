@@ -13,7 +13,20 @@ Read `PRODUCT_SPEC.md` §8.1 (the honest status table) for what ships versus wha
 as the v1 target. Read `CLAUDE.md` for the short list of rules that exist because breaking them
 cost real sessions real hours.
 
-## Start here — where the work actually is (2026-08-13)
+## Reliability follow-up (2026-09-10)
+
+Local review corrections cover durable named saves, draft flushing before scene exits,
+runtime-driven Pause state, authored-document exports, complete store-write validation,
+atomic verification locking, strict showroom console checks, generated gate counts,
+startup recovery and portrait KidX controls. KidX is reachable from the welcome card.
+`server/scene-document.mjs` shares entity vocabulary, document shape and mission-rule
+checks with the browser; `scripts/verify-manifest.mjs` is the gate inventory.
+
+These changes require their own release evidence. The production receipts below describe the
+August release, not automatic activation of this follow-up. See the latest `progress.md` entry
+for validation. Hardware priorities below are unchanged; no EV3/Pi qualification is implied.
+
+## Production baseline (2026-08-13)
 
 **The lean platform and KidX First Drive are the current production release on `main`.** The
 feature landed in `5bddf69`; the live visual follow-up landed in `ecd130b`, and the current release

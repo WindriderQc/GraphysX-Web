@@ -1,5 +1,10 @@
 # AgentX Center roadmap
 
+**Priority update — 2026-09-10.** This document records the retained Center capabilities and
+their technical limitations. It does not supersede `../HANDOFF.md`: the active product order
+is KidX/EV3 hardware integration, Raspberry Pi qualification, then application composition
+when a second application requires it. Center expansion and package extraction are deferred.
+
 *Truth reset: 2026-08-06. The AgentX Center v2 slice began from clean `main` at `9ea9da3`;
 this document includes the completed spatial mission-director work in the current release.
 [PRODUCT_SPEC.md](../PRODUCT_SPEC.md) remains the product contract. This is the execution order.*
@@ -176,7 +181,7 @@ by someone's estimate.
 1. **A free-text request surface** (slice 4). The provider adapter composes against three fixed
    topic requests because buttons are the only way to ask for anything. The hazard is layout, not
    plumbing: the welcome card grows upward over the scene.
-2. **Authored places** (slice 7). Three doorways make the Center navigable, but they lead to
+2. **Authored places — deferred** (slice 7). Three doorways make the Center navigable, but they lead to
    content that already existed rather than to a build lab, an overlook and an arena someone
    designed. Those cost entities, and the budget to hold is the showroom's real median frame of
    **13.3ms** — not the headless number, which is software-rasterised and reports ~330ms

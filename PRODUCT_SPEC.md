@@ -1,18 +1,12 @@
 # GraphysX Web — Product Spec
 
-**Status:** Draft v0.3 — 2026-07-18. North Star for splitting the deployed web product
-from the archive-revival workshop, and for the scene-engine vision. Supersedes the
-marketing claims in the old `README.md` until the re-architecture wave lands.
-Foundation slice `foundation-r1` has landed: the app now boots into the platform home
-(Scene Editor as the front door; archive-player menus off the product surface). Clean-host
-core `host-r1` has landed too: `PlatformHost` renders the v2 world on its own
-renderer/camera/controls/loop with zero `race-scene` dependency (reachable at
-`?host=standalone`). `host-r2` adds full agent parity on that host — the complete
-`window.__GRAPHYSX__` API + 90-tool bridge, wired straight to the runtime. `editor-r1`
-adds the human editing layer (click-select, transform gizmo, outliner, add/delete/starter/
-pause). **The default is now flipped onto the clean host** (`foundation-r2` / `showroom-r1`):
-the app boots the welcome showroom on `PlatformHost`, and race-scene is retired to
-`?host=legacy` (dynamically imported, off the default bundle). Phase 3 (showroom) has begun.
+**Current orientation — 2026-09-10.** The default route opens the welcome showroom on
+`PlatformHost`; the editor and agents share one v2 runtime and API. The archive host and
+`?host=legacy` have retired. Converted content lives under `src/content/` and remains part of
+the product. KidX First Drive (`?app=ev3-lab`) is the first application built on that runtime.
+Read §8.1 for shipped capabilities and `HANDOFF.md` for the current execution order. The
+implementation notes below retain historical measurements; they are not a production receipt
+for later changes. Generate current API and gate counts with `npm run counts`.
 
 **Live target:** <https://graphysx.specialblend.ca> · **Source of record:** `WindriderQc/GraphysX-Web`
 
@@ -193,13 +187,13 @@ Tenet §11 is "honesty over theatre," so the gap is recorded rather than implied
 
 The decisive test for "graduated" is whether a capability is expressible in the
 `graphysx.agent-world/v2` model — reachable by the editor *and* the agent API. A behavior
-locked inside a legacy environment module (`?host=legacy` only) has **not** graduated.
+available only in the separate archive workshop has **not** graduated into this product.
 
 | §8 claim | Actual status |
 | --- | --- |
 | Welcome showroom as front door | **Ships.** |
 | Agent World API + discoverable tool bridge | **Ships.** (Tool count grows as vocabulary graduates; the manifest is the source of truth, not a number pinned here.) |
-| Save / load / export / import (v2 JSON + legacy XML) | **Ships.** The compact editor toolbar exposes Save, Load, JSON Export and **Legacy XML** export; the Advanced JSON Workbench exposes **Import JSON / XML**. `exportLegacyXml()` emits a deterministic flat Scene3D v1.2 subset with structured warnings and rejects duplicate IDs or hierarchy instead of silently renaming/flattening. JSON remains the only lossless canonical format. Direct file import is workbench-only rather than duplicated in the compact toolbar. |
+| Save / load / export / import (v2 JSON + legacy XML) | **Ships.** The editor toolbar exposes Save, Load, Import, JSON Export, Copy and **Legacy XML** export; the Advanced JSON Workbench also supports **Import JSON / XML**. Save, Copy and JSON Export use the authored document, excluding session-only entities. Save reports success only after browser storage accepts the write; pending recovery drafts flush on editor exit. `exportLegacyXml()` emits a deterministic flat Scene3D v1.2 subset with structured warnings and rejects duplicate IDs or hierarchy instead of silently renaming/flattening. JSON remains the only lossless canonical format. |
 | Scene Editor: outliner, gizmo, create/delete, pause/step | **Ships.** |
 | Scene Editor: inspector, materials/textures, behaviors, interactions, tags, undo, JSON Workbench | **Ships on the default host.** Model material authoring is assignment-aware: the editor discovers stable slots after load, identifies source-map and repeated-source relationships, exposes only supported Phong/Standard/Physical controls, offers provenance-conscious presets for the Archive Garage vehicles, and resets one slot or all slots without replacing recovered source materials. |
 | Simulation systems (particles + ≥1 Nature-of-Code system) as editor entities | **Ships.** `emitter` is a v2 entity type (`agent-world-particles.ts`) with 8 presets derived from the decoded TV3D archive library, spawnable from the editor's Effects palette and via `api.emitters()`, budgeted at 600 particles/emitter. `flock` (`agent-world-flock.ts`) and now `force-field` (`agent-world-force-field.ts`) are v2 entity types too, both in the editor's Life palette with `api.flocks()` / `api.forceFields()`. Force fields graduate the second Nature-of-Code system — the forces-garden attractor/flow/drag/vortex from the p5 `sAll` sketches — and act *on* rigid bodies, particle emitters and flocks. A fourth, `formula-field` (`agent-world-formula.ts`), graduates the recovered Math Game — `Formulas::moleculesUpdate`'s PARABOLA/SLOPE and the `moleculesCreate` molecule grid — as an instanced field whose coefficients are ordinary scene data, editable in the inspector and via `api.update`. It affords the archive's full 10,000 molecules where a flock caps at 240, because a formula has no neighbour test. ~~DNA/evolutionary entities are still legacy-only in `nature-lab.ts`.~~ **Corrected**: `dna-tree` graduated in `dna-r2`, and `crowd` (`agent-world-crowd.ts`) graduated the race scene's NPC population in `crowd-r1` — a neutral instanced ground crowd with `wander`/`pursue` roles, in the editor's Life palette and on `api.crowds()`. With those two, every simulation system §4 lists is expressible in v2. |

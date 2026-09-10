@@ -9,8 +9,8 @@ Live application: <https://graphysx.specialblend.ca>
 
 > **Status: v1 met, deployed.** The site opens into the platform showroom; a human and
 > an agent edit the same live scene through one runtime; a game rebuilt on-platform plays
-> to a win. The legacy archive player survives behind `?host=legacy` as a reference
-> fallback. What the product is: **[PRODUCT_SPEC.md](PRODUCT_SPEC.md)**. Where it stands
+> to a win. The archive host has retired; converted scenes and assets remain in the shared
+> runtime. What the product is: **[PRODUCT_SPEC.md](PRODUCT_SPEC.md)**. Where it stands
 > and what's next: **[ROADMAP.md](ROADMAP.md)**.
 >
 > **Live Sessions, leaderboards and shared ghosts are deployed** — but a visitor can only
@@ -20,7 +20,12 @@ Live application: <https://graphysx.specialblend.ca>
 > **[docs/DEPLOYING_THE_STORE.md](docs/DEPLOYING_THE_STORE.md)**, then
 > `npm run store:preflight -- --url <store>`.
 >
-> **Current product direction: AgentX Center.** The showroom is a living 3D hub where Nestor
+> **Current product direction: a lean platform and KidX First Drive.** Open KidX from the
+> welcome card or `?app=ev3-lab` to build and run a six-block program through the same steering
+> API used by a human or agent. Real EV3 execution and Raspberry Pi qualification remain to
+> be completed on the target hardware. The current order is in **[HANDOFF.md](HANDOFF.md)**.
+>
+> The retained AgentX showroom is a 3D hub where Nestor
 > demonstrates Build, Play, and Explore through attributed scene commands whose results remain
 > editable. Shipped so far: live sessions with a server-authoritative mission director; a
 > co-authoring queue where Nestor **proposes** and a human accepts, discards, or takes
@@ -29,8 +34,8 @@ Live application: <https://graphysx.specialblend.ca>
 > course through the same `api.steer` calls a keyboard produces, then hands its trajectory over
 > as the ghost you race. A model provider can compose those proposals instead of Nestor — the
 > adapter ships, no provider is configured by default, and **none is required**: with nothing
-> set the page makes no request at all. Still open: a free-text way to ask for something, and
-> the Center's expansion into distinct places. Execution order and guardrails:
+> set the page makes no request at all. Free-text requests remain a future capability;
+> Center expansion is deferred. Capability history and remaining limitations:
 > **[docs/AGENTX_ROADMAP.md](docs/AGENTX_ROADMAP.md)**.
 
 The complete historical source and restoration record lives in the workshop repo,

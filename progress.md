@@ -4161,7 +4161,8 @@ or blocks the release.
 
 - R6: full scene writes now use the existing authored-field and graph validators before persistence. Entity vocabulary, world shape and mission-rule validation are shared with the browser; graph checks also reject invalid/duplicate joints and impossible collectible targets. Browser resource loading remains a separate concern.
 - New store tests prove malformed types, duplicates, parent cycles, transforms, physics and rules cannot replace an accepted revision. The 117 command-validation checks and typecheck pass; full runtime/document round-trips are included in the final gate.
-`n- R9: both lazy startup paths now catch renderer/import failures and display an accessible recovery page with diagnostic details and Retry. A new core smoke injects WebGL and chunk failures, verifies focus/no unhandled rejection, and restores the chunk route to prove retry succeeds. Both cases pass at 390x844.
+
+- R9: both lazy startup paths now catch renderer/import failures and display an accessible recovery page with diagnostic details and Retry. A new core smoke injects WebGL and chunk failures, verifies focus/no unhandled rejection, and restores the chunk route to prove retry succeeds. Both cases pass at 390x844.
 
 - R8: KidX keeps 72px controls in a two-row portrait layout, separates the mission card from Exit, and exposes complete coaching text. The existing EV3 browser suite passes, including new 320/390px hit tests and a successful three-Forward run in portrait; the 390x844 capture was inspected.
 
@@ -4172,3 +4173,5 @@ or blocks the release.
 - R6 imported-media compatibility: full documents retain registered texture/sky references and HTTP assets from local stores. This is distinct from the existing curated-only live-command policy, which remains unchanged. A regression proves both acceptance and continued command rejection.
 
 - KidX discovery: the welcome card links to First Drive and its Exit returns to the same front door. Startup recovery also covers the application's lazy chunk. The expanded startup smoke passes all three injected failures, both working retries and the welcome → KidX → welcome journey; portrait screenshots were inspected. The strict showroom smoke passes with zero console/page errors.
+
+- Documentation: aligned README, Product Spec, Roadmap and AgentX roadmap with the retired legacy host, current editor workflows and the existing KidX/EV3 → Pi priorities. Historical production evidence remains dated separately in HANDOFF.
