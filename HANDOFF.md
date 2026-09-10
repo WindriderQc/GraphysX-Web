@@ -97,7 +97,9 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    events and the owner confirms central taps and tracing work. Wider testing also finds missed
    contacts in Firefox, so this is not established as a Cinnamon-only fault. The Menu logo still
    fails; some menu entries work after a Cinnamon restart. Automatic session locking was disabled
-   at the owner's request. Touch diagnosis and full KidX acceptance remain open. Continue from
+   at the owner's request. An approved one-time reboot into installed kernel 6.14.0-37 succeeded;
+   the physical desktop comparison is pending. EDID identifies the monitor as Dell ST2220T.
+   Touch diagnosis and full KidX acceptance remain open. Continue from
    [the diagnostic and acceptance guide](docs/LINUX_MINT_TOUCH.md). The existing
    800×480 browser measurements remain compact-layout evidence, not hardware qualification.
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`

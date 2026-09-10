@@ -4235,3 +4235,10 @@ or blocks the release.
 - A locally authenticated, read-only evdev capture verified the LG axis ranges but received no events and lacks a confirmed positive control in its window. No kernel-failure claim follows from it. A physical USB reconnect redetected the enabled device, but Start still failed.
 - The mini-keyboard touchpad worked with the touchscreen disabled. Disabling only the mini-keyboard's mouse function did not improve touch. Both devices were restored; temporary observers/helpers are bounded and keyboard events were not recorded.
 - Kernel 6.14.0-37, its initramfs and Nouveau module are already installed alongside active 7.0.0-31. A guarded one-time boot helper was prepared, not executed; owner reboot confirmation is pending. Auto-lock remains disabled. KidX hardware acceptance and EV3 remain open; no product source changed.
+
+## 2026-09-10 — One-time Mint kernel comparison boot
+
+- Following explicit owner approval, the prepared helper selected the existing non-recovery Linux 6.14.0-37 entry for one boot, verified the GRUB selection and rebooted. SSH confirms 6.14.0-37-generic and the active X11 session; no kernel installation/removal or default-setting change occurred.
+- Restored the loopback-only SSH acceptance tunnel and verified HTTP 200. Firefox has not yet been launched on this boot: the owner is testing Menu, application launch and the clock first. That physical result remains pending.
+- Rediscovered touchscreen XInput id 8 and mini-keyboard mouse id 10. Old id 6 is now a Power Button and must not be reused for touch capture. Device/calibration settings are unchanged; all requested automatic-lock settings survived reboot.
+- EDID identifies Dell ST2220T (optical touch per Dell's specification). USB touch power is on/active. No kernel regression, hardware obstruction or full touchscreen qualification is claimed. Local receipts: output/mint-touch-2026-09-10/boot-614.log and kernel-614-inventory.log.

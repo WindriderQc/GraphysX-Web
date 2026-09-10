@@ -138,13 +138,30 @@ only the mini-keyboard's mouse function, leaving keyboard input available. The o
 that touchscreen behavior did not improve. This does not establish the mini-keyboard as the
 cause. Both devices were re-enabled; the temporary helpers also completed their automatic restores.
 
-The running kernel is `7.0.0-31-generic`. The installed `6.14.0-37-generic` kernel, its initramfs
+The initial running kernel was `7.0.0-31-generic`. The installed `6.14.0-37-generic` kernel, its initramfs
 and Nouveau module are present; the current graphics driver is Nouveau. SSH is enabled at boot.
 A helper at `/tmp/kidx-boot-614.py` is prepared for an owner-approved, one-time boot comparison.
 It locates the actual existing non-recovery GRUB entry, refuses an existing one-time selection,
 uses `grub-reboot`, verifies the selection and only then reboots. Syntax was checked, but the
-helper has **not been executed**. Reboot confirmation is pending because it closes the Mint session.
-No kernel was installed, removed or selected yet; no kernel regression is established.
+helper was then executed after the owner's explicit reboot approval. Its saved log confirms
+the verified one-time selection and reboot, and SSH now reports **`6.14.0-37-generic`**.
+The X11 session is active, the loopback acceptance tunnel is restored, and all three automatic
+lock settings remain disabled. No kernel was installed or removed, and `GRUB_DEFAULT` was not
+changed. The owner has been asked to try Menu, an application and the clock before Firefox is
+launched; that physical comparison is pending, so no kernel regression or repair is established.
+
+**Device ids changed on this boot:** the LG touchscreen is now XInput **8**, still
+`/dev/input/event6`; the mini-keyboard mouse is **10**. Do not reuse the earlier XInput id 6,
+which now identifies a Power Button. The touchscreen remains enabled with identity matrices.
+Current receipts are `boot-614.log` and `kernel-614-inventory.log` under the local diagnostic
+directory. The bounded remote touch capture is `/tmp/kidx-kernel614-touch.log`.
+
+The monitor EDID now identifies the display as **Dell ST2220T**, manufacturer `DEL`, on DP-2.
+Dell's [model specification](https://i.dell.com/images/emea/products/monitors/ST2220T_monitor_brochure_Ad_G10002992.pdf)
+identifies optical touch technology. This supplies a concrete hardware-inspection lead if the
+same behavior persists across kernels; an obstruction or hardware fault has not been observed.
+The touchscreen USB device reports power control `on` and runtime state `active`, so there is
+no evidence here to justify changing its autosuspend settings.
 
 Relevant local evidence: `xinput-firefox-menu-04.log`, `cinnamon-firefox-menu-04.json`,
 `xinput-open-menu-05.log` and `xinput-reset-06.log` under
