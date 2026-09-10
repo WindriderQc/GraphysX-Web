@@ -4164,3 +4164,5 @@ or blocks the release.
 `n- R9: both lazy startup paths now catch renderer/import failures and display an accessible recovery page with diagnostic details and Retry. A new core smoke injects WebGL and chunk failures, verifies focus/no unhandled rejection, and restores the chunk route to prove retry succeeds. Both cases pass at 390x844.
 
 - R8: KidX keeps 72px controls in a two-row portrait layout, separates the mission card from Exit, and exposes complete coaching text. The existing EV3 browser suite passes, including new 320/390px hit tests and a successful three-Forward run in portrait; the 390x844 capture was inspected.
+
+- Dependency maintenance: updated only the existing compatible js-yaml, nanoid and postcss resolutions. npm reports zero known vulnerabilities; typecheck and 285 unit tests pass, with the existing Windows skip.
