@@ -2113,12 +2113,12 @@ export class AgentWorldRuntime {
     if (!safeName) return this.failure("Snapshot name cannot be empty");
     // Saving is an authoring act, so it stores the document rather than the live runtime.
     const definition = this.exportDocument();
-    this.savedWorlds.set(safeName, deepClone(definition));
     try {
       window.localStorage.setItem(`graphysx.agent-world.v2.${safeName}`, JSON.stringify(definition));
     } catch {
-      // In-memory snapshots remain available when storage is blocked.
+      return this.failure("Save failed: browser storage is unavailable or full. Keep this tab open and export the scene.");
     }
+    this.savedWorlds.set(safeName, deepClone(definition));
     this.recordEvent("snapshot.saved", safeName);
     return this.success(safeName);
   }

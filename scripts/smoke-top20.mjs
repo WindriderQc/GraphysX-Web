@@ -55,6 +55,35 @@ try {
   await editor.waitForFunction(() => window.__GRAPHYSX__?.state()?.world?.id === "top20-editor", null, { timeout: SMOKE_TIMEOUT });
   out.draft.recovered = await editor.evaluate(() => window.__GRAPHYSX__.query({ ids: ["draft-probe"] }).length === 1);
 
+  // A session-only cache must never turn a rejected durable write into a Save receipt.
+  await editor.evaluate(() => window.__GRAPHYSX__.spawn({ id: "quota-probe", type: "box" }));
+  await editor.waitForFunction(() => JSON.parse(localStorage.getItem("graphysx.editor.draft.v1") ?? "null")
+    ?.definition?.entities.some((entity) => entity.id === "quota-probe"));
+  await editor.evaluate(() => {
+    window.__restoreStorage = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith("graphysx.agent-world.v2.")) throw new DOMException("Quota exhausted", "QuotaExceededError");
+      return window.__restoreStorage.call(this, key, value);
+    };
+  });
+  try {
+    editor.once("dialog", (dialog) => dialog.accept("quota-slot"));
+    await editor.locator(".gx-ed-toolbar").getByRole("button", { name: "Save", exact: true }).click();
+    out.quota = await editor.evaluate(() => ({
+      status: document.querySelector(".gx-ed-status")?.textContent ?? "",
+      stored: localStorage.getItem("graphysx.agent-world.v2.quota-slot"),
+      draftRetained: JSON.parse(localStorage.getItem("graphysx.editor.draft.v1") ?? "null")
+        ?.definition?.entities.some((entity) => entity.id === "quota-probe"),
+      cacheRejected: !window.__GRAPHYSX__.load("quota-slot").ok,
+    }));
+  } finally {
+    await editor.evaluate(() => { Storage.prototype.setItem = window.__restoreStorage; delete window.__restoreStorage; });
+  }
+  await editor.reload({ waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
+  await editor.waitForSelector(".gx-ed-recover:not([hidden])");
+  await editor.click(".gx-ed-recover");
+  out.quota.recoveredAfterReload = await editor.evaluate(() => window.__GRAPHYSX__.query({ ids: ["quota-probe"] }).length === 1);
+
   out.redo = await editor.evaluate(() => {
     const api = window.__GRAPHYSX__;
     api.spawn({ id: "redo-probe", type: "box" });
@@ -232,6 +261,8 @@ await browser.close();
 const ok =
   /unsaved/.test(out.draft?.dirtyText ?? "") &&
   out.draft?.draftWorld === "top20-editor" && out.draft?.recovered === true &&
+  /unsaved/.test(out.quota?.status ?? "") && /Save failed/.test(out.quota?.status ?? "") &&
+  out.quota?.stored === null && out.quota?.draftRetained === true && out.quota?.cacheRejected === true && out.quota?.recoveredAfterReload === true &&
   out.redo?.spawned === true && out.redo?.undone === true && out.redo?.redone === true && out.redo?.invalidated === true &&
   out.redo?.bridgeRedo === true && out.redo?.parity?.missing?.length === 0 && out.redo?.parity?.extra?.length === 0 &&
   out.palette?.dialog === "dialog" && out.palette?.commands?.some((command) => /Redo/.test(command)) &&

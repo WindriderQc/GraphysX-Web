@@ -4140,3 +4140,8 @@ or blocks the release.
 - `smoke-ev3-lab.mjs` now waits for optional host services and asserts the Stored scenes panel is not visible on `?app=ev3-lab`.
 - Verification is green on the stable preview: build; the full EV3 browser suite with 171 entities, both mission modes, program limits, deterministic playback, turns, repeatability, and zero browser errors; 278/278 unit tests (one intentional skip); and lint. The required game client also completed the two-Forward program, and the inspected 1280×720 settled screenshot has full copy, no clipping, and no Scenes panel.
 - Production follow-up `ecd130b` passed the clean Linux release matrix in 1h21m, deployed atomically, and passed both the workflow's activated-release smoke and an independent live-release smoke. The public EV3 route then completed the two-Forward program in 1.85 seconds with matching text state, zero browser errors, and an inspected settled screenshot with full typography and no authoring chrome.
+
+## 2026-09-10 — peer review reliability corrections
+
+- R1: `save()` now succeeds only after the named scene reaches browser storage. A rejected write leaves the current scene and recovery draft intact and returns an actionable error; it no longer creates a misleading in-memory saved slot.
+- Added a browser regression for quota failure, retained dirty state, rejected cache load and recovery after reload. Typecheck and existing unit suite pass (278 passed, one intentional Windows skip); combined browser validation follows the editor corrections.
