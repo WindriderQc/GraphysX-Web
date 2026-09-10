@@ -4151,3 +4151,5 @@ or blocks the release.
 - R4: the editor Pause control now derives its label, pressed state and next action from the runtime. Added an agent-pause → human-resume regression.
 
 - R5: the editor JSON download now exports the authored document, matching Save and Copy. The lower-level runtime snapshot API remains available. The browser smoke reads the downloaded file and checks that session-only entities are excluded.
+
+- R3: showroom console errors now participate in its exit status, consistent with the other product smokes. No error allowlist, assertion relaxation or timeout change was added. The full gate must now account for the shader errors observed during review.
