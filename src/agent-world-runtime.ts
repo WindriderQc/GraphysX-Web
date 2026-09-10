@@ -57,6 +57,7 @@ import {
   assertAuthoredSceneCommandNamespaces,
   assertAuthoredWorldEntityNamespaces,
 } from "../server/host-entity-id-policy.mjs";
+import { assertWorldDefinition, WORLD_ENTITY_TYPES } from "../server/scene-document.mjs";
 
 import {
   AmbientLight,
@@ -5043,10 +5044,7 @@ function rebuildTerrainMesh(runtime: RuntimeEntity): void {
 }
 
 function validateWorldDefinition(definition: AgentWorldDefinition): void {
-  if (!definition || definition.schema !== GRAPHYSX_AGENT_WORLD_SCHEMA) throw new Error(`World schema must be ${GRAPHYSX_AGENT_WORLD_SCHEMA}`);
-  if (!definition.id?.trim() || !definition.label?.trim()) throw new Error("World id and label are required");
-  if (!Array.isArray(definition.entities)) throw new Error("World entities must be an array");
-  if (definition.joints !== undefined && !Array.isArray(definition.joints)) throw new Error("World joints must be an array");
+  assertWorldDefinition(definition);
 }
 
 function resolveJoint(source: AgentWorldJointDefinition, entities: Map<string, RuntimeEntity>): ResolvedAgentWorldJoint {
@@ -5191,7 +5189,7 @@ function validateInteraction(interaction: AgentWorldInteraction, entities: Map<s
 }
 
 function isEntityType(value: unknown): value is AgentWorldEntityType {
-  return ["group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "spline", "model", "emitter", "terrain", "water", "flock", "crowd", "force-field", "formula-field", "dna-tree", "sound", "ambient-light", "directional-light", "point-light"].includes(String(value));
+  return WORLD_ENTITY_TYPES.includes(String(value));
 }
 
 const SURFACE_ENTITY_TYPES = new Set<AgentWorldEntityType>(["box", "sphere", "plane", "cylinder", "cone", "torus", "icosahedron"]);

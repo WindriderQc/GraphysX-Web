@@ -18,7 +18,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyCommands, describeCommands } from "./scene-commands.mjs";
+import { applyCommands, describeCommands, validateStoredSceneDefinition } from "./scene-commands.mjs";
 import { assertAuthoredWorldEntityNamespaces } from "./host-entity-id-policy.mjs";
 import { decodeStoreName, encodeStoreName, legacyStoreNameCandidates } from "./store-paths.mjs";
 import { createAssetStore, handleAssetRequest } from "./asset-store.mjs";
@@ -147,9 +147,8 @@ function scenePath(dir, name) {
 }
 
 /**
- * Validates only what the store itself depends on. The runtime re-validates in full on
- * load (agent-world-runtime.ts:1888) and it owns the deeper entity rules — duplicating
- * them here would mean two schemas drifting apart.
+ * Validate the complete authored write before it can become a stored revision or relay cut.
+ * The runtime still owns resource resolution; authored fields share the command validator.
  */
 function assertDefinition(definition) {
   if (!definition || typeof definition !== "object") throw new Error("A scene definition object is required");
@@ -165,6 +164,7 @@ function assertDefinition(definition) {
   if (ephemeral.length > 0) {
     throw new Error(`Scene documents cannot contain session-only entities: ${ephemeral.slice(0, 5).join(", ")}`);
   }
+  validateStoredSceneDefinition(definition);
 }
 
 function assertName(name) {

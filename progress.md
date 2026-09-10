@@ -4158,3 +4158,6 @@ or blocks the release.
 
 - R10: the verifier and counts command share a side-effect-free manifest, including all six static checks. Counts now reports 56 total checks and 50 smokes/audits; bridge entries are described as API paths. Test tiers and deadlines are unchanged.
 - Editor browser validation passed with zero console/page errors: quota failure and reload recovery, quick-exit/reload recovery, agent pause followed by human resume, and downloaded document semantics, plus the existing Top 20 workflows.
+
+- R6: full scene writes now use the existing authored-field and graph validators before persistence. Entity vocabulary, world shape and mission-rule validation are shared with the browser; graph checks also reject invalid/duplicate joints and impossible collectible targets. Browser resource loading remains a separate concern.
+- New store tests prove malformed types, duplicates, parent cycles, transforms, physics and rules cannot replace an accepted revision. The 117 command-validation checks and typecheck pass; full runtime/document round-trips are included in the final gate.

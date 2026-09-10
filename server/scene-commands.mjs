@@ -9,17 +9,13 @@ import {
   assertAuthoredSceneCommandNamespaces,
   assertAuthoredWorldEntityNamespaces,
 } from "./host-entity-id-policy.mjs";
+import { WORLD_SCHEMA, WORLD_ENTITY_TYPES, assertWorldDefinition, assertRulesDefinition } from "./scene-document.mjs";
 
-const WORLD_SCHEMA = "graphysx.agent-world/v2";
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/;
 const MAX_AUTHORED_ENTITIES = 1_024;
 const MAX_DEFINITION_BYTES = 8 * 1024 * 1024;
 
-const ENTITY_TYPES = new Set([
-  "group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane",
-  "spline", "model", "emitter", "terrain", "water", "flock", "crowd", "force-field",
-  "formula-field", "dna-tree", "sound", "ambient-light", "directional-light", "point-light",
-]);
+const ENTITY_TYPES = new Set(WORLD_ENTITY_TYPES);
 const PRIMITIVE_TYPES = new Set(["box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane"]);
 const PHYSICS_FORBIDDEN_TYPES = new Set([
   "group", "spline", "emitter", "sound", "terrain", "water", "flock", "crowd", "force-field",
@@ -862,8 +858,29 @@ function validateGraph(definition) {
   }
   if (definition.joints !== undefined) {
     if (!Array.isArray(definition.joints)) reject("Scene joints must be an array");
+    const jointIds = new Set();
     for (const joint of definition.joints) {
       if (!isRecord(joint)) reject("Scene joints must contain objects");
+      requireStableId(joint.id, "joint id");
+      if (jointIds.has(joint.id)) reject(`Duplicate joint id: ${joint.id}`);
+      jointIds.add(joint.id);
+      if (!["fixed", "revolute", "rope"].includes(joint.type)) reject(`Unsupported joint type: ${String(joint.type)}`);
+      if (joint.bodyA === joint.bodyB) reject(`Joint ${joint.id} requires two different bodies`);
+      for (const key of ["anchorA", "anchorB"]) {
+        if (joint[key] !== undefined) requireVector(joint[key], 3, `joint ${joint.id}.${key}`, -10_000, 10_000);
+      }
+      if (joint.type === "rope") requireFinite(joint.length, `joint ${joint.id}.length`, 0.001, 10_000);
+      else if (joint.length !== undefined) reject(`Only rope joints accept length: ${joint.id}`);
+      if (joint.axis !== undefined) {
+        if (joint.type !== "revolute") reject(`Only revolute joints accept axis: ${joint.id}`);
+        requireVector(joint.axis, 3, `joint ${joint.id}.axis`, -1, 1);
+        if (Math.hypot(...joint.axis) === 0) reject(`Joint ${joint.id} axis cannot be zero`);
+      }
+      for (const key of ["frameRotationDegreesA", "frameRotationDegreesB"]) {
+        if (joint[key] === undefined) continue;
+        if (joint.type !== "fixed") reject(`Only fixed joints accept frame rotations: ${joint.id}`);
+        requireVector(joint[key], 3, `joint ${joint.id}.${key}`, -360_000, 360_000);
+      }
       const bodyA = map.get(joint.bodyA);
       const bodyB = map.get(joint.bodyB);
       if (!bodyA || !bodyB) reject(`Joint ${String(joint.id)} references an unknown body`);
@@ -874,15 +891,12 @@ function validateGraph(definition) {
   }
   if (definition.rules !== undefined && definition.rules !== null) {
     const rules = requireRecord(definition.rules, "scene rules");
-    const requireRuleTarget = (id, label) => {
-      if (id !== undefined && !map.has(id)) reject(`Rules ${label} references unknown entity: ${String(id)}`);
-    };
-    requireRuleTarget(rules.subjectId, "subject");
-    requireRuleTarget(rules.spawn?.entityId, "spawn");
-    requireRuleTarget(rules.finish?.triggerId, "finish");
-    for (const checkpoint of rules.checkpoints ?? []) requireRuleTarget(checkpoint?.triggerId, "checkpoint");
-    for (const id of rules.collectibles?.triggerIds ?? []) requireRuleTarget(id, "collectible");
-    for (const subject of rules.subjects ?? []) requireRuleTarget(subject?.id, "race subject");
+    assertRulesDefinition(rules, new Set(map.keys()));
+    const collectibleIds = new Set(rules.collectibles?.triggerIds ?? []);
+    if (rules.collectibles?.tag) {
+      for (const entity of map.values()) if (entity.tags?.includes(rules.collectibles.tag)) collectibleIds.add(entity.id);
+    }
+    if (rules.collectibles?.targetCount > collectibleIds.size) reject("Rules collectible target exceeds the resolved inventory");
   }
 }
 
@@ -962,6 +976,15 @@ function applyCommand(definition, command) {
   }
 
   reject(`Unsupported command for document editing: ${String(command.op)}`);
+}
+
+/** Full writes use the same authored-field and graph checks as incremental writes. */
+export function validateStoredSceneDefinition(definition) {
+  assertWorldDefinition(definition);
+  validateJsonValue(definition, "scene");
+  if (definition.environment !== undefined) validateEnvironmentBlock(definition.environment, "scene.environment");
+  for (const entity of definition.entities) validateEntityFields(entity, `entity ${entity.id}`);
+  validateGraph(definition);
 }
 
 export function applyCommands(definition, commands) {

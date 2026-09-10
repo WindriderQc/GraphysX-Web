@@ -3,6 +3,7 @@ import type {
   AgentWorldStreamEvent,
   AgentWorldVector3,
 } from "./agent-world-runtime";
+import { assertRulesDefinition } from "../server/scene-document.mjs";
 
 /**
  * The rules layer: what a crossing *means*.
@@ -223,58 +224,7 @@ export type AgentWorldRulesSnapshot = {
  * author an unwinnable course, and it is invisible at runtime otherwise.
  */
 export function validateRules(rules: AgentWorldRulesDefinition, knownIds: ReadonlySet<string>): void {
-  if (rules.schema !== GRAPHYSX_AGENT_RULES_SCHEMA) {
-    throw new Error(`Rules schema must be ${GRAPHYSX_AGENT_RULES_SCHEMA}`);
-  }
-  const require = (id: string, what: string): void => {
-    if (!knownIds.has(id)) throw new Error(`Rules ${what} references unknown entity: ${id}`);
-  };
-  if (rules.subjectId) require(rules.subjectId, "subject");
-  if (rules.spawn) require(rules.spawn.entityId, "spawn");
-  if (rules.finish) require(rules.finish.triggerId, "finish");
-  for (const checkpoint of rules.checkpoints ?? []) require(checkpoint.triggerId, "checkpoint");
-  for (const id of rules.collectibles?.triggerIds ?? []) require(id, "collectible");
-
-  const seen = new Set<string>();
-  for (const checkpoint of rules.checkpoints ?? []) {
-    // A repeated gate in the ordered set would need the subject to cross the same volume
-    // twice without leaving it, which AABB occupancy makes impossible — the second crossing
-    // never fires and the lap deadlocks. Better to refuse the authoring than to ship a
-    // course that cannot be finished.
-    if (seen.has(checkpoint.triggerId)) throw new Error(`Rules repeat checkpoint: ${checkpoint.triggerId}`);
-    seen.add(checkpoint.triggerId);
-  }
-  if (rules.laps !== undefined && (!Number.isFinite(rules.laps) || rules.laps < 1)) {
-    throw new Error("Rules laps must be a positive number");
-  }
-  if (rules.subjects) {
-    if (rules.subjects.length === 0) throw new Error("Rules subjects must not be an empty list");
-    const subjectIds = new Set<string>();
-    for (const subject of rules.subjects) {
-      require(subject.id, "race subject");
-      if (subjectIds.has(subject.id)) throw new Error(`Rules repeat race subject: ${subject.id}`);
-      subjectIds.add(subject.id);
-    }
-    // The primary must be a racer: a `status()` that answered for a subject outside the race
-    // would rank nobody and desync every HUD built on it.
-    if (rules.subjectId && !subjectIds.has(rules.subjectId)) {
-      throw new Error(`Rules subjectId must be one of the race subjects: ${rules.subjectId}`);
-    }
-  }
-  if (rules.timer?.limitSeconds !== undefined && !(rules.timer.limitSeconds > 0)) {
-    throw new Error("Rules timer limitSeconds must be a positive number");
-  }
-  if (
-    rules.collectibles?.targetCount !== undefined
-    && (!Number.isInteger(rules.collectibles.targetCount) || rules.collectibles.targetCount < 1)
-  ) {
-    throw new Error("Rules collectibles.targetCount must be a positive integer");
-  }
-  if (!rules.finish && !rules.checkpoints?.length && !rules.collectibles) {
-    // A block with a spawn and a clock and nothing to reach is almost certainly a half-typed
-    // course rather than an intent. Say so now.
-    throw new Error("Rules need at least a finish, a checkpoint or a collectible to be reachable");
-  }
+  assertRulesDefinition(rules, knownIds);
 }
 
 /** Resolve the collectible set against the scene — `tag` is late-bound on purpose. */
