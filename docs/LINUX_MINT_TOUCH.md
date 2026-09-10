@@ -23,8 +23,9 @@ or touch scrolling in Programs.
 Firefox was restarted with **session-only `MOZ_USE_XINPUT2=1`**. The live process environment
 confirms the setting. Mozilla's [GTK startup implementation](https://github.com/mozilla-firefox/firefox/blob/main/toolkit/xre/nsAppRunner.cpp)
 uses this variable to control XInput2 multidevice support. No system environment, desktop
-launcher, driver, calibration or browser preference was changed. **The owner's repeat test
-with this setting is pending**; do not label native `pointerType=touch` or scrolling verified.
+launcher, driver, calibration or browser preference was changed. **The repeat test now confirms
+native `pointerType=touch`**: five trusted finger clicks and a trace with ten sampled points
+arrived after the restart. The owner confirms Firefox works. Programs scrolling is still untested.
 
 The diagnostic server runs on Windows loopback `127.0.0.1:4175`, through an SSH reverse
 forward bound to ugKid loopback `127.0.0.1:4175`. Firefox opens
@@ -41,9 +42,35 @@ Local receipts, outside git:
 - `output/playwright/mint-touch/browser-initial.png`: inspected Firefox trace and text selection.
 - `output/playwright/mint-touch/browser-xinput2.png`: inspected page after the session-only restart.
 
-**Next:** confirm finger taps and a trace after the XInput2 restart, inspect their pointer
-type, then perform the actual-PC KidX checklist below, including touch scrolling and held-Go
-release/cancellation. The review and saved-program implementation are already complete.
+**Next:** resolve the remaining Cinnamon desktop input issue described below, then perform
+the actual-PC KidX checklist, including touch scrolling and held-Go release/cancellation.
+The review and saved-program implementation are already complete.
+
+### Firefox works; Cinnamon desktop remains unresolved
+
+The owner reports that touch still does not work in the Mint desktop and explicitly confirms
+that a finger tap on the Mint Menu button does not open it. The same hardware reportedly worked
+after installation of an older Mint version; that version and edition have not been identified.
+
+The current versions are Cinnamon `6.6.9+zena`, Muffin `6.6.3+zena`,
+`xserver-xorg-core 2:21.1.12-1ubuntu1.6`, and libinput `1.25.0-1ubuntu3.6`.
+No Cinnamon extensions are enabled. The menu actor is visible and reactive at approximately
+`x=0, y=1040, width=44, height=40` on the 1920x1080 screen. This is configuration evidence,
+not a successful physical click.
+
+A 45-second touchscreen-only XInput capture and temporary Cinnamon stage observer received
+no events, but physical gestures during that window were not confirmed. That empty result is
+**inconclusive**. A second bounded five-minute capture was armed at 18:48:38 EDT to compare
+three taps on the Mint logo with one on the clock. The observer only retains LG touchscreen
+touch/button events, always propagates them, and automatically disconnects at the deadline.
+Retrieve `output/mint-touch-2026-09-10/xinput-menu-03.log` and the temporary observer result
+before drawing conclusions. The script on ugKid is `/tmp/kidx-cinnamon-touch-probe.py`;
+`python3 /tmp/kidx-cinnamon-touch-probe.py show` reads its bounded buffer, and `stop` detaches it.
+
+An inspected actual-desktop screenshot, including the successful native Firefox touch probe,
+is `output/playwright/mint-touch/mint-desktop.png`. Native browser input success does not
+qualify Cinnamon's panel, its menus or KidX. No kernel, input driver or compositor replacement
+has been attempted, and no regression cause is established yet.
 
 ### Automatic session locking disabled at the owner's request
 

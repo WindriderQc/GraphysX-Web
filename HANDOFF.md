@@ -93,9 +93,10 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    target with a freshly installed Linux Mint PC on 2026-09-10. Touch input is currently
    reported not working. SSH key access to ugKid is verified; Mint 22.3 Cinnamon/X11 detects
    the LG Display USB touchscreen with `hid-multitouch`. Physical taps/drags now produce X11
-   events, and the owner confirmed five taps and a trace in Firefox. Firefox initially reported
-   mouse compatibility events; the repeat test after a session-only `MOZ_USE_XINPUT2=1`
-   restart remains pending. Full KidX hardware acceptance is still open. Continue from
+   events. After a session-only `MOZ_USE_XINPUT2=1` restart, Firefox receives genuine touch
+   events and the owner confirms taps and tracing work. Cinnamon's Menu still does not open
+   on a finger tap; a confirmed desktop event capture is the next diagnostic step. Automatic
+   session locking was disabled at the owner's request. Full KidX acceptance remains open. Continue from
    [the diagnostic and acceptance guide](docs/LINUX_MINT_TOUCH.md). The existing
    800×480 browser measurements remain compact-layout evidence, not hardware qualification.
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`

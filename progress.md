@@ -4215,3 +4215,9 @@ or blocks the release.
 
 - Owner explicitly requested removal of automatic logoff while the touch acceptance remains in progress. Live Cinnamon settings showed a 900-second idle delay and automatic screensaver locking, with automatic suspend already disabled.
 - Persistently set `lock-enabled=false`, `idle-activation-enabled=false` and session `idle-delay=0` for `yb` through the active user D-Bus session. Read back all three values successfully; original settings are retained in `/home/yb/.local/state/kidx/auto-lock-before-E0QcLJ.txt`. No reboot or privileged command was needed. Display power settings were not changed, and no 15-minute idle soak is claimed.
+
+## 2026-09-10 — native Firefox touch confirmed; Cinnamon desktop still unresolved
+
+- After the session-only XInput2 restart, Firefox recorded five trusted `pointerType=touch` clicks and a native touch trace. The owner confirms Firefox works but Mint's desktop does not: specifically, touching the Mint Menu button does not open it. The owner reports working touch on an unidentified previous Mint version. Inspected a full actual-desktop screenshot showing the successful Firefox probe.
+- Live packages are Cinnamon 6.6.9, Muffin 6.6.3, Xorg 21.1.12 and libinput 1.25.0. No Cinnamon extensions are enabled; the Menu actor is visible/reactive at x=0,y=1040 with size 44x40. Investigated installed handlers and the matching upstream source; this does not establish the cause or justify a driver/kernel replacement.
+- Installed a temporary, bounded, touchscreen-only Cinnamon stage observer through its existing D-Bus diagnostic interface. The first 45-second XInput/50-second stage capture was empty without confirmed physical gestures and is inconclusive. A five-minute paired capture was armed at 18:48:38 EDT; owner response remains pending. The observer propagates all events and automatically disconnects. KidX physical acceptance and EV3 remain open.
