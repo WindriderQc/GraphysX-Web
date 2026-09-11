@@ -174,4 +174,7 @@ game client pass. Those targeted receipts remain under its
 this later source correction has not replaced the physical acceptance build.
 
 Application-surface generalization remains deferred until a second application needs it.
-No push, merge into `main`, or production deployment is authorized for this task.
+The owner subsequently authorized production publication and cleanup, specifically choosing
+this validated lot while the concurrent new Atelier remains excluded. Use the existing
+main deployment workflow and its hosted full gate, then verify the exact public revision.
+Earlier no-push/no-deploy notes record the original acceptance scope, now superseded.

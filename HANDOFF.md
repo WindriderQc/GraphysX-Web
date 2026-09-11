@@ -13,6 +13,18 @@ Read `PRODUCT_SPEC.md` §8.1 (the honest status table) for what ships versus wha
 as the v1 target. Read `CLAUDE.md` for the short list of rules that exist because breaking them
 cost real sessions real hours.
 
+## Production publication authorized (2026-09-11)
+
+The owner explicitly requested production publication and cleanup, then selected the lot
+validated in this task. This supersedes the earlier no-push/no-deploy boundary below.
+The concurrent, still-in-progress French Atelier, mission catalog and PDF-reader work are
+excluded. Publish the integrated First Drive/touch/Programs/maintenance changes and the
+bench-tested CLI USB adapter through the existing main deployment workflow. Its hosted full
+gate must pass before activation; verify the exact public `release.json` and production smoke.
+Do not run a duplicate local full matrix. The public application continues to run simulation;
+the hardware CLI remains a local tool. Cleanup preserves other tasks, useful evidence, the
+Firefox profile and saved `forward` data. See the latest `progress.md` publication entry.
+
 ## Fresh-session entry point (2026-09-11 ugKid / USB continuation)
 
 Read [the KidX continuation handoff](docs/KIDX_NEXT_SESSION.md) before editing. The isolated

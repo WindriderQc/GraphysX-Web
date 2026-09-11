@@ -124,4 +124,6 @@ Owner-confirmed Programs name/copy/overflow/Escape coverage is recorded in
 - [LEGO communication kit](https://www.lego.com/cdn/cs/set/assets/blt6879b00ae6951482/LEGO_MINDSTORMS_EV3_Communication_Developer_Kit.pdf), pp. 24–25: command/reply framing and constant encoding.
 - [Linux hidraw documentation](https://docs.kernel.org/hid/hidraw.html) and [ioctl definitions](https://raw.githubusercontent.com/torvalds/linux/master/include/uapi/linux/hidraw.h): report prefix and opened-handle identity.
 
-No push, merge into main, production deployment or general application abstraction.
+The owner subsequently authorized publication of this validated lot through the normal
+gated production workflow. The CLI source is included in Git; no remote motor service is
+deployed. Application generalization and wireless transport remain deferred.
