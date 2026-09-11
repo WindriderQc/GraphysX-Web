@@ -25,6 +25,14 @@ Do not run a duplicate local full matrix. The public application continues to ru
 the hardware CLI remains a local tool. Cleanup preserves other tasks, useful evidence, the
 Firefox profile and saved `forward` data. See the latest `progress.md` publication entry.
 
+PR #16 merged the release as `a306ff3`. Hosted run `34604715964` passed 60 checks,
+including BallZ, but all five combined KidX smokes reached their existing 600-second
+deadline while making progress; deployment was skipped. The KidX checks are now split
+into fifteen independent journeys (75 gate checks total), retaining every assertion,
+viewport and physical scenario. The original combined script commands still run their
+complete journeys. This test-only correction requires a new complete hosted gate before
+activation; the failed run is not a production receipt.
+
 ## Fresh-session entry point (2026-09-11 ugKid / USB continuation)
 
 Read [the KidX continuation handoff](docs/KIDX_NEXT_SESSION.md) before editing. The isolated
