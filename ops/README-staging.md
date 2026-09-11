@@ -23,8 +23,10 @@ C:\graphysx-staging\
   current.txt                 one line: the active release directory name
 ```
 
-`scripts/staging-server.mjs` re-reads `current.txt` per request, so publishing a release
-is an atomic pointer flip — the server never needs restarting.
+The workflow copies the build before updating `current.txt`.
+`scripts/staging-server.mjs` re-reads that pointer per request, so it needs no restart.
+The current `Set-Content` writer is not a transactional file replacement; the subsequent
+published-page check is separate from the prepublication gate.
 
 ## One-time setup
 
@@ -83,9 +85,9 @@ gh api repos/WindriderQc/GraphysX-Web/actions/runners --jq '.runners[] | {name, 
 
 ## Security note
 
-A self-hosted runner executes workflow code from the repository on this machine. Keep the
-repository private, or disable Actions for forked pull requests — otherwise a fork's PR can
-run arbitrary code on UGBrutal.
+A self-hosted runner executes the selected revision on this machine. This repository is
+public; the staging workflow has only a manual trigger. Keep forked pull-request execution
+on hosted CI, and do not add a `pull_request` trigger to this self-hosted workflow.
 
 ## Promotion path
 

@@ -14,8 +14,11 @@ of rules that exist because breaking them has already cost real sessions real ho
   worktrees too. Queue politely with `npm run verify -- --wait`; never `--force-lock` unless
   you have verified the holder is dead. Measured cost of overlap: five of six runs losing a
   random smoke to `net::ERR_CONNECTION_RESET`.
-- **Iterate with node-only probes and single smokes**, not repeated full gates. Run one full
-  gate at the end.
+- **Match local validation to the change.** Use unit/contract tests and scoped lint for
+  Node-only tooling; check links and commands for documentation. Use focused browser smokes
+  for an affected journey and a full gate for changes spanning shared runtime behavior.
+  **Publication always requires the full gate.** Do not repeat every 3D smoke for a docs or
+  tooling-only correction whose affected contracts are already verified.
 - **Compare the same revision and scope.** If a local smoke fails outside the diff, inspect
   machine contention and `gh run list` before changing product code. A clean CI run is useful
   evidence only for the revision it tested; an older green deployment does not validate

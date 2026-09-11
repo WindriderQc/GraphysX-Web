@@ -10,9 +10,9 @@ else would have — objects falling through the world, dead clicks on scenery, a
 on every production page load — and none of it is being replaced here.
 
 What it could not give anyone is a *fast* answer. The gate holds a machine-global lock,
-software-rasterises WebGL across most of the cores, and runs serially, so `CLAUDE.md`'s
-standing advice is to run one full gate at the end and iterate on node-only probes. That
-advice is right and it left a gap: the logic hardest to reason about in this codebase is pure,
+software-rasterises WebGL across most of the cores, and runs serially. `CLAUDE.md` now scopes
+local validation to the affected contracts while keeping the full gate for publication and
+shared-runtime changes. The logic hardest to reason about in this codebase is often pure,
 dependency-free, and was reachable only by starting a server and speaking HTTP to it.
 
 So the rule for this directory is narrow. **A test belongs here only if it needs no browser,

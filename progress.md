@@ -4304,3 +4304,35 @@ or blocks the release.
 - Completion criterion: the code lot is committed, the full local gate passes after the
   existing owner releases the machine lock, and cleanup preserves all foreign work/data.
   Production activation and exhaustive physical acceptance are outside this slice.
+
+### Scope adjustment and local closeout
+
+- The full gate queued behind the active rover run. Review of that cost showed the initial
+  criterion was broader than this tooling/documentation-only change: the default manifest and
+  all seven tier combinations are identical to the baseline, and real CLI regression tests
+  already prove refusal before side effects. Local completion therefore uses the affected
+  contracts; a full gate remains mandatory before publication. Updated the existing CLAUDE.md
+  rule and test README accordingly, without removing any checks, assertions or release gates.
+- The lock became available just before cancellation. Our run completed unit tests (300 pass,
+  one existing skip), typecheck, full lint, production build and both Rapier probes, then was
+  interrupted through the terminal during the startup smoke. **The full gate did not complete
+  and is not claimed green.** `verify.log` and `cancellation.json` retain the actual boundary.
+  The former gate process was confirmed gone; its stale lock was reclaimed and released with
+  the existing guard, without force. No Node verify/smoke process from this worktree or headless
+  Chromium process remained at the cleanup check.
+- Additional live read-only inventory: GitHub reports a public repository and zero registered
+  self-hosted runners. Windows reports ObjectNotFound for the exact scheduled-task name
+  `GraphysX Staging Server`. This does not rule out a differently named external installation;
+  no homelab host or production page was contacted. The staging guide now describes its actual
+  manual trigger, local dev/preview alternatives, and nontransactional `Set-Content` pointer
+  writer without claiming an atomic update.
+- A separate visual KidX task became active in the canonical checkout during this audit:
+  `dans kidx, qui est censé etre un lab lego ev3....     le first drive scene est vraiment laid!!!!!   :S    rien ne ressemble  a lego ni mindstorm ev3,`.
+  Its asset-generation, scene and interface changes were observed but not absorbed. The Mint
+  rover task remains separate too. This lot's code receipt is `a2ac802`; later edits only clarify
+  documentation. No concurrent visual or tactile changes are qualified by these tests.
+- Local delivery: maintenance changes are saved on `codex/simplify-maintenance`; no push, PR,
+  merge or deployment. The isolated worktree and its ignored receipts/build/dependencies are
+  retained intentionally for integration, owned by the `Faire le point sur la roadmap` task.
+  Foreign worktrees, data, branches and processes are untouched. No automation was created.
+  Further product refactoring is not part of this completed first lot.
