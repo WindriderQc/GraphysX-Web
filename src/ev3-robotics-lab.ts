@@ -491,7 +491,8 @@ function firstDriveWorkbench(): AgentWorldEntityDefinition[] {
   return [
     box("mat-edge", [0, -.04, 14], [17.2, .1, 17.2], "#34434a"),
     { id: "ev3-first-drive-mat", label: "KidX EV3 First Drive Work Mat", type: "plane",
-      transform: { position: [0, .011, 14] }, geometry: { width: 17, depth: 17 },
+      // Separate the support top (.01) and printed zones (.021) at the distant portrait view.
+      transform: { position: [0, .015, 14] }, geometry: { width: 17, depth: 17 },
       material: { color: "#ffffff", roughness: .96, texture: { id: "kidx-first-drive-mat" } },
       receiveShadow: true, tags: ["ev3-lab", "workbench"] },
     ...[-1, 1].flatMap((sign) => [
