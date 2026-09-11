@@ -12,6 +12,7 @@ export async function runKidxInteractive({ part = "all" } = {}) {
   mkdirSync(ART, { recursive: true });
   let browser, server;
   const errors = [];
+  const tracedContexts = [];
   try {
     if (!process.env.SMOKE_BASE) {
       const documents = await createKidxDocumentRoute(), teams = createKidxTeamRoute();
@@ -117,8 +118,11 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.construction.duo.session?.code);
       const code = (await state()).construction.duo.session.code;
       const secondContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+      await secondContext.tracing.start({ screenshots: true, snapshots: true, sources: true });
+      tracedContexts.push(secondContext);
       const second = applySmokeTimeout(await secondContext.newPage());
       second.on("pageerror", e => errors.push(String(e))); second.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
+      second.on("requestfailed", request => console.error("Construction request failed:", request.url(), request.failure()));
       await second.goto(`${base}/?app=ev3-lab&view=build&model=track3r`, { waitUntil: "domcontentloaded" });
       await constructionReady(second);
       await second.screenshot({ path: path.join(ART, "kidx-duo-ready-390.png") });
@@ -133,6 +137,8 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.build.step === 4);
       await second.screenshot({ path: path.join(ART, "kidx-duo-390.png") });
       assert.deepEqual((await state()).construction.duo.names, ["Alex", "Sam"]);
+      await secondContext.tracing.stop({ path: path.join(ART, "kidx-duo-trace.zip") });
+      tracedContexts.pop();
       await secondContext.close();
       console.log("  ok two independent browsers synchronize the build and preparation handoff");
       await page.locator("[data-build-back]").click(); await page.locator("[data-kidx-missions]").click();
@@ -151,6 +157,12 @@ export async function runKidxInteractive({ part = "all" } = {}) {
     }
     assert.deepEqual(errors, []);
     console.log("KidX interactive scenario passed; no browser errors.");
+  } catch (error) {
+    console.error("Construction browser errors:", errors);
+    for (const context of tracedContexts) {
+      await context.tracing.stop({ path: path.join(ART, "kidx-duo-trace.zip") }).catch(traceError => console.error(traceError));
+    }
+    throw error;
   } finally { if (browser) await browser.close(); if (server) await server.close(); }
 }
 
