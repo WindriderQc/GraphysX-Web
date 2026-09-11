@@ -70,6 +70,8 @@ test("French Nestor requests select explicit build actions", () => {
   assert.deepEqual(parseKidxBuildRequest("Montre-moi dessous"),{action:"underside"});
   assert.deepEqual(parseKidxBuildRequest("Étape 8"),{action:"step",value:7});
   assert.equal(parseKidxBuildRequest("Vue éclatée").action,"explode");
+  assert.equal(parseKidxBuildRequest("Écarte les pièces").action,"explode");
+  assert.equal(parseKidxBuildRequest("Continuer").action,"resume");
   assert.deepEqual(parseKidxBuildRequest("montre le moteur"),{action:"piece",search:"moteur"});
 });
 test("journey records are durable and unknown formats are not overwritten", () => {

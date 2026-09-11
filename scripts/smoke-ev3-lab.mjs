@@ -215,7 +215,7 @@ try {
     appInitial.sceneBrowserVisible === false, appInitial.sceneBrowserVisible);
   check("the first program exposes eight thumb-sized controls and no hardware actions",
     appInitial.controls.length === 8
-      && ["Ajouter un bloc Avancer", "Ajouter un bloc Reculer", "Ajouter un bloc Gauche", "Ajouter un bloc Droite", "Ajouter un bloc Stop", "Retirer le dernier bloc", "Lancer le programme", "Pilotage libre"]
+      && ["Ajouter un bloc Avancer", "Ajouter un bloc Reculer", "Ajouter un bloc Gauche", "Ajouter un bloc Droite", "Ajouter un bloc Arrêt", "Enlever le dernier bloc", "Démarrer le programme", "Piloter le robot"]
         .every((label) => appInitial.controls.some((control) => control.label === label))
       && appInitial.controls.every((control) => control.width >= 72 && control.height >= 72), appInitial.controls);
   // The application opens with a 0.9s camera move; evidence captured before it settles is a

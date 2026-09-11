@@ -13,7 +13,7 @@ export type KidxMission = {
 /** Original KidX exercises around Robot Trainer's controlled-movement learning objectives. */
 export const KIDX_MISSIONS: readonly KidxMission[] = [
   { id: "first-drive", title: "Premier trajet", objective: "Rejoins la zone bleue avant la fin du temps.",
-    hint: "Ajoute trois blocs Avancer, puis appuie sur Lancer.", skill: "Avancer en ligne droite", glyph: "↑",
+    hint: "Ajoute trois blocs Avancer, puis appuie sur Démarrer.", skill: "Avancer en ligne droite", glyph: "↑",
     finish: [0, 10.5], checkpoints: [], suggested: ["forward", "forward", "forward"] },
   { id: "right-turn", title: "Un quart de tour", objective: "Tourne à droite, puis rejoins la zone bleue.",
     hint: "Commence par Droite. Ajoute ensuite des blocs Avancer.", skill: "Prévoir un virage", glyph: "↱",

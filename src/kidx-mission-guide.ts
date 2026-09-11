@@ -18,7 +18,7 @@ type GuideSnapshot = {
   mode: "program" | "drive"; phase: string; attempt: "program" | "laboratory" | "drive" | null; running: boolean;
   blocks: readonly string[]; labOpen: boolean; labPrepared: boolean; paused?: boolean; error: string | null;
 };
-const names: Record<string, string> = { forward: "Avancer", backward: "Reculer", left: "Gauche", right: "Droite", stop: "Stop" };
+const names: Record<string, string> = { forward: "Avancer", backward: "Reculer", left: "Gauche", right: "Droite", stop: "Arrêt" };
 type GuideStep = { key: string; step: number; title: string; text: string; target: string | null };
 
 /** Guidance follows the child's actual controls and the scene's verdict, never a simulated success. */
@@ -29,24 +29,24 @@ export function kidxMissionGuideStep(mission: Pick<KidxMission, "id" | "suggeste
     ? "Tu peux enregistrer ton programme dans Blocs avancés, avec Enregistrer, ou revenir à l’Atelier pour choisir un autre défi."
     : "Tu peux enregistrer ton programme dans Programmes, ou revenir à l’Atelier pour choisir un autre défi.", target: ".gx-ev3-exit" };
   if (state.phase === "expired") return { key: "expired", step: 3, title: "On essaie autrement ?", text: "Appuie sur Réessayer. Change un seul réglage ou un seul bloc, puis compare le trajet.", target: "[data-ev3-retry]" };
-  if (state.running && state.paused) return { key: "paused", step: 3, title: "Programme en pause", text: "Dans Blocs avancés, Reprendre continue le programme. Un bloc permet de regarder chaque action séparément.", target: state.labOpen ? "[data-code-resume]" : "[data-kidx-lab]" };
+  if (state.running && state.paused) return { key: "paused", step: 3, title: "Programme en pause", text: "Dans Blocs avancés, Continuer reprend le programme. Avec Exécuter un bloc, le robot suit un seul ordre, puis attend.", target: state.labOpen ? "[data-code-resume]" : "[data-kidx-lab]" };
   if (state.running) return { key: "running", step: 3, title: "Observe ton robot", text: "Regarde son trajet et le bloc actif. Arrêter le robot coupe le mouvement immédiatement et garde tes blocs.", target: "[data-kidx-stop]" };
   if (state.mode === "drive" && !state.labOpen) return { key: "drive", step: 1, title: "À toi de piloter", text: "Maintiens Avancer ou Reculer; relâche pour couper la commande. Gauche et Droite dirigent le robot. Programmer permet de préparer des ordres.", target: mission.id === "reverse-parking" ? "[data-ev3='backward']" : "[data-ev3='go']" };
   if (state.error) return { key: "error", step: 3, title: "Vérifie le capteur", text: `${state.error} Ouvre Blocs avancés pour ajuster ton programme.`, target: state.labOpen ? "[data-code-editor]" : "[data-kidx-lab]" };
-  if (state.labOpen && !state.labPrepared) return { key: "example", step: 1, title: "Choisis l’exemple", text: "Appuie sur Exemple de la mission. Lis les blocs dans l’ordre et prévois ce que fera le robot.", target: "[data-code-example]" };
-  if (state.attempt) return { key: "review", step: 3, title: "Compare avec ton idée", text: "Le robot s’est arrêté. Regarde ce qui manque pour atteindre le bleu, ajuste un bloc ou sa durée, puis relance.", target: state.labOpen ? "[data-code-run]" : state.attempt === "laboratory" ? "[data-kidx-lab]" : "[data-ev3-run]" };
+  if (state.labOpen && !state.labPrepared) return { key: "example", step: 1, title: "Choisis l’exemple", text: "Appuie sur Utiliser l’exemple. Lis les blocs dans l’ordre et prévois ce que fera le robot.", target: "[data-code-example]" };
+  if (state.attempt) return { key: "review", step: 3, title: "Compare avec ton idée", text: "Le robot s’est arrêté. Regarde ce qui manque pour atteindre le bleu, ajuste un bloc ou sa durée, puis appuie sur Démarrer.", target: state.labOpen ? "[data-code-run]" : state.attempt === "laboratory" ? "[data-kidx-lab]" : "[data-ev3-run]" };
   if (mission.code || state.labOpen) {
-    if (!state.labOpen) return { key: "lab", step: 1, title: "Découvre le programme", text: "Ouvre Blocs avancés, puis choisis Exemple de la mission. Il prépare les moteurs et les capteurs de ce défi.", target: "[data-kidx-lab]" };
-    return { key: "lab-ready", step: 2, title: "Teste ton idée", text: "Lancer joue le programme. Un bloc permet d’avancer pas à pas et de regarder les capteurs entre deux actions.", target: "[data-code-run]" };
+    if (!state.labOpen) return { key: "lab", step: 1, title: "Découvre le programme", text: "Ouvre Blocs avancés, puis choisis Utiliser l’exemple. Il prépare les moteurs et les capteurs de ce défi.", target: "[data-kidx-lab]" };
+    return { key: "lab-ready", step: 2, title: "Teste ton idée", text: "Appuie sur Démarrer pour que le robot suive tout le programme. Avec Exécuter un bloc, il suit un seul ordre, puis attend pour te laisser observer les capteurs.", target: "[data-code-run]" };
   }
   const prefix = state.blocks.every((block, index) => block === mission.suggested[index]);
   if (prefix && state.blocks.length < mission.suggested.length) {
     const next = mission.suggested[state.blocks.length];
     return { key: `block-${state.blocks.length}`, step: 1, title: `Prépare tes ordres · ${state.blocks.length}/${mission.suggested.length}`,
-      text: `${state.blocks.length === 0 ? "Un bloc = un ordre. " : ""}Appuie sur ${names[next]} en bas : ce sera l’ordre ${state.blocks.length + 1}. Le robot attend que tu appuies sur Lancer.`, target: `[data-ev3-block='${next}']` };
+      text: `${state.blocks.length === 0 ? "Un bloc = un ordre. " : ""}Appuie sur ${names[next]} en bas : ce sera l’ordre ${state.blocks.length + 1}. Le robot attend que tu appuies sur Démarrer.`, target: `[data-ev3-block='${next}']` };
   }
   return { key: prefix ? "ready" : "explore", step: 2, title: prefix ? "Ton programme est prêt" : "Tu as une autre idée !",
-    text: prefix ? "Appuie sur Lancer. Le robot exécutera tes blocs de gauche à droite. Regarde s’il rejoint le bleu." : "Tu peux tester ton programme avec Lancer. Retirer enlève le dernier bloc si tu veux le modifier.", target: "[data-ev3-run]" };
+    text: prefix ? "Appuie sur Démarrer. Le robot suivra tes blocs de gauche à droite. Regarde s’il rejoint le bleu." : "Tu peux tester ton programme avec Démarrer. Enlever retire le dernier bloc si tu veux le modifier.", target: "[data-ev3-run]" };
 }
 
 export function mountKidxMissionGuide(root: HTMLElement, host: HTMLElement, toolbar: HTMLElement, mission: KidxMission, read: () => GuideSnapshot) {
@@ -55,7 +55,7 @@ export function mountKidxMissionGuide(root: HTMLElement, host: HTMLElement, tool
   button.textContent = "? Comment jouer"; button.dataset.kidxGuide = ""; button.setAttribute("aria-controls", "kidx-mission-guide"); toolbar.append(button);
   const panel = document.createElement("section"); panel.id = "kidx-mission-guide"; panel.className = "kx-mission-guide";
   panel.setAttribute("aria-label", "Guide de la mission avec Nestor");
-  panel.innerHTML = `<div class="kx-guide-heading"><span data-guide-step></span><button type="button" data-guide-close aria-label="Réduire le guide">×</button></div><p id="kidx-guide-instruction" data-guide-instruction></p><details><summary>Repères du défi</summary><p data-guide-landmarks></p><p data-guide-observe></p><p>Stop ajoute un ordre d’arrêt à ton programme. Arrêter le robot agit tout de suite, sans effacer tes blocs.</p><p class="kx-guide-camera">Glisse sur la scène pour regarder le robot sous un autre angle.</p></details>`;
+  panel.innerHTML = `<div class="kx-guide-heading"><span data-guide-step></span><button type="button" data-guide-close aria-label="Réduire le guide">×</button></div><p id="kidx-guide-instruction" data-guide-instruction></p><details><summary>Comprendre le parcours</summary><p data-guide-landmarks></p><p data-guide-observe></p><p>Le bloc Arrêt fait arrêter le robot quand vient son tour dans le programme. Arrêter le robot agit tout de suite, sans effacer tes blocs.</p><p class="kx-guide-camera">Glisse sur la scène pour regarder le robot sous un autre angle.</p></details>`;
   panel.querySelector("[data-guide-landmarks]")!.textContent = landmarks[0];
   panel.querySelector("[data-guide-observe]")!.textContent = landmarks[1];
   host.querySelector(".gx-ev3-nestor")!.after(panel);

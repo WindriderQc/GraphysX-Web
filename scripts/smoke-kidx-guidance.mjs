@@ -66,7 +66,7 @@ try {
   await page.locator("[data-kidx-guide]").click();
   await page.locator("[data-kidx-lab]").click();
   await highlighted("[data-code-example]");
-  assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Exemple de la mission/);
+  assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Utiliser l’exemple/);
   await page.locator("[data-lab-close]").click();
   await highlighted("[data-ev3-block='forward']");
   await page.locator("[data-ev3-block='forward']").click();
@@ -116,7 +116,7 @@ try {
   await page.locator("[data-kidx-lab]").click();
   await highlighted("[data-code-example]");
   assert.equal(await page.locator("[data-code-stop]").isDisabled(), true);
-  assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Exemple de la mission/);
+  assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Utiliser l’exemple/);
   await page.locator("[data-code-load]").click();
   assert.equal((await state()).guidance.stage, "example", "an empty saved-program slot does not prepare a program");
   await page.locator("[data-code-example]").click();

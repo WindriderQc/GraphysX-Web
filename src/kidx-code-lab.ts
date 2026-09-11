@@ -34,9 +34,9 @@ export function mountKidxCodeLab(root: HTMLElement, options: Options) {
     <p class="kx-code-intro">Règle chaque moteur, réagis aux capteurs et répète des actions avec une boucle. Pour les premiers trajets, les blocs en bas de la scène suffisent.</p>
     <div class="kx-lcd" data-lab-sensors aria-label="Écran des capteurs simulés"></div>
     <details><summary>Pilotage et son</summary><label>Puissance en pilotage <input data-lab-power type="range" min="20" max="100" value="100"> <output data-lab-power-value>100 %</output></label><button data-lab-sound aria-pressed="false">Activer le son des moteurs</button><p>Les capteurs mesurent cette scène simulée. Couleurs : 0 = tapis, 1 = noir, 2 = bleu, 3 = vert, 4 = jaune, 5 = rouge, 6 = blanc.</p></details>
-    <div class="kx-code-tools"><button data-code-example>Exemple de la mission</button><button data-code-save>Enregistrer</button><button data-code-load>Ouvrir</button></div>
+    <div class="kx-code-tools"><button data-code-example>Utiliser l’exemple</button><button data-code-save>Enregistrer</button><button data-code-load>Ouvrir mon programme</button></div>
     <div data-code-editor></div><p class="kx-code-status" data-code-status role="status"></p>
-    <footer><button data-code-run>▶ Lancer</button><button data-code-step>Un bloc</button><button data-code-pause>Pause</button><button data-code-resume>Reprendre</button><button data-code-stop disabled title="Arrêt immédiat. Les blocs sont conservés.">■ Arrêter ce programme</button></footer>`;
+    <footer><button data-code-run aria-label="Démarrer le programme">▶ Démarrer</button><button data-code-step title="Le robot suit un seul bloc, puis attend.">Exécuter un bloc</button><button data-code-pause>Pause</button><button data-code-resume>Continuer</button><button data-code-stop disabled title="Arrêt immédiat. Les blocs sont conservés.">■ Arrêter ce programme</button></footer>`;
   root.append(panel);
   panel.addEventListener("change", event => { if (event.target instanceof Element && event.target.closest("[data-code-editor]")) prepared = true; });
   const message = panel.querySelector<HTMLElement>("[data-code-status]")!;
@@ -74,9 +74,9 @@ export function mountKidxCodeLab(root: HTMLElement, options: Options) {
       for (const [index, node] of nodes.entries()) {
         const row = document.createElement("article"); row.className = `kx-code-block kx-code-${node.kind}`; row.dataset.codePath = `${prefix}${index}`;
         const header = document.createElement("div"); header.className = "kx-code-block-head";
-        const title = document.createElement("strong"); title.textContent = `${index + 1}. ${{ motors: "Moteurs B + C", wait: "Attendre", until: "Rouler jusqu’au capteur", repeat: "Répéter", if: "Si… alors" }[node.kind]}`;
+        const title = document.createElement("strong"); title.textContent = `${index + 1}. ${{ motors: "Moteurs B + C", wait: "Attendre", until: "Rouler jusqu’à…", repeat: "Répéter", if: "Si… alors" }[node.kind]}`;
         const up = makeButton("↑", () => { if (index) { [nodes[index - 1], nodes[index]] = [nodes[index], nodes[index - 1]]; render(); } }); up.setAttribute("aria-label", "Monter le bloc"); up.disabled = index === 0;
-        const remove = makeButton("✕", () => { nodes.splice(index, 1); render(); }); remove.setAttribute("aria-label", "Retirer ce bloc"); header.append(title, up, remove); row.append(header);
+        const remove = makeButton("✕", () => { nodes.splice(index, 1); render(); }); remove.setAttribute("aria-label", "Enlever ce bloc"); header.append(title, up, remove); row.append(header);
         const fields = document.createElement("div"); fields.className = "kx-code-fields"; row.append(fields);
         if (node.kind === "motors" || node.kind === "until") {
           numeric(fields, "B · gauche (%)", node.left, -100, 100, value => { node.left = value; }, 1);
@@ -90,8 +90,8 @@ export function mountKidxCodeLab(root: HTMLElement, options: Options) {
       }
       const add = document.createElement("div"); add.className = "kx-code-add";
       const choice = document.createElement("select"); choice.setAttribute("aria-label", "Bloc à ajouter");
-      for (const [id, title] of [["motors", "Moteurs"], ["wait", "Attendre"], ["until", "Jusqu’au capteur"], ...(depth < 4 ? [["repeat", "Répéter"], ["if", "Si… alors"]] : [])]) choice.add(new Option(title, id));
-      const addButton = makeButton("+ Ajouter", () => {
+      for (const [id, title] of [["motors", "Moteurs"], ["wait", "Attendre"], ["until", "Rouler jusqu’à…"], ...(depth < 4 ? [["repeat", "Répéter"], ["if", "Si… alors"]] : [])]) choice.add(new Option(title, id));
+      const addButton = makeButton("+ Ajouter le bloc", () => {
         if (nodes.length >= 32 || editor.querySelectorAll(".kx-code-block").length >= 64) { report("Le programme peut contenir 64 blocs, avec 32 blocs par liste."); return; }
         const kind = choice.value;
         nodes.push(kind === "repeat" ? { kind, count: 2, body: [motors()] } : kind === "if" ? { kind, condition: condition(), body: [motors()], otherwise: [] } : kind === "until" ? { kind, left: 50, right: 50, seconds: 10, condition: condition() } : kind === "wait" ? { kind, seconds: 1 } : motors()); render();
@@ -115,7 +115,7 @@ export function mountKidxCodeLab(root: HTMLElement, options: Options) {
   panel.querySelector("[data-code-stop]")!.addEventListener("click", () => { runner.stop(); stopped(); report("Robot arrêté. Ton programme est conservé."); });
   panel.querySelector("[data-code-save]")!.addEventListener("click", () => { try { report(saveKidxCode(localStorage, code) ?? "Programme enregistré dans ce navigateur."); } catch { report("Enregistrement indisponible. Ton programme reste ouvert."); } });
   panel.querySelector("[data-code-load]")!.addEventListener("click", () => { try { const saved = readKidxCode(localStorage); if (saved) { code = saved; prepared = true; render(); report("Programme ouvert."); } else report("Aucun programme enregistré."); } catch { report("La sauvegarde n’a pas pu être lue. Le programme ouvert reste intact."); } });
-  panel.querySelector("[data-code-example]")!.addEventListener("click", () => { code = structuredClone(options.example ?? [{ kind: "repeat", count: 3, body: [motors()] }]); prepared = true; render(); report("Exemple chargé. Observe les blocs, puis teste-le."); });
+  panel.querySelector("[data-code-example]")!.addEventListener("click", () => { code = structuredClone(options.example ?? [{ kind: "repeat", count: 3, body: [motors()] }]); prepared = true; render(); report("Exemple prêt. Observe les blocs, puis appuie sur Démarrer."); });
   panel.querySelector<HTMLInputElement>("[data-lab-power]")!.addEventListener("input", event => { const value = Number((event.target as HTMLInputElement).value); options.speed(value / 100); panel.querySelector("[data-lab-power-value]")!.textContent = `${value} %`; });
   panel.querySelector("[data-lab-sound]")!.addEventListener("click", async () => { try { await options.sound(!sound); sound = !sound; const b = panel.querySelector("[data-lab-sound]")!; b.textContent = sound ? "Couper le son" : "Activer le son des moteurs"; b.setAttribute("aria-pressed", String(sound)); } catch { report("Le son n’a pas pu démarrer dans ce navigateur."); } });
   render();

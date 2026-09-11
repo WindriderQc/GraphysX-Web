@@ -53,7 +53,7 @@ its fifth block type. `Blocs avancés` opens the richer language and names its m
 and loops. `Arrêter le robot` is an immediate brake, disabled before a command and after
 stopping; it preserves blocks, cancels paused programs too, and permits a fresh driving
 gesture to resume. Entering `Piloter` brakes residual program momentum. The bottom
-`Stop` button still adds a queued instruction. TRACK3R/SPIK3R retain batched
+`Arrêt` button still adds a queued instruction. TRACK3R/SPIK3R retain batched
 complete stages and load individual pieces only for the current demonstration. All 138 PDFs
 remain available; other models still need source CAD assembly data before acquiring 3D guides.
 Shared rooms use the local server, keep state in memory and disappear on restart. `KIDX_HOST`
@@ -65,6 +65,15 @@ The control-label follow-up passed the full 63-check gate in
 qualified by the expanded interactive browser journey, typecheck, focused lint/unit tests
 and the game client on the final source. Receipts use `output/kidx/control-clarity-final-*`;
 fingerprints are in `output/kidx/control-clarity-final-source-hashes.json`.
+
+Child-facing French labels now use `Démarrer` for a complete program, `Exécuter un bloc`
+for one step, and `Continuer` after a pause. Guidance, accessible names and construction
+controls share the vocabulary documented in `docs/KIDX_WORKSHOP.md`. PDF return buttons
+name their actual destination. Longer labels were inspected at 320/390px and desktop widths.
+The final wording source passed all 63 repository checks, including the earlier Drive brake
+follow-up: `output/kidx/verify-wording.log`. All fourteen source/test fingerprints match
+`output/kidx/wording-source-hashes.json`; the named-program smoke passed in 8m54s with its
+unchanged ten-minute deadline. The validated build is served by the local preview on 4177.
 
 ## KidX program library (current source, 2026-09-10)
 

@@ -27,10 +27,10 @@ The existing full seven-station EV3 scene remains in Browse Scenes.
 All eleven missions open with a French Nestor guide. It explains the next action and
 outlines its actual button in gold. Simple missions count the child's blocks and follow
 the suggested sequence; choosing a different program keeps that program intact and offers
-an experiment. Advanced missions lead into **Blocs avancés**, then **Exemple de la mission**
-and **Lancer**. The instruction continues inside the laboratory.
+an experiment. Advanced missions lead into **Blocs avancés**, then **Utiliser l’exemple**
+and **Démarrer**. The instruction continues inside the laboratory.
 
-**Repères du défi** explains each scene's colored zones, required checkpoints, robot-relative
+**Comprendre le parcours** explains each scene's colored zones, required checkpoints, robot-relative
 turns or sensor values. The initial programming view remains paused while the child reads.
 The guide collapses when execution starts; **Comment jouer** reopens it, with advice based
 on the real attempt or verdict. Closing the guide returns keyboard focus to that button.
@@ -42,9 +42,29 @@ loops. **Arrêter le robot** is an immediate brake that preserves both editors' 
 is disabled with **Déjà à l’arrêt** before any command or after stopping. It stays available
 for a running or paused program and after releasing a manual direction, when the chassis
 can still coast. A fresh direction resumes manual driving after braking. The separate
-**Stop** block only queues an instruction in the simple program; **Repères du défi** explains
+**Arrêt** block only queues an instruction in the simple program; **Comprendre le parcours** explains
 the distinction. Inside the advanced editor, **Arrêter ce programme** cancels its execution.
 Entering **Piloter** brakes residual program momentum before handing control to the child.
+
+## French labels for children
+
+Use a concrete verb and name the affected object when context does not make it obvious.
+Keep labels consistent in buttons, accessible names, Nestor instructions and spoken build
+requests. Introduce useful robotics words through short explanations (a block is an order;
+a loop repeats actions). These are editorial choices, not a claim of testing with children.
+
+| Action | Child-facing wording |
+| --- | --- |
+| Run the whole program | **Démarrer**; accessible name **Démarrer le programme**. Avoid **Lancer**. |
+| Execute the next instruction | **Exécuter un bloc**, explained as one order followed by a pause. |
+| Resume after a pause | **Continuer** in programs and demonstrations. |
+| Remove the last simple block | **Enlever**; accessible name **Enlever le dernier bloc**. |
+| Load the mission's sample blocks | **Utiliser l’exemple**. This prepares blocks; **Démarrer** starts movement. |
+| Update an existing saved program | **Enregistrer les changements**. |
+| Inspect assembly separation | **Écarter les pièces** / **Rassembler les pièces**. Groups move together; this is a viewing aid. Nestor accepts **Écarte les pièces** and the earlier technical terms. |
+| Move through construction | **Étape précédente** / **Étape suivante**; **Tourner le modèle** changes the view. |
+| Inspect a model or page | **Rapprocher** / **Éloigner** in 3D; **Agrandir** / **Page entière** in a notice. |
+| Return from a notice | **Construction 3D** or **Notices LEGO**, matching the actual destination. |
 
 The simulator has a wheeled teaching chassis built from detailed LDraw EV3 parts; see
 [KIDX_VISUALS.md](KIDX_VISUALS.md). The construction views use separate source assemblies
@@ -178,8 +198,10 @@ verifies nested programs, real step/pause, low-power keyboard reverse, LCD/sound
 CAD insertion, Nestor requests, two-browser handoffs and the 3:1 gear demonstration.
 The final `npm run verify -- --wait` passed all 63 checks (310 unit passes, one intentional
 Windows skip), including the complete guidance journey and all eleven initial mission targets.
-Receipt: `output/kidx/verify-guidance.log`. Screenshots from the final build
-were inspected at desktop, compact landscape and portrait sizes.
+Latest receipt: `output/kidx/verify-wording.log`. The French vocabulary review also exercised
+real program completion, pause/continue, construction separation and PDF return destinations.
+Screenshots from the final source were inspected at desktop and 320/390px portrait sizes;
+the focused wording captures are in `output/kidx/wording-review`.
 
 Inspect screenshots in the configured `SMOKE_ARTIFACTS` directory. Follow the machine-wide
 verification lock in `CLAUDE.md`; an isolated preview does not establish deployment or

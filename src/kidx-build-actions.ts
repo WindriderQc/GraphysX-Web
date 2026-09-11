@@ -5,7 +5,7 @@ export function parseKidxBuildRequest(text: string): { action: string; value?: n
   if (step) return { action: "step", value: Number(step[1]) - 1 };
   if (/dessous|en dessous/.test(request)) return { action: "underside" };
   if (/dessus|vue normale/.test(request)) return { action: "above" };
-  if (/eclat|separ/.test(request)) return { action: "explode" };
+  if (/eclat|separ|ecart/.test(request)) return { action: "explode" };
   if (/rassembl/.test(request)) return { action: "assemble" };
   if (/ralenti|lentement/.test(request)) return { action: "slow" };
   if (/pause|arrete/.test(request)) return { action: "pause" };

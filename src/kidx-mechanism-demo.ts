@@ -12,14 +12,14 @@ export function mountKidxMechanismDemo(root: HTMLElement, api: GraphysXAgentWorl
   api.pause(true); reframe();
   const ui = document.createElement("section"); ui.className = "kx-mechanism";
   ui.innerHTML = `<header><button data-demo-back>← Atelier</button><h1>Pourquoi cette roue tourne moins vite ?</h1></header>
-    <aside><small>COMPRENDRE EN 3D · 8 DENTS → 24 DENTS</small><h2 data-demo-caption></h2><p>Pièces LEGO agrandies. Le rapport des dents fixe le rapport des vitesses.</p><output data-demo-turns></output></aside>
-    <footer><button data-demo-play>Pause</button><button data-demo-restart>↺ Rejouer</button><label>Vitesse <select data-demo-speed><option value=".25">Très lent</option><option value=".5">Ralenti</option><option value="1" selected>Normal</option></select></label><button data-demo-reverse>Inverser le moteur</button></footer>`;
+    <aside><small>COMPRENDRE EN 3D · 8 DENTS → 24 DENTS</small><h2 data-demo-caption></h2><p>Compte les dents : la grande roue en a trois fois plus. Elle tourne donc trois fois moins vite.</p><output data-demo-turns></output></aside>
+    <footer><button data-demo-play>Pause</button><button data-demo-restart>↺ Revoir depuis le début</button><label>Vitesse <select data-demo-speed><option value=".25">Très lente</option><option value=".5">Lente</option><option value="1" selected>Normale</option></select></label><button data-demo-reverse>Changer le sens du moteur</button></footer>`;
   root.append(ui);
   let playing = true, elapsed = 0, rotation = 0, speed = 1, direction = 1;
   const render = () => {
     ui.querySelector("[data-demo-caption]")!.textContent = elapsed < 4 ? "Le petit pignon entraîne la grande roue." : elapsed < 8 ? "Les deux roues tournent dans des sens opposés." : "Trois tours du petit pignon donnent un tour de la grande roue.";
     ui.querySelector("[data-demo-turns]")!.textContent = `8 dents : ${(rotation / 360).toFixed(2)} tours · 24 dents : ${(-rotation / 1080).toFixed(2)} tours`;
-    ui.querySelector("[data-demo-play]")!.textContent = playing ? "Pause" : "Reprendre";
+    ui.querySelector("[data-demo-play]")!.textContent = playing ? "Pause" : "Continuer";
     api.transaction([{ op: "update", id: "kidx-gear-driver", patch: { transform: { rotationDegrees: [90, 0, rotation] } } }, { op: "update", id: "kidx-gear-driven", patch: { transform: { rotationDegrees: [90, 0, 7.5 - rotation / 3] } } }]);
   };
   ui.querySelector("[data-demo-back]")!.addEventListener("click", onExit);
