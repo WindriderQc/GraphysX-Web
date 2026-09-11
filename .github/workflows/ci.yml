@@ -2,11 +2,8 @@ name: CI
 
 on:
   pull_request:
-  push:
-    # Pushes to main are verified by the `verify` job in deploy.yml, which gates the
-    # production release on this same workflow. Skipping main here avoids a duplicate run.
-    branches-ignore:
-      - main
+  # Pull requests validate branch updates; main calls this workflow from deploy.yml.
+  # A separate branch-push trigger duplicated the PR gate for the same revision.
   workflow_call:
     inputs:
       full_verify:

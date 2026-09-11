@@ -32,7 +32,7 @@ not advance this baseline. Failed/cancelled releases and changes in intervening
 commits remain covered until a deployment succeeds. Prior runs are ordered by update
 time so a rerun of an older release can become the latest activation.
 
-Pull requests compare with their base merge point; branch pushes compare with their
+Pull requests compare with their base merge point; manual branch runs compare with their
 merge point against `origin/main`. Missing history, unavailable GitHub evidence or
 no successful ancestor among the latest 20 successful main workflows selects the
 full suite. The workflow summary names the comparison SHAs, changed files, matching
@@ -57,6 +57,8 @@ npm run verify -- --checks=none --wait
 ```
 
 The CI workflow has a manual `full_verify` input; deployment also exposes this input.
+Automatic CI runs for pull requests and is called by the main deployment workflow.
+Branch pushes without a PR do not run a duplicate gate; use the manual CI entry when needed.
 There is no new recurring task. Manually selected checks report their limited scope;
 the production workflow requires the complete selection calculated from its baseline.
 
@@ -86,4 +88,7 @@ Initial local validation (2026-09-11): 338 Node tests passed, one existing Windo
 skip; scoped tooling lint and workflow parsing passed. Selection, exact coverage,
 invalid filters, skipped/failed release baselines and cumulative Git rename history
 were exercised. A read-only GitHub lookup found the real successful deployment base.
-The new workflow has not been pushed or measured on GitHub yet.
+The first [Linux PR validation](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34634263687)
+passed in 2m17s: static checks plus the three selected deployment-integration checks.
+This measures a tooling/deployment change, not the duration of a full regression.
+Delivery and production receipts are attached to [PR #18](https://github.com/WindriderQc/GraphysX-Web/pull/18).
