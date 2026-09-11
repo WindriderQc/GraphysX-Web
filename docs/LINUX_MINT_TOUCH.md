@@ -7,6 +7,15 @@ KidX acceptance and EV3 hardware qualification remain open.
 
 ## Live touch diagnosis (2026-09-10, resumed session)
 
+**Current result:** after cleaning the screen, the owner confirms five successive physical
+Menu open/close taps and all six fullscreen Firefox targets, including the lower-left corner.
+Matched receipts confirm native touch across those zones. No calibration was applied.
+KidX's three-Forward/Run/success/retry flow also passed by physical touch. Drive exposed an
+app long-press menu issue and a chassis-heading mismatch, to resume in a fresh session at
+the owner's request. See "KidX acceptance and fresh-session handoff" below.
+The investigation below is chronological;
+its earlier failed tests do not describe the latest result.
+
 The owner confirmed physical interaction during a device-scoped XInput capture on ugKid.
 The capture received **6 RawTouchBegin, 79 RawTouchUpdate and 6 RawTouchEnd events** from
 device 6. The 45-second capture ended with the expected timeout status 124. The owner
@@ -44,11 +53,10 @@ Local receipts, outside git:
 - `output/playwright/mint-touch/browser-initial.png`: inspected Firefox trace and text selection.
 - `output/playwright/mint-touch/browser-xinput2.png`: inspected page after the session-only restart.
 
-**Next:** resolve the remaining Cinnamon desktop input issue described below, then perform
-the actual-PC KidX checklist, including touch scrolling and held-Go release/cancellation.
+**Next:** perform the actual-PC KidX checklist, including touch scrolling and held-Go release/cancellation.
 The review and saved-program implementation are already complete.
 
-### Central Firefox input works; wider touch reliability remains unresolved
+### Earlier failures and the subsequent six-zone retest
 
 The owner reports that touch still does not work in the Mint desktop and explicitly confirms
 that a finger tap on the Mint Menu button does not open it. The same hardware reportedly worked
@@ -127,7 +135,7 @@ reconnected it. XInput redetected the enabled LG device as id 6, `/dev/input/eve
 identity coordinate/calibration matrices. The owner still could not activate Start after
 reconnection; the six-target retest did not complete.
 
-#### Mini-keyboard touchpad comparison and next kernel test
+#### Mini-keyboard touchpad comparison and kernel test
 
 The owner uses a mini-keyboard with an integrated touchpad and reported a disappearing mouse
 cursor. XInput identifies its pointer as `  mini keyboard Mouse`, id 8, `/dev/input/event3`,
@@ -140,15 +148,17 @@ cause. Both devices were re-enabled; the temporary helpers also completed their 
 
 The initial running kernel was `7.0.0-31-generic`. The installed `6.14.0-37-generic` kernel, its initramfs
 and Nouveau module are present; the current graphics driver is Nouveau. SSH is enabled at boot.
-A helper at `/tmp/kidx-boot-614.py` is prepared for an owner-approved, one-time boot comparison.
-It locates the actual existing non-recovery GRUB entry, refuses an existing one-time selection,
-uses `grub-reboot`, verifies the selection and only then reboots. Syntax was checked, but the
-helper was then executed after the owner's explicit reboot approval. Its saved log confirms
+A helper was prepared at `/tmp/kidx-boot-614.py` for the one-time boot comparison. It located
+the actual existing non-recovery GRUB entry, refused an existing one-time selection, used
+`grub-reboot`, verified the selection and rebooted after the owner's explicit approval. Its saved log confirms
 the verified one-time selection and reboot, and SSH now reports **`6.14.0-37-generic`**.
 The X11 session is active, the loopback acceptance tunnel is restored, and all three automatic
 lock settings remain disabled. No kernel was installed or removed, and `GRUB_DEFAULT` was not
-changed. The owner has been asked to try Menu, an application and the clock before Firefox is
-launched; that physical comparison is pending, so no kernel regression or repair is established.
+changed. The owner reports that the Menu still did not open under 6.14, while some drags
+produced a cyan desktop selection rectangle and other areas remained unresponsive. The older
+kernel did not resolve the reported fault; no 7.0-specific regression or repair is established.
+The bounded capture had expired by the time this feedback arrived and contained no contacts;
+there is no confirmed positive control within its capture window.
 
 **Device ids changed on this boot:** the LG touchscreen is now XInput **8**, still
 `/dev/input/event6`; the mini-keyboard mouse is **10**. Do not reuse the earlier XInput id 6,
@@ -158,8 +168,43 @@ directory. The bounded remote touch capture is `/tmp/kidx-kernel614-touch.log`.
 
 The monitor EDID now identifies the display as **Dell ST2220T**, manufacturer `DEL`, on DP-2.
 Dell's [model specification](https://i.dell.com/images/emea/products/monitors/ST2220T_monitor_brochure_Ad_G10002992.pdf)
-identifies optical touch technology. This supplies a concrete hardware-inspection lead if the
-same behavior persists across kernels; an obstruction or hardware fault has not been observed.
+identifies optical touch technology. The [Dell user guide (mirrored text)](https://manualzilla.com/doc/7296771/dell-st2220t-user-s-guide)
+describes three optical sensors, at the two upper corners and lower-left corner, requiring
+clear views across the panel. It recommends keeping the rest of the hand clear when touching
+and cautions against wiping the upper-corner optics when cleaning the glass.
+
+The owner subsequently cleaned part of the screen and reports intermittent position errors
+but also successfully opening the Mint Menu. The inspected screenshot
+`output/playwright/mint-touch/touch-hud-614.png` shows the Menu open; it was not opened remotely
+for that screenshot. Cleaning correlates with this improvement, but an obstruction or hardware
+fault is not yet established and no calibration matrix was changed.
+
+To make capture timing visible, a temporary non-reactive desktop counter displayed received
+touch begins, ends and positions. `/tmp/kidx-visible-touch-probe.py` monitored only the identified
+LG XInput device, with a ten-minute limit and capped rows. It did not record keyboard input or
+alter input settings. The owner confirms that five successive finger taps reliably opened and
+closed Menu with dry glass and the rest of the hand clear; the counter increased each time.
+Balanced raw contacts at approximately x=15..18, y=1064..1066 support that report.
+
+Firefox was restarted with session-only `MOZ_USE_XINPUT2=1` after cleaning. The owner then
+confirmed touching only the centers of all six targets in fullscreen. Run
+`2026-09-10T23:57:00.609Z` completed at `23:57:26.105Z`; all six samples are trusted native touch:
+
+| Target | Expected pixels | Received pixels |
+| --- | --- | --- |
+| Upper left | 192, 162 | 193, 158 |
+| Upper right | 1728, 162 | 1720, 163 |
+| Lower right | 1728, 918 | 1729, 901 |
+| Lower left | 192, 918 | 196, 929 |
+| Lower center | 960, 702 | 960, 695 |
+| Bottom-left edge | 38, 1058 | 17, 1064 |
+
+This is successful coverage at 1920x1080 and device pixel ratio 1, not a precision calibration.
+The varying small offsets do not justify a global matrix. The raw log was retained as
+`output/mint-touch-2026-09-10/visible-touch-after-cleaning-final.jsonl`; the browser run is in
+`output/playwright/mint-touch/browser-receipts.jsonl`. The diagnostic processes and overlay
+were explicitly removed before opening KidX. No persistent Firefox launcher change was made;
+the one-time kernel selection also leaves the normal boot default unchanged.
 The touchscreen USB device reports power control `on` and runtime state `active`, so there is
 no evidence here to justify changing its autosuspend settings.
 
@@ -324,6 +369,50 @@ the device and Mint version. See [Mint's kernel documentation](https://linuxmint
    with Tab, Shift+Tab and Escape. Check the on-screen keyboard if the device requires one.
 7. Record screenshots and actual results. Browser emulation on Windows does not close this
    Linux hardware acceptance step.
+
+### KidX acceptance and fresh-session handoff (2026-09-10 evening EDT)
+
+The owner requested a new session once desktop/browser touch worked. Keep the established
+touch result above and resume application work, rather than repeating the kernel/calibration
+investigation.
+
+- **Passed on ugKid:** trusted finger activation of the welcome card's KidX entry, three
+  Forward blocks, Run, blue-target success and Try again. Receipts at
+  `2026-09-11T00:02:22Z` through `00:02:36Z` confirm all these transitions; retry restores
+  position `[0,0.83,17]`, heading 0 and pause. Firefox 155.0.1 uses a 1920x922 viewport on the
+  1920x1080 display at scale 1. A preliminary two-Forward run also succeeded; it is distinct
+  from the requested three-block test.
+- **Drive long press needs correction and physical retest:** the owner reports a submenu
+  appearing while holding a control. `kidx-long-press-menu.png` shows selected button text
+  after the menu was dismissed. Native cancellations and releases did stop the rover in
+  recorded intervals, but this does not qualify sustained driving. Suppress selection,
+  browser gesture takeover and context menus on held driving buttons; keep Programs' native
+  scrolling and name editing. The old emulated mouse hold smoke missed this physical issue.
+- **Chassis heading needs correction:** Left/Right turn the cyan marker but the vehicle does
+  not visibly turn. Source confirms steering currently models the BallZ subject/arrow split:
+  `applySteering()` changes force direction, and `placeSteeringArrows()` yaws the separate
+  marker. It does not yaw the rover's chassis. Implement the rover behavior through shared
+  API/runtime vocabulary or ordinary scene composition; do not add host-only scene mutations
+  or change BallZ's independent aim/body behavior. Verify visible chassis orientation as well
+  as Left/Right routes and heading reset.
+- **Still pending on the PC:** corrected sustained Drive holds and release outside a control,
+  all remaining block controls/routes, Programs save/reload/open/replay, touch scrolling,
+  name editing and Tab/Shift+Tab/Escape focus behavior. The mini-keyboard is available; an
+  on-screen keyboard is not yet a requirement. EV3 remains unplugged and unqualified.
+
+The active Firefox page and Windows server on port 4175 still serve the isolated build from
+before the long-press correction. Rebuild/test and refresh that isolated site deliberately
+before asking for a physical retest. Its script is
+`C:\Users\Yanik\codes\GraphysX-Web\output\playwright\mint-touch\serve.mjs`; receipts and
+screenshots live alongside it. These ignored artifacts stay in the original checkout if the
+next session uses a worktree. Do not assume that checkout's `dist/` follows a worktree build.
+Rediscover the server/tunnel processes before restarting them. The SSH reverse listener is
+loopback-only on both machines; user authorization for ugKid access persists.
+
+Current boot remains the one-time 6.14 kernel, and Firefox's XInput2 variable is session-only.
+No permanent kernel default, calibration, Firefox launcher or graphics-driver change was made.
+Automatic locking remains persistently disabled. Saved programs are scoped to the temporary
+origin; no application deployment, push, merge or EV3 motor test occurred.
 
 ## EV3 transport boundary
 

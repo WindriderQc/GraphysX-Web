@@ -90,16 +90,19 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    adapter that sends that same compiled input sequence to EV3; do not invent a second program
    model for the robot.
 2. **Phase 7, Linux Mint touchscreen PC validation.** The owner replaced the Raspberry Pi
-   target with a freshly installed Linux Mint PC on 2026-09-10. Touch input is currently
-   reported not working. SSH key access to ugKid is verified; Mint 22.3 Cinnamon/X11 detects
-   the LG Display USB touchscreen with `hid-multitouch`. Physical taps/drags now produce X11
-   events. After a session-only `MOZ_USE_XINPUT2=1` restart, Firefox receives genuine touch
-   events and the owner confirms central taps and tracing work. Wider testing also finds missed
-   contacts in Firefox, so this is not established as a Cinnamon-only fault. The Menu logo still
-   fails; some menu entries work after a Cinnamon restart. Automatic session locking was disabled
-   at the owner's request. An approved one-time reboot into installed kernel 6.14.0-37 succeeded;
-   the physical desktop comparison is pending. EDID identifies the monitor as Dell ST2220T.
-   Touch diagnosis and full KidX acceptance remain open. Continue from
+   target with a freshly installed Linux Mint PC on 2026-09-10. SSH key access to ugKid is
+   verified. Mint 22.3 Cinnamon/X11 uses the LG Display USB touchscreen on a Dell ST2220T
+   optical monitor. An approved one-time boot into installed kernel 6.14.0-37 initially showed
+   the same missed contacts as 7.0. After cleaning the screen, the owner confirms five reliable
+   Menu open/close taps and all six fullscreen Firefox targets, including the lower-left corner.
+   Matched receipts show trusted native touch with session-only `MOZ_USE_XINPUT2=1`; no
+   calibration matrix was applied. Cleaning correlates with improvement; no exact obstruction
+   or kernel regression is proved. Automatic locking is disabled and survived reboot.
+   The owner opened KidX by touch and confirmed three Forward blocks, Run success and Try again.
+   Drive acceptance exposed two application issues: a long press opens a browser menu/selects
+   button text, and Left/Right change the direction indicator without yawing the chassis.
+   The owner requested a fresh session here. Finish these application issues and actual-PC
+   acceptance before EV3; do not restart broad touchscreen diagnosis. Continue from
    [the diagnostic and acceptance guide](docs/LINUX_MINT_TOUCH.md). The existing
    800×480 browser measurements remain compact-layout evidence, not hardware qualification.
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`
