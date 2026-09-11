@@ -39,8 +39,8 @@ lightweight laboratory activity snapshot, without cloning the editor or reading 
 The workshop and mission arrival guide are implemented and verified locally: all 63 repository
 checks passed, with 310 passing unit tests and one intentional Windows skip. Receipt:
 `output/kidx/verify-guidance.log`. The saved-program smoke used 8m57s of its unchanged
-ten-minute deadline; the guidance journey used 6m15s. All nine guidance source/test/config
-files still match `output/kidx/guidance-source-hashes.json`. The guide is recorded in
+ten-minute deadline; the guidance journey used 6m15s. At that closeout, all nine guidance
+source/test/config files matched `output/kidx/guidance-source-hashes.json`. The guide is recorded in
 feature commit `10288a2`.
 See `docs/KIDX_NEXT.md` for acceptance and `docs/KIDX_WORKSHOP.md` for current behavior:
 reverse in both controls, independently animated CAD wheels, a regulated motor/sensor
@@ -49,12 +49,22 @@ construction pieces, local French Nestor scene commands, two-screen build handof
 achievements and a native 8:24 gear demonstration. All animation uses the shared host loop.
 
 The simple program still accepts six blocks and preserves existing named saves; Backward is
-its fifth block type. `Laboratoire +` opens the richer language. TRACK3R/SPIK3R retain batched
+its fifth block type. `Blocs avancés` opens the richer language and names its motors, sensors
+and loops. `Arrêter le robot` is an immediate brake, disabled before a command and after
+stopping; it preserves blocks, cancels paused programs too, and permits a fresh driving
+gesture to resume. Entering `Piloter` brakes residual program momentum. The bottom
+`Stop` button still adds a queued instruction. TRACK3R/SPIK3R retain batched
 complete stages and load individual pieces only for the current demonstration. All 138 PDFs
 remain available; other models still need source CAD assembly data before acquiring 3D guides.
 Shared rooms use the local server, keep state in memory and disappear on restart. `KIDX_HOST`
 can bind a private LAN IPv4 address; the default remains loopback. No public/production/hardware
 action is included. Final evidence and any remaining limitations belong in `progress.md`.
+
+The control-label follow-up passed the full 63-check gate in
+`output/kidx/verify-control-clarity.log`. A final one-line brake on entering Drive was then
+qualified by the expanded interactive browser journey, typecheck, focused lint/unit tests
+and the game client on the final source. Receipts use `output/kidx/control-clarity-final-*`;
+fingerprints are in `output/kidx/control-clarity-final-source-hashes.json`.
 
 ## KidX program library (current source, 2026-09-10)
 

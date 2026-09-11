@@ -186,6 +186,8 @@ export function mountEv3MissionStrip(
   const driveable = has(EV3_DRIVE_BASE_ID);
   const motion = createKidxRoverMotion(api, EV3_DRIVE_BASE_ID);
   let drivePower = 1;
+  let manualDriveActive = false;
+  let refreshStop = (): void => undefined;
   let laboratory: ReturnType<typeof mountKidxCodeLab> | null = null;
   const tuneDrive = (force: number, speedCap: number) => {
     const rover = api.query({ ids: [EV3_DRIVE_BASE_ID] })[0];
@@ -202,6 +204,7 @@ export function mountEv3MissionStrip(
   };
   const resetBodies = api.query({ tag: "kidx-reset" }).map(e => ({ id: e.id, position: e.position, rotationDegrees: e.rotationDegrees }));
   const brake = () => {
+    manualDriveActive = false;
     api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
     const rover = api.query({ ids: [EV3_DRIVE_BASE_ID] })[0];
     if (rover?.physics?.mode === "dynamic") api.update(EV3_DRIVE_BASE_ID, {
@@ -292,6 +295,15 @@ export function mountEv3MissionStrip(
     // A long finger hold is a driving command, not a text selection or browser menu.
     // Keep this scoped to held controls so Programs retains native touch scrolling/editing.
     button.addEventListener("contextmenu", (event) => { event.preventDefault(); });
+    const start = (): void => {
+      if (button.disabled) return;
+      button.dataset.held = "true";
+      manualDriveActive = true;
+      // A fresh driving gesture also resumes after an immediate stop.
+      if (!deterministicMode) api.pause(false);
+      input();
+      refreshStop();
+    };
     const stop = (): void => {
       button.dataset.held = "false";
       if (driveable) api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
@@ -299,14 +311,13 @@ export function mountEv3MissionStrip(
     button.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
       button.setPointerCapture(event.pointerId);
-      button.dataset.held = "true";
-      input();
+      start();
     });
     for (const type of ["pointerup", "pointercancel", "pointerleave"] as const) {
       button.addEventListener(type, stop);
     }
     button.addEventListener("lostpointercapture", stop);
-    button.addEventListener("keydown", event => { if ((event.key === " " || event.key === "Enter") && !event.repeat) { event.preventDefault(); button.dataset.held = "true"; input(); } });
+    button.addEventListener("keydown", event => { if ((event.key === " " || event.key === "Enter") && !event.repeat) { event.preventDefault(); start(); } });
     button.addEventListener("keyup", event => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); stop(); } });
     button.addEventListener("blur", stop);
     return button;
@@ -354,6 +365,7 @@ export function mountEv3MissionStrip(
   const missionReady = driveable && Boolean(missionRules?.finish) && missIds.size > 0;
   const resetAttempt = () => {
     attempt = null;
+    manualDriveActive = false;
     motion.reset();
     const reset = api.rules.reset();
     for (const body of resetBodies) api.update(body.id, { transform: { position: body.position, rotationDegrees: body.rotationDegrees }, physics: { mode: "dynamic", linearVelocity: [0, 0, 0], angularVelocity: [0, 0, 0] } });
@@ -431,6 +443,7 @@ export function mountEv3MissionStrip(
   runProgram.dataset.ev3Run = "";
   const driveMode = setVisibleLabel(tap("Drive mode", "●", () => {
     if (!controlsEnabled) return;
+    brake();
     api.pause(deterministicMode);
     mode = "drive";
     attempt = "drive";
@@ -500,6 +513,7 @@ export function mountEv3MissionStrip(
   setControlsEnabled = (enabled: boolean): void => {
     const wasEnabled = controlsEnabled;
     controlsEnabled = enabled;
+    if (!enabled) manualDriveActive = false;
     for (const button of driveButtons) {
       button.disabled = !enabled;
       if (!enabled) button.dataset.held = "false";
@@ -537,6 +551,7 @@ export function mountEv3MissionStrip(
     setControlsEnabled(controlsEnabled);
   };
   refreshControls = (): void => {
+    refreshStop();
     library.button.disabled = !missionReady || mode !== "program" || runner.state().running || laboratory?.state().running === true;
     pad.replaceChildren();
     actions.replaceChildren();
@@ -609,8 +624,23 @@ export function mountEv3MissionStrip(
     example: options.mission?.code,
   });
   const emergency = document.createElement("button"); emergency.type = "button"; emergency.className = "kx-lab-toggle kx-emergency";
-  emergency.textContent = "■ Arrêter"; emergency.dataset.kidxStop = "";
-  emergency.addEventListener("click", () => { runner.stop(); laboratory?.stop(); brake(); api.pause(true); activeProgramIndex = null; setControlsEnabled(true); refreshProgram(); refreshControls(); say("Robot arrêté. Tu peux modifier ou relancer ton programme."); });
+  emergency.innerHTML = `<span>■ Arrêter le robot</span><span class="kx-tool-detail" id="kidx-stop-description">Déjà à l’arrêt</span>`;
+  emergency.dataset.kidxStop = ""; emergency.disabled = true;
+  emergency.setAttribute("aria-label", "Arrêter le robot"); emergency.setAttribute("aria-describedby", "kidx-stop-description");
+  const stopDescription = emergency.querySelector<HTMLElement>(".kx-tool-detail")!;
+  refreshStop = () => {
+    // Releasing a direction cuts motor input but can leave momentum: keep braking available.
+    const active = runner.state().running || laboratory?.activity().running === true || manualDriveActive;
+    if (emergency.disabled === !active) return;
+    emergency.disabled = !active;
+    stopDescription.textContent = active ? "Immédiat · garde tes blocs" : "Déjà à l’arrêt";
+  };
+  emergency.addEventListener("click", () => {
+    runner.stop(); laboratory?.stop(); brake(); api.pause(true); activeProgramIndex = null;
+    for (const button of driveButtons) button.dataset.held = "false";
+    setControlsEnabled(true); refreshProgram(); refreshControls();
+    say(mode === "drive" ? "Robot arrêté. Maintiens une direction pour repartir." : "Robot arrêté. Tes blocs sont conservés. Lancer recommence le trajet.");
+  });
   const labTools = document.createElement("div"); labTools.className = "kx-mission-tools";
   labTools.append(laboratory.button, emergency); mission.append(labTools);
   const guidance = options.mission ? mountKidxMissionGuide(root, mission, labTools, options.mission, () => {
@@ -668,6 +698,7 @@ export function mountEv3MissionStrip(
     if (advanceProgram && api.rules.status()?.phase === "running") runner.advance(deltaSeconds);
     renderRun();
     guidance?.update();
+    refreshStop();
   };
 
   const unsubscribeFrame = options.subscribeFrame((deltaSeconds) => {

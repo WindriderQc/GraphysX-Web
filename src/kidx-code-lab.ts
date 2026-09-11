@@ -24,15 +24,19 @@ export function mountKidxCodeLab(root: HTMLElement, options: Options) {
   let worldPaused = false;
   let renderedRunning: boolean | null = null;
   const button = document.createElement("button"); button.type = "button"; button.className = "kx-lab-toggle";
-  button.textContent = "Laboratoire +"; button.dataset.kidxLab = ""; button.setAttribute("aria-expanded", "false");
+  button.innerHTML = `<span>Blocs avancés</span><span class="kx-tool-detail" id="kidx-lab-description">Moteurs · capteurs · boucles</span>`;
+  button.dataset.kidxLab = ""; button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-label", "Blocs avancés"); button.setAttribute("aria-describedby", "kidx-lab-description");
+  button.setAttribute("aria-controls", "kidx-code-lab");
   const panel = document.createElement("section"); panel.className = "kx-code-lab"; panel.hidden = true;
-  panel.setAttribute("aria-label", "Laboratoire de programmation EV3");
-  panel.innerHTML = `<header><div><small>MOTEURS · CAPTEURS · PROGRAMMES</small><h2>Le laboratoire EV3</h2></div><button data-lab-close aria-label="Fermer le laboratoire">✕</button></header>
+  panel.id = "kidx-code-lab"; panel.setAttribute("aria-label", "Blocs avancés EV3");
+  panel.innerHTML = `<header><div><small>PROGRAMMATION EV3</small><h2>Blocs avancés</h2></div><button data-lab-close aria-label="Fermer les blocs avancés">✕</button></header>
+    <p class="kx-code-intro">Règle chaque moteur, réagis aux capteurs et répète des actions avec une boucle. Pour les premiers trajets, les blocs en bas de la scène suffisent.</p>
     <div class="kx-lcd" data-lab-sensors aria-label="Écran des capteurs simulés"></div>
     <details><summary>Pilotage et son</summary><label>Puissance en pilotage <input data-lab-power type="range" min="20" max="100" value="100"> <output data-lab-power-value>100 %</output></label><button data-lab-sound aria-pressed="false">Activer le son des moteurs</button><p>Les capteurs mesurent cette scène simulée. Couleurs : 0 = tapis, 1 = noir, 2 = bleu, 3 = vert, 4 = jaune, 5 = rouge, 6 = blanc.</p></details>
     <div class="kx-code-tools"><button data-code-example>Exemple de la mission</button><button data-code-save>Enregistrer</button><button data-code-load>Ouvrir</button></div>
     <div data-code-editor></div><p class="kx-code-status" data-code-status role="status"></p>
-    <footer><button data-code-run>▶ Lancer</button><button data-code-step>Un bloc</button><button data-code-pause>Pause</button><button data-code-resume>Reprendre</button><button data-code-stop>■ Arrêter</button></footer>`;
+    <footer><button data-code-run>▶ Lancer</button><button data-code-step>Un bloc</button><button data-code-pause>Pause</button><button data-code-resume>Reprendre</button><button data-code-stop disabled title="Arrêt immédiat. Les blocs sont conservés.">■ Arrêter ce programme</button></footer>`;
   root.append(panel);
   panel.addEventListener("change", event => { if (event.target instanceof Element && event.target.closest("[data-code-editor]")) prepared = true; });
   const message = panel.querySelector<HTMLElement>("[data-code-status]")!;
@@ -125,6 +129,7 @@ export function mountKidxCodeLab(root: HTMLElement, options: Options) {
       if (state.running && state.paused !== worldPaused) { worldPaused = state.paused; options.pauseWorld(worldPaused); }
       if (renderedRunning !== state.running) {
         renderedRunning = state.running;
+        panel.querySelector<HTMLButtonElement>("[data-code-stop]")!.disabled = !state.running;
         editor.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>("input,button,select").forEach(control => { control.disabled = state.running || (control.getAttribute("aria-label") === "Monter le bloc" && control.parentElement?.parentElement?.dataset.codePath?.split(".").at(-1) === "0"); });
         for (const selector of ["[data-code-example]", "[data-code-load]"]) panel.querySelector<HTMLButtonElement>(selector)!.disabled = state.running;
       }

@@ -11,7 +11,7 @@ are French; the source PDFs keep their original text and illustrations.
 | Missions | Eleven exercises: the five original routes plus reverse parking, pushing cargo, distance-triggered retreat, a physical ramp, color detection and contact-triggered retreat. The cargo is the delivery subject; sensor return routes require an outbound checkpoint. Completed missions are saved locally. |
 | Notices LEGO | 138 indexed PDFs, including the owner's original kit references and the 120 distinct PDF links found in the official Education catalog. Covers, search, family/type filters, PDF canvas, previous/next page, direct page entry, zoom and saved reading position. |
 | Construire en 3D | TRACK3R: 28 stages/170 parts. SPIK3R: 56 stages/349 parts. Individual CAD pieces animate toward translucent destinations, with pause, slow replay and part selection. Smooth separation, clear underside, saved stage, French Nestor requests, shared build rooms and model-related challenges. |
-| Laboratoire + | Regulated left/right motor speed, duration, wait, repeat, conditionals and drive-until-sensor blocks; nested editor, save/open, active block, physical pause/step and live EV3 sensor readout. Optional locally synthesized motor sound. |
+| Blocs avancés | Regulated left/right motor speed, duration, wait, repeat, conditionals and drive-until-sensor blocks; nested editor, save/open, active block, physical pause/step and live EV3 sensor readout. Optional locally synthesized motor sound. |
 | Comprendre en 3D | A 12-second native CAD demonstration of 8:24 gears, opposing rotation, a 3:1 speed ratio, pause, slow motion, reverse and replay. |
 
 The movement exercises are adaptations of
@@ -27,7 +27,7 @@ The existing full seven-station EV3 scene remains in Browse Scenes.
 All eleven missions open with a French Nestor guide. It explains the next action and
 outlines its actual button in gold. Simple missions count the child's blocks and follow
 the suggested sequence; choosing a different program keeps that program intact and offers
-an experiment. Advanced missions lead into **Laboratoire +**, then **Exemple de la mission**
+an experiment. Advanced missions lead into **Blocs avancés**, then **Exemple de la mission**
 and **Lancer**. The instruction continues inside the laboratory.
 
 **Repères du défi** explains each scene's colored zones, required checkpoints, robot-relative
@@ -36,6 +36,15 @@ The guide collapses when execution starts; **Comment jouer** reopens it, with ad
 on the real attempt or verdict. Closing the guide returns keyboard focus to that button.
 Manual driving explains holding and releasing the controls. Compact layouts keep the help
 scrollable and the movement controls reachable.
+
+**Blocs avancés** describes its contents directly on the entry button: motors, sensors and
+loops. **Arrêter le robot** is an immediate brake that preserves both editors' blocks; it
+is disabled with **Déjà à l’arrêt** before any command or after stopping. It stays available
+for a running or paused program and after releasing a manual direction, when the chassis
+can still coast. A fresh direction resumes manual driving after braking. The separate
+**Stop** block only queues an instruction in the simple program; **Repères du défi** explains
+the distinction. Inside the advanced editor, **Arrêter ce programme** cancels its execution.
+Entering **Piloter** brakes residual program momentum before handing control to the child.
 
 The simulator has a wheeled teaching chassis built from detailed LDraw EV3 parts; see
 [KIDX_VISUALS.md](KIDX_VISUALS.md). The construction views use separate source assemblies
