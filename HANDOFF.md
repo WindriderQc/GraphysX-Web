@@ -13,19 +13,23 @@ Read `PRODUCT_SPEC.md` §8.1 (the honest status table) for what ships versus wha
 as the v1 target. Read `CLAUDE.md` for the short list of rules that exist because breaking them
 cost real sessions real hours.
 
-## Fresh-session entry point (2026-09-10 closeout)
+## Fresh-session entry point (2026-09-11 ugKid / USB continuation)
 
 Read [the KidX continuation handoff](docs/KIDX_NEXT_SESSION.md) before editing. The isolated
 `codex/kidx-integration` branch now combines maintenance `9d5d727`, driving corrections
 `e77158b`, EV3 workbench `fa9e6d0`, and both tasks' documentation closeouts. The workbench
 heading group carries the model and direction marker; the complete held-pointer lifecycle
-correction is retained. Typecheck, lint and 300 unit tests pass; combined browser/full-gate
-and physical acceptance are still pending. This does not change production.
+correction is retained. The integration task's single full gate passed 58/58 without retries
+on `0561dcd`, including 300 unit passes and one existing skip. This worktree branches from
+that build as `codex/kidx-ugkid-acceptance`; its new USB tooling has separate targeted tests
+and 303 Node unit passes (one skip). This does not change production.
 
-The prior rover task stopped its acceptance server and reverse SSH tunnel on 4175. Evidence
-and browser-local saved programs are retained. The canonical checkout, its dirty `.gitignore`
-and foreign servers remain untouched. Rediscover processes before preparing the combined build
-at the same Firefox origin. The continuation handoff records the remaining physical tests.
+The frozen `0561dcd` site is served on loopback 4175 through the restored reverse SSH tunnel.
+Firefox's profile and saved `forward` program are retained. The owner confirms the controls;
+name copies, list overflow and Escape still lack individual physical receipts. Read
+[ugKid acceptance](docs/KIDX_UGKID_ACCEPTANCE.md) for exact coverage and live-access receipts,
+and [the USB adapter guide](docs/KIDX_EV3_USB.md) before any motor execution. The canonical
+dirty `.gitignore` and foreign work remain untouched; rediscover listener owners before acting.
 
 ## Reliability follow-up (2026-09-10)
 
@@ -131,14 +135,18 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    Firefox receipts show canceled context menus and reset to idle. Programs save/reload/open
    and replay to blue are also physically confirmed. One final full gate passed all 58 checks
    without retries on that revision. The integrated workbench uses the scene heading group
-   for its EV3 model and retains the complete held-pointer lifecycle correction. It needs its
-   own combined gate and actual-PC acceptance, including remaining block routes, Programs
-   scrolling and keyboard focus, before EV3. Do not restart broad touchscreen diagnosis. Continue from
-   [the diagnostic and acceptance guide](docs/LINUX_MINT_TOUCH.md). The existing
+   for its EV3 model and retains the complete held-pointer lifecycle correction. Its own
+   combined gate now passes 58/58 on `0561dcd`; the owner confirms controls and Tab/Shift+Tab
+   have receipts. Name copies, list overflow and Escape remain individually unrecorded.
+   Do not restart broad touchscreen diagnosis. Continue from
+   [current ugKid acceptance](docs/KIDX_UGKID_ACCEPTANCE.md). The existing
    800×480 browser measurements remain compact-layout evidence, not hardware qualification.
-2. **Finish Phase 6 on real EV3 hardware.** All four blocks now work in simulation; add the narrow
-   adapter that sends that same compiled input sequence to EV3; do not invent a second program
-   model for the robot. Establish firmware, connection, motor ports and polarity with the owner first.
+2. **Finish Phase 6 on real EV3 hardware.** LEGO V1.09H is identified over USB, with large motors
+   on B/C. The owner observed the stop of one bounded B pulse; both motors remain unmounted,
+   and direction is explicitly deferred to software polarity. The narrow CLI USB adapter now
+   consumes timed inputs collected from the existing runner. Read-only identity and compiled
+   preview pass; compiled physical execution, chassis timing and transport-loss stop remain
+   unqualified. Continue from [the USB adapter guide](docs/KIDX_EV3_USB.md).
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`
    remains one `if` in `main.ts`. Generalize it when a *second* application asks for it, not before.
 

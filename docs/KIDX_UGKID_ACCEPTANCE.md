@@ -100,7 +100,9 @@ string). This confirms the LEGO Home firmware version. No firmware change was ma
 Proposed wiring is **B = left drive motor, C = right drive motor**, viewed in the robot's
 forward direction. A read-only `INPUT_DEVICE GET_TYPEMODE` query now detects large motors
 (type 7) on B and C, with A/D empty (type 126). The left/right physical association and
-polarity remain unconfirmed. A/B/C/D are motor outputs, while 1/2/3/4 are sensor inputs. Instruction
+polarity remain unconfirmed. The owner clarified that both motors are separate from the
+chassis and explicitly deferred mounting direction; software inversion will be selected later.
+A/B/C/D are motor outputs, while 1/2/3/4 are sensor inputs. Instruction
 diagrams are reference material, not evidence of this particular robot's wiring.
 
 The discovered `/dev/hidraw3` is owned by root with mode 0600. The version-only Python
@@ -116,8 +118,9 @@ persistent udev rule was installed. Rediscover device identity after reconnectio
 After the owner confirmed readiness, one B-only direction pulse at +20% power for 250 ms
 was sent using the brick-timed `OUTPUT_TIME_POWER` operation with braking. The serial-bound
 helper verified the opened EV3 USB handle before writing. The brick acknowledged the command;
-the receipt is `output/ev3-usb/direction-b.json`. Owner observation of the moving side,
-direction and actual stop is pending: an acknowledgment alone does not qualify those facts.
+the receipt is `output/ev3-usb/direction-b.json`. The owner observed its stop, but could not
+assign a direction with the motors unmounted. This confirms the observed single-pulse stop;
+it does not measure stop time or qualify a transport-loss stop.
 No C pulse or compiled-program execution has been sent. The fixed pulse helper is
 `output/ev3-usb/check_direction.py`, copied to `/tmp/kidx-check-direction.py` on ugKid.
 
@@ -128,13 +131,17 @@ it. See the [LEGO developer kits](https://education.lego.com/en-us/product-resou
 [ev3dev boot model](https://www.ev3dev.org/). Motor-side association,
 polarity and physical execution are still unqualified.
 
-After these facts and the PC acceptance are available, choose the narrow transport and feed
-it the same `EV3_FIRST_PROGRAM_BLOCKS` inputs/durations used by
-`createEv3FirstProgramRunner`. Do not create a separate hardware program language. Simulator
-durations and its approximate quarter-turn are not physical calibration. Real execution
-must have explicit start/stop behavior and a bounded motor stop if transport is lost, with
-that bound enforced where it can still act after disconnection. Hardware measurements and
-a real fault-stop test are required before a motor qualification claim.
+The [narrow USB adapter](KIDX_EV3_USB.md) now collects the existing runner's timed steering
+inputs without changing browser code or duplicating its language. It maps that sequence to
+explicit motor polarities and brick-timed pulses capped at 250 ms / 20% power, with stop on
+completion/interruption and no automatic motion retry. Live read-only inspection and a
+compiled preview pass on ugKid. Actual compiled execution, timing/turn measurements and a
+real transport-loss stop test remain pending; simulator timing is not hardware calibration.
+
+The integration task completed its single full gate on `0561dcd`: **58/58, zero retries**.
+The exact summary is in its `output/playwright/kidx-integration/full-verify.log`. The frozen
+site on 4175 still contains those 439 files. The separate USB tooling uses targeted tests;
+no full gate was rerun here and no new UI or shared runtime change was made.
 
 Application-surface generalization remains deferred until a second application needs it.
 No push, merge into `main`, or production deployment is authorized for this task.
