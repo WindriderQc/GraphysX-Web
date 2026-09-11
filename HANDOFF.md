@@ -15,17 +15,17 @@ cost real sessions real hours.
 
 ## Fresh-session entry point (2026-09-10 closeout)
 
-Read [the KidX continuation handoff](docs/KIDX_NEXT_SESSION.md) before editing. This worktree's
-`codex/kidx-mint-rover` contains the verified driving corrections (`e77158b`). Concurrent work
-on `codex/kidx-linux-mint` now contains the distinct EV3 workbench redesign (`fa9e6d0`), which
-also orients its visual assembly through the existing steering anchor. Neither branch contains
-the other's complete change. Reconcile the design and held-control lifecycle in an isolated
-branch before claiming acceptance of their combination.
+Read [the KidX continuation handoff](docs/KIDX_NEXT_SESSION.md) before editing. The isolated
+`codex/kidx-integration` branch now combines maintenance `9d5d727`, driving corrections
+`e77158b`, EV3 workbench `fa9e6d0`, and both tasks' documentation closeouts. The workbench
+heading group carries the model and direction marker; the complete held-pointer lifecycle
+correction is retained. Typecheck, lint and 300 unit tests pass; combined browser/full-gate
+and physical acceptance are still pending. This does not change production.
 
-The owner requested session cleanup: this session's acceptance server and reverse SSH tunnel
-on 4175 are now stopped. Evidence and browser-local saved programs are retained. The unrelated
-Vite server on 4176 and the original checkout's dirty `.gitignore` belong to other work and were
-left intact. The continuation handoff records restart details and the remaining physical tests.
+The prior rover task stopped its acceptance server and reverse SSH tunnel on 4175. Evidence
+and browser-local saved programs are retained. The canonical checkout, its dirty `.gitignore`
+and foreign servers remain untouched. Rediscover processes before preparing the combined build
+at the same Firefox origin. The continuation handoff records the remaining physical tests.
 
 ## Reliability follow-up (2026-09-10)
 
@@ -113,10 +113,7 @@ smoke passed, and an independent live smoke found zero bad responses, console er
 
 **Next, in the order that adds the most:**
 
-1. **Finish Phase 6 on real EV3 hardware.** All four blocks now work in simulation; add the narrow
-   adapter that sends that same compiled input sequence to EV3; do not invent a second program
-   model for the robot.
-2. **Phase 7, Linux Mint touchscreen PC validation.** The owner replaced the Raspberry Pi
+1. **Phase 7, Linux Mint touchscreen PC validation.** The owner replaced the Raspberry Pi
    target with a freshly installed Linux Mint PC on 2026-09-10. SSH key access to ugKid is
    verified. Mint 22.3 Cinnamon/X11 uses the LG Display USB touchscreen on a Dell ST2220T
    optical monitor. An approved one-time boot into installed kernel 6.14.0-37 initially showed
@@ -139,6 +136,9 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    scrolling and keyboard focus, before EV3. Do not restart broad touchscreen diagnosis. Continue from
    [the diagnostic and acceptance guide](docs/LINUX_MINT_TOUCH.md). The existing
    800×480 browser measurements remain compact-layout evidence, not hardware qualification.
+2. **Finish Phase 6 on real EV3 hardware.** All four blocks now work in simulation; add the narrow
+   adapter that sends that same compiled input sequence to EV3; do not invent a second program
+   model for the robot. Establish firmware, connection, motor ports and polarity with the owner first.
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`
    remains one `if` in `main.ts`. Generalize it when a *second* application asks for it, not before.
 

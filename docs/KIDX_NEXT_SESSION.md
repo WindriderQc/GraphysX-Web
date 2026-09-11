@@ -1,5 +1,14 @@
 # KidX continuation after session cleanup
 
+## Current integration status
+
+`codex/kidx-integration` now contains all branches listed below, including maintenance
+`9d5d727` and the LEGO reference index `a2bd99b`. Code integration is complete; typecheck,
+lint and 300 unit tests pass. Combined browser/full-gate and actual-PC validation are pending.
+The branch inventory and cleanup receipts below describe the earlier rover closeout; do not
+repeat the merge or treat its `e77158b` gate as the integrated build's receipt. See current
+`HANDOFF.md` and the latest integration entry in `progress.md` for subsequent results.
+
 ## Branches and evidence
 
 - `codex/kidx-mint-rover`: code commit `e77158b`, in
