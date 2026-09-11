@@ -10,8 +10,9 @@ export async function runKidxInteractive({ part = "all" } = {}) {
   assert.ok(["all", "program", "drive", "construction"].includes(part), `Unknown interactive part: ${part}`);
   const ART = process.env.SMOKE_ARTIFACTS || "output/verify";
   mkdirSync(ART, { recursive: true });
-  let browser, server;
+  let browser, secondBrowser, server;
   const errors = [];
+  const tracedContexts = [];
   try {
     if (!process.env.SMOKE_BASE) {
       const documents = await createKidxDocumentRoute(), teams = createKidxTeamRoute();
@@ -82,8 +83,15 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       console.log("  ok sound, low-power keyboard reverse, release and compact controls");
     }
     if (part === "all" || part === "construction") {
+      // A cold second WebGL client can still be loading CAD after its HTML controls
+      // appear. Use the same asset readiness contract as the construction-guide smoke.
+      const constructionReady = target => target.waitForFunction(() => {
+        const models = window.__GRAPHYSX__?.state().entities.filter(entity => entity.tags.includes("kidx-build"));
+        return models?.length && models.every(entity => entity.asset?.status === "ready");
+      });
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.goto(`${base}/?app=ev3-lab&view=build&model=track3r`, { waitUntil: "domcontentloaded" });
+      await constructionReady(page);
       await page.locator("[data-build-replay]").click();
       await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["kidx-demo-piece-0", "kidx-demo-destination"] }).every(e => e.asset?.status === "ready"));
       await page.evaluate(() => window.advanceTime(400));
@@ -109,10 +117,19 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       await page.locator("[data-team-create]").click();
       await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.construction.duo.session?.code);
       const code = (await state()).construction.duo.session.code;
-      const secondContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+      // Two screens use independent renderers. Separate Chromium processes keep their
+      // software WebGL queues independent too, instead of sharing one GPU process.
+      secondBrowser = await launchSmokeBrowser();
+      const secondContext = await secondBrowser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+      await secondContext.tracing.start({ screenshots: true, snapshots: true, sources: true });
+      tracedContexts.push(secondContext);
       const second = applySmokeTimeout(await secondContext.newPage());
       second.on("pageerror", e => errors.push(String(e))); second.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
+      second.on("requestfailed", request => console.error("Construction request failed:", request.url(), request.failure()));
       await second.goto(`${base}/?app=ev3-lab&view=build&model=track3r`, { waitUntil: "domcontentloaded" });
+      await constructionReady(second);
+      await second.screenshot({ path: path.join(ART, "kidx-duo-ready-390.png") });
+      console.log("  ok second browser's cold CAD scene is loaded and rendered");
       await second.locator("[data-build-team] > summary").click();
       await second.locator("summary").filter({ hasText: "Partager avec un autre écran" }).click();
       await second.locator("[data-team-code]").fill(code); await second.locator("[data-team-join]").click();
@@ -123,7 +140,10 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.build.step === 4);
       await second.screenshot({ path: path.join(ART, "kidx-duo-390.png") });
       assert.deepEqual((await state()).construction.duo.names, ["Alex", "Sam"]);
+      await secondContext.tracing.stop({ path: path.join(ART, "kidx-duo-trace.zip") });
+      tracedContexts.pop();
       await secondContext.close();
+      await secondBrowser.close(); secondBrowser = null;
       console.log("  ok two independent browsers synchronize the build and preparation handoff");
       await page.locator("[data-build-back]").click(); await page.locator("[data-kidx-missions]").click();
       await page.locator("[data-kidx-mechanism]").click();
@@ -141,7 +161,13 @@ export async function runKidxInteractive({ part = "all" } = {}) {
     }
     assert.deepEqual(errors, []);
     console.log("KidX interactive scenario passed; no browser errors.");
-  } finally { if (browser) await browser.close(); if (server) await server.close(); }
+  } catch (error) {
+    console.error("KidX interactive browser errors:", errors);
+    for (const context of tracedContexts) {
+      await context.tracing.stop({ path: path.join(ART, "kidx-duo-trace.zip") }).catch(traceError => console.error(traceError));
+    }
+    throw error;
+  } finally { if (secondBrowser) await secondBrowser.close(); if (browser) await browser.close(); if (server) await server.close(); }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

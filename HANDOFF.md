@@ -33,6 +33,23 @@ viewport and physical scenario. The original combined script commands still run 
 complete journeys. This test-only correction requires a new complete hosted gate before
 activation; the failed run is not a production receipt.
 
+The split-scenario run `34625236174` then passed 74/75 checks, with every deadline
+respected. Its only failure was the second construction browser's first control click
+during a cold start; the smoke had only awaited DOM content. The construction smoke now awaits
+the same model-asset readiness contract as the guide smoke and captures the second
+client's rendered startup before clicking. The targeted two-browser journey and all
+338 local Node tests pass (one Windows skip). CI now follows the affected-check policy
+in `CLAUDE.md` and `docs/CI_PERFORMANCE.md`, integrated by PR #18; its main comparison
+still includes all changes since the last successful production deployment.
+
+Readiness alone did not resolve hosted run `34639310664`: it timed out waiting
+for the second client's models. The construction smoke now launches two Chromium
+processes, matching two screens without sharing a software WebGL GPU queue. A local
+software-rendered comparison reduced the second client's asset wait from 78.7s to
+3.4s; the complete isolated journey passed in 1m43s with all assertions intact.
+The second client's trace is retained as `kidx-duo-trace.zip` on success or failure.
+Publication still requires the hosted result; this local comparison is not deployment proof.
+
 ## Fresh-session entry point (2026-09-11 ugKid / USB continuation)
 
 Read [the KidX continuation handoff](docs/KIDX_NEXT_SESSION.md) before editing. The isolated
