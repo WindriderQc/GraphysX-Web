@@ -354,11 +354,15 @@ try {
     return app?.program?.running === false && app?.mission?.phase === "running";
   }, { timeout: 5_000 });
   const stoppedShort = await page.evaluate(() => JSON.parse(window.render_game_to_text()).application);
-  check("Nestor explains a program that ends before the scene reports success",
+  check("Nestor explains a stationary program using the measured attempt",
     stoppedShort?.mission?.phase === "running"
       && stoppedShort?.program?.running === false
-      && stoppedShort?.nestor?.includes("arrêté avant l’arrivée")
-      && stoppedShort?.nestor?.includes("Avancer"), stoppedShort);
+      && stoppedShort?.nestor?.includes("resté au départ")
+      && stoppedShort?.nestor?.includes("Arrêt")
+      && stoppedShort?.debrief?.outcome === "finished"
+      && stoppedShort?.debrief?.segments?.length === 1
+      && stoppedShort?.debrief?.segments[0].distance < .01
+      && stoppedShort?.debrief?.segments[0].completed === true, stoppedShort);
   await page.locator("[data-ev3-undo]").click();
   await page.evaluate(() => {
     const forward = document.querySelector("[data-ev3-block='forward']");

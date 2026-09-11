@@ -75,6 +75,23 @@ follow-up: `output/kidx/verify-wording.log`. All fourteen source/test fingerprin
 `output/kidx/wording-source-hashes.json`; the named-program smoke passed in 8m54s with its
 unchanged ten-minute deadline. The validated build is served by the local preview on 4177.
 
+The six simple movement missions now offer `Comprendre mon trajet` after a program attempt.
+`kidx-mission-trace.ts` records measured per-block positions, travel, heading changes and red
+events; `kidx-mission-debrief.ts` presents a read-only top-down diagram, the real collision
+footprint, block selection/scrubbing and three optional French coaching hints. Unexecuted
+blocks have no invented path. Reports retain the last attempt through edits and clear on
+new attempts, resets or manual driving; disposal removes the dialog. Advanced sensor/cargo
+programs are outside this report's coverage. The dedicated browser journey and unit tests
+cover these boundaries. Validation comprises 63 passing checks in `output/kidx/verify-debrief.log`
+plus the corrected library smoke in `output/kidx/debrief-library-accepted.log`, on the same
+product build. The full-run failure was an unscoped dialog test; the follow-up preserves all
+assertions and passes in 9m40s of its unchanged ten-minute deadline (97%, limited headroom).
+This is combined coverage of all 64 checks, not a single green full-gate receipt. The unit
+suite has 315 passes and one intentional Windows skip. Final fingerprints:
+`output/kidx/debrief-accepted-source-hashes.json`. The reviewed build is served locally on
+4177. See `progress.md` for diagnostic history and `docs/KIDX_FAMILY_TRYOUT.md` for the owner's
+proposed ten-minute child test; child and hardware acceptance remain pending.
+
 ## KidX program library (current source, 2026-09-10)
 
 KidX now wraps this strip in a French workshop: eleven movement exercises, 138 indexed

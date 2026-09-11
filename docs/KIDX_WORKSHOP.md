@@ -46,6 +46,28 @@ can still coast. A fresh direction resumes manual driving after braking. The sep
 the distinction. Inside the advanced editor, **Arrêter ce programme** cancels its execution.
 Entering **Piloter** brakes residual program momentum before handing control to the child.
 
+## Understanding an attempt
+
+The six simple movement missions offer **Comprendre mon trajet** after a simple program
+finishes, reaches the goal or is stopped. Its top-down drawing records the actual rover
+positions and headings from the shared physics/control loop. Select a numbered block to
+highlight its measured path and scrub from its start to its observed end. Distances use the
+same scale as the EV3 readout. The body outline uses the mission's collision footprint, so
+touching the edge of blue or red remains visible even when the robot's center is outside it.
+Turn-only and interrupted instructions retain their observed
+rotation; unexecuted instructions are marked **Pas encore joué**.
+
+The report is read-only: browsing, scrubbing and requesting hints do not steer the robot,
+spend mission time or change the program. Three optional Nestor hints move from a question
+to an observation and an experiment. They use the actual outcome, observed red-zone events
+and the recorded movement; success always comes from the mission rules.
+
+Editing preserves the last attempt and its original blocks. Starting another program,
+resetting, opening a saved program or switching to manual driving clears the old report;
+leaving the mission disposes it. The report is session-only. Advanced sensor/cargo programs
+are outside its current coverage. See [KIDX_FAMILY_TRYOUT.md](KIDX_FAMILY_TRYOUT.md) for the
+short family test proposed to the owner; it is not evidence of completed child testing.
+
 ## French labels for children
 
 Use a concrete verb and name the affected object when context does not make it obvious.
@@ -186,6 +208,10 @@ EV3 lab and named-program smokes retain their behavior assertions with French co
 `npm run smoke:kidx-missions` covers real movement solutions/checkpoints.
 `npm run smoke:kidx-guidance` covers arrival, reading time, actual block edits and attempts,
 retry/verdict, drive and laboratory guidance, and reachable controls at 320/390/800 pixels.
+`npm run smoke:kidx-debrief` covers measured block paths, short/turned/interrupted/successful
+attempts, unused instructions, progressive hints, read-only scrubbing, 320/390/800/1280px
+layouts, focus restoration and reset/disposal. `test/kidx-mission-trace.test.mjs` covers
+recording boundaries, bounded drawing samples, immutable reports and evidence-based coaching.
 The mission and challenge smokes also verify the first guided action for all eleven missions.
 `npm run smoke:kidx-workshop` covers PDF rendering,
 navigation/zoom/persistence, both complete CAD models, step reversal/highlighting, assembly
@@ -196,12 +222,19 @@ test uses a clearly self-authored two-page fixture, not counterfeit LEGO instruc
 stationary stops, cargo/ramp behavior, resets and achievements. `npm run smoke:kidx-interactive`
 verifies nested programs, real step/pause, low-power keyboard reverse, LCD/sound, individual
 CAD insertion, Nestor requests, two-browser handoffs and the 3:1 gear demonstration.
-The final `npm run verify -- --wait` passed all 63 checks (310 unit passes, one intentional
-Windows skip), including the complete guidance journey and all eleven initial mission targets.
-Latest receipt: `output/kidx/verify-wording.log`. The French vocabulary review also exercised
-real program completion, pause/continue, construction separation and PDF return destinations.
-Screenshots from the final source were inspected at desktop and 320/390px portrait sizes;
-the focused wording captures are in `output/kidx/wording-review`.
+The debrief validation covers all 64 checks across the full run and a corrected library
+follow-up. `output/kidx/verify-debrief.log` records 63 passes, including 315 unit passes and
+one intentional Windows skip; its sole failure was a library test that assumed only one
+dialog existed. The corrected test targets the library explicitly and passed separately on
+the same product build: `output/kidx/debrief-library-accepted.log`. Its 9m40s runtime uses 97%
+of the unchanged ten-minute deadline, so timing headroom remains limited. The full-run log
+retains its failure; it is not a single green-gate receipt.
+
+Ten final source/test/config fingerprints match `output/kidx/debrief-accepted-source-hashes.json`.
+The debrief passed measured-path, stationary, turn, interruption and success scenarios, with
+inspected captures at desktop and 320/390/800px sizes. Final focused captures are in
+`output/kidx/debrief-stop-final`; the full-run debrief and corrected library captures were
+also inspected. The required game-client capture/state is in `output/kidx/debrief-client-accepted`.
 
 Inspect screenshots in the configured `SMOKE_ARTIFACTS` directory. Follow the machine-wide
 verification lock in `CLAUDE.md`; an isolated preview does not establish deployment or
