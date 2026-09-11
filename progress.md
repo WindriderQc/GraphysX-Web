@@ -4422,3 +4422,16 @@ or blocks the release.
 - Refreshed origin/main and public release.json: both identify bc35848a9bb8b4727d1eea6f24e8456dafa6514b, with the last deployment successful. The prepared branch is its descendant and includes the reconciled workbench/tactile corrections, named programs, maintenance, mat-only fix, USB CLI and acceptance evidence.
 - Use the existing main-triggered deployment workflow: its hosted full gate precedes activation, followed by an exact revision-manifest check and production browser canary. Do not bypass the workflow or run a duplicate local full matrix. Previous local evidence remains scoped to its tested source; current deployment truth is GitHub Actions plus the public release.json.
 - Cleanup is limited to this task's owned preview/tunnel, transient helpers and integrated worktree artifacts, after preserving useful receipts and proving publication. Preserve the active Atelier worktree, its edits/PDFs, the existing Firefox profile and saved forward program. No robot movement is needed for publication or cleanup.
+
+## 2026-09-11 — Repair the production install gate
+
+The authorized release push `1bb1f29` reached main, but Deploy run `34556286417`
+stopped at dependency installation: npm 10.9.8 required the missing optional peer
+`@emnapi/runtime@1.11.3` in package-lock.json. The full matrix and deployment did not
+start; production remained on `bc35848`.
+
+Regenerated only lock metadata with npm 10.9.8, matching CI. No existing package
+version changed. A clean `npm@10.9.8 ci --no-audit --no-fund` now succeeds locally;
+the installed tree passes 303 Node tests with one existing skip. Publication uses
+the hosted full gate on the corrected commit, with no duplicate local full matrix.
+The active French Atelier and its dependency changes remain excluded.
