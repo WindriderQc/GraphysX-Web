@@ -1,9 +1,13 @@
 # KidX on the Linux Mint touchscreen PC
 
 The owner's Linux Mint PC replaces the planned Raspberry Pi target. The PC runs the browser
-and, once selected and implemented, the local EV3 transport. First Drive still uses its existing
-four blocks and steering runner. Touch input has now been exercised on the real PC; complete
-KidX acceptance and EV3 hardware qualification remain open.
+and the local EV3 USB transport. First Drive still uses its existing four blocks and steering
+runner. The owner confirms controls plus Programs name/copy, touch scrolling and Escape/focus.
+The CLI adapter has run all four blocks on the real unmounted B/C motors and demonstrated
+stopping after controller-process loss. Chassis direction/calibration and physical USB removal
+remain unqualified. Read [current ugKid acceptance](KIDX_UGKID_ACCEPTANCE.md) and
+[the USB guide](KIDX_EV3_USB.md); the dated diagnosis and historical states below are retained
+as evidence, not instructions to restart the touchscreen investigation.
 
 ## Live touch diagnosis (2026-09-10, resumed session)
 

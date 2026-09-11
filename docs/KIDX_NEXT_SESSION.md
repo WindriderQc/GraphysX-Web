@@ -3,8 +3,13 @@
 ## Current integration status
 
 `codex/kidx-integration` now contains all branches listed below, including maintenance
-`9d5d727` and the LEGO reference index `a2bd99b`. Code integration is complete; typecheck,
-lint and 300 unit tests pass. Combined browser/full-gate and actual-PC validation are pending.
+`9d5d727` and the LEGO reference index `a2bd99b`. Its full gate passed 58/58 without retries
+on `0561dcd`; the later mat-only fix has separate targeted checks. The current continuation
+is `codex/kidx-ugkid-acceptance`, which includes that fix and the bounded CLI USB adapter.
+The owner confirms controls and the remaining Programs copy/scroll/Escape checklist. Real
+EV3 USB runs cover all four blocks and stopping after controller-process loss on unmounted
+motors. Read [current acceptance](KIDX_UGKID_ACCEPTANCE.md) and [USB status](KIDX_EV3_USB.md)
+for the exact evidence and remaining chassis qualification; do not repeat completed tests.
 The branch inventory and cleanup receipts below describe the earlier rover closeout; do not
 repeat the merge or treat its `e77158b` gate as the integrated build's receipt. See current
 `HANDOFF.md` and the latest integration entry in `progress.md` for subsequent results.

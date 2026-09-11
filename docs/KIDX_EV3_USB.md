@@ -4,8 +4,10 @@ Local development only. The connected brick is a LEGO EV3 running **V1.09H**, se
 `00165362f404`, with large motors on **B/C**. Both motors are separate from the chassis.
 The owner explicitly deferred mounting direction; polarity remains configurable, not
 qualified. One supervised B-only +20% / 250 ms pulse was acknowledged and the owner
-observed its stop. The first compiled **Forward -> Stop** run now also passes: both motors
-turned and stopped, confirmed by the owner. Direction, turning and fault-stop remain unqualified.
+observed its stop. Compiled **Forward -> Stop** and **Left -> Right -> Stop** now run on both
+motors, with motion, inversion and stopping confirmed by the owner. A deliberate controller
+process exit while the motors were busy also ended with their observed autonomous stop.
+Chassis direction, turn angles and measured stopping latency remain unqualified.
 
 ## Shared program and narrow transport
 
@@ -31,7 +33,8 @@ Abrupt process loss or USB removal leaves only the current timed chunk on the br
 This bounds commanded duration, **not measured physical stopping time**. Acknowledgments
 and busy flags cannot prove a route or mechanical stop. Brake/USB gaps make elapsed time
 longer than the nominal compiled duration and may make motion uneven. Chassis direction,
-timing, turn angle and a real unplug/host-loss stop test remain unqualified.
+timing, turn angle, USB unplug and full host-power-loss behavior remain unqualified. The
+controller-process-loss case below has been exercised on the connected brick.
 
 ## Commands
 
@@ -94,18 +97,25 @@ owner confirmed both motors turned and stopped. `forward-stop-run.jsonl` retains
 receipt. This is the first real shared-sequence execution; it does not qualify a chassis
 route, physical turn angle, or stopping after controller/USB loss.
 
-Prepared next, not executed: `compiled-left-right-stop.json` and a controller-loss probe
-at `output/ev3-usb/fault_stop.py`, copied to `/tmp/kidx-fault-stop.py`. The probe defaults to
-preview. With `--execute`, it runs the real adapter, confirms the first timed pulse is busy,
-then calls `os._exit(99)` so no final Stop can be sent. Exit 99 plus
-`controllerExitWhileBusy` establishes the intended fault; if busy is already false it aborts
-normally instead. Read-only motor state and owner-observed stopping must follow separately.
-This tests process loss, not physical USB unplug or exact stopping latency.
+The owner then authorized both remaining bench tests and confirmed inversion and both stops:
+
+- `compiled-left-right-stop.json`: B=-20/C=+20 for 550 ms, then the opposite powers for
+  550 ms, then 450 ms Stop; each movement remains split into chunks <=250 ms. All commands
+  and final braking were acknowledged. Receipt: `left-right-stop-run.jsonl`.
+- Controller loss: `output/ev3-usb/fault_stop.py`, copied to `/tmp/kidx-fault-stop.py`, ran
+  the real adapter, confirmed the first 250 ms pulse was busy, and called `os._exit(99)`.
+  No final Stop was sent. `controllerExitWhileBusy` and exit 99 establish the intended fault;
+  subsequent read-only inspection returned busy=false, and the owner saw the short impulse
+  stop by itself. Receipts: `fault-stop-run.jsonl`, `fault-stop-exit.txt`, `fault-stop-after.json`.
+
+The fault helper still defaults to a no-device preview; execution always requires its
+explicit `--execute` flag. This tests actual controller-process loss on unmounted motors,
+not physical USB unplug, whole-PC power loss or exact mechanical stopping latency.
 
 The integration task's single full gate passed **58/58 with zero retries on `0561dcd`**.
 It covers the frozen browser build on 4175. This tooling-only adapter has separate targeted
 tests; no browser source, bundle, BallZ aiming or workbench steering changed here.
-Remaining Programs name/copy/overflow/Escape coverage is recorded in
+Owner-confirmed Programs name/copy/overflow/Escape coverage is recorded in
 [ugKid acceptance](KIDX_UGKID_ACCEPTANCE.md).
 
 ## Protocol references

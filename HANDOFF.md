@@ -30,8 +30,9 @@ targeted checks and inspected captures apply to the identical browser source now
 branch. The full-gate receipt and the unchanged site on 4175 remain scoped to `0561dcd`.
 
 The frozen `0561dcd` site is served on loopback 4175 through the restored reverse SSH tunnel.
-Firefox's profile and saved `forward` program are retained. The owner confirms the controls;
-name copies, list overflow and Escape still lack individual physical receipts. Read
+Firefox's profile and saved `forward` program are retained. The owner confirms the controls
+and explicitly confirms name copies/original preservation, list overflow scrolling and
+Escape/focus restoration. Read
 [ugKid acceptance](docs/KIDX_UGKID_ACCEPTANCE.md) for exact coverage and live-access receipts,
 and [the USB adapter guide](docs/KIDX_EV3_USB.md) before any motor execution. The canonical
 dirty `.gitignore` and foreign work remain untouched; rediscover listener owners before acting.
@@ -142,7 +143,8 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    without retries on that revision. The integrated workbench uses the scene heading group
    for its EV3 model and retains the complete held-pointer lifecycle correction. Its own
    combined gate now passes 58/58 on `0561dcd`; the owner confirms controls and Tab/Shift+Tab
-   have receipts. Name copies, list overflow and Escape remain individually unrecorded.
+   have receipts. The owner subsequently confirms name copying with original preservation,
+   list overflow scrolling and Escape/focus restoration, completing the remaining checklist.
    Do not restart broad touchscreen diagnosis. Continue from
    [current ugKid acceptance](docs/KIDX_UGKID_ACCEPTANCE.md). The existing
    800×480 browser measurements remain compact-layout evidence, not hardware qualification.
@@ -151,7 +153,10 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    and direction is explicitly deferred to software polarity. The narrow CLI USB adapter now
    consumes timed inputs collected from the existing runner. Read-only identity and compiled
    preview pass. The first compiled Forward -> Stop run is physically confirmed: both motors
-   turned and stopped. Left/Right, chassis timing and transport-loss stop remain unqualified.
+   turned and stopped. Left/Right inversion and stopping are also owner-confirmed. A real
+   controller-process exit during a busy timed pulse ended with observed autonomous stopping
+   and a read-only idle reply. Chassis direction/calibration, physical USB unplug, whole-host
+   power loss and exact stopping latency remain unqualified; do not repeat the bench checks.
    Continue from [the USB adapter guide](docs/KIDX_EV3_USB.md).
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`
    remains one `if` in `main.ts`. Generalize it when a *second* application asks for it, not before.

@@ -49,7 +49,7 @@ Physical input receipts remain in the running server's
 The observer is passive; a remote page opening or screenshot is not a physical-input pass.
 Filter by Firefox session start and correlate owner feedback with input/state transitions.
 
-## Remaining physical checklist
+## Physical acceptance
 
 Drive holds, visible turns, release outside a control, Go success/retry and the saved
 `forward` program's reload/replay were accepted on `e77158b`. Keep those receipts scoped
@@ -59,9 +59,15 @@ to that version; do not repeat broad touch diagnosis or calibrate without new ev
 | --- | --- | --- |
 | Left route, Undo and Stop | Add Left, Forward, Stop. Undo removes only the last block. Restore Stop and Run: left turn, forward motion, then a stopped, editable program. | Owner confirms controls; Undo/Stop have receipts, Left has no individual run receipt. |
 | Right route | Undo all three blocks; add Right, Forward, Stop and Run. Check the opposite route and final stop. | Owner confirms controls; Right/Stop exercised in another sequence, detailed below. |
-| Name editing and copies | Open the existing `forward` program through Programs. Select/edit the name with the mini-keyboard; save a distinct copy. Confirm the original `forward` entry remains. Repeat with distinct names. | Pending. |
-| Programs scrolling | Make enough named copies for the real dialog to overflow; swipe up and down inside the list, then open a visible entry. Do not seed storage or emulate a swipe and call it hardware acceptance. | Pending. |
-| Keyboard focus | In Programs, Tab and Shift+Tab cycle through visible enabled controls, including both ends. Escape closes the dialog and restores focus to Programs; reopen and edit again. | Tab/Shift+Tab and reverse focus wrap observed; Close restores outside focus. Escape not recorded. |
+| Name editing and copies | Open the existing `forward` program through Programs. Select/edit the name with the mini-keyboard; save a distinct copy. Confirm the original `forward` entry remains. Repeat with distinct names. | Owner explicitly confirms editing, Save a copy and preservation of the original. |
+| Programs scrolling | Make enough named copies for the real dialog to overflow; swipe up and down inside the list. Do not seed storage or emulate a swipe and call it hardware acceptance. | Owner explicitly confirms touch scrolling of the overflowing list. |
+| Keyboard focus | In Programs, Tab and Shift+Tab cycle through visible enabled controls, including both ends. Escape closes the dialog and restores focus to Programs. | Tab/Shift+Tab and reverse focus wrap have receipts; owner explicitly confirms Escape and subsequent Tab from Programs. |
+
+The owner completed the remaining Programs confirmation after the EV3 bench tests:
+"Yes, all three work" in response to the specific name/copy/original, overflow-scroll and
+Escape/focus checklist. This closes acceptance by owner report, together with the earlier
+controls confirmation. These later confirmations are not presented as newly instrumented
+Firefox traces or as an exact replay of the original paired Left/Right route recipes.
 
 ### Owner follow-up, 2026-09-11 01:44 UTC
 
@@ -129,7 +135,7 @@ uses a microSD card and leaves internal firmware intact; no flashing is needed t
 it. See the [LEGO developer kits](https://education.lego.com/en-us/product-resources/mindstorms-ev3/downloads/developer-kits/),
 [Linux hidraw interface](https://docs.kernel.org/hid/hidraw.html) and
 [ev3dev boot model](https://www.ev3dev.org/). Motor-side association,
-polarity and physical execution are still unqualified.
+polarity and chassis execution are still unqualified.
 
 The [narrow USB adapter](KIDX_EV3_USB.md) now collects the existing runner's timed steering
 inputs without changing browser code or duplicating its language. It maps that sequence to
@@ -138,9 +144,20 @@ completion/interruption and no automatic motion retry. Live read-only inspection
 compiled preview pass on ugKid. After the owner's explicit "go", the first compiled
 Forward -> Stop run completed: B/C each received +20% for 250+250+250+150 ms, followed by
 450 ms neutral Stop and an acknowledged final brake. The owner confirms both motors turned
-and stopped. Receipt: `output/ev3-usb/forward-stop-run.jsonl`. Compiled Left/Right, chassis
-timing/turn measurements and a real transport-loss stop test remain pending; simulator
-timing is not hardware calibration.
+and stopped. Receipt: `output/ev3-usb/forward-stop-run.jsonl`.
+
+After a further explicit "go", Left -> Right -> Stop completed on B/C with acknowledged
+commands, and the owner confirmed inversion and stopping. The controller-loss probe then
+exited with code 99 immediately after a positive busy read during its first acknowledged
+250 ms pulse. It bypassed final Stop. Read-only inspection afterward returned busy=false;
+the owner confirmed the short final impulse stopped by itself. Receipts are
+`left-right-stop-run.jsonl`, `fault-stop-run.jsonl`, `fault-stop-exit.txt` and
+`fault-stop-after.json` under `output/ev3-usb/`.
+
+This completes the four-block and controller-process-loss bench checks on unmounted motors.
+Chassis direction, timing/turn measurements, physical USB removal and full host-power-loss
+behavior remain unqualified. No exact physical stopping-time bound was measured. The owner
+explicitly deferred mounting direction; simulator timing is not hardware calibration.
 
 The integration task completed its single full gate on `0561dcd`: **58/58, zero retries**.
 The exact summary is in its `output/playwright/kidx-integration/full-verify.log`. The frozen
