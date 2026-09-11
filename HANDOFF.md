@@ -101,6 +101,8 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    The owner opened KidX by touch and confirmed three Forward blocks, Run success and Try again.
    Drive acceptance exposed two application issues: a long press opens a browser menu/selects
    button text, and Left/Right change the direction indicator without yawing the chassis.
+   The held-button menu/gesture correction is now in source and passes the focused EV3 smoke
+   and required game client; the served ugKid build and physical retest are still pending.
    The owner requested a fresh session here. Finish these application issues and actual-PC
    acceptance before EV3; do not restart broad touchscreen diagnosis. Continue from
    [the diagnostic and acceptance guide](docs/LINUX_MINT_TOUCH.md). The existing

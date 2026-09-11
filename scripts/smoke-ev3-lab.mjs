@@ -22,7 +22,7 @@ const pageErrors = [];
 try {
   if (!SHARED_BASE) server = await startStaticServer({ root: path.resolve("dist"), port: PORT });
   browser = await launchSmokeBrowser();
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, hasTouch: true });
   applySmokeTimeout(page);
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
   page.on("pageerror", (error) => pageErrors.push(String(error)));
@@ -265,9 +265,56 @@ try {
       && drivenSuccess.rover?.[2] < 14
       && drivenSuccess.nestor.includes("You did it!"), drivenSuccess);
 
+  // Native touch must stay captured through a long hold and a slide outside the button.
+  // Browser panning/selection used to cancel this gesture on the physical Mint touchscreen.
+  await page.locator("[data-ev3-retry]").click();
+  const left = page.locator("[data-ev3='left']");
+  const leftBox = await left.boundingBox();
+  if (!leftBox) throw new Error("First Drive Left control has no hit box");
+  const touchSession = await page.context().newCDPSession(page);
+  const contact = { x: leftBox.x + leftBox.width / 2, y: leftBox.y + leftBox.height / 2, id: 1 };
+  try {
+    await touchSession.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [contact] });
+    await page.waitForTimeout(1_100);
+    await touchSession.send("Input.dispatchTouchEvent", {
+      type: "touchMove", touchPoints: [{ ...contact, x: contact.x + 300, y: contact.y - 130 }],
+    });
+    await page.waitForTimeout(150);
+    const heldOutside = await left.evaluate((button) => ({
+      held: button.dataset.held,
+      heading: JSON.parse(window.render_game_to_text()).application.rover.headingDegrees,
+      selection: String(window.getSelection()),
+    }));
+    check("long touch and slide outside keep steering without selecting the button label",
+      heldOutside.held === "true" && heldOutside.heading !== 0 && heldOutside.selection === "", heldOutside);
+  } finally {
+    await touchSession.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await touchSession.detach();
+  }
+  await page.waitForFunction(() => {
+    const rover = JSON.parse(window.render_game_to_text()).application.rover;
+    return document.querySelector("[data-ev3='left']")?.getAttribute("data-held") === "false"
+      && Math.hypot(rover.velocity[0], rover.velocity[2]) < 0.01;
+  }, { timeout: 3_000 });
+  check("releasing the touch outside stops the rover", true);
+
+  await page.evaluate(() => {
+    window.__ev3ContextMenus = [];
+    document.addEventListener("contextmenu", (event) => {
+      window.__ev3ContextMenus.push({ prevented: event.defaultPrevented, trusted: event.isTrusted });
+    });
+  });
+  await left.click({ button: "right" });
+  await page.locator("[data-ev3-mode='program']").click({ button: "right" });
+  const contextMenus = await page.evaluate(() => window.__ev3ContextMenus);
+  check("browser context menus are suppressed only on held driving controls",
+    contextMenus.length === 2 && contextMenus.every((event) => event.trusted)
+      && contextMenus[0].prevented && !contextMenus[1].prevented, contextMenus);
+  await page.keyboard.press("Escape");
+  await page.screenshot({ path: path.join(ART, "ev3-touch-release-800x480.png"), fullPage: false });
+
   // Build mode is the new product loop. Touch every block family, undo back to empty, prove the
   // six-block bound, then leave the known three-Forward solution in the tray.
-  await page.locator("[data-ev3-retry]").click();
   await page.locator("[data-ev3-mode='program']").click();
   for (const id of ["left", "right", "stop"]) await page.locator(`[data-ev3-block='${id}']`).click();
   const everyBlock = await page.evaluate(() => ({

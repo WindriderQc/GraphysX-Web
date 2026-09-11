@@ -97,6 +97,7 @@ const injectStyleOnce = (): void => {
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;backdrop-filter:blur(8px)}
 .gx-ev3 button span.gx-ev3-glyph{font-size:26px;line-height:1}
 .gx-ev3 button:active,.gx-ev3 button[data-held="true"]{background:rgba(38,120,150,.95);border-color:#7fe6ff;transform:scale(.96)}
+.gx-ev3 button[data-held]{touch-action:none;user-select:none}
 .gx-ev3 button:disabled{cursor:default;opacity:.45;transform:none}
 .gx-ev3 button[hidden]{display:none!important}
 .gx-ev3 button:focus-visible{outline:3px solid #7fe6ff;outline-offset:3px}
@@ -238,6 +239,7 @@ export function mountEv3MissionStrip(
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.ev3 = label.toLowerCase();
+    button.dataset.held = "false";
     button.setAttribute("aria-label", label);
     const icon = document.createElement("span");
     icon.className = "gx-ev3-glyph";
@@ -246,11 +248,15 @@ export function mountEv3MissionStrip(
     text.textContent = label;
     button.append(icon, text);
 
+    // A long finger hold is a driving command, not a text selection or browser menu.
+    // Keep this scoped to held controls so Programs retains native touch scrolling/editing.
+    button.addEventListener("contextmenu", (event) => { event.preventDefault(); });
     const stop = (): void => {
       button.dataset.held = "false";
       if (driveable) api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
     };
     button.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
       button.setPointerCapture(event.pointerId);
       button.dataset.held = "true";
       input();

@@ -382,12 +382,19 @@ investigation.
   position `[0,0.83,17]`, heading 0 and pause. Firefox 155.0.1 uses a 1920x922 viewport on the
   1920x1080 display at scale 1. A preliminary two-Forward run also succeeded; it is distinct
   from the requested three-block test.
-- **Drive long press needs correction and physical retest:** the owner reports a submenu
+- **Drive long press corrected in source; physical retest pending:** the owner reports a submenu
   appearing while holding a control. `kidx-long-press-menu.png` shows selected button text
   after the menu was dismissed. Native cancellations and releases did stop the rover in
-  recorded intervals, but this does not qualify sustained driving. Suppress selection,
-  browser gesture takeover and context menus on held driving buttons; keep Programs' native
-  scrolling and name editing. The old emulated mouse hold smoke missed this physical issue.
+  recorded intervals, but this does not qualify sustained driving. Held buttons now use
+  `touch-action:none`, disable text selection and prevent `contextmenu`; non-primary mouse
+  presses do not start driving. The CSS applies before contact, since changing touch-action
+  during a gesture is too late. Programs retains native scrolling and name editing. See
+  [MDN touch-action](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/touch-action)
+  and [contextmenu](https://developer.mozilla.org/en-US/docs/Web/API/Element/contextmenu_event).
+  The focused EV3 smoke now passes a native touch hold, slide outside, release-to-stop and
+  trusted context-menu scope checks. The required game client also passes; screenshots were
+  inspected and console/page errors are empty. These are Windows Chromium results; ugKid's
+  served copy still predates the correction and needs a Firefox physical retest.
 - **Chassis heading needs correction:** Left/Right turn the cyan marker but the vehicle does
   not visibly turn. Source confirms steering currently models the BallZ subject/arrow split:
   `applySteering()` changes force direction, and `placeSteeringArrows()` yaws the separate
@@ -408,6 +415,13 @@ screenshots live alongside it. These ignored artifacts stay in the original chec
 next session uses a worktree. Do not assume that checkout's `dist/` follows a worktree build.
 Rediscover the server/tunnel processes before restarting them. The SSH reverse listener is
 loopback-only on both machines; user authorization for ugKid access persists.
+
+Long-press correction validation is in `output/mint-touch-2026-09-10/` (build-hold-fix.log,
+smoke-hold-fix.log, client-hold-fix.log) and `output/playwright/mint-hold-fix/` (screenshots and
+client state). Typecheck/build and the focused smoke passed. The full gate has not been rerun
+for this correction; run it once after completing the application fixes, per CLAUDE.md.
+The inspected release screenshot also retains a highlighted Go button after success/retry
+while the rover is stopped; check whether held-button visual state is cleared at reset.
 
 Current boot remains the one-time 6.14 kernel, and Firefox's XInput2 variable is session-only.
 No permanent kernel default, calibration, Firefox launcher or graphics-driver change was made.
