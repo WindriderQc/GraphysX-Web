@@ -113,11 +113,13 @@ the owner account access for the current device connection. The live version and
 replies are retained in `output/ev3-usb/identity.json` and `ports.json`. No broad USB permission or
 persistent udev rule was installed. Rediscover device identity after reconnection.
 
-Prepared but not executed: one B-only direction pulse at +20% power for 250 ms, using the
-brick-timed `OUTPUT_TIME_POWER` operation with braking. Its dry-run packet is produced by
-`output/ev3-usb/check_direction.py`; the copy on ugKid is `/tmp/kidx-check-direction.py`.
-The owner has been asked to confirm B-left/C-right, wheels clear of the support and readiness
-before that first physical motion. No motor command has been sent so far.
+After the owner confirmed readiness, one B-only direction pulse at +20% power for 250 ms
+was sent using the brick-timed `OUTPUT_TIME_POWER` operation with braking. The serial-bound
+helper verified the opened EV3 USB handle before writing. The brick acknowledged the command;
+the receipt is `output/ev3-usb/direction-b.json`. Owner observation of the moving side,
+direction and actual stop is pending: an acknowledgment alone does not qualify those facts.
+No C pulse or compiled-program execution has been sent. The fixed pulse helper is
+`output/ev3-usb/check_direction.py`, copied to `/tmp/kidx-check-direction.py` on ugKid.
 
 Start with the documented LEGO USB direct-command path. An optional future ev3dev boot
 uses a microSD card and leaves internal firmware intact; no flashing is needed to explore
