@@ -82,8 +82,15 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       console.log("  ok sound, low-power keyboard reverse, release and compact controls");
     }
     if (part === "all" || part === "construction") {
+      // A cold second WebGL client can still be loading CAD after its HTML controls
+      // appear. Use the same asset readiness contract as the construction-guide smoke.
+      const constructionReady = target => target.waitForFunction(() => {
+        const models = window.__GRAPHYSX__?.state().entities.filter(entity => entity.tags.includes("kidx-build"));
+        return models?.length && models.every(entity => entity.asset?.status === "ready");
+      });
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.goto(`${base}/?app=ev3-lab&view=build&model=track3r`, { waitUntil: "domcontentloaded" });
+      await constructionReady(page);
       await page.locator("[data-build-replay]").click();
       await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["kidx-demo-piece-0", "kidx-demo-destination"] }).every(e => e.asset?.status === "ready"));
       await page.evaluate(() => window.advanceTime(400));
@@ -113,6 +120,9 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       const second = applySmokeTimeout(await secondContext.newPage());
       second.on("pageerror", e => errors.push(String(e))); second.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
       await second.goto(`${base}/?app=ev3-lab&view=build&model=track3r`, { waitUntil: "domcontentloaded" });
+      await constructionReady(second);
+      await second.screenshot({ path: path.join(ART, "kidx-duo-ready-390.png") });
+      console.log("  ok second browser's cold CAD scene is loaded and rendered");
       await second.locator("[data-build-team] > summary").click();
       await second.locator("summary").filter({ hasText: "Partager avec un autre écran" }).click();
       await second.locator("[data-team-code]").fill(code); await second.locator("[data-team-join]").click();
