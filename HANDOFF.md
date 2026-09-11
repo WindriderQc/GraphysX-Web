@@ -150,8 +150,9 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    on B/C. The owner observed the stop of one bounded B pulse; both motors remain unmounted,
    and direction is explicitly deferred to software polarity. The narrow CLI USB adapter now
    consumes timed inputs collected from the existing runner. Read-only identity and compiled
-   preview pass; compiled physical execution, chassis timing and transport-loss stop remain
-   unqualified. Continue from [the USB adapter guide](docs/KIDX_EV3_USB.md).
+   preview pass. The first compiled Forward -> Stop run is physically confirmed: both motors
+   turned and stopped. Left/Right, chassis timing and transport-loss stop remain unqualified.
+   Continue from [the USB adapter guide](docs/KIDX_EV3_USB.md).
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`
    remains one `if` in `main.ts`. Generalize it when a *second* application asks for it, not before.
 

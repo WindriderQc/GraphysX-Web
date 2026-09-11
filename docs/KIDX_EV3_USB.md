@@ -4,7 +4,8 @@ Local development only. The connected brick is a LEGO EV3 running **V1.09H**, se
 `00165362f404`, with large motors on **B/C**. Both motors are separate from the chassis.
 The owner explicitly deferred mounting direction; polarity remains configurable, not
 qualified. One supervised B-only +20% / 250 ms pulse was acknowledged and the owner
-observed its stop. No compiled program has run on the brick yet.
+observed its stop. The first compiled **Forward -> Stop** run now also passes: both motors
+turned and stopped, confirmed by the owner. Direction, turning and fault-stop remain unqualified.
 
 ## Shared program and narrow transport
 
@@ -85,6 +86,21 @@ Python 3 is required for that separate protocol suite; `npm test` remains Node-o
 Live inspection on ugKid passes, including opened-handle serial verification and idle B/C
 motors. The compiled four-block preview passes with `executed: false`. Receipts are under
 `output/ev3-usb/`. No additional motor movement was sent during implementation.
+
+After the owner's explicit "go", the compiled Forward -> Stop sequence ran on the real
+brick with provisional positive polarities: Forward = 250+250+250+150 ms at +20% on B/C,
+then 450 ms neutral Stop. Every command and the final brake were acknowledged, and the
+owner confirmed both motors turned and stopped. `forward-stop-run.jsonl` retains the
+receipt. This is the first real shared-sequence execution; it does not qualify a chassis
+route, physical turn angle, or stopping after controller/USB loss.
+
+Prepared next, not executed: `compiled-left-right-stop.json` and a controller-loss probe
+at `output/ev3-usb/fault_stop.py`, copied to `/tmp/kidx-fault-stop.py`. The probe defaults to
+preview. With `--execute`, it runs the real adapter, confirms the first timed pulse is busy,
+then calls `os._exit(99)` so no final Stop can be sent. Exit 99 plus
+`controllerExitWhileBusy` establishes the intended fault; if busy is already false it aborts
+normally instead. Read-only motor state and owner-observed stopping must follow separately.
+This tests process loss, not physical USB unplug or exact stopping latency.
 
 The integration task's single full gate passed **58/58 with zero retries on `0561dcd`**.
 It covers the frozen browser build on 4175. This tooling-only adapter has separate targeted

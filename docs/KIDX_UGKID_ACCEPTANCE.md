@@ -121,7 +121,7 @@ helper verified the opened EV3 USB handle before writing. The brick acknowledged
 the receipt is `output/ev3-usb/direction-b.json`. The owner observed its stop, but could not
 assign a direction with the motors unmounted. This confirms the observed single-pulse stop;
 it does not measure stop time or qualify a transport-loss stop.
-No C pulse or compiled-program execution has been sent. The fixed pulse helper is
+That initial single-motor helper is
 `output/ev3-usb/check_direction.py`, copied to `/tmp/kidx-check-direction.py` on ugKid.
 
 Start with the documented LEGO USB direct-command path. An optional future ev3dev boot
@@ -135,8 +135,12 @@ The [narrow USB adapter](KIDX_EV3_USB.md) now collects the existing runner's tim
 inputs without changing browser code or duplicating its language. It maps that sequence to
 explicit motor polarities and brick-timed pulses capped at 250 ms / 20% power, with stop on
 completion/interruption and no automatic motion retry. Live read-only inspection and a
-compiled preview pass on ugKid. Actual compiled execution, timing/turn measurements and a
-real transport-loss stop test remain pending; simulator timing is not hardware calibration.
+compiled preview pass on ugKid. After the owner's explicit "go", the first compiled
+Forward -> Stop run completed: B/C each received +20% for 250+250+250+150 ms, followed by
+450 ms neutral Stop and an acknowledged final brake. The owner confirms both motors turned
+and stopped. Receipt: `output/ev3-usb/forward-stop-run.jsonl`. Compiled Left/Right, chassis
+timing/turn measurements and a real transport-loss stop test remain pending; simulator
+timing is not hardware calibration.
 
 The integration task completed its single full gate on `0561dcd`: **58/58, zero retries**.
 The exact summary is in its `output/playwright/kidx-integration/full-verify.log`. The frozen
