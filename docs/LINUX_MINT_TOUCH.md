@@ -10,9 +10,11 @@ KidX acceptance and EV3 hardware qualification remain open.
 **Current result:** after cleaning the screen, the owner confirms five successive physical
 Menu open/close taps and all six fullscreen Firefox targets, including the lower-left corner.
 Matched receipts confirm native touch across those zones. No calibration was applied.
-KidX's three-Forward/Run/success/retry flow also passed by physical touch. Drive exposed an
-app long-press menu issue and a chassis-heading mismatch, to resume in a fresh session at
-the owner's request. See "KidX acceptance and fresh-session handoff" below.
+KidX's three-Forward/Run/success/retry flow also passed by physical touch. The subsequent
+long-press menu and chassis-heading corrections are now served and physically accepted.
+Programs save/reload/open/replay also passed. Programs touch scrolling and keyboard focus
+remain awaiting the owner's physical result. See "KidX acceptance and fresh-session handoff"
+below.
 The investigation below is chronological;
 its earlier failed tests do not describe the latest result.
 
@@ -382,7 +384,7 @@ investigation.
   position `[0,0.83,17]`, heading 0 and pause. Firefox 155.0.1 uses a 1920x922 viewport on the
   1920x1080 display at scale 1. A preliminary two-Forward run also succeeded; it is distinct
   from the requested three-block test.
-- **Drive long press corrected in source; physical retest pending:** the owner reports a submenu
+- **Drive long press corrected and physically accepted:** the owner reported a submenu
   appearing while holding a control. `kidx-long-press-menu.png` shows selected button text
   after the menu was dismissed. Native cancellations and releases did stop the rover in
   recorded intervals, but this does not qualify sustained driving. Held buttons now use
@@ -393,35 +395,55 @@ investigation.
   and [contextmenu](https://developer.mozilla.org/en-US/docs/Web/API/Element/contextmenu_event).
   The focused EV3 smoke now passes a native touch hold, slide outside, release-to-stop and
   trusted context-menu scope checks. The required game client also passes; screenshots were
-  inspected and console/page errors are empty. These are Windows Chromium results; ugKid's
-  served copy still predates the correction and needs a Firefox physical retest.
-- **Chassis heading needs correction:** Left/Right turn the cyan marker but the vehicle does
-  not visibly turn. Source confirms steering currently models the BallZ subject/arrow split:
-  `applySteering()` changes force direction, and `placeSteeringArrows()` yaws the separate
-  marker. It does not yaw the rover's chassis. Implement the rover behavior through shared
-  API/runtime vocabulary or ordinary scene composition; do not add host-only scene mutations
-  or change BallZ's independent aim/body behavior. Verify visible chassis orientation as well
-  as Left/Right routes and heading reset.
-- **Still pending on the PC:** corrected sustained Drive holds and release outside a control,
-  all remaining block controls/routes, Programs save/reload/open/replay, touch scrolling,
-  name editing and Tab/Shift+Tab/Escape focus behavior. The mini-keyboard is available; an
+  inspected and console/page errors are empty. These are Windows Chromium results; the
+  corrected build is now served to ugKid. The owner confirms sustained holds, sliding outside
+  and release-to-stop, with no browser menu or selection. Trusted native Firefox receipts at
+  `2026-09-11T00:21:34Z` through `00:22:16Z` confirm canceled context menus, Go success and retry
+  to heading 0 with zero velocity. Held visual
+  state and pointer ownership also clear at success, retry and disposal; a late release from
+  a retired hold cannot stop the next input.
+- **Chassis heading corrected in scene composition:** the visible chassis is now the existing
+  `steering.arrowId` root at lift 0. Wheels, brick, front beam and elevated cyan marker are its
+  ordinary children. The dynamic collider and forces are unchanged. No host-only mutation or
+  shared BallZ steering change is involved. The focused EV3 smoke measures rendered front-beam
+  and indicator directions on both turn routes, repeatability, north reset and document reload.
+  Inspected left/right and game-client screenshots confirm visible vehicle yaw. The owner
+  also confirms visible Left/Right vehicle rotation on ugKid after this correction.
+- **Programs save/reload/open/replay passed:** the owner saved the three-Forward program as
+  `forward`, reloaded Firefox, opened it and ran it to blue. Matched browser sessions and the
+  success receipt at `2026-09-11T00:23:20Z` confirm the saved name, all three blocks and a
+  1.764-second mission completion. This is the same temporary origin and Firefox profile.
+- **Still pending on the PC:** remaining block controls/routes, touch scrolling,
+  repeated name editing/copying and Tab/Shift+Tab/Escape focus behavior. The final physical
+  scroll/focus exercise has been requested; no confirmation or matching new receipts have
+  arrived yet. Automated coverage is green but does not close these physical items.
+  The mini-keyboard is available; an
   on-screen keyboard is not yet a requirement. EV3 remains unplugged and unqualified.
 
-The active Firefox page and Windows server on port 4175 still serve the isolated build from
-before the long-press correction. Rebuild/test and refresh that isolated site deliberately
-before asking for a physical retest. Its script is
-`C:\Users\Yanik\codes\GraphysX-Web\output\playwright\mint-touch\serve.mjs`; receipts and
-screenshots live alongside it. These ignored artifacts stay in the original checkout if the
-next session uses a worktree. Do not assume that checkout's `dist/` follows a worktree build.
+The latest correction is in the isolated worktree branch `codex/kidx-mint-rover`, based on
+`codex/kidx-linux-mint` at `f3d9f52`. A new Firefox tab opens
+`http://127.0.0.1:4175/?app=ev3-lab&acceptance=rover-hold` on ugKid. The server on 4175 now uses
+`C:\Users\Yanik\.codex\worktrees\ab67\GraphysX-Web\output\playwright\mint-rover\serve.mjs`.
+Its isolated `site/`, `served-build.json`, passive browser receipts and actual-Mint captures
+are alongside it. The source hash and index hash were read back through ugKid's tunnel.
+Earlier diagnostic artifacts remain in the original checkout at
+`C:\Users\Yanik\codes\GraphysX-Web\output\playwright\mint-touch\`.
+Do not assume that checkout's `dist/` follows a worktree build.
 Rediscover the server/tunnel processes before restarting them. The SSH reverse listener is
 loopback-only on both machines; user authorization for ugKid access persists.
 
 Long-press correction validation is in `output/mint-touch-2026-09-10/` (build-hold-fix.log,
 smoke-hold-fix.log, client-hold-fix.log) and `output/playwright/mint-hold-fix/` (screenshots and
-client state). Typecheck/build and the focused smoke passed. The full gate has not been rerun
-for this correction; run it once after completing the application fixes, per CLAUDE.md.
-The inspected release screenshot also retains a highlighted Go button after success/retry
-while the rover is stopped; check whether held-button visual state is cleared at reset.
+client state). The follow-up worktree's `output/mint-rover/` contains check/build/lint/smoke
+and client logs. Typecheck, 293 unit tests (one existing skip), build, targeted lint, the full
+focused EV3 smoke and game client pass. The Go regression assertion checks the detached button
+before pointer-up and idle controls after retry. Final full-gate status is recorded in the
+latest progress entry: **all 58 checks passed with zero retries**. This was the single final
+full gate after the corrections, including 293 unit passes (one existing skip), typecheck,
+lint, build, both KidX smokes, BallZ and the 131/131 two-browser collaboration checks.
+The Programs smoke took 8m12s of its unchanged 10-minute deadline, producing a headroom
+warning rather than a failure. No assertion or deadline was relaxed. The 436 files in the
+isolated served site match the full-gate build byte-for-byte (`served-copy-check.json`).
 
 Current boot remains the one-time 6.14 kernel, and Firefox's XInput2 variable is session-only.
 No permanent kernel default, calibration, Firefox launcher or graphics-driver change was made.

@@ -244,6 +244,8 @@ try {
   await page.locator("[data-ev3-retry]").click();
   await page.locator("[data-ev3-mode='drive']").click();
   const go = page.locator("[data-ev3='go']");
+  // Success detaches the drive pad; retain this node to inspect the retired hold itself.
+  const goElement = await go.elementHandle();
   const goBox = await go.boundingBox();
   if (!goBox) throw new Error("First Drive Go control has no hit box");
   await page.mouse.move(goBox.x + goBox.width / 2, goBox.y + goBox.height / 2);
@@ -252,6 +254,8 @@ try {
     await page.waitForFunction(() => document.querySelector("[data-ev3-mission]")?.getAttribute("data-phase") === "complete", {
       timeout: 10_000,
     });
+    check("success clears held Go before the pointer is released",
+      await goElement.evaluate((button) => button.dataset.held) === "false");
   } finally {
     await page.mouse.up();
   }
@@ -268,6 +272,11 @@ try {
   // Native touch must stay captured through a long hold and a slide outside the button.
   // Browser panning/selection used to cancel this gesture on the physical Mint touchscreen.
   await page.locator("[data-ev3-retry]").click();
+  check("retry restores idle drive controls and a north-facing chassis", await page.evaluate(() => {
+    const chassis = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base:chassis"] })[0];
+    return [...document.querySelectorAll("[data-held]")].every((button) => button.dataset.held === "false")
+      && Math.abs(chassis.rotationDegrees[1]) < 0.01;
+  }));
   const left = page.locator("[data-ev3='left']");
   const leftBox = await left.boundingBox();
   if (!leftBox) throw new Error("First Drive Left control has no hit box");
@@ -434,10 +443,25 @@ try {
       const stepped = window.advanceTime(1_700);
       const rover = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base"] })[0] ?? null;
       const indicator = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base:heading"] })[0] ?? null;
+      const chassis = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base:chassis"] })[0] ?? null;
+      // Read rendered world-space directions: local transforms alone cannot prove that the
+      // actual chassis, front beam and elevated indicator share the commanded heading.
+      const world = window.__GRAPHYSX_HOST__.world;
+      const chassisObject = world.getEntityObject("ev3-drive-base:chassis");
+      const frontObject = world.getEntityObject("ev3-drive-base:front-beam");
+      const indicatorObject = world.getEntityObject("ev3-drive-base:heading");
+      const chassisPosition = chassisObject.getWorldPosition(chassisObject.position.clone());
+      const front = frontObject.getWorldPosition(frontObject.position.clone()).sub(chassisPosition);
+      front.y = 0;
+      front.normalize();
+      const aim = indicatorObject.position.clone().set(0, 1, 0)
+        .applyQuaternion(indicatorObject.getWorldQuaternion(indicatorObject.quaternion.clone()));
       return {
         stepped,
         position: rover?.position ?? null,
         headingDegrees: rover?.steering?.headingDegrees ?? null,
+        chassis,
+        visualDirections: { front: front.toArray(), aim: aim.toArray() },
         indicator: indicator ? {
           visible: indicator.visible,
           position: indicator.position,
@@ -462,7 +486,7 @@ try {
       && leftFirst.headingDegrees > 250 && leftFirst.headingDegrees < 290
       && leftFirst.rendered?.rover?.headingDegrees === leftFirst.headingDegrees
       && leftFirst.indicator?.visible
-      && Math.abs(leftFirst.indicator.rotationDegrees?.[1] + leftFirst.headingDegrees) < 1,
+      && Math.abs(leftFirst.chassis.rotationDegrees?.[1] + leftFirst.headingDegrees) < 1,
     leftFirst);
   check("the same turn-containing program repeats from the same heading and spawn",
     repeatDelta < 0.03 && Math.abs(leftFirst.headingDegrees - leftSecond.headingDegrees) < 0.01,
@@ -473,6 +497,13 @@ try {
   await page.locator("[data-ev3-block='right']").click();
   await page.locator("[data-ev3-block='forward']").click();
   const right = await runTurnProgram("ev3-first-program-right-800x480.png");
+  for (const [name, pose] of [["Left", leftFirst], ["Right", right]]) {
+    const radians = pose.headingDegrees * Math.PI / 180;
+    const expected = [Math.sin(radians), 0, -Math.cos(radians)];
+    check(`${name} visibly turns both the vehicle front and the cyan indicator`,
+      [pose.visualDirections.front, pose.visualDirections.aim].every((direction) =>
+        direction.every((value, index) => Math.abs(value - expected[index]) < 0.01)), pose.visualDirections);
+  }
   check("Right then Forward produces the opposite physical route",
     right.position?.[0] > 0.5
       && right.headingDegrees > 70 && right.headingDegrees < 110

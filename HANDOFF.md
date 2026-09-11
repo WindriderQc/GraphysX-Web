@@ -101,10 +101,16 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    The owner opened KidX by touch and confirmed three Forward blocks, Run success and Try again.
    Drive acceptance exposed two application issues: a long press opens a browser menu/selects
    button text, and Left/Right change the direction indicator without yawing the chassis.
-   The held-button menu/gesture correction is now in source and passes the focused EV3 smoke
-   and required game client; the served ugKid build and physical retest are still pending.
-   The owner requested a fresh session here. Finish these application issues and actual-PC
-   acceptance before EV3; do not restart broad touchscreen diagnosis. Continue from
+   The held-button gesture/visual-state correction and visible rover heading now pass the
+   focused EV3 smoke and required game client. The chassis is the existing steering visual
+   root, with its parts and cyan indicator as ordinary children; BallZ is unchanged.
+   The corrected isolated build is now served to a new ugKid Firefox tab. The owner confirms
+   physical Drive holds, visible turns, release outside and Go success/retry; trusted native
+   Firefox receipts show canceled context menus and reset to idle. Programs save/reload/open
+   and replay to blue are also physically confirmed. One final full gate passed all 58 checks
+   without retries, including both KidX smokes and BallZ. Complete the remaining physical
+   block-route, Programs scrolling and keyboard focus tests before EV3; do not restart broad
+   touchscreen diagnosis. Continue from
    [the diagnostic and acceptance guide](docs/LINUX_MINT_TOUCH.md). The existing
    800×480 browser measurements remain compact-layout evidence, not hardware qualification.
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`

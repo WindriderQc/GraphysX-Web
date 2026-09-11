@@ -194,7 +194,8 @@ function buildRover(
       type: "box",
       transform: { position: [position[0], position[1] + 0.78, position[2]], rotationDegrees: options.rotationDegrees ?? [0, 0, 0] },
       // The driveable root is a nearly invisible body tall enough to rest on the mat with its
-      // visual wheels at ground level. Its visible chassis is an ordinary child below.
+      // visual wheels at ground level. Steering anchors the visible chassis independently
+      // of this collider, using the same scene-native visual root as BallZ's aim indicator.
       geometry: { width: 4.6, height: driveable ? 1.56 : 0.58, depth: 3.8 },
       material: { color: PALETTE.dark, roughness: 0.48, metalness: 0.15, ...(driveable ? { opacity: 0.015 } : {}) },
       ...(driveable ? {
@@ -206,16 +207,19 @@ function buildRover(
           turnRateDegrees: 160,
           kickImpulse: 5,
           jumpImpulse: 0,
-          arrowId: `${prefix}:heading`,
-          arrowLift: 2.65,
+          arrowId: `${prefix}:chassis`,
+          arrowLift: 0,
         },
       } : {}),
       castShadow: true,
       tags: rootTags,
     },
     ...(driveable ? [
-      directionIndicator(prefix, position),
-      roverPart(prefix, "chassis", "Drive Base Chassis", "box", [0, 0, 0], { width: 4.6, height: 0.58, depth: 3.8 }, PALETTE.dark),
+      {
+        ...roverPart(prefix, "chassis", "Drive Base Chassis", "box", [position[0], position[1] + 0.78, position[2]], { width: 4.6, height: 0.58, depth: 3.8 }, PALETTE.dark),
+        parentId: undefined,
+      },
+      directionIndicator(prefix),
     ] : []),
     roverPart(prefix, "brick", "EV3 Intelligent Brick", "box", [0, 1.02, 0.42], { width: 2.35, height: 1.45, depth: 1.62 }, PALETTE.white),
     roverPart(prefix, "screen", "EV3 Brick Screen", "box", [0, 1.77, 0.12], { width: 1.25, height: 0.08, depth: 0.82 }, PALETTE.screen, { emissive: "#364b1c", emissiveIntensity: 0.22 }),
@@ -277,16 +281,20 @@ function buildRover(
     );
   }
 
-  return parts;
+  // All visible parts share the heading root; no per-frame application or host mutation.
+  return driveable
+    ? parts.map((part) => part.parentId === prefix ? { ...part, parentId: `${prefix}:chassis` } : part)
+    : parts;
 }
 
-function directionIndicator(prefix: string, position: AgentWorldVector3): AgentWorldEntityDefinition {
+function directionIndicator(prefix: string): AgentWorldEntityDefinition {
   return {
     id: `${prefix}:heading`,
     label: "Drive Direction",
     type: "cone",
+    parentId: `${prefix}:chassis`,
     transform: {
-      position: [position[0], position[1] + 3.43, position[2]],
+      position: [0, 2.65, 0],
       // ConeGeometry points along +Y; -90° around X makes its tip point north (-Z).
       rotationDegrees: [-90, 0, 0],
     },

@@ -235,6 +235,8 @@ export function mountEv3MissionStrip(
    * stylus, and `setPointerCapture` means a thumb that slides off the button still releases the
    * control instead of leaving the robot driving forever.
    */
+  const releaseHeldControls: Array<() => void> = [];
+  const clearHeldControls = (): void => { for (const release of releaseHeldControls) release(); };
   const held = (label: string, glyph: string, input: () => void): HTMLButtonElement => {
     const button = document.createElement("button");
     button.type = "button";
@@ -251,18 +253,26 @@ export function mountEv3MissionStrip(
     // A long finger hold is a driving command, not a text selection or browser menu.
     // Keep this scoped to held controls so Programs retains native touch scrolling/editing.
     button.addEventListener("contextmenu", (event) => { event.preventDefault(); });
+    let pointerId: number | null = null;
     const stop = (): void => {
       button.dataset.held = "false";
+      if (pointerId === null) return;
+      const releasedPointer = pointerId;
+      pointerId = null;
+      if (button.hasPointerCapture(releasedPointer)) button.releasePointerCapture(releasedPointer);
       if (driveable) api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
     };
+    releaseHeldControls.push(stop);
     button.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || button.disabled) return;
+      clearHeldControls();
+      pointerId = event.pointerId;
       button.setPointerCapture(event.pointerId);
       button.dataset.held = "true";
       input();
     });
-    for (const type of ["pointerup", "pointercancel", "pointerleave"] as const) {
-      button.addEventListener(type, stop);
+    for (const type of ["pointerup", "pointercancel", "pointerleave", "lostpointercapture"] as const) {
+      button.addEventListener(type, (event) => { if (event.pointerId === pointerId) stop(); });
     }
     return button;
   };
@@ -306,6 +316,7 @@ export function mountEv3MissionStrip(
   const timeLimit = missionRules?.timer?.limitSeconds ?? EV3_FIRST_MISSION_TIME_LIMIT_SECONDS;
   const missionReady = driveable && Boolean(missionRules?.finish) && missIds.size > 0;
   const resetAttempt = () => {
+    clearHeldControls();
     const reset = api.rules.reset();
     // Rules own the spawn transform and velocity. Heading is transient steering state, so the
     // application restores the scene-authored north heading at the same attempt boundary.
@@ -447,6 +458,7 @@ export function mountEv3MissionStrip(
   setControlsEnabled = (enabled: boolean): void => {
     const wasEnabled = controlsEnabled;
     controlsEnabled = enabled;
+    if (!enabled && wasEnabled) clearHeldControls();
     for (const button of driveButtons) button.disabled = !enabled;
     for (const button of programButtons) button.disabled = !enabled || program.length >= EV3_FIRST_PROGRAM_MAX_BLOCKS;
     undo.disabled = !enabled || program.length === 0;
@@ -631,6 +643,7 @@ export function mountEv3MissionStrip(
     },
     dispose: () => {
       unsubscribeFrame();
+      clearHeldControls();
       runner.stop();
       library.dispose();
       mission.remove();
