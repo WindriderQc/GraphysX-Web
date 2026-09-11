@@ -1837,12 +1837,20 @@ export class AgentWorldRuntime {
   }
 
   /**
-   * The cheap per-frame read a chase camera needs: the steering subject's live heading, with
+   * The steering subject's live aim heading, with
    * no state clone. Null when the entity does not exist or carries no steering block.
    */
   steeringHeadingOf(id: string): number | null {
     const steering = this.entities.get(id)?.definition.steering;
     return steering ? steering.headingDegrees : null;
+  }
+
+  /** Read the body's actual motion without cloning scene state in the camera's frame loop. */
+  readLinearVelocityOf(id: string, target: Vector3): Vector3 {
+    const body = this.entities.get(id)?.body;
+    target.set(0, 0, 0);
+    if (body) this.physicsWorld.readLinearVelocity(body, target);
+    return target;
   }
 
   listPrefabs(): readonly AgentWorldPrefabDescriptor[] {

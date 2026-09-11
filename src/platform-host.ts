@@ -264,10 +264,13 @@ export class PlatformHost {
   private chaseTargetId: string | null = null;
   /** The subject's world radius, for camera distances and the aim plane's height. */
   private chaseRadius = 0.5;
+  /** Last horizontal travel heading in radians; held through rest and contact jitter. */
+  private chaseHeading = 0;
   /** Scratch for the chase camera and mouse-aim raycast — no per-frame allocation. */
   private readonly chaseScratch = {
     desired: new Vector3(),
     look: new Vector3(),
+    velocity: new Vector3(),
     ndc: new Vector2(),
     hit: new Vector3(),
     plane: new Plane(new Vector3(0, 1, 0), 0),
@@ -1182,6 +1185,8 @@ export class PlatformHost {
     // so there is no separate entry move to fight); anything else keeps the fixed framing.
     const subject = this.currentMode === "play" ? this.findChaseSubject() : null;
     this.chaseTargetId = subject?.id ?? null;
+    // Use the authored aim only to frame a fresh spawn before it has any motion.
+    this.chaseHeading = subject ? (this.world.steeringHeadingOf(subject.id) ?? 0) * Math.PI / 180 : 0;
     this.chaseRadius = subject
       ? Math.max(0.2, subject.geometry.radius * Math.max(subject.scale[0], subject.scale[1], subject.scale[2]))
       : 0.5;
@@ -1220,8 +1225,8 @@ export class PlatformHost {
 
   /**
    * The follow camera (the original BallZ chase): behind-and-above the caged ball, offset
-   * yaw following the fire-arrow's heading so "up" on screen is always "where the arrow
-   * points", eased with exponential damping so it tracks without snapping. Runs in the one
+   * yaw following the outer body's horizontal velocity, independent of the inner aim ball.
+   * Hold the last travel heading at rest and ease the pose with exponential damping. Runs in the one
    * shared tick — never a second loop — and replaces `controls.update()` for the frame, so
    * the orbit spherical state cannot fight the follow pose. The orbit target is kept synced
    * to the ball, which is what makes leaving play (or losing the subject) seamless.
@@ -1234,17 +1239,20 @@ export class PlatformHost {
     }
     // The chase owns the camera; an entry/focus move still in flight would fight it.
     this.focusMove = null;
-    const heading = this.world.steeringHeadingOf(this.chaseTargetId!) ?? 0;
-    const radians = (heading * Math.PI) / 180;
-    const dirX = Math.sin(radians);
-    const dirZ = -Math.cos(radians);
+    const scratch = this.chaseScratch;
+    const velocity = this.world.readLinearVelocityOf(this.chaseTargetId!, scratch.velocity);
+    // Ignore tiny contact corrections and vertical bounces; neither defines a travel yaw.
+    if (Math.hypot(velocity.x, velocity.z) > 0.25) {
+      this.chaseHeading = Math.atan2(velocity.x, -velocity.z);
+    }
+    const dirX = Math.sin(this.chaseHeading);
+    const dirZ = -Math.cos(this.chaseHeading);
     // Steeper than the classic 30°: at ~38° elevation the aim arrow reads ahead of the ball
     // instead of hiding behind it, and a spawn beside an arena wall is seen over the wall
     // rather than through it (screenshot-verified both ways).
     const radius = this.chaseRadius;
     const distance = Math.max(6.5, radius * 12);
     const height = Math.max(4.6, radius * 9.5);
-    const scratch = this.chaseScratch;
     scratch.desired.set(
       subject.position.x - dirX * distance,
       subject.position.y + height,
