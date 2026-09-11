@@ -92,6 +92,12 @@ once with `npx playwright install chromium`. See [test/README.md](test/README.md
 fast-test boundary and [CLAUDE.md](CLAUDE.md) before running expensive checks alongside
 another session.
 
+CI runs static checks plus journeys affected by the changed files. Documentation and Node
+tooling do not trigger 3D checks or a site deployment. Shared runtime/dependency changes use
+the full suite; larger selections spread across up to four independent runners. See
+[release verification time](docs/CI_PERFORMANCE.md) for scope, comparison baselines and manual
+full verification. Local `npm run verify` remains the explicit full-suite command.
+
 The store is optional. A browser can explicitly select it with `?store=http://localhost:8788`;
 production configuration and write credentials belong in
 [docs/DEPLOYING_THE_STORE.md](docs/DEPLOYING_THE_STORE.md), not the client bundle.

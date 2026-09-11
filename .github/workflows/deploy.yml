@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      full_verify:
+        description: Run the complete regression suite before deploying
+        type: boolean
+        default: false
 
 concurrency:
   group: graphysx-production
@@ -12,15 +17,19 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  # Production is gated: typecheck, build, and the headless smokes across every product
-  # route must pass before anything is shipped to graphysx.specialblend.ca.
+  # Static checks and affected journeys must pass. Shared/unknown changes and manual
+  # full_verify requests use the complete suite. A public smoke follows activation.
   verify:
     uses: ./.github/workflows/ci.yml
+    with:
+      full_verify: ${{ inputs.full_verify == true }}
 
   deploy:
     needs: verify
+    if: needs.verify.outputs.deployment_required == 'true'
     runs-on: ubuntu-latest
 
     steps:
