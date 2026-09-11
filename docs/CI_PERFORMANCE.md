@@ -50,7 +50,7 @@ rule, check its consumers and add a regression test for the expected selection.
 npm run verify -- --wait
 
 # Reproduce an exact selection printed by CI.
-npm run verify -- --checks=kidx-guidance,standalone,product-assets,asset-guard --wait
+npm run verify -- --checks=kidx-guidance-arrival,standalone,product-assets,asset-guard --wait
 
 # Static checks, with no Chromium launch or smoke server.
 npm run verify -- --checks=none --wait
@@ -76,7 +76,7 @@ original failed disk preflight and its retry was not build time.
 
 Parallelizing every test still spent unnecessary work on unrelated features. Selection
 now comes first; parallel runners help larger selections. The earlier estimate of
-32 minutes applies only to the full current inventory, not to an ordinary small change.
+32 minutes applied to the earlier full inventory, before KidX scenario splitting.
 No new CI wall-time measurement is claimed before this workflow actually runs.
 
 Implementation references: GitHub's [dynamic matrices](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/run-job-variations)

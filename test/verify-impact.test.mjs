@@ -28,12 +28,12 @@ describe("verification by changed area", () => {
     const plan = selectVerification(["src/kidx-mission-guide.ts"]);
     assert.equal(plan.mode, "targeted");
     assert.equal(plan.deploy, true);
-    assert.deepEqual(new Set(names(plan)), new Set(["kidx-guidance", "standalone", "product-assets", "asset-guard"]));
+    assert.deepEqual(new Set(names(plan)), new Set(["kidx-guidance-arrival", "kidx-guidance-attempt", "kidx-guidance-laboratory", "standalone", "product-assets", "asset-guard"]));
   });
 
   it("limits broad KidX changes to KidX and the short integration checks", () => {
     const plan = selectVerification(["src/kidx-app.css", "src/ev3-mission-strip.ts", "public/assets/kidx/first-drive-mat.svg"]);
-    assert.ok(names(plan).includes("kidx-interactive"));
+    assert.ok(names(plan).includes("kidx-interactive-program"));
     assert.ok(names(plan).includes("ev3-program-layout-compact"));
     assert.ok(!names(plan).includes("live-sessions-browser"));
     assert.ok(!names(plan).includes("world1"));
@@ -44,7 +44,7 @@ describe("verification by changed area", () => {
     const plan = selectVerification(["src/ballz-play.ts", "server/live-sessions.mjs"]);
     assert.ok(names(plan).includes("ballz"));
     assert.ok(names(plan).includes("live-sessions-browser"));
-    assert.ok(!names(plan).includes("kidx-guidance"));
+    assert.ok(!names(plan).includes("kidx-guidance-arrival"));
     assert.equal(new Set(names(plan)).size, plan.smokes.length);
   });
 
@@ -59,8 +59,9 @@ describe("verification by changed area", () => {
 
   it("reruns a changed smoke itself without deploying test-only changes", () => {
     const plan = selectVerification(["scripts/smoke-kidx-guidance.mjs"]);
-    assert.deepEqual(names(plan), ["kidx-guidance"]);
+    assert.deepEqual(names(plan), ["kidx-guidance-arrival", "kidx-guidance-attempt", "kidx-guidance-laboratory"]);
     assert.equal(plan.deploy, false);
+    assert.deepEqual(names(selectVerification(["scripts/smoke-kidx-guidance-arrival.mjs"])), ["kidx-guidance-arrival"]);
     const node = verificationMatrix(selectVerification(["scripts/smoke-results.mjs"]).smokes);
     assert.equal(node.include[0].browser, false);
   });
@@ -88,7 +89,7 @@ describe("verification by changed area", () => {
       assert.throws(() => resolveVerifyOptions([`--checks=${value}`], {}), /--checks/);
     }
     for (const other of ["--shard=1/4", "--tier=apps", "--base=https://example.com"]) {
-      assert.throws(() => resolveVerifyOptions(["--checks=kidx-guidance", other], {}), /cannot be combined/);
+      assert.throws(() => resolveVerifyOptions(["--checks=kidx-guidance-arrival", other], {}), /cannot be combined/);
     }
   });
 });

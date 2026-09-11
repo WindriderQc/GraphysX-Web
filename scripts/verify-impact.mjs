@@ -7,6 +7,14 @@ const GAMES = ["ballz", "games", "archive-cup", "archive-levels", "spiral", "wor
 const BASELINE = ["standalone", "product-assets", "asset-guard"];
 const NODE_ONLY = new Set(["scene-command-validation", "product-assets", "asset-guard", "previews", "store-auth", "live-sessions", "live-sessions-security", "live-undo", "results", "dna"]);
 
+function family(...prefixes) {
+  return prefixes.flatMap((prefix) => {
+    const checks = VERIFY_SMOKES.filter((smoke) => smoke.name === prefix || smoke.name.startsWith(`${prefix}-`)).map((smoke) => smoke.name);
+    if (!checks.length) throw new Error(`Unknown impact family: ${prefix}`);
+    return checks;
+  });
+}
+
 // Narrow rules precede family rules. Unknown executable/shared files select the full
 // suite. This is an explicit coverage map, not a guess based on import reachability.
 const RULES = [
@@ -14,9 +22,9 @@ const RULES = [
   { match: /^scripts\/(?:verify(?:-[\w-]+)?|plan-verification|counts)\.(?:mjs|json)$/, checks: [], label: "verification tooling", deploy: false },
   { match: /^\.github\/workflows\/(?:ci|staging)\.yml$/, checks: [], label: "CI configuration", deploy: false },
   { match: /^(?:\.github\/workflows\/deploy\.yml|scripts\/write-release-metadata\.mjs|ops\/)/, checks: BASELINE, label: "deployment configuration", deploy: true },
-  { match: /^src\/kidx-mission-guide\.ts$/, checks: ["kidx-guidance"], label: "KidX arrival guidance", deploy: true },
-  { match: /^src\/kidx-(?:pdf-reader|library|document-catalog)\.(?:ts|json)$/, checks: ["kidx-workshop"], label: "KidX documents", deploy: true },
-  { match: /^src\/kidx-code(?:-lab)?\.ts$/, checks: ["kidx-interactive", "kidx-challenges", "kidx-guidance"], label: "KidX code laboratory", deploy: true },
+  { match: /^src\/kidx-mission-guide\.ts$/, checks: family("kidx-guidance"), label: "KidX arrival guidance", deploy: true },
+  { match: /^src\/kidx-(?:pdf-reader|library|document-catalog)\.(?:ts|json)$/, checks: family("kidx-workshop"), label: "KidX documents", deploy: true },
+  { match: /^src\/kidx-code(?:-lab)?\.ts$/, checks: family("kidx-interactive", "kidx-challenges", "kidx-guidance"), label: "KidX code laboratory", deploy: true },
   { match: /^(?:src\/(?:kidx-|ev3-)|public\/assets\/kidx\/|scripts\/kidx-)/, checks: KIDX, label: "KidX workshop", deploy: true },
   { match: /^src\/(?:ballz-|archive-ballz-levels\.ts)/, checks: GAMES, label: "BallZ games", deploy: true },
   { match: /^(?:src\/results-client\.ts|server\/results-store\.mjs)$/, checks: ["results", "results-browser"], label: "results", deploy: true },
@@ -33,6 +41,14 @@ export function selectVerification(changedFiles, { full = false } = {}) {
     if (smoke) {
       selected.add(smoke.name);
       reasons.push({ file, rule: `changed check: ${smoke.name}` });
+      continue;
+    }
+    // Split scenario wrappers import these shared harnesses. A harness change reruns
+    // its complete family, while a wrapper-only change still selects just that wrapper.
+    const harness = /^scripts\/smoke-(kidx-(?:missions|workshop|challenges|interactive|guidance))\.mjs$/.exec(file);
+    if (harness) {
+      for (const name of family(harness[1])) selected.add(name);
+      reasons.push({ file, rule: `changed scenario family: ${harness[1]}` });
       continue;
     }
     const rule = RULES.find((candidate) => candidate.match.test(file));

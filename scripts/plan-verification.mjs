@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { selectVerification, verificationMatrix } from "./verify-impact.mjs";
 
-const git = (...args) => execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+const git = (...args) => execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 const isSha = (value) => typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
 
 // A successful docs-only workflow has a skipped deploy job and is NOT a new
@@ -29,7 +29,7 @@ export function changedFilesSince(base, head) {
 }
 
 export async function planFromGitHub(env = process.env) {
-  const head = git("rev-parse", "HEAD");
+  const head = git("rev-parse", "HEAD").trim();
   const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, "utf8"));
   let base = null;
   let fallback = null;
@@ -37,7 +37,7 @@ export async function planFromGitHub(env = process.env) {
   try {
     if (event.pull_request) {
       if (!isSha(event.pull_request.base.sha)) throw new Error("Missing pull request base SHA");
-      base = git("merge-base", head, event.pull_request.base.sha);
+      base = git("merge-base", head, event.pull_request.base.sha).trim();
     } else if (env.GITHUB_REF === "refs/heads/main") {
       if (!/^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPOSITORY ?? "")) throw new Error("Missing repository identity");
       const request = async (suffix) => {
@@ -52,7 +52,7 @@ export async function planFromGitHub(env = process.env) {
         try { git("merge-base", "--is-ancestor", sha, head); return true; } catch { return false; }
       } });
     } else {
-      base = git("merge-base", head, "origin/main");
+      base = git("merge-base", head, "origin/main").trim();
     }
   } catch {
     // Missing history/API access may increase testing, never silently reduce it.
