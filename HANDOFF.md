@@ -35,7 +35,7 @@ activation; the failed run is not a production receipt.
 
 The split-scenario run `34625236174` then passed 74/75 checks, with every deadline
 respected. Its only failure was the second construction browser's first control click
-while cold CAD initialization was still in flight. The construction smoke now awaits
+during a cold start; the smoke had only awaited DOM content. The construction smoke now awaits
 the same model-asset readiness contract as the guide smoke and captures the second
 client's rendered startup before clicking. The targeted two-browser journey and all
 338 local Node tests pass (one Windows skip). CI now follows the affected-check policy
