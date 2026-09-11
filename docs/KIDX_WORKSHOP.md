@@ -121,6 +121,18 @@ LAN IPv4 address before running `npm run serve:kidx`; both devices use that addr
 Only loopback/private IPv4 bindings are accepted. No public deployment or device configuration
 is required by the feature; actual tablet connectivity is a separate household check.
 
+The current Windows preview is also available to ugKid at
+`http://192.168.2.12:4177/?app=ev3-lab`. The loopback URL only works on the hosting computer.
+To start that LAN preview from PowerShell with the reviewed release directory:
+
+```powershell
+$env:KIDX_HOST = '192.168.2.12'
+npm run serve:kidx -- output/kidx/release
+```
+
+Use the host's current private IPv4 address if it changes. The host and server must remain
+running, and shared build participants must use the same LAN address.
+
 Sensor distance uses oriented obstacle footprints at sensor height; contact is a forward
 bumper threshold, color samples authored floor patches, and angle reports steering heading.
 The 56 mm wheel sets the displayed distance scale. Motor percentages regulate target speed

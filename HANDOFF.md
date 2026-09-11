@@ -92,6 +92,11 @@ suite has 315 passes and one intentional Windows skip. Final fingerprints:
 4177. See `progress.md` for diagnostic history and `docs/KIDX_FAMILY_TRYOUT.md` for the owner's
 proposed ten-minute child test; child and hardware acceptance remain pending.
 
+The reviewed preview now also listens on the Windows host's LAN address:
+`http://192.168.2.12:4177/?app=ev3-lab` for ugKid. The original loopback listener remains for
+this Windows machine. Both serve `output/kidx/release`; use the LAN URL on both devices for
+shared build rooms. This is a running local preview, not an installed startup service.
+
 ## KidX program library (current source, 2026-09-10)
 
 KidX now wraps this strip in a French workshop: eleven movement exercises, 138 indexed

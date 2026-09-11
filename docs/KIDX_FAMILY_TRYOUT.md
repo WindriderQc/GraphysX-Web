@@ -1,6 +1,14 @@
 # Essai KidX avec les garçons
 
-Durée proposée : environ dix minutes. Ouvrir `http://127.0.0.1:4177/?app=ev3-lab`.
+Durée proposée : environ dix minutes.
+
+- Sur **ugKid**, ouvrir `http://192.168.2.12:4177/?app=ev3-lab` sur le même réseau local.
+- Sur le poste Windows qui héberge l’aperçu, `http://127.0.0.1:4177/?app=ev3-lab` fonctionne aussi.
+
+Le poste Windows et son serveur KidX doivent rester allumés. Pour partager une construction
+entre deux écrans, utiliser l’adresse `192.168.2.12` sur les deux appareils. `127.0.0.1`
+désigne toujours l’appareil sur lequel on ouvre le lien.
+
 Ce petit essai sert à observer ce qui est clair, sans noter les enfants ni leur demander de
 trouver une « bonne réponse » à chaque question.
 
