@@ -395,13 +395,13 @@ investigation.
   trusted context-menu scope checks. The required game client also passes; screenshots were
   inspected and console/page errors are empty. These are Windows Chromium results; ugKid's
   served copy still predates the correction and needs a Firefox physical retest.
-- **Chassis heading needs correction:** Left/Right turn the cyan marker but the vehicle does
-  not visibly turn. Source confirms steering currently models the BallZ subject/arrow split:
-  `applySteering()` changes force direction, and `placeSteeringArrows()` yaws the separate
-  marker. It does not yaw the rover's chassis. Implement the rover behavior through shared
-  API/runtime vocabulary or ordinary scene composition; do not add host-only scene mutations
-  or change BallZ's independent aim/body behavior. Verify visible chassis orientation as well
-  as Left/Right routes and heading reset.
+- **Chassis heading corrected in source; physical retest pending:** the original acceptance
+  showed Left/Right turning the cyan marker while the body stayed north. The EV3 workbench
+  redesign now places the rendered assembly under the existing scene heading anchor. The
+  public steering path rotates the whole group; the physical collider and BallZ behavior are
+  unchanged. Disabled held controls also clear their pressed appearance. The focused browser
+  smoke checks the rendered chassis heading for both turn programs. See `KIDX_VISUALS.md`
+  and `progress.md` for source/validation receipts; ugKid has not been refreshed by this change.
 - **Still pending on the PC:** corrected sustained Drive holds and release outside a control,
   all remaining block controls/routes, Programs save/reload/open/replay, touch scrolling,
   name editing and Tab/Shift+Tab/Escape focus behavior. The mini-keyboard is available; an

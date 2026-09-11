@@ -160,6 +160,21 @@ try {
   await page.setViewportSize({ width: 800, height: 480 });
   await page.goto(`${base}?app=ev3-lab`, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await page.waitForSelector("[data-ev3-mission='first-drive']", { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => window.__GRAPHYSX_HOST__.world.getEntityObject("ev3-drive-base:technic")
+    ?.getObjectByName("ev3-driving-base source model"), { timeout: SMOKE_TIMEOUT });
+  const modelLook = await page.evaluate(() => {
+    const host = window.__GRAPHYSX_HOST__;
+    const model = host.world.getEntityObject("ev3-drive-base:technic");
+    const mat = host.world.getEntityObject("ev3-first-drive-mat");
+    const scene = window.__GRAPHYSX__.exportDocument();
+    return { meshes: model.getObjectByName("ev3-driving-base source model").children.length,
+      parent: model.parent === host.world.getEntityObject("ev3-drive-base:heading"),
+      matTexture: Boolean(mat.material.map), mission: scene.rules.subjectId,
+      unrelatedStations: scene.entities.filter(entity => entity.tags?.includes("construction-bay")).length };
+  });
+  check("First Drive loads the detailed EV3 assembly and a dedicated textured workbench",
+    modelLook.meshes === 9 && modelLook.parent && modelLook.matTexture
+      && modelLook.mission === "ev3-drive-base" && modelLook.unrelatedStations === 0, modelLook);
   // Give optional host services time to answer. A connected scene store used to mount its
   // authoring panel over this kid-facing app after the mission surface had already appeared.
   await page.waitForTimeout(750);
@@ -434,10 +449,15 @@ try {
       const stepped = window.advanceTime(1_700);
       const rover = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base"] })[0] ?? null;
       const indicator = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base:heading"] })[0] ?? null;
+      const model = window.__GRAPHYSX_HOST__.world.getEntityObject("ev3-drive-base:technic");
+      model.updateWorldMatrix(true, false);
+      const elements = model.matrixWorld.elements;
       return {
         stepped,
         position: rover?.position ?? null,
         headingDegrees: rover?.steering?.headingDegrees ?? null,
+        // The actual rendered chassis must face the physical steering direction.
+        chassisHeading: (Math.atan2(-elements[8], elements[10]) * 180 / Math.PI + 360) % 360,
         indicator: indicator ? {
           visible: indicator.visible,
           position: indicator.position,
@@ -462,6 +482,7 @@ try {
       && leftFirst.headingDegrees > 250 && leftFirst.headingDegrees < 290
       && leftFirst.rendered?.rover?.headingDegrees === leftFirst.headingDegrees
       && leftFirst.indicator?.visible
+      && Math.abs(leftFirst.chassisHeading - leftFirst.headingDegrees) < 1
       && Math.abs(leftFirst.indicator.rotationDegrees?.[1] + leftFirst.headingDegrees) < 1,
     leftFirst);
   check("the same turn-containing program repeats from the same heading and spawn",
@@ -475,6 +496,7 @@ try {
   const right = await runTurnProgram("ev3-first-program-right-800x480.png");
   check("Right then Forward produces the opposite physical route",
     right.position?.[0] > 0.5
+      && Math.abs(right.chassisHeading - right.headingDegrees) < 1
       && right.headingDegrees > 70 && right.headingDegrees < 110
       && leftFirst.position?.[0] < 0,
     { left: leftFirst, right });

@@ -87,46 +87,50 @@ const injectStyleOnce = (): void => {
   style.id = STYLE_ID;
   style.textContent = `
 .gx-ev3{position:fixed;inset:auto 0 0 0;z-index:30;display:flex;align-items:flex-end;justify-content:space-between;
-  gap:12px;padding:12px 14px calc(12px + env(safe-area-inset-bottom));pointer-events:none;font-family:var(--gx-font)}
+  gap:12px;padding:18px 20px calc(18px + env(safe-area-inset-bottom));pointer-events:none;font-family:var(--gx-font);
+  background:linear-gradient(transparent,rgba(239,239,230,.92))}
 /* Keep a stable control band within each viewport layout, including while a run changes state. */
 .gx-ev3-pad,.gx-ev3-actions{display:flex;gap:12px;pointer-events:auto}
 .gx-ev3[data-mode="program"] .gx-ev3-pad,.gx-ev3[data-mode="program"] .gx-ev3-actions{gap:8px}
-.gx-ev3 button{width:${EV3_TOUCH_TARGET_PX}px;height:${EV3_TOUCH_TARGET_PX}px;border-radius:18px;border:2px solid rgba(120,220,255,.5);
-  background:rgba(9,26,36,.88);color:#eaf7ff;font:800 15px/1.1 var(--gx-font);cursor:pointer;
+.gx-ev3 button{width:${EV3_TOUCH_TARGET_PX}px;height:${EV3_TOUCH_TARGET_PX}px;border-radius:10px;border:1px solid #aeb8b5;
+  background:#fafbf5;color:#24363d;font:800 15px/1.1 var(--gx-font);cursor:pointer;box-shadow:0 4px 0 #acb6b1,0 6px 12px #253b4020;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
-  -webkit-tap-highlight-color:transparent;touch-action:manipulation;backdrop-filter:blur(8px)}
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.gx-ev3 button[data-ev3-block]{background:#dcecc3;border-color:#a1ba7c;box-shadow:0 4px 0 #8ba36b,0 6px 12px #253b4018}
+.gx-ev3 button[data-ev3-block="stop"]{background:#f9d9d5;border-color:#d2a29b;box-shadow:0 4px 0 #bd8c85}
+.gx-ev3 button[data-ev3-run],.gx-ev3 button[data-ev3="go"]{background:#39771f;border-color:#346b1e;color:#fff;box-shadow:0 4px 0 #255217}
 .gx-ev3 button span.gx-ev3-glyph{font-size:26px;line-height:1}
-.gx-ev3 button:active,.gx-ev3 button[data-held="true"]{background:rgba(38,120,150,.95);border-color:#7fe6ff;transform:scale(.96)}
+.gx-ev3 button:active,.gx-ev3 button[data-held="true"]{background:#c7dda8;border-color:#507d39;color:#23371c;transform:translateY(3px);box-shadow:0 1px 0 #789261}
 .gx-ev3 button[data-held]{touch-action:none;user-select:none}
-.gx-ev3 button:disabled{cursor:default;opacity:.45;transform:none}
+.gx-ev3 button:disabled{cursor:default;opacity:.5;transform:none;box-shadow:none}
 .gx-ev3 button[hidden]{display:none!important}
-.gx-ev3 button:focus-visible{outline:3px solid #7fe6ff;outline-offset:3px}
+.gx-ev3 button:focus-visible{outline:3px solid #1669b2;outline-offset:4px}
 .gx-ev3-wide{width:auto!important;min-width:${EV3_TOUCH_TARGET_PX * 2}px;padding:0 18px}
 .gx-ev3-mission{position:fixed;left:14px;top:14px;z-index:30;width:min(66vw,560px);pointer-events:none;
-  padding:13px 15px 14px;border:1px solid rgba(120,220,255,.38);border-radius:16px;
-  background:rgba(9,26,36,.88);color:#eaf7ff;font-family:var(--gx-font);backdrop-filter:blur(10px)}
+  padding:13px 15px 14px;border:1px solid #cbd1c9;border-top:4px solid #c52f32;border-radius:12px;
+  background:rgba(252,252,246,.97);color:#24363d;font-family:var(--gx-font);box-shadow:0 8px 30px #293b3d16}
 .gx-ev3-mission-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px}
-.gx-ev3-kicker{color:#7fe6ff;font:800 11px/1 var(--gx-font);letter-spacing:.12em;text-transform:uppercase}
-.gx-ev3-clock{min-width:48px;text-align:center;padding:5px 8px;border-radius:999px;background:rgba(46,120,208,.28);
-  color:#fff;font:800 14px/1 var(--gx-font);font-variant-numeric:tabular-nums}
+.gx-ev3-kicker{color:#b3282b;font:800 11px/1.3 var(--gx-font);letter-spacing:.07em;text-transform:uppercase}
+.gx-ev3-clock{min-width:48px;text-align:center;padding:7px 8px;border-radius:5px;background:#dce2cf;
+  color:#35432f;font:800 14px/1 monospace;font-variant-numeric:tabular-nums}
 .gx-ev3-objective{font:800 19px/1.18 var(--gx-font)}
-.gx-ev3-nestor{display:flex;align-items:center;gap:9px;margin-top:10px;color:#dff4ff;font:600 14px/1.25 var(--gx-font)}
-.gx-ev3-nestor-mark{display:grid;place-items:center;flex:0 0 30px;height:30px;border-radius:50%;background:#7fe6ff;color:#08202b;
-  font:900 16px/1 var(--gx-font);box-shadow:0 0 18px rgba(127,230,255,.28)}
-.gx-ev3-nestor-copy{min-width:0}.gx-ev3-nestor-name{display:block;color:#7fe6ff;font:800 10px/1 var(--gx-font);letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px}
+.gx-ev3-nestor{display:flex;align-items:center;gap:9px;margin-top:10px;color:#43574c;font:600 14px/1.25 var(--gx-font)}
+.gx-ev3-nestor-mark{display:grid;place-items:center;flex:0 0 30px;height:30px;border-radius:8px;background:#e4ebd9;color:#36532a;
+  font:900 16px/1 var(--gx-font)}
+.gx-ev3-nestor-copy{min-width:0}.gx-ev3-nestor-name{display:block;color:#3d692f;font:800 10px/1 var(--gx-font);letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px}
 .gx-ev3-status{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gx-ev3-program-readout{display:flex;align-items:center;gap:9px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(127,230,255,.18)}
+.gx-ev3-program-readout{display:flex;align-items:center;gap:9px;margin-top:9px;padding-top:8px;border-top:1px solid #dce2d8}
 .gx-ev3-program-blocks{display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden;list-style:none;margin:0;padding:0}
 .gx-ev3-program-chip{display:flex;align-items:center;gap:4px;min-width:0;padding:5px 7px;border-radius:8px;
-  background:rgba(45,118,151,.42);color:#eaf7ff;font:800 11px/1 var(--gx-font);white-space:nowrap}
-.gx-ev3-program-chip[data-active="true"]{background:#7fe6ff;color:#08202b;box-shadow:0 0 14px rgba(127,230,255,.34)}
-.gx-ev3-program-empty{color:#b9d2dc;font:600 11px/1 var(--gx-font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  background:#dcecc3;color:#304c25;font:800 11px/1 var(--gx-font);white-space:nowrap;border:1px solid #b3c59a}
+.gx-ev3-program-chip[data-active="true"]{background:#39771f;color:#fff;border-color:#265818}
+.gx-ev3-program-empty{color:#61716a;font:600 11px/1 var(--gx-font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gx-ev3-mission[data-mode="drive"] .gx-ev3-program-readout{display:none}
 .gx-ev3-mission[data-phase="complete"]{border-color:rgba(94,235,151,.72)}
 .gx-ev3-mission[data-phase="expired"]{border-color:rgba(255,174,92,.72)}
 .gx-ev3-exit{position:fixed;right:14px;top:14px;z-index:30;pointer-events:auto;
-  min-height:48px;padding:0 16px;border-radius:12px;border:2px solid rgba(120,220,255,.45);
-  background:rgba(9,26,36,.82);color:#dff4ff;font:700 14px/1 var(--gx-font);cursor:pointer;touch-action:manipulation}
+  min-height:48px;padding:0 16px;border-radius:10px;border:1px solid #bbc5bd;
+  background:#fafbf5;color:#34454b;font:700 14px/1 var(--gx-font);cursor:pointer;touch-action:manipulation}
 /* The render-settings disclosure is pinned bottom-right at z-index 120 and competes with the
    mission's controls. It is a developer control and a child has no use for it, so the
    application surface hides it rather than dodging around it. */
@@ -177,7 +181,7 @@ export function mountEv3MissionStrip(
   missionHead.className = "gx-ev3-mission-head";
   const kicker = document.createElement("span");
   kicker.className = "gx-ev3-kicker";
-  kicker.textContent = "Mission 01 · First Drive";
+  kicker.textContent = "KidX · MINDSTORMS EV3 / First Drive";
   const clock = document.createElement("span");
   clock.className = "gx-ev3-clock";
   clock.dataset.ev3Clock = "";
@@ -447,7 +451,10 @@ export function mountEv3MissionStrip(
   setControlsEnabled = (enabled: boolean): void => {
     const wasEnabled = controlsEnabled;
     controlsEnabled = enabled;
-    for (const button of driveButtons) button.disabled = !enabled;
+    for (const button of driveButtons) {
+      button.disabled = !enabled;
+      if (!enabled) button.dataset.held = "false";
+    }
     for (const button of programButtons) button.disabled = !enabled || program.length >= EV3_FIRST_PROGRAM_MAX_BLOCKS;
     undo.disabled = !enabled || program.length === 0;
     runProgram.disabled = !enabled || program.length === 0;

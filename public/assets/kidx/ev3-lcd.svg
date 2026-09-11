@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="356" height="322" viewBox="0 0 178 161">
+  <rect width="178" height="161" fill="#a8af89"/>
+  <g fill="#30392d" font-family="monospace">
+    <text x="12" y="19" font-size="12" font-weight="bold">EV3</text>
+    <path d="M143 8h21v11h-21z m21 3h3v5h-3z" fill="none" stroke="#30392d" stroke-width="2"/>
+    <path d="M146 11h14v5h-14z"/>
+    <path d="M9 26h160" stroke="#30392d"/>
+    <text x="89" y="59" text-anchor="middle" font-size="15" font-weight="bold">FIRST DRIVE</text>
+    <path d="M76 75l27 17-27 17z"/>
+    <text x="89" y="134" text-anchor="middle" font-size="12">MOTORS B + C</text>
+    <path d="M9 146h160" stroke="#30392d"/>
+  </g>
+</svg>

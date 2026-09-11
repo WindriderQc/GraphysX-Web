@@ -17,6 +17,15 @@ export type AgentWorldTextureDescriptor = {
  */
 export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
   {
+    id: "kidx-first-drive-mat",
+    label: "KidX First Drive Mat",
+    url: "/assets/kidx/first-drive-mat.svg",
+    category: "science",
+    description: "Original robotics work mat with a grid, start marks and a finish label.",
+    defaultRepeat: [1, 1],
+    source: "KidX original SVG artwork"
+  },
+  {
     id: "checker",
     label: "Checker",
     url: "/assets/textures/Damier.jpg",

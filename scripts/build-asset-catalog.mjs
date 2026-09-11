@@ -132,6 +132,13 @@ export async function buildAssetCatalog() {
       source: payload.provenance?.archiveSource ?? "",
     });
   }
+  // Original KidX models use the same native format and release discovery as imported assets.
+  const kidXDirectory = join(ROOT, "public", "assets", "kidx");
+  for (const file of (await readdir(kidXDirectory)).filter((name) => name.endsWith(".json")).sort()) {
+    const payload = JSON.parse(await readFile(join(kidXDirectory, file), "utf8"));
+    entries.push({ id: file.slice(0, -5), label: payload.catalog.label, category: payload.catalog.category,
+      format: "graphysx-mesh-json", url: `/assets/kidx/${file}`, source: payload.provenance.source });
+  }
   const duplicates = entries.map((entry) => entry.id).filter((id, index, all) => all.indexOf(id) !== index);
   if (duplicates.length > 0) throw new Error(`Duplicate asset ids: ${duplicates.join(", ")}`);
   return entries;

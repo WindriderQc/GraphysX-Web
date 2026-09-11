@@ -148,6 +148,9 @@ type RecoveredPbrProfile = {
  * group, and geometry byte. Unlisted assets retain their exact legacy Phong path.
  */
 function recoveredPbrProfile(assetId: string | null, materialName: string): RecoveredPbrProfile | null {
+  if (assetId === "ev3-driving-base") {
+    return { shading: "standard", roughness: materialName === "rubber" ? 0.94 : 0.38, metalness: 0 };
+  }
   // The 2011 player ball, revival look (the legacy ball-selector's default): the shell is a
   // translucent cage so the FireArrow controller inside stays legible — same glass mechanics
   // as the car windows. The controller/fire meshes carry the archived FireArrow texture and

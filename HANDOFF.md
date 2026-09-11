@@ -46,6 +46,19 @@ not draft recovery, export/import or cross-device synchronization.
 failed storage, and touch/keyboard behavior at 320/390px portrait and 800/1280px landscape.
 See `progress.md` for this change's validation; the August production receipt is separate.
 
+## KidX EV3 visual workbench (current source, 2026-09-10)
+
+First Drive now opens a dedicated workbench with an original procedural EV3-inspired
+Technic driving base, printed mat and loose-brick trays. The full lab remains a separate
+starter with all seven construction families and missions. The camera no longer auto-orbits
+and reframes on portrait resize. The existing heading anchor carries the complete visible
+robot, so Left/Right now turn the chassis as well as its marker; disabled held controls also
+clear their pressed appearance. Program semantics and the physical drive collider are unchanged.
+
+Model source, release asset discovery and verification are documented in
+`docs/KIDX_VISUALS.md`. See the latest progress entry for actual test receipts. This is local
+source work; it does not qualify the physical Mint touchscreen or real EV3 hardware.
+
 ## Production baseline (2026-08-13)
 
 **The lean platform and KidX First Drive are the current production release on `main`.** The
@@ -103,8 +116,8 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    button text, and Left/Right change the direction indicator without yawing the chassis.
    The held-button menu/gesture correction is now in source and passes the focused EV3 smoke
    and required game client; the served ugKid build and physical retest are still pending.
-   The owner requested a fresh session here. Finish these application issues and actual-PC
-   acceptance before EV3; do not restart broad touchscreen diagnosis. Continue from
+   The chassis heading and held appearance are now corrected in the source workbench redesign
+   above. Finish the corrected build's actual-PC acceptance before EV3; do not restart broad touchscreen diagnosis. Continue from
    [the diagnostic and acceptance guide](docs/LINUX_MINT_TOUCH.md). The existing
    800×480 browser measurements remain compact-layout evidence, not hardware qualification.
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`

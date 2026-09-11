@@ -139,5 +139,6 @@ export const GRAPHYSX_AGENT_WORLD_ASSET_CATALOG: readonly AgentWorldAssetDescrip
   { id: "archive-tvm-pipe1", label: "Pipe 1", category: "archive-prop", format: "graphysx-mesh-json", url: "/assets/ports/archive-tvm-pipe1.json", source: "pipe1.tvm" },
   { id: "archive-tvm-prisme", label: "Prisme", category: "archive-prop", format: "graphysx-mesh-json", url: "/assets/ports/archive-tvm-prisme.json", source: "Prisme.TVM" },
   { id: "archive-tvm-ring-tvm", label: "BallZ Ring", category: "archive-prop", format: "graphysx-mesh-json", url: "/assets/ports/archive-tvm-ring-tvm.json", source: "ring.tvm" },
-  { id: "archive-tvm-slide1", label: "Slide 1", category: "archive-prop", format: "graphysx-mesh-json", url: "/assets/ports/archive-tvm-slide1.json", source: "Slide1.TVM" }
+  { id: "archive-tvm-slide1", label: "Slide 1", category: "archive-prop", format: "graphysx-mesh-json", url: "/assets/ports/archive-tvm-slide1.json", source: "Slide1.TVM" },
+  { id: "ev3-driving-base", label: "EV3-inspired Technic Driving Base", category: "vehicle", format: "graphysx-mesh-json", url: "/assets/kidx/ev3-driving-base.json", source: "Original procedural geometry; scripts/build-ev3-assets.mjs" }
 ] as const;
