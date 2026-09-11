@@ -1,8 +1,10 @@
 # KidX LEGO EV3 instruction references
 
-The owner supplied 28 PDFs under `docs/Lego/` on 2026-09-10. This index records
-the local source material for future KidX visual and construction work. The PDFs
-remain local references; they are not runtime assets or build dependencies.
+The owner supplied 28 PDFs under `docs/Lego/` on 2026-09-10. The inventory below records
+those originals. The subsequent LEGO Education import brings the active catalog to
+138 documents. KidX now reads these local PDFs through its optional document server;
+they remain outside the release assets and are not build dependencies. See
+[KIDX_WORKSHOP.md](KIDX_WORKSHOP.md) for the catalog, reader and two CAD construction guides.
 Paths below are relative to this document. Page numbers are one-based PDF pages.
 
 ## First Drive: the most useful pages
@@ -27,7 +29,8 @@ The current First Drive mesh is still the original, wheeled, Education-inspired
 model described in [KIDX_VISUALS.md](KIDX_VISUALS.md). It does not reproduce TRACK3R.
 Its rounded shell, wheel-and-caster chassis and custom mat should not be presented
 as faithful reproductions of the owner's newly supplied instructions. This source
-review does not change that mesh or the simulated driving behavior.
+review does not change that mesh. TRACK3R and SPIK3R now have separate LDraw construction
+views; their source and coverage are documented in the workshop guide.
 
 For a future TRACK3R model, prioritize the recognizable silhouette and construction:
 paired tracks with visible gears, the brick's faceted housing and gray button

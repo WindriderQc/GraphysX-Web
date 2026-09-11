@@ -3,6 +3,15 @@ import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
 // @ts-expect-error -- plain .mjs build script, no type declarations
 import { productAssetManifest } from "./scripts/product-assets.mjs";
+// @ts-expect-error -- local development middleware, not browser code
+import { createKidxDocumentRoute } from "./scripts/kidx-document-server.mjs";
+
+function kidxDocuments(): Plugin {
+  return { name: "kidx-local-instructions", apply: "serve", async configureServer(server) {
+    const route = await createKidxDocumentRoute();
+    server.middlewares.use((req, res, next) => { if (!route(req, res)) next(); });
+  } };
+}
 
 /**
  * Copy only the product's assets into a release build.
@@ -42,10 +51,12 @@ export default defineConfig(({ command }) => {
   return {
     // Dev always serves all of public/, so the legacy route keeps its archive locally.
     publicDir: prune ? false : "public",
-    plugins: prune ? [productAssets()] : [],
+    plugins: prune ? [productAssets()] : [kidxDocuments()],
+    optimizeDeps: { entries: ["index.html"] },
     server: {
       // PORT lets a second checkout/session run its own dev server beside the default one.
-      port: Number(process.env.PORT ?? 4173)
+      port: Number(process.env.PORT ?? 4173),
+      watch: { ignored: ["**/output/**", "**/docs/Lego/**"] },
     }
   };
 });

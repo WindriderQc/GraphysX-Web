@@ -27,15 +27,19 @@ Live application: <https://graphysx.specialblend.ca>
 > Raspberry Pi target. See **[HANDOFF.md](HANDOFF.md)** and the
 > **[Linux Mint touchscreen guide](docs/LINUX_MINT_TOUCH.md)**.
 >
-> **In the current source:** First Drive's **Programs** button saves named block sequences in
-> this browser. Build a program, open Programs, enter a name and save. After reloading, open
-> Programs and select a saved name; **Run** uses the same simulator. Editing an opened program
-> enables **Update saved program**; entering another name saves a copy. Browser data clearing
+> **In the current source:** First Drive's **Programmes** button saves named block sequences in
+> this browser. Build a program, open Programmes, enter a name and save. After reloading, open
+> Programmes and select a saved name; **Lancer** uses the same simulator. Editing an opened program
+> enables **Mettre à jour**; entering another name saves a copy. Browser data clearing
 > removes this library. Programs are not synced to a scene store or another device.
 >
-> First Drive now uses an EV3-inspired Technic robot on a dedicated work mat, with a
+> First Drive now uses detailed LDraw EV3 parts in a wheeled robot on a dedicated work mat, with a
 > stable camera and touch controls styled around the brick's LCD and programming blocks.
-> The original model is generated locally; see **[KidX visuals](docs/KIDX_VISUALS.md)**.
+> The teaching chassis is assembled locally; see **[KidX visuals](docs/KIDX_VISUALS.md)** for sources.
+> **Atelier** now opens five French movement missions, a searchable library of 138 LEGO
+> notices and 3D assembly guides for TRACK3R and SPIK3R. The other models have PDF guidance.
+> Open `?app=ev3-lab&view=atelier`; **[KidX workshop](docs/KIDX_WORKSHOP.md)** documents
+> the local PDF cache/server, CAD provenance, current coverage and verification.
 >
 > The retained AgentX showroom is a 3D hub where Nestor
 > demonstrates Build, Play, and Explore through attributed scene commands whose results remain

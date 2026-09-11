@@ -11,11 +11,12 @@
 // `api.steer` on the drive base. There is no bespoke host state and no second command path,
 // which is the invariant that lets an agent do anything a child can do and vice versa.
 //
-// Deliberately NOT here: mission selection, hardware or a scoring system. This is
-// one real mission and one tiny motion language — enough to measure blocks → program → simulation
-// before generalising either the application surface or the hardware bridge.
+// KidX owns mission selection. This strip shares one motion language and rule evaluator
+// across its movement exercises; hardware control remains a separate capability.
 
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import { kidxFrench } from "./kidx-french";
+import type { KidxMission } from "./kidx-missions";
 import { mountEv3ProgramLibrary } from "./ev3-program-library";
 import {
   EV3_FIRST_MISSION_MISS_TAG,
@@ -75,6 +76,8 @@ export type Ev3MissionStripState = {
 };
 
 export type Ev3MissionStripOptions = {
+  mission?: KidxMission;
+  french?: boolean;
   /** Joins the host's one frame loop; the surface must never create its own rAF loop. */
   subscribeFrame: (listener: (deltaSeconds: number) => void) => () => void;
 };
@@ -168,6 +171,7 @@ export function mountEv3MissionStrip(
   onExit: () => void,
   options: Ev3MissionStripOptions,
 ): Ev3MissionStrip {
+  const t = options.french ? kidxFrench : (text: string) => text;
   injectStyleOnce();
 
   const has = (id: string): boolean => api.query({ ids: [id] }).length === 1;
@@ -175,13 +179,13 @@ export function mountEv3MissionStrip(
 
   const mission = document.createElement("section");
   mission.className = "gx-ev3-mission";
-  mission.dataset.ev3Mission = "first-drive";
-  mission.setAttribute("aria-label", "First Drive mission");
+  mission.dataset.ev3Mission = options?.mission?.id ?? "first-drive";
+  mission.setAttribute("aria-label", options?.mission?.title ?? "First Drive mission");
   const missionHead = document.createElement("div");
   missionHead.className = "gx-ev3-mission-head";
   const kicker = document.createElement("span");
   kicker.className = "gx-ev3-kicker";
-  kicker.textContent = "KidX · MINDSTORMS EV3 / First Drive";
+  kicker.textContent = `KidX · MINDSTORMS EV3 / ${options.mission?.title ?? "First Drive"}`;
   const clock = document.createElement("span");
   clock.className = "gx-ev3-clock";
   clock.dataset.ev3Clock = "";
@@ -189,7 +193,7 @@ export function mountEv3MissionStrip(
   const objective = document.createElement("div");
   objective.className = "gx-ev3-objective";
   objective.dataset.ev3Objective = "";
-  objective.textContent = "Reach the blue target before time runs out.";
+  objective.textContent = options.mission?.objective ?? "Reach the blue target before time runs out.";
   const nestor = document.createElement("div");
   nestor.className = "gx-ev3-nestor";
   const nestorMark = document.createElement("span");
@@ -204,14 +208,14 @@ export function mountEv3MissionStrip(
   status.className = "gx-ev3-status";
   status.dataset.ev3Nestor = "";
   status.setAttribute("role", "status");
-  const say = (text: string): void => { status.textContent = text; };
+  const say = (text: string): void => { status.textContent = text === "Build a program: tap Forward three times, then Run." && options.mission ? options.mission.hint : t(text); };
   say(driveable ? "Build a program: tap Forward three times, then Run." : "This lab has no drive base loaded.");
   nestorCopy.append(nestorName, status);
   nestor.append(nestorMark, nestorCopy);
   const programReadout = document.createElement("div");
   programReadout.className = "gx-ev3-program-readout";
   programReadout.dataset.ev3Program = "";
-  programReadout.setAttribute("aria-label", "Your program");
+  programReadout.setAttribute("aria-label", t("Your program"));
   const programBlocks = document.createElement("ol");
   programBlocks.className = "gx-ev3-program-blocks";
   programBlocks.setAttribute("aria-live", "polite");
@@ -221,7 +225,7 @@ export function mountEv3MissionStrip(
   const exit = document.createElement("button");
   exit.type = "button";
   exit.className = "gx-ev3-exit";
-  exit.textContent = "✕ Leave the lab";
+  exit.textContent = t("✕ Leave the lab");
   exit.addEventListener("click", () => onExit());
 
   const strip = document.createElement("div");
@@ -244,12 +248,12 @@ export function mountEv3MissionStrip(
     button.type = "button";
     button.dataset.ev3 = label.toLowerCase();
     button.dataset.held = "false";
-    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-label", t(label));
     const icon = document.createElement("span");
     icon.className = "gx-ev3-glyph";
     icon.textContent = glyph;
     const text = document.createElement("span");
-    text.textContent = label;
+    text.textContent = t(label);
     button.append(icon, text);
 
     // A long finger hold is a driving command, not a text selection or browser menu.
@@ -276,12 +280,12 @@ export function mountEv3MissionStrip(
     button.type = "button";
     button.dataset.ev3 = label.toLowerCase();
     if (wide) button.className = "gx-ev3-wide";
-    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-label", t(label));
     const icon = document.createElement("span");
     icon.className = "gx-ev3-glyph";
     icon.textContent = glyph;
     const text = document.createElement("span");
-    text.textContent = label;
+    text.textContent = t(label);
     button.append(icon, text);
     button.addEventListener("click", run);
     return button;
@@ -338,7 +342,7 @@ export function mountEv3MissionStrip(
 
   const setVisibleLabel = (button: HTMLButtonElement, label: string): HTMLButtonElement => {
     const text = button.lastElementChild;
-    if (text) text.textContent = label;
+    if (text) text.textContent = t(label);
     return button;
   };
   const blockOrder: Ev3FirstProgramBlockId[] = ["forward", "left", "right", "stop"];
@@ -444,7 +448,7 @@ export function mountEv3MissionStrip(
     refreshControls();
     renderRun();
     say("Program opened. Add blocks or tap Run to try it.");
-  });
+  }, t);
   programReadout.prepend(library.button);
   library.button.disabled = !missionReady;
 
@@ -472,7 +476,7 @@ export function mountEv3MissionStrip(
     if (program.length === 0) {
       const empty = document.createElement("li");
       empty.className = "gx-ev3-program-empty";
-      empty.textContent = "Tap blocks below to build";
+      empty.textContent = t("Tap blocks below to build");
       programBlocks.append(empty);
     } else {
       program.forEach((id, index) => {
@@ -481,7 +485,7 @@ export function mountEv3MissionStrip(
         chip.className = "gx-ev3-program-chip";
         chip.dataset.ev3ProgramBlock = id;
         chip.dataset.active = String(index === activeProgramIndex);
-        chip.textContent = `${block.glyph} ${block.shortLabel}`;
+        chip.textContent = `${block.glyph} ${t(block.shortLabel)}`;
         programBlocks.append(chip);
       });
     }

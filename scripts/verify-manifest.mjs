@@ -37,6 +37,8 @@ export const VERIFY_SMOKES = [
   { name: "joints", tier: "apps", script: "scripts/smoke-joints.mjs", covers: "scene-authored fixed/revolute/rope joints: motion, bridge parity, patch, undo, export/reload" },
   { name: "ev3-lab", tier: "apps", script: "scripts/smoke-ev3-lab.mjs", covers: "EV3 Robotics Mission Lab: seven construction families, seven mission zones, driveable base, gripper and launch interactions, round-trip" },
   { name: "ev3-programs", tier: "apps", script: "scripts/smoke-ev3-programs.mjs", covers: "KidX named programs: save/reload/replay, update/copy/delete, unsaved edits, storage failure, responsive library and keyboard focus" },
+  { name: "kidx-missions", tier: "apps", script: "scripts/smoke-kidx-missions.mjs", covers: "Five French movement missions finish through program controls and real physics; delivery and return require checkpoints" },
+  { name: "kidx-workshop", tier: "apps", script: "scripts/smoke-kidx-workshop.mjs", covers: "LEGO catalog and PDF reader, native TRACK3R/SPIK3R assembly guides, authored normals, progress and responsive controls" },
   { name: "ballz18-sky", tier: "apps", script: "scripts/smoke-ballz18-sky.mjs", covers: "exact authored 2048px BallZ18 sky: release manifest, six SHA-256 hashes, decode, orientation, scene application" },
   { name: "scenenet-xml", tier: "apps", script: "scripts/smoke-scenenet-xml.mjs", covers: "SceneNET v1.0/v1.1/v1.2/split-enum import-export-import, deterministic XML, structured loss warnings, ambiguity rejection, editor download" },
   { name: "mesh-colliders", tier: "apps", script: "scripts/smoke-mesh-colliders.mjs", covers: "scene-native model colliders: Great Slide trimesh, dynamic convex hull, rejection, bridge + round-trip" },

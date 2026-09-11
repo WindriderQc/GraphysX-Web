@@ -28,6 +28,13 @@ for validation. Hardware priorities below are unchanged; no EV3/Pi qualification
 
 ## KidX program library (current source, 2026-09-10)
 
+KidX now wraps this strip in a French workshop: five movement exercises, 138 indexed
+PDF notices, and TRACK3R/SPIK3R native assembly guides. `?app=ev3-lab&view=atelier`
+opens the new sections; the default route still opens Premier trajet. See
+`docs/KIDX_WORKSHOP.md` for actual coverage, local document serving, generated CAD and
+license provenance. Only these two models have assembly geometry; the remaining PDFs
+are read page by page. Current local validation is recorded in `progress.md`.
+
 First Drive now has a **Programs** disclosure above the unchanged seven play controls. Named
 programs can be saved, opened after reload, explicitly updated, copied under another name and
 deleted. Opening resets the attempt and heading, pauses the rover and preserves the existing
@@ -48,8 +55,10 @@ See `progress.md` for this change's validation; the August production receipt is
 
 ## KidX EV3 visual workbench (current source, 2026-09-10)
 
-First Drive now opens a dedicated workbench with an original procedural EV3-inspired
-Technic driving base, printed mat and loose-brick trays. The full lab remains a separate
+First Drive now opens a dedicated workbench with detailed, licensed LDraw EV3 components
+in an original wheeled chassis, a printed mat and loose-brick trays. The 3D construction
+helper has no floor or wall geometry, allowing clear inspection from underneath.
+The full lab remains a separate
 starter with all seven construction families and missions. The camera no longer auto-orbits
 and reframes on portrait resize. The existing heading anchor carries the complete visible
 robot, so Left/Right now turn the chassis as well as its marker; disabled held controls also

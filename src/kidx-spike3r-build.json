@@ -1,0 +1,2090 @@
+{
+  "id": "spike3r",
+  "label": "SPIK3R",
+  "height": 3.6969038759438066,
+  "width": 5.4,
+  "depth": 4.297849971796052,
+  "steps": [
+    {
+      "sourceStep": 0,
+      "url": "/assets/kidx/builds/spike3r/spike3r-1.json",
+      "pieces": [
+        {
+          "file": "95658.dat",
+          "color": "15",
+          "label": "Electric Mindstorms EV3 Large Motor"
+        },
+        {
+          "file": "59426.dat",
+          "color": "72",
+          "label": "Technic Axle  5.5 with Stop Type 2"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        },
+        {
+          "file": "32278.dat",
+          "color": "0",
+          "label": "Technic Beam 15"
+        },
+        {
+          "file": "48989.dat",
+          "color": "71",
+          "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
+        }
+      ]
+    },
+    {
+      "sourceStep": 1,
+      "url": "/assets/kidx/builds/spike3r/spike3r-2.json",
+      "pieces": [
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "3713.dat",
+          "color": "4",
+          "label": "Technic Bush with Two Flanges"
+        }
+      ]
+    },
+    {
+      "sourceStep": 2,
+      "url": "/assets/kidx/builds/spike3r/spike3r-3.json",
+      "pieces": [
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "6587.dat",
+          "color": "28",
+          "label": "Technic Axle  3 with Stud"
+        },
+        {
+          "file": "74695.dat",
+          "color": "0",
+          "label": "=Technic Beam  2 Liftarm"
+        }
+      ]
+    },
+    {
+      "sourceStep": 3,
+      "url": "/assets/kidx/builds/spike3r/spike3r-4.json",
+      "pieces": [
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "32348.dat",
+          "color": "0",
+          "label": "Technic Beam  4 x  4 Liftarm Bent 53.13"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "32523.dat",
+          "color": "0",
+          "label": "Technic Beam  3"
+        },
+        {
+          "file": "32316.dat",
+          "color": "0",
+          "label": "Technic Beam  5"
+        },
+        {
+          "file": "32278.dat",
+          "color": "0",
+          "label": "Technic Beam 15"
+        }
+      ]
+    },
+    {
+      "sourceStep": 4,
+      "url": "/assets/kidx/builds/spike3r/spike3r-5.json",
+      "pieces": [
+        {
+          "file": "99455.dat",
+          "color": "15",
+          "label": "Electric Mindstorms EV3 Medium Motor"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "60484.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3 T-shaped"
+        },
+        {
+          "file": "60484.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3 T-shaped"
+        }
+      ]
+    },
+    {
+      "sourceStep": 5,
+      "url": "/assets/kidx/builds/spike3r/spike3r-6.json",
+      "pieces": [
+        {
+          "file": "48989.dat",
+          "color": "71",
+          "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
+        },
+        {
+          "file": "48989.dat",
+          "color": "71",
+          "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "31313 - ev3cable-studio-2.ldr",
+          "color": "47",
+          "label": "EV3 Cable"
+        }
+      ]
+    },
+    {
+      "sourceStep": 6,
+      "url": "/assets/kidx/builds/spike3r/spike3r-7.json",
+      "pieces": [
+        {
+          "file": "59426.dat",
+          "color": "72",
+          "label": "Technic Axle  5.5 with Stop Type 2"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        },
+        {
+          "file": "32278.dat",
+          "color": "0",
+          "label": "Technic Beam 15"
+        },
+        {
+          "file": "48989.dat",
+          "color": "71",
+          "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "32123b.dat",
+          "color": "14",
+          "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
+        }
+      ]
+    },
+    {
+      "sourceStep": 7,
+      "url": "/assets/kidx/builds/spike3r/spike3r-8.json",
+      "pieces": [
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "6587.dat",
+          "color": "28",
+          "label": "Technic Axle  3 with Stud"
+        },
+        {
+          "file": "74695.dat",
+          "color": "0",
+          "label": "=Technic Beam  2 Liftarm"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        }
+      ]
+    },
+    {
+      "sourceStep": 8,
+      "url": "/assets/kidx/builds/spike3r/spike3r-9.json",
+      "pieces": [
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "32348.dat",
+          "color": "0",
+          "label": "Technic Beam  4 x  4 Liftarm Bent 53.13"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "32316.dat",
+          "color": "0",
+          "label": "Technic Beam  5"
+        },
+        {
+          "file": "32523.dat",
+          "color": "0",
+          "label": "Technic Beam  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 9,
+      "url": "/assets/kidx/builds/spike3r/spike3r-10.json",
+      "pieces": [
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "31313 - 4185a.dat",
+          "color": "71",
+          "label": "4185a"
+        },
+        {
+          "file": "2815.dat",
+          "color": "256",
+          "label": "Technic Wedge Belt Wheel Tyre"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        },
+        {
+          "file": "32278.dat",
+          "color": "0",
+          "label": "Technic Beam 15"
+        }
+      ]
+    },
+    {
+      "sourceStep": 10,
+      "url": "/assets/kidx/builds/spike3r/spike3r-11.json",
+      "pieces": [
+        {
+          "file": "32526.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  5 Bent 90"
+        },
+        {
+          "file": "32526.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  5 Bent 90"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "40490.dat",
+          "color": "0",
+          "label": "Technic Beam  9"
+        }
+      ]
+    },
+    {
+      "sourceStep": 11,
+      "url": "/assets/kidx/builds/spike3r/spike3r-12.json",
+      "pieces": [
+        {
+          "file": "32556.dat",
+          "color": "19",
+          "label": "~Moved to 32556a"
+        },
+        {
+          "file": "32316.dat",
+          "color": "0",
+          "label": "Technic Beam  5"
+        },
+        {
+          "file": "32138.dat",
+          "color": "71",
+          "label": "Technic Pin  3L Double with Axlehole"
+        },
+        {
+          "file": "32556.dat",
+          "color": "19",
+          "label": "~Moved to 32556a"
+        },
+        {
+          "file": "32316.dat",
+          "color": "0",
+          "label": "Technic Beam  5"
+        },
+        {
+          "file": "32138.dat",
+          "color": "71",
+          "label": "Technic Pin  3L Double with Axlehole"
+        },
+        {
+          "file": "32556.dat",
+          "color": "19",
+          "label": "~Moved to 32556a"
+        },
+        {
+          "file": "32316.dat",
+          "color": "0",
+          "label": "Technic Beam  5"
+        },
+        {
+          "file": "32138.dat",
+          "color": "71",
+          "label": "Technic Pin  3L Double with Axlehole"
+        },
+        {
+          "file": "32556.dat",
+          "color": "19",
+          "label": "~Moved to 32556a"
+        },
+        {
+          "file": "32316.dat",
+          "color": "0",
+          "label": "Technic Beam  5"
+        },
+        {
+          "file": "32138.dat",
+          "color": "71",
+          "label": "Technic Pin  3L Double with Axlehole"
+        }
+      ]
+    },
+    {
+      "sourceStep": 12,
+      "url": "/assets/kidx/builds/spike3r/spike3r-13.json",
+      "pieces": [
+        {
+          "file": "32524.dat",
+          "color": "0",
+          "label": "Technic Beam  7"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "6628.dat",
+          "color": "0",
+          "label": "Technic Pin Towball with Friction"
+        },
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "32524.dat",
+          "color": "0",
+          "label": "Technic Beam  7"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "6628.dat",
+          "color": "0",
+          "label": "Technic Pin Towball with Friction"
+        },
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "32524.dat",
+          "color": "0",
+          "label": "Technic Beam  7"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "6628.dat",
+          "color": "0",
+          "label": "Technic Pin Towball with Friction"
+        },
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "32524.dat",
+          "color": "0",
+          "label": "Technic Beam  7"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "6628.dat",
+          "color": "0",
+          "label": "Technic Pin Towball with Friction"
+        },
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        }
+      ]
+    },
+    {
+      "sourceStep": 13,
+      "url": "/assets/kidx/builds/spike3r/spike3r-14.json",
+      "pieces": [
+        {
+          "file": "31313 - 4185a.dat",
+          "color": "71",
+          "label": "4185a"
+        },
+        {
+          "file": "2815.dat",
+          "color": "256",
+          "label": "Technic Wedge Belt Wheel Tyre"
+        },
+        {
+          "file": "74695.dat",
+          "color": "0",
+          "label": "=Technic Beam  2 Liftarm"
+        },
+        {
+          "file": "31313 - 4185a.dat",
+          "color": "71",
+          "label": "4185a"
+        },
+        {
+          "file": "2815.dat",
+          "color": "256",
+          "label": "Technic Wedge Belt Wheel Tyre"
+        },
+        {
+          "file": "74695.dat",
+          "color": "0",
+          "label": "=Technic Beam  2 Liftarm"
+        }
+      ]
+    },
+    {
+      "sourceStep": 14,
+      "url": "/assets/kidx/builds/spike3r/spike3r-15.json",
+      "pieces": [
+        {
+          "file": "32140.dat",
+          "color": "0",
+          "label": "Technic Beam  2 x  4 Liftarm Bent 90"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "32348.dat",
+          "color": "0",
+          "label": "Technic Beam  4 x  4 Liftarm Bent 53.13"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 15,
+      "url": "/assets/kidx/builds/spike3r/spike3r-16.json",
+      "pieces": [
+        {
+          "file": "32140.dat",
+          "color": "0",
+          "label": "Technic Beam  2 x  4 Liftarm Bent 90"
+        },
+        {
+          "file": "44294.dat",
+          "color": "71",
+          "label": "Technic Axle  7"
+        },
+        {
+          "file": "3713.dat",
+          "color": "4",
+          "label": "Technic Bush with Two Flanges"
+        },
+        {
+          "file": "3713.dat",
+          "color": "4",
+          "label": "Technic Bush with Two Flanges"
+        },
+        {
+          "file": "32009.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 16,
+      "url": "/assets/kidx/builds/spike3r/spike3r-17.json",
+      "pieces": [
+        {
+          "file": "87082.dat",
+          "color": "71",
+          "label": "Technic Pin Long with Pin Hole Type 1"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        },
+        {
+          "file": "32034.dat",
+          "color": "4",
+          "label": "Technic Angle Connector #2 (180 degree)"
+        },
+        {
+          "file": "98568p02.dat",
+          "color": "4",
+          "label": "Constraction Blade 11.5L with Sawtooth Back with Pearl Silver Blade Pattern"
+        },
+        {
+          "file": "32009.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
+        },
+        {
+          "file": "32140.dat",
+          "color": "0",
+          "label": "Technic Beam  2 x  4 Liftarm Bent 90"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "32348.dat",
+          "color": "0",
+          "label": "Technic Beam  4 x  4 Liftarm Bent 53.13"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 17,
+      "url": "/assets/kidx/builds/spike3r/spike3r-18.json",
+      "pieces": [
+        {
+          "file": "32140.dat",
+          "color": "0",
+          "label": "Technic Beam  2 x  4 Liftarm Bent 90"
+        },
+        {
+          "file": "44294.dat",
+          "color": "71",
+          "label": "Technic Axle  7"
+        },
+        {
+          "file": "3713.dat",
+          "color": "4",
+          "label": "Technic Bush with Two Flanges"
+        },
+        {
+          "file": "3713.dat",
+          "color": "4",
+          "label": "Technic Bush with Two Flanges"
+        },
+        {
+          "file": "32009.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 18,
+      "url": "/assets/kidx/builds/spike3r/spike3r-19.json",
+      "pieces": [
+        {
+          "file": "87082.dat",
+          "color": "71",
+          "label": "Technic Pin Long with Pin Hole Type 1"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        },
+        {
+          "file": "32034.dat",
+          "color": "4",
+          "label": "Technic Angle Connector #2 (180 degree)"
+        },
+        {
+          "file": "98568p02.dat",
+          "color": "4",
+          "label": "Constraction Blade 11.5L with Sawtooth Back with Pearl Silver Blade Pattern"
+        },
+        {
+          "file": "32009.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
+        }
+      ]
+    },
+    {
+      "sourceStep": 19,
+      "url": "/assets/kidx/builds/spike3r/spike3r-20.json",
+      "pieces": [
+        {
+          "file": "87083.dat",
+          "color": "72",
+          "label": "Technic Axle  4 with Stop"
+        },
+        {
+          "file": "40490.dat",
+          "color": "0",
+          "label": "Technic Beam  9"
+        },
+        {
+          "file": "32123b.dat",
+          "color": "14",
+          "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
+        },
+        {
+          "file": "32123b.dat",
+          "color": "14",
+          "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
+        },
+        {
+          "file": "87083.dat",
+          "color": "72",
+          "label": "Technic Axle  4 with Stop"
+        }
+      ]
+    },
+    {
+      "sourceStep": 20,
+      "url": "/assets/kidx/builds/spike3r/spike3r-21.json",
+      "pieces": [
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "32526.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  5 Bent 90"
+        },
+        {
+          "file": "32054.dat",
+          "color": "4",
+          "label": "Technic Pin Long with Stop Bush"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "32526.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  5 Bent 90"
+        },
+        {
+          "file": "32054.dat",
+          "color": "4",
+          "label": "Technic Pin Long with Stop Bush"
+        }
+      ]
+    },
+    {
+      "sourceStep": 21,
+      "url": "/assets/kidx/builds/spike3r/spike3r-22.json",
+      "pieces": [
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 22,
+      "url": "/assets/kidx/builds/spike3r/spike3r-23.json",
+      "pieces": [
+        {
+          "file": "87082.dat",
+          "color": "71",
+          "label": "Technic Pin Long with Pin Hole Type 1"
+        },
+        {
+          "file": "32192.dat",
+          "color": "4",
+          "label": "Technic Angle Connector #4 (135 degree)"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        }
+      ]
+    },
+    {
+      "sourceStep": 23,
+      "url": "/assets/kidx/builds/spike3r/spike3r-24.json",
+      "pieces": [
+        {
+          "file": "98568p02.dat",
+          "color": "4",
+          "label": "Constraction Blade 11.5L with Sawtooth Back with Pearl Silver Blade Pattern"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 24,
+      "url": "/assets/kidx/builds/spike3r/spike3r-25.json",
+      "pieces": [
+        {
+          "file": "87082.dat",
+          "color": "71",
+          "label": "Technic Pin Long with Pin Hole Type 1"
+        },
+        {
+          "file": "32192.dat",
+          "color": "4",
+          "label": "Technic Angle Connector #4 (135 degree)"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        }
+      ]
+    },
+    {
+      "sourceStep": 25,
+      "url": "/assets/kidx/builds/spike3r/spike3r-26.json",
+      "pieces": [
+        {
+          "file": "98568p02.dat",
+          "color": "4",
+          "label": "Constraction Blade 11.5L with Sawtooth Back with Pearl Silver Blade Pattern"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 26,
+      "url": "/assets/kidx/builds/spike3r/spike3r-27.json",
+      "pieces": [
+        {
+          "file": "87082.dat",
+          "color": "71",
+          "label": "Technic Pin Long with Pin Hole Type 1"
+        },
+        {
+          "file": "32192.dat",
+          "color": "4",
+          "label": "Technic Angle Connector #4 (135 degree)"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        }
+      ]
+    },
+    {
+      "sourceStep": 27,
+      "url": "/assets/kidx/builds/spike3r/spike3r-28.json",
+      "pieces": [
+        {
+          "file": "98568p02.dat",
+          "color": "4",
+          "label": "Constraction Blade 11.5L with Sawtooth Back with Pearl Silver Blade Pattern"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 28,
+      "url": "/assets/kidx/builds/spike3r/spike3r-29.json",
+      "pieces": [
+        {
+          "file": "87082.dat",
+          "color": "71",
+          "label": "Technic Pin Long with Pin Hole Type 1"
+        },
+        {
+          "file": "32192.dat",
+          "color": "4",
+          "label": "Technic Angle Connector #4 (135 degree)"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        }
+      ]
+    },
+    {
+      "sourceStep": 29,
+      "url": "/assets/kidx/builds/spike3r/spike3r-30.json",
+      "pieces": [
+        {
+          "file": "98568p02.dat",
+          "color": "4",
+          "label": "Constraction Blade 11.5L with Sawtooth Back with Pearl Silver Blade Pattern"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        }
+      ]
+    },
+    {
+      "sourceStep": 30,
+      "url": "/assets/kidx/builds/spike3r/spike3r-31.json",
+      "pieces": [
+        {
+          "file": "3673.dat",
+          "color": "71",
+          "label": "Technic Pin"
+        },
+        {
+          "file": "32184.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Axle)"
+        },
+        {
+          "file": "2736.dat",
+          "color": "71",
+          "label": "Technic Axle Towball"
+        },
+        {
+          "file": "2736.dat",
+          "color": "71",
+          "label": "Technic Axle Towball"
+        },
+        {
+          "file": "32293.dat",
+          "color": "0",
+          "label": "Technic Steering Link 9L"
+        },
+        {
+          "file": "32293.dat",
+          "color": "0",
+          "label": "Technic Steering Link 9L"
+        }
+      ]
+    },
+    {
+      "sourceStep": 31,
+      "url": "/assets/kidx/builds/spike3r/spike3r-32.json",
+      "pieces": [
+        {
+          "file": "3673.dat",
+          "color": "71",
+          "label": "Technic Pin"
+        },
+        {
+          "file": "32184.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Axle)"
+        },
+        {
+          "file": "2736.dat",
+          "color": "71",
+          "label": "Technic Axle Towball"
+        },
+        {
+          "file": "2736.dat",
+          "color": "71",
+          "label": "Technic Axle Towball"
+        },
+        {
+          "file": "32293.dat",
+          "color": "0",
+          "label": "Technic Steering Link 9L"
+        },
+        {
+          "file": "32293.dat",
+          "color": "0",
+          "label": "Technic Steering Link 9L"
+        },
+        {
+          "file": "6628.dat",
+          "color": "0",
+          "label": "Technic Pin Towball with Friction"
+        }
+      ]
+    },
+    {
+      "sourceStep": 32,
+      "url": "/assets/kidx/builds/spike3r/spike3r-33.json",
+      "pieces": [
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "32316.dat",
+          "color": "0",
+          "label": "Technic Beam  5"
+        },
+        {
+          "file": "32054.dat",
+          "color": "4",
+          "label": "Technic Pin Long with Stop Bush"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "32316.dat",
+          "color": "0",
+          "label": "Technic Beam  5"
+        },
+        {
+          "file": "32054.dat",
+          "color": "4",
+          "label": "Technic Pin Long with Stop Bush"
+        }
+      ]
+    },
+    {
+      "sourceStep": 33,
+      "url": "/assets/kidx/builds/spike3r/spike3r-34.json",
+      "pieces": [
+        {
+          "file": "31313 - ev3cable-studio-3.ldr",
+          "color": "47",
+          "label": "EV3 Cable"
+        }
+      ]
+    },
+    {
+      "sourceStep": 34,
+      "url": "/assets/kidx/builds/spike3r/spike3r-35.json",
+      "pieces": [
+        {
+          "file": "64179.dat",
+          "color": "71",
+          "label": "Technic Beam  7 x  5 with Open Center  5 x  3"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        }
+      ]
+    },
+    {
+      "sourceStep": 35,
+      "url": "/assets/kidx/builds/spike3r/spike3r-36.json",
+      "pieces": [
+        {
+          "file": "99550c01.dat",
+          "color": "15",
+          "label": "Electric Mindstorms EV3 Large Motor Case"
+        },
+        {
+          "file": "99617c01.dat",
+          "color": "4",
+          "label": "Electric Mindstorms EV3 Large Motor Drive Hub Double"
+        },
+        {
+          "file": "48989.dat",
+          "color": "71",
+          "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
+        },
+        {
+          "file": "32009.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        }
+      ]
+    },
+    {
+      "sourceStep": 36,
+      "url": "/assets/kidx/builds/spike3r/spike3r-37.json",
+      "pieces": [
+        {
+          "file": "48989.dat",
+          "color": "71",
+          "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
+        },
+        {
+          "file": "32009.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        }
+      ]
+    },
+    {
+      "sourceStep": 37,
+      "url": "/assets/kidx/builds/spike3r/spike3r-38.json",
+      "pieces": [
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "32526.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  5 Bent 90"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "32073.dat",
+          "color": "71",
+          "label": "Technic Axle  5"
+        },
+        {
+          "file": "74695.dat",
+          "color": "0",
+          "label": "=Technic Beam  2 Liftarm"
+        }
+      ]
+    },
+    {
+      "sourceStep": 38,
+      "url": "/assets/kidx/builds/spike3r/spike3r-39.json",
+      "pieces": [
+        {
+          "file": "32526.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  5 Bent 90"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "41669.dat",
+          "color": "4",
+          "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
+        },
+        {
+          "file": "41669.dat",
+          "color": "4",
+          "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        }
+      ]
+    },
+    {
+      "sourceStep": 39,
+      "url": "/assets/kidx/builds/spike3r/spike3r-40.json",
+      "pieces": [
+        {
+          "file": "32524.dat",
+          "color": "0",
+          "label": "Technic Beam  7"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "32316.dat",
+          "color": "0",
+          "label": "Technic Beam  5"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "41678.dat",
+          "color": "4",
+          "label": "Technic Cross Block 2 x 2 Split (Axle/Twin Pin)"
+        },
+        {
+          "file": "32062.dat",
+          "color": "4",
+          "label": "Technic Axle  2 Notched"
+        }
+      ]
+    },
+    {
+      "sourceStep": 40,
+      "url": "/assets/kidx/builds/spike3r/spike3r-41.json",
+      "pieces": [
+        {
+          "file": "32524.dat",
+          "color": "0",
+          "label": "Technic Beam  7"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "32316.dat",
+          "color": "0",
+          "label": "Technic Beam  5"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "41678.dat",
+          "color": "4",
+          "label": "Technic Cross Block 2 x 2 Split (Axle/Twin Pin)"
+        },
+        {
+          "file": "32062.dat",
+          "color": "4",
+          "label": "Technic Axle  2 Notched"
+        }
+      ]
+    },
+    {
+      "sourceStep": 41,
+      "url": "/assets/kidx/builds/spike3r/spike3r-42.json",
+      "pieces": [
+        {
+          "file": "32140.dat",
+          "color": "0",
+          "label": "Technic Beam  2 x  4 Liftarm Bent 90"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        },
+        {
+          "file": "74695.dat",
+          "color": "0",
+          "label": "=Technic Beam  2 Liftarm"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "74695.dat",
+          "color": "0",
+          "label": "=Technic Beam  2 Liftarm"
+        },
+        {
+          "file": "32039.dat",
+          "color": "71",
+          "label": "Technic Connector (Axle/Bush) Type 1"
+        },
+        {
+          "file": "32073.dat",
+          "color": "71",
+          "label": "Technic Axle  5"
+        }
+      ]
+    },
+    {
+      "sourceStep": 42,
+      "url": "/assets/kidx/builds/spike3r/spike3r-43.json",
+      "pieces": [
+        {
+          "file": "32140.dat",
+          "color": "0",
+          "label": "Technic Beam  2 x  4 Liftarm Bent 90"
+        },
+        {
+          "file": "43093.dat",
+          "color": "1",
+          "label": "Technic Axle Pin with Friction"
+        },
+        {
+          "file": "32523.dat",
+          "color": "0",
+          "label": "Technic Beam  3"
+        },
+        {
+          "file": "32523.dat",
+          "color": "0",
+          "label": "Technic Beam  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 43,
+      "url": "/assets/kidx/builds/spike3r/spike3r-44.json",
+      "pieces": [
+        {
+          "file": "54271.dat",
+          "color": "0",
+          "label": "Constraction Weapon Ball Shooter"
+        },
+        {
+          "file": "54821.dat",
+          "color": "4",
+          "label": "Technic Bionicle Ball 16.5 mm"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "32013.dat",
+          "color": "4",
+          "label": "Technic Angle Connector #1"
+        },
+        {
+          "file": "31313 - 64391d01.dat",
+          "color": "15",
+          "label": "64391d01"
+        },
+        {
+          "file": "31313 - 64683d01.dat",
+          "color": "15",
+          "label": "64683d01"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        }
+      ]
+    },
+    {
+      "sourceStep": 44,
+      "url": "/assets/kidx/builds/spike3r/spike3r-45.json",
+      "pieces": [
+        {
+          "file": "32184.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Axle)"
+        },
+        {
+          "file": "32184.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Axle)"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "32039.dat",
+          "color": "71",
+          "label": "Technic Connector (Axle/Bush) Type 1"
+        },
+        {
+          "file": "53550.dat",
+          "color": "0",
+          "label": "Technic Bionicle Weapon Ball Shooter Magazine"
+        }
+      ]
+    },
+    {
+      "sourceStep": 45,
+      "url": "/assets/kidx/builds/spike3r/spike3r-46.json",
+      "pieces": [
+        {
+          "file": "48989.dat",
+          "color": "71",
+          "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
+        },
+        {
+          "file": "48989.dat",
+          "color": "71",
+          "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
+        },
+        {
+          "file": "95646c01.dat",
+          "color": "15",
+          "label": "Electric Mindstorms EV3 with Rechargeable Battery"
+        },
+        {
+          "file": "31313 - ev3cable-studio-1.ldr",
+          "color": "47",
+          "label": "EV3 Cable"
+        }
+      ]
+    },
+    {
+      "sourceStep": 46,
+      "url": "/assets/kidx/builds/spike3r/spike3r-47.json",
+      "pieces": [
+        {
+          "file": "54821.dat",
+          "color": "4",
+          "label": "Technic Bionicle Ball 16.5 mm"
+        },
+        {
+          "file": "54821.dat",
+          "color": "4",
+          "label": "Technic Bionicle Ball 16.5 mm"
+        }
+      ]
+    },
+    {
+      "sourceStep": 47,
+      "url": "/assets/kidx/builds/spike3r/spike3r-48.json",
+      "pieces": [
+        {
+          "file": "87083.dat",
+          "color": "72",
+          "label": "Technic Axle  4 with Stop"
+        },
+        {
+          "file": "87083.dat",
+          "color": "72",
+          "label": "Technic Axle  4 with Stop"
+        },
+        {
+          "file": "32009.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 48,
+      "url": "/assets/kidx/builds/spike3r/spike3r-49.json",
+      "pieces": [
+        {
+          "file": "48989.dat",
+          "color": "71",
+          "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
+        },
+        {
+          "file": "6628.dat",
+          "color": "0",
+          "label": "Technic Pin Towball with Friction"
+        },
+        {
+          "file": "42610.dat",
+          "color": "71",
+          "label": "Wheel Rim  8 x 11.2 with Centre Groove"
+        },
+        {
+          "file": "42610.dat",
+          "color": "71",
+          "label": "Wheel Rim  8 x 11.2 with Centre Groove"
+        }
+      ]
+    },
+    {
+      "sourceStep": 49,
+      "url": "/assets/kidx/builds/spike3r/spike3r-50.json",
+      "pieces": [
+        {
+          "file": "32009.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
+        },
+        {
+          "file": "41669.dat",
+          "color": "4",
+          "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
+        },
+        {
+          "file": "41669.dat",
+          "color": "4",
+          "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
+        },
+        {
+          "file": "32009.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "6558.dat",
+          "color": "1",
+          "label": "Technic Pin Long with Friction and Slot"
+        },
+        {
+          "file": "32271.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  7 Liftarm Bent 53.13"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        }
+      ]
+    },
+    {
+      "sourceStep": 50,
+      "url": "/assets/kidx/builds/spike3r/spike3r-51.json",
+      "pieces": [
+        {
+          "file": "48989.dat",
+          "color": "71",
+          "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
+        },
+        {
+          "file": "6628.dat",
+          "color": "0",
+          "label": "Technic Pin Towball with Friction"
+        },
+        {
+          "file": "42610.dat",
+          "color": "71",
+          "label": "Wheel Rim  8 x 11.2 with Centre Groove"
+        },
+        {
+          "file": "42610.dat",
+          "color": "71",
+          "label": "Wheel Rim  8 x 11.2 with Centre Groove"
+        }
+      ]
+    },
+    {
+      "sourceStep": 51,
+      "url": "/assets/kidx/builds/spike3r/spike3r-52.json",
+      "pieces": [
+        {
+          "file": "32009.dat",
+          "color": "0",
+          "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
+        },
+        {
+          "file": "41669.dat",
+          "color": "4",
+          "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
+        },
+        {
+          "file": "41669.dat",
+          "color": "4",
+          "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
+        },
+        {
+          "file": "40490.dat",
+          "color": "0",
+          "label": "Technic Beam  9"
+        }
+      ]
+    },
+    {
+      "sourceStep": 52,
+      "url": "/assets/kidx/builds/spike3r/spike3r-53.json",
+      "pieces": [
+        {
+          "file": "6575.dat",
+          "color": "0",
+          "label": "~Moved to 6575a"
+        },
+        {
+          "file": "32123b.dat",
+          "color": "14",
+          "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
+        },
+        {
+          "file": "6575.dat",
+          "color": "0",
+          "label": "~Moved to 6575a"
+        },
+        {
+          "file": "6632.dat",
+          "color": "71",
+          "label": "Technic Beam  3 x  0.5 Liftarm"
+        },
+        {
+          "file": "2736.dat",
+          "color": "71",
+          "label": "Technic Axle Towball"
+        },
+        {
+          "file": "2736.dat",
+          "color": "71",
+          "label": "Technic Axle Towball"
+        },
+        {
+          "file": "2739a.dat",
+          "color": "0",
+          "label": "Technic Steering Link  6L Type 1"
+        },
+        {
+          "file": "2739a.dat",
+          "color": "0",
+          "label": "Technic Steering Link  6L Type 1"
+        },
+        {
+          "file": "6587.dat",
+          "color": "28",
+          "label": "Technic Axle  3 with Stud"
+        }
+      ]
+    },
+    {
+      "sourceStep": 53,
+      "url": "/assets/kidx/builds/spike3r/spike3r-54.json",
+      "pieces": [
+        {
+          "file": "32073.dat",
+          "color": "71",
+          "label": "Technic Axle  5"
+        },
+        {
+          "file": "32123b.dat",
+          "color": "14",
+          "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
+        },
+        {
+          "file": "32123b.dat",
+          "color": "14",
+          "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
+        },
+        {
+          "file": "6536.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 2 (Axle/Pin)"
+        }
+      ]
+    },
+    {
+      "sourceStep": 54,
+      "url": "/assets/kidx/builds/spike3r/spike3r-55.json",
+      "pieces": [
+        {
+          "file": "95654.dat",
+          "color": "71",
+          "label": "Electric Mindstorms EV3 Infrared Sensor"
+        },
+        {
+          "file": "6536.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 2 (Axle/Pin)"
+        },
+        {
+          "file": "32123b.dat",
+          "color": "14",
+          "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
+        },
+        {
+          "file": "32123b.dat",
+          "color": "14",
+          "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        },
+        {
+          "file": "2780.dat",
+          "color": "0",
+          "label": "Technic Pin with Friction and Slots"
+        }
+      ]
+    },
+    {
+      "sourceStep": 55,
+      "url": "/assets/kidx/builds/spike3r/spike3r-56.json",
+      "pieces": [
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "41669.dat",
+          "color": "15",
+          "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
+        },
+        {
+          "file": "41669.dat",
+          "color": "15",
+          "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
+        },
+        {
+          "file": "42003.dat",
+          "color": "4",
+          "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
+        },
+        {
+          "file": "4519.dat",
+          "color": "71",
+          "label": "Technic Axle  3"
+        },
+        {
+          "file": "41669.dat",
+          "color": "15",
+          "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
+        },
+        {
+          "file": "41669.dat",
+          "color": "15",
+          "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
+        },
+        {
+          "file": "31313 - ev3cable-studio-4.ldr",
+          "color": "47",
+          "label": "EV3 Cable"
+        }
+      ]
+    }
+  ]
+}
