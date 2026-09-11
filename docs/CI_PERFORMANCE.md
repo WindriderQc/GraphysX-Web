@@ -1,68 +1,89 @@
-# Release verification time
+# Verification proportional to the change
 
-The release gate runs the complete smoke inventory across four independent GitHub
-Ubuntu runners. Each runner still executes its checks serially, with the existing
-machine lock, isolated servers, assertions, deadlines and retry policy. The existing
-`Typecheck, build, headless smokes` check succeeds only when every shard succeeds;
-production continues to depend on that complete reusable workflow.
+CI always runs unit tests, typecheck, lint, build and the fast Node physics probes.
+Browser checks are selected by changed area. A full 3D regression is not a routine
+prerequisite for every deployment.
 
-`npm run verify` remains the full serial local gate. To reproduce one CI shard:
+| Change | Browser coverage |
+| --- | --- |
+| Markdown documentation, Node unit tests, verification tooling, CI configuration | None; no site deployment |
+| One registered smoke script | That smoke; no site deployment |
+| KidX arrival guide | Guidance journey plus short integration checks |
+| KidX PDF/catalog | Workshop journey plus short integration checks |
+| KidX code laboratory | Interactive, challenge and guidance journeys plus integration |
+| Other KidX/EV3 code or KidX assets | KidX/EV3 journeys plus integration |
+| BallZ code | Game journeys plus integration |
+| Results client/store | Results contracts and browser journey plus integration |
+| Store or live collaboration | Store/collaboration contracts and journeys plus integration |
+| Deployment configuration | Short integration checks, then existing production smoke |
+| Shared engine, global styling, build/dependencies, unclassified files | Full regression |
+
+The short integration selection is `standalone`, `product-assets` and `asset-guard`;
+only standalone launches a browser. The last two check the built asset inventory in
+Node. Mixed changes take the union of their checks. Existing assertions, timeouts,
+retry limits, rollback and the post-activation public smoke remain in place.
+
+## Comparison base
+
+`scripts/plan-verification.mjs` reads Git changes, including both sides of renames.
+For production, it compares HEAD with the last successful deployment that actually
+ran the `deploy` job. A successful docs-only workflow with a skipped deploy job does
+not advance this baseline. Failed/cancelled releases and changes in intervening
+commits remain covered until a deployment succeeds. Prior runs are ordered by update
+time so a rerun of an older release can become the latest activation.
+
+Pull requests compare with their base merge point; branch pushes compare with their
+merge point against `origin/main`. Missing history, unavailable GitHub evidence or
+no successful ancestor among the latest 20 successful main workflows selects the
+full suite. The workflow summary names the comparison SHAs, changed files, matching
+rules and selected checks. A selected check is required; a skipped/failed planner
+or failed/cancelled matrix cannot pass the aggregate release check.
+
+The coverage map is explicit in `scripts/verify-impact.mjs`. It is not inferred from
+runtime imports. New shared paths default to full verification. When adding a narrow
+rule, check its consumers and add a regression test for the expected selection.
+
+## Running checks
 
 ```bash
-npm run verify -- --shard=2/4
+# The full serial suite remains available explicitly.
+npm run verify -- --wait
+
+# Reproduce an exact selection printed by CI.
+npm run verify -- --checks=kidx-guidance,standalone,product-assets,asset-guard --wait
+
+# Static checks, with no Chromium launch or smoke server.
+npm run verify -- --checks=none --wait
 ```
 
-A shard reports its partial scope. All four shards on the same revision are required
-for release qualification. Sharding cannot be combined with tiers or an external
-base URL, which could otherwise omit required checks. Do not run several shards
-concurrently on one local machine; the machine lock continues to prevent that.
+The CI workflow has a manual `full_verify` input; deployment also exposes this input.
+There is no new recurring task. Manually selected checks report their limited scope;
+the production workflow requires the complete selection calculated from its baseline.
 
-## Measured baseline
+Selections are balanced across one to four independent GitHub runners, using the
+historical seconds in `scripts/verify-timings.json`. Each runner remains serial and
+retains the machine lock. New checks receive estimates until measured; estimates
+never change deadlines. Static-only changes use one runner and skip Chromium installation.
+The original `--shard=i/n` option still reproduces a slice of the full inventory.
 
-The [September 11 release](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34564435709)
-at `f3219f68fd98bdf8956d08e13c05abcb7e3b6a1c` spent 1h43m27s in
-`Verify release`. `live-sessions-browser` alone took 25m55s, showroom 8m08s and
-editor 7m09s. The successful deployment retry took 4m33s, including a 12-second
-upload, a 12-second production build and 3m07s checking the activated site.
-The original deployment attempt failed its remote disk preflight; the later retry
-reused the successful verification job. The intervening hours were not build time.
+## Why this changed
 
-The bottleneck is serial software-rendered browser testing. Rebuilding the final
-production bundle is a small fraction of the total and remains unchanged, including
-its production store configuration. Deployment, rollback and public smoke logic
-also remain unchanged.
+The [September 11 baseline](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34564435709)
+spent 1h43m27s in verification, including 25m55s in collaboration, 8m08s in showroom
+and 7m09s in editor. The successful deployment retry took 4m33s, including a
+12-second upload and 3m07s checking the activated site. The interval between the
+original failed disk preflight and its retry was not build time.
 
-## Partitioning and estimates
+Parallelizing every test still spent unnecessary work on unrelated features. Selection
+now comes first; parallel runners help larger selections. The earlier estimate of
+32 minutes applies only to the full current inventory, not to an ordinary small change.
+No new CI wall-time measurement is claimed before this workflow actually runs.
 
-`scripts/verify-timings.json` records the smoke durations from that successful gate,
-with its revision and source run. `scripts/verify-shards.mjs` assigns the longest
-checks to the least-loaded shard, then restores manifest order within each shard.
-The manifest is the sole coverage inventory: stale timing entries do not select
-checks, and newly registered checks automatically join a shard. Unmeasured checks
-use a five-minute estimate (30 minutes for a long-deadline check). These are scheduling
-hints only; they never change the actual timeout or a test assertion.
+Implementation references: GitHub's [dynamic matrices](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/run-job-variations)
+and [workflow run API](https://docs.github.com/en/rest/actions/workflow-runs).
 
-For the initial 59-smoke inventory, this predicts roughly 32 minutes per shard,
-plus runner setup and the separate deployment job. This is an estimate: five new
-KidX journeys lack Linux timings, shared runner performance varies, and the current
-feature code differs from the measured baseline. Record a complete green matrix
-before claiming an observed speedup. Inspect its four screenshot artifacts and
-per-shard summaries when diagnosing a failure.
-
-Four runners reduce wall time by distributing existing work. The inexpensive unit,
-typecheck, lint, build and Node probes repeat in each shard to keep it self-contained.
-Total runner minutes may increase slightly with setup and repeated static checks.
-No GPU runner or homelab service is required.
-
-GitHub's [matrix documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/run-job-variations)
-describes the parallel jobs. `fail-fast: false` preserves evidence from the remaining
-shards after a failure; the aggregate check rejects failure, cancellation or a skipped
-matrix. An already-running deployment keeps the workflow from its own revision.
-
-## Initial local validation (2026-09-11)
-
-`npm test`: 326 passed, one existing Windows skip. Typecheck and full lint passed.
-Coverage tests exercise every supported shard count, exact-once inclusion, new checks,
-invalid shard arguments and conflicting scope filters. Both workflow files parse,
-and the required matrix-to-verification-to-deployment dependencies were checked.
-The four-runner Linux matrix and its wall-time improvement have not yet been measured.
+Initial local validation (2026-09-11): 338 Node tests passed, one existing Windows
+skip; scoped tooling lint and workflow parsing passed. Selection, exact coverage,
+invalid filters, skipped/failed release baselines and cumulative Git rename history
+were exercised. A read-only GitHub lookup found the real successful deployment base.
+The new workflow has not been pushed or measured on GitHub yet.

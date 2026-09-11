@@ -23,7 +23,7 @@ import {
 //   npm run verify -- --no-build   reuse the existing dist/
 //   npm run verify -- --base https://graphysx.specialblend.ca/   smoke a live deploy
 //
-// CI runs the full gate on a clean checkout. Local, partial and external runs report
+// CI selects checks by changed area on a clean checkout. Local, partial and external runs report
 // their own scope; none is a receipt for a different revision or environment.
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -65,6 +65,7 @@ if (options.help) {
   console.log(`Usage: npm run verify -- [options]
   --tier=<names>   Select comma-separated tiers: ${[...new Set(VERIFY_SMOKES.map((smoke) => smoke.tier))].join(", ")}
   --shard=<i/n>   Run one balanced shard; all n shards must pass to qualify a release
+  --checks=<names> Run named smokes, or none for unit/typecheck/lint/build/Node probes
   --no-build       Reuse dist/; skip typecheck, lint and build
   --base <url>     Check an external HTTP(S) page; skip build and local-only checks
   --wait          Wait for another local gate to release the machine lock

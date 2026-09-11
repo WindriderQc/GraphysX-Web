@@ -4,8 +4,9 @@
 
 ## Why these exist, and what they are not
 
-Everything else in this project is proved end to end by the full `npm run verify` matrix, most
-of it driving the built output through a real headless browser. That has caught bugs nothing
+Browser behavior is covered by the `npm run verify` inventory, most
+of it driving the built output through a real headless browser. CI selects the affected
+journeys; the full suite is reserved for shared changes or an explicit request. That has caught bugs nothing
 else would have — objects falling through the world, dead clicks on scenery, a console error
 on every production page load — and none of it is being replaced here.
 

@@ -93,6 +93,7 @@ export function resolveVerifyOptions(args, env = process.env) {
     options: {
       tier: { type: "string" },
       shard: { type: "string" },
+      checks: { type: "string" },
       base: { type: "string" },
       "no-build": { type: "boolean", default: false },
       wait: { type: "boolean", default: false },
@@ -117,15 +118,23 @@ export function resolveVerifyOptions(args, env = process.env) {
     }
   }
   const shard = values.shard === undefined ? null : parseVerifyShard(values.shard, VERIFY_SMOKES.length);
+  if (values.checks !== undefined && (tiers || shard || externalBase)) {
+    throw new Error("--checks cannot be combined with --tier, --shard or an external base.");
+  }
+  const checks = values.checks === undefined ? null : new Set(values.checks === "none" ? [] : values.checks.split(","));
+  if (checks && [...checks].some((name) => !VERIFY_SMOKES.some((smoke) => smoke.name === name))) {
+    throw new Error("--checks must contain registered smoke names, or the explicit value none for static checks only.");
+  }
   if (shard && (tiers || externalBase)) {
     throw new Error("--shard cannot be combined with --tier or an external base; shards partition the complete local inventory.");
   }
   const smokes = shard
     ? planVerifyShards(VERIFY_SMOKES, shard.count)[shard.index - 1].smokes
-    : VERIFY_SMOKES.filter((smoke) => !tiers || tiers.has(smoke.tier));
+    : VERIFY_SMOKES.filter((smoke) => checks ? checks.has(smoke.name) : !tiers || tiers.has(smoke.tier));
   return {
     smokes,
     shard,
+    checks,
     tiers,
     externalBase,
     noBuild: values["no-build"],

@@ -8,9 +8,23 @@ on:
     branches-ignore:
       - main
   workflow_call:
+    inputs:
+      full_verify:
+        type: boolean
+        default: false
+    outputs:
+      deployment_required:
+        value: ${{ jobs.plan.outputs.deploy }}
+  workflow_dispatch:
+    inputs:
+      full_verify:
+        description: Run the complete regression suite
+        type: boolean
+        default: true
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -23,16 +37,38 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  plan:
+    name: Select affected checks
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.impact.outputs.matrix }}
+      deploy: ${{ steps.impact.outputs.deploy }}
+    steps:
+      - name: Checkout comparison history
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Plan verification from changed files
+        id: impact
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFY_FULL: ${{ inputs.full_verify }}
+        run: node scripts/plan-verification.mjs
+
   smokes:
-    name: Release shard ${{ matrix.shard }}/4
+    name: Selected checks ${{ matrix.shard }}
+    needs: plan
     runs-on: ubuntu-latest
     # One software-rendered browser suite per machine, as required by the local lock.
-    # All checks remain required; failures keep the other shards running for evidence.
+    # Only affected checks run; every selected shard is required.
     strategy:
       fail-fast: false
       max-parallel: 4
-      matrix:
-        shard: [1, 2, 3, 4]
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
 
     steps:
       - name: Checkout
@@ -48,16 +84,18 @@ jobs:
         run: npm ci
 
       - name: Install Chromium for headless smokes
+        if: matrix.browser
         run: npx playwright install --with-deps chromium
 
-      # Typecheck + production build, then drive the built output through every product
-      # route in a real browser: showroom, editor, KidX, games and collaboration.
-      # Coverage lives in scripts/verify-manifest.mjs. Browser checks reject console/page errors.
+      # Static checks always run. The planner selects affected browser journeys; an
+      # explicit "none" runs no browser. Unknown/shared changes select the full suite.
       - name: Verify release
-        run: npm run verify -- --shard=${{ matrix.shard }}/4
+        env:
+          VERIFY_CHECKS: ${{ matrix.checks }}
+        run: npm run verify -- "--checks=$VERIFY_CHECKS"
 
       - name: Upload smoke screenshots
-        if: always()
+        if: always() && matrix.browser
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: verify-screenshots-${{ github.sha }}-${{ matrix.shard }}
@@ -69,11 +107,12 @@ jobs:
   # or skipped matrix. deploy.yml still waits for the complete reusable workflow.
   verify:
     name: Typecheck, build, headless smokes
-    needs: smokes
+    needs: [plan, smokes]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Require every release shard
         env:
+          PLAN_RESULT: ${{ needs.plan.result }}
           SHARDS_RESULT: ${{ needs.smokes.result }}
-        run: test "$SHARDS_RESULT" = success
+        run: test "$PLAN_RESULT" = success && test "$SHARDS_RESULT" = success

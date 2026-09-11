@@ -17,8 +17,10 @@ of rules that exist because breaking them has already cost real sessions real ho
 - **Match local validation to the change.** Use unit/contract tests and scoped lint for
   Node-only tooling; check links and commands for documentation. Use focused browser smokes
   for an affected journey and a full gate for changes spanning shared runtime behavior.
-  **Publication always requires the full gate.** Do not repeat every 3D smoke for a docs or
-  tooling-only correction whose affected contracts are already verified.
+  **Publication requires static checks and the affected journeys selected by CI.** The
+  full suite is required for shared runtime/dependency changes, unknown impact or an
+  explicit full-verification request. Docs and Node-only tooling do not need 3D tests.
+  See `docs/CI_PERFORMANCE.md`; do not restore an unconditional full suite before deployment.
 - **Compare the same revision and scope.** If a local smoke fails outside the diff, inspect
   machine contention and `gh run list` before changing product code. A clean CI run is useful
   evidence only for the revision it tested; an older green deployment does not validate
@@ -60,8 +62,9 @@ of rules that exist because breaking them has already cost real sessions real ho
 
 - Follow the task's authorized delivery level. A push to `main` starts production deployment;
   LAN staging is manual. See the workflows and `ops/README-staging.md`, not historical plans.
-- Report local changes, commits, push/PR, CI, merge and deployed behavior separately. For
-  publication, use the full gate; tier, existing-build and external-page checks are partial.
+- Report local changes, commits, push/PR, CI, merge and deployed behavior separately.
+  Publication uses the CI impact plan relative to the last successful production deployment;
+  ad hoc tier, existing-build and external-page checks alone are not that release plan.
 - Remove only this task's temporary processes and worktrees. Before normal `git worktree remove`
   or `git branch -d`, prove the work is saved/integrated and no session uses it; inspect tracked,
   untracked and ignored files. Preserve `.graphysx-store/` and useful `output/` receipts. If
