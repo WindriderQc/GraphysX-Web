@@ -44,8 +44,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # Typecheck + production build, then drive the built output through every product
-      # route in a real browser: default showroom, ?host=standalone (agent API + editor),
-      # and ?host=legacy. Fails on any console or page error.
+      # route in a real browser: showroom, editor, KidX, games and collaboration.
+      # Coverage lives in scripts/verify-manifest.mjs. Browser checks reject console/page errors.
       - name: Verify release
         run: npm run verify
 

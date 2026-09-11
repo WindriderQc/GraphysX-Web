@@ -13,6 +13,42 @@ Read `PRODUCT_SPEC.md` §8.1 (the honest status table) for what ships versus wha
 as the v1 target. Read `CLAUDE.md` for the short list of rules that exist because breaking them
 cost real sessions real hours.
 
+## Production publication authorized (2026-09-11)
+
+The owner requested all local work to be pushed, then explicitly requested merge and deployment.
+This expands the earlier release scope to include the French Atelier, mission catalog,
+PDF reader, interactive lessons and construction guides, arrival guidance and BallZ's
+outer-ball camera correction alongside the First Drive/touch/Programs/maintenance changes
+and bench-tested CLI USB adapter. Use the existing main deployment workflow. Its hosted full
+gate must pass before activation; verify the exact public `release.json` and production smoke.
+Do not run a duplicate local full matrix. The public application continues to run simulation;
+the hardware CLI remains a local tool. Cleanup preserves other tasks, useful evidence, the
+Firefox profile and saved `forward` data. See the latest `progress.md` publication entry.
+
+## Fresh-session entry point (2026-09-11 ugKid / USB continuation)
+
+Read [the KidX continuation handoff](docs/KIDX_NEXT_SESSION.md) before editing. The isolated
+`codex/kidx-integration` branch now combines maintenance `9d5d727`, driving corrections
+`e77158b`, EV3 workbench `fa9e6d0`, and both tasks' documentation closeouts. The workbench
+heading group carries the model and direction marker; the complete held-pointer lifecycle
+correction is retained. The integration task's single full gate passed 58/58 without retries
+on `0561dcd`, including 300 unit passes and one existing skip. This worktree branches from
+that build as `codex/kidx-ugkid-acceptance`; its new USB tooling has separate targeted tests
+and 303 Node unit passes (one skip). This does not change production.
+
+The integration task's later mat fix `6df06f8` is now included here as `6a813bd`: only the
+textured plane moves from y=.011 to .015, eliminating depth fighting at 320px. Its existing
+targeted checks and inspected captures apply to the identical browser source now in this
+branch. The full-gate receipt and the unchanged site on 4175 remain scoped to `0561dcd`.
+
+The frozen `0561dcd` site is served on loopback 4175 through the restored reverse SSH tunnel.
+Firefox's profile and saved `forward` program are retained. The owner confirms the controls
+and explicitly confirms name copies/original preservation, list overflow scrolling and
+Escape/focus restoration. Read
+[ugKid acceptance](docs/KIDX_UGKID_ACCEPTANCE.md) for exact coverage and live-access receipts,
+and [the USB adapter guide](docs/KIDX_EV3_USB.md) before any motor execution. The canonical
+dirty `.gitignore` and foreign work remain untouched; rediscover listener owners before acting.
+
 ## Reliability follow-up (2026-09-10)
 
 Local review corrections cover durable named saves, draft flushing before scene exits,
@@ -51,8 +87,9 @@ its fifth block type. `Laboratoire +` opens the richer language. TRACK3R/SPIK3R 
 complete stages and load individual pieces only for the current demonstration. All 138 PDFs
 remain available; other models still need source CAD assembly data before acquiring 3D guides.
 Shared rooms use the local server, keep state in memory and disappear on restart. `KIDX_HOST`
-can bind a private LAN IPv4 address; the default remains loopback. No public/production/hardware
-action is included. Final evidence and any remaining limitations belong in `progress.md`.
+can bind a private LAN IPv4 address; the default remains loopback. The application release is
+authorized above; physical hardware operation remains separate. Final evidence and any remaining
+limitations belong in `progress.md`.
 
 ## KidX program library (current source, 2026-09-10)
 
@@ -136,10 +173,7 @@ smoke passed, and an independent live smoke found zero bad responses, console er
 
 **Next, in the order that adds the most:**
 
-1. **Finish Phase 6 on real EV3 hardware.** All five blocks now work in simulation; add the narrow
-   adapter that sends that same compiled input sequence to EV3; do not invent a second program
-   model for the robot.
-2. **Phase 7, Linux Mint touchscreen PC validation.** The owner replaced the Raspberry Pi
+1. **Phase 7, Linux Mint touchscreen PC validation.** The owner replaced the Raspberry Pi
    target with a freshly installed Linux Mint PC on 2026-09-10. SSH key access to ugKid is
    verified. Mint 22.3 Cinnamon/X11 uses the LG Display USB touchscreen on a Dell ST2220T
    optical monitor. An approved one-time boot into installed kernel 6.14.0-37 initially showed
@@ -151,12 +185,29 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    The owner opened KidX by touch and confirmed three Forward blocks, Run success and Try again.
    Drive acceptance exposed two application issues: a long press opens a browser menu/selects
    button text, and Left/Right change the direction indicator without yawing the chassis.
-   The held-button menu/gesture correction is now in source and passes the focused EV3 smoke
-   and required game client; the served ugKid build and physical retest are still pending.
-   The chassis heading and held appearance are now corrected in the source workbench redesign
-   above. Finish the corrected build's actual-PC acceptance before EV3; do not restart broad touchscreen diagnosis. Continue from
-   [the diagnostic and acceptance guide](docs/LINUX_MINT_TOUCH.md). The existing
+   The held-button gesture/visual-state correction and visible rover heading now pass the
+   focused EV3 smoke and required game client on the rover-only revision `e77158b`. The owner confirms
+   physical Drive holds, visible turns, release outside and Go success/retry; trusted native
+   Firefox receipts show canceled context menus and reset to idle. Programs save/reload/open
+   and replay to blue are also physically confirmed. One final full gate passed all 58 checks
+   without retries on that revision. The integrated workbench uses the scene heading group
+   for its EV3 model and retains the complete held-pointer lifecycle correction. Its own
+   combined gate now passes 58/58 on `0561dcd`; the owner confirms controls and Tab/Shift+Tab
+   have receipts. The owner subsequently confirms name copying with original preservation,
+   list overflow scrolling and Escape/focus restoration, completing the remaining checklist.
+   Do not restart broad touchscreen diagnosis. Continue from
+   [current ugKid acceptance](docs/KIDX_UGKID_ACCEPTANCE.md). The existing
    800×480 browser measurements remain compact-layout evidence, not hardware qualification.
+2. **Finish Phase 6 on real EV3 hardware.** LEGO V1.09H is identified over USB, with large motors
+   on B/C. The owner observed the stop of one bounded B pulse; both motors remain unmounted,
+   and direction is explicitly deferred to software polarity. The narrow CLI USB adapter now
+   consumes timed inputs collected from the existing runner. Read-only identity and compiled
+   preview pass. The first compiled Forward -> Stop run is physically confirmed: both motors
+   turned and stopped. Left/Right inversion and stopping are also owner-confirmed. A real
+   controller-process exit during a busy timed pulse ended with observed autonomous stopping
+   and a read-only idle reply. Chassis direction/calibration, physical USB unplug, whole-host
+   power loss and exact stopping latency remain unqualified; do not repeat the bench checks.
+   Continue from [the USB adapter guide](docs/KIDX_EV3_USB.md).
 3. **Phase 4, the application composition surface.** Deliberately not built yet: `?app=ev3-lab`
    remains one `if` in `main.ts`. Generalize it when a *second* application asks for it, not before.
 

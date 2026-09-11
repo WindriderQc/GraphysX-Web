@@ -52,7 +52,6 @@
     "smoke:level3": "node scripts/smoke-level3.mjs",
     "audit:product-assets": "node scripts/audit-product-assets.mjs",
     "audit:previews": "node scripts/audit-previews.mjs",
-    "assets:archive-census": "node scripts/generate-archive-parity.mjs",
     "smoke:live-release": "node scripts/smoke-live-release.mjs",
     "smoke:store-auth": "node scripts/smoke-store-auth.mjs",
     "smoke:live-sessions": "node scripts/smoke-live-sessions.mjs",

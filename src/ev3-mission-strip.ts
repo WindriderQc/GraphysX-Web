@@ -276,6 +276,8 @@ export function mountEv3MissionStrip(
    * stylus, and `setPointerCapture` means a thumb that slides off the button still releases the
    * control instead of leaving the robot driving forever.
    */
+  const releaseHeldControls: Array<() => void> = [];
+  const clearHeldControls = (): void => { for (const release of releaseHeldControls) release(); };
   const held = (label: string, glyph: string, input: () => void): HTMLButtonElement => {
     const button = document.createElement("button");
     button.type = "button";
@@ -292,21 +294,28 @@ export function mountEv3MissionStrip(
     // A long finger hold is a driving command, not a text selection or browser menu.
     // Keep this scoped to held controls so Programs retains native touch scrolling/editing.
     button.addEventListener("contextmenu", (event) => { event.preventDefault(); });
+    let pointerId: number | null = null;
     const stop = (): void => {
+      const wasHeld = button.dataset.held === "true";
       button.dataset.held = "false";
-      if (driveable) api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
+      const releasedPointer = pointerId;
+      pointerId = null;
+      if (releasedPointer !== null && button.hasPointerCapture(releasedPointer)) button.releasePointerCapture(releasedPointer);
+      if (wasHeld && driveable) api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
     };
+    releaseHeldControls.push(stop);
     button.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || button.disabled) return;
+      clearHeldControls();
+      pointerId = event.pointerId;
       button.setPointerCapture(event.pointerId);
       button.dataset.held = "true";
       input();
     });
-    for (const type of ["pointerup", "pointercancel", "pointerleave"] as const) {
-      button.addEventListener(type, stop);
+    for (const type of ["pointerup", "pointercancel", "pointerleave", "lostpointercapture"] as const) {
+      button.addEventListener(type, (event) => { if (event.pointerId === pointerId) stop(); });
     }
-    button.addEventListener("lostpointercapture", stop);
-    button.addEventListener("keydown", event => { if ((event.key === " " || event.key === "Enter") && !event.repeat) { event.preventDefault(); button.dataset.held = "true"; input(); } });
+    button.addEventListener("keydown", event => { if ((event.key === " " || event.key === "Enter") && !event.repeat && !button.disabled) { event.preventDefault(); clearHeldControls(); button.dataset.held = "true"; input(); } });
     button.addEventListener("keyup", event => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); stop(); } });
     button.addEventListener("blur", stop);
     return button;
@@ -353,6 +362,7 @@ export function mountEv3MissionStrip(
   const timeLimit = missionRules?.timer?.limitSeconds ?? EV3_FIRST_MISSION_TIME_LIMIT_SECONDS;
   const missionReady = driveable && Boolean(missionRules?.finish) && missIds.size > 0;
   const resetAttempt = () => {
+    clearHeldControls();
     attempt = null;
     motion.reset();
     const reset = api.rules.reset();
@@ -500,10 +510,8 @@ export function mountEv3MissionStrip(
   setControlsEnabled = (enabled: boolean): void => {
     const wasEnabled = controlsEnabled;
     controlsEnabled = enabled;
-    for (const button of driveButtons) {
-      button.disabled = !enabled;
-      if (!enabled) button.dataset.held = "false";
-    }
+    if (!enabled && wasEnabled) clearHeldControls();
+    for (const button of driveButtons) button.disabled = !enabled;
     for (const button of programButtons) button.disabled = !enabled || program.length >= EV3_FIRST_PROGRAM_MAX_BLOCKS;
     undo.disabled = !enabled || program.length === 0;
     runProgram.disabled = !enabled || program.length === 0;
@@ -731,6 +739,7 @@ export function mountEv3MissionStrip(
     },
     dispose: () => {
       unsubscribeFrame();
+      clearHeldControls();
       motion.dispose();
       guidance?.dispose();
       laboratory?.dispose();

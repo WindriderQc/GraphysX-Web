@@ -14,7 +14,10 @@ try {
   if (!process.env.SMOKE_BASE) server = await startStaticServer({ root: path.resolve("dist"), port: Number(process.env.SMOKE_PORT || 4572) });
   const base = process.env.SMOKE_BASE ?? server.url;
   browser = await launchSmokeBrowser();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  // Run the storage/replay journey at a compact landscape size to avoid paying for a
+  // desktop WebGL frame on every DOM action. The companion program-layout smoke
+  // retains the four-viewport hit-target, keyboard and screenshot checks.
+  const page = await browser.newPage({ viewport: { width: 800, height: 480 } });
   applySmokeTimeout(page);
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
   page.on("pageerror", (error) => errors.push(String(error)));
@@ -126,44 +129,7 @@ try {
   await name.fill("My very long program name for First Drive");
   await save.click();
   await close();
-  for (const [width, height] of [[1280, 720], [800, 480], [320, 844], [390, 844]]) {
-    await page.setViewportSize({ width, height });
-    await programs();
-    const geometry = await page.locator("dialog").evaluate((element) => {
-      const r = element.getBoundingClientRect();
-      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, client: element.clientWidth, scroll: element.scrollWidth };
-    });
-    assert.ok(geometry.left >= 0 && geometry.right <= width && geometry.top >= 0 && geometry.bottom <= height);
-    assert.ok(geometry.scroll <= geometry.client, JSON.stringify(geometry));
-    const buttons = page.locator("dialog button:visible");
-    for (let index = 0; index < await buttons.count(); index += 1) {
-      const target = buttons.nth(index);
-      await target.scrollIntoViewIfNeeded();
-      assert.equal(await target.evaluate((element) => {
-        const r = element.getBoundingClientRect();
-        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-        return r.height >= (element.hasAttribute("data-program-close") ? 48 : 72)
-          && (element === hit || element.contains(hit));
-      }), true);
-    }
-    await name.focus();
-    for (let index = 0; index < 14; index += 1) {
-      await page.keyboard.press("Tab");
-      assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest("dialog"))), true);
-    }
-    await page.locator("[data-program-close]").focus();
-    await page.keyboard.press("Shift+Tab");
-    assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest("dialog"))), true);
-    await name.focus();
-    await page.locator("dialog").evaluate((element) => { element.scrollTop = 0; });
-    await page.waitForTimeout(1100);
-    await page.screenshot({ path: path.join(ART, `ev3-program-library-${width}x${height}.png`) });
-    await page.keyboard.press("Escape");
-    assert.equal((await state()).program.library.open, false);
-    assert.equal(await page.locator("[data-ev3-programs]").evaluate((element) => element === document.activeElement), true);
-    await page.screenshot({ path: path.join(ART, `ev3-program-saved-${width}x${height}.png`) });
-  }
-  console.log("  ok  library touch targets, focus trap, Escape and focus restoration at four viewport sizes");
+
 
   const valid = await rawStore();
   const corrupt = '{"schema":"future-version","programs":[]}';

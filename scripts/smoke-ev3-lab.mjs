@@ -266,6 +266,8 @@ try {
   await page.locator("[data-ev3-retry]").click();
   await page.locator("[data-ev3-mode='drive']").click();
   const go = page.locator("[data-ev3='go']");
+  // Success detaches the drive pad; retain this node to inspect the retired hold itself.
+  const goElement = await go.elementHandle();
   const goBox = await go.boundingBox();
   if (!goBox) throw new Error("First Drive Go control has no hit box");
   await page.mouse.move(goBox.x + goBox.width / 2, goBox.y + goBox.height / 2);
@@ -274,6 +276,8 @@ try {
     await page.waitForFunction(() => document.querySelector("[data-ev3-mission]")?.getAttribute("data-phase") === "complete", {
       timeout: 10_000,
     });
+    check("success clears held Go before the pointer is released",
+      await goElement.evaluate((button) => button.dataset.held) === "false");
   } finally {
     await page.mouse.up();
   }
@@ -290,6 +294,11 @@ try {
   // Native touch must stay captured through a long hold and a slide outside the button.
   // Browser panning/selection used to cancel this gesture on the physical Mint touchscreen.
   await page.locator("[data-ev3-retry]").click();
+  check("retry restores idle drive controls and a north-facing chassis", await page.evaluate(() => {
+    const chassis = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base:heading"] })[0];
+    return [...document.querySelectorAll("[data-held]")].every((button) => button.dataset.held === "false")
+      && Math.abs(chassis.rotationDegrees[1]) < 0.01;
+  }));
   const left = page.locator("[data-ev3='left']");
   const leftBox = await left.boundingBox();
   if (!leftBox) throw new Error("First Drive Left control has no hit box");
@@ -456,13 +465,21 @@ try {
       const stepped = window.advanceTime(1_700);
       const rover = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base"] })[0] ?? null;
       const indicator = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base:heading"] })[0] ?? null;
-      const model = window.__GRAPHYSX_HOST__.world.getEntityObject("ev3-drive-base:technic");
+      // Read actual rendered world-space directions, including the model and cone transforms.
+      const world = window.__GRAPHYSX_HOST__.world;
+      const model = world.getEntityObject("ev3-drive-base:technic");
+      const indicatorObject = world.getEntityObject("ev3-drive-base:direction");
+      const front = model.position.clone().set(0, 0, -1)
+        .applyQuaternion(model.getWorldQuaternion(model.quaternion.clone()));
+      const aim = indicatorObject.position.clone().set(0, 1, 0)
+        .applyQuaternion(indicatorObject.getWorldQuaternion(indicatorObject.quaternion.clone()));
       model.updateWorldMatrix(true, false);
       const elements = model.matrixWorld.elements;
       return {
         stepped,
         position: rover?.position ?? null,
         headingDegrees: rover?.steering?.headingDegrees ?? null,
+        visualDirections: { front: front.toArray(), aim: aim.toArray() },
         // The actual rendered chassis must face the physical steering direction.
         chassisHeading: (Math.atan2(-elements[8], elements[10]) * 180 / Math.PI + 360) % 360,
         indicator: indicator ? {
@@ -501,6 +518,13 @@ try {
   await page.locator("[data-ev3-block='right']").click();
   await page.locator("[data-ev3-block='forward']").click();
   const right = await runTurnProgram("ev3-first-program-right-800x480.png");
+  for (const [name, pose] of [["Left", leftFirst], ["Right", right]]) {
+    const radians = pose.headingDegrees * Math.PI / 180;
+    const expected = [Math.sin(radians), 0, -Math.cos(radians)];
+    check(`${name} visibly turns both the vehicle front and the direction marker`,
+      [pose.visualDirections.front, pose.visualDirections.aim].every((direction) =>
+        direction.every((value, index) => Math.abs(value - expected[index]) < 0.01)), pose.visualDirections);
+  }
   check("Right then Forward produces the opposite physical route",
     right.position?.[0] > 0.5
       && Math.abs(right.chassisHeading - right.headingDegrees) < 1

@@ -54,6 +54,8 @@ try {
   const reversing = movement.state; assert.ok(reversing.rover.position[2] > 17.1, "low-power held reverse must overcome rolling resistance");
   assert.ok(reversing.wheels.lcdMotors.every(level => level > 0), "both brick LCD meters must reflect actual wheel movement");
   assert.equal(movement.meters, 2);
+  const released = await page.evaluate(() => window.advanceTime(800));
+  assert.ok(Math.hypot(...released.rover.velocity) < 0.1, "releasing the keyboard must stop driving without the emergency button");
   await page.locator("[data-kidx-stop]").click();
   const stoppedPose = (await state()).rover.position;
   assert.ok(stoppedPose[2] > 17.1); assert.deepEqual((await state()).rover.velocity, [0, 0, 0]);

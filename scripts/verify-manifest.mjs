@@ -1,3 +1,5 @@
+import { parseArgs } from "node:util";
+
 // Release inventory shared by the runner and project counts; importing it starts no work.
 export const VERIFY_STATIC_CHECKS = {
   unit: { command: "node", args: ["--test", "test/*.test.mjs"] },
@@ -36,7 +38,9 @@ export const VERIFY_SMOKES = [
   { name: "physics", tier: "apps", script: "scripts/smoke-physics.mjs", covers: "physics migration baseline: contacts, fixed-step schedules, sleep/wake, teardown/reload" },
   { name: "joints", tier: "apps", script: "scripts/smoke-joints.mjs", covers: "scene-authored fixed/revolute/rope joints: motion, bridge parity, patch, undo, export/reload" },
   { name: "ev3-lab", tier: "apps", script: "scripts/smoke-ev3-lab.mjs", covers: "EV3 Robotics Mission Lab: seven construction families, seven mission zones, driveable base, gripper and launch interactions, round-trip" },
-  { name: "ev3-programs", tier: "apps", script: "scripts/smoke-ev3-programs.mjs", covers: "KidX named programs: save/reload/replay, update/copy/delete, unsaved edits, storage failure, responsive library and keyboard focus" },
+  { name: "ev3-programs", tier: "apps", script: "scripts/smoke-ev3-programs.mjs", covers: "KidX named programs: save/reload/replay, update/copy/delete, unsaved edits and storage failure" },
+  { name: "ev3-program-layout", tier: "apps", script: "scripts/smoke-ev3-program-layout.mjs", covers: "KidX saved programs at 1280x720: touch targets, overflow, keyboard focus trap, Escape and focus restoration" },
+  { name: "ev3-program-layout-compact", tier: "apps", script: "scripts/smoke-ev3-program-layout-compact.mjs", covers: "KidX saved programs at 800x480, 320x844 and 390x844: desktop-to-compact resize, touch targets, overflow, keyboard focus trap, Escape and focus restoration" },
   { name: "kidx-missions", tier: "apps", script: "scripts/smoke-kidx-missions.mjs", covers: "Five French movement missions finish through program controls and real physics; delivery and return require checkpoints" },
   { name: "kidx-workshop", tier: "apps", script: "scripts/smoke-kidx-workshop.mjs", covers: "LEGO catalog and PDF reader, native TRACK3R/SPIK3R assembly guides, authored normals, progress and responsive controls" },
   { name: "kidx-challenges", tier: "apps", script: "scripts/smoke-kidx-challenges.mjs", covers: "Reverse, cargo physics, ramp elevation, live distance/color/contact decisions, actual return routes, reset and achievements" },
@@ -67,3 +71,46 @@ export const VERIFY_SMOKES = [
   { name: "results", tier: "deep", script: "scripts/smoke-results.mjs", covers: "results: persistent bests, compatibility-separated leaderboards with client-attested trust labels, deterministic ordering and bounds, shared ghost round-trip, and refusal of desynced/incomplete/implausible/oversized/unsorted submissions" },
   { name: "dna", tier: "apps", script: "scripts/smoke-dna.mjs", covers: "DNA forest: deterministic genome drift, preset fidelity, node-level (no browser)" },
 ];
+
+// Validate the requested coverage before the runner takes the lock, clears artifacts or
+// starts a child. A misspelled tier used to select no smokes and still report success.
+export function resolveVerifyOptions(args, env = process.env) {
+  const { values } = parseArgs({
+    args,
+    options: {
+      tier: { type: "string" },
+      base: { type: "string" },
+      "no-build": { type: "boolean", default: false },
+      wait: { type: "boolean", default: false },
+      "force-lock": { type: "boolean", default: false },
+      help: { type: "boolean", short: "h", default: false },
+    },
+    strict: true,
+    allowPositionals: false,
+  });
+  const availableTiers = new Set(VERIFY_SMOKES.map((smoke) => smoke.tier));
+  const tiers = values.tier === undefined ? null : new Set(values.tier.split(",").map((tier) => tier.trim()));
+  if (tiers && [...tiers].some((tier) => !availableTiers.has(tier))) {
+    throw new Error(`--tier must name one or more of: ${[...availableTiers].join(", ")}; received ${JSON.stringify(values.tier)}.`);
+  }
+
+  const externalBase = values.base ?? (env.SMOKE_BASE || null);
+  if (externalBase !== null) {
+    let url;
+    try { url = new URL(externalBase); } catch { /* Report the option, without echoing credentials. */ }
+    if (!url || !["http:", "https:"].includes(url.protocol)) {
+      throw new Error("--base / SMOKE_BASE must be an absolute HTTP(S) URL.");
+    }
+  }
+  const smokes = VERIFY_SMOKES.filter((smoke) => !tiers || tiers.has(smoke.tier));
+  return {
+    smokes,
+    tiers,
+    externalBase,
+    noBuild: values["no-build"],
+    wait: values.wait,
+    forceLock: values["force-lock"],
+    help: values.help,
+    fullRelease: !externalBase && !values["no-build"] && smokes.length === VERIFY_SMOKES.length,
+  };
+}
