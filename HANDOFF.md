@@ -24,6 +24,11 @@ on `0561dcd`, including 300 unit passes and one existing skip. This worktree bra
 that build as `codex/kidx-ugkid-acceptance`; its new USB tooling has separate targeted tests
 and 303 Node unit passes (one skip). This does not change production.
 
+The integration task's later mat fix `6df06f8` is now included here as `6a813bd`: only the
+textured plane moves from y=.011 to .015, eliminating depth fighting at 320px. Its existing
+targeted checks and inspected captures apply to the identical browser source now in this
+branch. The full-gate receipt and the unchanged site on 4175 remain scoped to `0561dcd`.
+
 The frozen `0561dcd` site is served on loopback 4175 through the restored reverse SSH tunnel.
 Firefox's profile and saved `forward` program are retained. The owner confirms the controls;
 name copies, list overflow and Escape still lack individual physical receipts. Read

@@ -143,5 +143,14 @@ The exact summary is in its `output/playwright/kidx-integration/full-verify.log`
 site on 4175 still contains those 439 files. The separate USB tooling uses targeted tests;
 no full gate was rerun here and no new UI or shared runtime change was made.
 
+Subsequently cherry-picked the integration task's independently validated mat correction
+`6df06f8` as `6a813bd`. Only the textured mat height changes (.011 to .015); printed zones,
+steering, physics and program execution are unchanged. Inspected its 320px before/after
+and final smoke screenshots. Browser source/assets/dependency files are identical to the
+integration task's post-fix source, whose typecheck, unit suite, lint, build, EV3 smoke and
+game client pass. Those targeted receipts remain under its
+`output/playwright/kidx-integration/mat-*`. The currently served site is still `0561dcd`;
+this later source correction has not replaced the physical acceptance build.
+
 Application-surface generalization remains deferred until a second application needs it.
 No push, merge into `main`, or production deployment is authorized for this task.
