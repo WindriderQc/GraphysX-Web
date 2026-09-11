@@ -13,6 +13,11 @@ wheel rims, Technic liftarms with through-holes, blue pins and two motor leads. 
 visual teaching model, not imported LEGO CAD, an exact building instruction or a
 dimensionally qualified hardware simulation.
 
+The owner's original kit and Education instruction PDFs are indexed in
+[KIDX_LEGO_REFERENCES.md](KIDX_LEGO_REFERENCES.md), including specific TRACK3R
+assembly and original play-mat pages. They provide references for future fidelity
+work; the current wheeled mesh does not reproduce the tracked 31313 build.
+
 Regenerate the committed native mesh after changing its generator:
 
 ```sh
