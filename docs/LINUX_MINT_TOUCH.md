@@ -11,10 +11,11 @@ KidX acceptance and EV3 hardware qualification remain open.
 Menu open/close taps and all six fullscreen Firefox targets, including the lower-left corner.
 Matched receipts confirm native touch across those zones. No calibration was applied.
 KidX's three-Forward/Run/success/retry flow also passed by physical touch. The subsequent
-long-press menu and chassis-heading corrections are now served and physically accepted.
+long-press menu and chassis-heading corrections were served and physically accepted.
 Programs save/reload/open/replay also passed. Programs touch scrolling and keyboard focus
 remain awaiting the owner's physical result. See "KidX acceptance and fresh-session handoff"
-below.
+below. The acceptance server and tunnel are stopped after the owner's cleanup request;
+restart details and concurrent-branch reconciliation are in `KIDX_NEXT_SESSION.md`.
 The investigation below is chronological;
 its earlier failed tests do not describe the latest result.
 
@@ -396,7 +397,7 @@ investigation.
   The focused EV3 smoke now passes a native touch hold, slide outside, release-to-stop and
   trusted context-menu scope checks. The required game client also passes; screenshots were
   inspected and console/page errors are empty. These are Windows Chromium results; the
-  corrected build is now served to ugKid. The owner confirms sustained holds, sliding outside
+  corrected build was served to ugKid. The owner confirms sustained holds, sliding outside
   and release-to-stop, with no browser menu or selection. Trusted native Firefox receipts at
   `2026-09-11T00:21:34Z` through `00:22:16Z` confirm canceled context menus, Go success and retry
   to heading 0 with zero velocity. Held visual
@@ -420,17 +421,23 @@ investigation.
   The mini-keyboard is available; an
   on-screen keyboard is not yet a requirement. EV3 remains unplugged and unqualified.
 
-The latest correction is in the isolated worktree branch `codex/kidx-mint-rover`, based on
-`codex/kidx-linux-mint` at `f3d9f52`. A new Firefox tab opens
-`http://127.0.0.1:4175/?app=ev3-lab&acceptance=rover-hold` on ugKid. The server on 4175 now uses
+The driving correction is in the isolated worktree branch `codex/kidx-mint-rover` at `e77158b`,
+based on `codex/kidx-linux-mint` at `f3d9f52`. Concurrent work has since advanced that original
+branch to the distinct workbench redesign `fa9e6d0`; see `KIDX_NEXT_SESSION.md` before combining
+their changes. The accepted Firefox tab used
+`http://127.0.0.1:4175/?app=ev3-lab&acceptance=rover-hold` on ugKid. Its server script is
 `C:\Users\Yanik\.codex\worktrees\ab67\GraphysX-Web\output\playwright\mint-rover\serve.mjs`.
-Its isolated `site/`, `served-build.json`, passive browser receipts and actual-Mint captures
-are alongside it. The source hash and index hash were read back through ugKid's tunnel.
+The server and reverse tunnel on 4175 were stopped during requested cleanup and both listeners
+were verified absent. The validated isolated site is retained as `site-validated-e77158b/`;
+`served-build.json`, passive browser receipts and actual-Mint captures are alongside it.
+The source hash and index hash were read back through ugKid's tunnel before acceptance.
 Earlier diagnostic artifacts remain in the original checkout at
 `C:\Users\Yanik\codes\GraphysX-Web\output\playwright\mint-touch\`.
 Do not assume that checkout's `dist/` follows a worktree build.
-Rediscover the server/tunnel processes before restarting them. The SSH reverse listener is
-loopback-only on both machines; user authorization for ugKid access persists.
+Rediscover processes before restarting. The previous reverse listener was loopback-only on
+both machines; user authorization for ugKid access persists. Preserve the same browser origin
+and profile to retain the saved `forward` program. An unrelated Vite process on 4176 was left
+running for its owning session.
 
 Long-press correction validation is in `output/mint-touch-2026-09-10/` (build-hold-fix.log,
 smoke-hold-fix.log, client-hold-fix.log) and `output/playwright/mint-hold-fix/` (screenshots and

@@ -13,6 +13,20 @@ Read `PRODUCT_SPEC.md` §8.1 (the honest status table) for what ships versus wha
 as the v1 target. Read `CLAUDE.md` for the short list of rules that exist because breaking them
 cost real sessions real hours.
 
+## Fresh-session entry point (2026-09-10 closeout)
+
+Read [the KidX continuation handoff](docs/KIDX_NEXT_SESSION.md) before editing. This worktree's
+`codex/kidx-mint-rover` contains the verified driving corrections (`e77158b`). Concurrent work
+on `codex/kidx-linux-mint` now contains the distinct EV3 workbench redesign (`fa9e6d0`), which
+also orients its visual assembly through the existing steering anchor. Neither branch contains
+the other's complete change. Reconcile the design and held-control lifecycle in an isolated
+branch before claiming acceptance of their combination.
+
+The owner requested session cleanup: this session's acceptance server and reverse SSH tunnel
+on 4175 are now stopped. Evidence and browser-local saved programs are retained. The unrelated
+Vite server on 4176 and the original checkout's dirty `.gitignore` belong to other work and were
+left intact. The continuation handoff records restart details and the remaining physical tests.
+
 ## Reliability follow-up (2026-09-10)
 
 Local review corrections cover durable named saves, draft flushing before scene exits,
@@ -104,7 +118,7 @@ smoke passed, and an independent live smoke found zero bad responses, console er
    The held-button gesture/visual-state correction and visible rover heading now pass the
    focused EV3 smoke and required game client. The chassis is the existing steering visual
    root, with its parts and cyan indicator as ordinary children; BallZ is unchanged.
-   The corrected isolated build is now served to a new ugKid Firefox tab. The owner confirms
+   The corrected isolated build was served to a new ugKid Firefox tab. The owner confirms
    physical Drive holds, visible turns, release outside and Go success/retry; trusted native
    Firefox receipts show canceled context menus and reset to idle. Programs save/reload/open
    and replay to blue are also physically confirmed. One final full gate passed all 58 checks
