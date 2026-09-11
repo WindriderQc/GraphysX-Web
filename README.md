@@ -92,6 +92,10 @@ once with `npx playwright install chromium`. See [test/README.md](test/README.md
 fast-test boundary and [CLAUDE.md](CLAUDE.md) before running expensive checks alongside
 another session.
 
+CI distributes the complete inventory across four independent runners; local verification
+stays serial. See [release verification time](docs/CI_PERFORMANCE.md) for measured costs,
+shard reproduction and the distinction between estimates and observed improvements.
+
 The store is optional. A browser can explicitly select it with `?store=http://localhost:8788`;
 production configuration and write credentials belong in
 [docs/DEPLOYING_THE_STORE.md](docs/DEPLOYING_THE_STORE.md), not the client bundle.

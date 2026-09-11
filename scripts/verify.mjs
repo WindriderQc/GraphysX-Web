@@ -64,6 +64,7 @@ try {
 if (options.help) {
   console.log(`Usage: npm run verify -- [options]
   --tier=<names>   Select comma-separated tiers: ${[...new Set(VERIFY_SMOKES.map((smoke) => smoke.tier))].join(", ")}
+  --shard=<i/n>   Run one balanced shard; all n shards must pass to qualify a release
   --no-build       Reuse dist/; skip typecheck, lint and build
   --base <url>     Check an external HTTP(S) page; skip build and local-only checks
   --wait          Wait for another local gate to release the machine lock
@@ -76,7 +77,9 @@ Partial or external verification is not a full release gate.`);
 }
 const { noBuild, externalBase } = options;
 const SMOKES = options.smokes.map((smoke) => smoke.longDeadline ? { ...smoke, deadlineMs: LIVE_BROWSER_DEADLINE_MS } : smoke);
-const scope = options.fullRelease ? "full release gate" : "partial verification";
+const scope = options.shard
+  ? `release shard ${options.shard.index}/${options.shard.count} (all shards required)`
+  : options.fullRelease ? "full release gate" : "partial verification";
 
 function runStatic(name) {
   const check = VERIFY_STATIC_CHECKS[name];

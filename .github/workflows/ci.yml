@@ -23,9 +23,16 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  verify:
-    name: Typecheck, build, headless smokes
+  smokes:
+    name: Release shard ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
+    # One software-rendered browser suite per machine, as required by the local lock.
+    # All checks remain required; failures keep the other shards running for evidence.
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [1, 2, 3, 4]
 
     steps:
       - name: Checkout
@@ -47,13 +54,26 @@ jobs:
       # route in a real browser: showroom, editor, KidX, games and collaboration.
       # Coverage lives in scripts/verify-manifest.mjs. Browser checks reject console/page errors.
       - name: Verify release
-        run: npm run verify
+        run: npm run verify -- --shard=${{ matrix.shard }}/4
 
       - name: Upload smoke screenshots
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: verify-screenshots-${{ github.sha }}
+          name: verify-screenshots-${{ github.sha }}-${{ matrix.shard }}
           path: output/verify
           if-no-files-found: warn
           retention-days: 7
+
+  # Preserve the existing required-check name and fail closed on a failed, cancelled
+  # or skipped matrix. deploy.yml still waits for the complete reusable workflow.
+  verify:
+    name: Typecheck, build, headless smokes
+    needs: smokes
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every release shard
+        env:
+          SHARDS_RESULT: ${{ needs.smokes.result }}
+        run: test "$SHARDS_RESULT" = success

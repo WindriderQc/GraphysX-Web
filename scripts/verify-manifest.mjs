@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { parseVerifyShard, planVerifyShards } from "./verify-shards.mjs";
 
 // Release inventory shared by the runner and project counts; importing it starts no work.
 export const VERIFY_STATIC_CHECKS = {
@@ -91,6 +92,7 @@ export function resolveVerifyOptions(args, env = process.env) {
     args,
     options: {
       tier: { type: "string" },
+      shard: { type: "string" },
       base: { type: "string" },
       "no-build": { type: "boolean", default: false },
       wait: { type: "boolean", default: false },
@@ -114,15 +116,22 @@ export function resolveVerifyOptions(args, env = process.env) {
       throw new Error("--base / SMOKE_BASE must be an absolute HTTP(S) URL.");
     }
   }
-  const smokes = VERIFY_SMOKES.filter((smoke) => !tiers || tiers.has(smoke.tier));
+  const shard = values.shard === undefined ? null : parseVerifyShard(values.shard, VERIFY_SMOKES.length);
+  if (shard && (tiers || externalBase)) {
+    throw new Error("--shard cannot be combined with --tier or an external base; shards partition the complete local inventory.");
+  }
+  const smokes = shard
+    ? planVerifyShards(VERIFY_SMOKES, shard.count)[shard.index - 1].smokes
+    : VERIFY_SMOKES.filter((smoke) => !tiers || tiers.has(smoke.tier));
   return {
     smokes,
+    shard,
     tiers,
     externalBase,
     noBuild: values["no-build"],
     wait: values.wait,
     forceLock: values["force-lock"],
     help: values.help,
-    fullRelease: !externalBase && !values["no-build"] && smokes.length === VERIFY_SMOKES.length,
+    fullRelease: !shard && !externalBase && !values["no-build"] && smokes.length === VERIFY_SMOKES.length,
   };
 }
