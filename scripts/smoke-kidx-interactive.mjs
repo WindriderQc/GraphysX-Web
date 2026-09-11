@@ -10,7 +10,7 @@ export async function runKidxInteractive({ part = "all" } = {}) {
   assert.ok(["all", "program", "drive", "construction"].includes(part), `Unknown interactive part: ${part}`);
   const ART = process.env.SMOKE_ARTIFACTS || "output/verify";
   mkdirSync(ART, { recursive: true });
-  let browser, server;
+  let browser, secondBrowser, server;
   const errors = [];
   const tracedContexts = [];
   try {
@@ -117,7 +117,10 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       await page.locator("[data-team-create]").click();
       await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.construction.duo.session?.code);
       const code = (await state()).construction.duo.session.code;
-      const secondContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+      // Two screens use independent renderers. Separate Chromium processes keep their
+      // software WebGL queues independent too, instead of sharing one GPU process.
+      secondBrowser = await launchSmokeBrowser();
+      const secondContext = await secondBrowser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
       await secondContext.tracing.start({ screenshots: true, snapshots: true, sources: true });
       tracedContexts.push(secondContext);
       const second = applySmokeTimeout(await secondContext.newPage());
@@ -140,6 +143,7 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       await secondContext.tracing.stop({ path: path.join(ART, "kidx-duo-trace.zip") });
       tracedContexts.pop();
       await secondContext.close();
+      await secondBrowser.close(); secondBrowser = null;
       console.log("  ok two independent browsers synchronize the build and preparation handoff");
       await page.locator("[data-build-back]").click(); await page.locator("[data-kidx-missions]").click();
       await page.locator("[data-kidx-mechanism]").click();
@@ -158,12 +162,12 @@ export async function runKidxInteractive({ part = "all" } = {}) {
     assert.deepEqual(errors, []);
     console.log("KidX interactive scenario passed; no browser errors.");
   } catch (error) {
-    console.error("Construction browser errors:", errors);
+    console.error("KidX interactive browser errors:", errors);
     for (const context of tracedContexts) {
       await context.tracing.stop({ path: path.join(ART, "kidx-duo-trace.zip") }).catch(traceError => console.error(traceError));
     }
     throw error;
-  } finally { if (browser) await browser.close(); if (server) await server.close(); }
+  } finally { if (secondBrowser) await secondBrowser.close(); if (browser) await browser.close(); if (server) await server.close(); }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
