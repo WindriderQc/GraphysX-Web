@@ -20,32 +20,32 @@ export function mountEv3ProgramLibrary(
     style.id = "gx-ev3-program-library-style";
     style.textContent = `
 .gx-ev3-programs-button{pointer-events:auto;flex:0 0 88px;min-height:48px;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:4px;border:1px solid #71cbe3;border-radius:10px;
-  background:#133c4c;color:#eaf7ff;font:700 12px/1.2 var(--gx-font);cursor:pointer;touch-action:manipulation}
-.gx-ev3-programs-button small{font-size:10px;color:#b9d2dc}.gx-ev3-programs-button:disabled{opacity:.45;cursor:default}
+  align-items:center;justify-content:center;gap:4px;border:1px solid #acbaa4;border-radius:10px;
+  background:#e8edde;color:#2c3f35;font:700 12px/1.2 var(--gx-font);cursor:pointer;touch-action:manipulation}
+.gx-ev3-programs-button small{font-size:10px;color:#52644e}.gx-ev3-programs-button:disabled{opacity:.45;cursor:default}
 .gx-ev3-library{box-sizing:border-box;width:min(560px,calc(100vw - 32px));max-height:calc(100dvh - 32px);
-  padding:20px;border:1px solid #71cbe3;border-radius:18px;background:#0c2430;color:#eaf7ff;
+  padding:20px;border:1px solid #acbaa4;border-radius:18px;background:#fafbf5;color:#2c3f35;
   font:500 14px/1.4 var(--gx-font);overflow:auto;overscroll-behavior:contain}
-.gx-ev3-library::backdrop{background:rgba(3,12,18,.75)}
+.gx-ev3-library::backdrop{background:rgba(31,43,38,.55)}
 .gx-ev3-library header{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .gx-ev3-library h2{margin:0;font-size:24px}.gx-ev3-library h3{margin:20px 0 10px;font-size:16px}
-.gx-ev3-library p{margin:12px 0;color:#c3dce7;overflow-wrap:anywhere}
+.gx-ev3-library p{margin:12px 0;color:#52644e;overflow-wrap:anywhere}
 .gx-ev3-library label{display:block;font-weight:700;margin-bottom:6px}
-.gx-ev3-library input{box-sizing:border-box;width:100%;min-height:48px;border:1px solid #71cbe3;border-radius:10px;
-  padding:10px;background:#081c26;color:#fff;font:inherit}
-.gx-ev3-library button{min-height:72px;padding:12px;border:1px solid #71cbe3;border-radius:12px;
-  background:#133c4c;color:#eaf7ff;font:700 14px/1.3 var(--gx-font);cursor:pointer;touch-action:manipulation}
+.gx-ev3-library input{box-sizing:border-box;width:100%;min-height:48px;border:1px solid #acbaa4;border-radius:10px;
+  padding:10px;background:#ffffff;color:#24363d;font:inherit}
+.gx-ev3-library button{min-height:72px;padding:12px;border:1px solid #acbaa4;border-radius:12px;
+  background:#e8edde;color:#2c3f35;font:700 14px/1.3 var(--gx-font);cursor:pointer;touch-action:manipulation}
 .gx-ev3-library button:disabled{opacity:.45;cursor:default}.gx-ev3-library button[data-program-close]{min-height:48px}
-.gx-ev3-library button[data-program-save]{width:100%;margin-top:10px;background:#7fe6ff;color:#08202b}
-.gx-ev3-library button:focus-visible,.gx-ev3-library input:focus-visible,.gx-ev3-programs-button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.gx-ev3-library button[data-program-save]{width:100%;margin-top:10px;background:#39771f;color:#ffffff}
+.gx-ev3-library button:focus-visible,.gx-ev3-library input:focus-visible,.gx-ev3-programs-button:focus-visible{outline:3px solid #1766b0;outline-offset:3px}
 .gx-ev3-library ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
 .gx-ev3-library li{display:flex;gap:8px;align-items:stretch}
 .gx-ev3-library li button:first-child{flex:1;min-width:0;text-align:left;overflow-wrap:anywhere}
 .gx-ev3-library li button:last-child{flex:0 0 80px}
-.gx-ev3-library li small{display:block;margin-top:4px;color:#bedeea;font-weight:500}
-.gx-ev3-library [data-program-message]{min-height:20px;color:#99ecc0}
-.gx-ev3-library [data-program-message][data-error="true"]{color:#ffc391}
-.gx-ev3-library [data-program-confirm]{padding:12px;border:1px solid #ffc391;border-radius:12px;margin:12px 0}
+.gx-ev3-library li small{display:block;margin-top:4px;color:#52644e;font-weight:500}
+.gx-ev3-library [data-program-message]{min-height:20px;color:#326a29}
+.gx-ev3-library [data-program-message][data-error="true"]{color:#a94223}
+.gx-ev3-library [data-program-confirm]{padding:12px;border:1px solid #a94223;border-radius:12px;margin:12px 0}
 .gx-ev3-library [data-program-confirm] button{width:100%;margin-top:8px}
 .gx-ev3-library [hidden]{display:none!important}
 @media(max-width:400px){.gx-ev3-library{padding:14px}}

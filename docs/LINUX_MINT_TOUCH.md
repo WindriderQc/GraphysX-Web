@@ -396,24 +396,24 @@ investigation.
   The focused EV3 smoke now passes a native touch hold, slide outside, release-to-stop and
   trusted context-menu scope checks. The required game client also passes; screenshots were
   inspected and console/page errors are empty. These are Windows Chromium results; the
-  corrected build is now served to ugKid. The owner confirms sustained holds, sliding outside
+  rover-only build `e77158b` was then served to ugKid. The owner confirms sustained holds, sliding outside
   and release-to-stop, with no browser menu or selection. Trusted native Firefox receipts at
   `2026-09-11T00:21:34Z` through `00:22:16Z` confirm canceled context menus, Go success and retry
   to heading 0 with zero velocity. Held visual
   state and pointer ownership also clear at success, retry and disposal; a late release from
   a retired hold cannot stop the next input.
-- **Chassis heading corrected in scene composition:** the visible chassis is now the existing
-  `steering.arrowId` root at lift 0. Wheels, brick, front beam and elevated cyan marker are its
-  ordinary children. The dynamic collider and forces are unchanged. No host-only mutation or
-  shared BallZ steering change is involved. The focused EV3 smoke measures rendered front-beam
-  and indicator directions on both turn routes, repeatability, north reset and document reload.
-  Inspected left/right and game-client screenshots confirm visible vehicle yaw. The owner
-  also confirms visible Left/Right vehicle rotation on ugKid after this correction.
+- **Chassis heading corrected in scene composition:** rover revision `e77158b` put the visible
+  chassis and its children under the existing steering root, with physical Left/Right rotation
+  confirmed on ugKid. The integrated workbench now uses a heading group at lift 0 for the EV3
+  model and its direction cone. The dynamic collider and forces are unchanged. No host-only
+  mutation or shared BallZ steering change is involved. The combined smoke measures actual
+  rendered model and marker directions on both turn routes, repeatability and north reset.
+  This newer representation requires its own browser and physical acceptance; see `KIDX_VISUALS.md`.
 - **Programs save/reload/open/replay passed:** the owner saved the three-Forward program as
   `forward`, reloaded Firefox, opened it and ran it to blue. Matched browser sessions and the
   success receipt at `2026-09-11T00:23:20Z` confirm the saved name, all three blocks and a
   1.764-second mission completion. This is the same temporary origin and Firefox profile.
-- **Still pending on the PC:** remaining block controls/routes, touch scrolling,
+- **Still pending on the PC:** acceptance of the integrated workbench, remaining block controls/routes, touch scrolling,
   repeated name editing/copying and Tab/Shift+Tab/Escape focus behavior. The final physical
   scroll/focus exercise has been requested; no confirmation or matching new receipts have
   arrived yet. Automated coverage is green but does not close these physical items.

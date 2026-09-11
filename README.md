@@ -34,6 +34,10 @@ Live application: <https://graphysx.specialblend.ca>
 > enables **Update saved program**; entering another name saves a copy. Browser data clearing
 > removes this library. Programs are not synced to a scene store or another device.
 >
+> First Drive now uses an EV3-inspired Technic robot on a dedicated work mat, with a
+> stable camera and touch controls styled around the brick's LCD and programming blocks.
+> The original model is generated locally; see **[KidX visuals](docs/KIDX_VISUALS.md)**.
+>
 > The retained AgentX showroom is a 3D hub where Nestor
 > demonstrates Build, Play, and Explore through attributed scene commands whose results remain
 > editable. Shipped so far: live sessions with a server-authoritative mission director; a
