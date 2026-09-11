@@ -36,10 +36,12 @@ a physics frame during initialization cannot be mistaken for a child's completed
 check all eleven initial targets. The guide uses the existing shared frame loop and a
 lightweight laboratory activity snapshot, without cloning the editor or reading sensors per frame.
 
-The authorized ten-feature expansion is implemented and verified locally: all 62 repository
+The workshop and mission arrival guide are implemented and verified locally: all 63 repository
 checks passed, with 310 passing unit tests and one intentional Windows skip. Receipt:
-`output/kidx/verify-expansion.log`. The saved-program smoke used 9m14s of its unchanged
-ten-minute deadline; all other checks retained comfortable headroom.
+`output/kidx/verify-guidance.log`. The saved-program smoke used 8m57s of its unchanged
+ten-minute deadline; the guidance journey used 6m15s. All nine guidance source/test/config
+files still match `output/kidx/guidance-source-hashes.json`. The guide is recorded in
+feature commit `10288a2`.
 See `docs/KIDX_NEXT.md` for acceptance and `docs/KIDX_WORKSHOP.md` for current behavior:
 reverse in both controls, independently animated CAD wheels, a regulated motor/sensor
 language with nested blocks and physical pause/step, eleven missions, animated individual

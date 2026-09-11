@@ -167,8 +167,9 @@ test uses a clearly self-authored two-page fixture, not counterfeit LEGO instruc
 stationary stops, cargo/ramp behavior, resets and achievements. `npm run smoke:kidx-interactive`
 verifies nested programs, real step/pause, low-power keyboard reverse, LCD/sound, individual
 CAD insertion, Nestor requests, two-browser handoffs and the 3:1 gear demonstration.
-The final `npm run verify -- --wait` passed all 62 checks (310 unit passes, one intentional
-Windows skip). Receipt: `output/kidx/verify-expansion.log`. Screenshots from the final build
+The final `npm run verify -- --wait` passed all 63 checks (310 unit passes, one intentional
+Windows skip), including the complete guidance journey and all eleven initial mission targets.
+Receipt: `output/kidx/verify-guidance.log`. Screenshots from the final build
 were inspected at desktop, compact landscape and portrait sizes.
 
 Inspect screenshots in the configured `SMOKE_ARTIFACTS` directory. Follow the machine-wide
