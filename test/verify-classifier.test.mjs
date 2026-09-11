@@ -5,6 +5,9 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { VERIFY_SMOKES, resolveVerifyOptions } from "../scripts/verify-manifest.mjs";
 import {
   DEADLINE_WARN_FRACTION,
   HARNESS_FAILURE_SIGNATURES,
@@ -19,6 +22,71 @@ const classify = (...chunks) => {
   for (const chunk of chunks) classifier.inspect(chunk);
   return classifier.signatures;
 };
+
+describe("verify coverage selection", () => {
+  it("keeps every release check by default", () => {
+    const options = resolveVerifyOptions([], {});
+    assert.deepEqual(options.smokes, VERIFY_SMOKES);
+    assert.equal(options.fullRelease, true);
+  });
+
+  it("selects whole tiers in manifest order without duplicating checks", () => {
+    const options = resolveVerifyOptions(["--tier=core, apps,core"], {});
+    assert.deepEqual(options.smokes, VERIFY_SMOKES.filter((smoke) => ["core", "apps"].includes(smoke.tier)));
+    assert.equal(options.fullRelease, false);
+    assert.ok(options.smokes.length > 0);
+    const allTiers = [...new Set(VERIFY_SMOKES.map((smoke) => smoke.tier))].join(",");
+    assert.equal(resolveVerifyOptions([`--tier=${allTiers}`], {}).fullRelease, true);
+  });
+
+  it("refuses empty, misspelled and partly invalid tiers instead of dropping coverage", () => {
+    for (const tier of ["", " ", "cor", "core,unknown", "core,", ",apps", "core,,apps"]) {
+      assert.throws(() => resolveVerifyOptions([`--tier=${tier}`], {}), /--tier must name/);
+    }
+  });
+
+  it("refuses unknown options, positional arguments and missing values", () => {
+    for (const args of [["--tiers=core"], ["--no-buid"], ["core"], ["--tier"], ["--base"], ["--base", "--no-build"]]) {
+      assert.throws(() => resolveVerifyOptions(args, {}));
+    }
+  });
+
+  it("keeps external and existing-build checks explicitly partial", () => {
+    assert.equal(resolveVerifyOptions(["--no-build"], {}).fullRelease, false);
+    const url = "https://example.invalid/release/";
+    const external = resolveVerifyOptions(["--base", url], {});
+    assert.equal(external.externalBase, url);
+    assert.equal(external.fullRelease, false);
+    assert.equal(resolveVerifyOptions([], { SMOKE_BASE: url }).fullRelease, false);
+    assert.equal(resolveVerifyOptions(["--base", url], { SMOKE_BASE: "http://localhost:4173" }).externalBase, url);
+    for (const base of ["", "localhost:4173", "file:///tmp/dist", "not-a-url"]) {
+      assert.throws(() => resolveVerifyOptions(["--base", base], {}), /absolute HTTP\(S\) URL/);
+    }
+    assert.throws(() => resolveVerifyOptions([], { SMOKE_BASE: "invalid" }), /absolute HTTP\(S\) URL/);
+  });
+
+  it("preserves lock options and offers help without starting work", () => {
+    const options = resolveVerifyOptions(["--wait", "--force-lock", "-h"], {});
+    assert.equal(options.wait, true);
+    assert.equal(options.forceLock, true);
+    assert.equal(options.help, true);
+  });
+
+  it("rejects invalid CLI coverage before acquiring the lock or starting tests", () => {
+    for (const args of [["--tier=cor"], ["--tier="], ["--tiers=core"], ["--base"]]) {
+      const result = spawnSync(process.execPath, ["scripts/verify.mjs", ...args], {
+        cwd: fileURLToPath(new URL("..", import.meta.url)),
+        env: { ...process.env, SMOKE_BASE: "" },
+        encoding: "utf8",
+        timeout: 5_000,
+      });
+      assert.ifError(result.error);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /verify:.*(?:--tier|--base|Unknown option)/);
+      assert.doesNotMatch(result.stdout + result.stderr, /=== unit tests ===|All \d+ checks passed|Another verify/);
+    }
+  });
+});
 
 describe("harness failure classification", () => {
   it("matches every signature it claims to", () => {

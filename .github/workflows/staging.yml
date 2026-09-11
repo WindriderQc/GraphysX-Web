@@ -1,8 +1,7 @@
 name: Staging (UGBrutal)
 
-# Test deploy on the UGBrutal box (192.168.2.12). Every branch push builds, verifies, and
-# publishes to the LAN staging host at http://192.168.2.12:8099 — so a change can be seen
-# running on a real release before main ships it to production.
+# Manual test deploy on UGBrutal (192.168.2.12): builds, verifies, then publishes to
+# http://192.168.2.12:8099 so a release can be inspected before main ships to production.
 #
 # Requires a self-hosted runner on UGBrutal with the labels [self-hosted, ugbrutal],
 # and `npm run serve:staging` running as a background service on that box.
@@ -11,8 +10,8 @@ name: Staging (UGBrutal)
 # Manual only. This deliberately does NOT trigger on push: without a registered runner
 # every push queued a job that could never start, waited 24h and failed — pure noise.
 # Day-to-day prototyping on UGBrutal does not need this at all; `npm run dev -- --host`
-# serves the app on the LAN with hot-reload, and `npm run serve:staging` serves a real
-# production build. Register a runner and enable a push trigger only if unattended
+# serves the app on the LAN with hot-reload; `npm run preview` serves the local dist/.
+# `npm run serve:staging` serves releases published by this workflow. Enable a push trigger only if unattended
 # staging deploys ever become worth the setup.
 #
 # SECURITY: this repository is public. Never add a `pull_request:` trigger here while a

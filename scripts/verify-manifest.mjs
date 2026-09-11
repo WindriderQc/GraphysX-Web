@@ -1,3 +1,5 @@
+import { parseArgs } from "node:util";
+
 // Release inventory shared by the runner and project counts; importing it starts no work.
 export const VERIFY_STATIC_CHECKS = {
   unit: { command: "node", args: ["--test", "test/*.test.mjs"] },
@@ -62,3 +64,46 @@ export const VERIFY_SMOKES = [
   { name: "results", tier: "deep", script: "scripts/smoke-results.mjs", covers: "results: persistent bests, compatibility-separated leaderboards with client-attested trust labels, deterministic ordering and bounds, shared ghost round-trip, and refusal of desynced/incomplete/implausible/oversized/unsorted submissions" },
   { name: "dna", tier: "apps", script: "scripts/smoke-dna.mjs", covers: "DNA forest: deterministic genome drift, preset fidelity, node-level (no browser)" },
 ];
+
+// Validate the requested coverage before the runner takes the lock, clears artifacts or
+// starts a child. A misspelled tier used to select no smokes and still report success.
+export function resolveVerifyOptions(args, env = process.env) {
+  const { values } = parseArgs({
+    args,
+    options: {
+      tier: { type: "string" },
+      base: { type: "string" },
+      "no-build": { type: "boolean", default: false },
+      wait: { type: "boolean", default: false },
+      "force-lock": { type: "boolean", default: false },
+      help: { type: "boolean", short: "h", default: false },
+    },
+    strict: true,
+    allowPositionals: false,
+  });
+  const availableTiers = new Set(VERIFY_SMOKES.map((smoke) => smoke.tier));
+  const tiers = values.tier === undefined ? null : new Set(values.tier.split(",").map((tier) => tier.trim()));
+  if (tiers && [...tiers].some((tier) => !availableTiers.has(tier))) {
+    throw new Error(`--tier must name one or more of: ${[...availableTiers].join(", ")}; received ${JSON.stringify(values.tier)}.`);
+  }
+
+  const externalBase = values.base ?? (env.SMOKE_BASE || null);
+  if (externalBase !== null) {
+    let url;
+    try { url = new URL(externalBase); } catch { /* Report the option, without echoing credentials. */ }
+    if (!url || !["http:", "https:"].includes(url.protocol)) {
+      throw new Error("--base / SMOKE_BASE must be an absolute HTTP(S) URL.");
+    }
+  }
+  const smokes = VERIFY_SMOKES.filter((smoke) => !tiers || tiers.has(smoke.tier));
+  return {
+    smokes,
+    tiers,
+    externalBase,
+    noBuild: values["no-build"],
+    wait: values.wait,
+    forceLock: values["force-lock"],
+    help: values.help,
+    fullRelease: !externalBase && !values["no-build"] && smokes.length === VERIFY_SMOKES.length,
+  };
+}

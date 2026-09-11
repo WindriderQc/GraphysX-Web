@@ -4256,3 +4256,51 @@ or blocks the release.
 - Extended the existing EV3 smoke with real browser touch dispatch: hold for 1.1 seconds, slide outside while still steering, release and verify a stopped rover. Trusted context-menu events are canceled on held controls and retained on Build. The entire focused smoke passes, including existing mission/program/portrait coverage and zero console/page errors.
 - Typecheck/build passed. Ran the required develop-web-game client against the corrected local build; inspected its screenshot/state and the touch-release screenshot. The game client ends in Drive with zero velocity after a held Left input. The screenshots also confirm the separate chassis-heading issue remains; a stale Go highlight after success/retry is another visual-state item to inspect at that boundary.
 - The owner requested a new session during this bounded verification. The corrected code is not yet served to ugKid. Physical Firefox acceptance, Programs acceptance and one final full gate after the remaining fixes are deliberately pending in the handoff. No production or EV3 action occurred.
+
+## 2026-09-10 — bounded maintenance audit and contributor workflow
+
+- Scope: local GraphysX-Web maintenance, based on `f3d9f52`, isolated in
+  `C:/Users/Yanik/codes/GraphysX-Web-maintenance` on `codex/simplify-maintenance`.
+  Preserve all product features; no push, merge, production or hardware action is authorized
+  by this slice. The canonical checkout and the active Mint rover task remain independent.
+- Observed source: one Vite browser product (`src/main.ts`), one renderer/runtime shared by
+  editor, games and KidX, an optional dependency-free scene/media/collaboration server
+  (`server/scene-store.mjs`), browser agent adapters under `tools/`, and a separate optional
+  staging release server. `package.json` defines the commands; `verify-manifest.mjs` defines
+  coverage; the three workflows define CI, manual LAN staging and production delivery.
+- GitHub inspection: remote `main` remains `bc35848`, with no open PR. The canonical local
+  branch is 27 commits ahead. The latest successful production workflow is the August 13 run
+  `31733557395`; this is historical deployment evidence, not a live-site check today.
+- Concurrent work: `KidX sur Mint : conduite tactile et…` owns the dirty worktree at
+  `C:/Users/Yanik/.codex/worktrees/ab67/GraphysX-Web` and its full gate. Do not edit its rover,
+  touch acceptance, handoff or running services. The audit's worktree inventory also found
+  uncommitted work in Claude worktrees `confident-taussig-db4a7a`, `elastic-zhukovsky-a68592`
+  and `fervent-hawking-9f13f3`; their current owners are unknown. All prior worktrees contain
+  ignored content, often scene-store data and browser receipts. None is eligible for deletion
+  from ancestry or a clean Git status alone. Exact paths, heads, changes and ignored directory
+  names are recorded in `output/maintenance-2026-09-10/worktrees-before.json`.
+
+| Finding and daily cost | Consumers / preserved capability | Bounded action and proof |
+| --- | --- | --- |
+| A typo such as `--tier=cor` or an empty tier selects zero smokes; static checks can still report success. This makes a developer's apparent validation misleading. | Full CI, tier aliases, external-page checks, retry/deadline policy and machine lock. | Validate options before side effects in the existing manifest/runner. Refuse bad options/URLs; label partial coverage. Pure selection tests and real invalid-CLI tests, then the full gate. |
+| `assets:archive-census` invokes a missing file, wasting a contributor's time. | Converted content, provenance projections, vendor tools and product asset audits remain. | Removed only the dangling npm alias. `f41b5d4` already deleted the implementation/ledger; current searches find no other caller. Audit every retained npm script target. No replacement archive subsystem. |
+| Staging docs promise branch-push publication; the actual workflow is manual and needs its own runner/server. This invites needless setup and incorrect delivery claims. | Local dev/preview, manual staging, scheduled server, release pointer/retention, production server deployment and rollback. | Update the existing README, staging guide and workflow comments. Compare parsed workflows to the baseline to prove no execution behavior changed. |
+| Contributor orientation mixes historical backlog with current instructions and omits ownership/cleanup boundaries. New sessions repeat investigation or absorb another task's files. | Existing product contract, current handoff and searchable history. | Put commands and source entry points in README; keep coordination/delivery rules in CLAUDE.md. Validate local links. No new registry, framework or process. |
+
+- Retained by design: the static product/store split supports offline use and optional shared
+  persistence; it is not redundant deployment. The full asset build option, XML compatibility,
+  advanced editor, preview workshop, direct smoke commands, data protections and all manifest
+  checks stay. No `src/`, `server/`, dependency version or production workflow behavior changes.
+- Deferred assessment, not a new refactor backlog: the runtime and editor are large (5,457 and
+  4,248 lines at this baseline), but line count alone does not justify new abstractions. The
+  active rover work, real-PC acceptance, EV3 adapter and future second-application composition
+  remain with their existing priorities. Physical state and old worktree ownership were not
+  requalified by this audit.
+- Initial validation: `npm run check` passes (300 tests, one existing Windows skip); scoped
+  ESLint passes. Seven added tests cover full/partial selection, invalid options, external URL
+  behavior and rejection by the actual CLI before work begins. The manifest still contains
+  all 58 release checks and 91 bridge paths. `contracts.json` records no missing retained npm
+  targets, no changed retained command, no broken local links and identical parsed workflows.
+- Completion criterion: the code lot is committed, the full local gate passes after the
+  existing owner releases the machine lock, and cleanup preserves all foreign work/data.
+  Production activation and exhaustive physical acceptance are outside this slice.
