@@ -36,8 +36,10 @@ Live application: <https://graphysx.specialblend.ca>
 > First Drive now uses detailed LDraw EV3 parts in a wheeled robot on a dedicated work mat, with a
 > stable camera and touch controls styled around the brick's LCD and programming blocks.
 > The teaching chassis is assembled locally; see **[KidX visuals](docs/KIDX_VISUALS.md)** for sources.
-> **Atelier** now opens five French movement missions, a searchable library of 138 LEGO
-> notices and 3D assembly guides for TRACK3R and SPIK3R. The other models have PDF guidance.
+> **Atelier** now opens eleven French missions, a searchable library of 138 LEGO notices,
+> animated per-piece TRACK3R/SPIK3R guides and an 8:24 gear demonstration. **Laboratoire +**
+> adds motor speed, loops, sensor conditions and physical pause/step. Nestor can demonstrate
+> build steps in French; two screens can share a local build room. The other models have PDF guidance.
 > Open `?app=ev3-lab&view=atelier`; **[KidX workshop](docs/KIDX_WORKSHOP.md)** documents
 > the local PDF cache/server, CAD provenance, current coverage and verification.
 >

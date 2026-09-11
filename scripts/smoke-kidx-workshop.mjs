@@ -117,9 +117,11 @@ try {
     await capture(`${build.id}-complete`);
     await page.locator("[data-build-explode]").click();
     assert.equal((await state()).build.exploded, true);
+    await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["kidx-assembly-1"] })[0].position.some(value => value !== 0));
     const exploded = await page.evaluate(() => window.__GRAPHYSX__.query({ ids: ["kidx-assembly-1"] })[0].position);
     assert.ok(exploded.some((value) => value !== 0));
     await page.locator("[data-build-explode]").click();
+    await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["kidx-assembly-1"] })[0].position.every(value => value === 0));
     assert.deepEqual(await page.evaluate(() => window.__GRAPHYSX__.query({ ids: ["kidx-assembly-1"] })[0].position), [0, 0, 0]);
     await page.locator("[data-build-rotate]").click();
     assert.equal((await state()).build.angle, 80);

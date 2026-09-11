@@ -162,18 +162,25 @@ try {
   await page.waitForSelector("[data-ev3-mission='first-drive']", { timeout: SMOKE_TIMEOUT });
   await page.waitForFunction(() => window.__GRAPHYSX_HOST__.world.getEntityObject("ev3-drive-base:technic")
     ?.getObjectByName("ev3-driving-base source model"), { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => ["left", "right"].every(side => window.__GRAPHYSX_HOST__.world.getEntityObject(`ev3-drive-base:wheel-${side}`)
+    ?.getObjectByName(`ev3-driving-wheel-${side} source model`)), { timeout: SMOKE_TIMEOUT });
   const modelLook = await page.evaluate(() => {
     const host = window.__GRAPHYSX_HOST__;
     const model = host.world.getEntityObject("ev3-drive-base:technic");
     const mat = host.world.getEntityObject("ev3-first-drive-mat");
     const scene = window.__GRAPHYSX__.exportDocument();
     return { meshes: model.getObjectByName("ev3-driving-base source model").children.length,
+      wheels: ["left", "right"].map(side => {
+        const wheel = host.world.getEntityObject(`ev3-drive-base:wheel-${side}`);
+        return { meshes: wheel.getObjectByName(`ev3-driving-wheel-${side} source model`).children.length,
+          parent: wheel.parent === host.world.getEntityObject("ev3-drive-base:heading") };
+      }),
       parent: model.parent === host.world.getEntityObject("ev3-drive-base:heading"),
       matTexture: Boolean(mat.material.map), mission: scene.rules.subjectId,
       unrelatedStations: scene.entities.filter(entity => entity.tags?.includes("construction-bay")).length };
   });
   check("First Drive loads the detailed EV3 assembly and a dedicated textured workbench",
-    modelLook.meshes === 15 && modelLook.parent && modelLook.matTexture
+    modelLook.meshes === 14 && modelLook.wheels.every(wheel => wheel.meshes === 2 && wheel.parent) && modelLook.parent && modelLook.matTexture
       && modelLook.mission === "ev3-drive-base" && modelLook.unrelatedStations === 0, modelLook);
   // Give optional host services time to answer. A connected scene store used to mount its
   // authoring panel over this kid-facing app after the mission surface had already appeared.
@@ -206,9 +213,9 @@ try {
       && appInitial.rendered?.mission?.phase === "running", appInitial);
   check("the kid-facing application hides scene-store authoring chrome",
     appInitial.sceneBrowserVisible === false, appInitial.sceneBrowserVisible);
-  check("the first program exposes seven thumb-sized controls and no hardware actions",
-    appInitial.controls.length === 7
-      && ["Ajouter un bloc Avancer", "Ajouter un bloc Gauche", "Ajouter un bloc Droite", "Ajouter un bloc Stop", "Retirer le dernier bloc", "Lancer le programme", "Pilotage libre"]
+  check("the first program exposes eight thumb-sized controls and no hardware actions",
+    appInitial.controls.length === 8
+      && ["Ajouter un bloc Avancer", "Ajouter un bloc Reculer", "Ajouter un bloc Gauche", "Ajouter un bloc Droite", "Ajouter un bloc Stop", "Retirer le dernier bloc", "Lancer le programme", "Pilotage libre"]
         .every((label) => appInitial.controls.some((control) => control.label === label))
       && appInitial.controls.every((control) => control.width >= 72 && control.height >= 72), appInitial.controls);
   // The application opens with a 0.9s camera move; evidence captured before it settles is a
@@ -382,7 +389,7 @@ try {
     JSON.stringify(readyProgram.blocks) === JSON.stringify(["forward", "forward", "forward"])
       && readyProgram.chips.length === 3 && !readyProgram.runDisabled, readyProgram);
   check("Build mode remains thumb-sized after authoring",
-    readyProgram.controls.length === 7
+    readyProgram.controls.length === 8
       && readyProgram.controls.every((control) => control.width >= 72 && control.height >= 72), readyProgram.controls);
   // SwiftShader can render the DOM several frames ahead of the WebGL canvas. Wait for the reset
   // start line to be painted so this is evidence of Build mode, not a stale frame from Drive.
@@ -519,7 +526,7 @@ try {
       };
     });
     check(`all portrait controls remain visible and reachable at ${width}px`,
-      layout.buttons.length === 7 && layout.buttons.every((button) => button.width >= 72 && button.height >= 72
+      layout.buttons.length === 8 && layout.buttons.every((button) => button.width >= 72 && button.height >= 72
         && button.left >= 0 && button.right <= width && button.bottom <= 844 && button.reachable)
         && layout.mission.top >= layout.exit.bottom && layout.mission.right <= width, layout);
     await page.screenshot({ path: path.join(ART, `ev3-first-program-ready-${width}x844.png`), fullPage: false });

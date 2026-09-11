@@ -12,56 +12,122 @@
         {
           "file": "64179.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-0.json",
+          "center": [
+            0.22,
+            0.440399,
+            -0.64
+          ],
           "label": "Technic Beam  7 x  5 with Open Center  5 x  3"
         },
         {
           "file": "48989.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-1.json",
+          "center": [
+            0.22,
+            0.440399,
+            0
+          ],
           "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
         },
         {
           "file": "64179.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-2.json",
+          "center": [
+            0.22,
+            0.440399,
+            0.64
+          ],
           "label": "Technic Beam  7 x  5 with Open Center  5 x  3"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-3.json",
+          "center": [
+            -0.18,
+            0.440399,
+            -0.32
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-4.json",
+          "center": [
+            -0.18,
+            0.440399,
+            -0.64
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-5.json",
+          "center": [
+            -0.18,
+            0.440399,
+            0.32
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-6.json",
+          "center": [
+            -0.18,
+            0.440399,
+            0.64
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-7.json",
+          "center": [
+            0.62,
+            0.440399,
+            -0.64
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-8.json",
+          "center": [
+            0.62,
+            0.440399,
+            -0.32
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-9.json",
+          "center": [
+            0.62,
+            0.440399,
+            0.32
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-10.json",
+          "center": [
+            0.62,
+            0.440399,
+            0.64
+          ],
           "label": "Technic Pin with Friction and Slots"
         }
       ]
@@ -73,31 +139,67 @@
         {
           "file": "64178.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-11.json",
+          "center": [
+            1.02,
+            0.440399,
+            0
+          ],
           "label": "Technic Beam 11 x  5 with Open Center  5 x  3"
         },
         {
           "file": "64178.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-12.json",
+          "center": [
+            -0.58,
+            0.440399,
+            0
+          ],
           "label": "Technic Beam 11 x  5 with Open Center  5 x  3"
         },
         {
           "file": "48989.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-13.json",
+          "center": [
+            1.02,
+            0.440399,
+            -0.32
+          ],
           "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
         },
         {
           "file": "48989.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-14.json",
+          "center": [
+            1.02,
+            0.440399,
+            0.32
+          ],
           "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
         },
         {
           "file": "48989.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-15.json",
+          "center": [
+            -0.58,
+            0.440399,
+            -0.32
+          ],
           "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
         },
         {
           "file": "48989.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-16.json",
+          "center": [
+            -0.58,
+            0.440399,
+            0.32
+          ],
           "label": "Technic Cross Block 1 x 3 (Pin/Pin/Pin) with 4 Pins"
         }
       ]
@@ -109,36 +211,78 @@
         {
           "file": "95658.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-17.json",
+          "center": [
+            -0.220003,
+            0.760396,
+            -1.12
+          ],
           "label": "Electric Mindstorms EV3 Large Motor"
         },
         {
           "file": "32054.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-18.json",
+          "center": [
+            0.38,
+            0.440399,
+            -0.96
+          ],
           "label": "Technic Pin Long with Stop Bush"
         },
         {
           "file": "32054.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-19.json",
+          "center": [
+            0.06,
+            0.440399,
+            -0.96
+          ],
           "label": "Technic Pin Long with Stop Bush"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-20.json",
+          "center": [
+            -0.74,
+            0.520399,
+            -0.32
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-21.json",
+          "center": [
+            -0.74,
+            0.520399,
+            0.32
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-22.json",
+          "center": [
+            1.18,
+            0.520399,
+            -0.32
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-23.json",
+          "center": [
+            1.18,
+            0.520399,
+            0.32
+          ],
           "label": "Technic Pin with Friction and Slots"
         }
       ]
@@ -150,21 +294,45 @@
         {
           "file": "32054.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-24.json",
+          "center": [
+            0.38,
+            0.440399,
+            0.96
+          ],
           "label": "Technic Pin Long with Stop Bush"
         },
         {
           "file": "32054.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-25.json",
+          "center": [
+            0.06,
+            0.440399,
+            0.96
+          ],
           "label": "Technic Pin Long with Stop Bush"
         },
         {
           "file": "95658.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-26.json",
+          "center": [
+            -0.220003,
+            0.760396,
+            1.12
+          ],
           "label": "Electric Mindstorms EV3 Large Motor"
         },
         {
           "file": "95646c01.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-27.json",
+          "center": [
+            0.22,
+            0.884399,
+            0
+          ],
           "label": "Electric Mindstorms EV3 with Rechargeable Battery"
         }
       ]
@@ -176,31 +344,67 @@
         {
           "file": "41239.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-28.json",
+          "center": [
+            -0.1,
+            0.440399,
+            2.08
+          ],
           "label": "Technic Beam 13"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-29.json",
+          "center": [
+            0.7,
+            0.440399,
+            2
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-30.json",
+          "center": [
+            -0.9,
+            0.440399,
+            2
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "6558.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-31.json",
+          "center": [
+            0.38,
+            0.440399,
+            1.92
+          ],
           "label": "Technic Pin Long with Friction and Slot"
         },
         {
           "file": "32523.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-32.json",
+          "center": [
+            0.86,
+            0.440399,
+            1.92
+          ],
           "label": "Technic Beam  3"
         },
         {
           "file": "32523.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-33.json",
+          "center": [
+            -1.06,
+            0.440399,
+            1.92
+          ],
           "label": "Technic Beam  3"
         }
       ]
@@ -212,31 +416,67 @@
         {
           "file": "55013.dat",
           "color": "72",
+          "url": "/assets/kidx/builds/track3r/piece-34.json",
+          "center": [
+            -1.06,
+            0.440399,
+            1.522
+          ],
           "label": "Technic Axle  8 with Stop"
         },
         {
           "file": "56145.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-35.json",
+          "center": [
+            -1.06,
+            0.440399,
+            1.76
+          ],
           "label": "Wheel Rim 20 x 30 with  6 Dual Spokes and External Ribs"
         },
         {
           "file": "32123b.dat",
           "color": "14",
+          "url": "/assets/kidx/builds/track3r/piece-36.json",
+          "center": [
+            -1.06,
+            0.440399,
+            1.56
+          ],
           "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
         },
         {
           "file": "74695.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-37.json",
+          "center": [
+            0.3,
+            0.440399,
+            1.92
+          ],
           "label": "=Technic Beam  2 Liftarm"
         },
         {
           "file": "74695.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-38.json",
+          "center": [
+            0.3,
+            0.440399,
+            1.76
+          ],
           "label": "=Technic Beam  2 Liftarm"
         },
         {
           "file": "55013.dat",
           "color": "72",
+          "url": "/assets/kidx/builds/track3r/piece-39.json",
+          "center": [
+            0.22,
+            0.440399,
+            1.522
+          ],
           "label": "Technic Axle  8 with Stop"
         }
       ]
@@ -248,31 +488,67 @@
         {
           "file": "74695.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-40.json",
+          "center": [
+            0.3,
+            0.440399,
+            1.6
+          ],
           "label": "=Technic Beam  2 Liftarm"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-41.json",
+          "center": [
+            0.38,
+            0.440399,
+            1.52
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "32073.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-42.json",
+          "center": [
+            -0.26,
+            0.440399,
+            1.76
+          ],
           "label": "Technic Axle  5"
         },
         {
           "file": "32498.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-43.json",
+          "center": [
+            -0.26,
+            0.440399,
+            1.92
+          ],
           "label": "Technic Gear 36 Tooth Double Bevel"
         },
         {
           "file": "3713.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-44.json",
+          "center": [
+            -0.26,
+            0.440399,
+            1.76
+          ],
           "label": "Technic Bush with Two Flanges"
         },
         {
           "file": "32498.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-45.json",
+          "center": [
+            -0.26,
+            0.440399,
+            1.6
+          ],
           "label": "Technic Gear 36 Tooth Double Bevel"
         }
       ]
@@ -284,16 +560,34 @@
         {
           "file": "32073.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-46.json",
+          "center": [
+            0.86,
+            0.440399,
+            1.76
+          ],
           "label": "Technic Axle  5"
         },
         {
           "file": "32123b.dat",
           "color": "14",
+          "url": "/assets/kidx/builds/track3r/piece-47.json",
+          "center": [
+            0.86,
+            0.440399,
+            1.56
+          ],
           "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
         },
         {
           "file": "56145.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-48.json",
+          "center": [
+            0.86,
+            0.440399,
+            1.76
+          ],
           "label": "Wheel Rim 20 x 30 with  6 Dual Spokes and External Ribs"
         }
       ]
@@ -305,46 +599,100 @@
         {
           "file": "41239.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-49.json",
+          "center": [
+            -0.1,
+            0.440399,
+            1.44
+          ],
           "label": "Technic Beam 13"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-50.json",
+          "center": [
+            0.06,
+            0.440399,
+            1.36
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "31313 - 53992c05.dat",
           "color": "256",
+          "url": "/assets/kidx/builds/track3r/piece-51.json",
+          "center": [
+            -0.1,
+            0.440399,
+            1.76
+          ],
           "label": "53992c05"
         },
         {
           "file": "41239.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-52.json",
+          "center": [
+            -0.1,
+            0.440399,
+            -2.08
+          ],
           "label": "Technic Beam 13"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-53.json",
+          "center": [
+            0.7,
+            0.440399,
+            -2
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-54.json",
+          "center": [
+            -0.9,
+            0.440399,
+            -2
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "6558.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-55.json",
+          "center": [
+            0.38,
+            0.440399,
+            -1.92
+          ],
           "label": "Technic Pin Long with Friction and Slot"
         },
         {
           "file": "32523.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-56.json",
+          "center": [
+            0.86,
+            0.440399,
+            -1.92
+          ],
           "label": "Technic Beam  3"
         },
         {
           "file": "32523.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-57.json",
+          "center": [
+            -1.06,
+            0.440399,
+            -1.92
+          ],
           "label": "Technic Beam  3"
         }
       ]
@@ -356,31 +704,67 @@
         {
           "file": "55013.dat",
           "color": "72",
+          "url": "/assets/kidx/builds/track3r/piece-58.json",
+          "center": [
+            -1.06,
+            0.440399,
+            -1.522
+          ],
           "label": "Technic Axle  8 with Stop"
         },
         {
           "file": "56145.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-59.json",
+          "center": [
+            -1.06,
+            0.440399,
+            -1.76
+          ],
           "label": "Wheel Rim 20 x 30 with  6 Dual Spokes and External Ribs"
         },
         {
           "file": "32123b.dat",
           "color": "14",
+          "url": "/assets/kidx/builds/track3r/piece-60.json",
+          "center": [
+            -1.06,
+            0.440399,
+            -1.56
+          ],
           "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
         },
         {
           "file": "74695.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-61.json",
+          "center": [
+            0.3,
+            0.440399,
+            -1.92
+          ],
           "label": "=Technic Beam  2 Liftarm"
         },
         {
           "file": "74695.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-62.json",
+          "center": [
+            0.3,
+            0.440399,
+            -1.76
+          ],
           "label": "=Technic Beam  2 Liftarm"
         },
         {
           "file": "55013.dat",
           "color": "72",
+          "url": "/assets/kidx/builds/track3r/piece-63.json",
+          "center": [
+            0.22,
+            0.440399,
+            -1.522
+          ],
           "label": "Technic Axle  8 with Stop"
         }
       ]
@@ -392,31 +776,67 @@
         {
           "file": "74695.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-64.json",
+          "center": [
+            0.3,
+            0.440399,
+            -1.6
+          ],
           "label": "=Technic Beam  2 Liftarm"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-65.json",
+          "center": [
+            0.38,
+            0.440399,
+            -1.52
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "32073.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-66.json",
+          "center": [
+            -0.26,
+            0.440399,
+            -1.76
+          ],
           "label": "Technic Axle  5"
         },
         {
           "file": "32498.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-67.json",
+          "center": [
+            -0.26,
+            0.440399,
+            -1.92
+          ],
           "label": "Technic Gear 36 Tooth Double Bevel"
         },
         {
           "file": "3713.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-68.json",
+          "center": [
+            -0.26,
+            0.440399,
+            -1.76
+          ],
           "label": "Technic Bush with Two Flanges"
         },
         {
           "file": "32498.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-69.json",
+          "center": [
+            -0.26,
+            0.440399,
+            -1.6
+          ],
           "label": "Technic Gear 36 Tooth Double Bevel"
         }
       ]
@@ -428,16 +848,34 @@
         {
           "file": "32073.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-70.json",
+          "center": [
+            0.86,
+            0.440399,
+            -1.76
+          ],
           "label": "Technic Axle  5"
         },
         {
           "file": "32123b.dat",
           "color": "14",
+          "url": "/assets/kidx/builds/track3r/piece-71.json",
+          "center": [
+            0.86,
+            0.440399,
+            -1.56
+          ],
           "label": "Technic Bush 1/2 Smooth with Axle Hole Semi-Reduced"
         },
         {
           "file": "56145.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-72.json",
+          "center": [
+            0.86,
+            0.440399,
+            -1.76
+          ],
           "label": "Wheel Rim 20 x 30 with  6 Dual Spokes and External Ribs"
         }
       ]
@@ -449,26 +887,56 @@
         {
           "file": "41239.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-73.json",
+          "center": [
+            -0.1,
+            0.440399,
+            -1.44
+          ],
           "label": "Technic Beam 13"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-74.json",
+          "center": [
+            0.06,
+            0.440399,
+            -1.36
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "31313 - 53992c05.dat",
           "color": "256",
+          "url": "/assets/kidx/builds/track3r/piece-75.json",
+          "center": [
+            -0.1,
+            0.440399,
+            -1.76
+          ],
           "label": "53992c05"
         },
         {
           "file": "31313 - ev3cable-studio-3.ldr",
           "color": "47",
+          "url": "/assets/kidx/builds/track3r/piece-76.json",
+          "center": [
+            1.330462,
+            1.003698,
+            0.607157
+          ],
           "label": "EV3 Cable"
         },
         {
           "file": "31313 - ev3cable-studio-4.ldr",
           "color": "47",
+          "url": "/assets/kidx/builds/track3r/piece-77.json",
+          "center": [
+            1.303928,
+            1.026665,
+            -0.719147
+          ],
           "label": "EV3 Cable"
         }
       ]
@@ -480,41 +948,89 @@
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-78.json",
+          "center": [
+            0.62,
+            1.240399,
+            -0.96
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-79.json",
+          "center": [
+            0.62,
+            1.240399,
+            -1.28
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "31313 - 64681d03.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-80.json",
+          "center": [
+            1.484,
+            1.317323,
+            -1.116001
+          ],
           "label": "64681d03"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-81.json",
+          "center": [
+            1.34,
+            1.400399,
+            -0.88
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-82.json",
+          "center": [
+            1.02,
+            1.400399,
+            -0.88
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "32526.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-83.json",
+          "center": [
+            1.02,
+            1.240399,
+            -0.8
+          ],
           "label": "Technic Beam  3 x  5 Bent 90"
         },
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-84.json",
+          "center": [
+            0.622,
+            1.400399,
+            -0.96
+          ],
           "label": "Technic Axle Pin with Friction"
         },
         {
           "file": "41669.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-85.json",
+          "center": [
+            0.54,
+            1.376063,
+            -1.114128
+          ],
           "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
         }
       ]
@@ -526,41 +1042,89 @@
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-86.json",
+          "center": [
+            0.62,
+            1.240399,
+            0.96
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-87.json",
+          "center": [
+            0.62,
+            1.240399,
+            1.28
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "31313 - 64393d03.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-88.json",
+          "center": [
+            1.484,
+            1.317323,
+            1.116001
+          ],
           "label": "64393d03"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-89.json",
+          "center": [
+            1.34,
+            1.400399,
+            0.88
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-90.json",
+          "center": [
+            1.02,
+            1.400399,
+            0.88
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "32526.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-91.json",
+          "center": [
+            1.02,
+            1.240399,
+            0.8
+          ],
           "label": "Technic Beam  3 x  5 Bent 90"
         },
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-92.json",
+          "center": [
+            0.622,
+            1.400399,
+            0.96
+          ],
           "label": "Technic Axle Pin with Friction"
         },
         {
           "file": "41669.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-93.json",
+          "center": [
+            0.54,
+            1.376063,
+            1.114128
+          ],
           "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
         }
       ]
@@ -572,11 +1136,23 @@
         {
           "file": "32054.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-94.json",
+          "center": [
+            -0.74,
+            0.920399,
+            1.12
+          ],
           "label": "Technic Pin Long with Stop Bush"
         },
         {
           "file": "32054.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-95.json",
+          "center": [
+            -0.74,
+            0.920399,
+            -1.12
+          ],
           "label": "Technic Pin Long with Stop Bush"
         }
       ]
@@ -588,51 +1164,111 @@
         {
           "file": "99455.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-96.json",
+          "center": [
+            -1.184,
+            1.544399,
+            0
+          ],
           "label": "Electric Mindstorms EV3 Medium Motor"
         },
         {
           "file": "32073.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-97.json",
+          "center": [
+            -1.508,
+            1.304399,
+            0
+          ],
           "label": "Technic Axle  5"
         },
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-98.json",
+          "center": [
+            -1.348,
+            1.304399,
+            -0.238
+          ],
           "label": "Technic Axle Pin with Friction"
         },
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-99.json",
+          "center": [
+            -1.348,
+            1.304399,
+            0.238
+          ],
           "label": "Technic Axle Pin with Friction"
         },
         {
           "file": "32034.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-100.json",
+          "center": [
+            -1.348,
+            1.304399,
+            -0.48
+          ],
           "label": "Technic Angle Connector #2 (180 degree)"
         },
         {
           "file": "32034.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-101.json",
+          "center": [
+            -1.348,
+            1.304399,
+            0.48
+          ],
           "label": "Technic Angle Connector #2 (180 degree)"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-102.json",
+          "center": [
+            -1.348,
+            1.384399,
+            0.48
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-103.json",
+          "center": [
+            -1.348,
+            1.384399,
+            -0.48
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-104.json",
+          "center": [
+            -1.348,
+            1.304399,
+            -0.722
+          ],
           "label": "Technic Axle Pin with Friction"
         },
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-105.json",
+          "center": [
+            -1.348,
+            1.304399,
+            0.722
+          ],
           "label": "Technic Axle Pin with Friction"
         }
       ]
@@ -644,31 +1280,67 @@
         {
           "file": "32034.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-106.json",
+          "center": [
+            -1.508,
+            1.304399,
+            -0.48
+          ],
           "label": "Technic Angle Connector #2 (180 degree)"
         },
         {
           "file": "32034.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-107.json",
+          "center": [
+            -1.508,
+            1.304399,
+            0.48
+          ],
           "label": "Technic Angle Connector #2 (180 degree)"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-108.json",
+          "center": [
+            -1.508,
+            1.384399,
+            0.48
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-109.json",
+          "center": [
+            -1.508,
+            1.384399,
+            -0.48
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-110.json",
+          "center": [
+            -1.508,
+            1.304399,
+            -0.722
+          ],
           "label": "Technic Axle Pin with Friction"
         },
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-111.json",
+          "center": [
+            -1.508,
+            1.304399,
+            0.722
+          ],
           "label": "Technic Axle Pin with Friction"
         }
       ]
@@ -680,26 +1352,56 @@
         {
           "file": "44294.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-112.json",
+          "center": [
+            -1.668,
+            1.304399,
+            0
+          ],
           "label": "Technic Axle  7"
         },
         {
           "file": "3713.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-113.json",
+          "center": [
+            -1.668,
+            1.304399,
+            0.32
+          ],
           "label": "Technic Bush with Two Flanges"
         },
         {
           "file": "3713.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-114.json",
+          "center": [
+            -1.668,
+            1.304399,
+            -0.32
+          ],
           "label": "Technic Bush with Two Flanges"
         },
         {
           "file": "59443.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-115.json",
+          "center": [
+            -1.668,
+            1.304399,
+            0.56
+          ],
           "label": "Technic Axle Joiner Inline Smooth"
         },
         {
           "file": "59443.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-116.json",
+          "center": [
+            -1.668,
+            1.304399,
+            -0.56
+          ],
           "label": "Technic Axle Joiner Inline Smooth"
         }
       ]
@@ -711,41 +1413,89 @@
         {
           "file": "4519.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-117.json",
+          "center": [
+            -1.668,
+            1.304399,
+            0.8
+          ],
           "label": "Technic Axle  3"
         },
         {
           "file": "4519.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-118.json",
+          "center": [
+            -1.668,
+            1.304399,
+            -0.8
+          ],
           "label": "Technic Axle  3"
         },
         {
           "file": "32348.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-119.json",
+          "center": [
+            -1.284362,
+            1.112763,
+            0.8
+          ],
           "label": "Technic Beam  4 x  4 Liftarm Bent 53.13"
         },
         {
           "file": "32348.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-120.json",
+          "center": [
+            -1.284362,
+            1.112763,
+            -0.8
+          ],
           "label": "Technic Beam  4 x  4 Liftarm Bent 53.13"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-121.json",
+          "center": [
+            -0.996,
+            1.048399,
+            0.88
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-122.json",
+          "center": [
+            -0.996,
+            1.048399,
+            -0.88
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "41669.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-123.json",
+          "center": [
+            -1.512,
+            1.304399,
+            0.96
+          ],
           "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
         },
         {
           "file": "41669.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-124.json",
+          "center": [
+            -1.512,
+            1.304399,
+            -0.96
+          ],
           "label": "Technic Tooth  1 x  3 with Axlehole with Rounded Bottom Cavity"
         }
       ]
@@ -757,21 +1507,45 @@
         {
           "file": "32348.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-125.json",
+          "center": [
+            -0.803638,
+            1.112035,
+            0.96
+          ],
           "label": "Technic Beam  4 x  4 Liftarm Bent 53.13"
         },
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-126.json",
+          "center": [
+            -1.188,
+            1.304399,
+            0.878
+          ],
           "label": "Technic Axle Pin with Friction"
         },
         {
           "file": "32348.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-127.json",
+          "center": [
+            -0.803638,
+            1.112035,
+            -0.96
+          ],
           "label": "Technic Beam  4 x  4 Liftarm Bent 53.13"
         },
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-128.json",
+          "center": [
+            -1.188,
+            1.304399,
+            -0.878
+          ],
           "label": "Technic Axle Pin with Friction"
         }
       ]
@@ -783,31 +1557,67 @@
         {
           "file": "31313 - 64391d03.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-129.json",
+          "center": [
+            -1.364,
+            1.6204,
+            -0.396924
+          ],
           "label": "64391d03"
         },
         {
           "file": "31313 - 64683d03.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-130.json",
+          "center": [
+            -1.364,
+            1.6204,
+            0.396924
+          ],
           "label": "64683d03"
         },
         {
           "file": "6587.dat",
           "color": "28",
+          "url": "/assets/kidx/builds/track3r/piece-131.json",
+          "center": [
+            -0.42,
+            0.920399,
+            1.154
+          ],
           "label": "Technic Axle  3 with Stud"
         },
         {
           "file": "3713.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-132.json",
+          "center": [
+            -0.42,
+            0.920399,
+            1.28
+          ],
           "label": "Technic Bush with Two Flanges"
         },
         {
           "file": "3713.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-133.json",
+          "center": [
+            -0.42,
+            0.920399,
+            -1.28
+          ],
           "label": "Technic Bush with Two Flanges"
         },
         {
           "file": "6587.dat",
           "color": "28",
+          "url": "/assets/kidx/builds/track3r/piece-134.json",
+          "center": [
+            -0.42,
+            0.920399,
+            -1.154
+          ],
           "label": "Technic Axle  3 with Stud"
         }
       ]
@@ -819,6 +1629,12 @@
         {
           "file": "31313 - ev3cable-studio-1.ldr",
           "color": "47",
+          "url": "/assets/kidx/builds/track3r/piece-135.json",
+          "center": [
+            0.414597,
+            1.002352,
+            -0.384176
+          ],
           "label": "EV3 Cable"
         }
       ]
@@ -830,31 +1646,67 @@
         {
           "file": "32184.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-136.json",
+          "center": [
+            -1.98,
+            1.464399,
+            0
+          ],
           "label": "Technic Cross Block 1 x 3 (Axle/Pin/Axle)"
         },
         {
           "file": "4519.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-137.json",
+          "center": [
+            -1.98,
+            1.624399,
+            0.16
+          ],
           "label": "Technic Axle  3"
         },
         {
           "file": "4519.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-138.json",
+          "center": [
+            -1.98,
+            1.624399,
+            -0.16
+          ],
           "label": "Technic Axle  3"
         },
         {
           "file": "32009.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-139.json",
+          "center": [
+            -2.3,
+            1.624399,
+            0.8
+          ],
           "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
         },
         {
           "file": "32009.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-140.json",
+          "center": [
+            -2.3,
+            1.624399,
+            -0.8
+          ],
           "label": "Technic Beam  3 x  3.8 x  7 Liftarm Bent 45 Double"
         },
         {
           "file": "32184.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-141.json",
+          "center": [
+            -1.98,
+            1.784399,
+            0
+          ],
           "label": "Technic Cross Block 1 x 3 (Axle/Pin/Axle)"
         }
       ]
@@ -866,26 +1718,56 @@
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-142.json",
+          "center": [
+            -2.058,
+            1.784399,
+            0
+          ],
           "label": "Technic Axle Pin with Friction"
         },
         {
           "file": "43093.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-143.json",
+          "center": [
+            -2.058,
+            1.464399,
+            0
+          ],
           "label": "Technic Axle Pin with Friction"
         },
         {
           "file": "6575.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-144.json",
+          "center": [
+            -2.1,
+            1.624399,
+            0
+          ],
           "label": "~Moved to 6575a"
         },
         {
           "file": "6575.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-145.json",
+          "center": [
+            -2.18,
+            1.6244,
+            0
+          ],
           "label": "~Moved to 6575a"
         },
         {
           "file": "6587.dat",
           "color": "28",
+          "url": "/assets/kidx/builds/track3r/piece-146.json",
+          "center": [
+            -2.014,
+            1.624399,
+            0
+          ],
           "label": "Technic Axle  3 with Stud"
         }
       ]
@@ -897,51 +1779,111 @@
         {
           "file": "32062.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-147.json",
+          "center": [
+            -2.62,
+            1.624399,
+            -1.44
+          ],
           "label": "Technic Axle  2 Notched"
         },
         {
           "file": "32062.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-148.json",
+          "center": [
+            -2.62,
+            1.624399,
+            1.44
+          ],
           "label": "Technic Axle  2 Notched"
         },
         {
           "file": "92907.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-149.json",
+          "center": [
+            -2.536001,
+            1.624399,
+            1.36002
+          ],
           "label": "Technic Cross Block  2 x  2 x  2 Bent 90 Split (Pin/Twin Axle)"
         },
         {
           "file": "92907.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-150.json",
+          "center": [
+            -2.536001,
+            1.624399,
+            -1.36002
+          ],
           "label": "Technic Cross Block  2 x  2 x  2 Bent 90 Split (Pin/Twin Axle)"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-151.json",
+          "center": [
+            -2.54,
+            1.624399,
+            -1.28
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "2780.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-152.json",
+          "center": [
+            -2.54,
+            1.624399,
+            1.28
+          ],
           "label": "Technic Pin with Friction and Slots"
         },
         {
           "file": "98347.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-153.json",
+          "center": [
+            -2.58,
+            1.859014,
+            -1.310184
+          ],
           "label": "Technic Blade Curved  0.5 x  4 with Pin Hole"
         },
         {
           "file": "98347.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-154.json",
+          "center": [
+            -2.66,
+            1.389784,
+            -1.310184
+          ],
           "label": "Technic Blade Curved  0.5 x  4 with Pin Hole"
         },
         {
           "file": "98347.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-155.json",
+          "center": [
+            -2.66,
+            1.389784,
+            1.310184
+          ],
           "label": "Technic Blade Curved  0.5 x  4 with Pin Hole"
         },
         {
           "file": "98347.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-156.json",
+          "center": [
+            -2.58,
+            1.859014,
+            1.310184
+          ],
           "label": "Technic Blade Curved  0.5 x  4 with Pin Hole"
         }
       ]
@@ -953,21 +1895,45 @@
         {
           "file": "32140.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-157.json",
+          "center": [
+            1.74,
+            0.840399,
+            -0.16
+          ],
           "label": "Technic Beam  2 x  4 Liftarm Bent 90"
         },
         {
           "file": "4519.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-158.json",
+          "center": [
+            1.98,
+            0.920399,
+            0
+          ],
           "label": "Technic Axle  3"
         },
         {
           "file": "6558.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-159.json",
+          "center": [
+            1.82,
+            0.920399,
+            0
+          ],
           "label": "Technic Pin Long with Friction and Slot"
         },
         {
           "file": "6558.dat",
           "color": "1",
+          "url": "/assets/kidx/builds/track3r/piece-160.json",
+          "center": [
+            1.5,
+            0.920399,
+            0
+          ],
           "label": "Technic Pin Long with Friction and Slot"
         }
       ]
@@ -979,46 +1945,100 @@
         {
           "file": "74695.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-161.json",
+          "center": [
+            1.5,
+            0.840399,
+            0
+          ],
           "label": "=Technic Beam  2 Liftarm"
         },
         {
           "file": "95654.dat",
           "color": "15",
+          "url": "/assets/kidx/builds/track3r/piece-162.json",
+          "center": [
+            2.224,
+            1.160401,
+            0
+          ],
           "label": "Electric Mindstorms EV3 Infrared Sensor"
         },
         {
           "file": "32140.dat",
           "color": "0",
+          "url": "/assets/kidx/builds/track3r/piece-163.json",
+          "center": [
+            1.74,
+            0.840399,
+            0.16
+          ],
           "label": "Technic Beam  2 x  4 Liftarm Bent 90"
         },
         {
           "file": "32073.dat",
           "color": "71",
+          "url": "/assets/kidx/builds/track3r/piece-164.json",
+          "center": [
+            1.5,
+            0.760399,
+            0
+          ],
           "label": "Technic Axle  5"
         },
         {
           "file": "42003.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-165.json",
+          "center": [
+            1.5,
+            0.600399,
+            -0.32
+          ],
           "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
         },
         {
           "file": "42003.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-166.json",
+          "center": [
+            1.5,
+            0.600399,
+            0.32
+          ],
           "label": "Technic Cross Block 1 x 3 (Axle/Pin/Pin)"
         },
         {
           "file": "32054.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-167.json",
+          "center": [
+            1.5,
+            0.440399,
+            0.32
+          ],
           "label": "Technic Pin Long with Stop Bush"
         },
         {
           "file": "32054.dat",
           "color": "4",
+          "url": "/assets/kidx/builds/track3r/piece-168.json",
+          "center": [
+            1.5,
+            0.440399,
+            -0.32
+          ],
           "label": "Technic Pin Long with Stop Bush"
         },
         {
           "file": "31313 - ev3cable-studio-2.ldr",
           "color": "47",
+          "url": "/assets/kidx/builds/track3r/piece-169.json",
+          "center": [
+            0.388405,
+            0.836015,
+            0.392282
+          ],
           "label": "EV3 Cable"
         }
       ]

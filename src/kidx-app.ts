@@ -4,6 +4,11 @@ import { availableKidxDocuments, findKidxDocuments, KIDX_DOCUMENTS, readKidxProg
 import { KIDX_BUILDS, kidxBuildEntities, kidxPartLabel, type KidxBuild } from "./kidx-builds";
 import { KIDX_LESSON_SOURCE, KIDX_MISSIONS, kidxBuildScene, kidxMissionScene, type KidxMission } from "./kidx-missions";
 import "./kidx-app.css";
+import { createKidxBuildPlayback } from "./kidx-build-playback";
+import { parseKidxBuildRequest, smoothKidx } from "./kidx-build-actions";
+import { markKidxJourney, readKidxJourney } from "./kidx-journey";
+import { mountKidxMechanismDemo } from "./kidx-mechanism-demo";
+import { createKidxTeam } from "./kidx-team";
 
 export type KidxApplication = { dispose: () => void; state: () => unknown; advanceTime: (milliseconds: number) => unknown };
 type Options = {
@@ -18,6 +23,7 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
   let content: HTMLElement | null = null;
   let disposeDetail: (() => void) | null = null;
   let detailState: (() => unknown) | null = null;
+  let advanceDetail: ((seconds: number) => void) | null = null;
   let activeMission = KIDX_MISSIONS[0];
   let activeBuild: KidxBuild | null = null;
   let buildStep = 0;
@@ -36,6 +42,7 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
     generation++;
     strip?.dispose(); strip = null;
     disposeDetail?.(); disposeDetail = null; detailState = null;
+    advanceDetail = null;
     content?.remove(); content = null;
     api.pause(true); reframe = () => {};
   };
@@ -52,7 +59,8 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
       options.frameView([x + 5 * distance, targetY + 9.2 * distance, z + 14.25 * distance], [x, targetY, z], 0);
     };
     reframe();
-    strip = mountEv3MissionStrip(root, api, () => showHome("missions"), { subscribeFrame: options.subscribeFrame, mission, french: true });
+    strip = mountEv3MissionStrip(root, api, () => showHome("missions"), { subscribeFrame: options.subscribeFrame, mission, french: true,
+      onComplete: () => { try { markKidxJourney(localStorage, "missions", mission.id); } catch { /* optional achievement */ } } });
   };
   const openReader = async (item: KidxDocument, returnToBuild: KidxBuild | null = null) => {
     clear(); screen = "reader";
@@ -69,7 +77,8 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
     try { storedStep = Number(localStorage.getItem(`graphysx:kidx:build:${build.id}:v1`) ?? 0); } catch { /* optional persistence */ }
     buildStep = Math.max(0, Math.min(build.steps.length - 1, Number.isFinite(initialStep ?? storedStep) ? Math.floor(initialStep ?? storedStep) : 0));
     exploded = false; angle = 35;
-    let zoom = buildStep < 6 ? 1.35 : 1;
+    let zoom = buildStep < 6 ? (root.clientWidth <= 600 ? 1.35 : 2) : 1;
+    let underside = false;
     const entities = kidxBuildEntities(build, buildStep);
     const receipt = api.load(kidxBuildScene(entities.slice(0, buildStep + 1)));
     if (!receipt.ok) throw new Error(receipt.error ?? "Unable to load build");
@@ -98,19 +107,74 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
       const radius = (portrait ? 11 : 7) / zoom;
       const radians = angle * Math.PI / 180;
       const target: AgentWorldVector3 = [portrait ? 0 : 1.3, portrait ? -1.6 : build.height * .45, 0];
-      options.frameView([target[0] + radius * Math.sin(radians), target[1] + radius * .8, radius * Math.cos(radians)], target, 0);
+      options.frameView([target[0] + radius * Math.sin(radians), target[1] + radius * (underside ? -.8 : .8), radius * Math.cos(radians)], target, .35);
     };
+    const demo = document.createElement("section"); demo.className = "kx-demo-controls";
+    demo.innerHTML = `<button data-build-replay>▶ Nestor, montre-moi</button><div class="kx-card-row"><button data-build-pause>Pause</button><button data-build-resume>Reprendre</button></div>
+      <label>Vitesse <select data-build-speed aria-label="Vitesse de la démonstration"><option value=".25">Très lent</option><option value=".5">Ralenti</option><option value="1" selected>Normal</option><option value="2">Rapide</option></select></label>
+      <label>Revoir une pièce <select data-build-piece aria-label="Pièce à montrer"></select></label><p data-build-demo-status role="status">Une courte démonstration avec les vraies pièces du modèle.</p>
+      <details><summary>Demander à Nestor</summary><form data-build-request><label>Ta demande<input aria-label="Demande à Nestor" placeholder="Montre dessous, étape 8, moteur…" maxlength="120"></label><button>Montrer</button></form><p>Guide local : tourner, dessus/dessous, étape, pièce, pause, ralenti, vue éclatée.</p></details>
+      <details data-build-team><summary>Construire ensemble</summary><label>Constructeur 1<input data-team-one maxlength="24" value="Constructeur 1"></label><label>Constructeur 2<input data-team-two maxlength="24" value="Constructeur 2"></label><button data-team-toggle>Activer le duo</button><p data-team-status role="status"></p><button data-team-ready hidden>Pièces prêtes →</button><details><summary>Partager avec un autre écran</summary><button data-team-create>Créer un code duo</button><label>Code de l’autre écran<input data-team-code maxlength="8" autocomplete="off" spellcheck="false"></label><button data-team-join>Rejoindre</button><button data-team-leave>Quitter le duo partagé</button><p data-team-session role="status">Ouvre le même modèle depuis le serveur KidX sur les deux écrans.</p></details></details>`;
+    ui.querySelector(".kx-build-side p")!.after(demo);
+    const demoStatus = demo.querySelector<HTMLElement>("[data-build-demo-status]")!;
+    const playback = createKidxBuildPlayback(api, build, text => { demoStatus.textContent = text; });
+    const pieceSelect = demo.querySelector<HTMLSelectElement>("[data-build-piece]")!;
+    const speedSelect = demo.querySelector<HTMLSelectElement>("[data-build-speed]")!;
+    let transitions: Array<{ id: string; from: AgentWorldVector3; to: AgentWorldVector3 }> = [];
+    let transitionTime = 0;
+    let duo = false, prepared = false;
+    const teamNames = [demo.querySelector<HTMLInputElement>("[data-team-one]")!, demo.querySelector<HTMLInputElement>("[data-team-two]")!];
+    const teamKey = `graphysx:kidx:team:${build.id}:v1`;
+    try {
+      const saved = JSON.parse(localStorage.getItem(teamKey) ?? "null");
+      if (saved?.version === 1 && Array.isArray(saved.names) && saved.names.length === 2 && saved.names.every((n: unknown) => typeof n === "string" && n.length <= 24)) {
+        teamNames.forEach((input, i) => { input.value = saved.names[i]; }); duo = saved.active === true;
+        prepared = saved.step === buildStep && saved.prepared === true;
+      }
+    } catch { /* optional browser-local teamwork */ }
+    const team = () => {
+      const prepareName = teamNames[buildStep % 2].value.trim() || `Constructeur ${buildStep % 2 + 1}`;
+      const assembleName = teamNames[(buildStep + 1) % 2].value.trim() || `Constructeur ${(buildStep + 1) % 2 + 1}`;
+      demo.querySelector("[data-team-toggle]")!.textContent = duo ? "Revenir en solo" : "Activer le duo";
+      demo.querySelector<HTMLButtonElement>("[data-team-ready]")!.hidden = !duo;
+      demo.querySelector("[data-team-ready]")!.textContent = prepared ? "Assemblage terminé →" : "Pièces prêtes →";
+      demo.querySelector("[data-team-status]")!.textContent = duo ? prepared ? `${assembleName}, assemble ! ${prepareName} peut te montrer la démonstration.` : `${prepareName}, prépare les pièces. ${assembleName} assemblera. Les rôles changent à chaque étape.` : "À deux sur cet écran : une personne prépare, l’autre assemble.";
+      try { localStorage.setItem(teamKey, JSON.stringify({ version: 1, active: duo, names: teamNames.map(n => n.value), step: buildStep, prepared })); }
+      catch { demo.querySelector("[data-team-status]")!.textContent += " Reprise non enregistrée."; }
+    };
+    let receivingTeam = false;
+    const sharedTeam = createKidxTeam(build.id, state => {
+      receivingTeam = true;
+      try {
+        duo = true;
+        if (state.step !== buildStep) go(state.step, false);
+        prepared = state.prepared;
+        teamNames.forEach((input, i) => { input.value = state.names[i]; });
+        demo.querySelector<HTMLInputElement>("[data-team-code]")!.value = state.code;
+        team();
+      } finally { receivingTeam = false; }
+    }, text => { demo.querySelector("[data-team-session]")!.textContent = text; });
+    const teamDraft = () => ({ model: build.id, step: buildStep, prepared, names: teamNames.map((n, i) => n.value.trim() || `Constructeur ${i + 1}`) });
+    const publishTeam = () => { if (!receivingTeam) sharedTeam.publish(teamDraft()); };
     const pending = new Set<string>();
     let loadFailed = false;
     const highlight = (id: string, active: boolean): AgentWorldCommand => ({ op: "update", id,
       patch: { modelMaterialOverrides: active ? Object.fromEntries((api.state()?.entities.find((item) => item.id === id)?.materialSlots ?? [])
         .map((slot) => [slot.id, { emissive: "#63a947", emissiveIntensity: .22 }])) : null } });
     const readyStatus = () => {
+      if (playback.state().active) return;
       status.textContent = loadFailed ? "Une pièce n’a pas pu être chargée. Reviens à l’atelier pour réessayer."
         : buildStep === build.steps.length - 1 ? "Le modèle est assemblé ! Tu peux revoir chaque étape." : "Les pièces de l’étape actuelle sont légèrement éclairées en vert.";
     };
     let frameTime = 0;
-    disposeDetail = options.subscribeFrame((delta) => {
+    const advanceBuild = (delta: number) => {
+      playback.advance(delta);
+      if (transitions.length) {
+        transitionTime += Math.min(.1, delta);
+        const t = smoothKidx(transitionTime / .65);
+        api.transaction(transitions.map(({ id, from, to }) => ({ op: "update", id, patch: { transform: { position: from.map((v, i) => v + (to[i] - v) * t) as AgentWorldVector3 } } })));
+        if (t === 1) transitions = [];
+      }
       if (!pending.size || (frameTime += delta) < .2) return;
       frameTime = 0;
       const states = api.state()?.entities ?? [];
@@ -127,7 +191,12 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
         }
       }
       if (!pending.size) readyStatus();
-    });
+    };
+    let deterministicBuild = false;
+    const unsubscribe = options.subscribeFrame(delta => { sharedTeam.advance(); if (!deterministicBuild) advanceBuild(delta); });
+    advanceDetail = delta => { deterministicBuild = true; advanceBuild(delta); };
+    disposeDetail = () => { unsubscribe(); sharedTeam.dispose(); playback.stop(); };
+    detailState = () => ({ demonstration: playback.state(), duo: { active: duo, prepared, names: teamNames.map(n => n.value), session: sharedTeam.state() }, underside });
     const update = () => {
       const commands: AgentWorldCommand[] = [];
       for (const [index, entity] of entities.entries()) {
@@ -157,6 +226,8 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
         else inventory.set(key, { count: 1, label: kidxPartLabel(piece.label), file: piece.file, color: colors[piece.color] ?? "" });
       }
       const list = ui.querySelector("[data-build-pieces]")!; list.replaceChildren();
+      pieceSelect.replaceChildren();
+      build.steps[buildStep].pieces.forEach((piece, i) => pieceSelect.add(new Option(`${i + 1} · ${kidxPartLabel(piece.label)}`, String(i))));
       for (const item of inventory.values()) {
         const row = document.createElement("li"); row.textContent = `${item.count} × ${item.label}`;
         const code = document.createElement("small"); code.textContent = item.file.replace(/^31313 - /, "").replace(/\.dat$|\.ldr$/g, "") + (item.color ? ` · ${item.color}` : "");
@@ -165,15 +236,70 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
       if (pending.size) status.textContent = "Chargement des pièces 3D…"; else readyStatus();
       try { localStorage.setItem(`graphysx:kidx:build:${build.id}:v1`, String(buildStep)); }
       catch { status.textContent += " Reprise non enregistrée dans ce navigateur."; }
+      team();
     };
-    const go = (value: number) => { if (!Number.isFinite(value)) { update(); return; } buildStep = Math.max(0, Math.min(build.steps.length - 1, Math.floor(value))); update(); };
+    const go = (value: number, animate = true) => {
+      if (!Number.isFinite(value)) return;
+      playback.stop(); transitions = []; prepared = false; exploded = false;
+      buildStep = Math.max(0, Math.min(build.steps.length - 1, Math.floor(value))); update();
+      publishTeam();
+      if (animate) playback.start(buildStep);
+    };
     previous.addEventListener("click", () => go(buildStep - 1)); next.addEventListener("click", () => go(buildStep + 1));
     number.addEventListener("change", () => go(Number(number.value) - 1));
-    explode.addEventListener("click", () => { exploded = !exploded; update(); });
-    ui.querySelector("[data-build-complete]")!.addEventListener("click", () => { zoom = 1; go(build.steps.length - 1); reframe(); });
+    const setExploded = (value: boolean) => {
+      playback.stop();
+      const before = new Map(api.query({ tag: "kidx-build" }).map(e => [e.id, e.position]));
+      exploded = value; update(); transitionTime = 0;
+      transitions = api.query({ tag: "kidx-build" }).filter(e => e.visible).map(e => ({ id: e.id, from: before.get(e.id) ?? [0, 0, 0], to: e.position }));
+      for (const item of transitions) api.update(item.id, { transform: { position: item.from } });
+    };
+    explode.addEventListener("click", () => setExploded(!exploded));
+    ui.querySelector("[data-build-complete]")!.addEventListener("click", () => { zoom = 1; go(build.steps.length - 1, false); reframe(); });
     ui.querySelector("[data-build-rotate]")!.addEventListener("click", () => { angle += 45; reframe(); });
-    ui.querySelector("[data-build-zoom-in]")!.addEventListener("click", () => { zoom = Math.min(2.2, zoom + .2); reframe(); });
+    ui.querySelector("[data-build-zoom-in]")!.addEventListener("click", () => { zoom = Math.min(3.2, zoom + .2); reframe(); });
     ui.querySelector("[data-build-zoom-out]")!.addEventListener("click", () => { zoom = Math.max(.6, zoom - .2); reframe(); });
+    const replay = (piece = 0) => { if (exploded) { exploded = false; update(); } transitions = []; playback.start(buildStep, piece); };
+    demo.querySelector("[data-build-replay]")!.addEventListener("click", () => replay());
+    demo.querySelector("[data-build-pause]")!.addEventListener("click", () => playback.pause());
+    demo.querySelector("[data-build-resume]")!.addEventListener("click", () => playback.resume());
+    speedSelect.addEventListener("change", () => playback.speed(Number(speedSelect.value)));
+    pieceSelect.addEventListener("change", () => replay(Number(pieceSelect.value)));
+    demo.querySelector("[data-build-request]")!.addEventListener("submit", event => {
+      event.preventDefault(); const input = demo.querySelector<HTMLInputElement>("[aria-label='Demande à Nestor']")!;
+      const request = parseKidxBuildRequest(input.value);
+      if (request.action === "step") go(request.value!);
+      else if (request.action === "next") go(buildStep + 1);
+      else if (request.action === "previous") go(buildStep - 1);
+      else if (request.action === "underside" || request.action === "above") { underside = request.action === "underside"; reframe(); }
+      else if (request.action === "rotate") { angle += 45; reframe(); }
+      else if (request.action === "explode" || request.action === "assemble") setExploded(request.action === "explode");
+      else if (request.action === "pause") playback.pause();
+      else if (request.action === "resume") playback.resume();
+      else if (request.action === "slow") { speedSelect.value = ".5"; playback.speed(.5); replay(); }
+      else if (request.action === "replay") replay();
+      else {
+        const search = request.search ?? "";
+        const found = build.steps[buildStep].pieces.findIndex(p => `${kidxPartLabel(p.label)} ${p.label} ${p.file}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(search));
+        if (!search || found < 0) { demoStatus.textContent = "Je ne trouve pas cette pièce dans l’étape actuelle. Choisis-la dans la liste, ou demande une étape, dessous ou une vue éclatée."; return; }
+        pieceSelect.value = String(found); replay(found);
+        const center = build.steps[buildStep].pieces[found].center;
+        const distance = root.clientWidth <= 600 ? 1.8 : 1;
+        options.frameView([center[0] + 1.6 * distance, center[1] + 1.8 * distance, center[2] + 2.5 * distance], [center[0] + (root.clientWidth > 600 ? .4 : 0), center[1], center[2]], .45);
+      }
+      if (!["piece", "replay", "slow", "step", "next", "previous"].includes(request.action)) demoStatus.textContent = `Nestor : ${input.value.trim()}. C’est fait.`;
+    });
+    demo.querySelector("[data-team-toggle]")!.addEventListener("click", () => { duo = !duo; prepared = false; if (!duo) sharedTeam.leave(); team(); publishTeam(); });
+    teamNames.forEach(input => input.addEventListener("change", () => { team(); publishTeam(); }));
+    demo.querySelector("[data-team-ready]")!.addEventListener("click", () => { if (prepared) { if (buildStep < build.steps.length - 1) go(buildStep + 1); else demoStatus.textContent = "Bravo à vous deux, le modèle est assemblé !"; } else { prepared = true; team(); publishTeam(); } });
+    demo.querySelector("[data-team-create]")!.addEventListener("click", () => { duo = true; team(); void sharedTeam.create(teamDraft()); });
+    demo.querySelector("[data-team-join]")!.addEventListener("click", () => { void sharedTeam.join(demo.querySelector<HTMLInputElement>("[data-team-code]")!.value); });
+    demo.querySelector("[data-team-leave]")!.addEventListener("click", () => sharedTeam.leave());
+    const adventure = document.createElement("details"); adventure.className = "kx-build-adventure";
+    adventure.innerHTML = `<summary>Construire → Programmer → Tester</summary><p>Les défis utilisent la base roulante EV3 de l’atelier pour expérimenter les mécanismes de ce modèle.</p>`;
+    for (const mission of KIDX_MISSIONS.filter(item => item.build === build.id)) adventure.append(button(mission.title + " →", () => startMission(mission)));
+    adventure.append(button("J’ai terminé la construction ✓", () => { try { const saved = markKidxJourney(localStorage, "builds", build.id); demoStatus.textContent = saved ? "Construction terminée et enregistrée. Bravo ! Essaie maintenant un défi." : "Bravo ! La progression n’a pas pu être enregistrée."; } catch { demoStatus.textContent = "Bravo ! La progression n’a pas pu être enregistrée."; } }));
+    ui.querySelector(".kx-build-side")!.append(adventure);
     ui.querySelector("[data-build-back]")!.addEventListener("click", () => showHome("builds"));
     ui.querySelector("[data-build-pdf]")!.addEventListener("click", () => {
       const original = KIDX_DOCUMENTS.find((item) => item.id === build.documentId);
@@ -199,6 +325,8 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
     panel.querySelector("h1")!.textContent = titles[tab][0]; panel.querySelector(".kx-hero p")!.textContent = titles[tab][1];
     const body = panel.querySelector<HTMLElement>(".kx-content")!;
     const grid = document.createElement("div"); grid.className = "kx-grid";
+    let journey = { missions: {} as Record<string, number>, builds: {} as Record<string, number> };
+    try { journey = readKidxJourney(localStorage); } catch { /* unreadable progress never blocks the workshop */ }
     const card = (title: string, subtitle: string, eyebrow: string, cover?: string) => {
       const article = document.createElement("article"); article.className = "kx-card";
       if (cover) { const image = document.createElement("img"); image.src = cover; image.alt = title; image.loading = "lazy"; article.append(image); }
@@ -211,18 +339,21 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
     };
     if (tab === "missions") {
       KIDX_MISSIONS.forEach((mission, index) => {
-        const { article, inner } = card(mission.title, mission.objective, `MISSION ${String(index + 1).padStart(2, "0")} · ${mission.skill}`);
+        const { article, inner } = card(mission.title, mission.objective, `${journey.missions[mission.id] ? "✓ RÉUSSIE · " : ""}MISSION ${String(index + 1).padStart(2, "0")} · ${mission.skill}`);
         const glyph = document.createElement("div"); glyph.className = "kx-glyph"; glyph.textContent = mission.glyph; article.prepend(glyph);
         const play = button("Programmer le robot →", () => startMission(mission)); play.dataset.kidxMission = mission.id; inner.append(play);
+        if (mission.build) { const build = KIDX_BUILDS.find(b => b.id === mission.build)!; const link = button(`Construire ${build.label}`, () => showBuild(build)); link.className = "kx-secondary"; inner.append(link); }
       });
       const source = document.createElement("p"); source.className = "kx-source";
       source.append("Exercices KidX inspirés des déplacements et virages de Robot Trainer. ");
       const link = document.createElement("a"); link.href = KIDX_LESSON_SOURCE; link.target = "_blank"; link.rel = "noopener noreferrer"; link.textContent = "Voir l’activité LEGO originale ↗"; source.append(link);
       body.append(source, grid);
+      const { inner } = card("Les engrenages en mouvement", "Observe deux vraies pièces LEGO : 8 et 24 dents. Ralentis, inverse le moteur et compte les tours.", "COMPRENDRE EN 3D · 12 SECONDES");
+      inner.append(button("▶ Montre-moi les engrenages", showMechanism, "data-kidx-mechanism"));
     } else if (tab === "builds") {
       for (const build of KIDX_BUILDS) {
         const original = KIDX_DOCUMENTS.find((item) => item.id === build.documentId)!;
-        const { inner } = card(build.label, build.subtitle, `${build.steps.length} ASSEMBLAGES 3D · KIT 31313`, original.coverUrl);
+        const { inner } = card(build.label, build.subtitle, `${journey.builds[build.id] ? "✓ CONSTRUIT · " : ""}${build.steps.length} ASSEMBLAGES 3D · KIT 31313`, original.coverUrl);
         const open = button("Construire en 3D →", () => showBuild(build)); open.dataset.kidxBuild = build.id; inner.append(open);
       }
       const { inner } = card("Les autres modèles", "Chaque PDF est déjà lisible page par page. Les autres assemblages 3D restent à décrire et à vérifier.", `${KIDX_DOCUMENTS.filter((item) => item.kind === "build").length} NOTICES DE CONSTRUCTION`);
@@ -254,13 +385,33 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
     }
     root.append(panel); panel.querySelector<HTMLButtonElement>(`[data-kidx-${tab}]`)!.focus();
   };
+  const showMechanism = () => {
+    clear(); screen = "mechanism";
+    const demo = mountKidxMechanismDemo(root, api, options.frameView, () => showHome("missions"));
+    reframe = demo.reframe;
+    let deterministic = false;
+    const unsubscribe = options.subscribeFrame(delta => { if (!deterministic) demo.advance(delta); });
+    advanceDetail = delta => { deterministic = true; demo.advance(delta); };
+    detailState = demo.state;
+    disposeDetail = () => { unsubscribe(); demo.dispose(); };
+  };
   const resize = () => reframe(); window.addEventListener("resize", resize);
-  if (new URLSearchParams(location.search).get("view") === "atelier") showHome("missions");
+  const route = new URLSearchParams(location.search);
+  const requestedBuild = KIDX_BUILDS.find(build => build.id === route.get("model"));
+  if (route.get("view") === "build" && requestedBuild) showBuild(requestedBuild);
+  else if (route.get("view") === "atelier") showHome("missions");
   else startMission(activeMission);
   const state = () => strip ? { ...strip.state(), screen, missionId: activeMission.id } : {
     screen, build: screen === "build" && activeBuild ? { id: activeBuild.id, step: buildStep + 1, steps: activeBuild.steps.length, exploded, angle } : null,
-    reader: detailState?.() ?? null,
+    reader: screen === "reader" ? detailState?.() ?? null : null,
+    construction: screen === "build" ? detailState?.() ?? null : null,
+    mechanism: screen === "mechanism" ? detailState?.() ?? null : null,
   };
-  return { state, advanceTime: (milliseconds) => strip ? strip.advanceTime(milliseconds) : state(),
+  return { state, advanceTime: (milliseconds) => {
+    if (strip) return strip.advanceTime(milliseconds);
+    if (!Number.isFinite(milliseconds) || milliseconds < 0) throw new RangeError("Invalid elapsed time");
+    for (let i = 0; i < Math.ceil(milliseconds / (1000 / 60)); i++) advanceDetail?.(1 / 60);
+    return state();
+  },
     dispose: () => { disposed = true; clear(); window.removeEventListener("resize", resize); } };
 }

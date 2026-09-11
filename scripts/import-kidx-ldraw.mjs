@@ -70,12 +70,21 @@ const normalize = new Matrix4().makeScale(scale, scale, scale).multiply(new Matr
 const out = path.resolve(`public/assets/kidx/builds/${name}`);
 await mkdir(out, { recursive: true });
 const assemblies = new Map();
+const nativeMeshes = (batches) => [...batches].map(([name, { material, geometries }]) => {
+  const geometry = mergeVertices(mergeGeometries(geometries), .00001);
+  return { name, ...serializeKidxGeometry(geometry), materials: [{ name: material.name,
+    color: [material.color.r, material.color.g, material.color.b, material.opacity], specularPower: 45 }] };
+});
 // Native model assets are merged by construction step and color to keep draw calls bounded.
 for (const part of parts) {
   const step = part.userData.buildingStep ?? 0;
   if (!assemblies.has(step)) assemblies.set(step, { pieces: [], geometry: new Map() });
   const assembly = assemblies.get(step);
+  const pieceGeometry = new Map();
+  const pieceCenter = new Box3().setFromObject(part).getCenter(new Vector3()).applyMatrix4(normalize);
+  const pieceId = `piece-${parts.indexOf(part)}`;
   assembly.pieces.push({ file: part.userData.fileName, color: part.userData.colorCode,
+    url: `/assets/kidx/builds/${name}/${pieceId}.json`, center: pieceCenter.toArray().map(v => Number(v.toFixed(6))),
     label: /ev3cable/i.test(part.name) ? "EV3 Cable" : packed.get(part.userData.fileName?.toLowerCase())?.split(/\r?\n/)[0].replace(/^0\s+/, "") ?? part.name });
   part.traverse((mesh) => {
     if (!mesh.isMesh) return;
@@ -107,16 +116,15 @@ for (const part of parts) {
         }
       }
       assembly.geometry.get(key).geometries.push(slice);
+      if (!pieceGeometry.has(key)) pieceGeometry.set(key, { material, geometries: [] });
+      pieceGeometry.get(key).geometries.push(slice.clone().translate(-pieceCenter.x, -pieceCenter.y, -pieceCenter.z));
     }
   });
+  await writeFile(path.join(out, `${pieceId}.json`), JSON.stringify({ meshes: nativeMeshes(pieceGeometry) }));
 }
 const steps = [];
 for (const [sourceStep, assembly] of assemblies) {
-  const meshes = [...assembly.geometry].map(([name, { material, geometries }]) => {
-    const geometry = mergeVertices(mergeGeometries(geometries), .00001);
-    return { name, ...serializeKidxGeometry(geometry), materials: [{ name: material.name,
-        color: [material.color.r, material.color.g, material.color.b, material.opacity], specularPower: 45 }] };
-  });
+  const meshes = nativeMeshes(assembly.geometry);
   const id = `${name}-${steps.length + 1}`;
   const url = `/assets/kidx/builds/${name}/${id}.json`;
   await writeFile(path.join(out, `${id}.json`), JSON.stringify({ meshes }));

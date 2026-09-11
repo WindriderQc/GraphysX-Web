@@ -228,6 +228,20 @@ function buildRover(
         castShadow: true, receiveShadow: true,
         tags: ["ev3-lab", "construction-part", "representation:adapted-ldraw"],
       },
+      ...([-1, 1] as const).map((side) => ({
+        id: `${prefix}:wheel-${side < 0 ? "left" : "right"}`, label: side < 0 ? "Left EV3 wheel" : "Right EV3 wheel",
+        type: "model" as const, parentId: `${prefix}:heading`,
+        asset: { id: `ev3-driving-wheel-${side < 0 ? "left" : "right"}` },
+        transform: { position: [side * 2.02, .13, -.7] as AgentWorldVector3 },
+        castShadow: true, receiveShadow: true, tags: ["kidx-wheel", "construction-part"],
+      })),
+      ...(["left", "right"] as const).map((side, index) => ({
+        id: `${prefix}:lcd-${side}`, label: `LCD motor ${index === 0 ? "B" : "C"} activity`,
+        type: "box" as const, parentId: `${prefix}:heading`, visible: false,
+        transform: { position: [.05, 2.26, -.833 + index * .157] as AgentWorldVector3 },
+        geometry: { width: .85, height: .008, depth: .055 },
+        material: { color: "#30392d", roughness: 1 }, tags: ["kidx-lcd", "construction-part"],
+      })),
       // Preserve the editable brick target inside the detailed EV3 housing.
       { ...roverPart(prefix, "brick", "EV3 Intelligent Brick Core", "box", [0, 1.45, .15],
         { width: 1.7, height: .4, depth: 2.7 }, PALETTE.white), parentId: `${prefix}:heading` },

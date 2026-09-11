@@ -5,11 +5,14 @@ import { defineConfig, type Plugin } from "vite";
 import { productAssetManifest } from "./scripts/product-assets.mjs";
 // @ts-expect-error -- local development middleware, not browser code
 import { createKidxDocumentRoute } from "./scripts/kidx-document-server.mjs";
+// @ts-expect-error -- local development middleware, not browser code
+import { createKidxTeamRoute } from "./scripts/kidx-team-server.mjs";
 
 function kidxDocuments(): Plugin {
   return { name: "kidx-local-instructions", apply: "serve", async configureServer(server) {
     const route = await createKidxDocumentRoute();
-    server.middlewares.use((req, res, next) => { if (!route(req, res)) next(); });
+    const teams = createKidxTeamRoute();
+    server.middlewares.use((req, res, next) => { if (!teams(req, res) && !route(req, res)) next(); });
   } };
 }
 

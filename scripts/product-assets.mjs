@@ -117,7 +117,10 @@ export async function productAssetManifest() {
   for (const document of documents) wanted.add(document.coverUrl);
   for (const model of ["track3r", "spike3r"]) {
     const build = JSON.parse(await readFile(path.join(ROOT, `src/kidx-${model}-build.json`), "utf8"));
-    for (const step of build.steps) wanted.add(step.url);
+    for (const step of build.steps) {
+      wanted.add(step.url);
+      for (const piece of step.pieces) if (piece.url) wanted.add(piece.url);
+    }
     wanted.add(`/assets/kidx/builds/${model}/credits.json`);
   }
 

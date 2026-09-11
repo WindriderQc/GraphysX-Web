@@ -8,25 +8,65 @@ are French; the source PDFs keep their original text and illustrations.
 
 | Section | Current coverage |
 | --- | --- |
-| Missions | Five original KidX movement exercises: Premier trajet, Un quart de tour, À gauche toute, La livraison, Retour à la base. The last two require a yellow checkpoint before the blue finish. |
+| Missions | Eleven exercises: the five original routes plus reverse parking, pushing cargo, distance-triggered retreat, a physical ramp, color detection and contact-triggered retreat. The cargo is the delivery subject; sensor return routes require an outbound checkpoint. Completed missions are saved locally. |
 | Notices LEGO | 138 indexed PDFs, including the owner's original kit references and the 120 distinct PDF links found in the official Education catalog. Covers, search, family/type filters, PDF canvas, previous/next page, direct page entry, zoom and saved reading position. |
-| Construire en 3D | TRACK3R: 28 assembly stages, 170 logical parts. SPIK3R: 56 stages, 349 logical parts. Native geometry, current-stage highlighting, parts inventory, rotation, zoom, assembly separation, full-model preview and saved stage. |
+| Construire en 3D | TRACK3R: 28 stages/170 parts. SPIK3R: 56 stages/349 parts. Individual CAD pieces animate toward translucent destinations, with pause, slow replay and part selection. Smooth separation, clear underside, saved stage, French Nestor requests, shared build rooms and model-related challenges. |
+| Laboratoire + | Regulated left/right motor speed, duration, wait, repeat, conditionals and drive-until-sensor blocks; nested editor, save/open, active block, physical pause/step and live EV3 sensor readout. Optional locally synthesized motor sound. |
+| Comprendre en 3D | A 12-second native CAD demonstration of 8:24 gears, opposing rotation, a 3:1 speed ratio, pause, slow motion, reverse and replay. |
 
 The movement exercises are adaptations of
 [LEGO Robot Trainer: Moves and Turns](https://education.lego.com/en-us/lessons/ev3-robot-trainer/1-moves-and-turns/).
-They use the existing four blocks and six-block limit. They do not reproduce all seven
-Robot Trainer lessons, sensor programs, or the five hardware missions of each 31313 robot.
+The simple program retains a six-block limit and adds Backward as its fifth block type.
+The richer laboratory is bounded at 64 instructions, four nesting levels and three minutes
+per execution, with explicit timeouts for sensor waits. These are original learning
+exercises, not a reproduction of every official hardware lesson.
 The existing full seven-station EV3 scene remains in Browse Scenes.
 
 The simulator has a wheeled teaching chassis built from detailed LDraw EV3 parts; see
 [KIDX_VISUALS.md](KIDX_VISUALS.md). The construction views use separate source assemblies
 with no floor, desk or wall geometry, so the underside stays visible when orbiting.
 Their assembly ordering comes from LDraw and can differ from the LEGO PDF pages.
-They show groups of pieces per stage, not a PDF-derived, validated instruction for every
-individual connector. Motors, sensors and generated cables are indivisible parts; their
+Stages can now be demonstrated one logical piece at a time, with a gold insertion arrow. The illustrated approach path
+is a teaching animation, not a connector-aware collision plan derived from the PDF.
+Motors, sensors and generated cables are indivisible parts; their
 internal CAD geometry is not an instruction to dismantle them. Stickers and conditional
 edge lines are omitted. Use **Notice LEGO** to check small connections and cable routing.
 Other models have the original PDF reader; they do not yet have 3D assembly data.
+
+## Interactive learning and teamwork
+
+**Nestor, montre-moi** replays the current stage. Select a piece or ask in French for
+`montre le moteur`, `étape 8`, `dessous`, `vue normale`, `tourne`, `vue éclatée`,
+`rassemble`, `pause`, `reprendre` or `ralenti`. The guide interprets these commands locally;
+it does not require or claim a connected language model. Unrecognized requests get a
+specific fallback. Camera, visibility, materials and part movement use the ordinary scene API.
+
+**Construire ensemble** alternates who prepares and who assembles. Names and local progress
+are saved in the browser. **Partager avec un autre écran** creates an eight-character room
+code on `serve:kidx` or the Vite development server. Open the same model on another browser
+or device and join with the code. Step and handoff state synchronize through the local server;
+stale writes recover the latest revision, and interrupted handoffs retry after reconnect.
+Rooms are in memory, expire after twelve hours
+without requests and disappear when the server restarts. Leaving/reopening a model requires
+joining its shared room again. Static hosting retains same-screen teamwork.
+
+The server defaults to loopback. For two devices, set `KIDX_HOST` to this computer's private
+LAN IPv4 address before running `npm run serve:kidx`; both devices use that address and port.
+Only loopback/private IPv4 bindings are accepted. No public deployment or device configuration
+is required by the feature; actual tablet connectivity is a separate household check.
+
+Sensor distance uses oriented obstacle footprints at sensor height; contact is a forward
+bumper threshold, color samples authored floor patches, and angle reports steering heading.
+The 56 mm wheel sets the displayed distance scale. Motor percentages regulate target speed
+while retaining rolling force; this is a teaching simulator with a chassis box collider,
+not a calibrated EV3 torque, tyre or electrical model. The ray and readouts are driven by
+the same measurements the program interpreter consumes. Physical tilt and measured travel
+drive the rendered chassis, wheel rotation and B/C activity meters on the brick LCD.
+A pause freezes both instructions and physics.
+
+Browser state keys: `graphysx:kidx:code:v1` for the advanced program,
+`graphysx:kidx:journey:v1` for achievements, and `graphysx:kidx:team:<model>:v1`
+for same-screen roles. Existing simple named programs keep their original key/schema.
 
 ## Local documents
 
@@ -104,6 +144,14 @@ EV3 lab and named-program smokes retain their behavior assertions with French co
 navigation/zoom/persistence, both complete CAD models, step reversal/highlighting, assembly
 separation, source normals and 800x480/390x844 controls. Without a local cache, its PDF input
 test uses a clearly self-authored two-page fixture, not counterfeit LEGO instructions.
+
+`npm run smoke:kidx-challenges` verifies all six new physical routes, live sensor decisions,
+stationary stops, cargo/ramp behavior, resets and achievements. `npm run smoke:kidx-interactive`
+verifies nested programs, real step/pause, low-power keyboard reverse, LCD/sound, individual
+CAD insertion, Nestor requests, two-browser handoffs and the 3:1 gear demonstration.
+The final `npm run verify -- --wait` passed all 62 checks (310 unit passes, one intentional
+Windows skip). Receipt: `output/kidx/verify-expansion.log`. Screenshots from the final build
+were inspected at desktop, compact landscape and portrait sizes.
 
 Inspect screenshots in the configured `SMOKE_ARTIFACTS` directory. Follow the machine-wide
 verification lock in `CLAUDE.md`; an isolated preview does not establish deployment or

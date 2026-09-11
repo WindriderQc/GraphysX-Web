@@ -1,4 +1,5 @@
 const COPY: Record<string, string> = {
+  "Backward": "Reculer", "Back": "Reculer",
   "Forward": "Avancer", "Fwd": "Avancer", "Left": "Gauche", "Right": "Droite", "Stop": "Stop",
   "Go": "Avancer", "Run": "Lancer", "Undo": "Retirer", "Drive": "Piloter", "Build": "Programmer",
   "Try again": "Réessayer", "Drive mode": "Pilotage libre", "Build mode": "Programmer", "Run program": "Lancer le programme",
@@ -41,7 +42,7 @@ const COPY: Record<string, string> = {
 export function kidxFrench(text: string): string {
   if (COPY[text]) return COPY[text];
   const patterns: [RegExp, (...matches: string[]) => string][] = [
-    [/^Add (Forward|Left|Right|Stop) block$/, (_, name) => `Ajouter un bloc ${COPY[name]}`],
+    [/^Add (Forward|Backward|Left|Right|Stop) block$/, (_, name) => `Ajouter un bloc ${COPY[name]}`],
     [/^Running block (\d+) of (\d+): (.+)\.$/, (_, index, total, name) => `Bloc ${index} sur ${total} : ${COPY[name] ?? name}.`],
     [/^(.+) added\. Add more blocks, then tap Run\.$/, (_, name) => `${COPY[name] ?? name} ajouté. Ajoute des blocs, puis appuie sur Lancer.`],
     [/^(.+) added as block (\d+)\.$/, (_, name, index) => `${COPY[name] ?? name} ajouté en position ${index}.`],

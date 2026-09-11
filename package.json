@@ -35,6 +35,8 @@
     "smoke:ev3-lab": "node scripts/smoke-ev3-lab.mjs",
     "smoke:kidx-workshop": "node scripts/smoke-kidx-workshop.mjs",
     "smoke:kidx-missions": "node scripts/smoke-kidx-missions.mjs",
+    "smoke:kidx-challenges": "node scripts/smoke-kidx-challenges.mjs",
+    "smoke:kidx-interactive": "node scripts/smoke-kidx-interactive.mjs",
     "serve:kidx": "node scripts/serve-kidx.mjs",
     "smoke:ballz18-sky": "node scripts/smoke-ballz18-sky.mjs",
     "smoke:scenenet-xml": "node scripts/smoke-scenenet-xml.mjs",

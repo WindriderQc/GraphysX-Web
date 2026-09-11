@@ -150,14 +150,14 @@ type RecoveredPbrProfile = {
  * group, and geometry byte. Unlisted assets retain their exact legacy Phong path.
  */
 function recoveredPbrProfile(assetId: string | null, materialName: string): RecoveredPbrProfile | null {
-  if ((assetId === "ev3-driving-base" || assetId?.startsWith("kidx-track3r-") || assetId?.startsWith("kidx-spike3r-"))
+  if ((assetId?.startsWith("ev3-driving-") || assetId?.startsWith("kidx-track3r-") || assetId?.startsWith("kidx-spike3r-"))
       && /trans_clear/i.test(materialName)) {
     return { shading: "standard", roughness: .35, metalness: 0, opacity: .18 };
   }
   if (assetId?.startsWith("kidx-track3r-") || assetId?.startsWith("kidx-spike3r-")) {
     return { shading: "standard", roughness: /rubber/i.test(materialName) ? .9 : .4, metalness: 0 };
   }
-  if (assetId === "ev3-driving-base") {
+  if (assetId?.startsWith("ev3-driving-")) {
     if (materialName === "LCD") return { shading: "standard", roughness: .8, metalness: 0 };
     if (/rubber/i.test(materialName)) return { shading: "standard", roughness: .88, metalness: 0 };
     if (/metal|chrome|alloy/i.test(materialName)) return { shading: "standard", roughness: .32, metalness: .15 };
