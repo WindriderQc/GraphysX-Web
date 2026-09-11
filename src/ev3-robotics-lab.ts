@@ -5,7 +5,7 @@ import type {
 } from "./agent-world-runtime";
 
 /**
- * A scene-native EV3 learning lab, with original procedural models and editable scene parts.
+ * A scene-native EV3 learning lab, with a detailed LDraw driving base and editable scene parts.
  * The construction families and mission vocabulary follow LEGO Education's published EV3
  * building-instruction and Robot Trainer catalogs; proportions are deliberately stylized so
  * this remains a flexible robotics-planning scene, not a brick-by-brick digital twin.
@@ -63,7 +63,7 @@ export function ev3RoboticsLab(firstDriveOnly = false): Pick<AgentWorldDefinitio
       type: "box",
       transform: { position: [0, -0.32, firstDriveOnly ? 13 : -9] },
       geometry: { width: firstDriveOnly ? 32 : 58, height: 0.64, depth: firstDriveOnly ? 24 : 70 },
-      material: { color: "#c3ae90", roughness: 0.88, metalness: 0 },
+      material: { color: "#695847", roughness: 0.82, metalness: 0 },
       physics: { mode: "static", material: "ground", friction: 0.92 },
       receiveShadow: true,
       tags: ["ev3-lab", "challenge-mat", "physics:static"],
@@ -74,12 +74,12 @@ export function ev3RoboticsLab(firstDriveOnly = false): Pick<AgentWorldDefinitio
 
   return {
     environment: {
-      background: "#e2e6e5",
+      background: "#142d38",
       sky: null,
       lighting: {
         source: "hdri",
         hdri: "studio-small-08",
-        intensity: 0.45,
+        intensity: 0.32,
         yawDegrees: -18,
         backgroundIntensity: 0.72,
         backgroundBlur: 0.18,
@@ -116,7 +116,7 @@ function labLights(): AgentWorldEntityDefinition[] {
       id: "ev3-lab-ambient",
       label: "EV3 Lab Ambient Light",
       type: "ambient-light",
-      intensity: 0.4,
+      intensity: 0.24,
       material: { color: "#ffffff" },
       tags: ["ev3-lab", "lighting"],
     },
@@ -124,12 +124,14 @@ function labLights(): AgentWorldEntityDefinition[] {
       id: "ev3-lab-sun",
       label: "EV3 Lab Key Light",
       type: "directional-light",
-      intensity: 1.25,
+      intensity: 1.65,
       transform: { position: [-18, 26, 22] },
       material: { color: "#fff8ed" },
       castShadow: true,
       tags: ["ev3-lab", "lighting"],
     },
+    { id: "ev3-lab-rim", label: "Cool Workshop Fill", type: "directional-light", intensity: .65,
+      transform: { position: [15, 10, -10] }, material: { color: "#9bcde2" }, tags: ["ev3-lab", "lighting"] },
   ];
 }
 
@@ -224,11 +226,25 @@ function buildRover(
         id: `${prefix}:technic`, label: "EV3 Motors, Technic Frame and Intelligent Brick", type: "model" as const,
         parentId: `${prefix}:heading`, asset: { id: "ev3-driving-base" },
         castShadow: true, receiveShadow: true,
-        tags: ["ev3-lab", "construction-part", "representation:ev3-inspired"],
+        tags: ["ev3-lab", "construction-part", "representation:adapted-ldraw"],
       },
-      // The brick's interior remains a separately editable scene part inside the rounded shell.
-      { ...roverPart(prefix, "brick", "EV3 Intelligent Brick Core", "box", [0, 1.2, .16],
-        { width: 2.05, height: .6, depth: 3.2 }, PALETTE.white), parentId: `${prefix}:heading` },
+      ...([-1, 1] as const).map((side) => ({
+        id: `${prefix}:wheel-${side < 0 ? "left" : "right"}`, label: side < 0 ? "Left EV3 wheel" : "Right EV3 wheel",
+        type: "model" as const, parentId: `${prefix}:heading`,
+        asset: { id: `ev3-driving-wheel-${side < 0 ? "left" : "right"}` },
+        transform: { position: [side * 2.02, .13, -.7] as AgentWorldVector3 },
+        castShadow: true, receiveShadow: true, tags: ["kidx-wheel", "construction-part"],
+      })),
+      ...(["left", "right"] as const).map((side, index) => ({
+        id: `${prefix}:lcd-${side}`, label: `LCD motor ${index === 0 ? "B" : "C"} activity`,
+        type: "box" as const, parentId: `${prefix}:heading`, visible: false,
+        transform: { position: [.05, 2.26, -.833 + index * .157] as AgentWorldVector3 },
+        geometry: { width: .85, height: .008, depth: .055 },
+        material: { color: "#30392d", roughness: 1 }, tags: ["kidx-lcd", "construction-part"],
+      })),
+      // Preserve the editable brick target inside the detailed EV3 housing.
+      { ...roverPart(prefix, "brick", "EV3 Intelligent Brick Core", "box", [0, 1.45, .15],
+        { width: 1.7, height: .4, depth: 2.7 }, PALETTE.white), parentId: `${prefix}:heading` },
       { ...roverPart(prefix, "direction", "Forward Direction", "cone", [0, .06, -2.32],
         { radius: .23, height: .65, radialSegments: 3 }, PALETTE.blue, {}, [-90, 0, 0]), parentId: `${prefix}:heading` },
     ] : [
@@ -486,9 +502,13 @@ function firstDriveWorkbench(): AgentWorldEntityDefinition[] {
   const box = (id: string, position: AgentWorldVector3, size: AgentWorldVector3, color: string): AgentWorldEntityDefinition => ({
     id: `ev3-workbench-${id}`, label: `First Drive ${id}`, type: "box", transform: { position },
     geometry: { width: size[0], height: size[1], depth: size[2] }, material: { color, roughness: .8 },
-    castShadow: true, receiveShadow: true, tags: ["ev3-lab", "workbench"],
+    castShadow: id !== "back-wall" && id !== "shelf", receiveShadow: true, tags: ["ev3-lab", "workbench"],
   });
   return [
+    box("back-wall", [0, 5.2, 1.4], [32, 10.4, .45], "#193d49"),
+    box("shelf", [0, 2.9, 2.2], [29, .25, 1.8], "#3b5660"),
+    ...[-12, -8, -4, 4, 8, 12].map((x, index) => box(`parts-bin-${index}`, [x, 3.4, 2.2],
+      [2.9, .8, 1.25], ["#cf4a34", "#d39b24", "#237e9a"][index % 3])),
     box("mat-edge", [0, -.04, 14], [17.2, .1, 17.2], "#34434a"),
     { id: "ev3-first-drive-mat", label: "KidX EV3 First Drive Work Mat", type: "plane",
       // Separate the support top (.01) and printed zones (.021) at the distant portrait view.

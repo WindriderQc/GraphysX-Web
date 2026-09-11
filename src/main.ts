@@ -25,8 +25,7 @@ import {
 import { composeSkyboxSpiral, frameSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from "./archive-skybox-spiral";
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { showStartupError } from "./startup-error";
-import type { Ev3MissionStrip } from "./ev3-mission-strip";
-import { ev3FirstDriveScene } from "./ev3-robotics-lab";
+import type { KidxApplication } from "./kidx-app";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
 import { nestorTopicRequest, type NestorTopic } from "./showroom-nestor";
@@ -363,47 +362,25 @@ if (mode === "previews" && import.meta.env.DEV) {
      * Keyed by id rather than a boolean because this is the seam a second application uses, not
      * a special case for EV3.
      */
-    let appSurface: Ev3MissionStrip | null = null;
-    let releaseApplicationView = (): void => undefined;
+    let appSurface: KidxApplication | null = null;
     // Application surfaces own the whole play viewport. Keep this separate from the lazy
     // surface module so later host chrome (notably the asynchronously mounted scene browser)
     // can respect the route before the application's import has finished.
     let applicationOpen = false;
     const openApplication = (id: string): boolean => {
       if (id !== "ev3-lab") return false;
-      const loaded = host.api.load(ev3FirstDriveScene());
-      if (!loaded.ok) return false;
       applicationOpen = true;
-      // Keep robot, lane and goal together. Narrow viewports need more distance to retain
-      // the same horizontal play area; the authored three-quarter view shows the EV3 hardware.
-      const rover = host.api.query({ ids: ["ev3-drive-base"] })[0];
-      const goal = host.api.query({ ids: ["ev3-first-mission-finish"] })[0];
-      if (rover && goal) {
-        const frameAttempt = () => {
-          const distance = Math.max(1, .95 / (root.clientWidth / Math.max(1, root.clientHeight)));
-          const targetZ = (rover.position[2] + goal.position[2]) / 2 + .5;
-          const targetY = root.clientHeight <= 520 ? 2 : 1.1;
-          host.frameView([goal.position[0] + 5 * distance, targetY + 9.2 * distance, targetZ + 14.25 * distance],
-            [goal.position[0], targetY, targetZ], 0);
-        };
-        frameAttempt();
-        window.addEventListener("resize", frameAttempt);
-        releaseApplicationView = () => window.removeEventListener("resize", frameAttempt);
-      } else host.frameWorld();
       requestShowroomInteraction(false);
-      void import("./ev3-mission-strip").then(({ mountEv3MissionStrip }) => {
-        appSurface = mountEv3MissionStrip(
-          root,
-          host.api,
-          () => {
-            appSurface?.dispose();
-            appSurface = null;
-            applicationOpen = false;
-            releaseApplicationView();
-            window.location.search = "";
-          },
-          { subscribeFrame: host.subscribeFrame.bind(host) },
-        );
+      void import("./kidx-app").then(({ mountKidxApp }) => {
+        appSurface = mountKidxApp(root, host.api, () => {
+          appSurface?.dispose();
+          appSurface = null;
+          applicationOpen = false;
+          window.location.search = "";
+        }, {
+          subscribeFrame: host.subscribeFrame.bind(host),
+          frameView: (position, target, seconds) => host.frameView(position, target, seconds),
+        });
       }).catch((error: unknown) => showStartupError(root, error));
       return true;
     };

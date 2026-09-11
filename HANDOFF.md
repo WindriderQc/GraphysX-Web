@@ -15,11 +15,11 @@ cost real sessions real hours.
 
 ## Production publication authorized (2026-09-11)
 
-The owner explicitly requested production publication and cleanup, then selected the lot
-validated in this task. This supersedes the earlier no-push/no-deploy boundary below.
-The concurrent, still-in-progress French Atelier, mission catalog and PDF-reader work are
-excluded. Publish the integrated First Drive/touch/Programs/maintenance changes and the
-bench-tested CLI USB adapter through the existing main deployment workflow. Its hosted full
+The owner requested all local work to be pushed, then explicitly requested merge and deployment.
+This expands the earlier release scope to include the French Atelier, mission catalog,
+PDF reader, interactive lessons and construction guides, arrival guidance and BallZ's
+outer-ball camera correction alongside the First Drive/touch/Programs/maintenance changes
+and bench-tested CLI USB adapter. Use the existing main deployment workflow. Its hosted full
 gate must pass before activation; verify the exact public `release.json` and production smoke.
 Do not run a duplicate local full matrix. The public application continues to run simulation;
 the hardware CLI remains a local tool. Cleanup preserves other tasks, useful evidence, the
@@ -62,16 +62,52 @@ These changes require their own release evidence. The production receipts below 
 August release, not automatic activation of this follow-up. See the latest `progress.md` entry
 for validation. Hardware priorities below are unchanged; no EV3/Pi qualification is implied.
 
+## KidX interactive workshop (current source, 2026-09-11)
+
+Mission arrival now includes a French Nestor guide in `src/kidx-mission-guide.ts`:
+actual next-button highlighting, block counts, scene landmarks, laboratory handoff,
+automatic collapse on execution and context-sensitive reopening. Attempt tracking is explicit;
+a physics frame during initialization cannot be mistaken for a child's completed attempt.
+`smoke:kidx-guidance` covers this journey and compact reachability; both mission suites
+check all eleven initial targets. The guide uses the existing shared frame loop and a
+lightweight laboratory activity snapshot, without cloning the editor or reading sensors per frame.
+
+The authorized ten-feature expansion is implemented and verified locally: all 62 repository
+checks passed, with 310 passing unit tests and one intentional Windows skip. Receipt:
+`output/kidx/verify-expansion.log`. The saved-program smoke used 9m14s of its unchanged
+ten-minute deadline; all other checks retained comfortable headroom.
+See `docs/KIDX_NEXT.md` for acceptance and `docs/KIDX_WORKSHOP.md` for current behavior:
+reverse in both controls, independently animated CAD wheels, a regulated motor/sensor
+language with nested blocks and physical pause/step, eleven missions, animated individual
+construction pieces, local French Nestor scene commands, two-screen build handoffs,
+achievements and a native 8:24 gear demonstration. All animation uses the shared host loop.
+
+The simple program still accepts six blocks and preserves existing named saves; Backward is
+its fifth block type. `Laboratoire +` opens the richer language. TRACK3R/SPIK3R retain batched
+complete stages and load individual pieces only for the current demonstration. All 138 PDFs
+remain available; other models still need source CAD assembly data before acquiring 3D guides.
+Shared rooms use the local server, keep state in memory and disappear on restart. `KIDX_HOST`
+can bind a private LAN IPv4 address; the default remains loopback. The application release is
+authorized above; physical hardware operation remains separate. Final evidence and any remaining
+limitations belong in `progress.md`.
+
 ## KidX program library (current source, 2026-09-10)
 
-First Drive now has a **Programs** disclosure above the unchanged seven play controls. Named
+KidX now wraps this strip in a French workshop: eleven movement exercises, 138 indexed
+PDF notices, and TRACK3R/SPIK3R native assembly guides. `?app=ev3-lab&view=atelier`
+opens the new sections; the default route still opens Premier trajet. See
+`docs/KIDX_WORKSHOP.md` for actual coverage, local document serving, generated CAD and
+license provenance. Only these two models have assembly geometry; the remaining PDFs
+are read page by page. Current local validation is recorded in `progress.md`.
+
+First Drive has a **Programs** disclosure above the eight simple play controls. Named
 programs can be saved, opened after reload, explicitly updated, copied under another name and
 deleted. Opening resets the attempt and heading, pauses the rover and preserves the existing
 Run path. The library remains accessible on success so the child can save the winning program.
 Unsaved blocks require an explicit replacement; duplicate names and stale updates are refused.
 
 The versioned library is browser-local, under `graphysx:kidx:first-drive:programs:v1`; it stores
-the same four block ids, one to six per program. Names are limited to 40 characters. No cloud,
+five supported block ids, one to six per program. Names are limited to 40 characters. No cloud,
 store server or hardware is involved. A fresh page starts with an empty working program and
 the saved list available through Programs. Storage errors leave current blocks and previous
 data intact; malformed or future-version data is not overwritten. This is manual persistence,
@@ -84,8 +120,10 @@ See `progress.md` for this change's validation; the August production receipt is
 
 ## KidX EV3 visual workbench (current source, 2026-09-10)
 
-First Drive now opens a dedicated workbench with an original procedural EV3-inspired
-Technic driving base, printed mat and loose-brick trays. The full lab remains a separate
+First Drive now opens a dedicated workbench with detailed, licensed LDraw EV3 components
+in an original wheeled chassis, a printed mat and loose-brick trays. The 3D construction
+helper has no floor or wall geometry, allowing clear inspection from underneath.
+The full lab remains a separate
 starter with all seven construction families and missions. The camera no longer auto-orbits
 and reframes on portrait resize. The existing heading anchor carries the complete visible
 robot, so Left/Right now turn the chassis as well as its marker; disabled held controls also
@@ -101,7 +139,7 @@ source work; it does not qualify the physical Mint touchscreen or real EV3 hardw
 feature landed in `5bddf69`; the live visual follow-up landed in `ecd130b`, and the current release
 line includes both. `refactor/lean-platform` remains the pre-KidX integration line for provenance.
 
-**KidX First Drive is shipped, not pending.** It adds a bounded four-block language, runs those
+**KidX First Drive is shipped, not pending.** It has a bounded five-block language, runs those
 blocks through the same steering API as a child or agent, and lets the existing First Drive scene
 rules and Nestor judge the result. Left / Right produce opposite physical routes, Forward preserves
 heading, every attempt restores north, and a scene-authored cyan marker makes direction visible.
@@ -356,10 +394,10 @@ of this one.
 The editor is a correct tool aimed at the wrong person. Reaching the EV3 lab through Browse
 Scenes was measured at desktop, 1024×600 and 800×480: **218 controls, every one under 44px**,
 four authoring panels around a postage stamp of the lab. `?app=ev3-lab` opens the same scene in
-its own surface instead — First Drive's mission card and seven Build-mode actions, none under
+its own surface instead — First Drive's mission card and eight Program-mode actions, none under
 72px at 800×480.
 
-- **The surface holds no scene state.** Manual controls and the four-block program runner both
+- **The surface holds no scene state.** Manual controls and the five-block program runner both
   reduce to `api.steer` on the drive base. The EV3 document declares the 30-second run,
   drive-base subject and blue finish through `rules`; red miss lanes are trigger entities.
   Nestor reads `api.events` and `api.rules.status()` in the host's shared frame loop. An agent

@@ -46,9 +46,9 @@ export async function runProgramLayout({
     await page.evaluate(() => window.advanceTime(0));
     const state = () => page.evaluate(() => JSON.parse(window.render_game_to_text()).application);
     const programs = () => page.locator("[data-ev3-programs]").click();
-    const name = page.getByLabel("Program name", { exact: true });
+    const name = page.getByLabel("Nom du programme", { exact: true });
     await programs();
-    await page.getByRole("button", { name: "Open " + longName, exact: true }).click();
+    await page.getByRole("button", { name: "Ouvrir " + longName, exact: true }).click();
     await page.locator("[data-ev3-run]").click();
     const success = await page.evaluate(() => window.advanceTime(3000));
     assert.equal(success.mission.phase, "complete");

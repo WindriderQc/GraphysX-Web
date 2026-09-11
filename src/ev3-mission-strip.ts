@@ -11,11 +11,16 @@
 // `api.steer` on the drive base. There is no bespoke host state and no second command path,
 // which is the invariant that lets an agent do anything a child can do and vice versa.
 //
-// Deliberately NOT here: mission selection, hardware or a scoring system. This is
-// one real mission and one tiny motion language — enough to measure blocks → program → simulation
-// before generalising either the application surface or the hardware bridge.
+// KidX owns mission selection. This strip shares one motion language and rule evaluator
+// across its movement exercises; hardware control remains a separate capability.
 
-import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
+import type { GraphysXAgentWorldApi, AgentWorldSteerInput } from "./agent-world-runtime";
+import { kidxFrench } from "./kidx-french";
+import { createKidxRoverMotion } from "./kidx-rover-motion";
+import { mountKidxCodeLab } from "./kidx-code-lab";
+import { mountKidxMissionGuide } from "./kidx-mission-guide";
+import { readKidxSensors, KIDX_CM_PER_UNIT } from "./kidx-sensors";
+import type { KidxMission } from "./kidx-missions";
 import { mountEv3ProgramLibrary } from "./ev3-program-library";
 import {
   EV3_FIRST_MISSION_MISS_TAG,
@@ -72,9 +77,15 @@ export type Ev3MissionStripState = {
     library: { open: boolean; savedName: string | null; unsavedChanges: boolean };
   };
   nestor: string;
+  wheels: { leftDegrees: number; rightDegrees: number; soundEnabled: boolean };
+  laboratory: ReturnType<ReturnType<typeof mountKidxCodeLab>["state"]>;
+  guidance: ReturnType<ReturnType<typeof mountKidxMissionGuide>["state"]> | null;
 };
 
 export type Ev3MissionStripOptions = {
+  mission?: KidxMission;
+  french?: boolean;
+  onComplete?: () => void;
   /** Joins the host's one frame loop; the surface must never create its own rAF loop. */
   subscribeFrame: (listener: (deltaSeconds: number) => void) => () => void;
 };
@@ -168,20 +179,46 @@ export function mountEv3MissionStrip(
   onExit: () => void,
   options: Ev3MissionStripOptions,
 ): Ev3MissionStrip {
+  const t = options.french ? kidxFrench : (text: string) => text;
   injectStyleOnce();
 
   const has = (id: string): boolean => api.query({ ids: [id] }).length === 1;
   const driveable = has(EV3_DRIVE_BASE_ID);
+  const motion = createKidxRoverMotion(api, EV3_DRIVE_BASE_ID);
+  let drivePower = 1;
+  let laboratory: ReturnType<typeof mountKidxCodeLab> | null = null;
+  const tuneDrive = (force: number, speedCap: number) => {
+    const rover = api.query({ ids: [EV3_DRIVE_BASE_ID] })[0];
+    if (!rover?.steering || (rover.steering.force === force && rover.steering.speedCap === speedCap)) return;
+    // A regulated motor reduces its target speed while retaining enough force to roll.
+    // Preserve the measured pose/velocity when updating the existing rigid body.
+    api.update(EV3_DRIVE_BASE_ID, { steering: { force, speedCap }, transform: { position: rover.position, rotationDegrees: rover.rotationDegrees },
+      physics: { mode: "dynamic", linearVelocity: rover.physics?.linearVelocity ?? [0, 0, 0], angularVelocity: rover.physics?.angularVelocity ?? [0, 0, 0] } });
+  };
+  const regulatedInput = (input: AgentWorldSteerInput) => {
+    const power = Math.abs(input.thrust ?? 0);
+    if (power > 0) tuneDrive(34 / power, Math.max(.05, 5.4 * power));
+    api.steer(EV3_DRIVE_BASE_ID, input);
+  };
+  const resetBodies = api.query({ tag: "kidx-reset" }).map(e => ({ id: e.id, position: e.position, rotationDegrees: e.rotationDegrees }));
+  const brake = () => {
+    api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
+    const rover = api.query({ ids: [EV3_DRIVE_BASE_ID] })[0];
+    if (rover?.physics?.mode === "dynamic") api.update(EV3_DRIVE_BASE_ID, {
+      transform: { position: rover.position, rotationDegrees: rover.rotationDegrees },
+      physics: { mode: "dynamic", linearVelocity: [0, 0, 0], angularVelocity: [0, 0, 0] },
+    });
+  };
 
   const mission = document.createElement("section");
   mission.className = "gx-ev3-mission";
-  mission.dataset.ev3Mission = "first-drive";
-  mission.setAttribute("aria-label", "First Drive mission");
+  mission.dataset.ev3Mission = options?.mission?.id ?? "first-drive";
+  mission.setAttribute("aria-label", options?.mission?.title ?? "First Drive mission");
   const missionHead = document.createElement("div");
   missionHead.className = "gx-ev3-mission-head";
   const kicker = document.createElement("span");
   kicker.className = "gx-ev3-kicker";
-  kicker.textContent = "KidX · MINDSTORMS EV3 / First Drive";
+  kicker.textContent = `KidX · MINDSTORMS EV3 / ${options.mission?.title ?? "First Drive"}`;
   const clock = document.createElement("span");
   clock.className = "gx-ev3-clock";
   clock.dataset.ev3Clock = "";
@@ -189,7 +226,7 @@ export function mountEv3MissionStrip(
   const objective = document.createElement("div");
   objective.className = "gx-ev3-objective";
   objective.dataset.ev3Objective = "";
-  objective.textContent = "Reach the blue target before time runs out.";
+  objective.textContent = options.mission?.objective ?? "Reach the blue target before time runs out.";
   const nestor = document.createElement("div");
   nestor.className = "gx-ev3-nestor";
   const nestorMark = document.createElement("span");
@@ -204,14 +241,14 @@ export function mountEv3MissionStrip(
   status.className = "gx-ev3-status";
   status.dataset.ev3Nestor = "";
   status.setAttribute("role", "status");
-  const say = (text: string): void => { status.textContent = text; };
+  const say = (text: string): void => { status.textContent = text === "Build a program: tap Forward three times, then Run." && options.mission ? options.mission.hint : t(text); };
   say(driveable ? "Build a program: tap Forward three times, then Run." : "This lab has no drive base loaded.");
   nestorCopy.append(nestorName, status);
   nestor.append(nestorMark, nestorCopy);
   const programReadout = document.createElement("div");
   programReadout.className = "gx-ev3-program-readout";
   programReadout.dataset.ev3Program = "";
-  programReadout.setAttribute("aria-label", "Your program");
+  programReadout.setAttribute("aria-label", t("Your program"));
   const programBlocks = document.createElement("ol");
   programBlocks.className = "gx-ev3-program-blocks";
   programBlocks.setAttribute("aria-live", "polite");
@@ -221,7 +258,7 @@ export function mountEv3MissionStrip(
   const exit = document.createElement("button");
   exit.type = "button";
   exit.className = "gx-ev3-exit";
-  exit.textContent = "✕ Leave the lab";
+  exit.textContent = t("✕ Leave the lab");
   exit.addEventListener("click", () => onExit());
 
   const strip = document.createElement("div");
@@ -246,12 +283,12 @@ export function mountEv3MissionStrip(
     button.type = "button";
     button.dataset.ev3 = label.toLowerCase();
     button.dataset.held = "false";
-    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-label", t(label));
     const icon = document.createElement("span");
     icon.className = "gx-ev3-glyph";
     icon.textContent = glyph;
     const text = document.createElement("span");
-    text.textContent = label;
+    text.textContent = t(label);
     button.append(icon, text);
 
     // A long finger hold is a driving command, not a text selection or browser menu.
@@ -259,12 +296,12 @@ export function mountEv3MissionStrip(
     button.addEventListener("contextmenu", (event) => { event.preventDefault(); });
     let pointerId: number | null = null;
     const stop = (): void => {
+      const wasHeld = button.dataset.held === "true";
       button.dataset.held = "false";
-      if (pointerId === null) return;
       const releasedPointer = pointerId;
       pointerId = null;
-      if (button.hasPointerCapture(releasedPointer)) button.releasePointerCapture(releasedPointer);
-      if (driveable) api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
+      if (releasedPointer !== null && button.hasPointerCapture(releasedPointer)) button.releasePointerCapture(releasedPointer);
+      if (wasHeld && driveable) api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
     };
     releaseHeldControls.push(stop);
     button.addEventListener("pointerdown", (event) => {
@@ -278,6 +315,9 @@ export function mountEv3MissionStrip(
     for (const type of ["pointerup", "pointercancel", "pointerleave", "lostpointercapture"] as const) {
       button.addEventListener(type, (event) => { if (event.pointerId === pointerId) stop(); });
     }
+    button.addEventListener("keydown", event => { if ((event.key === " " || event.key === "Enter") && !event.repeat && !button.disabled) { event.preventDefault(); clearHeldControls(); button.dataset.held = "true"; input(); } });
+    button.addEventListener("keyup", event => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); stop(); } });
+    button.addEventListener("blur", stop);
     return button;
   };
 
@@ -286,21 +326,22 @@ export function mountEv3MissionStrip(
     button.type = "button";
     button.dataset.ev3 = label.toLowerCase();
     if (wide) button.className = "gx-ev3-wide";
-    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-label", t(label));
     const icon = document.createElement("span");
     icon.className = "gx-ev3-glyph";
     icon.textContent = glyph;
     const text = document.createElement("span");
-    text.textContent = label;
+    text.textContent = t(label);
     button.append(icon, text);
     button.addEventListener("click", run);
     return button;
   };
 
   const driveButtons = driveable ? [
-    held("Left", "◀", () => { api.steer(EV3_DRIVE_BASE_ID, { turn: -1, thrust: 0.6 }); }),
-    held("Go", "▲", () => { api.steer(EV3_DRIVE_BASE_ID, { thrust: 1, turn: 0 }); }),
-    held("Right", "▶", () => { api.steer(EV3_DRIVE_BASE_ID, { turn: 1, thrust: 0.6 }); }),
+    held("Left", "◀", () => { regulatedInput({ turn: -drivePower, thrust: 0.6 * drivePower }); }),
+    held("Go", "▲", () => { regulatedInput({ thrust: drivePower, turn: 0 }); }),
+    held("Backward", "▼", () => { regulatedInput({ thrust: -drivePower, turn: 0 }); }),
+    held("Right", "▶", () => { regulatedInput({ turn: drivePower, thrust: 0.6 * drivePower }); }),
   ] : [];
 
   let eventCursor = 0;
@@ -310,6 +351,7 @@ export function mountEv3MissionStrip(
   let program: Ev3FirstProgramBlockId[] = [];
   let controlsEnabled = true;
   let deterministicMode = false;
+  let attempt: "program" | "laboratory" | "drive" | null = null;
   let activeProgramIndex: number | null = null;
   let refreshProgram = (): void => undefined;
   let refreshControls = (): void => undefined;
@@ -321,10 +363,14 @@ export function mountEv3MissionStrip(
   const missionReady = driveable && Boolean(missionRules?.finish) && missIds.size > 0;
   const resetAttempt = () => {
     clearHeldControls();
+    attempt = null;
+    motion.reset();
     const reset = api.rules.reset();
+    for (const body of resetBodies) api.update(body.id, { transform: { position: body.position, rotationDegrees: body.rotationDegrees }, physics: { mode: "dynamic", linearVelocity: [0, 0, 0], angularVelocity: [0, 0, 0] } });
     // Rules own the spawn transform and velocity. Heading is transient steering state, so the
     // application restores the scene-authored north heading at the same attempt boundary.
     if (driveable) api.steer(EV3_DRIVE_BASE_ID, { headingDegrees: 0, thrust: 0, turn: 0 });
+    tuneDrive(34, 5.4);
     return reset;
   };
   const runner = createEv3FirstProgramRunner(
@@ -349,10 +395,10 @@ export function mountEv3MissionStrip(
 
   const setVisibleLabel = (button: HTMLButtonElement, label: string): HTMLButtonElement => {
     const text = button.lastElementChild;
-    if (text) text.textContent = label;
+    if (text) text.textContent = t(label);
     return button;
   };
-  const blockOrder: Ev3FirstProgramBlockId[] = ["forward", "left", "right", "stop"];
+  const blockOrder: Ev3FirstProgramBlockId[] = ["forward", "backward", "left", "right", "stop"];
   const programButtons = blockOrder.map((id) => {
     const block = EV3_FIRST_PROGRAM_BLOCKS[id];
     const button = tap(`Add ${block.label} block`, block.glyph, () => {
@@ -381,6 +427,7 @@ export function mountEv3MissionStrip(
     if (!controlsEnabled || program.length === 0 || !missionReady) return;
     runner.stop();
     const reset = resetAttempt();
+    attempt = "program";
     misses = 0;
     lastPhase = reset.value?.phase ?? "idle";
     eventCursor = api.events().sequence;
@@ -390,12 +437,13 @@ export function mountEv3MissionStrip(
     runner.start(program);
     refreshProgram();
     refreshControls();
-  }), "Run");
+  }, false), "Run");
   runProgram.dataset.ev3Run = "";
   const driveMode = setVisibleLabel(tap("Drive mode", "●", () => {
     if (!controlsEnabled) return;
-    api.pause(false);
+    api.pause(deterministicMode);
     mode = "drive";
+    attempt = "drive";
     mission.dataset.mode = mode;
     strip.dataset.mode = mode;
     refreshControls();
@@ -427,7 +475,7 @@ export function mountEv3MissionStrip(
     lastPhase = reset.value?.phase ?? "idle";
     eventCursor = api.events().sequence;
     retry.hidden = true;
-    api.pause(mode === "program");
+    api.pause(deterministicMode || mode === "program");
     setControlsEnabled(true);
     refreshProgram();
     refreshControls();
@@ -455,7 +503,7 @@ export function mountEv3MissionStrip(
     refreshControls();
     renderRun();
     say("Program opened. Add blocks or tap Run to try it.");
-  });
+  }, t);
   programReadout.prepend(library.button);
   library.button.disabled = !missionReady;
 
@@ -470,7 +518,7 @@ export function mountEv3MissionStrip(
     driveMode.disabled = !enabled;
     buildMode.disabled = !enabled;
     // A completed attempt disables driving, but its winning program can still be saved.
-    library.button.disabled = !missionReady || mode !== "program" || runner.state().running;
+    library.button.disabled = !missionReady || mode !== "program" || runner.state().running || laboratory?.state().running === true;
     // Stop a held manual input on the enabled → disabled edge. Re-rendering disabled program
     // controls must not emit another stop: doing so would cancel the block the runner just set.
     if (!enabled && wasEnabled && driveable) api.steer(EV3_DRIVE_BASE_ID, { thrust: 0, turn: 0 });
@@ -481,7 +529,7 @@ export function mountEv3MissionStrip(
     if (program.length === 0) {
       const empty = document.createElement("li");
       empty.className = "gx-ev3-program-empty";
-      empty.textContent = "Tap blocks below to build";
+      empty.textContent = t("Tap blocks below to build");
       programBlocks.append(empty);
     } else {
       program.forEach((id, index) => {
@@ -490,14 +538,14 @@ export function mountEv3MissionStrip(
         chip.className = "gx-ev3-program-chip";
         chip.dataset.ev3ProgramBlock = id;
         chip.dataset.active = String(index === activeProgramIndex);
-        chip.textContent = `${block.glyph} ${block.shortLabel}`;
+        chip.textContent = `${block.glyph} ${t(block.shortLabel)}`;
         programBlocks.append(chip);
       });
     }
     setControlsEnabled(controlsEnabled);
   };
   refreshControls = (): void => {
-    library.button.disabled = !missionReady || mode !== "program" || runner.state().running;
+    library.button.disabled = !missionReady || mode !== "program" || runner.state().running || laboratory?.state().running === true;
     pad.replaceChildren();
     actions.replaceChildren();
     mission.dataset.mode = mode;
@@ -515,7 +563,7 @@ export function mountEv3MissionStrip(
     }
   };
 
-  const formatClock = (seconds: number): string => `0:${Math.max(0, Math.ceil(seconds)).toString().padStart(2, "0")}`;
+  const formatClock = (seconds: number): string => { const total = Math.max(0, Math.ceil(seconds)); return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, "0")}`; };
   const renderRun = (): void => {
     const run = api.rules.status();
     if (!run) {
@@ -528,7 +576,9 @@ export function mountEv3MissionStrip(
     mission.dataset.misses = String(misses);
     if (run.phase !== lastPhase) {
       if (run.phase === "complete") {
+        options.onComplete?.();
         runner.stop();
+        laboratory?.stop();
         activeProgramIndex = null;
         api.pause(true);
         say(`You did it! Blue target reached in ${run.elapsedSeconds.toFixed(1)} seconds.`);
@@ -538,6 +588,7 @@ export function mountEv3MissionStrip(
         refreshControls();
       } else if (run.phase === "expired") {
         runner.stop();
+        laboratory?.stop();
         activeProgramIndex = null;
         api.pause(true);
         say("Time's up. Good try — tap Try again and aim for blue.");
@@ -549,6 +600,32 @@ export function mountEv3MissionStrip(
       lastPhase = run.phase;
     }
   };
+
+  laboratory = mountKidxCodeLab(root, {
+    readings: () => readKidxSensors(api, EV3_DRIVE_BASE_ID),
+    apply: regulatedInput,
+    beforeRun: () => {
+      if (!controlsEnabled || !missionReady) return false;
+      runner.stop(); resetAttempt(); attempt = "laboratory"; misses = 0; lastPhase = "running"; eventCursor = api.events().sequence;
+      retry.hidden = true; setControlsEnabled(false); refreshControls();
+      if (!deterministicMode) api.pause(false);
+      return true;
+    },
+    afterStop: () => { brake(); api.pause(true); setControlsEnabled(true); refreshControls(); },
+    report: say, sound: value => motion.sound(value), speed: value => { drivePower = value; },
+    pauseWorld: value => { if (value || !deterministicMode) api.pause(value); },
+    example: options.mission?.code,
+  });
+  const emergency = document.createElement("button"); emergency.type = "button"; emergency.className = "kx-lab-toggle kx-emergency";
+  emergency.textContent = "■ Arrêter"; emergency.dataset.kidxStop = "";
+  emergency.addEventListener("click", () => { runner.stop(); laboratory?.stop(); brake(); api.pause(true); activeProgramIndex = null; setControlsEnabled(true); refreshProgram(); refreshControls(); say("Robot arrêté. Tu peux modifier ou relancer ton programme."); });
+  const labTools = document.createElement("div"); labTools.className = "kx-mission-tools";
+  labTools.append(laboratory.button, emergency); mission.append(labTools);
+  const guidance = options.mission ? mountKidxMissionGuide(root, mission, labTools, options.mission, () => {
+    const lab = laboratory!.activity(), run = api.rules.status();
+    return { mode, phase: run?.phase ?? "idle", attempt,
+      running: runner.state().running || lab.running, blocks: program, labOpen: lab.open, labPrepared: lab.prepared, paused: lab.paused, error: lab.error };
+  }) : null;
 
   if (missionReady) {
     // Start when the instructions appear, not while the application's dynamic import is still
@@ -565,7 +642,17 @@ export function mountEv3MissionStrip(
     clock.textContent = "--:--";
   }
 
+  let rayLength = -1;
   const processFrame = (deltaSeconds: number, advanceProgram: boolean): void => {
+    motion.advance(deltaSeconds);
+    laboratory?.advance(advanceProgram || mode === "drive" ? deltaSeconds : 0);
+    if (options.mission?.challenge && has("kidx-sensor-ray")) {
+      const distance = Math.min(12, Math.max(.02, readKidxSensors(api, EV3_DRIVE_BASE_ID).distance / KIDX_CM_PER_UNIT));
+      if (distance !== rayLength) {
+        rayLength = distance;
+        api.update("kidx-sensor-ray", { transform: { position: [0, .4, -1.95 - distance / 2], scale: [1, 1, distance] } });
+      }
+    }
     const page = api.events(eventCursor);
     eventCursor = page.sequence;
     const run = api.rules.status();
@@ -588,6 +675,7 @@ export function mountEv3MissionStrip(
     renderRun();
     if (advanceProgram && api.rules.status()?.phase === "running") runner.advance(deltaSeconds);
     renderRun();
+    guidance?.update();
   };
 
   const unsubscribeFrame = options.subscribeFrame((deltaSeconds) => {
@@ -623,6 +711,9 @@ export function mountEv3MissionStrip(
         library: library.state(),
       },
       nestor: status.textContent ?? "",
+      wheels: motion.state(),
+      laboratory: laboratory!.state(),
+      guidance: guidance?.state() ?? null,
     };
   };
 
@@ -639,6 +730,7 @@ export function mountEv3MissionStrip(
       }
       const steps = Math.ceil(milliseconds / (1000 / 60));
       for (let index = 0; index < steps; index += 1) {
+        if (laboratory?.state().paused) { processFrame(0, false); continue; }
         api.step(1 / 60);
         processFrame(1 / 60, true);
       }
@@ -648,6 +740,9 @@ export function mountEv3MissionStrip(
     dispose: () => {
       unsubscribeFrame();
       clearHeldControls();
+      motion.dispose();
+      guidance?.dispose();
+      laboratory?.dispose();
       runner.stop();
       library.dispose();
       mission.remove();

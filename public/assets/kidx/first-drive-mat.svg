@@ -1,24 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1536" viewBox="0 0 1000 1000">
   <defs>
-    <pattern id="grid" width="25" height="25" patternUnits="userSpaceOnUse"><path d="M25 0H0V25" fill="none" stroke="#c6d0c8" stroke-width=".9"/></pattern>
-    <pattern id="ticks" width="25" height="20" patternUnits="userSpaceOnUse"><path d="M0 0v12" stroke="#6b797c" stroke-width="2"/></pattern>
+    <pattern id="grid" width="25" height="25" patternUnits="userSpaceOnUse"><path d="M25 0H0V25" fill="none" stroke="#4b7369" stroke-width=".9"/></pattern>
+    <pattern id="ticks" width="25" height="20" patternUnits="userSpaceOnUse"><path d="M0 0v12" stroke="#a5c0aa" stroke-width="2"/></pattern>
   </defs>
-  <rect width="1000" height="1000" rx="10" fill="#f4f3ea"/>
+  <rect width="1000" height="1000" rx="10" fill="#315c56"/>
   <rect x="24" y="24" width="952" height="952" fill="url(#grid)"/>
-  <rect x="24" y="24" width="952" height="952" rx="3" fill="none" stroke="#34434a" stroke-width="3"/>
+  <rect x="24" y="24" width="952" height="952" rx="3" fill="none" stroke="#d3dfc8" stroke-width="3"/>
   <rect x="50" y="936" width="900" height="20" fill="url(#ticks)"/>
-  <path d="M375 710v-30m250 30v-30M375 470v-30m250 30v-30" stroke="#809098" stroke-width="3"/>
-  <path d="M500 660V490" stroke="#8a999f" stroke-width="4" stroke-dasharray="12 16"/>
-  <path d="M486 502l14-16 14 16" stroke="#34434a" stroke-width="4" fill="none"/>
-  <g font-family="Arial,sans-serif" fill="#34434a">
+  <path d="M375 710v-30m250 30v-30M375 470v-30m250 30v-30" stroke="#91b8a3" stroke-width="3"/>
+  <path d="M500 660V490" stroke="#98bfa8" stroke-width="4" stroke-dasharray="12 16"/>
+  <path d="M486 502l14-16 14 16" stroke="#d3dfc8" stroke-width="4" fill="none"/>
+  <g font-family="Arial,sans-serif" fill="#d3dfc8">
     <text x="60" y="90" font-size="31" font-weight="bold" letter-spacing="2">KidX</text>
-    <text x="60" y="116" font-size="12" letter-spacing="3">ROBOTICS LAB</text>
-    <text x="940" y="84" text-anchor="end" font-size="18" font-weight="bold">01 / FIRST DRIVE</text>
+    <text x="60" y="116" font-size="12" letter-spacing="3">ATELIER ROBOTIQUE</text>
+    <text x="940" y="84" text-anchor="end" font-size="18" font-weight="bold">01 / PREMIER TRAJET</text>
     <text x="940" y="111" text-anchor="end" font-size="12" letter-spacing="1">MINDSTORMS EV3</text>
-    <text x="500" y="912" text-anchor="middle" font-size="15" font-weight="bold" letter-spacing="5">START</text>
-    <text x="500" y="244" text-anchor="middle" font-size="16" font-weight="bold" letter-spacing="3">FINISH</text>
-    <text x="73" y="905" font-size="12">BUILD. CODE. EXPLORE.</text>
+    <text x="500" y="912" text-anchor="middle" font-size="15" font-weight="bold" letter-spacing="5">DÉPART</text>
+    <text x="500" y="244" text-anchor="middle" font-size="16" font-weight="bold" letter-spacing="3">ARRIVÉE</text>
+    <text x="73" y="905" font-size="12">CONSTRUIS. CODE. EXPLORE.</text>
   </g>
-  <path d="M355 859h55m180 0h55" stroke="#34434a" stroke-width="4"/>
+  <path d="M355 859h55m180 0h55" stroke="#d3dfc8" stroke-width="4"/>
   <path d="M75 149h62" stroke="#cf2f32" stroke-width="8"/>
 </svg>

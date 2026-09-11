@@ -322,13 +322,15 @@ try {
   });
 
   // --- The chase camera lives behind the ball, in the one shared loop --------------------
-  // Park the ball at centre (a transform patch rebuilds the body, zeroing velocity), aim the
-  // heading east, and let real frames run: the follow camera must ease behind the ball
-  // (camera west of it), keep it near frame centre, and keep the orbit target synced.
+  // Give the outer ball eastward velocity while aiming north. Physics stays paused so the
+  // measured velocity is stable while real frames ease the camera behind actual travel.
   await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
-    api.update("ballz-ball", { transform: { position: [0, 0.7, 0] } });
-    api.steer("ballz-ball", { headingDegrees: 90, thrust: 0, turn: 0 });
+    api.update("ballz-ball", {
+      transform: { position: [0, 0.7, 0] },
+      physics: { mode: "dynamic", linearVelocity: [5, 0, 0] },
+    });
+    api.steer("ballz-ball", { headingDegrees: 0, thrust: 0, turn: 0 });
   });
   await page.waitForTimeout(1400);
   out.chase = await page.evaluate(() => {
@@ -344,6 +346,43 @@ try {
       orbitTargetNearBall: host.orbitTarget.distanceTo(ball.position) < 4,
     };
   });
+
+  // Aiming the inner ball the opposite way must not swing the camera while coasting.
+  await page.evaluate(() => window.__GRAPHYSX__.steer("ballz-ball", { headingDegrees: 270 }));
+  await page.waitForTimeout(1400);
+  out.chase.aimIndependent = await page.evaluate(() => {
+    const host = window.__GRAPHYSX_HOST__;
+    const ball = host.world.getEntityObject("ballz-ball");
+    return host.camera.position.x < ball.position.x - 6 && Math.abs(host.camera.position.z - ball.position.z) < 0.2;
+  });
+
+  // Change actual travel to south without changing aim: the camera now belongs north.
+  await page.evaluate(() => window.__GRAPHYSX__.update("ballz-ball", {
+    physics: { mode: "dynamic", linearVelocity: [0, 0, 5] },
+  }));
+  await page.waitForTimeout(1400);
+  out.chase.followsTravelChange = await page.evaluate(() => {
+    const host = window.__GRAPHYSX_HOST__;
+    const ball = host.world.getEntityObject("ballz-ball");
+    return host.camera.position.z < ball.position.z - 6 && Math.abs(host.camera.position.x - ball.position.x) < 0.2;
+  });
+
+  // At rest, during a vertical bounce, or with tiny sideways contact jitter, retain south.
+  out.chase.stableAtRest = true;
+  for (const velocity of [[0, 0, 0], [0.05, 8, -0.05]]) {
+    await page.evaluate((linearVelocity) => {
+      const api = window.__GRAPHYSX__;
+      api.update("ballz-ball", { physics: { mode: "dynamic", linearVelocity } });
+      api.steer("ballz-ball", { headingDegrees: 90 });
+    }, velocity);
+    await page.waitForTimeout(1400);
+    out.chase.stableAtRest &&= await page.evaluate(() => {
+      const host = window.__GRAPHYSX_HOST__;
+      const ball = host.world.getEntityObject("ballz-ball");
+      return host.camera.position.z < ball.position.z - 6 && Math.abs(host.camera.position.x - ball.position.x) < 0.2;
+    });
+  }
+  await page.screenshot({ path: path.join(ART, "ballz-chase-travel.png") });
 
   // --- Is it actually PLAYABLE by hand? --------------------------------------------------
   // The level materialising is not the same claim as a person being able to play it. This
@@ -762,6 +801,9 @@ const ok =
   out.chase?.cameraAbove === true &&
   out.chase?.ballCentered === true &&
   out.chase?.orbitTargetNearBall === true &&
+  out.chase?.aimIndependent === true &&
+  out.chase?.followsTravelChange === true &&
+  out.chase?.stableAtRest === true &&
   out.control?.movedNorth === true &&
   out.hudVisible?.present === true &&
   out.hudVisible?.sized === true &&

@@ -3,6 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startStaticServer } from "./static-server.mjs";
+import { createKidxTeamRoute } from "./kidx-team-server.mjs";
 import { VERIFY_SMOKES, VERIFY_STATIC_CHECKS, resolveVerifyOptions } from "./verify-manifest.mjs";
 import {
   DEADLINE_WARN_FRACTION,
@@ -253,7 +254,7 @@ try {
         if (!base) {
           // A fresh ephemeral server per smoke prevents stale keep-alive sockets from one
           // Chromium process being inherited as transport flakiness by the next process.
-          server = await startStaticServer({ root: path.join(ROOT, "dist"), port: PORT });
+          server = await startStaticServer({ root: path.join(ROOT, "dist"), port: PORT, routeRequest: createKidxTeamRoute() });
           base = server.url;
         }
         try {

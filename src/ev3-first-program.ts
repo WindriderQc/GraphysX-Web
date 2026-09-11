@@ -1,7 +1,7 @@
 import type { AgentWorldSteerInput } from "./agent-world-runtime";
 
 /** A deliberately tiny first language: enough to express and debug motion, nothing more. */
-export type Ev3FirstProgramBlockId = "forward" | "left" | "right" | "stop";
+export type Ev3FirstProgramBlockId = "forward" | "backward" | "left" | "right" | "stop";
 
 export type Ev3FirstProgramBlock = {
   id: Ev3FirstProgramBlockId;
@@ -24,6 +24,10 @@ export const EV3_FIRST_PROGRAM_BLOCKS: Readonly<Record<Ev3FirstProgramBlockId, E
     // Preserve the heading established by an earlier turn. A Forward block that writes an
     // absolute north heading makes every Left / Right block before it decorative.
     input: { thrust: 1, turn: 0 },
+  },
+  backward: {
+    id: "backward", label: "Backward", shortLabel: "Back", glyph: "▼",
+    durationSeconds: 0.9, input: { thrust: -1, turn: 0 },
   },
   left: {
     id: "left",

@@ -162,18 +162,25 @@ try {
   await page.waitForSelector("[data-ev3-mission='first-drive']", { timeout: SMOKE_TIMEOUT });
   await page.waitForFunction(() => window.__GRAPHYSX_HOST__.world.getEntityObject("ev3-drive-base:technic")
     ?.getObjectByName("ev3-driving-base source model"), { timeout: SMOKE_TIMEOUT });
+  await page.waitForFunction(() => ["left", "right"].every(side => window.__GRAPHYSX_HOST__.world.getEntityObject(`ev3-drive-base:wheel-${side}`)
+    ?.getObjectByName(`ev3-driving-wheel-${side} source model`)), { timeout: SMOKE_TIMEOUT });
   const modelLook = await page.evaluate(() => {
     const host = window.__GRAPHYSX_HOST__;
     const model = host.world.getEntityObject("ev3-drive-base:technic");
     const mat = host.world.getEntityObject("ev3-first-drive-mat");
     const scene = window.__GRAPHYSX__.exportDocument();
     return { meshes: model.getObjectByName("ev3-driving-base source model").children.length,
+      wheels: ["left", "right"].map(side => {
+        const wheel = host.world.getEntityObject(`ev3-drive-base:wheel-${side}`);
+        return { meshes: wheel.getObjectByName(`ev3-driving-wheel-${side} source model`).children.length,
+          parent: wheel.parent === host.world.getEntityObject("ev3-drive-base:heading") };
+      }),
       parent: model.parent === host.world.getEntityObject("ev3-drive-base:heading"),
       matTexture: Boolean(mat.material.map), mission: scene.rules.subjectId,
       unrelatedStations: scene.entities.filter(entity => entity.tags?.includes("construction-bay")).length };
   });
   check("First Drive loads the detailed EV3 assembly and a dedicated textured workbench",
-    modelLook.meshes === 9 && modelLook.parent && modelLook.matTexture
+    modelLook.meshes === 14 && modelLook.wheels.every(wheel => wheel.meshes === 2 && wheel.parent) && modelLook.parent && modelLook.matTexture
       && modelLook.mission === "ev3-drive-base" && modelLook.unrelatedStations === 0, modelLook);
   // Give optional host services time to answer. A connected scene store used to mount its
   // authoring panel over this kid-facing app after the mission surface had already appeared.
@@ -197,8 +204,8 @@ try {
     })),
   }));
   check("the child sees one explicit objective and a full 30 second clock",
-    appInitial.objective === "Reach the blue target before time runs out."
-      && appInitial.clock === "0:30" && appInitial.nestor.includes("Build a program"), appInitial);
+    appInitial.objective === "Rejoins la zone bleue avant la fin du temps."
+      && appInitial.clock === "0:30" && appInitial.nestor.includes("Ajoute trois blocs Avancer"), appInitial);
   check("First Drive opens in Build mode with empty text state that matches the screen",
     appInitial.mode === "program"
       && appInitial.rendered?.mode === "program"
@@ -206,9 +213,9 @@ try {
       && appInitial.rendered?.mission?.phase === "running", appInitial);
   check("the kid-facing application hides scene-store authoring chrome",
     appInitial.sceneBrowserVisible === false, appInitial.sceneBrowserVisible);
-  check("the first program exposes seven thumb-sized controls and no hardware actions",
-    appInitial.controls.length === 7
-      && ["Add Forward block", "Add Left block", "Add Right block", "Add Stop block", "Undo block", "Run program", "Drive mode"]
+  check("the first program exposes eight thumb-sized controls and no hardware actions",
+    appInitial.controls.length === 8
+      && ["Ajouter un bloc Avancer", "Ajouter un bloc Reculer", "Ajouter un bloc Gauche", "Ajouter un bloc Droite", "Ajouter un bloc Stop", "Retirer le dernier bloc", "Lancer le programme", "Pilotage libre"]
         .every((label) => appInitial.controls.some((control) => control.label === label))
       && appInitial.controls.every((control) => control.width >= 72 && control.height >= 72), appInitial.controls);
   // The application opens with a 0.9s camera move; evidence captured before it settles is a
@@ -222,7 +229,7 @@ try {
     gx.update("ev3-drive-base", { transform: { position: [5, 0.83, 12.5] } });
     gx.step(1 / 60);
   });
-  await page.waitForFunction(() => document.querySelector("[data-ev3-nestor]")?.textContent?.includes("red zone"), {
+  await page.waitForFunction(() => document.querySelector("[data-ev3-nestor]")?.textContent?.includes("Zone rouge"), {
     timeout: SMOKE_TIMEOUT,
   });
   const missUi = await page.evaluate(() => ({
@@ -231,7 +238,7 @@ try {
     nestor: document.querySelector("[data-ev3-nestor]")?.textContent ?? "",
   }));
   check("Nestor reacts to a real red-zone crossing and keeps the attempt alive",
-    missUi.phase === "running" && missUi.misses === "1" && missUi.nestor.includes("Steer back toward blue"), missUi);
+    missUi.phase === "running" && missUi.misses === "1" && missUi.nestor.includes("Reviens vers le bleu"), missUi);
 
   await page.evaluate(() => {
     const gx = window.__GRAPHYSX__;
@@ -245,11 +252,11 @@ try {
     nestor: document.querySelector("[data-ev3-nestor]")?.textContent ?? "",
     retryVisible: !document.querySelector("[data-ev3-retry]")?.hidden,
     controlsDisabled: [...document.querySelectorAll("[data-ev3]")]
-      .filter((button) => button.getAttribute("aria-label") !== "Try again")
+      .filter((button) => button.getAttribute("aria-label") !== "Réessayer")
       .every((button) => button.disabled),
   }));
   check("success stops the robot, earns Nestor's celebration and offers another attempt",
-    completeUi.nestor.includes("You did it!") && completeUi.retryVisible && completeUi.controlsDisabled, completeUi);
+    completeUi.nestor.includes("Réussi !") && completeUi.retryVisible && completeUi.controlsDisabled, completeUi);
   await page.waitForTimeout(1_100);
   await page.screenshot({ path: path.join(ART, "ev3-first-mission-800x480.png"), fullPage: false });
 
@@ -279,10 +286,10 @@ try {
     rover: window.__GRAPHYSX__.query({ ids: ["ev3-drive-base"] })[0]?.position ?? null,
     nestor: document.querySelector("[data-ev3-nestor]")?.textContent ?? "",
   }));
-  check("Drive mode still moves the rover through the real held-Go control",
+  check("Pilotage libre still moves the rover through the real held-Go control",
     drivenSuccess.run?.phase === "complete"
       && drivenSuccess.rover?.[2] < 14
-      && drivenSuccess.nestor.includes("You did it!"), drivenSuccess);
+      && drivenSuccess.nestor.includes("Réussi !"), drivenSuccess);
 
   // Native touch must stay captured through a long hold and a slide outside the button.
   // Browser panning/selection used to cancel this gesture on the physical Mint touchscreen.
@@ -359,8 +366,8 @@ try {
   check("Nestor explains a program that ends before the scene reports success",
     stoppedShort?.mission?.phase === "running"
       && stoppedShort?.program?.running === false
-      && stoppedShort?.nestor?.includes("stopped before blue")
-      && stoppedShort?.nestor?.includes("Forward"), stoppedShort);
+      && stoppedShort?.nestor?.includes("arrêté avant l’arrivée")
+      && stoppedShort?.nestor?.includes("Avancer"), stoppedShort);
   await page.locator("[data-ev3-undo]").click();
   await page.evaluate(() => {
     const forward = document.querySelector("[data-ev3-block='forward']");
@@ -391,7 +398,7 @@ try {
     JSON.stringify(readyProgram.blocks) === JSON.stringify(["forward", "forward", "forward"])
       && readyProgram.chips.length === 3 && !readyProgram.runDisabled, readyProgram);
   check("Build mode remains thumb-sized after authoring",
-    readyProgram.controls.length === 7
+    readyProgram.controls.length === 8
       && readyProgram.controls.every((control) => control.width >= 72 && control.height >= 72), readyProgram.controls);
   // SwiftShader can render the DOM several frames ahead of the WebGL canvas. Wait for the reset
   // start line to be painted so this is evidence of Build mode, not a stale frame from Drive.
@@ -429,7 +436,7 @@ try {
       && programmedSuccess.text?.program?.running === false
       && programmedSuccess.run?.phase === "complete"
       && programmedSuccess.rover?.[2] < 14
-      && programmedSuccess.nestor.includes("You did it!")
+      && programmedSuccess.nestor.includes("Réussi !")
       && programmedSuccess.retryVisible, programmedSuccess);
   await page.waitForTimeout(1_100);
   await page.screenshot({ path: path.join(ART, "ev3-first-program-complete-800x480.png"), fullPage: false });
@@ -543,7 +550,7 @@ try {
       };
     });
     check(`all portrait controls remain visible and reachable at ${width}px`,
-      layout.buttons.length === 7 && layout.buttons.every((button) => button.width >= 72 && button.height >= 72
+      layout.buttons.length === 8 && layout.buttons.every((button) => button.width >= 72 && button.height >= 72
         && button.left >= 0 && button.right <= width && button.bottom <= 844 && button.reachable)
         && layout.mission.top >= layout.exit.bottom && layout.mission.right <= width, layout);
     await page.screenshot({ path: path.join(ART, `ev3-first-program-ready-${width}x844.png`), fullPage: false });

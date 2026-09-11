@@ -31,7 +31,7 @@ try {
   const add = async (...blocks) => { for (const id of blocks) await page.locator(`[data-ev3-block='${id}']`).click(); };
   const programs = () => page.locator("[data-ev3-programs]").click();
   const close = () => page.locator("[data-program-close]").click();
-  const name = page.getByLabel("Program name", { exact: true });
+  const name = page.getByLabel("Nom du programme", { exact: true });
   const save = page.locator("[data-program-save]");
   const message = page.locator("[data-program-message]");
   const run = async (ms) => {
@@ -48,7 +48,7 @@ try {
   await programs();
   await name.fill("Left turn");
   await save.click();
-  assert.match(await message.innerText(), /Saved “Left turn”/);
+  assert.match(await message.innerText(), /« Left turn » enregistré/);
   assert.equal((await state()).program.library.unsavedChanges, false);
   await close();
   const first = await run(1700);
@@ -56,7 +56,7 @@ try {
   await enter();
   assert.deepEqual((await state()).program.blocks, []);
   await programs();
-  await page.getByRole("button", { name: "Open Left turn", exact: true }).click();
+  await page.getByRole("button", { name: "Ouvrir Left turn", exact: true }).click();
   assert.deepEqual((await state()).program.blocks, ["left", "forward"]);
   assert.equal((await state()).program.running, false);
   const second = await run(1700);
@@ -65,30 +65,30 @@ try {
 
   await page.locator("[data-ev3-undo]").click();
   await programs();
-  await page.getByRole("button", { name: "Open Left turn", exact: true }).click();
+  await page.getByRole("button", { name: "Ouvrir Left turn", exact: true }).click();
   assert.equal(await page.locator("[data-program-confirm]").isVisible(), true);
   await page.locator("[data-program-open-cancel]").click();
   assert.deepEqual((await state()).program.blocks, ["left"]);
   await save.click();
   assert.deepEqual(JSON.parse(await rawStore()).programs[0].blocks, ["left"]);
   await name.fill("<b>Turn</b>");
-  assert.equal(await save.innerText(), "Save a copy");
+  assert.equal(await save.innerText(), "Enregistrer une copie");
   await save.click();
   assert.equal(JSON.parse(await rawStore()).programs.length, 2);
   assert.equal(await page.locator("[data-program-list] b").count(), 0);
-  const deleteCopy = page.getByRole("button", { name: "Delete <b>Turn</b>", exact: true });
+  const deleteCopy = page.getByRole("button", { name: "Supprimer <b>Turn</b>", exact: true });
   await deleteCopy.click();
   await name.focus();
   assert.equal(JSON.parse(await rawStore()).programs.length, 2);
   await deleteCopy.click();
-  await page.getByRole("button", { name: "Confirm delete <b>Turn</b>", exact: true }).click();
+  await page.getByRole("button", { name: "Confirmer la suppression de <b>Turn</b>", exact: true }).click();
   assert.equal(JSON.parse(await rawStore()).programs.length, 1);
   assert.equal((await state()).program.library.savedName, null);
   assert.deepEqual((await state()).program.blocks, ["left"]);
   await close();
   await add("right");
   await programs();
-  await page.getByRole("button", { name: "Open Left turn", exact: true }).click();
+  await page.getByRole("button", { name: "Ouvrir Left turn", exact: true }).click();
   await page.locator("[data-program-open-confirm]").click();
   assert.deepEqual((await state()).program.blocks, ["left"]);
   console.log("  ok  explicit update, copy, safe text, cancelled deletion and unsaved-block protection");
@@ -101,11 +101,11 @@ try {
   await programs();
   await name.fill("Blue target");
   await save.click();
-  assert.match(await message.innerText(), /Saved “Blue target”/);
+  assert.match(await message.innerText(), /« Blue target » enregistré/);
   await name.fill("LEFT TURN");
   const beforeFailure = await rawStore();
   await save.click();
-  assert.match(await message.innerText(), /already saved/);
+  assert.match(await message.innerText(), /Ce nom existe déjà/);
   assert.equal(await rawStore(), beforeFailure);
   await name.fill("Blocked write");
   await page.evaluate((key) => {
@@ -117,7 +117,7 @@ try {
   }, EV3_PROGRAM_STORAGE_KEY);
   try {
     await save.click();
-    assert.match(await message.innerText(), /Could not save/);
+    assert.match(await message.innerText(), /Impossible d’enregistrer/);
     assert.equal(await rawStore(), beforeFailure);
     assert.equal((await state()).program.library.savedName, "Blue target");
     assert.deepEqual((await state()).program.blocks, ["forward", "forward", "forward"]);
@@ -137,10 +137,10 @@ try {
   await enter();
   await add("forward");
   await programs();
-  assert.match(await message.innerText(), /stored data has been left untouched/);
+  assert.match(await message.innerText(), /Les données ont été conservées/);
   await name.fill("New program");
   await save.click();
-  assert.match(await message.innerText(), /stored data has been left untouched/);
+  assert.match(await message.innerText(), /Les données ont été conservées/);
   assert.equal(await rawStore(), corrupt);
   assert.deepEqual((await state()).program.blocks, ["forward"]);
   await page.screenshot({ path: path.join(ART, "ev3-program-storage-unavailable.png") });

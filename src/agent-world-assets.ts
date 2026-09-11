@@ -116,6 +116,8 @@ type PayloadMaterial = {
 type PayloadMesh = {
   name?: string;
   positions: number[];
+  /** Authored normals preserve CAD hard edges and avoid runtime reconstruction. */
+  normals?: number[];
   uvs?: number[] | null;
   indices: number[];
   groups?: Array<{ start: number; count: number; materialIndex: number }>;
@@ -148,8 +150,18 @@ type RecoveredPbrProfile = {
  * group, and geometry byte. Unlisted assets retain their exact legacy Phong path.
  */
 function recoveredPbrProfile(assetId: string | null, materialName: string): RecoveredPbrProfile | null {
-  if (assetId === "ev3-driving-base") {
-    return { shading: "standard", roughness: materialName === "rubber" ? 0.94 : 0.38, metalness: 0 };
+  if ((assetId?.startsWith("ev3-driving-") || assetId?.startsWith("kidx-track3r-") || assetId?.startsWith("kidx-spike3r-"))
+      && /trans_clear/i.test(materialName)) {
+    return { shading: "standard", roughness: .35, metalness: 0, opacity: .18 };
+  }
+  if (assetId?.startsWith("kidx-track3r-") || assetId?.startsWith("kidx-spike3r-")) {
+    return { shading: "standard", roughness: /rubber/i.test(materialName) ? .9 : .4, metalness: 0 };
+  }
+  if (assetId?.startsWith("ev3-driving-")) {
+    if (materialName === "LCD") return { shading: "standard", roughness: .8, metalness: 0 };
+    if (/rubber/i.test(materialName)) return { shading: "standard", roughness: .88, metalness: 0 };
+    if (/metal|chrome|alloy/i.test(materialName)) return { shading: "standard", roughness: .32, metalness: .15 };
+    return { shading: "physical", roughness: .34, metalness: 0, clearcoat: .22, clearcoatRoughness: .3 };
   }
   // The 2011 player ball, revival look (the legacy ball-selector's default): the shell is a
   // translucent cage so the FireArrow controller inside stays legible — same glass mechanics
@@ -342,7 +354,8 @@ export async function loadAgentWorldModel(
     // hard car panels (doors, wheel arches, the Impreza's rear quarter) into one soft blob.
     // Creased normals keep the mesh sharp where adjacent faces meet past the threshold while
     // still smoothing genuinely curved surfaces; on any failure we fall back to averaging.
-    const shaded = smoothRecoveredNormals(geometry, 45);
+    if (sourceMesh.normals) geometry.setAttribute("normal", new Float32BufferAttribute(sourceMesh.normals, 3));
+    const shaded = sourceMesh.normals ? geometry : smoothRecoveredNormals(geometry, 45);
     shaded.computeBoundingBox();
     shaded.computeBoundingSphere();
     const materials = (sourceMesh.materials?.length ? sourceMesh.materials : [{}]).map((sourceMaterial) => {
@@ -466,6 +479,8 @@ function validatePayload(payload: AssetPayload, collision?: Pick<AgentWorldModel
     if (!Array.isArray(mesh.positions) || mesh.positions.length < 9 || mesh.positions.length % 3 !== 0) throw new Error("Model mesh has invalid positions");
     if (!Array.isArray(mesh.indices) || mesh.indices.length < 3 || mesh.indices.length % 3 !== 0) throw new Error("Model mesh has invalid indices");
     const vertexCount = mesh.positions.length / 3;
+    if (mesh.normals !== undefined && (!Array.isArray(mesh.normals) || mesh.normals.length !== mesh.positions.length
+      || !mesh.normals.every(Number.isFinite))) throw new Error("Model mesh has invalid normals");
     for (let index = 0; index < mesh.positions.length; index += 1) {
       if (!Number.isFinite(mesh.positions[index])) throw new Error(`Model mesh position ${index} is not finite`);
     }

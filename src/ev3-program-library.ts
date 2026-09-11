@@ -14,6 +14,7 @@ export function mountEv3ProgramLibrary(
   root: HTMLElement,
   getBlocks: () => readonly Ev3FirstProgramBlockId[],
   onOpen: (blocks: Ev3FirstProgramBlockId[]) => void,
+  t: (text: string) => string = (text) => text,
 ) {
   if (!document.getElementById("gx-ev3-program-library-style")) {
     const style = document.createElement("style");
@@ -60,7 +61,7 @@ export function mountEv3ProgramLibrary(
   button.className = "gx-ev3-programs-button";
   button.dataset.ev3Programs = "";
   button.setAttribute("aria-haspopup", "dialog");
-  button.append("Programs");
+  button.append(t("Programs"));
   const badge = document.createElement("small");
   button.append(badge);
   const dialog = document.createElement("dialog");
@@ -69,7 +70,7 @@ export function mountEv3ProgramLibrary(
   const makeButton = (label: string, key: string, action: () => void): HTMLButtonElement => {
     const element = document.createElement("button");
     element.type = "button";
-    element.textContent = label;
+    element.textContent = t(label);
     element.setAttribute(`data-program-${key}`, "");
     element.addEventListener("click", action);
     return element;
@@ -77,17 +78,17 @@ export function mountEv3ProgramLibrary(
   const header = document.createElement("header");
   const title = document.createElement("h2");
   title.id = "gx-ev3-library-title";
-  title.textContent = "Your programs";
+  title.textContent = t("Your programs");
   const close = makeButton("Close", "close", () => dialog.close());
   header.append(title, close);
   const intro = document.createElement("p");
-  intro.textContent = "Saved only in this browser. Open a program to build or run it again.";
+  intro.textContent = t("Saved only in this browser. Open a program to build or run it again.");
   const preview = document.createElement("p");
   preview.dataset.programPreview = "";
   const form = document.createElement("form");
   const label = document.createElement("label");
   label.htmlFor = "gx-ev3-program-name";
-  label.textContent = "Program name";
+  label.textContent = t("Program name");
   const name = document.createElement("input");
   name.id = label.htmlFor;
   name.maxLength = EV3_PROGRAM_NAME_MAX_LENGTH;
@@ -96,7 +97,7 @@ export function mountEv3ProgramLibrary(
   message.dataset.programMessage = "";
   message.setAttribute("role", "status");
   const tell = (text: string, error = false): void => {
-    message.textContent = text;
+    message.textContent = t(text);
     message.dataset.error = String(error);
   };
   const dirty = (): boolean => active ? !sameBlocks(active.blocks, getBlocks()) : getBlocks().length > 0;
@@ -104,10 +105,10 @@ export function mountEv3ProgramLibrary(
   const save = makeButton("Save program", "save", () => undefined);
   save.type = "submit";
   const refresh = (): void => {
-    badge.textContent = active ? (dirty() ? "Unsaved edits" : "Saved") : "Not saved";
-    button.title = active ? `${active.name} · ${badge.textContent}` : "Save or open a program";
-    preview.textContent = describe(getBlocks());
-    save.textContent = updating() ? "Update saved program" : active ? "Save a copy" : "Save program";
+    badge.textContent = t(active ? (dirty() ? "Unsaved edits" : "Saved") : "Not saved");
+    button.title = active ? `${active.name} · ${badge.textContent}` : t("Save or open a program");
+    preview.textContent = describe(getBlocks()).split(" → ").map(t).join(" → ");
+    save.textContent = t(updating() ? "Update saved program" : active ? "Save a copy" : "Save program");
     save.disabled = !name.value.trim() || getBlocks().length === 0
       || (updating() && !dirty() && name.value.trim() === active?.name);
   };
@@ -132,7 +133,7 @@ export function mountEv3ProgramLibrary(
   const keep = makeButton("Keep current blocks", "open-cancel", () => { cancelOpen(); name.focus(); });
   confirmation.append(confirmText, confirmOpen, keep);
   const listTitle = document.createElement("h3");
-  listTitle.textContent = "Saved programs";
+  listTitle.textContent = t("Saved programs");
   const list = document.createElement("ul");
   list.dataset.programList = "";
   const renderList = (): void => {
@@ -141,7 +142,7 @@ export function mountEv3ProgramLibrary(
     if (!loaded.ok) { tell(loaded.error, true); return; }
     if (loaded.value.length === 0) {
       const empty = document.createElement("li");
-      empty.textContent = "No saved programs yet.";
+      empty.textContent = t("No saved programs yet.");
       list.append(empty);
     }
     for (const saved of loaded.value) {
@@ -149,21 +150,21 @@ export function mountEv3ProgramLibrary(
       const openButton = makeButton(saved.name, "open", () => {
         if (dirty() && !sameBlocks(getBlocks(), saved.blocks)) {
           pendingOpen = saved;
-          confirmText.textContent = `Open “${saved.name}”? Your current unsaved blocks will be replaced.`;
+          confirmText.textContent = t(`Open “${saved.name}”? Your current unsaved blocks will be replaced.`);
           confirmation.hidden = false;
           keep.focus();
         } else open(saved);
       });
-      openButton.setAttribute("aria-label", `Open ${saved.name}`);
+      openButton.setAttribute("aria-label", t(`Open ${saved.name}`));
       const blocks = document.createElement("small");
-      blocks.textContent = describe(saved.blocks);
+      blocks.textContent = describe(saved.blocks).split(" → ").map(t).join(" → ");
       openButton.append(blocks);
       let confirmingDelete = false;
       const remove = makeButton("Delete", "delete", () => {
         if (!confirmingDelete) {
           confirmingDelete = true;
-          remove.textContent = "Delete?";
-          remove.setAttribute("aria-label", `Confirm delete ${saved.name}`);
+          remove.textContent = t("Delete?");
+          remove.setAttribute("aria-label", t(`Confirm delete ${saved.name}`));
           return;
         }
         const result = store.remove(saved);
@@ -175,11 +176,11 @@ export function mountEv3ProgramLibrary(
         tell(`Deleted “${saved.name}”. Current blocks are still here.`);
         name.focus();
       });
-      remove.setAttribute("aria-label", `Delete ${saved.name}`);
+      remove.setAttribute("aria-label", t(`Delete ${saved.name}`));
       remove.addEventListener("blur", () => {
         confirmingDelete = false;
-        remove.textContent = "Delete";
-        remove.setAttribute("aria-label", `Delete ${saved.name}`);
+        remove.textContent = t("Delete");
+        remove.setAttribute("aria-label", t(`Delete ${saved.name}`));
       });
       row.append(openButton, remove);
       list.append(row);

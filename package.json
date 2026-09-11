@@ -33,6 +33,12 @@
     "smoke:physics": "node scripts/smoke-physics.mjs",
     "smoke:joints": "node scripts/smoke-joints.mjs",
     "smoke:ev3-lab": "node scripts/smoke-ev3-lab.mjs",
+    "smoke:kidx-workshop": "node scripts/smoke-kidx-workshop.mjs",
+    "smoke:kidx-missions": "node scripts/smoke-kidx-missions.mjs",
+    "smoke:kidx-challenges": "node scripts/smoke-kidx-challenges.mjs",
+    "smoke:kidx-interactive": "node scripts/smoke-kidx-interactive.mjs",
+    "smoke:kidx-guidance": "node scripts/smoke-kidx-guidance.mjs",
+    "serve:kidx": "node scripts/serve-kidx.mjs",
     "smoke:ballz18-sky": "node scripts/smoke-ballz18-sky.mjs",
     "smoke:scenenet-xml": "node scripts/smoke-scenenet-xml.mjs",
     "smoke:mesh-colliders": "node scripts/smoke-mesh-colliders.mjs",
@@ -79,6 +85,7 @@
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",
     "@fontsource/space-grotesk": "^5.3.0",
+    "pdfjs-dist": "6.3.289",
     "three": "^0.179.1"
   },
   "devDependencies": {
