@@ -18,3 +18,5 @@ patches/
 .env
 .env.*
 !.env.example
+
+docs/Lego
