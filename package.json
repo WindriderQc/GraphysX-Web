@@ -37,6 +37,7 @@
     "smoke:kidx-missions": "node scripts/smoke-kidx-missions.mjs",
     "smoke:kidx-challenges": "node scripts/smoke-kidx-challenges.mjs",
     "smoke:kidx-interactive": "node scripts/smoke-kidx-interactive.mjs",
+    "smoke:kidx-guidance": "node scripts/smoke-kidx-guidance.mjs",
     "serve:kidx": "node scripts/serve-kidx.mjs",
     "smoke:ballz18-sky": "node scripts/smoke-ballz18-sky.mjs",
     "smoke:scenenet-xml": "node scripts/smoke-scenenet-xml.mjs",

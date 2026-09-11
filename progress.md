@@ -4337,3 +4337,13 @@ or blocks the release.
 - Extended the existing BallZ smoke to cover coasting against aim, changed travel direction, rest and contact jitter. The full focused smoke passes with no console/page errors (output/playwright/ballz-camera/smoke-final.log). The first run's only failure was the optional local scene store missing at startup; the passing run had the loopback store available.
 - Typecheck, lint and the existing node suite pass: 310 passed, one intentional platform skip. The required web-game client drove the archive T Course through movement, independent aim, braking and jumping; both gameplay screenshots and text states were inspected, with a collected ring and no browser errors (output/playwright/ballz-camera/game-final).
 - Local source validation only; no full release gate, deployment or homelab operation. Unrelated KidX edits are preserved. No remaining camera task TODOs.
+
+
+## 2026-09-11 — KidX mission arrival guidance
+
+- User request: "il manque ptete un peu de Guidance quand on arrive dans Premier trajet ( et les autre mission aussi I guess)".
+- Added an initially open French guide to all eleven missions, with real next-button highlighting, suggested-prefix block counts, alternate-program exploration, scene-specific landmarks and observation prompts. Advanced lessons hand the instruction into the laboratory. Running collapses the guide; Comment jouer restores contextual help for pause, review, retry, real success and manual driving.
+- The first game-client capture exposed a real initialization edge: advancing one physics frame made an elapsed-time heuristic call a fresh arrival a completed attempt. Replaced that heuristic with explicit user-attempt state at the existing run/reset boundaries; the browser regression exercises this exact case.
+- Typecheck passed. Desktop, 320px, 390px and 800x480 arrival/expanded-landmark screenshots were inspected; all help and movement controls remain reachable. Dedicated browser journey and final repository gate are pending at this entry. The unrelated .gitignore edit remains excluded.
+
+- The owner authorized pushing all local work. Published the existing KidX and BallZ commits, then prepared this guidance snapshot for the same branch. All nine source/test/config hashes match the owner's running validation snapshot; the dedicated guidance smoke is green with zero browser errors. The broader local gate remains in progress in the KidX task, and publication does not claim deployment.

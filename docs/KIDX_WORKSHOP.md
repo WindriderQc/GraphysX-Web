@@ -22,6 +22,21 @@ per execution, with explicit timeouts for sensor waits. These are original learn
 exercises, not a reproduction of every official hardware lesson.
 The existing full seven-station EV3 scene remains in Browse Scenes.
 
+## Arriving in a mission
+
+All eleven missions open with a French Nestor guide. It explains the next action and
+outlines its actual button in gold. Simple missions count the child's blocks and follow
+the suggested sequence; choosing a different program keeps that program intact and offers
+an experiment. Advanced missions lead into **Laboratoire +**, then **Exemple de la mission**
+and **Lancer**. The instruction continues inside the laboratory.
+
+**Repères du défi** explains each scene's colored zones, required checkpoints, robot-relative
+turns or sensor values. The initial programming view remains paused while the child reads.
+The guide collapses when execution starts; **Comment jouer** reopens it, with advice based
+on the real attempt or verdict. Closing the guide returns keyboard focus to that button.
+Manual driving explains holding and releasing the controls. Compact layouts keep the help
+scrollable and the movement controls reachable.
+
 The simulator has a wheeled teaching chassis built from detailed LDraw EV3 parts; see
 [KIDX_VISUALS.md](KIDX_VISUALS.md). The construction views use separate source assemblies
 with no floor, desk or wall geometry, so the underside stays visible when orbiting.
@@ -140,6 +155,9 @@ illustrations alone do not supply 3D part coordinates or a machine-readable asse
 `npm test` covers catalog search/progress and the restricted document route. The existing
 EV3 lab and named-program smokes retain their behavior assertions with French copy.
 `npm run smoke:kidx-missions` covers real movement solutions/checkpoints.
+`npm run smoke:kidx-guidance` covers arrival, reading time, actual block edits and attempts,
+retry/verdict, drive and laboratory guidance, and reachable controls at 320/390/800 pixels.
+The mission and challenge smokes also verify the first guided action for all eleven missions.
 `npm run smoke:kidx-workshop` covers PDF rendering,
 navigation/zoom/persistence, both complete CAD models, step reversal/highlighting, assembly
 separation, source normals and 800x480/390x844 controls. Without a local cache, its PDF input

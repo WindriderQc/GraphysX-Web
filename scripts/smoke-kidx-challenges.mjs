@@ -22,6 +22,8 @@ try {
     await page.locator(`[data-kidx-mission="${id}"]`).click();
     const initial = await page.evaluate(() => window.advanceTime(0));
     assert.equal(initial.mission.phase, "running", "no challenge wins at spawn");
+    assert.equal(initial.guidance.expanded, true, `${id} arrival guidance`);
+    assert.equal(initial.guidance.target, id === "reverse-parking" ? "[data-ev3-block='backward']" : "[data-kidx-lab]");
     if (id === "reverse-parking") {
       for (let i = 0; i < 2; i++) await page.locator("[data-ev3-block='backward']").click();
       await page.locator("[data-ev3-run]").click();

@@ -18,6 +18,7 @@ import type { GraphysXAgentWorldApi, AgentWorldSteerInput } from "./agent-world-
 import { kidxFrench } from "./kidx-french";
 import { createKidxRoverMotion } from "./kidx-rover-motion";
 import { mountKidxCodeLab } from "./kidx-code-lab";
+import { mountKidxMissionGuide } from "./kidx-mission-guide";
 import { readKidxSensors, KIDX_CM_PER_UNIT } from "./kidx-sensors";
 import type { KidxMission } from "./kidx-missions";
 import { mountEv3ProgramLibrary } from "./ev3-program-library";
@@ -78,6 +79,7 @@ export type Ev3MissionStripState = {
   nestor: string;
   wheels: { leftDegrees: number; rightDegrees: number; soundEnabled: boolean };
   laboratory: ReturnType<ReturnType<typeof mountKidxCodeLab>["state"]>;
+  guidance: ReturnType<ReturnType<typeof mountKidxMissionGuide>["state"]> | null;
 };
 
 export type Ev3MissionStripOptions = {
@@ -340,6 +342,7 @@ export function mountEv3MissionStrip(
   let program: Ev3FirstProgramBlockId[] = [];
   let controlsEnabled = true;
   let deterministicMode = false;
+  let attempt: "program" | "laboratory" | "drive" | null = null;
   let activeProgramIndex: number | null = null;
   let refreshProgram = (): void => undefined;
   let refreshControls = (): void => undefined;
@@ -350,6 +353,7 @@ export function mountEv3MissionStrip(
   const timeLimit = missionRules?.timer?.limitSeconds ?? EV3_FIRST_MISSION_TIME_LIMIT_SECONDS;
   const missionReady = driveable && Boolean(missionRules?.finish) && missIds.size > 0;
   const resetAttempt = () => {
+    attempt = null;
     motion.reset();
     const reset = api.rules.reset();
     for (const body of resetBodies) api.update(body.id, { transform: { position: body.position, rotationDegrees: body.rotationDegrees }, physics: { mode: "dynamic", linearVelocity: [0, 0, 0], angularVelocity: [0, 0, 0] } });
@@ -413,6 +417,7 @@ export function mountEv3MissionStrip(
     if (!controlsEnabled || program.length === 0 || !missionReady) return;
     runner.stop();
     const reset = resetAttempt();
+    attempt = "program";
     misses = 0;
     lastPhase = reset.value?.phase ?? "idle";
     eventCursor = api.events().sequence;
@@ -428,6 +433,7 @@ export function mountEv3MissionStrip(
     if (!controlsEnabled) return;
     api.pause(deterministicMode);
     mode = "drive";
+    attempt = "drive";
     mission.dataset.mode = mode;
     strip.dataset.mode = mode;
     refreshControls();
@@ -592,7 +598,7 @@ export function mountEv3MissionStrip(
     apply: regulatedInput,
     beforeRun: () => {
       if (!controlsEnabled || !missionReady) return false;
-      runner.stop(); resetAttempt(); misses = 0; lastPhase = "running"; eventCursor = api.events().sequence;
+      runner.stop(); resetAttempt(); attempt = "laboratory"; misses = 0; lastPhase = "running"; eventCursor = api.events().sequence;
       retry.hidden = true; setControlsEnabled(false); refreshControls();
       if (!deterministicMode) api.pause(false);
       return true;
@@ -607,6 +613,11 @@ export function mountEv3MissionStrip(
   emergency.addEventListener("click", () => { runner.stop(); laboratory?.stop(); brake(); api.pause(true); activeProgramIndex = null; setControlsEnabled(true); refreshProgram(); refreshControls(); say("Robot arrêté. Tu peux modifier ou relancer ton programme."); });
   const labTools = document.createElement("div"); labTools.className = "kx-mission-tools";
   labTools.append(laboratory.button, emergency); mission.append(labTools);
+  const guidance = options.mission ? mountKidxMissionGuide(root, mission, labTools, options.mission, () => {
+    const lab = laboratory!.activity(), run = api.rules.status();
+    return { mode, phase: run?.phase ?? "idle", attempt,
+      running: runner.state().running || lab.running, blocks: program, labOpen: lab.open, labPrepared: lab.prepared, paused: lab.paused, error: lab.error };
+  }) : null;
 
   if (missionReady) {
     // Start when the instructions appear, not while the application's dynamic import is still
@@ -656,6 +667,7 @@ export function mountEv3MissionStrip(
     renderRun();
     if (advanceProgram && api.rules.status()?.phase === "running") runner.advance(deltaSeconds);
     renderRun();
+    guidance?.update();
   };
 
   const unsubscribeFrame = options.subscribeFrame((deltaSeconds) => {
@@ -693,6 +705,7 @@ export function mountEv3MissionStrip(
       nestor: status.textContent ?? "",
       wheels: motion.state(),
       laboratory: laboratory!.state(),
+      guidance: guidance?.state() ?? null,
     };
   };
 
@@ -719,6 +732,7 @@ export function mountEv3MissionStrip(
     dispose: () => {
       unsubscribeFrame();
       motion.dispose();
+      guidance?.dispose();
       laboratory?.dispose();
       runner.stop();
       library.dispose();

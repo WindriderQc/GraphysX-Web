@@ -33,6 +33,8 @@ try {
     await page.locator(`[data-kidx-mission='${id}']`).click();
     await page.evaluate(() => window.advanceTime(0));
     assert.equal((await state()).mission.phase, "running", `${id} must not win at spawn`);
+    assert.equal((await state()).guidance.expanded, true, `${id} arrival guidance`);
+    assert.equal((await state()).guidance.target, `[data-ev3-block='${blocks[0]}']`);
     for (const block of blocks) await page.locator(`[data-ev3-block='${block}']`).click();
     await page.locator("[data-ev3-run]").click();
     let result;

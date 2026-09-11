@@ -28,6 +28,14 @@ for validation. Hardware priorities below are unchanged; no EV3/Pi qualification
 
 ## KidX interactive workshop (current source, 2026-09-11)
 
+Mission arrival now includes a French Nestor guide in `src/kidx-mission-guide.ts`:
+actual next-button highlighting, block counts, scene landmarks, laboratory handoff,
+automatic collapse on execution and context-sensitive reopening. Attempt tracking is explicit;
+a physics frame during initialization cannot be mistaken for a child's completed attempt.
+`smoke:kidx-guidance` covers this journey and compact reachability; both mission suites
+check all eleven initial targets. The guide uses the existing shared frame loop and a
+lightweight laboratory activity snapshot, without cloning the editor or reading sensors per frame.
+
 The authorized ten-feature expansion is implemented and verified locally: all 62 repository
 checks passed, with 310 passing unit tests and one intentional Windows skip. Receipt:
 `output/kidx/verify-expansion.log`. The saved-program smoke used 9m14s of its unchanged

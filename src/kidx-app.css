@@ -23,6 +23,21 @@ body:has(.kx-mechanism) .gx-display-settings,body:has(.kx-build-ui) .gx-display-
 
 .kx-demo-controls{border:1px solid #52727a;border-radius:12px;padding:10px;margin:12px 0;background:#102b35}.kx-demo-controls>button:first-child{background:#e6bd58;color:#17353d}.kx-demo-controls label{display:block;font-size:12px;margin:8px 0}.kx-demo-controls input,.kx-demo-controls select{display:block;width:100%;min-height:44px;margin-top:5px;padding:8px;border:1px solid #709096;border-radius:8px;background:#eaf0e1;color:#233c43;font:500 13px var(--gx-font)}.kx-demo-controls details{font-size:12px}.kx-demo-controls p{font-size:12px;line-height:1.45}.kx-demo-controls .kx-card-row button{padding:8px;font-size:12px}
 .kx-mission-tools{display:flex;gap:8px;margin-top:8px;pointer-events:auto}
+/* Arrival guidance stays beside the program, then collapses when the robot starts. */
+.kx-mission-guide{margin-top:8px;padding:8px 12px;background:#fff4cc;border:1px solid #d8bc63;border-radius:10px;color:#384737;font:600 13px/1.4 var(--gx-font);pointer-events:auto}
+.kx-mission-guide[hidden],.kx-guide-lab-hint[hidden]{display:none}
+.kx-guide-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:800}
+.kx-guide-heading button{min-width:44px;min-height:44px;border:0;border-radius:8px;background:#eddea6;color:#35482f;font:700 20px var(--gx-font);cursor:pointer}
+.kx-mission-guide p{margin:4px 0 7px}
+.kx-mission-guide summary{cursor:pointer;min-height:44px;box-sizing:border-box;display:list-item;font-size:12px;color:#665d32;padding:12px 0}
+.kx-mission-guide details p{font-size:12px;font-weight:500}
+.kx-guide-camera{color:#69704f}.kx-guide-toggle{margin-left:auto;white-space:nowrap}
+.kx-guide-lab-hint{padding:10px 12px;border:1px solid #d8bc63;border-radius:9px;background:#fff4cc;color:#384737;font:600 13px/1.4 var(--gx-font)}
+[data-kidx-guide-target=true]{outline:3px solid #e7aa20!important;outline-offset:3px!important}
+.kx-mission-guide :focus-visible{outline:3px solid #376988;outline-offset:2px}
+.gx-ev3-mission[data-guide-open=true]{max-height:calc(100dvh - 128px);overflow:auto;overscroll-behavior:contain;pointer-events:auto}
+@media(max-height:550px){.kx-mission-guide{font-size:11px;padding:5px 9px}.kx-mission-guide p{margin:2px 0 4px}.kx-guide-heading{font-size:11px}}
+@media(max-width:700px){.kx-mission-tools{flex-wrap:wrap;gap:6px}.kx-guide-toggle{font-size:11px;padding:6px 8px}.kx-mission-guide{font-size:12px;padding:7px 9px}.gx-ev3-mission[data-guide-open=true]{max-height:calc(100dvh - 272px)}}
 .kx-lab-toggle{min-height:44px;padding:8px 12px;background:#234b57;color:#fff;border:1px solid #54777c;border-radius:9px;font:700 12px var(--gx-font);cursor:pointer;touch-action:manipulation}
 .kx-emergency{background:#fae4dd;color:#9e352e;border-color:#d3a196}
 .kx-code-lab{box-sizing:border-box;position:fixed;top:76px;right:14px;bottom:106px;width:min(470px,calc(100vw - 28px));z-index:44;overflow:auto;background:#12313d;color:#eef3e7;border:1px solid #547a80;border-radius:16px;box-shadow:0 12px 50px #06192388;padding:16px;font-family:var(--gx-font);overscroll-behavior:contain}

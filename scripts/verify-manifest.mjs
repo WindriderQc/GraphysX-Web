@@ -41,6 +41,7 @@ export const VERIFY_SMOKES = [
   { name: "kidx-workshop", tier: "apps", script: "scripts/smoke-kidx-workshop.mjs", covers: "LEGO catalog and PDF reader, native TRACK3R/SPIK3R assembly guides, authored normals, progress and responsive controls" },
   { name: "kidx-challenges", tier: "apps", script: "scripts/smoke-kidx-challenges.mjs", covers: "Reverse, cargo physics, ramp elevation, live distance/color/contact decisions, actual return routes, reset and achievements" },
   { name: "kidx-interactive", tier: "apps", script: "scripts/smoke-kidx-interactive.mjs", covers: "Nested programs and physical pause/step, CAD insertion, Nestor controls, two-browser build handoff, gear ratio and compact layouts" },
+  { name: "kidx-guidance", tier: "apps", script: "scripts/smoke-kidx-guidance.mjs", covers: "Arrival guidance, reading time, actual blocks and attempts, exploration, verdict, retry, laboratory handoff and compact controls" },
   { name: "ballz18-sky", tier: "apps", script: "scripts/smoke-ballz18-sky.mjs", covers: "exact authored 2048px BallZ18 sky: release manifest, six SHA-256 hashes, decode, orientation, scene application" },
   { name: "scenenet-xml", tier: "apps", script: "scripts/smoke-scenenet-xml.mjs", covers: "SceneNET v1.0/v1.1/v1.2/split-enum import-export-import, deterministic XML, structured loss warnings, ambiguity rejection, editor download" },
   { name: "mesh-colliders", tier: "apps", script: "scripts/smoke-mesh-colliders.mjs", covers: "scene-native model colliders: Great Slide trimesh, dynamic convex hull, rejection, bridge + round-trip" },

@@ -20,6 +20,7 @@ const condition = (): KidxCondition => ({ sensor: "distance", operator: "lt", va
 export function mountKidxCodeLab(root: HTMLElement, options: Options) {
   let code: KidxInstruction[] = [motors()], open = false, lastPath: string | null = null;
   let wasRunning = false, sound = false;
+  let prepared = false;
   let worldPaused = false;
   let renderedRunning: boolean | null = null;
   const button = document.createElement("button"); button.type = "button"; button.className = "kx-lab-toggle";
@@ -33,6 +34,7 @@ export function mountKidxCodeLab(root: HTMLElement, options: Options) {
     <div data-code-editor></div><p class="kx-code-status" data-code-status role="status"></p>
     <footer><button data-code-run>▶ Lancer</button><button data-code-step>Un bloc</button><button data-code-pause>Pause</button><button data-code-resume>Reprendre</button><button data-code-stop>■ Arrêter</button></footer>`;
   root.append(panel);
+  panel.addEventListener("change", event => { if (event.target instanceof Element && event.target.closest("[data-code-editor]")) prepared = true; });
   const message = panel.querySelector<HTMLElement>("[data-code-status]")!;
   const report = (text: string) => { message.textContent = text; options.report(text); };
   const runner = createKidxCodeRunner(options.apply, options.readings, report);
@@ -44,7 +46,7 @@ export function mountKidxCodeLab(root: HTMLElement, options: Options) {
   button.addEventListener("click", () => show(!open));
   panel.querySelector("[data-lab-close]")!.addEventListener("click", () => show(false));
   panel.addEventListener("keydown", event => { if (event.key === "Escape") { event.stopPropagation(); show(false); } });
-  const makeButton = (text: string, action: () => void) => { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.addEventListener("click", action); return b; };
+  const makeButton = (text: string, action: () => void) => { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.addEventListener("click", () => { prepared = true; action(); }); return b; };
   const numeric = (parent: HTMLElement, label: string, value: number, min: number, max: number, change: (v: number) => void, step = .1) => {
     const wrapper = document.createElement("label"); wrapper.textContent = label;
     const input = document.createElement("input"); input.type = "number"; input.value = String(value); input.min = String(min); input.max = String(max); input.step = String(step); input.setAttribute("aria-label", label);
@@ -100,7 +102,7 @@ export function mountKidxCodeLab(root: HTMLElement, options: Options) {
     if (!code.length) { report("Ajoute au moins un bloc."); return; }
     if (!options.beforeRun()) return;
     if (!runner.start(code, step)) { report("Vérifie les valeurs et le nombre de blocs."); options.afterStop(); return; }
-    wasRunning = true; if (!step) show(false);
+    prepared = true; wasRunning = true; if (!step) show(false);
   };
   panel.querySelector("[data-code-run]")!.addEventListener("click", () => begin());
   panel.querySelector("[data-code-step]")!.addEventListener("click", () => begin(true));
@@ -108,13 +110,14 @@ export function mountKidxCodeLab(root: HTMLElement, options: Options) {
   panel.querySelector("[data-code-resume]")!.addEventListener("click", () => { runner.resume(); if (runner.state().running) { worldPaused = false; options.pauseWorld(false); } });
   panel.querySelector("[data-code-stop]")!.addEventListener("click", () => { runner.stop(); stopped(); report("Robot arrêté. Ton programme est conservé."); });
   panel.querySelector("[data-code-save]")!.addEventListener("click", () => { try { report(saveKidxCode(localStorage, code) ?? "Programme enregistré dans ce navigateur."); } catch { report("Enregistrement indisponible. Ton programme reste ouvert."); } });
-  panel.querySelector("[data-code-load]")!.addEventListener("click", () => { try { const saved = readKidxCode(localStorage); if (saved) { code = saved; render(); report("Programme ouvert."); } else report("Aucun programme enregistré."); } catch { report("La sauvegarde n’a pas pu être lue. Le programme ouvert reste intact."); } });
-  panel.querySelector("[data-code-example]")!.addEventListener("click", () => { code = structuredClone(options.example ?? [{ kind: "repeat", count: 3, body: [motors()] }]); render(); report("Exemple chargé. Observe les blocs, puis teste-le."); });
+  panel.querySelector("[data-code-load]")!.addEventListener("click", () => { try { const saved = readKidxCode(localStorage); if (saved) { code = saved; prepared = true; render(); report("Programme ouvert."); } else report("Aucun programme enregistré."); } catch { report("La sauvegarde n’a pas pu être lue. Le programme ouvert reste intact."); } });
+  panel.querySelector("[data-code-example]")!.addEventListener("click", () => { code = structuredClone(options.example ?? [{ kind: "repeat", count: 3, body: [motors()] }]); prepared = true; render(); report("Exemple chargé. Observe les blocs, puis teste-le."); });
   panel.querySelector<HTMLInputElement>("[data-lab-power]")!.addEventListener("input", event => { const value = Number((event.target as HTMLInputElement).value); options.speed(value / 100); panel.querySelector("[data-lab-power-value]")!.textContent = `${value} %`; });
   panel.querySelector("[data-lab-sound]")!.addEventListener("click", async () => { try { await options.sound(!sound); sound = !sound; const b = panel.querySelector("[data-lab-sound]")!; b.textContent = sound ? "Couper le son" : "Activer le son des moteurs"; b.setAttribute("aria-pressed", String(sound)); } catch { report("Le son n’a pas pu démarrer dans ce navigateur."); } });
   render();
   return {
     button,
+    activity: () => ({ open, prepared, ...runner.state() }),
     stop() { runner.stop(); stopped(); },
     advance(delta: number) {
       runner.advance(delta); if (!runner.state().running) stopped();
