@@ -4435,3 +4435,32 @@ version changed. A clean `npm@10.9.8 ci --no-audit --no-fund` now succeeds local
 the installed tree passes 303 Node tests with one existing skip. Publication uses
 the hosted full gate on the corrected commit, with no duplicate local full matrix.
 The active French Atelier and its dependency changes remain excluded.
+
+## 2026-09-11 — Bound the Programs release checks
+
+Deploy run `34556647327` on `1b6d245` completed in 1h39m13s: 57 checks passed;
+`ev3-programs` reached its existing 600-second deadline during its responsive
+section. No deployment started. The three persistence phases had passed before
+the timeout. The unrelated collaboration browser check passed in 26m03s.
+
+Moving the persistence workflow from 1280x720 to 800x480 reduced the combined
+local Programs smoke from the integration receipt's 7m31s to 4m59.7s. That still
+left insufficient headroom for the measured slower CI renderer. The final test
+structure separates persistence/replay, desktop layout, and compact layouts into
+three independently bounded checks. All original layout, hit-target, focus,
+Escape and screenshot assertions are retained. The compact group still traverses
+the desktop-to-landscape resize; its seed records come from the existing program
+serializer and are opened and run through the real UI.
+
+No product source, render loop, dependency, workflow, timeout or assertion was
+weakened or changed for this correction. The gate now has 60 checks because one
+combined smoke became three. Node tests pass 303 with one existing skip; scoped
+lint passes. The final desktop screenshot is byte-identical to the successful
+combined targeted run. A new complete hosted gate is required before publication;
+the failed run does not authorize activation.
+
+Final targeted receipts: persistence/replay passed in 166.0s, desktop layout in
+149.7s, and compact layout in 157.9s. Inspected the desktop and compact library
+captures; all four original viewport sizes and browser-error checks pass. Logs,
+timing JSON and screenshots are under output/production-release/. Only these
+affected browser checks were rerun locally, not the full matrix.
