@@ -62,6 +62,13 @@ describe("verification by changed area", () => {
     assert.deepEqual(names(plan), ["kidx-guidance-arrival", "kidx-guidance-attempt", "kidx-guidance-laboratory"]);
     assert.equal(plan.deploy, false);
     assert.deepEqual(names(selectVerification(["scripts/smoke-kidx-guidance-arrival.mjs"])), ["kidx-guidance-arrival"]);
+    const ev3 = selectVerification(["scripts/smoke-ev3-lab.mjs"]);
+    assert.deepEqual(names(ev3), ["ev3-lab-scene", "ev3-lab-drive", "ev3-lab-program"]);
+    assert.equal(ev3.deploy, false);
+    assert.deepEqual(names(selectVerification(["scripts/smoke-ev3-lab-drive.mjs"])), ["ev3-lab-drive"]);
+    const debrief = selectVerification(["scripts/smoke-kidx-debrief.mjs"]);
+    assert.deepEqual(names(debrief), ["kidx-debrief-review", "kidx-debrief-turns", "kidx-debrief-outcomes"]);
+    assert.equal(debrief.deploy, false);
     const node = verificationMatrix(selectVerification(["scripts/smoke-results.mjs"]).smokes);
     assert.equal(node.include[0].browser, false);
   });

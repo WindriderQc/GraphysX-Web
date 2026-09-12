@@ -43,6 +43,11 @@ The coverage map is explicit in `scripts/verify-impact.mjs`. It is not inferred 
 runtime imports. New shared paths default to full verification. When adding a narrow
 rule, check its consumers and add a regression test for the expected selection.
 
+EV3 scene/drive/program checks and KidX debrief review/turn/outcome checks run as separate
+journeys. Their combined scripts remain available for manual use. A change to either
+shared script selects its whole family, so splitting a slow journey retains its assertions
+and the existing per-process deadline.
+
 ## Running checks
 
 ```bash

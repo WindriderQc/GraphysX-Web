@@ -45,7 +45,7 @@ export function selectVerification(changedFiles, { full = false } = {}) {
     }
     // Split scenario wrappers import these shared harnesses. A harness change reruns
     // its complete family, while a wrapper-only change still selects just that wrapper.
-    const harness = /^scripts\/smoke-(kidx-(?:missions|workshop|challenges|interactive|guidance))\.mjs$/.exec(file);
+    const harness = /^scripts\/smoke-(ev3-lab|kidx-(?:missions|workshop|challenges|interactive|guidance|debrief))\.mjs$/.exec(file);
     if (harness) {
       for (const name of family(harness[1])) selected.add(name);
       reasons.push({ file, rule: `changed scenario family: ${harness[1]}` });
