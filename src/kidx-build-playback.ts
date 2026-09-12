@@ -77,7 +77,7 @@ export function createKidxBuildPlayback(api: GraphysXAgentWorldApi, build: KidxB
       api.update(pieceId(index), { transform: { position: [piece.center[0] + .6 * remaining, piece.center[1] + 1.25 * remaining, piece.center[2] + .45 * remaining] } });
       if (elapsed >= 1.8) {
         index++;
-        if (index >= build.steps[step].pieces.length) { index--; stop(); report("Démonstration terminée. À toi d’assembler ! Tu peux la rejouer ou revoir une pièce."); }
+        if (index >= build.steps[step].pieces.length) { index--; stop(); report("Démonstration terminée. À toi d’assembler ! Appuie sur Nestor, montre-moi pour la revoir, ou choisis une pièce."); }
         else prepare();
       }
     },

@@ -30,6 +30,28 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       await page.evaluate(() => window.advanceTime(0));
     }
     if (part === "all" || part === "program") {
+      // Use real host time here: deterministic stepping would hide a world left paused after Stop.
+      await page.locator("[data-ev3-block='forward']").click();
+      await page.locator("[data-ev3-run]").click();
+      await page.waitForFunction(() => !JSON.parse(window.render_game_to_text()).application.program.running);
+      const finishedPosition = (await state()).rover.position;
+      await page.locator("[data-ev3-mode='drive']").click();
+      await page.waitForTimeout(300);
+      const handoff = (await state()).rover;
+      assert.deepEqual([handoff.position[0], handoff.position[2]], [finishedPosition[0], finishedPosition[2]], "entering Drive must brake residual program momentum before resuming the world");
+      assert.deepEqual([handoff.velocity[0], handoff.velocity[2]], [0, 0]);
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
+      const manualReverse = page.locator("[data-ev3='backward']");
+      await manualReverse.focus(); await page.keyboard.down("Space"); await page.keyboard.up("Space");
+      await page.locator("[data-kidx-stop]").click();
+      assert.equal(await page.evaluate(() => window.__GRAPHYSX__.state().paused), true);
+      const restartZ = (await state()).rover.position[2];
+      await manualReverse.focus(); await page.keyboard.down("Space");
+      assert.equal(await page.evaluate(() => window.__GRAPHYSX__.state().paused), false, "a fresh direction resumes after Stop");
+      await page.waitForFunction(z => JSON.parse(window.render_game_to_text()).application.rover.position[2] > z + .05, restartZ);
+      await page.keyboard.up("Space"); await page.locator("[data-kidx-stop]").click();
+      assert.deepEqual((await state()).rover.velocity, [0, 0, 0]);
+      await page.locator("[data-ev3-mode='program']").click();
       await page.locator("[data-kidx-lab]").click();
       await page.locator("[data-code-example]").click();
       await page.locator("[data-code-save]").click();
@@ -40,6 +62,8 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       await page.locator("[data-code-step]").click();
       await page.evaluate(() => window.advanceTime(1000));
       const paused = await state(); assert.equal(paused.laboratory.paused, true); assert.ok(paused.rover.position[2] < 17);
+      assert.equal(await page.locator("[data-kidx-stop]").isEnabled(), true, "a paused program can still be cancelled");
+      assert.equal(await page.locator("[data-code-stop]").isEnabled(), true);
       await page.evaluate(() => window.advanceTime(500));
       assert.deepEqual((await state()).rover.position, paused.rover.position, "step pause must freeze the physical pose");
       await page.screenshot({ path: path.join(ART, "kidx-code-step.png") });
@@ -60,9 +84,11 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       await page.locator("[data-lab-close]").click();
       await page.locator("[data-ev3-mode='drive']").click();
       const reverse = page.locator("[data-ev3='backward']");
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true, "selecting Drive is not yet a motor command");
       await reverse.focus(); await page.keyboard.down("Space");
       const movement = await page.evaluate(() => ({ state: window.advanceTime(500), meters: window.__GRAPHYSX__.query({ tag: "kidx-lcd" }).filter(e => e.visible).length }));
       await page.keyboard.up("Space");
+      assert.equal(await page.locator("[data-kidx-stop]").isEnabled(), true, "release can leave momentum, so braking must remain available");
       const reversing = movement.state; assert.ok(reversing.rover.position[2] > 17.1, "low-power held reverse must overcome rolling resistance");
       assert.ok(reversing.wheels.lcdMotors.every(level => level > 0), "both brick LCD meters must reflect actual wheel movement");
       assert.equal(movement.meters, 2);
@@ -71,6 +97,7 @@ export async function runKidxInteractive({ part = "all" } = {}) {
       await page.locator("[data-kidx-stop]").click();
       const stoppedPose = (await state()).rover.position;
       assert.ok(stoppedPose[2] > 17.1); assert.deepEqual((await state()).rover.velocity, [0, 0, 0]);
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
       await page.locator("[data-ev3-mode='program']").click();
       for (const width of [390, 800]) {
         await page.setViewportSize({ width, height: width === 800 ? 480 : 844 });

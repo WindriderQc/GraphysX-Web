@@ -59,7 +59,7 @@ try {
   await page.waitForTimeout(1_100);
   await page.screenshot({ path: path.join(artifacts, "kidx-ready-390x844.png") });
   await page.getByRole("button", { name: "← Atelier", exact: true }).click();
-  await page.getByRole("button", { name: "Quitter le lab", exact: true }).click();
+  await page.getByRole("button", { name: "Quitter KidX", exact: true }).click();
   await page.getByRole("button", { name: "KidX · First Drive" }).waitFor();
   assert.deepEqual(errors, [], "the welcome → KidX → welcome journey must have no browser errors");
   await page.close();

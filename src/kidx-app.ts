@@ -68,7 +68,7 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
     const token = generation;
     const [reader, local] = await Promise.all([import("./kidx-pdf-reader"), available]);
     if (disposed || token !== generation) return;
-    const mounted = reader.mountKidxPdfReader(root, item, local.has(item.id), () => returnToBuild ? showBuild(returnToBuild, buildStep) : showHome("library"));
+    const mounted = reader.mountKidxPdfReader(root, item, local.has(item.id), () => returnToBuild ? showBuild(returnToBuild, buildStep) : showHome("library"), returnToBuild ? "← Construction 3D" : "← Notices LEGO");
     disposeDetail = mounted.dispose; detailState = mounted.state;
   };
   const showBuild = (build: KidxBuild, initialStep?: number) => {
@@ -86,11 +86,11 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
     const ui = document.createElement("section"); ui.className = "kx-build-ui"; content = ui;
     ui.innerHTML = `<header class="kx-build-bar"><button data-build-back>← Atelier</button><h1></h1><button data-build-pdf>Notice LEGO</button></header>
       <aside class="kx-build-side"><small class="kx-eyebrow">CONSTRUCTION 3D</small><h2 data-build-title></h2><div class="kx-build-progress"><i></i></div>
-      <p>Ajoute les pièces mises en lumière. Tourne le modèle pour regarder les points de connexion.</p><ul data-build-pieces></ul>
-      <div class="kx-card-row"><button data-build-zoom-in aria-label="Rapprocher le modèle">Zoom +</button><button data-build-zoom-out aria-label="Éloigner le modèle">Zoom −</button></div>
-      <button data-build-explode>Vue éclatée</button><button data-build-complete>Voir le modèle complet</button>
+      <p>Ajoute les pièces mises en lumière. Tourne le modèle pour voir où les pièces s’emboîtent.</p><ul data-build-pieces></ul>
+      <div class="kx-card-row"><button data-build-zoom-in aria-label="Rapprocher le modèle">Rapprocher</button><button data-build-zoom-out aria-label="Éloigner le modèle">Éloigner</button></div>
+      <button data-build-explode title="Écarte les groupes de pièces pour voir comment ils s’emboîtent.">Écarter les pièces</button><button data-build-complete>Voir le modèle complet</button>
       <details><summary>À propos de ce guide</summary>Assemblages issus du modèle LDraw de Philippe Hurbain. Leur ordre peut différer des pages LEGO. Vérifie les petits raccords dans la notice originale. Les câbles sont regroupés et les autocollants ne sont pas tous représentés.<br><a target="_blank" rel="noopener noreferrer" data-build-credits>Crédits des pièces et sources</a></details></aside>
-      <div class="kx-build-status" role="status"></div><footer class="kx-build-footer"><button data-build-prev>← Retour</button><label>Étape <input data-build-number type="number" min="1" aria-label="Numéro d’étape"> <span></span></label><button data-build-next>Suivant →</button><button data-build-rotate aria-label="Tourner le modèle de 45 degrés">↻ Tourner</button></footer>`;
+      <div class="kx-build-status" role="status"></div><footer class="kx-build-footer"><button data-build-prev aria-label="Étape précédente">← Étape précédente</button><label>Étape <input data-build-number type="number" min="1" aria-label="Numéro d’étape"> <span></span></label><button data-build-next aria-label="Étape suivante">Étape suivante →</button><button data-build-rotate aria-label="Tourner le modèle de 45 degrés">↻ Tourner le modèle</button></footer>`;
     ui.querySelector("h1")!.textContent = build.label;
     ui.querySelector<HTMLAnchorElement>("[data-build-credits]")!.href = `/assets/kidx/builds/${build.id}/credits.json`;
     const number = ui.querySelector<HTMLInputElement>("[data-build-number]")!;
@@ -110,11 +110,11 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
       options.frameView([target[0] + radius * Math.sin(radians), target[1] + radius * (underside ? -.8 : .8), radius * Math.cos(radians)], target, .35);
     };
     const demo = document.createElement("section"); demo.className = "kx-demo-controls";
-    demo.innerHTML = `<button data-build-replay>▶ Nestor, montre-moi</button><div class="kx-card-row"><button data-build-pause>Pause</button><button data-build-resume>Reprendre</button></div>
-      <label>Vitesse <select data-build-speed aria-label="Vitesse de la démonstration"><option value=".25">Très lent</option><option value=".5">Ralenti</option><option value="1" selected>Normal</option><option value="2">Rapide</option></select></label>
+    demo.innerHTML = `<button data-build-replay>▶ Nestor, montre-moi</button><div class="kx-card-row"><button data-build-pause>Pause</button><button data-build-resume>Continuer</button></div>
+      <label>Vitesse <select data-build-speed aria-label="Vitesse de la démonstration"><option value=".25">Très lente</option><option value=".5">Lente</option><option value="1" selected>Normale</option><option value="2">Rapide</option></select></label>
       <label>Revoir une pièce <select data-build-piece aria-label="Pièce à montrer"></select></label><p data-build-demo-status role="status">Une courte démonstration avec les vraies pièces du modèle.</p>
-      <details><summary>Demander à Nestor</summary><form data-build-request><label>Ta demande<input aria-label="Demande à Nestor" placeholder="Montre dessous, étape 8, moteur…" maxlength="120"></label><button>Montrer</button></form><p>Guide local : tourner, dessus/dessous, étape, pièce, pause, ralenti, vue éclatée.</p></details>
-      <details data-build-team><summary>Construire ensemble</summary><label>Constructeur 1<input data-team-one maxlength="24" value="Constructeur 1"></label><label>Constructeur 2<input data-team-two maxlength="24" value="Constructeur 2"></label><button data-team-toggle>Activer le duo</button><p data-team-status role="status"></p><button data-team-ready hidden>Pièces prêtes →</button><details><summary>Partager avec un autre écran</summary><button data-team-create>Créer un code duo</button><label>Code de l’autre écran<input data-team-code maxlength="8" autocomplete="off" spellcheck="false"></label><button data-team-join>Rejoindre</button><button data-team-leave>Quitter le duo partagé</button><p data-team-session role="status">Ouvre le même modèle depuis le serveur KidX sur les deux écrans.</p></details></details>`;
+      <details><summary>Demander à Nestor</summary><form data-build-request><label>Ta demande<input aria-label="Demande à Nestor" placeholder="Montre dessous, étape 8, moteur…" maxlength="120"></label><button>Demander à Nestor</button></form><p>Essaie : « Tourne le modèle », « Montre dessous », « Étape 8 » ou « Écarte les pièces ».</p></details>
+      <details data-build-team><summary>Construire ensemble</summary><label>Constructeur 1<input data-team-one maxlength="24" value="Constructeur 1"></label><label>Constructeur 2<input data-team-two maxlength="24" value="Constructeur 2"></label><button data-team-toggle>Construire à deux</button><p data-team-status role="status"></p><button data-team-ready hidden>Pièces prêtes →</button><details><summary>Partager avec un autre écran</summary><button data-team-create>Créer un code duo</button><label>Code de l’autre écran<input data-team-code maxlength="8" autocomplete="off" spellcheck="false"></label><button data-team-join>Rejoindre le duo</button><button data-team-leave>Arrêter le partage</button><p data-team-session role="status">Ouvre le même modèle depuis le serveur KidX sur les deux écrans.</p></details></details>`;
     ui.querySelector(".kx-build-side p")!.after(demo);
     const demoStatus = demo.querySelector<HTMLElement>("[data-build-demo-status]")!;
     const playback = createKidxBuildPlayback(api, build, text => { demoStatus.textContent = text; });
@@ -135,9 +135,9 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
     const team = () => {
       const prepareName = teamNames[buildStep % 2].value.trim() || `Constructeur ${buildStep % 2 + 1}`;
       const assembleName = teamNames[(buildStep + 1) % 2].value.trim() || `Constructeur ${(buildStep + 1) % 2 + 1}`;
-      demo.querySelector("[data-team-toggle]")!.textContent = duo ? "Revenir en solo" : "Activer le duo";
+      demo.querySelector("[data-team-toggle]")!.textContent = duo ? "Construire seul" : "Construire à deux";
       demo.querySelector<HTMLButtonElement>("[data-team-ready]")!.hidden = !duo;
-      demo.querySelector("[data-team-ready]")!.textContent = prepared ? "Assemblage terminé →" : "Pièces prêtes →";
+      demo.querySelector("[data-team-ready]")!.textContent = prepared ? "Étape terminée →" : "Pièces prêtes →";
       demo.querySelector("[data-team-status]")!.textContent = duo ? prepared ? `${assembleName}, assemble ! ${prepareName} peut te montrer la démonstration.` : `${prepareName}, prépare les pièces. ${assembleName} assemblera. Les rôles changent à chaque étape.` : "À deux sur cet écran : une personne prépare, l’autre assemble.";
       try { localStorage.setItem(teamKey, JSON.stringify({ version: 1, active: duo, names: teamNames.map(n => n.value), step: buildStep, prepared })); }
       catch { demo.querySelector("[data-team-status]")!.textContent += " Reprise non enregistrée."; }
@@ -213,10 +213,11 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
       if (!result.ok) { status.textContent = "Cette étape n’a pas pu être affichée. Reviens à l’atelier pour réessayer."; return; }
       pending.clear();
       for (const item of api.state()?.entities ?? []) if (item.tags.includes("kidx-build") && item.asset?.status === "loading") pending.add(item.id);
-      number.value = String(buildStep + 1); title.textContent = `Assemblage ${buildStep + 1} sur ${build.steps.length}`;
+      number.value = String(buildStep + 1); title.textContent = `Étape ${buildStep + 1} sur ${build.steps.length}`;
       progress.style.width = `${(buildStep + 1) / build.steps.length * 100}%`;
       previous.disabled = buildStep === 0; next.disabled = buildStep === build.steps.length - 1;
-      explode.textContent = exploded ? "Rassembler" : "Vue éclatée"; explode.setAttribute("aria-pressed", String(exploded));
+      explode.textContent = exploded ? "Rassembler les pièces" : "Écarter les pièces"; explode.setAttribute("aria-pressed", String(exploded));
+      explode.title = exploded ? "Remets les groupes de pièces à leur place." : "Écarte les groupes de pièces pour voir comment ils s’emboîtent.";
       const inventory = new Map<string, { count: number; label: string; file: string; color: string }>();
       const colors: Record<string, string> = { "0": "noir", "1": "bleu", "4": "rouge", "7": "gris", "14": "jaune", "15": "blanc", "71": "gris clair", "72": "gris foncé" };
       for (const piece of build.steps[buildStep].pieces) {
@@ -281,7 +282,7 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
       else {
         const search = request.search ?? "";
         const found = build.steps[buildStep].pieces.findIndex(p => `${kidxPartLabel(p.label)} ${p.label} ${p.file}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(search));
-        if (!search || found < 0) { demoStatus.textContent = "Je ne trouve pas cette pièce dans l’étape actuelle. Choisis-la dans la liste, ou demande une étape, dessous ou une vue éclatée."; return; }
+        if (!search || found < 0) { demoStatus.textContent = "Je ne trouve pas cette pièce dans l’étape actuelle. Choisis-la dans la liste, ou demande une étape, dessous ou demande d’écarter les pièces."; return; }
         pieceSelect.value = String(found); replay(found);
         const center = build.steps[buildStep].pieces[found].center;
         const distance = root.clientWidth <= 600 ? 1.8 : 1;
@@ -313,14 +314,14 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
     api.clear("kidx-workshop", "KidX · Atelier");
     const panel = document.createElement("section"); panel.className = "kx-shell"; content = panel;
     panel.innerHTML = `<header class="kx-head"><div class="kx-brand"><b>K</b><div>KidX<small>MINDSTORMS · EV3</small></div></div></header><nav class="kx-tabs" aria-label="Activités KidX"></nav><div class="kx-hero"><div><span class="kx-eyebrow">L’ATELIER DES PETITS INGÉNIEURS</span><h1></h1><p></p></div></div><div class="kx-content"></div>`;
-    panel.querySelector(".kx-head")!.append(button("Quitter le lab", onExit));
+    panel.querySelector(".kx-head")!.append(button("Quitter KidX", onExit));
     const tabs = panel.querySelector("nav")!;
     for (const [id, label] of [["missions", "Missions"], ["builds", "Construire en 3D"], ["library", "Notices LEGO"]] as const) {
       const element = button(label, () => showHome(id), `data-kidx-${id}`);
       element.setAttribute("aria-selected", String(id === tab)); tabs.append(element);
     }
     const titles = { missions: ["Un robot. Des idées. À toi de jouer.", "Prévois son trajet, assemble les blocs et regarde ton programme prendre vie."],
-      builds: ["Construis-le, un assemblage à la fois.", "Tourne le modèle, observe les nouvelles pièces et avance à ton rythme. La notice LEGO reste à portée de main."],
+      builds: ["Construis ton robot, étape par étape.", "Tourne le modèle, observe les nouvelles pièces et avance à ton rythme. La notice LEGO reste à portée de main."],
       library: ["Toutes tes notices, dans l’atelier.", "Choisis un modèle ou un programme. KidX garde la dernière page lue pour reprendre facilement."] };
     panel.querySelector("h1")!.textContent = titles[tab][0]; panel.querySelector(".kx-hero p")!.textContent = titles[tab][1];
     const body = panel.querySelector<HTMLElement>(".kx-content")!;
@@ -348,15 +349,15 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
       source.append("Exercices KidX inspirés des déplacements et virages de Robot Trainer. ");
       const link = document.createElement("a"); link.href = KIDX_LESSON_SOURCE; link.target = "_blank"; link.rel = "noopener noreferrer"; link.textContent = "Voir l’activité LEGO originale ↗"; source.append(link);
       body.append(source, grid);
-      const { inner } = card("Les engrenages en mouvement", "Observe deux vraies pièces LEGO : 8 et 24 dents. Ralentis, inverse le moteur et compte les tours.", "COMPRENDRE EN 3D · 12 SECONDES");
+      const { inner } = card("Les engrenages en mouvement", "Observe deux vraies pièces LEGO : 8 et 24 dents. Ralentis, change le sens du moteur et compte les tours.", "COMPRENDRE EN 3D · 12 SECONDES");
       inner.append(button("▶ Montre-moi les engrenages", showMechanism, "data-kidx-mechanism"));
     } else if (tab === "builds") {
       for (const build of KIDX_BUILDS) {
         const original = KIDX_DOCUMENTS.find((item) => item.id === build.documentId)!;
-        const { inner } = card(build.label, build.subtitle, `${journey.builds[build.id] ? "✓ CONSTRUIT · " : ""}${build.steps.length} ASSEMBLAGES 3D · KIT 31313`, original.coverUrl);
+        const { inner } = card(build.label, build.subtitle, `${journey.builds[build.id] ? "✓ CONSTRUIT · " : ""}${build.steps.length} ÉTAPES EN 3D · KIT 31313`, original.coverUrl);
         const open = button("Construire en 3D →", () => showBuild(build)); open.dataset.kidxBuild = build.id; inner.append(open);
       }
-      const { inner } = card("Les autres modèles", "Chaque PDF est déjà lisible page par page. Les autres assemblages 3D restent à décrire et à vérifier.", `${KIDX_DOCUMENTS.filter((item) => item.kind === "build").length} NOTICES DE CONSTRUCTION`);
+      const { inner } = card("Les autres modèles", "Tu peux construire ces modèles avec leur notice LEGO. Leur guide en 3D n’est pas encore disponible.", `${KIDX_DOCUMENTS.filter((item) => item.kind === "build").length} NOTICES DE CONSTRUCTION`);
       inner.append(button("Parcourir les notices", () => showHome("library")));
       body.append(grid);
     } else {

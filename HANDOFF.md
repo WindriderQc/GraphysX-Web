@@ -13,42 +13,33 @@ Read `PRODUCT_SPEC.md` §8.1 (the honest status table) for what ships versus wha
 as the v1 target. Read `CLAUDE.md` for the short list of rules that exist because breaking them
 cost real sessions real hours.
 
-## Production publication authorized (2026-09-11)
+## Production publication (2026-09-12)
 
-The owner requested all local work to be pushed, then explicitly requested merge and deployment.
-This expands the earlier release scope to include the French Atelier, mission catalog,
-PDF reader, interactive lessons and construction guides, arrival guidance and BallZ's
-outer-ball camera correction alongside the First Drive/touch/Programs/maintenance changes
-and bench-tested CLI USB adapter. Use the existing main deployment workflow. Its hosted full
-gate must pass before activation; verify the exact public `release.json` and production smoke.
-Do not run a duplicate local full matrix. The public application continues to run simulation;
-the hardware CLI remains a local tool. Cleanup preserves other tasks, useful evidence, the
-Firefox profile and saved `forward` data. See the latest `progress.md` publication entry.
+Use [production KidX](https://graphysx.specialblend.ca/?app=ev3-lab) on ugKid. The owner
+explicitly requested production instead of a Windows-hosted preview. The current verified
+release is `f34ddc64f2f301cff5664658c2fce4dafb74b21a` (PR #19): deployment run
+`34642551927` succeeded and its SHA was checked against the public `release.json`.
+It includes the Atelier, simulation missions, CAD guides and held-touch fixes.
 
-PR #16 merged the release as `a306ff3`. Hosted run `34604715964` passed 60 checks,
-including BallZ, but all five combined KidX smokes reached their existing 600-second
-deadline while making progress; deployment was skipped. The KidX checks are now split
-into fifteen independent journeys (75 gate checks total), retaining every assertion,
-viewport and physical scenario. The original combined script commands still run their
-complete journeys. This test-only correction requires a new complete hosted gate before
-activation; the failed run is not a production receipt.
+The next release integrates the later French labels, advanced-block/immediate-stop
+clarification and measured **Comprendre mon trajet** debrief from `60aaa5b`. Integration
+uses `codex/kidx-mission-release` in a separate worktree and preserves the current pointer
+lifecycle, independent scenario checks and two-browser construction readiness. Tests for
+saved-program layouts target their named dialog now that the debrief adds another dialog.
+Hosted run `34696376812` passed the other checks but both combined `ev3-lab` and
+`kidx-debrief` reached their ten-minute bounds after making progress. Their assertions
+now run in three independent scenarios per family; the combined scripts remain
+available (`npm run smoke:ev3-lab` and `node scripts/smoke-kidx-debrief.mjs`). Product code,
+timeouts and assertions are unchanged by this split. The new debrief checks use the
+existing verification entrypoint, leaving the npm manifest unchanged from production.
+This integration is pending a fresh hosted CI result and deployment; the previous release does not
+validate it. Follow the existing impact-selected CI/deploy workflow, then check the exact
+public release SHA and rendered KidX journey. Do not run a duplicate local full matrix.
 
-The split-scenario run `34625236174` then passed 74/75 checks, with every deadline
-respected. Its only failure was the second construction browser's first control click
-during a cold start; the smoke had only awaited DOM content. The construction smoke now awaits
-the same model-asset readiness contract as the guide smoke and captures the second
-client's rendered startup before clicking. The targeted two-browser journey and all
-338 local Node tests pass (one Windows skip). CI now follows the affected-check policy
-in `CLAUDE.md` and `docs/CI_PERFORMANCE.md`, integrated by PR #18; its main comparison
-still includes all changes since the last successful production deployment.
-
-Readiness alone did not resolve hosted run `34639310664`: it timed out waiting
-for the second client's models. The construction smoke now launches two Chromium
-processes, matching two screens without sharing a software WebGL GPU queue. A local
-software-rendered comparison reduced the second client's asset wait from 78.7s to
-3.4s; the complete isolated journey passed in 1m43s with all assertions intact.
-The second client's trace is retained as `kidx-duo-trace.zip` on success or failure.
-Publication still requires the hosted result; this local comparison is not deployment proof.
+The public site runs simulation and ships the CAD assets. The hardware CLI remains local;
+the ignored PDF cache and cross-screen construction rooms still require the optional LAN
+server. Static hosting retains same-screen teamwork and official-PDF/local-file fallbacks.
+Preserve the ugKid browser profile, saved programs and other sessions' worktrees.
 
 ## Fresh-session entry point (2026-09-11 ugKid / USB continuation)
 
@@ -97,10 +88,12 @@ a physics frame during initialization cannot be mistaken for a child's completed
 check all eleven initial targets. The guide uses the existing shared frame loop and a
 lightweight laboratory activity snapshot, without cloning the editor or reading sensors per frame.
 
-The authorized ten-feature expansion is implemented and verified locally: all 62 repository
+The workshop and mission arrival guide are implemented and verified locally: all 63 repository
 checks passed, with 310 passing unit tests and one intentional Windows skip. Receipt:
-`output/kidx/verify-expansion.log`. The saved-program smoke used 9m14s of its unchanged
-ten-minute deadline; all other checks retained comfortable headroom.
+`output/kidx/verify-guidance.log`. The saved-program smoke used 8m57s of its unchanged
+ten-minute deadline; the guidance journey used 6m15s. At that closeout, all nine guidance
+source/test/config files matched `output/kidx/guidance-source-hashes.json`. The guide is recorded in
+feature commit `10288a2`.
 See `docs/KIDX_NEXT.md` for acceptance and `docs/KIDX_WORKSHOP.md` for current behavior:
 reverse in both controls, independently animated CAD wheels, a regulated motor/sensor
 language with nested blocks and physical pause/step, eleven missions, animated individual
@@ -108,13 +101,54 @@ construction pieces, local French Nestor scene commands, two-screen build handof
 achievements and a native 8:24 gear demonstration. All animation uses the shared host loop.
 
 The simple program still accepts six blocks and preserves existing named saves; Backward is
-its fifth block type. `Laboratoire +` opens the richer language. TRACK3R/SPIK3R retain batched
+its fifth block type. `Blocs avancés` opens the richer language and names its motors, sensors
+and loops. `Arrêter le robot` is an immediate brake, disabled before a command and after
+stopping; it preserves blocks, cancels paused programs too, and permits a fresh driving
+gesture to resume. Entering `Piloter` brakes residual program momentum. The bottom
+`Arrêt` button still adds a queued instruction. TRACK3R/SPIK3R retain batched
 complete stages and load individual pieces only for the current demonstration. All 138 PDFs
 remain available; other models still need source CAD assembly data before acquiring 3D guides.
 Shared rooms use the local server, keep state in memory and disappear on restart. `KIDX_HOST`
 can bind a private LAN IPv4 address; the default remains loopback. The application release is
 authorized above; physical hardware operation remains separate. Final evidence and any remaining
 limitations belong in `progress.md`.
+
+The control-label follow-up passed the full 63-check gate in
+`output/kidx/verify-control-clarity.log`. A final one-line brake on entering Drive was then
+qualified by the expanded interactive browser journey, typecheck, focused lint/unit tests
+and the game client on the final source. Receipts use `output/kidx/control-clarity-final-*`;
+fingerprints are in `output/kidx/control-clarity-final-source-hashes.json`.
+
+Child-facing French labels now use `Démarrer` for a complete program, `Exécuter un bloc`
+for one step, and `Continuer` after a pause. Guidance, accessible names and construction
+controls share the vocabulary documented in `docs/KIDX_WORKSHOP.md`. PDF return buttons
+name their actual destination. Longer labels were inspected at 320/390px and desktop widths.
+The final wording source passed all 63 repository checks, including the earlier Drive brake
+follow-up: `output/kidx/verify-wording.log`. All fourteen source/test fingerprints match
+`output/kidx/wording-source-hashes.json`; the named-program smoke passed in 8m54s with its
+unchanged ten-minute deadline. The validated build is served by the local preview on 4177.
+
+The six simple movement missions now offer `Comprendre mon trajet` after a program attempt.
+`kidx-mission-trace.ts` records measured per-block positions, travel, heading changes and red
+events; `kidx-mission-debrief.ts` presents a read-only top-down diagram, the real collision
+footprint, block selection/scrubbing and three optional French coaching hints. Unexecuted
+blocks have no invented path. Reports retain the last attempt through edits and clear on
+new attempts, resets or manual driving; disposal removes the dialog. Advanced sensor/cargo
+programs are outside this report's coverage. The dedicated browser journey and unit tests
+cover these boundaries. Validation comprises 63 passing checks in `output/kidx/verify-debrief.log`
+plus the corrected library smoke in `output/kidx/debrief-library-accepted.log`, on the same
+product build. The full-run failure was an unscoped dialog test; the follow-up preserves all
+assertions and passes in 9m40s of its unchanged ten-minute deadline (97%, limited headroom).
+This is combined coverage of all 64 checks, not a single green full-gate receipt. The unit
+suite has 315 passes and one intentional Windows skip. Final fingerprints:
+`output/kidx/debrief-accepted-source-hashes.json`. The reviewed build is served locally on
+4177. See `progress.md` for diagnostic history and `docs/KIDX_FAMILY_TRYOUT.md` for the owner's
+proposed ten-minute child test; child and hardware acceptance remain pending.
+
+The reviewed preview now also listens on the Windows host's LAN address:
+`http://192.168.2.12:4177/?app=ev3-lab` for ugKid. The original loopback listener remains for
+this Windows machine. Both serve `output/kidx/release`; use the LAN URL on both devices for
+shared build rooms. This is a running local preview, not an installed startup service.
 
 ## KidX program library (current source, 2026-09-10)
 

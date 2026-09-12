@@ -13,7 +13,7 @@ export type KidxMission = {
 /** Original KidX exercises around Robot Trainer's controlled-movement learning objectives. */
 export const KIDX_MISSIONS: readonly KidxMission[] = [
   { id: "first-drive", title: "Premier trajet", objective: "Rejoins la zone bleue avant la fin du temps.",
-    hint: "Ajoute trois blocs Avancer, puis appuie sur Lancer.", skill: "Avancer en ligne droite", glyph: "↑",
+    hint: "Ajoute trois blocs Avancer, puis appuie sur Démarrer.", skill: "Avancer en ligne droite", glyph: "↑",
     finish: [0, 10.5], checkpoints: [], suggested: ["forward", "forward", "forward"] },
   { id: "right-turn", title: "Un quart de tour", objective: "Tourne à droite, puis rejoins la zone bleue.",
     hint: "Commence par Droite. Ajoute ensuite des blocs Avancer.", skill: "Prévoir un virage", glyph: "↱",
@@ -35,11 +35,11 @@ export const KIDX_MISSIONS: readonly KidxMission[] = [
     finish: [0, 7], checkpoints: [], suggested: ["forward", "forward", "forward", "forward"],
     code: [{ kind: "motors", left: 100, right: 100, seconds: 8 }] },
   { id: "sensor-retreat", title: "Je vois le mur !", objective: "Passe au jaune, détecte le mur et recule jusqu’au bleu.",
-    hint: "Ouvre Laboratoire + et l’exemple de la mission. Le capteur décidera quand reculer.", skill: "Réagir à une distance", glyph: "◉", build: "track3r", challenge: "sensor",
+    hint: "Ouvre Blocs avancés et l’exemple de la mission. Le capteur décidera quand reculer.", skill: "Réagir à une distance", glyph: "◉", build: "track3r", challenge: "sensor",
     finish: [0, 20], checkpoints: [[0, 12]], suggested: [],
     code: [{ kind: "until", left: 65, right: 65, seconds: 15, condition: { sensor: "distance", operator: "lt", value: 5 } }, { kind: "motors", left: -100, right: -100, seconds: 6 }] },
   { id: "ramp-crossing", title: "La petite rampe", objective: "Monte la rampe et rejoins le plateau bleu.",
-    hint: "Compare une puissance faible puis forte dans le laboratoire. Le robot doit grimper.", skill: "Explorer les forces", glyph: "▰", build: "spike3r", challenge: "ramp",
+    hint: "Compare une puissance faible puis forte dans Blocs avancés. Le robot doit grimper.", skill: "Explorer les forces", glyph: "▰", build: "spike3r", challenge: "ramp",
     finish: [0, 8], checkpoints: [[0, 12]], suggested: ["forward", "forward", "forward", "forward"],
     code: [{ kind: "motors", left: 100, right: 100, seconds: 7 }] },
   { id: "color-detect", title: "Le détective des couleurs", objective: "Passe au jaune, détecte le bleu et reviens te garer.",

@@ -38,6 +38,10 @@ export async function runKidxGuidance({ part = "all" } = {}) {
     }
     if (part === "all" || part === "arrival") {
       await guide().waitFor();
+      assert.equal(await page.locator("[data-kidx-lab]").getAttribute("aria-label"), "Blocs avancés");
+      assert.match(await page.locator("[data-kidx-lab]").innerText(), /Moteurs · capteurs · boucles/);
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
+      assert.match(await page.locator("[data-kidx-stop]").innerText(), /Déjà à l’arrêt/);
       assert.equal((await state()).guidance.stage, "block-0");
       assert.match(await guide().innerText(), /Un bloc = un ordre/);
       await highlighted("[data-ev3-block='forward']");
@@ -49,7 +53,7 @@ export async function runKidxGuidance({ part = "all" } = {}) {
       await capture("desktop");
       for (const [width, height] of [[320, 740], [390, 844], [800, 480]]) {
         await page.setViewportSize({ width, height });
-        for (const selector of ["[data-kidx-guide]", "[data-ev3-block='forward']", ".gx-ev3-exit", "[data-guide-close]"]) await reachable(selector);
+        for (const selector of ["[data-kidx-guide]", "[data-ev3-block='forward']", ".gx-ev3-exit", "[data-guide-close]", "[data-kidx-lab]", "[data-kidx-stop]"]) await reachable(selector);
         await capture(`${width}`);
         await guide().locator("summary").click();
         assert.match(await guide().innerText(), /bandes rouges/);
@@ -59,13 +63,18 @@ export async function runKidxGuidance({ part = "all" } = {}) {
         await guide().locator("summary").click();
       }
       await page.setViewportSize({ width: 1280, height: 800 });
+      await page.locator("[data-ev3-block='stop']").click();
+      assert.deepEqual((await state()).program.blocks, ["stop"], "Stop queues an instruction instead of stopping or starting an attempt");
+      assert.equal((await state()).program.running, false);
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
+      await page.locator("[data-ev3-undo]").click();
       await page.locator("[data-guide-close]").click();
       assert.equal(await guide().isVisible(), false);
       assert.equal(await page.locator("[data-kidx-guide]").evaluate(e => e === document.activeElement), true);
       await page.locator("[data-kidx-guide]").click();
       await page.locator("[data-kidx-lab]").click();
       await highlighted("[data-code-example]");
-      assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Exemple de la mission/);
+      assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Utiliser l’exemple/);
       await page.locator("[data-lab-close]").click();
       await highlighted("[data-ev3-block='forward']");
     }
@@ -81,7 +90,16 @@ export async function runKidxGuidance({ part = "all" } = {}) {
       // A short actual attempt produces review guidance, then Retry prepares a fresh attempt.
       await page.locator("[data-ev3-run]").click();
       assert.equal((await state()).guidance.expanded, false);
+      assert.equal(await page.locator("[data-kidx-stop]").isEnabled(), true);
+      await page.evaluate(() => window.advanceTime(100));
+      await page.locator("[data-kidx-stop]").click();
+      assert.equal((await state()).program.running, false);
+      assert.deepEqual((await state()).program.blocks, ["forward"]);
+      assert.deepEqual((await state()).rover.velocity, [0, 0, 0]);
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
+      await page.locator("[data-ev3-run]").click();
       await page.evaluate(() => window.advanceTime(1400));
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
       await page.locator("[data-kidx-guide]").click();
       assert.equal((await state()).guidance.stage, "review");
       await page.locator("[data-kidx-lab]").click();
@@ -92,6 +110,7 @@ export async function runKidxGuidance({ part = "all" } = {}) {
       await page.locator("[data-ev3-run]").click();
       await page.evaluate(() => window.advanceTime(3500));
       assert.equal((await state()).mission.phase, "complete");
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
       await page.locator("[data-kidx-guide]").click();
       assert.match(await guide().innerText(), /Défi réussi/);
       await capture("complete");
@@ -108,7 +127,8 @@ export async function runKidxGuidance({ part = "all" } = {}) {
       await highlighted("[data-kidx-lab]");
       await page.locator("[data-kidx-lab]").click();
       await highlighted("[data-code-example]");
-      assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Exemple de la mission/);
+      assert.equal(await page.locator("[data-code-stop]").isDisabled(), true);
+      assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Utiliser l’exemple/);
       await page.locator("[data-code-load]").click();
       assert.equal((await state()).guidance.stage, "example", "an empty saved-program slot does not prepare a program");
       await page.locator("[data-code-example]").click();
@@ -119,8 +139,15 @@ export async function runKidxGuidance({ part = "all" } = {}) {
       await page.locator("[data-code-run]").click();
       assert.equal((await state()).guidance.expanded, false);
       assert.equal((await state()).laboratory.running, true);
+      assert.equal(await page.locator("[data-kidx-stop]").isEnabled(), true);
+      assert.match(await page.locator("[data-kidx-stop]").innerText(), /Immédiat · garde tes blocs/);
+      const codeBeforeStop = (await state()).laboratory.code;
+      await capture("running-stop");
       await page.locator("[data-kidx-stop]").click();
       assert.equal((await state()).laboratory.running, false);
+      assert.deepEqual((await state()).laboratory.code, codeBeforeStop);
+      assert.deepEqual((await state()).rover.velocity, [0, 0, 0]);
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
     }
     assert.deepEqual(errors, []);
     console.log("KidX guidance scenario passed; no console or page errors.");

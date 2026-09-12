@@ -11,7 +11,7 @@ are French; the source PDFs keep their original text and illustrations.
 | Missions | Eleven exercises: the five original routes plus reverse parking, pushing cargo, distance-triggered retreat, a physical ramp, color detection and contact-triggered retreat. The cargo is the delivery subject; sensor return routes require an outbound checkpoint. Completed missions are saved locally. |
 | Notices LEGO | 138 indexed PDFs, including the owner's original kit references and the 120 distinct PDF links found in the official Education catalog. Covers, search, family/type filters, PDF canvas, previous/next page, direct page entry, zoom and saved reading position. |
 | Construire en 3D | TRACK3R: 28 stages/170 parts. SPIK3R: 56 stages/349 parts. Individual CAD pieces animate toward translucent destinations, with pause, slow replay and part selection. Smooth separation, clear underside, saved stage, French Nestor requests, shared build rooms and model-related challenges. |
-| Laboratoire + | Regulated left/right motor speed, duration, wait, repeat, conditionals and drive-until-sensor blocks; nested editor, save/open, active block, physical pause/step and live EV3 sensor readout. Optional locally synthesized motor sound. |
+| Blocs avancés | Regulated left/right motor speed, duration, wait, repeat, conditionals and drive-until-sensor blocks; nested editor, save/open, active block, physical pause/step and live EV3 sensor readout. Optional locally synthesized motor sound. |
 | Comprendre en 3D | A 12-second native CAD demonstration of 8:24 gears, opposing rotation, a 3:1 speed ratio, pause, slow motion, reverse and replay. |
 
 The movement exercises are adaptations of
@@ -27,15 +27,66 @@ The existing full seven-station EV3 scene remains in Browse Scenes.
 All eleven missions open with a French Nestor guide. It explains the next action and
 outlines its actual button in gold. Simple missions count the child's blocks and follow
 the suggested sequence; choosing a different program keeps that program intact and offers
-an experiment. Advanced missions lead into **Laboratoire +**, then **Exemple de la mission**
-and **Lancer**. The instruction continues inside the laboratory.
+an experiment. Advanced missions lead into **Blocs avancés**, then **Utiliser l’exemple**
+and **Démarrer**. The instruction continues inside the laboratory.
 
-**Repères du défi** explains each scene's colored zones, required checkpoints, robot-relative
+**Comprendre le parcours** explains each scene's colored zones, required checkpoints, robot-relative
 turns or sensor values. The initial programming view remains paused while the child reads.
 The guide collapses when execution starts; **Comment jouer** reopens it, with advice based
 on the real attempt or verdict. Closing the guide returns keyboard focus to that button.
 Manual driving explains holding and releasing the controls. Compact layouts keep the help
 scrollable and the movement controls reachable.
+
+**Blocs avancés** describes its contents directly on the entry button: motors, sensors and
+loops. **Arrêter le robot** is an immediate brake that preserves both editors' blocks; it
+is disabled with **Déjà à l’arrêt** before any command or after stopping. It stays available
+for a running or paused program and after releasing a manual direction, when the chassis
+can still coast. A fresh direction resumes manual driving after braking. The separate
+**Arrêt** block only queues an instruction in the simple program; **Comprendre le parcours** explains
+the distinction. Inside the advanced editor, **Arrêter ce programme** cancels its execution.
+Entering **Piloter** brakes residual program momentum before handing control to the child.
+
+## Understanding an attempt
+
+The six simple movement missions offer **Comprendre mon trajet** after a simple program
+finishes, reaches the goal or is stopped. Its top-down drawing records the actual rover
+positions and headings from the shared physics/control loop. Select a numbered block to
+highlight its measured path and scrub from its start to its observed end. Distances use the
+same scale as the EV3 readout. The body outline uses the mission's collision footprint, so
+touching the edge of blue or red remains visible even when the robot's center is outside it.
+Turn-only and interrupted instructions retain their observed
+rotation; unexecuted instructions are marked **Pas encore joué**.
+
+The report is read-only: browsing, scrubbing and requesting hints do not steer the robot,
+spend mission time or change the program. Three optional Nestor hints move from a question
+to an observation and an experiment. They use the actual outcome, observed red-zone events
+and the recorded movement; success always comes from the mission rules.
+
+Editing preserves the last attempt and its original blocks. Starting another program,
+resetting, opening a saved program or switching to manual driving clears the old report;
+leaving the mission disposes it. The report is session-only. Advanced sensor/cargo programs
+are outside its current coverage. See [KIDX_FAMILY_TRYOUT.md](KIDX_FAMILY_TRYOUT.md) for the
+short family test proposed to the owner; it is not evidence of completed child testing.
+
+## French labels for children
+
+Use a concrete verb and name the affected object when context does not make it obvious.
+Keep labels consistent in buttons, accessible names, Nestor instructions and spoken build
+requests. Introduce useful robotics words through short explanations (a block is an order;
+a loop repeats actions). These are editorial choices, not a claim of testing with children.
+
+| Action | Child-facing wording |
+| --- | --- |
+| Run the whole program | **Démarrer**; accessible name **Démarrer le programme**. Avoid **Lancer**. |
+| Execute the next instruction | **Exécuter un bloc**, explained as one order followed by a pause. |
+| Resume after a pause | **Continuer** in programs and demonstrations. |
+| Remove the last simple block | **Enlever**; accessible name **Enlever le dernier bloc**. |
+| Load the mission's sample blocks | **Utiliser l’exemple**. This prepares blocks; **Démarrer** starts movement. |
+| Update an existing saved program | **Enregistrer les changements**. |
+| Inspect assembly separation | **Écarter les pièces** / **Rassembler les pièces**. Groups move together; this is a viewing aid. Nestor accepts **Écarte les pièces** and the earlier technical terms. |
+| Move through construction | **Étape précédente** / **Étape suivante**; **Tourner le modèle** changes the view. |
+| Inspect a model or page | **Rapprocher** / **Éloigner** in 3D; **Agrandir** / **Page entière** in a notice. |
+| Return from a notice | **Construction 3D** or **Notices LEGO**, matching the actual destination. |
 
 The simulator has a wheeled teaching chassis built from detailed LDraw EV3 parts; see
 [KIDX_VISUALS.md](KIDX_VISUALS.md). The construction views use separate source assemblies
@@ -69,6 +120,19 @@ The server defaults to loopback. For two devices, set `KIDX_HOST` to this comput
 LAN IPv4 address before running `npm run serve:kidx`; both devices use that address and port.
 Only loopback/private IPv4 bindings are accepted. No public deployment or device configuration
 is required by the feature; actual tablet connectivity is a separate household check.
+
+For ordinary use on ugKid, open [production KidX](https://graphysx.specialblend.ca/?app=ev3-lab).
+Simulation and the shipped CAD construction guides do not depend on the Windows host.
+The local PDF cache and cross-screen rooms still require the optional LAN server.
+To start a LAN preview from PowerShell with a reviewed release directory:
+
+```powershell
+$env:KIDX_HOST = '192.168.2.12'
+npm run serve:kidx -- output/kidx/release
+```
+
+Use the host's current private IPv4 address if it changes. The host and server must remain
+running, and shared build participants must use the same LAN address.
 
 Sensor distance uses oriented obstacle footprints at sensor height; contact is a forward
 bumper threshold, color samples authored floor patches, and angle reports steering heading.
@@ -157,6 +221,10 @@ EV3 lab and named-program smokes retain their behavior assertions with French co
 `npm run smoke:kidx-missions` covers real movement solutions/checkpoints.
 `npm run smoke:kidx-guidance` covers arrival, reading time, actual block edits and attempts,
 retry/verdict, drive and laboratory guidance, and reachable controls at 320/390/800 pixels.
+`node scripts/smoke-kidx-debrief.mjs` covers measured block paths, short/turned/interrupted/successful
+attempts, unused instructions, progressive hints, read-only scrubbing, 320/390/800/1280px
+layouts, focus restoration and reset/disposal. `test/kidx-mission-trace.test.mjs` covers
+recording boundaries, bounded drawing samples, immutable reports and evidence-based coaching.
 The mission and challenge smokes also verify the first guided action for all eleven missions.
 `npm run smoke:kidx-workshop` covers PDF rendering,
 navigation/zoom/persistence, both complete CAD models, step reversal/highlighting, assembly
@@ -167,9 +235,19 @@ test uses a clearly self-authored two-page fixture, not counterfeit LEGO instruc
 stationary stops, cargo/ramp behavior, resets and achievements. `npm run smoke:kidx-interactive`
 verifies nested programs, real step/pause, low-power keyboard reverse, LCD/sound, individual
 CAD insertion, Nestor requests, two-browser handoffs and the 3:1 gear demonstration.
-The final `npm run verify -- --wait` passed all 62 checks (310 unit passes, one intentional
-Windows skip). Receipt: `output/kidx/verify-expansion.log`. Screenshots from the final build
-were inspected at desktop, compact landscape and portrait sizes.
+The debrief validation covers all 64 checks across the full run and a corrected library
+follow-up. `output/kidx/verify-debrief.log` records 63 passes, including 315 unit passes and
+one intentional Windows skip; its sole failure was a library test that assumed only one
+dialog existed. The corrected test targets the library explicitly and passed separately on
+the same product build: `output/kidx/debrief-library-accepted.log`. Its 9m40s runtime uses 97%
+of the unchanged ten-minute deadline, so timing headroom remains limited. The full-run log
+retains its failure; it is not a single green-gate receipt.
+
+Ten final source/test/config fingerprints match `output/kidx/debrief-accepted-source-hashes.json`.
+The debrief passed measured-path, stationary, turn, interruption and success scenarios, with
+inspected captures at desktop and 320/390/800px sizes. Final focused captures are in
+`output/kidx/debrief-stop-final`; the full-run debrief and corrected library captures were
+also inspected. The required game-client capture/state is in `output/kidx/debrief-client-accepted`.
 
 Inspect screenshots in the configured `SMOKE_ARTIFACTS` directory. Follow the machine-wide
 verification lock in `CLAUDE.md`; an isolated preview does not establish deployment or

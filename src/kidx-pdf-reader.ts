@@ -4,14 +4,15 @@ import { KIDX_PROGRESS_KEY, readKidxProgress, type KidxDocument } from "./kidx-l
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
-export function mountKidxPdfReader(root: HTMLElement, document: KidxDocument, local: boolean, onClose: () => void) {
+export function mountKidxPdfReader(root: HTMLElement, document: KidxDocument, local: boolean, onClose: () => void, backLabel = "← Notices LEGO") {
   const panel = window.document.createElement("section");
   panel.className = "kx-reader";
   panel.setAttribute("aria-label", `Notice de ${document.title}`);
-  panel.innerHTML = `<header class="kx-reader-head"><button data-reader-back>← Bibliothèque</button><div><small>NOTICE LEGO · PAS À PAS</small><h2></h2></div><a target="_blank" rel="noopener noreferrer">PDF original ↗</a></header>
+  panel.innerHTML = `<header class="kx-reader-head"><button data-reader-back></button><div><small>NOTICE LEGO · PAS À PAS</small><h2></h2></div><a target="_blank" rel="noopener noreferrer">PDF original ↗</a></header>
     <div class="kx-reader-status" role="status">Ouverture de la notice…</div>
     <div class="kx-paper"><canvas aria-label="Page de la notice LEGO"></canvas></div>
-    <footer class="kx-reader-controls"><button data-page-prev aria-label="Page précédente">←</button><label>Page <input data-page-number type="number" min="1" inputmode="numeric" aria-label="Numéro de page"> <span data-page-total></span></label><button data-page-next aria-label="Page suivante">→</button><button data-page-zoom aria-label="Agrandir la page">Zoom +</button></footer>`;
+    <footer class="kx-reader-controls"><button data-page-prev aria-label="Page précédente">←</button><label>Page <input data-page-number type="number" min="1" inputmode="numeric" aria-label="Numéro de page"> <span data-page-total></span></label><button data-page-next aria-label="Page suivante">→</button><button data-page-zoom aria-label="Agrandir la page">Agrandir</button></footer>`;
+  panel.querySelector("[data-reader-back]")!.textContent = backLabel;
   panel.querySelector("h2")!.textContent = document.title;
   const source = panel.querySelector("a")!;
   const url = local ? `/kidx-documents/${document.id}.pdf` : document.sourceUrl;
@@ -117,7 +118,7 @@ export function mountKidxPdfReader(root: HTMLElement, document: KidxDocument, lo
   previous.addEventListener("click", () => go(page - 1));
   next.addEventListener("click", () => go(page + 1));
   number.addEventListener("change", () => go(Number(number.value)));
-  zoomButton.addEventListener("click", () => { zoom = !zoom; zoomButton.textContent = zoom ? "Ajuster" : "Zoom +"; void render(); });
+  zoomButton.addEventListener("click", () => { zoom = !zoom; zoomButton.textContent = zoom ? "Page entière" : "Agrandir"; zoomButton.setAttribute("aria-label", zoom ? "Voir la page entière" : "Agrandir la page"); void render(); });
   panel.querySelector("[data-reader-back]")!.addEventListener("click", onClose);
   const keyboard = (event: KeyboardEvent) => {
     if (event.target instanceof HTMLInputElement) return;

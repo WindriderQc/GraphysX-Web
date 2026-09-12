@@ -46,6 +46,7 @@ export async function runProgramLayout({
     await page.evaluate(() => window.advanceTime(0));
     const state = () => page.evaluate(() => JSON.parse(window.render_game_to_text()).application);
     const programs = () => page.locator("[data-ev3-programs]").click();
+    const library = page.getByRole("dialog", { name: "Tes programmes", exact: true });
     const name = page.getByLabel("Nom du programme", { exact: true });
     await programs();
     await page.getByRole("button", { name: "Ouvrir " + longName, exact: true }).click();
@@ -62,14 +63,17 @@ export async function runProgramLayout({
     for (const [width, height] of viewports) {
       await page.setViewportSize({ width, height });
       await programs();
-      const geometry = await page.locator("dialog").evaluate((element) => {
+      assert.equal(await library.count(), 1);
+      assert.equal(await page.locator("#kidx-mission-debrief").evaluate((element) => element.open), false);
+      const geometry = await library.evaluate((element) => {
         const r = element.getBoundingClientRect();
         return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, client: element.clientWidth, scroll: element.scrollWidth };
       });
       assert.ok(geometry.left >= 0 && geometry.right <= width && geometry.top >= 0 && geometry.bottom <= height);
       assert.ok(geometry.scroll <= geometry.client, JSON.stringify(geometry));
-      const buttons = page.locator("dialog button:visible");
-      for (let index = 0; index < await buttons.count(); index += 1) {
+      const buttons = library.locator("button:visible");
+      const buttonCount = await buttons.count();
+      for (let index = 0; index < buttonCount; index += 1) {
         const target = buttons.nth(index);
         await target.scrollIntoViewIfNeeded();
         assert.equal(await target.evaluate((element) => {
@@ -82,13 +86,13 @@ export async function runProgramLayout({
       await name.focus();
       for (let index = 0; index < 14; index += 1) {
         await page.keyboard.press("Tab");
-        assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest("dialog"))), true);
+        assert.equal(await page.evaluate(() => Boolean(document.querySelector("dialog.gx-ev3-library")?.contains(document.activeElement))), true);
       }
       await page.locator("[data-program-close]").focus();
       await page.keyboard.press("Shift+Tab");
-      assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest("dialog"))), true);
+      assert.equal(await page.evaluate(() => Boolean(document.querySelector("dialog.gx-ev3-library")?.contains(document.activeElement))), true);
       await name.focus();
-      await page.locator("dialog").evaluate((element) => { element.scrollTop = 0; });
+      await library.evaluate((element) => { element.scrollTop = 0; });
       await page.waitForTimeout(1100);
       await page.screenshot({ path: path.join(ART, `ev3-program-library-${width}x${height}.png`) });
       await page.keyboard.press("Escape");
