@@ -121,9 +121,10 @@ LAN IPv4 address before running `npm run serve:kidx`; both devices use that addr
 Only loopback/private IPv4 bindings are accepted. No public deployment or device configuration
 is required by the feature; actual tablet connectivity is a separate household check.
 
-The current Windows preview is also available to ugKid at
-`http://192.168.2.12:4177/?app=ev3-lab`. The loopback URL only works on the hosting computer.
-To start that LAN preview from PowerShell with the reviewed release directory:
+For ordinary use on ugKid, open [production KidX](https://graphysx.specialblend.ca/?app=ev3-lab).
+Simulation and the shipped CAD construction guides do not depend on the Windows host.
+The local PDF cache and cross-screen rooms still require the optional LAN server.
+To start a LAN preview from PowerShell with a reviewed release directory:
 
 ```powershell
 $env:KIDX_HOST = '192.168.2.12'

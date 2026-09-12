@@ -1,7 +1,12 @@
 # Staging on UGBrutal
 
-Test deploy target for GraphysX Web. Every branch push builds, verifies, and publishes
-here, so changes can be seen running on a real release before `main` ships to production.
+Optional LAN release target for GraphysX Web. The workflow is **manual only**
+(`workflow_dispatch`); a branch push does not publish here. It requires a registered
+`[self-hosted, ugbrutal]` runner and the persistent staging server below.
+
+For ordinary local development, use `npm run dev`. To inspect `dist/`, use
+`npm run build` then `npm run preview`. Neither requires a scheduled task, firewall change
+or self-hosted runner. The staging setup below is for retained, manually published releases.
 
 | | |
 | --- | --- |
@@ -18,8 +23,10 @@ C:\graphysx-staging\
   current.txt                 one line: the active release directory name
 ```
 
-`scripts/staging-server.mjs` re-reads `current.txt` per request, so publishing a release
-is an atomic pointer flip — the server never needs restarting.
+The workflow copies the build before updating `current.txt`.
+`scripts/staging-server.mjs` re-reads that pointer per request, so it needs no restart.
+The current `Set-Content` writer is not a transactional file replacement; the subsequent
+published-page check is separate from the prepublication gate.
 
 ## One-time setup
 
@@ -50,7 +57,7 @@ New-NetFirewallRule -DisplayName "GraphysX staging 8099" -Direction Inbound `
 ### 2. GitHub Actions self-hosted runner
 
 The staging workflow targets `runs-on: [self-hosted, ugbrutal]`. Until a runner with
-those labels is registered, staging jobs queue instead of running.
+those labels is registered, manually requested staging jobs queue instead of running.
 
 Get a registration token (valid one hour):
 
@@ -78,15 +85,19 @@ gh api repos/WindriderQc/GraphysX-Web/actions/runners --jq '.runners[] | {name, 
 
 ## Security note
 
-A self-hosted runner executes workflow code from the repository on this machine. Keep the
-repository private, or disable Actions for forked pull requests — otherwise a fork's PR can
-run arbitrary code on UGBrutal.
+A self-hosted runner executes the selected revision on this machine. This repository is
+public; the staging workflow has only a manual trigger. Keep forked pull-request execution
+on hosted CI, and do not add a `pull_request` trigger to this self-hosted workflow.
 
 ## Promotion path
 
 ```
-branch push  ->  CI (ubuntu)          typecheck + build + smokes
-             ->  Staging (UGBrutal)   same gate, then publish to :8099
+branch push  ->  CI (ubuntu)          full release gate; no staging publication
+manual run  ->  Staging (UGBrutal)   full gate, publish to :8099, check published page
 push to main ->  CI gate              must pass
              ->  Deploy               atomic release to graphysx.specialblend.ca
 ```
+
+The published-page check skips build and checks requiring an isolated local store; it
+complements the full prepublication gate. Staging retains its release pointer, scheduled
+server and two-release retention. It does not deploy the optional scene-store server.

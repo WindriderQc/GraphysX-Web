@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startStaticServer } from "./static-server.mjs";
 import { createKidxTeamRoute } from "./kidx-team-server.mjs";
-import { VERIFY_SMOKES, VERIFY_STATIC_CHECKS } from "./verify-manifest.mjs";
+import { VERIFY_SMOKES, VERIFY_STATIC_CHECKS, resolveVerifyOptions } from "./verify-manifest.mjs";
 import {
   DEADLINE_WARN_FRACTION,
   acquireVerifyLock,
@@ -23,8 +23,8 @@ import {
 //   npm run verify -- --no-build   reuse the existing dist/
 //   npm run verify -- --base https://graphysx.specialblend.ca/   smoke a live deploy
 //
-// This is the same gate CI runs before production deploys, so a green local run means
-// a green pipeline.
+// CI selects checks by changed area on a clean checkout. Local, partial and external runs report
+// their own scope; none is a receipt for a different revision or environment.
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ARTIFACTS = path.join(ROOT, "output", "verify");
@@ -54,16 +54,33 @@ const SMOKE_DEADLINE_MS = Number(process.env.VERIFY_SMOKE_TIMEOUT_MS || 10 * 60 
 const LIVE_BROWSER_DEADLINE_MS = Number(process.env.VERIFY_LIVE_BROWSER_TIMEOUT_MS || 30 * 60 * 1000);
 const BUILD_DEADLINE_MS = Number(process.env.VERIFY_BUILD_TIMEOUT_MS || 10 * 60 * 1000);
 
-const argv = process.argv.slice(2);
-const noBuild = argv.includes("--no-build");
-const baseArgIndex = argv.indexOf("--base");
-const externalBase = baseArgIndex >= 0 ? argv[baseArgIndex + 1] : process.env.SMOKE_BASE;
-// `--tier=core` (or `core,apps`) runs a slice of the gate. Absent means the whole thing, so a
-// release keeps full coverage and only the development loop gets shorter.
-const tierArg = argv.find((a) => a.startsWith("--tier="));
-const TIERS = tierArg ? new Set(tierArg.slice("--tier=".length).split(",").map((s) => s.trim()).filter(Boolean)) : null;
+let options;
+try {
+  options = resolveVerifyOptions(process.argv.slice(2));
+} catch (error) {
+  console.error(`verify: ${error.message}\nRun npm run verify -- --help for usage.`);
+  process.exit(1);
+}
+if (options.help) {
+  console.log(`Usage: npm run verify -- [options]
+  --tier=<names>   Select comma-separated tiers: ${[...new Set(VERIFY_SMOKES.map((smoke) => smoke.tier))].join(", ")}
+  --shard=<i/n>   Run one balanced shard; all n shards must pass to qualify a release
+  --checks=<names> Run named smokes, or none for unit/typecheck/lint/build/Node probes
+  --no-build       Reuse dist/; skip typecheck, lint and build
+  --base <url>     Check an external HTTP(S) page; skip build and local-only checks
+  --wait          Wait for another local gate to release the machine lock
+  --force-lock    Recover a lock only after verifying its owner is dead
+  --help, -h      Show usage without starting checks or changing artifacts
 
-const SMOKES = VERIFY_SMOKES.map((smoke) => smoke.longDeadline ? { ...smoke, deadlineMs: LIVE_BROWSER_DEADLINE_MS } : smoke);
+No options: run the full release gate. SMOKE_BASE also selects an external page.
+Partial or external verification is not a full release gate.`);
+  process.exit(0);
+}
+const { noBuild, externalBase } = options;
+const SMOKES = options.smokes.map((smoke) => smoke.longDeadline ? { ...smoke, deadlineMs: LIVE_BROWSER_DEADLINE_MS } : smoke);
+const scope = options.shard
+  ? `release shard ${options.shard.index}/${options.shard.count} (all shards required)`
+  : options.fullRelease ? "full release gate" : "partial verification";
 
 function runStatic(name) {
   const check = VERIFY_STATIC_CHECKS[name];
@@ -168,10 +185,9 @@ let server = null;
 // including on a signal.
 let releaseLock;
 try {
-  // The lock lives beside the artifacts, so its directory has to exist before the artifacts
-  // step that would otherwise create it.
+  // The machine lock's directory is independent of this checkout's artifacts.
   await mkdir(path.dirname(LOCK_PATH), { recursive: true });
-  releaseLock = await acquireVerifyLock(LOCK_PATH, { force: argv.includes("--force-lock"), wait: argv.includes("--wait") });
+  releaseLock = await acquireVerifyLock(LOCK_PATH, { force: options.forceLock, wait: options.wait });
 } catch (error) {
   if (error.code === "EVERIFYLOCKED") {
     console.error(`\n${error.message}`);
@@ -184,6 +200,7 @@ installSignalCleanup(() => [...children], releaseLock);
 try {
   await rm(ARTIFACTS, { recursive: true, force: true });
   await mkdir(ARTIFACTS, { recursive: true });
+  console.log(`\nScope: ${scope}; ${SMOKES.length}/${VERIFY_SMOKES.length} smokes selected; ${externalBase ? "external page (local-only checks excluded)" : noBuild ? "existing dist/" : "fresh local build"}.`);
 
   // First, and unconditionally: sub-second, node-only, no server, no browser, no lock
   // contention. If a pure function's contract broke there is no reason to spend forty
@@ -228,7 +245,7 @@ try {
     console.error("\nSkipping smokes — typecheck/build failed.");
   } else {
     console.log(`\n=== smokes against ${externalBase ?? "isolated local servers"} ===`);
-    for (const smoke of SMOKES.filter((s) => !TIERS || TIERS.has(s.tier ?? "apps"))) {
+    for (const smoke of SMOKES) {
       if (externalBase && smoke.localOnly) {
         console.log(`\n--- ${smoke.name}: skipped against an external page (requires its isolated loopback store) ---`);
         continue;
@@ -282,6 +299,7 @@ const retried = results.filter((r) => r.retried);
 const usage = new Map(results.map((r) => [r, describeDeadlineUsage(r.elapsedMs, r.deadlineMs)]));
 const widest = Math.max(...results.map((r) => r.label.length));
 console.log("\n=== verify summary ===");
+console.log(`Scope: ${scope}.`);
 for (const r of results) {
   // A retried pass is not the same result as a first-attempt pass, and the summary is the
   // thing people actually read. Say so on the line itself — and say what it cost.
@@ -321,3 +339,4 @@ if (retried.length) {
   console.log(`\nNote: ${retried.length} check(s) passed only after a transport retry: ${retried.map((r) => r.label).join(", ")}`);
 }
 console.log(`\nAll ${results.length} checks passed. Screenshots: ${ARTIFACTS}`);
+if (!options.fullRelease) console.log("This partial verification does not establish a full release gate.");

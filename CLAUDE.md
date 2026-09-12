@@ -1,20 +1,30 @@
 # GraphysX Web — session contract
 
-Read `HANDOFF.md` for orientation and `progress.md` for history. This file is the short list
+Read `README.md` for entry points and commands, `HANDOFF.md` for current priorities, and
+search `progress.md` for specific history. This file is the short list
 of rules that exist because breaking them has already cost real sessions real hours.
 
 ## Concurrency on this machine (several sessions share it, and this tree)
 
+- Before editing, inspect `git status`, `git worktree list` and known active tasks. A clean
+  branch is not an ownership release. Work in a separate `codex/` branch/worktree when
+  another task owns the checkout; never reset, stash or absorb its changes.
 - **One full gate at a time, machine-wide.** `npm run verify` software-rasterises WebGL on
   ~70% of the cores. The lock is machine-global (`verify-guard.mjs`), so it now covers
   worktrees too. Queue politely with `npm run verify -- --wait`; never `--force-lock` unless
   you have verified the holder is dead. Measured cost of overlap: five of six runs losing a
   random smoke to `net::ERR_CONNECTION_RESET`.
-- **Iterate with node-only probes and single smokes**, not repeated full gates. Run one full
-  gate at the end.
-- **CI is the authority.** If a local smoke fails on something your diff does not touch,
-  check `gh run list` before chasing it. The deploy gate runs on a clean machine and has
-  repeatedly passed commits the loaded local box failed.
+- **Match local validation to the change.** Use unit/contract tests and scoped lint for
+  Node-only tooling; check links and commands for documentation. Use focused browser smokes
+  for an affected journey and a full gate for changes spanning shared runtime behavior.
+  **Publication requires static checks and the affected journeys selected by CI.** The
+  full suite is required for shared runtime/dependency changes, unknown impact or an
+  explicit full-verification request. Docs and Node-only tooling do not need 3D tests.
+  See `docs/CI_PERFORMANCE.md`; do not restore an unconditional full suite before deployment.
+- **Compare the same revision and scope.** If a local smoke fails outside the diff, inspect
+  machine contention and `gh run list` before changing product code. A clean CI run is useful
+  evidence only for the revision it tested; an older green deployment does not validate
+  today's local changes.
 - **Stage by explicit path. Never `git add -A`.** Concurrent sessions' work has been swept
   into unrelated commits three recorded times — once leaving `main` briefly broken (a smoke
   landed without its feature).
@@ -47,3 +57,15 @@ of rules that exist because breaking them has already cost real sessions real ho
 - Recovered archive material is adapted behind v2 vocabulary, never rewritten, and
   provenance records keep `faithful` / `adapted` / `absent` honest — placements you invented
   go under `adapted` even when they were informed by recovered data.
+
+## Delivery and cleanup
+
+- Follow the task's authorized delivery level. A push to `main` starts production deployment;
+  LAN staging is manual. See the workflows and `ops/README-staging.md`, not historical plans.
+- Report local changes, commits, push/PR, CI, merge and deployed behavior separately.
+  Publication uses the CI impact plan relative to the last successful production deployment;
+  ad hoc tier, existing-build and external-page checks alone are not that release plan.
+- Remove only this task's temporary processes and worktrees. Before normal `git worktree remove`
+  or `git branch -d`, prove the work is saved/integrated and no session uses it; inspect tracked,
+  untracked and ignored files. Preserve `.graphysx-store/` and useful `output/` receipts. If
+  ownership or data preservation is uncertain, retain the path and explain why at closeout.

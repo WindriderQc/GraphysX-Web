@@ -1,18 +1,25 @@
 # KidX on the Linux Mint touchscreen PC
 
 The owner's Linux Mint PC replaces the planned Raspberry Pi target. The PC runs the browser
-and, once selected and implemented, the local EV3 transport. First Drive still uses its existing
-four blocks and steering runner. Touch input has now been exercised on the real PC; complete
-KidX acceptance and EV3 hardware qualification remain open.
+and the local EV3 USB transport. First Drive still uses its existing four blocks and steering
+runner. The owner confirms controls plus Programs name/copy, touch scrolling and Escape/focus.
+The CLI adapter has run all four blocks on the real unmounted B/C motors and demonstrated
+stopping after controller-process loss. Chassis direction/calibration and physical USB removal
+remain unqualified. Read [current ugKid acceptance](KIDX_UGKID_ACCEPTANCE.md) and
+[the USB guide](KIDX_EV3_USB.md); the dated diagnosis and historical states below are retained
+as evidence, not instructions to restart the touchscreen investigation.
 
 ## Live touch diagnosis (2026-09-10, resumed session)
 
 **Current result:** after cleaning the screen, the owner confirms five successive physical
 Menu open/close taps and all six fullscreen Firefox targets, including the lower-left corner.
 Matched receipts confirm native touch across those zones. No calibration was applied.
-KidX's three-Forward/Run/success/retry flow also passed by physical touch. Drive exposed an
-app long-press menu issue and a chassis-heading mismatch, to resume in a fresh session at
-the owner's request. See "KidX acceptance and fresh-session handoff" below.
+KidX's three-Forward/Run/success/retry flow also passed by physical touch. The subsequent
+long-press menu and chassis-heading corrections were served and physically accepted.
+Programs save/reload/open/replay also passed. Programs touch scrolling and keyboard focus
+remain awaiting the owner's physical result. See "KidX acceptance and fresh-session handoff"
+below. The acceptance server and tunnel are stopped after the owner's cleanup request;
+restart details and concurrent-branch reconciliation are in `KIDX_NEXT_SESSION.md`.
 The investigation below is chronological;
 its earlier failed tests do not describe the latest result.
 
@@ -382,7 +389,7 @@ investigation.
   position `[0,0.83,17]`, heading 0 and pause. Firefox 155.0.1 uses a 1920x922 viewport on the
   1920x1080 display at scale 1. A preliminary two-Forward run also succeeded; it is distinct
   from the requested three-block test.
-- **Drive long press corrected in source; physical retest pending:** the owner reports a submenu
+- **Drive long press corrected and physically accepted:** the owner reported a submenu
   appearing while holding a control. `kidx-long-press-menu.png` shows selected button text
   after the menu was dismissed. Native cancellations and releases did stop the rover in
   recorded intervals, but this does not qualify sustained driving. Held buttons now use
@@ -393,35 +400,61 @@ investigation.
   and [contextmenu](https://developer.mozilla.org/en-US/docs/Web/API/Element/contextmenu_event).
   The focused EV3 smoke now passes a native touch hold, slide outside, release-to-stop and
   trusted context-menu scope checks. The required game client also passes; screenshots were
-  inspected and console/page errors are empty. These are Windows Chromium results; ugKid's
-  served copy still predates the correction and needs a Firefox physical retest.
-- **Chassis heading corrected in source; physical retest pending:** the original acceptance
-  showed Left/Right turning the cyan marker while the body stayed north. The EV3 workbench
-  redesign now places the rendered assembly under the existing scene heading anchor. The
-  public steering path rotates the whole group; the physical collider and BallZ behavior are
-  unchanged. Disabled held controls also clear their pressed appearance. The focused browser
-  smoke checks the rendered chassis heading for both turn programs. See `KIDX_VISUALS.md`
-  and `progress.md` for source/validation receipts; ugKid has not been refreshed by this change.
-- **Still pending on the PC:** corrected sustained Drive holds and release outside a control,
-  all remaining block controls/routes, Programs save/reload/open/replay, touch scrolling,
-  name editing and Tab/Shift+Tab/Escape focus behavior. The mini-keyboard is available; an
+  inspected and console/page errors are empty. These are Windows Chromium results; the
+  rover-only build `e77158b` was then served to ugKid. The owner confirms sustained holds, sliding outside
+  and release-to-stop, with no browser menu or selection. Trusted native Firefox receipts at
+  `2026-09-11T00:21:34Z` through `00:22:16Z` confirm canceled context menus, Go success and retry
+  to heading 0 with zero velocity. Held visual
+  state and pointer ownership also clear at success, retry and disposal; a late release from
+  a retired hold cannot stop the next input.
+- **Chassis heading corrected in scene composition:** rover revision `e77158b` put the visible
+  chassis and its children under the existing steering root, with physical Left/Right rotation
+  confirmed on ugKid. The integrated workbench now uses a heading group at lift 0 for the EV3
+  model and its direction cone. The dynamic collider and forces are unchanged. No host-only
+  mutation or shared BallZ steering change is involved. The combined smoke measures actual
+  rendered model and marker directions on both turn routes, repeatability and north reset.
+  This newer representation requires its own browser and physical acceptance; see `KIDX_VISUALS.md`.
+- **Programs save/reload/open/replay passed:** the owner saved the three-Forward program as
+  `forward`, reloaded Firefox, opened it and ran it to blue. Matched browser sessions and the
+  success receipt at `2026-09-11T00:23:20Z` confirm the saved name, all three blocks and a
+  1.764-second mission completion. This is the same temporary origin and Firefox profile.
+- **Still pending on the PC:** acceptance of the integrated workbench, remaining block controls/routes, touch scrolling,
+  repeated name editing/copying and Tab/Shift+Tab/Escape focus behavior. The final physical
+  scroll/focus exercise has been requested; no confirmation or matching new receipts have
+  arrived yet. Automated coverage is green but does not close these physical items.
+  The mini-keyboard is available; an
   on-screen keyboard is not yet a requirement. EV3 remains unplugged and unqualified.
 
-The active Firefox page and Windows server on port 4175 still serve the isolated build from
-before the long-press correction. Rebuild/test and refresh that isolated site deliberately
-before asking for a physical retest. Its script is
-`C:\Users\Yanik\codes\GraphysX-Web\output\playwright\mint-touch\serve.mjs`; receipts and
-screenshots live alongside it. These ignored artifacts stay in the original checkout if the
-next session uses a worktree. Do not assume that checkout's `dist/` follows a worktree build.
-Rediscover the server/tunnel processes before restarting them. The SSH reverse listener is
-loopback-only on both machines; user authorization for ugKid access persists.
+The driving correction is in the isolated worktree branch `codex/kidx-mint-rover` at `e77158b`,
+based on `codex/kidx-linux-mint` at `f3d9f52`. Concurrent work has since advanced that original
+branch to the distinct workbench redesign `fa9e6d0`; see `KIDX_NEXT_SESSION.md` before combining
+their changes. The accepted Firefox tab used
+`http://127.0.0.1:4175/?app=ev3-lab&acceptance=rover-hold` on ugKid. Its server script is
+`C:\Users\Yanik\.codex\worktrees\ab67\GraphysX-Web\output\playwright\mint-rover\serve.mjs`.
+The server and reverse tunnel on 4175 were stopped during requested cleanup and both listeners
+were verified absent. The validated isolated site is retained as `site-validated-e77158b/`;
+`served-build.json`, passive browser receipts and actual-Mint captures are alongside it.
+The source hash and index hash were read back through ugKid's tunnel before acceptance.
+Earlier diagnostic artifacts remain in the original checkout at
+`C:\Users\Yanik\codes\GraphysX-Web\output\playwright\mint-touch\`.
+Do not assume that checkout's `dist/` follows a worktree build.
+Rediscover processes before restarting. The previous reverse listener was loopback-only on
+both machines; user authorization for ugKid access persists. Preserve the same browser origin
+and profile to retain the saved `forward` program. An unrelated Vite process on 4176 was left
+running for its owning session.
 
 Long-press correction validation is in `output/mint-touch-2026-09-10/` (build-hold-fix.log,
 smoke-hold-fix.log, client-hold-fix.log) and `output/playwright/mint-hold-fix/` (screenshots and
-client state). Typecheck/build and the focused smoke passed. The full gate has not been rerun
-for this correction; run it once after completing the application fixes, per CLAUDE.md.
-The inspected release screenshot also retains a highlighted Go button after success/retry
-while the rover is stopped; check whether held-button visual state is cleared at reset.
+client state). The follow-up worktree's `output/mint-rover/` contains check/build/lint/smoke
+and client logs. Typecheck, 293 unit tests (one existing skip), build, targeted lint, the full
+focused EV3 smoke and game client pass. The Go regression assertion checks the detached button
+before pointer-up and idle controls after retry. Final full-gate status is recorded in the
+latest progress entry: **all 58 checks passed with zero retries**. This was the single final
+full gate after the corrections, including 293 unit passes (one existing skip), typecheck,
+lint, build, both KidX smokes, BallZ and the 131/131 two-browser collaboration checks.
+The Programs smoke took 8m12s of its unchanged 10-minute deadline, producing a headroom
+warning rather than a failure. No assertion or deadline was relaxed. The 436 files in the
+isolated served site match the full-gate build byte-for-byte (`served-copy-check.json`).
 
 Current boot remains the one-time 6.14 kernel, and Firefox's XInput2 variable is session-only.
 No permanent kernel default, calibration, Firefox launcher or graphics-driver change was made.

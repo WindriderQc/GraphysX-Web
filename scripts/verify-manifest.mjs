@@ -1,3 +1,6 @@
+import { parseArgs } from "node:util";
+import { parseVerifyShard, planVerifyShards } from "./verify-shards.mjs";
+
 // Release inventory shared by the runner and project counts; importing it starts no work.
 export const VERIFY_STATIC_CHECKS = {
   unit: { command: "node", args: ["--test", "test/*.test.mjs"] },
@@ -36,12 +39,26 @@ export const VERIFY_SMOKES = [
   { name: "physics", tier: "apps", script: "scripts/smoke-physics.mjs", covers: "physics migration baseline: contacts, fixed-step schedules, sleep/wake, teardown/reload" },
   { name: "joints", tier: "apps", script: "scripts/smoke-joints.mjs", covers: "scene-authored fixed/revolute/rope joints: motion, bridge parity, patch, undo, export/reload" },
   { name: "ev3-lab", tier: "apps", script: "scripts/smoke-ev3-lab.mjs", covers: "EV3 Robotics Mission Lab: seven construction families, seven mission zones, driveable base, gripper and launch interactions, round-trip" },
-  { name: "ev3-programs", tier: "apps", script: "scripts/smoke-ev3-programs.mjs", covers: "KidX named programs: save/reload/replay, update/copy/delete, unsaved edits, storage failure, responsive library and keyboard focus" },
-  { name: "kidx-missions", tier: "apps", script: "scripts/smoke-kidx-missions.mjs", covers: "Five French movement missions finish through program controls and real physics; delivery and return require checkpoints" },
-  { name: "kidx-workshop", tier: "apps", script: "scripts/smoke-kidx-workshop.mjs", covers: "LEGO catalog and PDF reader, native TRACK3R/SPIK3R assembly guides, authored normals, progress and responsive controls" },
-  { name: "kidx-challenges", tier: "apps", script: "scripts/smoke-kidx-challenges.mjs", covers: "Reverse, cargo physics, ramp elevation, live distance/color/contact decisions, actual return routes, reset and achievements" },
-  { name: "kidx-interactive", tier: "apps", script: "scripts/smoke-kidx-interactive.mjs", covers: "Nested programs and physical pause/step, CAD insertion, Nestor controls, two-browser build handoff, gear ratio and compact layouts" },
-  { name: "kidx-guidance", tier: "apps", script: "scripts/smoke-kidx-guidance.mjs", covers: "Arrival guidance, reading time, actual blocks and attempts, exploration, verdict, retry, laboratory handoff and compact controls" },
+  { name: "ev3-programs", tier: "apps", script: "scripts/smoke-ev3-programs.mjs", covers: "KidX named programs: save/reload/replay, update/copy/delete, unsaved edits and storage failure" },
+  { name: "ev3-program-layout", tier: "apps", script: "scripts/smoke-ev3-program-layout.mjs", covers: "KidX saved programs at 1280x720: touch targets, overflow, keyboard focus trap, Escape and focus restoration" },
+  { name: "ev3-program-layout-compact", tier: "apps", script: "scripts/smoke-ev3-program-layout-compact.mjs", covers: "KidX saved programs at 800x480, 320x844 and 390x844: desktop-to-compact resize, touch targets, overflow, keyboard focus trap, Escape and focus restoration" },
+  // Preserve all KidX assertions in independent journeys; the combined scripts exceeded
+  // the existing ten-minute bound on the Linux software-WebGL runner (run 34604715964).
+  { name: "kidx-missions-start", tier: "apps", script: "scripts/smoke-kidx-missions-start.mjs", covers: "First French mission: arrival guidance, real block controls and physical completion" },
+  { name: "kidx-missions-turns", tier: "apps", script: "scripts/smoke-kidx-missions-turns.mjs", covers: "French left/right missions: ordered block controls and real physical turns" },
+  { name: "kidx-missions-checkpoints", tier: "apps", script: "scripts/smoke-kidx-missions-checkpoints.mjs", covers: "Delivery and return missions: real routes and mandatory checkpoints" },
+  { name: "kidx-workshop-reader", tier: "apps", script: "scripts/smoke-kidx-workshop-reader.mjs", covers: "LEGO catalog, PDF input/rendering, paging/zoom, reading progress and rejected malformed normals" },
+  { name: "kidx-workshop-track3r", tier: "apps", script: "scripts/smoke-kidx-workshop-track3r.mjs", covers: "TRACK3R: native CAD normals, steps/highlights, explode/reassemble, rotate/zoom, resume and responsive controls" },
+  { name: "kidx-workshop-spike3r", tier: "apps", script: "scripts/smoke-kidx-workshop-spike3r.mjs", covers: "SPIK3R: native CAD normals, steps/highlights, explode/reassemble, rotate/zoom, resume and responsive controls" },
+  { name: "kidx-challenges-mechanical", tier: "apps", script: "scripts/smoke-kidx-challenges-mechanical.mjs", covers: "Reverse parking and cargo: real motor movement, cargo physics, stop, reset and achievements" },
+  { name: "kidx-challenges-distance-ramp", tier: "apps", script: "scripts/smoke-kidx-challenges-distance-ramp.mjs", covers: "Distance-triggered return and physical ramp climb, checkpoints, stop and reset" },
+  { name: "kidx-challenges-color-touch", tier: "apps", script: "scripts/smoke-kidx-challenges-color-touch.mjs", covers: "Color/contact sensors cause real reverse journeys; checkpoints, stop, reset and achievements" },
+  { name: "kidx-interactive-program", tier: "apps", script: "scripts/smoke-kidx-interactive-program.mjs", covers: "Nested programs, save/reload, actual physical step/pause/resume and mission completion" },
+  { name: "kidx-interactive-drive", tier: "apps", script: "scripts/smoke-kidx-interactive-drive.mjs", covers: "Sound, low-power keyboard reverse, LCD meters, keyboard release, emergency stop and compact controls" },
+  { name: "kidx-interactive-construction", tier: "apps", script: "scripts/smoke-kidx-interactive-construction.mjs", covers: "CAD insertion, French Nestor controls, two-browser build handoff, 3:1 gears and compact layouts" },
+  { name: "kidx-guidance-arrival", tier: "apps", script: "scripts/smoke-kidx-guidance-arrival.mjs", covers: "Arrival reading time, non-attempt physics frame, 320/390/800 layouts, focus and laboratory hints" },
+  { name: "kidx-guidance-attempt", tier: "apps", script: "scripts/smoke-kidx-guidance-attempt.mjs", covers: "Child-authored blocks, exploration, real attempt/review, completion, retry and held-drive guidance" },
+  { name: "kidx-guidance-laboratory", tier: "apps", script: "scripts/smoke-kidx-guidance-laboratory.mjs", covers: "Sensor mission laboratory handoff, empty saved slot, example/run, compact reachability and stop" },
   { name: "kidx-debrief", tier: "apps", script: "scripts/smoke-kidx-debrief.mjs", covers: "Measured simple-block paths, progressive hints, read-only scrubbing, interrupted instructions, success, compact layouts and report lifecycle" },
   { name: "ballz18-sky", tier: "apps", script: "scripts/smoke-ballz18-sky.mjs", covers: "exact authored 2048px BallZ18 sky: release manifest, six SHA-256 hashes, decode, orientation, scene application" },
   { name: "scenenet-xml", tier: "apps", script: "scripts/smoke-scenenet-xml.mjs", covers: "SceneNET v1.0/v1.1/v1.2/split-enum import-export-import, deterministic XML, structured loss warnings, ambiguity rejection, editor download" },
@@ -68,3 +85,63 @@ export const VERIFY_SMOKES = [
   { name: "results", tier: "deep", script: "scripts/smoke-results.mjs", covers: "results: persistent bests, compatibility-separated leaderboards with client-attested trust labels, deterministic ordering and bounds, shared ghost round-trip, and refusal of desynced/incomplete/implausible/oversized/unsorted submissions" },
   { name: "dna", tier: "apps", script: "scripts/smoke-dna.mjs", covers: "DNA forest: deterministic genome drift, preset fidelity, node-level (no browser)" },
 ];
+
+// Validate the requested coverage before the runner takes the lock, clears artifacts or
+// starts a child. A misspelled tier used to select no smokes and still report success.
+export function resolveVerifyOptions(args, env = process.env) {
+  const { values } = parseArgs({
+    args,
+    options: {
+      tier: { type: "string" },
+      shard: { type: "string" },
+      checks: { type: "string" },
+      base: { type: "string" },
+      "no-build": { type: "boolean", default: false },
+      wait: { type: "boolean", default: false },
+      "force-lock": { type: "boolean", default: false },
+      help: { type: "boolean", short: "h", default: false },
+    },
+    strict: true,
+    allowPositionals: false,
+  });
+  const availableTiers = new Set(VERIFY_SMOKES.map((smoke) => smoke.tier));
+  const tiers = values.tier === undefined ? null : new Set(values.tier.split(",").map((tier) => tier.trim()));
+  if (tiers && [...tiers].some((tier) => !availableTiers.has(tier))) {
+    throw new Error(`--tier must name one or more of: ${[...availableTiers].join(", ")}; received ${JSON.stringify(values.tier)}.`);
+  }
+
+  const externalBase = values.base ?? (env.SMOKE_BASE || null);
+  if (externalBase !== null) {
+    let url;
+    try { url = new URL(externalBase); } catch { /* Report the option, without echoing credentials. */ }
+    if (!url || !["http:", "https:"].includes(url.protocol)) {
+      throw new Error("--base / SMOKE_BASE must be an absolute HTTP(S) URL.");
+    }
+  }
+  const shard = values.shard === undefined ? null : parseVerifyShard(values.shard, VERIFY_SMOKES.length);
+  if (values.checks !== undefined && (tiers || shard || externalBase)) {
+    throw new Error("--checks cannot be combined with --tier, --shard or an external base.");
+  }
+  const checks = values.checks === undefined ? null : new Set(values.checks === "none" ? [] : values.checks.split(","));
+  if (checks && [...checks].some((name) => !VERIFY_SMOKES.some((smoke) => smoke.name === name))) {
+    throw new Error("--checks must contain registered smoke names, or the explicit value none for static checks only.");
+  }
+  if (shard && (tiers || externalBase)) {
+    throw new Error("--shard cannot be combined with --tier or an external base; shards partition the complete local inventory.");
+  }
+  const smokes = shard
+    ? planVerifyShards(VERIFY_SMOKES, shard.count)[shard.index - 1].smokes
+    : VERIFY_SMOKES.filter((smoke) => checks ? checks.has(smoke.name) : !tiers || tiers.has(smoke.tier));
+  return {
+    smokes,
+    shard,
+    checks,
+    tiers,
+    externalBase,
+    noBuild: values["no-build"],
+    wait: values.wait,
+    forceLock: values["force-lock"],
+    help: values.help,
+    fullRelease: !shard && !externalBase && !values["no-build"] && smokes.length === VERIFY_SMOKES.length,
+  };
+}

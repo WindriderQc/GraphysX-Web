@@ -4,15 +4,16 @@
 
 ## Why these exist, and what they are not
 
-Everything else in this project is proved end to end by the full `npm run verify` matrix, most
-of it driving the built output through a real headless browser. That has caught bugs nothing
+Browser behavior is covered by the `npm run verify` inventory, most
+of it driving the built output through a real headless browser. CI selects the affected
+journeys; the full suite is reserved for shared changes or an explicit request. That has caught bugs nothing
 else would have — objects falling through the world, dead clicks on scenery, a console error
 on every production page load — and none of it is being replaced here.
 
 What it could not give anyone is a *fast* answer. The gate holds a machine-global lock,
-software-rasterises WebGL across most of the cores, and runs serially, so `CLAUDE.md`'s
-standing advice is to run one full gate at the end and iterate on node-only probes. That
-advice is right and it left a gap: the logic hardest to reason about in this codebase is pure,
+software-rasterises WebGL across most of the cores, and runs serially. `CLAUDE.md` now scopes
+local validation to the affected contracts while keeping the full gate for publication and
+shared-runtime changes. The logic hardest to reason about in this codebase is often pure,
 dependency-free, and was reachable only by starting a server and speaking HTTP to it.
 
 So the rule for this directory is narrow. **A test belongs here only if it needs no browser,

@@ -1,144 +1,162 @@
+import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 import { startStaticServer } from "./static-server.mjs";
 
-const ART = process.env.SMOKE_ARTIFACTS || "output/verify";
-mkdirSync(ART, { recursive: true });
-let browser, server;
-const errors = [];
-try {
-  if (!process.env.SMOKE_BASE) server = await startStaticServer({ root: path.resolve("dist"), port: 0 });
-  const base = (process.env.SMOKE_BASE ?? server.url).replace(/\/$/, "");
-  browser = await launchSmokeBrowser();
-  const page = applySmokeTimeout(await browser.newPage({ viewport: { width: 1280, height: 800 }, hasTouch: true }));
-  page.on("pageerror", e => errors.push(String(e)));
-  page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
-  const state = () => page.evaluate(() => JSON.parse(window.render_game_to_text()).application);
-  const guide = () => page.locator("#kidx-mission-guide");
-  const capture = name => page.screenshot({ path: path.join(ART, `kidx-guidance-${name}.png`) });
-  const highlighted = async selector => assert.equal(await page.locator(selector).getAttribute("data-kidx-guide-target"), "true", selector);
-  const reachable = async selector => {
-    const bounds = await page.locator(selector).evaluate(button => {
-      button.scrollIntoView({ block: "nearest" });
-      const r = button.getBoundingClientRect();
-      return { left: r.left, right: r.right, width: r.width, height: r.height, bottom: r.bottom,
-        hit: button.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) };
-    });
-    assert.ok(bounds.left >= 0 && bounds.right <= page.viewportSize().width && bounds.bottom <= page.viewportSize().height && bounds.width >= 44 && bounds.height >= 44 && bounds.hit, JSON.stringify({ selector, bounds }));
-  };
-  await page.goto(`${base}/?app=ev3-lab`, { waitUntil: "domcontentloaded" });
-  await guide().waitFor();
-  assert.equal(await page.locator("[data-kidx-lab]").getAttribute("aria-label"), "Blocs avancés");
-  assert.match(await page.locator("[data-kidx-lab]").innerText(), /Moteurs · capteurs · boucles/);
-  assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
-  assert.match(await page.locator("[data-kidx-stop]").innerText(), /Déjà à l’arrêt/);
-  assert.equal((await state()).guidance.stage, "block-0");
-  assert.match(await guide().innerText(), /Un bloc = un ordre/);
-  await highlighted("[data-ev3-block='forward']");
-  const before = (await state()).mission.elapsedSeconds;
-  await page.waitForTimeout(300);
-  assert.equal((await state()).mission.elapsedSeconds, before, "reading arrival guidance must not spend mission time");
-  await page.evaluate(() => window.advanceTime(17));
-  assert.equal((await state()).guidance.stage, "block-0", "a physics frame is not a child's attempt");
-  await capture("desktop");
-  for (const [width, height] of [[320, 740], [390, 844], [800, 480]]) {
-    await page.setViewportSize({ width, height });
-    for (const selector of ["[data-kidx-lab]", "[data-kidx-stop]", "[data-kidx-guide]", "[data-ev3-block='forward']", ".gx-ev3-exit", "[data-guide-close]"]) await reachable(selector);
-    await capture(`${width}`);
-    await guide().locator("summary").click();
-    assert.match(await guide().innerText(), /bandes rouges/);
-    assert.match(await guide().innerText(), /gauche à droite/);
-    await reachable("[data-kidx-guide]");
-    await capture(`${width}-landmarks`);
-    await guide().locator("summary").click();
+export async function runKidxGuidance({ part = "all" } = {}) {
+  assert.ok(["all", "arrival", "attempt", "laboratory"].includes(part), `Unknown guidance part: ${part}`);
+  const ART = process.env.SMOKE_ARTIFACTS || "output/verify";
+  mkdirSync(ART, { recursive: true });
+  let browser, server;
+  const errors = [];
+  try {
+    if (!process.env.SMOKE_BASE) server = await startStaticServer({ root: path.resolve("dist"), port: 0 });
+    const base = (process.env.SMOKE_BASE ?? server.url).replace(/\/$/, "");
+    browser = await launchSmokeBrowser();
+    const page = applySmokeTimeout(await browser.newPage({ viewport: { width: 1280, height: 800 }, hasTouch: true }));
+    page.on("pageerror", e => errors.push(String(e)));
+    page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
+    const state = () => page.evaluate(() => JSON.parse(window.render_game_to_text()).application);
+    const guide = () => page.locator("#kidx-mission-guide");
+    const capture = name => page.screenshot({ path: path.join(ART, `kidx-guidance-${name}.png`) });
+    const highlighted = async selector => assert.equal(await page.locator(selector).getAttribute("data-kidx-guide-target"), "true", selector);
+    const reachable = async selector => {
+      const bounds = await page.locator(selector).evaluate(button => {
+        button.scrollIntoView({ block: "nearest" });
+        const r = button.getBoundingClientRect();
+        return { left: r.left, right: r.right, width: r.width, height: r.height, bottom: r.bottom,
+          hit: button.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) };
+      });
+      assert.ok(bounds.left >= 0 && bounds.right <= page.viewportSize().width && bounds.bottom <= page.viewportSize().height && bounds.width >= 44 && bounds.height >= 44 && bounds.hit, JSON.stringify({ selector, bounds }));
+    };
+    await page.goto(`${base}/?app=ev3-lab${part === "laboratory" ? "&view=atelier" : ""}`, { waitUntil: "domcontentloaded" });
+    if (part === "attempt") {
+      await page.waitForFunction(() => typeof window.advanceTime === "function");
+      await page.evaluate(() => window.advanceTime(0));
+    }
+    if (part === "all" || part === "arrival") {
+      await guide().waitFor();
+      assert.equal(await page.locator("[data-kidx-lab]").getAttribute("aria-label"), "Blocs avancés");
+      assert.match(await page.locator("[data-kidx-lab]").innerText(), /Moteurs · capteurs · boucles/);
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
+      assert.match(await page.locator("[data-kidx-stop]").innerText(), /Déjà à l’arrêt/);
+      assert.equal((await state()).guidance.stage, "block-0");
+      assert.match(await guide().innerText(), /Un bloc = un ordre/);
+      await highlighted("[data-ev3-block='forward']");
+      const before = (await state()).mission.elapsedSeconds;
+      await page.waitForTimeout(300);
+      assert.equal((await state()).mission.elapsedSeconds, before, "reading arrival guidance must not spend mission time");
+      await page.evaluate(() => window.advanceTime(17));
+      assert.equal((await state()).guidance.stage, "block-0", "a physics frame is not a child's attempt");
+      await capture("desktop");
+      for (const [width, height] of [[320, 740], [390, 844], [800, 480]]) {
+        await page.setViewportSize({ width, height });
+        for (const selector of ["[data-kidx-guide]", "[data-ev3-block='forward']", ".gx-ev3-exit", "[data-guide-close]", "[data-kidx-lab]", "[data-kidx-stop]"]) await reachable(selector);
+        await capture(`${width}`);
+        await guide().locator("summary").click();
+        assert.match(await guide().innerText(), /bandes rouges/);
+        assert.match(await guide().innerText(), /gauche à droite/);
+        await reachable("[data-kidx-guide]");
+        await capture(`${width}-landmarks`);
+        await guide().locator("summary").click();
+      }
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.locator("[data-ev3-block='stop']").click();
+      assert.deepEqual((await state()).program.blocks, ["stop"], "Stop queues an instruction instead of stopping or starting an attempt");
+      assert.equal((await state()).program.running, false);
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
+      await page.locator("[data-ev3-undo]").click();
+      await page.locator("[data-guide-close]").click();
+      assert.equal(await guide().isVisible(), false);
+      assert.equal(await page.locator("[data-kidx-guide]").evaluate(e => e === document.activeElement), true);
+      await page.locator("[data-kidx-guide]").click();
+      await page.locator("[data-kidx-lab]").click();
+      await highlighted("[data-code-example]");
+      assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Utiliser l’exemple/);
+      await page.locator("[data-lab-close]").click();
+      await highlighted("[data-ev3-block='forward']");
+    }
+    if (part === "all" || part === "attempt") {
+      await page.locator("[data-ev3-block='forward']").click();
+      assert.match(await guide().innerText(), /1\/3.*ordre 2/s);
+      await page.locator("[data-ev3-block='left']").click();
+      assert.equal((await state()).guidance.stage, "explore");
+      assert.deepEqual((await state()).program.blocks, ["forward", "left"], "guidance must preserve the child's own idea");
+      await highlighted("[data-ev3-run]");
+      await page.locator("[data-ev3-undo]").click();
+      await highlighted("[data-ev3-block='forward']");
+      // A short actual attempt produces review guidance, then Retry prepares a fresh attempt.
+      await page.locator("[data-ev3-run]").click();
+      assert.equal((await state()).guidance.expanded, false);
+      assert.equal(await page.locator("[data-kidx-stop]").isEnabled(), true);
+      await page.evaluate(() => window.advanceTime(100));
+      await page.locator("[data-kidx-stop]").click();
+      assert.equal((await state()).program.running, false);
+      assert.deepEqual((await state()).program.blocks, ["forward"]);
+      assert.deepEqual((await state()).rover.velocity, [0, 0, 0]);
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
+      await page.locator("[data-ev3-run]").click();
+      await page.evaluate(() => window.advanceTime(1400));
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
+      await page.locator("[data-kidx-guide]").click();
+      assert.equal((await state()).guidance.stage, "review");
+      await page.locator("[data-kidx-lab]").click();
+      await highlighted("[data-code-example]");
+      await page.locator("[data-lab-close]").click();
+      assert.equal((await state()).guidance.stage, "review");
+      for (let i = 0; i < 2; i++) await page.locator("[data-ev3-block='forward']").click();
+      await page.locator("[data-ev3-run]").click();
+      await page.evaluate(() => window.advanceTime(3500));
+      assert.equal((await state()).mission.phase, "complete");
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
+      await page.locator("[data-kidx-guide]").click();
+      assert.match(await guide().innerText(), /Défi réussi/);
+      await capture("complete");
+      await page.locator("[data-ev3-retry]").click();
+      assert.equal((await state()).guidance.stage, "ready");
+      await page.locator("[data-ev3-mode='drive']").click();
+      assert.match(await guide().innerText(), /Maintiens.*relâche/s);
+      await highlighted("[data-ev3='go']");
+    }
+    if (part === "all" || part === "laboratory") {
+      if (part === "all") await page.locator(".gx-ev3-exit").click();
+      await page.locator("[data-kidx-mission='sensor-retreat']").click();
+      await page.evaluate(() => window.advanceTime(0));
+      await highlighted("[data-kidx-lab]");
+      await page.locator("[data-kidx-lab]").click();
+      await highlighted("[data-code-example]");
+      assert.equal(await page.locator("[data-code-stop]").isDisabled(), true);
+      assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Utiliser l’exemple/);
+      await page.locator("[data-code-load]").click();
+      assert.equal((await state()).guidance.stage, "example", "an empty saved-program slot does not prepare a program");
+      await page.locator("[data-code-example]").click();
+      await highlighted("[data-code-run]");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await reachable("[data-code-run]");
+      await capture("laboratory");
+      await page.locator("[data-code-run]").click();
+      assert.equal((await state()).guidance.expanded, false);
+      assert.equal((await state()).laboratory.running, true);
+      assert.equal(await page.locator("[data-kidx-stop]").isEnabled(), true);
+      assert.match(await page.locator("[data-kidx-stop]").innerText(), /Immédiat · garde tes blocs/);
+      const codeBeforeStop = (await state()).laboratory.code;
+      await capture("running-stop");
+      await page.locator("[data-kidx-stop]").click();
+      assert.equal((await state()).laboratory.running, false);
+      assert.deepEqual((await state()).laboratory.code, codeBeforeStop);
+      assert.deepEqual((await state()).rover.velocity, [0, 0, 0]);
+      assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
+    }
+    assert.deepEqual(errors, []);
+    console.log("KidX guidance scenario passed; no console or page errors.");
+  } finally {
+    if (browser) await browser.close();
+    if (server) await server.close();
   }
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await page.locator("[data-ev3-block='stop']").click();
-  assert.deepEqual((await state()).program.blocks, ["stop"], "Stop queues an instruction instead of stopping or starting an attempt");
-  assert.equal((await state()).program.running, false);
-  assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
-  await page.locator("[data-ev3-undo]").click();
-  await page.locator("[data-guide-close]").click();
-  assert.equal(await guide().isVisible(), false);
-  assert.equal(await page.locator("[data-kidx-guide]").evaluate(e => e === document.activeElement), true);
-  await page.locator("[data-kidx-guide]").click();
-  await page.locator("[data-kidx-lab]").click();
-  await highlighted("[data-code-example]");
-  assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Utiliser l’exemple/);
-  await page.locator("[data-lab-close]").click();
-  await highlighted("[data-ev3-block='forward']");
-  await page.locator("[data-ev3-block='forward']").click();
-  assert.match(await guide().innerText(), /1\/3.*ordre 2/s);
-  await page.locator("[data-ev3-block='left']").click();
-  assert.equal((await state()).guidance.stage, "explore");
-  assert.deepEqual((await state()).program.blocks, ["forward", "left"], "guidance must preserve the child's own idea");
-  await highlighted("[data-ev3-run]");
-  await page.locator("[data-ev3-undo]").click();
-  await highlighted("[data-ev3-block='forward']");
-  // A short actual attempt produces review guidance, then Retry prepares a fresh attempt.
-  await page.locator("[data-ev3-run]").click();
-  assert.equal((await state()).guidance.expanded, false);
-  assert.equal(await page.locator("[data-kidx-stop]").isEnabled(), true);
-  await page.evaluate(() => window.advanceTime(100));
-  await page.locator("[data-kidx-stop]").click();
-  assert.equal((await state()).program.running, false);
-  assert.deepEqual((await state()).program.blocks, ["forward"]);
-  assert.deepEqual((await state()).rover.velocity, [0, 0, 0]);
-  assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
-  await page.locator("[data-ev3-run]").click();
-  await page.evaluate(() => window.advanceTime(1400));
-  assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
-  await page.locator("[data-kidx-guide]").click();
-  assert.equal((await state()).guidance.stage, "review");
-  await page.locator("[data-kidx-lab]").click();
-  await highlighted("[data-code-example]");
-  await page.locator("[data-lab-close]").click();
-  assert.equal((await state()).guidance.stage, "review");
-  for (let i = 0; i < 2; i++) await page.locator("[data-ev3-block='forward']").click();
-  await page.locator("[data-ev3-run]").click();
-  await page.evaluate(() => window.advanceTime(3500));
-  assert.equal((await state()).mission.phase, "complete");
-  assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
-  await page.locator("[data-kidx-guide]").click();
-  assert.match(await guide().innerText(), /Défi réussi/);
-  await capture("complete");
-  await page.locator("[data-ev3-retry]").click();
-  assert.equal((await state()).guidance.stage, "ready");
-  await page.locator("[data-ev3-mode='drive']").click();
-  assert.match(await guide().innerText(), /Maintiens.*relâche/s);
-  await highlighted("[data-ev3='go']");
-  await page.locator(".gx-ev3-exit").click();
-  await page.locator("[data-kidx-mission='sensor-retreat']").click();
-  await page.evaluate(() => window.advanceTime(0));
-  await highlighted("[data-kidx-lab]");
-  await page.locator("[data-kidx-lab]").click();
-  await highlighted("[data-code-example]");
-  assert.equal(await page.locator("[data-code-stop]").isDisabled(), true);
-  assert.match(await page.locator("[data-guide-lab-hint]").innerText(), /Utiliser l’exemple/);
-  await page.locator("[data-code-load]").click();
-  assert.equal((await state()).guidance.stage, "example", "an empty saved-program slot does not prepare a program");
-  await page.locator("[data-code-example]").click();
-  await highlighted("[data-code-run]");
-  await page.setViewportSize({ width: 390, height: 844 });
-  await reachable("[data-code-run]");
-  await capture("laboratory");
-  await page.locator("[data-code-run]").click();
-  assert.equal((await state()).guidance.expanded, false);
-  assert.equal((await state()).laboratory.running, true);
-  assert.equal(await page.locator("[data-kidx-stop]").isEnabled(), true);
-  assert.match(await page.locator("[data-kidx-stop]").innerText(), /Immédiat · garde tes blocs/);
-  const codeBeforeStop = (await state()).laboratory.code;
-  await capture("running-stop");
-  await page.locator("[data-kidx-stop]").click();
-  assert.equal((await state()).laboratory.running, false);
-  assert.deepEqual((await state()).laboratory.code, codeBeforeStop);
-  assert.deepEqual((await state()).rover.velocity, [0, 0, 0]);
-  assert.equal(await page.locator("[data-kidx-stop]").isDisabled(), true);
-  assert.deepEqual(errors, []);
-  console.log("KidX guidance smoke passed: arrival time, actual blocks/attempts, exploration, verdict, retry, drive, laboratory handoff, 320/390/800 layouts and no console errors.");
-} finally {
-  if (browser) await browser.close();
-  if (server) await server.close();
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await runKidxGuidance();
 }
