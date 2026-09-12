@@ -17,31 +17,37 @@ cost real sessions real hours.
 
 Use [production KidX](https://graphysx.specialblend.ca/?app=ev3-lab) on ugKid. The owner
 explicitly requested production instead of a Windows-hosted preview. The current verified
-release is `f34ddc64f2f301cff5664658c2fce4dafb74b21a` (PR #19): deployment run
-`34642551927` succeeded and its SHA was checked against the public `release.json`.
-It includes the Atelier, simulation missions, CAD guides and held-touch fixes.
+release is `0c23d88dfe114e0042840e807e6e42db9592336f` ([PR #20](https://github.com/WindriderQc/GraphysX-Web/pull/20)).
+[Deployment run 34701575948](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34701575948)
+succeeded, including exact public release identity and the Great Slide canary. The public
+`release.json` was checked again before and after two additional KidX browser journeys.
 
-The next release integrates the later French labels, advanced-block/immediate-stop
-clarification and measured **Comprendre mon trajet** debrief from `60aaa5b`. Integration
-uses `codex/kidx-mission-release` in a separate worktree and preserves the current pointer
-lifecycle, independent scenario checks and two-browser construction readiness. Tests for
-saved-program layouts target their named dialog now that the debrief adds another dialog.
-Hosted run `34696376812` passed the other checks but both combined `ev3-lab` and
-`kidx-debrief` reached their ten-minute bounds after making progress. Their assertions
-now run in three independent scenarios per family; the combined scripts remain
-available (`npm run smoke:ev3-lab` and `node scripts/smoke-kidx-debrief.mjs`). Product code,
-timeouts and assertions are unchanged by this split. The new debrief checks use the
-existing verification entrypoint, leaving the npm manifest unchanged from production.
-This integration is pending a fresh hosted CI result and deployment; the previous release does not
-validate it. Follow the existing impact-selected CI/deploy workflow, then check the exact
-public release SHA and rendered KidX journey. Do not run a duplicate local full matrix.
+Production includes the Atelier, simulation missions, CAD guides and held-touch fixes,
+plus the later French labels, distinct advanced-block/immediate-stop controls and measured
+**Comprendre mon trajet** debrief for the six simple-block missions. The integration
+preserves pointer capture/release cleanup and independent construction browser readiness.
+Saved-program layout checks target their named dialog alongside the new debrief dialog.
+
+PR CI `34699795220` and the production gate passed all 28 impact-selected checks and static
+checks; Linux unit coverage passed 344 tests without skips. On the public hostname,
+`kidx-debrief-review` passed in 2m10s and `kidx-workshop-track3r` in 2m12s without browser
+errors. Inspected the desktop/320px debrief and first/assembled TRACK3R captures; the
+journeys also cover 390/800px controls, model rotation/zoom, steps and reassembly.
+This is browser evidence against production, not a new physical ugKid or EV3 acceptance.
+
+The two formerly combined slow checks now run as three independent journeys per family.
+Their original assertions and ten-minute deadlines remain unchanged; combined scripts are
+still available (`npm run smoke:ev3-lab` and `node scripts/smoke-kidx-debrief.mjs`). See
+`docs/CI_PERFORMANCE.md` for measured durations and remaining headroom warnings. Release
+evidence is retained in the isolated `codex/kidx-mission-release` worktree under
+`output/kidx/`, including `release-receipt.json`, hosted logs and `public-browser/` captures.
 
 The public site runs simulation and ships the CAD assets. The hardware CLI remains local;
 the ignored PDF cache and cross-screen construction rooms still require the optional LAN
 server. Static hosting retains same-screen teamwork and official-PDF/local-file fallbacks.
 Preserve the ugKid browser profile, saved programs and other sessions' worktrees.
 
-## Fresh-session entry point (2026-09-11 ugKid / USB continuation)
+## Earlier physical acceptance (2026-09-11 ugKid / USB)
 
 Read [the KidX continuation handoff](docs/KIDX_NEXT_SESSION.md) before editing. The isolated
 `codex/kidx-integration` branch now combines maintenance `9d5d727`, driving corrections

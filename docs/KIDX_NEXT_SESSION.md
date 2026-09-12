@@ -1,6 +1,19 @@
 # KidX continuation after session cleanup
 
-## Current integration status
+## Daily use on ugKid
+
+Open [production KidX](https://graphysx.specialblend.ca/?app=ev3-lab), or go directly to
+[the construction workshop](https://graphysx.specialblend.ca/?app=ev3-lab&view=atelier).
+The public application does not require a Windows preview or an SSH tunnel. Read the
+production section in [HANDOFF.md](../HANDOFF.md) for the deployed revision and its evidence.
+The optional LAN PDF cache and cross-screen construction rooms are separate from static
+hosting; see [the workshop guide](KIDX_WORKSHOP.md).
+
+The loopback addresses, branches and commands below document earlier physical acceptance.
+Use them only to reproduce those specific receipts. Preserve the old browser profile:
+programs stored on its loopback origin are separate from the production site's storage.
+
+## Earlier integration status
 
 `codex/kidx-integration` now contains all branches listed below, including maintenance
 `9d5d727` and the LEGO reference index `a2bd99b`. Its full gate passed 58/58 without retries

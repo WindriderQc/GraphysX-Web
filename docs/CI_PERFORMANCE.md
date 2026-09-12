@@ -97,3 +97,11 @@ The first [Linux PR validation](https://github.com/WindriderQc/GraphysX-Web/acti
 passed in 2m17s: static checks plus the three selected deployment-integration checks.
 This measures a tooling/deployment change, not the duration of a full regression.
 Delivery and production receipts are attached to [PR #18](https://github.com/WindriderQc/GraphysX-Web/pull/18).
+
+The [September 12 KidX PR validation](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34699795220)
+passed in 35m39s on four runners: all 28 selected journeys, 344 Linux Node tests,
+typecheck, lint, build and both Rapier probes. This is the measured KidX selection,
+not the full inventory. The split EV3 program took 6m30s; the three debrief journeys
+took 5m23s to 5m35s, within their unchanged ten-minute deadlines. The existing compact
+program-library and checkpoint-mission checks still reported headroom warnings at
+8m43s and 9m04s. Those passed; the warnings remain visible for future maintenance.
