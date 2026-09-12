@@ -221,7 +221,7 @@ EV3 lab and named-program smokes retain their behavior assertions with French co
 `npm run smoke:kidx-missions` covers real movement solutions/checkpoints.
 `npm run smoke:kidx-guidance` covers arrival, reading time, actual block edits and attempts,
 retry/verdict, drive and laboratory guidance, and reachable controls at 320/390/800 pixels.
-`npm run smoke:kidx-debrief` covers measured block paths, short/turned/interrupted/successful
+`node scripts/smoke-kidx-debrief.mjs` covers measured block paths, short/turned/interrupted/successful
 attempts, unused instructions, progressive hints, read-only scrubbing, 320/390/800/1280px
 layouts, focus restoration and reset/disposal. `test/kidx-mission-trace.test.mjs` covers
 recording boundaries, bounded drawing samples, immutable reports and evidence-based coaching.

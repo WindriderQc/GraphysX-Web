@@ -28,8 +28,10 @@ lifecycle, independent scenario checks and two-browser construction readiness. T
 saved-program layouts target their named dialog now that the debrief adds another dialog.
 Hosted run `34696376812` passed the other checks but both combined `ev3-lab` and
 `kidx-debrief` reached their ten-minute bounds after making progress. Their assertions
-now run in three independent scenarios per family; the combined npm commands remain
-available. Product code, timeouts and assertions are unchanged by this split.
+now run in three independent scenarios per family; the combined scripts remain
+available (`npm run smoke:ev3-lab` and `node scripts/smoke-kidx-debrief.mjs`). Product code,
+timeouts and assertions are unchanged by this split. The new debrief checks use the
+existing verification entrypoint, leaving the npm manifest unchanged from production.
 This integration is pending a fresh hosted CI result and deployment; the previous release does not
 validate it. Follow the existing impact-selected CI/deploy workflow, then check the exact
 public release SHA and rendered KidX journey. Do not run a duplicate local full matrix.
