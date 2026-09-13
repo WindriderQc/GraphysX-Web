@@ -44,4 +44,16 @@ The host currently clamps `frameView(..., 0)` to 150 ms. Codex will resolve the 
 
 ## Evidence
 
-First code slice is the interface plus pure visual clock and presentation mapping. It is not yet mounted into the browser. Its tests cover late assets, skip, reduced motion, exact zero durations, invalid time, and real-playback precedence over generation state. Full visual qualification follows integration of Claude's committed renderer and Forge.
+Integrated commits: Codex entry/contracts `9309804`, Claude sculpt/pose `6d8f27d` as `3ba594e`, interface adoption `9e245df`, Claude Forge `a4b4163` as `fce43cf`. Typecheck and the existing suite on the integrated tree pass: 382 passed, one skipped, no failures. No new production dependency was added. The application route, persistent appearance integration and real Conversation/Hello are still pending.
+
+The Forge owner runs a development preview at `http://localhost:4199/llmx-preview.html`. Codex inspected that page with the real voxel rig attached and the simulation label visible, including entry and rest. That page includes working files not yet in these committed slices; it is not a screenshot receipt for `fce43cf`. The face renderer is still owned and being finished by `aiops-b5`; Forge is owned by `graphysx-web-74`.
+
+Visual feedback on the inspected preview: the bright socket dominates the face, and the dark metal/seams obscure its main surfaces. Recheck the latest renderer copy before judging the lighting, since the two visual worktrees currently exchange uncommitted preview copies.
+
+Review note for the face owner: the current renderer uses exponential smoothing for `current.build` and tests `current.build < 1` to decide whether to rewrite static cubes. The same recurrence at 60 Hz remains below one after 10,000 iterations due to floating-point convergence. Snap a near-target value to its target (with a bounded visual tolerance), and test that static writes actually stop after assembly. Do not make opening readiness depend on an exact equality that the smoother cannot guarantee.
+
+The entry tests cover late assets, skip, reduced motion, exact zero durations, invalid time, and real-playback precedence over generation state. Full visual qualification follows integration of Claude's committed renderer and the actual LLMx route.
+
+## Messaging receipt
+
+The existing Claude sessions were discovered through the installed CLI (`claude agents --json`): `aiops-b5` owns the face and `graphysx-web-74` owns the Forge. A one-shot relay restricted to `SendMessage`/`ToolSearch` was attempted to send the coordination note to both. It failed before inference with HTTP 401 (invalid API key), zero model tokens and no message found in either recipient log. No credential, authentication setting or running-session permission was changed. This failed relay is distinct from the two functioning interactive Claude sessions. Shared file/Pipeline delivery is available; receipt by Claude is not yet confirmed.
