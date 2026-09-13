@@ -212,8 +212,9 @@ describe("posing", () => {
     // The jaw is a rotation, so its reach is the hinge-to-chin radius times the angle, plus the
     // additive contributions. A cube leaving this envelope means the mask has dislocated.
     const span = Math.abs(weights.anchors.chin.y - weights.anchors.jawHinge.y) + 0.4;
-    const ceiling = span * POSE_LIMITS.jawRadians + POSE_LIMITS.lipSpread + POSE_LIMITS.browLift
-      + POSE_LIMITS.browThinkWave + POSE_LIMITS.cheekLift + POSE_LIMITS.breathAmplitude;
+    const ceiling = span * POSE_LIMITS.jawRadians + POSE_LIMITS.lipPart * 1.5 + POSE_LIMITS.lipSpread
+      + POSE_LIMITS.lipPurse * 2 + POSE_LIMITS.browLift + POSE_LIMITS.browThinkWave + POSE_LIMITS.browFrown
+      + POSE_LIMITS.browConverge + POSE_LIMITS.cheekLift + POSE_LIMITS.breathAmplitude;
     for (let i = 0; i < weights.count; i += 1) {
       const travel = Math.hypot(
         out.position[i * 3] - weights.rest[i * 3],
@@ -257,6 +258,48 @@ describe("posing", () => {
     const written = poseInto(weights, { ...AT_REST, speak: 1 }, out.position, out.scale, weights.animatedCount);
     assert.equal(written, weights.animatedCount);
     assert.equal(out.position[weights.animatedCount * 3], -999, "wrote past the requested limit");
+  });
+});
+
+describe("expressions that must read at a distance", () => {
+  const weights = deriveWeights(asset, "high");
+  const browIndex = asset.regions.indexOf("brow");
+  const innerBrowMeanY = (position) => {
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < weights.count; i += 1) {
+      if (weights.region[i] !== browIndex || Math.abs(weights.rest[i * 3]) > 0.12) continue;
+      sum += position[i * 3 + 1];
+      n += 1;
+    }
+    assert.ok(n > 0, "no inner brow cubes");
+    return sum / n;
+  };
+  const inCubes = (metres) => (metres / weights.level.cube).toFixed(1);
+
+  it("raises the brow by cubes, not millimetres, when attending", () => {
+    const out = buffers(weights);
+    poseInto(weights, { ...AT_REST, attention: 1 }, out.position, out.scale);
+    const lift = innerBrowMeanY(out.position) - innerBrowMeanY(weights.rest);
+    assert.ok(lift > weights.level.cube * 2, "brow lifted only " + inCubes(lift) + " cubes");
+  });
+
+  it("gathers the inner brow downward when thinking", () => {
+    const out = buffers(weights);
+    poseInto(weights, { ...AT_REST, think: 1 }, out.position, out.scale);
+    const drop = innerBrowMeanY(weights.rest) - innerBrowMeanY(out.position);
+    assert.ok(drop > weights.level.cube * 1.5, "inner brow dropped only " + inCubes(drop) + " cubes");
+  });
+
+  it("looks away and half-closes the lids when thinking, without the caller aiming it", () => {
+    const { anchors } = weights;
+    const thinking = eyeTransform(anchors, { think: 1 });
+    const neutral = eyeTransform(anchors, {});
+    assert.ok(thinking.pitch < neutral.pitch, "a thinking gaze should rise");
+    assert.ok(thinking.yaw !== neutral.yaw, "a thinking gaze should turn aside");
+    assert.ok(thinking.lidRadians > neutral.lidRadians, "thinking should lower the lids");
+    const attending = eyeTransform(anchors, { attention: 1 });
+    assert.ok(attending.lidRadians < neutral.lidRadians, "attending should open the lids wider");
   });
 });
 

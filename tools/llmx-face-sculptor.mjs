@@ -32,7 +32,7 @@ const OUT = join(HERE, "..", "src", "llmx-face-forge.json");
  * animating it wrongly. Raised to 2 when the eye gained an iris and a pupil and the mouth gained
  * a cavity: a v1 renderer has no mesh for those regions and would draw them as metal.
  */
-export const FACE_DATA_VERSION = 2;
+export const FACE_DATA_VERSION = 3;
 
 // ---------------------------------------------------------------------------
 // SDF toolkit. Standard analytic primitives; the smooth operators are what keep
@@ -141,6 +141,9 @@ export const REGIONS = [
   // read as an eye rather than a lit disc, and `maw` is the cavity that stops the mouth showing
   // the inside of the shell.
   "iris", "pupil", "maw",
+  // Appended in v3: the walls of the mouth tunnel. Dark like the cavity, but they move with the
+  // lips they belong to — the floor with the lower lip, the roof with the upper.
+  "throat",
 ];
 
 const R = Object.fromEntries(REGIONS.map((name, index) => [name, index]));
@@ -151,7 +154,7 @@ const R = Object.fromEntries(REGIONS.map((name, index) => [name, index]));
  * makes a denser, better-looking mask affordable.
  */
 export const ANIMATED_REGIONS = [
-  "brow", "socket", "eye", "lid", "cheek", "nose", "jaw", "lip", "iris", "pupil", "maw",
+  "brow", "socket", "eye", "lid", "cheek", "nose", "jaw", "lip", "iris", "pupil", "maw", "throat",
 ];
 
 /**
@@ -194,8 +197,13 @@ function maskDistance(x, y, z) {
 
   // Lips, before the mouth is cut through them. The upper lip is deliberately thinner than the
   // lower one — an even pair reads as a letterbox slot rather than a mouth.
-  d = smin(d, sdEllipsoid(x, y + 0.45, z - 0.41, 0.26, 0.042, 0.115), 0.04);
-  d = smin(d, sdEllipsoid(x, y + 0.615, z - 0.41, 0.255, 0.062, 0.13), 0.04);
+  //
+  // Both are shallow in Z on purpose. The lower lip used to reach 0.13 m deep, so it was a slab
+  // whose top face was the floor of the mouth: when it dropped, that brown top face appeared in
+  // the aperture — "c'est une langue ?" — and from below it stuck out of the profile like an
+  // open drawer. A lip is a rim, one or two cubes deep; the mouth reads by its aperture.
+  d = smin(d, sdEllipsoid(x, y + 0.45, z - 0.4, 0.26, 0.042, 0.085), 0.04);
+  d = smin(d, sdEllipsoid(x, y + 0.615, z - 0.4, 0.255, 0.062, 0.085), 0.04);
 
   // Swept-back temple fins and a crown fin — where the mask stops being a face and becomes
   // machinery. Capsules sweeping up and back, not slabs: a flat panel reads as a billboard from
@@ -252,13 +260,18 @@ function eyePart(x, y, z) {
  * that read as teeth. A dark cavity wall behind the aperture closes the view. It is not
  * decoration: it is what makes an open mouth read as depth rather than as damage.
  */
+/** Inside the (slightly dilated) mouth cut. */
+function isInsideMouthCut(x, y, z) {
+  const { y: my } = ANCHORS.mouth;
+  return sdEllipsoid(x, y - my, z - 0.44, 0.28, 0.12, 0.44) < 0;
+}
+
 /**
  * Shell inside the mouth tunnel that sits behind the cavity wall. Invisible from anywhere the
  * viewer can be — the matte wall is in front of it — so it is not kept at all.
  */
 function isBehindMouthWall(x, y, z) {
-  const { y: my } = ANCHORS.mouth;
-  return z < 0.2 && sdEllipsoid(x, y - my, z - 0.44, 0.28, 0.12, 0.44) < 0;
+  return z < 0.2 && isInsideMouthCut(x, y, z);
 }
 
 function mawDistance(x, y, z) {
@@ -295,7 +308,8 @@ function regionOf(x, y, z, fromEye, fromLid) {
   if (len(ax - eye.x, y - eye.y, z - eye.z) < 0.32 && z > 0.05) return R.socket;
   if (y > 0.19 && y < 0.46 && z > 0.15) return R.brow;
   if (ax < 0.2 && y > -0.3 && y < 0.3 && z > 0.3) return R.nose;
-  if (Math.abs(y - mouth.y) < 0.135 && ax < mouth.halfWidth + 0.03 && z > 0.28) return R.lip;
+  // Only the outer rim of the lips carries the lip tint; everything deeper is throat.
+  if (Math.abs(y - mouth.y) < 0.135 && ax < mouth.halfWidth + 0.03 && z > 0.44) return R.lip;
   if (len(ax - cheek.x, y - cheek.y, z - cheek.z) < 0.28) return R.cheek;
   if (y < jawHinge.y) return R.jaw;
   return R.cranium;
@@ -376,7 +390,9 @@ function voxelise(cube) {
 
         // The far end of the mouth tunnel lies behind the cavity wall; nothing there can be seen.
         if (onMask && isBehindMouthWall(x, y, z)) continue;
-        const region = inEye ? eyePart(x, y, z) : onMaw ? R.maw : regionOf(x, y, z, false, onLid);
+        let region = inEye ? eyePart(x, y, z) : onMaw ? R.maw : regionOf(x, y, z, false, onLid);
+        // The tunnel's walls, floor and roof: dark, and moving with their lips.
+        if (onMask && region !== R.lip && z <= 0.44 && isInsideMouthCut(x, y, z)) region = R.throat;
         cells.push({ ix, iy, iz, region });
       }
     }

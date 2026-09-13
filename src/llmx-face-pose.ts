@@ -129,7 +129,7 @@ export type FaceAsset = {
   levels: FaceLevel[];
 };
 
-export const SUPPORTED_FACE_VERSION = 2;
+export const SUPPORTED_FACE_VERSION = 3;
 export const FACE_FORMAT = "graphysx.llmx-voxel-face";
 
 /**
@@ -209,6 +209,7 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
   const lipIndex = regions.indexOf("lip");
   const browIndex = regions.indexOf("brow");
   const mawIndex = regions.indexOf("maw");
+  const throatIndex = regions.indexOf("throat");
   const cheekIndex = regions.indexOf("cheek");
 
   let minX = Infinity;
@@ -257,7 +258,7 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
     // in front and above that line is skull. So the ramp starts just above the mouth line.
     if (region[i] === jawIndex) {
       jaw[i] = smoothstep(anchors.mouth.y + 0.04, anchors.chin.y * 0.62, y);
-    } else if (region[i] === lipIndex) {
+    } else if (region[i] === lipIndex || region[i] === throatIndex) {
       jaw[i] = y >= anchors.mouth.y ? 0 : smoothstep(anchors.mouth.y, anchors.chin.y * 0.62, y);
     } else {
       jaw[i] = 0;
@@ -282,8 +283,15 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
     );
     lip[i] = region[i] === mawIndex ? 0 : clamp01(1 - lipFall);
 
-    const browFall = Math.hypot((y - anchors.brow.y) / 0.2, (Math.abs(x) - anchors.brow.x) / 0.34);
-    brow[i] = region[i] === browIndex ? clamp01(1 - browFall * 0.72) : 0;
+    // Flat across the whole brow and falling off only past its outer end. Measuring from the
+    // brow anchor — the middle of each arch — starved the inner ends, which are exactly the
+    // cubes a frown gathers and a raised brow lifts: the expressions were authored at full
+    // amplitude and delivered at half.
+    const browFall = Math.hypot(
+      (y - anchors.brow.y) / 0.2,
+      Math.max(0, Math.abs(x) - anchors.brow.x - 0.12) / 0.2,
+    );
+    brow[i] = region[i] === browIndex ? clamp01(1 - browFall * 0.85) : 0;
 
     const cheekFall = Math.hypot(
       (Math.abs(x) - anchors.cheek.x) / 0.26,
@@ -363,8 +371,26 @@ export const POSE_LIMITS = Object.freeze({
   mouthResponse: 0.6,
   lipSpread: 0.035,
   lipPurse: 0.03,
-  browLift: 0.045,
-  browThinkWave: 0.014,
+  /**
+   * Attention and thinking, sized to read at conversation distance. The first values here —
+   * 0.045 m of brow lift and a 0.014 m ripple — were half a cube to a cube at 24 mm, and from
+   * 7.4 m the harness's "Penser" and "Attention" buttons visibly did nothing. These are artistic
+   * commands, not measurements of a mind: a listening face raises its brow and opens its eyes,
+   * a waiting one gathers its brow and looks away.
+   */
+  browLift: 0.085,
+  browThinkWave: 0.03,
+  /** Inner brow drops and draws toward the centre while thinking. */
+  browFrown: 0.075,
+  browConverge: 0.04,
+  /** Lids: half-closed while thinking, wide while attending. Radians about the eye's X axis. */
+  thinkLidRadians: 0.42,
+  attentionLidRadians: -0.3,
+  /** A thinking face looks up and to one side — added inside the rig, not by the caller. */
+  thinkGazeY: 0.35,
+  thinkGazeX: -0.22,
+  /** Whole-mask lateral tilt while attending, radians. A head that listens leans. */
+  attentionTilt: 0.045,
   cheekLift: 0.022,
   gazeRadians: 0.34,
   breathAmplitude: 0.006,
@@ -425,7 +451,10 @@ export function poseInto(
   const spread = POSE_LIMITS.lipSpread * tone * mouth;
   const purse = POSE_LIMITS.lipPurse * -tone * mouth;
 
-  const browTarget = POSE_LIMITS.browLift * (d.attention * 0.7 + Math.max(0, d.warmth) * 0.3);
+  const browTarget = POSE_LIMITS.browLift * (d.attention + Math.max(0, d.warmth) * 0.3);
+  const frown = POSE_LIMITS.browFrown * d.think;
+  const converge = POSE_LIMITS.browConverge * d.think;
+  const thinkPurse = POSE_LIMITS.lipPurse * 0.8 * d.think;
   const cheekTarget = POSE_LIMITS.cheekLift * Math.max(0, d.warmth);
   const breathOffset = POSE_LIMITS.breathAmplitude * Math.sin(d.breath);
   // Where the lips stop parting: just past the authored half-width, so the corners hold.
@@ -454,6 +483,9 @@ export function poseInto(
     if (lw > 0) {
       px += spread * lw * (x >= 0 ? 1 : -1);
       pz += purse * lw;
+      // Lips gather slightly while thinking, whether or not anything is being said.
+      pz += thinkPurse * lw;
+      px -= Math.sign(x) * thinkPurse * 0.6 * lw;
       // Part the lips directly, on top of whatever the jaw is doing. Signed by which side of
       // the mouth line the cube rests on, and asymmetric because a mouth opens downward.
       //
@@ -473,6 +505,11 @@ export function poseInto(
       // A slow wave crossing the brow while the engine is busy. Travelling rather than
       // pulsing, so it reads as activity instead of a heartbeat.
       py += POSE_LIMITS.browThinkWave * d.think * Math.sin(d.breath * 1.7 + side[i] * 1.2 + x * 4.5) * bw;
+      // The frown: the inner ends of the brow drop and draw together. Weighted toward the
+      // centre so the outer brow stays put and it reads as gathering, not as the brow sinking.
+      const inner = clamp01(1 - Math.abs(x) / 0.3);
+      py -= frown * bw * inner;
+      px -= Math.sign(x) * converge * bw * inner;
     }
 
     const cw = cheek[i];
@@ -532,16 +569,21 @@ export function eyeTransform(anchors: FaceAnchors, input: Partial<FaceDrivers>):
   glow: number;
 } {
   const d = clampDrivers(input);
+  // A thinking face looks away — up and to one side — regardless of where the caller is aiming
+  // it. Added here so every host gets it without having to know the convention.
+  const gazeX = clamp(d.gazeX + POSE_LIMITS.thinkGazeX * d.think, -1, 1);
+  const gazeY = clamp(d.gazeY + POSE_LIMITS.thinkGazeY * d.think, -1, 1);
+  // The blink owns the lid while it lasts; otherwise the expression sets where the lid rests.
+  const restingLid = POSE_LIMITS.thinkLidRadians * d.think + POSE_LIMITS.attentionLidRadians * d.attention;
   return {
     pivot: { x: anchors.eye.x, y: anchors.eye.y, z: anchors.eye.z },
-    yaw: d.gazeX * POSE_LIMITS.gazeRadians,
+    yaw: gazeX * POSE_LIMITS.gazeRadians,
     // Both angles are rotations the rig applies about +Y and +X respectively. About +X, a
     // positive angle sends the front of the eye *down* — (0, 0, z) goes to (0, −z·sinθ, z·cosθ)
     // — so an upward gaze (gazeY > 0) is a negative pitch. This shipped without the sign and
     // the eyes tracked the camera upside down; the test below pins the convention.
-    pitch: -d.gazeY * POSE_LIMITS.gazeRadians * 0.6,
-    // Attention holds the lid a little higher; a blink always reaches full closure.
-    lidRadians: (d.blink - 0.12 * d.attention) * 1.55,
+    pitch: -gazeY * POSE_LIMITS.gazeRadians * 0.6,
+    lidRadians: d.blink * 1.55 + (1 - d.blink) * restingLid,
     /*
      * The eyes carry the only emissive on the mask, which makes them the brightest thing in a
      * dark room — and therefore the signal a viewer reads first. An earlier `+ 0.3 * speak` made

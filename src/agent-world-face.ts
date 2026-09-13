@@ -280,6 +280,10 @@ export class AgentWorldVoxelFace {
     current.warmth = approach(current.warmth, target.warmth, RESPONSE.warmth, dt);
     current.breath += dt * 0.9;
 
+    // A head that listens leans. Applied to the rig's own group, so the host's anchor is
+    // untouched: this is the mask's posture, not its placement.
+    this.object.rotation.z = POSE_LIMITS.attentionTilt * current.attention;
+
     this.advanceBlink(dt);
     current.blink = approach(current.blink, Math.max(this.autoBlinkValue, target.blink), RESPONSE.blink, dt);
 
@@ -389,7 +393,7 @@ export class AgentWorldVoxelFace {
         ballCubes.push(i);
         continue;
       }
-      if (name === "maw") {
+      if (name === "maw" || name === "throat") {
         mawCubes.push(i);
         continue;
       }
