@@ -1,12 +1,12 @@
 # LLMx — reprise après redémarrage et partage Codex / Claude
 
-Date : 2026-09-13. État : Claude relancé et travail visuel en cours; Codex reprend la synchronisation. Priorité confirmée par Yanik : ambiance, visage et entrée en conversation avant l'atelier maths.
+Date : 2026-09-13. État : première ambiance LLMx intégrée localement avec le travail des deux sessions Claude. Priorité confirmée par Yanik : ambiance et visage avant l'atelier maths. Le dialogue AgentX et le premier « Hello » restent à raccorder.
 
 Objectif demandé par Yanik : terminer rapidement en partageant le travail entre Codex et son agent Claude après le redémarrage du PC.
 
 ## Point de reprise
 
-Raccord visuel en cours : `C:\Users\Yanik\codes\GraphysX-Web-llmx-integration\docs\LLMX_VISUAL_CONTRACT.md`, branche `codex/llmx-integration`, base `d7c9937`, Pipeline `0688`. Codex y prépare le contrat et l'entrée; Claude conserve ses modules de visage et de Forge. Le contrat est disponible à lire, pas encore acquitté par Claude. Les interfaces déjà implémentées peuvent être adaptées par Codex pour éviter de refaire du travail.
+**Passation actuelle :** `C:\Users\Yanik\codes\GraphysX-Web-llmx-integration\docs\LLMX_CURRENT_HANDOFF.md`, branche `codex/llmx-integration`, base `d7c9937`, Pipeline `0688`. Elle contient les dossiers exacts de Claude, le lancement après redémarrage, les décisions d'intégration et les limites des validations. La route `?app=llmx`, l'apparence persistante, l'entrée animée et la sauvegarde/reprise dans le navigateur sont implémentées. Le raccord d'origine reste décrit dans `LLMX_VISUAL_CONTRACT.md`. Le relais direct Codex vers les sessions Claude a échoué à l'authentification; aucune réception de message n'est prétendue.
 
 - Plan complet : [LLMX_IMPLEMENTATION_PLAN.md](LLMX_IMPLEMENTATION_PLAN.md).
 - Dossier de référence : `C:\Users\Yanik\codes\GraphysX-Web-llmx-plan`.
