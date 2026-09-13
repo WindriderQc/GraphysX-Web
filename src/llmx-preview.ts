@@ -243,6 +243,68 @@ function speechEnvelope(t: number): number {
   return Math.min(1, syllables);
 }
 
+/**
+ * A synthetic stand-in voice, so "Parler (simulé)" is audible and — the part that matters — so
+ * the mouth is driven the way the real one will be: from the amplitude of the audio actually
+ * playing on this device (an AnalyserNode on the output bus), not from the envelope directly.
+ * A buzzy vowel-ish tone with the syllable envelope on its gain and a slow formant sweep. It is
+ * not speech and never will be; the real voice is VoiX, wired by the integrator.
+ */
+function createSimulatedVoice() {
+  let context: AudioContext | null = null;
+  let gain: GainNode | null = null;
+  let filter: BiquadFilterNode | null = null;
+  let analyser: AnalyserNode | null = null;
+  let samples: Float32Array<ArrayBuffer> | null = null;
+  return {
+    /** Must run inside a user gesture: browsers refuse to start audio otherwise. */
+    start(): void {
+      if (context) { void context.resume(); return; }
+      context = new AudioContext();
+      const low = context.createOscillator();
+      low.type = "sawtooth";
+      low.frequency.value = 108;
+      const high = context.createOscillator();
+      high.type = "square";
+      high.frequency.value = 216.5;
+      const highGain = context.createGain();
+      highGain.gain.value = 0.35;
+      filter = context.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.Q.value = 1.8;
+      gain = context.createGain();
+      gain.gain.value = 0;
+      analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      samples = new Float32Array(analyser.fftSize);
+      low.connect(filter);
+      high.connect(highGain).connect(filter);
+      filter.connect(gain).connect(analyser).connect(context.destination);
+      low.start();
+      high.start();
+    },
+    stop(): void {
+      if (gain && context) gain.gain.setTargetAtTime(0, context.currentTime, 0.05);
+    },
+    /** Shape the tone from the envelope; the mouth does not read this, it reads level(). */
+    drive(t: number, envelope: number): void {
+      if (!context || !gain || !filter) return;
+      gain.gain.setTargetAtTime(envelope * 0.16, context.currentTime, 0.02);
+      filter.frequency.value = 420 + 760 * (0.5 + 0.5 * Math.sin(t * 1.7));
+    },
+    /** RMS of what is actually being played, 0–1. */
+    level(): number {
+      if (!analyser || !samples) return 0;
+      analyser.getFloatTimeDomainData(samples);
+      let sum = 0;
+      for (let i = 0; i < samples.length; i += 1) sum += samples[i] * samples[i];
+      return Math.min(1, Math.sqrt(sum / samples.length) * 22);
+    },
+    get active(): boolean { return context !== null; },
+  };
+}
+const voice = createSimulatedVoice();
+
 const unsubscribe = host.subscribeFrame((deltaSeconds) => {
   clock += deltaSeconds;
 
@@ -288,7 +350,16 @@ const unsubscribe = host.subscribeFrame((deltaSeconds) => {
     drivers.gazeY = clamp(Math.atan2(dy, Math.hypot(dx, dz)) / GAZE_LIMIT_RADIANS, -1, 1);
   }
 
-  drivers.speak = simulateSpeech && drivers.build > 0.98 ? speechEnvelope(clock) : 0;
+  if (simulateSpeech && drivers.build > 0.98) {
+    const envelope = speechEnvelope(clock);
+    voice.drive(clock, envelope);
+    // With audio running the mouth follows the analyser, as it will with the real voice; without
+    // a gesture (e.g. ?speak=1 on load) it falls back to the envelope so the motion is still visible.
+    drivers.speak = voice.active ? voice.level() : envelope;
+  } else {
+    voice.stop();
+    drivers.speak = 0;
+  }
   drivers.speakTone = 0.5 + 0.3 * Math.sin(clock * 1.7);
   drivers.think = simulateThink ? 0.8 : 0;
   drivers.breath = clock * 1.1;
@@ -336,7 +407,7 @@ const button = (label: string, action: () => void): HTMLButtonElement => {
 button("Rejouer l'entrée", () => restartIntro());
 button("Caméra repos", restCamera);
 button("Caméra entrée", () => host.frameView(anchors.cameraEntry.position, anchors.cameraEntry.target, 0.9));
-const speakButton = button("Parler (simulé)", () => { simulateSpeech = !simulateSpeech; });
+const speakButton = button("Parler (simulé)", () => { simulateSpeech = !simulateSpeech; if (simulateSpeech) voice.start(); });
 const thinkButton = button("Penser (simulé)", () => { simulateThink = !simulateThink; });
 const attentionButton = button("Attention (simulé)", () => { simulateAttention = !simulateAttention; });
 const reducedButton = button("Mouvements réduits", () => { reducedMotion = !reducedMotion; });
@@ -350,7 +421,7 @@ function render(): void {
   readout.textContent =
     `visage   ${faceIsStandIn ? "stand-in (bloc)" : "rig voxel"}\n` +
     `phase    ${phase}${reducedMotion ? " · réduit" : ""}\n` +
-    `build    ${described.build.toFixed(2)}   speak ${drivers.speak.toFixed(2)}\n` +
+    `build    ${described.build.toFixed(2)}   speak ${drivers.speak.toFixed(2)} ${voice.active ? "· son synthétique" : "· sans son"}\n` +
     `think    ${drivers.think.toFixed(2)}   attention ${drivers.attention.toFixed(2)}\n` +
     `profil   ${host.qualityProfile.name}   rendu ${described.renderedLevel ?? "-"} (monde ${described.level ?? "-"})\n` +
     `frames   ${host.frameCount}`;
@@ -381,5 +452,5 @@ render();
   intro: { restart: restartIntro, time: (): number | null => introTime },
   setSpeaking: (on: boolean): void => { simulateSpeech = on; render(); },
   simulateCreation,
-  dispose: (): void => { unsubscribe(); presentation.dispose(); face.dispose(); hud.remove(); host.dispose(); },
+  dispose: (): void => { unsubscribe(); voice.stop(); presentation.dispose(); face.dispose(); hud.remove(); host.dispose(); },
 };
