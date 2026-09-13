@@ -1,8 +1,8 @@
 # Wiring the voxel face into the scene document
 
 For the integrator. The face is finished and qualified on branch `claude/llmx-face-forge`;
-what is missing is the nine call sites that make it **savable** and correctly sized — eight in
-`agent-world-runtime.ts`, one wherever the face is mounted.
+what is missing is the ten call sites that make it **savable**, correctly sized and reachable —
+eight in `agent-world-runtime.ts`, one wherever the face is mounted, one at the front door.
 That file belongs to the integrator, so this is a proposal, not a change.
 
 Until this lands, the mask exists only as a rig a host constructs by hand — which is what the
@@ -174,6 +174,72 @@ the plan is explicit that density must not oscillate during a conversation.
 
 The face was qualified at `mobile` (1552 cubes): same mask, chunkier — eyes, brow, nose, mouth
 and jaw all still read, on a phone viewport, with the controls usable.
+
+## The tenth hunk: the front door
+
+There is no LLMx button yet, and that is the front door's own rule rather than an oversight.
+`showroom-welcome.ts` adds each destination **only when a caller supplies its hook** — "so the
+button can never be a dead control: the front door should not advertise a room that is not
+there." Today `?app=llmx` mounts nothing: the Forge lives on `claude/llmx-forge`, the face on
+`claude/llmx-face-forge`, and the conversation is not built. The button appears in the same
+change that makes the room real.
+
+Three edits, following exactly how KidX reaches its lab.
+
+1. **`showroom-welcome.ts`** — one more optional hook beside `onOpenKidX`:
+
+   ```ts
+   onOpenLlmx?: () => void;
+   ```
+
+   and, beside the KidX block near the end of `mountWelcome`:
+
+   ```ts
+   if (hooks?.onOpenLlmx) {
+     const llmx = document.createElement("button");
+     llmx.type = "button";
+     llmx.className = "gx-go-llmx";
+     llmx.style.gridColumn = "1 / -1";
+     llmx.textContent = "LLMx · Nocturnal Forge";
+     llmx.addEventListener("click", hooks.onOpenLlmx);
+     overlay.querySelector(".gx-actions")?.append(llmx);
+   }
+   ```
+
+   The button's class is load-bearing: the headless smokes select on these.
+
+2. **`main.ts`**, in the `mountWelcome` hooks beside `onOpenKidX`:
+
+   ```ts
+   onOpenLlmx: () => { window.location.search = "?app=llmx"; },
+   ```
+
+3. **`main.ts`**, in `openApplication` — it is specialised to `ev3-lab` today, so this is where
+   the small common application contract the plan asks for earns its keep:
+
+   ```ts
+   if (id === "llmx") {
+     applicationOpen = true;
+     requestShowroomInteraction(false);
+     void import("./llmx-app").then(({ mountLlmxApp }) => {
+       appSurface = mountLlmxApp(root, host.api, () => { … }, {
+         subscribeFrame: host.subscribeFrame.bind(host),
+         frameView: (position, target, seconds) => host.frameView(position, target, seconds),
+         qualityProfile: () => host.qualityProfile.name,
+       });
+     }).catch((error: unknown) => showStartupError(root, error));
+     return true;
+   }
+   ```
+
+   `qualityProfile` is the ninth hunk's other half: the mount needs it to call
+   `setQualityCeiling`. Note `autoOrbit: !editorFirst && appParam !== "ev3-lab"` near line 848
+   also needs `&& appParam !== "llmx"` — an idle orbit fighting the entry choreography is the
+   same bug KidX already fixed once.
+
+Until that lands, the way to look at the Forge and the mask is the dev harness on the Forge
+branch (`llmx-preview.html`, its own vite port), which is what every screenshot in this lane
+came from.
 
 ## What to check once it is wired
 
