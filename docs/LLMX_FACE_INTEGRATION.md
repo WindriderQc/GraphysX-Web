@@ -1,5 +1,7 @@
 # Wiring the voxel face into the scene document
 
+**Integrator update (2026-09-13):** the shared runtime now carries the face through appearance patch/state/export/load, preserves children/materials and applies the device ceiling. See [LLMX_CURRENT_HANDOFF.md](LLMX_CURRENT_HANDOFF.md) for the implemented, narrower persistent appearance contract and test receipts. The original visual-owner proposal below is retained for context; its "missing call sites" list is no longer current in this integration branch.
+
 For the integrator. The face is finished and qualified on branch `claude/llmx-face-forge`;
 what is missing is the nine call sites that make it **savable** and correctly sized — eight in
 `agent-world-runtime.ts`, one wherever the face is mounted.

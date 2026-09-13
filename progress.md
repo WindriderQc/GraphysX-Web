@@ -2,6 +2,15 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-09-13 — LLMx Forge, face and private conversation integration
+
+- Integrated both finished Claude visual lanes into `codex/llmx-integration`: minimal floor/altar ambience, bottom-up dense voxel face, original camera choreography, lighting and particles. Persistent appearance uses the shared runtime and device quality ceiling; save/reload preserves the authored world separately from conversation identity.
+- Added the local Household relay, exact-session text/NDJSON client, real application-origin Hello, existing VoiX playback/capture integration and actual played-audio analyser. Waiting/generation are observable transport states, never model reasoning. AIOps PR600 is merged and deployed as Household1.54.0; 239 backend tests passed.
+- A real four-turn local Qwen session retained the word `cuivre`; duplicate opening reused its reply. Real Kokoro PCM and actual browser Hello were observed. Inference latency in that sample was32–215seconds, not a low-latency qualification. Physical microphone/speaker acceptance remains with the operator.
+- Fixed floating interior mouth shelves at their source and non-continuous jaw/lip deformation; geometric and profile/underside checks cover all quality levels. Added restore/cleanup recovery and exact played-turn interruption across Stop, Mute, world changes, visibility and exit.
+- Current restart instructions, scope and final receipts: `docs/LLMX_CURRENT_HANDOFF.md`. Next bounded work is validated scene co-creation/undo, additional named environments, then early visual arithmetic; none is silently claimed as delivered by this first environment.
+- Final verification: 461 unit tests passed with one existing skip; typecheck, lint, build and Rapier probes passed. Six selected room/startup/Center/editor/validation/round-trip checks passed. Seven conversation scenarios passed in the combined run; the last assertion incorrectly read the window discarded by intentional Center navigation. Test-only fix935dd25 and the focused replay rerun passed all four exact-turn stops; the initial failure is retained. Real browser VoiX playback measured amplitude0.6816 and face motion followed by rest, without new inference or microphone capture. The existing web-game client passed and its screenshot/state were inspected. Final UI clarity changes were rebuilt and visually checked; physical acoustic acceptance remains pending.
+
 ## 2026-07-28 — `map-editor-race-r1` (complete)
 
 - Re-verified the proposed archive-debt candidate against current `HEAD`: draw → store → play already shipped in the Levels workbench, so the live missing piece was authored race rules rather than another play path.

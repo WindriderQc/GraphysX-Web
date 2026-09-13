@@ -2,6 +2,8 @@
 
 2026-09-13. Shared base: `d7c9937`. Codex integration worktree: `C:\Users\Yanik\codes\GraphysX-Web-llmx-integration`, branch `codex/llmx-integration`. Pipeline task: `0688`.
 
+**Current status:** the appearance/runtime/application integration described below is now implemented locally. Use [LLMX_CURRENT_HANDOFF.md](LLMX_CURRENT_HANDOFF.md) for current scope, commits, restart instructions and validation. The original proposal and intermediate receipts below are retained as design history, not a current backlog.
+
 Yanik's current priority is the Forge atmosphere, face and entrance. Early arithmetic for ages 4 and 7 is documented for later in the planning worktree; it does not block this milestone.
 
 ## Ownership and delivery

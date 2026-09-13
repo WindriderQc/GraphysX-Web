@@ -1,5 +1,11 @@
 # LLMx — Nocturnal Forge (environment, choreography, preview harness)
 
+**Integration update (2026-09-13):** the product application is now mounted at `?app=llmx`.
+The original group anchor remains a group; its `llmx-face` agent child carries the registered
+persistent appearance. The application settles reduced-motion arrivals immediately. See
+[LLMX_CURRENT_HANDOFF.md](LLMX_CURRENT_HANDOFF.md) for current behavior, ownership and validation;
+the proposed wiring and preview behavior below describe the visual author's earlier handoff.
+
 Owner: the Claude "Forge" session (branch `claude/llmx-forge`, base `d7c9937`). The face
 (sculpt, data, pose, rig `agent-world-face.ts`) belongs to the Claude "face" session on
 `claude/llmx-face-forge`; the application mount, contracts, conversation and catalogues belong to
