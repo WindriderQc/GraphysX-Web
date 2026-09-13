@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LLMx Forge preview (dev harness)</title>
+    <!--
+      Development-only harness for the Nocturnal Forge and the voxel face inside the real
+      PlatformHost. Served by `vite` in dev; deliberately NOT a build input, so it never ships.
+      Everything it animates is a SIMULATION — no conversation, no audio, no agent.
+    -->
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/llmx-preview.ts"></script>
+  </body>
+</html>
