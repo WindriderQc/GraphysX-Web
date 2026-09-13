@@ -1,6 +1,6 @@
 # LLMx — integrated application and restart
 
-2026-09-13. Private LAN conversation is deployed; GraphysX runs from the local integration branch. No public GraphysX deployment.
+2026-09-13. Private LAN conversation is deployed; GraphysX runs from the local integration branch. No public GraphysX deployment. The continued creation milestone is described in [LLMX_CREATION.md](LLMX_CREATION.md): native scene edits and receipts, named environments, deterministic arithmetic and isolated Family conversations.
 
 ## Restart after reboot
 
@@ -12,7 +12,7 @@ npm run serve:llmx
 
 Open **http://127.0.0.1:4207/?app=llmx**, or choose **LLMx · Forge nocturne** on the home page. Branch: `codex/llmx-integration`, base d7c9937. Dependencies and the compiled build are already present; no production dependency was added. Keep the same browser profile and origin/port to recover the saved environment and exact conversation. Restart this process after a PC reboot. After changing source code, run `npm run build` again. For live development, replace the last command with `npm run dev -- --host 127.0.0.1 --port 4207 --strictPort`.
 
-The backend is Household **1.54.0**, installed through [AIOps PR 600](https://github.com/WindriderQc/aiOPs/pull/600), merge 71968ac5199543987cff2358ebce8d6c12b17950. Deployment run 34782936932 succeeded; the live container was healthy and reported version 1.54.0. Product pins, VoiX deployment, GPU routing, model files and context limits were preserved.
+The creation backend was introduced in Household **1.55.0** through [AIOps PR 602](https://github.com/WindriderQc/aiOPs/pull/602), merge 38267aeb409995cf104513f329852928ffccc6c1, deployment 34787274026. The sound-library release **1.56.0** preserves that integration. The verified live service is **1.56.2**, [AIOps PR 604](https://github.com/WindriderQc/aiOPs/pull/604), merge 054cb0442be9e5c812e75cef5d0925fc73fd3b1c, deployment 34790527096. PR603 corrected the response-format problem discovered with real Qwen; malformed scene arrays cannot be displayed, spoken or extracted as commands. PR604 binds each proposal to its request observation and advances the displayed math lesson by one step, including after undo and reload. Product pins, GPU routing, model files and context limits were preserved.
 
 If AgentX is unavailable, the Forge remains usable. Restore the service and choose **Reconnecter**. A missing saved session can be replaced with **Nouvelle conversation**. An interrupted or uncertain opening is never replayed automatically. **Réécouter** uses the stored completed reply's exact provider and voice.
 
@@ -25,7 +25,8 @@ If AgentX is unavailable, the Forge remains usable. Restore the service and choo
 - AgentX originates a real **Hello** application turn after visual, session and audio readiness, or explicit text choice. No fake human greeting or canned assistant response. Autoplay restrictions produce an audio/text choice; microphone capture starts from **Parler**.
 - The existing VoiX player feeds an analyser; the face follows played speech amplitude and brightness. Waiting/generation animations reflect transport state, not model reasoning or GPU load. Text-only mode produces no pretend lip sync.
 - Stop, visibility changes, world reload, exit and new conversation invalidate stale callbacks and stop playback/capture. A new session can recover from unconfirmed cleanup while retaining a warning and requiring the human to start.
-- One environment is saved locally. Session identity is stored separately. **Quitter LLMx** returns to the AgentX Center.
+- Named environments are saved locally, with copy/rename/load and migration of the old Forge save. Session identity is separate. **Passer en famille** selects isolated Family worlds and its Family agent; **Quitter LLMx** returns to the AgentX Center.
+- Human text/voice requests can produce validated native scene edits, followed by an exact outcome receipt, creation accent and native undo/redo. **Atelier maths** provides counting, addition and subtraction from 0 to 20 with one real cube per unit and one move per step.
 
 ## Architecture seams
 
@@ -33,7 +34,7 @@ If AgentX is unavailable, the Forge remains usable. Restore the service and choo
 
 The shared persistent appearance contract is `{kind:"voxel-face", asset:"forge-mask", palette:"forge", seed:1}`; null restores the ordinary avatar. Broader renderer configuration remains internal. Invalid appearance is rejected before rollback can rebuild the room. Driver snapping avoids indefinite static-buffer uploads; the rig owns its materials and disposal.
 
-Thinking particles are transient runtime entities outside the authored document and undo/save history. Creation camera and visual accents exist, but scene creation awaits an accepted, validated scene-command path. The diagnostic /llmx-preview.html contains simulated speech controls; the product route uses actual conversation audio.
+Thinking particles are transient runtime entities outside the authored document and undo/save history. Creation camera and visual accents follow validated native commits. The diagnostic /llmx-preview.html contains simulated speech controls; the product route uses actual conversation audio.
 
 ## Visual integration and ownership
 
@@ -45,9 +46,9 @@ The Center entry remains in its existing application row. Commit 20537a6 fixes t
 
 ## Evidence and remaining acceptance
 
-Backend tests: **239 passed**, including exact replay voice and early interruption admission. Final GraphysX results belong in the validation section below.
+Backend tests: **262 passed** for Household and its corpus after the final continuation correction. PR604 CI 34790454562 passed (sanity 1m15s; data tests 19s); deployment 34790527096 succeeded and the live status returned 1.56.2. GraphysX results and real-model acceptance remain separate receipts below.
 
-Live REST evidence is in:
+Earlier personal-conversation REST evidence is in:
 `C:\Users\Yanik\.codex\visualizations\2026\09\13\01a09bca-9310-7013-b443-b6b546d8b1f5\llmx-live`
 
 - Real opening: “Hello ! Bienvenue dans la Forge nocturne. De quoi aurais-tu envie de parler ce soir ?”
@@ -60,18 +61,37 @@ The actual browser separately displayed a newly generated Hello with sound enabl
 
 The historical full GraphysX gate on 20537a6 was stopped when scope changed; it is not a full-pass receipt. Use final focused results for this integrated revision.
 
+## Final creation qualification
+
+The compiled local build contains product change cd7deaa and verification split 63eb604. **506 Node tests passed, one existing test skipped**; typecheck, lint, build and both Rapier checks passed. The final creation actions journey passed in 3m36s and named environments/Family/mobile in 6m46s. All 71 original assertion calls remain in the two bounded scenarios. Earlier room, startup, scene validation, document round-trip, conversation replay and showroom checks also passed on the integrated creation build. This is focused feature verification, not the full public-release matrix.
+
+The final desktop and 390px mobile math captures were inspected: all five counting cubes and the equation are visible, with conversation history collapsed. The unchanged develop-web-game client passed and its screenshot/state show the fully assembled 21,825-cube face without a console-error artifact. Logs and screenshots are under `output/llmx-creation/` and `output/verify/`.
+
+Actual browser and deployed Qwen acceptance used Family session `d0697403-989f-4b9c-b740-d987beab6a4f`:
+
+| Request | Actual result | Completed turn | Duration |
+| --- | --- | --- | --- |
+| Application opening | Real Hello, no scene action | e54dbc21-9051-4162-bb40-dd3167ee1997 | 6,265 ms |
+| Blue cube | Native cube, applied receipt | 0cd770c5-2604-473b-afc5-152fd801cf80 | 8,760 ms |
+| Demonstrate 2 + 3 | Five native units, step 0, applied receipt | 2ba72258-cd01-45ec-9037-7d17a58b8d83 | 8,097 ms |
+| Next step after manual undo, save, rename and reload | Exactly one cube moved: step 1 to 2 | 99abc878-3cf4-4060-b3ac-cfdc43303dc8 | 11,071 ms |
+| “Encore une étape, s’il te plaît.” | Step 3, all five cubes together, applied receipt | 8c2edf16-abce-4937-8d53-1146e849902b | 9,843 ms |
+
+All runs report `qwen3.8:27b-mtp-q8_0` through the existing OpenClaw Family route. Actual UI and exact-turn backend receipts agree. The final French transcript and stored French Kokoro voice describe the observed step. The saved world **Atelier de la Forge** contains this completed lesson and the blue cube in the Codex browser's Family library; other browser profiles have their own storage. Family entry: **http://127.0.0.1:4207/?app=llmx&profile=family**. The original Hello was recovered on reload without another opening turn.
+
+Initial real-model failures remain in `output/llmx-creation/live/`: malformed arrays before PR603 and a historical revision/step before PR604. They were rejected without scene changes. The final successful continuation used the same conversation despite that history. No additional model retry or second inference loop was introduced.
+
 ## Next bounded milestone
 
-1. Connect validated scene commands, accepted-action receipts and undo to co-creation; then trigger creation accents.
-2. Add named environments beyond the first local save.
-3. Bring in visual arithmetic for ages 4 and 7: groups, counting, addition and subtraction with numerical truth independent of decorative geometry. Recovered formula visualizer analysis and needed fixes are in the planning worktree's math document.
-4. Qualify microphone/speaker interaction physically and measure latency before changing inference infrastructure.
+1. Qualify microphone/speaker interaction physically and measure latency before changing inference infrastructure.
+2. Try the concrete arithmetic workshop with the children and adjust teaching pace from observed use.
+3. Extend into rigorous formula lessons after fixing the recovered visualizer's coordinate/display separation; its analysis remains in the planning worktree's math document.
 
 Qwen contributed a useful bounded opening-contract review (Pipeline 0691, 8,780 ms). An earlier rambling review was rejected; Codex took over. This does not establish autonomous development. Claude/Codex coordination used files and user handoff; the attempted direct CLI messaging relay failed authentication.
 
 The original plan is in C:\Users\Yanik\codes\GraphysX-Web-llmx-plan. Its older branch stays local because its historical workflow can trigger expensive feature-push CI.
 
-## Final validation
+## Previous conversation and face validation
 
 The final combined verification built application commit **8738e54**. **461 unit tests passed, one existing test was skipped**; typecheck, lint, build and both Rapier probes passed. Selected browser checks passed for LLMx room/persistence/mobile, startup recovery, Center, editor, scene-command validation and document round-trip. No full release matrix or public deployment is claimed.
 
@@ -90,3 +110,5 @@ The existing develop-web-game client passed with no console-error artifact; its 
 Final display adjustments **c229bf3** and **2a09e03** keep narrow-screen voice from automatically covering the face with history, open messages at the latest reply, and leave room for the Display button. Typecheck/lint and the final build passed; the rebuilt application was inspected in the actual browser. Transport, geometry and persistence were unchanged by these display adjustments. The served final build includes **2a09e03**.
 
 The finished Claude preview on4199 is stopped. The compiled integration server on4207 remains running. The merged AIOps backend worktree was removed after hash-verified receipt preservation under `C:\Users\Yanik\codes\aiOPs\output\llmx-0690-backend-handoff`; other worktrees and their untracked copies were preserved.
+
+Creation delivery cleanup: the temporary backend worktree `aiops-llmx-scene-format` was clean and removed normally after PR604 was merged and live-qualified. Both backend correction branches are pushed; source and receipts remain available. The AIOps Lead was released for the separate sound correction. Only the compiled preview on4207 is retained for this feature; the temporary4208 development server is stopped. Final evidence is also copied to `C:\Users\Yanik\.codex\visualizations\2026\09\13\01a09bca-9310-7013-b443-b6b546d8b1f5\llmx-creation`.
