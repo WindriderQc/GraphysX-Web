@@ -112,6 +112,29 @@ Two fields carry a rule that is in the source and should survive integration:
   shared host is not this conversation thinking, and a face that frowns at someone else's batch
   is lying to the person in front of it.
 
+## The ninth hunk: cap the density to the device
+
+Measured in the Forge on a 375x812 phone viewport: the host reports profile `mobile`, and the
+face still renders `high` — 5174 cubes. **Nothing currently connects the two.** Whoever mounts
+the face has to:
+
+```ts
+face.setQualityCeiling(host.qualityProfile.name);   // "high" | "balanced" | "mobile"
+```
+
+This is deliberately *not* part of `configure`. The ceiling is a property of the machine
+looking at the mask; the authored `level` is a property of the world. Folding the cap into the
+configuration would mean opening a world on a phone and letting it autosave writes the phone's
+limit back into the document — the mask is then permanently coarse for everyone, the author
+included, with nothing recording why. `describe()` reports `level` and `renderedLevel`
+separately so "why does it look coarse here" is answerable from outside.
+
+Re-cap only when the profile actually changes. Each change rebuilds the instance buffers, and
+the plan is explicit that density must not oscillate during a conversation.
+
+The face was qualified at `mobile` (1552 cubes): same mask, chunkier — eyes, brow, nose, mouth
+and jaw all still read, on a phone viewport, with the controls usable.
+
 ## What to check once it is wired
 
 The pure half is covered by `test/llmx-face-pose.test.mjs` (30 tests), including the appearance

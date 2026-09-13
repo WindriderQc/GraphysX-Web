@@ -554,3 +554,22 @@ export function resolveAgentWorldAppearance(source: AgentWorldAppearance): Resol
 export function serializeAgentWorldAppearance(appearance: ResolvedAgentWorldAppearance): AgentWorldAppearance {
   return { ...appearance };
 }
+
+/**
+ * The coarser of what the world asked for and what the device allows.
+ *
+ * Pure and here rather than in the renderer because the direction of this comparison is exactly
+ * the kind of thing that silently inverts: getting it backwards would render a phone's world at
+ * desktop density and look like a performance problem rather than a logic error. `null` means
+ * no cap.
+ */
+export function effectiveFaceLevel(
+  authored: AgentWorldFaceLevel,
+  ceiling: AgentWorldFaceLevel | null,
+): AgentWorldFaceLevel {
+  const order: AgentWorldFaceLevel[] = ["mobile", "balanced", "high"];
+  const wanted = order.indexOf(authored);
+  if (wanted < 0) return ceiling ?? "high";
+  const capped = ceiling ? order.indexOf(ceiling) : order.length - 1;
+  return order[Math.min(wanted, capped < 0 ? order.length - 1 : capped)];
+}

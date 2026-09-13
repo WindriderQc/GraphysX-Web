@@ -20,6 +20,7 @@ import {
   buildScale,
   clampDrivers,
   deriveWeights,
+  effectiveFaceLevel,
   eyeTransform,
   hash01,
   poseInto,
@@ -359,5 +360,19 @@ describe("agent appearance", () => {
   it("falls back to a known level rather than trusting an unknown one", () => {
     assert.equal(resolveAgentWorldFace({ level: "ultra" }).level, "high");
     assert.equal(resolveAgentWorldFace({ seed: Number.NaN }).seed, 1);
+  });
+});
+
+describe("device quality ceiling", () => {
+  it("takes the coarser of the authored level and the device cap", () => {
+    assert.equal(effectiveFaceLevel("high", "mobile"), "mobile");
+    assert.equal(effectiveFaceLevel("mobile", "high"), "mobile", "a cap must never raise density");
+    assert.equal(effectiveFaceLevel("balanced", "high"), "balanced");
+    assert.equal(effectiveFaceLevel("high", null), "high");
+  });
+
+  it("survives a level name it does not know", () => {
+    assert.equal(effectiveFaceLevel("ultra", "balanced"), "balanced");
+    assert.equal(effectiveFaceLevel("high", "ultra"), "high");
   });
 });

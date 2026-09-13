@@ -23,6 +23,7 @@ import {
   POSE_LIMITS,
   clampDrivers,
   deriveWeights,
+  effectiveFaceLevel,
   eyeTransform,
   hash01,
   poseInto,
@@ -122,6 +123,8 @@ export class AgentWorldVoxelFace {
   readonly object = new Group();
 
   private config: ResolvedAgentWorldFace;
+  /** Device cap on density. Never written back to `config` — see {@link setQualityCeiling}. */
+  private ceiling: AgentWorldFaceLevel | null = null;
   private weights: FaceWeights;
 
   /** Cube indices belonging to each mesh, resolved once at build. */
@@ -160,8 +163,32 @@ export class AgentWorldVoxelFace {
     this.config = config;
     this.object.name = "VoxelFace";
     this.object.userData.graphysxVoxelFace = this;
-    this.weights = deriveWeights(asset, config.level);
+    this.weights = deriveWeights(asset, this.effectiveLevel());
     this.build();
+  }
+
+  /**
+   * Cap the rendered density to what this device can afford.
+   *
+   * Deliberately separate from {@link configure}: the ceiling is a property of the machine
+   * looking at the mask, the authored `level` is a property of the world. Folding the cap into
+   * the configuration would mean that opening a world on a phone and letting it autosave writes
+   * the phone's limit back into the document — and the mask is then permanently coarse for
+   * everyone, including the author, with nothing recording why.
+   *
+   * Pass `null` to lift the cap.
+   */
+  setQualityCeiling(profile: AgentWorldFaceLevel | null): void {
+    if (this.ceiling === profile) return;
+    this.ceiling = profile;
+    const level = this.effectiveLevel();
+    if (level === this.weights.level.name) return;
+    this.weights = deriveWeights(asset, level);
+    this.build();
+  }
+
+  private effectiveLevel(): AgentWorldFaceLevel {
+    return effectiveFaceLevel(this.config.level, this.ceiling);
   }
 
   /**
@@ -173,7 +200,7 @@ export class AgentWorldVoxelFace {
     this.config = config;
     const structural = previous.level !== config.level || previous.seed !== config.seed || previous.asset !== config.asset;
     if (structural) {
-      this.weights = deriveWeights(asset, config.level);
+      this.weights = deriveWeights(asset, this.effectiveLevel());
       this.build();
       return;
     }
@@ -242,13 +269,16 @@ export class AgentWorldVoxelFace {
   /** Live readout, so a host can show what the face is doing without re-deriving it. */
   describe(): {
     level: AgentWorldFaceLevel;
+    renderedLevel: AgentWorldFaceLevel;
     cubes: number;
     animatedCubes: number;
     build: number;
     speaking: boolean;
   } {
     return {
+      // Both, because "why does it look coarse here" is otherwise unanswerable from the outside.
       level: this.config.level,
+      renderedLevel: this.weights.level.name as AgentWorldFaceLevel,
       cubes: this.weights.count,
       animatedCubes: this.weights.animatedCount,
       build: Number(this.current.build.toFixed(3)),
