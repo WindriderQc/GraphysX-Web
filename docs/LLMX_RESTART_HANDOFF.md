@@ -6,6 +6,8 @@ Objectif demandé par Yanik : terminer rapidement en partageant le travail entre
 
 ## Point de reprise
 
+Raccord visuel en cours : `C:\Users\Yanik\codes\GraphysX-Web-llmx-integration\docs\LLMX_VISUAL_CONTRACT.md`, branche `codex/llmx-integration`, base `d7c9937`, Pipeline `0688`. Codex y prépare le contrat et l'entrée; Claude conserve ses modules de visage et de Forge. Le contrat est disponible à lire, pas encore acquitté par Claude. Les interfaces déjà implémentées peuvent être adaptées par Codex pour éviter de refaire du travail.
+
 - Plan complet : [LLMX_IMPLEMENTATION_PLAN.md](LLMX_IMPLEMENTATION_PLAN.md).
 - Dossier de référence : `C:\Users\Yanik\codes\GraphysX-Web-llmx-plan`.
 - Branche de planification : `codex/llmx-experience-plan`.
