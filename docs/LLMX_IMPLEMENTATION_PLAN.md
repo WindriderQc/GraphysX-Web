@@ -2,6 +2,8 @@
 
 Date : 2026-09-13. Statut : plan proposé, aucune fonctionnalité LLMx implémentée par ce document.
 
+Reprise après redémarrage et partage du travail avec Claude : [LLMX_RESTART_HANDOFF.md](LLMX_RESTART_HANDOFF.md).
+
 **Résultat recherché :** entrer dans un environnement 3D persistant, voir un visage de cubes se construire dans une ambiance gothique industrielle, puis entendre le même interlocuteur que dans nos conversations AgentX ouvrir l'échange par « Hello ». On peut ensuite lui parler, construire avec lui, annuler une modification et retrouver son monde à la prochaine visite.
 
 Ce plan porte sur le code local inspecté, pas sur une vérification de production. Aucun appel au homelab ni changement de modèle, de GPU ou de déploiement n'a été effectué. Les valeurs graphiques et temporelles proposées sont des points de départ à mesurer.
