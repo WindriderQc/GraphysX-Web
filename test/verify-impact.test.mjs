@@ -80,6 +80,21 @@ describe("verification by changed area", () => {
     assert.ok(!names(plan).includes("live-sessions-browser"));
   });
 
+  it("reruns both LLMx creation scenarios for their shared helper and only the changed wrapper otherwise", () => {
+    const checks = ["llmx-creation-actions", "llmx-creation-library"];
+    const shared = selectVerification(["scripts/smoke-llmx-creation.mjs"]);
+    assert.equal(shared.mode, "targeted");
+    assert.equal(shared.deploy, false);
+    assert.deepEqual(names(shared), checks);
+    for (const check of checks) {
+      const wrapper = selectVerification([`scripts/smoke-${check}.mjs`]);
+      assert.deepEqual(names(wrapper), [check]);
+      assert.equal(wrapper.deploy, false);
+      assert.deepEqual(names(selectVerification(["scripts/smoke-llmx-creation.mjs", `scripts/smoke-${check}.mjs`])), checks);
+    }
+    assert.deepEqual(resolveVerifyOptions([`--checks=${checks.join(",")}`], {}).smokes, shared.smokes);
+  });
+
   it("partitions selected checks exactly once and passes their names through the real runner parser", () => {
     for (const files of [[], ["README.md"], ["src/kidx-mission-guide.ts"], ["src/kidx-app.ts"], ["src/platform-host.ts"]]) {
       const plan = selectVerification(files);

@@ -12,7 +12,8 @@ export const VERIFY_STATIC_CHECKS = {
 };
 
 export const VERIFY_SMOKES = [
-  { name: "llmx-creation", tier: "apps", script: "scripts/smoke-llmx-creation.mjs", covers: "Native scene proposals and exact receipts, stale edits, math quantities/undo, named saves and isolated Family worlds" },
+  { name: "llmx-creation-actions", tier: "apps", script: "scripts/smoke-llmx-creation-actions.mjs", covers: "Native scene proposals and exact receipts, stale undo rejection, corrected French math history, deterministic quantities and undo/redo" },
+  { name: "llmx-creation-library", tier: "apps", script: "scripts/smoke-llmx-creation-library.mjs", covers: "UI-authored math, named copy/rename/open/reload, stale world rejection, isolated Family worlds and mobile counting controls" },
   { name: "llmx-conversation", tier: "apps", script: "scripts/smoke-llmx-conversation.mjs", covers: "Private-session text/opening, explicit audio choice, stale callbacks, interruption, recovery and exact-voice replay with intercepted transport" },
   { name: "llmx", tier: "apps", script: "scripts/smoke-llmx.mjs", covers: "Forge appearance lifecycle, save/reload, reduced motion, immediate camera, environment selection and Center return" },
   { name: "startup", tier: "core", script: "scripts/smoke-startup.mjs", covers: "renderer and lazy-import failures: accessible recovery page and working retry" },
