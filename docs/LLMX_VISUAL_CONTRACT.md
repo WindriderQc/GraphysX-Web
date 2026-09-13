@@ -1,0 +1,45 @@
+# LLMx visual integration — first interface
+
+2026-09-13. Shared base: `d7c9937`. Codex integration worktree: `C:\Users\Yanik\codes\GraphysX-Web-llmx-integration`, branch `codex/llmx-integration`. Pipeline task: `0688`.
+
+Yanik's current priority is the Forge atmosphere, face and entrance. Early arithmetic for ages 4 and 7 is documented for later in the planning worktree; it does not block this milestone.
+
+## Ownership and delivery
+
+Claude owns face data/sculpting, `llmx-face-pose.ts`, the face renderer and the Forge builder. Codex owns `main.ts`, `platform-host.ts`, `agent-world-runtime.ts`, server validation, shared contracts and application/conversation integration. Supply small committed slices with file lists; Codex integrates them without merging unrelated branch changes.
+
+The following interface is ready for review in [llmx-contracts.ts](../src/llmx-contracts.ts). Claude acknowledgement is still pending. If an existing visual module already uses another interface, preserve the work and document that interface; Codex can adapt it at the boundary.
+
+## Face
+
+The authored entity is an ordinary `agent` with `appearance: { kind: "voxel-face", asset: "forge-mask", palette: "forge", seed: 1 }`. Codex will thread `appearance` through normalization, patching, state, export and server validation. It is not a new physics entity type. The quality profile selects `high`, `balanced` or `mobile` separately from persistent appearance.
+
+The renderer exposes `object`, `setPresentation(presentation)`, `tick(deltaSeconds)` and `dispose()`. The presentation fields match the observed Claude pose model: `build`, `speak`, `speakTone`, `gazeX`, `gazeY`, `attention`, `think`, `warmth`. The rig owns blinking and breathing. The runtime calls the tick in its existing frame loop; neither renderer nor application owns a second animation loop.
+
+The face source observed before this interface already supports the three quality names. Its sculpt and counts may continue evolving; no hardcoded rest geometry is introduced by Codex.
+
+`llmx-presentation.ts` maps observable conversation/output state to these inputs. The actual speech output bus supplies amplitude and brightness. Neither queued text/audio, user microphone, ambience nor unrelated GPU activity drives the mouth. Playback can continue after generation ends. The presentation layer cannot claim a real connection by animating a waiting pose.
+
+## Forge
+
+Proposed export: `buildLlmXForge(): LlmXEnvironment`, with:
+
+- `id`, `label`, `world` (ordinary `AgentWorldDefinition`), `faceEntityId`;
+- `anchors.cameraStart`, `cameraRest`, `cameraTarget`, `creationCenter`, in world coordinates;
+- `entrance.cameraSeconds`, `assemblyDelaySeconds`, `assemblySeconds`.
+
+The builder composes persistent entities and environment settings only. No DOM, renderer construction, service URL, private session data or internal animation loop. It may use the current GraphysX sky/HDRI, lights, fog, bloom and particle presets. Codex applies environment settings through the host and mounts the face through the runtime.
+
+Use a placeholder agent entity if the runtime appearance type is not yet in Claude's branch; supply its intended `appearance` in the handoff. Do not weaken validation or cast a new unregistered entity type just to compile the visual branch.
+
+## Entrance and readiness
+
+`llmx-entrance.ts` provides a pure clock for camera/assembly progress. It remains loading until essential assets are ready, supports skip/reduced motion, and cannot be revived by a late asset callback after disposal. The host is the only source of ticks. Zero visual duration means no animation, not a skipped readiness check.
+
+Visual readiness does not start a greeting on its own. The application separately coordinates Conversation readiness, explicit audio activation and the server-side opening turn. No canned or simulated Hello is accepted as the actual agent conversation.
+
+The host currently clamps `frameView(..., 0)` to 150 ms. Codex will resolve the immediate-framing case for skipped/reduced-motion entrances and verify affected camera behavior. Claude need not work around this inside the Forge.
+
+## Evidence
+
+First code slice is the interface plus pure visual clock and presentation mapping. It is not yet mounted into the browser. Its tests cover late assets, skip, reduced motion, exact zero durations, invalid time, and real-playback precedence over generation state. Full visual qualification follows integration of Claude's committed renderer and Forge.
