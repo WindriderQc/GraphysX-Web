@@ -93,21 +93,22 @@ export function mountPreviewHost(container: HTMLElement): PreviewHost {
     const control = document.createElement("button");
     control.type = "button";
     control.dataset.preview = entry.id;
-    control.disabled = entry.state !== "mountable";
+    control.disabled = entry.state === "unconverted";
     control.innerHTML = `<span class="gx-pv-label"></span><span class="gx-pv-summary"></span>`;
     control.querySelector(".gx-pv-label")!.textContent = entry.label;
     control.querySelector(".gx-pv-summary")!.textContent = entry.state === "mountable"
       ? entry.summary
       : `${entry.summary}${entry.legacyCanvasId ? ` · needs ${entry.legacyCanvasId}` : ""}`;
     if (entry.state === "mountable") control.addEventListener("click", () => void open(entry.id));
+    if (entry.state === "standalone" && entry.href) control.addEventListener("click", () => { window.location.href = entry.href!; });
     item.append(control);
     return item;
   };
 
   find<HTMLUListElement>("mountable").replaceChildren(
-    ...PREVIEWS.filter((entry) => entry.state === "mountable").map(button));
+    ...PREVIEWS.filter((entry) => entry.state !== "unconverted").map(button));
   find<HTMLUListElement>("unconverted").replaceChildren(
-    ...PREVIEWS.filter((entry) => entry.state !== "mountable").map(button));
+    ...PREVIEWS.filter((entry) => entry.state === "unconverted").map(button));
 
   async function open(id: string): Promise<void> {
     const entry = PREVIEWS.find((candidate) => candidate.id === id);
@@ -141,7 +142,8 @@ export function mountPreviewHost(container: HTMLElement): PreviewHost {
     active,
     frames: runner.frames(),
     mountable: PREVIEWS.filter((entry) => entry.state === "mountable").map((entry) => entry.id),
-    unconverted: PREVIEWS.filter((entry) => entry.state !== "mountable").map((entry) => entry.id),
+    standalone: PREVIEWS.filter((entry) => entry.state === "standalone").map((entry) => entry.id),
+    unconverted: PREVIEWS.filter((entry) => entry.state === "unconverted").map((entry) => entry.id),
     preview: runner.describe(),
   });
   testWindow.advanceTime = (milliseconds: number) => runner.advanceTime(milliseconds);

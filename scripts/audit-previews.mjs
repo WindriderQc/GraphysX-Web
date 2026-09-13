@@ -36,15 +36,8 @@ for (const id of listedIds) {
 }
 
 // Which ids the registry marks mountable: the `state` on the same entry as the id.
-const mountable = new Set(
-  [...registrySource.matchAll(/id:\s*"([^"]+)"[\s\S]{0,400}?state:\s*"mountable"/g)]
-    .map((match) => match[1])
-    .filter((id) => {
-      // Guard against a greedy match spanning into the next entry.
-      const entry = registrySource.split(`id: "${id}"`)[1]?.slice(0, 400) ?? "";
-      return /state:\s*"mountable"/.test(entry.split(/\bid:\s*"/)[0]);
-    }),
-);
+const entries = [...registrySource.matchAll(/id:\s*"([^"]+)"([\s\S]*?)(?=\bid:\s*"|$)/g)];
+const mountable = new Set(entries.filter(([, , entry]) => /state:\s*"mountable"/.test(entry)).map(([, id]) => id));
 
 /**
  * Source with comments removed.
@@ -57,6 +50,19 @@ const mountable = new Set(
 const stripComments = (source) => source
   .replace(/\/\*[\s\S]*?\*\//g, " ")
   .replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
+
+// Dedicated development pages use the same renderer/loop rules, without a gallery mount.
+const standalone = entries.filter(([, , entry]) => /state:\s*"standalone"/.test(entry));
+for (const [, id, entry] of standalone) {
+  const href = entry.match(/href:\s*"([^"]+)"/)?.[1];
+  if (!href) { failures.push(`Standalone preview ${id} has no href`); continue; }
+  const source = stripComments(await readFile(path.join(SRC, `${id}-preview.ts`), "utf8"));
+  if (/new WebGLRenderer|requestAnimationFrame\s*\(/.test(source) || !/new PlatformHost\(/.test(source)) {
+    failures.push(`src/${id}-preview.ts must use PlatformHost and its frame loop`);
+  }
+  try { await readFile(path.join(ROOT, href), "utf8"); }
+  catch { failures.push(`Standalone preview ${id} has no HTML entry: ${href}`); }
+}
 
 for (const id of mountable) {
   const source = stripComments(await readFile(path.join(SRC, `${id}-preview.ts`), "utf8"));
@@ -72,7 +78,7 @@ for (const id of mountable) {
 }
 
 console.log(`preview audit: ${files.length} harness file(s), ${listedIds.size} registered, ${mountable.size} mountable`);
-console.log(`  unconverted: ${fileIds.length - mountable.size} (listed and disabled in the index, not hidden)`);
+console.log(`  standalone: ${standalone.length}; unconverted: ${fileIds.length - mountable.size - standalone.length} (listed and disabled in the index, not hidden)`);
 
 if (failures.length > 0) {
   console.error(`\nFAIL  ${failures.length} preview registry problem(s):`);

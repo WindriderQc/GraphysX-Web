@@ -10,23 +10,30 @@
 
 /**
  * - `mountable`  — converted to the shared bootstrap; the host can run it.
+ * - `standalone` — dedicated development HTML using a PlatformHost and its frame loop.
  * - `unconverted` — still a side-effect module that builds its own renderer and frame loop
  *   and queries a canvas id no HTML provides. It cannot run. Recorded here rather than
  *   quietly omitted, because "undocumented and unreachable" is the thing being fixed.
  */
-export type PreviewState = "mountable" | "unconverted";
+export type PreviewState = "mountable" | "standalone" | "unconverted";
 
 export type PreviewEntry = {
   id: string;
   label: string;
   summary: string;
   state: PreviewState;
+  /** A development HTML entry that owns a PlatformHost rather than a gallery mount. */
+  href?: string;
   /** The canvas id the unconverted module still queries — what a converter needs to know. */
   legacyCanvasId?: string;
   load?: () => Promise<{ mount: (context: never) => never }>;
 };
 
 export const PREVIEWS: PreviewEntry[] = [
+  {
+    id: "llmx", label: "LLMx — Forge", state: "standalone", href: "./llmx-preview.html",
+    summary: "Forge lighting and face drivers in a dedicated PlatformHost. Simulated conversation only.",
+  },
   {
     id: "milky-way",
     label: "Voie Lactée",
