@@ -14,7 +14,7 @@ The following interface is ready for review in [llmx-contracts.ts](../src/llmx-c
 
 The authored entity is an ordinary `agent` with `appearance: { kind: "voxel-face", asset: "forge-mask", palette: "forge", seed: 1 }`. Codex will thread `appearance` through normalization, patching, state, export and server validation. It is not a new physics entity type. The quality profile selects `high`, `balanced` or `mobile` separately from persistent appearance.
 
-The renderer exposes `object`, `setPresentation(presentation)`, `tick(deltaSeconds)` and `dispose()`. The presentation fields match the observed Claude pose model: `build`, `speak`, `speakTone`, `gazeX`, `gazeY`, `attention`, `think`, `warmth`. The rig owns blinking and breathing. The runtime calls the tick in its existing frame loop; neither renderer nor application owns a second animation loop.
+Codex adopts the interface already agreed between the two Claude sessions: `object`, `setDrivers(Partial<FaceDrivers>)`, `update(deltaSeconds)`, `describe()` (including `build` and `speaking`) and `dispose()`. The conversation mapper supplies `build`, `speak`, `speakTone`, `gazeX`, `gazeY`, `attention`, `think`, `warmth`. The rig owns normal blinking and breathing; the entrance may temporarily override lid closure. The runtime calls the update in its existing frame loop; neither renderer nor application owns a second animation loop.
 
 The face source observed before this interface already supports the three quality names. Its sculpt and counts may continue evolving; no hardcoded rest geometry is introduced by Codex.
 
@@ -22,11 +22,13 @@ The face source observed before this interface already supports the three qualit
 
 ## Forge
 
-Proposed export: `buildLlmXForge(): LlmXEnvironment`, with:
+The generic application descriptor can be filled from Claude's existing `createForgeWorld() -> { document, anchors }`; no rename or rewrite of his builder is requested. Mapping into the proposed descriptor:
 
 - `id`, `label`, `world` (ordinary `AgentWorldDefinition`), `faceEntityId`;
 - `anchors.cameraStart`, `cameraRest`, `cameraTarget`, `creationCenter`, in world coordinates;
 - `entrance.cameraSeconds`, `assemblyDelaySeconds`, `assemblySeconds`.
+
+Claude's `forgeIntroAt()` and `forgeCameraAt()` remain the artistic source for the circuit, approach, assembly and wake bands. The Codex clock only gates start/skip/disposal and supplies elapsed time; it must not add another easing over those samples. The Forge uses `llmx-face-anchor` as a group marker until the integrator adds the authored agent appearance.
 
 The builder composes persistent entities and environment settings only. No DOM, renderer construction, service URL, private session data or internal animation loop. It may use the current GraphysX sky/HDRI, lights, fog, bloom and particle presets. Codex applies environment settings through the host and mounts the face through the runtime.
 

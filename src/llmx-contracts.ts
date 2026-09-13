@@ -1,5 +1,6 @@
-import type { Group } from "three";
+import type { Object3D } from "three";
 import type { AgentWorldDefinition, AgentWorldVector3 } from "./agent-world-runtime";
+import type { FaceDrivers } from "./llmx-face-pose";
 
 /** Persistent appearance only. Conversation identifiers and live drivers never enter a scene. */
 export type LlmXFaceAppearance = {
@@ -12,22 +13,16 @@ export type LlmXFaceAppearance = {
 export type LlmXDetail = "high" | "balanced" | "mobile";
 
 /** Presentation inputs match the existing Claude pose model; blink/breath belong to the rig. */
-export type LlmXFacePresentation = {
-  build: number;
-  speak: number;
-  speakTone: number;
-  gazeX: number;
-  gazeY: number;
-  attention: number;
-  think: number;
-  warmth: number;
-};
+export type LlmXFacePresentation = Pick<FaceDrivers,
+  "build" | "speak" | "speakTone" | "gazeX" | "gazeY" | "attention" | "think" | "warmth"
+>;
 
 /** A renderer has no session, transport, or independent animation loop. */
 export type LlmXFaceRenderer = {
-  readonly object: Group;
-  setPresentation: (presentation: Readonly<LlmXFacePresentation>) => void;
-  tick: (deltaSeconds: number) => void;
+  readonly object: Object3D;
+  setDrivers: (drivers: Partial<FaceDrivers>) => void;
+  update: (deltaSeconds: number) => void;
+  describe: () => { build: number; speaking: boolean };
   dispose: () => void;
 };
 
