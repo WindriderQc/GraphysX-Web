@@ -43,7 +43,7 @@ test("budgets: one floor collider, one shadow-casting light, particles under the
 
   const emitters = document.entities.filter((entity) => entity.type === "emitter");
   const restBudget = emitters.reduce((sum, entity) => sum + entity.emitter.maxParticles, 0);
-  assert.ok(emitters.length >= 2, "the Forge is meant to breathe: smoke and sparks at least");
+  assert.ok(emitters.length >= 1, "the Forge is meant to breathe: the amber motes at least");
   assert.ok(restBudget <= 600, `rest particle budget ${restBudget} exceeds 600`);
   assert.ok(emitters.every((entity) => entity.emitter.maxParticles <= 600));
 

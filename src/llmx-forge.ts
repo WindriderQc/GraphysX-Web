@@ -32,7 +32,7 @@ import type {
  *
  * ## Budgets (plan §9.2)
  *
- * One shadow-casting light (the cold key). Two emitters, well under the 600-particle rest
+ * One shadow-casting light (the cold key). One emitter, far under the 600-particle rest
  * budget. Bloom at the plan's starting values (0.45 / 0.35 / 0.9): only emissives cross the
  * threshold, so the mask's edges stay crisp.
  *
@@ -148,7 +148,7 @@ export function createForgeWorld(options: { id?: string; label?: string } = {}):
       lighting: { source: "hdri", hdri: "vignaioli-night", intensity: 0.32, yawDegrees: 24, backgroundIntensity: 0.55, backgroundBlur: 0.12 },
       // The fog is the horizon: the plateau's far edge dissolves into it.
       envelope: { fogNear: 16, fogFar: 46, cameraFar: 110 },
-      post: { bloom: { strength: 0.45, radius: 0.35, threshold: 0.9 } },
+      post: { bloom: { strength: 0.3, radius: 0.3, threshold: 0.92 } },
       ground: { visible: false, size: PLATEAU, color: PALETTE.joint, grid: false, gridColor: PALETTE.joint },
     },
     entities,
@@ -191,12 +191,15 @@ function lights(): AgentWorldEntityDefinition[] {
     { id: "forge-ambient", label: "Forge Ambient", type: "ambient-light", intensity: 0.28, material: { color: "#243040" }, tags: ["lighting"] },
     // The one shadow-casting light. Cold, oblique, from the visitor's upper left: it reveals
     // the brow, the nose blade and the cheekbones, which is what the sculpt was tuned for.
-    { id: "forge-key", label: "Cold Key", type: "directional-light", intensity: 2.4, transform: { position: [-9, 13, 10] }, material: { color: "#b8d0ff" }, castShadow: true, tags: ["lighting"] },
+    { id: "forge-key", label: "Cold Key", type: "directional-light", intensity: 2.8, transform: { position: [-9, 13, 10] }, material: { color: "#c6d6f2" }, castShadow: true, tags: ["lighting"] },
+    // A dim neutral fill from the visitor's side, no shadows: it keeps the shadow half of the
+    // mask readable without flattening the key. Placed near the rest camera, above eye line.
+    { id: "forge-fill", label: "Visitor Fill", type: "point-light", intensity: 7, distance: 14, marker: false, transform: { position: [3.5, 5.2, 8.5] }, material: { color: "#d9d3c8", emissive: "#d9d3c8" }, tags: ["lighting"] },
     // Copper rim from behind and above the mask. No marker: the light, not the lightbulb.
-    { id: "forge-rim", label: "Copper Rim", type: "point-light", intensity: 26, distance: 16, marker: false, transform: { position: [0, FACE_CENTER_Y + 1.4, -3.4] }, material: { color: PALETTE.amber, emissive: PALETTE.amber }, tags: ["lighting"] },
-    // A faint cyan up-light from the crown, so the jaw is lit from below the way a forge lights
-    // the smith. Short range: it must not reach the floor tiles.
-    { id: "forge-crown-light", label: "Crown Up-light", type: "point-light", intensity: 5, distance: 7, marker: false, transform: { position: [0, SOCKET_HEIGHT + 0.35, 0.5] }, material: { color: PALETTE.cyan, emissive: PALETTE.cyan }, tags: ["lighting"] },
+    { id: "forge-rim", label: "Copper Rim", type: "point-light", intensity: 14, distance: 14, marker: false, transform: { position: [0, FACE_CENTER_Y + 1.4, -3.4] }, material: { color: PALETTE.amber, emissive: PALETTE.amber }, tags: ["lighting"] },
+    // No up-light from the crown. A first version had a cyan point light at the socket that
+    // reached the chin and the inside of the mouth from below — the flashlight-under-the-face
+    // look. The crown's own emissive is enough of a glow at the altar.
   ];
 }
 
@@ -329,18 +332,13 @@ function faceAnchor(anchors: ForgeAnchors): AgentWorldEntityDefinition {
 
 function emitters(): AgentWorldEntityDefinition[] {
   return [
-    {
-      // The crown's twinkle: sparse, cyan-tinted, slow.
-      id: "forge-crown-sparks", label: "Crown Sparks", type: "emitter",
-      transform: { position: [0, SOCKET_HEIGHT + 0.15, 0] },
-      emitter: { preset: "energy-orb", rate: 14, maxParticles: 28, lifetimeSeconds: 1.4, speed: 0.6, sizeScale: 1.6, volumeScale: 1, color: PALETTE.cyan, seed: 12 },
-      tags: ["ambience", "energy"],
-    },
+    // No crown sparks: the additive star sprites read as a smoky white-blue haze in the
+    // altar (owner review, 2026-09-13). The slow amber rings below are the ambience.
     {
       // A few slow motes drifting up the mask. Tinted copper so they sit with the rim light.
       id: "forge-motes", label: "Forge Motes", type: "emitter",
       transform: { position: [0, SOCKET_HEIGHT + 0.6, 0] },
-      emitter: { preset: "plasma-trail", rate: 6, maxParticles: 36, lifetimeSeconds: 6, speed: 0.4, sizeScale: 0.9, volumeScale: 1, color: PALETTE.amber, direction: [0, 1, 0], spread: 0.6, seed: 13 },
+      emitter: { preset: "plasma-trail", rate: 4, maxParticles: 24, lifetimeSeconds: 6, speed: 0.35, sizeScale: 0.8, volumeScale: 1, color: PALETTE.amber, direction: [0, 1, 0], spread: 0.6, seed: 13 },
       tags: ["ambience"],
     },
   ];

@@ -182,7 +182,9 @@ export function mountForgePresentation(scene: Scene, anchors: ForgeAnchors): For
       clock += deltaSeconds;
       writeStrips();
       writeCreation();
-      const target = activity.speaking && activity.build > 0.95 ? 6 + 3 * Math.sin(clock * 4.2) : 0;
+      // Kept faint on purpose: at 6–9 the whole mask brightened with every phrase and the
+      // viewer read "speech" off the cheeks instead of the mouth (owner review, 2026-09-13).
+      const target = activity.speaking && activity.build > 0.95 ? 2 + 1.2 * Math.sin(clock * 4.2) : 0;
       // Attack fast, release slow: the light should answer the first syllable and fade after
       // the last, not flicker between words.
       const rate = target > breath.intensity ? 12 : 3;
