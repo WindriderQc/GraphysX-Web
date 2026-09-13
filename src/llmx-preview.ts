@@ -167,6 +167,42 @@ let reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matc
 let clock = 0;
 let nextBlink = 2.5;
 let blinkPhase = 0;
+let gazeHold: { point: [number, number, number]; until: number } | null = null;
+let creationCount = 0;
+
+/**
+ * Simulate an accepted creation: an ordinary `api.spawn` of an ephemeral copper block dropped
+ * into the build zone (the same call an agent's accepted proposal would make), then the
+ * presentation accent and a two-second glance. What is simulated is the *decision*; the
+ * object is real scene state and lands on the real floor collider.
+ */
+function simulateCreation(): void {
+  const { center, radius } = anchors.buildZone;
+  creationCount += 1;
+  const angle = creationCount * 2.4;
+  const spread = radius * 0.55;
+  const x = center[0] + Math.cos(angle) * spread * ((creationCount % 3) / 3);
+  const z = center[2] + Math.sin(angle) * spread * ((creationCount % 3) / 3);
+  const receipt = host.api.spawn({
+    id: `preview-creation-${creationCount}`,
+    label: `Preview creation ${creationCount}`,
+    type: creationCount % 2 === 0 ? "cylinder" : "box",
+    transform: { position: [x, 1.4, z], rotationDegrees: [0, creationCount * 37, 0] },
+    geometry: { width: 0.7, height: 0.7, depth: 0.7, radius: 0.36, radialSegments: 24 },
+    material: { color: "#8a5a34", emissive: "#5a2c10", emissiveIntensity: 0.6, roughness: 0.35, metalness: 0.85 },
+    physics: { mode: "dynamic", mass: 2 },
+    castShadow: true,
+    receiveShadow: true,
+    ephemeral: true,
+    tags: ["preview-creation"],
+  });
+  if (!receipt.ok) {
+    console.error("llmx-preview: simulated creation refused", receipt.error);
+    return;
+  }
+  presentation.announceCreation([x, center[1], z]);
+  gazeHold = { point: [x, 0.5, z], until: clock + 2.2 };
+}
 
 function restartIntro(seek = 0): void {
   introTime = seek;
@@ -229,9 +265,11 @@ const unsubscribe = host.subscribeFrame((deltaSeconds) => {
   // Only once the eyes are open — a mask that tracks you before it wakes is not what the
   // choreography promises.
   if (drivers.build > 0.98 && drivers.blink < 0.5) {
-    const dx = host.camera.position.x - anchors.faceCenter[0];
-    const dy = host.camera.position.y - anchors.gazeTarget[1];
-    const dz = host.camera.position.z - anchors.faceCenter[2];
+    // A fresh creation holds the gaze for a moment, then the eyes return to the visitor.
+    const focus = gazeHold && clock < gazeHold.until ? gazeHold.point : [host.camera.position.x, host.camera.position.y, host.camera.position.z];
+    const dx = focus[0] - anchors.faceCenter[0];
+    const dy = focus[1] - anchors.gazeTarget[1];
+    const dz = focus[2] - anchors.faceCenter[2];
     drivers.gazeX = clamp(Math.atan2(dx, dz) / GAZE_LIMIT_RADIANS, -1, 1);
     drivers.gazeY = clamp(Math.atan2(dy, Math.hypot(dx, dz)) / GAZE_LIMIT_RADIANS, -1, 1);
   }
@@ -288,6 +326,7 @@ const speakButton = button("Parler (simulé)", () => { simulateSpeech = !simulat
 const thinkButton = button("Penser (simulé)", () => { simulateThink = !simulateThink; });
 const attentionButton = button("Attention (simulé)", () => { simulateAttention = !simulateAttention; });
 const reducedButton = button("Mouvements réduits", () => { reducedMotion = !reducedMotion; });
+button("Créer (simulé)", simulateCreation);
 hud.append(title, readout, buttons);
 root.append(hud);
 
@@ -326,5 +365,6 @@ render();
   drivers: (): PreviewDrivers => ({ ...drivers }),
   intro: { restart: restartIntro, time: (): number | null => introTime },
   setSpeaking: (on: boolean): void => { simulateSpeech = on; render(); },
+  simulateCreation,
   dispose: (): void => { unsubscribe(); presentation.dispose(); face.dispose(); hud.remove(); host.dispose(); },
 };

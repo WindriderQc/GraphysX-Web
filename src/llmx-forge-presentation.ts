@@ -8,6 +8,8 @@ import {
   PointLight,
   type Scene,
 } from "three";
+import { RingGeometry, Mesh, DoubleSide } from "three";
+import type { AgentWorldVector3 } from "./agent-world-runtime";
 import type { ForgeAnchors, ForgeIntroFrame } from "./llmx-forge";
 
 /**
@@ -36,6 +38,12 @@ export type ForgePresentation = Readonly<{
   setIntro: (frame: ForgeIntroFrame) => void;
   /** What the face is doing, at most once per frame. */
   setActivity: (activity: ForgeActivity) => void;
+  /**
+   * Something was just created at `point` (world). Runs a light along the floor from the socket
+   * to it and opens a ring there — the plan's "trajet lumineux, bref anneau". One accent at a
+   * time: a new call restarts the effect at the new point rather than stacking.
+   */
+  announceCreation: (point: AgentWorldVector3) => void;
   update: (deltaSeconds: number) => void;
   dispose: () => void;
 }>;
@@ -64,6 +72,75 @@ export function mountForgePresentation(scene: Scene, anchors: ForgeAnchors): For
   let activity: ForgeActivity = { speaking: false, build: 1 };
   let clock = 0;
   const color = new Color();
+
+  // Creation accent: a trail of segments re-laid from the socket rim to the point, and a flat
+  // ring that opens on the floor there. Built once, hidden when idle.
+  const TRAIL_SEGMENTS = 32;
+  const trail = new InstancedMesh(new BoxGeometry(0.28, 0.02, 0.1), new MeshBasicMaterial({ color: "#ffffff" }), TRAIL_SEGMENTS);
+  trail.name = "ForgeCreationTrail";
+  trail.visible = false;
+  const ring = new Mesh(
+    new RingGeometry(0.86, 1, 64),
+    new MeshBasicMaterial({ color: "#66dcff", transparent: true, opacity: 0, side: DoubleSide, depthWrite: false }),
+  );
+  ring.name = "ForgeCreationRing";
+  ring.rotation.x = -Math.PI / 2;
+  ring.visible = false;
+  group.add(trail, ring);
+  let creation: { since: number; point: AgentWorldVector3 } | null = null;
+  const CREATION_TRAIL_SECONDS = 0.55;
+  const CREATION_RING_SECONDS = 1.1;
+  const cyan = new Color("#66dcff");
+
+  const layTrail = (point: AgentWorldVector3): void => {
+    const matrix = new Matrix4();
+    const fromX = anchors.socketTop[0];
+    const fromZ = anchors.socketTop[2];
+    const dx = point[0] - fromX;
+    const dz = point[2] - fromZ;
+    const yaw = Math.atan2(dx, dz) + Math.PI / 2;
+    for (let i = 0; i < TRAIL_SEGMENTS; i += 1) {
+      const t = (i + 0.5) / TRAIL_SEGMENTS;
+      matrix.makeRotationY(yaw);
+      matrix.setPosition(fromX + dx * t, anchors.buildZone.center[1] + 0.06, fromZ + dz * t);
+      trail.setMatrixAt(i, matrix);
+    }
+    trail.instanceMatrix.needsUpdate = true;
+    trail.computeBoundingSphere();
+  };
+
+  const writeCreation = (): void => {
+    if (!creation) return;
+    const age = clock - creation.since;
+    if (age > CREATION_RING_SECONDS) {
+      creation = null;
+      trail.visible = false;
+      ring.visible = false;
+      return;
+    }
+    // The trail: a front running socket → point, then fading behind it.
+    const front = Math.min(1, age / CREATION_TRAIL_SECONDS) * 1.1;
+    const fade = age < CREATION_TRAIL_SECONDS ? 1 : Math.max(0, 1 - (age - CREATION_TRAIL_SECONDS) / 0.35);
+    for (let i = 0; i < TRAIL_SEGMENTS; i += 1) {
+      const along = (i + 0.5) / TRAIL_SEGMENTS;
+      const behind = front - along;
+      const gain = behind < 0 ? 0 : Math.max(0, 1 - behind * 4) * 2.4 * fade;
+      color.copy(cyan).multiplyScalar(gain);
+      trail.setColorAt(i, color);
+    }
+    if (trail.instanceColor) trail.instanceColor.needsUpdate = true;
+    // The ring opens once the trail arrives, from a point to the build radius, and fades.
+    const ringAge = age - CREATION_TRAIL_SECONDS * 0.8;
+    if (ringAge <= 0) {
+      ring.visible = false;
+      return;
+    }
+    const k = Math.min(1, ringAge / (CREATION_RING_SECONDS - CREATION_TRAIL_SECONDS * 0.8));
+    const eased = 1 - Math.pow(1 - k, 3);
+    ring.visible = true;
+    ring.scale.setScalar(0.15 + eased * 1.6);
+    (ring.material as MeshBasicMaterial).opacity = 0.9 * (1 - k);
+  };
 
   const writeStrips = (): void => {
     for (const strip of strips) {
@@ -95,9 +172,16 @@ export function mountForgePresentation(scene: Scene, anchors: ForgeAnchors): For
     setActivity: (next) => {
       activity = next;
     },
+    announceCreation: (point) => {
+      creation = { since: clock, point };
+      layTrail(point);
+      ring.position.set(point[0], anchors.buildZone.center[1] + 0.05, point[2]);
+      trail.visible = true;
+    },
     update: (deltaSeconds) => {
       clock += deltaSeconds;
       writeStrips();
+      writeCreation();
       const target = activity.speaking && activity.build > 0.95 ? 6 + 3 * Math.sin(clock * 4.2) : 0;
       // Attack fast, release slow: the light should answer the first syllable and fade after
       // the last, not flicker between words.
@@ -111,6 +195,11 @@ export function mountForgePresentation(scene: Scene, anchors: ForgeAnchors): For
         (strip.mesh.material as MeshBasicMaterial).dispose();
         strip.mesh.dispose();
       }
+      trail.geometry.dispose();
+      (trail.material as MeshBasicMaterial).dispose();
+      trail.dispose();
+      ring.geometry.dispose();
+      (ring.material as MeshBasicMaterial).dispose();
       breath.dispose();
     },
   };

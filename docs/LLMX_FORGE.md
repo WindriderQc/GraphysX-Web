@@ -10,7 +10,7 @@ Codex per [LLMX_RESTART_HANDOFF](../../GraphysX-Web-llmx-plan/docs/LLMX_RESTART_
 | File | Role |
 | --- | --- |
 | `src/llmx-forge.ts` | `createForgeWorld()` — the Forge as a plain v2 document plus named anchors (`faceCenter`, `gazeTarget`, `cameraRest`, `cameraEntry`, `buildZone`, `ribs`). Also the pure entry timeline `forgeIntroAt()` / `forgeCameraAt()`. Type-only over the runtime so `node --test` loads it. |
-| `src/llmx-forge-presentation.ts` | Host-side transient effects: the copper circuit running along the ribs at entry, the copper "breath" behind the mask while the agent speaks. Not scene state; never exported. |
+| `src/llmx-forge-presentation.ts` | Host-side transient effects: the copper circuit running along the ribs at entry, the copper "breath" behind the mask while the agent speaks, and `announceCreation(point)` — a cyan trail from the socket to a new object and a ring opening under it. Not scene state; never exported. |
 | `src/llmx-preview.ts` + `llmx-preview.html` | Dev harness in the real `PlatformHost`. Not a build input. Everything it animates is labelled SIMULATION. |
 | `test/llmx-forge.test.mjs` | Document invariants: unique ids, one floor collider, one shadow light, particle budget, anchors consistent, timeline monotonic. |
 
@@ -30,7 +30,7 @@ Plug it in with `window.__LLMX_PREVIEW__.attachFace(rig)`.
 
 From this worktree: `npm run dev -- --port 4199` then open
 `http://localhost:4199/llmx-preview.html`. Query: `intro=0` skips the entry, `t=<s>` seeks it,
-`speak=1` starts the simulated speech envelope. `.claude/launch.json` has an `llmx-preview`
+`speak=1` starts the simulated speech envelope. "Créer (simulé)" spawns an ephemeral copper block into the build zone through an ordinary `api.spawn` (the object is real scene state on the real collider; only the decision is simulated), fires the creation accent and holds the mask's gaze on it for two seconds. `.claude/launch.json` has an `llmx-preview`
 entry for the Browser pane.
 
 With a junctioned `node_modules`, Vite logs 403s for `@fontsource` files outside its allow list;
@@ -46,5 +46,8 @@ is ready; the application gates the "Hello" separately.
 
 Entry view with the plateau, arches and stack smoke; circuit pulse along the front rib; block
 stand-in assembling from the chin up; rest framing with the crown, rim breath and build zone.
-Not yet: the real voxel mask in the Forge (waiting on the rig), a reduced profile capture, and any
-measured frame budget.
+Later the same day, with the face session's rig (its commit `cc223dd`) attached through the
+harness: the mask carries the key light without cracks, aims its gaze at the rest camera
+(`gazeX` 0.55), opens its mouth on simulated speech, and turns toward a simulated creation while
+the trail and ring play. Not yet: a landscape capture at native scale, a reduced-profile capture
+with a measured frame budget.
