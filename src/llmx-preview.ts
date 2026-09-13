@@ -45,7 +45,13 @@ type PreviewFaceRig = {
   readonly object: Object3D;
   setDrivers: (drivers: Partial<PreviewDrivers>) => void;
   update: (deltaSeconds: number) => void;
-  describe: () => { build: number; speaking: boolean };
+  describe: () => { build: number; speaking: boolean; level?: string; renderedLevel?: string };
+  /**
+   * Cap the rendered density to the viewing machine's profile. A property of the viewer, kept
+   * out of the saved `level` on purpose: autosave on a phone must not write the phone's limit
+   * into everyone's world. Called once at attach and again only when the host's profile changes.
+   */
+  setQualityCeiling?: (profile: "high" | "balanced" | "mobile") => void;
   dispose: () => void;
 };
 
@@ -150,8 +156,16 @@ function attachFace(rig: PreviewFaceRig): void {
   faceIsStandIn = false;
   anchorObject.add(rig.object);
   rig.setDrivers(drivers);
+  rig.setQualityCeiling?.(host.qualityProfile.name);
   render();
 }
+
+// The host announces a real profile change on its canvas (resize across a tier boundary); the
+// ceiling follows it then and only then, so density never oscillates mid-conversation.
+host.renderer.domElement.addEventListener("graphysx-render-profile-change", () => {
+  face.setQualityCeiling?.(host.qualityProfile.name);
+  render();
+});
 
 // ---------------------------------------------------------------------------
 // Simulation state. Every number here is invented for the preview and labelled as such.
@@ -338,7 +352,8 @@ function render(): void {
     `phase    ${phase}${reducedMotion ? " · réduit" : ""}\n` +
     `build    ${described.build.toFixed(2)}   speak ${drivers.speak.toFixed(2)}\n` +
     `think    ${drivers.think.toFixed(2)}   attention ${drivers.attention.toFixed(2)}\n` +
-    `profil   ${host.qualityProfile.name}   frames ${host.frameCount}`;
+    `profil   ${host.qualityProfile.name}   rendu ${described.renderedLevel ?? "-"} (monde ${described.level ?? "-"})\n` +
+    `frames   ${host.frameCount}`;
   const pressed = (element: HTMLButtonElement, on: boolean): void => {
     element.setAttribute("aria-pressed", String(on));
     element.style.background = on ? "#2b5a6e" : "#17222d";
