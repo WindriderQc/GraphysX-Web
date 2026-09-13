@@ -1,7 +1,8 @@
 # Wiring the voxel face into the scene document
 
 For the integrator. The face is finished and qualified on branch `claude/llmx-face-forge`;
-what is missing is the eight call sites in `agent-world-runtime.ts` that make it **savable**.
+what is missing is the nine call sites that make it **savable** and correctly sized — eight in
+`agent-world-runtime.ts`, one wherever the face is mounted.
 That file belongs to the integrator, so this is a proposal, not a change.
 
 Until this lands, the mask exists only as a rig a host constructs by hand — which is what the
@@ -137,7 +138,7 @@ and jaw all still read, on a phone viewport, with the controls usable.
 
 ## What to check once it is wired
 
-The pure half is covered by `test/llmx-face-pose.test.mjs` (30 tests), including the appearance
+The pure half is covered by `test/llmx-face-pose.test.mjs` (32 tests), including the appearance
 round-trip and the refusal of an unknown `kind`. What that file cannot reach, and what the
 runtime tests should add:
 
