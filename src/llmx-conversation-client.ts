@@ -195,18 +195,20 @@ export class LlmXConversationClient {
       else this.storage?.removeItem(this.storageKey);
     } catch { /* Session continuity is optional when browser storage is unavailable. */ }
   }
-  private async json(path: string, epoch: number, body?: unknown): Promise<Record<string, unknown>> {
+  private async json(path: string, epoch: number, body?: unknown, timeoutMs?: number): Promise<Record<string, unknown>> {
     const controller = new AbortController();
     this.requests.add(controller);
+    const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
     try {
       const response = await this.fetcher(this.base + path, { signal: controller.signal,
         ...(body !== undefined ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
       this.current(epoch);
       const payload: unknown = await response.json();
       this.current(epoch);
+      controller.signal.throwIfAborted();
       if (!response.ok) throw new Error(typeof object(payload).message === 'string' ? String(object(payload).message) : 'Conversation indisponible.');
       return unpack(payload);
-    } finally { this.requests.delete(controller); }
+    } finally { clearTimeout(timer); this.requests.delete(controller); }
   }
 
   initialize(): Promise<LlmXSession | null> {
@@ -304,8 +306,26 @@ export class LlmXConversationClient {
       });
       this.current(epoch);
       const data = unpack(await response.json());
+      this.current(epoch);
       if (!response.ok || data.turnId !== receipt.turnId) throw new Error('Le résultat n’a pas été confirmé à notre agent.');
     } finally { clearTimeout(timer); this.requests.delete(controller); }
+  }
+
+  /** Resolve the recorded French outcome through the same session/persona voice authority. */
+  async readSceneReply(turnId: string, sessionId: string, expectedText: string): Promise<LlmXReply> {
+    const epoch = this.epoch;
+    this.current(epoch);
+    if (this.session?.sessionId !== sessionId || !this.completedTurnIds.has(turnId)) throw new Error('La conversation de cette création a changé.');
+    const data = await this.json('/sessions/' + encodeURIComponent(sessionId) + '/history', epoch, undefined, 10000);
+    this.current(epoch);
+    sessionValue(data.session, sessionId, this.profile);
+    const latest = object(data.lastReply);
+    if (latest.turnId !== turnId) throw new Error('La voix de cette réponse n’est plus disponible dans ce tour.');
+    const reply = replyValue(latest.reply);
+    if (reply.text !== expectedText || reply.language !== 'fr' || reply.speech?.language !== 'fr' || !reply.speech.provider?.trim()) {
+      throw new Error('La voix française de cette réponse n’a pas pu être confirmée.');
+    }
+    return reply;
   }
 
   observeSceneReply(turnId: string, reply: LlmXReply): void {

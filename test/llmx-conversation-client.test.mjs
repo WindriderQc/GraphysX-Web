@@ -96,6 +96,97 @@ test('math observations derive from current operands and step, rejecting inconsi
   }
 });
 
+const correctedText = 'Au départ : 2 cubes et 3 cubes. Quantité totale : 5 cubes.';
+const frenchSceneReply = { text: correctedText, language: 'fr', speech: { provider: 'voxcpm', voice: 'voice_a', language: 'fr' } };
+const correctedHistory = () => ({ session: session(), lastReply: { turnId, reply: structuredClone(frenchSceneReply) } });
+
+test('a recorded scene outcome resolves its exact French persona voice without another action or inference', async () => {
+  let recorded = false;
+  const h = harness(call => {
+    if (call.url.endsWith('/scene-receipts')) { recorded = true; return json({ turnId, receipt: call.body }); }
+    if (call.url.endsWith('/history')) { assert.equal(recorded, true); return json(correctedHistory()); }
+    return json(result(turnId, 'Two plus three make six.', { reply: { text: 'Two plus three make six.', language: 'en',
+      speech: { provider: 'kokoro', voice: 'am_michael', language: 'en' } } }));
+  });
+  await h.client.send('Show two plus three.', scene, { turnId });
+  h.client.observeSceneReply(turnId, { text: correctedText, language: 'fr' });
+  await h.client.recordSceneReceipt({ turnId, status: 'applied', entityIds: [], message: correctedText }, h.client.session.sessionId);
+  const reply = await h.client.readSceneReply(turnId, h.client.session.sessionId, correctedText);
+  assert.deepEqual(reply, frenchSceneReply);
+  h.client.observeSceneReply(turnId, reply);
+  assert.deepEqual(h.client.latestReply, { turnId, reply: frenchSceneReply });
+  assert.equal(h.client.history.at(-1).content, correctedText);
+  assert.equal(turnCalls(h.calls).length, 1);
+  assert.equal(h.calls.at(-1).url, '/llmx-api/sessions/llmx-owned-session/history');
+  assert.equal(h.calls.at(-1).init.method, undefined, 'voice recovery is a read only');
+});
+
+test('voice recovery refuses another session, profile, turn, text or non-French voice and preserves the corrected fallback', async () => {
+  for (const mutate of [value => { value.session.sessionId = 'another-session'; },
+    value => { value.session.packId = 'kidx_nestor'; value.session.scopeId = 'family'; },
+    value => { value.lastReply.turnId = secondId; }, value => { value.lastReply.reply.text = 'Another answer.'; },
+    value => { value.lastReply.reply.language = 'en'; }, value => { value.lastReply.reply.speech.language = 'en'; },
+    value => { delete value.lastReply.reply.speech; }, value => { value.lastReply = null; }]) {
+    const payload = correctedHistory(); mutate(payload);
+    const h = harness(call => call.url.endsWith('/history') ? json(payload) : json(result()));
+    await h.client.send('Question', scene, { turnId });
+    const fallback = { text: correctedText, language: 'fr' };
+    h.client.observeSceneReply(turnId, fallback);
+    await assert.rejects(h.client.readSceneReply(turnId, h.client.session.sessionId, correctedText));
+    assert.deepEqual(h.client.latestReply, { turnId, reply: fallback });
+    assert.equal(h.client.history.at(-1).content, correctedText);
+    assert.equal(turnCalls(h.calls).length, 1);
+  }
+});
+
+test('voice recovery accepts only a completed local turn and keeps Family reads within its own route', async () => {
+  const calls = [], family = session('family-session', { packId: 'kidx_nestor', scopeId: 'family' });
+  const client = new LlmXConversationClient({ profile: 'family', storage: memory(), fetch: async (url, init = {}) => {
+    calls.push({ url, init });
+    assert.ok(url.startsWith('/llmx-api/family/'));
+    if (url.endsWith('/config')) return json(config);
+    if (url.endsWith('/sessions')) return json({ session: family });
+    if (url.endsWith('/history')) return json({ session: family, lastReply: { turnId, reply: frenchSceneReply } });
+    return json(result(turnId, 'Question', { session: family }));
+  } });
+  await client.initialize();
+  await assert.rejects(client.readSceneReply(turnId, family.sessionId, correctedText), /changé/);
+  assert.equal(calls.length, 2);
+  await client.send('Question', scene, { turnId });
+  await assert.rejects(client.readSceneReply(turnId, 'private-session', correctedText), /changé/);
+  assert.deepEqual(await client.readSceneReply(turnId, family.sessionId, correctedText), frenchSceneReply);
+  assert.equal(calls.at(-1).url, '/llmx-api/family/sessions/family-session/history');
+});
+
+for (const reset of ['dispose', 'newSession']) test(`a late French voice body cannot revive a reply after ${reset}`, async () => {
+  const body = deferred();
+  const h = harness(call => call.url.endsWith('/history') ? { ok: true, json: () => body.promise } : json(result()));
+  await h.client.send('Question', scene, { turnId });
+  const reading = h.client.readSceneReply(turnId, h.client.session.sessionId, correctedText);
+  const cancelled = assert.rejects(reading, { name: 'AbortError' });
+  await until(() => h.calls.some(call => call.url.endsWith('/history')));
+  await h.client[reset]();
+  assert.equal(h.calls.find(call => call.url.endsWith('/history')).init.signal.aborted, true);
+  body.resolve({ ok: true, data: correctedHistory() });
+  await cancelled;
+  assert.equal(h.client.latestReply, null);
+  assert.deepEqual(h.client.history, []);
+});
+
+test('French voice history lookup is bounded to ten seconds without replaying the turn', async t => {
+  const h = harness(call => call.url.endsWith('/history') ? new Promise((_resolve, reject) => {
+    call.init.signal.addEventListener('abort', () => reject(new DOMException('Timed out', 'AbortError')), { once: true });
+  }) : json(result()));
+  await h.client.send('Question', scene, { turnId });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const reading = h.client.readSceneReply(turnId, h.client.session.sessionId, correctedText);
+  const timedOut = assert.rejects(reading, { name: 'AbortError' });
+  t.mock.timers.tick(10000);
+  await timedOut;
+  assert.equal(turnCalls(h.calls).length, 1);
+  assert.equal(h.client.state, 'idle');
+});
+
 test('disabled configuration makes no session, history, opening or turn request', async () => {
   const calls = [];
   const client = new LlmXConversationClient({ storage: memory('private-other'), fetch: async (url) => {

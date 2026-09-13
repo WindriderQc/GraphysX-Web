@@ -53,24 +53,43 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
   let voice: LlmXVoiceConversation | null = null;
   let speech: AbortController | null = null;
   let speechTurnId: string | null = null, lastReplyTurnId: string | null = null;
+  let replyNeedingVoiceTurnId: string | null = null;
   let detail = '', voiceState = '', partial = '', lastReply: LlmXReply | null = null;
   let settling: Promise<void> = Promise.resolve();
   const client = new LlmXConversationClient({ profile: options.profile, onChange: () => render(), onDelta: (_delta, answer) => {
     partial = answer; render();
   } });
 
-  async function acceptTurn(result: LlmXTurnResult, before: number): Promise<LlmXReply> {
-    check(before);
+  async function acceptTurn(result: LlmXTurnResult, before: number, signal?: AbortSignal): Promise<LlmXReply> {
+    const current = () => { check(before); signal?.throwIfAborted(); };
+    current();
     if (!result.sceneProposal) return result.reply;
     const receipt = options.onSceneProposal?.(result.sceneProposal, result.turnId)
       ?? { turnId: result.turnId, status: 'rejected' as const, entityIds: [], message: 'La création n’est pas disponible ici.' };
-    const reply = receipt.status === 'rejected' || result.sceneProposal.math
+    const replaced = receipt.status === 'rejected' || !!result.sceneProposal.math;
+    const needsFrenchVoice = replaced && (result.reply.language !== 'fr' || (result.reply.speech?.language ?? 'fr') !== 'fr');
+    let reply = replaced
       ? { ...result.reply, text: receipt.message || 'La création n’a pas pu être confirmée.' } : result.reply;
+    if (needsFrenchVoice) {
+      // Keep the corrected text for replay, without carrying the original English voice.
+      reply = { text: reply.text, language: 'fr' };
+      lastReply = reply; lastReplyTurnId = result.turnId; replyNeedingVoiceTurnId = result.turnId;
+    }
     partial = ''; client.observeSceneReply(result.turnId, reply);
     detail = receipt.message || (receipt.status === 'applied' ? 'Création appliquée.' : 'Création refusée.'); render();
     try { await client.recordSceneReceipt(receipt, result.session.sessionId); }
-    catch { check(before); detail += ' Le résultat n’a pas encore été confirmé à notre agent.'; render(); }
-    check(before);
+    catch { current(); detail += ' Le résultat n’a pas encore été confirmé à notre agent.'; render(); }
+    current();
+    if (needsFrenchVoice) {
+      try {
+        reply = await client.readSceneReply(result.turnId, result.session.sessionId, reply.text);
+        current();
+        lastReply = reply; replyNeedingVoiceTurnId = null; client.observeSceneReply(result.turnId, reply);
+      } catch {
+        current();
+        throw new Error(detail + ' Le texte corrigé reste affiché, mais sa voix française est indisponible. Réécouter permettra de la vérifier à nouveau.');
+      }
+    }
     // Speak the observed outcome if execution failed, never an unfulfilled model promise.
     return reply;
   }
@@ -142,6 +161,11 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
     if (!sound || disposed || before !== epoch) return;
     const abort = new AbortController(); speech = abort; speechTurnId = turnId; voiceState = 'preparing'; render();
     try {
+      if (replyNeedingVoiceTurnId === turnId && turnId && client.session) {
+        reply = await client.readSceneReply(turnId, client.session.sessionId, reply.text);
+        abort.signal.throwIfAborted(); check(before);
+        lastReply = reply; replyNeedingVoiceTurnId = null; client.observeSceneReply(turnId, reply);
+      }
       // Fetch only after the shared player is ready: an aborted loader cannot strand a TTS request.
       await loadLlmXAudio(); abort.signal.throwIfAborted();
       const response = await synthesize(reply, abort.signal);
@@ -240,7 +264,7 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
           const result = await client.send(text, sceneContext(), { signal, turnId: metadata.turnId, channel: 'voice' });
           signal.throwIfAborted();
           if (disposed || before !== epoch) throw new DOMException('Conversation closed', 'AbortError');
-          const reply = await acceptTurn(result, before);
+          const reply = await acceptTurn(result, before, signal);
           currentReply = reply; lastReply = reply; lastReplyTurnId = result.turnId; partial = ''; render();
           return reply;
         },
@@ -337,7 +361,7 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
       await client.newSession();
       if (disposed || before !== epoch) return;
       detail = client.cleanupWarning || cleanupWarning;
-      openingChecked = !!detail; suppressOpening = !!detail; lastReply = null; lastReplyTurnId = null; partial = '';
+      openingChecked = !!detail; suppressOpening = !!detail; lastReply = null; lastReplyTurnId = null; replyNeedingVoiceTurnId = null; partial = '';
       if (detail) detail += ' Nouvelle conversation prête : à toi de commencer.';
       await maybeOpening();
     } catch (error) { fail(error); }
@@ -354,6 +378,7 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
   window.addEventListener('pagehide', hide);
   return {
     ready() { visualReady = true; void maybeOpening(); },
+    collapseHistory() { transcript.hidden = true; button('history').setAttribute('aria-expanded', 'false'); },
     worldChanged() { void stop(available() ? 'Environnement rechargé. La conversation continue ici.' : '').catch(() => {}); },
     sample() { return disposed ? quiet() : voice?.audio?.readSpeechSample?.() ?? output.sample(); },
     phase(): LlmXConversationPhase {
