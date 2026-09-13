@@ -445,3 +445,112 @@ export function eyeTransform(anchors: FaceAnchors, input: Partial<FaceDrivers>):
     glow: clamp(0.45 + 0.4 * d.attention + 0.3 * d.speak - 0.5 * d.blink, 0, 1.4),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Appearance — the face's serialisable identity, kept here rather than with the
+// renderer so that `node --test` can reach it. GraphysX's convention is that a
+// module the fast test tier imports may only take *type* imports from other
+// `.ts` files; the renderer takes Three.js at runtime and therefore cannot be
+// one. Config is data, so it belongs on this side of that line anyway.
+// ---------------------------------------------------------------------------
+
+export type AgentWorldFaceLevel = "high" | "balanced" | "mobile";
+
+export type AgentWorldFace = {
+  /** Which sculpted mask. One is shipped; the field exists so a second cannot be a silent swap. */
+  asset?: string;
+  level?: AgentWorldFaceLevel;
+  /** Base metal of the mask. */
+  metalColor?: string;
+  /** Accent on the temple fins. Copper is an accent — see the palette note in the renderer. */
+  copperColor?: string;
+  /** Emissive of the eyes. */
+  eyeColor?: string;
+  /** Warm tint on the lips, so the mouth reads without becoming a bright bar. */
+  lipColor?: string;
+  /** Seed for the per-cube forge jitter. Deterministic: the same seed is the same mask. */
+  seed?: number;
+  /** Blink on its own schedule. A host that drives blink explicitly still wins. */
+  autoBlink?: boolean;
+};
+
+export type ResolvedAgentWorldFace = Required<AgentWorldFace>;
+
+/**
+ * The Nocturnal Forge palette. Charcoal metal, patinated copper on the fins only, cold cyan in
+ * the eyes. The one rule worth writing down: copper is an accent. Giving the lips the same
+ * copper as the fins grew a bright horizontal bar across the mask that read as a grille rather
+ * than a mouth — the mouth has to read by its shadow and its aperture, which is what makes it
+ * look like it can open.
+ */
+const BASE_FACE: ResolvedAgentWorldFace = {
+  asset: "forge-mask",
+  level: "high",
+  metalColor: "#4c525e",
+  copperColor: "#a06a3e",
+  eyeColor: "#60d6e8",
+  lipColor: "#423c3a",
+  seed: 1,
+  autoBlink: true,
+};
+
+export function resolveAgentWorldFace(source: AgentWorldFace | undefined): ResolvedAgentWorldFace {
+  const base = BASE_FACE;
+  if (!source) return { ...base };
+  const level = source.level;
+  return {
+    asset: source.asset ?? base.asset,
+    level: level === "balanced" || level === "mobile" || level === "high" ? level : base.level,
+    metalColor: source.metalColor ?? base.metalColor,
+    copperColor: source.copperColor ?? base.copperColor,
+    eyeColor: source.eyeColor ?? base.eyeColor,
+    lipColor: source.lipColor ?? base.lipColor,
+    seed: Number.isFinite(source.seed) ? (source.seed as number) : base.seed,
+    autoBlink: source.autoBlink ?? base.autoBlink,
+  };
+}
+
+/**
+ * How an `agent` entity chooses to look.
+ *
+ * A discriminated union with one member today. It is a union rather than a bare face config
+ * because the alternative — "an agent with a `face` block is a voxel face" — makes the second
+ * appearance a breaking change to the first. `kind` costs one string in the document and keeps
+ * that door open.
+ *
+ * Changing an agent's appearance changes nothing about the agent: not its role, not its
+ * capabilities, not what it is allowed to do. This is presentation.
+ */
+export type AgentWorldAppearance = { kind: "voxel-face" } & AgentWorldFace;
+
+export type ResolvedAgentWorldAppearance = { kind: "voxel-face" } & ResolvedAgentWorldFace;
+
+/** Appearance kinds this build can render. */
+export const AGENT_WORLD_APPEARANCE_KINDS = ["voxel-face"] as const;
+
+/**
+ * Resolve an appearance from a document.
+ *
+ * An unknown `kind` throws rather than falling back to the default avatar. A scene written by a
+ * newer build has to report an explicit incompatibility: silently replacing someone's mask with
+ * a capsule and then *saving that back* is how a world loses its face permanently.
+ */
+export function resolveAgentWorldAppearance(source: AgentWorldAppearance): ResolvedAgentWorldAppearance {
+  const kind = source?.kind;
+  if (kind !== "voxel-face") {
+    throw new Error(
+      `Unsupported agent appearance: ${String(kind)}. This build renders ${AGENT_WORLD_APPEARANCE_KINDS.join(", ")}.`,
+    );
+  }
+  return { kind, ...resolveAgentWorldFace(source) };
+}
+
+/**
+ * Serialise a resolved appearance back into the document.
+ *
+ * Fully specified rather than diffed against the defaults, exactly as `formula` does it: a
+ * default that later changes value must not silently restyle every mask already saved.
+ */
+export function serializeAgentWorldAppearance(appearance: ResolvedAgentWorldAppearance): AgentWorldAppearance {
+  return { ...appearance };
+}
