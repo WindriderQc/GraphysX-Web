@@ -1,4 +1,6 @@
+import { Vector3 } from "three";
 import { findVoxelFace } from "./agent-world-face";
+import { POSE_LIMITS } from "./llmx-face-pose";
 import type { LlmXApplication } from "./llmx-contracts";
 import { createLlmXEntrance } from "./llmx-entrance";
 import { createLlmXForge, LLMX_FACE_ID, readLlmXEnvironment, saveLlmXEnvironment } from "./llmx-environment";
@@ -42,6 +44,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   let entrance = makeEntrance();
   let lastPhase = "";
   let cameraOwned = true;
+  const localGaze = new Vector3();
 
   const surface = document.createElement("section");
   surface.className = "gx-llmx";
@@ -96,13 +99,18 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     const currentFace = object && findVoxelFace(object);
     if (!currentFace) return;
     face = currentFace;
-    face.setLevel(host.qualityProfile.name);
+    face.setQualityCeiling(host.qualityProfile.name);
     const previousPhase = entrance.state().phase;
     if (motionIsReduced() && previousPhase === "entering") entrance.skip();
     const state = entrance.advance(Math.min(0.1, Math.max(0, delta)));
     const intro = forgeIntroAt(state.elapsedSeconds);
     presentation.setIntro(intro);
-    const drivers = { build: intro.assembly, blink: 1 - intro.wake, attention: 0.25 + 0.4 * intro.wake };
+    object.worldToLocal(localGaze.copy(host.camera.position));
+    const drivers = {
+      build: intro.assembly, blink: 1 - intro.wake, attention: 0.25 + 0.4 * intro.wake,
+      gazeX: Math.atan2(localGaze.x, localGaze.z) / POSE_LIMITS.gazeRadians,
+      gazeY: Math.atan2(localGaze.y - 0.1, Math.hypot(localGaze.x, localGaze.z)) / POSE_LIMITS.gazeRadians,
+    };
     if (state.phase === "ready" && previousPhase === "entering") face.snapDrivers(drivers);
     else face.setDrivers(drivers);
     if (cameraOwned) {

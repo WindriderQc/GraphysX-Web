@@ -22,13 +22,15 @@ test("static face instance uploads stop after assembly, including after a replay
 });
 
 test("skip applies the complete face immediately and changing detail retains its pose", () => {
-  const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "mobile" }));
+  const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "high" }));
   try {
     face.snapDrivers({ build: 1, blink: 0 });
     assert.equal(face.describe().build, 1);
-    face.setLevel("balanced");
+    face.setQualityCeiling("mobile");
+    face.setQualityCeiling("balanced");
     assert.equal(face.describe().build, 1);
-    assert.equal(face.describe().level, "balanced");
+    assert.equal(face.describe().level, "high");
+    assert.equal(face.describe().renderedLevel, "balanced");
     assert.equal(face.object.children.length, 3);
   } finally { face.dispose(); }
   assert.equal(face.object.children.length, 0);

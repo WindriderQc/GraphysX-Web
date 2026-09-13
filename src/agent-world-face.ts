@@ -230,11 +230,6 @@ export class AgentWorldVoxelFace {
     this.update(0);
   }
 
-  /** Detail follows the host device, not the saved environment. */
-  setLevel(level: AgentWorldFaceLevel): void {
-    if (level !== this.config.level) this.configure({ ...this.config, level });
-  }
-
   /**
    * Advance the face by one frame. Called from `host.subscribeFrame`, never from its own loop.
    *
