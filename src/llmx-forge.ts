@@ -352,6 +352,30 @@ function emitters(): AgentWorldEntityDefinition[] {
   ];
 }
 
+/** Id of the ephemeral thinking emitter, so the application can find and remove it. */
+export const LLMX_THINKING_EMITTER_ID = "llmx-thinking";
+
+/**
+ * "Thinking" as something you can see: slow rings rising out of the cranium while the
+ * conversation transport reports waiting or generating (owner's idea, 2026-09-13). Ordinary
+ * emitter vocabulary, spawned ephemeral by the application when thinking starts and removed
+ * when it ends — so it never lands in a saved document. Seated inside the top of the mask;
+ * particles do not collide, so they drift up through the shell and out of the open back.
+ * The same rule as the face's `think` driver applies: this follows the transport, never GPU load.
+ */
+export function forgeThinkingEmitter(anchors: ForgeAnchors): AgentWorldEntityDefinition {
+  const [x, y, z] = anchors.faceCenter;
+  return {
+    id: LLMX_THINKING_EMITTER_ID,
+    label: "Thinking",
+    type: "emitter",
+    transform: { position: [x, y + 0.55, z - 0.1] },
+    emitter: { preset: "plasma-trail", rate: 9, maxParticles: 36, lifetimeSeconds: 2.6, speed: 0.55, sizeScale: 0.55, volumeScale: 1, color: PALETTE.cyan, direction: [0, 1, 0], spread: 0.45, seed: 21 },
+    ephemeral: true,
+    tags: [LLMX_FORGE_TAG, "thinking", "presentation"],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Entry choreography (plan §6.1). Pure timeline; the host applies it per frame.
 // ---------------------------------------------------------------------------

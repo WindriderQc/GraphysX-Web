@@ -1,6 +1,6 @@
 import { BoxGeometry, Group, Mesh, MeshStandardMaterial, SphereGeometry, type Object3D } from "three";
 import { PlatformHost } from "./platform-host";
-import { createForgeWorld, forgeIntroAt, FORGE_INTRO, LLMX_FACE_ANCHOR_ID } from "./llmx-forge";
+import { createForgeWorld, forgeIntroAt, forgeThinkingEmitter, FORGE_INTRO, LLMX_FACE_ANCHOR_ID, LLMX_THINKING_EMITTER_ID } from "./llmx-forge";
 import { mountForgePresentation } from "./llmx-forge-presentation";
 // The product's page styles: they size #app to the viewport and give the HUD the brand font.
 import "./styles.css";
@@ -419,7 +419,18 @@ button("Rejouer l'entrée", () => restartIntro());
 button("Caméra repos", restCamera);
 button("Caméra entrée", () => host.frameView(anchors.cameraEntry.position, anchors.cameraEntry.target, 0.9));
 const speakButton = button("Parler (simulé)", () => { simulateSpeech = !simulateSpeech; if (simulateSpeech) voice.start(); });
-const thinkButton = button("Penser (simulé)", () => { simulateThink = !simulateThink; });
+const thinkButton = button("Penser (simulé)", () => { simulateThink = !simulateThink; setThinkingEmitter(simulateThink); });
+
+/** The thinking rings: an ordinary ephemeral emitter, spawned when thinking starts, removed when it ends. */
+function setThinkingEmitter(on: boolean): void {
+  const present = host.api.query({ ids: [LLMX_THINKING_EMITTER_ID] }).length === 1;
+  if (on && !present) {
+    const receipt = host.api.spawn(forgeThinkingEmitter(anchors));
+    if (!receipt.ok) console.error("llmx-preview: thinking emitter refused", receipt.error);
+  } else if (!on && present) {
+    host.api.remove(LLMX_THINKING_EMITTER_ID);
+  }
+}
 const attentionButton = button("Attention (simulé)", () => { simulateAttention = !simulateAttention; });
 const reducedButton = button("Mouvements réduits", () => { reducedMotion = !reducedMotion; });
 button("Créer (simulé)", simulateCreation);

@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   createForgeWorld,
+  forgeThinkingEmitter,
+  LLMX_THINKING_EMITTER_ID,
   forgeCameraAt,
   forgeIntroAt,
   FORGE_INTRO,
@@ -149,4 +151,17 @@ test("the camera path starts at entry, ends at rest and never leaves the segment
   }
   // Out-of-range samples clamp instead of overshooting past the rest pose.
   assert.deepEqual(forgeCameraAt(anchors, 2), forgeCameraAt(anchors, 1));
+});
+
+test("the thinking emitter is ephemeral, bounded, and seated inside the top of the mask", () => {
+  const { document, anchors } = createForgeWorld();
+  const emitter = forgeThinkingEmitter(anchors);
+  assert.equal(emitter.id, LLMX_THINKING_EMITTER_ID);
+  assert.equal(emitter.type, "emitter");
+  assert.equal(emitter.ephemeral, true, "must never land in a saved document");
+  assert.ok(emitter.emitter.maxParticles <= 60);
+  const [x, y, z] = emitter.transform.position;
+  assert.ok(Math.abs(x - anchors.faceCenter[0]) < 0.01 && Math.abs(z - anchors.faceCenter[2]) < 0.3);
+  assert.ok(y > anchors.faceCenter[1] && y < anchors.faceCenter[1] + anchors.faceHeight / 2, "inside the cranium, not above it");
+  assert.ok(!document.entities.some((entity) => entity.id === emitter.id), "not part of the template");
 });
