@@ -4,13 +4,15 @@ import { POSE_LIMITS } from "./llmx-face-pose";
 import type { LlmXApplication } from "./llmx-contracts";
 import { createLlmXEntrance } from "./llmx-entrance";
 import { createLlmXForge, LLMX_FACE_ID, readLlmXEnvironment, saveLlmXEnvironment } from "./llmx-environment";
-import { FORGE_INTRO, forgeCameraAt, forgeIntroAt } from "./llmx-forge";
+import { FORGE_INTRO, forgeCameraAt, forgeIntroAt, forgeThinkingEmitter, LLMX_THINKING_EMITTER_ID } from "./llmx-forge";
 import { mountForgePresentation } from "./llmx-forge-presentation";
+import { mountLlmXConversation } from "./llmx-conversation";
+import { llmxFacePresentation } from "./llmx-presentation";
 import type { PlatformHost } from "./platform-host";
 import { motionIsReduced } from "./platform-theme";
 import "./llmx.css";
 
-/** First product slice: a persistent visual room. Conversation/voice are not simulated here. */
+/** Persistent room with one shared AgentX conversation and observed speech presentation. */
 export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () => void): LlmXApplication {
   const forge = createLlmXForge();
   let notice = "";
@@ -44,6 +46,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   let entrance = makeEntrance();
   let lastPhase = "";
   let cameraOwned = true;
+  let thinking = false;
   const localGaze = new Vector3();
 
   const surface = document.createElement("section");
@@ -62,7 +65,6 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
         <button type="button" data-action="environments">Environnements</button>
         <button type="button" data-action="save">Sauvegarder</button>
       </nav>
-      <p class="gx-llmx-caption">Le lieu prend vie. Le dialogue arrive bientôt.</p>
       <p class="gx-llmx-notice" role="status" aria-live="polite"></p>
     </footer>
     <dialog aria-labelledby="llmx-environments-title" class="gx-llmx-environments">
@@ -71,12 +73,24 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
       <button class="gx-llmx-world" type="button" data-action="load">
         <strong>Forge nocturne</strong><span class="gx-llmx-saved"></span>
       </button>
+      <button type="button" data-action="original">Revenir au décor d’origine</button>
       <p class="gx-llmx-caption">Sauvegardé dans ce navigateur. Effacer ses données efface aussi la sauvegarde.</p>
       <button type="button" data-action="close">Retour à la Forge</button>
     </dialog>`;
   const element = <T extends HTMLElement>(selector: string): T => surface.querySelector<T>(selector)!;
   const button = (action: string) => element<HTMLButtonElement>(`[data-action="${action}"]`);
   const dialog = element<HTMLDialogElement>("dialog");
+  let revision = 0;
+  const conversation = mountLlmXConversation(surface, () => ({
+    schemaVersion: 1,
+    environment: { id: "llmx-nocturnal-forge", name: "Forge nocturne" },
+    revision: String(revision),
+    entities: (host.api.exportDocument()?.entities ?? [])
+      .filter(entity => entity.id === LLMX_FACE_ID || entity.tags?.includes("llmx-creation"))
+      .slice(0, 24).map(entity => ({ id: (entity.id ?? "entity").slice(0, 80), type: entity.type,
+        ...(entity.label ? { name: entity.label.slice(0, 120) } : {}),
+        ...(entity.transform?.position ? { position: entity.transform.position } : {}) })),
+  }));
   const render = () => {
     const phase = entrance.state().phase;
     if (phase !== lastPhase) {
@@ -104,10 +118,18 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     if (motionIsReduced() && previousPhase === "entering") entrance.skip();
     const state = entrance.advance(Math.min(0.1, Math.max(0, delta)));
     const intro = forgeIntroAt(state.elapsedSeconds);
+    if (state.phase === "ready") conversation.ready();
+    const speech = conversation.sample();
+    const presence = llmxFacePresentation({ assembly: intro.assembly, phase: conversation.phase(), speech });
+    const nextThinking = presence.think > 0 && state.phase === "ready" && !motionIsReduced();
+    if (nextThinking !== thinking || (nextThinking && !host.world.getEntityObject(LLMX_THINKING_EMITTER_ID))) {
+      thinking = nextThinking;
+      host.world.reconcileTransientEntities("llmx-presentation", thinking ? [forgeThinkingEmitter(forge.anchors)] : []);
+    }
     presentation.setIntro(intro);
     object.worldToLocal(localGaze.copy(host.camera.position));
     const drivers = {
-      build: intro.assembly, blink: 1 - intro.wake, attention: 0.25 + 0.4 * intro.wake,
+      ...presence, blink: 1 - intro.wake, attention: presence.attention * intro.wake,
       gazeX: Math.atan2(localGaze.x, localGaze.z) / POSE_LIMITS.gazeRadians,
       gazeY: Math.atan2(localGaze.y - 0.1, Math.hypot(localGaze.x, localGaze.z)) / POSE_LIMITS.gazeRadians,
     };
@@ -118,7 +140,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
       host.frameView(pose.position, pose.target, 0);
       if (state.phase === "ready") cameraOwned = false;
     }
-    presentation.setActivity({ speaking: false, build: intro.assembly });
+    presentation.setActivity({ speaking: speech.playing, thinking: presence.think > 0, build: intro.assembly });
     presentation.update(motionIsReduced() ? 0 : delta);
     if (lastPhase !== state.phase) render();
   };
@@ -166,6 +188,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   button("load").addEventListener("click", () => {
     try {
       const stored = readLlmXEnvironment(window.localStorage);
+      conversation.worldChanged(); revision++;
       const result = host.api.load(stored ?? forge.document);
       if (!result.ok) throw new Error(result.error);
       host.applyEnvironment();
@@ -180,12 +203,21 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
       render();
     }
   });
+  button("original").addEventListener("click", () => {
+    conversation.worldChanged(); revision++;
+    const result = host.api.load(forge.document);
+    if (result.ok) {
+      host.applyEnvironment(); face = requireFace();
+      notice = "Décor d’origine chargé. Sauvegarde-le pour le retrouver à la prochaine visite.";
+      dialog.close(); restart();
+    } else { notice = result.error ?? "Le décor n’a pas pu être chargé."; render(); }
+  });
   root.append(surface);
   restart();
   const unsubscribe = host.subscribeFrame(frame);
   const state = () => ({
     application: "llmx", environment: "llmx-nocturnal-forge", entrance: entrance.state(),
-    face: disposed ? null : face.describe(), conversation: "unavailable", saved, notice,
+    face: disposed ? null : face.describe(), conversation: conversation.state(), saved, notice,
   });
   return {
     state,
@@ -203,6 +235,8 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     dispose() {
       if (disposed) return;
       disposed = true;
+      conversation.dispose();
+      host.world.clearTransientEntities("llmx-presentation");
       entrance.dispose();
       unsubscribe();
       host.renderer.domElement.removeEventListener("pointerdown", interruptCamera);

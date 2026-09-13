@@ -12,6 +12,8 @@ const browser = await launchSmokeBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
   applySmokeTimeout(page);
+  // This journey qualifies the visual room offline; conversation has its own transport smoke.
+  await page.route('**/llmx-api/config', route => route.fulfill({ json: { enabled: false } }));
   const errors = [];
   page.on("pageerror", error => errors.push(String(error)));
   page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
@@ -21,7 +23,7 @@ try {
   assert.equal(initial.application, "llmx");
   assert.equal(initial.entrance.phase, "ready");
   assert.equal(initial.face.build, 1);
-  assert.equal(initial.conversation, "unavailable", "visual readiness must not claim AgentX connection");
+  assert.equal(initial.conversation.available, false, "visual readiness must not claim AgentX connection");
   await page.screenshot({ path: path.join(artifacts, "llmx-forge-desktop.png") });
 
   const lifecycle = await page.evaluate(() => {
@@ -58,7 +60,7 @@ try {
   assert.equal(lifecycle.reloaded.seed, 29);
   assert.equal(lifecycle.restoredDefault, true);
   assert.equal(lifecycle.materialsOwned, true);
-  assert.equal(lifecycle.meshCount, 3);
+  assert.equal(lifecycle.meshCount, 5);
   assert.deepEqual(lifecycle.immediateCamera, [1, 2, 9]);
   console.log("ok: persisted appearance, rejected patch atomicity, avatar replacement, child ownership, materials and immediate camera");
 

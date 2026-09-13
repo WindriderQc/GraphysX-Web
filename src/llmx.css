@@ -6,7 +6,7 @@
 .gx-llmx button:hover{background:#1b3039;border-color:#81c4ca}
 .gx-llmx button:focus-visible{outline:2px solid #9de4e5;outline-offset:4px}
 .gx-llmx button[hidden]{display:none}
-.gx-llmx-footer{position:absolute;bottom:22px;left:20px;right:20px;text-align:center}
+.gx-llmx-footer{position:absolute;top:24px;left:240px;right:190px;text-align:center}
 .gx-llmx-phase{display:table;margin:0 auto 12px;padding:7px 13px;border-radius:20px;background:#0e161ee8;font-size:14px;color:#d5e6e7;text-shadow:0 2px 8px #000}
 .gx-llmx nav{display:flex;justify-content:center;flex-wrap:wrap;gap:8px}
 .gx-llmx-caption{font-size:12px;color:#a6b4bc;line-height:1.5;margin:12px 0 0;text-shadow:0 2px 8px #000}
@@ -19,4 +19,24 @@
 .gx-llmx-environments .gx-llmx-world{display:flex;flex-direction:column;gap:8px;width:100%;padding:24px;text-align:left;background:linear-gradient(120deg,#26363c,#152329 55%,#3d2d24);margin:20px 0}
 .gx-llmx-world strong{font-size:18px;font-weight:500}.gx-llmx-world span{color:#b9cbd0}
 .gx-llmx-environments [data-action=close]{margin-top:20px;width:100%}
-@media(max-width:600px){.gx-llmx-header{top:14px;left:16px;right:16px}.gx-llmx h1{font-size:17px}.gx-llmx-footer{bottom:16px;left:12px;right:12px}.gx-llmx button{padding:9px 12px;font-size:12px}.gx-llmx-phase{margin-bottom:10px}}
+.gx-llmx-conversation{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);width:min(720px,calc(100% - 40px));pointer-events:auto}
+.gx-llmx-talk-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px}
+.gx-llmx-talk-heading p{font-size:13px;margin:0;padding:9px 13px;border-radius:12px;background:#0e161ee8;max-width:75%;line-height:1.4}
+.gx-llmx .gx-llmx-talk-heading button,.gx-llmx .gx-llmx-talk-options button{font-size:12px;padding:7px 12px;min-height:36px}
+.gx-llmx-composer{display:flex;gap:7px;padding:8px;border:1px solid #71939f55;background:#0c141beb;backdrop-filter:blur(12px);border-radius:17px;box-shadow:0 10px 40px #0005}
+.gx-llmx-composer input{flex:1;min-width:60px;border:0;outline:0;padding:10px;color:#e7f1f2;background:transparent;font:14px var(--gx-font,system-ui,sans-serif)}
+.gx-llmx-composer input:focus-visible{outline:1px solid #93b8c388;border-radius:8px}
+.gx-llmx-composer input::placeholder{color:#9aadb7}
+.gx-llmx button:disabled{opacity:.45;cursor:default}
+.gx-llmx button[aria-pressed=true]{border-color:#7ddad5;color:#a6eee7}
+.gx-llmx-talk-options{display:flex;gap:6px;justify-content:center;margin-top:8px}
+.gx-llmx-transcript{position:absolute;right:0;bottom:100%;width:min(420px,100%);max-height:min(300px,35vh);overflow:auto;margin-bottom:14px;padding:14px;box-sizing:border-box;border:1px solid #61778266;border-radius:16px;background:#0d171eed;backdrop-filter:blur(12px);scrollbar-width:thin}
+.gx-llmx-message{margin:0 0 12px;font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.gx-llmx-message:last-child{margin:0}.gx-llmx-message strong{display:block;font-size:11px;color:#85bdc6;margin-bottom:3px;font-weight:500}
+.gx-llmx-message.user strong{color:#d2ad80}.gx-llmx-message.partial{color:#c0d3d8}
+.gx-llmx-audio-choice{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;padding:14px;margin:10px 0;border-radius:16px;background:#14222bef;border:1px solid #71939f55}
+.gx-llmx-audio-choice span{flex-basis:100%;font-size:13px;text-align:center;margin-bottom:4px}
+.gx-llmx [hidden]{display:none}
+@media(min-width:1000px){.gx-llmx-transcript{left:calc(50% + 220px);right:auto;width:calc(50vw - 250px);max-width:360px;max-height:45vh;bottom:calc(100% + 12px)}}
+@media(max-width:900px){.gx-llmx-footer{top:95px;left:12px;right:12px}.gx-llmx-phase{display:none}}
+@media(max-width:600px){.gx-llmx-header{top:14px;left:16px;right:16px}.gx-llmx h1{font-size:17px}.gx-llmx button{padding:9px 12px;font-size:12px}.gx-llmx-conversation{bottom:12px;width:calc(100% - 24px)}.gx-llmx-composer{flex-wrap:wrap}.gx-llmx-composer input{flex-basis:calc(100% - 110px)}.gx-llmx-composer [data-talk=microphone]{flex:1}.gx-llmx-talk-options{flex-wrap:wrap}.gx-llmx-footer{top:82px}.gx-llmx nav{gap:5px}.gx-llmx nav button{padding:7px 10px;min-height:36px}.gx-llmx-transcript{max-height:28vh}}
