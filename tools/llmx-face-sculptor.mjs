@@ -207,8 +207,13 @@ function maskDistance(x, y, z) {
   // note on ANCHORS.eye.
   d = smax(d, -sdEllipsoid(ax - 0.29, y - 0.1, z - 0.42, 0.235, 0.185, 0.22), 0.065);
 
-  // The mouth, cut through the lips. Taller than it is deep, so it opens as an aperture.
-  d = smax(d, -sdEllipsoid(x, y + 0.52, z - 0.44, 0.255, 0.095, 0.22), 0.035);
+  // The mouth, cut through the lips — and cut *deep*. A shallow ellipsoid is a closed pocket:
+  // the shell wraps its inside, and where that inner wall pinches shut at the back it leaves a
+  // horizontal ring of cubes on the mouth line. Closed, it is hidden; open, it hangs in the
+  // aperture at mid-height like a palate with a square hole in it. Reaching the pocket's waist
+  // back behind the cavity wall (z ≈ 0.02, plate at 0.16) turns the pocket into a tunnel whose
+  // roof and floor belong to the lips above and below them, and whose end is the matte wall.
+  d = smax(d, -sdEllipsoid(x, y + 0.52, z - 0.44, 0.255, 0.095, 0.42), 0.035);
 
   return d;
 }
@@ -247,6 +252,15 @@ function eyePart(x, y, z) {
  * that read as teeth. A dark cavity wall behind the aperture closes the view. It is not
  * decoration: it is what makes an open mouth read as depth rather than as damage.
  */
+/**
+ * Shell inside the mouth tunnel that sits behind the cavity wall. Invisible from anywhere the
+ * viewer can be — the matte wall is in front of it — so it is not kept at all.
+ */
+function isBehindMouthWall(x, y, z) {
+  const { y: my } = ANCHORS.mouth;
+  return z < 0.2 && sdEllipsoid(x, y - my, z - 0.44, 0.28, 0.12, 0.44) < 0;
+}
+
 function mawDistance(x, y, z) {
   const { y: my, halfWidth } = ANCHORS.mouth;
   const shell = Math.abs(z - 0.16) - 0.02;
@@ -360,6 +374,8 @@ function voxelise(cube) {
         const onMaw = !inEye && !onLid && !onMask && Math.abs(mawDistance(x, y, z)) <= band;
         if (!inEye && !onLid && !onMask && !onMaw) continue;
 
+        // The far end of the mouth tunnel lies behind the cavity wall; nothing there can be seen.
+        if (onMask && isBehindMouthWall(x, y, z)) continue;
         const region = inEye ? eyePart(x, y, z) : onMaw ? R.maw : regionOf(x, y, z, false, onLid);
         cells.push({ ix, iy, iz, region });
       }
