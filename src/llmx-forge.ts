@@ -197,7 +197,7 @@ function lights(): AgentWorldEntityDefinition[] {
     { id: "forge-rim", label: "Copper Rim", type: "point-light", intensity: 26, distance: 16, marker: false, transform: { position: [0, FACE_CENTER_Y + 1.4, -3.4] }, material: { color: PALETTE.amber, emissive: PALETTE.amber }, tags: ["lighting"] },
     // A faint cyan up-light from the crown, so the jaw is lit from below the way a forge lights
     // the smith. Short range: it must not reach the floor tiles.
-    { id: "forge-crown-light", label: "Crown Up-light", type: "point-light", intensity: 9, distance: 7, marker: false, transform: { position: [0, SOCKET_HEIGHT + 0.35, 0.5] }, material: { color: PALETTE.cyan, emissive: PALETTE.cyan }, tags: ["lighting"] },
+    { id: "forge-crown-light", label: "Crown Up-light", type: "point-light", intensity: 5, distance: 7, marker: false, transform: { position: [0, SOCKET_HEIGHT + 0.35, 0.5] }, material: { color: PALETTE.cyan, emissive: PALETTE.cyan }, tags: ["lighting"] },
     // Two amber embers in the industrial stacks, purely for the horizon.
     { id: "forge-stack-ember-0", label: "Stack Ember", type: "point-light", intensity: 8, distance: 12, marker: false, transform: { position: [-12.5, 7.5, -11] }, material: { color: PALETTE.amber, emissive: PALETTE.amber }, tags: ["lighting"] },
     { id: "forge-stack-ember-1", label: "Stack Ember", type: "point-light", intensity: 8, distance: 12, marker: false, transform: { position: [13.5, 6.5, -9] }, material: { color: PALETTE.amber, emissive: PALETTE.amber }, tags: ["lighting"] },
@@ -310,7 +310,9 @@ function socket(): AgentWorldEntityDefinition[] {
       type: "torus",
       transform: { position: [0, SOCKET_HEIGHT + 0.12, 0], rotationDegrees: [90, 0, 0] },
       geometry: { radius: 0.95, tube: 0.045, radialSegments: 64 },
-      material: { color: PALETTE.cyan, emissive: PALETTE.cyan, emissiveIntensity: 1.7, roughness: 0.2, metalness: 0.4 },
+      // 1.7 pulled the eye to the ring before the face; 1.0 still crosses the bloom threshold
+      // (0.9) for a soft halo and leaves the mask as the subject.
+      material: { color: PALETTE.cyanGlow, emissive: PALETTE.cyan, emissiveIntensity: 1.0, roughness: 0.2, metalness: 0.4 },
       behaviors: [{ type: "spin", axis: "z", speedDegrees: 9 }],
       castShadow: false,
       receiveShadow: false,

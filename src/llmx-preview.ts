@@ -128,6 +128,21 @@ let face: PreviewFaceRig = createStandIn();
 let faceIsStandIn = true;
 anchorObject.add(face.object);
 
+// The voxel rig lives in the face session's worktree. When its module is present next to this
+// file it is attached automatically; when it is not, the glob matches nothing and the stand-in
+// stays — so the harness runs on both sides of the split without either side editing the other.
+type FaceRigModule = {
+  AgentWorldVoxelFace: new (config: unknown) => PreviewFaceRig;
+  resolveAgentWorldFace: (source: undefined) => unknown;
+};
+const rigModules = import.meta.glob<FaceRigModule>("./agent-world-face.ts");
+const loadRig = rigModules["./agent-world-face.ts"];
+if (loadRig) {
+  loadRig()
+    .then((module) => attachFace(new module.AgentWorldVoxelFace(module.resolveAgentWorldFace(undefined))))
+    .catch((error: unknown) => { console.error("llmx-preview: voxel rig failed to load; keeping the stand-in", error); });
+}
+
 function attachFace(rig: PreviewFaceRig): void {
   anchorObject.remove(face.object);
   face.dispose();
@@ -164,6 +179,10 @@ function restartIntro(seek = 0): void {
 function restCamera(): void {
   host.frameView(anchors.cameraRest.position, anchors.cameraRest.target, 0.9);
 }
+
+/** Mirrors `POSE_LIMITS.gazeRadians` in the rig: a full-scale gaze driver is this many radians. */
+const GAZE_LIMIT_RADIANS = 0.34;
+const clamp = (value: number, min: number, max: number): number => (value < min ? min : value > max ? max : value);
 
 /** A syllable-like envelope: bursts of 1.4 s with 0.5 s gaps. Not speech; a stand-in for its amplitude. */
 function speechEnvelope(t: number): number {
@@ -203,6 +222,18 @@ const unsubscribe = host.subscribeFrame((deltaSeconds) => {
       }
     }
     drivers.attention = simulateAttention ? 0.85 : 0.25;
+  }
+
+  // Gaze toward the camera, in the mask's frame: gazeX > 0 turns the eyes toward +X (the face
+  // session's convention, confirmed 2026-09-13), normalised by the rig's 0.34 rad gaze limit.
+  // Only once the eyes are open — a mask that tracks you before it wakes is not what the
+  // choreography promises.
+  if (drivers.build > 0.98 && drivers.blink < 0.5) {
+    const dx = host.camera.position.x - anchors.faceCenter[0];
+    const dy = host.camera.position.y - anchors.gazeTarget[1];
+    const dz = host.camera.position.z - anchors.faceCenter[2];
+    drivers.gazeX = clamp(Math.atan2(dx, dz) / GAZE_LIMIT_RADIANS, -1, 1);
+    drivers.gazeY = clamp(Math.atan2(dy, Math.hypot(dx, dz)) / GAZE_LIMIT_RADIANS, -1, 1);
   }
 
   drivers.speak = simulateSpeech && drivers.build > 0.98 ? speechEnvelope(clock) : 0;
