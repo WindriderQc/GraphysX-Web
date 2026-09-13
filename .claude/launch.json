@@ -4,9 +4,26 @@
     {
       "name": "graphysx-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 4173,
       "autoPort": true
+    },
+    {
+      "name": "llmx-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4199",
+        "--strictPort"
+      ],
+      "port": 4199,
+      "url": "http://localhost:4199"
     }
   ]
 }
