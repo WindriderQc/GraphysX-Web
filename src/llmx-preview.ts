@@ -182,6 +182,8 @@ let clock = 0;
 let nextBlink = 2.5;
 let blinkPhase = 0;
 let gazeHold: { point: [number, number, number]; until: number } | null = null;
+/** Diagnostic: pin the speak driver to a constant (e.g. 1 for the maximal mouth opening). */
+let speakHold: number | null = null;
 let creationCount = 0;
 
 /**
@@ -360,6 +362,7 @@ const unsubscribe = host.subscribeFrame((deltaSeconds) => {
     voice.stop();
     drivers.speak = 0;
   }
+  if (speakHold !== null) drivers.speak = speakHold;
   drivers.speakTone = 0.5 + 0.3 * Math.sin(clock * 1.7);
   drivers.think = simulateThink ? 0.8 : 0;
   drivers.breath = clock * 1.1;
@@ -452,5 +455,7 @@ render();
   intro: { restart: restartIntro, time: (): number | null => introTime },
   setSpeaking: (on: boolean): void => { simulateSpeech = on; render(); },
   simulateCreation,
+  holdSpeak: (value: number | null): void => { speakHold = value; },
+  rig: (): PreviewFaceRig => face,
   dispose: (): void => { unsubscribe(); voice.stop(); presentation.dispose(); face.dispose(); hud.remove(); host.dispose(); },
 };
