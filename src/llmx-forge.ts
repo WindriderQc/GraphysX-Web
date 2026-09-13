@@ -23,14 +23,16 @@ import type {
  *   group entity `llmx-face-anchor` marks the same point in the document.
  * - Four copper ribs run along tile joints from the socket outward. They are the "circuit"
  *   the entry choreography lights up (see `llmx-forge-presentation.ts`).
- * - Gothic arches and industrial stacks stand at 13–17 m in the fog: silhouettes, not props.
- *   They cast no shadows and use one material each.
- * - Build zone: a subtle cyan ring on the floor to the visitor's front-right, where created
- *   objects appear by default. It is a document entity so an agent can read where "here" is.
+ * - Nothing past the plateau. A first version ringed it with gothic arches, stacks and a gantry;
+ *   Yanik cut them on 2026-09-13 ("inutile et ça alourdit"): the floor, the altar and the fog
+ *   are the set, and the mask is the subject.
+ * - Build zone: where created objects land by default, to the visitor's front-right. Data only
+ *   ({@link ForgeAnchors.buildZone}): a permanent floor ring marking it read as an unexplained
+ *   offset circle, so the zone is shown only while a creation lands (presentation ring).
  *
  * ## Budgets (plan §9.2)
  *
- * One shadow-casting light (the cold key). Three emitters, well under the 600-particle rest
+ * One shadow-casting light (the cold key). Two emitters, well under the 600-particle rest
  * budget. Bloom at the plan's starting values (0.45 / 0.35 / 0.9): only emissives cross the
  * threshold, so the mask's edges stay crisp.
  *
@@ -74,7 +76,7 @@ export type ForgeAnchors = Readonly<{
   socketTop: AgentWorldVector3;
   /** Where the camera rests for conversation: slightly off-axis, at eye level with the mask. */
   cameraRest: ForgeCameraPose;
-  /** Where the entry move starts: far and high, the plateau and the arches in shot. */
+  /** Where the entry move starts: far and high, the whole plateau in shot. */
   cameraEntry: ForgeCameraPose;
   /** Default landing area for created objects, and what "here" means when nothing is picked. */
   buildZone: Readonly<{ center: AgentWorldVector3; radius: number }>;
@@ -119,7 +121,6 @@ const MASK_HEIGHT = 2.3;
 const EYE_HEIGHT = 0.1;
 const FACE_CENTER_Y = SOCKET_HEIGHT + MASK_HOVER + MASK_HEIGHT / 2;
 const RIB_LENGTH = 11;
-const SILHOUETTE_RADIUS = 14.5;
 
 export function createForgeWorld(options: { id?: string; label?: string } = {}): ForgeWorld {
   const anchors = forgeAnchors();
@@ -129,8 +130,6 @@ export function createForgeWorld(options: { id?: string; label?: string } = {}):
     ...ribs(anchors),
     ...socket(),
     faceAnchor(anchors),
-    buildZone(anchors),
-    ...silhouettes(),
     ...emitters(),
   ].map((entity) => ({ ...entity, tags: [LLMX_FORGE_TAG, ...(entity.tags ?? [])] }));
 
@@ -142,12 +141,12 @@ export function createForgeWorld(options: { id?: string; label?: string } = {}):
     label: options.label ?? LLMX_FORGE_LABEL,
     environment: {
       background: "#05070b",
-      // Stars on all six faces; `nightsky` carries a horizon silhouette that fights the arches.
+      // Stars on all six faces; `nightsky` carries a horizon silhouette that fights the fog line.
       sky: "clearnight",
       // A night HDR at low strength so the black metal still has something to reflect. Kept
       // well under the key light so the mask's volumes come from the key, not the ambient.
       lighting: { source: "hdri", hdri: "vignaioli-night", intensity: 0.32, yawDegrees: 24, backgroundIntensity: 0.55, backgroundBlur: 0.12 },
-      // The fog is the horizon: the silhouettes at 14–17 m sit in the band and read as depth.
+      // The fog is the horizon: the plateau's far edge dissolves into it.
       envelope: { fogNear: 16, fogFar: 46, cameraFar: 110 },
       post: { bloom: { strength: 0.45, radius: 0.35, threshold: 0.9 } },
       ground: { visible: false, size: PLATEAU, color: PALETTE.joint, grid: false, gridColor: PALETTE.joint },
@@ -198,9 +197,6 @@ function lights(): AgentWorldEntityDefinition[] {
     // A faint cyan up-light from the crown, so the jaw is lit from below the way a forge lights
     // the smith. Short range: it must not reach the floor tiles.
     { id: "forge-crown-light", label: "Crown Up-light", type: "point-light", intensity: 5, distance: 7, marker: false, transform: { position: [0, SOCKET_HEIGHT + 0.35, 0.5] }, material: { color: PALETTE.cyan, emissive: PALETTE.cyan }, tags: ["lighting"] },
-    // Two amber embers in the industrial stacks, purely for the horizon.
-    { id: "forge-stack-ember-0", label: "Stack Ember", type: "point-light", intensity: 8, distance: 12, marker: false, transform: { position: [-12.5, 7.5, -11] }, material: { color: PALETTE.amber, emissive: PALETTE.amber }, tags: ["lighting"] },
-    { id: "forge-stack-ember-1", label: "Stack Ember", type: "point-light", intensity: 8, distance: 12, marker: false, transform: { position: [13.5, 6.5, -9] }, material: { color: PALETTE.amber, emissive: PALETTE.amber }, tags: ["lighting"] },
   ];
 }
 
@@ -331,104 +327,8 @@ function faceAnchor(anchors: ForgeAnchors): AgentWorldEntityDefinition {
   };
 }
 
-function buildZone(anchors: ForgeAnchors): AgentWorldEntityDefinition {
-  const { center, radius } = anchors.buildZone;
-  return {
-    id: "forge-build-zone",
-    label: "Build Zone",
-    type: "torus",
-    transform: { position: [center[0], center[1] + 0.03, center[2]], rotationDegrees: [90, 0, 0] },
-    geometry: { radius, tube: 0.025, radialSegments: 64 },
-    material: { color: PALETTE.cyan, emissive: PALETTE.cyanGlow, emissiveIntensity: 0.5, roughness: 0.4, metalness: 0.3, opacity: 0.85 },
-    castShadow: false,
-    receiveShadow: false,
-    tags: ["build-zone"],
-  };
-}
-
-/** Gothic arches and industrial stacks at the fog line. Silhouettes: one dark material, no shadows. */
-function silhouettes(): AgentWorldEntityDefinition[] {
-  const dark = { color: PALETTE.iron, roughness: 0.6, metalness: 0.6 };
-  const entities: AgentWorldEntityDefinition[] = [];
-  // Five arches on the far side and flanks; none behind the visitor, whose back is to the fog.
-  const archAngles = [-150, -105, -75, -30, 30, 75, 105, 150];
-  archAngles.forEach((degrees, index) => {
-    const radians = (degrees * Math.PI) / 180;
-    const cx = Math.sin(radians) * SILHOUETTE_RADIUS;
-    const cz = -Math.cos(radians) * SILHOUETTE_RADIUS;
-    // Arches face the socket: their span runs perpendicular to the radius.
-    const yaw = -degrees;
-    const span = 3.2;
-    const pillarHeight = 7.5;
-    const dx = Math.cos(radians) * (span / 2);
-    const dz = Math.sin(radians) * (span / 2);
-    entities.push(
-      {
-        id: `forge-arch-${index}-pillar-l`, label: "Arch Pillar", type: "box",
-        transform: { position: [cx - dx, pillarHeight / 2, cz - dz], rotationDegrees: [0, yaw, 0] },
-        geometry: { width: 0.9, height: pillarHeight, depth: 0.9 }, material: dark,
-        castShadow: false, receiveShadow: false, tags: ["silhouette", "arch"],
-      },
-      {
-        id: `forge-arch-${index}-pillar-r`, label: "Arch Pillar", type: "box",
-        transform: { position: [cx + dx, pillarHeight / 2, cz + dz], rotationDegrees: [0, yaw, 0] },
-        geometry: { width: 0.9, height: pillarHeight, depth: 0.9 }, material: dark,
-        castShadow: false, receiveShadow: false, tags: ["silhouette", "arch"],
-      },
-      {
-        // The round of the arch, standing upright and turned to face the socket.
-        id: `forge-arch-${index}-round`, label: "Arch Round", type: "torus",
-        transform: { position: [cx, pillarHeight, cz], rotationDegrees: [0, yaw, 0] },
-        geometry: { radius: span / 2, tube: 0.42, radialSegments: 40 }, material: dark,
-        castShadow: false, receiveShadow: false, tags: ["silhouette", "arch"],
-      },
-      {
-        // A spire over the keystone: the pointed line that makes it gothic rather than roman.
-        id: `forge-arch-${index}-spire`, label: "Arch Spire", type: "cone",
-        transform: { position: [cx, pillarHeight + span / 2 + 1.6, cz] },
-        geometry: { radius: 0.55, height: 3.4, radialSegments: 8 }, material: dark,
-        castShadow: false, receiveShadow: false, tags: ["silhouette", "arch"],
-      },
-    );
-  });
-  // Industrial stacks beside the two ember lights, and one gantry beam across the back.
-  entities.push(
-    {
-      id: "forge-stack-0", label: "Stack", type: "cylinder",
-      transform: { position: [-12.5, 5.5, -11] }, geometry: { radius: 0.7, height: 11, radialSegments: 16 }, material: dark,
-      castShadow: false, receiveShadow: false, tags: ["silhouette", "stack"],
-    },
-    {
-      id: "forge-stack-1", label: "Stack", type: "cylinder",
-      transform: { position: [13.5, 4.5, -9] }, geometry: { radius: 0.6, height: 9, radialSegments: 16 }, material: dark,
-      castShadow: false, receiveShadow: false, tags: ["silhouette", "stack"],
-    },
-    {
-      id: "forge-gantry", label: "Gantry Beam", type: "box",
-      transform: { position: [0, 9.2, -16.5] }, geometry: { width: 20, height: 0.7, depth: 0.7 }, material: dark,
-      castShadow: false, receiveShadow: false, tags: ["silhouette", "gantry"],
-    },
-  );
-  return entities;
-}
-
 function emitters(): AgentWorldEntityDefinition[] {
   return [
-    // Smoke belongs to the horizon, not the socket. Two socket-smoke attempts (in front, then
-    // behind and smaller) both rose straight through the mask as pale blobs — the one thing the
-    // ambience must never cover — so the "souffle distant" comes from the stacks in the fog.
-    {
-      id: "forge-stack-smoke-0", label: "Stack Smoke", type: "emitter",
-      transform: { position: [-12.5, 11.2, -11] },
-      emitter: { preset: "ember-smoke", rate: 5, maxParticles: 30, lifetimeSeconds: 7, speed: 0.5, sizeScale: 2.2, volumeScale: 2, direction: [0.3, 1, 0], spread: 0.7, seed: 11 },
-      tags: ["ambience", "stack"],
-    },
-    {
-      id: "forge-stack-smoke-1", label: "Stack Smoke", type: "emitter",
-      transform: { position: [13.5, 9.2, -9] },
-      emitter: { preset: "ember-smoke", rate: 4, maxParticles: 24, lifetimeSeconds: 7, speed: 0.45, sizeScale: 2, volumeScale: 2, direction: [-0.2, 1, 0], spread: 0.7, seed: 14 },
-      tags: ["ambience", "stack"],
-    },
     {
       // The crown's twinkle: sparse, cyan-tinted, slow.
       id: "forge-crown-sparks", label: "Crown Sparks", type: "emitter",
