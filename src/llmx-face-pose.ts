@@ -284,8 +284,12 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
 
 /** Bounds on every authored movement, in metres or radians. Nothing here is a free parameter. */
 export const POSE_LIMITS = Object.freeze({
-  /** Jaw opening at speak = 1. Beyond roughly this the mask dislocates rather than speaks. */
-  jawRadians: 0.26,
+  /**
+   * Jaw opening at speak = 1, in radians. Measured in the Forge rather than reasoned about: at
+   * 0.26 the whole lower mask swung and read as a hinged puppet jaw, not a mouth. Speech barely
+   * uses the range a jaw actually has, and the lips carry most of what a viewer reads.
+   */
+  jawRadians: 0.17,
   lipSpread: 0.035,
   lipPurse: 0.03,
   browLift: 0.045,
