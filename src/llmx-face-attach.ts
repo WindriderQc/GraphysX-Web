@@ -9,7 +9,8 @@
  * Everything the harness drives is a SIMULATION — no conversation, no audio, no agent.
  */
 
-import { AgentWorldVoxelFace, resolveAgentWorldFace } from "./agent-world-face";
+import { AgentWorldVoxelFace } from "./agent-world-face";
+import { resolveAgentWorldFace } from "./llmx-face-pose";
 
 type Harness = { attachFace: (rig: unknown) => void };
 

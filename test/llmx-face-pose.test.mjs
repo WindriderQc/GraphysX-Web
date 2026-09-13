@@ -23,6 +23,10 @@ import {
   eyeTransform,
   hash01,
   poseInto,
+  AGENT_WORLD_APPEARANCE_KINDS,
+  resolveAgentWorldAppearance,
+  resolveAgentWorldFace,
+  serializeAgentWorldAppearance,
 } from "../src/llmx-face-pose.ts";
 
 const asset = JSON.parse(readFileSync(new URL("../src/llmx-face-forge.json", import.meta.url), "utf8"));
@@ -318,5 +322,42 @@ describe("level of detail", () => {
     for (const region of ["eye", "lid", "lip", "brow", "jaw"]) {
       assert.ok((mobile.regionCounts[region] ?? 0) > 10, `mobile lost ${region}: ${mobile.regionCounts[region] ?? 0} cubes`);
     }
+  });
+});
+
+// The appearance is the seam between the rig and the scene document. These tests are the
+// roundtrip half of it — they need no Three.js, so they run in the fast tier with everything
+// else. The rendering half is qualified by looking at it, in the Forge.
+describe("agent appearance", () => {
+  it("fills in every field, so a default that later moves cannot restyle saved masks", () => {
+    const resolved = resolveAgentWorldAppearance({ kind: "voxel-face" });
+    assert.equal(resolved.kind, "voxel-face");
+    for (const field of ["asset", "level", "metalColor", "copperColor", "eyeColor", "lipColor", "seed", "autoBlink"]) {
+      assert.notEqual(resolved[field], undefined, `${field} was left unresolved`);
+    }
+  });
+
+  it("round-trips a customised mask without drift", () => {
+    const authored = { kind: "voxel-face", level: "mobile", eyeColor: "#ff9900", seed: 42, autoBlink: false };
+    const once = resolveAgentWorldAppearance(authored);
+    const twice = resolveAgentWorldAppearance(serializeAgentWorldAppearance(once));
+    assert.deepEqual(twice, once);
+    assert.equal(twice.level, "mobile");
+    assert.equal(twice.eyeColor, "#ff9900");
+    assert.equal(twice.seed, 42);
+    assert.equal(twice.autoBlink, false);
+  });
+
+  it("refuses an appearance from a newer build instead of silently dropping the face", () => {
+    // Falling back to the default avatar here and then saving that back is how a world loses
+    // its mask permanently — the failure has to surface at load.
+    assert.throws(() => resolveAgentWorldAppearance({ kind: "hologram" }), /Unsupported agent appearance/);
+    assert.throws(() => resolveAgentWorldAppearance({}), /Unsupported agent appearance/);
+    assert.equal(AGENT_WORLD_APPEARANCE_KINDS.includes("voxel-face"), true);
+  });
+
+  it("falls back to a known level rather than trusting an unknown one", () => {
+    assert.equal(resolveAgentWorldFace({ level: "ultra" }).level, "high");
+    assert.equal(resolveAgentWorldFace({ seed: Number.NaN }).seed, 1);
   });
 });

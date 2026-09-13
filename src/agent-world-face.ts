@@ -16,6 +16,9 @@ import {
   type FaceAsset,
   type FaceDrivers,
   type FaceWeights,
+  type ResolvedAgentWorldAppearance,
+  type AgentWorldFaceLevel,
+  type ResolvedAgentWorldFace,
   NEUTRAL_DRIVERS,
   POSE_LIMITS,
   clampDrivers,
@@ -54,45 +57,23 @@ import {
  * tests and the offline preview tool, so a wrong mouth is reproducible without a browser.
  */
 
-export type AgentWorldFaceLevel = "high" | "balanced" | "mobile";
-
-export type AgentWorldFace = {
-  /** Which sculpted mask. One is shipped; the field exists so a second cannot be a silent swap. */
-  asset?: string;
-  level?: AgentWorldFaceLevel;
-  /** Base metal of the mask. */
-  metalColor?: string;
-  /** Accent on the temple fins. Copper is an accent — see the note on the palette below. */
-  copperColor?: string;
-  /** Emissive of the eyes. */
-  eyeColor?: string;
-  /** Warm tint on the lips, so the mouth reads without becoming a bright bar. */
-  lipColor?: string;
-  /** Seed for the per-cube forge jitter. Deterministic: the same seed is the same mask. */
-  seed?: number;
-  /** Blink on its own schedule. A host that drives blink explicitly still wins — see update(). */
-  autoBlink?: boolean;
-};
-
-export type ResolvedAgentWorldFace = Required<AgentWorldFace>;
-
 /**
- * The Nocturnal Forge palette. Charcoal metal, patinated copper on the fins only, cold cyan in
- * the eyes. The one rule worth writing down: copper is an accent. Giving the lips the same
- * copper as the fins grew a bright horizontal bar across the mask that read as a grille rather
- * than a mouth — the mouth has to read by its shadow and its aperture, which is what makes it
- * look like it can open.
+ * The configuration and appearance API lives in `llmx-face-pose.ts` — it is plain data, and
+ * keeping it there is what lets `node --test` reach it (this module takes Three.js at runtime,
+ * which the fast test tier cannot). Re-exported here so that "the face module" remains one
+ * import for callers; moving an export is not a reason to break them.
  */
-const BASE_FACE: ResolvedAgentWorldFace = {
-  asset: "forge-mask",
-  level: "high",
-  metalColor: "#4c525e",
-  copperColor: "#a06a3e",
-  eyeColor: "#60d6e8",
-  lipColor: "#423c3a",
-  seed: 1,
-  autoBlink: true,
-};
+export {
+  type AgentWorldAppearance,
+  type AgentWorldFace,
+  type AgentWorldFaceLevel,
+  type ResolvedAgentWorldAppearance,
+  type ResolvedAgentWorldFace,
+  AGENT_WORLD_APPEARANCE_KINDS,
+  resolveAgentWorldAppearance,
+  resolveAgentWorldFace,
+  serializeAgentWorldAppearance,
+} from "./llmx-face-pose";
 
 /** Per-region tint, applied through `instanceColor` so one material serves the whole mask. */
 const REGION_TINT: Record<string, keyof Pick<ResolvedAgentWorldFace, "metalColor" | "copperColor" | "lipColor">> = {
@@ -111,22 +92,6 @@ const CUBE_OVERLAP = 1.022;
  * by hand" and "exploded". Every degree here also widens the seams the overlap has to close.
  */
 const JITTER_RADIANS = 0.03;
-
-export function resolveAgentWorldFace(source: AgentWorldFace | undefined): ResolvedAgentWorldFace {
-  const base = BASE_FACE;
-  if (!source) return { ...base };
-  const level = source.level;
-  return {
-    asset: source.asset ?? base.asset,
-    level: level === "balanced" || level === "mobile" || level === "high" ? level : base.level,
-    metalColor: source.metalColor ?? base.metalColor,
-    copperColor: source.copperColor ?? base.copperColor,
-    eyeColor: source.eyeColor ?? base.eyeColor,
-    lipColor: source.lipColor ?? base.lipColor,
-    seed: Number.isFinite(source.seed) ? (source.seed as number) : base.seed,
-    autoBlink: source.autoBlink ?? base.autoBlink,
-  };
-}
 
 const asset = faceAsset as unknown as FaceAsset;
 
@@ -557,4 +522,9 @@ function indexOfSlot(list: Uint32Array, cube: number): number {
 export function findVoxelFace(object: Object3D): AgentWorldVoxelFace | null {
   const face = object.userData.graphysxVoxelFace;
   return face instanceof AgentWorldVoxelFace ? face : null;
+}
+
+/** Build the scene object for an appearance. The caller owns adding it and disposing it. */
+export function createAppearanceObject(appearance: ResolvedAgentWorldAppearance): Group {
+  return new AgentWorldVoxelFace(appearance).object;
 }
