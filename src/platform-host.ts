@@ -627,6 +627,10 @@ export class PlatformHost {
       this.controls.enableDamping = false;
       this.controls.update();
       this.controls.enableDamping = damping;
+      // OrbitControls recomposes spherical coordinates during update. Finish at the
+      // authored coordinates exactly, rather than returning its round-trip approximation.
+      this.camera.position.copy(toPosition);
+      this.camera.lookAt(toTarget);
       return;
     }
     this.focusMove = {

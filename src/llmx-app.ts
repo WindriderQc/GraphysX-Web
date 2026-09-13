@@ -87,7 +87,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   };
 
   function makeEntrance() {
-    return createLlmXEntrance({ cameraSeconds: FORGE_INTRO.seconds, assemblyDelaySeconds: 2, assemblySeconds: 4.4 }, motionIsReduced());
+    return createLlmXEntrance({ cameraSeconds: FORGE_INTRO.seconds, assemblyDelaySeconds: FORGE_INTRO.assembly.start, assemblySeconds: FORGE_INTRO.assembly.end - FORGE_INTRO.assembly.start }, motionIsReduced());
   }
   const frame = (delta: number) => {
     if (disposed) return;
