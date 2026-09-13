@@ -210,8 +210,11 @@ function eyeDistance(x, y, z) {
 function lidDistance(x, y, z) {
   const { x: ex, y: ey, z: ez, radius } = ANCHORS.eye;
   const shell = Math.abs(len(Math.abs(x) - ex, y - ey, z - ez) - (radius + 0.028)) - 0.022;
-  // Upper half only, with a soft edge so the lid line is not a hard staircase.
-  return smax(shell, ey + 0.012 - y, 0.03);
+  // The lid caps the top third of the eyeball, not its top half. A half-covered eyeball leaves
+  // only a crescent of cyan along the bottom rim, and a bottom crescent reads as a gaze aimed
+  // at the floor no matter where the eye is actually pointed. Soft edge so the lid line is not
+  // a hard staircase.
+  return smax(shell, ey + radius * 0.38 - y, 0.03);
 }
 
 // ---------------------------------------------------------------------------

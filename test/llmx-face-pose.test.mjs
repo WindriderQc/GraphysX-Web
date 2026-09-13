@@ -155,12 +155,20 @@ describe("posing", () => {
     return upper / upperCount - lower / lowerCount;
   };
 
-  it("separates the lips when speech drives it", () => {
+  // Asserted as a proportion of the closed mouth rather than as a distance in metres. An
+  // absolute threshold has to be re-guessed every time the jaw angle or the sculpt changes —
+  // and it was: the first version of this test was calibrated against a 0.26 rad jaw that was
+  // later rejected in the Forge for swinging like a puppet's. What "the mouth visibly opens"
+  // actually means does not depend on the mask's size.
+  it("separates the lips by a visible proportion when speech drives it", () => {
     const out = buffers(weights);
     poseInto(weights, { ...AT_REST, speak: 1 }, out.position, out.scale);
     const opened = lipGap(out.position);
     const closed = lipGap(weights.rest);
-    assert.ok(opened > closed + 0.04, `mouth barely opened: ${closed.toFixed(3)}m to ${opened.toFixed(3)}m`);
+    assert.ok(
+      opened > closed * 1.25,
+      `mouth barely opened: ${closed.toFixed(3)}m to ${opened.toFixed(3)}m (${((opened / closed - 1) * 100).toFixed(0)}%)`,
+    );
   });
 
   it("opens progressively, so a quiet passage is not a shout", () => {
