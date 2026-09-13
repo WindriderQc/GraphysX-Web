@@ -185,6 +185,7 @@ let gazeHold: { point: [number, number, number]; until: number } | null = null;
 /** Diagnostic: pin the speak driver to a constant (e.g. 1 for the maximal mouth opening). */
 let speakHold: number | null = null;
 let creationCount = 0;
+let cameraReturnAt: number | null = null;
 
 /**
  * Simulate an accepted creation: an ordinary `api.spawn` of an ephemeral copper block dropped
@@ -218,6 +219,9 @@ function simulateCreation(): void {
   }
   presentation.announceCreation([x, center[1], z]);
   gazeHold = { point: [x, 0.5, z], until: clock + 2.2 };
+  // Pull back so the visitor sees where it lands and the mask looking at it, then come home.
+  host.frameView(anchors.cameraCreation.position, anchors.cameraCreation.target, 0.8);
+  cameraReturnAt = clock + 3.4;
 }
 
 function restartIntro(seek = 0): void {
@@ -365,12 +369,16 @@ const unsubscribe = host.subscribeFrame((deltaSeconds) => {
   if (speakHold !== null) drivers.speak = speakHold;
   drivers.speakTone = 0.5 + 0.3 * Math.sin(clock * 1.7);
   drivers.think = simulateThink ? 0.8 : 0;
+  if (cameraReturnAt !== null && clock >= cameraReturnAt) {
+    cameraReturnAt = null;
+    restCamera();
+  }
   drivers.breath = clock * 1.1;
 
   face.setDrivers(drivers);
   face.update(deltaSeconds);
   const described = face.describe();
-  presentation.setActivity({ speaking: described.speaking, build: described.build });
+  presentation.setActivity({ speaking: described.speaking, build: described.build, thinking: simulateThink });
   presentation.update(deltaSeconds);
   render();
 });

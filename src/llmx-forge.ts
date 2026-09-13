@@ -78,6 +78,8 @@ export type ForgeAnchors = Readonly<{
   cameraRest: ForgeCameraPose;
   /** Where the entry move starts: near the altar, low, the crown and the mask's chin in shot. */
   cameraEntry: ForgeCameraPose;
+  /** Pulled back and to the right so the face and the build zone share the frame while something lands. */
+  cameraCreation: ForgeCameraPose;
   /** Default landing area for created objects, and what "here" means when nothing is picked. */
   buildZone: Readonly<{ center: AgentWorldVector3; radius: number }>;
   /** Straight-line rib runs from the socket rim outward, for the presentation layer. */
@@ -181,6 +183,9 @@ function forgeAnchors(): ForgeAnchors {
     // seen arriving; the approach then lifts to the eyes as the mask builds upward. A first
     // version started 26 m out and the assembly began as a speck (owner review, 2026-09-13).
     cameraEntry: { position: [2.1, 2.3, 6.6], target: [0, 1.5, 0] },
+    // Between the visitor and the build zone, high enough to see the floor where the object
+    // lands and the mask that is looking at it. The application returns to rest afterwards.
+    cameraCreation: { position: [4.2, 5.4, 11.2], target: [2.2, 1.9, 1.6] },
     // Front-right of the socket from the visitor's side: in shot at rest, clear of the ribs.
     buildZone: { center: [4.6, TILE_THICKNESS, 3.4], radius: 2.6 },
     ribs: ribRuns,
