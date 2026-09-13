@@ -47,10 +47,13 @@ test("budgets: one floor collider, one shadow-casting light, particles under the
   assert.ok(restBudget <= 600, `rest particle budget ${restBudget} exceeds 600`);
   assert.ok(emitters.every((entity) => entity.emitter.maxParticles <= 600));
 
-  // Silhouettes are scenery in the fog: they must not join the shadow pass.
-  const silhouettes = document.entities.filter((entity) => entity.tags.includes("silhouette"));
-  assert.ok(silhouettes.length >= 8);
-  assert.ok(silhouettes.every((entity) => entity.castShadow === false && !entity.physics));
+  // Nothing stands past the plateau: the peripheral arches, stacks and gantry were cut by the
+  // owner as weight without value. Everything authored sits inside the 32 m square.
+  for (const entity of document.entities) {
+    const [x, , z] = entity.transform?.position ?? [0, 0, 0];
+    assert.ok(Math.abs(x) <= 16 && Math.abs(z) <= 16, `${entity.id} stands outside the plateau`);
+  }
+  assert.ok(!document.entities.some((entity) => entity.tags.includes("silhouette")));
 
   // Point lights are lights, not lightbulbs: no marker spheres in a composed scene.
   const points = document.entities.filter((entity) => entity.type === "point-light");
