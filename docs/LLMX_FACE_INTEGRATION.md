@@ -9,6 +9,45 @@ Until this lands, the mask exists only as a rig a host constructs by hand — wh
 dev harness does. It cannot be authored, saved, reloaded or inspected, so the P5 library has
 nothing to persist.
 
+## État à la passation — 2026-09-13, pour Codex
+
+**Branche `claude/llmx-face-forge`**, base `origin/main` d7c9937, 11 commits, poussée. 36 tests
+purs (`node --test test/llmx-face-pose.test.mjs`), typecheck et lint scoped propres. Aucun
+fichier partagé touché : `main.ts`, le runtime, `package.json`, les catalogues sont à toi.
+
+**Vérifié dans la Forge (harnais dev, simulation, aucune conversation) :** assemblage de bas en
+haut, bouche qui s'ouvre (3,5 cubes à speak 0,3 — 6 à speak 1), Penser et Attention lisibles,
+regard vers la caméra (gazeY > 0 = haut, gazeX > 0 = +X), bascule de LOD en direct, profil
+téléphone. Yanik a validé le concept plancher + autel ; ses trois retours structurels — bouche
+fermée, « langue », expressions invisibles — sont corrigés (commits 8c4db54 → 894e623).
+
+**L'autre moitié est sur `claude/llmx-forge`** (session Claude `graphysx-web-74`, même base) :
+le monde de la Forge, l'éclairage, la caméra, la réaction aux créations, `docs/LLMX_FORGE.md`.
+Les deux branches se sont développées à travers un seul point de couture,
+`window.__LLMX_PREVIEW__.attachFace(rig)` dans `llmx-preview.html` / `src/llmx-preview.ts`
+(à elle) et `src/llmx-face-attach.ts` (à moi, dev seulement, `?face=mobile|balanced|high`).
+Intègre les deux ; ni l'une ni l'autre n'a modifié les fichiers de l'autre.
+
+**Ce qui reste et qui est à toi :** les neuf raccords ci-dessous, `?app=llmx`, la conversation
+et le « Hello ». Une fois `appearance` dans le runtime, `createForgeWorld()` posera
+`appearance: { kind: "voxel-face" }` sur `llmx-face-anchor` et le masque se reconstruira au
+chargement sans instanciation manuelle.
+
+**Ouvert, non bloquant :** le caractère du masque (sévère, yeux étroits) est un arbitrage de
+Yanik — c'est un paramètre du sculpteur, pas une remodélisation ; visèmes alignés sur le son
+après la V1 ; commissures encore perfectibles à speak = 1.
+
+**Cinq choses à ne pas réapprendre :**
+- `.claude/launch.json` est **suivi** dans GraphysX ; ne l'écrase pas pour un harnais.
+- Le « 15 fps » du panneau navigateur n'est pas une mesure : 66,6 ms identiques avec le
+  visage masqué, c'est un plafond de cadence. `update()` du rig coûte 1,66 ms à 21 432 cubes.
+- `speak` = amplitude de l'audio réellement joué ; `think` = signal du transport de
+  conversation, jamais la charge GPU.
+- `setQualityCeiling(host.qualityProfile.name)` au montage, et seulement quand le profil change.
+- Le sculpteur (`node tools/llmx-face-sculptor.mjs`, 0,35 s) et la planche hors ligne
+  (`node tools/llmx-face-preview.mjs high`) sont le cycle d'itération du visage ; le regarder
+  dans la Forge à 7,4 m avec la parole reste le seul juge.
+
 ## What already exists
 
 | Module | Owner | What it gives you |
