@@ -29,6 +29,9 @@ const attach = (): void => {
     return;
   }
   harness.attachFace(rig);
+  // Dev-only handle, so a live level swap and a dispose can be exercised from the console.
+  // The real application reaches the rig through `findVoxelFace(entityObject)`.
+  (window as unknown as { __LLMX_FACE__?: unknown }).__LLMX_FACE__ = rig;
   console.info("[llmx] real voxel face attached:", rig.describe());
 };
 
