@@ -16,6 +16,11 @@ type Harness = { attachFace: (rig: unknown) => void };
 
 const rig = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "high" }));
 
+// `?face=mobile|balanced|high` caps the rendered density the way the host's render profile
+// will, so the reduced profile can be looked at without re-authoring the world.
+const ceiling = new URLSearchParams(window.location.search).get("face");
+if (ceiling === "mobile" || ceiling === "balanced" || ceiling === "high") rig.setQualityCeiling(ceiling);
+
 const attach = (): void => {
   const harness = (window as unknown as { __LLMX_PREVIEW__?: Harness }).__LLMX_PREVIEW__;
   if (!harness) {
