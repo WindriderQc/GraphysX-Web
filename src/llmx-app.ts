@@ -381,6 +381,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   }
   function openMath() {
     mathPanel.hidden = false; surface.classList.add('math-open'); cameraOwned = false;
+    conversation.collapseHistory();
     const [x, y, z] = mathLesson()?.buildZone.center ?? llmxMathBuildZone(forge.anchors.buildZone).center;
     const compact = window.innerWidth < 600;
     host.frameView(compact ? [x, y + 8, z + 5] : [x, y + 4.6, z + 3],

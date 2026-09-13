@@ -73,6 +73,7 @@ async function observe(name) {
     };
   });
   snapshots.push({ name, ...observed });
+  console.log(`creation checkpoint: ${name} (${Date.now() - startedAt} ms)`);
   return observed;
 }
 
@@ -179,7 +180,8 @@ try {
         turn.receipt = structuredClone(body);
         if (body.status === 'rejected' || turn.math) {
           turn.replyText = body.message;
-          stored.lastReply = { turnId: body.turnId, reply: { text: body.message, language: 'fr' } };
+          stored.lastReply = { turnId: body.turnId, reply: { text: body.message, language: 'fr',
+            speech: { provider: 'kokoro', voice: 'ff_siwis', language: 'fr' } } };
         }
         return json(body);
       }
@@ -196,9 +198,10 @@ try {
           : stale ? structuredClone(originalProposal) : current;
         assert.ok(sceneProposal, 'a stale response requires a previously observed world');
         if (!originalProposal) originalProposal = structuredClone(current);
-        const text = math ? 'Deux plus trois font six.' : stale ? 'Cette ancienne création est maintenant en place.' : 'Le cube bleu est en place.';
+        const text = math ? 'Two plus three make six.' : stale ? 'Cette ancienne création est maintenant en place.' : 'Le cube bleu est en place.';
         stored.session.turnCount++;
-        const reply = { text, language: 'fr' };
+        const reply = math ? { text, language: 'en', speech: { provider: 'kokoro', voice: 'am_michael', language: 'en' } }
+          : { text, language: 'fr' };
         stored.turns.push({ origin: 'human', clientTurnId: body.turnId, inputText: body.text, replyText: text, outcome: 'completed', math });
         stored.lastReply = { turnId: body.turnId, reply };
         return json({ session: stored.session, turnId: body.turnId, origin: 'human', reply, sceneProposal });
@@ -238,11 +241,16 @@ try {
   await action('redo').click();
   assert.deepEqual((await observe('redo-survives-rejection')).created, created.created);
 
+  const historyBeforeMath = matching('/history').length;
   const mathTurn = await send('Montre 2 plus 3 avec les cubes.', 'applied');
   assert.match(mathTurn.receipt.body.message, /2 cubes et 3 cubes/);
-  assert.equal(await page.locator('#llmx-transcript').getByText('Deux plus trois font six.', { exact: true }).count(), 0,
+  assert.equal(await page.locator('#llmx-transcript').getByText('Two plus three make six.', { exact: true }).count(), 0,
     'a model arithmetic error must not survive in the displayed or replayable response');
+  assert.equal(matching('/history').length, historyBeforeMath + 1,
+    'the French math outcome resolves the exact session voice after replacing an English model reply');
   const taught = await observe('human-math-proposal'); assertMath(taught, 0);
+  assert.equal(await page.locator('#llmx-transcript').isVisible(), false,
+    'opening the math table keeps every counted cube clear of the transcript');
   const table = taught.created.find(entity => entity.id === 'llmx-created-math');
   const ordinaryCube = taught.created.find(entity => entity.id === 'llmx-created-smoke-cube');
   assert.ok(Math.abs(table.transform.position[0] - ordinaryCube.transform.position[0]) > 5,
