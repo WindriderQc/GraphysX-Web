@@ -243,23 +243,13 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
     if (y > maxY) maxY = y;
     if (z > maxZ) maxZ = z;
 
-    // The jaw swings as a mass about its hinge, so its weight is a height ramp, not a blob:
-    // nothing above the hinge moves, and the chin moves fully.
-    //
-    // The upper lip is the exception, and it was a real modelling error: it belongs to the
-    // skull, not the mandible. Ramping it from the hinge like everything else meant the jaw
-    // dragged *both* lips down together — so the mouth stayed shut no matter how far the jaw
-    // opened, while the chin swung visibly. Lip cubes above the mouth line are held still; below
-    // it they ramp from the mouth line rather than the hinge, so the lower lip leads.
-    //
-    // The same holds for the jaw region itself. Its ramp used to start at the hinge, a quarter
-    // of a metre *above* the mouth — which put the upper-lip area and the roof of the mouth
-    // tunnel on the mandible. Anatomically the mandible's body starts at the teeth; everything
-    // in front and above that line is skull. So the ramp starts just above the mouth line.
-    if (region[i] === jawIndex) {
-      jaw[i] = smoothstep(anchors.mouth.y + 0.04, anchors.chin.y * 0.62, y);
-    } else if (region[i] === lipIndex || region[i] === throatIndex) {
-      jaw[i] = y >= anchors.mouth.y ? 0 : smoothstep(anchors.mouth.y, anchors.chin.y * 0.62, y);
+    // The upper lip and tunnel roof belong to the skull. Below the mouth, the jaw's rotation
+    // grows gradually until the chin moves fully. Tint boundaries must not change that motion.
+    if (region[i] === jawIndex || region[i] === lipIndex || region[i] === throatIndex) {
+      // One continuous field across material boundaries. The short old ramp stretched the
+      // side of the lower face into separate horizontal rows at a full opening. Carry that
+      // rotation gradually from the mouth down to the chin instead.
+      jaw[i] = smoothstep(anchors.mouth.y, anchors.chin.y * 0.9, y);
     } else {
       jaw[i] = 0;
     }
@@ -276,8 +266,10 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
      * The cavity behind the mouth is excluded: it has to stay where it is while the lips part
      * around it, or the hole travels with the lips and there is nothing to see into.
      */
+    // The lower lip blends into the chin over a wider band. A drop greater than the old
+    // 0.22 m falloff inverted successive rows and folded them into a horizontal shelf.
     const lipFall = Math.hypot(
-      (y - anchors.mouth.y) / 0.22,
+      (y - anchors.mouth.y) / (y < anchors.mouth.y ? 0.3 : 0.22),
       x / (anchors.mouth.halfWidth + 0.2),
       (z - anchors.mouth.z) / 0.34,
     );
@@ -353,7 +345,7 @@ export const POSE_LIMITS = Object.freeze({
    * into it. The per-cube lip weight falls off toward the corners, so the centre opens and the
    * corners stay — which is what makes it a mouth rather than a hatch.
    */
-  lipPart: 0.26,
+  lipPart: 0.14,
   /** The upper lip barely moves; a mouth opens downward. */
   lipPartUpperShare: 0.26,
   /**
@@ -496,7 +488,11 @@ export function poseInto(
       // a nutcracker's jaw. Closing the corners is what turns that block into a mouth.
       const upper = y >= anchors.mouth.y;
       const corner = clamp01(1 - (x * x) / (cornerReach * cornerReach));
-      py += (upper ? POSE_LIMITS.lipPart * POSE_LIMITS.lipPartUpperShare : -POSE_LIMITS.lipPart) * lw * mouth * corner;
+      // The tunnel's side walls cross the mouth line. A sign flip there split adjacent cubes
+      // into separate upper/lower plates even when the outer corners stayed closed. Ease the
+      // split through the commissure so both walls remain connected as the aperture opens.
+      const parting = smoothstep(0, 0.09, Math.abs(y - anchors.mouth.y));
+      py += (upper ? POSE_LIMITS.lipPart * POSE_LIMITS.lipPartUpperShare : -POSE_LIMITS.lipPart) * lw * mouth * corner * parting;
     }
 
     const bw = brow[i];
@@ -524,8 +520,9 @@ export function poseInto(
     outPosition[i * 3] = px;
     outPosition[i * 3 + 1] = py;
     outPosition[i * 3 + 2] = pz;
-    // Grow the cube where the surface is being pulled apart. See POSE_LIMITS.stretchFill.
-    const stretch = lw > 0 ? 1 + POSE_LIMITS.stretchFill * mouth * clamp01(lw * 2.5) : 1;
+    // Fill both lip parting and the jaw's transition; the rigid chin keeps its normal scale.
+    const stretchWeight = Math.max(clamp01(lw * 2.5), 4 * jw * (1 - jw));
+    const stretch = 1 + POSE_LIMITS.stretchFill * mouth * stretchWeight;
     outScale[i] = buildScale(rise[i], d.build, i) * stretch;
   }
   return count;

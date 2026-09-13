@@ -261,6 +261,115 @@ describe("posing", () => {
   });
 });
 
+describe("mouth surface continuity", () => {
+  for (const level of asset.levels) {
+    const weights = deriveWeights(asset, level.name);
+    const byIndex = new Map(level.indices.map((index, i) => [index, i]));
+    const lipId = asset.regions.indexOf("lip");
+    const jawId = asset.regions.indexOf("jaw");
+    const skinIds = new Set([lipId, jawId, asset.regions.indexOf("throat")]);
+
+    it(`${level.name}: leaves the central mouth tunnel empty`, () => {
+      // A shelf was generated here because a steep gradient made the ellipsoid's interior
+      // look like its surface. This is an empty volume, independent of material and camera.
+      for (let i = 0; i < weights.count; i += 1) {
+        const [x, y, z] = weights.rest.subarray(i * 3, i * 3 + 3);
+        const inAperture = Math.abs(x) < 0.08 && Math.abs(y - weights.anchors.mouth.y) < 0.035
+          && z > 0.23 && z < 0.57;
+        assert.ok(!inAperture, `cube ${i} occupies the empty mouth tunnel at ${x},${y},${z}`);
+      }
+    });
+
+    for (const speak of [0, 0.3, 0.6, 1]) {
+      it(`${level.name}: keeps lower rows ordered and lips attached at speak=${speak}`, () => {
+        const out = buffers(weights);
+        poseInto(weights, { ...AT_REST, speak }, out.position, out.scale);
+        const backing = [];
+        let apertureBottom = -Infinity;
+        let apertureTop = Infinity;
+        for (let i = 0; i < weights.count; i += 1) {
+          if (weights.region[i] === asset.regions.indexOf("maw")) backing.push(i);
+          if (weights.region[i] !== lipId || Math.abs(weights.rest[i * 3]) > level.cube * 1.1) continue;
+          const half = level.cube * out.scale[i] * 0.5;
+          if (weights.rest[i * 3 + 1] < weights.anchors.mouth.y) {
+            apertureBottom = Math.max(apertureBottom, out.position[i * 3 + 1] + half);
+          } else {
+            apertureTop = Math.min(apertureTop, out.position[i * 3 + 1] - half);
+          }
+        }
+        assert.ok(apertureBottom < apertureTop, "the mouth must retain a central aperture");
+        for (let y = apertureBottom; y <= apertureTop; y += level.cube * 0.5) {
+          assert.ok(backing.some(i => {
+            const half = level.cube * out.scale[i] * 0.5 + 1e-6;
+            return Math.abs(out.position[i * 3]) <= half && Math.abs(out.position[i * 3 + 1] - y) <= half;
+          }), `the open mouth exposes an edge or hole in its backing wall at y=${y}`);
+        }
+        let rowPairs = 0;
+        for (let i = 0; i < weights.count; i += 1) {
+          const [x, y, z] = weights.rest.subarray(i * 3, i * 3 + 3);
+          const above = byIndex.get(level.indices[i] + level.grid[0]);
+          if (above === undefined || z < 0.35 || y < -0.9
+            || y > weights.anchors.mouth.y - level.cube || Math.abs(x) > 0.3) continue;
+          rowPairs += 1;
+          assert.ok(out.position[above * 3 + 1] > out.position[i * 3 + 1],
+            `lower-mouth rows ${i}/${above} folded over into a shelf`);
+        }
+        assert.ok(rowPairs > 0, "the lower-mouth continuity check must sample real rows");
+
+        for (let i = 0; i < weights.count; i += 1) {
+          const above = byIndex.get(level.indices[i] + level.grid[0]);
+          if (above === undefined || weights.region[i] !== jawId || weights.region[above] !== jawId) continue;
+          const [x, y, z] = weights.rest.subarray(i * 3, i * 3 + 3);
+          if (y < -0.92 || y > -0.48 || z < 0.18 || Math.abs(x) < 0.22) continue;
+          const reach = level.cube * (out.scale[i] + out.scale[above]) * 0.5;
+          for (let axis = 0; axis < 3; axis += 1) {
+            const gap = Math.abs(out.position[i * 3 + axis] - out.position[above * 3 + axis]) - reach;
+            // Permit the tiny forge seams, but no row-width tears along the side of the jaw.
+            assert.ok(gap < level.cube * 0.06 + 1e-6, `jaw rows ${i}/${above} tore apart by ${gap / level.cube} cubes`);
+          }
+        }
+
+        // Connected components of touching posed cubes: every lip component must reach the
+        // jaw. This rejects a floating lip bar even if that bar's own cubes touch one another.
+        const parents = Int32Array.from({ length: weights.count }, (_, i) => i);
+        const root = (i) => {
+          while (parents[i] !== i) { parents[i] = parents[parents[i]]; i = parents[i]; }
+          return i;
+        };
+        const buckets = new Map();
+        const bucketEdge = level.cube * (1 + POSE_LIMITS.stretchFill);
+        for (let i = 0; i < weights.count; i += 1) {
+          if (!skinIds.has(weights.region[i])) continue;
+          const cell = [0, 1, 2].map(axis => Math.floor(out.position[i * 3 + axis] / bucketEdge));
+          for (let dx = -1; dx <= 1; dx += 1) {
+            for (let dy = -1; dy <= 1; dy += 1) {
+              for (let dz = -1; dz <= 1; dz += 1) {
+                const nearby = buckets.get(`${cell[0] + dx}|${cell[1] + dy}|${cell[2] + dz}`) ?? [];
+                for (const j of nearby) {
+                  const reach = level.cube * (out.scale[i] + out.scale[j]) * 0.5 + 1e-6;
+                  if ([0, 1, 2].every(axis => Math.abs(out.position[i * 3 + axis] - out.position[j * 3 + axis]) <= reach)) {
+                    parents[root(i)] = root(j);
+                  }
+                }
+              }
+            }
+          }
+          const key = cell.join("|");
+          if (!buckets.has(key)) buckets.set(key, []);
+          buckets.get(key).push(i);
+        }
+        const attached = new Set();
+        for (let i = 0; i < weights.count; i += 1) {
+          if (weights.region[i] === jawId) attached.add(root(i));
+        }
+        for (let i = 0; i < weights.count; i += 1) {
+          if (weights.region[i] === lipId) assert.ok(attached.has(root(i)), `lip cube ${i} floats free of the jaw`);
+        }
+      });
+    }
+  }
+});
+
 describe("expressions that must read at a distance", () => {
   const weights = deriveWeights(asset, "high");
   const browIndex = asset.regions.indexOf("brow");

@@ -277,7 +277,9 @@ function isBehindMouthWall(x, y, z) {
 function mawDistance(x, y, z) {
   const { y: my, halfWidth } = ANCHORS.mouth;
   const shell = Math.abs(z - 0.16) - 0.02;
-  const within = sdEllipsoid(x, y - my, 0, halfWidth + 0.09, 0.17, 1);
+  // Cover the opened aperture as well as the resting slit. A shorter wall exposes its lower
+  // edge as a dark floating bar, with the lit inside of the head visible underneath it.
+  const within = sdEllipsoid(x, y - (my - 0.06), 0, halfWidth + 0.09, 0.25, 1);
   return smax(shell, within, 0.02);
 }
 
@@ -345,6 +347,30 @@ function normalisedDistance(field, x, y, z, h) {
   return gradient > 1e-6 ? d / gradient : d;
 }
 
+/**
+ * A shell cell must contain an actual boundary of the solid.
+ *
+ * Gradient normalisation alone is unsafe inside a flattened ellipsoid: its bound has a steep
+ * interior gradient, so dividing by that gradient can turn a point deep inside the mouth cut
+ * into an apparent zero. That authored a detached horizontal shelf through the empty mouth.
+ * The normalised band remains a cheap candidate filter; opposite signs around the cell are
+ * the evidence that a surface really passes here. The band is the same as the shell's existing
+ * sampling margin, so this removes false interior cells without thickening the whole mask.
+ */
+function isSurfaceCell(field, x, y, z, band, step) {
+  if (Math.abs(normalisedDistance(field, x, y, z, step)) > band) return false;
+  const inside = field(x, y, z) <= 0;
+  for (const dx of [-band, 0, band]) {
+    for (const dy of [-band, 0, band]) {
+      for (const dz of [-band, 0, band]) {
+        if (dx === 0 && dy === 0 && dz === 0) continue;
+        if ((field(x + dx, y + dy, z + dz) <= 0) !== inside) return true;
+      }
+    }
+  }
+  return false;
+}
+
 function voxelise(cube) {
   // A shell band slightly wider than half a cube: thin enough to stay one cube deep, wide
   // enough that a surface grazing the grid does not open holes. Meaningful in metres only
@@ -382,17 +408,18 @@ function voxelise(cube) {
         // Eyes are solid, not a shell: a hollow eyeball reads as a hole. `eyeDistance` is an
         // exact sphere distance, so it needs no normalisation.
         const inEye = eyeDistance(x, y, z) <= 0;
-        const onLid = !inEye && Math.abs(normalisedDistance(lidDistance, x, y, z, step)) <= band;
-        const onMask = !inEye && !onLid && Math.abs(normalisedDistance(maskDistance, x, y, z, step)) <= band;
-        // The cavity sits behind the mouth aperture, so it is only kept where the mask is not.
-        const onMaw = !inEye && !onLid && !onMask && Math.abs(mawDistance(x, y, z)) <= band;
+        const onLid = !inEye && isSurfaceCell(lidDistance, x, y, z, band, step);
+        const onMask = !inEye && !onLid && isSurfaceCell(maskDistance, x, y, z, band, step);
+        // The backing wall also fills intersections with the tunnel shell. Removing a hidden
+        // tunnel voxel must not punch a matching hole through the wall in front of it.
+        const onMaw = !inEye && !onLid && Math.abs(mawDistance(x, y, z)) <= band;
         if (!inEye && !onLid && !onMask && !onMaw) continue;
 
         // The far end of the mouth tunnel lies behind the cavity wall; nothing there can be seen.
-        if (onMask && isBehindMouthWall(x, y, z)) continue;
+        if (onMask && !onMaw && isBehindMouthWall(x, y, z)) continue;
         let region = inEye ? eyePart(x, y, z) : onMaw ? R.maw : regionOf(x, y, z, false, onLid);
         // The tunnel's walls, floor and roof: dark, and moving with their lips.
-        if (onMask && region !== R.lip && z <= 0.44 && isInsideMouthCut(x, y, z)) region = R.throat;
+        if (onMask && !onMaw && region !== R.lip && z <= 0.44 && isInsideMouthCut(x, y, z)) region = R.throat;
         cells.push({ ix, iy, iz, region });
       }
     }
