@@ -31,7 +31,11 @@ test("skip applies the complete face immediately and changing detail retains its
     assert.equal(face.describe().build, 1);
     assert.equal(face.describe().level, "high");
     assert.equal(face.describe().renderedLevel, "balanced");
-    assert.equal(face.object.children.length, 3);
+    assert.equal(face.object.children.length, 5);
+    const cavity = face.object.children.find(child => child.name === "VoxelFaceMaw");
+    assert.ok(cavity, "a dedicated cavity remains matte after a detail change");
+    assert.equal(cavity.material.metalness, 0);
+    assert.equal(cavity.castShadow, false);
   } finally { face.dispose(); }
   assert.equal(face.object.children.length, 0);
   assert.doesNotThrow(() => face.dispose());

@@ -472,6 +472,7 @@ export class AgentWorldVoxelFace {
     mesh.name = name;
     mesh.count = count;
     mesh.castShadow = false;
+    mesh.userData.graphysxFaceCastShadow = false;
     mesh.receiveShadow = false;
     mesh.frustumCulled = false;
     this.object.add(mesh);
