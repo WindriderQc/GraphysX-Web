@@ -58,3 +58,26 @@ harness: the mask carries the key light without cracks, aims its gaze at the res
 (`gazeX` 0.55), opens its mouth on simulated speech, and turns toward a simulated creation while
 the trail and ring play. Not yet: a landscape capture at native scale, a reduced-profile capture
 with a measured frame budget.
+
+## Handoff to Codex (2026-09-13, end of the Forge lane)
+
+- Branch `claude/llmx-forge` is pushed; base `origin/main` `d7c9937`. The face lane is
+  `claude/llmx-face-forge` (HEAD `1118377`), also pushed. Neither branch touched the other's
+  files; `main.ts`, the runtime, `package.json` and the catalogues are untouched by both.
+- `src/agent-world-face.ts`, `src/llmx-face-pose.ts` and `src/llmx-face-forge.json` are NOT in this
+  branch: they belong to the face branch. To run the harness with the real mask, copy them beside
+  the harness from the face branch (the `import.meta.glob` picks them up); without them the
+  stand-in block shows.
+- Owner-reviewed in the harness on 2026-09-13: entry from the altar, mouth opening from an
+  analyser on played audio, gaze toward the camera, thinking (rings out of the cranium, ribs
+  breathing) and attention, creation trail/ring with the camera pulled back. Cut by the owner:
+  arches, stacks, gantry, the permanent build-zone ring, the crown sparks and the under-light.
+- Integration seams for the application: `createForgeWorld()` (document + anchors, including
+  `cameraEntry`/`cameraRest`/`cameraCreation`/`gazeTarget`), `forgeIntroAt()` for the entry,
+  `mountForgePresentation()` with `setIntro`/`setActivity`/`announceCreation` (call the last
+  only after the commit receipt of an accepted proposal), `forgeThinkingEmitter()` spawned
+  ephemeral on the transport's waiting state and removed after. The face's nine seams are in the
+  face branch's `docs/LLMX_FACE_INTEGRATION.md`; the harness's `attachFace`, `holdSpeak` and
+  `simulateCreation` show the calling order.
+- Not done here: the `?app=llmx` mount, the `appearance` field on the anchor entity, any
+  Household/VoiX wiring, a verify-manifest smoke, and a native-scale landscape capture.
