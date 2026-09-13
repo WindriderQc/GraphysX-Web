@@ -22,10 +22,32 @@ Les références de code et la disponibilité des services doivent être relues 
 | --- | --- | --- |
 | **Claude** | Visage et ambiance | Asset original, rendu de cubes et expressions, Forge nocturne, éclairage/particules, chorégraphie visuelle, qualification visuelle |
 | **Codex** | Conversation et intégration | Contrats communs, montage LLMx, schéma/sérialisation du visage, consommateur privé Household, audio, accueil « Hello », bibliothèque, raccord des commandes |
+| **Qwen 3.8 local, participation proposée** | Petits travaux indépendants sous revue | Cas de test, lecture ciblée de code, fixtures de scènes, helpers purs avec contrat fixé |
 | **Codex, intégrateur initial** | Assemblage et parcours complet | Intégrations intermédiaires, tests de régression, résolution des incompatibilités et reçus de validation |
 | **Yanik** | Arbitrages visuels et essai physique | Valider le caractère du visage et l'ambiance, puis la vraie conversation au micro et aux haut-parleurs |
 
 Ce partage est un défaut de départ. Le modifier explicitement si Claude travaille déjà sur certains fichiers, puis mettre à jour cette passation. Les changements de propriétaire sont annoncés avant les modifications.
+
+## Faire participer Qwen sans ralentir les deux autres agents
+
+Le modèle local est documenté dans AIOps comme `qwen3.8:27b-mtp-q8_0` sur UGalien. Le rapport de qualification du 2026-08-16, actualisé le 2026-08-24, rapporte environ 84,5 tokens de sortie par seconde dans ses échantillons standard et des contrats de tool calling réussis. Ce sont des mesures historiques sur cet artefact, pas une mesure de vitesse de développement LLMx ni une vérification de disponibilité actuelle. Source : [qualification locale](../../aiOPs/docs/ai-ops/ugalien-qwen38-qualification-2026-08-16.md).
+
+Qwen constitue une troisième ressource de production/relecture proposée. Codex conserve les décisions de contrat et l'intégration; Claude conserve la responsabilité visuelle. Un seul travail Qwen actif au départ, avec un contexte ciblé et une sortie bornée. Le grand contexte disponible n'impose pas de lui envoyer tous les dépôts.
+
+Premiers travaux utiles :
+
+- Examiner le contrat d'accueil fixé et proposer les cas de concurrence, rechargement et interruption manquants. Codex vérifie leur pertinence et garde l'oracle d'acceptation.
+- Produire des fixtures conformes au schéma pour les six scénarios de création, y compris des variantes invalides et des révisions périmées.
+- Après accord sur l'interface, implémenter un helper pur et isolé, par exemple la sélection bornée des entités pertinentes pour le contexte spatial, avec exemples d'entrée/sortie et tests indépendants fournis par l'intégrateur.
+- Relire un diff limité pour trouver des données de session introduites dans un export, une fuite de ressources ou un résultat asynchrone devenu obsolète. Les signalements doivent citer le code et un scénario reproductible.
+
+Commencer par une tâche courte avec sortie attendue et tests connus. Mesurer **temps total jusqu'au résultat accepté**, incluant préparation, attente, revue et corrections; les tokens/seconde ne suffisent pas. Limiter l'essai initial à une production et une correction ciblée. Si la reprise coûte plus que la tâche, Codex ou Claude la termine et Qwen prend un travail plus simple. Ne pas lancer une campagne de benchmark générale sur le chemin critique.
+
+Ollama fournit l'inférence; l'accès au dépôt, l'exécution des tests et la remise d'un patch passent par un exécuteur existant à vérifier. Un worker Linux n'a pas automatiquement accès aux worktrees Windows. Privilégier le raccord supervisé déjà disponible; si aucun exécuteur compatible n'est prêt, demander une réponse ou un patch borné depuis l'environnement qui possède les fichiers, puis vérifier localement. Ne pas construire une nouvelle plateforme de délégation pour gagner quelques tâches.
+
+Pour le premier essai, vérifier le modèle/hôte réellement utilisés et empêcher un fallback cloud silencieux. Aucun changement de Modelfile, de contexte résident ou de routage global. Les tâches Qwen ne doivent pas saturer le même modèle pendant les essais de conversation et du « Hello »; la mesure vocale passe en priorité.
+
+La participation reste proposée et non lancée. La demande actuelle porte sur son utilité; l'essai sur le homelab sera lancé après autorisation de Yanik conformément aux instructions du projet.
 
 ## Première étape après redémarrage : un accord court sur les interfaces
 
