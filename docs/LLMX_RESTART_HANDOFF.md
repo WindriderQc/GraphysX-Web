@@ -1,6 +1,6 @@
 # LLMx — reprise après redémarrage et partage Codex / Claude
 
-Date : 2026-09-13. État : plan initial terminé; état de l'implémentation parallèle à resynchroniser après la relance de Claude. L'inspection de son travail est suspendue à la demande de Yanik.
+Date : 2026-09-13. État : Claude relancé et travail visuel en cours; Codex reprend la synchronisation. Priorité confirmée par Yanik : ambiance, visage et entrée en conversation avant l'atelier maths.
 
 Objectif demandé par Yanik : terminer rapidement en partageant le travail entre Codex et son agent Claude après le redémarrage du PC.
 
@@ -53,7 +53,7 @@ Yanik a autorisé cette participation le 2026-09-13 (« tu as AgentX comme aide 
 
 Le Math Game existe toujours dans GraphysX. Le [plan d'atelier](LLMX_MATH_WORKSHOP.md) l'intègre comme premier cas pédagogique de co-création : pente, parabole, prédiction puis manipulation et explication. Réutiliser son rendu de cubes et ses primitives; distinguer les valeurs exactes de l'échelle d'affichage, synchroniser les guides et relire les coefficients effectivement appliqués. Aucune nouvelle dépendance de production nécessaire pour ces deux familles.
 
-Codex garde l'évaluation, le repère et le raccord conversationnel. Les besoins de présentation de l'atelier seront convenus avec Claude après sa relance; ne pas détourner son premier lot visage/ambiance avant cet accord. Pipeline reste la source de l'état des tâches; ce document ne vaut pas accusé de réception de Claude.
+Yanik précise ensuite les premiers niveaux : enfants de 4 et 7 ans, comptage, addition et soustraction avec des cubes manipulables. Les fonctions deviennent une extension ultérieure. Codex garde l'évaluation, le repère et le raccord conversationnel. Ne pas détourner le premier lot visage/ambiance pour cet atelier. Pipeline reste la source de l'état des tâches; ce document ne vaut pas accusé de réception de Claude.
 
 ## Première étape après redémarrage : un accord court sur les interfaces
 

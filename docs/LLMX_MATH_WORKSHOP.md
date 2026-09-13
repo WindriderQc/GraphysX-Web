@@ -26,7 +26,21 @@ L'agent peut montrer un point, tracer une courbe, déplacer un curseur, superpos
 
 Boucle pédagogique : **question courte → prédiction de l'apprenant → transformation visible → mesure → explication → nouvel essai**. Les réponses du LLM n'établissent jamais seules la vérité numérique. Ne pas introduire de score ni inférer la compréhension à partir d'un simple « oui ».
 
-### Première leçon : voir une pente
+### Priorité confirmée : ambiance d'abord, puis mathématiques concrètes
+
+Yanik précise que les premiers apprenants ont **4 et 7 ans**. L'atelier commencera donc par les quantités, le comptage, l'addition et la soustraction; droites et paraboles resteront des extensions pour plus tard. Adapter le niveau à l'essai de l'enfant plutôt que déduire sa compréhension de son âge.
+
+- Départ simple : compter jusqu'à 5, associer chaque cube à un mot-nombre, comparer deux petits groupes et construire un groupe de même taille. Introduire ensuite de petites sommes et différences quand l'enfant est à l'aise.
+- Étape suivante : nombres jusqu'à 20, regrouper par 5 ou 10, déplacer des unités, expliquer une addition ou une soustraction et représenter la même opération de plusieurs façons. Étendre les plages seulement après observation.
+- « 2 + 3 » : deux cubes d'une couleur et trois d'une autre se rapprochent; on peut tous les compter et constater qu'il y en a cinq. « 5 − 2 » : déplacer deux cubes vers une zone retirée, en laissant trois dans le groupe actif. Le départ, l'action et le résultat restent visibles et réversibles.
+- Pour une comparaison de quantités, conserver la taille des cubes et éviter que perspective, empilement ou couleur seule donnent un indice trompeur. Prévoir un cadrage de dessus ou frontal, des groupes assez espacés, de grosses cibles tactiles et un accompagnement oral sans lecture obligatoire.
+- Le nombre et l'opération viennent d'un modèle déterministe; animations, équation éventuelle et réponse orale reprennent ce même état. Le LLM choisit une explication et une question, pas le résultat arithmétique. Des cubes cachés derrière d'autres ne doivent pas faire échouer un comptage.
+
+Ces séances utilisent des primitives déjà présentes et la co-création de LLMx. Leurs données et leur conversation devront suivre la voie Family/persona adaptée aux enfants, séparée de la session personnelle de Yanik. Le décor et le visage pourront être adoucis et les mouvements réduits pour cet usage. Cela ne change pas le choix de Forge nocturne pour la première expérience personnelle.
+
+**Ordre de réalisation demandé : finir d'abord l'ambiance, le visage et l'entrée en conversation.** La pédagogie reste planifiée; ne pas ouvrir ce chantier sur le chemin critique de la Forge.
+
+### Extension ultérieure : voir une pente
 
 1. Afficher `y = x` dans un repère mathématique gradué et marquer `(0, 0)` et `(1, 1)`.
 2. Montrer le triangle de pente : déplacement horizontal 1, déplacement vertical 1, donc `m = 1`.
@@ -35,7 +49,7 @@ Boucle pédagogique : **question courte → prédiction de l'apprenant → trans
 5. Modifier ensuite seulement `b`, par exemple de 0 à 1, pour distinguer translation et pente.
 6. Laisser l'apprenant essayer `m = 0` puis une pente négative. Expliquer à partir de l'état réellement appliqué.
 
-### Deuxième leçon : sculpter une parabole
+### Extension ultérieure : sculpter une parabole
 
 Partir de `y = x²`, faire varier seulement `a`, puis `c`, puis introduire `b`. Comparer `a = 1`, `a = 2` et `a = -1`, sans changer l'échelle entre deux états comparés. Montrer le sommet calculé et quelques substitutions numériques. Le cas `a = 0` devient une droite; il ne possède plus de sommet de parabole.
 

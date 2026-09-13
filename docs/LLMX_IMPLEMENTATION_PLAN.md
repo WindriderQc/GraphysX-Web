@@ -249,7 +249,7 @@ Ajout demandé par Yanik : utiliser le **Math Game** encore présent (`formula-f
 
 Le [plan de l'atelier maths](LLMX_MATH_WORKSHOP.md) précise les scènes, la réutilisation, les corrections et l'acceptation. Deux conditions précèdent l'usage pédagogique : distinguer la valeur mathématique de la hauteur comprimée/coupée du rendu historique, et recalculer ensemble courbes, cubes, repère et étiquettes. Les coefficients résolus sont déjà lisibles par `api.state()`.
 
-Cet atelier devient un cas concret de P6 après le premier visage parlant, avec les mêmes propositions, reçus, annulations et sauvegardes. Aucun parseur général ni nouvelle dépendance de production pour la première version. Les extensions à la trigonométrie, aux vecteurs ou au calcul différentiel suivent plus tard.
+Yanik précise que les premiers apprenants ont 4 et 7 ans : commencer par compter, réunir et retirer des cubes pour l'addition et la soustraction, avec calcul déterministe et contrôles simples. Les fonctions sont une extension ultérieure. L'ambiance, le visage et l'entrée en conversation passent d'abord. Cet atelier devient ensuite un cas concret de P6, avec les mêmes propositions, reçus, annulations et sauvegardes. Aucun parseur général ni nouvelle dépendance de production pour la première version. Les extensions à la trigonométrie, aux vecteurs ou au calcul différentiel suivent plus tard.
 
 ## 8. Sauvegarde, reprise et identité
 
