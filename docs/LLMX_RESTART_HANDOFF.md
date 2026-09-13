@@ -1,6 +1,6 @@
 # LLMx — reprise après redémarrage et partage Codex / Claude
 
-Date : 2026-09-13. État : première ambiance LLMx intégrée localement avec le travail des deux sessions Claude. Priorité confirmée par Yanik : ambiance et visage avant l'atelier maths. Le dialogue AgentX et le premier « Hello » restent à raccorder.
+Date : 2026-09-13. État actuel : Forge et visage intégrés; conversation texte/voix et vrai accueil « Hello » raccordés à Household 1.54.0, déployé sur UGFrank (AIOps PR600, 71968ac5). La passation dans le worktree d’intégration ci-dessous fait autorité pour le lancement et les derniers résultats. Le plan historique conserve les étapes initialement proposées; les maths et la création validée de scènes constituent la prochaine étape.
 
 Objectif demandé par Yanik : terminer rapidement en partageant le travail entre Codex et son agent Claude après le redémarrage du PC.
 
