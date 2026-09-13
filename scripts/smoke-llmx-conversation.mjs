@@ -141,6 +141,7 @@ async function fixture(options = {}) {
           window.__LLMX_SMOKE__.played.push(receipt);
           if (window.__LLMX_SMOKE__.holdPlayback) await new Promise((resolve, reject) => {
             signal.addEventListener('abort', () => { receipt.aborted = true;
+              sessionStorage.setItem('llmx-smoke-playback-aborts', String(Number(sessionStorage.getItem('llmx-smoke-playback-aborts') || 0) + 1));
               reject(new DOMException('Silent fixture playback stopped', 'AbortError')); }, { once: true });
           }); }
       } };`;
@@ -206,9 +207,9 @@ async function fixture(options = {}) {
   await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.entrance.phase === 'ready');
   return { page, calls, errors, talk, messages,
     matching: suffix => calls.filter(call => call.path.endsWith(suffix)),
-    async finish(name) {
+    async finish(name, expectedNavigations = 1) {
       assert.deepEqual(errors, [], `${name}: browser errors`);
-      assert.equal(navigations.length, 1, `${name}: the mounted application unexpectedly reloaded`);
+      assert.equal(navigations.length, expectedNavigations, `${name}: the mounted application unexpectedly reloaded`);
       reports.push({ name, elapsedMs: Date.now() - scenarioStartedAt,
         calls: calls.map(call => ({ path: call.path, method: call.method })), browserErrors: errors });
       await page.close();
@@ -373,7 +374,10 @@ try {
     await h.page.getByRole('button', { name: 'Quitter LLMx', exact: true }).click();
     await h.page.getByRole('button', { name: 'LLMx · Forge nocturne', exact: true }).waitFor();
     await checkpoint(() => h.matching('/interrupt').length === 4);
-    assert.equal(await h.page.evaluate(() => window.__LLMX_SMOKE__.played[1].aborted), true);
+    // Exit deliberately loads the Center document. Keep the synchronous audio-stop
+    // receipt across that real navigation rather than reading the discarded window.
+    assert.equal(await h.page.evaluate(() => sessionStorage.getItem('llmx-smoke-playback-aborts')), '2');
+    assert.equal(new URL(h.page.url()).searchParams.has('app'), false);
     const requests = h.matching('/synthesize/stream');
     assert.equal(requests.length, 4);
     for (const request of requests) assert.deepEqual(request.body,
@@ -383,7 +387,7 @@ try {
     assert.ok(interruptions.every(request => request.body.turnId === savedTurn),
       'stopping restored reply A must interrupt A, even when the newest audit is failed turn B');
     assert.equal(h.matching('/opening').length, 0);
-    await h.finish('environment, visibility, mute and exit stop the exact restored reply and preserve its voice');
+    await h.finish('environment, visibility, mute and exit stop the exact restored reply and preserve its voice', 2);
   }
   writeFileSync(path.join(artifacts, 'llmx-conversation-report.json'), JSON.stringify({
     scope: 'Mounted LLMx controller, intercepted backend and silent audio fixtures; no live inference or acoustic acceptance',
