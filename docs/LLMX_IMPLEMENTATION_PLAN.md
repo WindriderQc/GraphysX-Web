@@ -6,7 +6,7 @@ Reprise après redémarrage, partage du travail avec Claude et participation pro
 
 **Résultat recherché :** entrer dans un environnement 3D persistant, voir un visage de cubes se construire dans une ambiance gothique industrielle, puis entendre le même interlocuteur que dans nos conversations AgentX ouvrir l'échange par « Hello ». On peut ensuite lui parler, construire avec lui, annuler une modification et retrouver son monde à la prochaine visite.
 
-Ce plan porte sur le code local inspecté, pas sur une vérification de production. Aucun appel au homelab ni changement de modèle, de GPU ou de déploiement n'a été effectué. Les valeurs graphiques et temporelles proposées sont des points de départ à mesurer.
+Ce plan porte sur le code local inspecté, pas sur une vérification de production. L'analyse initiale n'a sollicité aucun service du homelab. Après autorisation de Yanik, une première relecture locale via AgentX a été réalisée pour l'atelier maths; son reçu et ses limites sont documentés dans [LLMX_MATH_WORKSHOP.md](LLMX_MATH_WORKSHOP.md). Aucun changement de modèle, de GPU ou de déploiement n'a été effectué. Les valeurs graphiques et temporelles proposées sont des points de départ à mesurer.
 
 ## 1. Décisions proposées
 
@@ -242,6 +242,14 @@ L'aperçu utilise une projection temporaire exclue de la sauvegarde. « Oui » n
 L'application se fait en une transaction attribuée. En cas de conflit de révision, recalculer ou représenter l'aperçu. La narration de succès attend le reçu effectif; elle distingue « voici une proposition » et « c'est créé ». Si le backend n'accepte pas les outils de scène, il ne peut pas affirmer avoir modifié le monde.
 
 L'animation d'apparition suit le commit accepté, sans créer de nouvelles révisions à chaque étape. Une panne ou une interruption avant commit ne laisse pas de demi-construction persistante. Le budget vérifie aussi l'expansion des prefabs, la géométrie, les lumières et les particules : 40 commandes ne constituent pas à elles seules un budget graphique.
+
+### 7.3 Apprendre les mathématiques avec l'agent
+
+Ajout demandé par Yanik : utiliser le **Math Game** encore présent (`formula-field` et `archive-math-lab`) pour expliquer les maths dans la Forge. Le premier atelier montre droites et paraboles, fait varier un paramètre, demande une prédiction et vérifie la réponse avec des valeurs calculées. Le visage montre la figure et la commente à partir de l'état réellement appliqué.
+
+Le [plan de l'atelier maths](LLMX_MATH_WORKSHOP.md) précise les scènes, la réutilisation, les corrections et l'acceptation. Deux conditions précèdent l'usage pédagogique : distinguer la valeur mathématique de la hauteur comprimée/coupée du rendu historique, et recalculer ensemble courbes, cubes, repère et étiquettes. Les coefficients résolus sont déjà lisibles par `api.state()`.
+
+Cet atelier devient un cas concret de P6 après le premier visage parlant, avec les mêmes propositions, reçus, annulations et sauvegardes. Aucun parseur général ni nouvelle dépendance de production pour la première version. Les extensions à la trigonométrie, aux vecteurs ou au calcul différentiel suivent plus tard.
 
 ## 8. Sauvegarde, reprise et identité
 

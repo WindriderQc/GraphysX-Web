@@ -1,6 +1,6 @@
 # LLMx — reprise après redémarrage et partage Codex / Claude
 
-Date : 2026-09-13. État : plan terminé; implémentation non démarrée.
+Date : 2026-09-13. État : plan initial terminé; état de l'implémentation parallèle à resynchroniser après la relance de Claude. L'inspection de son travail est suspendue à la demande de Yanik.
 
 Objectif demandé par Yanik : terminer rapidement en partageant le travail entre Codex et son agent Claude après le redémarrage du PC.
 
@@ -12,7 +12,7 @@ Objectif demandé par Yanik : terminer rapidement en partageant le travail entre
 - Commit du plan initial : `d053ae7`.
 - Code GraphysX utilisé pour l'analyse : `60aaa5b`.
 - Dernière vérification de cette base : 315 tests réussis, 1 ignoré, 0 échec. Ces tests ne prouvent aucune fonctionnalité LLMx future.
-- Aucun serveur, travail GPU ou processus de génération n'a été démarré pour préparer le plan et cette passation. Aucun travail Claude n'a été envoyé.
+- Aucun serveur ni travail GPU n'avait été lancé pour le plan initial. Yanik a depuis autorisé la coopération locale via AgentX : la relecture maths Pipeline 0687 a été exécutée et vérifiée, voir ci-dessous. Aucun serveur LLMx n'est lancé par cette passation.
 
 Les références de code et la disponibilité des services doivent être relues après le redémarrage. Aucun état gardé uniquement dans cette conversation n'est nécessaire pour comprendre le plan.
 
@@ -47,7 +47,13 @@ Ollama fournit l'inférence; l'accès au dépôt, l'exécution des tests et la r
 
 Pour le premier essai, vérifier le modèle/hôte réellement utilisés et empêcher un fallback cloud silencieux. Aucun changement de Modelfile, de contexte résident ou de routage global. Les tâches Qwen ne doivent pas saturer le même modèle pendant les essais de conversation et du « Hello »; la mesure vocale passe en priorité.
 
-La participation reste proposée et non lancée. La demande actuelle porte sur son utilité; l'essai sur le homelab sera lancé après autorisation de Yanik conformément aux instructions du projet.
+Yanik a autorisé cette participation le 2026-09-13 (« tu as AgentX comme aide au lieu de Ollama direct »). Ne pas redemander cette autorisation pour les tâches bornées de cette portée. Premier essai réalisé : relecture Math Game via AgentX, modèle exact confirmé, 45,136 secondes de requête, conclusions partiellement retenues après revue Codex. La réponse brute et les corrections restent distinctes; ce n'est pas une livraison autonome. Voir [atelier maths et reçu](LLMX_MATH_WORKSHOP.md).
+
+## Ajout de Yanik : enseigner les maths dans LLMx
+
+Le Math Game existe toujours dans GraphysX. Le [plan d'atelier](LLMX_MATH_WORKSHOP.md) l'intègre comme premier cas pédagogique de co-création : pente, parabole, prédiction puis manipulation et explication. Réutiliser son rendu de cubes et ses primitives; distinguer les valeurs exactes de l'échelle d'affichage, synchroniser les guides et relire les coefficients effectivement appliqués. Aucune nouvelle dépendance de production nécessaire pour ces deux familles.
+
+Codex garde l'évaluation, le repère et le raccord conversationnel. Les besoins de présentation de l'atelier seront convenus avec Claude après sa relance; ne pas détourner son premier lot visage/ambiance avant cet accord. Pipeline reste la source de l'état des tâches; ce document ne vaut pas accusé de réception de Claude.
 
 ## Première étape après redémarrage : un accord court sur les interfaces
 
@@ -98,7 +104,7 @@ Le chemin critique est le raccord **session → accueil → lecture réelle → 
 - Petits commits en anglais, avec fichiers touchés et tests exécutés. Réponses et échanges avec Yanik en français.
 - À chaque livraison : commit(s), résultat visible, tests, limites et éventuelle dépendance d'interface. Les résultats simulés restent étiquetés.
 - Un seul intégrateur touche les fichiers partagés. Pas de refonte transversale ou d'installation de dépendance supplémentaire sans besoin démontré.
-- Demander à Yanik avant un essai sollicitant le homelab. Ne pas reconfigurer un GPU, un modèle ou les contextes `ax/` pour accélérer sans instruction appropriée.
+- L'autorisation de coopération locale via AgentX est acquise pour cette portée. Ne pas reconfigurer un GPU, un modèle ou les contextes `ax/` pour accélérer sans instruction appropriée.
 - Conserver séparément les preuves de tests, d'intégration, de déploiement et d'acceptation acoustique.
 
 ## Message prêt à transmettre à Claude après redémarrage
