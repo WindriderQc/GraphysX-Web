@@ -24,7 +24,14 @@ The only shadow-casting light is the directional key at (-9, 13, 10); no shadow 
 
 The harness drives the rig through the interface the face session fixed on 2026-09-13:
 `object`, `setDrivers(Partial<FaceDrivers>)`, `update(dt)`, `describe()`, `dispose()`.
-Plug it in with `window.__LLMX_PREVIEW__.attachFace(rig)`.
+Plug it in with `window.__LLMX_PREVIEW__.attachFace(rig)`; when `agent-world-face.ts` sits beside the
+harness it is attached automatically.
+
+Once Codex wires the runtime (the face session's `docs/LLMX_FACE_INTEGRATION.md` lists the eight
+seams, modelled on how `formula` already threads through `agent-world-runtime.ts`), the anchor
+entity carries `appearance: { kind: "voxel-face", level, ... }` and the mask rebuilds on load with
+nobody instantiating it by hand. `createForgeWorld()` will then set that field on
+`llmx-face-anchor`; it does not yet, because the entity type does not know the field.
 
 ## Running the harness
 
