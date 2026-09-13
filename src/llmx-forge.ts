@@ -370,7 +370,7 @@ export function forgeThinkingEmitter(anchors: ForgeAnchors): AgentWorldEntityDef
     label: "Thinking",
     type: "emitter",
     transform: { position: [x, y + 0.55, z - 0.1] },
-    emitter: { preset: "plasma-trail", rate: 9, maxParticles: 36, lifetimeSeconds: 2.6, speed: 0.55, sizeScale: 0.55, volumeScale: 1, color: PALETTE.cyan, direction: [0, 1, 0], spread: 0.45, seed: 21 },
+    emitter: { preset: "plasma-trail", rate: 12, maxParticles: 40, lifetimeSeconds: 2.8, speed: 0.75, sizeScale: 2.8, volumeScale: 1, color: "#d2fbff", direction: [0, 1, 0], spread: 0.4, seed: 21 },
     ephemeral: true,
     tags: [LLMX_FORGE_TAG, "thinking", "presentation"],
   };
