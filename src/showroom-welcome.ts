@@ -666,21 +666,23 @@ export function mountWelcome(
     const kidX = document.createElement("button");
     kidX.type = "button";
     kidX.className = "gx-go-kidx";
-    kidX.style.gridColumn = "1 / -1";
+    // Share the existing application row. Growing this bottom-anchored card would
+    // move its actions over the showroom's clickable physics bodies.
+    if (!hooks.onOpenLlmX) kidX.style.gridColumn = "1 / -1";
     kidX.textContent = "KidX · First Drive";
     kidX.addEventListener("click", hooks.onOpenKidX);
     overlay.querySelector(".gx-actions")?.append(kidX);
   }
-  if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   if (hooks?.onOpenLlmX) {
     const llmx = document.createElement("button");
     llmx.type = "button";
     llmx.className = "gx-go-llmx";
-    llmx.style.gridColumn = "1 / -1";
+    if (!hooks.onOpenKidX) llmx.style.gridColumn = "1 / -1";
     llmx.textContent = "LLMx · Forge nocturne";
     llmx.addEventListener("click", hooks.onOpenLlmX);
     overlay.querySelector(".gx-actions")?.append(llmx);
   }
+  if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);
   return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showTour, reset, dispose };
 }
