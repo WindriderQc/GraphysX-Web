@@ -411,6 +411,54 @@ test('an explicit new session recovers terminal or uncertain openings without in
   }
 });
 
+test('explicit new session can leave uncertain work after failed cleanup, without greeting or false acknowledgement', async () => {
+  for (const status of [409, 503]) {
+    const calls = [], cleanup = deferred();
+    let creations = 0;
+    const client = new LlmXConversationClient({ storage: memory(), fetch: async (url, init = {}) => {
+      const body = init.body ? JSON.parse(init.body) : null;
+      calls.push({ url, body });
+      if (url.endsWith('/config')) return json(config);
+      if (url === '/llmx-api/sessions') return json({ session: session('fresh-session-' + (++creations)) }, 201);
+      if (url.endsWith('/interrupt')) return cleanup.promise;
+      if (url.includes('/fresh-session-1/')) return stream(['{"type":']);
+      assert.ok(url.includes('/fresh-session-2/'));
+      return stream([{ type: 'done', data: result(body.turnId, 'Nouvelle réponse.', { session: session('fresh-session-2') }) }]);
+    } });
+    await assert.rejects(client.send('Ancienne question', scene, { turnId }));
+    const replacement = client.newSession();
+    const joinedInitialization = client.initialize();
+    cleanup.resolve(json({ interrupted: false, turnId }, status));
+    const [created, joined] = await Promise.all([replacement, joinedInitialization]);
+    assert.equal(created.sessionId, 'fresh-session-2');
+    assert.equal(joined.sessionId, created.sessionId);
+    assert.equal(creations, 2);
+    assert.equal(client.config.enabled, true);
+    assert.equal(client.state, 'idle');
+    assert.match(client.cleanupWarning, /n’a pas été confirmé/);
+    assert.equal(await client.opening(scene), null);
+    assert.equal(calls.some(call => call.url.endsWith('/opening')), false);
+    await client.send('Je reprends', scene, { turnId: secondId });
+    assert.deepEqual(client.history.map(message => message.content), ['Je reprends', 'Nouvelle réponse.']);
+    assert.equal(calls.filter(call => call.url.includes('/fresh-session-1/turns/text')).length, 1);
+    assert.equal(calls.filter(call => call.url.endsWith('/interrupt')).length, 1);
+  }
+});
+
+test('dispose still rejects an unconfirmed cleanup while an explicit new session is preparing', async () => {
+  const cleanup = deferred();
+  const h = harness(call => call.url.endsWith('/interrupt') ? cleanup.promise : stream(['{"type":']));
+  await assert.rejects(h.client.send('Question', scene, { turnId }));
+  const replacement = h.client.newSession();
+  const replaced = assert.rejects(replacement, { name: 'AbortError' });
+  const disposal = h.client.dispose();
+  const failedDisposal = assert.rejects(disposal, /arrêt/);
+  cleanup.resolve(json({ interrupted: false, turnId }, 503));
+  await Promise.all([replaced, failedDisposal]);
+  assert.equal(h.client.state, 'disposed');
+  assert.equal(h.calls.filter(call => call.url === '/llmx-api/sessions').length, 1);
+});
+
 test('scene observations are copied, bounded and reject non-finite positions before any request', async () => {
   const copy = llmxSceneContext(scene);
   assert.deepEqual(copy, scene);

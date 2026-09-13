@@ -120,6 +120,7 @@ export class LlmXConversationClient {
   history: LlmXMessage[] = [];
   latestTurnId: string | null = null;
   latestReply: { reply: LlmXReply; turnId: string } | null = null;
+  cleanupWarning: string | null = null;
   private readonly options: Options;
   private readonly fetcher: typeof fetch;
   private readonly storage: StorageAccess | null;
@@ -174,7 +175,7 @@ export class LlmXConversationClient {
 
   initialize(): Promise<LlmXSession | null> {
     if (this.state === 'disposed') return Promise.reject(aborted());
-    if (this.resetPending) return this.resetPending.then(() => this.initialize());
+    if (this.resetPending) return this.resetPending.catch(() => {}).then(() => this.initialize());
     if (this.initialization) return this.initialization;
     if (this.session || this.config?.enabled === false) return Promise.resolve(this.session);
     const epoch = this.epoch;
@@ -486,7 +487,14 @@ export class LlmXConversationClient {
     this.selection = selection;
     this.remember(null);
     try { await cleanup; }
-    catch (error) { if (this.epoch === epoch) this.changed('error'); throw error; }
+    catch (error) {
+      this.current(epoch);
+      // A new conversation is an explicit escape from uncertain old work, not a
+      // replay or a claim that cancellation succeeded. Require the human to speak first.
+      this.cleanupWarning = 'L’arrêt de la conversation précédente n’a pas été confirmé.'
+        + (error instanceof Error ? ' ' + error.message : '');
+      this.openingAttempted = true;
+    }
     finally { if (this.epoch === epoch) this.resetPending = null; }
     this.current(epoch);
     return this.initialize();
@@ -505,6 +513,7 @@ export class LlmXConversationClient {
     this.active = null; this.initialization = null; this.interruption = null; this.unsettled = null;
     this.resetPending = null; this.sentTurnIds.clear();
     this.session = null; this.history = []; this.latestTurnId = null; this.latestReply = null;
+    this.cleanupWarning = null;
     this.humanPending = false; this.humanStarted = false; this.openingAttempted = false; this.config = null;
     this.changed(dispose ? 'disposed' : 'idle');
     if (cleanup) await cleanup;
