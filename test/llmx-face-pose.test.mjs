@@ -81,7 +81,9 @@ describe("derived weights", () => {
   });
 
   it("puts animated cubes first, so the rig can slice instead of filter", () => {
-    const animatedRegions = new Set(["brow", "socket", "eye", "lid", "cheek", "nose", "jaw", "lip"]);
+    // From the asset, not restated here: a hardcoded copy of this list went stale the moment
+    // the eye gained an iris, and the test then blamed the code.
+    const animatedRegions = new Set(asset.animatedRegions);
     for (let i = 0; i < weights.animatedCount; i += 1) {
       assert.ok(animatedRegions.has(asset.regions[weights.region[i]]), `cube ${i} is static but placed in the animated slice`);
     }

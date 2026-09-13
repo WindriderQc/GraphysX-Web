@@ -150,13 +150,18 @@ const FORGE_PALETTE = {
   cranium: [52, 57, 64],
   brow: [43, 47, 54],
   socket: [24, 26, 31],
-  eye: [96, 214, 232],
   lid: [62, 67, 75],
   cheek: [60, 65, 72],
   nose: [56, 61, 68],
   jaw: [49, 54, 61],
-  lip: [66, 60, 58],
+  lip: [54, 50, 50],
   plate: [141, 92, 54],
+  // The eye's three parts. A uniformly lit ball reads as a disc; a dark pupil inside a bright
+  // iris inside a dim sclera is what lets a viewer tell where it is looking.
+  eye: [34, 54, 62],
+  iris: [96, 214, 232],
+  pupil: [6, 9, 12],
+  maw: [9, 10, 13],
 };
 
 /** Diagnostic palette: every region a distinct hue, so mis-tagging is visible at a glance. */
@@ -171,6 +176,9 @@ const REGION_PALETTE = {
   jaw: [212, 132, 60],
   lip: [236, 84, 140],
   plate: [140, 116, 210],
+  iris: [96, 226, 232],
+  pupil: [250, 250, 250],
+  maw: [30, 30, 34],
 };
 
 const WIDTH = 420;
@@ -245,7 +253,8 @@ function render(cubes, level, view, palette, { lit }) {
       // Depth keeps the far side of the mask from competing with the lit front planes.
       const depth = farZ === nearZ ? 1 : 0.45 + 0.55 * ((c.p.z - farZ) / (nearZ - farZ));
       const gain = (0.42 + 1.1 * lambert + 0.5 * fill) * depth;
-      const rim = face.regions[c.region] === "eye" ? 1.35 : 1;
+      const name = face.regions[c.region];
+      const rim = name === "iris" ? 1.5 : name === "eye" ? 1.05 : 1;
       r = Math.min(255, Math.round(r * gain * rim + 10 * lambert));
       g = Math.min(255, Math.round(g * gain * rim + 13 * lambert));
       b = Math.min(255, Math.round(b * gain * rim + 18 * lambert));

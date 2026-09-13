@@ -108,8 +108,9 @@ export type FaceLevel = {
   cube: number;
   grid: [number, number, number] | number[];
   /**
-   * Grid origin, per level rather than per asset: the X axis is centred on the mask's symmetry
-   * plane at `-(nx * cube) / 2`, and `nx` differs between levels.
+   * Grid origin, per level rather than per asset. X is 0: the X axis is centred on the mask's
+   * symmetry plane and cube centres are `(ix - (nx - 1) / 2) * cube`, which is exactly
+   * antisymmetric in floating point. Y and Z are ordinary `origin + (i + 0.5) * cube` bounds.
    */
   origin: [number, number, number] | number[];
   count: number;
@@ -122,11 +123,13 @@ export type FaceAsset = {
   format: string;
   version: number;
   regions: string[];
+  /** Which regions an expression can move. Authoritative; consumers must not restate it. */
+  animatedRegions: string[];
   anchors: FaceAnchors;
   levels: FaceLevel[];
 };
 
-export const SUPPORTED_FACE_VERSION = 1;
+export const SUPPORTED_FACE_VERSION = 2;
 export const FACE_FORMAT = "graphysx.llmx-voxel-face";
 
 /**
@@ -205,6 +208,7 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
   const jawIndex = regions.indexOf("jaw");
   const lipIndex = regions.indexOf("lip");
   const browIndex = regions.indexOf("brow");
+  const mawIndex = regions.indexOf("maw");
   const cheekIndex = regions.indexOf("cheek");
 
   let minX = Infinity;
@@ -219,7 +223,9 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
     const ix = index % nx;
     const iy = Math.floor(index / nx) % ny;
     const iz = Math.floor(index / (nx * ny));
-    const x = ox + (ix + 0.5) * cube;
+    // Exactly antisymmetric about the mask's centre plane — see the note in the sculptor. This
+    // expression must stay bit-identical to the one that authored the grid.
+    const x = ox + (ix - (nx - 1) / 2) * cube;
     const y = oy + (iy + 0.5) * cube;
     const z = oz + (iz + 0.5) * cube;
 
@@ -238,14 +244,38 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
 
     // The jaw swings as a mass about its hinge, so its weight is a height ramp, not a blob:
     // nothing above the hinge moves, and the chin moves fully.
-    jaw[i] =
-      region[i] === jawIndex || region[i] === lipIndex
-        ? smoothstep(anchors.jawHinge.y, anchors.chin.y * 0.62, y)
-        : 0;
+    //
+    // The upper lip is the exception, and it was a real modelling error: it belongs to the
+    // skull, not the mandible. Ramping it from the hinge like everything else meant the jaw
+    // dragged *both* lips down together — so the mouth stayed shut no matter how far the jaw
+    // opened, while the chin swung visibly. Lip cubes above the mouth line are held still; below
+    // it they ramp from the mouth line rather than the hinge, so the lower lip leads.
+    if (region[i] === jawIndex) {
+      jaw[i] = smoothstep(anchors.jawHinge.y, anchors.chin.y * 0.62, y);
+    } else if (region[i] === lipIndex) {
+      jaw[i] = y >= anchors.mouth.y ? 0 : smoothstep(anchors.mouth.y, anchors.chin.y * 0.62, y);
+    } else {
+      jaw[i] = 0;
+    }
 
-    // Lips are shaped by proximity to the mouth centre, so the corners trail the middle.
-    const lipFall = Math.hypot((y - anchors.mouth.y) / 0.16, x / (anchors.mouth.halfWidth + 0.12));
-    lip[i] = region[i] === lipIndex ? clamp01(1 - lipFall) : 0;
+    /*
+     * Lip influence is a smooth field around the mouth, not a region flag.
+     *
+     * Keying it to `region === lip` made the lip band translate as a rigid plate while its
+     * neighbours stayed put, and at a 0.17 m opening that tore a gap around the whole mouth —
+     * you could see the lit inside of the shell through the seam. Faces deform; they do not
+     * separate into plates. Taking the weight from distance instead lets the motion fall off
+     * into the jaw, cheeks and nose over a few cubes, so the mouth area stretches.
+     *
+     * The cavity behind the mouth is excluded: it has to stay where it is while the lips part
+     * around it, or the hole travels with the lips and there is nothing to see into.
+     */
+    const lipFall = Math.hypot(
+      (y - anchors.mouth.y) / 0.22,
+      x / (anchors.mouth.halfWidth + 0.2),
+      (z - anchors.mouth.z) / 0.34,
+    );
+    lip[i] = region[i] === mawIndex ? 0 : clamp01(1 - lipFall);
 
     const browFall = Math.hypot((y - anchors.brow.y) / 0.2, (Math.abs(x) - anchors.brow.x) / 0.34);
     brow[i] = region[i] === browIndex ? clamp01(1 - browFall * 0.72) : 0;
@@ -259,7 +289,9 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
   }
 
   const span = maxY - minY || 1;
-  for (let i = 0; i < count; i += 1) rise[i] = (rest[i * 3 + 1] - minY) / span;
+  // Clamped: the lowest cube can land a few parts in 10^8 below minY through float rounding,
+  // and `rise` is a documented 0..1 that `buildScale` reads as a height fraction.
+  for (let i = 0; i < count; i += 1) rise[i] = clamp01((rest[i * 3 + 1] - minY) / span);
 
   return {
     level,
@@ -285,11 +317,45 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
 /** Bounds on every authored movement, in metres or radians. Nothing here is a free parameter. */
 export const POSE_LIMITS = Object.freeze({
   /**
-   * Jaw opening at speak = 1, in radians. Measured in the Forge rather than reasoned about: at
-   * 0.26 the whole lower mask swung and read as a hinged puppet jaw, not a mouth. Speech barely
-   * uses the range a jaw actually has, and the lips carry most of what a viewer reads.
+   * Jaw opening at speak = 1, in radians.
+   *
+   * This number has been wrong in both directions. At 0.26 the whole lower mask swung and read
+   * as a hinged puppet jaw; dropping it to 0.17 then made speech almost invisible at
+   * conversation distance. Amplitude was never the real variable — **distribution** was. The
+   * lips now lead the opening through {@link POSE_LIMITS.lipPart}, and the jaw only carries the
+   * mass behind them, so the mouth can open visibly without the face dislocating.
    */
-  jawRadians: 0.17,
+  jawRadians: 0.14,
+  /**
+   * Lower-lip drop at speak = 1, in metres, before the per-cube lip weight.
+   *
+   * **A jaw rotation alone cannot open this mouth**, and the arithmetic says why. The lower lip
+   * sits 0.34 m below the hinge, so even a generous 0.26 rad moves it 0.34 · sin(0.26) = 0.088 m
+   * — under two cubes at the high density, and at a normal speech level less than one. The
+   * mouth stayed shut while the chin swung, which is exactly what it looked like: a face that
+   * moves all over while its mouth does nothing.
+   *
+   * So the opening is a translation of the lips, and the jaw merely follows. This value is
+   * comparable to the aperture's own height on purpose: a mouth reads as open when you can see
+   * into it. The per-cube lip weight falls off toward the corners, so the centre opens and the
+   * corners stay — which is what makes it a mouth rather than a hatch.
+   */
+  lipPart: 0.26,
+  /** The upper lip barely moves; a mouth opens downward. */
+  lipPartUpperShare: 0.26,
+  /**
+   * How much a cube grows where the mouth is stretching, as a fraction of its edge.
+   *
+   * The mask is a shell one cube thick, and a shell cannot stretch: moving the lips 0.17 m apart
+   * pulls neighbouring cubes further apart than they overlap, and the gaps show the lit inside
+   * as a speckle across the lower face. Growing the cubes in proportion to how hard that part of
+   * the face is being pulled closes the gaps exactly where they open, for the cost of one
+   * multiply. It is invisible — a cube 40% larger among cubes of the same colour reads as the
+   * same surface, where a hole through it does not.
+   */
+  stretchFill: 0.42,
+  /** Exponent on `speak` before it drives the mouth. Below one; see the note where it is used. */
+  mouthResponse: 0.6,
   lipSpread: 0.035,
   lipPurse: 0.03,
   browLift: 0.045,
@@ -328,10 +394,21 @@ export function poseInto(
   // Eyes and lids are deliberately absent from this loop: both are rigid bodies turning about
   // the eye centre, so the rig applies one {@link eyeTransform} per side instead of paying for
   // a per-cube branch here.
+  /*
+   * The mouth's own response curve.
+   *
+   * `speak` is the energy of played audio, and a real voice spends almost all of its time
+   * between 0.2 and 0.7 — it reaches 1 on a shout, not on a sentence. Driving the opening
+   * linearly therefore wastes most of the authored range on amplitudes that never occur, and the
+   * mouth reads as barely moving while the meter says it is working. Raising to a power below
+   * one puts the visible travel where speech actually lives: 0.3 opens to 49%, 0.5 to 66%.
+   */
+  const mouth = Math.pow(d.speak, POSE_LIMITS.mouthResponse);
+
   // Positive opens. The hinge sits behind and above the chin, so this rotation drops the lips
   // and swings the chin down and *back* — which is what a jaw does. An earlier negative angle
   // lifted the chin into the mouth instead; the lip-separation test below is what caught it.
-  const jawAngle = POSE_LIMITS.jawRadians * d.speak;
+  const jawAngle = POSE_LIMITS.jawRadians * mouth;
   const cosJaw = Math.cos(jawAngle);
   const sinJaw = Math.sin(jawAngle);
   const hingeY = anchors.jawHinge.y;
@@ -340,8 +417,8 @@ export function poseInto(
   // A rounded mouth pulls the lips in and forward; a bright one spreads them. speakTone 0.5 is
   // neutral, so silence never biases the shape.
   const tone = (d.speakTone - 0.5) * 2;
-  const spread = POSE_LIMITS.lipSpread * tone * d.speak;
-  const purse = POSE_LIMITS.lipPurse * -tone * d.speak;
+  const spread = POSE_LIMITS.lipSpread * tone * mouth;
+  const purse = POSE_LIMITS.lipPurse * -tone * mouth;
 
   const browTarget = POSE_LIMITS.browLift * (d.attention * 0.7 + Math.max(0, d.warmth) * 0.3);
   const cheekTarget = POSE_LIMITS.cheekLift * Math.max(0, d.warmth);
@@ -370,6 +447,10 @@ export function poseInto(
     if (lw > 0) {
       px += spread * lw * (x >= 0 ? 1 : -1);
       pz += purse * lw;
+      // Part the lips directly, on top of whatever the jaw is doing. Signed by which side of
+      // the mouth line the cube rests on, and asymmetric because a mouth opens downward.
+      const upper = y >= anchors.mouth.y;
+      py += (upper ? POSE_LIMITS.lipPart * POSE_LIMITS.lipPartUpperShare : -POSE_LIMITS.lipPart) * lw * mouth;
     }
 
     const bw = brow[i];
@@ -392,7 +473,9 @@ export function poseInto(
     outPosition[i * 3] = px;
     outPosition[i * 3 + 1] = py;
     outPosition[i * 3 + 2] = pz;
-    outScale[i] = buildScale(rise[i], d.build, i);
+    // Grow the cube where the surface is being pulled apart. See POSE_LIMITS.stretchFill.
+    const stretch = lw > 0 ? 1 + POSE_LIMITS.stretchFill * mouth * clamp01(lw * 2.5) : 1;
+    outScale[i] = buildScale(rise[i], d.build, i) * stretch;
   }
   return count;
 }
@@ -441,8 +524,14 @@ export function eyeTransform(anchors: FaceAnchors, input: Partial<FaceDrivers>):
     pitch: d.gazeY * POSE_LIMITS.gazeRadians * 0.6,
     // Attention holds the lid a little higher; a blink always reaches full closure.
     lidRadians: (d.blink - 0.12 * d.attention) * 1.55,
-    // The eyes carry the only emissive on the mask, so this is where presence is read from.
-    glow: clamp(0.45 + 0.4 * d.attention + 0.3 * d.speak - 0.5 * d.blink, 0, 1.4),
+    /*
+     * The eyes carry the only emissive on the mask, which makes them the brightest thing in a
+     * dark room — and therefore the signal a viewer reads first. An earlier `+ 0.3 * speak` made
+     * them pulse on every syllable, and at conversation distance that read as "the whole face is
+     * speaking" while the mouth itself looked static. Speech must not drive the eyes: it belongs
+     * to the mouth. What is left is a trace, so the eyes are not frozen while the agent talks.
+     */
+    glow: clamp(0.45 + 0.4 * d.attention + 0.05 * d.speak - 0.5 * d.blink, 0, 1.4),
   };
 }
 
