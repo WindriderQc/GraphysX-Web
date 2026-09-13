@@ -35,7 +35,9 @@ try {
     const childKept = host.world.getEntityObject("face-child-test").parent === host.world.getEntityObject("llmx-face");
     const changed = api.exportDocument();
     const invalid = api.update("llmx-face", { appearance: { ...appearance, seed: -1 } });
-    const unchanged = JSON.stringify(api.exportDocument()) === JSON.stringify(changed);
+    const afterInvalid = api.exportDocument();
+    const unchanged = JSON.stringify(afterInvalid) === JSON.stringify(changed);
+    const changedEntities = changed.entities.filter((entity, index) => JSON.stringify(entity) !== JSON.stringify(afterInvalid.entities[index])).map(entity => entity.id);
     must(api.load(changed));
     const reloaded = api.state().entities.find(entity => entity.id === "llmx-face").appearance;
     must(api.update("llmx-face", { appearance: null }));
@@ -48,11 +50,11 @@ try {
     must(api.load(original));
     host.frameView([1, 2, 9], [0, 2, 0], 0);
     const immediateCamera = host.camera.position.toArray();
-    return { appearance, childKept, rejected: !invalid.ok, unchanged, reloaded, restoredDefault, materialsOwned, meshCount: meshes.length, immediateCamera };
+    return { appearance, childKept, rejected: !invalid.ok, unchanged, changedEntities, reloaded, restoredDefault, materialsOwned, meshCount: meshes.length, immediateCamera };
   });
   assert.equal(lifecycle.childKept, true);
   assert.equal(lifecycle.rejected, true);
-  assert.equal(lifecycle.unchanged, true);
+  assert.equal(lifecycle.unchanged, true, JSON.stringify(lifecycle.changedEntities));
   assert.equal(lifecycle.reloaded.seed, 29);
   assert.equal(lifecycle.restoredDefault, true);
   assert.equal(lifecycle.materialsOwned, true);

@@ -1900,6 +1900,12 @@ export class AgentWorldRuntime {
       for (const command of commands) {
         assertAuthoredSceneCommandNamespaces(command);
         this.assertCommandTransientBoundary(command);
+        // A malformed visual identity must not tear down a live conversation face just to
+        // reject its patch. Check its data before taking/reloading a rollback snapshot.
+        // Entity-type validation still runs during application, so remove/spawn/update
+        // batches may legitimately reuse an id with a different type.
+        if (command.op === "update" && command.patch?.appearance !== undefined) resolveAgentAppearance(command.patch.appearance);
+        if (command.op === "spawn" && command.entity?.appearance !== undefined) resolveAgentAppearance(command.entity.appearance, command.entity.type);
       }
     } catch (error) {
       this.recordEvent("transaction.rejected", error instanceof Error ? error.message : String(error));
