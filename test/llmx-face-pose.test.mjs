@@ -292,7 +292,19 @@ describe("eyes", () => {
   it("keeps gaze inside its authored cone", () => {
     const hard = eyeTransform(anchors, { gazeX: 9, gazeY: -9 });
     assert.equal(hard.yaw, POSE_LIMITS.gazeRadians);
-    assert.equal(hard.pitch, -POSE_LIMITS.gazeRadians * 0.6);
+    // gazeY = -1 is a downward gaze, which about +X is a positive pitch. The previous version of
+    // this line asserted the opposite and was pinning the inverted convention in place.
+    assert.equal(hard.pitch, POSE_LIMITS.gazeRadians * 0.6);
+  });
+
+  it("raises the front of the eye for an upward gaze", () => {
+    // The rig rotates about +X, where a positive angle lowers the front of the eye. So looking
+    // up must be a negative pitch — and looking toward +X a positive yaw, the natural pair.
+    const up = eyeTransform(anchors, { gazeY: 1 });
+    const right = eyeTransform(anchors, { gazeX: 1 });
+    const frontY = Math.sin(-up.pitch); // y of the unit forward vector (0, 0, 1) after the rotation
+    assert.ok(frontY > 0, `gazeY = 1 should raise the eye's front, pitch was ${up.pitch}`);
+    assert.ok(right.yaw > 0, "gazeX = 1 should be a positive yaw toward +X");
   });
 
   it("closes fully on a blink and dims while closed", () => {

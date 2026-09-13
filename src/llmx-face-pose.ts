@@ -250,8 +250,13 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
     // dragged *both* lips down together — so the mouth stayed shut no matter how far the jaw
     // opened, while the chin swung visibly. Lip cubes above the mouth line are held still; below
     // it they ramp from the mouth line rather than the hinge, so the lower lip leads.
+    //
+    // The same holds for the jaw region itself. Its ramp used to start at the hinge, a quarter
+    // of a metre *above* the mouth — which put the upper-lip area and the roof of the mouth
+    // tunnel on the mandible. Anatomically the mandible's body starts at the teeth; everything
+    // in front and above that line is skull. So the ramp starts just above the mouth line.
     if (region[i] === jawIndex) {
-      jaw[i] = smoothstep(anchors.jawHinge.y, anchors.chin.y * 0.62, y);
+      jaw[i] = smoothstep(anchors.mouth.y + 0.04, anchors.chin.y * 0.62, y);
     } else if (region[i] === lipIndex) {
       jaw[i] = y >= anchors.mouth.y ? 0 : smoothstep(anchors.mouth.y, anchors.chin.y * 0.62, y);
     } else {
@@ -423,6 +428,8 @@ export function poseInto(
   const browTarget = POSE_LIMITS.browLift * (d.attention * 0.7 + Math.max(0, d.warmth) * 0.3);
   const cheekTarget = POSE_LIMITS.cheekLift * Math.max(0, d.warmth);
   const breathOffset = POSE_LIMITS.breathAmplitude * Math.sin(d.breath);
+  // Where the lips stop parting: just past the authored half-width, so the corners hold.
+  const cornerReach = anchors.mouth.halfWidth * 1.08;
 
   for (let i = 0; i < count; i += 1) {
     const x = rest[i * 3];
@@ -449,8 +456,15 @@ export function poseInto(
       pz += purse * lw;
       // Part the lips directly, on top of whatever the jaw is doing. Signed by which side of
       // the mouth line the cube rests on, and asymmetric because a mouth opens downward.
+      //
+      // The parting fades to nothing at the commissures. A mouth opens in the middle and stays
+      // joined at its corners; the general lip field is still 40% strong out there, and letting
+      // it flip sign across the mouth line at the corners tore them apart vertically — isolated
+      // cubes floating beside the aperture, and a lower lip that dropped as one wide block like
+      // a nutcracker's jaw. Closing the corners is what turns that block into a mouth.
       const upper = y >= anchors.mouth.y;
-      py += (upper ? POSE_LIMITS.lipPart * POSE_LIMITS.lipPartUpperShare : -POSE_LIMITS.lipPart) * lw * mouth;
+      const corner = clamp01(1 - (x * x) / (cornerReach * cornerReach));
+      py += (upper ? POSE_LIMITS.lipPart * POSE_LIMITS.lipPartUpperShare : -POSE_LIMITS.lipPart) * lw * mouth * corner;
     }
 
     const bw = brow[i];
@@ -521,7 +535,11 @@ export function eyeTransform(anchors: FaceAnchors, input: Partial<FaceDrivers>):
   return {
     pivot: { x: anchors.eye.x, y: anchors.eye.y, z: anchors.eye.z },
     yaw: d.gazeX * POSE_LIMITS.gazeRadians,
-    pitch: d.gazeY * POSE_LIMITS.gazeRadians * 0.6,
+    // Both angles are rotations the rig applies about +Y and +X respectively. About +X, a
+    // positive angle sends the front of the eye *down* — (0, 0, z) goes to (0, −z·sinθ, z·cosθ)
+    // — so an upward gaze (gazeY > 0) is a negative pitch. This shipped without the sign and
+    // the eyes tracked the camera upside down; the test below pins the convention.
+    pitch: -d.gazeY * POSE_LIMITS.gazeRadians * 0.6,
     // Attention holds the lid a little higher; a blink always reaches full closure.
     lidRadians: (d.blink - 0.12 * d.attention) * 1.55,
     /*
