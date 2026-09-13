@@ -82,8 +82,23 @@ const REGION_TINT: Record<string, keyof Pick<ResolvedAgentWorldFace, "metalColor
   lip: "lipColor",
 };
 
-/** Regions darker than the base metal, so the orbits stay deep under a strong key light. */
-const REGION_SHADE: Record<string, number> = { socket: 0.55, brow: 0.84, jaw: 0.94, lid: 1.12, cheek: 1.1 };
+/**
+ * Regions darker than the base metal, so the orbits stay deep under a strong key light.
+ *
+ * `pupil` and `maw` are near-black on purpose. They are the two places where the mask has to
+ * read as a *hole* — something the viewer looks into — and a hole that catches a highlight
+ * stops being one.
+ */
+const REGION_SHADE: Record<string, number> = {
+  socket: 0.55,
+  brow: 0.84,
+  jaw: 0.94,
+  lid: 1.12,
+  cheek: 1.1,
+  eye: 0.42,
+  pupil: 0.06,
+  maw: 0.05,
+};
 
 /** Cube edge as a multiple of the grid step. See the note where it is used. */
 const CUBE_OVERLAP = 1.022;
@@ -130,12 +145,16 @@ export class AgentWorldVoxelFace {
   /** Cube indices belonging to each mesh, resolved once at build. */
   private metalAnimated: Uint32Array = new Uint32Array(0);
   private metalStatic: Uint32Array = new Uint32Array(0);
-  private eyeCubes: Uint32Array = new Uint32Array(0);
+  private ballCubes: Uint32Array = new Uint32Array(0);
+  private irisCubes: Uint32Array = new Uint32Array(0);
   private lidCubes: Uint32Array = new Uint32Array(0);
+  private mawCubes: Uint32Array = new Uint32Array(0);
 
   private animatedMesh: InstancedMesh | null = null;
   private staticMesh: InstancedMesh | null = null;
   private eyeMesh: InstancedMesh | null = null;
+  private ballMesh: InstancedMesh | null = null;
+  private mawMesh: InstancedMesh | null = null;
 
   /** Pose scratch, sized once. `poseInto` writes here; the meshes read from it. */
   private position = new Float32Array(0);
@@ -259,6 +278,7 @@ export class AgentWorldVoxelFace {
     poseInto(this.weights, current, this.position, this.scale, limit);
 
     this.writeMesh(this.animatedMesh, this.metalAnimated);
+    this.writeMesh(this.mawMesh, this.mawCubes);
     this.writeEyes();
     if (assembling) {
       this.writeMesh(this.staticMesh, this.metalStatic);
@@ -289,7 +309,7 @@ export class AgentWorldVoxelFace {
   }
 
   dispose(): void {
-    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh]) {
+    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh, this.ballMesh, this.mawMesh]) {
       if (!mesh) continue;
       this.object.remove(mesh);
       mesh.geometry.dispose();
@@ -299,6 +319,8 @@ export class AgentWorldVoxelFace {
     this.animatedMesh = null;
     this.staticMesh = null;
     this.eyeMesh = null;
+    this.ballMesh = null;
+    this.mawMesh = null;
     delete this.object.userData.graphysxVoxelFace;
   }
 
@@ -337,12 +359,25 @@ export class AgentWorldVoxelFace {
 
     const metalAnimated: number[] = [];
     const metalStatic: number[] = [];
-    const eyeCubes: number[] = [];
+    // The eyeball is two meshes, not one. A single emissive material cannot hold a dark pupil:
+    // `instanceColor` multiplies the diffuse colour and leaves emissive alone, so a pupil on the
+    // iris material would still glow — which is exactly the lit disc this pass exists to fix.
+    const ballCubes: number[] = [];
+    const irisCubes: number[] = [];
     const lidCubes: number[] = [];
+    const mawCubes: number[] = [];
     for (let i = 0; i < count; i += 1) {
       const name = regionNames[weights.region[i]];
-      if (name === "eye") {
-        eyeCubes.push(i);
+      if (name === "iris") {
+        irisCubes.push(i);
+        continue;
+      }
+      if (name === "eye" || name === "pupil") {
+        ballCubes.push(i);
+        continue;
+      }
+      if (name === "maw") {
+        mawCubes.push(i);
         continue;
       }
       if (name === "lid") lidCubes.push(i);
@@ -351,8 +386,10 @@ export class AgentWorldVoxelFace {
     }
     this.metalAnimated = Uint32Array.from(metalAnimated);
     this.metalStatic = Uint32Array.from(metalStatic);
-    this.eyeCubes = Uint32Array.from(eyeCubes);
+    this.ballCubes = Uint32Array.from(ballCubes);
+    this.irisCubes = Uint32Array.from(irisCubes);
     this.lidCubes = Uint32Array.from(lidCubes);
+    this.mawCubes = Uint32Array.from(mawCubes);
 
     // Cubes are drawn slightly larger than the grid step so neighbours interpenetrate. At
     // exactly one step they only *touch*, and the forge jitter below then rotates them apart:
@@ -362,7 +399,13 @@ export class AgentWorldVoxelFace {
     const edge = weights.level.cube * CUBE_OVERLAP;
     this.animatedMesh = this.createMesh("VoxelFaceAnimated", edge, this.metalAnimated.length, false);
     this.staticMesh = this.createMesh("VoxelFaceStatic", edge, this.metalStatic.length, false);
-    this.eyeMesh = this.createMesh("VoxelFaceEyes", edge, this.eyeCubes.length, true);
+    this.ballMesh = this.createMesh("VoxelFaceEyeball", edge, this.ballCubes.length, false);
+    // The mouth cavity gets its own matte black material rather than a dark tint on the metal.
+    // A near-black albedo does not make a metal stop reflecting: at metalness 0.5 the cavity
+    // still caught the copper rim light behind the mask and read as a bright bar across the
+    // open mouth — the very artefact this cavity was added to remove. A hole has to be matte.
+    this.mawMesh = this.createMaw("VoxelFaceMaw", edge, this.mawCubes.length);
+    this.eyeMesh = this.createMesh("VoxelFaceIris", edge, this.irisCubes.length, true);
 
     this.writeColors();
     this.staticDirty = true;
@@ -370,6 +413,7 @@ export class AgentWorldVoxelFace {
     poseInto(weights, this.current, this.position, this.scale, weights.count);
     this.writeMesh(this.animatedMesh, this.metalAnimated);
     this.writeMesh(this.staticMesh, this.metalStatic);
+    this.writeMesh(this.mawMesh, this.mawCubes);
     this.writeEyes();
   }
 
@@ -405,12 +449,28 @@ export class AgentWorldVoxelFace {
     return mesh;
   }
 
+  private createMaw(name: string, edge: number, count: number): InstancedMesh {
+    const mesh = new InstancedMesh(
+      new BoxGeometry(edge, edge, edge),
+      new MeshStandardMaterial({ color: "#07090c", roughness: 1, metalness: 0 }),
+      Math.max(count, 1),
+    );
+    mesh.name = name;
+    mesh.count = count;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    mesh.frustumCulled = false;
+    this.object.add(mesh);
+    return mesh;
+  }
+
   private writeColors(): void {
     const regionNames = asset.regions;
     const base = new Color(this.config.metalColor);
     for (const [mesh, list] of [
       [this.animatedMesh, this.metalAnimated],
       [this.staticMesh, this.metalStatic],
+      [this.ballMesh, this.ballCubes],
     ] as const) {
       if (!mesh) continue;
       for (let j = 0; j < list.length; j += 1) {
@@ -473,8 +533,9 @@ export class AgentWorldVoxelFace {
     const mesh = this.eyeMesh;
     if (mesh) {
       (mesh.material as MeshStandardMaterial).emissiveIntensity = eye.glow;
-      this.writeRotatedAbout(mesh, this.eyeCubes, eye.pivot, eye.yaw, eye.pitch, null);
+      this.writeRotatedAbout(mesh, this.irisCubes, eye.pivot, eye.yaw, eye.pitch, null);
     }
+    this.writeRotatedAbout(this.ballMesh, this.ballCubes, eye.pivot, eye.yaw, eye.pitch, null);
     // Lids live in the metal mesh, so they are re-posed on top of what writeMesh just wrote.
     this.writeRotatedAbout(this.animatedMesh, this.lidCubes, eye.pivot, 0, eye.lidRadians, this.metalAnimated);
   }
@@ -518,7 +579,7 @@ export class AgentWorldVoxelFace {
   }
 
   private disposeMeshes(): void {
-    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh]) {
+    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh, this.ballMesh, this.mawMesh]) {
       if (!mesh) continue;
       this.object.remove(mesh);
       mesh.geometry.dispose();
@@ -528,6 +589,8 @@ export class AgentWorldVoxelFace {
     this.animatedMesh = null;
     this.staticMesh = null;
     this.eyeMesh = null;
+    this.ballMesh = null;
+    this.mawMesh = null;
   }
 }
 

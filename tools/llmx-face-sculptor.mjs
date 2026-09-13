@@ -27,7 +27,12 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, "..", "src", "llmx-face-forge.json");
 
 /** Data format version. A runtime that does not know this number refuses the asset. */
-export const FACE_DATA_VERSION = 1;
+/**
+ * Data format version. A runtime that does not know this number refuses the asset rather than
+ * animating it wrongly. Raised to 2 when the eye gained an iris and a pupil and the mouth gained
+ * a cavity: a v1 renderer has no mesh for those regions and would draw them as metal.
+ */
+export const FACE_DATA_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // SDF toolkit. Standard analytic primitives; the smooth operators are what keep
@@ -130,7 +135,13 @@ export const ANCHORS = {
 };
 
 /** Region ids. Array order is the wire format — never reorder, only append. */
-export const REGIONS = ["cranium", "brow", "socket", "eye", "lid", "cheek", "nose", "jaw", "lip", "plate"];
+export const REGIONS = [
+  "cranium", "brow", "socket", "eye", "lid", "cheek", "nose", "jaw", "lip", "plate",
+  // Appended in v2. `eye` now means the sclera; the iris and pupil are the parts that make it
+  // read as an eye rather than a lit disc, and `maw` is the cavity that stops the mouth showing
+  // the inside of the shell.
+  "iris", "pupil", "maw",
+];
 
 const R = Object.fromEntries(REGIONS.map((name, index) => [name, index]));
 
@@ -139,7 +150,9 @@ const R = Object.fromEntries(REGIONS.map((name, index) => [name, index]));
  * whose matrices are rewritten per frame, and leaves the rest written once — which is what
  * makes a denser, better-looking mask affordable.
  */
-export const ANIMATED_REGIONS = ["brow", "socket", "eye", "lid", "cheek", "nose", "jaw", "lip"];
+export const ANIMATED_REGIONS = [
+  "brow", "socket", "eye", "lid", "cheek", "nose", "jaw", "lip", "iris", "pupil", "maw",
+];
 
 /**
  * Rear cut plane. Deep enough that the profile still reads as a head — an earlier -0.42 turned
@@ -181,8 +194,8 @@ function maskDistance(x, y, z) {
 
   // Lips, before the mouth is cut through them. The upper lip is deliberately thinner than the
   // lower one — an even pair reads as a letterbox slot rather than a mouth.
-  d = smin(d, sdEllipsoid(x, y + 0.45, z - 0.41, 0.27, 0.055, 0.12), 0.045);
-  d = smin(d, sdEllipsoid(x, y + 0.605, z - 0.41, 0.265, 0.085, 0.14), 0.045);
+  d = smin(d, sdEllipsoid(x, y + 0.45, z - 0.41, 0.26, 0.042, 0.115), 0.04);
+  d = smin(d, sdEllipsoid(x, y + 0.615, z - 0.41, 0.255, 0.062, 0.13), 0.04);
 
   // Swept-back temple fins and a crown fin — where the mask stops being a face and becomes
   // machinery. Capsules sweeping up and back, not slabs: a flat panel reads as a billboard from
@@ -195,7 +208,7 @@ function maskDistance(x, y, z) {
   d = smax(d, -sdEllipsoid(ax - 0.29, y - 0.1, z - 0.42, 0.235, 0.185, 0.22), 0.065);
 
   // The mouth, cut through the lips. Taller than it is deep, so it opens as an aperture.
-  d = smax(d, -sdEllipsoid(x, y + 0.52, z - 0.44, 0.27, 0.062, 0.2), 0.04);
+  d = smax(d, -sdEllipsoid(x, y + 0.52, z - 0.44, 0.255, 0.095, 0.22), 0.035);
 
   return d;
 }
@@ -206,10 +219,45 @@ function eyeDistance(x, y, z) {
   return len(Math.abs(x) - ex, y - ey, z - ez) - radius;
 }
 
+/**
+ * Which part of the eyeball a cube belongs to.
+ *
+ * A uniformly emissive ball reads as a lit disc, not as an eye — it has no iris to aim and no
+ * pupil to fix on you, so at conversation distance it looks wrong without being able to say why.
+ * The front cap carries a dark pupil inside a bright iris inside a dim sclera; everything facing
+ * away stays sclera. This only becomes possible at a fine enough grid: at 46 mm the whole eye is
+ * five cubes across and an iris cannot exist.
+ */
+function eyePart(x, y, z) {
+  const { x: ex, y: ey, z: ez, radius } = ANCHORS.eye;
+  const ax = Math.abs(x);
+  const forward = (z - ez) / radius;
+  if (forward < 0.3) return R.eye;
+  const offAxis = len(ax - ex, y - ey, 0);
+  if (offAxis < radius * 0.3) return R.pupil;
+  if (offAxis < radius * 0.66) return R.iris;
+  return R.eye;
+}
+
+/**
+ * The inside of the mouth.
+ *
+ * The mask is a one-cube shell, so cutting a mouth through it opens a hole onto the *inside* of
+ * that shell — and the copper rim light behind the mask lit those interior rows as bright bars
+ * that read as teeth. A dark cavity wall behind the aperture closes the view. It is not
+ * decoration: it is what makes an open mouth read as depth rather than as damage.
+ */
+function mawDistance(x, y, z) {
+  const { y: my, halfWidth } = ANCHORS.mouth;
+  const shell = Math.abs(z - 0.16) - 0.02;
+  const within = sdEllipsoid(x, y - my, 0, halfWidth + 0.09, 0.17, 1);
+  return smax(shell, within, 0.02);
+}
+
 /** The lid is a cap over the top of the eyeball; it rotates down to blink. */
 function lidDistance(x, y, z) {
   const { x: ex, y: ey, z: ez, radius } = ANCHORS.eye;
-  const shell = Math.abs(len(Math.abs(x) - ex, y - ey, z - ez) - (radius + 0.028)) - 0.022;
+  const shell = Math.abs(len(Math.abs(x) - ex, y - ey, z - ez) - (radius + 0.034)) - 0.026;
   // The lid caps the top third of the eyeball, not its top half. A half-covered eyeball leaves
   // only a crescent of cyan along the bottom rim, and a bottom crescent reads as a gaze aimed
   // at the floor no matter where the eye is actually pointed. Soft edge so the lid line is not
@@ -233,7 +281,7 @@ function regionOf(x, y, z, fromEye, fromLid) {
   if (len(ax - eye.x, y - eye.y, z - eye.z) < 0.32 && z > 0.05) return R.socket;
   if (y > 0.19 && y < 0.46 && z > 0.15) return R.brow;
   if (ax < 0.2 && y > -0.3 && y < 0.3 && z > 0.3) return R.nose;
-  if (Math.abs(y - mouth.y) < 0.105 && ax < mouth.halfWidth + 0.04 && z > 0.26) return R.lip;
+  if (Math.abs(y - mouth.y) < 0.135 && ax < mouth.halfWidth + 0.03 && z > 0.28) return R.lip;
   if (len(ax - cheek.x, y - cheek.y, z - cheek.z) < 0.28) return R.cheek;
   if (y < jawHinge.y) return R.jaw;
   return R.cranium;
@@ -279,17 +327,26 @@ function voxelise(cube) {
   const ny = Math.ceil((BOUNDS.maxY - BOUNDS.minY) / cube);
   const nz = Math.ceil((BOUNDS.maxZ - BOUNDS.minZ) / cube);
 
-  // The X grid is centred on the mask's symmetry plane rather than on the authored bounds.
-  // With an arbitrary origin the two halves sample the surface at different sub-cube offsets,
-  // and the mask comes out subtly lopsided — one eye half a cube wider than the other. Placing
-  // the origin at -(nx * cube) / 2 makes x(ix) === -x(nx - 1 - ix) exactly, for any nx.
-  const originX = -(nx * cube) / 2;
+  // The X grid is centred on the mask's symmetry plane rather than on the authored bounds:
+  // with an arbitrary origin the two halves sample the surface at different sub-cube offsets
+  // and the mask comes out lopsided.
+  //
+  // Centring is not enough on its own, though. `-(nx * cube) / 2 + (ix + 0.5) * cube` is
+  // symmetric in exact arithmetic but not in floating point — a mirrored pair's coordinates can
+  // differ in the last unit in the last place, and a region test evaluated exactly on its
+  // boundary then classifies them differently. That is not cosmetic: one cube of a mirrored pair
+  // landed in `lip` and the other in `jaw`, so the two halves of the mouth moved differently.
+  //
+  // `(ix - (nx - 1) / 2) * cube` is exactly antisymmetric in IEEE 754, because `a - b` and
+  // `b - a` are exact negations and both are then scaled by the same factor. Both the sculptor
+  // and `deriveWeights` use this form, so the symmetry survives into the runtime.
+  const originX = 0;
   const cells = [];
 
   for (let iy = 0; iy < ny; iy += 1) {
     const y = BOUNDS.minY + (iy + 0.5) * cube;
     for (let ix = 0; ix < nx; ix += 1) {
-      const x = originX + (ix + 0.5) * cube;
+      const x = originX + (ix - (nx - 1) / 2) * cube;
       for (let iz = 0; iz < nz; iz += 1) {
         const z = BOUNDS.minZ + (iz + 0.5) * cube;
         if (z < BACK_CAP) continue;
@@ -299,9 +356,12 @@ function voxelise(cube) {
         const inEye = eyeDistance(x, y, z) <= 0;
         const onLid = !inEye && Math.abs(normalisedDistance(lidDistance, x, y, z, step)) <= band;
         const onMask = !inEye && !onLid && Math.abs(normalisedDistance(maskDistance, x, y, z, step)) <= band;
-        if (!inEye && !onLid && !onMask) continue;
+        // The cavity sits behind the mouth aperture, so it is only kept where the mask is not.
+        const onMaw = !inEye && !onLid && !onMask && Math.abs(mawDistance(x, y, z)) <= band;
+        if (!inEye && !onLid && !onMask && !onMaw) continue;
 
-        cells.push({ ix, iy, iz, region: regionOf(x, y, z, inEye, onLid) });
+        const region = inEye ? eyePart(x, y, z) : onMaw ? R.maw : regionOf(x, y, z, false, onLid);
+        cells.push({ ix, iy, iz, region });
       }
     }
   }
@@ -349,10 +409,16 @@ function packLevel(name, level) {
   };
 }
 
+/**
+ * Three densities of the same sculpt. `high` was raised from 46 mm after Yanik judged the mask
+ * in the Forge: the features that carry a face — an iris, a lip, the corner of a mouth — are
+ * smaller than a cube at that size, so no amount of shading could have fixed them. `mobile`
+ * deliberately did not move; a phone's budget has not changed.
+ */
 const LEVELS = [
-  { name: "high", cube: 0.046 },
-  { name: "balanced", cube: 0.06 },
-  { name: "mobile", cube: 0.082 },
+  { name: "high", cube: 0.024 },
+  { name: "balanced", cube: 0.038 },
+  { name: "mobile", cube: 0.072 },
 ];
 
 function sculpt() {
@@ -367,6 +433,10 @@ function sculpt() {
       note: "Composed from analytic signed distance fields in tools/llmx-face-sculptor.mjs. No external model, texture or scan is involved; re-running the script reproduces this file exactly.",
     },
     regions: REGIONS,
+    // Travels with the asset rather than being restated by each consumer. Appending a region
+    // and forgetting to update a duplicated copy of this list is a drift that already happened
+    // once, and it is invisible until a cube animates that should not have.
+    animatedRegions: ANIMATED_REGIONS,
     anchors: ANCHORS,
     levels,
   };
