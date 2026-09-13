@@ -76,7 +76,7 @@ export type ForgeAnchors = Readonly<{
   socketTop: AgentWorldVector3;
   /** Where the camera rests for conversation: slightly off-axis, at eye level with the mask. */
   cameraRest: ForgeCameraPose;
-  /** Where the entry move starts: far and high, the whole plateau in shot. */
+  /** Where the entry move starts: near the altar, low, the crown and the mask's chin in shot. */
   cameraEntry: ForgeCameraPose;
   /** Default landing area for created objects, and what "here" means when nothing is picked. */
   buildZone: Readonly<{ center: AgentWorldVector3; radius: number }>;
@@ -177,7 +177,10 @@ function forgeAnchors(): ForgeAnchors {
     // the group origin frames the nose. Close enough that the face fills roughly a third of the
     // frame height at 16:9: readable, not looming.
     cameraRest: { position: [1.4, round(FACE_CENTER_Y + EYE_HEIGHT - 0.05), 7.4], target: gazeTarget },
-    cameraEntry: { position: [3.5, 8.5, 26], target: [0, 2.4, 0] },
+    // Already close to the altar and aimed low at the crown, so the first cubes of the chin are
+    // seen arriving; the approach then lifts to the eyes as the mask builds upward. A first
+    // version started 26 m out and the assembly began as a speck (owner review, 2026-09-13).
+    cameraEntry: { position: [2.1, 2.3, 6.6], target: [0, 1.5, 0] },
     // Front-right of the socket from the visitor's side: in shot at rest, clear of the ribs.
     buildZone: { center: [4.6, TILE_THICKNESS, 3.4], radius: 2.6 },
     ribs: ribRuns,
