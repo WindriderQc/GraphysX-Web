@@ -2,6 +2,13 @@
 
 Date : 2026-09-13. Statut : plan proposé, aucune fonctionnalité LLMx implémentée par ce document.
 
+**Mise à jour du 13 septembre :** le premier jalon d'ambiance est maintenant implémenté dans
+`GraphysX-Web-llmx-integration`, branche `codex/llmx-integration` : entrée, visage persistant,
+éclairage, particules et sauvegarde locale. La conversation, la voix et le vrai « Hello »
+restent la prochaine étape. Le présent document conserve l'analyse et le plan complet;
+la [passation actuelle](../../GraphysX-Web-llmx-integration/docs/LLMX_CURRENT_HANDOFF.md)
+donne les instructions de reprise et les reçus de validation du code intégré.
+
 Reprise après redémarrage, partage du travail avec Claude et participation proposée de Qwen 3.8 local : [LLMX_RESTART_HANDOFF.md](LLMX_RESTART_HANDOFF.md).
 
 **Résultat recherché :** entrer dans un environnement 3D persistant, voir un visage de cubes se construire dans une ambiance gothique industrielle, puis entendre le même interlocuteur que dans nos conversations AgentX ouvrir l'échange par « Hello ». On peut ensuite lui parler, construire avec lui, annuler une modification et retrouver son monde à la prochaine visite.
