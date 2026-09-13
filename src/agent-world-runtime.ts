@@ -1,3 +1,5 @@
+import { resolveAgentAppearance, type AgentAppearance } from "../server/agent-appearance.mjs";
+import { AgentWorldVoxelFace, findVoxelFace, resolveAgentWorldFace } from "./agent-world-face";
 import {
   AgentWorldFormulaField,
   GRAPHYSX_AGENT_WORLD_FORMULAS,
@@ -622,6 +624,8 @@ export type AgentWorldEntityDefinition = {
   };
   path?: AgentWorldSplinePath;
   asset?: AgentWorldModelAsset;
+  /** Persistent visual identity; live conversation state is deliberately separate. */
+  appearance?: AgentAppearance | null;
   /** Particle emitter configuration. Only valid on `emitter` entities. */
   emitter?: AgentWorldEmitter;
   /**
@@ -700,6 +704,8 @@ export type AgentWorldEntityPatch = {
   marker?: boolean;
   physics?: Partial<AgentWorldPhysics> | null;
   agent?: AgentWorldAgentProfile;
+  /** Replace appearance, or restore the default avatar with null. */
+  appearance?: AgentAppearance | null;
   /** Patch the emitter of an `emitter` entity. Merged over the current configuration. */
   emitter?: AgentWorldEmitter;
   /** Patch the sound of a `sound` entity. Merged over the current configuration. */
@@ -939,6 +945,7 @@ export type AgentWorldEntityState = {
   } | null;
   path: { pointCount: number; closed: boolean } | null;
   asset: ({ status: "loading" | "ready" | "error"; error?: string } & ResolvedAgentWorldModelAsset) | null;
+  appearance: Required<AgentAppearance> | null;
   agent: Required<AgentWorldAgentProfile> | null;
   emitter: (ResolvedAgentWorldEmitter & { liveParticles: number }) | null;
   sound: ResolvedAgentWorldSound | null;
@@ -1230,6 +1237,7 @@ type ResolvedEntity = {
   geometry: Required<NonNullable<AgentWorldEntityDefinition["geometry"]>>;
   path: Required<AgentWorldSplinePath> | null;
   asset: ResolvedAgentWorldModelAsset | null;
+  appearance: Required<AgentAppearance> | null;
   agent: Required<AgentWorldAgentProfile> | null;
   emitter: ResolvedAgentWorldEmitter | null;
   sound: ResolvedAgentWorldSound | null;
@@ -2518,6 +2526,9 @@ export class AgentWorldRuntime {
       if (definition.type !== "agent") throw new Error("Only agent entities accept an agent profile");
       definition.agent = resolveAgentProfile(patch.agent, definition.agent ?? undefined);
     }
+    if (patch.appearance !== undefined) {
+      definition.appearance = resolveAgentAppearance(patch.appearance, definition.type);
+    }
     if (patch.emitter !== undefined) {
       if (definition.type !== "emitter") throw new Error("Only emitter entities accept an emitter configuration");
       definition.emitter = resolveAgentWorldEmitter(patch.emitter, definition.emitter ?? undefined);
@@ -3171,6 +3182,7 @@ export class AgentWorldRuntime {
     // deterministic slice, exactly as it does a rigid body.
     for (const runtime of this.entities.values()) {
       const particles = findParticleSystem(runtime.object);
+      findVoxelFace(runtime.object)?.update(deltaSeconds);
       if (particles) particles.update(deltaSeconds);
       const water = findWaterSurface(runtime.object);
       if (water) water.update(deltaSeconds);
@@ -3725,6 +3737,7 @@ export class AgentWorldRuntime {
 
   private applyResolvedEntity(runtime: RuntimeEntity): void {
     const { definition, object } = runtime;
+    if (definition.type === "agent") applyAgentAppearance(object, definition);
     object.visible = definition.visible;
     if (definition.type === "model") {
       applyAgentWorldModelMaterialOverrides(object, definition.modelMaterialOverrides);
@@ -3763,6 +3776,13 @@ export class AgentWorldRuntime {
       }
       if (!belongsToRuntime) return;
       if (child instanceof Mesh) {
+        if (definition.appearance) {
+          // The sculpt owns its materials and suppresses self-shadow acne. Authored child
+          // entities were excluded above and still keep their independent appearance.
+          child.castShadow = definition.castShadow && child.userData.graphysxFaceCastShadow === true;
+          child.receiveShadow = false;
+          return;
+        }
         child.castShadow = definition.castShadow;
         child.receiveShadow = definition.receiveShadow;
         // Some entity types own their own material, configured from their own field: water
@@ -3803,6 +3823,7 @@ export class AgentWorldRuntime {
       throw new Error("Only model entities accept modelMaterialOverrides");
     }
     const agent = source.type === "agent" ? resolveAgentProfile(source.agent) : null;
+    const appearance = resolveAgentAppearance(source.appearance, source.type);
     if (source.type !== "agent" && source.agent) throw new Error("Only agent entities accept an agent profile");
     const emitter = source.type === "emitter" ? resolveAgentWorldEmitter(source.emitter) : null;
     if (source.type !== "emitter" && source.emitter) throw new Error("Only emitter entities accept an emitter configuration");
@@ -3873,6 +3894,7 @@ export class AgentWorldRuntime {
       path,
       asset,
       agent,
+      appearance,
       emitter,
       sound,
       terrain,
@@ -3988,6 +4010,7 @@ export class AgentWorldRuntime {
     }
     return {
       formula: formulaState,
+      appearance: deepClone(runtime.definition.appearance),
       dna: dnaState,
       id,
       label: runtime.definition.label,
@@ -4336,6 +4359,36 @@ function createGeometry(definition: ResolvedEntity) {
 }
 
 function createAgentAvatar(definition: ResolvedEntity): Group {
+  const group = new Group();
+  applyAgentAppearance(group, definition);
+  return group;
+}
+
+function applyAgentAppearance(object: Object3D, definition: ResolvedEntity): void {
+  const key = JSON.stringify(definition.appearance);
+  if (object.userData.graphysxAgentAppearanceKey === key) return;
+  const previous = object.userData.graphysxAgentVisual;
+  if (previous instanceof Object3D) {
+    object.remove(previous);
+    disposeObjectTree(previous);
+  }
+  let visual: Object3D;
+  if (definition.appearance) {
+    const face = new AgentWorldVoxelFace(resolveAgentWorldFace(definition.appearance));
+    face.snapDrivers({ build: 1 });
+    visual = face.object;
+    visual.traverse((child) => {
+      if (child instanceof Mesh) child.userData.graphysxFaceCastShadow = child.castShadow;
+    });
+  } else {
+    visual = createDefaultAgentAvatar(definition);
+  }
+  object.add(visual);
+  object.userData.graphysxAgentVisual = visual;
+  object.userData.graphysxAgentAppearanceKey = key;
+}
+
+function createDefaultAgentAvatar(definition: ResolvedEntity): Group {
   const group = new Group();
   const height = Math.max(0.8, definition.geometry.height);
   const radius = Math.max(0.2, definition.geometry.radius);
@@ -5271,6 +5324,7 @@ function serializeSteering(steering: ResolvedAgentWorldSteering): AgentWorldStee
 
 function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition {
   return {
+    ...(definition.appearance ? { appearance: deepClone(definition.appearance) } : {}),
     // Carried explicitly: a formula field that does not serialise would round-trip into an
     // empty plot, which is the failure the write-only-state sweep exists to catch.
     ...(definition.formula ? { formula: deepClone(definition.formula) } : {}),
@@ -5426,6 +5480,11 @@ function disposeObjectTree(root: Object3D): void {
   // Include it in whole-entity teardown, while the Sets protect shared source maps/materials.
   sourceAgentWorldModelMaterials(root).forEach(disposeMaterial);
   root.traverse((child) => {
+    const face = findVoxelFace(child);
+    if (face) {
+      face.dispose();
+      return;
+    }
     const particles = findParticleSystem(child);
     if (particles) {
       particles.dispose();

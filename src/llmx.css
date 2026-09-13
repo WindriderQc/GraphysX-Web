@@ -1,0 +1,22 @@
+.gx-llmx{position:absolute;inset:0;z-index:45;pointer-events:none;color:#dce7e9;font-family:var(--gx-font,system-ui,sans-serif)}
+.gx-llmx-header{position:absolute;top:24px;left:28px;right:28px;display:flex;justify-content:space-between;align-items:start;gap:16px}
+.gx-llmx-eyebrow{font-size:11px;font-weight:600;letter-spacing:.28em;color:#84bec8}
+.gx-llmx h1{font-size:20px;line-height:1.4;font-weight:500;margin:4px 0;text-shadow:0 2px 10px #000}
+.gx-llmx button{pointer-events:auto;min-height:44px;padding:10px 16px;border:1px solid #61778266;border-radius:10px;color:inherit;background:#0e161ede;font:500 13px var(--gx-font,system-ui,sans-serif);cursor:pointer;backdrop-filter:blur(10px)}
+.gx-llmx button:hover{background:#1b3039;border-color:#81c4ca}
+.gx-llmx button:focus-visible{outline:2px solid #9de4e5;outline-offset:4px}
+.gx-llmx button[hidden]{display:none}
+.gx-llmx-footer{position:absolute;bottom:22px;left:20px;right:20px;text-align:center}
+.gx-llmx-phase{display:table;margin:0 auto 12px;padding:7px 13px;border-radius:20px;background:#0e161ee8;font-size:14px;color:#d5e6e7;text-shadow:0 2px 8px #000}
+.gx-llmx nav{display:flex;justify-content:center;flex-wrap:wrap;gap:8px}
+.gx-llmx-caption{font-size:12px;color:#a6b4bc;line-height:1.5;margin:12px 0 0;text-shadow:0 2px 8px #000}
+.gx-llmx-notice{font-size:13px;margin:8px 0 0;color:#d4c2a7}
+.gx-llmx-notice:empty{display:none}
+.gx-llmx-environments{pointer-events:auto;box-sizing:border-box;max-width:440px;width:calc(100% - 32px);padding:28px;background:#101820;color:#dce7e9;border:1px solid #567079;border-radius:18px;box-shadow:0 20px 80px #0009}
+.gx-llmx-environments::backdrop{background:#050a11bb;backdrop-filter:blur(6px)}
+.gx-llmx-environments h2{font-size:21px;font-weight:500;margin:0 0 12px}
+.gx-llmx-environments p{line-height:1.5}
+.gx-llmx-environments .gx-llmx-world{display:flex;flex-direction:column;gap:8px;width:100%;padding:24px;text-align:left;background:linear-gradient(120deg,#26363c,#152329 55%,#3d2d24);margin:20px 0}
+.gx-llmx-world strong{font-size:18px;font-weight:500}.gx-llmx-world span{color:#b9cbd0}
+.gx-llmx-environments [data-action=close]{margin-top:20px;width:100%}
+@media(max-width:600px){.gx-llmx-header{top:14px;left:16px;right:16px}.gx-llmx h1{font-size:17px}.gx-llmx-footer{bottom:16px;left:12px;right:12px}.gx-llmx button{padding:9px 12px;font-size:12px}.gx-llmx-phase{margin-bottom:10px}}

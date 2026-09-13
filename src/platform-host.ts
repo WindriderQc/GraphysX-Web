@@ -618,6 +618,17 @@ export class PlatformHost {
     const toPosition = new Vector3(...position);
     const toTarget = new Vector3(...target);
     this.controls.autoRotate = false;
+    if (duration === 0) {
+      this.focusMove = null;
+      this.camera.position.copy(toPosition);
+      this.controls.target.copy(toTarget);
+      // Clear leftover pointer damping so a skipped entrance really settles here.
+      const damping = this.controls.enableDamping;
+      this.controls.enableDamping = false;
+      this.controls.update();
+      this.controls.enableDamping = damping;
+      return;
+    }
     this.focusMove = {
       fromPosition: this.camera.position.clone(),
       toPosition,

@@ -1,14 +1,10 @@
 import type { Object3D } from "three";
 import type { AgentWorldDefinition, AgentWorldVector3 } from "./agent-world-runtime";
 import type { FaceDrivers } from "./llmx-face-pose";
+import type { AgentAppearance } from "../server/agent-appearance.mjs";
 
 /** Persistent appearance only. Conversation identifiers and live drivers never enter a scene. */
-export type LlmXFaceAppearance = {
-  kind: "voxel-face";
-  asset: "forge-mask";
-  palette: "forge";
-  seed: number;
-};
+export type LlmXFaceAppearance = Required<AgentAppearance>;
 
 export type LlmXDetail = "high" | "balanced" | "mobile";
 

@@ -228,6 +228,21 @@ export class AgentWorldVoxelFace {
     }
   }
 
+  /** Immediate authored pose for load/skip/reduced motion; normal speech still uses smoothing. */
+  snapDrivers(drivers: Partial<FaceDrivers>): void {
+    this.setDrivers(drivers);
+    for (const key of Object.keys(drivers) as (keyof FaceDrivers)[]) {
+      if (key !== "breath") this.current[key] = this.target[key];
+    }
+    this.staticDirty = true;
+    this.update(0);
+  }
+
+  /** Detail follows the host device, not the saved environment. */
+  setLevel(level: AgentWorldFaceLevel): void {
+    if (level !== this.config.level) this.configure({ ...this.config, level });
+  }
+
   /**
    * Advance the face by one frame. Called from `host.subscribeFrame`, never from its own loop.
    *
@@ -242,6 +257,9 @@ export class AgentWorldVoxelFace {
     const target = this.target;
 
     current.build = approach(current.build, target.build, RESPONSE.build, dt);
+    // Exponential convergence otherwise stays infinitesimally below 1 forever, uploading the
+    // entire static mask every frame even after assembly has visibly finished.
+    if (Math.abs(current.build - target.build) < 1e-5) current.build = target.build;
     current.speak = approach(
       current.speak,
       target.speak,
@@ -395,6 +413,7 @@ export class AgentWorldVoxelFace {
     // The mask casts one silhouette into the Forge; it must not receive its own cubes' shadows,
     // which at this density turns the whole face into noise under a strong key light.
     mesh.castShadow = !emissive;
+    mesh.userData.graphysxFaceCastShadow = !emissive;
     mesh.receiveShadow = false;
 
     // A fixed, generous bounding sphere. Recomputing it per frame over thousands of moving
@@ -555,6 +574,8 @@ function indexOfSlot(list: Uint32Array, cube: number): number {
 
 /** Reach the rig from its scene object, the way `findFormulaField` reaches a formula field. */
 export function findVoxelFace(object: Object3D): AgentWorldVoxelFace | null {
-  const face = object.userData.graphysxVoxelFace;
+  const visual = object.userData.graphysxAgentVisual;
+  const face = object.userData.graphysxVoxelFace ??
+    (visual instanceof Object3D ? visual.userData.graphysxVoxelFace : undefined);
   return face instanceof AgentWorldVoxelFace ? face : null;
 }

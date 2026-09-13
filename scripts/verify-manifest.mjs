@@ -12,6 +12,7 @@ export const VERIFY_STATIC_CHECKS = {
 };
 
 export const VERIFY_SMOKES = [
+  { name: "llmx", tier: "apps", script: "scripts/smoke-llmx.mjs", covers: "Forge appearance lifecycle, save/reload, reduced motion, immediate camera, environment selection and Center return" },
   { name: "startup", tier: "core", script: "scripts/smoke-startup.mjs", covers: "renderer and lazy-import failures: accessible recovery page and working retry" },
   { name: "showroom", tier: "core", script: "scripts/smoke-showroom.mjs", covers: "default route: welcome showroom, gated editor, auto-orbit" },
   { name: "editor", tier: "core", script: "scripts/smoke-editor.mjs", covers: "editor: library palette, model + texture + behaviour, bloom authoring, exit path" },

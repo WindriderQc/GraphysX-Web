@@ -42,6 +42,7 @@ export function mountWelcome(
   variant: ShowroomWelcomeVariant = onNestorTopic ? "agentx" : "scene-resume",
   hooks?: {
     onOpenKidX?: () => void;
+    onOpenLlmX?: () => void;
     coauthor?: { onAccept?: () => void; onDiscard?: () => void; onToggleCommand?: (index: number) => void };
     tour?: { onStart?: () => void; onNext?: () => void; onPrevious?: () => void; onStop?: () => void };
   },
@@ -671,6 +672,15 @@ export function mountWelcome(
     overlay.querySelector(".gx-actions")?.append(kidX);
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
+  if (hooks?.onOpenLlmX) {
+    const llmx = document.createElement("button");
+    llmx.type = "button";
+    llmx.className = "gx-go-llmx";
+    llmx.style.gridColumn = "1 / -1";
+    llmx.textContent = "LLMx · Forge nocturne";
+    llmx.addEventListener("click", hooks.onOpenLlmX);
+    overlay.querySelector(".gx-actions")?.append(llmx);
+  }
   container.append(style, overlay);
   return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showTour, reset, dispose };
 }

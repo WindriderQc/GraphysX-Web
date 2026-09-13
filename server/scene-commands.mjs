@@ -5,6 +5,7 @@
 // An untrusted live member must never be able to commit JSON that every browser subsequently
 // refuses to load; declining an unproven command is safer than persisting it.
 
+import { resolveAgentAppearance } from "./agent-appearance.mjs";
 import {
   assertAuthoredSceneCommandNamespaces,
   assertAuthoredWorldEntityNamespaces,
@@ -23,12 +24,14 @@ const PHYSICS_FORBIDDEN_TYPES = new Set([
 ]);
 const MOTION_BEHAVIORS = new Set(["spin", "bob", "orbit", "pulse", "look-at", "follow-spline"]);
 const ENTITY_KEYS = new Set([
+  "appearance",
   "id", "label", "type", "parentId", "transform", "material", "modelMaterialOverrides", "geometry",
   "path", "asset", "emitter", "sound", "terrain", "water", "flock", "crowd", "formula", "surface",
   "steering", "dna", "forceField", "agent", "physics", "intensity", "distance", "marker", "visible",
   "castShadow", "receiveShadow", "ephemeral", "tags", "behaviors", "interactions",
 ]);
 const PATCH_KEYS = new Set([
+  "appearance",
   "label", "parentId", "transform", "material", "modelMaterialOverrides", "surface", "steering", "visible",
   "castShadow", "receiveShadow", "ephemeral", "tags", "intensity", "distance", "marker", "physics", "agent",
   "emitter", "sound", "terrain", "water", "flock", "crowd", "formula", "dna", "forceField", "interactions",
@@ -608,6 +611,7 @@ function validateTypedConfig(entity, key, value, label, { merged = false } = {})
 
 function validateEntityFields(entity, label, allowImportedMedia = false) {
   allowedKeys(entity, ENTITY_KEYS, label);
+  validateAppearance(entity.appearance, entity.type);
   requireStableId(entity.id, `${label}.id`);
   if (!ENTITY_TYPES.has(entity.type)) reject(`Unsupported entity type: ${String(entity.type)}`);
   if (entity.label !== undefined) requireString(entity.label, `${label}.label`, { maximum: 240 });
@@ -649,6 +653,7 @@ function validateEntityFields(entity, label, allowImportedMedia = false) {
 
 function validatePatchFields(current, patch, label) {
   allowedKeys(patch, PATCH_KEYS, label);
+  validateAppearance(patch.appearance, current.type);
   if (patch.label !== undefined) requireString(patch.label, `${label}.label`, { maximum: 240 });
   if (patch.parentId !== undefined && patch.parentId !== null) requireStableId(patch.parentId, `${label}.parentId`);
   if (patch.transform !== undefined) validateTransform(patch.transform, `${label}.transform`);
@@ -728,6 +733,7 @@ function mergeEntityPatch(current, patch) {
 }
 
 function validateUpdatedEntity(entity, label) {
+  validateAppearance(entity.appearance, entity.type);
   if (entity.parentId && entity.parentId === entity.id) reject("An entity cannot parent itself");
   if (entity.physics !== undefined) validatePhysics(entity.physics, `${label}.physics`, entity);
   if (entity.steering !== undefined) {
@@ -740,6 +746,11 @@ function validateUpdatedEntity(entity, label) {
   if (entity.physics && !["kinematic", "trigger"].includes(entity.physics.mode) && (entity.behaviors ?? []).some((behavior) => MOTION_BEHAVIORS.has(behavior.type))) {
     reject("Transform behaviors require kinematic physics");
   }
+}
+
+function validateAppearance(value, type) {
+  try { resolveAgentAppearance(value, type); }
+  catch (error) { reject(error.message); }
 }
 
 function validateEnvironmentBlock(value, label, allowImportedMedia = false) {
