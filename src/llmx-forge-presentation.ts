@@ -29,6 +29,8 @@ import type { ForgeAnchors, ForgeIntroFrame } from "./llmx-forge";
 export type ForgeActivity = Readonly<{
   /** True while audio the agent is speaking is actually playing. Amplitude lives in the rig. */
   speaking: boolean;
+  /** True while the conversation transport reports waiting or generating. Never GPU load. */
+  thinking?: boolean;
   /** The rig's assembly progress, 0–1, so the rim only breathes over a present face. */
   build: number;
 }>;
@@ -156,6 +158,11 @@ export function mountForgePresentation(scene: Scene, anchors: ForgeAnchors): For
         // Speech runs a faint ripple outward from the socket, over a present face only.
         if (activity.speaking && activity.build > 0.95) {
           gain += 0.35 * Math.max(0, Math.sin(clock * 5 - along * 9));
+        }
+        // Thinking: a slow breath along the whole circuit, socket outward, so waiting on the
+        // engine reads as the Forge working rather than as a frozen face.
+        if (activity.thinking && activity.build > 0.95) {
+          gain += 0.55 * Math.max(0, Math.sin(clock * 1.6 - along * 2.2));
         }
         color.copy(COPPER).multiplyScalar(gain);
         strip.mesh.setColorAt(i, color);
