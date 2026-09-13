@@ -223,6 +223,10 @@ export function recoverLlmXMath(world: LlmXMathWorld | null | undefined): LlmXMa
     throw new LlmXMathError("The counting table must stay level with a uniform scale");
   }
   const lesson = buildLlmXMath(config, { center: transform.position, radius: transform.scale[0] * BASE_RADIUS });
+  const expectedIds = new Set(lesson.entities.map(entity => entity.id));
+  if (world.entities.some(entity => entity.parentId && expectedIds.has(entity.parentId) && !expectedIds.has(entity.id))) {
+    throw new LlmXMathError("An unrelated object was attached inside the counting table");
+  }
   const children = world.entities.filter(entity => ownsMathId(entity.id) && entity.tags?.includes(LLMX_MATH_TAG) && entity.id !== LLMX_MATH_ROOT_ID);
   const expectedChildren = lesson.entities.filter(entity => entity.id !== LLMX_MATH_ROOT_ID);
   if (children.length !== expectedChildren.length) throw new LlmXMathError("The visible workshop no longer matches its saved configuration");

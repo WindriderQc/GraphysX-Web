@@ -14,21 +14,24 @@ export function createLlmXRoute({ householdUrl = process.env.LLMX_HOUSEHOLD_URL,
   };
   return (req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    const family = url.pathname.startsWith('/llmx-api/family/');
+    const pathname = family ? url.pathname.replace('/llmx-api/family/', '/llmx-api/') : url.pathname;
+    const profileConsumer = consumer + (family ? '/family' : '');
     const asset = /^\/(?:assets\/household|llmx-api\/assets)\/([^/]+)$/.exec(url.pathname);
     if (!url.pathname.startsWith('/llmx-api/') && !(asset && assets.has(asset[1]))) return false;
     if (!origin) {
-      json(res, url.pathname === '/llmx-api/config' ? 200 : 503,
+      json(res, pathname === '/llmx-api/config' ? 200 : 503,
         { enabled: false, message: 'La conversation AgentX n’est pas configurée sur ce serveur.' });
       return true;
     }
-    const session = /^\/llmx-api\/sessions\/([a-zA-Z0-9-]{1,80})\/(history|turns\/text|opening|interrupt)$/.exec(url.pathname);
+    const session = /^\/llmx-api\/sessions\/([a-zA-Z0-9-]{1,80})\/(history|turns\/text|opening|interrupt|scene-receipts)$/.exec(pathname);
     const target = req.method === 'GET' && asset && assets.has(asset[1])
       ? asset[1] === 'voice-audio.js' ? '/api/voix/player.js' : '/assets/household/' + asset[1]
-      : req.method === 'GET' && url.pathname === '/llmx-api/config' ? consumer + '/config'
-      : req.method === 'GET' && url.pathname === '/llmx-api/sessions/recent' ? consumer + '/sessions/recent'
-      : req.method === 'POST' && url.pathname === '/llmx-api/sessions' ? consumer + '/sessions'
+      : req.method === 'GET' && pathname === '/llmx-api/config' ? profileConsumer + '/config'
+      : req.method === 'GET' && pathname === '/llmx-api/sessions/recent' ? profileConsumer + '/sessions/recent'
+      : req.method === 'POST' && pathname === '/llmx-api/sessions' ? profileConsumer + '/sessions'
       : session && ((req.method === 'GET' && session[2] === 'history') || (req.method === 'POST' && session[2] !== 'history'))
-        ? consumer + '/sessions/' + session[1] + '/' + session[2]
+        ? profileConsumer + '/sessions/' + session[1] + '/' + session[2]
       : req.method === 'GET' && url.pathname === '/llmx-api/voices' ? '/api/voix/catalog'
       : req.method === 'POST' && url.pathname === '/llmx-api/transcribe' ? '/api/voix/transcribe'
       : req.method === 'POST' && url.pathname === '/llmx-api/synthesize/stream' ? '/api/voix/synthesize/stream'
@@ -54,7 +57,7 @@ export function createLlmXRoute({ householdUrl = process.env.LLMX_HOUSEHOLD_URL,
         const response = await fetchImpl(new URL(target, origin), { method: req.method, body, headers,
           redirect: 'error', signal: abort.signal });
         if (abort.signal.aborted || res.destroyed) return;
-        if (url.pathname === '/llmx-api/config') {
+        if (pathname === '/llmx-api/config') {
           if (!response.ok) { json(res, 200, { enabled: false, message: 'Le raccord LLMx attend la mise à jour AgentX.' }); return; }
           const payload = await response.json().catch(() => null);
           const config = payload?.data ?? payload;

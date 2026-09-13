@@ -346,7 +346,7 @@ try {
     await h.talk('replay').click();
     await h.page.waitForFunction(() => Boolean(window.__LLMX_SMOKE__.responses['speech-1']));
     await h.page.getByRole('button', { name: 'Environnements', exact: true }).click();
-    await h.page.getByRole('dialog', { name: 'Vos environnements' }).getByRole('button', { name: 'Forge nocturne Environnement d’origine' }).click();
+    await h.page.getByRole('dialog', { name: 'Vos environnements' }).getByRole('button', { name: 'Revenir au décor d’origine', exact: true }).click();
     await h.page.evaluate(() => window.__LLMX_SMOKE__.releaseResponse('speech-1'));
     await h.page.waitForFunction(() => window.__LLMX_SMOKE__.completedGates.includes('speech-1'));
     await flush(h.page);

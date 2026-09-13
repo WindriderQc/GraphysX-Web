@@ -44,11 +44,15 @@ function localBounds(entity: AgentWorldEntityDefinition): Box3 | null {
 }
 
 /** Check the complete preflight document before committing any native commands. No scene objects are allocated. */
-export function validateLlmXCreationBounds(world: AgentWorldDefinition, buildZone: LlmXCreationBuildZone): void {
+export function validateLlmXCreationBounds(world: AgentWorldDefinition, buildZone: LlmXCreationBuildZone, mathZone: LlmXCreationBuildZone = buildZone): void {
   const center = vector(buildZone.center);
   if (!Number.isFinite(buildZone.radius) || buildZone.radius <= 0) throw malformed();
   const allowed = new Box3(new Vector3(center.x - buildZone.radius, center.y - 0.15, center.z - buildZone.radius),
     new Vector3(center.x + buildZone.radius, center.y + 6, center.z + buildZone.radius));
+  const mathCenter = vector(mathZone.center);
+  if (!Number.isFinite(mathZone.radius) || mathZone.radius <= 0) throw malformed();
+  const mathAllowed = new Box3(new Vector3(mathCenter.x - mathZone.radius, mathCenter.y - 0.15, mathCenter.z - mathZone.radius),
+    new Vector3(mathCenter.x + mathZone.radius, mathCenter.y + 6, mathCenter.z + mathZone.radius));
   const entities = new Map<string, AgentWorldEntityDefinition>();
   for (const entity of world.entities) {
     if (!entity.id) continue;
@@ -79,9 +83,10 @@ export function validateLlmXCreationBounds(world: AgentWorldDefinition, buildZon
     if (!bounds) continue; // Empty groups add no artificial unit cube.
     bounds.applyMatrix4(matrix);
     const { min, max } = bounds;
+    const area = id === 'llmx-created-math' || id.startsWith('llmx-created-math-') ? mathAllowed : allowed;
     if ([...min.toArray(), ...max.toArray()].some(value => !Number.isFinite(value)) ||
-        min.x < allowed.min.x - epsilon || max.x > allowed.max.x + epsilon ||
-        min.y < allowed.min.y - epsilon || max.y > allowed.max.y + epsilon ||
-        min.z < allowed.min.z - epsilon || max.z > allowed.max.z + epsilon) throw fail();
+        min.x < area.min.x - epsilon || max.x > area.max.x + epsilon ||
+        min.y < area.min.y - epsilon || max.y > area.max.y + epsilon ||
+        min.z < area.min.z - epsilon || max.z > area.max.z + epsilon) throw fail();
   }
 }

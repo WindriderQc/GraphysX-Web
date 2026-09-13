@@ -1024,7 +1024,7 @@ export function applyCommands(definition, commands) {
   entityMap(next.entities);
   const outputs = commands.map((command) => applyCommand(next, command));
   validateGraph(next);
-  const serializedBytes = Buffer.byteLength(JSON.stringify(next), "utf8");
+  const serializedBytes = new TextEncoder().encode(JSON.stringify(next)).byteLength;
   if (serializedBytes > MAX_DEFINITION_BYTES) {
     reject(`A live-authored scene supports at most ${MAX_DEFINITION_BYTES} serialized bytes`);
   }

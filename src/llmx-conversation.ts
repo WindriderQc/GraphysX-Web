@@ -1,4 +1,5 @@
-import { LlmXConversationClient, type LlmXSceneContext } from './llmx-conversation-client';
+import { LlmXConversationClient, type LlmXSceneContext, type LlmXTurnResult } from './llmx-conversation-client';
+import type { LlmXSceneReceipt } from './llmx-actions';
 import { LlmXSpeechOutput, loadLlmXAudio, type LlmXReply, type LlmXVoiceConversation } from './llmx-audio';
 import type { LlmXConversationPhase } from './llmx-contracts';
 
@@ -11,7 +12,8 @@ const labels: Record<string, string> = {
 const quiet = () => ({ playing: false, amplitude: 0, brightness: 0 });
 
 /** One private Household session shared by text and the existing microphone conversation. */
-export function mountLlmXConversation(root: HTMLElement, sceneContext: () => LlmXSceneContext) {
+export function mountLlmXConversation(root: HTMLElement, sceneContext: () => LlmXSceneContext,
+  options: { profile?: 'personal' | 'family'; onSceneProposal?: (proposal: unknown, turnId: string) => LlmXSceneReceipt } = {}) {
   const surface = document.createElement('section');
   surface.className = 'gx-llmx-conversation';
   surface.setAttribute('aria-label', 'Conversation avec notre agent');
@@ -53,9 +55,25 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
   let speechTurnId: string | null = null, lastReplyTurnId: string | null = null;
   let detail = '', voiceState = '', partial = '', lastReply: LlmXReply | null = null;
   let settling: Promise<void> = Promise.resolve();
-  const client = new LlmXConversationClient({ onChange: () => render(), onDelta: (_delta, answer) => {
+  const client = new LlmXConversationClient({ profile: options.profile, onChange: () => render(), onDelta: (_delta, answer) => {
     partial = answer; render();
   } });
+
+  async function acceptTurn(result: LlmXTurnResult, before: number): Promise<LlmXReply> {
+    check(before);
+    if (!result.sceneProposal) return result.reply;
+    const receipt = options.onSceneProposal?.(result.sceneProposal, result.turnId)
+      ?? { turnId: result.turnId, status: 'rejected' as const, entityIds: [], message: 'La création n’est pas disponible ici.' };
+    const reply = receipt.status === 'rejected' || result.sceneProposal.math
+      ? { ...result.reply, text: receipt.message || 'La création n’a pas pu être confirmée.' } : result.reply;
+    partial = ''; client.observeSceneReply(result.turnId, reply);
+    detail = receipt.message || (receipt.status === 'applied' ? 'Création appliquée.' : 'Création refusée.'); render();
+    try { await client.recordSceneReceipt(receipt, result.session.sessionId); }
+    catch { check(before); detail += ' Le résultat n’a pas encore été confirmé à notre agent.'; render(); }
+    check(before);
+    // Speak the observed outcome if execution failed, never an unfulfilled model promise.
+    return reply;
+  }
 
   const available = () => initialized && !!client.session && client.config?.enabled !== false;
   const busy = () => acting || ['opening', 'sending', 'interrupting'].includes(client.state)
@@ -222,8 +240,9 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
           const result = await client.send(text, sceneContext(), { signal, turnId: metadata.turnId, channel: 'voice' });
           signal.throwIfAborted();
           if (disposed || before !== epoch) throw new DOMException('Conversation closed', 'AbortError');
-          currentReply = result.reply; lastReply = result.reply; lastReplyTurnId = result.turnId; partial = ''; render();
-          return result.reply;
+          const reply = await acceptTurn(result, before);
+          currentReply = reply; lastReply = reply; lastReplyTurnId = result.turnId; partial = ''; render();
+          return reply;
         },
         synthesize: (reply, signal) => synthesize({ ...reply, speech: currentReply?.speech }, signal),
         async interrupt(_session, turnId, signal) { signal.throwIfAborted(); await client.interrupt(turnId); },
@@ -253,7 +272,8 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
       input.value = ''; detail = ''; partial = ''; revealHistory(true); render();
       const result = await client.send(text, sceneContext(), { channel: 'text' });
       if (disposed || before !== epoch) return;
-      partial = ''; lastReply = result.reply; lastReplyTurnId = result.turnId; render(); await speak(result.reply, before, result.turnId);
+      const reply = await acceptTurn(result, before);
+      partial = ''; lastReply = reply; lastReplyTurnId = result.turnId; render(); await speak(reply, before, result.turnId);
     } catch (error) { fail(error); }
     finally { acting = false; render(); }
   });

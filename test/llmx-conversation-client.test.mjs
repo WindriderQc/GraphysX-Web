@@ -46,6 +46,56 @@ function harness(route, options = {}) {
 }
 const turnCalls = calls => calls.filter(call => /\/turns\/text$|\/opening$/.test(call.url));
 
+test('family uses only its own exact session key and rejects a personal response', async () => {
+  const storage = memory('private-session');
+  storage.values.set('graphysx.llmx.family.session.v1', 'family-session');
+  const calls = [];
+  const client = new LlmXConversationClient({ profile: 'family', storage, fetch: async url => {
+    calls.push(url);
+    if (url.endsWith('/config')) return json(config);
+    return json({ session: session('family-session', { packId: 'kidx_nestor', scopeId: 'family' }), turns: [] });
+  } });
+  await client.initialize();
+  assert.deepEqual(calls, ['/llmx-api/family/config', '/llmx-api/family/sessions/family-session/history']);
+  assert.equal(storage.getItem(LLMX_SESSION_STORAGE_KEY), 'private-session');
+  const wrong = new LlmXConversationClient({ profile: 'family', storage, fetch: async url =>
+    url.endsWith('/config') ? json(config) : json({ session: session('family-session') }) });
+  await assert.rejects(wrong.initialize(), /Session LLMx invalide/);
+});
+
+test('scene capability and receipts copy safely, and only a completed local send can report its result', async () => {
+  const context = { ...scene, capabilities: { commandsVersion: 1, mathVersion: 1 }, buildZone: { center: [4.6, .2, 3.4], radius: 2.6 },
+    lastAction: { turnId, status: 'applied', entityIds: ['llmx-created-cube'], message: 'Création en place.' } };
+  const copied = llmxSceneContext(context); context.buildZone.center[0] = 999;
+  assert.equal(copied.buildZone.center[0], 4.6);
+  let receipt = null;
+  const h = harness(call => {
+    if (call.url.endsWith('/scene-receipts')) { receipt = call.body; return json({ turnId, receipt: call.body }); }
+    return json(result(turnId, 'Je prépare le cube.', { sceneProposal: { schemaVersion: 1, environmentId: 'night-forge', revision: '1', intent: 'Créer', commands: [] } }));
+  });
+  await h.client.initialize();
+  await assert.rejects(h.client.recordSceneReceipt(copied.lastAction, 'llmx-owned-session'), /changé/);
+  const reply = await h.client.send('Crée un cube', copied, { turnId });
+  assert.equal(reply.sceneProposal.environmentId, 'night-forge');
+  await h.client.recordSceneReceipt(copied.lastAction, reply.session.sessionId);
+  assert.deepEqual(receipt, copied.lastAction);
+  h.client.observeSceneReply(turnId, { ...reply.reply, text: 'Résultat vérifié : cinq cubes.' });
+  assert.equal(h.client.history.at(-1).content, 'Résultat vérifié : cinq cubes.');
+  assert.equal(h.client.latestReply.reply.text, 'Résultat vérifié : cinq cubes.');
+  assert.equal(turnCalls(h.calls)[0].body.sceneContext.capabilities, undefined, 'older Household keeps its observation-only contract');
+  await assert.rejects(h.client.recordSceneReceipt(copied.lastAction, 'another-session'), /changé/);
+});
+
+test('math observations derive from current operands and step, rejecting inconsistent results', () => {
+  const mathLesson = { operation: 'add', left: 3, right: 2, step: 1, result: 5 };
+  const value = llmxSceneContext({ ...scene, mathLesson });
+  assert.deepEqual(value.mathLesson, mathLesson);
+  assert.notEqual(value.mathLesson, mathLesson);
+  for (const patch of [{ result: 6 }, { step: 3 }, { left: 20 }, { operation: 'subtract' }, { left: -.5 }]) {
+    assert.throws(() => llmxSceneContext({ ...scene, mathLesson: { ...mathLesson, ...patch } }));
+  }
+});
+
 test('disabled configuration makes no session, history, opening or turn request', async () => {
   const calls = [];
   const client = new LlmXConversationClient({ storage: memory('private-other'), fetch: async (url) => {

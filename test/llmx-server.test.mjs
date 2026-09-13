@@ -77,6 +77,14 @@ test("fixed conversation and voice routes forward their method and exact body wi
   });
   const base = await relay(t, { householdUrl: upstream });
   const cases = [
+    ["GET", "/family/sessions/recent", `${consumer}/family/sessions/recent`],
+    ["POST", "/family/sessions", `${consumer}/family/sessions`],
+    ["GET", `/family/sessions/${sessionId}/history`, `${consumer}/family/sessions/${sessionId}/history`],
+    ["POST", `/family/sessions/${sessionId}/opening`, `${consumer}/family/sessions/${sessionId}/opening`],
+    ["POST", `/family/sessions/${sessionId}/turns/text`, `${consumer}/family/sessions/${sessionId}/turns/text`],
+    ["POST", `/family/sessions/${sessionId}/interrupt`, `${consumer}/family/sessions/${sessionId}/interrupt`],
+    ["POST", `/family/sessions/${sessionId}/scene-receipts`, `${consumer}/family/sessions/${sessionId}/scene-receipts`],
+    ["POST", `/sessions/${sessionId}/scene-receipts`, `${consumer}/sessions/${sessionId}/scene-receipts`],
     ["GET", "/sessions/recent", `${consumer}/sessions/recent`],
     ["POST", "/sessions", `${consumer}/sessions`],
     ["GET", `/sessions/${sessionId}/history`, `${consumer}/sessions/${sessionId}/history`],

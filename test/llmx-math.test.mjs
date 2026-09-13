@@ -175,6 +175,8 @@ test("recovery refuses corrupt quantities and altered visible cubes rather than 
     world => { units(world)[0].tags.push("llmx-math:zone:elsewhere"); },
     world => { units(world)[0].tags.push("llmx-math:zone:elsewhere"); units(world)[0].tags = units(world)[0].tags.filter(tag => tag !== "llmx-math:zone:left"); },
     world => world.entities.push(structuredClone(units(world)[0])),
+    world => world.entities.push({ id: 'foreign-cube', type: 'box', parentId: LLMX_MATH_ROOT_ID }),
+    world => world.entities.push({ id: 'foreign-cube', type: 'box', parentId: units(world)[0].id }),
     world => { world.entities.find(entity => entity.tags?.includes("llmx-math-marker")).visible = false; },
     world => { world.entities.find(entity => entity.tags?.includes("llmx-math-marker")).transform.scale[0] *= 2; },
   ];

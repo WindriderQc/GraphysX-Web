@@ -1,10 +1,15 @@
 import type { LlmXReply, LlmXSession } from './llmx-audio';
+import type { LlmXSceneProposal, LlmXSceneReceipt } from './llmx-actions';
 
 export type { LlmXReply, LlmXSession } from './llmx-audio';
 export type LlmXSceneContext = {
   schemaVersion: 1;
   environment: { id: string; name: string };
   revision?: string;
+  capabilities?: { commandsVersion: 1; mathVersion: 1 };
+  buildZone?: { center: [number, number, number]; radius: number };
+  lastAction?: LlmXSceneReceipt;
+  mathLesson?: { operation: 'count' | 'add' | 'subtract'; left: number; right: number; step: number; result: number };
   selectedEntityIds?: string[];
   entities?: { id: string; name?: string; type: string; position?: [number, number, number] }[];
 };
@@ -18,7 +23,7 @@ export type LlmXConfig = {
 export type LlmXMessage = { role: 'user' | 'assistant'; content: string; turnId?: string; interrupted?: boolean;
   outcome?: 'completed' | 'cancelled' | 'failed' };
 export type LlmXTurnResult = { session: LlmXSession; reply: LlmXReply; turnId: string;
-  origin?: 'human' | 'application_opening'; traceId?: string };
+  origin?: 'human' | 'application_opening'; traceId?: string; sceneProposal?: LlmXSceneProposal };
 export type LlmXSessionSelection = { language?: string; label?: string; personaId?: string;
   agentId?: string; backend?: string; voice?: Record<string, unknown> };
 export type LlmXTurnOptions = { turnId?: string; signal?: AbortSignal; channel?: 'text' | 'voice';
@@ -26,7 +31,7 @@ export type LlmXTurnOptions = { turnId?: string; signal?: AbortSignal; channel?:
 export type LlmXConversationState = 'idle' | 'initializing' | 'disabled' | 'opening' | 'sending' |
   'interrupting' | 'error' | 'disposed';
 type StorageAccess = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
-type Options = { fetch?: typeof fetch; storage?: StorageAccess | null; storageKey?: string;
+type Options = { fetch?: typeof fetch; storage?: StorageAccess | null; storageKey?: string; profile?: 'personal' | 'family';
   onChange?: (client: LlmXConversationClient) => void;
   onDelta?: LlmXTurnOptions['onDelta'] };
 type Turn = { id: string; epoch: number; kind: 'opening' | 'human'; controller: AbortController;
@@ -35,7 +40,6 @@ type TurnAddress = { sessionId: string; turnId: string };
 type InterruptReceipt = { interrupted: true; turnId: string };
 
 export const LLMX_SESSION_STORAGE_KEY = 'graphysx.llmx.session.v1';
-const base = '/llmx-api';
 const validId = (value: unknown): value is string => typeof value === 'string' && /^[a-zA-Z0-9-]{16,80}$/.test(value);
 const aborted = () => new DOMException('Conversation annulée.', 'AbortError');
 const object = (value: unknown): Record<string, unknown> =>
@@ -45,12 +49,12 @@ const unpack = (value: unknown): Record<string, unknown> => {
   if (body.ok === false || body.status === 'error') throw new Error(typeof body.message === 'string' ? body.message : 'Conversation indisponible.');
   return 'data' in body ? object(body.data) : body;
 };
-const sessionValue = (value: unknown, expected?: string): LlmXSession => {
+const sessionValue = (value: unknown, expected?: string, profile = 'personal'): LlmXSession => {
   const session = object(value);
   if (typeof session.sessionId !== 'string' || !/^[a-zA-Z0-9-]{1,64}$/.test(session.sessionId) ||
       (expected !== undefined && session.sessionId !== expected) || object(session.llmx).schemaVersion !== 1 ||
-      (session.packId !== undefined && session.packId !== 'personal_operator') ||
-      (session.scopeId !== undefined && session.scopeId !== 'personal')) throw new Error('Session LLMx invalide.');
+      (session.packId !== undefined && session.packId !== (profile === 'family' ? 'kidx_nestor' : 'personal_operator')) ||
+      (session.scopeId !== undefined && session.scopeId !== profile)) throw new Error('Session LLMx invalide.');
   return session as LlmXSession;
 };
 const replyValue = (value: unknown): LlmXReply => {
@@ -68,13 +72,14 @@ const replyValue = (value: unknown): LlmXReply => {
   }
   return result;
 };
-const resultValue = (value: unknown, turn: Turn): LlmXTurnResult => {
+const resultValue = (value: unknown, turn: Turn, profile = 'personal'): LlmXTurnResult => {
   const data = object(value);
   if ((data.turnId !== undefined && data.turnId !== turn.id) ||
       (data.origin !== undefined && data.origin !== (turn.kind === 'opening' ? 'application_opening' : 'human'))) {
     throw new Error('Réponse LLMx incomplète.');
   }
-  return { ...data, session: sessionValue(data.session, turn.sessionId), reply: replyValue(data.reply), turnId: turn.id };
+  if (turn.kind === 'opening' && data.sceneProposal !== undefined) throw new Error('L’accueil ne peut pas modifier le décor.');
+  return { ...data, session: sessionValue(data.session, turn.sessionId, profile), reply: replyValue(data.reply), turnId: turn.id };
 };
 const browserStorage = (): StorageAccess | null => {
   try { return globalThis.localStorage ?? null; } catch { return null; }
@@ -92,6 +97,32 @@ export function llmxSceneContext(value: LlmXSceneContext): LlmXSceneContext {
   const context: LlmXSceneContext = { schemaVersion: 1,
     environment: { id: text(value.environment.id, 80), name: text(value.environment.name, 120) } };
   if (value.revision !== undefined) context.revision = text(value.revision, 80);
+  if (value.capabilities !== undefined) {
+    if (value.capabilities.commandsVersion !== 1 || value.capabilities.mathVersion !== 1) throw new Error('Création de scène incompatible.');
+    context.capabilities = { commandsVersion: 1, mathVersion: 1 };
+  }
+  if (value.buildZone !== undefined) {
+    const { center, radius } = value.buildZone;
+    if (!Array.isArray(center) || center.length !== 3 || center.some(n => !Number.isFinite(n) || Math.abs(n) > 10000) ||
+        !Number.isFinite(radius) || radius <= 0 || radius > 100) throw new Error('Zone de création invalide.');
+    context.buildZone = { center: [...center], radius };
+  }
+  if (value.lastAction !== undefined) {
+    const receipt = value.lastAction;
+    if (!validId(receipt.turnId) || !['applied', 'rejected'].includes(receipt.status) ||
+        !Array.isArray(receipt.entityIds) || receipt.entityIds.length > 256) throw new Error('Résultat de création invalide.');
+    context.lastAction = { turnId: receipt.turnId, status: receipt.status, entityIds: receipt.entityIds.map(id => text(id, 80)),
+      ...(receipt.message ? { message: text(receipt.message, 400) } : {}) };
+  }
+  if (value.mathLesson !== undefined) {
+    const math = value.mathLesson;
+    if (!['count', 'add', 'subtract'].includes(math.operation) || [math.left, math.right, math.step, math.result].some(n => !Number.isInteger(n) || n < 0 || n > 20) ||
+        (math.operation === 'count' && math.right !== 0) || math.step > (math.operation === 'count' ? math.left : math.right) ||
+        math.result !== (math.operation === 'count' ? math.left : math.operation === 'add' ? math.left + math.right : math.left - math.right)) {
+      throw new Error('Observation de l’exercice invalide.');
+    }
+    context.mathLesson = { ...math };
+  }
   if (value.selectedEntityIds !== undefined) {
     if (!Array.isArray(value.selectedEntityIds) || value.selectedEntityIds.length > 8) throw new Error('Sélection de scène trop grande.');
     context.selectedEntityIds = value.selectedEntityIds.map(id => text(id, 80));
@@ -125,6 +156,8 @@ export class LlmXConversationClient {
   private readonly fetcher: typeof fetch;
   private readonly storage: StorageAccess | null;
   private readonly storageKey: string;
+  private readonly base: string;
+  private readonly profile: 'personal' | 'family';
   private epoch = 0;
   private readonly requests = new Set<AbortController>();
   private initialization: Promise<LlmXSession | null> | null = null;
@@ -137,13 +170,16 @@ export class LlmXConversationClient {
   private resetPending: Promise<void> | null = null;
   private disposal: Promise<void> | null = null;
   private readonly sentTurnIds = new Set<string>();
+  private readonly completedTurnIds = new Set<string>();
   private selection: LlmXSessionSelection = {};
 
   constructor(options: Options = {}) {
     this.options = options;
     this.fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.storage = options.storage === undefined ? browserStorage() : options.storage;
-    this.storageKey = options.storageKey ?? LLMX_SESSION_STORAGE_KEY;
+    this.profile = options.profile ?? 'personal';
+    this.base = '/llmx-api' + (this.profile === 'family' ? '/family' : '');
+    this.storageKey = options.storageKey ?? (this.profile === 'family' ? 'graphysx.llmx.family.session.v1' : LLMX_SESSION_STORAGE_KEY);
   }
 
   private current(epoch: number): void {
@@ -163,7 +199,7 @@ export class LlmXConversationClient {
     const controller = new AbortController();
     this.requests.add(controller);
     try {
-      const response = await this.fetcher(base + path, { signal: controller.signal,
+      const response = await this.fetcher(this.base + path, { signal: controller.signal,
         ...(body !== undefined ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
       this.current(epoch);
       const payload: unknown = await response.json();
@@ -194,13 +230,13 @@ export class LlmXConversationClient {
       if (saved && /^[a-zA-Z0-9-]{1,64}$/.test(saved)) {
         // Do not fall back to recent/private sessions, or silently replace a failed restore.
         const data = await this.json('/sessions/' + encodeURIComponent(saved) + '/history', epoch);
-        const restored = sessionValue(data.session, saved);
+        const restored = sessionValue(data.session, saved, this.profile);
         this.restoreHistory(data);
         this.session = restored;
       } else {
         const data = await this.json('/sessions', epoch,
           { language: 'fr', label: 'LLMx · Forge nocturne', ...this.selection });
-        this.session = sessionValue(data.session);
+        this.session = sessionValue(data.session, undefined, this.profile);
         this.remember(this.session.sessionId);
       }
       this.openingAttempted ||= Boolean(this.session.llmx?.opening);
@@ -253,6 +289,32 @@ export class LlmXConversationClient {
     this.history = messages;
     this.latestTurnId = latestTurnId;
     this.latestReply = latestReply;
+  }
+
+  async recordSceneReceipt(receipt: LlmXSceneReceipt, sessionId: string): Promise<void> {
+    const epoch = this.epoch;
+    this.current(epoch);
+    if (this.session?.sessionId !== sessionId || !this.completedTurnIds.has(receipt.turnId)) throw new Error('La conversation de cette création a changé.');
+    const controller = new AbortController();
+    this.requests.add(controller);
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await this.fetcher(`${this.base}/sessions/${encodeURIComponent(sessionId)}/scene-receipts`, {
+        method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(receipt),
+      });
+      this.current(epoch);
+      const data = unpack(await response.json());
+      if (!response.ok || data.turnId !== receipt.turnId) throw new Error('Le résultat n’a pas été confirmé à notre agent.');
+    } finally { clearTimeout(timer); this.requests.delete(controller); }
+  }
+
+  observeSceneReply(turnId: string, reply: LlmXReply): void {
+    if (!this.completedTurnIds.has(turnId)) throw new Error('Le tour de cette création n’est pas terminé.');
+    const checked = replyValue(reply);
+    const message = this.history.find(item => item.role === 'assistant' && item.turnId === turnId);
+    if (message) message.content = checked.text;
+    if (this.latestReply?.turnId === turnId) this.latestReply = { turnId, reply: checked };
+    this.changed();
   }
 
   async opening(sceneContext: LlmXSceneContext, options: Omit<LlmXTurnOptions, 'turnId' | 'channel'> & { voice?: boolean } = {}): Promise<LlmXTurnResult | null> {
@@ -350,12 +412,17 @@ export class LlmXConversationClient {
 
   private async performTurn(turn: Turn, path: string, body: unknown, onDelta?: LlmXTurnOptions['onDelta'], input?: string): Promise<LlmXTurnResult | null> {
     this.checkTurn(turn);
+    if (!this.config?.capabilities?.sceneProposals) {
+      const request = object(body), context = object(request.sceneContext);
+      const { capabilities: _capabilities, buildZone: _zone, lastAction: _action, mathLesson: _math, ...observation } = context;
+      body = { ...request, sceneContext: observation };
+    }
     turn.sessionId = this.session!.sessionId;
     turn.dispatched = true;
     this.sentTurnIds.add(turn.id);
     this.latestTurnId = turn.id;
     this.unsettled = { sessionId: turn.sessionId, turnId: turn.id };
-    const response = await this.fetcher(`${base}/sessions/${encodeURIComponent(turn.sessionId)}${path}`, {
+    const response = await this.fetcher(`${this.base}/sessions/${encodeURIComponent(turn.sessionId)}${path}`, {
       method: 'POST', signal: turn.controller.signal, headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
       body: JSON.stringify(body) });
     this.checkTurn(turn);
@@ -369,7 +436,7 @@ export class LlmXConversationClient {
       const payload = unpack(await response.json());
       this.checkTurn(turn);
       if (turn.kind === 'opening' && payload.opening) {
-        if (payload.session) this.session = sessionValue(payload.session, turn.sessionId);
+        if (payload.session) this.session = sessionValue(payload.session, turn.sessionId, this.profile);
         const opening = object(payload.opening);
         if (typeof opening.turnId === 'string') this.latestTurnId = opening.turnId;
         this.unsettled = opening.status === 'pending' && validId(opening.turnId)
@@ -377,7 +444,7 @@ export class LlmXConversationClient {
         this.changed();
         return null; // A duplicate may carry reply text. It is history, never permission to speak.
       }
-      result = resultValue(payload, turn);
+      result = resultValue(payload, turn, this.profile);
     } else {
       if (!response.body) throw new Error('Flux LLMx absent.');
       const reader = response.body.getReader(), decoder = new TextDecoder();
@@ -394,7 +461,7 @@ export class LlmXConversationClient {
           this.options.onDelta?.(event.delta, answer, turn.id);
           onDelta?.(event.delta, answer, turn.id);
         }
-        if (event.type === 'done') completed = resultValue(event.data, turn);
+        if (event.type === 'done') completed = resultValue(event.data, turn, this.profile);
       };
       try {
         while (true) {
@@ -419,6 +486,7 @@ export class LlmXConversationClient {
     this.checkTurn(turn);
     this.session = result.session;
     this.latestReply = { turnId: result.turnId, reply: result.reply };
+    this.completedTurnIds.add(turn.id);
     this.unsettled = null;
     if (input) this.history.push({ role: 'user', content: input, turnId: turn.id });
     this.history.push({ role: 'assistant', content: result.reply.text, turnId: turn.id });
@@ -467,7 +535,7 @@ export class LlmXConversationClient {
     try {
       // Retrying an acknowledged pending cancellation is safe; never retry a text/opening POST.
       for (let attempt = 0; attempt < 4; attempt++) {
-        const response = await this.fetcher(`${base}/sessions/${encodeURIComponent(address.sessionId)}/interrupt`, {
+        const response = await this.fetcher(`${this.base}/sessions/${encodeURIComponent(address.sessionId)}/interrupt`, {
           method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ turnId: address.turnId }) });
         const data = unpack(await response.json());
         if (response.status === 202 && data.pending === true && data.turnId === address.turnId) continue;
@@ -511,7 +579,7 @@ export class LlmXConversationClient {
     for (const controller of this.requests) controller.abort();
     this.requests.clear();
     this.active = null; this.initialization = null; this.interruption = null; this.unsettled = null;
-    this.resetPending = null; this.sentTurnIds.clear();
+    this.resetPending = null; this.sentTurnIds.clear(); this.completedTurnIds.clear();
     this.session = null; this.history = []; this.latestTurnId = null; this.latestReply = null;
     this.cleanupWarning = null;
     this.humanPending = false; this.humanStarted = false; this.openingAttempted = false; this.config = null;

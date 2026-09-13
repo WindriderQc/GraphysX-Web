@@ -65,13 +65,13 @@ try {
   console.log("ok: persisted appearance, rejected patch atomicity, avatar replacement, child ownership, materials and immediate camera");
 
   await page.getByRole("button", { name: "Sauvegarder", exact: true }).click();
-  await page.getByText("Votre Forge est sauvegardée dans ce navigateur.", { exact: true }).waitFor();
+  await page.getByText("Votre monde est sauvegardé dans ce navigateur.", { exact: true }).waitFor();
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "Forge nocturne", exact: true }).waitFor();
   assert.equal(await page.evaluate(() => JSON.parse(window.render_game_to_text()).application.saved), true);
   await page.getByRole("button", { name: "Environnements", exact: true }).click();
   await page.getByRole("dialog", { name: "Vos environnements" }).waitFor();
-  await page.getByRole("button", { name: "Forge nocturne Reprendre votre sauvegarde" }).click();
+  await page.getByRole("button", { name: "Ouvrir", exact: true }).click();
   await page.getByRole("button", { name: "Rejouer l’entrée", exact: true }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: path.join(artifacts, "llmx-forge-mobile.png") });

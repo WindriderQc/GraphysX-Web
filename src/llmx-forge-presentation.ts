@@ -1,4 +1,5 @@
 import {
+  AdditiveBlending,
   BoxGeometry,
   Color,
   Group,
@@ -46,6 +47,7 @@ export type ForgePresentation = Readonly<{
    * time: a new call restarts the effect at the new point rather than stacking.
    */
   announceCreation: (point: AgentWorldVector3) => void;
+  clearCreation: () => void;
   update: (deltaSeconds: number) => void;
   dispose: () => void;
 }>;
@@ -78,7 +80,8 @@ export function mountForgePresentation(scene: Scene, anchors: ForgeAnchors): For
   // Creation accent: a trail of segments re-laid from the socket rim to the point, and a flat
   // ring that opens on the floor there. Built once, hidden when idle.
   const TRAIL_SEGMENTS = 32;
-  const trail = new InstancedMesh(new BoxGeometry(0.28, 0.02, 0.1), new MeshBasicMaterial({ color: "#ffffff" }), TRAIL_SEGMENTS);
+  const trail = new InstancedMesh(new BoxGeometry(0.28, 0.02, 0.1), new MeshBasicMaterial({ color: "#ffffff", transparent: true,
+    blending: AdditiveBlending, depthWrite: false }), TRAIL_SEGMENTS);
   trail.name = "ForgeCreationTrail";
   trail.visible = false;
   const ring = new Mesh(
@@ -185,6 +188,7 @@ export function mountForgePresentation(scene: Scene, anchors: ForgeAnchors): For
       ring.position.set(point[0], anchors.buildZone.center[1] + 0.05, point[2]);
       trail.visible = true;
     },
+    clearCreation: () => { creation = null; trail.visible = false; ring.visible = false; },
     update: (deltaSeconds) => {
       clock += deltaSeconds;
       writeStrips();
