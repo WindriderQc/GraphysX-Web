@@ -99,8 +99,11 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
     detail = error instanceof Error ? error.message : 'La conversation est interrompue. Réessaie quand tu veux.';
     render();
   }
-  function revealHistory() {
+  function revealHistory(forText = false) {
+    // Keep the face visible during voice on narrow screens; typed chat asks to read.
+    if (!forText && window.matchMedia('(max-width: 999px)').matches) return;
     transcript.hidden = false; button('history').setAttribute('aria-expanded', 'true');
+    transcript.scrollTop = transcript.scrollHeight;
   }
   async function request(path: string, init: RequestInit): Promise<Response> {
     const response = await fetch('/llmx-api/' + path, { ...init,
@@ -247,7 +250,7 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
     acting = true;
     try {
       const before = await stopForAction();
-      input.value = ''; detail = ''; partial = ''; revealHistory(); render();
+      input.value = ''; detail = ''; partial = ''; revealHistory(true); render();
       const result = await client.send(text, sceneContext(), { channel: 'text' });
       if (disposed || before !== epoch) return;
       partial = ''; lastReply = result.reply; lastReplyTurnId = result.turnId; render(); await speak(result.reply, before, result.turnId);
@@ -262,6 +265,7 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
   });
   button('history').addEventListener('click', () => {
     transcript.hidden = !transcript.hidden; button('history').setAttribute('aria-expanded', String(!transcript.hidden));
+    if (!transcript.hidden) transcript.scrollTop = transcript.scrollHeight;
   });
   button('stop').addEventListener('click', () => { void stop('Arrêté. Reprends quand tu veux.').catch(() => {}); });
   button('microphone').addEventListener('click', () => { void startVoice().catch(error => fail(error)); });
