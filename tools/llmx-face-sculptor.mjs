@@ -246,10 +246,35 @@ function regionOf(x, y, z, fromEye, fromLid) {
 
 const BOUNDS = { minX: -0.82, maxX: 0.82, minY: -1.14, maxY: 1.16, minZ: BACK_CAP, maxZ: 0.62 };
 
+/**
+ * Distance to the surface, normalised by the local gradient.
+ *
+ * The composed field is not a true distance function: `sdEllipsoid` is a bound, and `smin` /
+ * `smax` distort magnitude wherever they blend. So `|d|` is not metres — it is metres times
+ * some local factor — and a fixed shell band therefore keeps a *thicker* shell where the
+ * gradient is steep and a thinner one where it is shallow. Those thick patches protrude by a
+ * row, and a rim light grazing the mask from behind lights their risers as bright vertical
+ * streaks down the shadowed side of the cranium.
+ *
+ * Dividing by |∇d| recovers an approximate true distance (the standard correction for a
+ * non-metric SDF), which is what makes the shell one cube thick everywhere. Six extra
+ * evaluations per cell, offline, on a grid of a few tens of thousands: free.
+ */
+function normalisedDistance(field, x, y, z, h) {
+  const d = field(x, y, z);
+  const gx = (field(x + h, y, z) - field(x - h, y, z)) / (2 * h);
+  const gy = (field(x, y + h, z) - field(x, y - h, z)) / (2 * h);
+  const gz = (field(x, y, z + h) - field(x, y, z - h)) / (2 * h);
+  const gradient = len(gx, gy, gz);
+  return gradient > 1e-6 ? d / gradient : d;
+}
+
 function voxelise(cube) {
-  // A shell band slightly wider than half a cube: thin enough to stay roughly one cube deep,
-  // wide enough that a surface grazing the grid does not open holes.
+  // A shell band slightly wider than half a cube: thin enough to stay one cube deep, wide
+  // enough that a surface grazing the grid does not open holes. Meaningful in metres only
+  // because the distances below are gradient-normalised.
   const band = cube * 0.62;
+  const step = cube * 0.25;
   const nx = Math.ceil((BOUNDS.maxX - BOUNDS.minX) / cube);
   const ny = Math.ceil((BOUNDS.maxY - BOUNDS.minY) / cube);
   const nz = Math.ceil((BOUNDS.maxZ - BOUNDS.minZ) / cube);
@@ -269,11 +294,11 @@ function voxelise(cube) {
         const z = BOUNDS.minZ + (iz + 0.5) * cube;
         if (z < BACK_CAP) continue;
 
-        const dEye = eyeDistance(x, y, z);
-        // Eyes are solid, not a shell: a hollow eyeball reads as a hole.
-        const inEye = dEye <= 0;
-        const onLid = !inEye && Math.abs(lidDistance(x, y, z)) <= band;
-        const onMask = !inEye && !onLid && Math.abs(maskDistance(x, y, z)) <= band;
+        // Eyes are solid, not a shell: a hollow eyeball reads as a hole. `eyeDistance` is an
+        // exact sphere distance, so it needs no normalisation.
+        const inEye = eyeDistance(x, y, z) <= 0;
+        const onLid = !inEye && Math.abs(normalisedDistance(lidDistance, x, y, z, step)) <= band;
+        const onMask = !inEye && !onLid && Math.abs(normalisedDistance(maskDistance, x, y, z, step)) <= band;
         if (!inEye && !onLid && !onMask) continue;
 
         cells.push({ ix, iy, iz, region: regionOf(x, y, z, inEye, onLid) });
