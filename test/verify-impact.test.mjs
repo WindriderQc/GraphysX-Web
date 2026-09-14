@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { VERIFY_SMOKES, resolveVerifyOptions } from "../scripts/verify-manifest.mjs";
-import { selectVerification, verificationMatrix } from "../scripts/verify-impact.mjs";
+import { selectVerification, verificationMatrix, MAX_VERIFY_RUNNERS } from "../scripts/verify-impact.mjs";
 import { findDeploymentBase } from "../scripts/plan-verification.mjs";
 
 const names = (plan) => plan.smokes.map((smoke) => smoke.name);
@@ -38,6 +38,28 @@ describe("verification by changed area", () => {
     assert.ok(!names(plan).includes("live-sessions-browser"));
     assert.ok(!names(plan).includes("world1"));
     assert.equal(plan.mode, "targeted");
+  });
+
+  it("targets voice contracts, corrected scene speech and Family for LLMx transport changes", () => {
+    for (const file of ["src/llmx-conversation.ts", "src/llmx-conversation-client.ts", "src/llmx-audio.ts", "src/llmx-speech-queue.ts", "src/llmx-transport.ts", "scripts/llmx-server.mjs", "scripts/serve-llmx.mjs", "server/llmx-target.mjs", "server/llmx-target.d.mts"]) {
+      const plan = selectVerification([file]);
+      assert.equal(plan.mode, "targeted", file);
+      assert.equal(plan.deploy, true, file);
+      assert.deepEqual(new Set(names(plan)), new Set(["llmx-conversation-session", "llmx-conversation-turns", "llmx-conversation-replay", "llmx-creation-actions", "llmx-creation-family", "llmx-world", "llmx", "standalone", "product-assets", "asset-guard"]), file);
+    }
+  });
+
+  it("covers every room journey and the face's native-world consumers for LLMx-only edits", () => {
+    for (const file of ["src/llmx-app.ts", "src/llmx.css", "src/llmx-face-pose.ts", "src/llmx-face-forge.json", "src/llmx-face-finish.ts", "src/agent-world-face.ts", "src/llmx-preview.ts", "llmx-preview.html"]) {
+      const plan = selectVerification([file]);
+      assert.equal(plan.mode, "targeted", file);
+      for (const smoke of VERIFY_SMOKES.filter(smoke => smoke.name === 'llmx' || smoke.name.startsWith('llmx-'))) assert.ok(names(plan).includes(smoke.name), file + ': ' + smoke.name);
+      for (const name of ["agent-mcp", "scene-command-validation", "roundtrip", "standalone", "product-assets", "asset-guard"]) assert.ok(names(plan).includes(name), file + ': ' + name);
+      assert.ok(!names(plan).includes("live-sessions-browser"), file);
+      assert.ok(!names(plan).includes("ballz"), file);
+    }
+    assert.equal(selectVerification(["src/llmx-audio.ts", "src/platform-host.ts"]).mode, "full");
+    assert.equal(selectVerification(["src/llmx-face-pose.ts", "package-lock.json"]).mode, "full");
   });
 
   it("unions mixed changes and includes collaboration only when that area changed", () => {
@@ -108,11 +130,18 @@ describe("verification by changed area", () => {
     for (const files of [[], ["README.md"], ["src/kidx-mission-guide.ts"], ["src/kidx-app.ts"], ["src/platform-host.ts"]]) {
       const plan = selectVerification(files);
       const matrix = verificationMatrix(plan.smokes);
-      assert.ok(matrix.include.length >= 1 && matrix.include.length <= 4);
+      assert.ok(matrix.include.length >= 1 && matrix.include.length <= MAX_VERIFY_RUNNERS);
       const executed = matrix.include.flatMap((job) => resolveVerifyOptions([`--checks=${job.checks}`], {}).smokes);
       assert.deepEqual(new Set(executed), new Set(plan.smokes));
       assert.equal(executed.length, plan.smokes.length);
     }
+  });
+
+  it("uses twelve runners for the full suite and keeps the workflow ceiling aligned", () => {
+    const full = verificationMatrix(VERIFY_SMOKES);
+    assert.equal(full.include.length, 12);
+    assert.match(readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'), new RegExp(`max-parallel: ${MAX_VERIFY_RUNNERS}\\b`));
+    assert.equal(verificationMatrix(selectVerification(["README.md"]).smokes).include.length, 1);
   });
 
   it("rejects misspelled check lists and conflicting filters before any check runs", () => {

@@ -5,6 +5,7 @@ const KIDX = VERIFY_SMOKES.filter((s) => /^(ev3-|kidx-)/.test(s.name)).map((s) =
 const STORE = VERIFY_SMOKES.filter((s) => s.tier === "deep" && s.name !== "top20").map((s) => s.name);
 const GAMES = ["ballz", "games", "archive-cup", "archive-levels", "spiral", "world1", "great-slide", "map1", "level1-2011", "suzanne-machinery", "suzanne1", "suzanne2", "level3", "ballz18-sky"];
 const BASELINE = ["standalone", "product-assets", "asset-guard"];
+export const MAX_VERIFY_RUNNERS = 12;
 const NODE_ONLY = new Set(["scene-command-validation", "product-assets", "asset-guard", "previews", "store-auth", "live-sessions", "live-sessions-security", "live-undo", "results", "dna"]);
 
 function family(...prefixes) {
@@ -22,6 +23,12 @@ const RULES = [
   { match: /^scripts\/(?:verify(?:-[\w-]+)?|plan-verification|counts)\.(?:mjs|json)$/, checks: [], label: "verification tooling", deploy: false },
   { match: /^\.github\/workflows\/(?:ci|staging)\.yml$/, checks: [], label: "CI configuration", deploy: false },
   { match: /^(?:\.github\/workflows\/deploy\.yml|scripts\/write-release-metadata\.mjs|ops\/)/, checks: BASELINE, label: "deployment configuration", deploy: true },
+  // Conversation changes affect opening/replay, corrected scene speech and profile
+  // switching. The native renderer/host, schema and dependencies keep their broad rules.
+  { match: /^(?:src\/llmx-(?:audio|conversation(?:-client)?|speech-queue|transport)\.ts|scripts\/(?:llmx-server|serve-llmx)\.mjs|server\/llmx-target\.(?:mjs|d\.mts))$/, checks: [...family("llmx-conversation"), "llmx-creation-actions", "llmx-creation-family", "llmx-world", "llmx"], label: "LLMx conversation and voice transport", deploy: true },
+  // The face asset/pose/finish are also consumed by agent-world-face.ts, so include
+  // native-world round trips and the external-agent journey, not only the room UI.
+  { match: /^(?:src\/(?:llmx[-.]|agent-world-face\.ts$)|llmx-preview\.html$)/, checks: [...family("llmx"), "agent-mcp", "scene-command-validation", "roundtrip"], label: "LLMx room and voxel face", deploy: true },
   { match: /^src\/kidx-mission-guide\.ts$/, checks: family("kidx-guidance"), label: "KidX arrival guidance", deploy: true },
   { match: /^src\/kidx-(?:pdf-reader|library|document-catalog)\.(?:ts|json)$/, checks: family("kidx-workshop"), label: "KidX documents", deploy: true },
   { match: /^src\/kidx-code(?:-lab)?\.ts$/, checks: family("kidx-interactive", "kidx-challenges", "kidx-guidance"), label: "KidX code laboratory", deploy: true },
@@ -68,7 +75,7 @@ export function selectVerification(changedFiles, { full = false } = {}) {
 export function verificationMatrix(smokes) {
   if (!smokes.length) return { include: [{ shard: 1, checks: "none", browser: false }] };
   const total = planVerifyShards(smokes, 1)[0].estimatedSeconds;
-  const count = Math.min(4, smokes.length, Math.max(1, Math.ceil(total / 600)));
+  const count = Math.min(MAX_VERIFY_RUNNERS, smokes.length, Math.max(1, Math.ceil(total / 600)));
   return { include: planVerifyShards(smokes, count).map((shard, index) => ({
     shard: index + 1,
     checks: shard.smokes.map((smoke) => smoke.name).join(","),

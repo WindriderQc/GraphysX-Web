@@ -64,7 +64,7 @@ jobs:
     # Only affected checks run; every selected shard is required.
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 12
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
 
     steps:

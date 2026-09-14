@@ -33,8 +33,8 @@ describe("release shards", () => {
     assert.deepEqual(planVerifyShards(smokes, 2, weights), plan);
   });
 
-  it("selects all four CI shards through the actual CLI parser and labels each as partial", () => {
-    const options = [1, 2, 3, 4].map((index) => resolveVerifyOptions([`--shard=${index}/4`], {}));
+  it("selects all twelve CI shards through the actual CLI parser and labels each as partial", () => {
+    const options = Array.from({ length: 12 }, (_, index) => resolveVerifyOptions([`--shard=${index + 1}/12`], {}));
     assert.deepEqual(new Set(options.flatMap((option) => option.smokes)), new Set(VERIFY_SMOKES));
     assert.equal(options.reduce((sum, option) => sum + option.smokes.length, 0), VERIFY_SMOKES.length);
     for (const option of options) {
