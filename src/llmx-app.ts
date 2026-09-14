@@ -134,7 +134,8 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   const worlds = element<HTMLSelectElement>('[data-worlds]');
   const mathPanel = element<HTMLElement>('.gx-llmx-math-panel');
   const faceInset = createLlmXFaceInset(host.renderer, host.scene, surface,
-    () => host.world.getEntityObject(LLMX_FACE_ID), viewFace);
+    () => host.world.getEntityObject(LLMX_FACE_ID), viewFace,
+    () => host.world.getEntityObject(LLMX_THINKING_EMITTER_ID));
   const identity = () => ({ environmentId: activeId ?? `${profile}-forge-draft`, revision: `${revision}:${host.api.state()!.revision}` });
   const actions = createLlmXSceneActions(host.api, identity, forge.anchors.buildZone, (receipt, kind) => {
     saved = false;

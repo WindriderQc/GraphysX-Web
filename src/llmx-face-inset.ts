@@ -2,7 +2,8 @@ import { PerspectiveCamera, Vector2, Vector3, Vector4, type Object3D, type Scene
 
 /** A second view of the existing rig. No extra world, animation loop or audio player. */
 export function createLlmXFaceInset(renderer: WebGLRenderer, scene: Scene, surface: HTMLElement,
-  faceObject: () => Object3D | null, onActivate: () => void) {
+  faceObject: () => Object3D | null, onActivate: () => void,
+  worldEffect: () => Object3D | null = () => null) {
   const button = document.createElement('button');
   button.className = 'gx-llmx-face-inset';
   button.type = 'button';
@@ -49,7 +50,11 @@ export function createLlmXFaceInset(renderer: WebGLRenderer, scene: Scene, surfa
     renderer.getViewport(viewport); renderer.getScissor(scissor);
     const scissorTest = renderer.getScissorTest(), autoClear = renderer.autoClear;
     const shadowRefresh = renderer.shadowMap.needsUpdate;
+    const effect = worldEffect(), effectVisible = effect?.visible;
     try {
+      // Large thinking sprites belong to the world view. In a close portrait
+      // their overlapping rings obscure the silhouette; keep the rig and lights.
+      if (effect) effect.visible = false;
       renderer.setRenderTarget(null);
       renderer.setViewport(x, y, width, height);
       renderer.setScissor(x, y, width, height);
@@ -60,6 +65,7 @@ export function createLlmXFaceInset(renderer: WebGLRenderer, scene: Scene, surfa
       renderer.render(scene, camera);
       frames++;
     } finally {
+      if (effect) effect.visible = effectVisible!;
       renderer.setRenderTarget(renderTarget, cubeFace, mipLevel);
       renderer.setViewport(viewport); renderer.setScissor(scissor);
       renderer.setScissorTest(scissorTest);

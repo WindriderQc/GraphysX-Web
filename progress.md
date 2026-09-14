@@ -1,5 +1,11 @@
 # GraphysX Web progress
 
+## 2026-09-14 — Clear portrait and natural capability questions
+
+- The small portrait temporarily excludes the ephemeral thinking emitter during its own render pass. Large overlapping plasma sprites no longer form a blue/white halo around the close-up silhouette. The main view keeps the same particles, face, lights and shared render loop. Visibility is restored even on render failure and resolves each newly spawned emitter.
+- Local validation: 571 Node passes, one existing Windows skip; typecheck/build and scoped lint pass. The focused portrait fixture holds a transport response with more than 30 live thinking particles, captures the actual close-up, then completes ordinary dialogue. Before/after images inspected in output/playwright/portrait-before and portrait-after. Browser state is not injected. The fixture uses HTTP responses only, so it is not real-model acceptance.
+- The reported capabilities question also exposed forced native tool choice in Household. AIOps PR626 switches to automatic choice and reuses the existing verified native final answer. Scene changes retain the completed graphysx_reply contract. All290 Household tests pass, including ordinary reply, native scene call/receipt and refusal of text-only proposals. Publication and actual-agent acceptance follow separately.
+
 Original prompt: "lets go then, lets make this happen!!"
 
 ## 2026-09-13 — Full authored world and the existing AgentX voice path
