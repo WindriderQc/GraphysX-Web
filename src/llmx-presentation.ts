@@ -17,6 +17,8 @@ export function llmxFacePresentation(input: {
     gazeY: 0,
     attention: input.phase === "listening" ? 1 : 0.25,
     think: !speaking && (input.phase === "waiting" || input.phase === "generating") ? 1 : 0,
-    warmth: speaking || input.phase === "listening" ? 0.2 : 0,
+    // A discreet smile while talking or being talked to; the application adds more when the
+    // visitor points at the mask.
+    warmth: speaking || input.phase === "listening" ? 0.35 : 0,
   };
 }

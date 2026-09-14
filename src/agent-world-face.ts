@@ -525,9 +525,16 @@ export class AgentWorldVoxelFace {
     const { weights } = this;
     const cubes: number[] = [];
     const regionNames = asset.regions;
+    const { mouth } = weights.anchors;
     for (let i = 0; i < weights.count; i += 1) {
       const region = regionNames[weights.region[i]];
       if (region === "iris" || region === "eye" || region === "pupil" || region === "maw" || region === "throat") continue;
+      // Nothing behind the mouth: shrunk toward the centre, the lips and chin would land inside
+      // the tunnel and plug the open mouth with grey (owner review, 2026-09-13).
+      const sx = weights.rest[i * 3] * 0.9;
+      const sy = weights.rest[i * 3 + 1] * 0.9;
+      const sz = weights.rest[i * 3 + 2] * 0.9;
+      if (Math.abs(sx) < mouth.halfWidth + 0.14 && Math.abs(sy - mouth.y) < 0.2 && sz > 0.05) continue;
       cubes.push(i);
     }
     const mesh = new InstancedMesh(

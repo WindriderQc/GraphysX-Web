@@ -153,6 +153,8 @@ export type FaceWeights = {
   lip: Float32Array;
   brow: Float32Array;
   cheek: Float32Array;
+  /** 1 for the matte mouth cavity (maw), which no expression may drag around. */
+  cavity: Uint8Array;
   /** Height normalised over the mask's own extent, 0 at the chin and 1 at the crown. */
   rise: Float32Array;
   /** Bounding box of the rest pose: [minX, minY, minZ, maxX, maxY, maxZ]. */
@@ -203,6 +205,7 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
   const lip = new Float32Array(count);
   const brow = new Float32Array(count);
   const cheek = new Float32Array(count);
+  const cavity = new Uint8Array(count);
   const rise = new Float32Array(count);
 
   const jawIndex = regions.indexOf("jaw");
@@ -279,6 +282,7 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
       (z - anchors.mouth.z) / 0.34,
     );
     lip[i] = region[i] === mawIndex ? 0 : clamp01(1 - lipFall);
+    cavity[i] = region[i] === mawIndex ? 1 : 0;
 
     // Flat across the whole brow and falling off only past its outer end. Measuring from the
     // brow anchor — the middle of each arch — starved the inner ends, which are exactly the
@@ -325,6 +329,7 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
     lip,
     brow,
     cheek,
+    cavity,
     rise,
     bounds: new Float32Array([minX, minY, minZ, maxX, maxY, maxZ]),
   };
@@ -377,6 +382,9 @@ export const POSE_LIMITS = Object.freeze({
   /** Exponent on `speak` before it drives the mouth. Below one; see the note where it is used. */
   mouthResponse: 0.6,
   lipSpread: 0.035,
+  /** A smile: the corners of the mouth rise and widen, metres at warmth = 1. */
+  smileLift: 0.09,
+  smileWiden: 0.035,
   lipPurse: 0.03,
   /**
    * Attention and thinking, sized to read at conversation distance. The first values here —
@@ -398,7 +406,7 @@ export const POSE_LIMITS = Object.freeze({
   thinkGazeX: -0.22,
   /** Whole-mask lateral tilt while attending, radians. A head that listens leans. */
   attentionTilt: 0.045,
-  cheekLift: 0.022,
+  cheekLift: 0.034,
   gazeRadians: 0.34,
   breathAmplitude: 0.006,
 });
@@ -426,7 +434,7 @@ export function poseInto(
   limit = weights.count,
 ): number {
   const d = clampDrivers(input);
-  const { anchors, rest, jaw, lip, brow, cheek, rise } = weights;
+  const { anchors, rest, jaw, lip, brow, cheek, cavity, rise } = weights;
   const count = Math.min(limit, weights.count);
 
   // Eyes and lids are deliberately absent from this loop: both are rigid bodies turning about
@@ -463,6 +471,10 @@ export function poseInto(
   const converge = POSE_LIMITS.browConverge * d.think;
   const thinkPurse = POSE_LIMITS.lipPurse * 0.8 * d.think;
   const cheekTarget = POSE_LIMITS.cheekLift * Math.max(0, d.warmth);
+  const smile = Math.max(0, d.warmth);
+  // Severity pulls the corners down a little; the smile is asymmetric on purpose (lifting
+  // a corner is more readable than dropping one).
+  const frownMouth = Math.max(0, -d.warmth) * 0.4;
   const breathOffset = POSE_LIMITS.breathAmplitude * Math.sin(d.breath);
   // Where the lips stop parting: just past the authored half-width, so the corners hold.
   const cornerReach = anchors.mouth.halfWidth * 1.08;
@@ -528,6 +540,16 @@ export function poseInto(
       px -= Math.sign(x) * converge * bw * inner;
     }
 
+    // The smile is a field around each commissure, crossing lip, cheek and jaw alike: the corner
+    // rises and widens, the middle of the mouth stays, and the effect fades over a hand's
+    // width so the cheek carries it up. Severity drops the corners, less.
+    const cornerDist = Math.hypot(Math.abs(x) - anchors.mouth.halfWidth, (y - anchors.mouth.y) * 1.3, (z - anchors.mouth.z) * 0.8);
+    const smileW = cavity[i] ? 0 : 1 - smoothstep(0, 0.24, cornerDist);
+    if (smileW > 0) {
+      py += POSE_LIMITS.smileLift * (smile - frownMouth) * smileW;
+      px += Math.sign(x) * POSE_LIMITS.smileWiden * smile * smileW;
+    }
+
     const cw = cheek[i];
     if (cw > 0) {
       py += cheekTarget * cw;
@@ -547,7 +569,8 @@ export function poseInto(
     // Uniform across the band, not parabolic: the field falls off linearly, so the rows spread
     // by the same amount at its edges as at its middle.
     const browStretch = 4 * bw * (1 - bw) * clamp01(d.attention + d.think + Math.max(0, d.warmth) * 0.3) + 0.5 * bw * d.think;
-    const stretch = 1 + POSE_LIMITS.stretchFill * (mouth * stretchWeight + 1.0 * browStretch);
+    const smileStretch = 4 * smileW * (1 - smileW) * smile;
+    const stretch = 1 + POSE_LIMITS.stretchFill * (mouth * stretchWeight + 1.0 * browStretch + 0.9 * smileStretch);
     outScale[i] = buildScale(rise[i], d.build, i) * stretch;
   }
   return count;

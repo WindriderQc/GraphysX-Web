@@ -2,6 +2,7 @@ import { BoxGeometry, Group, Mesh, MeshStandardMaterial, SphereGeometry, type Ob
 import { PlatformHost } from "./platform-host";
 import { createForgeWorld, forgeIntroAt, forgeThinkingEmitter, FORGE_INTRO, LLMX_FACE_ANCHOR_ID, LLMX_THINKING_EMITTER_ID } from "./llmx-forge";
 import { mountForgePresentation } from "./llmx-forge-presentation";
+import { createPointerFocus } from "./llmx-gaze";
 // The product's page styles: they size #app to the viewport and give the HUD the brand font.
 import "./styles.css";
 
@@ -70,6 +71,8 @@ const host = new PlatformHost(root, {
   intro: false,
 });
 const presentation = mountForgePresentation(host.scene, anchors);
+// The visitor's pointer, while it moves over the scene, is where the mask looks.
+const pointerFocus = createPointerFocus(host.renderer.domElement);
 
 // ---------------------------------------------------------------------------
 // The face slot: a stand-in until the rig is attached.
@@ -177,6 +180,7 @@ let approachStarted = false;
 let simulateSpeech = params.get("speak") === "1";
 let simulateThink = false;
 let simulateAttention = false;
+let simulateSmile = false;
 let reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 let clock = 0;
 let nextBlink = 2.5;
@@ -340,6 +344,7 @@ const unsubscribe = host.subscribeFrame((deltaSeconds) => {
       }
     }
     drivers.attention = simulateAttention ? 0.85 : 0.25;
+    drivers.warmth = simulateSmile ? 0.9 : 0;
   }
 
   // Gaze toward the camera, in the mask's frame: gazeX > 0 turns the eyes toward +X (the face
@@ -347,8 +352,13 @@ const unsubscribe = host.subscribeFrame((deltaSeconds) => {
   // Only once the eyes are open — a mask that tracks you before it wakes is not what the
   // choreography promises.
   if (drivers.build > 0.98 && drivers.blink < 0.5) {
-    // A fresh creation holds the gaze for a moment, then the eyes return to the visitor.
-    const focus = gazeHold && clock < gazeHold.until ? gazeHold.point : [host.camera.position.x, host.camera.position.y, host.camera.position.z];
+    // A fresh creation holds the gaze for a moment; otherwise a moving pointer leads, and the
+    // eyes return to the visitor (the camera) once it stops.
+    const live = pointerFocus.resolve(host.camera, anchors.faceCenter, 1.2);
+    const focus = gazeHold && clock < gazeHold.until ? gazeHold.point : live ? live.point : [host.camera.position.x, host.camera.position.y, host.camera.position.z];
+    if (live?.overFace && !simulateAttention) drivers.attention = Math.max(drivers.attention, 0.7);
+    // Pointing at the mask earns a small smile, the way a face warms when it is looked at.
+    if (live?.overFace && !simulateSmile) drivers.warmth = Math.max(drivers.warmth, 0.45);
     const dx = focus[0] - anchors.faceCenter[0];
     const dy = focus[1] - anchors.gazeTarget[1];
     const dz = focus[2] - anchors.faceCenter[2];
@@ -432,6 +442,7 @@ function setThinkingEmitter(on: boolean): void {
   }
 }
 const attentionButton = button("Attention (simulé)", () => { simulateAttention = !simulateAttention; });
+const smileButton = button("Sourire (simulé)", () => { simulateSmile = !simulateSmile; });
 const reducedButton = button("Mouvements réduits", () => { reducedMotion = !reducedMotion; });
 button("Créer (simulé)", simulateCreation);
 hud.append(title, readout, buttons);
@@ -454,6 +465,7 @@ function render(): void {
   pressed(speakButton, simulateSpeech);
   pressed(thinkButton, simulateThink);
   pressed(attentionButton, simulateAttention);
+  pressed(smileButton, simulateSmile);
   pressed(reducedButton, reducedMotion);
 }
 
@@ -476,5 +488,5 @@ render();
   simulateCreation,
   holdSpeak: (value: number | null): void => { speakHold = value; },
   rig: (): PreviewFaceRig => face,
-  dispose: (): void => { unsubscribe(); voice.stop(); presentation.dispose(); face.dispose(); hud.remove(); host.dispose(); },
+  dispose: (): void => { unsubscribe(); voice.stop(); pointerFocus.dispose(); presentation.dispose(); face.dispose(); hud.remove(); host.dispose(); },
 };
