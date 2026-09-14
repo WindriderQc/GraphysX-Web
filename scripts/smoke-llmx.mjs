@@ -52,7 +52,8 @@ try {
     must(api.load(original));
     host.frameView([1, 2, 9], [0, 2, 0], 0);
     const immediateCamera = host.camera.position.toArray();
-    return { appearance, childKept, rejected: !invalid.ok, unchanged, changedEntities, reloaded, restoredDefault, materialsOwned, meshCount: meshes.length, immediateCamera };
+    return { appearance, childKept, rejected: !invalid.ok, unchanged, changedEntities, reloaded, restoredDefault, materialsOwned,
+      meshNames: meshes.map(mesh => mesh.name).sort(), immediateCamera };
   });
   assert.equal(lifecycle.childKept, true);
   assert.equal(lifecycle.rejected, true);
@@ -60,7 +61,7 @@ try {
   assert.equal(lifecycle.reloaded.seed, 29);
   assert.equal(lifecycle.restoredDefault, true);
   assert.equal(lifecycle.materialsOwned, true);
-  assert.equal(lifecycle.meshCount, 5);
+  assert.deepEqual(lifecycle.meshNames, ['VoxelFaceAnimated', 'VoxelFaceEyeball', 'VoxelFaceIris', 'VoxelFaceLiner', 'VoxelFaceMaw', 'VoxelFaceStatic']);
   assert.deepEqual(lifecycle.immediateCamera, [1, 2, 9]);
   console.log("ok: persisted appearance, rejected patch atomicity, avatar replacement, child ownership, materials and immediate camera");
 

@@ -64,7 +64,8 @@ try {
   assert.ok(turns[0].sceneContext.world.catalogs.textures.includes('eroded-metal'));
   await send('Fais suivre une trajectoire et lance une balle attachée.', [
     { op: 'spawn', entity: { id: 'route', type: 'spline', path: { points: [[24, 2, 0], [26, 4, 0], [28, 2, 0]] }, material: { color: '#55ddff' } } },
-    { op: 'spawn', entity: { id: 'traveller', type: 'sphere', geometry: { radius: 0.4 }, material: { color: '#55ddff' }, physics: { mode: 'kinematic' } } },
+    { op: 'spawn', entity: { id: 'traveller', type: 'sphere', geometry: { radius: 0.4 }, material: { color: '#55ddff' } } },
+    { op: 'update', id: 'traveller', patch: { physics: { mode: 'kinematic' } } },
     { op: 'attach-behavior', id: 'traveller', behavior: { id: 'travel', type: 'follow-spline', splineId: 'route', speed: 2, loop: true } },
     { op: 'spawn', entity: { id: 'anchor', type: 'box', transform: { position: [26, 5, 1], scale: [0.4, 0.4, 0.4] }, physics: { mode: 'static' } } },
     { op: 'spawn', entity: { id: 'ball', type: 'sphere', transform: { position: [26, 2, 1] }, physics: { mode: 'dynamic', mass: 1 }, material: { color: '#df8b4c' }, steering: {} } },
