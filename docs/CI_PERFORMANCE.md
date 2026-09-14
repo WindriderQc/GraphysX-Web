@@ -27,8 +27,8 @@ deployment do not advance this baseline. Failed/cancelled releases and accumulat
 changes remain covered. Pull requests compare against their base merge point.
 Missing history selects complete coverage instead of silently dropping checks.
 
-The planner and Node job must both succeed. The aggregate check is named
-`Typecheck, build and Node checks`; it does not claim visual acceptance.
+Planning and Node verification are sequential steps in the same job. Either failure
+fails `Typecheck, build and Node checks`; it does not claim visual acceptance.
 Documentation and verification tooling still do not deploy the site.
 
 After activation, `scripts/smoke-live-release.mjs` checks the expected release SHA
