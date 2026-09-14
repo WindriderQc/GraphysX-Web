@@ -12,6 +12,8 @@ prerequisite for every deployment.
 | KidX PDF/catalog | Workshop journey plus short integration checks |
 | KidX code laboratory | Interactive, challenge and guidance journeys plus integration |
 | Other KidX/EV3 code or KidX assets | KidX/EV3 journeys plus integration |
+| LLMx voice/session transport | Opening/replay/recovery, scene speech, Family, whole-world interaction and room lifecycle |
+| LLMx room or voxel face | All LLMx journeys, native agent access, scene validation and round trip |
 | BallZ code | Game journeys plus integration |
 | Results client/store | Results contracts and browser journey plus integration |
 | Store or live collaboration | Store/collaboration contracts and journeys plus integration |
@@ -67,11 +69,35 @@ Branch pushes without a PR do not run a duplicate gate; use the manual CI entry 
 There is no new recurring task. Manually selected checks report their limited scope;
 the production workflow requires the complete selection calculated from its baseline.
 
-Selections are balanced across one to four independent GitHub runners, using the
+Selections are balanced across one to twelve independent GitHub runners, using the
 historical seconds in `scripts/verify-timings.json`. Each runner remains serial and
 retains the machine lock. New checks receive estimates until measured; estimates
 never change deadlines. Static-only changes use one runner and skip Chromium installation.
 The original `--shard=i/n` option still reproduces a slice of the full inventory.
+
+## LLMx release correction (2026-09-14)
+
+LLMx-only files previously fell through the unknown-file rule and selected every
+game and collaboration journey. The explicit LLMx rules now select the affected
+conversation/room journeys. Pose, finish and geometry changes retain native-world
+round-trip, scene validation and external-agent coverage because the voxel face
+also exists outside the room. Changes mixed with the shared runtime, host, schemas
+or dependencies still receive their existing broad/full selection.
+
+All 84 current journey timings now come from their passing CI receipts in runs
+34804919818 and 34809216949. The first run had three old combined journeys time out;
+only its passing journeys provide estimates. The second measured their seven
+passing replacements. Timing metadata is a scheduling hint, never an acceptance
+receipt or a timeout override.
+
+The same full inventory has an estimated critical path of 63.4 minutes on four
+runners and 25.8 minutes on twelve. This is a projection from measured individual
+journeys; queueing, setup and deployment are additional, and the actual new run must
+confirm the gain. The remaining full-suite floor is the 25m48s collaboration
+journey. Static-only changes still use one runner, and small selections grow only
+as needed toward a ten-minute scheduling target. Every selected check runs exactly
+once; assertions, per-check deadlines, renderer quality and the aggregate required
+check remain unchanged.
 
 ## Why this changed
 
