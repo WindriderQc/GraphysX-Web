@@ -16,16 +16,15 @@ cost real sessions real hours.
 ## Production publication (2026-09-14)
 
 **[LLMx is public](https://graphysx.specialblend.ca/?app=llmx)**, with an entry on the
-home page. The deployed product is `0a13e75af0882220a5716ec02c106eb720c9af31`;
-[run34873742082](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34873742082)
-passed the full 84-journey inventory, 564 Linux unit tests and the activated-site smoke.
-One group needed a bounded retry after the Family journey exceeded its deadline;
-the same code and deadlines passed on that retry. Public `release.json` and the
-normal browser confirm the sculpted face. Deployment took 4m42s; the complete
-workflow took 53m02s including the failed attempt and targeted retry.
-The delivery policy now keeps WebGL journeys local. GitHub runs static checks and selected
-Node contracts on one machine; activation checks the release identity and exact entry files
-over HTTP. The timings above describe the preceding hosted-rendering workflow.
+home page. The deployed product is `d2c70b03f0997dde8de2c89d9d6aabe94e2dc2ff`;
+[run34881378247](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34881378247)
+passed 571 Linux unit tests, the selected Node/build checks and exact HTTP acceptance
+of the 21 entry files. Public `release.json` confirms the SHA after completion.
+The full workflow took **2m31s**, including **58s** for verification and **1m25s**
+for deployment. GitHub launched no 3D browser; visual journeys now run locally.
+Application source/assets are unchanged from `0a13e75`, whose sculpted face and
+saved conversation were inspected in the normal browser. Its earlier 84-journey
+gate and retry receipts remain historical evidence, not checks rerun by this release.
 See [CI_PERFORMANCE.md](docs/CI_PERFORMANCE.md).
 
 This release integrates Claude's liner-only shadow (`e6c1e70`), sculpted face

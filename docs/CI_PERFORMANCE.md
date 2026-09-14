@@ -58,11 +58,29 @@ No journey is deleted or weakened. The 84 checks comprise 10 Node contracts and
 for a documentation or Node-only change. GitHub configuration and the HTTP checker
 can be validated with Node tests, including explicit bad-publication fixtures.
 
+## First delivery without hosted rendering
+
+[PR23](https://github.com/WindriderQc/GraphysX-Web/pull/23) merged as `d2c70b0`.
+Its final PR validation took **1m00s**. The main production workflow
+[34881378247](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34881378247)
+ran from 18:32:02 to 18:34:33 UTC: **2m31s total**, including **58s** for the sole
+verification job and **1m25s** for deployment. All 571 Linux unit tests passed without
+skips; all eight selected Node/build checks passed. No Chromium was installed or
+launched. The HTTP check verified all 21 entry files, the transaction finalized, and
+public `release.json` was verified afterwards. There was no retry. This is an actual
+measurement for this delivery scope, not a guarantee for every future release.
+
+Application source/assets/dependencies are unchanged from the previously inspected
+`0a13e75`. The local full Node selection passed all 16 checks and the separate
+production-configured HTTP comparison passed before publication. Receipts:
+`output/ci-local-visuals-release.json`, `output/ci-local-visuals-deploy-ci.log` and
+`output/ci-local-visuals-production-artifact/release-http.json`.
+
 ## Historical hosted-rendering measurements
 
 The measurements below explain the change of policy. They describe earlier
 workflows that rendered 3D on GitHub and do not predict the new delivery duration.
-A duration for the new policy is reported only after its first real run finishes.
+The first measured duration under the new policy is recorded above.
 
 ## LLMx release correction (2026-09-14)
 
