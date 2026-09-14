@@ -82,7 +82,7 @@ KidX is on the welcome card and at `?app=ev3-lab`. The preview workshop is dev-o
 | Production build | `npm run build` | Writes this checkout's `dist/`; does not publish it. |
 | Inspect that build | `npm run preview` | Serves `dist/` locally; read the printed URL. |
 | Platform / application tests | `npm run verify:core` / `npm run verify:apps` | Selected tiers; useful during development, not a full release gate. |
-| Complete release gate | `npm run verify -- --wait` | Unit tests, typecheck, lint, build, physics probes and all registered smokes. Waits for the machine lock. |
+| Complete local regression | `npm run verify -- --wait` | Unit tests, typecheck, lint, build, physics probes and all registered smokes. Waits for the machine lock. |
 | Optional scene store | `npm run serve:scenes` | Listens on loopback port 8788; stores scenes and related data under `.graphysx-store/` by default. |
 | Current API/test counts | `npm run counts` | Reads the bridge and verification manifest. |
 
@@ -92,11 +92,11 @@ once with `npx playwright install chromium`. See [test/README.md](test/README.md
 fast-test boundary and [CLAUDE.md](CLAUDE.md) before running expensive checks alongside
 another session.
 
-CI runs static checks plus journeys affected by the changed files. Documentation and Node
-tooling do not trigger 3D checks or a site deployment. Shared runtime/dependency changes use
-the full suite; larger selections spread across up to four independent runners. See
-[release verification time](docs/CI_PERFORMANCE.md) for scope, comparison baselines and manual
-full verification. Local `npm run verify` remains the explicit full-suite command.
+GitHub runs static checks and affected Node contracts on one machine, without a 3D browser.
+Visual journeys run locally; CI lists the affected local checks separately. After activation,
+an HTTP check verifies the release SHA and exact built HTML/JavaScript/CSS, preserving rollback
+on delivery failure. Documentation and Node tooling do not trigger a site deployment. See
+[release verification](docs/CI_PERFORMANCE.md) for scope and local commands.
 
 The store is optional. A browser can explicitly select it with `?store=http://localhost:8788`;
 production configuration and write credentials belong in

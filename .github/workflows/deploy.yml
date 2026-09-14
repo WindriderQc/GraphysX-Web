@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       full_verify:
-        description: Run the complete regression suite before deploying
+        description: Check all Node contracts and list the full local visual plan
         type: boolean
         default: false
 
@@ -20,8 +20,8 @@ permissions:
   actions: read
 
 jobs:
-  # Static checks and affected journeys must pass. Shared/unknown changes and manual
-  # full_verify requests use the complete suite. A public smoke follows activation.
+  # Hosted CI checks Node contracts and the build. Visual journeys stay local;
+  # activation is followed by an HTTP check of the exact published build.
   verify:
     uses: ./.github/workflows/ci.yml
     with:
@@ -44,11 +44,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      # The pre-deploy reusable gate proves the build in isolation. This browser is for the
-      # separate post-activation proof against the public hostname.
-      - name: Install Chromium for production smoke
-        run: npx playwright install --with-deps chromium
 
       - name: Build production release
         env:
@@ -557,7 +552,7 @@ jobs:
             ln -s "$new_target" "$base/current.next"
             mv -Tf "$base/current.next" "$base/current"
 
-      - name: Smoke the activated production release
+      - name: Verify the activated release over HTTP
         id: live_smoke
         timeout-minutes: 5
         env:
@@ -850,4 +845,4 @@ jobs:
         run: |
           echo '### Production verified' >> "$GITHUB_STEP_SUMMARY"
           echo 'Commit `${{ github.sha }}` is live at <https://graphysx.specialblend.ca/>.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'The revision manifest matched and the Great Slide canary completed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'The revision manifest, HTML and referenced JavaScript/CSS match the deployed build. No 3D browser was launched.' >> "$GITHUB_STEP_SUMMARY"

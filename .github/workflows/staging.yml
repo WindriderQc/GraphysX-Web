@@ -46,7 +46,7 @@ jobs:
       - name: Install Chromium for headless smokes
         run: npx playwright install chromium
 
-      # Same gate as production CI: typecheck, build, and smoke every product route.
+      # Optional local full visual run on UGBrutal; hosted production CI runs Node only.
       - name: Verify release
         run: npm run verify
 

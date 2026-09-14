@@ -23,7 +23,10 @@ One group needed a bounded retry after the Family journey exceeded its deadline;
 the same code and deadlines passed on that retry. Public `release.json` and the
 normal browser confirm the sculpted face. Deployment took 4m42s; the complete
 workflow took 53m02s including the failed attempt and targeted retry.
-LLMx-only changes now select their own journeys; see [CI_PERFORMANCE.md](docs/CI_PERFORMANCE.md).
+The delivery policy now keeps WebGL journeys local. GitHub runs static checks and selected
+Node contracts on one machine; activation checks the release identity and exact entry files
+over HTTP. The timings above describe the preceding hosted-rendering workflow.
+See [CI_PERFORMANCE.md](docs/CI_PERFORMANCE.md).
 
 This release integrates Claude's liner-only shadow (`e6c1e70`), sculpted face
 lighting (`30bcb5a`) and the MCP reconnection change (`2a4f7be`). Local checks and
