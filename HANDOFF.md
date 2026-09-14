@@ -13,40 +13,31 @@ Read `PRODUCT_SPEC.md` §8.1 (the honest status table) for what ships versus wha
 as the v1 target. Read `CLAUDE.md` for the short list of rules that exist because breaking them
 cost real sessions real hours.
 
-## Production publication (2026-09-12)
+## Production publication (2026-09-14)
 
-Use [production KidX](https://graphysx.specialblend.ca/?app=ev3-lab) on ugKid. The owner
-explicitly requested production instead of a Windows-hosted preview. The current verified
-release is `0c23d88dfe114e0042840e807e6e42db9592336f` ([PR #20](https://github.com/WindriderQc/GraphysX-Web/pull/20)).
-[Deployment run 34701575948](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34701575948)
-succeeded, including exact public release identity and the Great Slide canary. The public
-`release.json` was checked again before and after two additional KidX browser journeys.
+**[LLMx is public](https://graphysx.specialblend.ca/?app=llmx)**, with an entry on the
+home page. The deployed product is `0b906d080c32bd6b6ee563ac374ef5ef6e7e6945`;
+[run34863918465](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34863918465)
+passed all 84 selected journeys, 551 Linux unit tests and the activated-site smoke.
+Public `release.json` and the normal browser confirm the release and home-page entry.
+Verification took 27m53s; the workflow took 34m22s including queueing and deployment.
+LLMx-only changes now select their own journeys; see [CI_PERFORMANCE.md](docs/CI_PERFORMANCE.md).
 
-Production includes the Atelier, simulation missions, CAD guides and held-touch fixes,
-plus the later French labels, distinct advanced-block/immediate-stop controls and measured
-**Comprendre mon trajet** debrief for the six simple-block missions. The integration
-preserves pointer capture/release cleanup and independent construction browser readiness.
-Saved-program layout checks target their named dialog alongside the new debrief dialog.
+This integrates Claude's voxel face and reactions, native whole-world commands,
+conditional maths, named environments and the existing Household/VoiX conversation.
+The public browser reaches private AgentX directly at `agentx.specialblend.icu` on
+the home LAN; AgentX is not exposed on the public VM. Browser saves belong to their
+origin, so localhost worlds are preserved separately from the public site.
 
-PR CI `34699795220` and the production gate passed all 28 impact-selected checks and static
-checks; Linux unit coverage passed 344 tests without skips. On the public hostname,
-`kidx-debrief-review` passed in 2m10s and `kidx-workshop-track3r` in 2m12s without browser
-errors. Inspected the desktop/320px debrief and first/assembled TRACK3R captures; the
-journeys also cover 390/800px controls, model rotation/zoom, steps and reassembly.
-This is browser evidence against production, not a new physical ugKid or EV3 acceptance.
+Read [LLMX_CURRENT_HANDOFF.md](docs/LLMX_CURRENT_HANDOFF.md) for current AgentX
+release/acceptance, remaining model limits and local restart instructions. The isolated
+`GraphysX-Web-llmx-verified` checkout holds the preview and delivery evidence; preserve
+other sessions' worktrees and the dependency junction into the integration checkout.
 
-The two formerly combined slow checks now run as three independent journeys per family.
-Their original assertions and ten-minute deadlines remain unchanged; combined scripts are
-still available (`npm run smoke:ev3-lab` and `node scripts/smoke-kidx-debrief.mjs`). See
-`docs/CI_PERFORMANCE.md` for measured durations and remaining headroom warnings. Release
-evidence is retained in the isolated `codex/kidx-mission-release` worktree under
-`output/kidx/`, including `release-receipt.json`, hosted logs and `public-browser/` captures.
-
-The public site runs simulation and ships the CAD assets. The hardware CLI remains local;
-the ignored PDF cache and cross-screen construction rooms still require the optional LAN
-server. Static hosting retains same-screen teamwork and official-PDF/local-file fallbacks.
-Preserve the ugKid browser profile, saved programs and other sessions' worktrees.
-
+The earlier KidX production features remain included: Atelier, simulation/CAD guides,
+held-touch controls and the measured **Comprendre mon trajet** debrief. Historical
+PR20/public KidX receipts remain in `progress.md` and the KidX delivery worktree.
+Public browser checks do not create new physical ugKid, EV3 or microphone acceptance.
 ## Earlier physical acceptance (2026-09-11 ugKid / USB)
 
 Read [the KidX continuation handoff](docs/KIDX_NEXT_SESSION.md) before editing. The isolated

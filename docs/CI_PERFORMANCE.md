@@ -4,6 +4,14 @@ CI always runs unit tests, typecheck, lint, build and the fast Node physics prob
 Browser checks are selected by changed area. A full 3D regression is not a routine
 prerequisite for every deployment.
 
+The 84 registered smokes are complete journeys, not 84 small unit tests. Their
+software-rendered browser cost must not become the default price of changing one
+feature. Keep deterministic rules in unit/contract tests; use browser journeys for
+the integration and visible behavior that those tests cannot establish. Increasing
+runner count reduces elapsed time but does not reduce total work or simplify tests.
+The present correction fixes LLMx selection; it does not claim the long browser
+journeys have already been simplified.
+
 | Change | Browser coverage |
 | --- | --- |
 | Markdown documentation, Node unit tests, verification tooling, CI configuration | None; no site deployment |
@@ -98,6 +106,18 @@ journey. Static-only changes still use one runner, and small selections grow onl
 as needed toward a ten-minute scheduling target. Every selected check runs exactly
 once; assertions, per-check deadlines, renderer quality and the aggregate required
 check remain unchanged.
+
+Observed on [run 34863918465](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34863918465),
+revision `0b906d080c32bd6b6ee563ac374ef5ef6e7e6945`: all twelve runners passed.
+Verification ran from 15:44:02 to 16:11:55 UTC on September 14, **27m53s** including
+planning, runner setup and the aggregate check. The run was created at 15:42:26 UTC;
+initial queueing and subsequent deployment are outside that verification duration.
+This confirms the parallel gain for the full 84-journey inventory. It does not yet
+measure a future LLMx-only release or remove the cost of its browser journeys.
+The complete successful workflow took **34m22s**, including its initial queue;
+the deployment job took **4m49s**, including the activated-site smoke. All 84
+registered journeys passed exactly once, with 551 passing Linux unit tests per
+runner (about six seconds for the unit suite). Collaboration alone took 26m07s.
 
 ## Why this changed
 
