@@ -2,6 +2,19 @@
 
 The product entry remains `?app=llmx`. `?app=llmx&profile=family` selects the existing Household Family agent and a separate browser library/session identity. Household 1.57.0 (AIOps PR611) extends the existing conversation to full-world native commands. Version 1 clients retain their earlier creation contract; version 2 clients advertise the broader observation and command vocabulary. Deployment and live acceptance are recorded in the current handoff.
 
+Household 1.58.0 (AIOps PR613) gives the selected native agent an explicit
+`graphysx_reply` client tool through its existing Responses request. The tool
+hands one validated reply/proposal to the browser; it does not run scene changes
+on AgentX. The next human turn includes the persisted browser outcome in that
+same native session. Ordinary dialogue omits scene changes. This removes the
+observed tool-discovery loop without replacing native tools, memory or voice.
+
+Household 1.58.3 also accepts a verified same-run natural answer for ordinary
+dialogue without a client tool call. It does not parse text-only answers into
+scene mutations. Scene changes still require the native browser reply tool;
+its flat behavior schema matches the runtime. Audit retention preserves empty
+command objects, whose presence can change native semantics.
+
 ## One native scene path
 
 The conversation sends a bounded current observation: environment identity, generation plus native runtime revision, the authored entity index, up to 32 focused entity details, actual asset catalogs, environment settings, joints, arithmetic configuration/result and the last applied/rejected receipt. Selected objects and matches to the current request take priority for details. Live world positions, velocities and trigger occupants accompany authored properties; they are explicitly read-only observations, distinct from saved parent-local transforms. Large appearance and height arrays stay in scene assets. Hidden arithmetic units do not flood the observation. Descriptive scene content remains observation data. Household binds the proposal to the immutable environment and revision captured for this request; the model does not supply concurrency tokens. The browser still compares that dispatch revision with its current world before any commit.
