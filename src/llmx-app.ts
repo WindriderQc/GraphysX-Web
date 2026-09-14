@@ -13,6 +13,7 @@ import { mountLlmXConversation } from "./llmx-conversation";
 import { llmxFacePresentation } from "./llmx-presentation";
 import { createLlmXFaceInset } from "./llmx-face-inset";
 import { createPointerFocus, gazeDriversToward } from "./llmx-gaze";
+import { createFaceReactions } from "./llmx-face-reactions";
 import type { PlatformHost } from "./platform-host";
 import { motionIsReduced } from "./platform-theme";
 import { llmxWorldContext } from "./llmx-world-context";
@@ -73,6 +74,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   const localGaze = new Vector3();
   // A moving pointer leads the gaze and, over the mask, its attention; the camera otherwise.
   const pointerFocus = createPointerFocus(host.renderer.domElement);
+  const reactions = createFaceReactions();
 
   const surface = document.createElement("section");
   surface.className = "gx-llmx";
@@ -146,7 +148,11 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
         return bounds.isEmpty() ? [object!.getWorldPosition(new Vector3())] : [bounds.min, bounds.max];
       });
     const focus = points.length ? points.reduce((sum, point) => sum.add(point), new Vector3()).divideScalar(points.length) : null;
-    if (!motionIsReduced() && focus) presentation.announceCreation(focus.toArray());
+    if (!motionIsReduced() && focus) {
+      presentation.announceCreation(focus.toArray());
+      // The mask looks at what it just made, brow and mouth lifting for a moment.
+      reactions.creation(focus.toArray() as [number, number, number], performance.now() / 1000);
+    }
     if (lesson && kind === 'math') {
       openMath(); element<HTMLDetailsElement>('[data-math-settings]').open = false;
     }
@@ -209,6 +215,11 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     if (state.phase === "ready") conversation.ready();
     const speech = conversation.sample();
     const presence = llmxFacePresentation({ assembly: intro.assembly, phase: conversation.phase(), speech });
+    const now = performance.now() / 1000;
+    // A nod on the first syllable of each reply; a pause between words is not a new reply.
+    const replyStarts = reactions.speech(speech.playing, now);
+    if (replyStarts && state.phase === "ready" && !motionIsReduced()) face.nod();
+    const reaction = motionIsReduced() ? { warmth: 0, attention: 0, focus: null } : reactions.overlay(now);
     const nextThinking = presence.think > 0 && state.phase === "ready" && !motionIsReduced();
     if (nextThinking !== thinking || (nextThinking && !host.world.getEntityObject(LLMX_THINKING_EMITTER_ID))) {
       thinking = nextThinking;
@@ -218,15 +229,17 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     faceInset.update(state.phase === 'ready' && worldFocused && !dialog.open);
     // While the inset shows the face, its own camera is the visitor; otherwise a moving pointer
     // leads the gaze and the main camera is the fallback.
+    // A fresh creation holds the gaze first: the mask looks at what it made before coming back.
     const live = faceInset.visible ? null : pointerFocus.resolve(host.camera,
       object.getWorldPosition(localGaze).toArray(), 1.2 * object.matrixWorld.getMaxScaleOnAxis());
-    if (live) localGaze.set(live.point[0], live.point[1], live.point[2]);
+    if (reaction.focus) localGaze.set(reaction.focus[0], reaction.focus[1], reaction.focus[2]);
+    else if (live) localGaze.set(live.point[0], live.point[1], live.point[2]);
     else localGaze.copy(faceInset.visible ? faceInset.camera.position : host.camera.position);
     object.worldToLocal(localGaze);
     const drivers = {
       ...presence, blink: 1 - intro.wake,
-      attention: Math.max(presence.attention, live?.overFace ? 0.7 : 0) * intro.wake,
-      warmth: Math.max(presence.warmth, live?.overFace ? 0.5 : 0),
+      attention: Math.max(presence.attention, live?.overFace ? 0.7 : 0, reaction.attention) * intro.wake,
+      warmth: Math.max(presence.warmth, live?.overFace ? 0.5 : 0, reaction.warmth),
       ...gazeDriversToward(localGaze, 0.1, POSE_LIMITS.gazeRadians),
     };
     if (state.phase === "ready" && previousPhase === "entering") face.snapDrivers(drivers);

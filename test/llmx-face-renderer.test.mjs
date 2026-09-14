@@ -118,3 +118,28 @@ test("one blink in five is a double blink, and none of them is a step", () => {
     assert.ok(quickFollowUps >= 2 && quickFollowUps < blinks / 2, `double blinks: ${quickFollowUps} of ${blinks}`);
   } finally { face.dispose(); }
 });
+
+test("a nod dips the head by a couple of degrees and returns, without a step, on top of the sway", () => {
+  const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "mobile" }));
+  try {
+    face.snapDrivers({ build: 1, blink: 0, gazeX: 0, gazeY: 0 });
+    for (let i = 0; i < 30; i += 1) face.update(1 / 60);
+    const before = face.object.rotation.x;
+    face.nod();
+    let peak = 0;
+    let largestStep = 0;
+    let previous = before;
+    let pitchAfter = Number.NaN;
+    for (let i = 0; i < 60; i += 1) {
+      face.update(1 / 60);
+      const pitch = face.object.rotation.x - before;
+      peak = Math.max(peak, pitch);
+      largestStep = Math.max(largestStep, Math.abs(face.object.rotation.x - previous));
+      previous = face.object.rotation.x;
+      if (i === 59) pitchAfter = pitch;
+    }
+    assert.ok(peak > 0.03 && peak < 0.06, `the nod dips forward by 2-3 degrees (peak ${peak.toFixed(4)} rad)`);
+    assert.ok(Math.abs(pitchAfter) < 0.006, `and the head is back after a second (${pitchAfter.toFixed(4)} rad)`);
+    assert.ok(largestStep < 0.008, `no frame jumps (largest step ${largestStep.toFixed(4)} rad)`);
+  } finally { face.dispose(); }
+});

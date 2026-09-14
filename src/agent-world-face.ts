@@ -149,6 +149,12 @@ const IDLE = {
   doubleBlinkChance: 0.2,
 };
 
+/**
+ * A single nod: a dip of the head, forward then back, over this long. Down fast, up slower,
+ * as a person marks the first word of an answer. About two and a half degrees.
+ */
+const NOD = { radians: 0.045, seconds: 0.62 };
+
 const clamp = (value: number, min: number, max: number): number => (value < min ? min : value > max ? max : value);
 
 /** Frame-rate independent exponential approach. `tau` is the time to close ~63% of the gap. */
@@ -210,6 +216,9 @@ export class AgentWorldVoxelFace {
   private saccadeY = 0;
   private idleGazeX = 0;
   private idleGazeY = 0;
+  /** Seconds left in the current nod, 0 when the head is not nodding. */
+  private nodRemaining = 0;
+  private nodStrength = 1;
 
   // Reused across every cube of every frame. The update loop allocates nothing.
   private readonly matrix = new Matrix4();
@@ -281,6 +290,16 @@ export class AgentWorldVoxelFace {
     }
   }
 
+  /**
+   * One nod, now: a small dip of the head that the rig plays out over the next frames, on top
+   * of its sway. A gesture, not a driver — it has no target to hold, so it starts and finishes
+   * on its own. The application calls it on the first syllable of a reply.
+   */
+  nod(strength = 1): void {
+    this.nodRemaining = NOD.seconds;
+    this.nodStrength = clamp(strength, 0, 1);
+  }
+
   /** Immediate authored pose for load/skip/reduced motion; normal speech still uses smoothing. */
   snapDrivers(drivers: Partial<FaceDrivers>): void {
     this.setDrivers(drivers);
@@ -329,9 +348,19 @@ export class AgentWorldVoxelFace {
     const t = this.idleClock;
     const busy = Math.max(current.speak, current.think * 0.6);
     const sway = IDLE.headSway * (1 - 0.5 * busy);
+    let nodPitch = 0;
+    if (this.nodRemaining > 0) {
+      this.nodRemaining = Math.max(0, this.nodRemaining - dt);
+      // Progress skewed toward the start: the dip is quick, the return is slower. Zero at both
+      // ends and a finite slope everywhere, so the nod never steps in or out (a power curve did:
+      // its first frame alone was two thirds of a degree).
+      const u = 1 - this.nodRemaining / NOD.seconds;
+      const k = u / (u + (1 - u) * 0.6);
+      nodPitch = NOD.radians * this.nodStrength * Math.sin(Math.PI * k);
+    }
     this.object.rotation.z = POSE_LIMITS.attentionTilt * current.attention + sway * 0.35 * Math.sin(t * 0.37 + 1.3);
     this.object.rotation.y = IDLE.headFollowsGaze * current.gazeX * POSE_LIMITS.gazeRadians + sway * (Math.sin(t * 0.23) * 0.6 + Math.sin(t * 0.71 + 0.8) * 0.4);
-    this.object.rotation.x = -IDLE.headFollowsGaze * current.gazeY * POSE_LIMITS.gazeRadians * 0.6 + sway * 0.5 * Math.sin(t * 0.29 + 2.1) + IDLE.breathNod * Math.sin(current.breath);
+    this.object.rotation.x = -IDLE.headFollowsGaze * current.gazeY * POSE_LIMITS.gazeRadians * 0.6 + sway * 0.5 * Math.sin(t * 0.29 + 2.1) + IDLE.breathNod * Math.sin(current.breath) + nodPitch;
 
     this.advanceBlink(dt);
     current.blink = approach(current.blink, Math.max(this.autoBlinkValue, target.blink), RESPONSE.blink, dt);
