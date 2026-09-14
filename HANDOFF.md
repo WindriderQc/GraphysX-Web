@@ -16,15 +16,16 @@ cost real sessions real hours.
 ## Production publication (2026-09-14)
 
 **[LLMx is public](https://graphysx.specialblend.ca/?app=llmx)**, with an entry on the
-home page. The deployed product is `d2c70b03f0997dde8de2c89d9d6aabe94e2dc2ff`;
-[run34881378247](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34881378247)
-passed 571 Linux unit tests, the selected Node/build checks and exact HTTP acceptance
-of the 21 entry files. Public `release.json` confirms the SHA after completion.
-The full workflow took **2m31s**, including **58s** for verification and **1m25s**
-for deployment. GitHub launched no 3D browser; visual journeys now run locally.
-Application source/assets are unchanged from `0a13e75`, whose sculpted face and
-saved conversation were inspected in the normal browser. Its earlier 84-journey
-gate and retry receipts remain historical evidence, not checks rerun by this release.
+home page. The deployed product is `cb8a8ce64f8aaa577411758966a61db31c67192f`;
+[run34883725489](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34883725489)
+passed Node/build checks and exact HTTP acceptance. Public `release.json` confirms
+the SHA after completion. Verification took **1m01s**, deployment **1m18s**.
+GitHub launched no 3D browser; visual journeys now run locally.
+This release removes the thinking-particle halo from the small face portrait,
+preserving the existing main-world particles and lighting. Local captures were
+inspected, 571 Node tests pass with one Windows skip, and the normal public browser
+restores its saved conversation. Household1.58.10 separately removes forced tool
+choice for ordinary dialogue (AIOps PR626, all290 Household tests pass).
 See [CI_PERFORMANCE.md](docs/CI_PERFORMANCE.md).
 
 This release integrates Claude's liner-only shadow (`e6c1e70`), sculpted face
