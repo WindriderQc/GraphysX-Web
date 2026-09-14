@@ -218,7 +218,8 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     faceInset.update(state.phase === 'ready' && worldFocused && !dialog.open);
     // While the inset shows the face, its own camera is the visitor; otherwise a moving pointer
     // leads the gaze and the main camera is the fallback.
-    const live = faceInset.visible ? null : pointerFocus.resolve(host.camera, forge.anchors.faceCenter, 1.2);
+    const live = faceInset.visible ? null : pointerFocus.resolve(host.camera,
+      object.getWorldPosition(localGaze).toArray(), 1.2 * object.matrixWorld.getMaxScaleOnAxis());
     if (live) localGaze.set(live.point[0], live.point[1], live.point[2]);
     else localGaze.copy(faceInset.visible ? faceInset.camera.position : host.camera.position);
     object.worldToLocal(localGaze);
