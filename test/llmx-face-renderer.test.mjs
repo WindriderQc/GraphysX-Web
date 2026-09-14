@@ -54,3 +54,59 @@ test("skip applies the complete face immediately and changing detail retains its
   assert.equal(face.object.children.length, 0);
   assert.doesNotThrow(() => face.dispose());
 });
+
+test("a face at rest is alive: fixations jump, the head sways within a degree or two, and speech calms it", () => {
+  const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "mobile" }));
+  try {
+    face.snapDrivers({ build: 1, blink: 0, gazeX: 0, gazeY: 0 });
+    const rest = face.object;
+    const gaze = new Set();
+    let maxYaw = 0;
+    let maxPitch = 0;
+    for (let step = 0; step < 60 * 12; step += 1) {
+      face.update(1 / 60);
+      gaze.add(Number(face.describe().build) && Math.round(rest.rotation.y * 1e4));
+      maxYaw = Math.max(maxYaw, Math.abs(rest.rotation.y));
+      maxPitch = Math.max(maxPitch, Math.abs(rest.rotation.x));
+    }
+    assert.ok(gaze.size > 20, "the head and eyes keep changing over twelve seconds with nothing driving them");
+    assert.ok(maxYaw < 0.06 && maxPitch < 0.06, `idle sway stays under ~3 degrees (yaw ${maxYaw.toFixed(3)}, pitch ${maxPitch.toFixed(3)})`);
+
+    // Busy: the sway shrinks while speaking, so it never fights the mouth.
+    const idleYaw = maxYaw;
+    face.snapDrivers({ speak: 1 });
+    let busyYaw = 0;
+    for (let step = 0; step < 60 * 12; step += 1) {
+      face.setDrivers({ speak: 1 });
+      face.update(1 / 60);
+      busyYaw = Math.max(busyYaw, Math.abs(rest.rotation.y - 0));
+    }
+    assert.ok(busyYaw <= idleYaw + 1e-6, `sway while speaking (${busyYaw.toFixed(3)}) is not larger than at rest (${idleYaw.toFixed(3)})`);
+  } finally { face.dispose(); }
+});
+
+test("one blink in five is a double blink, and none of them is a step", () => {
+  const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "mobile" }));
+  try {
+    face.snapDrivers({ build: 1, blink: 0 });
+    let blinks = 0;
+    let quickFollowUps = 0;
+    let wasClosed = false;
+    let lastOpenedAt = -10;
+    let time = 0;
+    let previous = 0;
+    for (let step = 0; step < 60 * 240; step += 1) {
+      face.update(1 / 60);
+      time += 1 / 60;
+      const closed = face.describe().build === 1 && face["current"].blink > 0.5;
+      const value = face["current"].blink;
+      assert.ok(Math.abs(value - previous) < 0.6, "lids move, they do not teleport");
+      previous = value;
+      if (closed && !wasClosed) { blinks += 1; if (time - lastOpenedAt < 0.6) quickFollowUps += 1; }
+      if (!closed && wasClosed) lastOpenedAt = time;
+      wasClosed = closed;
+    }
+    assert.ok(blinks >= 30, `expected regular blinks over four minutes, got ${blinks}`);
+    assert.ok(quickFollowUps >= 2 && quickFollowUps < blinks / 2, `double blinks: ${quickFollowUps} of ${blinks}`);
+  } finally { face.dispose(); }
+});

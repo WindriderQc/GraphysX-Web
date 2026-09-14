@@ -101,7 +101,7 @@ const REGION_SHADE: Record<string, number> = {
 };
 
 /** Cube edge as a multiple of the grid step. See the note where it is used. */
-const CUBE_OVERLAP = 1.022;
+const CUBE_OVERLAP = 1.05;
 
 /**
  * Maximum forge jitter, in radians. Small on purpose: this is the difference between "stacked
@@ -129,6 +129,25 @@ const RESPONSE = {
   warmth: 0.9,
   build: 0.05,
 };
+
+/** Life at rest: amplitudes are in gaze units (-1..1) and radians; all deliberately small. */
+const IDLE = {
+  /** Largest saccade, as a fraction of the gaze range. Fixations wander, they do not dart. */
+  saccade: 0.16,
+  fixationMin: 1.1,
+  fixationSpread: 2.6,
+  /** Slow drift under the fixations. */
+  drift: 0.02,
+  /** Peak yaw/pitch of the head's own sway, radians. About a degree. */
+  headSway: 0.014,
+  /** How much of the gaze angle the head takes over — the eyes lead. */
+  headFollowsGaze: 0.18,
+  /** A nod with each breath, radians. */
+  breathNod: 0.004,
+  doubleBlinkChance: 0.2,
+};
+
+const clamp = (value: number, min: number, max: number): number => (value < min ? min : value > max ? max : value);
 
 /** Frame-rate independent exponential approach. `tau` is the time to close ~63% of the gap. */
 const approach = (current: number, target: number, tau: number, dt: number): number =>
@@ -170,6 +189,20 @@ export class AgentWorldVoxelFace {
   private blinkTimer = 1.8;
   private blinkPhase = 0;
   private autoBlinkValue = 0;
+  /** A second blink right after the first, occasionally — one blink in five reads as mechanical. */
+  private doubleBlinkPending = false;
+  /**
+   * Life at rest. A face that only moves when driven reads as an object; eyes make small
+   * involuntary jumps between fixations, and a head is never perfectly still. These are the
+   * rig's own, added on top of whatever the host drives, and they shrink while the face is
+   * busy speaking or thinking so they never fight an expression.
+   */
+  private idleClock = 0;
+  private saccadeTimer = 1.4;
+  private saccadeX = 0;
+  private saccadeY = 0;
+  private idleGazeX = 0;
+  private idleGazeY = 0;
 
   // Reused across every cube of every frame. The update loop allocates nothing.
   private readonly matrix = new Matrix4();
@@ -275,16 +308,23 @@ export class AgentWorldVoxelFace {
       dt,
     );
     current.speakTone = approach(current.speakTone, target.speakTone, RESPONSE.speakTone, dt);
-    current.gazeX = approach(current.gazeX, target.gazeX, RESPONSE.gaze, dt);
-    current.gazeY = approach(current.gazeY, target.gazeY, RESPONSE.gaze, dt);
+    this.advanceIdle(dt);
+    current.gazeX = approach(current.gazeX, clamp(target.gazeX + this.idleGazeX, -1, 1), RESPONSE.gaze, dt);
+    current.gazeY = approach(current.gazeY, clamp(target.gazeY + this.idleGazeY, -1, 1), RESPONSE.gaze, dt);
     current.attention = approach(current.attention, target.attention, RESPONSE.attention, dt);
     current.think = approach(current.think, target.think, RESPONSE.think, dt);
     current.warmth = approach(current.warmth, target.warmth, RESPONSE.warmth, dt);
     current.breath += dt * 0.9;
 
     // A head that listens leans. Applied to the rig's own group, so the host's anchor is
-    // untouched: this is the mask's posture, not its placement.
-    this.object.rotation.z = POSE_LIMITS.attentionTilt * current.attention;
+    // untouched: this is the mask's posture, not its placement. The yaw and pitch underneath
+    // are the idle sway plus a fraction of the gaze — eyes lead, the head follows a little.
+    const t = this.idleClock;
+    const busy = Math.max(current.speak, current.think * 0.6);
+    const sway = IDLE.headSway * (1 - 0.5 * busy);
+    this.object.rotation.z = POSE_LIMITS.attentionTilt * current.attention + sway * 0.35 * Math.sin(t * 0.37 + 1.3);
+    this.object.rotation.y = IDLE.headFollowsGaze * current.gazeX * POSE_LIMITS.gazeRadians + sway * (Math.sin(t * 0.23) * 0.6 + Math.sin(t * 0.71 + 0.8) * 0.4);
+    this.object.rotation.x = -IDLE.headFollowsGaze * current.gazeY * POSE_LIMITS.gazeRadians * 0.6 + sway * 0.5 * Math.sin(t * 0.29 + 2.1) + IDLE.breathNod * Math.sin(current.breath);
 
     this.advanceBlink(dt);
     current.blink = approach(current.blink, Math.max(this.autoBlinkValue, target.blink), RESPONSE.blink, dt);
@@ -564,6 +604,27 @@ export class AgentWorldVoxelFace {
   }
 
   /** Advance the blink scheduler. Intervals are irregular; a metronome blink reads as a machine. */
+  /**
+   * Saccades and drift. Every second or three the eyes jump to a new small fixation and hold
+   * it; between jumps they drift very slowly. Deterministic in the breath clock, so the same
+   * face at the same moment looks the same on every machine.
+   */
+  private advanceIdle(dt: number): void {
+    this.idleClock += dt;
+    const busy = Math.max(this.current.speak, this.current.think * 0.6, this.target.build < 1 ? 1 : 0);
+    const amplitude = IDLE.saccade * (1 - 0.7 * busy);
+    this.saccadeTimer -= dt;
+    if (this.saccadeTimer <= 0) {
+      const seed = Math.floor(this.idleClock * 53);
+      this.saccadeX = (hash01(seed) - 0.5) * 2 * amplitude;
+      this.saccadeY = (hash01(seed + 1) - 0.5) * 2 * amplitude * 0.55;
+      this.saccadeTimer = IDLE.fixationMin + hash01(seed + 2) * IDLE.fixationSpread;
+    }
+    // Snap to the fixation (eyes jump, they do not glide), then a slow drift on top.
+    this.idleGazeX = approach(this.idleGazeX, this.saccadeX, 0.035, dt) + IDLE.drift * Math.sin(this.idleClock * 0.31);
+    this.idleGazeY = approach(this.idleGazeY, this.saccadeY, 0.035, dt) + IDLE.drift * 0.6 * Math.sin(this.idleClock * 0.19 + 0.7);
+  }
+
   private advanceBlink(dt: number): void {
     if (!this.config.autoBlink) {
       this.autoBlinkValue = 0;
@@ -573,7 +634,18 @@ export class AgentWorldVoxelFace {
       this.blinkPhase = Math.max(0, this.blinkPhase - dt / 0.13);
       // Down and back up over one blink, rather than a step.
       this.autoBlinkValue = Math.sin(this.blinkPhase * Math.PI);
-      if (this.blinkPhase === 0) this.blinkTimer = 2.2 + hash01(Math.floor(this.current.breath * 97)) * 4.5;
+      if (this.blinkPhase === 0) {
+        const roll = hash01(Math.floor(this.current.breath * 97));
+        if (this.doubleBlinkPending) {
+          this.doubleBlinkPending = false;
+          this.blinkTimer = 2.2 + roll * 4.5;
+        } else if (roll < IDLE.doubleBlinkChance) {
+          this.doubleBlinkPending = true;
+          this.blinkTimer = 0.22;
+        } else {
+          this.blinkTimer = 2.2 + roll * 4.5;
+        }
+      }
       return;
     }
     this.autoBlinkValue = 0;
