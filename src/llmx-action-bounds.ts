@@ -2,7 +2,8 @@ import { Box3, Euler, Matrix4, Quaternion, Vector3 } from "three";
 import type { AgentWorldDefinition, AgentWorldEntityDefinition } from "./agent-world-runtime";
 
 export type LlmXCreationBuildZone = { center: readonly [number, number, number]; radius: number };
-const fail = () => new Error("Cette création dépasse l’espace de construction. Réduis sa taille ou rapproche-la du centre.");
+const fail = (reason?: string) => new Error("Cette création dépasse l’espace de construction. "
+  + (reason ?? "Réduis sa taille ou rapproche-la du centre."));
 const malformed = () => new Error("Les dimensions ou les ancrages de cette création sont invalides.");
 const supported = new Set(["box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane", "group", "point-light"]);
 const epsilon = 1e-8;
@@ -84,9 +85,10 @@ export function validateLlmXCreationBounds(world: AgentWorldDefinition, buildZon
     bounds.applyMatrix4(matrix);
     const { min, max } = bounds;
     const area = id === 'llmx-created-math' || id.startsWith('llmx-created-math-') ? mathAllowed : allowed;
-    if ([...min.toArray(), ...max.toArray()].some(value => !Number.isFinite(value)) ||
-        min.x < area.min.x - epsilon || max.x > area.max.x + epsilon ||
-        min.y < area.min.y - epsilon || max.y > area.max.y + epsilon ||
+    if ([...min.toArray(), ...max.toArray()].some(value => !Number.isFinite(value))) throw malformed();
+    if (min.x < area.min.x - epsilon || max.x > area.max.x + epsilon ||
         min.z < area.min.z - epsilon || max.z > area.max.z + epsilon) throw fail();
+    if (min.y < area.min.y - epsilon) throw fail("Une boîte ou un objet traverse le plancher. Il faut relever sa position en tenant compte de sa hauteur.");
+    if (max.y > area.max.y + epsilon) throw fail("Cette construction est trop haute. Il faut réduire sa hauteur.");
   }
 }

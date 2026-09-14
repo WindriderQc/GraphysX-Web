@@ -21,6 +21,20 @@ test("canonical Forge and ordinary primitives pass without counting the protecte
   assert.equal(JSON.stringify(forge.document), original);
 });
 
+test("a three-box pyramid fits when unit-cube centers include the floor and half their height", () => {
+  const pyramid = (floorCenter, topCenter) => [
+    [zone.center[0] - 0.5, floorCenter, zone.center[2]],
+    [zone.center[0] + 0.5, floorCenter, zone.center[2]],
+    [zone.center[0], topCenter, zone.center[2]],
+  ].map((position, index) => entity('box', { id: `llmx-created-pyramid-${index}`, transform: { position } }));
+  // Real rejected turn used y=.315 with no geometry or scale: the default cube is 1m.
+  assert.throws(() => check(...pyramid(0.315, 1.315)), /traverse le plancher/);
+  const grounded = pyramid(zone.center[1] + 0.5, zone.center[1] + 1.5);
+  assert.doesNotThrow(() => check(...grounded));
+  assert.ok(Math.abs(grounded[0].transform.position[1] - 0.5 - zone.center[1]) < 1e-12);
+  assert.equal(grounded[2].transform.position[1] - 0.5, grounded[0].transform.position[1] + 0.5);
+});
+
 test("geometry dimensions, tube thickness and final height must fit, even when centers do", () => {
   for (const [type, geometry] of [["box", { width: 10000 }], ["box", { height: 13 }], ["box", { depth: 10000 }],
     ["sphere", { radius: 4 }], ["icosahedron", { radius: 4 }], ["cylinder", { radius: 4 }],
