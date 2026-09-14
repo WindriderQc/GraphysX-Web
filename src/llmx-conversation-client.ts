@@ -23,7 +23,7 @@ export type LlmXConfig = {
     interrupt?: boolean; playbackSignals?: boolean };
 };
 export type LlmXMessage = { role: 'user' | 'assistant'; content: string; turnId?: string; interrupted?: boolean;
-  outcome?: 'completed' | 'cancelled' | 'failed' };
+  outcome?: 'pending' | 'completed' | 'cancelled' | 'failed' };
 export type LlmXTurnResult = { session: LlmXSession; reply: LlmXReply; turnId: string;
   origin?: 'human' | 'application_opening'; traceId?: string; sceneProposal?: LlmXSceneProposal };
 export type LlmXSessionSelection = { language?: string; label?: string; personaId?: string;
@@ -269,12 +269,12 @@ export class LlmXConversationClient {
     if (Array.isArray(data.turns)) {
       for (const value of data.turns) {
         const turn = object(value), turnId = typeof turn.clientTurnId === 'string' ? turn.clientTurnId : undefined;
+        const outcome = turn.outcome === 'completed' || turn.outcome === 'cancelled' || turn.outcome === 'failed' ? turn.outcome : undefined;
         // Opening audits are application events, never synthetic human greetings.
         if (turn.origin !== 'application_opening' && typeof turn.inputText === 'string' && turn.inputText.trim()) {
-          messages.push({ role: 'user', content: turn.inputText, turnId });
+          messages.push({ role: 'user', content: turn.inputText, turnId, ...(outcome ? { outcome } : {}) });
         }
         if (typeof turn.replyText === 'string' && turn.replyText.trim()) {
-          const outcome = turn.outcome === 'completed' || turn.outcome === 'cancelled' || turn.outcome === 'failed' ? turn.outcome : undefined;
           messages.push({ role: 'assistant', content: turn.replyText, turnId,
             interrupted: turn.interrupted === true || outcome === 'cancelled' || outcome === 'failed', ...(outcome ? { outcome } : {}) });
         }
@@ -423,7 +423,12 @@ export class LlmXConversationClient {
     if (turn.suppressed || turn.controller.signal.aborted) throw aborted();
   }
   private turnFailed(turn: Turn): void {
+    if (this.epoch === turn.epoch) this.setUserOutcome(turn.id, 'failed');
     if (this.epoch === turn.epoch && this.state !== 'disposed' && !turn.suppressed) this.changed('error');
+  }
+  private setUserOutcome(turnId: string, outcome: 'completed' | 'cancelled' | 'failed'): void {
+    const message = this.history.find(item => item.role === 'user' && item.turnId === turnId && item.outcome === 'pending');
+    if (message) message.outcome = outcome;
   }
   private async finishTurn(turn: Turn): Promise<void> {
     if (turn.suppressed && this.interruption?.address.turnId === turn.id) await this.interruption.transport.catch(() => {});
@@ -448,6 +453,11 @@ export class LlmXConversationClient {
     this.sentTurnIds.add(turn.id);
     this.latestTurnId = turn.id;
     this.unsettled = { sessionId: turn.sessionId, turnId: turn.id };
+    // Echo the exact submitted text before waiting for headers, deltas or completion.
+    if (input) {
+      this.history.push({ role: 'user', content: input, turnId: turn.id, outcome: 'pending' });
+      this.changed();
+    }
     const response = await this.fetcher(`${this.base}/sessions/${encodeURIComponent(turn.sessionId)}${path}`, {
       method: 'POST', signal: turn.controller.signal, headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
       body: JSON.stringify(body) });
@@ -514,7 +524,7 @@ export class LlmXConversationClient {
     this.latestReply = { turnId: result.turnId, reply: result.reply };
     this.completedTurnIds.add(turn.id);
     this.unsettled = null;
-    if (input) this.history.push({ role: 'user', content: input, turnId: turn.id });
+    this.setUserOutcome(turn.id, 'completed');
     this.history.push({ role: 'assistant', content: result.reply.text, turnId: turn.id });
     this.changed();
     return result;
@@ -545,10 +555,14 @@ export class LlmXConversationClient {
       }
       if (turn) { turn.controller.abort(); if (this.active === turn) this.active = null; }
       for (const message of this.history) if (message.turnId === turnId && message.role === 'assistant') message.interrupted = true;
+      this.setUserOutcome(turnId, 'cancelled');
       this.changed('idle');
       return receipt;
     }).catch((error: unknown) => {
-      if (this.epoch === epoch && this.state !== 'disposed') this.changed('error');
+      if (this.epoch === epoch && this.state !== 'disposed') {
+        this.setUserOutcome(turnId, 'failed');
+        this.changed('error');
+      }
       throw error;
     }).finally(() => { if (this.epoch === epoch) this.interruption = null; });
     this.interruption = { address, promise, transport };

@@ -339,6 +339,39 @@ test('a duplicate JSON opening with reply text returns null and emits no text or
   }
 });
 
+for (const channel of ['text', 'voice']) {
+  test(`${channel} shows the exact user text before response headers and keeps one row through streaming`, async () => {
+    const response = deferred(), updates = [];
+    const text = 'Écoute, ça va ?\nTrois <boîtes> & deux cubes.';
+    let delta;
+    const h = harness(() => response.promise, {
+      onDelta: value => { delta = value; },
+      onChange: client => updates.push(client.history.map(message => ({ ...message })))
+    });
+    const sent = h.client.send('  ' + text + '  ', scene, { turnId, channel });
+    await until(() => turnCalls(h.calls).length === 1);
+    const pending = [{ role: 'user', content: text, turnId, outcome: 'pending' }];
+    assert.deepEqual(h.client.history, pending);
+    assert.ok(updates.some(history => history[0]?.outcome === 'pending'));
+    assert.equal(turnCalls(h.calls)[0].body.text, text);
+    assert.equal(turnCalls(h.calls)[0].body.channel, channel);
+    let source;
+    response.resolve(new Response(new ReadableStream({ start(controller) { source = controller; } }),
+      { headers: { 'Content-Type': 'application/x-ndjson' } }));
+    source.enqueue(new TextEncoder().encode(JSON.stringify({ type: 'delta', delta: 'Oui.' }) + '\n'));
+    await until(() => delta === 'Oui.');
+    assert.deepEqual(h.client.history, pending);
+    source.enqueue(new TextEncoder().encode(JSON.stringify({ type: 'done', data: result(turnId, 'Oui.') }) + '\n'));
+    source.close();
+    await sent;
+    assert.deepEqual(h.client.history, [
+      { role: 'user', content: text, turnId, outcome: 'completed' },
+      { role: 'assistant', content: 'Oui.', turnId }
+    ]);
+    assert.equal(turnCalls(h.calls).length, 1);
+  });
+}
+
 test('split NDJSON and UTF-8 chunks, blank lines and an unterminated done line produce the real reply', async () => {
   const answer = 'Écoute, ça va.', bytes = new TextEncoder().encode('\n' + JSON.stringify({ type: 'delta', delta: answer }) + '\r\n' +
     JSON.stringify({ type: 'done', data: result(turnId, answer) }));
@@ -368,10 +401,10 @@ for (const [name, events] of [
   ['server error', [{ type: 'error', message: 'inference failed' }]],
   ['event after done', [{ type: 'done', data: result() }, { type: 'delta', delta: 'trailing' }]]
 ]) {
-  test(`${name} rejects without committing partial history or retrying the action`, async () => {
+  test(`${name} retains the failed user message without committing a partial answer or retrying`, async () => {
     const h = harness(() => stream(events));
     await assert.rejects(h.client.send('Bonjour', scene, { turnId }));
-    assert.deepEqual(h.client.history, []);
+    assert.deepEqual(h.client.history, [{ role: 'user', content: 'Bonjour', turnId, outcome: 'failed' }]);
     assert.equal(h.client.state, 'error');
     assert.equal(turnCalls(h.calls).length, 1);
     await assert.rejects(h.client.send('Bonjour', scene, { turnId }), /déjà été envoyé/);
@@ -488,7 +521,7 @@ test('an external abort suppresses late deltas and waits for verified cancellati
   receipt.resolve(json({ interrupted: true, turnId }));
   await cancelled;
   assert.equal(turnCalls(h.calls)[0].init.signal.aborted, true);
-  assert.deepEqual(h.client.history, []);
+  assert.deepEqual(h.client.history, [{ role: 'user', content: 'Bonjour', turnId, outcome: 'cancelled' }]);
 });
 
 test('dispose invalidates callbacks and stops requests immediately, with a separately awaited server receipt', async () => {
