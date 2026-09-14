@@ -126,7 +126,14 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: (request?
       const message = document.createElement('p'); message.className = 'gx-llmx-message ' + item.role;
       const name = document.createElement('strong'); name.textContent = item.role === 'user' ? 'Toi' : 'Notre agent';
       const content = document.createElement('span'); content.textContent = item.content + (item.interrupted ? ' (interrompu)' : '');
-      message.append(name, content); transcript.append(message);
+      message.append(name, content);
+      if (item.role === 'user' && item.outcome && item.outcome !== 'completed') {
+        const status = document.createElement('small'); status.className = 'gx-llmx-message-status';
+        status.textContent = { pending: 'En attente de réponse…', cancelled: 'Réponse interrompue', failed: 'Réponse non terminée' }[item.outcome];
+        message.dataset.outcome = item.outcome;
+        message.append(status);
+      }
+      transcript.append(message);
     }
     if (partial && !client.history.some(item => item.role === 'assistant' && item.content === partial)) {
       const message = document.createElement('p'); message.className = 'gx-llmx-message assistant partial';

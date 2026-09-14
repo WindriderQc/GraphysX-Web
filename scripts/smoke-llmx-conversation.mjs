@@ -185,7 +185,8 @@ async function fixture(options = {}) {
       sessions.set(currentSession.sessionId, currentSession);
       const result = { session: currentSession, turnId, origin: opening ? 'application_opening' : 'human', reply: reply(text) };
       return route.fulfill({ contentType: 'application/x-ndjson',
-        headers: hold ? { 'X-Smoke-Hold-Done': 'human-turn' } : {},
+        headers: hold ? { 'X-Smoke-Hold-Done': 'human-turn' }
+          : body.text === 'Écoute, ça va ?' ? { 'X-Smoke-Hold-Response': 'user-echo' } : {},
         body: JSON.stringify({ type: 'delta', delta: hold ? 'Brouillon en cours…' : text }) + '\n' +
           JSON.stringify({ type: 'done', data: result }) });
     }
@@ -265,7 +266,16 @@ try {
     assert.equal(await h.messages.locator('.user').count(), 0);
     await h.page.getByRole('textbox', { name: 'Ton message' }).fill('Écoute, ça va ?');
     await h.talk('send').click();
+    await h.page.waitForFunction(() => Boolean(window.__LLMX_SMOKE__.responses['user-echo']));
+    await h.messages.locator('.user[data-outcome="pending"]').getByText('Écoute, ça va ?', { exact: true }).waitFor();
+    assert.equal(await h.messages.locator('.user').count(), 1);
+    assert.equal(await h.messages.locator('.assistant').count(), 1, 'only the greeting exists before reply headers');
+    assert.equal(await h.messages.locator('.gx-llmx-message-status').textContent(), 'En attente de réponse…');
+    await h.page.screenshot({ path: path.join(artifacts, 'llmx-conversation-pending.png') });
+    await h.page.evaluate(() => window.__LLMX_SMOKE__.releaseResponse('user-echo'));
     await h.messages.getByText('Réponse à : Écoute, ça va ?', { exact: true }).waitFor();
+    assert.equal(await h.messages.locator('.user').count(), 1, 'completion must not duplicate the user message');
+    assert.equal(await h.messages.locator('[data-outcome="pending"]').count(), 0);
     assert.equal(h.matching('/sessions').length, 1);
     assert.ok(h.matching('/turns/text')[0].path.includes('/smoke-created-session-1/'));
     assert.ok(await h.page.evaluate(() => window.__LLMX_SMOKE__.chunks > 40));
@@ -276,6 +286,8 @@ try {
     await checkpoint(() => h.matching('/interrupt').length === 1);
     await h.page.evaluate(() => window.__LLMX_SMOKE__.releaseStream('human-turn'));
     await waitIdle(h.page); await flush(h.page);
+    assert.equal(await h.messages.locator('.user[data-outcome="cancelled"] span').textContent(), 'Arrête ce tour');
+    assert.equal(await h.messages.locator('[data-outcome="pending"]').count(), 0);
     assert.equal(await h.messages.getByText('Cette fin ne doit jamais apparaître.', { exact: true }).count(), 0);
     assert.equal(await h.messages.getByText('Brouillon en cours…', { exact: true }).count(), 0);
     assert.equal(h.matching('/synthesize/stream').length, 0);

@@ -34,6 +34,7 @@
 .gx-llmx-message{margin:0 0 12px;font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
 .gx-llmx-message:last-child{margin:0}.gx-llmx-message strong{display:block;font-size:11px;color:#85bdc6;margin-bottom:3px;font-weight:500}
 .gx-llmx-message.user strong{color:#d2ad80}.gx-llmx-message.partial{color:#c0d3d8}
+.gx-llmx-message-status{display:block;margin-top:4px;font-size:11px;color:#b8c8ca}
 .gx-llmx-audio-choice{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;padding:14px;margin:10px 0;border-radius:16px;background:#14222bef;border:1px solid #71939f55}
 .gx-llmx-audio-choice span{flex-basis:100%;font-size:13px;text-align:center;margin-bottom:4px}
 .gx-llmx [hidden]{display:none!important}
