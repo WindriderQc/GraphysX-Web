@@ -8,7 +8,11 @@ import { startStaticServer } from './static-server.mjs';
 // Mounted product controls and native scene reads. HTTP fixtures replace only AgentX;
 // no application state injection, scene API writes, inference or acoustic acceptance.
 export async function runLlmXCreation({ part = 'all' } = {}) {
-  assert.ok(['all', 'actions', 'library'].includes(part), `Unknown creation part: ${part}`);
+  assert.ok(['all', 'actions', 'math', 'library', 'family'].includes(part), `Unknown creation part: ${part}`);
+  const checkActions = part === 'all' || part === 'actions';
+  const checkMath = part === 'all' || part === 'math';
+  const checkLibrary = part === 'all' || part === 'library';
+  const checkFamily = part === 'all' || part === 'family';
   const reportName = 'llmx-creation' + (part === 'all' ? '' : '-' + part);
   const artifacts = process.env.SMOKE_ARTIFACTS || 'output/playwright/' + reportName;
   mkdirSync(artifacts, { recursive: true });
@@ -241,23 +245,28 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
     const url = new URL(base); url.searchParams.set('app', 'llmx');
     await page.goto(url.href, { waitUntil: 'domcontentloaded' });
     await ready();
-    await portrait(false);
+    if (checkActions) await portrait(false);
     const initial = await observe('initial');
     assert.equal(initial.created.length, 0);
-    const accepted = await send('Crée un cube bleu.', 'applied');
-    await portrait(true);
-    await page.getByRole('button', { name: 'Afficher le visage en grand' }).click();
-    await portrait(false);
-    assert.deepEqual(accepted.receipt.body.entityIds, ['llmx-created-smoke-cube']);
-    const created = await observe('accepted-human-creation');
-    assert.equal(created.created.length, 1);
-    assert.equal(created.created[0].id, 'llmx-created-smoke-cube');
-    assert.deepEqual(created.protectedEntities, initial.protectedEntities);
-    assert.equal(created.commits.length, initial.commits.length + 1);
-    assert.equal(created.commits.at(-1).id, 'llmx-turn-' + accepted.turn.body.turnId);
-    assert.equal(created.commits.at(-1).commandCount, 1);
+    let created;
+    if (checkActions || checkMath || checkLibrary) {
+      const accepted = await send('Crée un cube bleu.', 'applied');
+      if (checkActions) {
+        await portrait(true);
+        await page.getByRole('button', { name: 'Afficher le visage en grand' }).click();
+        await portrait(false);
+      }
+      assert.deepEqual(accepted.receipt.body.entityIds, ['llmx-created-smoke-cube']);
+      created = await observe('accepted-human-creation');
+      assert.equal(created.created.length, 1);
+      assert.equal(created.created[0].id, 'llmx-created-smoke-cube');
+      assert.deepEqual(created.protectedEntities, initial.protectedEntities);
+      assert.equal(created.commits.length, initial.commits.length + 1);
+      assert.equal(created.commits.at(-1).id, 'llmx-turn-' + accepted.turn.body.turnId);
+      assert.equal(created.commits.at(-1).commandCount, 1);
+    }
     let finalMath;
-    if (part !== 'library') {
+    if (checkActions) {
       await action('undo').click();
       assert.equal((await observe('native-undo-creation')).created.length, 0);
       await action('redo').click();
@@ -290,6 +299,8 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       const ordinaryCube = taught.created.find(entity => entity.id === 'llmx-created-smoke-cube');
       assert.ok(Math.abs(table.transform.position[0] - ordinaryCube.transform.position[0]) > 5,
         'an earlier ordinary creation must not sit among the counted units');
+    }
+    if (checkMath) {
       await prepareAddition();
       const math0 = await observe('math-two-plus-three-step-0'); assertMath(math0, 0);
       await action('math-next').click();
@@ -325,8 +336,8 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       assert.equal((await observe('hidden-math-after-undo')).mathVisible, false);
       await action('redo').click();
       assert.equal((await observe('hidden-math-after-redo')).mathVisible, false);
-    } else {
-      // A fresh library scenario authors the same source world through the actual
+    } else if (!checkActions) {
+      // Each fresh persistence scenario authors its source world through the actual
       // form and three discrete steps; it never restores an injected test snapshot.
       await prepareAddition();
       assertMath(await observe('library-setup-math-step-0'), 0);
@@ -337,12 +348,13 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       }
     }
 
-    if (part !== 'actions') {
+    let saved;
+    if (checkLibrary) {
       if (await action('math-close').isVisible()) await action('math-close').click();
       await openLibrary();
       await page.locator('[data-world-name]').fill('Somme cinq');
       await action('save-as').click();
-      const saved = await observe('named-original');
+      saved = await observe('named-original');
       assert.equal(saved.application.worldName, 'Somme cinq');
       assert.ok(saved.application.activeId);
       await page.locator('[data-world-name]').fill('Somme copie');
@@ -366,11 +378,6 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       assert.equal(reloaded.application.mathOpen, false);
       assert.equal(reloaded.application.activeId, copyId);
       assert.deepEqual(reloaded.created, finalMath.created);
-      await action('math').click();
-      const resumed = await observe('resume-saved-math'); assertMath(resumed, 3);
-      assert.equal(resumed.mathVisible, true);
-      await action('face').click();
-      assert.equal((await observe('face-hides-saved-math')).mathVisible, false);
       await send('Ancien contexte après changement de monde.', 'rejected');
       const worldRejected = await observe('stale-after-world-change-rejected');
       assert.deepEqual(worldRejected.created, reloaded.created);
@@ -380,7 +387,21 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       await action('load').click();
       await page.getByRole('heading', { name: 'Somme cinq', exact: true }).waitFor();
       assertMath(await observe('reopen-original-named-world'), 3);
+    }
 
+    if (checkFamily) {
+      if (!saved) {
+        // Build two real personal saves through the same controls. The Family
+        // journey is independent of library copy/rename/reload and agent receipts.
+        await action('math-close').click();
+        await openLibrary();
+        await page.locator('[data-world-name]').fill('Somme cinq');
+        await action('save-as').click();
+        saved = await observe('family-setup-personal-save');
+        await page.locator('[data-world-name]').fill('Somme bis');
+        await action('duplicate').click();
+        await action('close').click();
+      }
       const profileCallStart = calls.length;
       await action('profile').click(); await ready('family');
       const familyInitial = await observe('family-isolated-initial');
@@ -413,14 +434,19 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       await action('profile').click(); await ready();
       const personalReturn = await observe('personal-restored-after-family'); assertMath(personalReturn, 3);
       assert.equal(personalReturn.application.activeId, saved.application.activeId);
+      await action('math').click();
+      const resumed = await observe('resume-saved-math'); assertMath(resumed, 3);
+      assert.equal(resumed.mathVisible, true);
+      await action('face').click();
+      assert.equal((await observe('face-hides-saved-math')).mathVisible, false);
       await openLibrary();
       assert.equal(await page.locator('[data-worlds] option').count(), 2);
       assert.doesNotMatch(await page.locator('[data-worlds]').textContent(), /Famille cubes/);
       await action('close').click();
     }
-    // All: cube, stale undo, math, stale world. Actions ends after math; the library
-    // wrapper needs only its UI-authored cube and the stale-world proposal.
-    const receiptCount = part === 'all' ? 5 : part === 'actions' ? 4 : 2;
+    // Family authors through the UI only; other wrappers retain their exact
+    // human creation, ordinary update and stale-proposal receipt counts.
+    const receiptCount = part === 'all' ? 5 : part === 'actions' ? 3 : part === 'family' ? 0 : 2;
     assert.equal(matching('/scene-receipts').length, receiptCount, 'only human scene proposals produce backend receipts');
     assert.equal(matching('/synthesize/stream').length, 0, 'this journey must never request audio');
     assert.equal(matching('/opening').length, 0, 'there is no synthetic opening in this journey');
@@ -429,7 +455,7 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       scope: 'Mounted creation, arithmetic and library controls; intercepted AgentX HTTP, audio off, native API reads only',
       part, base, elapsedMs: Date.now() - startedAt, calls, navigations, snapshots, browserErrors: errors,
     }, null, 2) + '\n');
-    console.log(`ok: ${reportName}; native creation receipts, arithmetic and ${part === 'actions' ? 'undo/redo' : 'named worlds/Family isolation'}`);
+    console.log(`ok: ${reportName}; mounted creation, arithmetic and persistence checks`);
   } catch (error) {
     writeFileSync(path.join(artifacts, reportName + '-failure.json'), JSON.stringify({
       part, error: String(error), elapsedMs: Date.now() - startedAt, calls, navigations, snapshots, browserErrors: errors,
