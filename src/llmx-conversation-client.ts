@@ -202,7 +202,8 @@ export class LlmXConversationClient {
   private async json(path: string, epoch: number, body?: unknown, timeoutMs?: number): Promise<Record<string, unknown>> {
     const controller = new AbortController();
     this.requests.add(controller);
-    const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+    const timer = timeoutMs ? setTimeout(() => controller.abort(new DOMException(
+      'La connexion à AgentX ne répond pas. Vérifie ton réseau privé puis réessaie.', 'TimeoutError')), timeoutMs) : undefined;
     try {
       const response = await this.fetcher(this.base + path, { signal: controller.signal,
         ...(body !== undefined ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });

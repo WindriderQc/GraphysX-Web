@@ -200,6 +200,22 @@ test('French voice history lookup is bounded to ten seconds without replaying th
   assert.equal(h.client.state, 'idle');
 });
 
+test('an unreachable AgentX expires with a visible connection error, not a silent user cancellation', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const calls = [];
+  const client = new LlmXConversationClient({ storage: memory(), fetch: (url, { signal }) => {
+    calls.push(url);
+    return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+  } });
+  const connecting = client.initialize();
+  const timedOut = assert.rejects(connecting, { name: 'TimeoutError', message: /réseau privé/ });
+  t.mock.timers.tick(15000);
+  await timedOut;
+  assert.equal(client.state, 'error');
+  assert.equal(client.session, null);
+  assert.deepEqual(calls, ['/llmx-api/config']);
+});
+
 test('disabled configuration makes no session, history, opening or turn request', async () => {
   const calls = [];
   const client = new LlmXConversationClient({ storage: memory('private-other'), fetch: async (url) => {
