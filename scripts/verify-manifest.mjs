@@ -12,6 +12,7 @@ export const VERIFY_STATIC_CHECKS = {
 };
 
 export const VERIFY_SMOKES = [
+  { name: "llmx-world", tier: "apps", script: "scripts/smoke-llmx-world.mjs", covers: "Full world proposals: authored scenery, textures, lights, paths, physics/impulse/joints, undo and saved reload" },
   { name: "agent-mcp", tier: "core", script: "scripts/smoke-agent-mcp.mjs", covers: "Two MCP clients share a visible native world: edits, revision conflict, save/reload, camera and real PNG capture" },
   { name: "llmx-creation-actions", tier: "apps", script: "scripts/smoke-llmx-creation-actions.mjs", covers: "Native scene proposals and exact receipts, stale undo rejection, corrected French math history, deterministic quantities and undo/redo" },
   { name: "llmx-creation-library", tier: "apps", script: "scripts/smoke-llmx-creation-library.mjs", covers: "UI-authored math, named copy/rename/open/reload, stale world rejection, isolated Family worlds and mobile counting controls" },

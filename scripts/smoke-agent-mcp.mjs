@@ -37,7 +37,7 @@ try {
   await page.goto(prepared.url, { waitUntil: 'domcontentloaded' });
   let worldId = await connected();
   let state = await jsonCall(a, 'observe', { worldId });
-  await jsonCall(a, 'edit', { worldId, expectedRevision: state.revision, method: 'create', args: [{ schema: 'graphysx.agent-world/v2', id: 'mcp-shared', entities: [
+  await jsonCall(a, 'edit', { worldId, expectedRevision: state.revision, method: 'create', args: [{ schema: 'graphysx.agent-world/v2', id: 'mcp-shared', label: 'MCP shared world', entities: [
     { id: 'light', type: 'ambient-light', intensity: 1.4 },
     { id: 'codex-cube', type: 'box', transform: { position: [-0.6, 0.5, 0] }, material: { color: '#53b8da' } },
   ] }] });

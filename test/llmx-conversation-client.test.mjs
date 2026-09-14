@@ -86,6 +86,19 @@ test('scene capability and receipts copy safely, and only a completed local send
   await assert.rejects(h.client.recordSceneReceipt(copied.lastAction, 'another-session'), /changé/);
 });
 
+test('an observation-only Household receives a bounded legacy context from a full-world client', async () => {
+  const h = harness(() => json(result()));
+  const context = { ...scene, capabilities: { commandsVersion: 2, mathVersion: 1 },
+    entities: Array.from({ length: 40 }, (_, index) => ({ id: `cube-${index}`, type: 'box' })),
+    world: { settings: { sky: 'clearblue' } } };
+  await h.client.send('Bonjour', context, { turnId });
+  const sent = turnCalls(h.calls)[0].body.sceneContext;
+  assert.equal(sent.capabilities, undefined);
+  assert.equal(sent.world, undefined);
+  assert.equal(sent.entities.length, 24);
+  assert.equal(context.entities.length, 40);
+});
+
 test('math observations derive from current operands and step, rejecting inconsistent results', () => {
   const mathLesson = { operation: 'add', left: 3, right: 2, step: 1, result: 5 };
   const value = llmxSceneContext({ ...scene, mathLesson });

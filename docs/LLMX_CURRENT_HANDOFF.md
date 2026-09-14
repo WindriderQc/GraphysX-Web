@@ -2,6 +2,18 @@
 
 2026-09-13. Private LAN conversation is deployed; GraphysX runs from the local integration branch. No public GraphysX deployment. The continued creation milestone is described in [LLMX_CREATION.md](LLMX_CREATION.md): native scene edits and receipts, named environments, deterministic arithmetic and isolated Family conversations.
 
+## Full-world and voice integration — current milestone
+
+Household **1.57.0** is deployed through [AIOps PR611](https://github.com/WindriderQc/aiOPs/pull/611), merge `ae024d70f0287c73268823eb8af50c6e2efa416a`, successful deployment `34798475833`. Its 263 Household tests and PR checks passed. The live local relay config advertises `commandsVersion:2`. Earlier release receipts below remain historical.
+
+The integration checkout now lets the agent edit the full authored world, including existing Forge entities, transforms, native materials and lights, sky/gravity, spline paths, behaviors, joints and physical interactions. The native API owns commits, undo and saved documents. The face and its parent remain movable but retain their identities for reload; Claude owns face geometry. The model receives the authored index, focused details, live simulation observations and actual asset catalogs. The old construction circle is only a suggested location.
+
+Voice directly loads AgentX's existing Household Conversation, capture worklet and VoiX player. Existing microphone echo cancellation, acoustic interruption and resumed listening are reused. LLMx forwards completed validated scene replies into existing phrase prefetch with the actual selected voice; text/replay prepares one phrase ahead through the same player. There is no second microphone engine or inference loop. The shared interruption monitor also starts while inference is pending. Yanik uses PC microphone/speakers and requested reuse of the established AgentX qualification, not a repeated device project.
+
+Claude's previous full gate completed naturally (84 checks passed). Focused integration verification passes MCP sharing, creation/undo/math visibility, conversation lifecycle, scene validation and document round-trip. Final source checks pass 527 Node tests with one existing skip, typecheck, lint and build. The new full-world journey and installed skill client pass on the verified RTX 5070 Ti renderer; their captures/state were inspected. The skill client's action script is unchanged; a local preload selects the verified hardware renderer while Claude's separate CPU-rendered gate continues. Real-model/VoiX receipts follow below when completed. This is a local integration milestone, not a public GraphysX release.
+
+The new full-world journey found and fixed two inherited presentation restrictions: undo controls depended on old created-ID prefixes, and spline camera focus used the object origin instead of geometry bounds. Current accepted actions always expose undo, and framing includes the affected geometry. Preserve earlier failed logs under `output/llmx-final-*`; final hardware evidence is `output/playwright/llmx-world-gpu/` and `output/playwright/llmx-skill/`.
+
 ## Restart after reboot
 
 ```powershell

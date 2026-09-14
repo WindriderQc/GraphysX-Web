@@ -2,6 +2,7 @@ import { LlmXConversationClient, type LlmXSceneContext, type LlmXTurnResult } fr
 import type { LlmXSceneReceipt } from './llmx-actions';
 import { LlmXSpeechOutput, loadLlmXAudio, llmxSpeechSampleFromRms, type LlmXReply, type LlmXVoiceConversation } from './llmx-audio';
 import type { LlmXConversationPhase } from './llmx-contracts';
+import { llmxSpeechChunks, playLlmXSpeech } from './llmx-speech-queue';
 
 const labels: Record<string, string> = {
   initializing: 'Connexion à AgentX…', opening: 'Notre agent arrive…', sending: 'Il réfléchit…',
@@ -12,7 +13,7 @@ const labels: Record<string, string> = {
 const quiet = () => ({ playing: false, amplitude: 0, brightness: 0 });
 
 /** One private Household session shared by text and the existing microphone conversation. */
-export function mountLlmXConversation(root: HTMLElement, sceneContext: () => LlmXSceneContext,
+export function mountLlmXConversation(root: HTMLElement, sceneContext: (request?: string) => LlmXSceneContext,
   options: { profile?: 'personal' | 'family'; onSceneProposal?: (proposal: unknown, turnId: string) => LlmXSceneReceipt } = {}) {
   const surface = document.createElement('section');
   surface.className = 'gx-llmx-conversation';
@@ -56,6 +57,7 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
   let replyNeedingVoiceTurnId: string | null = null;
   let detail = '', voiceState = '', partial = '', lastReply: LlmXReply | null = null;
   let settling: Promise<void> = Promise.resolve();
+  let timings: { turnId?: string; transcriptionMs?: number; replyMs?: number; firstAudioMs?: number; startedAt?: number } = {};
   const client = new LlmXConversationClient({ profile: options.profile, onChange: () => render(), onDelta: (_delta, answer) => {
     partial = answer; render();
   } });
@@ -168,11 +170,10 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
       }
       // Fetch only after the shared player is ready: an aborted loader cannot strand a TTS request.
       await loadLlmXAudio(); abort.signal.throwIfAborted();
-      const response = await synthesize(reply, abort.signal);
-      abort.signal.throwIfAborted();
-      if (before !== epoch || disposed) return;
-      voiceState = 'speaking'; render();
-      await output.play(response, abort.signal);
+      await playLlmXSpeech(reply, abort.signal, synthesize, async (response, signal) => {
+        check(before); voiceState = 'speaking'; render();
+        await output.play(response, signal);
+      });
     } catch (error) {
       if (!abort.signal.aborted) fail(error, before);
     } finally {
@@ -250,22 +251,29 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
           return client.session;
         },
         async transcribe(blob, language, signal) {
+          timings = { startedAt: performance.now() };
           const body = new FormData(); body.append('file', blob, 'speech.wav'); body.append('language', language);
           const response = await request('transcribe', { method: 'POST', body, signal });
           const result = await response.json() as { text?: string; data?: { text?: string } };
           signal.throwIfAborted();
           if (disposed || before !== epoch) throw new DOMException('Conversation closed', 'AbortError');
+          timings.transcriptionMs = Math.round(performance.now() - timings.startedAt!);
           return String(result.data?.text ?? result.text ?? '');
         },
-        async turn(_session, text, signal, _delta, metadata) {
+        async turn(_session, text, signal, delta, metadata) {
           if (disposed || before !== epoch) throw new DOMException('Conversation closed', 'AbortError');
           revealHistory(); partial = ''; detail = '';
+          const started = performance.now(); timings.turnId = metadata.turnId;
           // Stream text to the transcript; synthesis waits for the final, server-selected voice.
-          const result = await client.send(text, sceneContext(), { signal, turnId: metadata.turnId, channel: 'voice' });
+          const result = await client.send(text, sceneContext(text), { signal, turnId: metadata.turnId, channel: 'voice' });
           signal.throwIfAborted();
           if (disposed || before !== epoch) throw new DOMException('Conversation closed', 'AbortError');
           const reply = await acceptTurn(result, before, signal);
+          timings.replyMs = Math.round(performance.now() - started);
           currentReply = reply; lastReply = reply; lastReplyTurnId = result.turnId; partial = ''; render();
+          // Reuse Household's bounded phrase prefetch after the real scene outcome and
+          // server-selected voice are known. No speculative speech or duplicate turn.
+          for (const chunk of llmxSpeechChunks(reply.text)) delta(chunk + ' ');
           return reply;
         },
         synthesize: (reply, signal) => synthesize({ ...reply, speech: currentReply?.speech }, signal),
@@ -294,9 +302,11 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
     try {
       const before = await stopForAction();
       input.value = ''; detail = ''; partial = ''; revealHistory(true); render();
-      const result = await client.send(text, sceneContext(), { channel: 'text' });
+      timings = { startedAt: performance.now() };
+      const result = await client.send(text, sceneContext(text), { channel: 'text' });
       if (disposed || before !== epoch) return;
       const reply = await acceptTurn(result, before);
+      timings.turnId = result.turnId; timings.replyMs = Math.round(performance.now() - timings.startedAt!);
       partial = ''; lastReply = reply; lastReplyTurnId = result.turnId; render(); await speak(reply, before, result.turnId);
     } catch (error) { fail(error); }
     finally { acting = false; render(); }
@@ -383,7 +393,10 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
     sample() {
       if (disposed) return quiet();
       const microphoneSpeech = voice?.audio?.readSpeechSample?.();
-      return microphoneSpeech ? llmxSpeechSampleFromRms(microphoneSpeech) : output.sample();
+      const sample = microphoneSpeech ? llmxSpeechSampleFromRms(microphoneSpeech) : output.sample();
+      if (sample.playing && timings.startedAt !== undefined && timings.firstAudioMs === undefined)
+        timings.firstAudioMs = Math.round(performance.now() - timings.startedAt);
+      return sample;
     },
     phase(): LlmXConversationPhase {
       if (detail && client.state === 'error' || voiceState === 'error') return 'error';
@@ -395,7 +408,7 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
     },
     state() { return { state: client.state, available: available(), phase: this.phase(), microphone: hearing,
       sound, opening: client.session?.llmx?.opening?.status ?? null, messages: client.history.length,
-      speech: this.sample(), detail }; },
+      speech: this.sample(), detail, timings: { ...timings, startedAt: undefined } }; },
     dispose() {
       if (disposed) return;
       const pending = stop();

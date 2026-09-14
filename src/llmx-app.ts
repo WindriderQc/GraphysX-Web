@@ -1,4 +1,4 @@
-import { Vector3 } from "three";
+import { Box3, Vector3 } from "three";
 import { findVoxelFace } from "./agent-world-face";
 import { POSE_LIMITS } from "./llmx-face-pose";
 import type { LlmXApplication } from "./llmx-contracts";
@@ -14,6 +14,7 @@ import { llmxFacePresentation } from "./llmx-presentation";
 import { createLlmXFaceInset } from "./llmx-face-inset";
 import type { PlatformHost } from "./platform-host";
 import { motionIsReduced } from "./platform-theme";
+import { llmxWorldContext } from "./llmx-world-context";
 import "./llmx.css";
 
 /** Persistent room with one shared AgentX conversation and observed speech presentation. */
@@ -130,39 +131,41 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   const faceInset = createLlmXFaceInset(host.renderer, host.scene, surface,
     () => host.world.getEntityObject(LLMX_FACE_ID), viewFace);
   const identity = () => ({ environmentId: activeId ?? `${profile}-forge-draft`, revision: `${revision}:${host.api.state()!.revision}` });
-  const actions = createLlmXSceneActions(host.api, identity, forge.anchors.buildZone, receipt => {
+  const actions = createLlmXSceneActions(host.api, identity, forge.anchors.buildZone, (receipt, kind) => {
     saved = false;
+    hadEdits = true;
     notice = receipt.message ?? 'Création appliquée.';
     cameraOwned = false;
-    const lesson = recoverLlmXMath(host.api.exportDocument()!);
-    if (!motionIsReduced()) presentation.announceCreation(lesson && receipt.entityIds.some(id => id.startsWith('llmx-created-math'))
-      ? lesson.buildZone.center : forge.anchors.buildZone.center);
-    if (lesson && receipt.entityIds.some(id => id.startsWith('llmx-created-math'))) {
+    const lesson = mathLesson();
+    const points = receipt.entityIds.map(id => host.world.getEntityObject(id)).filter(object => object && object.visible)
+      .flatMap(object => {
+        const bounds = new Box3().setFromObject(object!);
+        return bounds.isEmpty() ? [object!.getWorldPosition(new Vector3())] : [bounds.min, bounds.max];
+      });
+    const focus = points.length ? points.reduce((sum, point) => sum.add(point), new Vector3()).divideScalar(points.length) : null;
+    if (!motionIsReduced() && focus) presentation.announceCreation(focus.toArray());
+    if (lesson && kind === 'math') {
       openMath(); element<HTMLDetailsElement>('[data-math-settings]').open = false;
     }
     else {
       closeMath();
       worldFocused = true;
-      host.frameView(forge.anchors.cameraCreation.position, forge.anchors.cameraCreation.target, motionIsReduced() ? 0 : 0.8);
+      if (focus) {
+        const distance = Math.min(45, Math.max(4, ...points.map(point => point.distanceTo(focus) * 3 + 4)));
+        host.frameView(focus.clone().add(new Vector3(0.65, 0.5, 1).normalize().multiplyScalar(distance)).toArray(), focus.toArray(), motionIsReduced() ? 0 : 0.8);
+      }
     }
     renderMath(); render();
   });
-  const conversation = mountLlmXConversation(surface, () => ({
+  const conversation = mountLlmXConversation(surface, (request = '') => ({
     schemaVersion: 1,
     environment: { id: identity().environmentId, name: worldName },
     revision: identity().revision,
-    capabilities: { commandsVersion: 1, mathVersion: 1 },
+    capabilities: { commandsVersion: 2, mathVersion: 1 },
     buildZone: forge.anchors.buildZone,
     ...(lastAction ? { lastAction } : {}),
     ...mathContext(),
-    entities: (host.api.exportDocument()?.entities ?? [])
-      .filter(entity => entity.id === LLMX_FACE_ID || entity.id?.startsWith('llmx-created-'))
-      // The deterministic lesson describes its quantities; reserved cube/glyph IDs
-      // must not crowd editable creations out of the bounded observation.
-      .filter(entity => !entity.id?.startsWith(LLMX_MATH_ROOT_ID + '-') && (entity.id !== LLMX_MATH_ROOT_ID || !mathPanel.hidden))
-      .slice(0, 24).map(entity => ({ id: (entity.id ?? "entity").slice(0, 80), type: entity.type,
-        ...(entity.id === 'llmx-created-math' ? { name: mathObservation() } : entity.label ? { name: entity.label.slice(0, 120) } : {}),
-        ...(entity.transform?.position ? { position: entity.transform.position } : {}) })),
+    ...llmxWorldContext(host.api, request, !mathPanel.hidden),
   }), { profile, onSceneProposal: (proposal, turnId) => {
     lastAction = actions.apply(proposal, turnId);
     notice = lastAction.message ?? ''; render(); return lastAction;
@@ -180,7 +183,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     button('profile').textContent = profile === 'family' ? 'En famille · quitter' : 'Passer en famille';
     element(".gx-llmx-saved").textContent = profile === 'family' ? 'Vos mondes en famille. Les mondes personnels restent dans leur espace.' : 'Vos mondes personnels, dans ce navigateur.';
     button('save').textContent = saved && savedRevision === host.api.state()?.revision ? 'Sauvegardé' : 'Sauvegarder';
-    hadEdits ||= !!host.api.exportDocument()?.entities.some(entity => entity.id?.startsWith('llmx-created-'));
+    hadEdits ||= !!host.api.exportDocument()?.entities.some(entity => entity.tags?.includes('llmx-creation') || entity.id?.startsWith('llmx-created-'));
     element('.gx-llmx-edit-actions').hidden = !hadEdits;
   };
 
@@ -382,11 +385,6 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     try { return recoverLlmXMath(host.api.exportDocument()); }
     catch { element('[data-math-notice]').textContent = 'Les cubes ont changé. Prépare un nouvel exercice pour compter avec exactitude.'; return null; }
   }
-  function mathObservation() {
-    const lesson = mathLesson();
-    return lesson ? `${lesson.labels.equation}; étape ${lesson.config.step}/${lesson.stepCount}; ${lesson.labels.action}`.slice(0, 120)
-      : 'Exercice modifié : les quantités doivent être préparées à nouveau.';
-  }
   function mathContext() {
     if (mathPanel.hidden) return {};
     const lesson = mathLesson();
@@ -433,7 +431,10 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   function viewFace() {
     closeMath(); cameraOwned = false;
     worldFocused = false;
-    host.frameView(forge.anchors.cameraRest.position, forge.anchors.cameraRest.target, motionIsReduced() ? 0 : 0.7);
+    const object = host.world.getEntityObject(LLMX_FACE_ID);
+    const offset = object ? object.getWorldPosition(new Vector3()).sub(new Vector3(...forge.anchors.faceCenter)) : new Vector3();
+    host.frameView(new Vector3(...forge.anchors.cameraRest.position).add(offset).toArray(),
+      new Vector3(...forge.anchors.cameraRest.target).add(offset).toArray(), motionIsReduced() ? 0 : 0.7);
   }
   button('math').addEventListener('click', () => { conversation.worldChanged(); openMath(); });
   button('math-close').addEventListener('click', () => { viewFace(); button('math').focus(); });

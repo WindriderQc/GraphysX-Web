@@ -2,6 +2,15 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-09-13 — Full authored world and the existing AgentX voice path
+
+- Yanik assigned the face to Claude and voice/world integration to Codex. Expanded LLMx commands to the authored environment: existing entities, native lights/materials, all native types, spline updates, behaviors, physics interactions and joints. The build zone is now a workshop suggestion. Reuse shared validation and one native commit; retain exact revision/turn receipts and reloadable face/anchor identities.
+- Version 2 observations include the whole authored ID index, focused details, live positions/velocities and actual catalogs. The visible math workshop follows math intent, including repeated identical lessons; ordinary actions close it. Created-object camera framing follows the actual world location.
+- LLMx still loads Household Conversation, its capture worklet and VoiX. Existing echo cancellation, interruption, endpointing and resumed listening are reused. Validated scene outcomes feed phrase prefetch with the exact session voice; no microphone reimplementation. Shared interruption monitoring now also starts during pending inference. Yanik uses PC microphone/speakers and explicitly reminded us to reuse AgentX's completed conversation work.
+- Backend 1.57.0: PR611 merged as ae024d70f0287c73268823eb8af50c6e2efa416a; deployment34798475833 succeeded. 263 Household tests and both PR checks passed; live LLMx config advertises commandsVersion2. No model files, provider routing or GPU settings changed.
+- Claude's earlier full gate finished naturally with all84 checks passed. Our first follow-up passed creation-library/llmx/standalone but exposed an MCP fixture missing a required label and identical math proposals closing the workshop; both were fixed, and MCP plus creation-actions now pass. The first new full-world smoke had an incomplete mocked configuration, preserved in its failure log. Final source checks, the corrected full-world journey, unchanged skill client and real-model/VoiX acceptance are in progress; this paragraph is not a final pass claim.
+- Final source checks pass 527 Node tests (one existing skip), typecheck/lint/build; focused conversation, MCP, creation, scene validation and round-trip pass. The full-world journey also exposed inherited undo visibility and spline-origin framing; both are fixed. Final full-world/undo/reload passes on the verified RTX5070Ti, and the installed skill action script passes with a hardware-renderer preload. Captures/state were inspected. Claude's separate software gate was not interrupted or unlocked. Real-model/VoiX acceptance remains separate and in progress.
+
 ## 2026-09-13 — Shared GraphysX capabilities for Codex and Claude Code
 
 - Installed one local MCP server and one shared GraphysX skill for both clients, available across projects. Eight compact tools reuse the existing browser World API, revision checks, renderer and native persistence; full API docs are an on-demand MCP resource. The browser explicitly connects with agentBridge=1. No AgentX backend changes or model calls.

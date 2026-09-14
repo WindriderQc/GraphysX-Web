@@ -6,7 +6,8 @@ export type LlmXSceneContext = {
   schemaVersion: 1;
   environment: { id: string; name: string };
   revision?: string;
-  capabilities?: { commandsVersion: 1; mathVersion: 1 };
+  capabilities?: { commandsVersion: 1 | 2; mathVersion: 1 };
+  world?: Record<string, unknown>;
   buildZone?: { center: [number, number, number]; radius: number };
   lastAction?: LlmXSceneReceipt;
   mathLesson?: { operation: 'count' | 'add' | 'subtract'; left: number; right: number; step: number; result: number };
@@ -98,8 +99,8 @@ export function llmxSceneContext(value: LlmXSceneContext): LlmXSceneContext {
     environment: { id: text(value.environment.id, 80), name: text(value.environment.name, 120) } };
   if (value.revision !== undefined) context.revision = text(value.revision, 80);
   if (value.capabilities !== undefined) {
-    if (value.capabilities.commandsVersion !== 1 || value.capabilities.mathVersion !== 1) throw new Error('Création de scène incompatible.');
-    context.capabilities = { commandsVersion: 1, mathVersion: 1 };
+    if (![1, 2].includes(value.capabilities.commandsVersion) || value.capabilities.mathVersion !== 1) throw new Error('Création de scène incompatible.');
+    context.capabilities = { commandsVersion: value.capabilities.commandsVersion, mathVersion: 1 };
   }
   if (value.buildZone !== undefined) {
     const { center, radius } = value.buildZone;
@@ -128,7 +129,7 @@ export function llmxSceneContext(value: LlmXSceneContext): LlmXSceneContext {
     context.selectedEntityIds = value.selectedEntityIds.map(id => text(id, 80));
   }
   if (value.entities !== undefined) {
-    if (!Array.isArray(value.entities) || value.entities.length > 24) throw new Error('Observation de scène trop grande.');
+    if (!Array.isArray(value.entities) || value.entities.length > (context.capabilities?.commandsVersion === 2 ? 1024 : 24)) throw new Error('Observation de scène trop grande.');
     context.entities = value.entities.map(entity => {
       const item: NonNullable<LlmXSceneContext['entities']>[number] = { id: text(entity.id, 80), type: text(entity.type, 40) };
       if (entity.name !== undefined) item.name = text(entity.name, 120);
@@ -140,6 +141,8 @@ export function llmxSceneContext(value: LlmXSceneContext): LlmXSceneContext {
       return item;
     });
   }
+  if (value.world !== undefined && context.capabilities?.commandsVersion === 2) context.world = structuredClone(value.world);
+  if (new TextEncoder().encode(JSON.stringify(context)).byteLength > 196608) throw new Error('Observation de scène trop grande.');
   return context;
 }
 
@@ -434,7 +437,8 @@ export class LlmXConversationClient {
     this.checkTurn(turn);
     if (!this.config?.capabilities?.sceneProposals) {
       const request = object(body), context = object(request.sceneContext);
-      const { capabilities: _capabilities, buildZone: _zone, lastAction: _action, mathLesson: _math, ...observation } = context;
+      const { capabilities: _capabilities, buildZone: _zone, lastAction: _action, mathLesson: _math, world: _world, ...observation } = context;
+      if (Array.isArray(observation.entities)) observation.entities = observation.entities.slice(0, 24);
       body = { ...request, sceneContext: observation };
     }
     turn.sessionId = this.session!.sessionId;

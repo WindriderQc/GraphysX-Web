@@ -31,6 +31,7 @@ const ENTITY_KEYS = new Set([
   "castShadow", "receiveShadow", "ephemeral", "tags", "behaviors", "interactions",
 ]);
 const PATCH_KEYS = new Set([
+  "path",
   "appearance",
   "label", "parentId", "transform", "material", "modelMaterialOverrides", "surface", "steering", "visible",
   "castShadow", "receiveShadow", "ephemeral", "tags", "intensity", "distance", "marker", "physics", "agent",
@@ -653,6 +654,10 @@ function validateEntityFields(entity, label, allowImportedMedia = false) {
 
 function validatePatchFields(current, patch, label) {
   allowedKeys(patch, PATCH_KEYS, label);
+  if (patch.path !== undefined) {
+    if (current.type !== "spline") reject("Only spline entities accept path");
+    validatePath(patch.path, `${label}.path`);
+  }
   validateAppearance(patch.appearance, current.type);
   if (patch.label !== undefined) requireString(patch.label, `${label}.label`, { maximum: 240 });
   if (patch.parentId !== undefined && patch.parentId !== null) requireStableId(patch.parentId, `${label}.parentId`);
@@ -992,6 +997,44 @@ function applyCommand(definition, command) {
     validateEnvironmentBlock(command.environment, "set-environment.environment");
     definition.environment = { ...(definition.environment ?? {}), ...structuredClone(command.environment) };
     return { op: "set-environment" };
+  }
+
+  if (command.op === "attach-behavior" || command.op === "detach-behavior") {
+    allowedKeys(command, new Set(["op", "id", command.op === "attach-behavior" ? "behavior" : "behaviorId"]), "behavior command");
+    requireStableId(command.id, "behavior entity id");
+    const entity = entities.find(entry => entry.id === command.id);
+    if (!entity) reject(`Unknown entity: ${command.id}`);
+    entity.behaviors ??= [];
+    if (command.op === "attach-behavior") {
+      validateBehaviors([command.behavior], "behavior");
+      if (entity.behaviors.some(entry => entry.id === command.behavior.id)) reject(`Duplicate behavior: ${command.behavior.id}`);
+      entity.behaviors.push(structuredClone(command.behavior));
+    } else {
+      requireStableId(command.behaviorId, "behavior id");
+      const index = entity.behaviors.findIndex(entry => entry.id === command.behaviorId);
+      if (index < 0) reject(`Unknown behavior: ${command.behaviorId}`);
+      entity.behaviors.splice(index, 1);
+    }
+    validateUpdatedEntity(entity, `entity ${command.id}`);
+    return { op: command.op, id: command.id };
+  }
+
+  if (["add-joint", "update-joint", "remove-joint"].includes(command.op)) {
+    const adding = command.op === "add-joint";
+    allowedKeys(command, new Set(adding ? ["op", "joint"] : command.op === "update-joint" ? ["op", "id", "patch"] : ["op", "id"]), "joint command");
+    const id = adding ? command.joint?.id : command.id;
+    requireStableId(id, "joint id");
+    definition.joints ??= [];
+    const index = definition.joints.findIndex(joint => joint.id === id);
+    if (adding ? index >= 0 : index < 0) reject(`${adding ? "Duplicate" : "Unknown"} joint: ${id}`);
+    if (command.op === "remove-joint") definition.joints.splice(index, 1);
+    else {
+      const values = adding ? command.joint : command.patch;
+      allowedKeys(values, new Set([...(adding ? ["id"] : []), "type", "bodyA", "bodyB", "anchorA", "anchorB", "axis", "length", "frameRotationDegreesA", "frameRotationDegreesB"]), "joint");
+      const joint = { ...(adding ? {} : definition.joints[index]), ...structuredClone(values), id };
+      if (adding) definition.joints.push(joint); else definition.joints[index] = joint;
+    }
+    return { op: command.op, id };
   }
 
   reject(`Unsupported command for document editing: ${String(command.op)}`);

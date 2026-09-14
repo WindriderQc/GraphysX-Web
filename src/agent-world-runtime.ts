@@ -682,6 +682,8 @@ export type AgentWorldEntityDefinition = {
 };
 
 export type AgentWorldEntityPatch = {
+  /** Replace a spline's control points without changing its ID or followers. */
+  path?: AgentWorldSplinePath;
   label?: string;
   parentId?: string | null;
   transform?: Partial<AgentWorldTransform>;
@@ -2481,6 +2483,14 @@ export class AgentWorldRuntime {
   private updateInternal(id: string, patch: AgentWorldEntityPatch): void {
     const runtime = this.requireEntity(id);
     const definition = runtime.definition;
+    if (patch.path !== undefined) {
+      definition.path = resolveSplinePath(definition.type, patch.path);
+      if (definition.path && runtime.object instanceof Line) {
+        const geometry = new BufferGeometry().setFromPoints(createSplineCurve(definition.path).getPoints(Math.max(24, definition.path.points.length * 16)));
+        runtime.object.geometry.dispose();
+        runtime.object.geometry = geometry;
+      }
+    }
     if (patch.parentId !== undefined) {
       const nextParent = patch.parentId;
       if (nextParent === id) throw new Error("An entity cannot parent itself");

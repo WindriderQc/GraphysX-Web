@@ -364,7 +364,7 @@ revision checks, transactions, undo, the async bridge, and document export/reloa
 
 An entity with `type: "agent"` is a visible participant with a serializable role, status, perception radius, and semantic capability list. This describes who or what is present in a shared spatial explanation; it does not run arbitrary scripts or create a second AI runtime.
 
-Splines are visible, queryable entities. A `follow-spline` behavior references one by stable ID; entities driven by both a path and physics use `kinematic` mode—the modern equivalent of the archived mesh-controlled flag.
+Splines are visible, queryable entities. A `follow-spline` behavior references one by stable ID; entities driven by both a path and physics use `kinematic` mode—the modern equivalent of the archived mesh-controlled flag. `gx.update(id, { path: { points, closed, tension } })` replaces an existing spline's control points and visible line while preserving its ID and followers. Export/load and native undo/redo retain the updated path.
 
 ```js
 gx.transaction([
