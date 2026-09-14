@@ -478,9 +478,8 @@ export class AgentWorldVoxelFace {
    * left at a coarser level — showed the black inside of the head (owner review, 2026-09-13:
    * "on peut juste ajouter une couche derrière qui ne bouge pas et qui bloquera le trou au
    * pire"). Rather than proving every future pose seam-free, put a second, darker surface a
-   * few cubes behind the first: a gap now shows dark metal, which is what a crease looks like.
-   * Matte and unlit-looking on purpose, so it never competes with the outer shell; one draw
-   * call, matrices written once per build.
+   * few cubes behind the first: a gap now shows the same grey metal, which is what a crease in
+   * a solid mask looks like. One draw call, matrices written once per build, no shadow cast.
    */
   private buildLiner(name: string, edge: number): InstancedMesh {
     const { weights } = this;
@@ -493,7 +492,9 @@ export class AgentWorldVoxelFace {
     }
     const mesh = new InstancedMesh(
       new BoxGeometry(edge * 1.15, edge * 1.15, edge * 1.15),
-      new MeshStandardMaterial({ color: "#14171c", roughness: 0.95, metalness: 0.1 }),
+      // The shell's own grey and finish (owner: a darker liner "fait louche"): a crease then reads
+      // as more of the same metal, not as a different material showing through.
+      new MeshStandardMaterial({ color: this.config.metalColor, roughness: 0.54, metalness: 0.5 }),
       Math.max(cubes.length, 1),
     );
     mesh.name = name;
