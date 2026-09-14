@@ -15,7 +15,8 @@ export function localGraphysXUrl(value) {
   return url;
 }
 
-export function createGraphysXMcp({ url = process.env.GRAPHYSX_URL ?? 'http://127.0.0.1:4207/', autoStart = true } = {}) {
+export function createGraphysXMcp({ url = process.env.GRAPHYSX_URL ?? 'http://127.0.0.1:4207/',
+  autoStart = !['0', 'false', 'no'].includes(String(process.env.GRAPHYSX_AUTOSTART ?? '1').toLowerCase()) } = {}) {
   const base = localGraphysXUrl(url);
   const server = new McpServer({ name: 'graphysx', version: '1.0.0' });
   server.registerResource('world-api', 'graphysx://world-api', { mimeType: 'text/markdown', description: 'Native World API argument shapes, entity types and examples. Read when a tool or entity schema is needed.' },
@@ -24,7 +25,7 @@ export function createGraphysXMcp({ url = process.env.GRAPHYSX_URL ?? 'http://12
   async function request(endpoint, body) {
     const response = await fetch(new URL('/graphysx-agent/' + endpoint, base), { redirect: 'error', signal: AbortSignal.timeout(25_000),
       ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
-    if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('This preview lacks GraphysX agent tools. Restart it with the updated serve-llmx script.');
+    if (!response.headers.get('content-type')?.includes('application/json')) throw new Error(`The server at ${base.origin} has no GraphysX agent relay. Use a preview started by scripts/serve-llmx.mjs or the Vite dev server from this checkout, or point GRAPHYSX_URL at one.`);
     const value = await response.json();
     if (!response.ok) throw new Error(value.error ?? `GraphysX HTTP ${response.status}`);
     return value;
@@ -86,8 +87,8 @@ export function createGraphysXMcp({ url = process.env.GRAPHYSX_URL ?? 'http://12
     async ({ worldId }) => { const { image, mimeType, ...info } = await call(worldId, { kind: 'capture' });
       return { content: [{ type: 'image', data: image, mimeType }, ...asText(info).content] }; });
   const vector = z.tuple([z.number().min(-10_000).max(10_000), z.number().min(-10_000).max(10_000), z.number().min(-10_000).max(10_000)]);
-  register('camera', 'Frame the actual main view using world-space camera position and target (+y up). Then capture to inspect the result. Does not edit scene entities.',
-    { worldId, expectedRevision: z.number().int().nonnegative(), position: vector, target: vector }, false,
+  register('camera', 'Frame the actual main view using world-space camera position and target (+y up). Then capture to inspect the result. Does not edit scene entities or change the revision; pass expectedRevision only to guard against framing a scene that changed since you observed it.',
+    { worldId, expectedRevision: z.number().int().nonnegative().optional(), position: vector, target: vector }, false,
     async ({ worldId, ...request }) => asText(await call(worldId, { kind: 'camera', ...request })));
   return server;
 }

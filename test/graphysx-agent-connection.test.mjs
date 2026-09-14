@@ -12,6 +12,15 @@ test('camera uses bounded native framing without accepting stale or degenerate c
   await assert.rejects(invoke(host, { ...request, position: [Infinity, 0, 0] }), /finite/);
   await assert.rejects(invoke(host, { ...request, position: request.target }), /must differ/);
   assert.equal(moves.length, 1);
+  await invoke(host, { kind: 'camera', position: [1, 2, 3], target: [0, 0, 0] });
+  assert.equal(moves.length, 2, 'framing does not change the scene, so the revision guard is optional');
+});
+
+test('a tab without a loaded world says so instead of reporting a revision conflict', async () => {
+  const host = { api: { state: () => null }, frameView: () => {}, bridge: { manifest: () => ({ tools: [{ path: 'spawn', mutates: true }] }), call: async () => ({ ok: true }) } };
+  assert.equal((await invoke(host, { kind: 'summary' })).loaded, false);
+  await assert.rejects(invoke(host, { kind: 'edit', method: 'spawn', expectedRevision: 0, args: [{}] }), /No world is loaded/);
+  await assert.rejects(invoke(host, { kind: 'camera', position: [1, 2, 3], target: [0, 0, 0] }), /No world is loaded/);
 });
 
 test('read/edit separation, native rejection and stale revisions are enforced at the actual browser boundary', async () => {
