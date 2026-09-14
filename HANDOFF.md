@@ -24,8 +24,10 @@ GitHub launched no 3D browser; visual journeys now run locally.
 This release removes the thinking-particle halo from the small face portrait,
 preserving the existing main-world particles and lighting. Local captures were
 inspected, 571 Node tests pass with one Windows skip, and the normal public browser
-restores its saved conversation. Household1.58.10 separately removes forced tool
-choice for ordinary dialogue (AIOps PR626, all290 Household tests pass).
+restores its saved conversation. Household1.58.11 retains automatic tool choice
+and distinguishes failed replies from still-running work (AIOps PR627, all294
+Household tests pass). New conversation was verified with real Qwen while keeping
+the exact world and the older interrupted history.
 See [CI_PERFORMANCE.md](docs/CI_PERFORMANCE.md).
 
 This release integrates Claude's liner-only shadow (`e6c1e70`), sculpted face
