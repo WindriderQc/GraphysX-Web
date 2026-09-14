@@ -9,12 +9,16 @@ export function llmxWorldContext(api: GraphysXAgentWorldApi, request = '', mathV
   const liveEntities = new Map(state?.entities.map(entity => [entity.id, entity]) ?? []);
   const words = request.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z0-9-]+/).filter(word => word.length > 3);
   const score = (entity: typeof world.entities[number]) => {
-    const name = `${entity.id} ${entity.label ?? ''} ${(entity.tags ?? []).join(' ')}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const name = `${entity.id} ${entity.type} ${entity.label ?? ''} ${(entity.tags ?? []).join(' ')}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     return (selected.includes(entity.id!) ? 100 : 0) + words.filter(word => name.includes(word)).length * 20
       + (entity.tags?.includes('llmx-creation') ? 5 : 0) + (entity.type.includes('light') ? 2 : 0);
   };
   const observed = world.entities.filter(entity => !entity.id?.startsWith('llmx-created-math-') && (entity.id !== 'llmx-created-math' || mathVisible));
-  const details = [...observed].sort((a, b) => score(b) - score(a)).slice(0, 32).map(entity => {
+  // Do not fill the remaining budget with unrelated floor tiles. The index
+  // still describes every entity; detail is for selection, requests, creations
+  // and lights. Filling all 32 slots added seconds to even a short voice reply.
+  const details = observed.map(entity => ({ entity, relevance: score(entity) })).filter(item => item.relevance > 0)
+    .sort((a, b) => b.relevance - a.relevance).slice(0, 32).map(({ entity }) => {
     // Large geometry/height fields are scene assets, not useful conversational context.
     const { appearance: _appearance, ...detail } = entity;
     if (detail.terrain?.heights) detail.terrain = { ...detail.terrain, heights: undefined };

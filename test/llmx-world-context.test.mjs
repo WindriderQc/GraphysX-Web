@@ -13,7 +13,7 @@ test('world observation indexes authored scenery and selects requested details w
   for (const key of ['assets', 'sounds', 'textures', 'skies', 'hdris', 'emitters', 'heightmaps', 'flocks', 'crowds', 'forceFields', 'formulas', 'dna', 'surfaces']) api[key] = () => [{ id: 'actual-' + key }];
   const observation = llmxWorldContext(api, 'Change la trajectoire extérieure');
   assert.equal(observation.entities.length, 77);
-  assert.equal(observation.world.details.length, 32);
+  assert.deepEqual(observation.world.details.map(entity => entity.id), ['floor-74', 'route', 'lamp']);
   assert.equal(observation.world.details[0].id, 'floor-74');
   assert.deepEqual(observation.world.details[0].transform.position, [74, 0, 0]);
   assert.deepEqual(observation.world.details[0].runtime.position, [74, 2, 5]);
@@ -23,4 +23,8 @@ test('world observation indexes authored scenery and selects requested details w
   assert.deepEqual(observation.world.catalogs.textures, ['actual-textures']);
   assert.equal(llmxWorldContext(api, '', true).entities.length, 78);
   assert.equal(JSON.stringify(world), before);
+  const dialogue = llmxWorldContext(api, 'Merci, avec plaisir');
+  assert.equal(dialogue.entities.length, 77, 'Conversation still receives the full world index');
+  assert.deepEqual(dialogue.world.details.map(entity => entity.id), ['floor-74', 'lamp'], 'No unrelated tiles fill a short reply');
+  assert.ok(llmxWorldContext(api, 'Montre les spline').world.details.some(entity => entity.id === 'route'), 'Native type names can request detail');
 });
