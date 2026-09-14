@@ -2,6 +2,15 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-09-13 — LLMx pyramid placement and contextual math workshop
+
+- A real rejected seven-box proposal omitted dimensions/scale and placed default unit cubes at y=.315, with bottom y=-.185 below the Forge bounds. Household 1.56.5 (PR607, main0a367c28, deploy34792879875) now explains dimensions, floor-relative centers and stacked extents; complete grounded cube/pyramid examples pass the actual GraphysX validator. The UI distinguishes below-floor from oversized/too-high errors.
+- The native math root is now hidden outside the workshop. Closing it or focusing ordinary creation hides its 3D objects; opening restores the authored lesson without adding commits or changing saved quantities. Load/undo reacquire the root. Hidden math is omitted from scene observations, and visible math uses its root plus semantic lesson instead of crowding editable objects out with reserved cube/glyph IDs.
+- Real IAB/Qwen acceptance: Family session ac8641b8-e86b-4236-821f-ce2e54f796f5, turn57db5343-f68c-40f3-ba4e-c2678f467bf2, qwen3.8:27b-mtp-q8_0, 10,158ms, three explicit .65m cubes, browser receipt applied. Screenshot inspected. The existing saved subtraction 4-3, step3, was shown, hidden, saved/reloaded hidden and reopened unchanged. Text-only, microphone off.
+- Static verification: 512 Node tests pass, one existing skip; typecheck/lint/build and Rapier probes pass. The first gate caught strict floating equality in the new test; that assertion was corrected to tolerance and all units reran successfully. Original log retained. New browser assertions cover actual root visibility, observations, creation transition, undo and saved-world resume.
+- Additional real recoloring exposed update.entity instead of native update.id/patch; exact native answer is preserved in output/llmx-workshop-colour-native.json. Household1.56.7 (PR609, maine089a30e, deploy34793746038) supplies exact native edit shapes and examples using observed IDs; 266 Household/corpus tests pass and live status confirms1.56.7. The repeated real Qwen request passed in 9,752ms (turn991373cd-5169-46a6-8f2a-ea8b44561cb7), recolored the three existing boxes and closed the math workshop. Native undo/redo and screenshots confirmed the workshop stayed hidden. Both finished backend worktrees were cleaned and the Lead released to the sounds task.
+- Yanik chose to let Claude's full 78-check gate on c403519 finish. Our targeted browser checks and the unchanged develop-web-game client are queued after that process, without interrupting it. Pending logs: output/llmx-workshop-browser-verify.log and output/llmx-workshop-skill.log. No public GraphysX deployment is claimed.
+
 ## 2026-09-13 — LLMx Forge, face and private conversation integration
 
 - Integrated both finished Claude visual lanes into `codex/llmx-integration`: minimal floor/altar ambience, bottom-up dense voxel face, original camera choreography, lighting and particles. Persistent appearance uses the shared runtime and device quality ceiling; save/reload preserves the authored world separately from conversation identity.

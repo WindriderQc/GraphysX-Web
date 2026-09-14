@@ -65,7 +65,8 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       const readTag = key => root?.tags?.find(tag => tag.startsWith(`llmx-math:${key}:`))?.split(':').at(-1);
       return {
         application: { profile: application.profile, activeId: application.activeId, worldName: application.worldName,
-          revision: application.revision, math: application.math, lastAction: application.lastAction },
+          revision: application.revision, math: application.math, mathOpen: application.mathOpen, lastAction: application.lastAction },
+        mathVisible: runtime.entities.find(entity => entity.id === 'llmx-created-math')?.visible ?? false,
         runtimeRevision: runtime.revision, commits: api.history(), created,
         protectedEntities: document.entities.filter(entity => !entity.id?.startsWith('llmx-created-')),
         math: root ? { operation: readTag('operation'), left: Number(readTag('left')), right: Number(readTag('right')),
@@ -97,6 +98,7 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
   }
 
   async function send(text, expectedStatus) {
+    const mathVisible = await page.locator('[data-math-lesson]').isVisible();
     const sentBefore = matching('/turns/text').length, receiptsBefore = matching('/scene-receipts').length;
     await page.locator('[data-text]').fill(text);
     await talk('send').click();
@@ -104,6 +106,11 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
     await page.waitForFunction(() => !document.querySelector('[data-talk="send"]').disabled);
     assert.equal(matching('/turns/text').length, sentBefore + 1, 'one request per human submission');
     const turn = matching('/turns/text').at(-1), receipt = matching('/scene-receipts').at(-1);
+    assert.equal(!!turn.body.sceneContext.mathLesson, mathVisible, 'only the active lesson is sent as current math context');
+    assert.ok(turn.body.sceneContext.entities.every(entity => !entity.id.startsWith('llmx-created-math-')),
+      'math quantities use their semantic lesson instead of filling the object limit with reserved cubes and glyphs');
+    if (!mathVisible) assert.ok(turn.body.sceneContext.entities.every(entity => !entity.id.startsWith('llmx-created-math')),
+      'hidden math must not be described as visible or crowd out ordinary scene observations');
     assert.equal(receipt.body.turnId, turn.body.turnId, 'receipt belongs to the exact completed human turn');
     assert.equal(receipt.body.status, expectedStatus);
     assert.ok(receipt.body.message?.trim());
@@ -195,6 +202,8 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
             intent: 'Créer un petit cube bleu', commands: [{ op: 'spawn', entity: { id: 'llmx-created-smoke-cube', type: 'box',
               transform: { position: observation.buildZone.center.map((value, axis) => value + (axis === 1 ? .35 : 0)), scale: [.4, .4, .4] },
               material: { color: '#44aaff' } } }] };
+          if (body.text === 'Change le cube bleu.') current.commands = [{ op: 'update', id: 'llmx-created-smoke-cube',
+            patch: { material: { color: '#ffaa44' } } }];
           const stale = body.text.startsWith('Ancien contexte');
           const math = body.text === 'Montre 2 plus 3 avec les cubes.';
           const sceneProposal = math ? { schemaVersion: 1, environmentId: observation.environment.id, revision: observation.revision,
@@ -255,6 +264,7 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       assert.equal(matching('/history').length, historyBeforeMath + 1,
         'the French math outcome resolves the exact session voice after replacing an English model reply');
       const taught = await observe('human-math-proposal'); assertMath(taught, 0);
+      assert.equal(taught.mathVisible, true, 'a math proposal reveals its actual 3D workshop');
       assert.equal(await page.locator('#llmx-transcript').isVisible(), false,
         'opening the math table keeps every counted cube clear of the transcript');
       const table = taught.created.find(entity => entity.id === 'llmx-created-math');
@@ -276,6 +286,24 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       finalMath = await observe('math-result-five'); assertMath(finalMath, 3);
       assert.equal(await action('math-next').isDisabled(), true);
       assert.match(await page.locator('[data-math-result]').textContent(), /5 cubes/);
+      await action('math-close').click();
+      const closedMath = await observe('closed-math');
+      assert.equal(closedMath.mathVisible, false, 'closing the workshop hides its 3D root');
+      assert.equal(closedMath.application.mathOpen, false);
+      assert.deepEqual(closedMath.created, finalMath.created, 'hiding the workshop preserves the authored exercise');
+      assert.deepEqual(closedMath.commits, finalMath.commits, 'a visibility change must not add an undo step');
+      await page.screenshot({ path: path.join(artifacts, 'llmx-creation-math-closed.png') });
+      await action('math').click();
+      const reopenedMath = await observe('reopened-math'); assertMath(reopenedMath, 3);
+      assert.equal(reopenedMath.mathVisible, true);
+      await send('Change le cube bleu.', 'applied');
+      finalMath = await observe('ordinary-creation-leaves-math'); assertMath(finalMath, 3);
+      assert.equal(finalMath.mathVisible, false, 'ordinary creation hides the math table and controls');
+      assert.equal(finalMath.application.mathOpen, false);
+      await action('undo').click();
+      assert.equal((await observe('hidden-math-after-undo')).mathVisible, false);
+      await action('redo').click();
+      assert.equal((await observe('hidden-math-after-redo')).mathVisible, false);
     } else {
       // A fresh library scenario authors the same source world through the actual
       // form and three discrete steps; it never restores an injected test snapshot.
@@ -289,7 +317,7 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
     }
 
     if (part !== 'actions') {
-      await action('math-close').click();
+      if (await action('math-close').isVisible()) await action('math-close').click();
       await openLibrary();
       await page.locator('[data-world-name]').fill('Somme cinq');
       await action('save-as').click();
@@ -312,8 +340,15 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       assert.equal((await observe('open-renamed-copy')).application.activeId, copyId);
       await page.reload({ waitUntil: 'domcontentloaded' }); await ready();
       const reloaded = await observe('reload-named-math'); assertMath(reloaded, 3);
+      assert.equal(reloaded.mathVisible, false, 'a saved workshop stays out of the arrival scene');
+      assert.equal(reloaded.application.mathOpen, false);
       assert.equal(reloaded.application.activeId, copyId);
       assert.deepEqual(reloaded.created, finalMath.created);
+      await action('math').click();
+      const resumed = await observe('resume-saved-math'); assertMath(resumed, 3);
+      assert.equal(resumed.mathVisible, true);
+      await action('face').click();
+      assert.equal((await observe('face-hides-saved-math')).mathVisible, false);
       await send('Ancien contexte après changement de monde.', 'rejected');
       const worldRejected = await observe('stale-after-world-change-rejected');
       assert.deepEqual(worldRejected.created, reloaded.created);
@@ -362,7 +397,7 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
     }
     // All: cube, stale undo, math, stale world. Actions ends after math; the library
     // wrapper needs only its UI-authored cube and the stale-world proposal.
-    const receiptCount = part === 'all' ? 4 : part === 'actions' ? 3 : 2;
+    const receiptCount = part === 'all' ? 5 : part === 'actions' ? 4 : 2;
     assert.equal(matching('/scene-receipts').length, receiptCount, 'only human scene proposals produce backend receipts');
     assert.equal(matching('/synthesize/stream').length, 0, 'this journey must never request audio');
     assert.equal(matching('/opening').length, 0, 'there is no synthetic opening in this journey');
