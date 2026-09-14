@@ -37,7 +37,11 @@ test("skip applies the complete face immediately and changing detail retains its
     const liner = face.object.children.find(child => child.name === "VoxelFaceLiner");
     const shell = face.object.children.find(child => child.name === "VoxelFaceStatic");
     assert.ok(liner, "a static liner sits behind the shell after a detail change");
-    assert.equal(liner.castShadow, false);
+    // The liner casts the mask's shadow, not the shell: the same silhouette for a fifth of the
+    // shadow pass under a software renderer.
+    assert.equal(liner.castShadow, true);
+    assert.equal(shell.castShadow, false);
+    assert.equal(face.object.children.find(child => child.name === "VoxelFaceAnimated").castShadow, false);
     assert.equal(liner.material.color.getHexString(), resolveAgentWorldFace({ level: "high" }).metalColor.slice(1), "the liner is the shell's own grey");
     assert.equal(liner.material.roughness, shell.material.roughness);
     assert.equal(liner.material.metalness, shell.material.metalness);
@@ -50,10 +54,17 @@ test("skip applies the complete face immediately and changing detail retains its
     // And it is not there before the face is: the entry must show cubes arriving on nothing.
     face.snapDrivers({ build: 0 });
     face.update(1 / 60);
-    assert.equal(liner.visible, false, "the liner hides while the mask assembles");
+    assert.equal(liner.material.colorWrite, false, "the liner is not drawn while the mask assembles");
+    assert.equal(liner.material.depthWrite, false, "nor does it occlude the cubes arriving behind it");
+    assert.equal(liner.visible && liner.castShadow, true, "but its shadow grows with the mask");
+    face.snapDrivers({ build: 0.5 });
+    face.update(1 / 60);
+    const halfBuilt = liner.instanceMatrix.version;
+    face.update(1 / 60);
+    assert.equal(liner.instanceMatrix.version, halfBuilt, "one write per build value, not one per frame");
     face.snapDrivers({ build: 1 });
     face.update(1 / 60);
-    assert.equal(liner.visible, true, "the liner shows once the mask is whole");
+    assert.equal(liner.material.colorWrite && liner.material.depthWrite, true, "the liner shows once the mask is whole");
     const cavity = face.object.children.find(child => child.name === "VoxelFaceMaw");
     assert.ok(cavity, "a dedicated cavity remains matte after a detail change");
     assert.equal(cavity.material.metalness, 0);

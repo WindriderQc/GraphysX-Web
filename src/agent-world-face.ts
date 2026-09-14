@@ -189,6 +189,8 @@ export class AgentWorldVoxelFace {
   private mawMesh: InstancedMesh | null = null;
   /** A static, darker copy of the shell a few cubes inside it. See {@link buildLiner}. */
   private linerMesh: InstancedMesh | null = null;
+  /** The build the liner's matrices were last written for; 1 once the mask is whole. */
+  private linerBuild = -1;
 
   /** Pose scratch, sized once. `poseInto` writes here; the meshes read from it. */
   private position = new Float32Array(0);
@@ -369,10 +371,7 @@ export class AgentWorldVoxelFace {
     // Once it is whole, only the animated slice needs rewriting and the static mesh is left
     // exactly as it was written.
     const assembling = current.build < 1 || this.staticDirty;
-    // Nothing inside the mask until the mask is whole: the liner appears only once the shell has
-    // closed over it, so the entry shows cubes arriving on nothing, not on a ghost of the face
-    // (owner: "l'inside peut apparaître après le visage construit au lieu d'avant").
-    if (this.linerMesh) this.linerMesh.visible = current.build >= 1;
+    this.syncLiner(current.build);
     const limit = assembling ? this.weights.count : this.weights.animatedCount;
     poseInto(this.weights, current, this.position, this.scale, limit);
 
@@ -539,10 +538,12 @@ export class AgentWorldVoxelFace {
     const mesh = new InstancedMesh(new BoxGeometry(edge, edge, edge), material, Math.max(count, 1));
     mesh.name = name;
     mesh.count = count;
-    // The mask casts one silhouette into the Forge; it must not receive its own cubes' shadows,
-    // which at this density turns the whole face into noise under a strong key light.
-    mesh.castShadow = !emissive;
-    mesh.userData.graphysxFaceCastShadow = !emissive;
+    // The mask casts one silhouette into the Forge, and the liner casts it (see buildLiner): a
+    // coarse copy of the shell is the same silhouette for a fifth of the shadow pass. The shell
+    // must not receive its own cubes' shadows either, which at this density turns the whole face
+    // into noise under a strong key light.
+    mesh.castShadow = false;
+    mesh.userData.graphysxFaceCastShadow = false;
     mesh.receiveShadow = false;
 
     // A fixed, generous bounding sphere. Recomputing it per frame over thousands of moving
@@ -614,8 +615,11 @@ export class AgentWorldVoxelFace {
     );
     mesh.name = name;
     mesh.count = kept.length;
-    mesh.castShadow = false;
-    mesh.userData.graphysxFaceCastShadow = false;
+    // The liner is the mask's shadow caster. Under the smokes' software renderer the shell's
+    // shadow pass was 230 ms of a 980 ms frame (2026-09-14); the liner's silhouette is the
+    // shell's, a tenth smaller, at a fifth of the cubes.
+    mesh.castShadow = true;
+    mesh.userData.graphysxFaceCastShadow = true;
     mesh.receiveShadow = false;
     mesh.frustumCulled = false;
     // Shrunk about the mask's origin: about three cubes inside the shell at the high level, and
@@ -625,12 +629,32 @@ export class AgentWorldVoxelFace {
     this.linerRest = Float32Array.from(rest);
     this.object.add(mesh);
     this.linerMesh = mesh;
-    this.writeLiner(1);
-    mesh.visible = this.current.build >= 1;
+    this.linerBuild = -1;
+    this.syncLiner(this.current.build);
     return mesh;
   }
 
-  /** The liner's matrices, written once. Its visibility is gated on assembly in update(). */
+  /**
+   * Nothing inside the mask until the mask is whole: the liner is drawn only once the shell has
+   * closed over it, so the entry shows cubes arriving on nothing, not on a ghost of the face
+   * (owner: "l'inside peut apparaître après le visage construit au lieu d'avant"). It still
+   * casts during assembly — colour and depth writes off, not visibility — so the mask's shadow
+   * grows on the altar with the mask, as it did when the shell was the caster.
+   */
+  private syncLiner(build: number): void {
+    const mesh = this.linerMesh;
+    if (!mesh) return;
+    const whole = build >= 1;
+    const material = mesh.material as MeshStandardMaterial;
+    material.colorWrite = whole;
+    material.depthWrite = whole;
+    if (this.linerBuild !== build) {
+      this.linerBuild = build;
+      this.writeLiner(build);
+    }
+  }
+
+  /** The liner's matrices: rewritten while the mask assembles, then left alone. */
   private writeLiner(build: number): void {
     const mesh = this.linerMesh;
     if (!mesh) return;
