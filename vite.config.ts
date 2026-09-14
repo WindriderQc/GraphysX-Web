@@ -9,13 +9,20 @@ import { createKidxDocumentRoute } from "./scripts/kidx-document-server.mjs";
 import { createKidxTeamRoute } from "./scripts/kidx-team-server.mjs";
 // @ts-expect-error -- local server composition, never part of the browser bundle
 import { createLlmXRoute } from "./scripts/llmx-server.mjs";
+// @ts-expect-error -- local agent relay (Codex / Claude Code MCP), never part of the browser bundle
+import { createGraphysXAgentRoute } from "./scripts/graphysx-agent-relay.mjs";
 
 function kidxDocuments(): Plugin {
   return { name: "kidx-local-instructions", apply: "serve", async configureServer(server) {
     const route = await createKidxDocumentRoute();
     const teams = createKidxTeamRoute();
     const llmx = createLlmXRoute();
-    server.middlewares.use((req, res, next) => { if (!llmx(req, res) && !teams(req, res) && !route(req, res)) next(); });
+    // The same relay the built preview mounts (scripts/serve-llmx.mjs), so a `?agentBridge=1` tab on the
+    // dev server is reachable by the graphysx MCP too (GRAPHYSX_URL=http://127.0.0.1:<dev port>/).
+    // The relay itself refuses anything but loopback, same-origin requests.
+    const agents = createGraphysXAgentRoute();
+    server.httpServer?.once("close", () => agents.dispose());
+    server.middlewares.use((req, res, next) => { if (!agents(req, res) && !llmx(req, res) && !teams(req, res) && !route(req, res)) next(); });
   } };
 }
 

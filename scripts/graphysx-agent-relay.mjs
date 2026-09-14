@@ -45,6 +45,9 @@ export function createGraphysXAgentRoute({ callTimeoutMs = 20_000, pollTimeoutMs
     const pending = [...world.pending.values()].find(entry => !entry.dispatched);
     if (!pending) return;
     const poll = world.poll; world.poll = null; clearTimeout(poll.timer);
+    // A poll whose socket already went away cannot carry the request; leave it undispatched for the next poll
+    // instead of reporting a falsely "uncertain" edit to the agent.
+    if (poll.response.destroyed || poll.response.writableEnded) return;
     pending.dispatched = true;
     send(poll.response, 200, { request: pending.request });
   }

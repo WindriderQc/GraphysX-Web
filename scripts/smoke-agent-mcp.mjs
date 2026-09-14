@@ -13,10 +13,20 @@ const a = startGraphysXMcpClient(server.url), b = startGraphysXMcpClient(server.
 const artifacts = process.env.SMOKE_ARTIFACTS || 'output/playwright/agent-mcp';
 mkdirSync(artifacts, { recursive: true });
 const errors = [];
+const recoveryHttpErrors = [];
+let resettingRelay = false;
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
 applySmokeTimeout(page);
 page.on('pageerror', error => errors.push(String(error)));
-page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+page.on('console', message => {
+  if (message.type() !== 'error') return;
+  const error = { text: message.text(), location: message.location() };
+  // Clearing the relay intentionally makes the old poll return 404 or 410. Only this
+  // exact endpoint and fault-injection window may emit that browser network diagnostic.
+  if (resettingRelay && error.location.url === new URL('/graphysx-agent/poll', server.url).href
+    && /^Failed to load resource: the server responded with a status of (404|410) /.test(error.text)) recoveryHttpErrors.push(error);
+  else errors.push(error);
+});
 const jsonCall = async (client, name, args) => {
   const result = await client.call(name, args); assert.ok(!result.isError, JSON.stringify(result));
   return JSON.parse(result.content[0].text);
@@ -55,7 +65,25 @@ try {
   await jsonCall(b, 'edit', { worldId, expectedRevision: state.revision, method: 'load', args: ['MCP shared scene'] });
   state = await jsonCall(a, 'observe', { worldId });
   assert.equal(state.world.id, 'mcp-shared'); assert.equal(state.entityCount, 3);
-  await jsonCall(a, 'camera', { worldId, expectedRevision: state.revision, position: [3, 2.5, 5], target: [0, 0.6, 0] });
+  const revision = state.revision;
+  resettingRelay = true;
+  route.dispose();
+  worldId = await connected(worldId);
+  state = await jsonCall(a, 'observe', { worldId });
+  assert.equal(state.world.id, 'mcp-shared'); assert.equal(state.revision, revision);
+  resettingRelay = false;
+  assert.ok(recoveryHttpErrors.length <= 1, 'one forgotten poll can report the deliberately reset connection');
+  // Exercise the browser's real attachment listeners with history-cache lifecycle events.
+  // This tests restore wiring without claiming that this headless run entered the browser's cache.
+  for (let restore = 0; restore < 2; restore++) {
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+    await page.waitForFunction(async () => !(await (await fetch('/graphysx-agent/worlds')).json()).worlds.length);
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+    worldId = await connected(worldId);
+    state = await jsonCall(a, 'observe', { worldId });
+    assert.equal(state.world.id, 'mcp-shared'); assert.equal(state.revision, revision);
+  }
+  await jsonCall(a, 'camera', { worldId, position: [3, 2.5, 5], target: [0, 0.6, 0] });
   const capture = await a.call('capture', { worldId }); assert.ok(!capture.isError, JSON.stringify(capture));
   const png = Buffer.from(capture.content[0].data, 'base64');
   assert.ok(png.length > 2000, 'capture contains actual rendered pixels');
@@ -63,7 +91,7 @@ try {
   writeFileSync(path.join(artifacts, 'state.json'), JSON.stringify(state, null, 2));
   await page.screenshot({ path: path.join(artifacts, 'browser.png') });
   assert.deepEqual(errors, []);
-  console.log('GraphysX MCP: two clients, native edits, stale rejection, persistence, camera and rendered capture passed.');
+  console.log('GraphysX MCP: two clients, native edits, stale rejection, persistence, relay reconnect, page lifecycle, camera and rendered capture passed.');
 } finally {
   a.close(); b.close(); await browser.close(); route.dispose(); await server.close();
 }
