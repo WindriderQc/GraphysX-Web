@@ -1,3 +1,4 @@
+import { connectLocalGraphysXAgent } from './graphysx-agent-connection';
 import {
   ARCHIVE_BUILDINGS,
   archiveBuildingBrowseRows,
@@ -906,6 +907,7 @@ if (mode === "previews" && import.meta.env.DEV) {
             if (returnToCup) openGamesShelf(true);
           },
     });
+    connectLocalGraphysXAgent(host);
     let welcomeSyncQueued = false;
     host.world.subscribeEvents(() => {
       if (welcomeSyncQueued) return;

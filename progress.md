@@ -2,6 +2,13 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-09-13 — Shared GraphysX capabilities for Codex and Claude Code
+
+- Installed one local MCP server and one shared GraphysX skill for both clients, available across projects. Eight compact tools reuse the existing browser World API, revision checks, renderer and native persistence; full API docs are an on-demand MCP resource. The browser explicitly connects with agentBridge=1. No AgentX backend changes or model calls.
+- Verified standard MCP connections, two clients sharing the real Family Forge, a separate scene authored in two steps, stale rejection, save/reload, camera and inspected actual PNG capture. Claude Code reports Connected; Codex configuration is enabled. On-demand preview startup passed on a temporary port and its process was cleaned up.
+- 521 Node tests pass, one existing skip; build/typecheck passed. The agent-mcp browser smoke is registered and queued with llmx, standalone and the two earlier creation checks behind Claude's uninterrupted gate. Queue session19766 replaces only our old idle watcher46010; outputs move to output/graphysx-agent-browser-verify.log and output/graphysx-agent-skill.log. This verification is still pending.
+- Current user-facing preview4207 was restarted with its existing Household route preserved. Registrations and skill junctions point at this integration checkout, which must be retained until repointed after merge. See docs/GRAPHYSX_MCP.md for receipts and scope.
+
 ## 2026-09-13 — Face portrait while exploring the world
 
 - Added a second camera in the existing renderer/frame loop: the same animated face stays in the top-right corner during creation, maths and manual orbit/zoom. Clicking it restores the main face view. No new session, audio path, dependency or backend change.

@@ -69,6 +69,8 @@ Responses use `graphysx.agent-tool-response/v1`. World changes are published as 
 
 ### External process / LLM tool host
 
+Codex and Claude Code can now use the same native API through the local MCP adapter, attached to an actual visible tab rather than an extra headless world. See [GraphysX MCP](docs/GRAPHYSX_MCP.md) for setup, tool discovery, revision guards and visual capture. The JSON Lines adapter below remains available for existing callers.
+
 `tools/graphysx-agent-stdio.mjs` is the small out-of-browser adapter. It launches one Playwright-hosted GraphysX page and forwards the same structured bridge requests over JSON Lines. `--stdio` keeps one agent-owned world session alive across many calls; there is no second scene model or server protocol.
 
 ```bash

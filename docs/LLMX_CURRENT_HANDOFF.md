@@ -139,6 +139,8 @@ At this handoff, the two updated automated creation browser journeys and the unc
 
 ## Face picture-in-picture while exploring
 
+Queue update: the later GraphysX MCP integration replaces only Codex's idle waiting process with session19766. It waits for the same uninterrupted Claude PID10036, then runs llmx, standalone, both creation checks and agent-mcp, followed by the unchanged skill client. Current logs are output/graphysx-agent-browser-verify.log and output/graphysx-agent-skill.log. The older queue/log references below are historical. See docs/GRAPHYSX_MCP.md for the shared tools and installed client registrations.
+
 The compiled preview on4207 now shows the existing animated face through a second camera in the upper-right corner while the main camera frames creations, maths or manual orbit/zoom. Clicking the portrait returns to the face and hides the inset. Entry/replay/load starts without it; environment dialogs temporarily hide it. The inset follows the current native rig after undo/load and directs its gaze toward the portrait camera. There is still one conversation, audio path, animated face, WebGL canvas and frame loop, with no new dependency or backend change.
 
 PlatformHost exposes a disposable after-render subscription. The portrait renders a scissored pass after the main view's compositor, restores renderer target/viewport/scissor/clear/shadow state even after failure, and reuses the main shadow budget. It uses the existing scene lighting; it does not duplicate the full-screen bloom pipeline. Mobile maths framing leaves the counted cubes to the left of the portrait, including at320px. The transcript remains clear of the portrait.
