@@ -49,6 +49,8 @@ export function loadLlmXAudio(): Promise<LlmXAudioRuntime> {
           if (error) { script.remove(); reject(error); } else resolve();
         };
         const timer = setTimeout(() => finish(new Error('Le transport vocal ne répond pas.')), 15000);
+        // Request CORS explicitly: AgentX's CORP policy rejects cross-origin no-cors scripts.
+        script.crossOrigin = 'anonymous';
         script.src = llmxUrl('/llmx-api/assets/' + name);
         script.onload = () => finish();
         script.onerror = () => finish(new Error('Le transport vocal est indisponible.'));
