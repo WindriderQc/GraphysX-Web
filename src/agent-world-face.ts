@@ -12,7 +12,9 @@ import {
 } from "three";
 
 import faceAsset from "./llmx-face-forge.json";
+import { applyForgeFinish } from "./llmx-face-finish";
 import {
+  buildScale,
   type FaceAsset,
   type FaceDrivers,
   type FaceWeights,
@@ -101,7 +103,7 @@ const REGION_SHADE: Record<string, number> = {
 };
 
 /** Cube edge as a multiple of the grid step. See the note where it is used. */
-const CUBE_OVERLAP = 1.022;
+const CUBE_OVERLAP = 1.05;
 
 /**
  * Maximum forge jitter, in radians. Small on purpose: this is the difference between "stacked
@@ -130,6 +132,25 @@ const RESPONSE = {
   build: 0.05,
 };
 
+/** Life at rest: amplitudes are in gaze units (-1..1) and radians; all deliberately small. */
+const IDLE = {
+  /** Largest saccade, as a fraction of the gaze range. Fixations wander, they do not dart. */
+  saccade: 0.16,
+  fixationMin: 1.1,
+  fixationSpread: 2.6,
+  /** Slow drift under the fixations. */
+  drift: 0.02,
+  /** Peak yaw/pitch of the head's own sway, radians. About a degree. */
+  headSway: 0.014,
+  /** How much of the gaze angle the head takes over — the eyes lead. */
+  headFollowsGaze: 0.18,
+  /** A nod with each breath, radians. */
+  breathNod: 0.004,
+  doubleBlinkChance: 0.2,
+};
+
+const clamp = (value: number, min: number, max: number): number => (value < min ? min : value > max ? max : value);
+
 /** Frame-rate independent exponential approach. `tau` is the time to close ~63% of the gap. */
 const approach = (current: number, target: number, tau: number, dt: number): number =>
   current + (target - current) * (1 - Math.exp(-dt / Math.max(tau, 1e-4)));
@@ -148,6 +169,11 @@ export class AgentWorldVoxelFace {
   private ballCubes: Uint32Array = new Uint32Array(0);
   private irisCubes: Uint32Array = new Uint32Array(0);
   private lidCubes: Uint32Array = new Uint32Array(0);
+  private lowerLidCubes: Uint32Array = new Uint32Array(0);
+  private pupilCubes: Set<number> = new Set();
+  /** The liner's cubes and their shrunk rest positions, so it can assemble with the shell. */
+  private linerCubes: Uint32Array = new Uint32Array(0);
+  private linerRest: Float32Array = new Float32Array(0);
   private mawCubes: Uint32Array = new Uint32Array(0);
 
   private animatedMesh: InstancedMesh | null = null;
@@ -155,6 +181,8 @@ export class AgentWorldVoxelFace {
   private eyeMesh: InstancedMesh | null = null;
   private ballMesh: InstancedMesh | null = null;
   private mawMesh: InstancedMesh | null = null;
+  /** A static, darker copy of the shell a few cubes inside it. See {@link buildLiner}. */
+  private linerMesh: InstancedMesh | null = null;
 
   /** Pose scratch, sized once. `poseInto` writes here; the meshes read from it. */
   private position = new Float32Array(0);
@@ -168,6 +196,20 @@ export class AgentWorldVoxelFace {
   private blinkTimer = 1.8;
   private blinkPhase = 0;
   private autoBlinkValue = 0;
+  /** A second blink right after the first, occasionally — one blink in five reads as mechanical. */
+  private doubleBlinkPending = false;
+  /**
+   * Life at rest. A face that only moves when driven reads as an object; eyes make small
+   * involuntary jumps between fixations, and a head is never perfectly still. These are the
+   * rig's own, added on top of whatever the host drives, and they shrink while the face is
+   * busy speaking or thinking so they never fight an expression.
+   */
+  private idleClock = 0;
+  private saccadeTimer = 1.4;
+  private saccadeX = 0;
+  private saccadeY = 0;
+  private idleGazeX = 0;
+  private idleGazeY = 0;
 
   // Reused across every cube of every frame. The update loop allocates nothing.
   private readonly matrix = new Matrix4();
@@ -273,16 +315,23 @@ export class AgentWorldVoxelFace {
       dt,
     );
     current.speakTone = approach(current.speakTone, target.speakTone, RESPONSE.speakTone, dt);
-    current.gazeX = approach(current.gazeX, target.gazeX, RESPONSE.gaze, dt);
-    current.gazeY = approach(current.gazeY, target.gazeY, RESPONSE.gaze, dt);
+    this.advanceIdle(dt);
+    current.gazeX = approach(current.gazeX, clamp(target.gazeX + this.idleGazeX, -1, 1), RESPONSE.gaze, dt);
+    current.gazeY = approach(current.gazeY, clamp(target.gazeY + this.idleGazeY, -1, 1), RESPONSE.gaze, dt);
     current.attention = approach(current.attention, target.attention, RESPONSE.attention, dt);
     current.think = approach(current.think, target.think, RESPONSE.think, dt);
     current.warmth = approach(current.warmth, target.warmth, RESPONSE.warmth, dt);
     current.breath += dt * 0.9;
 
     // A head that listens leans. Applied to the rig's own group, so the host's anchor is
-    // untouched: this is the mask's posture, not its placement.
-    this.object.rotation.z = POSE_LIMITS.attentionTilt * current.attention;
+    // untouched: this is the mask's posture, not its placement. The yaw and pitch underneath
+    // are the idle sway plus a fraction of the gaze — eyes lead, the head follows a little.
+    const t = this.idleClock;
+    const busy = Math.max(current.speak, current.think * 0.6);
+    const sway = IDLE.headSway * (1 - 0.5 * busy);
+    this.object.rotation.z = POSE_LIMITS.attentionTilt * current.attention + sway * 0.35 * Math.sin(t * 0.37 + 1.3);
+    this.object.rotation.y = IDLE.headFollowsGaze * current.gazeX * POSE_LIMITS.gazeRadians + sway * (Math.sin(t * 0.23) * 0.6 + Math.sin(t * 0.71 + 0.8) * 0.4);
+    this.object.rotation.x = -IDLE.headFollowsGaze * current.gazeY * POSE_LIMITS.gazeRadians * 0.6 + sway * 0.5 * Math.sin(t * 0.29 + 2.1) + IDLE.breathNod * Math.sin(current.breath);
 
     this.advanceBlink(dt);
     current.blink = approach(current.blink, Math.max(this.autoBlinkValue, target.blink), RESPONSE.blink, dt);
@@ -291,6 +340,10 @@ export class AgentWorldVoxelFace {
     // Once it is whole, only the animated slice needs rewriting and the static mesh is left
     // exactly as it was written.
     const assembling = current.build < 1 || this.staticDirty;
+    // Nothing inside the mask until the mask is whole: the liner appears only once the shell has
+    // closed over it, so the entry shows cubes arriving on nothing, not on a ghost of the face
+    // (owner: "l'inside peut apparaître après le visage construit au lieu d'avant").
+    if (this.linerMesh) this.linerMesh.visible = current.build >= 1;
     const limit = assembling ? this.weights.count : this.weights.animatedCount;
     poseInto(this.weights, current, this.position, this.scale, limit);
 
@@ -326,7 +379,7 @@ export class AgentWorldVoxelFace {
   }
 
   dispose(): void {
-    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh, this.ballMesh, this.mawMesh]) {
+    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh, this.ballMesh, this.mawMesh, this.linerMesh]) {
       if (!mesh) continue;
       this.object.remove(mesh);
       mesh.geometry.dispose();
@@ -335,6 +388,7 @@ export class AgentWorldVoxelFace {
     }
     this.animatedMesh = null;
     this.staticMesh = null;
+    this.linerMesh = null;
     this.eyeMesh = null;
     this.ballMesh = null;
     this.mawMesh = null;
@@ -382,6 +436,8 @@ export class AgentWorldVoxelFace {
     const ballCubes: number[] = [];
     const irisCubes: number[] = [];
     const lidCubes: number[] = [];
+    const lowerLidCubes: number[] = [];
+    const pupilCubes = new Set<number>();
     const mawCubes: number[] = [];
     for (let i = 0; i < count; i += 1) {
       const name = regionNames[weights.region[i]];
@@ -390,6 +446,7 @@ export class AgentWorldVoxelFace {
         continue;
       }
       if (name === "eye" || name === "pupil") {
+        if (name === "pupil") pupilCubes.add(i);
         ballCubes.push(i);
         continue;
       }
@@ -398,6 +455,7 @@ export class AgentWorldVoxelFace {
         continue;
       }
       if (name === "lid") lidCubes.push(i);
+      if (name === "lowerlid") lowerLidCubes.push(i);
       if (i < weights.animatedCount) metalAnimated.push(i);
       else metalStatic.push(i);
     }
@@ -406,6 +464,8 @@ export class AgentWorldVoxelFace {
     this.ballCubes = Uint32Array.from(ballCubes);
     this.irisCubes = Uint32Array.from(irisCubes);
     this.lidCubes = Uint32Array.from(lidCubes);
+    this.lowerLidCubes = Uint32Array.from(lowerLidCubes);
+    this.pupilCubes = pupilCubes;
     this.mawCubes = Uint32Array.from(mawCubes);
 
     // Cubes are drawn slightly larger than the grid step so neighbours interpenetrate. At
@@ -423,6 +483,7 @@ export class AgentWorldVoxelFace {
     // open mouth — the very artefact this cavity was added to remove. A hole has to be matte.
     this.mawMesh = this.createMaw("VoxelFaceMaw", edge, this.mawCubes.length);
     this.eyeMesh = this.createMesh("VoxelFaceIris", edge, this.irisCubes.length, true);
+    this.linerMesh = this.buildLiner("VoxelFaceLiner", edge);
 
     this.writeColors();
     this.staticDirty = true;
@@ -445,6 +506,7 @@ export class AgentWorldVoxelFace {
           // the copper and the specular while letting the volumes carry the light.
           { roughness: 0.54, metalness: 0.5 },
     );
+    if (!emissive) applyForgeFinish(material);
     const mesh = new InstancedMesh(new BoxGeometry(edge, edge, edge), material, Math.max(count, 1));
     mesh.name = name;
     mesh.count = count;
@@ -465,6 +527,81 @@ export class AgentWorldVoxelFace {
     );
     this.object.add(mesh);
     return mesh;
+  }
+
+  /**
+   * The liner: the metal shell copied once, shrunk toward the mask's centre, never animated.
+   *
+   * The mask is one cube thick, so any seam an expression opens — or a sampling gap the sculpt
+   * left at a coarser level — showed the black inside of the head (owner review, 2026-09-13:
+   * "on peut juste ajouter une couche derrière qui ne bouge pas et qui bloquera le trou au
+   * pire"). Rather than proving every future pose seam-free, put a second, darker surface a
+   * few cubes behind the first: a gap now shows the same grey metal, which is what a crease in
+   * a solid mask looks like. One draw call, matrices written once per build, no shadow cast.
+   */
+  private buildLiner(name: string, edge: number): InstancedMesh {
+    const { weights } = this;
+    const cubes: number[] = [];
+    const regionNames = asset.regions;
+    const { mouth } = weights.anchors;
+    for (let i = 0; i < weights.count; i += 1) {
+      const region = regionNames[weights.region[i]];
+      if (region === "iris" || region === "eye" || region === "pupil" || region === "maw" || region === "throat") continue;
+      // Nothing behind the mouth: shrunk toward the centre, the lips and chin would land inside
+      // the tunnel and plug the open mouth with grey (owner review, 2026-09-13).
+      const sx = weights.rest[i * 3] * 0.9;
+      const sy = weights.rest[i * 3 + 1] * 0.9;
+      const sz = weights.rest[i * 3 + 2] * 0.9;
+      if (Math.abs(sx) < mouth.halfWidth + 0.14 && Math.abs(sy - mouth.y) < 0.2 && sz > 0.05) continue;
+      cubes.push(i);
+    }
+    const mesh = new InstancedMesh(
+      new BoxGeometry(edge * 1.15, edge * 1.15, edge * 1.15),
+      // The shell's own grey and finish (owner: a darker liner "fait louche"): a crease then reads
+      // as more of the same metal, not as a different material showing through.
+      new MeshStandardMaterial({ color: this.config.metalColor, roughness: 0.54, metalness: 0.5 }),
+      Math.max(cubes.length, 1),
+    );
+    mesh.name = name;
+    mesh.count = cubes.length;
+    mesh.castShadow = false;
+    mesh.userData.graphysxFaceCastShadow = false;
+    mesh.receiveShadow = false;
+    mesh.frustumCulled = false;
+    // Shrunk about the mask's origin: about three cubes inside the shell at the high level, and
+    // proportionally at the coarser ones. Deep enough that the rows above a dropped brow still
+    // cover it; shallow enough that the eyes' sockets stay hollow.
+    const shrink = 0.9;
+    this.linerCubes = Uint32Array.from(cubes);
+    this.linerRest = new Float32Array(cubes.length * 3);
+    for (let k = 0; k < cubes.length; k += 1) {
+      const i = cubes[k];
+      this.linerRest[k * 3] = weights.rest[i * 3] * shrink;
+      this.linerRest[k * 3 + 1] = weights.rest[i * 3 + 1] * shrink;
+      this.linerRest[k * 3 + 2] = weights.rest[i * 3 + 2] * shrink;
+    }
+    this.object.add(mesh);
+    this.linerMesh = mesh;
+    this.writeLiner(1);
+    mesh.visible = this.current.build >= 1;
+    return mesh;
+  }
+
+  /** The liner's matrices, written once. Its visibility is gated on assembly in update(). */
+  private writeLiner(build: number): void {
+    const mesh = this.linerMesh;
+    if (!mesh) return;
+    const { rise } = this.weights;
+    for (let k = 0; k < this.linerCubes.length; k += 1) {
+      const i = this.linerCubes[k];
+      const s = buildScale(rise[i], build, i);
+      this.vector.set(this.linerRest[k * 3], this.linerRest[k * 3 + 1], this.linerRest[k * 3 + 2]);
+      this.quaternion.identity();
+      this.scaleVector.set(s, s, s);
+      this.matrix.compose(this.vector, this.quaternion, this.scaleVector);
+      mesh.setMatrixAt(k, this.matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
   }
 
   private createMaw(name: string, edge: number, count: number): InstancedMesh {
@@ -499,8 +636,10 @@ export class AgentWorldVoxelFace {
         this.color.set(tint ? this.config[tint] : base);
         const shade = REGION_SHADE[name];
         if (shade !== undefined) this.color.multiplyScalar(shade);
-        // A touch of per-cube variation, so a large flat plane of metal is not one flat colour.
+        // A touch of per-cube variation, so a large flat plane of metal is not one flat colour:
+        // brightness, and a hint of patina — some cubes a shade warmer, some cooler.
         this.color.multiplyScalar(0.93 + hash01(i + 977) * 0.14);
+        if (name !== "eye" && name !== "pupil") this.color.offsetHSL((hash01(i + 1409) - 0.5) * 0.05, (hash01(i + 2003) - 0.5) * 0.08, 0);
         mesh.setColorAt(j, this.color);
       }
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -511,6 +650,27 @@ export class AgentWorldVoxelFace {
   }
 
   /** Advance the blink scheduler. Intervals are irregular; a metronome blink reads as a machine. */
+  /**
+   * Saccades and drift. Every second or three the eyes jump to a new small fixation and hold
+   * it; between jumps they drift very slowly. Deterministic in the breath clock, so the same
+   * face at the same moment looks the same on every machine.
+   */
+  private advanceIdle(dt: number): void {
+    this.idleClock += dt;
+    const busy = Math.max(this.current.speak, this.current.think * 0.6, this.target.build < 1 ? 1 : 0);
+    const amplitude = IDLE.saccade * (1 - 0.7 * busy);
+    this.saccadeTimer -= dt;
+    if (this.saccadeTimer <= 0) {
+      const seed = Math.floor(this.idleClock * 53);
+      this.saccadeX = (hash01(seed) - 0.5) * 2 * amplitude;
+      this.saccadeY = (hash01(seed + 1) - 0.5) * 2 * amplitude * 0.55;
+      this.saccadeTimer = IDLE.fixationMin + hash01(seed + 2) * IDLE.fixationSpread;
+    }
+    // Snap to the fixation (eyes jump, they do not glide), then a slow drift on top.
+    this.idleGazeX = approach(this.idleGazeX, this.saccadeX, 0.035, dt) + IDLE.drift * Math.sin(this.idleClock * 0.31);
+    this.idleGazeY = approach(this.idleGazeY, this.saccadeY, 0.035, dt) + IDLE.drift * 0.6 * Math.sin(this.idleClock * 0.19 + 0.7);
+  }
+
   private advanceBlink(dt: number): void {
     if (!this.config.autoBlink) {
       this.autoBlinkValue = 0;
@@ -520,7 +680,18 @@ export class AgentWorldVoxelFace {
       this.blinkPhase = Math.max(0, this.blinkPhase - dt / 0.13);
       // Down and back up over one blink, rather than a step.
       this.autoBlinkValue = Math.sin(this.blinkPhase * Math.PI);
-      if (this.blinkPhase === 0) this.blinkTimer = 2.2 + hash01(Math.floor(this.current.breath * 97)) * 4.5;
+      if (this.blinkPhase === 0) {
+        const roll = hash01(Math.floor(this.current.breath * 97));
+        if (this.doubleBlinkPending) {
+          this.doubleBlinkPending = false;
+          this.blinkTimer = 2.2 + roll * 4.5;
+        } else if (roll < IDLE.doubleBlinkChance) {
+          this.doubleBlinkPending = true;
+          this.blinkTimer = 0.22;
+        } else {
+          this.blinkTimer = 2.2 + roll * 4.5;
+        }
+      }
       return;
     }
     this.autoBlinkValue = 0;
@@ -554,9 +725,10 @@ export class AgentWorldVoxelFace {
       (mesh.material as MeshStandardMaterial).emissiveIntensity = eye.glow;
       this.writeRotatedAbout(mesh, this.irisCubes, eye.pivot, eye.yaw, eye.pitch, null);
     }
-    this.writeRotatedAbout(this.ballMesh, this.ballCubes, eye.pivot, eye.yaw, eye.pitch, null);
+    this.writeRotatedAbout(this.ballMesh, this.ballCubes, eye.pivot, eye.yaw, eye.pitch, null, eye.pupilScale);
     // Lids live in the metal mesh, so they are re-posed on top of what writeMesh just wrote.
     this.writeRotatedAbout(this.animatedMesh, this.lidCubes, eye.pivot, 0, eye.lidRadians, this.metalAnimated);
+    this.writeRotatedAbout(this.animatedMesh, this.lowerLidCubes, eye.pivot, 0, eye.lowerLidRadians, this.metalAnimated);
   }
 
   private writeRotatedAbout(
@@ -566,6 +738,7 @@ export class AgentWorldVoxelFace {
     yaw: number,
     pitch: number,
     slotLookup: Uint32Array | null,
+    pupilScale = 1,
   ): void {
     if (!mesh || cubes.length === 0) return;
     for (let k = 0; k < cubes.length; k += 1) {
@@ -589,7 +762,7 @@ export class AgentWorldVoxelFace {
       this.spin.set(this.jitter[i * 4], this.jitter[i * 4 + 1], this.jitter[i * 4 + 2], this.jitter[i * 4 + 3]);
       this.quaternion.multiply(this.spin);
 
-      const s = this.scale[i];
+      const s = this.scale[i] * (pupilScale !== 1 && this.pupilCubes.has(i) ? pupilScale : 1);
       this.scaleVector.set(s, s, s);
       this.matrix.compose(this.vector, this.quaternion, this.scaleVector);
       mesh.setMatrixAt(slotLookup ? indexOfSlot(slotLookup, i) : k, this.matrix);
@@ -598,7 +771,7 @@ export class AgentWorldVoxelFace {
   }
 
   private disposeMeshes(): void {
-    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh, this.ballMesh, this.mawMesh]) {
+    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh, this.ballMesh, this.mawMesh, this.linerMesh]) {
       if (!mesh) continue;
       this.object.remove(mesh);
       mesh.geometry.dispose();
@@ -607,6 +780,7 @@ export class AgentWorldVoxelFace {
     }
     this.animatedMesh = null;
     this.staticMesh = null;
+    this.linerMesh = null;
     this.eyeMesh = null;
     this.ballMesh = null;
     this.mawMesh = null;

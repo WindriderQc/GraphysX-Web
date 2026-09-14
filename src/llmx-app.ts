@@ -12,6 +12,7 @@ import { mountForgePresentation } from "./llmx-forge-presentation";
 import { mountLlmXConversation } from "./llmx-conversation";
 import { llmxFacePresentation } from "./llmx-presentation";
 import { createLlmXFaceInset } from "./llmx-face-inset";
+import { createPointerFocus, gazeDriversToward } from "./llmx-gaze";
 import type { PlatformHost } from "./platform-host";
 import { motionIsReduced } from "./platform-theme";
 import { llmxWorldContext } from "./llmx-world-context";
@@ -70,6 +71,8 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   let worldFocused = false;
   let thinking = false;
   const localGaze = new Vector3();
+  // A moving pointer leads the gaze and, over the mask, its attention; the camera otherwise.
+  const pointerFocus = createPointerFocus(host.renderer.domElement);
 
   const surface = document.createElement("section");
   surface.className = "gx-llmx";
@@ -213,11 +216,17 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     }
     presentation.setIntro(intro);
     faceInset.update(state.phase === 'ready' && worldFocused && !dialog.open);
-    object.worldToLocal(localGaze.copy(faceInset.visible ? faceInset.camera.position : host.camera.position));
+    // While the inset shows the face, its own camera is the visitor; otherwise a moving pointer
+    // leads the gaze and the main camera is the fallback.
+    const live = faceInset.visible ? null : pointerFocus.resolve(host.camera, forge.anchors.faceCenter, 1.2);
+    if (live) localGaze.set(live.point[0], live.point[1], live.point[2]);
+    else localGaze.copy(faceInset.visible ? faceInset.camera.position : host.camera.position);
+    object.worldToLocal(localGaze);
     const drivers = {
-      ...presence, blink: 1 - intro.wake, attention: presence.attention * intro.wake,
-      gazeX: Math.atan2(localGaze.x, localGaze.z) / POSE_LIMITS.gazeRadians,
-      gazeY: Math.atan2(localGaze.y - 0.1, Math.hypot(localGaze.x, localGaze.z)) / POSE_LIMITS.gazeRadians,
+      ...presence, blink: 1 - intro.wake,
+      attention: Math.max(presence.attention, live?.overFace ? 0.7 : 0) * intro.wake,
+      warmth: Math.max(presence.warmth, live?.overFace ? 0.5 : 0),
+      ...gazeDriversToward(localGaze, 0.1, POSE_LIMITS.gazeRadians),
     };
     if (state.phase === "ready" && previousPhase === "entering") face.snapDrivers(drivers);
     else face.setDrivers(drivers);
@@ -510,6 +519,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
       window.removeEventListener('pointerup', endOrbit);
       window.removeEventListener('pointercancel', endOrbit);
       host.renderer.domElement.removeEventListener('wheel', zoomWorld);
+      pointerFocus.dispose();
       presentation.dispose();
       surface.remove();
       // Runtime owns the face and releases it on the next load/dispose.
