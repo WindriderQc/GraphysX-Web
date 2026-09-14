@@ -6,7 +6,8 @@ import { launchSmokeBrowser, applySmokeTimeout } from './smoke-harness.mjs';
 
 const artifacts = process.env.SMOKE_ARTIFACTS || 'output/playwright/llmx-world';
 mkdirSync(artifacts, { recursive: true });
-const server = await startStaticServer({ root: path.resolve('dist'), port: 0 });
+const server = process.env.SMOKE_BASE ? null : await startStaticServer({ root: path.resolve('dist'), port: 0 });
+const base = process.env.SMOKE_BASE || server.url;
 const nativeGpu = process.env.LLMX_NATIVE_GPU === '1';
 const browser = await launchSmokeBrowser(nativeGpu ? { args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] } : {});
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
@@ -47,7 +48,7 @@ try {
     assert.ok(renderer && !/swiftshader|software/i.test(renderer), 'hardware acceptance must not silently fall back to CPU rendering');
     console.log('Native GPU: ' + renderer);
   }
-  await page.goto(server.url + '?app=llmx');
+  await page.goto(base + '?app=llmx');
   await page.locator('[data-text]:not([disabled])').waitFor();
   const initial = await document();
   const floor = initial.entities.find(entity => entity.type === 'box');
@@ -98,4 +99,4 @@ try {
   writeFileSync(path.join(artifacts, 'failure.json'), JSON.stringify({ error: String(error), turns, receipts, errors }, null, 2));
   await page.screenshot({ path: path.join(artifacts, 'failure.png') }).catch(() => {});
   throw error;
-} finally { await browser.close(); await server.close(); }
+} finally { await browser.close(); await server?.close(); }
