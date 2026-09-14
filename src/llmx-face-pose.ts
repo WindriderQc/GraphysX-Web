@@ -211,6 +211,11 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
   const mawIndex = regions.indexOf("maw");
   const throatIndex = regions.indexOf("throat");
   const cheekIndex = regions.indexOf("cheek");
+  const craniumIndex = regions.indexOf("cranium");
+  const socketIndex = regions.indexOf("socket");
+  const lidIndex = regions.indexOf("lid");
+  const noseIndex = regions.indexOf("nose");
+  const plateIndex = regions.indexOf("plate");
 
   let minX = Infinity;
   let minY = Infinity;
@@ -280,10 +285,20 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
     // cubes a frown gathers and a raised brow lifts: the expressions were authored at full
     // amplitude and delivered at half.
     const browFall = Math.hypot(
-      (y - anchors.brow.y) / 0.2,
+      (y - anchors.brow.y) / (y < anchors.brow.y ? 0.22 : 0.32),
       Math.max(0, Math.abs(x) - anchors.brow.x - 0.12) / 0.2,
     );
-    brow[i] = region[i] === browIndex ? clamp01(1 - browFall * 0.85) : 0;
+    // A smooth field across material boundaries, like the lips, not a region flag: keyed to
+    // `region === brow` the arch moved as a plate and a lift or a frown opened a row of holes
+    // into the skull above it (owner review, 2026-09-13, "on voit dedans la tête"). The cranium
+    // above and the lid below now follow with a falloff — shorter downward so the eye barely
+    // moves — and poseInto grows the cubes of the transition band to close the seam.
+    const browRegion = region[i];
+    const browFollows = browRegion === browIndex || browRegion === craniumIndex || browRegion === socketIndex
+      || browRegion === lidIndex || browRegion === noseIndex || browRegion === cheekIndex || browRegion === plateIndex;
+    // An S-curve, not a line: flat at the brow line and at the far edge, steepest in the middle
+    // of the band — exactly where the parabolic stretch below is strongest.
+    brow[i] = browFollows ? 1 - smoothstep(0, 1, browFall * 0.85) : 0;
 
     const cheekFall = Math.hypot(
       (Math.abs(x) - anchors.cheek.x) / 0.26,
@@ -411,7 +426,7 @@ export function poseInto(
   limit = weights.count,
 ): number {
   const d = clampDrivers(input);
-  const { anchors, rest, side, jaw, lip, brow, cheek, rise } = weights;
+  const { anchors, rest, jaw, lip, brow, cheek, rise } = weights;
   const count = Math.min(limit, weights.count);
 
   // Eyes and lids are deliberately absent from this loop: both are rigid bodies turning about
@@ -501,10 +516,14 @@ export function poseInto(
       py += browTarget * bw;
       // A slow wave crossing the brow while the engine is busy. Travelling rather than
       // pulsing, so it reads as activity instead of a heartbeat.
-      py += POSE_LIMITS.browThinkWave * d.think * Math.sin(d.breath * 1.7 + side[i] * 1.2 + x * 4.5) * bw;
+      // Phase continuous across the centre line. Keyed on `side` (-1 | +1) it jumped 1.2 rad between
+      // the two cubes either side of x = 0, which read as a black slit between the brows.
+      py += POSE_LIMITS.browThinkWave * d.think * Math.sin(d.breath * 1.7 + x * x * 12) * bw;
       // The frown: the inner ends of the brow drop and draw together. Weighted toward the
       // centre so the outer brow stays put and it reads as gathering, not as the brow sinking.
-      const inner = clamp01(1 - Math.abs(x) / 0.3);
+      // An S-curve, not a V: the V's slope at the centre gave horizontally adjacent cubes drops a
+      // quarter of a cube apart, which opened a slit exactly between the brows.
+      const inner = 1 - smoothstep(0, 0.42, Math.abs(x));
       py -= frown * bw * inner;
       px -= Math.sign(x) * converge * bw * inner;
     }
@@ -523,7 +542,12 @@ export function poseInto(
     outPosition[i * 3 + 2] = pz;
     // Fill both lip parting and the jaw's transition; the rigid chin keeps its normal scale.
     const stretchWeight = Math.max(clamp01(lw * 2.5), 4 * jw * (1 - jw));
-    const stretch = 1 + POSE_LIMITS.stretchFill * mouth * stretchWeight;
+    // The brow band: where its weight falls from 1 toward 0 the rows spread apart, so the cubes
+    // there grow with the expression's amplitude — the same trick that closes the lips' seam.
+    // Uniform across the band, not parabolic: the field falls off linearly, so the rows spread
+    // by the same amount at its edges as at its middle.
+    const browStretch = 4 * bw * (1 - bw) * clamp01(d.attention + d.think + Math.max(0, d.warmth) * 0.3) + 0.5 * bw * d.think;
+    const stretch = 1 + POSE_LIMITS.stretchFill * (mouth * stretchWeight + 1.0 * browStretch);
     outScale[i] = buildScale(rise[i], d.build, i) * stretch;
   }
   return count;

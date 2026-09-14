@@ -155,6 +155,8 @@ export class AgentWorldVoxelFace {
   private eyeMesh: InstancedMesh | null = null;
   private ballMesh: InstancedMesh | null = null;
   private mawMesh: InstancedMesh | null = null;
+  /** A static, darker copy of the shell a few cubes inside it. See {@link buildLiner}. */
+  private linerMesh: InstancedMesh | null = null;
 
   /** Pose scratch, sized once. `poseInto` writes here; the meshes read from it. */
   private position = new Float32Array(0);
@@ -326,7 +328,7 @@ export class AgentWorldVoxelFace {
   }
 
   dispose(): void {
-    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh, this.ballMesh, this.mawMesh]) {
+    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh, this.ballMesh, this.mawMesh, this.linerMesh]) {
       if (!mesh) continue;
       this.object.remove(mesh);
       mesh.geometry.dispose();
@@ -335,6 +337,7 @@ export class AgentWorldVoxelFace {
     }
     this.animatedMesh = null;
     this.staticMesh = null;
+    this.linerMesh = null;
     this.eyeMesh = null;
     this.ballMesh = null;
     this.mawMesh = null;
@@ -423,6 +426,7 @@ export class AgentWorldVoxelFace {
     // open mouth — the very artefact this cavity was added to remove. A hole has to be matte.
     this.mawMesh = this.createMaw("VoxelFaceMaw", edge, this.mawCubes.length);
     this.eyeMesh = this.createMesh("VoxelFaceIris", edge, this.irisCubes.length, true);
+    this.linerMesh = this.buildLiner("VoxelFaceLiner", edge);
 
     this.writeColors();
     this.staticDirty = true;
@@ -463,6 +467,54 @@ export class AgentWorldVoxelFace {
       new Vector3((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2),
       Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]) / 2 + reach,
     );
+    this.object.add(mesh);
+    return mesh;
+  }
+
+  /**
+   * The liner: the metal shell copied once, shrunk toward the mask's centre, never animated.
+   *
+   * The mask is one cube thick, so any seam an expression opens — or a sampling gap the sculpt
+   * left at a coarser level — showed the black inside of the head (owner review, 2026-09-13:
+   * "on peut juste ajouter une couche derrière qui ne bouge pas et qui bloquera le trou au
+   * pire"). Rather than proving every future pose seam-free, put a second, darker surface a
+   * few cubes behind the first: a gap now shows dark metal, which is what a crease looks like.
+   * Matte and unlit-looking on purpose, so it never competes with the outer shell; one draw
+   * call, matrices written once per build.
+   */
+  private buildLiner(name: string, edge: number): InstancedMesh {
+    const { weights } = this;
+    const cubes: number[] = [];
+    const regionNames = asset.regions;
+    for (let i = 0; i < weights.count; i += 1) {
+      const region = regionNames[weights.region[i]];
+      if (region === "iris" || region === "eye" || region === "pupil" || region === "maw" || region === "throat") continue;
+      cubes.push(i);
+    }
+    const mesh = new InstancedMesh(
+      new BoxGeometry(edge * 1.15, edge * 1.15, edge * 1.15),
+      new MeshStandardMaterial({ color: "#14171c", roughness: 0.95, metalness: 0.1 }),
+      Math.max(cubes.length, 1),
+    );
+    mesh.name = name;
+    mesh.count = cubes.length;
+    mesh.castShadow = false;
+    mesh.userData.graphysxFaceCastShadow = false;
+    mesh.receiveShadow = false;
+    mesh.frustumCulled = false;
+    // Shrunk about the mask's origin: about three cubes inside the shell at the high level, and
+    // proportionally at the coarser ones. Deep enough that the rows above a dropped brow still
+    // cover it; shallow enough that the eyes' sockets stay hollow.
+    const shrink = 0.9;
+    for (let k = 0; k < cubes.length; k += 1) {
+      const i = cubes[k];
+      this.vector.set(weights.rest[i * 3] * shrink, weights.rest[i * 3 + 1] * shrink, weights.rest[i * 3 + 2] * shrink);
+      this.quaternion.identity();
+      this.scaleVector.set(1, 1, 1);
+      this.matrix.compose(this.vector, this.quaternion, this.scaleVector);
+      mesh.setMatrixAt(k, this.matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
     this.object.add(mesh);
     return mesh;
   }
@@ -598,7 +650,7 @@ export class AgentWorldVoxelFace {
   }
 
   private disposeMeshes(): void {
-    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh, this.ballMesh, this.mawMesh]) {
+    for (const mesh of [this.animatedMesh, this.staticMesh, this.eyeMesh, this.ballMesh, this.mawMesh, this.linerMesh]) {
       if (!mesh) continue;
       this.object.remove(mesh);
       mesh.geometry.dispose();
@@ -607,6 +659,7 @@ export class AgentWorldVoxelFace {
     }
     this.animatedMesh = null;
     this.staticMesh = null;
+    this.linerMesh = null;
     this.eyeMesh = null;
     this.ballMesh = null;
     this.mawMesh = null;
