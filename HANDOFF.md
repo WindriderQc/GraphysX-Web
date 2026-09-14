@@ -16,12 +16,19 @@ cost real sessions real hours.
 ## Production publication (2026-09-14)
 
 **[LLMx is public](https://graphysx.specialblend.ca/?app=llmx)**, with an entry on the
-home page. The deployed product is `0b906d080c32bd6b6ee563ac374ef5ef6e7e6945`;
-[run34863918465](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34863918465)
-passed all 84 selected journeys, 551 Linux unit tests and the activated-site smoke.
-Public `release.json` and the normal browser confirm the release and home-page entry.
-Verification took 27m53s; the workflow took 34m22s including queueing and deployment.
+home page. The deployed product is `0a13e75af0882220a5716ec02c106eb720c9af31`;
+[run34873742082](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34873742082)
+passed the full 84-journey inventory, 564 Linux unit tests and the activated-site smoke.
+One group needed a bounded retry after the Family journey exceeded its deadline;
+the same code and deadlines passed on that retry. Public `release.json` and the
+normal browser confirm the sculpted face. Deployment took 4m42s; the complete
+workflow took 53m02s including the failed attempt and targeted retry.
 LLMx-only changes now select their own journeys; see [CI_PERFORMANCE.md](docs/CI_PERFORMANCE.md).
+
+This release integrates Claude's liner-only shadow (`e6c1e70`), sculpted face
+lighting (`30bcb5a`) and the MCP reconnection change (`2a4f7be`). Local checks and
+inspected desktop/mobile captures pass. The local 104-entity MCP world also
+reconnected after the preview restart without reloading or losing its scene.
 
 This integrates Claude's voxel face and reactions, native whole-world commands,
 conditional maths, named environments and the existing Household/VoiX conversation.

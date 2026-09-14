@@ -112,12 +112,39 @@ revision `0b906d080c32bd6b6ee563ac374ef5ef6e7e6945`: all twelve runners passed.
 Verification ran from 15:44:02 to 16:11:55 UTC on September 14, **27m53s** including
 planning, runner setup and the aggregate check. The run was created at 15:42:26 UTC;
 initial queueing and subsequent deployment are outside that verification duration.
-This confirms the parallel gain for the full 84-journey inventory. It does not yet
-measure a future LLMx-only release or remove the cost of its browser journeys.
+This confirms the parallel gain for the full 84-journey inventory. It does not
+remove the cost of its browser journeys.
 The complete successful workflow took **34m22s**, including its initial queue;
 the deployment job took **4m49s**, including the activated-site smoke. All 84
 registered journeys passed exactly once, with 551 passing Linux unit tests per
 runner (about six seconds for the unit suite). Collaboration alone took 26m07s.
+
+The following liner-only LLMx release, `2bb0476`, measured the narrower path:
+[run34871091829](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34871091829)
+passed all 15 selected journeys exactly once on five runners, with 551 Linux unit
+passes per runner and no skips. Verification took **12m49s**, deployment **4m27s**,
+and the complete workflow **17m22s**. Family creation (8m19s) and the mathematics
+journey (7m56s) still report deadline-headroom warnings; those passed without
+extending any deadline. The cheaper face render does not remove other journey costs.
+
+The combined sculpted-face/MCP release, `0a13e75`, selected the full inventory in
+[run34873742082](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34873742082).
+Its first attempt passed 83 journeys; Family exceeded its unchanged ten-minute
+deadline while continuing through the UI, without an assertion failure. One bounded
+retry of that group passed on the identical SHA: Family **8m18s**, compared with
+**8m19s** in the preceding release. The other eleven successful groups were retained;
+all eight journeys in the retried group ran again. Across those attempts, all 84
+registered journeys have passing coverage, with **564 Linux unit passes** and zero
+skips. The local Family journey independently passed in **6m12s**, with its mobile
+capture inspected. No assertion, timeout or renderer-quality change was made.
+
+The entire successful workflow took **53m02s**, including the failed attempt and
+targeted retry; deployment and its activated-site smoke took **4m42s**. This is the
+actual delivery cost, not a new faster baseline. The repeated same-code check passed,
+but Family's headroom warning remains a maintenance concern. The one bounded retry
+does not establish a standing retry policy. Receipts are in
+`output/llmx-sculpted-face-ci-{attempt1,family-retry,final}.log` and
+`output/llmx-sculpted-face-ci-coverage.json`.
 
 ## Why this changed
 
