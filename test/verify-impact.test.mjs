@@ -80,8 +80,8 @@ describe("verification by changed area", () => {
     assert.ok(!names(plan).includes("live-sessions-browser"));
   });
 
-  it("reruns both LLMx creation scenarios for their shared helper and only the changed wrapper otherwise", () => {
-    const checks = ["llmx-creation-actions", "llmx-creation-library"];
+  it("reruns every LLMx creation scenario for their shared helper and only the changed wrapper otherwise", () => {
+    const checks = ["llmx-creation-actions", "llmx-creation-math", "llmx-creation-library", "llmx-creation-family"];
     const shared = selectVerification(["scripts/smoke-llmx-creation.mjs"]);
     assert.equal(shared.mode, "targeted");
     assert.equal(shared.deploy, false);
@@ -93,6 +93,15 @@ describe("verification by changed area", () => {
       assert.deepEqual(names(selectVerification(["scripts/smoke-llmx-creation.mjs", `scripts/smoke-${check}.mjs`])), checks);
     }
     assert.deepEqual(resolveVerifyOptions([`--checks=${checks.join(",")}`], {}).smokes, shared.smokes);
+  });
+
+  it("reruns every conversation scenario when its shared controller fixture changes", () => {
+    const checks = ["llmx-conversation-session", "llmx-conversation-turns", "llmx-conversation-replay"];
+    assert.deepEqual(names(selectVerification(["scripts/smoke-llmx-conversation.mjs"])), checks);
+    for (const check of checks) {
+      assert.deepEqual(names(selectVerification([`scripts/smoke-${check}.mjs`])), [check]);
+    }
+    assert.deepEqual(resolveVerifyOptions([`--checks=${checks.join(",")}`], {}).smokes.map(smoke => smoke.name), checks);
   });
 
   it("partitions selected checks exactly once and passes their names through the real runner parser", () => {

@@ -18,6 +18,7 @@ const selected = new Set((process.env.SMOKE_SCENARIOS || '').split(',').map(valu
 for (const name of selected) assert.ok(['disabled', 'restore404', 'text', 'audio-intent', 'failed', 'uncertain', 'cleanup503', 'replay'].includes(name),
   'Unknown SMOKE_SCENARIOS entry: ' + name);
 const run = name => selected.size === 0 || selected.has(name);
+const reportName = 'llmx-conversation' + (selected.size ? '-' + [...selected].join('-') : '');
 const savedId = 'smoke-remembered-session';
 const savedTurn = '12345678-1234-1234-1234-123456789abc';
 const laterFailedTurn = '22345678-1234-1234-1234-123456789abc';
@@ -389,17 +390,17 @@ try {
     assert.equal(h.matching('/opening').length, 0);
     await h.finish('environment, visibility, mute and exit stop the exact restored reply and preserve its voice', 2);
   }
-  writeFileSync(path.join(artifacts, 'llmx-conversation-report.json'), JSON.stringify({
+  writeFileSync(path.join(artifacts, reportName + '-report.json'), JSON.stringify({
     scope: 'Mounted LLMx controller, intercepted backend and silent audio fixtures; no live inference or acoustic acceptance',
     base, elapsedMs: Date.now() - startedAt, selected: [...selected], scenarios: reports
   }, null, 2) + '\n');
 } catch (error) {
-  writeFileSync(path.join(artifacts, 'llmx-conversation-failure.json'), JSON.stringify({
+  writeFileSync(path.join(artifacts, reportName + '-failure.json'), JSON.stringify({
     error: String(error), elapsedMs: Date.now() - startedAt, completed: reports,
     fixtures: fixtures.map(({ calls, errors, navigations }) => ({ calls, errors, navigations }))
   }, null, 2) + '\n');
   for (const context of browser.contexts()) for (const page of context.pages()) {
-    await page.screenshot({ path: path.join(artifacts, 'llmx-conversation-failure.png') }).catch(() => {});
+    await page.screenshot({ path: path.join(artifacts, reportName + '-failure.png') }).catch(() => {});
   }
   throw error;
 } finally {
