@@ -584,15 +584,36 @@ export class AgentWorldVoxelFace {
       if (Math.abs(sx) < mouth.halfWidth + 0.14 && Math.abs(sy - mouth.y) < 0.2 && sz > 0.05) continue;
       cubes.push(i);
     }
+    // Nobody sees the liner's resolution, only its colour through a crease, so at the dense level
+    // it is voxelised on a grid twice as coarse as the shell: a quarter of the instances for the
+    // same coverage. Measured under the smoke's software renderer, the one-to-one liner was 22% of
+    // the frame (2026-09-14). The coarser levels keep one cube per shell cube — there the liner
+    // is barely one cube inside and a bigger cube would poke through.
+    const coarse = weights.count > 12000 ? 2 : 1;
+    const cell = edge * coarse;
+    const shrink = 0.9;
+    const kept: number[] = [];
+    const rest: number[] = [];
+    const seen = new Set<number>();
+    for (const i of cubes) {
+      const gx = Math.round((weights.rest[i * 3] * shrink) / cell);
+      const gy = Math.round((weights.rest[i * 3 + 1] * shrink) / cell);
+      const gz = Math.round((weights.rest[i * 3 + 2] * shrink) / cell);
+      const key = ((gx + 512) * 1024 + (gy + 512)) * 1024 + (gz + 512);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      kept.push(i);
+      rest.push(gx * cell, gy * cell, gz * cell);
+    }
     const mesh = new InstancedMesh(
-      new BoxGeometry(edge * 1.15, edge * 1.15, edge * 1.15),
+      new BoxGeometry(cell * 1.15, cell * 1.15, cell * 1.15),
       // The shell's own grey and finish (owner: a darker liner "fait louche"): a crease then reads
       // as more of the same metal, not as a different material showing through.
       new MeshStandardMaterial({ color: this.config.metalColor, roughness: 0.54, metalness: 0.5 }),
-      Math.max(cubes.length, 1),
+      Math.max(kept.length, 1),
     );
     mesh.name = name;
-    mesh.count = cubes.length;
+    mesh.count = kept.length;
     mesh.castShadow = false;
     mesh.userData.graphysxFaceCastShadow = false;
     mesh.receiveShadow = false;
@@ -600,15 +621,8 @@ export class AgentWorldVoxelFace {
     // Shrunk about the mask's origin: about three cubes inside the shell at the high level, and
     // proportionally at the coarser ones. Deep enough that the rows above a dropped brow still
     // cover it; shallow enough that the eyes' sockets stay hollow.
-    const shrink = 0.9;
-    this.linerCubes = Uint32Array.from(cubes);
-    this.linerRest = new Float32Array(cubes.length * 3);
-    for (let k = 0; k < cubes.length; k += 1) {
-      const i = cubes[k];
-      this.linerRest[k * 3] = weights.rest[i * 3] * shrink;
-      this.linerRest[k * 3 + 1] = weights.rest[i * 3 + 1] * shrink;
-      this.linerRest[k * 3 + 2] = weights.rest[i * 3 + 2] * shrink;
-    }
+    this.linerCubes = Uint32Array.from(kept);
+    this.linerRest = Float32Array.from(rest);
     this.object.add(mesh);
     this.linerMesh = mesh;
     this.writeLiner(1);
