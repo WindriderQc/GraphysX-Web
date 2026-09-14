@@ -1,12 +1,12 @@
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { llmxTarget } from '../server/llmx-target.mjs';
 
 /** Private server composition; the browser never receives a Household origin or credential. */
 export function createLlmXRoute({ householdUrl = process.env.LLMX_HOUSEHOLD_URL, fetchImpl = fetch } = {}) {
   const origin = householdUrl ? new URL(householdUrl) : null;
   if (origin && (!['http:', 'https:'].includes(origin.protocol) || origin.username || origin.password
       || origin.pathname !== '/' || origin.search || origin.hash)) throw new Error('LLMX_HOUSEHOLD_URL must be a Household origin');
-  const consumer = '/api/consumers/nestor/v1/llmx';
   const assets = new Set(['browser-conversation.js', 'speech-language.js', 'voice-capture-worklet.js', 'voice-audio.js']);
   const json = (res, status, data) => {
     res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -16,7 +16,6 @@ export function createLlmXRoute({ householdUrl = process.env.LLMX_HOUSEHOLD_URL,
     const url = new URL(req.url, 'http://localhost');
     const family = url.pathname.startsWith('/llmx-api/family/');
     const pathname = family ? url.pathname.replace('/llmx-api/family/', '/llmx-api/') : url.pathname;
-    const profileConsumer = consumer + (family ? '/family' : '');
     const asset = /^\/(?:assets\/household|llmx-api\/assets)\/([^/]+)$/.exec(url.pathname);
     if (!url.pathname.startsWith('/llmx-api/') && !(asset && assets.has(asset[1]))) return false;
     if (!origin) {
@@ -24,18 +23,7 @@ export function createLlmXRoute({ householdUrl = process.env.LLMX_HOUSEHOLD_URL,
         { enabled: false, message: 'La conversation AgentX n’est pas configurée sur ce serveur.' });
       return true;
     }
-    const session = /^\/llmx-api\/sessions\/([a-zA-Z0-9-]{1,80})\/(history|turns\/text|opening|interrupt|scene-receipts)$/.exec(pathname);
-    const target = req.method === 'GET' && asset && assets.has(asset[1])
-      ? asset[1] === 'voice-audio.js' ? '/api/voix/player.js' : '/assets/household/' + asset[1]
-      : req.method === 'GET' && pathname === '/llmx-api/config' ? profileConsumer + '/config'
-      : req.method === 'GET' && pathname === '/llmx-api/sessions/recent' ? profileConsumer + '/sessions/recent'
-      : req.method === 'POST' && pathname === '/llmx-api/sessions' ? profileConsumer + '/sessions'
-      : session && ((req.method === 'GET' && session[2] === 'history') || (req.method === 'POST' && session[2] !== 'history'))
-        ? profileConsumer + '/sessions/' + session[1] + '/' + session[2]
-      : req.method === 'GET' && url.pathname === '/llmx-api/voices' ? '/api/voix/catalog'
-      : req.method === 'POST' && url.pathname === '/llmx-api/transcribe' ? '/api/voix/transcribe'
-      : req.method === 'POST' && url.pathname === '/llmx-api/synthesize/stream' ? '/api/voix/synthesize/stream'
-      : null;
+    const target = llmxTarget(req.method, url.pathname);
     if (!target) { json(res, 404, { message: 'Action de conversation inconnue.' }); return true; }
     void (async () => {
       const abort = new AbortController();

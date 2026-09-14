@@ -1,4 +1,5 @@
 import type { LlmXSpeechSample } from './llmx-contracts';
+import { llmxUrl } from "./llmx-transport";
 
 export type LlmXReply = { text: string; language?: string; speech?: { provider?: string; voice?: string; language?: string } };
 export type LlmXSession = { sessionId: string; backend?: string; agentId?: string; turnCount?: number;
@@ -37,7 +38,7 @@ declare global {
 }
 let runtimePromise: Promise<LlmXAudioRuntime> | undefined;
 
-/** Load the existing Household capture and VoiX player, served by the configured local relay. */
+/** Load the existing Household capture and VoiX player from the selected connection. */
 export function loadLlmXAudio(): Promise<LlmXAudioRuntime> {
   if (!runtimePromise) runtimePromise = (async () => {
     for (const name of ['speech-language.js', 'voice-audio.js', 'browser-conversation.js']) {
@@ -48,7 +49,7 @@ export function loadLlmXAudio(): Promise<LlmXAudioRuntime> {
           if (error) { script.remove(); reject(error); } else resolve();
         };
         const timer = setTimeout(() => finish(new Error('Le transport vocal ne répond pas.')), 15000);
-        script.src = '/llmx-api/assets/' + name;
+        script.src = llmxUrl('/llmx-api/assets/' + name);
         script.onload = () => finish();
         script.onerror = () => finish(new Error('Le transport vocal est indisponible.'));
         document.head.append(script);

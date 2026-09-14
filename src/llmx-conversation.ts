@@ -3,6 +3,7 @@ import type { LlmXSceneReceipt } from './llmx-actions';
 import { LlmXSpeechOutput, loadLlmXAudio, llmxSpeechSampleFromRms, type LlmXReply, type LlmXVoiceConversation } from './llmx-audio';
 import type { LlmXConversationPhase } from './llmx-contracts';
 import { llmxSpeechChunks, playLlmXSpeech } from './llmx-speech-queue';
+import { createLlmXFetch } from "./llmx-transport";
 
 const labels: Record<string, string> = {
   initializing: 'Connexion à AgentX…', opening: 'Notre agent arrive…', sending: 'Il réfléchit…',
@@ -145,7 +146,7 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: (request?
     transcript.scrollTop = transcript.scrollHeight;
   }
   async function request(path: string, init: RequestInit): Promise<Response> {
-    const response = await fetch('/llmx-api/' + path, { ...init,
+    const response = await createLlmXFetch()('/llmx-api/' + path, { ...init,
       headers: init.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' } });
     if (!response.ok) {
       const body = await response.json().catch(() => null) as { message?: string; error?: string } | null;

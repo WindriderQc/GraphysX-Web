@@ -1,7 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { transpileModule, ModuleKind, ScriptTarget } from 'typescript';
 import { importBrowserModule } from './support/import-browser-module.mjs';
 
 const { LlmXSpeechOutput, llmxSpeechSampleFromRms } =
@@ -11,14 +9,7 @@ const { llmxFacePresentation } =
 const quiet = { playing: false, amplitude: 0, brightness: 0 };
 const faceAmplitude = speech => llmxFacePresentation({ assembly: 1, phase: 'idle', speech }).speak;
 
-// Resolve the controller's bundler imports while executing its unchanged mounted behavior.
-const controllerUrl = new URL('../src/llmx-conversation.ts', import.meta.url);
-const { outputText } = transpileModule(readFileSync(controllerUrl, 'utf8'), {
-  compilerOptions: { module: ModuleKind.ESNext, target: ScriptTarget.ES2022 },
-});
-const controllerModule = outputText.replace(/from (['"])(\.\/[^'"]+)\1;/g,
-  (_match, _quote, specifier) => `from ${JSON.stringify(new URL(`${specifier}.ts`, controllerUrl).href)};`);
-const { mountLlmXConversation } = await import(`data:text/javascript;base64,${Buffer.from(controllerModule).toString('base64')}`);
+const { mountLlmXConversation } = await importBrowserModule(new URL('../src/llmx-conversation.ts', import.meta.url));
 
 class ElementFixture extends EventTarget {
   children = [];

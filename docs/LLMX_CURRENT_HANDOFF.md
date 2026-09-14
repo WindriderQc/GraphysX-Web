@@ -1,3 +1,12 @@
+# Public release in progress — 2026-09-14
+
+The active candidate is `codex/llmx-public-release`, based on the verified merge and now including Claude's `acb1d5e` face reactions and `fafb13a` lighter dense liner (merge `81e0829`). The public transport uses the existing private HTTPS AgentX origin; see [LLMX_PUBLIC_CONNECTION.md](LLMX_PUBLIC_CONNECTION.md).
+
+Household 1.58.4 is deployed and live status/script verified: PR617, merge `4848e2b7229661eed1260336dd300e280b0e4985`, deployment34859455760. All277 Household/corpus tests and PR CI pass. GraphysX passes546 Node tests (one existing skip), typecheck, lint, both normal and public-configured builds, focused face/conversation/full-world checks and the unchanged installed skill action client on the RTX5070Ti. Screenshots were inspected. The normal browser restored the saved local conversation through the direct private HTTPS connection.
+
+The production gate and actual public-domain acceptance remain pending. The historical frozen-candidate receipt below describes the previous delivery boundary and must not be mistaken for the current candidate's complete publication evidence.
+
+---
 # LLMx — current integration and restart
 
 2026-09-14. GraphysX is a local preview. The private AgentX conversation is deployed on the LAN. No public GraphysX deployment is included in this handoff.

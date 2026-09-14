@@ -1,5 +1,6 @@
 import type { LlmXReply, LlmXSession } from './llmx-audio';
 import type { LlmXSceneProposal, LlmXSceneReceipt } from './llmx-actions';
+import { createLlmXFetch } from "./llmx-transport";
 
 export type { LlmXReply, LlmXSession } from './llmx-audio';
 export type LlmXSceneContext = {
@@ -178,7 +179,7 @@ export class LlmXConversationClient {
 
   constructor(options: Options = {}) {
     this.options = options;
-    this.fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
+    this.fetcher = options.fetch ?? createLlmXFetch();
     this.storage = options.storage === undefined ? browserStorage() : options.storage;
     this.profile = options.profile ?? 'personal';
     this.base = '/llmx-api' + (this.profile === 'family' ? '/family' : '');
@@ -222,7 +223,7 @@ export class LlmXConversationClient {
     const epoch = this.epoch;
     this.changed('initializing');
     const promise = (async () => {
-      const config = await this.json('/config', epoch);
+      const config = await this.json('/config', epoch, undefined, 15000);
       if (config.enabled === false) {
         this.config = { ...config, enabled: false };
         this.changed('disabled');

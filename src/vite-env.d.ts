@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  /** Existing private HTTPS AgentX origin used by the public static LLMx page. */
+  readonly VITE_LLMX_AGENTX_ORIGIN?: string;
   /**
    * Where a production visitor's browser finds the scene store, baked in at build time.
    *

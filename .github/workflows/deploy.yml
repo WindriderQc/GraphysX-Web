@@ -53,6 +53,7 @@ jobs:
       - name: Build production release
         env:
           VITE_GRAPHYSX_STORE_URL: ${{ vars.GRAPHYSX_STORE_URL }}
+          VITE_LLMX_AGENTX_ORIGIN: https://agentx.specialblend.icu
         run: npm run build
 
       - name: Stamp release identity
