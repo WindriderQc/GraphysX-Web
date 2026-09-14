@@ -26,6 +26,20 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
   const matching = suffix => calls.filter(call => call.path.endsWith(suffix));
   const envelope = data => JSON.stringify({ ok: true, status: 'success', data });
 
+  async function portrait(visible) {
+    await page.waitForFunction(expected => {
+      const inset = JSON.parse(window.render_game_to_text()).application.faceInset;
+      return inset.visible === expected && (!expected || inset.frames > 0);
+    }, visible);
+    assert.equal(await page.getByRole('button', { name: 'Afficher le visage en grand' }).isVisible(), visible);
+    assert.equal(await page.locator('canvas[data-engine]').count(), 1, 'both cameras share one WebGL canvas');
+    if (!visible) return;
+    const rect = await page.locator('[data-face-inset-view]').boundingBox();
+    const viewport = page.viewportSize();
+    assert.ok(rect && rect.width > 80 && rect.height > 100 && rect.x >= 0 && rect.y >= 0
+      && rect.x + rect.width <= viewport.width && rect.y + rect.height <= viewport.height);
+  }
+
   page.on('framenavigated', frame => { if (frame === page.mainFrame()) navigations.push(frame.url()); });
   page.on('pageerror', error => errors.push(String(error)));
   page.on('console', message => {
@@ -227,9 +241,13 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
     const url = new URL(base); url.searchParams.set('app', 'llmx');
     await page.goto(url.href, { waitUntil: 'domcontentloaded' });
     await ready();
+    await portrait(false);
     const initial = await observe('initial');
     assert.equal(initial.created.length, 0);
     const accepted = await send('Crée un cube bleu.', 'applied');
+    await portrait(true);
+    await page.getByRole('button', { name: 'Afficher le visage en grand' }).click();
+    await portrait(false);
     assert.deepEqual(accepted.receipt.body.entityIds, ['llmx-created-smoke-cube']);
     const created = await observe('accepted-human-creation');
     assert.equal(created.created.length, 1);
@@ -264,6 +282,7 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       assert.equal(matching('/history').length, historyBeforeMath + 1,
         'the French math outcome resolves the exact session voice after replacing an English model reply');
       const taught = await observe('human-math-proposal'); assertMath(taught, 0);
+      await portrait(true);
       assert.equal(taught.mathVisible, true, 'a math proposal reveals its actual 3D workshop');
       assert.equal(await page.locator('#llmx-transcript').isVisible(), false,
         'opening the math table keeps every counted cube clear of the transcript');
@@ -280,6 +299,7 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       assert.equal(math1.commits.length, math0.commits.length + 1, 'a user step creates one native commit');
       await action('undo').click(); assertMath(await observe('math-step-undo'), 0);
       await action('redo').click(); assertMath(await observe('math-step-redo'), 1);
+      await portrait(true);
       await page.screenshot({ path: path.join(artifacts, 'llmx-creation-math-desktop.png') });
       await action('math-next').click(); assertMath(await observe('math-step-2'), 2);
       await action('math-next').click();
@@ -287,6 +307,7 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       assert.equal(await action('math-next').isDisabled(), true);
       assert.match(await page.locator('[data-math-result]').textContent(), /5 cubes/);
       await action('math-close').click();
+      await portrait(false);
       const closedMath = await observe('closed-math');
       assert.equal(closedMath.mathVisible, false, 'closing the workshop hides its 3D root');
       assert.equal(closedMath.application.mathOpen, false);
@@ -339,6 +360,7 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       await page.getByRole('heading', { name: 'Somme bis', exact: true }).waitFor();
       assert.equal((await observe('open-renamed-copy')).application.activeId, copyId);
       await page.reload({ waitUntil: 'domcontentloaded' }); await ready();
+      await portrait(false);
       const reloaded = await observe('reload-named-math'); assertMath(reloaded, 3);
       assert.equal(reloaded.mathVisible, false, 'a saved workshop stays out of the arrival scene');
       assert.equal(reloaded.application.mathOpen, false);
@@ -371,6 +393,7 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
       assertMath(await observe('family-math-step-1'), 1);
       await page.setViewportSize({ width: 390, height: 844 });
       await action('math-close').click(); await action('math').click();
+      await portrait(true);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'mobile page must not overflow horizontally');
       const nextBounds = await action('math-next').boundingBox();
       assert.ok(nextBounds && nextBounds.x >= 0 && nextBounds.x + nextBounds.width <= 390 && nextBounds.y >= 0

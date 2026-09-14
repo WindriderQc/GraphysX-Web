@@ -2,6 +2,13 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-09-13 — Face portrait while exploring the world
+
+- Added a second camera in the existing renderer/frame loop: the same animated face stays in the top-right corner during creation, maths and manual orbit/zoom. Clicking it restores the main face view. No new session, audio path, dependency or backend change.
+- Responsive portrait and transcript placement; mobile maths camera leaves counted cubes visible beside it. Renderer state is restored after the inset, including error paths; undo/load reacquire the native face and disposal removes the render subscription.
+- 514 Node tests pass with one existing skip, lint and production build pass. Inspected normal IAB at1280x720,390x844,320x844 and exercised portrait return, orbit, workshop, transcript and reload. No browser errors, sound/mic off.
+- The updated creation browser smokes and unchanged skill client are still queued in session46010 after Claude's full gate, per the user's choice. Inspect output/llmx-workshop-browser-verify.log, output/llmx-workshop-skill.log and their screenshots when complete; do not claim them passed yet. See docs/LLMX_CURRENT_HANDOFF.md. Animal sounds are unrelated and need no further coordination.
+
 ## 2026-09-13 — LLMx pyramid placement and contextual math workshop
 
 - A real rejected seven-box proposal omitted dimensions/scale and placed default unit cubes at y=.315, with bottom y=-.185 below the Forge bounds. Household 1.56.5 (PR607, main0a367c28, deploy34792879875) now explains dimensions, floor-relative centers and stacked extents; complete grounded cube/pyramid examples pass the actual GraphysX validator. The UI distinguishes below-floor from oversized/too-high errors.

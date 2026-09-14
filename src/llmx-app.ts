@@ -11,6 +11,7 @@ import { FORGE_INTRO, forgeCameraAt, forgeIntroAt, forgeThinkingEmitter, LLMX_TH
 import { mountForgePresentation } from "./llmx-forge-presentation";
 import { mountLlmXConversation } from "./llmx-conversation";
 import { llmxFacePresentation } from "./llmx-presentation";
+import { createLlmXFaceInset } from "./llmx-face-inset";
 import type { PlatformHost } from "./platform-host";
 import { motionIsReduced } from "./platform-theme";
 import "./llmx.css";
@@ -65,6 +66,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   let entrance = makeEntrance();
   let lastPhase = "";
   let cameraOwned = true;
+  let worldFocused = false;
   let thinking = false;
   const localGaze = new Vector3();
 
@@ -125,6 +127,8 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   const nameInput = element<HTMLInputElement>('[data-world-name]');
   const worlds = element<HTMLSelectElement>('[data-worlds]');
   const mathPanel = element<HTMLElement>('.gx-llmx-math-panel');
+  const faceInset = createLlmXFaceInset(host.renderer, host.scene, surface,
+    () => host.world.getEntityObject(LLMX_FACE_ID), viewFace);
   const identity = () => ({ environmentId: activeId ?? `${profile}-forge-draft`, revision: `${revision}:${host.api.state()!.revision}` });
   const actions = createLlmXSceneActions(host.api, identity, forge.anchors.buildZone, receipt => {
     saved = false;
@@ -138,6 +142,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     }
     else {
       closeMath();
+      worldFocused = true;
       host.frameView(forge.anchors.cameraCreation.position, forge.anchors.cameraCreation.target, motionIsReduced() ? 0 : 0.8);
     }
     renderMath(); render();
@@ -188,7 +193,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     // Reacquire after an ordinary API load/undo; the application never keeps an orphaned rig.
     const object = host.world.getEntityObject(LLMX_FACE_ID);
     const currentFace = object && findVoxelFace(object);
-    if (!currentFace) return;
+    if (!currentFace) { faceInset.update(false); return; }
     face = currentFace;
     face.setQualityCeiling(host.qualityProfile.name);
     const previousPhase = entrance.state().phase;
@@ -204,7 +209,8 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
       host.world.reconcileTransientEntities("llmx-presentation", thinking ? [forgeThinkingEmitter(forge.anchors)] : []);
     }
     presentation.setIntro(intro);
-    object.worldToLocal(localGaze.copy(host.camera.position));
+    faceInset.update(state.phase === 'ready' && worldFocused && !dialog.open);
+    object.worldToLocal(localGaze.copy(faceInset.visible ? faceInset.camera.position : host.camera.position));
     const drivers = {
       ...presence, blink: 1 - intro.wake, attention: presence.attention * intro.wake,
       gazeX: Math.atan2(localGaze.x, localGaze.z) / POSE_LIMITS.gazeRadians,
@@ -227,6 +233,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     entrance = makeEntrance();
     face.snapDrivers({ build: 0, blink: 1, speak: 0, think: 0 });
     cameraOwned = true;
+    worldFocused = false;
     // The mask is bundled and synchronous, as are the essential floor/lighting meshes.
     // Sky/HDRI may refine the background later; neither is conversation readiness.
     entrance.assetsReady();
@@ -250,6 +257,20 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     frame(0);
   };
   host.renderer.domElement.addEventListener("pointerdown", interruptCamera);
+  let orbitStart: { x: number; y: number } | null = null;
+  const startOrbit = (event: PointerEvent) => { orbitStart = { x: event.clientX, y: event.clientY }; };
+  const moveOrbit = (event: PointerEvent) => {
+    if (orbitStart && Math.hypot(event.clientX - orbitStart.x, event.clientY - orbitStart.y) > 8) {
+      worldFocused = true; orbitStart = null;
+    }
+  };
+  const endOrbit = () => { orbitStart = null; };
+  const zoomWorld = () => { worldFocused = true; };
+  host.renderer.domElement.addEventListener('pointerdown', startOrbit);
+  host.renderer.domElement.addEventListener('pointermove', moveOrbit);
+  window.addEventListener('pointerup', endOrbit);
+  window.addEventListener('pointercancel', endOrbit);
+  host.renderer.domElement.addEventListener('wheel', zoomWorld, { passive: true });
   function renderLibrary() {
     const entries = library.list();
     selectedId = entries.some(entry => entry.id === selectedId) ? selectedId : entries.some(entry => entry.id === activeId) ? activeId : entries[0]?.id ?? null;
@@ -390,11 +411,14 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   }
   function openMath() {
     mathPanel.hidden = false; surface.classList.add('math-open'); cameraOwned = false;
+    worldFocused = true;
     conversation.collapseHistory();
     const [x, y, z] = mathLesson()?.buildZone.center ?? llmxMathBuildZone(forge.anchors.buildZone).center;
     const compact = window.innerWidth < 600;
-    host.frameView(compact ? [x, y + 8, z + 5] : [x, y + 4.6, z + 3],
-      compact ? [x, y, z + 2.5] : [x - 0.5, y, z + 0.1], motionIsReduced() ? 0 : 0.7);
+    const compactDistance = Math.max(1, 390 / window.innerWidth);
+    // Leave the upper-right portrait clear of the counted cubes on a narrow screen.
+    host.frameView(compact ? [x + 0.8, y + 10.5 * compactDistance, z + 6.8 * compactDistance] : [x, y + 4.6, z + 3],
+      compact ? [x + 0.8, y, z + 3 * compactDistance] : [x - 0.5, y, z + 0.1], motionIsReduced() ? 0 : 0.7);
     renderMath();
   }
   function syncMathVisibility() {
@@ -408,6 +432,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   }
   function viewFace() {
     closeMath(); cameraOwned = false;
+    worldFocused = false;
     host.frameView(forge.anchors.cameraRest.position, forge.anchors.cameraRest.target, motionIsReduced() ? 0 : 0.7);
   }
   button('math').addEventListener('click', () => { conversation.worldChanged(); openMath(); });
@@ -449,9 +474,10 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   window.addEventListener('pagehide', preservePage);
   restart();
   const unsubscribe = host.subscribeFrame(frame);
+  const unsubscribeInset = host.subscribeAfterRender(faceInset.render);
   const state = () => ({
     application: "llmx", environment: "llmx-nocturnal-forge", profile, activeId, worldName, revision: identity().revision, entrance: entrance.state(),
-    face: disposed ? null : face.describe(), conversation: conversation.state(), saved, notice,
+    face: disposed ? null : face.describe(), faceInset: faceInset.state(), conversation: conversation.state(), saved, notice,
     math: mathLesson()?.config ?? null, mathOpen: !mathPanel.hidden, lastAction: lastAction ?? null,
   });
   return {
@@ -475,7 +501,14 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
       host.world.clearTransientEntities("llmx-presentation");
       entrance.dispose();
       unsubscribe();
+      unsubscribeInset();
+      faceInset.dispose();
       host.renderer.domElement.removeEventListener("pointerdown", interruptCamera);
+      host.renderer.domElement.removeEventListener('pointerdown', startOrbit);
+      host.renderer.domElement.removeEventListener('pointermove', moveOrbit);
+      window.removeEventListener('pointerup', endOrbit);
+      window.removeEventListener('pointercancel', endOrbit);
+      host.renderer.domElement.removeEventListener('wheel', zoomWorld);
       presentation.dispose();
       surface.remove();
       // Runtime owns the face and releases it on the next load/dispose.

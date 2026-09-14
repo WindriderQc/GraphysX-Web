@@ -232,6 +232,7 @@ export class PlatformHost {
   private readonly onResize = () => this.resize();
   private readonly resizeObserver: ResizeObserver | null;
   private readonly frameListeners = new Set<PlatformFrameListener>();
+  private readonly afterRenderListeners = new Set<PlatformFrameListener>();
   private renderProfile: PlatformRenderProfile;
   private shadowRefreshElapsed = Number.POSITIVE_INFINITY;
   private reflectionRefreshElapsed = Number.POSITIVE_INFINITY;
@@ -489,6 +490,13 @@ export class PlatformHost {
     if (this.disposed) return () => undefined;
     this.frameListeners.add(listener);
     return () => this.frameListeners.delete(listener);
+  }
+
+  /** Composite additional views in the same canvas after the main camera and its effects. */
+  subscribeAfterRender(listener: PlatformFrameListener): () => void {
+    if (this.disposed) return () => undefined;
+    this.afterRenderListeners.add(listener);
+    return () => this.afterRenderListeners.delete(listener);
   }
 
   /** Frames the 2D overlay has drawn. Tracks frameCount when an overlay is active — the proof
@@ -1370,6 +1378,10 @@ export class PlatformHost {
     // draw, followed by the passes the scene opted into.
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
+    for (const listener of this.afterRenderListeners) {
+      try { listener(delta); }
+      catch (error) { console.error("Post-render subscriber failed", error); }
+    }
     // The 2D layer draws in THIS frame, right after the 3D render — one shared loop, never a
     // second rAF. It is the last thing composited, so it sits over the scene.
     if (this.overlaySketch && this.overlayCtx && this.overlayWidth > 0) {
@@ -1514,6 +1526,7 @@ export class PlatformHost {
     }
     this.renderer.setAnimationLoop(null);
     this.frameListeners.clear();
+    this.afterRenderListeners.clear();
     this.unsubscribeEvents();
     this.audio.dispose();
     this.playLayer?.();
