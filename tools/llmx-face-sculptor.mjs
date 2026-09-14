@@ -202,8 +202,10 @@ function maskDistance(x, y, z) {
   // whose top face was the floor of the mouth: when it dropped, that brown top face appeared in
   // the aperture — "c'est une langue ?" — and from below it stuck out of the profile like an
   // open drawer. A lip is a rim, one or two cubes deep; the mouth reads by its aperture.
-  d = smin(d, sdEllipsoid(x, y + 0.45, z - 0.4, 0.26, 0.042, 0.085), 0.04);
-  d = smin(d, sdEllipsoid(x, y + 0.615, z - 0.4, 0.255, 0.062, 0.085), 0.04);
+  // Author a relaxed mouth. Speech opens this narrow seam in the shared pose model;
+  // a tall resting cut leaves the face permanently surprised, regardless of audio.
+  d = smin(d, sdEllipsoid(x, y + 0.485, z - 0.4, 0.26, 0.035, 0.085), 0.04);
+  d = smin(d, sdEllipsoid(x, y + 0.563, z - 0.4, 0.255, 0.045, 0.085), 0.04);
 
   // Swept-back temple fins and a crown fin — where the mask stops being a face and becomes
   // machinery. Capsules sweeping up and back, not slabs: a flat panel reads as a billboard from
@@ -221,7 +223,7 @@ function maskDistance(x, y, z) {
   // aperture at mid-height like a palate with a square hole in it. Reaching the pocket's waist
   // back behind the cavity wall (z ≈ 0.02, plate at 0.16) turns the pocket into a tunnel whose
   // roof and floor belong to the lips above and below them, and whose end is the matte wall.
-  d = smax(d, -sdEllipsoid(x, y + 0.52, z - 0.44, 0.255, 0.095, 0.42), 0.035);
+  d = smax(d, -sdEllipsoid(x, y + 0.52, z - 0.44, 0.255, 0.03, 0.42), 0.035);
 
   return d;
 }
@@ -311,7 +313,7 @@ function regionOf(x, y, z, fromEye, fromLid) {
   if (y > 0.19 && y < 0.46 && z > 0.15) return R.brow;
   if (ax < 0.2 && y > -0.3 && y < 0.3 && z > 0.3) return R.nose;
   // Only the outer rim of the lips carries the lip tint; everything deeper is throat.
-  if (Math.abs(y - mouth.y) < 0.135 && ax < mouth.halfWidth + 0.03 && z > 0.44) return R.lip;
+  if (Math.abs(y - mouth.y) < 0.08 && ax < mouth.halfWidth + 0.03 && z > 0.44) return R.lip;
   if (len(ax - cheek.x, y - cheek.y, z - cheek.z) < 0.28) return R.cheek;
   if (y < jawHinge.y) return R.jaw;
   return R.cranium;

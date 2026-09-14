@@ -62,12 +62,19 @@ export function loadLlmXAudio(): Promise<LlmXAudioRuntime> {
 
 const quietSample = (): LlmXSpeechSample => ({ playing: false, amplitude: 0, brightness: 0 });
 
+/** Apply the same mouth gain to raw output RMS from Household and the text/replay player. */
+export function llmxSpeechSampleFromRms(sample: Readonly<LlmXSpeechSample>): LlmXSpeechSample {
+  if (!sample.playing || !Number.isFinite(sample.amplitude) || sample.amplitude < 0.001) return quietSample();
+  return { playing: true, amplitude: Math.min(1, sample.amplitude * 8),
+    brightness: Number.isFinite(sample.brightness) ? Math.max(0, Math.min(1, sample.brightness * 4)) : 0 };
+}
+
 /** Output-only audio for the opening/text path. This never asks for a microphone. */
 export class LlmXSpeechOutput {
   private context: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private readonly waveform = new Float32Array(512);
-  private readonly spectrum = new Uint8Array(256);
+  private readonly spectrum = new Float32Array(256);
   private active = 0;
   private disposed = false;
 
@@ -108,13 +115,14 @@ export class LlmXSpeechOutput {
     for (const value of this.waveform) power += value * value;
     const rms = Math.sqrt(power / this.waveform.length);
     if (rms < 0.001) return quietSample();
-    this.analyser.getByteFrequencyData(this.spectrum);
+    this.analyser.getFloatFrequencyData(this.spectrum);
     let weight = 0, energy = 0;
-    for (let index = 0; index < this.spectrum.length; index++) {
-      weight += this.spectrum[index] * index; energy += this.spectrum[index];
+    for (let index = 1; index < this.spectrum.length; index++) {
+      const magnitude = Number.isFinite(this.spectrum[index]) ? Math.pow(10, this.spectrum[index] / 20) : 0;
+      weight += magnitude * index; energy += magnitude;
     }
-    return { playing: true, amplitude: Math.min(1, rms * 8),
-      brightness: energy ? Math.min(1, weight / energy / this.spectrum.length * 4) : 0 };
+    return llmxSpeechSampleFromRms({ playing: true, amplitude: rms,
+      brightness: energy ? weight / energy / (this.spectrum.length - 1) : 0 });
   }
 
   dispose(): void {

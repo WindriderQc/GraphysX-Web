@@ -491,7 +491,8 @@ export function poseInto(
       // The tunnel's side walls cross the mouth line. A sign flip there split adjacent cubes
       // into separate upper/lower plates even when the outer corners stayed closed. Ease the
       // split through the commissure so both walls remain connected as the aperture opens.
-      const parting = smoothstep(0, 0.09, Math.abs(y - anchors.mouth.y));
+      // The ramp fits the narrow resting seam: the old 90 mm ramp barely moved these lips.
+      const parting = smoothstep(0, 0.035, Math.abs(y - anchors.mouth.y));
       py += (upper ? POSE_LIMITS.lipPart * POSE_LIMITS.lipPartUpperShare : -POSE_LIMITS.lipPart) * lw * mouth * corner * parting;
     }
 

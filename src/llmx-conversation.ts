@@ -1,6 +1,6 @@
 import { LlmXConversationClient, type LlmXSceneContext, type LlmXTurnResult } from './llmx-conversation-client';
 import type { LlmXSceneReceipt } from './llmx-actions';
-import { LlmXSpeechOutput, loadLlmXAudio, type LlmXReply, type LlmXVoiceConversation } from './llmx-audio';
+import { LlmXSpeechOutput, loadLlmXAudio, llmxSpeechSampleFromRms, type LlmXReply, type LlmXVoiceConversation } from './llmx-audio';
 import type { LlmXConversationPhase } from './llmx-contracts';
 
 const labels: Record<string, string> = {
@@ -380,7 +380,11 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: () => Llm
     ready() { visualReady = true; void maybeOpening(); },
     collapseHistory() { transcript.hidden = true; button('history').setAttribute('aria-expanded', 'false'); },
     worldChanged() { void stop(available() ? 'Environnement rechargé. La conversation continue ici.' : '').catch(() => {}); },
-    sample() { return disposed ? quiet() : voice?.audio?.readSpeechSample?.() ?? output.sample(); },
+    sample() {
+      if (disposed) return quiet();
+      const microphoneSpeech = voice?.audio?.readSpeechSample?.();
+      return microphoneSpeech ? llmxSpeechSampleFromRms(microphoneSpeech) : output.sample();
+    },
     phase(): LlmXConversationPhase {
       if (detail && client.state === 'error' || voiceState === 'error') return 'error';
       if (['listening', 'hearing'].includes(voiceState)) return 'listening';

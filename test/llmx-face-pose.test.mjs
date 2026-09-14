@@ -269,12 +269,34 @@ describe("mouth surface continuity", () => {
     const jawId = asset.regions.indexOf("jaw");
     const skinIds = new Set([lipId, jawId, asset.regions.indexOf("throat")]);
 
-    it(`${level.name}: leaves the central mouth tunnel empty`, () => {
-      // A shelf was generated here because a steep gradient made the ellipsoid's interior
-      // look like its surface. This is an empty volume, independent of material and camera.
+    const aperture = (speak) => {
+      const out = buffers(weights);
+      poseInto(weights, { ...AT_REST, speak }, out.position, out.scale);
+      let bottom = -Infinity, top = Infinity;
       for (let i = 0; i < weights.count; i += 1) {
-        const [x, y, z] = weights.rest.subarray(i * 3, i * 3 + 3);
-        const inAperture = Math.abs(x) < 0.08 && Math.abs(y - weights.anchors.mouth.y) < 0.035
+        if (weights.region[i] !== lipId || Math.abs(weights.rest[i * 3]) > level.cube * 1.1) continue;
+        const half = level.cube * out.scale[i] * 0.5;
+        if (weights.rest[i * 3 + 1] < weights.anchors.mouth.y) bottom = Math.max(bottom, out.position[i * 3 + 1] + half);
+        else top = Math.min(top, out.position[i * 3 + 1] - half);
+      }
+      assert.ok(Number.isFinite(bottom) && Number.isFinite(top), "both central lip edges must exist");
+      return { ...out, bottom, top, gap: top - bottom };
+    };
+
+    it(`${level.name}: rests with a narrow seam and opens visibly for ordinary speech`, () => {
+      const resting = aperture(0), quiet = aperture(0.3), full = aperture(1);
+      assert.ok(resting.gap <= level.cube * 1.05, `resting mouth gapes by ${resting.gap}m`);
+      assert.ok(quiet.gap > resting.gap + 0.025, "ordinary speech must visibly part the lips");
+      assert.ok(full.gap > quiet.gap + 0.035, "loud speech must retain additional opening range");
+    });
+
+    it(`${level.name}: leaves the centre of the speaking mouth tunnel empty`, () => {
+      // Keep the interior-shelf regression while allowing the lips to meet at rest.
+      // The tunnel floor follows the lower lip; its central channel stays clear.
+      const out = aperture(1), middle = (out.bottom + out.top) * 0.5;
+      for (let i = 0; i < weights.count; i += 1) {
+        const [x, y, z] = out.position.subarray(i * 3, i * 3 + 3);
+        const inAperture = Math.abs(x) < 0.06 && Math.abs(y - middle) < out.gap * 0.25
           && z > 0.23 && z < 0.57;
         assert.ok(!inAperture, `cube ${i} occupies the empty mouth tunnel at ${x},${y},${z}`);
       }
@@ -297,7 +319,7 @@ describe("mouth surface continuity", () => {
             apertureTop = Math.min(apertureTop, out.position[i * 3 + 1] - half);
           }
         }
-        assert.ok(apertureBottom < apertureTop, "the mouth must retain a central aperture");
+        if (speak > 0) assert.ok(apertureBottom < apertureTop, "speaking must open the central aperture");
         for (let y = apertureBottom; y <= apertureTop; y += level.cube * 0.5) {
           assert.ok(backing.some(i => {
             const half = level.cube * out.scale[i] * 0.5 + 1e-6;
