@@ -12,6 +12,7 @@ import {
 } from "three";
 
 import faceAsset from "./llmx-face-forge.json";
+import { applyForgeFinish } from "./llmx-face-finish";
 import {
   buildScale,
   type FaceAsset,
@@ -505,6 +506,7 @@ export class AgentWorldVoxelFace {
           // the copper and the specular while letting the volumes carry the light.
           { roughness: 0.54, metalness: 0.5 },
     );
+    if (!emissive) applyForgeFinish(material);
     const mesh = new InstancedMesh(new BoxGeometry(edge, edge, edge), material, Math.max(count, 1));
     mesh.name = name;
     mesh.count = count;
@@ -634,8 +636,10 @@ export class AgentWorldVoxelFace {
         this.color.set(tint ? this.config[tint] : base);
         const shade = REGION_SHADE[name];
         if (shade !== undefined) this.color.multiplyScalar(shade);
-        // A touch of per-cube variation, so a large flat plane of metal is not one flat colour.
+        // A touch of per-cube variation, so a large flat plane of metal is not one flat colour:
+        // brightness, and a hint of patina — some cubes a shade warmer, some cooler.
         this.color.multiplyScalar(0.93 + hash01(i + 977) * 0.14);
+        if (name !== "eye" && name !== "pupil") this.color.offsetHSL((hash01(i + 1409) - 0.5) * 0.05, (hash01(i + 2003) - 0.5) * 0.08, 0);
         mesh.setColorAt(j, this.color);
       }
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
