@@ -187,15 +187,20 @@ function maskDistance(x, y, z) {
   d = smin(d, sdEllipsoid(x, y + 0.66, z - 0.04, 0.45, 0.38, 0.42), 0.17);
   d = smin(d, sdEllipsoid(x, y + 0.93, z - 0.17, 0.19, 0.17, 0.21), 0.13);
 
-  // Cheekbones — a tight blend, so the ridge survives voxelisation instead of melting.
-  d = smin(d, sdEllipsoid(ax - 0.43, y + 0.08, z - 0.28, 0.22, 0.14, 0.24), 0.06);
+  // Cheekbones — a tight blend, so the ridge survives voxelisation instead of melting. Pushed
+  // forward and outward so they catch the key light as two distinct planes.
+  d = smin(d, sdEllipsoid(ax - 0.45, y + 0.06, z - 0.31, 0.21, 0.13, 0.21), 0.05);
+  // A hollow under each cheekbone: the gauntness that makes the mask gothic rather than round.
+  d = smax(d, -sdEllipsoid(ax - 0.4, y + 0.36, z - 0.36, 0.15, 0.11, 0.16), 0.09);
 
   // Brow ridge, dipping toward the nose and pushed forward so it actually overhangs the eyes.
   // This single angle is most of the mask's character.
   d = smin(d, sdCapsule(ax, y, z, 0.05, 0.22, 0.43, 0.52, 0.33, 0.26, 0.12), 0.055);
 
-  // Nose: a blade widening downward, with wings.
+  // Nose: a blade widening downward, with wings, and a bridge — a thin ridge from between the
+  // brows to the tip, so the profile has a line rather than a slope.
   d = smin(d, sdRoundCone(x, y, z, 0, 0.25, 0.36, 0, -0.17, 0.45, 0.05, 0.11), 0.05);
+  d = smin(d, sdCapsule(x, y, z, 0, 0.24, 0.46, 0, -0.08, 0.53, 0.038), 0.04);
   d = smin(d, sdEllipsoid(ax - 0.125, y + 0.2, z - 0.39, 0.085, 0.065, 0.08), 0.05);
 
   // Lips, before the mouth is cut through them. The upper lip is deliberately thinner than the
