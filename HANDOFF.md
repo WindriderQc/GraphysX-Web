@@ -16,15 +16,17 @@ cost real sessions real hours.
 ## Production publication (2026-09-14)
 
 **[LLMx is public](https://graphysx.specialblend.ca/?app=llmx)**, with an entry on the
-home page. The deployed product is `cb8a8ce64f8aaa577411758966a61db31c67192f`;
-[run34883725489](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34883725489)
+home page. The deployed product is `a46726440d82ccf388a381ed05e266985994fd74`;
+[run34887332538](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34887332538)
 passed Node/build checks and exact HTTP acceptance. Public `release.json` confirms
-the SHA after completion. Verification took **1m01s**, deployment **1m18s**.
+the SHA after completion. Verification took **57s**, deployment **1m00s**.
 GitHub launched no 3D browser; visual journeys now run locally.
-This release removes the thinking-particle halo from the small face portrait,
-preserving the existing main-world particles and lighting. Local captures were
-inspected, 571 Node tests pass with one Windows skip, and the normal public browser
-restores its saved conversation. Household1.58.11 retains automatic tool choice
+User text now appears before reply headers arrive, including voice transcription,
+with a waiting label. Completion keeps one row; failures and confirmed interruption
+retain the phrase with a terminal label. All 574 hosted Node tests pass; the local
+text journey and installed skill client pass, with inspected screenshots. The earlier
+portrait halo fix and saved conversation restoration remain included.
+Household1.58.11 retains automatic tool choice
 and distinguishes failed replies from still-running work (AIOps PR627, all294
 Household tests pass). New conversation was verified with real Qwen while keeping
 the exact world and the older interrupted history.
