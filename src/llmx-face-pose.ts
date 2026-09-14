@@ -157,6 +157,12 @@ export type FaceWeights = {
   cavity: Uint8Array;
   /** Height normalised over the mask's own extent, 0 at the chin and 1 at the crown. */
   rise: Float32Array;
+  /**
+   * Outward surface normal per cube, unit length, 3 floats per cube. Estimated from the cubes
+   * around each cube, not from the sculpt's field, so it needs nothing the asset does not
+   * already carry. See {@link estimateNormals}.
+   */
+  normal: Float32Array;
   /** Bounding box of the rest pose: [minX, minY, minZ, maxX, maxY, maxZ]. */
   bounds: Float32Array;
 };
@@ -317,6 +323,8 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
   // and `rise` is a documented 0..1 that `buildScale` reads as a height fraction.
   for (let i = 0; i < count; i += 1) rise[i] = clamp01((rest[i * 3 + 1] - minY) / span);
 
+  const normal = estimateNormals(level, rest, (minY + maxY) / 2);
+
   return {
     level,
     anchors,
@@ -331,8 +339,158 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
     cheek,
     cavity,
     rise,
+    normal,
     bounds: new Float32Array([minX, minY, minZ, maxX, maxY, maxZ]),
   };
+}
+
+/** Neighbourhood radius, in cubes, over which a cube's normal is estimated. */
+const NORMAL_RADIUS = 2;
+
+/**
+ * Outward normals for a voxel shell, from occupancy alone.
+ *
+ * A cube lit by its own six faces shows the staircase: wherever the surface passes through
+ * forty-five degrees to the light, a whole contour of top faces catches it at once and the mask
+ * grows a bright line along the cheek (owner review, 2026-09-13: "la craque"). Shading each
+ * cube with the normal of the surface it belongs to instead — the way a sculpted surface would
+ * shade — removes the line while the silhouette stays cubes.
+ *
+ * The estimate is a plane fit: over the occupied cells within {@link NORMAL_RADIUS} of a cube,
+ * the direction of least spread is the surface normal. That holds for a shell one cube thick
+ * as well as three, where "away from the surrounding mass" does not — on a thin shell the mass
+ * is equal on both sides and that estimate is left with tangential noise, which shaded the mask
+ * in blotches. The least-spread direction is found by power iteration on the shifted covariance,
+ * seeded with the radial direction from the head's centre, which also orients it outward; cubes
+ * on the inner face of the shell are flipped to agree with it. One averaging pass over the
+ * immediate neighbours then smooths what the finite neighbourhood left jagged.
+ */
+export function estimateNormals(level: FaceLevel, rest: Float32Array, midY: number): Float32Array {
+  const count = level.indices.length;
+  const [nx, ny, nz] = level.grid;
+  const occupied = new Int32Array(nx * ny * nz).fill(-1);
+  for (let i = 0; i < count; i += 1) occupied[level.indices[i]] = i;
+  const raw = new Float32Array(count * 3);
+  const normal = new Float32Array(count * 3);
+  // The head's centre, a little behind the mask's origin: the face is the front of a skull.
+  const centreZ = -0.15;
+  const r = NORMAL_RADIUS;
+  for (let i = 0; i < count; i += 1) {
+    const index = level.indices[i];
+    const ix = index % nx;
+    const iy = Math.floor(index / nx) % ny;
+    const iz = Math.floor(index / (nx * ny));
+    // Covariance of the neighbourhood's cell offsets (the cube itself included, at the origin).
+    let n = 1;
+    let mx = 0;
+    let my = 0;
+    let mz = 0;
+    let xx = 0;
+    let yy = 0;
+    let zz = 0;
+    let xy = 0;
+    let xz = 0;
+    let yz = 0;
+    for (let dz = -r; dz <= r; dz += 1) {
+      const jz = iz + dz;
+      if (jz < 0 || jz >= nz) continue;
+      for (let dy = -r; dy <= r; dy += 1) {
+        const jy = iy + dy;
+        if (jy < 0 || jy >= ny) continue;
+        for (let dx = -r; dx <= r; dx += 1) {
+          const jx = ix + dx;
+          if (jx < 0 || jx >= nx || (dx === 0 && dy === 0 && dz === 0)) continue;
+          if (occupied[jx + jy * nx + jz * nx * ny] < 0) continue;
+          n += 1;
+          mx += dx;
+          my += dy;
+          mz += dz;
+          xx += dx * dx;
+          yy += dy * dy;
+          zz += dz * dz;
+          xy += dx * dy;
+          xz += dx * dz;
+          yz += dy * dz;
+        }
+      }
+    }
+    mx /= n;
+    my /= n;
+    mz /= n;
+    const cxx = xx / n - mx * mx;
+    const cyy = yy / n - my * my;
+    const czz = zz / n - mz * mz;
+    const cxy = xy / n - mx * my;
+    const cxz = xz / n - mx * mz;
+    const cyz = yz / n - my * mz;
+    // Radial direction from the head's centre: the seed and the orientation.
+    const x = rest[i * 3];
+    const y = rest[i * 3 + 1];
+    const z = rest[i * 3 + 2];
+    const rl = Math.hypot(x, (y - midY) * 0.6, z - centreZ) || 1;
+    const rx = x / rl;
+    const ry = ((y - midY) * 0.6) / rl;
+    const rz = (z - centreZ) / rl;
+    // Shift so the least-spread direction becomes the dominant eigenvector, then iterate.
+    const shift = cxx + cyy + czz;
+    const bxx = shift - cxx;
+    const byy = shift - cyy;
+    const bzz = shift - czz;
+    let vx = rx;
+    let vy = ry;
+    let vz = rz;
+    if (n > 3) {
+      for (let k = 0; k < 16; k += 1) {
+        const tx = bxx * vx - cxy * vy - cxz * vz;
+        const ty = -cxy * vx + byy * vy - cyz * vz;
+        const tz = -cxz * vx - cyz * vy + bzz * vz;
+        const l = Math.hypot(tx, ty, tz);
+        if (l < 1e-9) break;
+        vx = tx / l;
+        vy = ty / l;
+        vz = tz / l;
+      }
+    }
+    if (vx * rx + vy * ry + vz * rz < 0) {
+      vx = -vx;
+      vy = -vy;
+      vz = -vz;
+    }
+    raw[i * 3] = vx;
+    raw[i * 3 + 1] = vy;
+    raw[i * 3 + 2] = vz;
+  }
+  for (let i = 0; i < count; i += 1) {
+    const index = level.indices[i];
+    const ix = index % nx;
+    const iy = Math.floor(index / nx) % ny;
+    const iz = Math.floor(index / (nx * ny));
+    let sx = raw[i * 3] * 2;
+    let sy = raw[i * 3 + 1] * 2;
+    let sz = raw[i * 3 + 2] * 2;
+    for (let dz = -1; dz <= 1; dz += 1) {
+      const jz = iz + dz;
+      if (jz < 0 || jz >= nz) continue;
+      for (let dy = -1; dy <= 1; dy += 1) {
+        const jy = iy + dy;
+        if (jy < 0 || jy >= ny) continue;
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const jx = ix + dx;
+          if (jx < 0 || jx >= nx) continue;
+          const j = occupied[jx + jy * nx + jz * nx * ny];
+          if (j < 0 || j === i) continue;
+          sx += raw[j * 3];
+          sy += raw[j * 3 + 1];
+          sz += raw[j * 3 + 2];
+        }
+      }
+    }
+    const l = Math.hypot(sx, sy, sz) || 1;
+    normal[i * 3] = sx / l;
+    normal[i * 3 + 1] = sy / l;
+    normal[i * 3 + 2] = sz / l;
+  }
+  return normal;
 }
 
 // ---------------------------------------------------------------------------

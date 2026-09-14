@@ -2,6 +2,7 @@ import {
   BoxGeometry,
   Color,
   Group,
+  InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
   MeshStandardMaterial,
@@ -12,7 +13,7 @@ import {
 } from "three";
 
 import faceAsset from "./llmx-face-forge.json";
-import { applyForgeFinish } from "./llmx-face-finish";
+import { applyForgeFinish, SMOOTH_NORMAL_ATTRIBUTE } from "./llmx-face-finish";
 import {
   buildScale,
   type FaceAsset,
@@ -502,8 +503,8 @@ export class AgentWorldVoxelFace {
     // opened a lattice of lit seams across the cranium under a grazing key light. Overlap is
     // free (the cubes are opaque) and it is what makes the mask read as one solid mass.
     const edge = weights.level.cube * CUBE_OVERLAP;
-    this.animatedMesh = this.createMesh("VoxelFaceAnimated", edge, this.metalAnimated.length, false);
-    this.staticMesh = this.createMesh("VoxelFaceStatic", edge, this.metalStatic.length, false);
+    this.animatedMesh = this.createMesh("VoxelFaceAnimated", edge, this.metalAnimated.length, false, this.metalAnimated);
+    this.staticMesh = this.createMesh("VoxelFaceStatic", edge, this.metalStatic.length, false, this.metalStatic);
     this.ballMesh = this.createMesh("VoxelFaceEyeball", edge, this.ballCubes.length, false);
     // The mouth cavity gets its own matte black material rather than a dark tint on the metal.
     // A near-black albedo does not make a metal stop reflecting: at metalness 0.5 the cavity
@@ -523,7 +524,12 @@ export class AgentWorldVoxelFace {
     this.writeEyes();
   }
 
-  private createMesh(name: string, edge: number, count: number, emissive: boolean): InstancedMesh {
+  /**
+   * @param smoothOver When given, the cubes this mesh draws (in instance order): each instance
+   *   carries its surface normal so the finish can shade it as part of the sculpt rather than as
+   *   six axis-aligned faces. The metal shell opts in; eyes and the cavity keep their facets.
+   */
+  private createMesh(name: string, edge: number, count: number, emissive: boolean, smoothOver?: Uint32Array): InstancedMesh {
     const material = new MeshStandardMaterial(
       emissive
         ? { color: "#0b1418", emissive: this.config.eyeColor, emissiveIntensity: 0.8, roughness: 0.25, metalness: 0 }
@@ -534,8 +540,20 @@ export class AgentWorldVoxelFace {
           // the copper and the specular while letting the volumes carry the light.
           { roughness: 0.54, metalness: 0.5 },
     );
-    if (!emissive) applyForgeFinish(material);
-    const mesh = new InstancedMesh(new BoxGeometry(edge, edge, edge), material, Math.max(count, 1));
+    if (!emissive) applyForgeFinish(material, undefined, { smoothNormals: smoothOver !== undefined });
+    const geometry = new BoxGeometry(edge, edge, edge);
+    if (smoothOver) {
+      const normals = new Float32Array(Math.max(count, 1) * 3);
+      const source = this.weights.normal;
+      for (let j = 0; j < smoothOver.length; j += 1) {
+        const i = smoothOver[j];
+        normals[j * 3] = source[i * 3];
+        normals[j * 3 + 1] = source[i * 3 + 1];
+        normals[j * 3 + 2] = source[i * 3 + 2];
+      }
+      geometry.setAttribute(SMOOTH_NORMAL_ATTRIBUTE, new InstancedBufferAttribute(normals, 3));
+    }
+    const mesh = new InstancedMesh(geometry, material, Math.max(count, 1));
     mesh.name = name;
     mesh.count = count;
     // The mask casts one silhouette into the Forge, and the liner casts it (see buildLiner): a
