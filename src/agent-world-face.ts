@@ -13,6 +13,7 @@ import {
 
 import faceAsset from "./llmx-face-forge.json";
 import {
+  buildScale,
   type FaceAsset,
   type FaceDrivers,
   type FaceWeights,
@@ -167,6 +168,11 @@ export class AgentWorldVoxelFace {
   private ballCubes: Uint32Array = new Uint32Array(0);
   private irisCubes: Uint32Array = new Uint32Array(0);
   private lidCubes: Uint32Array = new Uint32Array(0);
+  private lowerLidCubes: Uint32Array = new Uint32Array(0);
+  private pupilCubes: Set<number> = new Set();
+  /** The liner's cubes and their shrunk rest positions, so it can assemble with the shell. */
+  private linerCubes: Uint32Array = new Uint32Array(0);
+  private linerRest: Float32Array = new Float32Array(0);
   private mawCubes: Uint32Array = new Uint32Array(0);
 
   private animatedMesh: InstancedMesh | null = null;
@@ -333,6 +339,10 @@ export class AgentWorldVoxelFace {
     // Once it is whole, only the animated slice needs rewriting and the static mesh is left
     // exactly as it was written.
     const assembling = current.build < 1 || this.staticDirty;
+    // Nothing inside the mask until the mask is whole: the liner appears only once the shell has
+    // closed over it, so the entry shows cubes arriving on nothing, not on a ghost of the face
+    // (owner: "l'inside peut apparaître après le visage construit au lieu d'avant").
+    if (this.linerMesh) this.linerMesh.visible = current.build >= 1;
     const limit = assembling ? this.weights.count : this.weights.animatedCount;
     poseInto(this.weights, current, this.position, this.scale, limit);
 
@@ -425,6 +435,8 @@ export class AgentWorldVoxelFace {
     const ballCubes: number[] = [];
     const irisCubes: number[] = [];
     const lidCubes: number[] = [];
+    const lowerLidCubes: number[] = [];
+    const pupilCubes = new Set<number>();
     const mawCubes: number[] = [];
     for (let i = 0; i < count; i += 1) {
       const name = regionNames[weights.region[i]];
@@ -433,6 +445,7 @@ export class AgentWorldVoxelFace {
         continue;
       }
       if (name === "eye" || name === "pupil") {
+        if (name === "pupil") pupilCubes.add(i);
         ballCubes.push(i);
         continue;
       }
@@ -441,6 +454,7 @@ export class AgentWorldVoxelFace {
         continue;
       }
       if (name === "lid") lidCubes.push(i);
+      if (name === "lowerlid") lowerLidCubes.push(i);
       if (i < weights.animatedCount) metalAnimated.push(i);
       else metalStatic.push(i);
     }
@@ -449,6 +463,8 @@ export class AgentWorldVoxelFace {
     this.ballCubes = Uint32Array.from(ballCubes);
     this.irisCubes = Uint32Array.from(irisCubes);
     this.lidCubes = Uint32Array.from(lidCubes);
+    this.lowerLidCubes = Uint32Array.from(lowerLidCubes);
+    this.pupilCubes = pupilCubes;
     this.mawCubes = Uint32Array.from(mawCubes);
 
     // Cubes are drawn slightly larger than the grid step so neighbours interpenetrate. At
@@ -554,17 +570,36 @@ export class AgentWorldVoxelFace {
     // proportionally at the coarser ones. Deep enough that the rows above a dropped brow still
     // cover it; shallow enough that the eyes' sockets stay hollow.
     const shrink = 0.9;
+    this.linerCubes = Uint32Array.from(cubes);
+    this.linerRest = new Float32Array(cubes.length * 3);
     for (let k = 0; k < cubes.length; k += 1) {
       const i = cubes[k];
-      this.vector.set(weights.rest[i * 3] * shrink, weights.rest[i * 3 + 1] * shrink, weights.rest[i * 3 + 2] * shrink);
+      this.linerRest[k * 3] = weights.rest[i * 3] * shrink;
+      this.linerRest[k * 3 + 1] = weights.rest[i * 3 + 1] * shrink;
+      this.linerRest[k * 3 + 2] = weights.rest[i * 3 + 2] * shrink;
+    }
+    this.object.add(mesh);
+    this.linerMesh = mesh;
+    this.writeLiner(1);
+    mesh.visible = this.current.build >= 1;
+    return mesh;
+  }
+
+  /** The liner's matrices, written once. Its visibility is gated on assembly in update(). */
+  private writeLiner(build: number): void {
+    const mesh = this.linerMesh;
+    if (!mesh) return;
+    const { rise } = this.weights;
+    for (let k = 0; k < this.linerCubes.length; k += 1) {
+      const i = this.linerCubes[k];
+      const s = buildScale(rise[i], build, i);
+      this.vector.set(this.linerRest[k * 3], this.linerRest[k * 3 + 1], this.linerRest[k * 3 + 2]);
       this.quaternion.identity();
-      this.scaleVector.set(1, 1, 1);
+      this.scaleVector.set(s, s, s);
       this.matrix.compose(this.vector, this.quaternion, this.scaleVector);
       mesh.setMatrixAt(k, this.matrix);
     }
     mesh.instanceMatrix.needsUpdate = true;
-    this.object.add(mesh);
-    return mesh;
   }
 
   private createMaw(name: string, edge: number, count: number): InstancedMesh {
@@ -686,9 +721,10 @@ export class AgentWorldVoxelFace {
       (mesh.material as MeshStandardMaterial).emissiveIntensity = eye.glow;
       this.writeRotatedAbout(mesh, this.irisCubes, eye.pivot, eye.yaw, eye.pitch, null);
     }
-    this.writeRotatedAbout(this.ballMesh, this.ballCubes, eye.pivot, eye.yaw, eye.pitch, null);
+    this.writeRotatedAbout(this.ballMesh, this.ballCubes, eye.pivot, eye.yaw, eye.pitch, null, eye.pupilScale);
     // Lids live in the metal mesh, so they are re-posed on top of what writeMesh just wrote.
     this.writeRotatedAbout(this.animatedMesh, this.lidCubes, eye.pivot, 0, eye.lidRadians, this.metalAnimated);
+    this.writeRotatedAbout(this.animatedMesh, this.lowerLidCubes, eye.pivot, 0, eye.lowerLidRadians, this.metalAnimated);
   }
 
   private writeRotatedAbout(
@@ -698,6 +734,7 @@ export class AgentWorldVoxelFace {
     yaw: number,
     pitch: number,
     slotLookup: Uint32Array | null,
+    pupilScale = 1,
   ): void {
     if (!mesh || cubes.length === 0) return;
     for (let k = 0; k < cubes.length; k += 1) {
@@ -721,7 +758,7 @@ export class AgentWorldVoxelFace {
       this.spin.set(this.jitter[i * 4], this.jitter[i * 4 + 1], this.jitter[i * 4 + 2], this.jitter[i * 4 + 3]);
       this.quaternion.multiply(this.spin);
 
-      const s = this.scale[i];
+      const s = this.scale[i] * (pupilScale !== 1 && this.pupilCubes.has(i) ? pupilScale : 1);
       this.scaleVector.set(s, s, s);
       this.matrix.compose(this.vector, this.quaternion, this.scaleVector);
       mesh.setMatrixAt(slotLookup ? indexOfSlot(slotLookup, i) : k, this.matrix);

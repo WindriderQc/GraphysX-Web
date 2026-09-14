@@ -32,7 +32,7 @@ const OUT = join(HERE, "..", "src", "llmx-face-forge.json");
  * animating it wrongly. Raised to 2 when the eye gained an iris and a pupil and the mouth gained
  * a cavity: a v1 renderer has no mesh for those regions and would draw them as metal.
  */
-export const FACE_DATA_VERSION = 3;
+export const FACE_DATA_VERSION = 4;
 
 // ---------------------------------------------------------------------------
 // SDF toolkit. Standard analytic primitives; the smooth operators are what keep
@@ -144,6 +144,9 @@ export const REGIONS = [
   // Appended in v3: the walls of the mouth tunnel. Dark like the cavity, but they move with the
   // lips they belong to — the floor with the lower lip, the roof with the upper.
   "throat",
+  // Appended in v4: the lower lid, a cap over the bottom of the eyeball. It rises with a smile
+  // (the squint that makes a smile sincere) and meets the upper lid on a blink.
+  "lowerlid",
 ];
 
 const R = Object.fromEntries(REGIONS.map((name, index) => [name, index]));
@@ -154,7 +157,7 @@ const R = Object.fromEntries(REGIONS.map((name, index) => [name, index]));
  * makes a denser, better-looking mask affordable.
  */
 export const ANIMATED_REGIONS = [
-  "brow", "socket", "eye", "lid", "cheek", "nose", "jaw", "lip", "iris", "pupil", "maw", "throat",
+  "brow", "socket", "eye", "lid", "cheek", "nose", "jaw", "lip", "iris", "pupil", "maw", "throat", "lowerlid",
 ];
 
 /**
@@ -189,7 +192,7 @@ function maskDistance(x, y, z) {
 
   // Brow ridge, dipping toward the nose and pushed forward so it actually overhangs the eyes.
   // This single angle is most of the mask's character.
-  d = smin(d, sdCapsule(ax, y, z, 0.05, 0.22, 0.4, 0.52, 0.33, 0.24, 0.105), 0.055);
+  d = smin(d, sdCapsule(ax, y, z, 0.05, 0.22, 0.43, 0.52, 0.33, 0.26, 0.12), 0.055);
 
   // Nose: a blade widening downward, with wings.
   d = smin(d, sdRoundCone(x, y, z, 0, 0.25, 0.36, 0, -0.17, 0.45, 0.05, 0.11), 0.05);
@@ -296,14 +299,22 @@ function lidDistance(x, y, z) {
   return smax(shell, ey + radius * 0.38 - y, 0.03);
 }
 
+/** The lower lid: the same shell, capping the bottom fifth of the eyeball. */
+function lowerLidDistance(x, y, z) {
+  const { x: ex, y: ey, z: ez, radius } = ANCHORS.eye;
+  const shell = Math.abs(len(Math.abs(x) - ex, y - ey, z - ez) - (radius + 0.034)) - 0.026;
+  return smax(shell, y - (ey - radius * 0.55), 0.03);
+}
+
 // ---------------------------------------------------------------------------
 // Region tagging. Each surviving voxel gets exactly one region; the tests run in
 // priority order, most specific first.
 // ---------------------------------------------------------------------------
 
-function regionOf(x, y, z, fromEye, fromLid) {
+function regionOf(x, y, z, fromEye, fromLid, fromLowerLid = false) {
   if (fromEye) return R.eye;
   if (fromLid) return R.lid;
+  if (fromLowerLid) return R.lowerlid;
   const ax = Math.abs(x);
   const { eye, mouth, cheek, jawHinge } = ANCHORS;
 
@@ -411,15 +422,16 @@ function voxelise(cube) {
         // exact sphere distance, so it needs no normalisation.
         const inEye = eyeDistance(x, y, z) <= 0;
         const onLid = !inEye && isSurfaceCell(lidDistance, x, y, z, band, step);
-        const onMask = !inEye && !onLid && isSurfaceCell(maskDistance, x, y, z, band, step);
+        const onLowerLid = !inEye && !onLid && isSurfaceCell(lowerLidDistance, x, y, z, band, step);
+        const onMask = !inEye && !onLid && !onLowerLid && isSurfaceCell(maskDistance, x, y, z, band, step);
         // The backing wall also fills intersections with the tunnel shell. Removing a hidden
         // tunnel voxel must not punch a matching hole through the wall in front of it.
-        const onMaw = !inEye && !onLid && Math.abs(mawDistance(x, y, z)) <= band;
-        if (!inEye && !onLid && !onMask && !onMaw) continue;
+        const onMaw = !inEye && !onLid && !onLowerLid && Math.abs(mawDistance(x, y, z)) <= band;
+        if (!inEye && !onLid && !onLowerLid && !onMask && !onMaw) continue;
 
         // The far end of the mouth tunnel lies behind the cavity wall; nothing there can be seen.
         if (onMask && !onMaw && isBehindMouthWall(x, y, z)) continue;
-        let region = inEye ? eyePart(x, y, z) : onMaw ? R.maw : regionOf(x, y, z, false, onLid);
+        let region = inEye ? eyePart(x, y, z) : onMaw ? R.maw : regionOf(x, y, z, false, onLid, onLowerLid);
         // The tunnel's walls, floor and roof: dark, and moving with their lips.
         if (onMask && !onMaw && region !== R.lip && z <= 0.44 && isInsideMouthCut(x, y, z)) region = R.throat;
         cells.push({ ix, iy, iz, region });

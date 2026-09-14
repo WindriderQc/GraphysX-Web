@@ -129,7 +129,7 @@ export type FaceAsset = {
   levels: FaceLevel[];
 };
 
-export const SUPPORTED_FACE_VERSION = 3;
+export const SUPPORTED_FACE_VERSION = 4;
 export const FACE_FORMAT = "graphysx.llmx-voxel-face";
 
 /**
@@ -400,6 +400,12 @@ export const POSE_LIMITS = Object.freeze({
   browConverge: 0.04,
   /** Lids: half-closed while thinking, wide while attending. Radians about the eye's X axis. */
   thinkLidRadians: 0.42,
+  /** The lower lid rises with a smile — the squint that makes a smile sincere — and on a blink. */
+  smileSquintRadians: 0.3,
+  blinkLowerLidRadians: 0.5,
+  /** Pupil size, as a multiple of the sculpted pupil: wide when attentive, narrow when thinking. */
+  pupilMin: 0.7,
+  pupilMax: 1.45,
   attentionLidRadians: -0.3,
   /** A thinking face looks up and to one side — added inside the rig, not by the caller. */
   thinkGazeY: 0.35,
@@ -611,6 +617,10 @@ export function eyeTransform(anchors: FaceAnchors, input: Partial<FaceDrivers>):
   yaw: number;
   pitch: number;
   lidRadians: number;
+  /** Rotation of the lower lid about the same pivot; negative raises its front edge. */
+  lowerLidRadians: number;
+  /** Multiplier on the pupil cubes' scale. */
+  pupilScale: number;
   glow: number;
 } {
   const d = clampDrivers(input);
@@ -629,6 +639,10 @@ export function eyeTransform(anchors: FaceAnchors, input: Partial<FaceDrivers>):
     // the eyes tracked the camera upside down; the test below pins the convention.
     pitch: -gazeY * POSE_LIMITS.gazeRadians * 0.6,
     lidRadians: d.blink * 1.55 + (1 - d.blink) * restingLid,
+    lowerLidRadians: -(d.blink * POSE_LIMITS.blinkLowerLidRadians + (1 - d.blink) * (POSE_LIMITS.smileSquintRadians * Math.max(0, d.warmth) + 0.08 * d.attention)),
+    // Pupils: wide with attention and warmth, narrow while thinking — the readable part of an
+    // eye at a distance, after the lids.
+    pupilScale: clamp(0.85 + 0.5 * d.attention + 0.12 * Math.max(0, d.warmth) - 0.25 * d.think, POSE_LIMITS.pupilMin, POSE_LIMITS.pupilMax),
     /*
      * The eyes carry the only emissive on the mask, which makes them the brightest thing in a
      * dark room — and therefore the signal a viewer reads first. An earlier `+ 0.3 * speak` made

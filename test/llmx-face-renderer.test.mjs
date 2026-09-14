@@ -42,10 +42,18 @@ test("skip applies the complete face immediately and changing detail retains its
     assert.equal(liner.material.roughness, shell.material.roughness);
     assert.equal(liner.material.metalness, shell.material.metalness);
     assert.ok(liner.count > 0 && liner.count < face.describe().cubes, "the liner copies the shell, not the eyes or the mouth cavity");
+    face.update(1 / 60);
     const linerVersion = liner.instanceMatrix.version;
     face.setDrivers({ think: 1, attention: 1 });
     for (let step = 0; step < 30; step += 1) face.update(1 / 60);
     assert.equal(liner.instanceMatrix.version, linerVersion, "the liner never follows an expression");
+    // And it is not there before the face is: the entry must show cubes arriving on nothing.
+    face.snapDrivers({ build: 0 });
+    face.update(1 / 60);
+    assert.equal(liner.visible, false, "the liner hides while the mask assembles");
+    face.snapDrivers({ build: 1 });
+    face.update(1 / 60);
+    assert.equal(liner.visible, true, "the liner shows once the mask is whole");
     const cavity = face.object.children.find(child => child.name === "VoxelFaceMaw");
     assert.ok(cavity, "a dedicated cavity remains matte after a detail change");
     assert.equal(cavity.material.metalness, 0);
