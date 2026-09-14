@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { selectVerification, verificationMatrix } from "./verify-impact.mjs";
+import { selectVerification, verificationExecution } from "./verify-impact.mjs";
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 const isSha = (value) => typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
@@ -56,26 +56,27 @@ export async function planFromGitHub(env = process.env) {
     }
   } catch {
     // Missing history/API access may increase testing, never silently reduce it.
-    fallback = "Could not establish the comparison base; running the full suite.";
+    fallback = "Could not establish the comparison base; selecting all Node checks and the full local visual plan.";
   }
   const files = base ? changedFilesSince(base, head) : [];
   const plan = selectVerification(files, { full: forceFull || !base });
   // A forced/manual redeploy or an unknown baseline still ships and gets the public smoke.
   plan.deploy ||= !base || (env.GITHUB_EVENT_NAME === "workflow_dispatch" && env.GITHUB_REF === "refs/heads/main");
-  return { ...plan, base, head, fallback, matrix: verificationMatrix(plan.smokes) };
+  return { ...plan, base, head, fallback, ...verificationExecution(plan.smokes) };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const plan = await planFromGitHub();
   const summary = [
-    `Verification: ${plan.mode}; ${plan.smokes.length} selected smokes; ${plan.matrix.include.length} runner(s).`,
+    `Verification: ${plan.mode}; ${plan.hosted.length} Node checks on one hosted runner; ${plan.local.length} visual checks for local execution.`,
     `Comparison: ${plan.base ?? "unavailable (full fallback)"} -> ${plan.head}.`,
     `Deploy: ${plan.deploy}.`,
     plan.fallback ?? "",
     ...plan.reasons.map(({ file, rule }) => `${JSON.stringify(file)}: ${rule}`),
-    `Checks: ${plan.smokes.map((smoke) => smoke.name).join(", ") || "static checks only"}`,
+    `GitHub checks: ${plan.hosted.map((smoke) => smoke.name).join(", ") || "static checks only"}.`,
+    plan.local.length ? `Local visual checks (not executed by GitHub): npm run verify -- --checks=${plan.local.map((smoke) => smoke.name).join(",")} --wait` : "No local visual checks selected.",
   ].filter(Boolean).join("\n");
   console.log(summary);
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(plan.matrix)}\ndeploy=${plan.deploy}\n`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `checks=${plan.hosted.map((smoke) => smoke.name).join(",") || "none"}\ndeploy=${plan.deploy}\n`);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary.replaceAll("\n", "  \n")}\n`);
 }

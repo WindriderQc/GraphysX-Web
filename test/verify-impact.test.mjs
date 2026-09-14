@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { VERIFY_SMOKES, resolveVerifyOptions } from "../scripts/verify-manifest.mjs";
-import { selectVerification, verificationMatrix, MAX_VERIFY_RUNNERS } from "../scripts/verify-impact.mjs";
+import { selectVerification, verificationExecution } from "../scripts/verify-impact.mjs";
 import { findDeploymentBase } from "../scripts/plan-verification.mjs";
 
 const names = (plan) => plan.smokes.map((smoke) => smoke.name);
@@ -16,8 +16,7 @@ describe("verification by changed area", () => {
     assert.equal(plan.mode, "static");
     assert.equal(plan.deploy, false);
     assert.deepEqual(names(plan), []);
-    const matrix = verificationMatrix(plan.smokes);
-    assert.deepEqual(matrix.include, [{ shard: 1, checks: "none", browser: false }]);
+    assert.deepEqual(verificationExecution(plan.smokes), { hosted: [], local: [] });
     const options = resolveVerifyOptions(["--checks=none"], {});
     assert.deepEqual(options.smokes, []);
     assert.equal(options.noBuild, false);
@@ -91,8 +90,9 @@ describe("verification by changed area", () => {
     const debrief = selectVerification(["scripts/smoke-kidx-debrief.mjs"]);
     assert.deepEqual(names(debrief), ["kidx-debrief-review", "kidx-debrief-turns", "kidx-debrief-outcomes"]);
     assert.equal(debrief.deploy, false);
-    const node = verificationMatrix(selectVerification(["scripts/smoke-results.mjs"]).smokes);
-    assert.equal(node.include[0].browser, false);
+    const node = verificationExecution(selectVerification(["scripts/smoke-results.mjs"]).smokes);
+    assert.deepEqual(node.hosted.map(smoke => smoke.name), ["results"]);
+    assert.deepEqual(node.local, []);
   });
 
   it("requires the integration checks for deployment config changes", () => {
@@ -100,6 +100,10 @@ describe("verification by changed area", () => {
     assert.equal(plan.deploy, true);
     assert.ok(names(plan).includes("standalone"));
     assert.ok(!names(plan).includes("live-sessions-browser"));
+    const http = selectVerification(['scripts/smoke-live-release.mjs']);
+    assert.equal(http.mode, 'targeted');
+    assert.equal(http.deploy, true);
+    assert.deepEqual(verificationExecution(http.smokes).hosted.map(smoke => smoke.name), ['product-assets', 'asset-guard']);
   });
 
   it("reruns every LLMx creation scenario for their shared helper and only the changed wrapper otherwise", () => {
@@ -126,22 +130,31 @@ describe("verification by changed area", () => {
     assert.deepEqual(resolveVerifyOptions([`--checks=${checks.join(",")}`], {}).smokes.map(smoke => smoke.name), checks);
   });
 
-  it("partitions selected checks exactly once and passes their names through the real runner parser", () => {
+  it("retains every selected check in exactly one execution location and preserves real runner arguments", () => {
     for (const files of [[], ["README.md"], ["src/kidx-mission-guide.ts"], ["src/kidx-app.ts"], ["src/platform-host.ts"]]) {
       const plan = selectVerification(files);
-      const matrix = verificationMatrix(plan.smokes);
-      assert.ok(matrix.include.length >= 1 && matrix.include.length <= MAX_VERIFY_RUNNERS);
-      const executed = matrix.include.flatMap((job) => resolveVerifyOptions([`--checks=${job.checks}`], {}).smokes);
+      const execution = verificationExecution(plan.smokes);
+      const executed = [execution.hosted, execution.local].flatMap(checks =>
+        resolveVerifyOptions([`--checks=${checks.map(smoke => smoke.name).join(',') || 'none'}`], {}).smokes);
       assert.deepEqual(new Set(executed), new Set(plan.smokes));
       assert.equal(executed.length, plan.smokes.length);
     }
   });
 
-  it("uses twelve runners for the full suite and keeps the workflow ceiling aligned", () => {
-    const full = verificationMatrix(VERIFY_SMOKES);
-    assert.equal(full.include.length, 12);
-    assert.match(readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'), new RegExp(`max-parallel: ${MAX_VERIFY_RUNNERS}\\b`));
-    assert.equal(verificationMatrix(selectVerification(["README.md"]).smokes).include.length, 1);
+  it("keeps full/unknown selections browser-free on GitHub while retaining their visual coverage locally", () => {
+    const full = verificationExecution(selectVerification(['src/platform-host.ts']).smokes);
+    assert.deepEqual(new Set(full.hosted.map(smoke => smoke.name)), new Set([
+      'scene-command-validation', 'product-assets', 'asset-guard', 'previews',
+      'store-auth', 'live-sessions', 'live-sessions-security', 'live-undo', 'results', 'dna',
+    ]));
+    for (const name of ['llmx', 'llmx-creation-family', 'live-sessions-browser', 'great-slide']) {
+      assert.ok(full.local.some(smoke => smoke.name === name));
+    }
+    assert.deepEqual(verificationExecution([{ name: 'future-visual-check' }]).hosted, []);
+    for (const workflow of ['ci', 'deploy']) {
+      const source = readFileSync(new URL(`../.github/workflows/${workflow}.yml`, import.meta.url), 'utf8');
+      assert.doesNotMatch(source, /playwright install|fromJSON\(needs.plan.outputs.matrix\)|max-parallel:/);
+    }
   });
 
   it("rejects misspelled check lists and conflicting filters before any check runs", () => {

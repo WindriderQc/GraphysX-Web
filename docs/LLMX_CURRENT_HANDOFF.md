@@ -36,6 +36,12 @@ One actual public opening returned native `NO_REPLY` after a failed `sessions_yi
 
 ## Delivery speed
 
+Current policy: GitHub executes no 3D browser. One hosted job runs static checks and selected
+Node contracts; visual checks stay local with inspected captures on the changed revision.
+After activation, HTTP verifies the SHA and exact built HTML/JavaScript/CSS, retaining rollback
+on mismatch. No self-hosted runner or new approval service is required. The measurements below
+are historical receipts from the preceding hosted-rendering policy.
+
 [PR22](https://github.com/WindriderQc/GraphysX-Web/pull/22) is merged. LLMx-only changes now select their actual journeys: voice/session changes select 10 checks, room/face changes select 15, including the short integration baseline. The first accumulated release selected all 84 journeys: verification 27m53s and workflow 34m22s on twelve runners. The liner-only release selected 15 journeys on five runners: verification 12m49s, deployment 4m27s, workflow 17m22s, with 551 Linux unit tests per runner. The current broader MCP/face release selected the full inventory and took 53m02s including one failed group and its unchanged retry; deployment took 4m42s. The Family rerun's 8m18s is effectively the preceding version's 8m19s, but its deadline-headroom warning remains. These are measured receipts, not an expectation that every release takes the same time.
 
 The 84 smokes are full journeys, not small unit tests. Prefer unit/contract coverage for deterministic rules and browser checks for visible integration. More runners reduce elapsed time but do not simplify the suite. See [CI_PERFORMANCE.md](CI_PERFORMANCE.md). Do not restore an unconditional full gate for small changes or add new heavy checks that repeat existing coverage.

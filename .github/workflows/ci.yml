@@ -11,11 +11,11 @@ on:
         default: false
     outputs:
       deployment_required:
-        value: ${{ jobs.plan.outputs.deploy }}
+        value: ${{ jobs.verify.outputs.deploy }}
   workflow_dispatch:
     inputs:
       full_verify:
-        description: Run the complete regression suite
+        description: Check all Node contracts and list the full local visual plan
         type: boolean
         default: true
 
@@ -34,11 +34,10 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  plan:
-    name: Select affected checks
+  verify:
+    name: Typecheck, build and Node checks
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.impact.outputs.matrix }}
       deploy: ${{ steps.impact.outputs.deploy }}
     steps:
       - name: Checkout comparison history
@@ -49,6 +48,7 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+          cache: npm
       - name: Plan verification from changed files
         id: impact
         env:
@@ -56,60 +56,10 @@ jobs:
           VERIFY_FULL: ${{ inputs.full_verify }}
         run: node scripts/plan-verification.mjs
 
-  smokes:
-    name: Selected checks ${{ matrix.shard }}
-    needs: plan
-    runs-on: ubuntu-latest
-    # One software-rendered browser suite per machine, as required by the local lock.
-    # Only affected checks run; every selected shard is required.
-    strategy:
-      fail-fast: false
-      max-parallel: 12
-      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Use Node.js 22
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-          cache: npm
-
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Chromium for headless smokes
-        if: matrix.browser
-        run: npx playwright install --with-deps chromium
-
-      # Static checks always run. The planner selects affected browser journeys; an
-      # explicit "none" runs no browser. Unknown/shared changes select the full suite.
       - name: Verify release
         env:
-          VERIFY_CHECKS: ${{ matrix.checks }}
+          VERIFY_CHECKS: ${{ steps.impact.outputs.checks }}
         run: npm run verify -- "--checks=$VERIFY_CHECKS"
-
-      - name: Upload smoke screenshots
-        if: always() && matrix.browser
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: verify-screenshots-${{ github.sha }}-${{ matrix.shard }}
-          path: output/verify
-          if-no-files-found: warn
-          retention-days: 7
-
-  # Preserve the existing required-check name and fail closed on a failed, cancelled
-  # or skipped matrix. deploy.yml still waits for the complete reusable workflow.
-  verify:
-    name: Typecheck, build, headless smokes
-    needs: [plan, smokes]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require every release shard
-        env:
-          PLAN_RESULT: ${{ needs.plan.result }}
-          SHARDS_RESULT: ${{ needs.smokes.result }}
-        run: test "$PLAN_RESULT" = success && test "$SHARDS_RESULT" = success

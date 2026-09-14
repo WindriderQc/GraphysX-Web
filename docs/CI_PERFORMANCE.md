@@ -1,87 +1,68 @@
-# Verification proportional to the change
+# Fast hosted checks, local visual verification
 
-CI always runs unit tests, typecheck, lint, build and the fast Node physics probes.
-Browser checks are selected by changed area. A full 3D regression is not a routine
-prerequisite for every deployment.
+GitHub does not launch Chromium or render 3D scenes. A single hosted job runs all
+Node unit tests, typecheck, lint, the production build, the Node physics probes and
+affected Node integration contracts. The existing ten Node-only checks remain
+available: scene command validation, product assets, asset guard, preview inventory,
+store authentication, sessions, session security, collaborative undo, results and DNA.
 
-The 84 registered smokes are complete journeys, not 84 small unit tests. Their
-software-rendered browser cost must not become the default price of changing one
-feature. Keep deterministic rules in unit/contract tests; use browser journeys for
-the integration and visible behavior that those tests cannot establish. Increasing
-runner count reduces elapsed time but does not reduce total work or simplify tests.
-The present correction fixes LLMx selection; it does not claim the long browser
-journeys have already been simplified.
+Visual journeys remain intact and run locally when their product area changes.
+Inspect the screenshots and record the tested revision. CI prints the affected
+local command, but does not claim to have executed it. This policy needs no new
+runner, service, queue or approval system. The existing manual UGBrutal staging
+workflow remains optional and executes on the local machine, not GitHub hardware.
 
-| Change | Browser coverage |
-| --- | --- |
-| Markdown documentation, Node unit tests, verification tooling, CI configuration | None; no site deployment |
-| One registered smoke script | That smoke; no site deployment |
-| KidX arrival guide | Guidance journey plus short integration checks |
-| KidX PDF/catalog | Workshop journey plus short integration checks |
-| KidX code laboratory | Interactive, challenge and guidance journeys plus integration |
-| Other KidX/EV3 code or KidX assets | KidX/EV3 journeys plus integration |
-| LLMx voice/session transport | Opening/replay/recovery, scene speech, Family, whole-world interaction and room lifecycle |
-| LLMx room or voxel face | All LLMx journeys, native agent access, scene validation and round trip |
-| BallZ code | Game journeys plus integration |
-| Results client/store | Results contracts and browser journey plus integration |
-| Store or live collaboration | Store/collaboration contracts and journeys plus integration |
-| Deployment configuration | Short integration checks, then existing production smoke |
-| Shared engine, global styling, build/dependencies, unclassified files | Full regression |
+## Selection and delivery
 
-The short integration selection is `standalone`, `product-assets` and `asset-guard`;
-only standalone launches a browser. The last two check the built asset inventory in
-Node. Mixed changes take the union of their checks. Existing assertions, timeouts,
-retry limits, rollback and the post-activation public smoke remain in place.
+The existing impact map in `scripts/verify-impact.mjs` still selects affected
+coverage. Known Node contracts go to GitHub; other checks go to the local visual
+plan. New checks default to local execution until explicitly classified as Node.
+Shared runtime, dependency or unknown changes select all Node contracts and the
+full local plan. The `full_verify` manual input expands selection in the same way;
+it never enables a hosted 3D renderer.
 
-## Comparison base
+For production, comparison remains against the last successful workflow whose
+`deploy` job actually ran. Successful documentation-only workflows with skipped
+deployment do not advance this baseline. Failed/cancelled releases and accumulated
+changes remain covered. Pull requests compare against their base merge point.
+Missing history selects complete coverage instead of silently dropping checks.
 
-`scripts/plan-verification.mjs` reads Git changes, including both sides of renames.
-For production, it compares HEAD with the last successful deployment that actually
-ran the `deploy` job. A successful docs-only workflow with a skipped deploy job does
-not advance this baseline. Failed/cancelled releases and changes in intervening
-commits remain covered until a deployment succeeds. Prior runs are ordered by update
-time so a rerun of an older release can become the latest activation.
+Planning and Node verification are sequential steps in the same job. Either failure
+fails `Typecheck, build and Node checks`; it does not claim visual acceptance.
+Documentation and verification tooling still do not deploy the site.
 
-Pull requests compare with their base merge point; manual branch runs compare with their
-merge point against `origin/main`. Missing history, unavailable GitHub evidence or
-no successful ancestor among the latest 20 successful main workflows selects the
-full suite. The workflow summary names the comparison SHAs, changed files, matching
-rules and selected checks. A selected check is required; a skipped/failed planner
-or failed/cancelled matrix cannot pass the aggregate release check.
+After activation, `scripts/smoke-live-release.mjs` checks the expected release SHA
+and compares the actual public HTML, module entry, module preloads and CSS against
+the freshly built files byte for byte, with browser-compatible content types. This
+catches an old index, missing bundles, changed bytes and SPA fallback pages without
+rendering a scene. Request deadlines and the bounded manifest retry remain. Failure
+still rolls back the existing deployment transaction. `release-http.json` records
+file hashes; it is HTTP delivery evidence, not visual or acoustic acceptance.
 
-The coverage map is explicit in `scripts/verify-impact.mjs`. It is not inferred from
-runtime imports. New shared paths default to full verification. When adding a narrow
-rule, check its consumers and add a regression test for the expected selection.
-
-EV3 scene/drive/program checks and KidX debrief review/turn/outcome checks run as separate
-journeys. Their combined scripts remain available for manual use. A change to either
-shared script selects its whole family, so splitting a slow journey retains its assertions
-and the existing per-process deadline.
-
-## Running checks
+## Local commands
 
 ```bash
-# The full serial suite remains available explicitly.
-npm run verify -- --wait
-
-# Reproduce an exact selection printed by CI.
-npm run verify -- --checks=kidx-guidance-arrival,standalone,product-assets,asset-guard --wait
-
-# Static checks, with no Chromium launch or smoke server.
+# Static checks, without launching Chromium.
 npm run verify -- --checks=none --wait
+
+# Example focused visual journey; use the affected list printed by CI.
+npm run verify -- --checks=llmx --wait
+
+# Full local regression, when its broader coverage is needed.
+npm run verify -- --wait
 ```
 
-The CI workflow has a manual `full_verify` input; deployment also exposes this input.
-Automatic CI runs for pull requests and is called by the main deployment workflow.
-Branch pushes without a PR do not run a duplicate gate; use the manual CI entry when needed.
-There is no new recurring task. Manually selected checks report their limited scope;
-the production workflow requires the complete selection calculated from its baseline.
+The existing local lock, assertions, timeouts and optional `--shard=i/n` remain.
+No journey is deleted or weakened. The 84 checks comprise 10 Node contracts and
+74 visual journeys; do not turn the local list into an unconditional extra gate
+for a documentation or Node-only change. GitHub configuration and the HTTP checker
+can be validated with Node tests, including explicit bad-publication fixtures.
 
-Selections are balanced across one to twelve independent GitHub runners, using the
-historical seconds in `scripts/verify-timings.json`. Each runner remains serial and
-retains the machine lock. New checks receive estimates until measured; estimates
-never change deadlines. Static-only changes use one runner and skip Chromium installation.
-The original `--shard=i/n` option still reproduces a slice of the full inventory.
+## Historical hosted-rendering measurements
+
+The measurements below explain the change of policy. They describe earlier
+workflows that rendered 3D on GitHub and do not predict the new delivery duration.
+A duration for the new policy is reported only after its first real run finishes.
 
 ## LLMx release correction (2026-09-14)
 
