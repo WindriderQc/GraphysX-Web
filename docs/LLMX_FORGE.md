@@ -17,6 +17,7 @@ Codex per [LLMX_RESTART_HANDOFF](../../GraphysX-Web-llmx-plan/docs/LLMX_RESTART_
 | --- | --- |
 | `src/llmx-forge.ts` | `createForgeWorld()` — the Forge as a plain v2 document plus named anchors (`faceCenter`, `gazeTarget`, `cameraRest`, `cameraEntry`, `buildZone`, `ribs`). Also the pure entry timeline `forgeIntroAt()` / `forgeCameraAt()`. Type-only over the runtime so `node --test` loads it. |
 | `src/llmx-forge-presentation.ts` | Host-side transient effects: the copper circuit running along the ribs at entry, the copper "breath" behind the mask while the agent speaks, and `announceCreation(point)` — a cyan trail from the socket to a new object and a ring opening under it. Not scene state; never exported. |
+| `src/llmx-face-reactions.ts` | The mask's reactions to events: a glance, raised brow and smile at an accepted creation; a nod (`face.nod()`, a rig gesture) on the first syllable of a reply, with a silence threshold so a pause between words is not a new reply. Pure over a clock; shared by the harness and the application. |
 | `src/llmx-preview.ts` + `llmx-preview.html` | Dev harness in the real `PlatformHost`. Not a build input. Everything it animates is labelled SIMULATION. |
 | `test/llmx-forge.test.mjs` | Document invariants: unique ids, one floor collider, one shadow light, particle budget, anchors consistent, timeline monotonic. |
 
@@ -43,7 +44,7 @@ nobody instantiating it by hand. `createForgeWorld()` will then set that field o
 
 From this worktree: `npm run dev -- --port 4199` then open
 `http://localhost:4199/llmx-preview.html`. Query: `intro=0` skips the entry, `t=<s>` seeks it,
-`speak=1` starts the simulated speech envelope. "Créer (simulé)" spawns an ephemeral copper block into the build zone through an ordinary `api.spawn` (the object is real scene state on the real collider; only the decision is simulated), fires the creation accent and holds the mask's gaze on it for two seconds. `.claude/launch.json` has an `llmx-preview`
+`speak=1` starts the simulated speech envelope. "Créer (simulé)" spawns an ephemeral copper block into the build zone through an ordinary `api.spawn` (the object is real scene state on the real collider; only the decision is simulated), fires the creation accent; the mask glances at it with a raised brow and a smile, then comes back to the visitor. "Parler (simulé)" earns a nod on its first syllable. `.claude/launch.json` has an `llmx-preview`
 entry for the Browser pane.
 
 With a junctioned `node_modules`, Vite logs 403s for `@fontsource` files outside its allow list;

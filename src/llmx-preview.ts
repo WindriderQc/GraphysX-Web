@@ -3,6 +3,7 @@ import { PlatformHost } from "./platform-host";
 import { createForgeWorld, forgeIntroAt, forgeThinkingEmitter, FORGE_INTRO, LLMX_FACE_ANCHOR_ID, LLMX_THINKING_EMITTER_ID } from "./llmx-forge";
 import { mountForgePresentation } from "./llmx-forge-presentation";
 import { createPointerFocus } from "./llmx-gaze";
+import { createFaceReactions } from "./llmx-face-reactions";
 // The product's page styles: they size #app to the viewport and give the HUD the brand font.
 import "./styles.css";
 
@@ -53,6 +54,8 @@ type PreviewFaceRig = {
    * into everyone's world. Called once at attach and again only when the host's profile changes.
    */
   setQualityCeiling?: (profile: "high" | "balanced" | "mobile") => void;
+  /** One nod, a rig gesture; absent on the stand-in. */
+  nod?: (strength?: number) => void;
   dispose: () => void;
 };
 
@@ -185,7 +188,7 @@ let reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matc
 let clock = 0;
 let nextBlink = 2.5;
 let blinkPhase = 0;
-let gazeHold: { point: [number, number, number]; until: number } | null = null;
+const reactions = createFaceReactions();
 /** Diagnostic: pin the speak driver to a constant (e.g. 1 for the maximal mouth opening). */
 let speakHold: number | null = null;
 let creationCount = 0;
@@ -222,7 +225,8 @@ function simulateCreation(): void {
     return;
   }
   presentation.announceCreation([x, center[1], z]);
-  gazeHold = { point: [x, 0.5, z], until: clock + 2.2 };
+  // The mask looks at what it made, brow and mouth lifting for a moment.
+  reactions.creation([x, 0.5, z], clock);
   // Pull back so the visitor sees where it lands and the mask looking at it, then come home.
   host.frameView(anchors.cameraCreation.position, anchors.cameraCreation.target, 0.8);
   cameraReturnAt = clock + 3.4;
@@ -355,10 +359,13 @@ const unsubscribe = host.subscribeFrame((deltaSeconds) => {
     // A fresh creation holds the gaze for a moment; otherwise a moving pointer leads, and the
     // eyes return to the visitor (the camera) once it stops.
     const live = pointerFocus.resolve(host.camera, anchors.faceCenter, 1.2);
-    const focus = gazeHold && clock < gazeHold.until ? gazeHold.point : live ? live.point : [host.camera.position.x, host.camera.position.y, host.camera.position.z];
+    const reaction = reactions.overlay(clock);
+    const focus = reaction.focus ?? (live ? live.point : [host.camera.position.x, host.camera.position.y, host.camera.position.z]);
     if (live?.overFace && !simulateAttention) drivers.attention = Math.max(drivers.attention, 0.7);
     // Pointing at the mask earns a small smile, the way a face warms when it is looked at.
     if (live?.overFace && !simulateSmile) drivers.warmth = Math.max(drivers.warmth, 0.45);
+    drivers.attention = Math.max(drivers.attention, reaction.attention);
+    drivers.warmth = Math.max(drivers.warmth, reaction.warmth);
     const dx = focus[0] - anchors.faceCenter[0];
     const dy = focus[1] - anchors.gazeTarget[1];
     const dz = focus[2] - anchors.faceCenter[2];
@@ -377,6 +384,8 @@ const unsubscribe = host.subscribeFrame((deltaSeconds) => {
     drivers.speak = 0;
   }
   if (speakHold !== null) drivers.speak = speakHold;
+  // A nod on the first syllable of each simulated reply, as the application does on real audio.
+  if (reactions.speech(simulateSpeech && drivers.build > 0.98, clock)) face.nod?.();
   drivers.speakTone = 0.5 + 0.3 * Math.sin(clock * 1.7);
   drivers.think = simulateThink ? 0.8 : 0;
   if (cameraReturnAt !== null && clock >= cameraReturnAt) {

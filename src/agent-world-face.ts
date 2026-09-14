@@ -149,6 +149,12 @@ const IDLE = {
   doubleBlinkChance: 0.2,
 };
 
+/**
+ * A single nod: a dip of the head, forward then back, over this long. Down fast, up slower,
+ * as a person marks the first word of an answer. About two and a half degrees.
+ */
+const NOD = { radians: 0.045, seconds: 0.62 };
+
 const clamp = (value: number, min: number, max: number): number => (value < min ? min : value > max ? max : value);
 
 /** Frame-rate independent exponential approach. `tau` is the time to close ~63% of the gap. */
@@ -210,6 +216,9 @@ export class AgentWorldVoxelFace {
   private saccadeY = 0;
   private idleGazeX = 0;
   private idleGazeY = 0;
+  /** Seconds left in the current nod, 0 when the head is not nodding. */
+  private nodRemaining = 0;
+  private nodStrength = 1;
 
   // Reused across every cube of every frame. The update loop allocates nothing.
   private readonly matrix = new Matrix4();
@@ -281,6 +290,16 @@ export class AgentWorldVoxelFace {
     }
   }
 
+  /**
+   * One nod, now: a small dip of the head that the rig plays out over the next frames, on top
+   * of its sway. A gesture, not a driver — it has no target to hold, so it starts and finishes
+   * on its own. The application calls it on the first syllable of a reply.
+   */
+  nod(strength = 1): void {
+    this.nodRemaining = NOD.seconds;
+    this.nodStrength = clamp(strength, 0, 1);
+  }
+
   /** Immediate authored pose for load/skip/reduced motion; normal speech still uses smoothing. */
   snapDrivers(drivers: Partial<FaceDrivers>): void {
     this.setDrivers(drivers);
@@ -329,9 +348,19 @@ export class AgentWorldVoxelFace {
     const t = this.idleClock;
     const busy = Math.max(current.speak, current.think * 0.6);
     const sway = IDLE.headSway * (1 - 0.5 * busy);
+    let nodPitch = 0;
+    if (this.nodRemaining > 0) {
+      this.nodRemaining = Math.max(0, this.nodRemaining - dt);
+      // Progress skewed toward the start: the dip is quick, the return is slower. Zero at both
+      // ends and a finite slope everywhere, so the nod never steps in or out (a power curve did:
+      // its first frame alone was two thirds of a degree).
+      const u = 1 - this.nodRemaining / NOD.seconds;
+      const k = u / (u + (1 - u) * 0.6);
+      nodPitch = NOD.radians * this.nodStrength * Math.sin(Math.PI * k);
+    }
     this.object.rotation.z = POSE_LIMITS.attentionTilt * current.attention + sway * 0.35 * Math.sin(t * 0.37 + 1.3);
     this.object.rotation.y = IDLE.headFollowsGaze * current.gazeX * POSE_LIMITS.gazeRadians + sway * (Math.sin(t * 0.23) * 0.6 + Math.sin(t * 0.71 + 0.8) * 0.4);
-    this.object.rotation.x = -IDLE.headFollowsGaze * current.gazeY * POSE_LIMITS.gazeRadians * 0.6 + sway * 0.5 * Math.sin(t * 0.29 + 2.1) + IDLE.breathNod * Math.sin(current.breath);
+    this.object.rotation.x = -IDLE.headFollowsGaze * current.gazeY * POSE_LIMITS.gazeRadians * 0.6 + sway * 0.5 * Math.sin(t * 0.29 + 2.1) + IDLE.breathNod * Math.sin(current.breath) + nodPitch;
 
     this.advanceBlink(dt);
     current.blink = approach(current.blink, Math.max(this.autoBlinkValue, target.blink), RESPONSE.blink, dt);
@@ -555,15 +584,36 @@ export class AgentWorldVoxelFace {
       if (Math.abs(sx) < mouth.halfWidth + 0.14 && Math.abs(sy - mouth.y) < 0.2 && sz > 0.05) continue;
       cubes.push(i);
     }
+    // Nobody sees the liner's resolution, only its colour through a crease, so at the dense level
+    // it is voxelised on a grid twice as coarse as the shell: a quarter of the instances for the
+    // same coverage. Measured under the smoke's software renderer, the one-to-one liner was 22% of
+    // the frame (2026-09-14). The coarser levels keep one cube per shell cube — there the liner
+    // is barely one cube inside and a bigger cube would poke through.
+    const coarse = weights.count > 12000 ? 2 : 1;
+    const cell = edge * coarse;
+    const shrink = 0.9;
+    const kept: number[] = [];
+    const rest: number[] = [];
+    const seen = new Set<number>();
+    for (const i of cubes) {
+      const gx = Math.round((weights.rest[i * 3] * shrink) / cell);
+      const gy = Math.round((weights.rest[i * 3 + 1] * shrink) / cell);
+      const gz = Math.round((weights.rest[i * 3 + 2] * shrink) / cell);
+      const key = ((gx + 512) * 1024 + (gy + 512)) * 1024 + (gz + 512);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      kept.push(i);
+      rest.push(gx * cell, gy * cell, gz * cell);
+    }
     const mesh = new InstancedMesh(
-      new BoxGeometry(edge * 1.15, edge * 1.15, edge * 1.15),
+      new BoxGeometry(cell * 1.15, cell * 1.15, cell * 1.15),
       // The shell's own grey and finish (owner: a darker liner "fait louche"): a crease then reads
       // as more of the same metal, not as a different material showing through.
       new MeshStandardMaterial({ color: this.config.metalColor, roughness: 0.54, metalness: 0.5 }),
-      Math.max(cubes.length, 1),
+      Math.max(kept.length, 1),
     );
     mesh.name = name;
-    mesh.count = cubes.length;
+    mesh.count = kept.length;
     mesh.castShadow = false;
     mesh.userData.graphysxFaceCastShadow = false;
     mesh.receiveShadow = false;
@@ -571,15 +621,8 @@ export class AgentWorldVoxelFace {
     // Shrunk about the mask's origin: about three cubes inside the shell at the high level, and
     // proportionally at the coarser ones. Deep enough that the rows above a dropped brow still
     // cover it; shallow enough that the eyes' sockets stay hollow.
-    const shrink = 0.9;
-    this.linerCubes = Uint32Array.from(cubes);
-    this.linerRest = new Float32Array(cubes.length * 3);
-    for (let k = 0; k < cubes.length; k += 1) {
-      const i = cubes[k];
-      this.linerRest[k * 3] = weights.rest[i * 3] * shrink;
-      this.linerRest[k * 3 + 1] = weights.rest[i * 3 + 1] * shrink;
-      this.linerRest[k * 3 + 2] = weights.rest[i * 3 + 2] * shrink;
-    }
+    this.linerCubes = Uint32Array.from(kept);
+    this.linerRest = Float32Array.from(rest);
     this.object.add(mesh);
     this.linerMesh = mesh;
     this.writeLiner(1);
