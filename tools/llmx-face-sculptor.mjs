@@ -301,14 +301,19 @@ function lidDistance(x, y, z) {
   // only a crescent of cyan along the bottom rim, and a bottom crescent reads as a gaze aimed
   // at the floor no matter where the eye is actually pointed. Soft edge so the lid line is not
   // a hard staircase.
-  return smax(shell, ey + radius * 0.38 - y, 0.03);
+  return smax(shell, UPPER_LID_LINE - y, 0.03);
 }
+
+/** Where the upper lid's cap plane cuts the eyeball: everything below it is the open eye. */
+const UPPER_LID_LINE = ANCHORS.eye.y + ANCHORS.eye.radius * 0.38;
+/** Where the lower lid's cap plane cuts the eyeball: everything above it is the open eye. */
+const LOWER_LID_LINE = ANCHORS.eye.y - ANCHORS.eye.radius * 0.55;
 
 /** The lower lid: the same shell, capping the bottom fifth of the eyeball. */
 function lowerLidDistance(x, y, z) {
   const { x: ex, y: ey, z: ez, radius } = ANCHORS.eye;
   const shell = Math.abs(len(Math.abs(x) - ex, y - ey, z - ez) - (radius + 0.034)) - 0.026;
-  return smax(shell, y - (ey - radius * 0.55), 0.03);
+  return smax(shell, y - LOWER_LID_LINE, 0.03);
 }
 
 // ---------------------------------------------------------------------------
@@ -395,6 +400,12 @@ function voxelise(cube) {
   // because the distances below are gradient-normalised.
   const band = cube * 0.62;
   const step = cube * 0.25;
+  // The shell band is a tolerance on the lid's curved shell, not on its straight lid line. At
+  // the mobile level (band 4.5 cm against an eye of 15 cm) it let both lids reach across the
+  // opening, so the eye was walled in even with the lids open: the mask looked asleep on every
+  // device capped to mobile. The line keeps at most 2 cm of slack, which is already more than
+  // the dense levels' band, so they are unchanged.
+  const lidLineTolerance = Math.min(band, 0.02);
   const nx = Math.ceil((BOUNDS.maxX - BOUNDS.minX) / cube);
   const ny = Math.ceil((BOUNDS.maxY - BOUNDS.minY) / cube);
   const nz = Math.ceil((BOUNDS.maxZ - BOUNDS.minZ) / cube);
@@ -426,8 +437,8 @@ function voxelise(cube) {
         // Eyes are solid, not a shell: a hollow eyeball reads as a hole. `eyeDistance` is an
         // exact sphere distance, so it needs no normalisation.
         const inEye = eyeDistance(x, y, z) <= 0;
-        const onLid = !inEye && isSurfaceCell(lidDistance, x, y, z, band, step);
-        const onLowerLid = !inEye && !onLid && isSurfaceCell(lowerLidDistance, x, y, z, band, step);
+        const onLid = !inEye && y >= UPPER_LID_LINE - lidLineTolerance && isSurfaceCell(lidDistance, x, y, z, band, step);
+        const onLowerLid = !inEye && !onLid && y <= LOWER_LID_LINE + lidLineTolerance && isSurfaceCell(lowerLidDistance, x, y, z, band, step);
         const onMask = !inEye && !onLid && !onLowerLid && isSurfaceCell(maskDistance, x, y, z, band, step);
         // The backing wall also fills intersections with the tunnel shell. Removing a hidden
         // tunnel voxel must not punch a matching hole through the wall in front of it.
