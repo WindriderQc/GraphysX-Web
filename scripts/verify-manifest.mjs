@@ -21,6 +21,7 @@ export const VERIFY_SMOKES = [
   { name: "llmx-conversation-session", tier: "apps", script: "scripts/smoke-llmx-conversation-session.mjs", covers: "Disabled conversation, exact missing-session recovery and failed/uncertain opening recovery" },
   { name: "llmx-conversation-turns", tier: "apps", script: "scripts/smoke-llmx-conversation-turns.mjs", covers: "Text/opening, explicit audio choice, stale callbacks, interruption and cleanup recovery with intercepted transport" },
   { name: "llmx-conversation-replay", tier: "apps", script: "scripts/smoke-llmx-conversation-replay.mjs", covers: "Exact restored voice replay, environment/visibility/mute/exit cancellation and turn identity" },
+  { name: "llmx-face-embed", tier: "apps", script: "scripts/smoke-llmx-face-embed.mjs", covers: "Built <llmx-face> module alone: one file, drawn mask, presence contract, speaking/sleeping and release on removal" },
   { name: "llmx", tier: "apps", script: "scripts/smoke-llmx.mjs", covers: "Forge appearance lifecycle, save/reload, reduced motion, immediate camera, environment selection and Center return" },
   { name: "startup", tier: "core", script: "scripts/smoke-startup.mjs", covers: "renderer and lazy-import failures: accessible recovery page and working retry" },
   { name: "showroom", tier: "core", script: "scripts/smoke-showroom.mjs", covers: "default route: welcome showroom, gated editor, auto-orbit" },
