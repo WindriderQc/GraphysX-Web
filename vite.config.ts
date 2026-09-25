@@ -1,6 +1,6 @@
 import { cp, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { defineConfig, type Plugin } from "vite";
+import { build, defineConfig, type Plugin } from "vite";
 // @ts-expect-error -- plain .mjs build script, no type declarations
 import { productAssetManifest } from "./scripts/product-assets.mjs";
 // @ts-expect-error -- local development middleware, not browser code
@@ -56,6 +56,20 @@ function productAssets(): Plugin {
   };
 }
 
+/**
+ * Build the `<llmx-face>` embed (vite.face.config.ts) with every release build, so the gate, CI
+ * and deploy all ship `dist/embed/llmx-face.js` — they run `vite build`, not the npm script.
+ */
+function faceEmbed(): Plugin {
+  return {
+    name: "graphysx-llmx-face-embed",
+    apply: "build",
+    async closeBundle() {
+      await build({ configFile: path.resolve("vite.face.config.ts"), logLevel: "warn" });
+    },
+  };
+}
+
 export default defineConfig(({ command }) => {
   // GRAPHYSX_FULL_ASSETS=1 builds the unpruned dist — for driving an archive world in the
   // legacy player against a real build, which the pruned release cannot serve.
@@ -64,7 +78,7 @@ export default defineConfig(({ command }) => {
   return {
     // Dev always serves all of public/, so the legacy route keeps its archive locally.
     publicDir: prune ? false : "public",
-    plugins: prune ? [productAssets()] : [kidxDocuments()],
+    plugins: prune ? [productAssets(), faceEmbed()] : command === "build" ? [faceEmbed()] : [kidxDocuments()],
     optimizeDeps: { entries: ["index.html"] },
     server: {
       // PORT lets a second checkout/session run its own dev server beside the default one.

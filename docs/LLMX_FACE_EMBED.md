@@ -7,7 +7,8 @@ its own conversation. AgentX Household uses it for the Super Dad and Famille ava
 
 - Source: `src/llmx-face-element.ts` (element, renderer, lights, halo) and
   `src/llmx-face-embed-presence.ts` (pure presence → face drivers, unit tested).
-- `npm run build` also runs `vite build -c vite.face.config.ts`, which writes one self-contained
+- Every `vite build` (gate, CI, deploy) also builds `vite.face.config.ts` through a plugin in
+  `vite.config.ts`; `npm run build:face` builds it alone. It writes one self-contained
   ES module, `dist/embed/llmx-face.js` (three.js and the sculpt inlined, ~230 KB gzip). It ships
   with every production deploy at `/embed/llmx-face.js`.
 - A host relays that file from its own origin (Household does, like the VoiX player) so its CSP
