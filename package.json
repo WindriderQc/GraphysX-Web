@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && vite build -c vite.face.config.ts",
+    "build:face": "vite build -c vite.face.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"test/*.test.mjs\"",

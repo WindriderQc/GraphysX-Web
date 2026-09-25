@@ -1,0 +1,273 @@
+import {
+  ACESFilmicToneMapping,
+  AdditiveBlending,
+  AmbientLight,
+  CanvasTexture,
+  Color,
+  DirectionalLight,
+  Mesh,
+  MeshBasicMaterial,
+  PerspectiveCamera,
+  PlaneGeometry,
+  PointLight,
+  Scene,
+  SRGBColorSpace,
+  Vector3,
+  WebGLRenderer,
+} from "three";
+import { AgentWorldVoxelFace } from "./agent-world-face";
+import { POSE_LIMITS, resolveAgentWorldFace, type AgentWorldFaceLevel } from "./llmx-face-pose";
+import { forgeIntroAt, FORGE_INTRO } from "./llmx-forge";
+import { gazeDriversToward } from "./llmx-gaze";
+import { embedFaceDrivers, IDLE_PRESENCE, newToolPulses, readEmbedPresence, type LlmXEmbedPresence } from "./llmx-face-embed-presence";
+
+/**
+ * `<llmx-face>`: the LLMx voxel mask alone, for another page to dock beside its own conversation.
+ *
+ * No world, physics, editor or transport: one renderer, one scene, the rig, four lights and an
+ * aura halo. The host page owns the conversation and pushes `agentx.presence.v1` through the
+ * `presence` property; the mask assembles on connect (the Forge intro, without the room) and
+ * follows the pointer anywhere on the page.
+ *
+ * Attributes: `level` (high | balanced | mobile), `tint` (#rrggbb, the aura and rim),
+ * `intro` ("off" to arrive already built).
+ * Events: `llmx-face-ready`, `llmx-face-error` (WebGL unavailable: the host shows its fallback).
+ */
+/** Half extents of the sculpt (measured Box3 of the high level, rounded up) with a margin. */
+const FRAME_HALF_WIDTH = 0.95;
+const FRAME_HALF_HEIGHT = 1.38;
+const FACE_FRONT = 0.66;
+const EYE_HEIGHT = 0.1;
+const DEFAULT_TINT = "#60d6e8";
+
+const reducedMotion = (): boolean => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+
+function deviceCeiling(): AgentWorldFaceLevel {
+  const cores = navigator.hardwareConcurrency || 4;
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
+  if (cores <= 4 || memory <= 4) return "mobile";
+  return cores <= 8 ? "balanced" : "high";
+}
+
+export class LlmXFaceElement extends HTMLElement {
+  static readonly observedAttributes = ["tint", "level"];
+
+  private renderer: WebGLRenderer | null = null;
+  private scene: Scene | null = null;
+  private camera: PerspectiveCamera | null = null;
+  private face: AgentWorldVoxelFace | null = null;
+  private aura: Mesh<PlaneGeometry, MeshBasicMaterial> | null = null;
+  private rim: PointLight | null = null;
+  private frame = 0;
+  private last = 0;
+  private elapsed = 0;
+  private sparks = 0;
+  private speakingBefore = false;
+  private readyEmitted = false;
+  private visibleOnScreen = true;
+  private pointer: { x: number; y: number; at: number } | null = null;
+  private current: LlmXEmbedPresence = IDLE_PRESENCE;
+  private readonly gaze = new Vector3();
+  private readonly tint = new Color(DEFAULT_TINT);
+  private resize: ResizeObserver | null = null;
+  private intersection: IntersectionObserver | null = null;
+
+  /** The last presence the host pushed. */
+  get presence(): LlmXEmbedPresence { return this.current; }
+
+  /** Push `agentx.presence.v1`; partial updates keep the previous fields. */
+  set presence(value: unknown) {
+    const next = readEmbedPresence(value, this.current);
+    this.sparks = Math.min(3, this.sparks + newToolPulses(this.current, next));
+    this.current = next;
+  }
+
+  /** Replay the assembly, as when the conversation is opened again. */
+  rebuild(): void {
+    this.elapsed = 0;
+    this.face?.snapDrivers({ build: 0, blink: 1, speak: 0, think: 0 });
+  }
+
+  connectedCallback(): void {
+    if (this.renderer) return;
+    const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+    root.innerHTML = "<style>:host{display:block;position:relative;contain:strict;min-width:48px;min-height:48px}canvas{position:absolute;inset:0;width:100%;height:100%;display:block}</style><canvas part=\"canvas\"></canvas>";
+    const canvas = root.querySelector("canvas")!;
+    try {
+      this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "low-power" });
+    } catch (error) {
+      this.dispatchEvent(new CustomEvent("llmx-face-error", { detail: { reason: "webgl", message: String(error) } }));
+      return;
+    }
+    this.renderer.outputColorSpace = SRGBColorSpace;
+    this.renderer.toneMapping = ACESFilmicToneMapping;
+    this.renderer.setClearColor(0x000000, 0);
+    this.scene = new Scene();
+    this.camera = new PerspectiveCamera(35, 1, 0.1, 30);
+    this.buildLights();
+    const level = (this.getAttribute("level") as AgentWorldFaceLevel | null) ?? "high";
+    this.face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: ["high", "balanced", "mobile"].includes(level) ? level : "high" }));
+    this.face.setQualityCeiling(deviceCeiling());
+    this.scene.add(this.face.object);
+    this.applyTint();
+    if (this.getAttribute("intro") === "off") {
+      this.elapsed = FORGE_INTRO.seconds;
+      this.face.snapDrivers({ build: 1, blink: 0 });
+    } else {
+      this.rebuild();
+    }
+    this.resize = new ResizeObserver(() => this.fit());
+    this.resize.observe(this);
+    this.intersection = new IntersectionObserver(entries => { this.visibleOnScreen = entries.some(entry => entry.isIntersecting); });
+    this.intersection.observe(this);
+    window.addEventListener("pointermove", this.onPointer, { passive: true });
+    this.fit();
+    this.last = performance.now();
+    this.frame = requestAnimationFrame(this.tick);
+  }
+
+  disconnectedCallback(): void {
+    cancelAnimationFrame(this.frame);
+    window.removeEventListener("pointermove", this.onPointer);
+    this.resize?.disconnect();
+    this.intersection?.disconnect();
+    this.face?.dispose();
+    this.aura?.geometry.dispose();
+    this.aura?.material.map?.dispose();
+    this.aura?.material.dispose();
+    this.renderer?.dispose();
+    this.renderer = this.scene = this.camera = this.face = this.aura = this.rim = null;
+    this.readyEmitted = false;
+  }
+
+  attributeChangedCallback(name: string): void {
+    if (name === "tint") this.applyTint();
+    if (name === "level" && this.face) {
+      const level = this.getAttribute("level");
+      if (level === "high" || level === "balanced" || level === "mobile") this.face.configure(resolveAgentWorldFace({ level }));
+    }
+  }
+
+  private buildLights(): void {
+    const scene = this.scene!;
+    // The Forge's light plan (llmx-forge.ts), relative to a mask at the origin.
+    scene.add(new AmbientLight("#243040", 0.28));
+    const key = new DirectionalLight("#c6d6f2", 2.8);
+    key.position.set(-9, 11.5, 10);
+    scene.add(key);
+    const fill = new PointLight("#d9d3c8", 7, 14);
+    fill.position.set(3.5, 3.7, 8.5);
+    scene.add(fill);
+    this.rim = new PointLight(DEFAULT_TINT, 14, 14);
+    this.rim.position.set(0, 1.4, -3.4);
+    scene.add(this.rim);
+    // The aura: a soft halo behind the head, additive, so it glows on any dock background.
+    this.aura = new Mesh(new PlaneGeometry(3.6, 3.6), new MeshBasicMaterial({ color: DEFAULT_TINT, map: haloTexture(), transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }));
+    this.aura.position.set(0, 0.1, -0.9);
+    scene.add(this.aura);
+  }
+
+  private applyTint(): void {
+    const value = this.getAttribute("tint");
+    this.tint.set(value && /^#[0-9a-f]{6}$/i.test(value) ? value : DEFAULT_TINT);
+    this.aura?.material.color.copy(this.tint);
+    this.rim?.color.copy(this.tint).lerp(new Color("#ffb45a"), 0.55);
+  }
+
+  /** Frame the mask whatever the dock's aspect: the head always fits with a margin. */
+  private fit(): void {
+    if (!this.renderer || !this.camera) return;
+    const width = Math.max(1, this.clientWidth), height = Math.max(1, this.clientHeight);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, width * height > 400_000 ? 1.5 : 2));
+    this.renderer.setSize(width, height, false);
+    this.camera.aspect = width / height;
+    const vertical = (this.camera.fov * Math.PI) / 360;
+    const horizontal = Math.atan(Math.tan(vertical) * this.camera.aspect);
+    const distance = FACE_FRONT + Math.max(FRAME_HALF_HEIGHT / Math.tan(vertical), FRAME_HALF_WIDTH / Math.tan(horizontal));
+    this.camera.position.set(0.18 * distance / 4.1, 0.03, distance);
+    this.camera.lookAt(0, 0, 0);
+    this.camera.updateProjectionMatrix();
+  }
+
+  private readonly onPointer = (event: PointerEvent): void => {
+    this.pointer = { x: event.clientX, y: event.clientY, at: performance.now() };
+  };
+
+  private readonly tick = (now: number): void => {
+    this.frame = requestAnimationFrame(this.tick);
+    const delta = Math.min(0.1, Math.max(0, (now - this.last) / 1000));
+    this.last = now;
+    if (document.hidden || !this.visibleOnScreen || !this.face || !this.renderer || !this.scene || !this.camera) return;
+    const reduced = reducedMotion();
+    this.elapsed += delta;
+    const intro = forgeIntroAt(this.elapsed, reduced);
+    const drivers = embedFaceDrivers(this.current, intro.assembly);
+    const speaking = (drivers.speak ?? 0) > 0;
+    if (speaking && !this.speakingBefore && intro.done && !reduced) this.face.nod(0.8);
+    this.speakingBefore = speaking;
+    this.face.setDrivers({
+      ...drivers,
+      blink: Math.max(drivers.blink ?? 0, 1 - intro.wake),
+      attention: (drivers.attention ?? 0) * intro.wake,
+      ...this.gazeDrivers(now),
+    });
+    this.face.update(reduced ? 0.1 : delta);
+    this.animateAura(delta, intro.assembly, drivers.think ?? 0, drivers.speak ?? 0, reduced);
+    this.renderer.render(this.scene, this.camera);
+    if (!this.readyEmitted && intro.done) {
+      this.readyEmitted = true;
+      this.dispatchEvent(new CustomEvent("llmx-face-ready"));
+    }
+  };
+
+  /** Look at the pointer while it moves anywhere on the page, then back at the viewer. */
+  private gazeDrivers(now: number): { gazeX: number; gazeY: number } {
+    const camera = this.camera!;
+    if (this.pointer && now - this.pointer.at < 4000) {
+      const rect = this.getBoundingClientRect();
+      const ndcX = ((this.pointer.x - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+      const ndcY = -(((this.pointer.y - rect.top) / Math.max(1, rect.height)) * 2 - 1);
+      this.gaze.set(ndcX, ndcY, 0.5).unproject(camera).sub(camera.position).normalize()
+        .multiplyScalar(camera.position.length() * 0.5).add(camera.position);
+    } else {
+      this.gaze.copy(camera.position);
+    }
+    return gazeDriversToward(this.gaze, EYE_HEIGHT, POSE_LIMITS.gazeRadians);
+  }
+
+  /** The emanation: the ring breathes with thought, swells with the voice, flares on each tool. */
+  private animateAura(delta: number, assembly: number, think: number, speak: number, reduced: boolean): void {
+    const aura = this.aura!, rim = this.rim!;
+    const sleeping = this.current.phase === "sleeping";
+    const listening = this.current.phase === "listening" ? Math.min(1, this.current.level * 10) : 0;
+    if (this.sparks > 0 && !reduced) {
+      aura.userData.flare = 1;
+      this.sparks -= 1;
+    }
+    const flare = aura.userData.flare = Math.max(0, (aura.userData.flare ?? 0) - delta * 1.6);
+    const pulse = reduced ? 0 : 0.5 + 0.5 * Math.sin(this.elapsed * (1.4 + think * 3));
+    const glow = sleeping ? 0.05 : 0.12 + think * (0.18 + 0.12 * pulse) + speak * 0.45 + listening * 0.3 + flare * 0.6;
+    aura.material.opacity = Math.min(1, glow * 1.4 * assembly);
+    aura.scale.setScalar(1 + speak * 0.08 + listening * 0.05 + flare * 0.35);
+    rim.intensity = (sleeping ? 4 : 10 + speak * 10 + think * 6 * pulse + flare * 14) * Math.max(0.2, assembly);
+  }
+}
+
+/** A radial falloff with a brighter band near the head's outline: light spilling past it. */
+function haloTexture(): CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 256;
+  const context = canvas.getContext("2d")!;
+  const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128);
+  gradient.addColorStop(0, "rgba(255,255,255,0.35)");
+  gradient.addColorStop(0.42, "rgba(255,255,255,0.8)");
+  gradient.addColorStop(0.55, "rgba(255,255,255,0.35)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 256, 256);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+
+if (!customElements.get("llmx-face")) customElements.define("llmx-face", LlmXFaceElement);
