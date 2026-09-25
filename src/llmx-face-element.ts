@@ -2,6 +2,7 @@ import {
   ACESFilmicToneMapping,
   AdditiveBlending,
   AmbientLight,
+  Box3,
   CanvasTexture,
   Color,
   DirectionalLight,
@@ -33,10 +34,10 @@ import { embedFaceDrivers, IDLE_PRESENCE, newToolPulses, readEmbedPresence, type
  * `intro` ("off" to arrive already built).
  * Events: `llmx-face-ready`, `llmx-face-error` (WebGL unavailable: the host shows its fallback).
  */
-/** Half extents of the sculpt (measured Box3 of the high level, rounded up) with a margin. */
-const FRAME_HALF_WIDTH = 0.95;
-const FRAME_HALF_HEIGHT = 1.38;
-const FACE_FRONT = 0.66;
+/** Frame used until the assembled mask can be measured: the high level's Box3 plus a margin. */
+const DEFAULT_FRAME = Object.freeze({ halfWidth: 0.95, halfHeight: 1.38, front: 0.66 });
+/** Room kept around the measured mask, so a nod or a sway never touches the dock's edge. */
+const FRAME_MARGIN = 1.14;
 const EYE_HEIGHT = 0.1;
 const DEFAULT_TINT = "#60d6e8";
 
@@ -67,6 +68,8 @@ export class LlmXFaceElement extends HTMLElement {
   private visibleOnScreen = true;
   private pointer: { x: number; y: number; at: number } | null = null;
   private current: LlmXEmbedPresence = IDLE_PRESENCE;
+  private frameExtent: { halfWidth: number; halfHeight: number; front: number } = DEFAULT_FRAME;
+  private measured = false;
   private readonly gaze = new Vector3();
   private readonly tint = new Color(DEFAULT_TINT);
   private resize: ResizeObserver | null = null;
@@ -144,7 +147,10 @@ export class LlmXFaceElement extends HTMLElement {
     if (name === "tint") this.applyTint();
     if (name === "level" && this.face) {
       const level = this.getAttribute("level");
-      if (level === "high" || level === "balanced" || level === "mobile") this.face.configure(resolveAgentWorldFace({ level }));
+      if (level === "high" || level === "balanced" || level === "mobile") {
+        this.face.configure(resolveAgentWorldFace({ level }));
+        this.measured = false;
+      }
     }
   }
 
@@ -183,7 +189,8 @@ export class LlmXFaceElement extends HTMLElement {
     this.camera.aspect = width / height;
     const vertical = (this.camera.fov * Math.PI) / 360;
     const horizontal = Math.atan(Math.tan(vertical) * this.camera.aspect);
-    const distance = FACE_FRONT + Math.max(FRAME_HALF_HEIGHT / Math.tan(vertical), FRAME_HALF_WIDTH / Math.tan(horizontal));
+    const { halfWidth, halfHeight, front } = this.frameExtent;
+    const distance = front + Math.max(halfHeight / Math.tan(vertical), halfWidth / Math.tan(horizontal));
     this.camera.position.set(0.18 * distance / 4.1, 0.03, distance);
     this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
@@ -214,11 +221,25 @@ export class LlmXFaceElement extends HTMLElement {
     this.face.update(reduced ? 0.1 : delta);
     this.animateAura(delta, intro.assembly, drivers.think ?? 0, drivers.speak ?? 0, reduced);
     this.renderer.render(this.scene, this.camera);
+    // Each level has its own cube size, so the whole mask is measured once it stands assembled.
+    if (!this.measured && intro.done && this.face.describe().build >= 0.999) this.measureFrame();
     if (!this.readyEmitted && intro.done) {
       this.readyEmitted = true;
       this.dispatchEvent(new CustomEvent("llmx-face-ready"));
     }
   };
+
+  private measureFrame(): void {
+    this.measured = true;
+    const box = new Box3().setFromObject(this.face!.object);
+    if (box.isEmpty()) return;
+    this.frameExtent = {
+      halfWidth: Math.max(Math.abs(box.min.x), Math.abs(box.max.x)) * FRAME_MARGIN,
+      halfHeight: Math.max(Math.abs(box.min.y), Math.abs(box.max.y)) * FRAME_MARGIN,
+      front: Math.max(0, box.max.z),
+    };
+    this.fit();
+  }
 
   /** Look at the pointer while it moves anywhere on the page, then back at the viewer. */
   private gazeDrivers(now: number): { gazeX: number; gazeY: number } {
