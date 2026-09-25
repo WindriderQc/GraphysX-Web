@@ -30,9 +30,19 @@ its own conversation. AgentX Household uses it for the Super Dad and Famille ava
   `interrupted`, `error`, `sleeping`. `level` is raw RMS (mic while listening, reply while
   speaking), `brightness` the reply's raw spectral brightness, `tokenRate` tokens/s while
   generating, `toolPulses` a monotonic counter (each increment flares the halo once).
+- `element.scene = { schema: "agentx.math-scene.v1", kind: "count", to }` (1–100) or
+  `{ kind: "add", a, b }` (sum 1–20) shows a look-only math picture beside the mask; `null`
+  clears it. Counting fills rods of ten (a gap after five, alternating shades per ten); an
+  addition shows both numbers apart, then slides the second up to complete the ten, with the
+  label `a + b = sum`. The mask looks at each new cube and nods when the picture is complete;
+  reduced motion shows the finished picture at once. Out-of-bounds pictures are refused whole,
+  never clamped. Layout and bounds: `src/llmx-math-scene.ts` (pure, unit tested); rendering:
+  `src/llmx-math-stage.ts`. The picture sits beside the mask in a wide dock, below it in a tall
+  one, and the camera eases to the new framing.
 - `element.rebuild()` replays the assembly.
 - Events: `llmx-face-ready` after the intro, `llmx-face-error` when WebGL is unavailable (the
-  host shows its own fallback).
+  host shows its own fallback), `llmx-scene-applied` / `llmx-scene-rejected` (a receipt for each
+  `scene`).
 
 The mapping reuses `llmxFacePresentation`, so the docked mask and the Forge mask read the same;
 the embed adds listening level, token-rate thinking intensity and sleep. The gaze follows the

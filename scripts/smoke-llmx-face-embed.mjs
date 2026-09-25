@@ -59,6 +59,24 @@ try {
   await page.waitForTimeout(600);
   await page.locator("#face").screenshot({ path: path.join(artifacts, "llmx-face-embed-sleeping.png") });
 
+  // A math picture beside the mask: applied with a receipt, out-of-bounds refused whole.
+  const receipts = await page.evaluate(() => {
+    const face = document.getElementById("face");
+    const seen = [];
+    face.addEventListener("llmx-scene-applied", event => seen.push(["applied", event.detail.cubes]));
+    face.addEventListener("llmx-scene-rejected", event => seen.push(["rejected", event.detail.reason]));
+    face.presence = { phase: "idle", level: 0 };
+    face.scene = { kind: "add", a: 15, b: 9 };
+    face.scene = { schema: "agentx.math-scene.v1", kind: "add", a: 8, b: 5 };
+    return { seen, scene: face.scene };
+  });
+  assert.deepEqual(receipts.seen, [["rejected", "out-of-bounds"], ["applied", 13]]);
+  assert.deepEqual(receipts.scene, { kind: "add", a: 8, b: 5 });
+  await page.waitForTimeout(4500);
+  await page.locator("#face").screenshot({ path: path.join(artifacts, "llmx-face-embed-math.png") });
+  const cleared = await page.evaluate(() => { const face = document.getElementById("face"); face.scene = null; return face.scene; });
+  assert.equal(cleared, null);
+
   // Removal releases the renderer; a host may mount and unmount the dock freely.
   const released = await page.evaluate(() => { const face = document.getElementById("face"); face.remove(); return face.renderer === null; });
   assert.equal(released, true);

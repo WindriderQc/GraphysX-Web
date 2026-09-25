@@ -40,6 +40,14 @@
     rebuild.textContent = "rebuild";
     rebuild.onclick = () => faces.forEach(face => face.rebuild());
     nav.append(tool, rebuild);
+    const scenes = { "3 + 4": { kind: "add", a: 3, b: 4 }, "8 + 5": { kind: "add", a: 8, b: 5 }, "12 + 8": { kind: "add", a: 12, b: 8 },
+      "compte 7": { kind: "count", to: 7 }, "compte 27": { kind: "count", to: 27 }, "compte 100": { kind: "count", to: 100 }, "effacer": null };
+    for (const [name, scene] of Object.entries(scenes)) {
+      const button = document.createElement("button");
+      button.textContent = name;
+      button.onclick = () => faces.forEach(face => { face.scene = scene; });
+      nav.append(button);
+    }
     // Simulated voice and token stream, so each phase can be judged without a conversation.
     setInterval(() => {
       const t = performance.now() / 1000;

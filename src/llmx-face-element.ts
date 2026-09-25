@@ -21,6 +21,8 @@ import { POSE_LIMITS, resolveAgentWorldFace, type AgentWorldFaceLevel } from "./
 import { forgeIntroAt, FORGE_INTRO } from "./llmx-forge";
 import { gazeDriversToward } from "./llmx-gaze";
 import { embedFaceDrivers, IDLE_PRESENCE, newToolPulses, readEmbedPresence, type LlmXEmbedPresence } from "./llmx-face-embed-presence";
+import { mathTimeline, readMathScene, type MathScene } from "./llmx-math-scene";
+import { MathStage } from "./llmx-math-stage";
 
 /**
  * `<llmx-face>`: the LLMx voxel mask alone, for another page to dock beside its own conversation.
@@ -32,13 +34,21 @@ import { embedFaceDrivers, IDLE_PRESENCE, newToolPulses, readEmbedPresence, type
  *
  * Attributes: `level` (high | balanced | mobile), `tint` (#rrggbb, the aura and rim),
  * `intro` ("off" to arrive already built).
- * Events: `llmx-face-ready`, `llmx-face-error` (WebGL unavailable: the host shows its fallback).
+ * `scene` (`agentx.math-scene.v1`, or null) shows a counting or addition picture beside the mask,
+ * which looks at each cube as it appears. Look-only: nothing in the picture is interactive.
+ * Events: `llmx-face-ready`, `llmx-face-error` (WebGL unavailable: the host shows its fallback),
+ * `llmx-scene-applied` / `llmx-scene-rejected` (the receipt for each `scene` the host pushes).
  */
 /** Frame used until the assembled mask can be measured: the high level's Box3 plus a margin. */
 const DEFAULT_FRAME = Object.freeze({ halfWidth: 0.95, halfHeight: 1.38, front: 0.66 });
 /** Room kept around the measured mask, so a nod or a sway never touches the dock's edge. */
 const FRAME_MARGIN = 1.14;
 const EYE_HEIGHT = 0.1;
+/** Space between the mask and the math picture, and room for the label above the cubes. */
+const STAGE_GAP = 0.35;
+const STAGE_LABEL_ROOM = 0.6;
+/** Seconds for the camera to settle on a new framing when a picture appears or clears. */
+const VIEW_EASE = 0.35;
 const DEFAULT_TINT = "#60d6e8";
 
 const reducedMotion = (): boolean => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
@@ -54,7 +64,7 @@ export class LlmXFaceElement extends HTMLElement {
   static readonly observedAttributes = ["tint", "level"];
 
   private renderer: WebGLRenderer | null = null;
-  private scene: Scene | null = null;
+  private world: Scene | null = null;
   private camera: PerspectiveCamera | null = null;
   private face: AgentWorldVoxelFace | null = null;
   private aura: Mesh<PlaneGeometry, MeshBasicMaterial> | null = null;
@@ -71,6 +81,10 @@ export class LlmXFaceElement extends HTMLElement {
   private frameExtent: { halfWidth: number; halfHeight: number; front: number } = DEFAULT_FRAME;
   private measured = false;
   private readonly gaze = new Vector3();
+  private stage: MathStage | null = null;
+  private stageFocusAt = 0;
+  private viewGoal = { x: 0, y: 0, distance: 4.1 };
+  private view: { x: number; y: number; distance: number } | null = null;
   private readonly tint = new Color(DEFAULT_TINT);
   private resize: ResizeObserver | null = null;
   private intersection: IntersectionObserver | null = null;
@@ -83,6 +97,27 @@ export class LlmXFaceElement extends HTMLElement {
     const next = readEmbedPresence(value, this.current);
     this.sparks = Math.min(3, this.sparks + newToolPulses(this.current, next));
     this.current = next;
+  }
+
+  /** The math picture being shown, or null. */
+  get scene(): MathScene | null { return this.stage?.current?.scene ?? null; }
+
+  /** Show `agentx.math-scene.v1` beside the mask, or clear it with null. Out-of-bounds pictures
+   * are refused whole (never clamped) and answered with `llmx-scene-rejected`. */
+  set scene(value: unknown) {
+    if (value === null || value === undefined) {
+      this.stage?.clear();
+      this.fit();
+      return;
+    }
+    const scene = readMathScene(value);
+    if (!scene || !this.stage) {
+      this.dispatchEvent(new CustomEvent("llmx-scene-rejected", { detail: { reason: scene ? "unavailable" : "out-of-bounds" } }));
+      return;
+    }
+    this.stage.show(mathTimeline(scene));
+    this.fit();
+    this.dispatchEvent(new CustomEvent("llmx-scene-applied", { detail: { scene, cubes: this.stage.current?.cubes.length ?? 0 } }));
   }
 
   /** Replay the assembly, as when the conversation is opened again. */
@@ -105,13 +140,15 @@ export class LlmXFaceElement extends HTMLElement {
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.setClearColor(0x000000, 0);
-    this.scene = new Scene();
+    this.world = new Scene();
     this.camera = new PerspectiveCamera(35, 1, 0.1, 30);
     this.buildLights();
     const level = (this.getAttribute("level") as AgentWorldFaceLevel | null) ?? "high";
     this.face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: ["high", "balanced", "mobile"].includes(level) ? level : "high" }));
     this.face.setQualityCeiling(deviceCeiling());
-    this.scene.add(this.face.object);
+    this.world.add(this.face.object);
+    this.stage = new MathStage();
+    this.world.add(this.stage.group);
     this.applyTint();
     if (this.getAttribute("intro") === "off") {
       this.elapsed = FORGE_INTRO.seconds;
@@ -135,11 +172,14 @@ export class LlmXFaceElement extends HTMLElement {
     this.resize?.disconnect();
     this.intersection?.disconnect();
     this.face?.dispose();
+    this.stage?.dispose();
+    this.stage = null;
+    this.view = null;
     this.aura?.geometry.dispose();
     this.aura?.material.map?.dispose();
     this.aura?.material.dispose();
     this.renderer?.dispose();
-    this.renderer = this.scene = this.camera = this.face = this.aura = this.rim = null;
+    this.renderer = this.world = this.camera = this.face = this.aura = this.rim = null;
     this.readyEmitted = false;
   }
 
@@ -155,7 +195,7 @@ export class LlmXFaceElement extends HTMLElement {
   }
 
   private buildLights(): void {
-    const scene = this.scene!;
+    const scene = this.world!;
     // The Forge's light plan (llmx-forge.ts), relative to a mask at the origin.
     scene.add(new AmbientLight("#243040", 0.28));
     const key = new DirectionalLight("#c6d6f2", 2.8);
@@ -180,7 +220,11 @@ export class LlmXFaceElement extends HTMLElement {
     this.rim?.color.copy(this.tint).lerp(new Color("#ffb45a"), 0.55);
   }
 
-  /** Frame the mask whatever the dock's aspect: the head always fits with a margin. */
+  /**
+   * Frame the mask, and the math picture when there is one, whatever the dock's aspect: both
+   * always fit with a margin. The picture sits beside the mask in a wide dock and below it in a
+   * tall one. The camera eases to the new framing rather than cutting.
+   */
   private fit(): void {
     if (!this.renderer || !this.camera) return;
     const width = Math.max(1, this.clientWidth), height = Math.max(1, this.clientHeight);
@@ -190,10 +234,40 @@ export class LlmXFaceElement extends HTMLElement {
     const vertical = (this.camera.fov * Math.PI) / 360;
     const horizontal = Math.atan(Math.tan(vertical) * this.camera.aspect);
     const { halfWidth, halfHeight, front } = this.frameExtent;
-    const distance = front + Math.max(halfHeight / Math.tan(vertical), halfWidth / Math.tan(horizontal));
-    this.camera.position.set(0.18 * distance / 4.1, 0.03, distance);
-    this.camera.lookAt(0, 0, 0);
-    this.camera.updateProjectionMatrix();
+    let minX = -halfWidth, maxX = halfWidth, minY = -halfHeight, maxY = halfHeight;
+    const timeline = this.stage?.current;
+    if (timeline && this.stage) {
+      const { min, max } = timeline.bounds;
+      const top = max[1] + STAGE_LABEL_ROOM;
+      const position = this.stage.group.position;
+      if (this.camera.aspect >= 1.05) position.set(halfWidth + STAGE_GAP - min[0], -(min[1] + top) / 2, 0);
+      else position.set(-(min[0] + max[0]) / 2, -halfHeight - STAGE_GAP - top, 0);
+      minX = Math.min(minX, position.x + min[0]); maxX = Math.max(maxX, position.x + max[0]);
+      minY = Math.min(minY, position.y + min[1]); maxY = Math.max(maxY, position.y + top);
+    }
+    const halfX = (maxX - minX) / 2, halfY = (maxY - minY) / 2;
+    const distance = front + Math.max(halfY / Math.tan(vertical), halfX / Math.tan(horizontal));
+    this.viewGoal = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, distance };
+    if (!this.view) this.view = { ...this.viewGoal };
+    this.applyView();
+  }
+
+  private applyView(): void {
+    const camera = this.camera, view = this.view;
+    if (!camera || !view) return;
+    camera.position.set(view.x + 0.18 * view.distance / 4.1, view.y + 0.03, view.distance);
+    camera.lookAt(view.x, view.y, 0);
+    camera.updateProjectionMatrix();
+  }
+
+  private easeView(delta: number, reduced: boolean): void {
+    const view = this.view, goal = this.viewGoal;
+    if (!view) return;
+    const k = reduced ? 1 : 1 - Math.exp(-delta / VIEW_EASE);
+    view.x += (goal.x - view.x) * k;
+    view.y += (goal.y - view.y) * k;
+    view.distance += (goal.distance - view.distance) * k;
+    this.applyView();
   }
 
   private readonly onPointer = (event: PointerEvent): void => {
@@ -204,13 +278,22 @@ export class LlmXFaceElement extends HTMLElement {
     this.frame = requestAnimationFrame(this.tick);
     const delta = Math.min(0.1, Math.max(0, (now - this.last) / 1000));
     this.last = now;
-    if (document.hidden || !this.visibleOnScreen || !this.face || !this.renderer || !this.scene || !this.camera) return;
+    if (document.hidden || !this.visibleOnScreen || !this.face || !this.renderer || !this.world || !this.camera) return;
     const reduced = reducedMotion();
     this.elapsed += delta;
     const intro = forgeIntroAt(this.elapsed, reduced);
     const drivers = embedFaceDrivers(this.current, intro.assembly);
     const speaking = (drivers.speak ?? 0) > 0;
     if (speaking && !this.speakingBefore && intro.done && !reduced) this.face.nod(0.8);
+    // Reduced motion shows the finished picture at once instead of building it cube by cube.
+    const math = this.stage?.update(reduced ? 3600 : delta) ?? { focus: null, completed: false };
+    // The mask looks at what it is counting, and nods once the picture is complete.
+    if (math.focus) {
+      this.stageFocusAt = now;
+      this.gaze.set(math.focus[0], math.focus[1], math.focus[2]).add(this.stage!.group.position);
+    }
+    if (math.completed && !reduced) this.face.nod(0.6);
+    this.easeView(delta, reduced);
     this.speakingBefore = speaking;
     this.face.setDrivers({
       ...drivers,
@@ -220,7 +303,7 @@ export class LlmXFaceElement extends HTMLElement {
     });
     this.face.update(reduced ? 0.1 : delta);
     this.animateAura(delta, intro.assembly, drivers.think ?? 0, drivers.speak ?? 0, reduced);
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.render(this.world, this.camera);
     // Each level has its own cube size, so the whole mask is measured once it stands assembled.
     if (!this.measured && intro.done && this.face.describe().build >= 0.999) this.measureFrame();
     if (!this.readyEmitted && intro.done) {
@@ -241,10 +324,14 @@ export class LlmXFaceElement extends HTMLElement {
     this.fit();
   }
 
-  /** Look at the pointer while it moves anywhere on the page, then back at the viewer. */
+  /** Look at the newest cube, else the pointer while it moves anywhere on the page, else the viewer. */
   private gazeDrivers(now: number): { gazeX: number; gazeY: number } {
     const camera = this.camera!;
-    if (this.pointer && now - this.pointer.at < 4000) {
+    if (now - this.stageFocusAt < 150) {
+      // A point beside the mask at its own depth is a ninety-degree glance; halfway to the viewer
+      // reads as looking at something held up in front of it (the same rule as llmx-gaze).
+      this.gaze.z = Math.max(this.gaze.z, camera.position.z * 0.3);
+    } else if (this.pointer && now - this.pointer.at < 4000) {
       const rect = this.getBoundingClientRect();
       const ndcX = ((this.pointer.x - rect.left) / Math.max(1, rect.width)) * 2 - 1;
       const ndcY = -(((this.pointer.y - rect.top) / Math.max(1, rect.height)) * 2 - 1);
