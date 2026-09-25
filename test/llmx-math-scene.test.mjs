@@ -43,6 +43,9 @@ test("an addition shows both numbers apart, then regroups the second to complete
   assert.equal(regrouped.length - 10, 3, "and three more");
   assert.equal(mathLabelAt(timeline, 0), "8");
   assert.equal(mathLabelAt(timeline, timeline.duration), "8 + 5 = 13");
+  // Nestor's answer starts with the picture; the regroup must land while he explains it.
+  assert.ok(b[0].moveAt >= 3.5 && b[0].moveAt <= 4.5, `regroup at ${b[0].moveAt}s`);
+  assert.ok(timeline.duration <= 5, `8 + 5 complete in ${timeline.duration}s`);
   const end = mathCubeAt(b[0], timeline.duration + 1);
   assert.deepEqual(end.position.map(v => +v.toFixed(6)), b[0].end.map(v => +v.toFixed(6)));
 });
