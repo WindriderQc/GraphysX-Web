@@ -39,6 +39,8 @@ export type MathTimeline = Readonly<{
 export const MATH_PITCH = 0.2;
 export const MATH_CUBE = 0.16;
 const MOVE_SECONDS = 0.6;
+/** Seconds between two cubes of an addition at most; counting keeps its own, slower pace. */
+const ADD_STEP_MAX = 0.25;
 
 const integer = (value: unknown, min: number, max: number): number | null =>
   typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : null;
@@ -99,12 +101,14 @@ export function mathTimeline(scene: MathScene): MathTimeline {
     return { scene, cubes, labels, duration: scene.to * step, bounds: boundsOf(cubes.map(cube => cube.end)) };
   }
   const { a, b } = scene;
-  const step = stepSeconds(a + b);
+  // Paced to Nestor's spoken answer, which starts with the picture: the result, then "look: the
+  // orange cubes complete the ten" lands on the regroup about four seconds in (8 + 5 at 4.1 s).
+  const step = Math.min(ADD_STEP_MAX, stepSeconds(a + b));
   const cubes: MathCube[] = [];
   // The second number waits one empty row below the first, so the two groups read apart.
   const firstRows = Math.max(1, Math.ceil(a / 10));
-  const bStart = a * step + 0.5;
-  const regroupAt = bStart + b * step + 0.7;
+  const bStart = a * step + 0.4;
+  const regroupAt = bStart + b * step + 0.5;
   for (let i = 0; i < a; i += 1) {
     const position = slot(i);
     cubes.push({ group: "a", start: position, end: position, appearAt: i * step, moveAt: regroupAt });
