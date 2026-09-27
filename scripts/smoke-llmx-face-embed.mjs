@@ -80,8 +80,42 @@ try {
   // Removal releases the renderer; a host may mount and unmount the dock freely.
   const released = await page.evaluate(() => { const face = document.getElementById("face"); face.remove(); return face.renderer === null; });
   assert.equal(released, true);
+
+  // The same file defines <llmx-stage>: the picture alone, for a host's own pictures zone.
+  const stage = await page.evaluate(() => new Promise(resolve => {
+    const element = document.createElement("llmx-stage");
+    element.id = "stage";
+    element.style.cssText = "display:block;width:320px;height:240px";
+    const seen = [];
+    element.addEventListener("llmx-scene-applied", event => seen.push(["applied", event.detail.cubes]));
+    element.addEventListener("llmx-scene-rejected", event => seen.push(["rejected", event.detail.reason]));
+    element.addEventListener("llmx-scene-complete", () => seen.push(["complete"]));
+    element.scene = { schema: "agentx.math-scene.v1", kind: "count", to: 12 };
+    document.body.append(element);
+    element.addEventListener("llmx-stage-ready", () => {
+      element.scene = { kind: "count", to: 101 };
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve({ seen, scene: element.scene })));
+    }, { once: true });
+  }));
+  assert.deepEqual(stage.seen.filter(([kind]) => kind !== "complete"), [["applied", 12], ["rejected", "out-of-bounds"]]);
+  assert.deepEqual(stage.scene, { kind: "count", to: 12 }, "a refused picture leaves the current one");
+  const stageLit = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => {
+    const source = document.getElementById("stage").shadowRoot.querySelector("canvas");
+    const probe = document.createElement("canvas");
+    probe.width = 80; probe.height = 60;
+    const context = probe.getContext("2d");
+    context.drawImage(source, 0, 0, probe.width, probe.height);
+    const data = context.getImageData(0, 0, probe.width, probe.height).data;
+    let lit = 0;
+    for (let index = 0; index < data.length; index += 4) if (data[index + 3] > 0 && data[index] + data[index + 1] + data[index + 2] > 60) lit += 1;
+    resolve(lit / (probe.width * probe.height));
+  })));
+  assert.ok(stageLit > 0.02 && stageLit < 0.8, `the stage draws the cubes (${stageLit.toFixed(3)})`);
+  await page.locator("#stage").screenshot({ path: path.join(artifacts, "llmx-stage-embed-count.png") });
+  const stageReleased = await page.evaluate(() => { const element = document.getElementById("stage"); element.remove(); return element.renderer === null; });
+  assert.equal(stageReleased, true);
   assert.deepEqual(errors, []);
-  console.log(`llmx face embed smoke passed (mask coverage ${idle.toFixed(3)})`);
+  console.log(`llmx face embed smoke passed (mask coverage ${idle.toFixed(3)}, stage coverage ${stageLit.toFixed(3)})`);
 } finally {
   await browser.close();
   await server?.close();
