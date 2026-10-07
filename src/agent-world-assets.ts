@@ -112,6 +112,13 @@ type PayloadMaterial = {
   specular?: Tuple3;
   emissive?: Tuple3;
   textureUrl?: string | null;
+  /**
+   * Which image row texture coordinate v=0 reads. Omitted (or true) keeps three's default:
+   * v=0 is the bottom row. `false` reads the top row first, for recovered maps whose UVs were
+   * authored against a top-left image origin. It is a property of the recovered material, so
+   * the UV arrays stay verbatim instead of being rewritten to suit the loader.
+   */
+  textureFlipY?: boolean;
 };
 type PayloadMesh = {
   name?: string;
@@ -315,18 +322,28 @@ export async function loadAgentWorldModel(
   if (collision) collision.onReady(collisionMeshFromPayload(payload, fit.scale, fit.offset, fit.mirrorZ));
 
   const textureLoader = new TextureLoader();
-  const textureUrls = [...new Set(payload.meshes.flatMap((mesh) => (mesh.materials ?? [])
-    .map((material) => material.textureUrl)
-    .filter((url): url is string => Boolean(url))))];
+  // One texture per (url, orientation): two materials may read the same file differently.
+  const textureRequests = new Map<string, { url: string; flipY: boolean }>();
+  for (const mesh of payload.meshes) {
+    for (const material of mesh.materials ?? []) {
+      if (!material.textureUrl) continue;
+      const flipY = material.textureFlipY !== false;
+      textureRequests.set(materialTextureKey(material.textureUrl, flipY), { url: material.textureUrl, flipY });
+    }
+  }
   const textures = new Map<string, Texture>();
-  const textureResults = await Promise.allSettled(textureUrls.map(async (url) => {
+  const textureResults = await Promise.allSettled([...textureRequests].map(async ([key, { url, flipY }]) => {
     const texture = asset.colorKey
       ? await loadColorKeyedTexture(url, asset.colorKey, asset.colorKeyTolerance)
       : await textureLoader.loadAsync(url);
     texture.colorSpace = SRGBColorSpace;
     texture.wrapS = RepeatWrapping;
     texture.wrapT = RepeatWrapping;
-    textures.set(url, texture);
+    if (texture.flipY !== flipY) {
+      texture.flipY = flipY;
+      texture.needsUpdate = true;
+    }
+    textures.set(key, texture);
   }));
   const textureFailure = textureResults.find((result) => result.status === "rejected");
   if (textureFailure?.status === "rejected") {
@@ -366,7 +383,9 @@ export async function loadAgentWorldModel(
         color: textureUrl ? 0xffffff : tupleColor(sourceMaterial.color, 0xb8c1c9),
         emissive: tupleColor(sourceMaterial.emissive, 0x000000),
         side: DoubleSide,
-        map: textureUrl ? textures.get(textureUrl) ?? null : null,
+        map: textureUrl
+          ? textures.get(materialTextureKey(textureUrl, sourceMaterial.textureFlipY !== false)) ?? null
+          : null,
         // `transparent` stays false on purpose: an alpha-tested cutout is opaque as far as
         // sorting and depth are concerned, which is what keeps overlapping leaf quads from
         // flickering against each other.
@@ -468,6 +487,10 @@ function smoothRecoveredNormals(geometry: BufferGeometry, creaseAngleDegrees: nu
   }
   geometry.computeVertexNormals();
   return geometry;
+}
+
+function materialTextureKey(url: string, flipY: boolean): string {
+  return `${flipY ? "flip" : "noflip"}:${url}`;
 }
 
 function validatePayload(payload: AssetPayload, collision?: Pick<AgentWorldModelCollisionRequest, "maxVertices" | "maxTriangles">): void {
