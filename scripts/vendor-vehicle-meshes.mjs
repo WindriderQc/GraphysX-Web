@@ -33,7 +33,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(here, "..");
-const CATALOG = join(ROOT, "src", "legacy", "cars-catalog.json");
+const CATALOG = join(ROOT, "src", "content", "cars-catalog.json");
 const OUT_DIR = join(ROOT, "public", "assets", "vehicles");
 const MANIFEST = join(ROOT, "src", "archive-vehicles-manifest.ts");
 
@@ -148,7 +148,13 @@ function write(id, payload, extra) {
       materials: [
         // Archive material names and their recorded texture file names are kept in the
         // material name so the lineage survives into the running scene graph.
-        { name: "Material#1 (CHASIS.JPG)", textureUrl: `${TEX}/ChassisSTi.bmp`, specularPower: 42 },
+        // The livery is read top row first. With three's default (v=0 at the bottom row) the
+        // faces of the nose sample the rear lamps and the number plate lands on the bonnet;
+        // read this way, grille, radiator and STI marks sit on the nose and the rear lamp and
+        // plate on the tail (test/vehicle-livery-orientation.test.mjs). The UVs stay verbatim.
+        // The glass, undercarriage and wheel maps are left on the default: their content does
+        // not settle the question either way.
+        { name: "Material#1 (CHASIS.JPG)", textureUrl: `${TEX}/ChassisSTi.bmp`, textureFlipY: false, specularPower: 42 },
         { name: "Material#2 (VENTANAS.JPG)", textureUrl: `${TEX}/Windows.bmp`, specularPower: 90 },
         { name: "Material #3 (CHASIS_A.JPG)", textureUrl: `${TEX}/Undercarriage.bmp`, specularPower: 12 },
       ],
@@ -181,6 +187,9 @@ function write(id, payload, extra) {
         "names CHASIS.JPG / VENTANAS.JPG / CHASIS_A.JPG / RUEDAS.JPG; the shipped BMPs are " +
         "those same maps under the workshop's vendored names.",
       "INFERRED: specular power per slot (the 3DS shininess was not carried into the catalog).",
+      "INFERRED: the livery map (ChassisSTi) is read top row first (textureFlipY false). The " +
+        "decoded UVs are unchanged; with the default orientation the nose sampled the rear " +
+        "lamps. Glass, undercarriage and wheel maps keep the default orientation, unverified.",
       "DELIBERATELY ABSENT: wheels are baked into the model at their catalog offsets and do " +
         "not steer or spin. A model entity is one static mesh group; articulation belongs to " +
         "a rig the platform does not have yet.",

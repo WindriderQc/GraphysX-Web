@@ -55,6 +55,7 @@ export const ARCHIVE_VEHICLE_MESHES: readonly ArchiveVehicleRecord[] = [
       "FAITHFUL: vertex/index/UV arrays verbatim from the decoded 3DS; the three chassis material slots and their face assignments; the four wheel hub offsets.",
       "FAITHFUL: textures are the archive's own, vendored under /assets/textures/cars (ChassisSTi/Windows/Undercarriage/Wheel .bmp). The catalog records the original names CHASIS.JPG / VENTANAS.JPG / CHASIS_A.JPG / RUEDAS.JPG; the shipped BMPs are those same maps under the workshop's vendored names.",
       "INFERRED: specular power per slot (the 3DS shininess was not carried into the catalog).",
+      "INFERRED: the livery map (ChassisSTi) is read top row first (textureFlipY false). The decoded UVs are unchanged; with the default orientation the nose sampled the rear lamps. Glass, undercarriage and wheel maps keep the default orientation, unverified.",
       "DELIBERATELY ABSENT: wheels are baked into the model at their catalog offsets and do not steer or spin. A model entity is one static mesh group; articulation belongs to a rig the platform does not have yet."
     ]
   },
