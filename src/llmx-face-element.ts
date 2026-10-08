@@ -20,6 +20,7 @@ import { AgentWorldVoxelFace } from "./agent-world-face";
 import { POSE_LIMITS, resolveAgentWorldFace, type AgentWorldFaceLevel } from "./llmx-face-pose";
 import { forgeIntroAt, FORGE_INTRO } from "./llmx-forge";
 import { gazeDriversToward } from "./llmx-gaze";
+import { createFaceReactions } from "./llmx-face-reactions";
 import { embedFaceDrivers, IDLE_PRESENCE, newToolPulses, readEmbedPresence, type LlmXEmbedPresence } from "./llmx-face-embed-presence";
 import { mathTimeline, readMathScene, type MathScene } from "./llmx-math-scene";
 import { MathStage } from "./llmx-math-stage";
@@ -73,7 +74,7 @@ export class LlmXFaceElement extends HTMLElement {
   private last = 0;
   private elapsed = 0;
   private sparks = 0;
-  private speakingBefore = false;
+  private readonly reactions = createFaceReactions();
   private readyEmitted = false;
   private visibleOnScreen = true;
   private pointer: { x: number; y: number; at: number } | null = null;
@@ -96,6 +97,11 @@ export class LlmXFaceElement extends HTMLElement {
   set presence(value: unknown) {
     const next = readEmbedPresence(value, this.current);
     this.sparks = Math.min(3, this.sparks + newToolPulses(this.current, next));
+    if (this.current.phase === "speaking" && next.phase !== "speaking") {
+      // An ended or cancelled reply releases its mouth before the next eased frame.
+      this.face?.snapDrivers({ speak: 0, speakTone: 0.5 });
+      this.reactions.speech(false, performance.now() / 1000);
+    }
     this.current = next;
   }
 
@@ -284,7 +290,7 @@ export class LlmXFaceElement extends HTMLElement {
     const intro = forgeIntroAt(this.elapsed, reduced);
     const drivers = embedFaceDrivers(this.current, intro.assembly);
     const speaking = (drivers.speak ?? 0) > 0;
-    if (speaking && !this.speakingBefore && intro.done && !reduced) this.face.nod(0.8);
+    if (this.reactions.speech(speaking, now / 1000) && intro.done && !reduced) this.face.nod(0.8);
     // Reduced motion shows the finished picture at once instead of building it cube by cube.
     const math = this.stage?.update(reduced ? 3600 : delta) ?? { focus: null, completed: false };
     // The mask looks at what it is counting, and nods once the picture is complete.
@@ -294,7 +300,6 @@ export class LlmXFaceElement extends HTMLElement {
     }
     if (math.completed && !reduced) this.face.nod(0.6);
     this.easeView(delta, reduced);
-    this.speakingBefore = speaking;
     this.face.setDrivers({
       ...drivers,
       blink: Math.max(drivers.blink ?? 0, 1 - intro.wake),

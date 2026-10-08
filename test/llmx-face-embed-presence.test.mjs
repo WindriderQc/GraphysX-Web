@@ -23,23 +23,30 @@ test("speech drives the mouth with the Forge's gain, and only while audible", ()
   assert.equal(speaking.think, 0, "a speaking face is not thinking");
   const silent = embedFaceDrivers(readEmbedPresence({ phase: "speaking", level: 0 }), 1);
   assert.equal(silent.speak, 0);
+  assert.equal(silent.think, 0, "a pause between words remains the same reply");
+  assert.ok(silent.warmth > 0, "the speaking expression survives a quiet syllable gap");
   assert.equal("gazeX" in speaking, false, "the embed owns the gaze");
 });
 
-test("thinking scales with the token stream and listening leans in", () => {
-  const slow = embedFaceDrivers(readEmbedPresence({ phase: "waiting" }), 1);
+test("waiting stays patient, generation scales with tokens, and listening leans in", () => {
+  const waiting = embedFaceDrivers(readEmbedPresence({ phase: "waiting" }), 1);
+  const slow = embedFaceDrivers(readEmbedPresence({ phase: "generating", tokenRate: 0 }), 1);
   const fast = embedFaceDrivers(readEmbedPresence({ phase: "generating", tokenRate: 60 }), 1);
+  assert.equal(waiting.think, 0, "a host queue does not imply active work");
   assert.equal(slow.think, 0.55);
   assert.equal(fast.think, 1);
   const listening = embedFaceDrivers(readEmbedPresence({ phase: "listening", level: 0.1 }), 1);
   assert.equal(listening.attention, 1);
   assert.ok(listening.warmth >= 0.35);
+  const interrupted = embedFaceDrivers(readEmbedPresence({ phase: "interrupted" }), 1);
+  assert.equal(interrupted.attention, 1, "an interruption returns an attentive pose");
+  assert.equal(interrupted.speak, 0);
   assert.ok(embedFaceDrivers(readEmbedPresence({ phase: "error" }), 1).warmth < 0);
 });
 
-test("sleep closes the eyes and the build follows the intro", () => {
+test("a host-busy sleep signal keeps the eyes open without pretending to work", () => {
   const asleep = embedFaceDrivers(readEmbedPresence({ phase: "sleeping", level: 0.2 }), 0.5);
-  assert.deepEqual(asleep, { build: 0.5, speak: 0, think: 0, attention: 0, warmth: 0, blink: 1 });
+  assert.deepEqual(asleep, { build: 0.5, speak: 0, think: 0, attention: 0.25, warmth: 0, blink: 0 });
 });
 
 test("each new tool pulse is one spark, capped per frame", () => {

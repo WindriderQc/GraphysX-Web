@@ -14,7 +14,7 @@
  * - At load: unpacking small integer arrays and deriving per-cube animation weights from the
  *   documented anchors. That is a few thousand cheap operations, not a re-sculpt.
  *
- * Run: npm run assets:llmx-face
+ * Run: node tools/llmx-face-sculptor.mjs
  *
  * Units are metres. The mask is authored facing +Z, up +Y, origin at the mask's own centre.
  */
@@ -125,7 +125,7 @@ export const ANCHORS = {
    * a dark room, and the eyes are the single feature carrying presence — this is a deliberate
    * stylisation, not a proportion error.
    */
-  eye: { x: 0.29, y: 0.1, z: 0.35, radius: 0.152 },
+  eye: { x: 0.29, y: 0.1, z: 0.38, radius: 0.152 },
   brow: { x: 0.31, y: 0.3, z: 0.37 },
   cheek: { x: 0.43, y: -0.08, z: 0.28 },
   mouth: { y: -0.52, z: 0.42, halfWidth: 0.27 },
@@ -305,9 +305,9 @@ function lidDistance(x, y, z) {
 }
 
 /** Where the upper lid's cap plane cuts the eyeball: everything below it is the open eye. */
-const UPPER_LID_LINE = ANCHORS.eye.y + ANCHORS.eye.radius * 0.38;
+const UPPER_LID_LINE = ANCHORS.eye.y + ANCHORS.eye.radius * 0.58;
 /** Where the lower lid's cap plane cuts the eyeball: everything above it is the open eye. */
-const LOWER_LID_LINE = ANCHORS.eye.y - ANCHORS.eye.radius * 0.55;
+const LOWER_LID_LINE = ANCHORS.eye.y - ANCHORS.eye.radius * 0.68;
 
 /** The lower lid: the same shell, capping the bottom fifth of the eyeball. */
 function lowerLidDistance(x, y, z) {

@@ -31,6 +31,7 @@ its own conversation. AgentX Household uses it for the Super Dad and Famille ava
   `interrupted`, `error`, `sleeping`. `level` is raw RMS (mic while listening, reply while
   speaking), `brightness` the reply's raw spectral brightness, `tokenRate` tokens/s while
   generating, `toolPulses` a monotonic counter (each increment flares the halo once).
+
 - `element.scene = { schema: "agentx.math-scene.v1", kind: "count", to }` (1–100) or
   `{ kind: "add", a, b }` (sum 1–20) shows a look-only math picture beside the mask; `null`
   clears it. Counting fills rods of ten (a gap after five, alternating shades per ten); an
@@ -44,6 +45,30 @@ its own conversation. AgentX Household uses it for the Super Dad and Famille ava
 - Events: `llmx-face-ready` after the intro, `llmx-face-error` when WebGL is unavailable (the
   host shows its own fallback), `llmx-scene-applied` / `llmx-scene-rejected` (a receipt for each
   `scene`).
+
+### Presence behavior
+
+Presence drives the existing gaze, brow, blink, head and mouth rig. The host must send the
+phase it actually observes; a silent audio sample is not a new thinking phase. The eye and lid
+sculpt keeps the iris visible at `high`, `balanced` and `mobile` density.
+
+| Observed phase | Face response |
+| --- | --- |
+| `idle` | Relaxed, open eyes and ordinary blinks. |
+| `listening` | Raised brow, open eyes and slight attentive tilt; microphone level adds warmth. |
+| `waiting` | Patient, open gaze; no fake thinking motion while a host is queued. |
+| `generating` | Focused brow and glance; token rate changes intensity. |
+| `speaking` | Mouth follows played audio level; a quiet gap keeps the speaking pose without opening the mouth or switching to thinking. The first audible onset gets one small nod, not one nod per word. |
+| `interrupted` | Mouth closes on the presence update, before the next animation frame; gaze returns to attention. |
+| `error` | Subdued expression; the host supplies the readable explanation. |
+| `sleeping` | Calm open eyes. Older Household docks also use this phase while an inference host is busy, so closed eyes would falsely show Nestor asleep. |
+
+On 2026-10-08, a read-only check of the Household dock found that its `host-busy` path sends
+`sleeping`. Its relayed face module was byte-identical to the then-current GraphysX-Web build.
+The dock sends phase, audio level, brightness, token rate and tool pulses; it does not send the
+tool name, confirmation requests, or whether `sleeping` means inactivity versus GPU queueing.
+Those distinctions and a click-to-open activity/commands panel belong to a future host contract
+and Household integration. The face does not invent activity or success from a pulse.
 
 ## `<llmx-stage>` — the math picture on its own
 
@@ -64,5 +89,15 @@ beside the mask (AgentX Household's Images zone):
   motion shows the finished picture at once. Rendering pauses off screen.
 
 The mapping reuses `llmxFacePresentation`, so the docked mask and the Forge mask read the same;
-the embed adds listening level, token-rate thinking intensity and sleep. The gaze follows the
-pointer anywhere on the host page and returns to the viewer after four seconds.
+the embed adds listening level, token-rate thinking intensity and a compatibility pose for the
+older dock's `sleeping` signal. The gaze follows the pointer anywhere on the host page and
+returns to the viewer after four seconds.
+
+Visual review: compare the exact previously relayed bundle with a new local build at a quarter
+dock (420 × 320), a portrait view, a three-quarter view, and a 96 × 96 mobile bubble. Check
+`speaking` and `sleeping` at minimum, plus the listening, waiting, generating and interrupted
+transitions. Run `node --test test/llmx-face-eyes-open.test.mjs
+test/llmx-face-embed-presence.test.mjs test/llmx-face-pose.test.mjs` and
+`scripts/smoke-llmx-face-embed.mjs` against `npm run build:face`. The smoke asserts that
+interruption closes the mouth immediately and that cyan eyes remain visible during the legacy
+busy signal.
