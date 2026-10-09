@@ -63,23 +63,15 @@ import { archiveVehicleMesh } from "./archive-vehicles-manifest";
  *   into the catalog, so the whole body takes one livery (the same choice race-scene makes),
  *   and its tire maps live only in the workshop. Untextured rubber rather than a stand-in.
  *
- * ## Two runtime limits this scene works around rather than papers over
+ * ## Two former runtime limits
  *
- * 1. **`loadAgentWorldModel` mis-places any model whose `fitSize` is not its native span.**
- *    It recentres with `sourceRoot.position = -center` and *then* sets `scale = fitSize/span`.
- *    Because a three.js matrix composes as T·R·S, the translation is applied in **unscaled**
- *    units while the geometry is scaled — so the model ends up displaced from its entity
- *    origin by `center * (1 - scale)`. Measured here: the Piste Ovale (bounds centre 9.7 units
- *    above its own base) rendered 9.16 units below where it was placed. So this scene loads
- *    every model at `fitSize = native span` — the one value where the defect is identically
- *    zero — and gets display size from the entity's own `transform.scale` instead, which is
- *    applied above the whole thing and is therefore exact. This is a defect in a shared file
- *    (`src/agent-world-assets.ts`) that this session does not own; it is reported, not patched,
- *    and it affects every existing `model` entity that uses the default `fitSize` of 4.
- * 2. **A `point-light` always renders a visible 0.12-unit emissive marker sphere**
- *    (`agent-world-runtime.ts` sets `userData.agentLightMarker` but nothing ever hides it).
- *    Rather than fight it, the lights here are placed where a real fixture belongs — at
- *    ceiling height — so the markers read as recessed downlights instead of as stray dots.
+ * 1. **Resolved in `0bc3f26`: model recentring at non-native `fitSize`.** The loader now
+ *    applies the fit scale to its centring offset as well as the geometry. The Garage keeps
+ *    each mesh at native `fitSize` for archive fidelity, not to mask a loader defect.
+ *    `scripts/smoke-model-recentre.mjs` checks rendered world-space bounds at three sizes.
+ * 2. **Resolved in `0bc3f26`: unavoidable point-light markers.** `marker: false` can now
+ *    hide a light's emissive sphere. The Garage's ceiling fixtures remain a presentation
+ *    choice; they no longer work around a runtime limitation.
  */
 
 /** Plinth top surface. Cars stand on this. */
@@ -233,8 +225,7 @@ export function composeArchiveVehicles(api: GraphysXAgentWorldApi): void {
         id: record.id,
         url: record.url,
         format: "graphysx-mesh-json",
-        // Native archive scale, 1:1 — and the only fitSize at which the loader's recentring
-        // defect (module header, note 1) is exactly zero.
+        // Native archive scale, 1:1; the loader now centres correctly at other fitSize values.
         fitSize: record.nativeFitSize,
       },
       transform: {

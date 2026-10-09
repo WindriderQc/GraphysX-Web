@@ -43,6 +43,7 @@ export const VERIFY_SMOKES = [
   { name: "spiral", tier: "apps", script: "scripts/smoke-spiral.mjs", covers: "Skybox Spiral port: composes, ball rests, movers move, markerless light, completable, round-trips" },
   { name: "world1", tier: "apps", script: "scripts/smoke-world1.mjs", covers: "World 1 mesh port: six meshes ready, physics-only descent through both holes, elevator moves, completable" },
   { name: "vehicles", tier: "apps", script: "scripts/smoke-vehicles.mjs", covers: "Archive Garage: recovered meshes register, ship in dist, and resolve" },
+  { name: "model-recentre", tier: "apps", script: "scripts/smoke-model-recentre.mjs", covers: "A model remains centred on its entity origin and fits at three fitSize values" },
   { name: "playgrounds", tier: "apps", script: "scripts/smoke-playgrounds.mjs", covers: "Nature Lab playgrounds: preset fidelity, fields do work, mass-independent attraction" },
   { name: "milkyway", tier: "apps", script: "scripts/smoke-milkyway.mjs", covers: "Voie Lactee: recovered radii and rates, retrograde Moon, textures fetch 200" },
   { name: "buildings", tier: "apps", script: "scripts/smoke-buildings.mjs", covers: "Maison massing model: archive transforms exact, recovered lamps, storey toggle" },
