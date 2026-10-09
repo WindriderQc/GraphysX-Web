@@ -741,7 +741,7 @@ try {
   }));
 
   // Browse replaces the document before entering the editor. Its Showroom exit must rebuild
-  // the AgentX Center, not strand Nestor's hard-coded topic UI over the starter world.
+  // the GraphysX welcome scene, not strand Nestor's hard-coded topic UI over the starter world.
   await page.click(".gx-go-browse");
   await page.waitForSelector(".gx-browse", { timeout: SMOKE_TIMEOUT });
   await page.click('[data-starter-id="signal-outpost"]');
@@ -935,7 +935,7 @@ const nestorIsLive =
   coauthorGateHolds &&
   !!nestorInitial &&
   nestorInitial.type === "agent" &&
-  nestorInitial.role === "AgentX Center guide" &&
+  nestorInitial.role === "GraphysX guide" &&
   nestorInitial.status === "ready" &&
   ["present", "build", "play", "explore"].every((capability) => nestorInitial.capabilities.includes(capability)) &&
   nestorInitial.consoleCount === 3 &&
@@ -1045,11 +1045,11 @@ const ok =
   focusWorks &&
   portalTravels &&
   nestorIsLive &&
-  roundTrip?.nestorProfile?.role === "AgentX Center guide" &&
+  roundTrip?.nestorProfile?.role === "GraphysX guide" &&
   roundTrip?.nestorProfile?.status === "presenting:build" &&
   roundTrip?.nestorProfile?.capabilities?.includes("build") &&
   roundTrip?.buildExported === true &&
-  roundTrip?.nestorReloaded?.role === "AgentX Center guide" &&
+  roundTrip?.nestorReloaded?.role === "GraphysX guide" &&
   roundTrip?.nestorReloaded?.status === "presenting:build" &&
   roundTrip?.buildReloaded === true &&
   out.nestorInEditor === true &&

@@ -188,7 +188,7 @@ if (mode === "previews" && import.meta.env.DEV) {
     // front door. The flag is armed only by Archive Cup launchers and consumed on exit.
     let resumeArchiveCup = false;
     // Editors entered from Browse hold a different world. Their Showroom exit must rebuild
-    // the AgentX Center instead of mounting Nestor's controls over unrelated scene targets.
+    // the GraphysX welcome scene instead of mounting Nestor's controls over unrelated scene targets.
     let restoreShowroomOnEditorExit = false;
     // DOM topics and physical consoles share this guard. A live client owns its operation
     // path and role checks, so Nestor cannot make an unbroadcast local commit while attached.
@@ -906,6 +906,7 @@ if (mode === "previews" && import.meta.env.DEV) {
             if (!returnToCup) focusFrontDoor();
             if (returnToCup) openGamesShelf(true);
           },
+      playExitLabel: () => resumeArchiveCup ? "← Archive Cup" : "← GraphysX",
     });
     connectLocalGraphysXAgent(host);
     let welcomeSyncQueued = false;

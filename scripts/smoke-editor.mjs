@@ -54,7 +54,7 @@ try {
 
   await page.waitForSelector(".gx-ed-panel--drawer", { timeout: SMOKE_TIMEOUT });
   out.hasExitButton = await page.$$eval(".gx-ed-toolbar button", (els) =>
-    els.some((e) => (e.textContent ?? "").includes("Showroom")));
+    els.some((e) => e.classList.contains("gx-ed-exit")));
 
   // The library is tabbed now: only the active tab renders, so walk all five and record
   // each tab's chip count. Every tab must carry content, and the vocabulary as a whole
@@ -563,7 +563,7 @@ try {
   await page.screenshot({ path: path.join(ART, "editor-library.png"), fullPage: false });
 
   // The editor must not be a one-way door.
-  await page.click('.gx-ed-toolbar button:has-text("Showroom")');
+  await page.getByRole("button", { name: "← Accueil", exact: true }).click();
   await page.waitForTimeout(600);
   out.welcomeBack = (await page.$(".gx-welcome")) !== null;
   out.editorHiddenAgain = await page.evaluate(() => {

@@ -532,7 +532,7 @@ export function createLiveAgentPresenceController(options: {
         actorId: member.actorId,
         actorLabel: member.label,
         actorKind: member.kind,
-        intent: `${member.label} joined the AgentX Center`,
+        intent: `${member.label} joined GraphysX`,
         revision: null,
         at: member.lastSeenAt ?? new Date().toISOString(),
       });

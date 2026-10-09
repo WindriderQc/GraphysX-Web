@@ -77,6 +77,7 @@ try {
     const text = JSON.parse(window.render_game_to_text());
     return {
       mode: window.__GRAPHYSX_HOST__.mode,
+      exitLabel: document.querySelector(".gx-bz-exit")?.textContent,
       ghost: ghost ? { id: ghost.id, ephemeral: ghost.ephemeral, physics: ghost.physics, position: ghost.position } : null,
       textCup: text.archiveCup,
       textGhost: text.personalGhost,
@@ -112,6 +113,7 @@ const ok =
   && JSON.stringify(out.returning?.tallies) === JSON.stringify(["2/9", "175"])
   && out.returning?.continueText === "Continue · Round 3"
   && out.playing?.mode === "play"
+  && out.playing?.exitLabel === "← Archive Cup"
   && out.playing?.ghost?.id === "personal-best-ghost"
   && out.playing?.ghost?.ephemeral === true
   && out.playing?.ghost?.physics === null

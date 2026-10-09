@@ -96,7 +96,7 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
         <button type="button" data-action="save">Save</button>
         <button type="button" data-action="save-as" title="Store what is on screen as a new named scene">Save as…</button>
         <button type="button" data-action="revert" title="Discard local changes and reload the stored scene">Revert</button>
-        <button type="button" data-action="close" title="Stop following this scene and return to the front door — the store keeps its copy" aria-label="Stop following this scene and return to AgentX Center">✕</button>
+        <button type="button" data-action="close" title="Stop following this scene and return to the front door — the store keeps its copy" aria-label="Stop following this scene and return to GraphysX">✕</button>
       </footer>
       <form class="gx-sb-saveas" data-role="saveas" aria-label="Save scene under a new name" hidden>
         <input data-role="saveas-name" type="text" aria-label="New scene name" placeholder="scene-name" spellcheck="false" autocomplete="off" maxlength="80" />

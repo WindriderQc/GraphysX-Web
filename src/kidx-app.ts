@@ -314,7 +314,9 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
     api.clear("kidx-workshop", "KidX · Atelier");
     const panel = document.createElement("section"); panel.className = "kx-shell"; content = panel;
     panel.innerHTML = `<header class="kx-head"><div class="kx-brand"><b>K</b><div>KidX<small>MINDSTORMS · EV3</small></div></div></header><nav class="kx-tabs" aria-label="Activités KidX"></nav><div class="kx-hero"><div><span class="kx-eyebrow">L’ATELIER DES PETITS INGÉNIEURS</span><h1></h1><p></p></div></div><div class="kx-content"></div>`;
-    panel.querySelector(".kx-head")!.append(button("Quitter KidX", onExit));
+    const home = button("← GraphysX", onExit, "data-kidx-home");
+    home.setAttribute("aria-label", "Retour à l’accueil GraphysX");
+    panel.querySelector(".kx-head")!.append(home);
     const tabs = panel.querySelector("nav")!;
     for (const [id, label] of [["missions", "Missions"], ["builds", "Construire en 3D"], ["library", "Notices LEGO"]] as const) {
       const element = button(label, () => showHome(id), `data-kidx-${id}`);

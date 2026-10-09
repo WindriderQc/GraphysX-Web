@@ -8,7 +8,7 @@ body:has(.kx-mechanism) .gx-display-settings,body:has(.kx-build-ui) .gx-display-
 .kx-shell button:disabled,.kx-reader button:disabled,.kx-build-ui button:disabled{opacity:.4;cursor:default}
 .kx-shell [hidden],.kx-reader [hidden],.kx-build-ui [hidden]{display:none!important}
 .kx-shell{position:fixed;inset:0;z-index:40;background:#112b36f5;overflow:auto;padding:24px max(24px,calc((100vw - 1160px)/2));overscroll-behavior:contain}
-.kx-head{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #3a5761;padding-bottom:18px}
+.kx-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #3a5761;padding-bottom:18px}
 .kx-brand{display:flex;align-items:center;gap:12px;font-size:24px;font-weight:800;letter-spacing:-1px}.kx-brand b{background:#edbb42;color:#1e3540;padding:10px 13px;border-radius:12px;box-shadow:0 4px 0 #a87e20}.kx-brand small{display:block;font-size:10px;color:#9ebbbb;letter-spacing:2px;margin-top:3px}
 .kx-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:24px 0}.kx-tabs button[aria-selected=true]{background:#edbb42;color:#18323c;border-color:#edbb42}
 .kx-hero{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:24px 0 30px}.kx-hero h1{font-size:clamp(28px,4vw,48px);line-height:1.07;letter-spacing:-1.5px;margin:8px 0 12px;max-width:700px}.kx-hero p{color:#bed0cf;line-height:1.6;margin:0;max-width:670px}.kx-eyebrow{color:#e5bf64;font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase}

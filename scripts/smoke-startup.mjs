@@ -59,7 +59,17 @@ try {
   await page.waitForTimeout(1_100);
   await page.screenshot({ path: path.join(artifacts, "kidx-ready-390x844.png") });
   await page.getByRole("button", { name: "← Atelier", exact: true }).click();
-  await page.getByRole("button", { name: "Quitter KidX", exact: true }).click();
+  const home = page.getByRole("button", { name: "Retour à l’accueil GraphysX", exact: true });
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    const box = await home.boundingBox();
+    assert.ok(box && box.x >= 0 && box.x + box.width <= width && box.height >= 44,
+      `the named GraphysX return must fit and remain touchable at ${width}px`);
+    await page.screenshot({ path: path.join(artifacts, `kidx-home-return-${width}.png`) });
+  }
+  await home.focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("heading", { name: "GraphysX", exact: true }).waitFor();
   await page.getByRole("button", { name: "KidX · First Drive" }).waitFor();
   assert.deepEqual(errors, [], "the welcome → KidX → welcome journey must have no browser errors");
   await page.close();
