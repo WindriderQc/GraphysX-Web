@@ -8,7 +8,8 @@ import path from "node:path";
 // the recovered slab, the movers genuinely move (a kinematic that never moved would pass any
 // structural check), the accent light carries no marker sphere, and the course is completed
 // for real through the rules layer — every ring, then the halfway gate, then the finish,
-// with the finish proven not to count early.
+// with the finish proven not to count early. A second crossing of every ring must leave
+// both its hidden world state and the collection tally unchanged.
 
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
 const ART = process.env.SMOKE_ARTIFACTS || path.resolve("output/smoke");
@@ -73,9 +74,8 @@ try {
 
     // --- finishing early must not count ----------------------------------------------
     // Park OUTSIDE every trigger volume between crossings. Parking at the spawn re-enters
-    // ring 1's box (0.5 units away) on every pull-back, and toggle-visibility genuinely
-    // toggles — the rules layer dedupes collection, but visibility flips back on. A rolling
-    // ball crosses each ring once; the harness must too.
+    // ring 1's box (0.5 units away) on every pull-back. Hidden triggers are inert, but
+    // each deliberate crossing still needs a clean exit before the next entry.
     const PARK = [0, 0.6, 24.5];
     const teleport = (position) => {
       api.update("spiral-ball", { transform: { position } });
@@ -87,13 +87,20 @@ try {
     const earlyPhase = api.rules.status().phase;
 
     // --- complete it for real: rings, then halfway, then finish -----------------------
-    // Skip rings already collected (ring 1, crossed at settle): a rolling ball crosses each
-    // ring once, and a second crossing genuinely toggles it back into existence.
+    // Skip rings already collected (ring 1, crossed at settle) on the first pass.
     for (const ring of rings) {
       if (api.query({ ids: [ring.id] })[0].visible === false) continue;
       teleport([ring.position[0], ring.position[1], ring.position[2]]);
     }
     const afterRings = api.rules.status();
+    const hiddenAfterRings = api.query({ tag: "collectible" }).filter((r) => r.visible === false).length;
+
+    // A collected ring must stay hidden on re-entry. The runtime suppresses a hidden
+    // trigger's own interaction while still reporting the crossing to the rules layer.
+    for (const ring of rings) teleport([ring.position[0], ring.position[1], ring.position[2]]);
+    const afterSecondPass = api.rules.status();
+    const hiddenAfterSecondPass = api.query({ tag: "collectible" }).filter((r) => r.visible === false).length;
+
     // Probe the halfway gate near its west end: the gate spans x -9.2..3.8, and probing at
     // the authored centre [-2.7, ...] grazes ring 10's box half a unit behind the gate.
     teleport([-8, 0.6, -22]);
@@ -120,6 +127,9 @@ try {
       earlyPhase,
       hiddenAfterSettle,
       collectedAfterRings: afterRings.collected.length,
+      hiddenAfterRings,
+      collectedAfterSecondPass: afterSecondPass.collected.length,
+      hiddenAfterSecondPass,
       checkpointAfterHalf: afterHalf.checkpointIndex,
       finalPhase: finalStatus.phase,
       elapsed: finalStatus.elapsedSeconds,
@@ -158,6 +168,9 @@ const ok =
   r.earlyPhase === "running" &&
   r.hiddenAfterSettle === 1 &&
   r.collectedAfterRings === 16 &&
+  r.hiddenAfterRings === 16 &&
+  r.collectedAfterSecondPass === 16 &&
+  r.hiddenAfterSecondPass === 16 &&
   r.checkpointAfterHalf === 1 &&
   r.finalPhase === "complete" &&
   r.hiddenRings === 16 &&
