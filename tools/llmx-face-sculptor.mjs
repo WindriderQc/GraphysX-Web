@@ -187,10 +187,9 @@ function maskDistance(x, y, z) {
   d = smin(d, sdEllipsoid(x, y + 0.66, z - 0.04, 0.45, 0.38, 0.42), 0.17);
   d = smin(d, sdEllipsoid(x, y + 0.93, z - 0.17, 0.19, 0.17, 0.21), 0.13);
 
-  // Cheekbones — a tight blend, so the ridge survives voxelisation instead of melting. Pushed
-  // forward and outward so they catch the key light as two distinct planes.
-  d = smin(d, sdEllipsoid(ax - 0.45, y + 0.06, z - 0.31, 0.21, 0.13, 0.21), 0.05);
-  // A hollow under each cheekbone: the gauntness that makes the mask gothic rather than round.
+  // The mid-face already carries the cheeks. An added forward ellipsoid formed two rectangular
+  // shelves under the eyes at portrait scale, so let the orbital rim meet this shared surface.
+  // A hollow below the cheeks gives the mask its gaunt shape.
   d = smax(d, -sdEllipsoid(ax - 0.4, y + 0.36, z - 0.36, 0.15, 0.11, 0.16), 0.09);
 
   // Brow ridge, dipping toward the nose and pushed forward so it actually overhangs the eyes.
