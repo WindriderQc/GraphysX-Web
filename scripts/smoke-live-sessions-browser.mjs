@@ -620,7 +620,9 @@ try {
     await waitForStore(store.url, { timeoutMs: 5_000 });
   }
 
-  browser = await launchSmokeBrowser({ args: ["--no-sandbox", "--use-gl=swiftshader", "--disable-dev-shm-usage"] });
+  // Chromium's supported software GLES driver is SwANGLE. The legacy --use-gl=swiftshader
+  // path can report shader validation errors after this long-running multi-page journey.
+  browser = await launchSmokeBrowser({ args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--disable-dev-shm-usage"] });
 
   // A one-box fixture can prove protocol convergence but cannot prove that Nestor visibly
   // reacts. Bootstrap the real shipping AgentX Center through the product, then make that

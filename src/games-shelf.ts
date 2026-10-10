@@ -100,9 +100,9 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   const close = document.createElement("button");
   close.type = "button";
   close.className = "gx-shelf-close";
-  close.textContent = "✕";
-  close.title = "Back to the showroom";
-  close.setAttribute("aria-label", "Close games and return to AgentX Center");
+  close.textContent = "← GraphysX";
+  close.title = "Return to GraphysX";
+  close.setAttribute("aria-label", "Close games and return to GraphysX");
   head.append(title, close);
 
   const blurb = document.createElement("p");
@@ -397,10 +397,10 @@ ${SHELF_PERSONALIZATION_CSS}
 .gx-shelf-card{box-sizing:border-box;width:min(900px,100%);max-height:86vh;display:flex;flex-direction:column;gap:12px;
   background:rgba(9,22,31,.96);border:1px solid rgba(79,208,230,.34);border-radius:14px;
   padding:20px 22px;box-shadow:0 18px 60px rgba(0,0,0,.5)}
-.gx-shelf-head{display:flex;align-items:center;gap:12px}
+.gx-shelf-head{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
 .gx-shelf-head h2{margin:0;flex:1;font-size:19px;letter-spacing:.04em;color:var(--gx-ink);font-weight:700}
 .gx-shelf-close{background:transparent;border:1px solid rgba(120,240,208,.3);border-radius:6px;
-  color:var(--gx-ink-soft);cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px}
+  color:var(--gx-ink-soft);cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px;min-height:44px}
 .gx-shelf-close:hover{border-color:var(--gx-accent);color:var(--gx-ink)}
 .gx-shelf-close:focus-visible{outline:2px solid var(--gx-accent);outline-offset:2px}
 .gx-shelf-blurb{margin:0;color:var(--gx-ink-faint);font-size:12.5px;line-height:1.5}

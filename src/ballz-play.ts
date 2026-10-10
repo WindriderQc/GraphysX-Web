@@ -41,6 +41,8 @@ import {
  * the ball itself, so a key press is an ordinary API call an agent could make too.
  */
 export type BallzPlayOptions = {
+  /** Visible destination, supplied by the host for HUD, pause and results exits. */
+  exitLabel?: string;
   /**
    * Host-supplied raycast of a client-space point onto the play plane, for mouse aiming.
    * The host owns the camera, so it owns the unprojection; everything this layer *does*
@@ -71,6 +73,7 @@ export function mountBallzPlay(
   onExit?: () => void,
   options: BallzPlayOptions = {},
 ): () => void {
+  const exitLabel = options.exitLabel ?? "← Back";
   const rules = api.rules.get();
   const players = api.query({ tag: "player" });
   // Rules are the authority: composed courses deliberately use their own subject ids
@@ -223,7 +226,7 @@ export function mountBallzPlay(
     const exit = document.createElement("button");
     exit.type = "button";
     exit.className = "gx-bz-exit";
-    exit.textContent = "✕ Exit play";
+    exit.textContent = exitLabel;
     exit.addEventListener("click", () => onExit());
     actions.append(exit);
   }
@@ -309,7 +312,7 @@ export function mountBallzPlay(
     if (onExit) {
       const exit = document.createElement("button");
       exit.type = "button";
-      exit.textContent = "← Exit to games";
+      exit.textContent = exitLabel;
       exit.dataset.gxPauseAction = "exit";
       exit.addEventListener("click", onExit);
       panel.append(exit);
@@ -384,7 +387,7 @@ export function mountBallzPlay(
       : replayDefinition
         ? () => { void reloadPristineScene(api, replayDefinition); }
         : undefined;
-    const panel = buildWinPanel(api, totalRings, seconds, desynced, onExit, replay);
+    const panel = buildWinPanel(api, totalRings, seconds, desynced, onExit, replay, exitLabel);
     container.append(panel);
     container.querySelector<HTMLElement>(".gx-bz-touch")?.setAttribute("inert", "");
     queueMicrotask(() => {
@@ -840,6 +843,7 @@ function buildWinPanel(
   desynced: boolean,
   onExit?: () => void,
   onReplay?: () => void,
+  exitLabel = "← Back",
 ): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "gx-bz-win";
@@ -893,7 +897,7 @@ function buildWinPanel(
     const back = document.createElement("button");
     back.type = "button";
     back.className = "gx-bz-win-btn";
-    back.textContent = "← Back to games";
+    back.textContent = exitLabel;
     back.addEventListener("click", () => onExit());
     actions.append(back);
   }

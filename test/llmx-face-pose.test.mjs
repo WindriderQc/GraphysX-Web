@@ -422,13 +422,14 @@ describe("expressions that must read at a distance", () => {
     assert.ok(drop > weights.level.cube * 1.5, "inner brow dropped only " + inCubes(drop) + " cubes");
   });
 
-  it("looks away and half-closes the lids when thinking, without the caller aiming it", () => {
+  it("looks away and narrows the eyes slightly while staying awake when thinking", () => {
     const { anchors } = weights;
     const thinking = eyeTransform(anchors, { think: 1 });
     const neutral = eyeTransform(anchors, {});
     assert.ok(thinking.pitch < neutral.pitch, "a thinking gaze should rise");
     assert.ok(thinking.yaw !== neutral.yaw, "a thinking gaze should turn aside");
     assert.ok(thinking.lidRadians > neutral.lidRadians, "thinking should lower the lids");
+    assert.ok(thinking.lidRadians < 0, "thinking keeps the resting upper lid lifted");
     const attending = eyeTransform(anchors, { attention: 1 });
     assert.ok(attending.lidRadians < neutral.lidRadians, "attending should open the lids wider");
   });

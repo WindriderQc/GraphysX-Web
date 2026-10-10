@@ -43,14 +43,18 @@ export function readEmbedPresence(value: unknown, previous: LlmXEmbedPresence = 
  * Presence → face drivers, reusing the full LLMx mapping for the shared phases so the docked mask
  * and the Forge mask read the same. The embed adds three things the Forge does not observe:
  * the listener's own voice level (attention leans in), the token rate (thinking intensity) and
- * sleep (the host's inference is busy elsewhere: eyes close, nothing is expected).
+ * the host's quiet/busy state. Older hosts use `sleeping` both for genuine inactivity and
+ * for a turn waiting on an inference host; it must therefore keep the eyes open.
  */
 export function embedFaceDrivers(presence: LlmXEmbedPresence, assembly: number): Partial<FaceDrivers> {
   if (presence.phase === "sleeping") {
-    return { build: assembly, speak: 0, think: 0, attention: 0, warmth: 0, blink: 1 };
+    return { build: assembly, speak: 0, think: 0, attention: 0.25, warmth: 0, blink: 0 };
   }
   const speaking = presence.phase === "speaking" && presence.level >= 0.001;
-  const phase = presence.phase === "speaking" ? "generating" : presence.phase;
+  // The shared presentation has no speaking phase: played audio supplies speech. Between
+  // syllables, keep its neutral attentive pose instead of misclassifying silence as thinking.
+  // Waiting for a host is likewise not evidence that Nestor is actively generating.
+  const phase = presence.phase === "speaking" || presence.phase === "waiting" ? "idle" : presence.phase;
   // The embed owns the gaze (pointer or viewer), so the presentation's neutral gaze is dropped.
   const { gazeX: _gazeX, gazeY: _gazeY, ...drivers } = llmxFacePresentation({
     assembly,
@@ -67,7 +71,9 @@ export function embedFaceDrivers(presence: LlmXEmbedPresence, assembly: number):
   return {
     ...drivers,
     think,
-    warmth: Math.max(drivers.warmth, listeningLevel * 0.3) - (presence.phase === "error" ? 0.3 : 0),
+    attention: presence.phase === "interrupted" ? 1 : drivers.attention,
+    warmth: Math.max(drivers.warmth, presence.phase === "speaking" ? 0.2 : 0, listeningLevel * 0.3)
+      - (presence.phase === "error" ? 0.3 : 0),
   };
 }
 

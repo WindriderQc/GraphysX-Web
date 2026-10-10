@@ -174,6 +174,7 @@ try {
   await page.screenshot({ path: path.join(ART, "games-playing.png"), fullPage: false });
 
   // ---- and back out to the front door ----
+  out.exitLabel = await page.locator(".gx-bz-exit").innerText();
   await page.click(".gx-bz-exit");
   await page.waitForTimeout(1200);
   out.returned = await page.evaluate(() => ({
@@ -311,6 +312,7 @@ const ok =
   out.framedOnLevel === true &&
   out.returned?.mode === "scene" &&
   out.returned?.welcomeBack === true &&
+  out.exitLabel === "← GraphysX" &&
   out.returned?.hudGone === true &&
   out.returned?.showroomEntities > 0 &&
   out.returned?.levelEntities === 0 &&

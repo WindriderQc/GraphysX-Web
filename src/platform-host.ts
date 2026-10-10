@@ -87,6 +87,8 @@ export interface PlatformHostOptions {
    * mean un-hiding chrome — the page has to decide what to show instead, usually the showroom.
    */
   onExitPlay?: () => void;
+  /** Visible destination of the page-owned play exit. */
+  playExitLabel?: () => string;
   /**
    * Initial camera framing. The default is a wide overview suited to the demo world; a
    * composed scene like the showroom wants its own, tighter framing.
@@ -227,6 +229,7 @@ export class PlatformHost {
   private readonly autoOrbit: boolean;
   private readonly onExitEditor?: () => void;
   private readonly onExitPlay?: () => void;
+  private readonly playExitLabel?: () => string;
   private readonly controls: OrbitControls;
   private readonly clock = new Clock();
   private readonly onResize = () => this.resize();
@@ -456,6 +459,7 @@ export class PlatformHost {
     this.autoOrbit = options.autoOrbit === true;
     this.onExitEditor = options.onExitEditor;
     this.onExitPlay = options.onExitPlay;
+    this.playExitLabel = options.playExitLabel;
     // The route decides the opening surface: the showroom opens on `scene`, the editor routes
     // open on `editor`. Set directly rather than through setMode, which would early-return on
     // the initial value and skip the editor load.
@@ -1201,6 +1205,9 @@ export class PlatformHost {
     this.playLayer?.();
     this.playLayer = this.currentMode === "play"
       ? mountBallzPlay(this.api, this.container, () => this.exitPlay(), {
+          exitLabel: this.onExitPlay
+            ? this.playExitLabel?.() ?? "← Back"
+            : this.modeBeforePlay === "editor" ? "← Scene Editor" : "← Scene",
           screenToGround: (clientX, clientY) => this.screenToGround(clientX, clientY),
         })
       : null;

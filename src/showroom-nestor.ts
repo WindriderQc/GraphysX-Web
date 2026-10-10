@@ -130,7 +130,7 @@ const READY_PRESENTATION: NestorPresentation = {
 };
 
 /**
- * Scene-native geometry for the AgentX Center guide and its three physical topic consoles.
+ * Scene-native geometry for the GraphysX guide and its three physical topic consoles.
  * Nothing here relies on private renderer objects: the avatar, light, particles, stage and
  * controls all survive export/load as ordinary v2 entities.
  */
@@ -304,7 +304,7 @@ export function buildNestorCenter(): AgentWorldEntityDefinition[] {
       transform: { position: [0, 0.38, 0], rotationDegrees: [0, 180, 0] },
       material: { color: "#3fc8df", emissive: "#0d566b", emissiveIntensity: 0.95, roughness: 0.22, metalness: 0.58 },
       agent: {
-        role: "AgentX Center guide",
+        role: "GraphysX guide",
         status: "ready",
         perceptionRadius: 12,
         capabilities: ["present", "build", "play", "explore"],
@@ -814,7 +814,7 @@ export function nestorTopicRequest(topic: NestorTopic): string {
 }
 
 function intentFor(topic: NestorTopic): string {
-  if (topic === "build") return "Assemble a signal beacon in the AgentX Center";
+  if (topic === "build") return "Assemble a signal beacon in GraphysX";
   if (topic === "play") return "Wake the kinetic playground with shared scene interactions";
   return "Illuminate the showroom's living flock systems";
 }

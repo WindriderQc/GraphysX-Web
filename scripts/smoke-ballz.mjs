@@ -11,7 +11,8 @@ import path from "node:path";
 //     different claims; the terrain-collider bug shipped because only the first was checked.
 //   - a wall actually STOPS it — a ball dropped on a wall rests on top rather than tunnelling.
 //   - crossing the finish gate fires `trigger.enter` exactly once, not once per frame.
-//   - a ring collects itself through its own toggle-visibility interaction.
+//   - a ring collects itself through its own toggle-visibility interaction and stays
+//     hidden when the ball crosses it again.
 //   - the whole thing survives export -> load, because a materialised level is claimed to be
 //     an ordinary scene rather than a special play mode.
 //
@@ -188,11 +189,16 @@ try {
     api.update("ballz-ball", { transform: { position: [rx, ry + 5, rz] } });
     for (let i = 0; i < 300; i += 1) api.step(1 / 60);
     const after = api.query({ ids: [ring.id] })[0];
+    api.update("ballz-ball", { transform: { position: [rx, ry + 5, rz] } });
+    for (let i = 0; i < 300; i += 1) api.step(1 / 60);
+    const afterSecondPass = api.query({ ids: [ring.id] })[0];
     return {
       id: ring.id,
       visibleBefore,
       visibleAfter: after.visible,
+      visibleAfterSecondPass: afterSecondPass.visible,
       collected: visibleBefore === true && after.visible === false,
+      staysCollected: afterSecondPass.visible === false,
     };
   });
 
@@ -760,6 +766,7 @@ const ok =
   out.finish?.crossedBy === "ballz-ball" &&
   out.finish?.didNotResist === true &&
   out.ring?.collected === true &&
+  out.ring?.staysCollected === true &&
   out.roundTrip?.survived === true &&
   out.roundTrip?.stillTrigger === true &&
   out.roundTrip?.lighting?.source === "hdri" &&

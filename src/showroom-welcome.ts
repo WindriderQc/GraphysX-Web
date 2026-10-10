@@ -251,8 +251,8 @@ export function mountWelcome(
   overlay.className = "gx-welcome";
   overlay.innerHTML = `
     <div class="gx-welcome-card">
-      <div class="gx-eyebrow"><span class="gx-online-dot"></span><span data-nestor-eyebrow>AgentX Center · Nestor online</span><button type="button" class="gx-tour-start" data-tour-start>Show me around</button></div>
-      <h1 data-nestor-title>MAKE THE WORLD MOVE.</h1>
+      <div class="gx-eyebrow"><span class="gx-online-dot"></span><span data-nestor-eyebrow>GraphysX · Nestor online</span><button type="button" class="gx-tour-start" data-tour-start>Show me around</button></div>
+      <h1 data-nestor-title>GraphysX</h1>
       <p class="gx-nestor-briefing" data-nestor-briefing aria-live="polite">Pick a live demo. Nestor will change this scene with the same inspectable commands available to every AgentX collaborator.</p>
       <div class="gx-nestor-topics" aria-label="Ask Nestor to show a capability">
         <button type="button" data-nestor-topic="build" aria-pressed="false">Build something</button>
@@ -302,12 +302,12 @@ export function mountWelcome(
     const briefing = overlay.querySelector<HTMLElement>("[data-nestor-briefing]");
     const commit = overlay.querySelector<HTMLElement>("[data-nestor-commit]");
     const hint = overlay.querySelector<HTMLElement>(".gx-hint");
-    if (eyebrow) eyebrow.textContent = liveObserver ? "AgentX Center · live session attached" : "Scene workspace · draft preserved";
+    if (eyebrow) eyebrow.textContent = liveObserver ? "GraphysX · live session attached" : "Scene workspace · draft preserved";
     if (title) title.textContent = liveObserver ? "NESTOR IS OBSERVING." : "YOUR WORLD IS STILL HERE.";
     if (briefing) {
       briefing.textContent = liveObserver
         ? "This live session owns scene operations. Nestor's local demonstrations are paused so every collaborator sees the same history."
-        : "Your in-memory scene is preserved. Re-enter the editor to keep building; the AgentX Center stays separate from this world.";
+        : "Your in-memory scene is preserved. Re-enter the editor to keep building; the GraphysX welcome scene stays separate from this world.";
       // The mission panel owns the live announcement channel in observer mode; this visual
       // copy mirrors it without creating a second, conflicting screen-reader announcement.
       if (liveObserver) briefing.setAttribute("aria-live", "off");
@@ -348,7 +348,7 @@ export function mountWelcome(
     if (!activity) {
       delete overlay.dataset.liveAgentActor;
       delete overlay.dataset.liveAgentRevision;
-      if (eyebrow) eyebrow.textContent = "AgentX Center · live session attached";
+      if (eyebrow) eyebrow.textContent = "GraphysX · live session attached";
       if (title) title.textContent = "NESTOR IS OBSERVING.";
       if (briefing) briefing.textContent = "This live session owns scene operations. Nestor's local demonstrations are paused so every collaborator sees the same history.";
       if (commit) commit.textContent = "Live operation path active";
@@ -358,8 +358,8 @@ export function mountWelcome(
     if (activity.revision === null) delete overlay.dataset.liveAgentRevision;
     else overlay.dataset.liveAgentRevision = String(activity.revision);
     if (eyebrow) eyebrow.textContent = activity.kind === "joined"
-      ? `AgentX Center · ${activity.actorLabel} online`
-      : `AgentX Center · accepted ${activity.actorLabel}`;
+      ? `GraphysX · ${activity.actorLabel} online`
+      : `GraphysX · accepted ${activity.actorLabel}`;
     if (title) title.textContent = activity.kind === "joined"
       ? `${activity.actorLabel.toUpperCase()} IS HERE.`
       : "NESTOR ACKNOWLEDGED IT.";
@@ -425,8 +425,8 @@ export function mountWelcome(
     const title = overlay.querySelector<HTMLElement>("[data-nestor-title]");
     const briefing = overlay.querySelector<HTMLElement>("[data-nestor-briefing]");
     const commit = overlay.querySelector<HTMLElement>("[data-nestor-commit]");
-    if (eyebrow) eyebrow.textContent = "AgentX Center · Nestor online";
-    if (title) title.textContent = "MAKE THE WORLD MOVE.";
+    if (eyebrow) eyebrow.textContent = "GraphysX · Nestor online";
+    if (title) title.textContent = "GraphysX";
     if (briefing) briefing.textContent = "Pick a live demo. Nestor will change this scene with the same inspectable commands available to every AgentX collaborator.";
     if (commit) commit.textContent = "Scene-native guide · ready";
     overlay.querySelectorAll<HTMLButtonElement>("[data-nestor-topic]").forEach((button) => button.setAttribute("aria-pressed", "false"));

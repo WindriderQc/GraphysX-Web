@@ -55,9 +55,32 @@ try {
   await page.waitForTimeout(400);
   await page.locator("#face").screenshot({ path: path.join(artifacts, "llmx-face-embed-speaking.png") });
 
+  const interrupted = await page.evaluate(() => {
+    const face = document.getElementById("face");
+    const wasSpeaking = face.face.describe().speaking;
+    face.presence = { phase: "interrupted", level: 0 };
+    return { wasSpeaking, stillSpeaking: face.face.describe().speaking };
+  });
+  assert.deepEqual(interrupted, { wasSpeaking: true, stillSpeaking: false }, "an interruption releases the mouth before another frame");
+
   await page.evaluate(() => { document.getElementById("face").presence = { phase: "sleeping" }; });
   await page.waitForTimeout(600);
   await page.locator("#face").screenshot({ path: path.join(artifacts, "llmx-face-embed-sleeping.png") });
+
+  const cyan = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => {
+    const canvas = document.getElementById("face").shadowRoot.querySelector("canvas");
+    const probe = document.createElement("canvas");
+    probe.width = 420; probe.height = 320;
+    const context = probe.getContext("2d");
+    context.drawImage(canvas, 0, 0, probe.width, probe.height);
+    const { data } = context.getImageData(0, 0, probe.width, probe.height);
+    let pixels = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      if (data[index + 1] > 80 && data[index + 2] > 80 && data[index + 1] > data[index] * 1.4) pixels += 1;
+    }
+    resolve(pixels);
+  })));
+  assert.ok(cyan > 20, `the waiting face keeps visible cyan eyes (${cyan} pixels)`);
 
   // A math picture beside the mask: applied with a receipt, out-of-bounds refused whole.
   const receipts = await page.evaluate(() => {

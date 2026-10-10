@@ -273,7 +273,7 @@ try {
   // Dispatch the actual exit button in the same task as the edit, before its 650ms debounce.
   await play.evaluate(() => {
     window.__GRAPHYSX__.spawn({ id: "quick-exit-probe", type: "box" });
-    [...document.querySelectorAll('.gx-ed-toolbar button')].find((button) => button.textContent === "← Showroom").click();
+    document.querySelector('.gx-ed-exit').click();
   });
   await play.waitForTimeout(850);
   out.quickExit = await play.evaluate(() => {

@@ -556,15 +556,16 @@ export const POSE_LIMITS = Object.freeze({
   /** Inner brow drops and draws toward the centre while thinking. */
   browFrown: 0.075,
   browConverge: 0.04,
-  /** Lids: half-closed while thinking, wide while attending. Radians about the eye's X axis. */
-  thinkLidRadians: 0.42,
+  /** Thinking keeps the aperture readable; concentration belongs chiefly to the brow and gaze. */
+  neutralLidRadians: -0.08,
+  thinkLidRadians: 0.08,
   /** The lower lid rises with a smile — the squint that makes a smile sincere — and on a blink. */
   smileSquintRadians: 0.3,
   blinkLowerLidRadians: 0.5,
   /** Pupil size, as a multiple of the sculpted pupil: wide when attentive, narrow when thinking. */
   pupilMin: 0.7,
   pupilMax: 1.45,
-  attentionLidRadians: -0.3,
+  attentionLidRadians: -0.25,
   /** A thinking face looks up and to one side — added inside the rig, not by the caller. */
   thinkGazeY: 0.35,
   thinkGazeX: -0.22,
@@ -787,7 +788,8 @@ export function eyeTransform(anchors: FaceAnchors, input: Partial<FaceDrivers>):
   const gazeX = clamp(d.gazeX + POSE_LIMITS.thinkGazeX * d.think, -1, 1);
   const gazeY = clamp(d.gazeY + POSE_LIMITS.thinkGazeY * d.think, -1, 1);
   // The blink owns the lid while it lasts; otherwise the expression sets where the lid rests.
-  const restingLid = POSE_LIMITS.thinkLidRadians * d.think + POSE_LIMITS.attentionLidRadians * d.attention;
+  const restingLid = POSE_LIMITS.neutralLidRadians + POSE_LIMITS.thinkLidRadians * d.think
+    + POSE_LIMITS.attentionLidRadians * d.attention;
   return {
     pivot: { x: anchors.eye.x, y: anchors.eye.y, z: anchors.eye.z },
     yaw: gazeX * POSE_LIMITS.gazeRadians,

@@ -1497,7 +1497,7 @@ export class PlatformEditor {
     toolbar.setAttribute("aria-label", "Scene editor tools");
 
     if (this.deps.onExit) {
-      const exit = this.toolButton("← Showroom", () => this.deps.onExit?.());
+      const exit = this.toolButton("← Accueil", () => this.deps.onExit?.(), "Retour à l’accueil — la scène en cours est conservée");
       exit.classList.add("gx-ed-exit");
       toolbar.append(this.group([exit]));
     }

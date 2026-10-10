@@ -67,9 +67,9 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
   const close = document.createElement("button");
   close.type = "button";
   close.className = "gx-browse-close";
-  close.textContent = "✕";
-  close.title = "Back to the showroom";
-  close.setAttribute("aria-label", "Close scene browser and return to AgentX Center");
+  close.textContent = "← GraphysX";
+  close.title = "Return to GraphysX";
+  close.setAttribute("aria-label", "Close scene browser and return to GraphysX");
   head.append(title, close);
 
   const blurb = document.createElement("p");
@@ -290,10 +290,10 @@ ${SHELF_PERSONALIZATION_CSS}
 .gx-browse-card{box-sizing:border-box;width:min(900px,100%);max-height:86vh;display:flex;flex-direction:column;gap:12px;
   background:rgba(9,22,31,.96);border:1px solid rgba(79,208,230,.34);border-radius:14px;
   padding:20px 22px;box-shadow:0 18px 60px rgba(0,0,0,.5)}
-.gx-browse-head{display:flex;align-items:center;gap:12px}
+.gx-browse-head{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
 .gx-browse-head h2{margin:0;flex:1;font-size:19px;letter-spacing:.04em;color:var(--gx-ink);font-weight:700}
 .gx-browse-close{background:transparent;border:1px solid rgba(120,240,208,.3);border-radius:6px;
-  color:var(--gx-ink-soft);cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px}
+  color:var(--gx-ink-soft);cursor:pointer;font:12px/1 var(--gx-font);padding:6px 9px;min-height:44px}
 .gx-browse-close:hover{border-color:var(--gx-accent);color:var(--gx-ink)}
 .gx-browse-close:focus-visible{outline:2px solid var(--gx-accent);outline-offset:2px}
 .gx-browse-blurb{margin:0;color:var(--gx-ink-faint);font-size:12.5px;line-height:1.5}
