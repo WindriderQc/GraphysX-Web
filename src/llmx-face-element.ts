@@ -157,6 +157,7 @@ export class LlmXFaceElement extends HTMLElement {
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.setClearColor(0x000000, 0);
+    canvas.addEventListener("webglcontextrestored", this.onContextRestored);
     this.world = new Scene();
     this.camera = new PerspectiveCamera(35, 1, 0.1, 30);
     this.buildLights();
@@ -184,6 +185,7 @@ export class LlmXFaceElement extends HTMLElement {
   }
 
   disconnectedCallback(): void {
+    this.renderer?.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);
     cancelAnimationFrame(this.frame);
     window.removeEventListener("pointermove", this.onPointer);
     this.resize?.disconnect();
@@ -231,12 +233,7 @@ export class LlmXFaceElement extends HTMLElement {
     // whose world reflects a night HDRI. That file is 1.7 MB — twice this whole bundle, and the
     // host would have to relay it too — so the dock generates the platform's own studio room
     // instead (platform-host.ts does the same for every world without a sky), once, at startup.
-    const pmrem = new PMREMGenerator(this.renderer!);
-    const room = new RoomEnvironment();
-    this.environment = pmrem.fromScene(room, 0.04);
-    room.dispose();
-    pmrem.dispose();
-    scene.environment = this.environment.texture;
+    this.buildEnvironment();
     scene.environmentIntensity = DOCK_ENVIRONMENT.intensity;
     scene.environmentRotation.set(0, (DOCK_ENVIRONMENT.yawDegrees * Math.PI) / 180, 0);
     // The aura: a soft halo behind the head, additive, so it glows on any dock background.
@@ -244,6 +241,28 @@ export class LlmXFaceElement extends HTMLElement {
     this.aura.position.set(0, 0.1, -0.9);
     scene.add(this.aura);
   }
+
+  /**
+   * Generate the reflected room into a render target. Also run when a lost WebGL context comes
+   * back: Three re-uploads meshes and textures from their sources, but a generated target has no
+   * source — its pixels lived on the GPU — so after a restore it would stay black and the mask
+   * would go dull until the page reloads. Measured: a context lost under the software renderer
+   * left exactly that (the environment set, its intensity changing nothing).
+   */
+  private buildEnvironment(): void {
+    const renderer = this.renderer;
+    const scene = this.world;
+    if (!renderer || !scene) return;
+    this.environment?.dispose();
+    const pmrem = new PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    this.environment = pmrem.fromScene(room, 0.04);
+    room.dispose();
+    pmrem.dispose();
+    scene.environment = this.environment.texture;
+  }
+
+  private readonly onContextRestored = (): void => { this.buildEnvironment(); };
 
   private applyTint(): void {
     const value = this.getAttribute("tint");
