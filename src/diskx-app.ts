@@ -508,6 +508,18 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     });
   }
 
+  // ---- entry ---------------------------------------------------------------------------------------
+  // The host abandons any camera move the moment the visitor grabs the canvas (OrbitControls
+  // "start"), which is right for a click on a block but strands a visitor who touches the
+  // canvas during the rise from street level: they stay nose-to-wall with no city in sight.
+  // So any grab or wheel during the entry snaps straight to the overview instead.
+  let entryRemaining = 0;
+  const settleEntry = (): void => {
+    if (entryRemaining <= 0) return;
+    entryRemaining = 0;
+    overviewCamera(0);
+  };
+
   // ---- pointer ---------------------------------------------------------------------------------
   let down: { x: number; y: number } | null = null;
   const dom = host.renderer.domElement;
@@ -552,6 +564,8 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     if (event.key === "Escape" || event.key === "Backspace") { event.preventDefault(); up(); }
   };
   dom.addEventListener("pointerdown", onPointerDown);
+  dom.addEventListener("pointerdown", settleEntry);
+  dom.addEventListener("wheel", settleEntry, { passive: true });
   dom.addEventListener("pointermove", onPointerMove);
   dom.addEventListener("pointerleave", onPointerLeave);
   dom.addEventListener("pointerup", onPointerUp);
@@ -564,6 +578,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   let editing = false;
   const frame = (delta: number): void => {
     if (disposed) return;
+    if (entryRemaining > 0) entryRemaining = Math.max(0, entryRemaining - delta);
     const nowEditing = host.mode === "editor";
     if (nowEditing !== editing) {
       editing = nowEditing;
@@ -594,10 +609,13 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   buildCity();
   overviewCamera(0);
   if (!reduced) {
-    // Entry: a slow rise from street level to the overview, so the skyline reveals itself.
+    // Entry: a rise from street level to the overview, so the skyline reveals itself. Short
+    // enough that nobody waits on it; interrupted by any grab (see `settleEntry`).
+    const ENTRY_SECONDS = 1.6;
     const start = OVERVIEW_DIRECTION.clone().multiplyScalar(CITY_SIZE * 0.9).setY(2.2);
     host.frameView([start.x, start.y, start.z], [0, 1.5, 0], 0);
-    overviewCamera(2.4);
+    overviewCamera(ENTRY_SECONDS);
+    entryRemaining = ENTRY_SECONDS;
   }
 
   const state = (): unknown => {
@@ -612,6 +630,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       listMode: listMode.kind,
       truncated: [...truncated],
       pendingDive: pending !== null,
+      entering: entryRemaining > 0,
       districts: blocks.map((block) => {
         const point = block.top.clone().project(host.camera);
         const onScreen = point.z < 1 && Math.abs(point.x) <= 1 && Math.abs(point.y) <= 1;
@@ -632,6 +651,8 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       disposed = true;
       unsubscribe();
       dom.removeEventListener("pointerdown", onPointerDown);
+      dom.removeEventListener("pointerdown", settleEntry);
+      dom.removeEventListener("wheel", settleEntry);
       dom.removeEventListener("pointermove", onPointerMove);
       dom.removeEventListener("pointerleave", onPointerLeave);
       dom.removeEventListener("pointerup", onPointerUp);
