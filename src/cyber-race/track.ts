@@ -3,7 +3,7 @@ import type { Rng } from "./textures";
 
 export const OPEN_RADIUS = 14;
 
-export type SectorKind = "tunnel" | "mines" | "shards" | "thorns" | "vortex";
+export type SectorKind = "tunnel" | "mines" | "shards" | "thorns" | "kaleido" | "wave" | "vortex";
 
 export interface SectorInfo {
   name: string;
@@ -15,21 +15,27 @@ export interface SectorInfo {
   weight: number;
   fog: number;
   fogColor: number;
-  sky: "circuit" | "sunset";
+  sky: "circuit" | "sunset" | "hexdots" | "none";
+  /** Keep the line nearly level (boards with a floor). */
+  flat: boolean;
 }
 
 export const SECTOR_INFO: Record<SectorKind, SectorInfo> = {
-  tunnel: { name: "TUNNEL", tube: 9, amp: 16, weight: 1.1, fog: 0.0075, fogColor: 0x061416, sky: "circuit" },
-  mines: { name: "CHAMP DE MINES", tube: 0, amp: 34, weight: 1, fog: 0.0055, fogColor: 0x061416, sky: "circuit" },
-  shards: { name: "CRISTAUX", tube: 0, amp: 34, weight: 1, fog: 0.0042, fogColor: 0x061416, sky: "circuit" },
-  thorns: { name: "TERRES HOSTILES", tube: 0, amp: 24, weight: 1, fog: 0.0032, fogColor: 0x5a2410, sky: "sunset" },
-  vortex: { name: "VORTEX", tube: 11, amp: 14, weight: 1, fog: 0.0065, fogColor: 0x120626, sky: "circuit" }
+  tunnel: { name: "TUNNEL", tube: 9, amp: 16, weight: 1.1, fog: 0.0075, fogColor: 0x061416, sky: "circuit", flat: false },
+  mines: { name: "CHAMP DE MINES", tube: 0, amp: 34, weight: 1, fog: 0.0055, fogColor: 0x061416, sky: "circuit", flat: false },
+  shards: { name: "CRISTAUX", tube: 0, amp: 34, weight: 1, fog: 0.0042, fogColor: 0x061416, sky: "circuit", flat: false },
+  thorns: { name: "TERRES HOSTILES", tube: 0, amp: 24, weight: 1, fog: 0.0032, fogColor: 0x5a2410, sky: "sunset", flat: true },
+  // Jobe's acceleration (01:00:20-01:02:40): a spiral of ornate tiles, no solid wall.
+  kaleido: { name: "KALÉIDOSCOPE", tube: 11, amp: 14, weight: 1, fog: 0.006, fogColor: 0x10061c, sky: "none", flat: false },
+  // Jobe reaching into the network (01:14): golden waves over the electric globe.
+  wave: { name: "VAGUE D'OR", tube: 0, amp: 22, weight: 1, fog: 0.0026, fogColor: 0x1a0830, sky: "hexdots", flat: true },
+  vortex: { name: "VORTEX", tube: 11, amp: 14, weight: 1, fog: 0.0065, fogColor: 0x120626, sky: "circuit", flat: false }
 };
 
 /** The race the two boys play in the film, then the extended run. */
 export const PLANS: Record<"film" | "extended", SectorKind[]> = {
   film: ["tunnel", "mines", "shards"],
-  extended: ["tunnel", "mines", "shards", "thorns", "vortex"]
+  extended: ["tunnel", "mines", "shards", "thorns", "kaleido", "wave", "vortex"]
 };
 
 export interface Sector {
@@ -83,7 +89,7 @@ export class Track {
       }
       // Use the sector of the next stretch so tube sectors stay gently curved.
       const info = this.sectorAt((i + 1) * spacing).info;
-      const yScale = info.sky === "sunset" ? 0.25 : 0.6;
+      const yScale = info.flat ? 0.25 : 0.6;
       x = x * 0.85 + (rng() * 2 - 1) * info.amp;
       y = y * 0.85 + (rng() * 2 - 1) * info.amp * yScale;
     }

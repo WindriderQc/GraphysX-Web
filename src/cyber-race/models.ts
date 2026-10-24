@@ -106,6 +106,26 @@ export function createFlyer(look: FlyerLook): FlyerModel {
     add(new THREE.SphereGeometry(0.045, 8, 6), eyeMaterial, side * 0.09, 0.1, 1.34);
   }
 
+  // Glass canopy over the head (00:40:36) and the hull under the body (00:41:00).
+  const glass = new THREE.MeshStandardMaterial({
+    color: 0xbfefff,
+    transparent: true,
+    opacity: 0.3,
+    roughness: 0.05,
+    metalness: 0.2,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  });
+  const canopy = add(new THREE.SphereGeometry(0.5, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), glass, 0, 0.02, 1.0);
+  canopy.scale.set(0.95, 0.85, 1.35);
+  const hull = add(new THREE.SphereGeometry(1, 20, 12), wing, 0, -0.32, 0.45);
+  hull.scale.set(0.5, 0.26, 1.85);
+  const stripe = add(new THREE.SphereGeometry(1, 20, 12), wingEdge, 0, -0.3, 0.5);
+  stripe.scale.set(0.53, 0.12, 1.7);
+  const noseGeo = new THREE.ConeGeometry(0.28, 0.9, 14);
+  noseGeo.rotateX(Math.PI / 2);
+  add(noseGeo, wing, 0, -0.32, 2.45);
+
   // Back pack and swept wings.
   add(new THREE.BoxGeometry(0.72, 0.24, 1.15), wingEdge, 0, 0.34, 0.05);
   const mainWing = wingGeometry(

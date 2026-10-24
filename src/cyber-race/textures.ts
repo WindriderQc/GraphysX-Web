@@ -303,3 +303,173 @@ export function sunsetTexture(): THREE.CanvasTexture {
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
+
+/** Cream lace tile with a dark lattice, as the acceleration sequence's spiral (01:01). */
+export function ornateTileTexture(): THREE.CanvasTexture {
+  const size = 128;
+  const [canvas, ctx] = makeCanvas(size, size);
+  ctx.fillStyle = "#f1e6cf";
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = "#2a1a2e";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(6, 6, size - 12, size - 12);
+  ctx.lineWidth = 2;
+  const c = size / 2;
+  // Eight-fold lattice: arcs and diagonals mirrored around the centre.
+  for (let k = 0; k < 8; k += 1) {
+    const a = (k * Math.PI) / 4;
+    ctx.beginPath();
+    ctx.arc(c + Math.cos(a) * 30, c + Math.sin(a) * 30, 18, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(c, c);
+    ctx.lineTo(c + Math.cos(a) * 56, c + Math.sin(a) * 56);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(c, c, 12, 0, Math.PI * 2);
+  ctx.fillStyle = "#2a1a2e";
+  ctx.fill();
+  for (const [x, y] of [[14, 14], [size - 14, 14], [14, size - 14], [size - 14, size - 14]]) {
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return toTexture(canvas);
+}
+
+/** Dark blue with branching cyan lightning: the electric brain-globe (01:02, 01:14). */
+export function lightningTexture(): THREE.CanvasTexture {
+  const w = 1024;
+  const h = 512;
+  const [canvas, ctx] = makeCanvas(w, h);
+  const rng = mulberry32(41);
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, "#1a1a6a");
+  g.addColorStop(0.5, "#2a2a9a");
+  g.addColorStop(1, "#141450");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  const bolt = (x: number, y: number, len: number, angle: number, width: number, depth: number): void => {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    let px = x;
+    let py = y;
+    const steps = 6 + Math.floor(rng() * 6);
+    for (let i = 0; i < steps; i += 1) {
+      angle += (rng() - 0.5) * 1.1;
+      px += Math.cos(angle) * (len / steps);
+      py += Math.sin(angle) * (len / steps);
+      ctx.lineTo(px, py);
+      if (depth < 2 && rng() < 0.25) bolt(px, py, len * 0.5, angle + (rng() - 0.5) * 1.6, width * 0.6, depth + 1);
+    }
+    ctx.lineWidth = width * 3;
+    ctx.strokeStyle = "rgba(120,200,255,0.25)";
+    ctx.stroke();
+    ctx.lineWidth = width;
+    ctx.strokeStyle = "#dff6ff";
+    ctx.stroke();
+  };
+  for (let i = 0; i < 70; i += 1) {
+    bolt(rng() * w, rng() * h, 60 + rng() * 160, rng() * Math.PI * 2, 1 + rng() * 2, 0);
+  }
+  for (let i = 0; i < 40; i += 1) {
+    ctx.fillStyle = `rgba(${200 + rng() * 55},${80 + rng() * 80},${rng() * 60},0.35)`;
+    ctx.beginPath();
+    ctx.arc(rng() * w, rng() * h, 4 + rng() * 14, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return toTexture(canvas);
+}
+
+/** Gold with darker grid lines for the undulating sheet (01:14). */
+export function goldGridTexture(): THREE.CanvasTexture {
+  const size = 64;
+  const [canvas, ctx] = makeCanvas(size, size);
+  ctx.fillStyle = "#f2c23a";
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = "#ffe48a";
+  ctx.fillRect(0, 0, size, 6);
+  ctx.strokeStyle = "#8a5a10";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(0, 0, size, size);
+  return toTexture(canvas);
+}
+
+/** Deep purple with rows of small hex dots, the backdrop of Jobe's interface (01:14). */
+export function hexDotsTexture(): THREE.CanvasTexture {
+  const w = 512;
+  const h = 256;
+  const [canvas, ctx] = makeCanvas(w, h);
+  ctx.fillStyle = "#160628";
+  ctx.fillRect(0, 0, w, h);
+  const r = 5;
+  for (let row = 0; row < h / 14 + 1; row += 1) {
+    for (let col = 0; col < w / 16 + 1; col += 1) {
+      const x = col * 16 + (row % 2 ? 8 : 0);
+      const y = row * 14;
+      ctx.beginPath();
+      for (let k = 0; k < 6; k += 1) {
+        const a = Math.PI / 6 + (k * Math.PI) / 3;
+        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.fillStyle = (row * 7 + col * 3) % 11 === 0 ? "#7a2a8a" : "#3a1458";
+      ctx.fill();
+    }
+  }
+  return toTexture(canvas);
+}
+
+/** Skin with gold streaks for Cyberjobe's face; the face centre sits at u = 0.25 (sphere +z). */
+export function cyberjobeSkinTexture(): THREE.CanvasTexture {
+  const w = 512;
+  const h = 256;
+  const [canvas, ctx] = makeCanvas(w, h);
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, "#d09060");
+  g.addColorStop(0.5, "#e8b890");
+  g.addColorStop(1, "#c08058");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  const rng = mulberry32(61);
+  for (let i = 0; i < 26; i += 1) {
+    const x = rng() * w;
+    ctx.strokeStyle = `rgba(${230 + rng() * 25},${170 + rng() * 40},60,${0.5 + rng() * 0.4})`;
+    ctx.lineWidth = 2 + rng() * 5;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.bezierCurveTo(x + (rng() - 0.5) * 60, h * 0.3, x + (rng() - 0.5) * 60, h * 0.6, x + (rng() - 0.5) * 40, h);
+    ctx.stroke();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/** Gold suit with dark circuit lines (Cyberjobe's body). */
+export function goldCircuitTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const [canvas, ctx] = makeCanvas(size, size);
+  ctx.fillStyle = "#e8b040";
+  ctx.fillRect(0, 0, size, size);
+  const rng = mulberry32(73);
+  for (let i = 0; i < 40; i += 1) {
+    let x = Math.floor(rng() * 16) * 16;
+    let y = Math.floor(rng() * 16) * 16;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let s = 0; s < 4; s += 1) {
+      if (rng() < 0.5) x += (rng() < 0.5 ? -1 : 1) * 32;
+      else y += (rng() < 0.5 ? -1 : 1) * 32;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "#2a1606";
+    ctx.stroke();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#ffe08a";
+    ctx.stroke();
+  }
+  return toTexture(canvas);
+}
