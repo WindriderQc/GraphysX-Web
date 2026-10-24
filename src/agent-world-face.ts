@@ -15,6 +15,7 @@ import {
 import faceAsset from "./llmx-face-forge.json";
 import { applyForgeFinish, SMOOTH_NORMAL_ATTRIBUTE } from "./llmx-face-finish";
 import { EYE_LOOK, gazeRotateInto, irisContrast, irisTone, lidEdgeY, lidShade, pickCatchlight } from "./llmx-face-eyes";
+import { classifyMouth, emberLevel, glowWeight, MOUTH_LOOK, MOUTH_ROLE, toothReveal, wallTone, type MouthInterior } from "./llmx-face-mouth";
 import {
   buildScale,
   type FaceAsset,
@@ -194,6 +195,12 @@ export class AgentWorldVoxelFace {
   private linerCubes: Uint32Array = new Uint32Array(0);
   private linerRest: Float32Array = new Float32Array(0);
   private mawCubes: Uint32Array = new Uint32Array(0);
+  /** The cavity's parts (see llmx-face-mouth), in the cavity mesh's instance order. */
+  private mouthInterior: MouthInterior | null = null;
+  /** Instance slots of the teeth, and the reveal their colours were last written for. */
+  private toothSlots = new Uint32Array(0);
+  private toothRevealWritten = -1;
+  private readonly toothRgb = [0, 0, 0];
 
   private animatedMesh: InstancedMesh | null = null;
   private staticMesh: InstancedMesh | null = null;
@@ -390,6 +397,7 @@ export class AgentWorldVoxelFace {
 
     this.writeMesh(this.animatedMesh, this.metalAnimated);
     this.writeMesh(this.mawMesh, this.mawCubes);
+    this.writeMouth();
     this.writeEyes();
     if (assembling) {
       this.writeMesh(this.staticMesh, this.metalStatic);
@@ -524,6 +532,7 @@ export class AgentWorldVoxelFace {
     // still caught the copper rim light behind the mask and read as a bright bar across the
     // open mouth — the very artefact this cavity was added to remove. A hole has to be matte.
     this.mawMesh = this.createMaw("VoxelFaceMaw", edge, this.mawCubes.length);
+    this.prepareMouth();
     this.eyeMesh = this.createMesh("VoxelFaceIris", edge, this.irisCubes.length, true);
     patchIrisEmissive(this.eyeMesh.material as MeshStandardMaterial);
     this.linerMesh = this.buildLiner("VoxelFaceLiner", edge);
@@ -535,6 +544,7 @@ export class AgentWorldVoxelFace {
     this.writeMesh(this.animatedMesh, this.metalAnimated);
     this.writeMesh(this.staticMesh, this.metalStatic);
     this.writeMesh(this.mawMesh, this.mawCubes);
+    this.writeMouth();
     this.writeEyes();
   }
 
@@ -713,11 +723,13 @@ export class AgentWorldVoxelFace {
   }
 
   private createMaw(name: string, edge: number, count: number): InstancedMesh {
-    const mesh = new InstancedMesh(
-      new BoxGeometry(edge, edge, edge),
-      new MeshStandardMaterial({ color: "#07090c", roughness: 1, metalness: 0 }),
-      Math.max(count, 1),
-    );
+    // A white base: every cube's tone is its instance colour (teeth, walls darkening with depth,
+    // the far wall), and its share of the ember is its own glow weight — see prepareMouth.
+    const geometry = new BoxGeometry(edge, edge, edge);
+    geometry.setAttribute(MOUTH_GLOW_ATTRIBUTE, new InstancedBufferAttribute(new Float32Array(Math.max(count, 1)), 1));
+    const material = new MeshStandardMaterial({ color: "#ffffff", roughness: 1, metalness: 0, emissive: MOUTH_LOOK.ember, emissiveIntensity: 0 });
+    patchMouthGlow(material);
+    const mesh = new InstancedMesh(geometry, material, Math.max(count, 1));
     mesh.name = name;
     mesh.count = count;
     mesh.castShadow = false;
@@ -726,6 +738,98 @@ export class AgentWorldVoxelFace {
     mesh.frustumCulled = false;
     this.object.add(mesh);
     return mesh;
+  }
+
+  /**
+   * The inside of the mouth: teeth on the tunnel's front rim, walls that darken with depth, and
+   * the ember's weight per cube. Colours are written once; only the teeth change, with the
+   * opening (writeMouth).
+   */
+  private prepareMouth(): void {
+    const mesh = this.mawMesh;
+    if (!mesh) return;
+    const regionNames = asset.regions;
+    const count = this.mawCubes.length;
+    const positions = new Float32Array(count * 3);
+    const back = new Uint8Array(count);
+    for (let k = 0; k < count; k += 1) {
+      const i = this.mawCubes[k];
+      positions[k * 3] = this.weights.rest[i * 3];
+      positions[k * 3 + 1] = this.weights.rest[i * 3 + 1];
+      positions[k * 3 + 2] = this.weights.rest[i * 3 + 2];
+      back[k] = regionNames[this.weights.region[i]] === "maw" ? 1 : 0;
+    }
+    const interior = classifyMouth(positions, back, this.weights.anchors.mouth, this.weights.level.cube);
+    this.mouthInterior = interior;
+    const glow = mesh.geometry.getAttribute(MOUTH_GLOW_ATTRIBUTE) as InstancedBufferAttribute;
+    const teeth: number[] = [];
+    const rgb = [0, 0, 0];
+    for (let k = 0; k < count; k += 1) {
+      const role = interior.role[k];
+      glow.setX(k, glowWeight(role as 0 | 1 | 2 | 3, interior.depth[k]));
+      if (role === MOUTH_ROLE.upperTooth || role === MOUTH_ROLE.lowerTooth) teeth.push(k);
+      wallTone(interior.depth[k], rgb);
+      // A little per-cube variation, as on the metal, so the walls are not one flat colour.
+      const jitter = 0.85 + hash01(this.mawCubes[k] + 3217) * 0.3;
+      this.color.setRGB(rgb[0] * jitter, rgb[1] * jitter, rgb[2] * jitter);
+      mesh.setColorAt(k, this.color);
+    }
+    glow.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    this.toothSlots = Uint32Array.from(teeth);
+    this.toothRevealWritten = -1;
+  }
+
+  /** The ember's intensity, and the teeth coming in as the lips part. Once per frame. */
+  private writeMouth(): void {
+    const mesh = this.mawMesh;
+    const interior = this.mouthInterior;
+    if (!mesh || !interior) return;
+    const open = Math.pow(this.current.speak, POSE_LIMITS.mouthResponse);
+    const whole = this.current.build >= 1 ? 1 : 0;
+    (mesh.material as MeshStandardMaterial).emissiveIntensity = whole * emberLevel(open, this.current.think, this.idleClock);
+    const reveal = toothReveal(open) * whole;
+    this.writeTeeth(mesh, interior, reveal);
+    if (Math.abs(reveal - this.toothRevealWritten) < 0.01) return;
+    this.toothRevealWritten = reveal;
+    const tooth = MOUTH_LOOK.tooth;
+    for (let t = 0; t < this.toothSlots.length; t += 1) {
+      const k = this.toothSlots[t];
+      wallTone(interior.depth[k], this.toothRgb);
+      const shade = interior.gap[k] ? MOUTH_LOOK.toothGap : 1;
+      this.color.setRGB(
+        this.toothRgb[0] + (tooth[0] * shade - this.toothRgb[0]) * reveal,
+        this.toothRgb[1] + (tooth[1] * shade - this.toothRgb[1]) * reveal,
+        this.toothRgb[2] + (tooth[2] * shade - this.toothRgb[2]) * reveal,
+      );
+      mesh.setColorAt(k, this.color);
+    }
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }
+
+  /**
+   * Teeth hold their place while the lips move: the upper row stays with the skull and the lower
+   * follows the jaw part of the way (MOUTH_LOOK), so parting lips uncover them. Written over the
+   * cavity's matrices each frame, after writeMesh; only the height is held back, so the rows
+   * still narrow and widen with the vowel.
+   */
+  private writeTeeth(mesh: InstancedMesh, interior: MouthInterior, reveal: number): void {
+    const { rest } = this.weights;
+    const drop = MOUTH_LOOK.upperToothDrop * this.weights.level.cube * reveal;
+    for (let t = 0; t < this.toothSlots.length; t += 1) {
+      const k = this.toothSlots[t];
+      const i = this.mawCubes[k];
+      const upper = interior.role[k] === MOUTH_ROLE.upperTooth;
+      const follow = upper ? MOUTH_LOOK.upperToothFollow : MOUTH_LOOK.lowerToothFollow;
+      const y = rest[i * 3 + 1] + (this.position[i * 3 + 1] - rest[i * 3 + 1]) * follow - (upper ? drop : 0);
+      this.vector.set(this.position[i * 3], y, this.position[i * 3 + 2]);
+      this.quaternion.set(this.jitter[i * 4], this.jitter[i * 4 + 1], this.jitter[i * 4 + 2], this.jitter[i * 4 + 3]);
+      const s = this.scale[i];
+      this.scaleVector.set(s, s, s);
+      this.matrix.compose(this.vector, this.quaternion, this.scaleVector);
+      mesh.setMatrixAt(k, this.matrix);
+    }
+    if (this.toothSlots.length) mesh.instanceMatrix.needsUpdate = true;
   }
 
   private writeColors(): void {
@@ -969,6 +1073,26 @@ export class AgentWorldVoxelFace {
  * gradient, the lid's shadow, the catchlight — lives in those per-cube values, so the emissive
  * term takes them too. The material is the rig's own; nothing else shares the program.
  */
+/** The per-instance attribute carrying each cavity cube's share of the ember. */
+const MOUTH_GLOW_ATTRIBUTE = "gxGlow";
+
+/**
+ * Scale the cavity's emissive (the ember) by each cube's own glow weight. The weight is its own
+ * attribute rather than the instance colour, because a tooth must be pale and never glow while
+ * the far wall is nearly black and glows fully: one colour cannot say both.
+ */
+function patchMouthGlow(material: MeshStandardMaterial): void {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("void main() {", ["attribute float " + MOUTH_GLOW_ATTRIBUTE + ";", "varying float vGxGlow;", "void main() {", "  vGxGlow = " + MOUTH_GLOW_ATTRIBUTE + ";"].join("\n"));
+    shader.fragmentShader = shader.fragmentShader
+      .replace("void main() {", ["varying float vGxGlow;", "void main() {"].join("\n"))
+      .replace("#include <emissivemap_fragment>", ["#include <emissivemap_fragment>", "  totalEmissiveRadiance *= vGxGlow;"].join("\n"));
+  };
+  material.customProgramCacheKey = () => "gx-mouth-glow";
+  material.needsUpdate = true;
+}
+
 function patchIrisEmissive(material: MeshStandardMaterial): void {
   material.onBeforeCompile = (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
