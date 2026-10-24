@@ -114,6 +114,7 @@ Preserve `.graphysx-store/`: it is user content, not disposable build output.
 | KidX programs and controls | `src/ev3-first-program.ts`, `src/ev3-program-library.ts`, `src/ev3-mission-strip.ts` |
 | Persistence, media and collaboration | `server/scene-store.mjs` and its imported `server/` modules |
 | Verification coverage | `scripts/verify-manifest.mjs`; `scripts/verify.mjs` executes it |
+| Cyber Race 1992 (standalone page, not in the product build) | `cyber-race.html`, `src/cyber-race/`; see [docs/CYBER_RACE.md](docs/CYBER_RACE.md) |
 
 Read [PRODUCT_SPEC.md](PRODUCT_SPEC.md) for the product contract and
 [HANDOFF.md](HANDOFF.md) for current priorities and constraints. Search `progress.md` only

@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>" />
+    <title>Cyber Race 1992</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --film-blue: #4a7fe2;
+        --panel: #c9d0d6;
+        --panel-dark: #7d868e;
+        --panel-light: #f4f6f8;
+        --hud-green: #6ff0b4;
+        --chevron: #e9b526;
+        --p1: #c45cff;
+        --p2: #4f9bff;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #050b0d;
+        font-family: "Orbitron", "Arial Black", system-ui, sans-serif;
+        user-select: none;
+      }
+      canvas#race-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .hidden {
+        display: none !important;
+      }
+
+      /* ---------- HUD (one per pilot) ---------- */
+      #huds {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+      .hud {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        overflow: hidden;
+      }
+      .hud .score {
+        position: absolute;
+        top: 2.5%;
+        right: 4%;
+        font-size: clamp(22px, 4.2vw, 64px);
+        font-weight: 900;
+        color: var(--hud-green);
+        letter-spacing: 0.04em;
+        text-shadow: 0 0 6px rgba(80, 255, 170, 0.6), 2px 2px 0 #0b3a2a;
+      }
+      .hud .name {
+        position: absolute;
+        top: 3%;
+        left: 4%;
+        font-size: clamp(12px, 1.6vw, 22px);
+        color: var(--pilot);
+        text-shadow: 0 0 8px var(--pilot);
+        letter-spacing: 0.15em;
+      }
+      .hud .place {
+        position: absolute;
+        top: calc(3% + clamp(16px, 2.2vw, 30px));
+        left: 4%;
+        font-size: clamp(18px, 3vw, 44px);
+        color: #fff;
+        text-shadow: 0 0 10px var(--pilot);
+      }
+      .hud .speed {
+        position: absolute;
+        bottom: 4%;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: clamp(11px, 1.3vw, 18px);
+        color: var(--hud-green);
+        letter-spacing: 0.1em;
+        opacity: 0.85;
+      }
+      .hud .chev {
+        position: absolute;
+        left: 5%;
+        top: 22%;
+        height: 58%;
+        width: clamp(16px, 2.1vw, 30px);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .hud .chev i {
+        flex: 1;
+        background: #4a3b0c;
+        clip-path: polygon(50% 0, 100% 55%, 100% 100%, 50% 45%, 0 100%, 0 55%);
+      }
+      .hud .chev i.on {
+        background: var(--chevron);
+        box-shadow: 0 0 6px var(--chevron);
+      }
+      .hud.boosting .chev i.on {
+        background: #fff3a8;
+      }
+      .hud .cross-v,
+      .hud .cross-h {
+        position: absolute;
+        background: rgba(200, 230, 255, 0.35);
+      }
+      .hud .cross-v {
+        left: 58%;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+      }
+      .hud .cross-h {
+        top: 38%;
+        left: 0;
+        right: 0;
+        height: 1px;
+      }
+      .hud .pads {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        height: 20%;
+      }
+      .hud .msg {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 40%;
+        text-align: center;
+        font-size: clamp(18px, 3vw, 46px);
+        color: #fff;
+        text-shadow: 0 0 12px var(--pilot), 2px 2px 0 #000;
+        letter-spacing: 0.08em;
+        transition: opacity 0.25s;
+      }
+      .hud .msg.big {
+        font-size: clamp(60px, 12vw, 180px);
+        color: var(--hud-green);
+      }
+      .hud .progress {
+        position: absolute;
+        left: 33%;
+        right: 33%;
+        bottom: 10%;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.18);
+      }
+      .hud .progress b {
+        position: absolute;
+        top: -3px;
+        width: 2px;
+        height: 10px;
+        background: rgba(255, 255, 255, 0.5);
+      }
+      .hud .progress .dot {
+        position: absolute;
+        top: -5px;
+        width: 14px;
+        height: 14px;
+        margin-left: -7px;
+        border-radius: 50%;
+        border: 2px solid #fff;
+      }
+      .hud .flash {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle, transparent 40%, rgba(255, 40, 60, 0.55));
+        opacity: 0;
+        transition: opacity 0.35s;
+      }
+      .hud .flash.on {
+        opacity: 1;
+        transition: none;
+      }
+      .hud .rival {
+        position: absolute;
+        top: calc(2.5% + clamp(28px, 5vw, 76px));
+        right: 4%;
+        font-size: clamp(11px, 1.4vw, 20px);
+        color: var(--p2);
+      }
+      #divider {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        width: 4px;
+        margin-left: -2px;
+        background: linear-gradient(#1a2a2e, #6ff0b4, #1a2a2e);
+        pointer-events: none;
+      }
+
+      /* ---------- Film-style blue menu ---------- */
+      #menu {
+        position: fixed;
+        inset: 0;
+        background: var(--film-blue);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+      }
+      .panel {
+        display: flex;
+        gap: 12px;
+        padding: 14px;
+        background: var(--panel);
+        border: 3px solid var(--panel-dark);
+        box-shadow: inset 2px 2px 0 var(--panel-light), inset -2px -2px 0 #99a2aa, 0 10px 30px rgba(0, 0, 40, 0.35);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(6, auto);
+        gap: 10px;
+        align-items: center;
+      }
+      .grid .sep {
+        grid-column: 1 / -1;
+        height: 2px;
+        background: var(--panel-dark);
+        box-shadow: 0 1px 0 var(--panel-light);
+      }
+      .ico {
+        width: clamp(46px, 6vw, 72px);
+        height: clamp(46px, 6vw, 72px);
+        display: grid;
+        place-items: center;
+        padding: 0;
+        background: #dfe4e8;
+        border: 2px solid #8f99a1;
+        box-shadow: inset 2px 2px 0 #fff, inset -2px -2px 0 #9aa3ab;
+        cursor: pointer;
+        color: #1a1d20;
+        font: 700 clamp(18px, 2.4vw, 30px) "Times New Roman", serif;
+      }
+      .ico svg {
+        width: 68%;
+        height: 68%;
+        stroke: currentColor;
+        stroke-width: 3.2;
+        fill: none;
+        stroke-linecap: square;
+      }
+      .ico.selected {
+        background: #23282c;
+        color: #f2f4f6;
+        box-shadow: inset 2px 2px 0 #000, inset -2px -2px 0 #4c555c;
+      }
+      .ico:focus-visible,
+      .ico.focus {
+        outline: 3px solid #ffe14a;
+        outline-offset: 2px;
+      }
+      .ico.ball {
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #9aa2a8 0, #2b2f33 28%, #050607 70%);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        border-color: #3a4045;
+      }
+      .ico.ball.pulse {
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        50% {
+          background: radial-gradient(circle at 35% 30%, #c8ffe6 0, #2d8a64 30%, #04140d 72%);
+        }
+      }
+      .scroll {
+        width: 26px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+      }
+      .scroll .box {
+        width: 22px;
+        height: 70px;
+        border: 2px solid #8f99a1;
+        background: #eef1f3;
+        box-shadow: inset 0 18px 0 #cfd5da;
+      }
+      .scroll .tri {
+        width: 0;
+        height: 0;
+        border-left: 11px solid transparent;
+        border-right: 11px solid transparent;
+        border-bottom: 18px solid #8f99a1;
+      }
+      .scroll .tri.down {
+        transform: rotate(180deg);
+      }
+      .caption {
+        min-height: 1.4em;
+        color: #fff;
+        font-size: clamp(12px, 1.5vw, 18px);
+        letter-spacing: 0.12em;
+        text-shadow: 0 2px 0 #23408a;
+        text-align: center;
+      }
+      .caption.small {
+        font-size: clamp(10px, 1.1vw, 13px);
+        opacity: 0.9;
+      }
+
+      /* ---------- Help, pause, game over ---------- */
+      .overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        color: #fff;
+        text-align: center;
+      }
+      #help {
+        background: rgba(20, 40, 90, 0.92);
+      }
+      #help table {
+        border-collapse: collapse;
+        font-size: clamp(11px, 1.3vw, 16px);
+        letter-spacing: 0.06em;
+      }
+      #help td,
+      #help th {
+        padding: 6px 18px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        text-align: left;
+      }
+      #help th {
+        color: #ffe14a;
+      }
+      #pause {
+        background: rgba(0, 10, 12, 0.6);
+        font-size: clamp(16px, 2vw, 26px);
+        letter-spacing: 0.2em;
+      }
+      #gameover {
+        background:
+          repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.12) 0 30px, rgba(0, 40, 50, 0.1) 30px 90px),
+          radial-gradient(circle at 50% 45%, #e7f2f4, #8fb0b6 55%, #3e5a60);
+      }
+      #gameover h1 {
+        margin: 0;
+        font-size: clamp(60px, 13vw, 200px);
+        font-weight: 900;
+        line-height: 0.9;
+        color: #d4223a;
+        -webkit-text-stroke: 3px #7a0f1e;
+        text-shadow: 6px 6px 0 rgba(40, 0, 10, 0.35);
+        letter-spacing: 0.04em;
+      }
+      #results {
+        display: flex;
+        gap: 40px;
+        font-size: clamp(14px, 2vw, 28px);
+        color: #0d2a30;
+      }
+      #results div {
+        min-width: 220px;
+      }
+      #results .who {
+        font-size: 1.2em;
+      }
+      #results .pts {
+        font-size: 1.6em;
+        font-weight: 900;
+      }
+      #gameover .caption {
+        text-shadow: none;
+        color: #0d2a30;
+      }
+      #results .stats {
+        font-size: 0.6em;
+        opacity: 0.8;
+      }
+      .choices {
+        display: flex;
+        gap: 18px;
+      }
+      #pause .choices {
+        flex-direction: column;
+      }
+      .choice {
+        min-width: 220px;
+        padding: 12px 22px;
+        font: 700 clamp(13px, 1.5vw, 20px) "Orbitron", "Arial Black", sans-serif;
+        letter-spacing: 0.12em;
+        color: #1a1d20;
+        background: #dfe4e8;
+        border: 2px solid #8f99a1;
+        box-shadow: inset 2px 2px 0 #fff, inset -2px -2px 0 #9aa3ab;
+        cursor: pointer;
+      }
+      .choice.focus {
+        background: #23282c;
+        color: #f2f4f6;
+        outline: 3px solid #ffe14a;
+        outline-offset: 2px;
+      }
+      .ico.disabled {
+        opacity: 0.35;
+      }
+      body.racing,
+      body.racing * {
+        cursor: none !important;
+      }
+      #toast {
+        position: fixed;
+        left: 50%;
+        bottom: 6%;
+        transform: translateX(-50%);
+        padding: 8px 18px;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        font-size: clamp(11px, 1.2vw, 15px);
+        letter-spacing: 0.08em;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        pointer-events: none;
+        transition: opacity 0.3s;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="race-canvas" aria-label="Course virtuelle à deux joueurs inspirée du film The Lawnmower Man (1992)"></canvas>
+    <div id="huds"></div>
+    <div id="divider" class="hidden"></div>
+
+    <div id="menu">
+      <div class="panel">
+        <div class="grid" id="menu-grid">
+          <button class="ico" data-group="course" data-value="0" title="Parcours court">
+            <svg viewBox="0 0 24 24"><path d="M4 20V4h16v16H8V8h8v8h-4" /></svg>
+          </button>
+          <button class="ico" data-group="course" data-value="1" title="Parcours normal">
+            <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4V9h10" /></svg>
+          </button>
+          <button class="ico" data-group="course" data-value="2" title="Parcours long">
+            <svg viewBox="0 0 24 24"><path d="M4 4v16M4 12h16M20 4v16M12 4v8" /></svg>
+          </button>
+          <button class="ico" data-group="course" data-value="3" title="Marathon">
+            <svg viewBox="0 0 24 24"><path d="M4 8h8V4M12 20v-8h8M4 16h4v4M16 4v4h4" /></svg>
+          </button>
+          <button class="ico" data-action="help" title="Aide">?</button>
+          <button class="ico ball pulse" data-action="start" title="Départ"></button>
+          <div class="sep"></div>
+          <button class="ico" data-group="level" data-value="0" title="Facile">
+            <svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="3" /><rect x="13" y="13" width="7" height="7" fill="currentColor" /></svg>
+          </button>
+          <button class="ico" data-group="level" data-value="1" title="Normal">
+            <svg viewBox="0 0 24 24"><path d="M8 3l4 7H4zM15 12l5 9h-10z" /></svg>
+          </button>
+          <button class="ico" data-group="level" data-value="2" title="Difficile">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M12 12V4a8 8 0 0 1 8 8zM12 12v8a8 8 0 0 1-8-8z" fill="currentColor" /></svg>
+          </button>
+          <button class="ico" data-group="level" data-value="3" title="Brutal">
+            <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" fill="currentColor" /><circle cx="15" cy="9" r="2.5" stroke="#dfe4e8" fill="#dfe4e8" /></svg>
+          </button>
+          <button class="ico" data-group="plan" data-value="0" title="Les 3 tableaux du film">
+            <svg viewBox="0 0 24 24"><path d="M6 5v14M12 5v14M18 5v14" /></svg>
+          </button>
+          <button class="ico" data-group="plan" data-value="1" title="5 tableaux : film + terres hostiles + vortex">
+            <svg viewBox="0 0 24 24"><path d="M3 5v14M7.5 5v14M12 5v14M16.5 5v14M21 5v14" /></svg>
+          </button>
+          <div class="sep"></div>
+          <button class="ico" data-group="mode" data-value="0" title="Deux joueurs">
+            <svg viewBox="0 0 24 24"><circle cx="7" cy="6" r="2.5" /><path d="M7 9v7M3 12h8M7 16l-3 5M7 16l3 5" /><circle cx="17" cy="6" r="2.5" /><path d="M17 9v7M13 12h8M17 16l-3 5M17 16l3 5" /></svg>
+          </button>
+          <button class="ico" data-group="mode" data-value="1" title="Un joueur contre l'ordinateur">
+            <svg viewBox="0 0 24 24"><circle cx="7" cy="6" r="2.5" /><path d="M7 9v7M3 12h8M7 16l-3 5M7 16l3 5" /><rect x="13" y="5" width="8" height="7" /><path d="M15 15h4M17 12v3" /></svg>
+          </button>
+          <button class="ico" data-action="sound" title="Son">
+            <svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" /><path class="wave" d="M16 8a5 5 0 0 1 0 8M18.5 5a9 9 0 0 1 0 14" /></svg>
+          </button>
+          <button class="ico" data-action="fullscreen" title="Plein écran">
+            <svg viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg>
+          </button>
+          <button class="ico" data-action="vr" title="Casque VR (Quest via Link)">
+            <svg viewBox="0 0 24 24"><path d="M3 8h18v8h-6l-3-3-3 3H3z" /><circle cx="7.5" cy="12" r="1.5" /><circle cx="16.5" cy="12" r="1.5" /></svg>
+          </button>
+          <button class="ico" data-action="quit" title="Quitter le jeu">
+            <svg viewBox="0 0 24 24"><path d="M12 3v8" /><path d="M7 6.5a7 7 0 1 0 10 0" /></svg>
+          </button>
+        </div>
+        <div class="scroll" aria-hidden="true"><div class="box"></div><div class="tri"></div><div class="tri down"></div></div>
+      </div>
+      <div class="caption" id="menu-caption"></div>
+      <div class="caption small" id="menu-hint">FLÈCHES / WASD / MANETTE + ENTRÉE OU A · BOULE NOIRE OU START = DÉPART · ? = COMMANDES</div>
+      <div class="caption small" id="menu-status"></div>
+    </div>
+
+    <div id="help" class="overlay hidden">
+      <div class="caption">COMMANDES</div>
+      <table>
+        <tr><th></th><th>JOBE (gauche)</th><th>PETER (droite)</th></tr>
+        <tr><td>Monter / descendre</td><td>W / S (Z / S en AZERTY)</td><td>↑ / ↓</td></tr>
+        <tr><td>Gauche / droite</td><td>A / D (Q / D en AZERTY)</td><td>← / →</td></tr>
+        <tr><td>Turbo</td><td>Espace ou Maj gauche</td><td>Maj droite, Entrée ou 0</td></tr>
+        <tr><td>Manette Xbox</td><td>Manette 1 : stick ou croix · turbo A / RB / RT</td><td>Manette 2 : stick ou croix · turbo A / RB / RT</td></tr>
+        <tr><td>Pause</td><td colspan="2">Échap, P ou START</td></tr>
+        <tr><td>Casque VR</td><td colspan="2">Joystick pour voler · gâchette = turbo · A = valider · B = retour</td></tr>
+      </table>
+      <div class="caption small">
+        Film : tunnel, champ de mines, cristaux. Étendu : + terres hostiles (passez dessus ou dessous les troncs) et le vortex.<br />
+        Les anneaux chromés donnent 1000 points et du turbo. Rester dans le sillage de l'autre donne de la vitesse.<br />
+        Le premier à la ligne damier gagne.
+      </div>
+      <div class="caption small">ÉCHAP, ENTRÉE, A OU B POUR FERMER</div>
+    </div>
+
+    <div id="pause" class="overlay hidden">
+      PAUSE
+      <div class="choices">
+        <button class="choice" data-choice="resume">REPRENDRE</button>
+        <button class="choice" data-choice="restart">RECOMMENCER</button>
+        <button class="choice" data-choice="menu">MENU</button>
+      </div>
+    </div>
+
+    <div id="gameover" class="overlay hidden">
+      <h1>GAME<br />OVER</h1>
+      <div id="results"></div>
+      <div class="choices">
+        <button class="choice" data-choice="again">REJOUER</button>
+        <button class="choice" data-choice="menu">MENU</button>
+      </div>
+    </div>
+
+    <div id="toast" style="opacity: 0"></div>
+
+    <script type="module" src="/src/cyber-race/main.ts"></script>
+  </body>
+</html>
