@@ -8,14 +8,18 @@ const {
   buildDiskxTree,
   categoryForPath,
   categoryShares,
+  DISKX_FREE_PATH_PREFIX,
   DISKX_REST_PATH,
   formatBytes,
   layoutDiskxCity,
   pathCrumbs,
   squarify,
+  volumeForPath,
+  volumeOccupancy,
 } = await importBrowserModule(new URL("../src/diskx-data.ts", import.meta.url));
-const { composeDiskxWorld, diskxPathOf, DISKX_DISTRICT_TAG, DISKX_PATH_TAG_PREFIX } =
+const { composeDiskxWorld, diskxPathOf, DISKX_DISTRICT_TAG, DISKX_FREE_TAG, DISKX_PATH_TAG_PREFIX } =
   await importBrowserModule(new URL("../src/diskx-scene.ts", import.meta.url));
+const { parseBytes, parseDiskxVolumes, resolveDiskxVolumes } = await import("../scripts/diskx-server.mjs");
 
 // AgentX Data reports only directories that directly hold files, with their own bytes. The
 // city must still show a parent that holds nothing but folders, and must never show a total
@@ -161,4 +165,53 @@ test("the recorded fixture is coherent with its summary", () => {
   assert.ok(total > fixture.summary.totalSize * 0.6 && total <= fixture.summary.totalSize);
   const shares = categoryShares(tree.roots.find((root) => root.path === "/mnt/media"));
   assert.equal(shares[0].category, "video");
+});
+
+// AgentX Data has no capacity, so free space arrives as volumes from elsewhere. It is drawn
+// once, beside the disks, at the same bytes-to-area scale, never inside a folder.
+test("free space is one honest tile per volume at the disks level, and a gauge everywhere", () => {
+  const tree = buildDiskxTree(fixture.roots, fixture.directories);
+  const all = { path: "diskx://all", name: "Tous", depth: -1, ownSize: 0, ownFiles: 0, totalSize: tree.roots.reduce((s, r) => s + r.totalSize, 0), totalFiles: 0, largestFile: null, category: "other", children: tree.roots, reported: false };
+  const volume = fixture.volumes[0];
+  const layout = layoutDiskxCity(all, { size: 40, freeVolumes: [volume] });
+  const free = layout.blocks.filter((block) => block.kind === "free");
+  assert.equal(free.length, 1);
+  assert.equal(free[0].node.path, `${DISKX_FREE_PATH_PREFIX}${volume.id}`);
+  assert.ok(free[0].height < 0.5, "emptiness is flat");
+  const used = layout.blocks.filter((block) => block.level === 0 && block.kind === "folder").reduce((s, b) => s + b.rect.width * b.rect.depth, 0);
+  const freeArea = free[0].rect.width * free[0].rect.depth;
+  const expected = volume.freeBytes / all.totalSize;
+  // Street gaps are subtracted from every tile alike, so the two big disk tiles lose a little
+  // more area than the one free tile; the exact proportionality is asserted on `squarify` above.
+  assert.ok(Math.abs(freeArea / used - expected) / expected < 0.12, `free/used area ${freeArea / used} vs bytes ${expected}`);
+  const inside = layoutDiskxCity(tree.roots[0], { size: 40, freeVolumes: [] });
+  assert.equal(inside.blocks.filter((block) => block.kind === "free").length, 0);
+  const world = composeDiskxWorld(layout, { motes: false });
+  const tile = world.entities.find((entity) => entity.tags?.includes(DISKX_FREE_TAG));
+  assert.ok(tile && tile.type === "box" && tile.material.opacity < 1, "the free tile is a translucent box");
+  assert.equal(volumeForPath([volume], "/mnt/datalake/ISO").id, volume.id);
+  assert.equal(volumeForPath([volume], "/elsewhere"), null);
+  const occupancy = volumeOccupancy(volume, tree);
+  assert.equal(occupancy.capacity, volume.capacityBytes);
+  assert.equal(occupancy.used, volume.capacityBytes - volume.freeBytes);
+  assert.ok(occupancy.usedShare > 0.3 && occupancy.usedShare < 0.4, `pool Media is about a third used, got ${occupancy.usedShare}`);
+});
+
+test("DISKX_VOLUMES parses declared sizes and measures mounts through statfs", async () => {
+  assert.equal(parseBytes("7.27 TiB"), Math.round(7.27 * 2 ** 40));
+  assert.equal(parseBytes("4.6 TB"), 4.6e12);
+  assert.equal(parseBytes(42), 42);
+  assert.throws(() => parseBytes("beaucoup"));
+  assert.throws(() => parseDiskxVolumes("{"));
+  assert.throws(() => parseDiskxVolumes(JSON.stringify([{ id: "x" }])), /roots/);
+  assert.deepEqual(parseDiskxVolumes(""), []);
+  const declared = parseDiskxVolumes(JSON.stringify([
+    { id: "pool", label: "pool Media", roots: ["/mnt/media"], capacity: "10 TB", free: "4 TB", note: "n" },
+    { id: "local", roots: ["/mnt/x"], path: "/fake" },
+    { id: "gone", roots: ["/mnt/y"], path: "/missing" },
+  ]));
+  const fakeStatfs = async (path) => { if (path === "/fake") return { blocks: 1000, bsize: 4096, bavail: 250 }; throw new Error("ENOENT"); };
+  const volumes = await resolveDiskxVolumes(declared, fakeStatfs, () => "2026-10-24T00:00:00Z");
+  assert.deepEqual(volumes.map((v) => [v.id, v.capacityBytes, v.freeBytes, v.source]), [["pool", 1e13, 4e12, "declared"], ["local", 4096000, 1024000, "measured"]]);
+  assert.equal(volumes[0].note, "n");
 });

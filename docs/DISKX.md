@@ -44,6 +44,30 @@ le premier niveau d'un disque de 25 000 dossiers est une borne inférieure (le H
 Windows et les autres hôtes ne sont pas dans l'index : c'est un agent de stockage à ajouter
 côté AgentX Data, pas côté GraphysX.
 
+## Espace libre et capacité
+
+AgentX Data n'indexe que des fichiers : aucune capacité, aucun espace libre nulle part dans
+son API (vérifié le 2026-10-24 sur `summary`, `agents`, `trends`, `system/resources`). Le
+libre vient donc d'une source séparée, les **volumes** :
+
+- `DISKX_VOLUMES` (shell ou `.env.local`) : tableau JSON de
+  `{ id, label?, roots, capacity?, free?, path?, note? }`. `capacity`/`free` sont déclarés
+  (octets ou « 7.27 TiB », « 4.6 TB ») ; `path` désigne un montage local mesuré par `statfs`
+  sur la machine qui sert la page. La route `/diskx-api/volumes` les renvoie avec
+  `source: "declared" | "measured"`.
+- La capture embarque le pool ZFS `Media` d'UGFrank mesuré le 2026-10-24 (`zpool list` :
+  7,27 TiB, 4,61 TiB libres), sur lequel vivent `/mnt/media` (= `/Media/Media`) et
+  `/mnt/datalake` (= `/Media/Media/Datalake`).
+
+Dans la ville, le libre est **une tuile translucide par volume, au niveau « Tous les
+disques »**, à la même échelle octets → surface que les disques ; il n'est jamais dessiné
+dans un dossier, parce qu'il appartient au volume et serait compté deux fois. Le HUD
+affiche la jauge du volume (utilisé / capacité / libre) à tous les niveaux, ou « capacité
+inconnue » quand rien ne la fournit. La vraie place de cette mesure est l'agent de stockage
+d'AgentX Data (`integrations/data-collectors/storage-agent.js` sur UGFrank, qui n'appelle pas
+`statvfs`) ; quand il la publiera, `/diskx-api/volumes` pourra la relayer au lieu d'une
+déclaration.
+
 ## Branchement
 
 Le gateway ne renvoie pas d'en-têtes CORS, donc le navigateur passe par la route
@@ -53,6 +77,8 @@ paramètres `root`, `limit`, `sort`).
 ```bash
 DISKX_DATA_URL=https://agentx.specialblend.icu npm run dev
 ```
+
+avec, au besoin, `DISKX_VOLUMES='[{"id":"ugfrank-media","label":"pool Media (UGFrank)","roots":["/mnt/media","/mnt/datalake"],"capacity":"7.27 TiB","free":"4.61 TiB"}]'`
 
 ou la même variable dans un `.env.local` ignoré par git. Sans elle (le site statique
 public, un poste hors LAN), la ville s'ouvre sur la capture du 2026-10-23 et le badge
@@ -64,7 +90,8 @@ un dossier.
 - `node --test test/diskx-layout.test.mjs` : cumul et parents inférés, catégories, unités,
   treemap (aires exactes, pas de chevauchement, rangées le long du petit côté — l'assertion
   qui a attrapé la première version en tranches), repli de la longue traîne, document v2
-  cohérent, bâtiments de toit posés sur leur quartier.
+  cohérent, bâtiments de toit posés sur leur quartier, tuile libre à l'échelle et jauge de
+  volume, analyse de `DISKX_VOLUMES` (déclaré et mesuré).
 - `npm run smoke:diskx` (après `npm run build`) : ville depuis la capture, quartiers en
   entités, vrai clic 3D sur la projection d'un toit, fil d'Ariane, fiche de survol, parité
   liste HUD / clic, `Échap`, retour au Center. Inscrit dans `scripts/verify-manifest.mjs`

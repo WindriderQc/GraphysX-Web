@@ -18,20 +18,24 @@ import "./diskx.css";
 import {
   buildDiskxTree,
   categoryShares,
+  DISKX_FREE_PATH_PREFIX,
   DISKX_PALETTE,
   DISKX_REST_PATH,
   formatBytes,
   formatCount,
   layoutDiskxCity,
   pathCrumbs,
+  volumeForPath,
+  volumeOccupancy,
   type DiskxCategory,
   type DiskxCityLayout,
   type DiskxDirectoryRow,
   type DiskxFileRow,
   type DiskxNode,
   type DiskxTree,
+  type DiskxVolume,
 } from "./diskx-data";
-import { composeDiskxWorld, DISKX_DISTRICT_TAG, diskxPathOf } from "./diskx-scene";
+import { composeDiskxWorld, DISKX_DISTRICT_TAG, diskxPathOf, FREE_COLOUR } from "./diskx-scene";
 import { createFixtureSource, DISKX_FIXTURE, resolveDiskxSource, type DiskxSource, type DiskxSummary } from "./diskx-source";
 import type { PlatformHost } from "./platform-host";
 import { motionIsReduced } from "./platform-theme";
@@ -71,7 +75,9 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   let listMode: { kind: "top" } | { kind: "rest"; nodes: DiskxNode[] } = { kind: "top" };
   let files: DiskxFileRow[] = [];
   let filesFor: string | null = null;
+  let volumes: DiskxVolume[] = [];
   let disposed = false;
+  void source.volumes().then((known) => { if (!disposed && source.kind === "fixture") { volumes = known; buildCity(); } });
 
   function makeAllNode(current: DiskxTree): DiskxNode {
     const node: DiskxNode = {
@@ -128,6 +134,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     <aside class="gx-diskx-panel" aria-label="Détails du dossier">
       <h2>Ce niveau</h2>
       <div class="gx-diskx-totals" data-totals></div>
+      <div class="gx-diskx-volumes" data-volumes></div>
       <h2>Par type</h2>
       <ul class="gx-diskx-legend" data-legend></ul>
       <h2 data-list-title>Dossiers</h2>
@@ -158,8 +165,13 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   let blocks: Block[] = [];
   const labelPool: HTMLDivElement[] = [];
 
+  function freeNodeFor(path: string): DiskxNode | null {
+    return layout?.blocks.find((block) => block.kind === "free" && block.node.path === path)?.node ?? null;
+  }
   function buildCity(): void {
-    layout = layoutDiskxCity(focus, { size: CITY_SIZE });
+    // Free space is laid out once, beside the disks, at the level where the disks are the
+    // districts. Inside a disk the HUD still shows the volume's gauge; the plaza does not.
+    layout = layoutDiskxCity(focus, { size: CITY_SIZE, freeVolumes: focus.path === DISKX_ALL_PATH ? volumes : [] });
     const world = composeDiskxWorld(layout, { motes: !reduced });
     const result = host.api.create(world);
     if (!result.ok) throw new Error(result.error);
@@ -169,7 +181,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       const path = diskxPathOf(entity.tags);
       const node = path === DISKX_REST_PATH
         ? layout!.blocks.find((block) => block.node.path === DISKX_REST_PATH)!.node
-        : nodeAt(path);
+        : path?.startsWith(DISKX_FREE_PATH_PREFIX) ? freeNodeFor(path) : nodeAt(path);
       const top = new Vector3(entity.position[0], entity.position[1] + entity.geometry.height / 2, entity.position[2]);
       return node ? { node, entityId: entity.id, category: node.category, top, halfWidth: entity.geometry.width / 2, halfDepth: entity.geometry.depth / 2 } : null;
     }).filter((block): block is Block => block !== null);
@@ -194,6 +206,14 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   // bottom of the plunge, rise over the new level. Reduced motion skips straight to the swap.
   let pending: { at: number; elapsed: number; run: () => void } | null = null;
   function dive(node: DiskxNode, from?: Block): void {
+    if (node.path.startsWith(DISKX_FREE_PATH_PREFIX)) {
+      const volume = volumes.find((entry) => node.path === `${DISKX_FREE_PATH_PREFIX}${entry.id}`);
+      notice = volume
+        ? `${formatBytes(volume.freeBytes)} libres sur ${volume.label} (${volume.source === "measured" ? "mesuré" : "déclaré"}${volume.measuredAt ? ` le ${new Date(volume.measuredAt).toLocaleDateString("fr-CA")}` : ""}).`
+        : "Espace libre.";
+      render();
+      return;
+    }
     if (node.path === DISKX_REST_PATH) {
       listMode = { kind: "rest", nodes: node.children };
       render();
@@ -296,6 +316,11 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     setLoading(1);
     try {
       summary = await source.summary();
+      try {
+        volumes = await source.volumes();
+      } catch {
+        volumes = [];
+      }
       if (source.kind === "live") {
         for (const diskRoot of source.roots) {
           fetched.add(diskRoot);
@@ -361,6 +386,27 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       [focus.ownFiles ? formatBytes(focus.ownSize) : "—", "fichiers ici"],
     ].map(([value, caption]) => `<div><strong>${value}</strong><span>${caption}</span></div>`).join("");
 
+    const gauges = element("[data-volumes]");
+    const shownVolumes = focus.path === DISKX_ALL_PATH ? volumes : [volumeForPath(volumes, focus.path)].filter((volume): volume is DiskxVolume => volume !== null);
+    gauges.replaceChildren(...shownVolumes.map((volume) => {
+      const occupancy = volumeOccupancy(volume, tree);
+      const gauge = document.createElement("div");
+      gauge.className = "gx-diskx-gauge";
+      gauge.style.setProperty("--used", `${Math.round(occupancy.usedShare * 100)}%`);
+      gauge.innerHTML = `<div class="head"><span class="name"></span><span class="free"><b>${formatBytes(occupancy.free)}</b> libres</span></div><div class="bar"><i></i></div><div class="foot"><span>${formatBytes(occupancy.used)} utilisés sur ${formatBytes(occupancy.capacity)}</span><span>${Math.round(occupancy.usedShare * 100)} %</span></div>`;
+      gauge.querySelector(".name")!.textContent = volume.label;
+      gauge.title = `${volume.source === "measured" ? "Mesuré" : "Déclaré"}${volume.measuredAt ? ` le ${new Date(volume.measuredAt).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" })}` : ""}${volume.note ? ` · ${volume.note}` : ""}`;
+      return gauge;
+    }));
+    if (!shownVolumes.length) {
+      const unknown = document.createElement("p");
+      unknown.className = "gx-diskx-unknown";
+      unknown.textContent = source.kind === "live"
+        ? "Capacité inconnue : AgentX Data n’indexe que les fichiers. Déclare DISKX_VOLUMES ou mesure sur l’hôte."
+        : "Capacité inconnue pour ce niveau.";
+      gauges.append(unknown);
+    }
+
     const legend = element("[data-legend]");
     legend.replaceChildren(...categoryShares(focus).slice(0, 6).map((entry) => {
       const li = document.createElement("li");
@@ -378,14 +424,16 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     list.replaceChildren(...listed.slice(0, 40).map((node) => {
       const li = document.createElement("li");
       li.className = "folder";
-      const { color } = DISKX_PALETTE[node.category];
+      const isFree = node.path.startsWith(DISKX_FREE_PATH_PREFIX);
+      const { color } = isFree ? { color: FREE_COLOUR } : DISKX_PALETTE[node.category];
       li.style.setProperty("--c", color);
+      if (isFree) li.classList.add("free");
       const entry = document.createElement("button");
       entry.type = "button";
       entry.dataset.path = node.path;
       entry.dataset.hover = String(hovered === node);
       entry.innerHTML = `<i></i><span class="name"></span><span class="size">${formatBytes(node.totalSize)}</span>`;
-      entry.querySelector(".name")!.textContent = node.path === DISKX_REST_PATH ? node.name : `${node.name}/`;
+      entry.querySelector(".name")!.textContent = node.path === DISKX_REST_PATH || isFree ? node.name : `${node.name}/`;
       entry.title = node.path;
       entry.addEventListener("click", () => dive(node, blocks.find((block) => block.node === node)));
       entry.addEventListener("pointerenter", () => setHovered(node, blocks.find((block) => block.node === node)?.entityId ?? null));
@@ -421,6 +469,16 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       card.innerHTML = `<h3>${focus.name}</h3><p>Chaque bloc est un dossier. Sa <b>surface</b>, ce sont ses octets; sa <b>hauteur</b>, sa part du niveau. Les petits blocs sur les toits sont les plus gros sous-dossiers.</p>`;
       return;
     }
+    if (node.path.startsWith(DISKX_FREE_PATH_PREFIX)) {
+      const volume = volumes.find((entry) => node.path === `${DISKX_FREE_PATH_PREFIX}${entry.id}`);
+      card.style.setProperty("--c", FREE_COLOUR);
+      card.innerHTML = `<h3></h3><p><b>${formatBytes(node.totalSize)}</b> libres${volume ? ` sur ${formatBytes(volume.capacityBytes)}` : ""}</p><p class="path"></p>`;
+      card.querySelector("h3")!.textContent = node.name;
+      card.querySelector(".path")!.textContent = volume
+        ? `${volume.source === "measured" ? "Mesuré" : "Déclaré"}${volume.measuredAt ? ` le ${new Date(volume.measuredAt).toLocaleDateString("fr-CA")}` : ""} · partagé par ${volume.roots.map((root) => root.slice(root.lastIndexOf("/") + 1)).join(", ")}`
+        : "";
+      return;
+    }
     const { color, label } = DISKX_PALETTE[node.category];
     card.style.setProperty("--c", color);
     const largest = node.largestFile ? node.largestFile.slice(node.largestFile.lastIndexOf("/") + 1) : null;
@@ -444,7 +502,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
         const size = bounds.getSize(new Vector3());
         halo.position.copy(bounds.getCenter(new Vector3()));
         halo.scale.set(size.x + 0.12, size.y + 0.12, size.z + 0.12);
-        (halo.material as LineBasicMaterial).color.set(DISKX_PALETTE[node?.category ?? "other"].color);
+        (halo.material as LineBasicMaterial).color.set(node?.path.startsWith(DISKX_FREE_PATH_PREFIX) ? FREE_COLOUR : DISKX_PALETTE[node?.category ?? "other"].color);
         halo.visible = true;
       }
     } else halo.visible = false;
@@ -497,7 +555,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       const fade = Math.max(0, Math.min(1, 1.6 - rank - cameraDistance / (CITY_SIZE * 2.6)));
       label.style.opacity = String(isHover ? 1 : Math.max(0.35, fade));
       label.style.transform = `translate(${x.toFixed(1)}px, ${(y - 10).toFixed(1)}px) translate(-50%, -100%)`;
-      label.style.setProperty("--c", DISKX_PALETTE[block.category].color);
+      label.style.setProperty("--c", block.node.path.startsWith(DISKX_FREE_PATH_PREFIX) ? FREE_COLOUR : DISKX_PALETTE[block.category].color);
       label.dataset.hover = String(isHover);
       const nameNode = label.firstElementChild as HTMLElement;
       const sizeNode = label.lastElementChild as HTMLElement;
@@ -629,6 +687,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       hovered: hovered?.path ?? null,
       listMode: listMode.kind,
       truncated: [...truncated],
+      volumes: volumes.map((volume) => ({ id: volume.id, label: volume.label, capacityBytes: volume.capacityBytes, freeBytes: volume.freeBytes, source: volume.source })),
       pendingDive: pending !== null,
       entering: entryRemaining > 0,
       districts: blocks.map((block) => {

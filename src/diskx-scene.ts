@@ -21,6 +21,8 @@ export const DISKX_WORLD_ID = "diskx-city";
 export const DISKX_TAG = "diskx";
 export const DISKX_DISTRICT_TAG = "diskx-district";
 export const DISKX_BUILDING_TAG = "diskx-building";
+/** A volume's free space, drawn as one low translucent tile beside the disks it serves. */
+export const DISKX_FREE_TAG = "diskx-free";
 export const DISKX_PATH_TAG_PREFIX = "diskx-path:";
 
 /** Read the folder path a DiskX entity stands for, or null for scenery. */
@@ -41,6 +43,7 @@ function blockEntities(block: DiskxBlock, index: number): AgentWorldEntityDefini
   const cx = round(rect.x + rect.width / 2);
   const cz = round(rect.z + rect.depth / 2);
   const isRest = node.path === DISKX_REST_PATH;
+  if (block.kind === "free") return freeTileEntities(block, index);
   const baseY = level === 0 ? 0 : blockTop(block);
   const prefix = level === 0 ? `diskx-d${index}` : `diskx-b${index}`;
   const label = isRest ? node.name : `${node.name} · ${node.totalSize ? sizeLabel(node.totalSize) : ""}`.trim();
@@ -87,6 +90,46 @@ function blockEntities(block: DiskxBlock, index: number): AgentWorldEntityDefini
   return [body, plate, ...rails, rim];
 }
 
+/**
+ * Free space: a see-through slab at street level, cyan, with soft rails — visibly a place
+ * where nothing stands yet, and clickable only for its card. Same byte-to-area scale as the
+ * districts around it, which is the whole point of drawing it at all.
+ */
+function freeTileEntities(block: DiskxBlock, index: number): AgentWorldEntityDefinition[] {
+  const { rect, height, node } = block;
+  const colour = FREE_COLOUR;
+  const cx = round(rect.x + rect.width / 2);
+  const cz = round(rect.z + rect.depth / 2);
+  const prefix = `diskx-f${index}`;
+  const pathTag = `${DISKX_PATH_TAG_PREFIX}${node.path}`;
+  const slab: AgentWorldEntityDefinition = {
+    id: prefix,
+    label: `${node.name} · ${sizeLabel(node.totalSize)}`,
+    type: "box",
+    geometry: { width: round(rect.width), height: round(height), depth: round(rect.depth) },
+    transform: { position: [cx, round(height / 2), cz] },
+    material: { color: "#0a2a33", emissive: colour, emissiveIntensity: 0.05, roughness: 0.15, metalness: 0.2, opacity: 0.55 },
+    castShadow: false,
+    receiveShadow: false,
+    tags: [DISKX_TAG, DISKX_DISTRICT_TAG, DISKX_FREE_TAG, pathTag],
+  };
+  const railY = round(height / 2 + RAIL / 2);
+  const rail = (id: string, geometry: { width: number; height: number; depth: number }, position: [number, number, number]): AgentWorldEntityDefinition => ({
+    id, label: `${node.name} (rail)`, type: "box", parentId: prefix, geometry, transform: { position },
+    material: { color: colour, emissive: colour, emissiveIntensity: 0.42, roughness: 0.3, metalness: 0, opacity: 0.8 },
+    castShadow: false, receiveShadow: false, tags: [DISKX_TAG, pathTag],
+  });
+  const thin = RAIL * 0.7;
+  return [
+    slab,
+    rail(`${prefix}-rail-n`, { width: round(rect.width), height: thin, depth: thin }, [0, railY, round(-rect.depth / 2 + thin / 2)]),
+    rail(`${prefix}-rail-s`, { width: round(rect.width), height: thin, depth: thin }, [0, railY, round(rect.depth / 2 - thin / 2)]),
+    rail(`${prefix}-rail-w`, { width: thin, height: thin, depth: round(rect.depth) }, [round(-rect.width / 2 + thin / 2), railY, 0]),
+    rail(`${prefix}-rail-e`, { width: thin, height: thin, depth: round(rect.depth) }, [round(rect.width / 2 - thin / 2), railY, 0]),
+  ];
+}
+
+export const FREE_COLOUR = "#39e0ff";
 const RAIL = 0.14;
 const RAIL_MATERIAL = (colour: string, dim: boolean): AgentWorldEntityDefinition["material"] =>
   ({ color: colour, emissive: colour, emissiveIntensity: dim ? 0.5 : 1.35, roughness: 0.2, metalness: 0 });

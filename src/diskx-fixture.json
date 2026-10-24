@@ -2085,5 +2085,20 @@
 "mtime": 1746224665
 }
 ]
+},
+"volumes": [
+{
+"id": "ugfrank-media",
+"label": "pool Media (UGFrank)",
+"roots": [
+"/mnt/media",
+"/mnt/datalake"
+],
+"capacityBytes": 7993449533932,
+"freeBytes": 5068748604047,
+"source": "measured",
+"measuredAt": "2026-10-24T05:40:00Z",
+"note": "zpool list sur UGFrank : Media 7,27 TiB, 2,65 TiB alloués, 4,61 TiB libres ; /mnt/media = /Media/Media, /mnt/datalake = /Media/Media/Datalake"
 }
+]
 }

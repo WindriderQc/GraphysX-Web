@@ -9,7 +9,7 @@
  */
 
 import fixtureJson from "./diskx-fixture.json" with { type: "json" };
-import type { DiskxDirectoryRow, DiskxFileRow } from "./diskx-data";
+import type { DiskxDirectoryRow, DiskxFileRow, DiskxVolume } from "./diskx-data";
 
 export type DiskxFixture = {
   schema: string;
@@ -19,6 +19,8 @@ export type DiskxFixture = {
   summary: { totalFiles: number; totalSize: number; directories: number; lastScanAt: string | null };
   directories: DiskxDirectoryRow[];
   files: Record<string, DiskxFileRow[]>;
+  /** Capacity and free space per volume, measured outside AgentX Data (which has none). */
+  volumes?: DiskxVolume[];
 };
 
 export const DISKX_FIXTURE: DiskxFixture = fixtureJson as DiskxFixture;
@@ -48,6 +50,29 @@ export type DiskxSource = {
   tree: (root: string) => Promise<DiskxTreePage>;
   /** Largest files directly in or under `root`. */
   files: (root: string, limit?: number) => Promise<DiskxFileRow[]>;
+  /** Volumes with capacity and free space; empty when nothing measured or declared them. */
+  volumes: () => Promise<DiskxVolume[]>;
+};
+
+const sanitiseVolumes = (value: unknown): DiskxVolume[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const record = entry as Partial<DiskxVolume> | null;
+    if (!record || typeof record.id !== "string" || !Array.isArray(record.roots)) return [];
+    const capacityBytes = Number(record.capacityBytes);
+    const freeBytes = Number(record.freeBytes);
+    if (!Number.isFinite(capacityBytes) || !Number.isFinite(freeBytes) || capacityBytes <= 0) return [];
+    return [{
+      id: record.id,
+      label: typeof record.label === "string" && record.label ? record.label : record.id,
+      roots: record.roots.filter((root): root is string => typeof root === "string"),
+      capacityBytes,
+      freeBytes: Math.max(0, Math.min(freeBytes, capacityBytes)),
+      source: record.source === "declared" ? "declared" : "measured",
+      measuredAt: typeof record.measuredAt === "string" ? record.measuredAt : null,
+      note: typeof record.note === "string" ? record.note : null,
+    }];
+  });
 };
 
 type AgentXEnvelope<T> = { status?: string; ok?: boolean; data?: T; message?: string };
@@ -77,6 +102,7 @@ export function createFixtureSource(fixture: DiskxFixture = DISKX_FIXTURE): Disk
       truncated: false,
     }),
     files: async (root, limit = 8) => (fixture.files[root] ?? []).slice(0, limit),
+    volumes: async () => sanitiseVolumes(fixture.volumes),
   };
 }
 
@@ -109,6 +135,13 @@ export function createLiveSource(fetchImpl: typeof fetch, roots: string[], origi
       const params = new URLSearchParams({ root, limit: String(limit), sort: "size" });
       const data = await unwrap<FilesData>(await fetchImpl(`/diskx-api/files?${params}`, { cache: "no-store" }));
       return data.files.map((file) => ({ path: file.path, size: file.size, category: file.category, mtime: file.mtime }));
+    },
+    volumes: async () => {
+      // Absent or unconfigured is "unknown", never the fixture's dated numbers.
+      const response = await fetchImpl("/diskx-api/volumes", { cache: "no-store" });
+      if (!response.ok) return [];
+      const payload = (await response.json()) as { volumes?: unknown };
+      return sanitiseVolumes(payload.volumes);
     },
   };
 }

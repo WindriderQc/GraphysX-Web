@@ -189,6 +189,25 @@ export function buildDiskxTree(roots: readonly string[], rows: readonly DiskxDir
   return { roots: rootNodes, byPath };
 }
 
+/**
+ * A volume is what the folders sit on: a disk, a pool, a share. AgentX Data indexes files and
+ * says nothing about capacity (measured 2026-10-24), so volumes come from a separate source —
+ * measured on the host that mounts them, or declared — and may be absent, in which case the
+ * city shows what is used and says the capacity is unknown rather than inventing one.
+ */
+export type DiskxVolume = {
+  id: string;
+  label: string;
+  /** Scanned roots that live on this volume. Free space is shared between them. */
+  roots: string[];
+  capacityBytes: number;
+  freeBytes: number;
+  /** "measured" from statfs/zpool on the host, "declared" by a person or a config file. */
+  source: "measured" | "declared";
+  measuredAt?: string | null;
+  note?: string | null;
+};
+
 export type DiskxRect = { x: number; z: number; width: number; depth: number };
 
 export type DiskxTile<T> = { item: T; rect: DiskxRect };
@@ -271,6 +290,8 @@ export function squarify<T>(items: readonly T[], weightOf: (item: T) => number, 
 
 export type DiskxBlock = {
   node: DiskxNode;
+  /** A folder district, the folded long tail, or a volume's free space. */
+  kind: "folder" | "rest" | "free";
   /** Footprint in world XZ, already inset by the street gap. */
   rect: DiskxRect;
   /** Block height in world units. */
@@ -302,10 +323,21 @@ export type DiskxCityOptions = {
   maxHeight?: number;
   /** Most districts drawn at once; the rest fold into one "autres" tile. */
   maxDistricts?: number;
+  /**
+   * Volumes whose free space is laid out beside the folders of this level, each as one low
+   * tile with the same bytes-to-area scale. Pass them at the level where the volumes' roots
+   * are the districts (the "all disks" view), never inside a folder: free space belongs to
+   * the volume, not to any folder on it, and drawing it twice would lie about the plaza.
+   */
+  freeVolumes?: DiskxVolume[];
 };
 
 /** The folded remainder of a level: many small siblings shown as one tile, still clickable as a list. */
 export const DISKX_REST_PATH = "diskx://rest";
+/** Prefix of the synthetic path a free-space tile carries: `diskx://free/<volume id>`. */
+export const DISKX_FREE_PATH_PREFIX = "diskx://free/";
+
+export const freePathOf = (volume: DiskxVolume): string => `${DISKX_FREE_PATH_PREFIX}${volume.id}`;
 
 const inset = (rect: DiskxRect, gap: number): DiskxRect => {
   const g = Math.min(gap, rect.width * 0.3, rect.depth * 0.3);
@@ -333,10 +365,13 @@ export function layoutDiskxCity(focus: DiskxNode, options: DiskxCityOptions = {}
   const shown = children.slice(0, maxDistricts);
   const rest = children.slice(maxDistricts);
   const restSize = rest.reduce((sum, child) => sum + child.totalSize, 0);
-  type Item = { kind: "child"; node: DiskxNode } | { kind: "rest"; size: number } | { kind: "plaza"; size: number };
+  type Item = { kind: "child"; node: DiskxNode } | { kind: "rest"; size: number } | { kind: "plaza"; size: number } | { kind: "free"; volume: DiskxVolume; size: number };
   const items: Item[] = shown.map((node) => ({ kind: "child", node }) as Item);
   if (restSize > 0) items.push({ kind: "rest", size: restSize });
   if (plazaWeight > 0) items.push({ kind: "plaza", size: plazaWeight });
+  for (const volume of options.freeVolumes ?? []) {
+    if (volume.freeBytes > 0) items.push({ kind: "free", volume, size: volume.freeBytes });
+  }
 
   const weightOf = (item: Item): number => (item.kind === "child" ? item.node.totalSize : item.size);
   const bounds: DiskxRect = { x: -size / 2, z: -size / 2, width: size, depth: size };
@@ -358,18 +393,29 @@ export function layoutDiskxCity(focus: DiskxNode, options: DiskxCityOptions = {}
       plaza = { rect, size: tile.item.size, files: focus.ownFiles };
       continue;
     }
+    if (tile.item.kind === "free") {
+      const { volume } = tile.item;
+      const node: DiskxNode = {
+        path: freePathOf(volume), name: `libre · ${volume.label}`, depth: focus.depth + 1,
+        ownSize: 0, ownFiles: 0, totalSize: volume.freeBytes, totalFiles: 0,
+        largestFile: null, category: "other", children: [], reported: false,
+      };
+      // Emptiness is flat: the tile keeps its honest footprint and no skyline.
+      blocks.push({ node, kind: "free", rect, height: 0.22, level: 0, parent: focus });
+      continue;
+    }
     if (tile.item.kind === "rest") {
       const node: DiskxNode = {
         path: DISKX_REST_PATH, name: `${rest.length} autres dossiers`, depth: focus.depth + 1,
         ownSize: 0, ownFiles: 0, totalSize: tile.item.size, totalFiles: rest.reduce((sum, child) => sum + child.totalFiles, 0),
         largestFile: null, category: "other", children: rest, reported: false,
       };
-      blocks.push({ node, rect, height: heightFor(tile.item.size, maxHeight), level: 0, parent: focus });
+      blocks.push({ node, kind: "rest", rect, height: heightFor(tile.item.size, maxHeight), level: 0, parent: focus });
       continue;
     }
     const node = tile.item.node;
     const height = heightFor(node.totalSize, maxHeight);
-    blocks.push({ node, rect, height, level: 0, parent: focus });
+    blocks.push({ node, kind: "folder", rect, height, level: 0, parent: focus });
     // Roof preview: the district's largest children as small buildings, inset again so the
     // district reads as a plinth. Skipped on slivers where nothing would be legible.
     if (rect.width < size * 0.06 || rect.depth < size * 0.06 || node.children.length === 0) continue;
@@ -379,7 +425,7 @@ export function layoutDiskxCity(focus: DiskxNode, options: DiskxCityOptions = {}
     for (const roofTile of squarify(roofItems, (child) => child.totalSize, roofBounds)) {
       const share = roofTile.item.totalSize / Math.max(1, roofTotal);
       const roofHeight = Math.max(0.12, Math.min(maxHeight * 0.4, (0.35 + Math.log10(Math.max(1e-6, share)) / 6 + 1) * maxHeight * 0.26));
-      blocks.push({ node: roofTile.item, rect: inset(roofTile.rect, street * 0.5), height: roofHeight, level: 1, parent: node });
+      blocks.push({ node: roofTile.item, kind: "folder", rect: inset(roofTile.rect, street * 0.5), height: roofHeight, level: 1, parent: node });
     }
   }
   return { focus, size, blocks, plaza };
@@ -413,4 +459,18 @@ export function pathCrumbs(tree: DiskxTree, node: DiskxNode): DiskxNode[] {
     current = current.depth > 0 ? tree.byPath.get(parentPath) : undefined;
   }
   return crumbs;
+}
+
+/** The volume a root (or any path under it) lives on, or null when none is known. */
+export function volumeForPath(volumes: readonly DiskxVolume[], path: string): DiskxVolume | null {
+  return volumes.find((volume) => volume.roots.some((root) => path === root || path.startsWith(`${root}/`))) ?? null;
+}
+
+/** Used/free/capacity of one volume as the HUD shows it; capacity wins over used + free when they disagree. */
+export function volumeOccupancy(volume: DiskxVolume, tree: DiskxTree): { used: number; free: number; capacity: number; indexed: number; usedShare: number } {
+  const indexed = volume.roots.reduce((sum, root) => sum + (tree.byPath.get(root)?.totalSize ?? 0), 0);
+  const capacity = Math.max(volume.capacityBytes, 0);
+  const free = Math.min(Math.max(volume.freeBytes, 0), capacity || volume.freeBytes);
+  const used = capacity > 0 ? Math.max(0, capacity - free) : indexed;
+  return { used, free, capacity, indexed, usedShare: capacity > 0 ? used / capacity : 0 };
 }

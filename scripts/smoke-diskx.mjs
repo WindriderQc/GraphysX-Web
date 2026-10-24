@@ -21,7 +21,7 @@ try {
   await page.getByRole("heading", { name: /Vos disques/, exact: false }).waitFor();
   await page.waitForFunction(() => {
     const text = JSON.parse(window.render_game_to_text());
-    return text.application?.application === "diskx" && text.application.source === "fixture" && text.application.districts.length >= 2;
+    return text.application?.application === "diskx" && text.application.source === "fixture" && text.application.districts.length >= 3;
   });
 
   const initial = await page.evaluate(() => {
@@ -38,11 +38,18 @@ try {
   });
   assert.equal(initial.app.focus.path, "diskx://all");
   assert.deepEqual(initial.app.crumbs, ["diskx://all"]);
-  assert.equal(initial.app.districts.length, 2, "one district per scanned disk");
+  assert.equal(initial.app.districts.filter((district) => !district.path.startsWith("diskx://free/")).length, 2, "one district per scanned disk");
   assert.ok(initial.world.id === "diskx-city", `world is the DiskX city, got ${initial.world.id}`);
   assert.ok(initial.entityCount > 20, "lights, kerbs, districts, caps, rims and roof buildings");
-  assert.ok(initial.districtEntities.every((entity) => entity.type === "box" && entity.tags.some((tag) => tag.startsWith("diskx-path:/mnt/"))), "districts are plain boxes carrying their folder path in tags");
+  assert.ok(initial.districtEntities.every((entity) => entity.type === "box" && entity.tags.some((tag) => tag.startsWith("diskx-path:/mnt/") || tag.startsWith("diskx-path:diskx://free/"))), "districts are plain boxes carrying their folder (or volume) path in tags");
   assert.ok(initial.bloom && initial.bloom.strength > 0, "the city declares bloom through the ordinary environment block");
+  // Free space: the fixture carries the pool measured on UGFrank, drawn once beside the disks.
+  const freeTiles = await page.evaluate(() => window.__GRAPHYSX__.query({ tag: "diskx-free" }).map((entity) => ({ id: entity.id, label: entity.label, opacity: entity.material.opacity })));
+  assert.equal(freeTiles.length, 1, "one free tile for the one volume");
+  assert.ok(freeTiles[0].opacity < 1 && /libre/.test(freeTiles[0].label), `free tile is translucent and says libre: ${JSON.stringify(freeTiles[0])}`);
+  const gauge = await page.locator(".gx-diskx-gauge .free").textContent();
+  assert.match(gauge, /To libres$/, `the volume gauge shows free terabytes, got ${gauge}`);
+  assert.equal(initial.app.volumes.length, 1);
   console.log(`ok: ${initial.entityCount} entities, districts ${initial.app.districts.map((d) => d.name).join(", ")}`);
   await page.screenshot({ path: path.join(artifacts, "diskx-all-disks.png") });
 

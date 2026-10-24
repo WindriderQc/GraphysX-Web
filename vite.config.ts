@@ -15,7 +15,7 @@ import { createGraphysXAgentRoute } from "./scripts/graphysx-agent-relay.mjs";
 // @ts-expect-error -- local read-only bridge to AgentX Data for DiskX, never part of the browser bundle
 import { createDiskxRoute } from "./scripts/diskx-server.mjs";
 
-function kidxDocuments(diskxDataUrl?: string): Plugin {
+function kidxDocuments(diskx?: { dataUrl?: string; volumesSpec?: string }): Plugin {
   return { name: "kidx-local-instructions", apply: "serve", async configureServer(server) {
     const route = await createKidxDocumentRoute();
     const teams = createKidxTeamRoute();
@@ -25,9 +25,9 @@ function kidxDocuments(diskxDataUrl?: string): Plugin {
     // The relay itself refuses anything but loopback, same-origin requests.
     const agents = createGraphysXAgentRoute();
     // DiskX reads AgentX Data through the page's own origin; `DISKX_DATA_URL` unset means fixture.
-    const diskx = createDiskxRoute({ dataUrl: diskxDataUrl });
+    const diskxRoute = createDiskxRoute({ dataUrl: diskx?.dataUrl, volumesSpec: diskx?.volumesSpec });
     server.httpServer?.once("close", () => agents.dispose());
-    server.middlewares.use((req, res, next) => { if (!agents(req, res) && !llmx(req, res) && !diskx(req, res) && !teams(req, res) && !route(req, res)) next(); });
+    server.middlewares.use((req, res, next) => { if (!agents(req, res) && !llmx(req, res) && !diskxRoute(req, res) && !teams(req, res) && !route(req, res)) next(); });
   } };
 }
 
@@ -76,9 +76,14 @@ function faceEmbed(): Plugin {
 }
 
 export default defineConfig(({ command, mode }) => {
-  // `DISKX_DATA_URL` may come from the shell or from an ignored `.env.local`, so a developer on
-  // the home LAN can point DiskX at AgentX Data without exporting anything per terminal.
-  const diskxDataUrl = process.env.DISKX_DATA_URL || loadEnv(mode, process.cwd(), "DISKX_").DISKX_DATA_URL || undefined;
+  // `DISKX_DATA_URL` / `DISKX_VOLUMES` may come from the shell or from an ignored `.env.local`,
+  // so a developer on the home LAN can point DiskX at AgentX Data (and declare or measure the
+  // volumes' capacity, which AgentX Data lacks) without exporting anything per terminal.
+  const diskxEnv = loadEnv(mode, process.cwd(), "DISKX_");
+  const diskx = {
+    dataUrl: process.env.DISKX_DATA_URL || diskxEnv.DISKX_DATA_URL || undefined,
+    volumesSpec: process.env.DISKX_VOLUMES || diskxEnv.DISKX_VOLUMES || undefined,
+  };
   // GRAPHYSX_FULL_ASSETS=1 builds the unpruned dist — for driving an archive world in the
   // legacy player against a real build, which the pruned release cannot serve.
   const fullAssets = process.env.GRAPHYSX_FULL_ASSETS === "1";
@@ -86,7 +91,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     // Dev always serves all of public/, so the legacy route keeps its archive locally.
     publicDir: prune ? false : "public",
-    plugins: prune ? [productAssets(), faceEmbed()] : command === "build" ? [faceEmbed()] : [kidxDocuments(diskxDataUrl)],
+    plugins: prune ? [productAssets(), faceEmbed()] : command === "build" ? [faceEmbed()] : [kidxDocuments(diskx)],
     optimizeDeps: { entries: ["index.html"] },
     server: {
       // PORT lets a second checkout/session run its own dev server beside the default one.
