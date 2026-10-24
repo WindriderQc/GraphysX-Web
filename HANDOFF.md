@@ -13,10 +13,92 @@ Read `PRODUCT_SPEC.md` §8.1 (the honest status table) for what ships versus wha
 as the v1 target. Read `CLAUDE.md` for the short list of rules that exist because breaking them
 cost real sessions real hours.
 
-## Production publication (2026-09-14)
+## Current state (audited 2026-10-23)
+
+**Production is `main` at `61580c7`**, deployed 2026-10-10 by
+[run 38025977946](https://github.com/WindriderQc/GraphysX-Web/actions/runs/38025977946);
+public `release.json` confirms that SHA. The twelve most recent hosted runs are green. On that
+HEAD `npm run check` passes: typecheck clean, 590 unit tests passing, one intentional Windows
+skip. No `TODO`/`FIXME` exists in `src/`, `server/` or `scripts/`.
+
+**What shipped between 2026-09-14 and 2026-10-10** (eight PRs, five direct commits; the
+section below this one is the September release they build on):
+
+- **`<llmx-face>`, the docked mask** (PR 26, 2026-09-25). The voxel mask as one self-contained
+  ES module, `dist/embed/llmx-face.js`, built by `vite.face.config.ts` on every `vite build`
+  and served at `/embed/llmx-face.js`. AgentX Household relays it from its own origin for the
+  Super Dad and Famille avatar docks and drives it with `agentx.presence.v1`.
+  Contract: [LLMX_FACE_EMBED.md](docs/LLMX_FACE_EMBED.md).
+- **Eyes open at `mobile`, framing from measured size** (PR 27). At the mobile density the lids
+  covered the whole iris, so every mobile-capped device showed a mask whose eyes never opened;
+  `llmx-face-eyes-open` now asserts at least half the iris visible at every level.
+- **Math pictures beside the mask** (PR 28) and **paced to Nestor's sentence** (PR 30):
+  `agentx.math-scene.v1`, counting to 100 in rods of ten and additions to 20 with regrouping,
+  look-only, refused whole when out of bounds, each with an applied/rejected receipt event.
+- **`<llmx-stage>`** (PR 31, 2026-09-27). The same picture on its own for Household's Images
+  zone; same bundle, same contract, plus `llmx-scene-complete`. It runs its own
+  `requestAnimationFrame` because it lives outside the product world; a host showing both
+  elements runs two loops. That is the embed's exception to the one-loop rule, not a precedent.
+- **Nestor stays alert through host waits** (`7c9ade9`, 2026-10-08). Older Household docks send
+  `sleeping` while an inference host is busy, so `sleeping` now keeps calm open eyes.
+- **Impreza livery orientation** (PR 32). A payload material may set `textureFlipY: false`;
+  only the Impreza's `ChassisSTi` map uses it, recorded as INFERRED. The vendor script's
+  `src/legacy` path was repaired so it runs again.
+- **Cheek shelves removed** (PR 33, Codex): the mask regenerated at all three densities.
+- **Direct `main` commits, 2026-10-09**: `smoke-model-recentre` guards world-space recentring at
+  every fit size; the live-sessions smoke uses the supported SwANGLE renderer; BallZ/spiral
+  smokes keep collected rings hidden on reentry; return destinations are named after the real
+  target instead of a generic "back" (`b04119c`).
+
+**Open, in the order that adds the most:**
+
+1. **KidX Nestor voice is integrated locally and nowhere else.** `codex/kidx-voice-integration`
+   (`57d4677`, Codex worktree `~/.codex/worktrees/kidx-voice-review/GraphysX-Web`) carries the
+   optional Household Family voice/text panel, bounded workshop actions, a fixed server relay
+   and the `kidx-voice` check. Its full local gate passed 93/93 with 599 unit tests. It is not
+   pushed, has no PR, and no child, microphone, speaker or ugKid acceptance exists. Read
+   `docs/KIDX_VOICE.md` on that branch before touching it; its HANDOFF/progress hunks will
+   conflict with this section and should be merged, not dropped.
+2. **`<llmx-stage>` acceptance** (AgentX archive issue 131). v1 shipped on both sides on
+   2026-09-25 and the receipt is stored on the family turn (AgentX PR 133). Remaining: the
+   owner's acceptance on `/panel` and on the kids' device.
+3. **The dock's presence contract is underspecified.** Household sends phase, level, brightness,
+   token rate and tool pulses, not the tool name, confirmation requests, or whether `sleeping`
+   means inactivity or GPU queueing. A click-to-open activity/commands panel belongs to a future
+   host contract. The consumer config still advertises `presence: false`.
+4. **KidX hardware**: chassis direction/calibration, USB unplug, host power loss and stopping
+   latency remain unqualified (see the 2026-08-13 baseline list below; do not repeat bench checks).
+5. **AgentX Center leftovers, unchanged since August**: a free-text request surface, authored
+   places (measure the current entity count on real hardware first), long coach courses blocked
+   by living-system nondeterminism, the two-file split, HDRI sky curation. See
+   [AGENTX_ROADMAP.md](docs/AGENTX_ROADMAP.md) "What is actually left".
+
+**Ecosystem seams, as they are now.** The relationship with AgentX became two-way in
+September. GraphysX is AgentX's client on `?app=llmx`: the public bundle calls
+`https://agentx.specialblend.icu/api/consumers/nestor/v1/llmx` and `/llmx/family` directly
+(`server/llmx-target.mjs` is the route map); on 2026-10-23 both profiles answer `enabled`,
+`commandsVersion 2`, `mathVersion 1`. AgentX is GraphysX's client for the dock: `agentx-home`
+sets `HOUSEHOLD_AVATAR_MODULE_URL` to `/embed/llmx-face.js`. The division holds: AgentX owns
+conversation, memory, tools, personas and family access; GraphysX renders and never sees a
+session. Repository landmarks in older docs have moved: the `aiOPs` checkout named in
+`docs/LLMX_CURRENT_HANDOFF.md` and `docs/KIDX_NESTOR_VOICE_SESSION.md` no longer exists
+locally, Household lives in `WindriderQc/AgentX`, and the `GraphysX-Web-llmx-integration` /
+`GraphysX-Web-llmx-verified` checkouts are gone (their worktree entries are prunable). The
+AgentX pipeline carries no GraphysX task and its RAG corpus has no GraphysX document.
+
+**Workstation hygiene found by the audit.** The `graphysx` MCP registration in `~/.claude.json`
+pointed at the deleted integration checkout, which is why every session reported
+`CONNECTION_CLOSED`; it was repointed to `codes/GraphysX-Web/tools/graphysx-mcp.mjs` on
+2026-10-23 (the skill junctions had been repointed the same morning). No preview was running on
+4207 or 4173. The main checkout sits on `codex/llmx-cheek-shelf-fix` with an uncommitted
+`.claude/launch.json` entry (`llmx-polish`) aimed at the stale `llmx-forge` worktree;
+`claude/llmx-face-forge` is 12 ahead / 123 behind `main` and unreviewed.
+
+## LLMx production publication (2026-09-14)
 
 **[LLMx is public](https://graphysx.specialblend.ca/?app=llmx)**, with an entry on the
-home page. The deployed product is `a46726440d82ccf388a381ed05e266985994fd74`;
+home page. The product deployed on that date was `a46726440d82ccf388a381ed05e266985994fd74`
+(production has since advanced; see the current state above);
 [run34887332538](https://github.com/WindriderQc/GraphysX-Web/actions/runs/34887332538)
 passed Node/build checks and exact HTTP acceptance. Public `release.json` confirms
 the SHA after completion. Verification took **57s**, deployment **1m00s**.
