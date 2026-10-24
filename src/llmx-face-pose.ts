@@ -539,7 +539,17 @@ export const POSE_LIMITS = Object.freeze({
   stretchFill: 0.42,
   /** Exponent on `speak` before it drives the mouth. Below one; see the note where it is used. */
   mouthResponse: 0.6,
-  lipSpread: 0.035,
+  lipSpread: 0.075,
+  /**
+   * Vowel shapes, so an "o" and an "i" are told apart in the dock. Rounded (dark tone): the
+   * corners pinch in, more at the corners than the middle, and the opening grows taller.
+   * Spread (bright tone): the opening flattens. Metres for the pinch, fractions of the parting
+   * for the height. Before these the tone only slid the whole lip sideways by 3.5 cm, which at
+   * dock size moved the mouth by less than a pixel.
+   */
+  vowelPinch: 0.13,
+  vowelRound: 0.4,
+  vowelFlat: 0.35,
   /** A smile: the corners of the mouth rise and widen, metres at warmth = 1. */
   smileLift: 0.09,
   smileWiden: 0.035,
@@ -628,8 +638,13 @@ export function poseInto(
   // A rounded mouth pulls the lips in and forward; a bright one spreads them. speakTone 0.5 is
   // neutral, so silence never biases the shape.
   const tone = (d.speakTone - 0.5) * 2;
-  const spread = POSE_LIMITS.lipSpread * tone * mouth;
+  // Spread widens only: a rounded vowel's narrowing is the pinch below, which spares the middle.
+  const spread = POSE_LIMITS.lipSpread * Math.max(0, tone) * mouth;
   const purse = POSE_LIMITS.lipPurse * -tone * mouth;
+  const rounded = Math.max(0, -tone);
+  const flat = Math.max(0, tone);
+  const pinch = POSE_LIMITS.vowelPinch * rounded * mouth;
+  const partShape = 1 + POSE_LIMITS.vowelRound * rounded - POSE_LIMITS.vowelFlat * flat;
 
   const browTarget = POSE_LIMITS.browLift * (d.attention + Math.max(0, d.warmth) * 0.3);
   const frown = POSE_LIMITS.browFrown * d.think;
@@ -665,8 +680,18 @@ export function poseInto(
 
     const lw = lip[i];
     if (lw > 0) {
-      px += spread * lw * (x >= 0 ? 1 : -1);
+      // Spread and pinch both grow from the mouth's axis outward. Spread used to slide each half
+      // of the lip sideways by its full amount, middle included, so a bright vowel split the lips
+      // down the centre by two cubes — measured, and present since the spread was written.
+      const across = Math.min(1, Math.abs(x) / anchors.mouth.halfWidth);
+      px += spread * lw * Math.sign(x) * across;
       pz += purse * lw;
+      // An "o" gathers the corners toward the middle — quadratic in the distance from the axis,
+      // so the middle of the lip barely moves and the corners travel the full pinch.
+      // Only the front of the mouth gathers: the corners' deep cubes, where the lips meet the
+      // cheek a hand's width back, opened seams when pinched and nobody sees them move.
+      const lipFront = smoothstep(0.28, 0.42, z);
+      px -= Math.sign(x) * pinch * lw * across * across * lipFront;
       // Lips gather slightly while thinking, whether or not anything is being said.
       pz += thinkPurse * lw;
       px -= Math.sign(x) * thinkPurse * 0.6 * lw;
@@ -685,7 +710,7 @@ export function poseInto(
       // split through the commissure so both walls remain connected as the aperture opens.
       // The ramp fits the narrow resting seam: the old 90 mm ramp barely moved these lips.
       const parting = smoothstep(0, 0.035, Math.abs(y - anchors.mouth.y));
-      py += (upper ? POSE_LIMITS.lipPart * POSE_LIMITS.lipPartUpperShare : -POSE_LIMITS.lipPart) * lw * mouth * corner * parting;
+      py += (upper ? POSE_LIMITS.lipPart * POSE_LIMITS.lipPartUpperShare : -POSE_LIMITS.lipPart) * lw * mouth * corner * parting * partShape;
     }
 
     const bw = brow[i];
@@ -735,7 +760,8 @@ export function poseInto(
     // by the same amount at its edges as at its middle.
     const browStretch = 4 * bw * (1 - bw) * clamp01(d.attention + d.think + Math.max(0, d.warmth) * 0.3) + 0.5 * bw * d.think;
     const smileStretch = 4 * smileW * (1 - smileW) * smile;
-    const stretch = 1 + POSE_LIMITS.stretchFill * (mouth * stretchWeight + 1.0 * browStretch + 0.9 * smileStretch);
+    // The lips' fill follows the opening's height: a rounded vowel parts them further.
+    const stretch = 1 + POSE_LIMITS.stretchFill * (mouth * partShape * stretchWeight + 1.0 * browStretch + 0.9 * smileStretch);
     outScale[i] = buildScale(rise[i], d.build, i) * stretch;
   }
   return count;
