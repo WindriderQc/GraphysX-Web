@@ -28,6 +28,7 @@ import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { showStartupError } from "./startup-error";
 import type { KidxApplication } from "./kidx-app";
 import type { LlmXApplication } from "./llmx-contracts";
+import type { DiskxApplication } from "./diskx-app";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
 import { nestorTopicRequest, type NestorTopic } from "./showroom-nestor";
@@ -364,16 +365,29 @@ if (mode === "previews" && import.meta.env.DEV) {
      * Keyed by id rather than a boolean because this is the seam a second application uses, not
      * a special case for EV3.
      */
-    let appSurface: KidxApplication | LlmXApplication | null = null;
+    let appSurface: KidxApplication | LlmXApplication | DiskxApplication | null = null;
     // Application surfaces own the whole play viewport. Keep this separate from the lazy
     // surface module so later host chrome (notably the asynchronously mounted scene browser)
     // can respect the route before the application's import has finished.
     let applicationOpen = false;
     const openApplication = (id: string): boolean => {
-      if (id !== "ev3-lab" && id !== "llmx") return false;
+      if (id !== "ev3-lab" && id !== "llmx" && id !== "diskx") return false;
       if (applicationOpen) return true;
       applicationOpen = true;
       requestShowroomInteraction(false);
+      if (id === "diskx") {
+        showroomEnvironment?.();
+        showroomEnvironment = null;
+        void import("./diskx-app").then(({ mountDiskxApp }) => {
+          appSurface = mountDiskxApp(root, host, () => {
+            appSurface?.dispose();
+            appSurface = null;
+            applicationOpen = false;
+            window.location.search = "";
+          });
+        }).catch((error: unknown) => showStartupError(root, error));
+        return true;
+      }
       if (id === "llmx") {
         showroomEnvironment?.();
         showroomEnvironment = null;
@@ -417,6 +431,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           ? {
             onOpenKidX: () => { window.location.search = "?app=ev3-lab"; },
             onOpenLlmX: () => { window.location.search = "?app=llmx"; },
+            onOpenDiskX: () => { window.location.search = "?app=diskx"; },
             coauthor: {
               onAccept: acceptNestorProposal,
               onDiscard: discardNestorProposal,
@@ -862,7 +877,7 @@ if (mode === "previews" && import.meta.env.DEV) {
       });
     };
     const host = new PlatformHost(root, {
-      autoOrbit: !editorFirst && appParam !== "ev3-lab" && appParam !== "llmx",
+      autoOrbit: !editorFirst && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx",
       editorVisible: editorFirst,
       // The showroom is a composed set, not an overview of a demo world: frame it closer
       // and slightly off-axis so the kinetic plinth reads and the sky stays in shot.
@@ -875,7 +890,7 @@ if (mode === "previews" && import.meta.env.DEV) {
       // screenshot harness should put you where you asked to be, immediately. `?intro=0`
       // opts out, which is how smoke-showroom measures the idle orbit without an intro
       // moving the camera underneath its probe.
-      intro: !editorFirst && appParam !== "llmx" && new URLSearchParams(window.location.search).get("intro") !== "0",
+      intro: !editorFirst && appParam !== "llmx" && appParam !== "diskx" && new URLSearchParams(window.location.search).get("intro") !== "0",
       // `?post=bloom` turns the demo post stack on for any route (bloom + SMAA through the
       // composer). Scenes whose documents carry their own `environment.post` keep their
       // tuning either way; this is the demo/preview switch, not a scene setting.

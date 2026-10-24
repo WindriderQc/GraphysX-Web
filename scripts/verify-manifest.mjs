@@ -23,6 +23,7 @@ export const VERIFY_SMOKES = [
   { name: "llmx-conversation-replay", tier: "apps", script: "scripts/smoke-llmx-conversation-replay.mjs", covers: "Exact restored voice replay, environment/visibility/mute/exit cancellation and turn identity" },
   { name: "llmx-face-embed", tier: "apps", script: "scripts/smoke-llmx-face-embed.mjs", covers: "Built <llmx-face> module alone: one file, drawn mask, presence contract, speaking/sleeping, math scene receipts and release on removal" },
   { name: "llmx", tier: "apps", script: "scripts/smoke-llmx.mjs", covers: "Forge appearance lifecycle, save/reload, reduced motion, immediate camera, environment selection and Center return" },
+  { name: "diskx", tier: "apps", script: "scripts/smoke-diskx.mjs", covers: "DiskX city from the recorded AgentX Data fixture: districts as entities, real 3D click dive, breadcrumb/up, hover card, HUD list parity, Center return" },
   { name: "startup", tier: "core", script: "scripts/smoke-startup.mjs", covers: "renderer and lazy-import failures: accessible recovery page and working retry" },
   { name: "showroom", tier: "core", script: "scripts/smoke-showroom.mjs", covers: "default route: welcome showroom, gated editor, auto-orbit" },
   { name: "editor", tier: "core", script: "scripts/smoke-editor.mjs", covers: "editor: library palette, model + texture + behaviour, bloom authoring, exit path" },

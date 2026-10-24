@@ -24,6 +24,20 @@
       ],
       "port": 4199,
       "url": "http://localhost:4199"
+    },
+    {
+      "name": "diskx-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4211",
+        "--strictPort"
+      ],
+      "port": 4211,
+      "url": "http://localhost:4211"
     }
   ]
 }
