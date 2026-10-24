@@ -44,6 +44,45 @@ try {
   })));
   const idle = await sampleLit();
   assert.ok(idle > 0.08 && idle < 0.7, `the mask fills part of the dock (${idle.toFixed(3)})`);
+  // The metal has something to reflect, generated in the file itself: without it the docked mask
+  // read a third darker than in the Forge (mean luminance 50 against 72 at the same intensity).
+  const lighting = await page.evaluate(() => {
+    const face = document.getElementById("face");
+    return { environment: !!face.world.environment, intensity: face.world.environmentIntensity };
+  });
+  assert.deepEqual(lighting, { environment: true, intensity: 0.32 }, "the docked mask reflects a generated room, as the Forge's mask reflects its sky");
+  // And it actually lights the mask: the centre of the face with the environment off, then at
+  // its intensity. An environment that is set but black (a generated target lost with the GPU
+  // context) passes the check above and fails this one.
+  const environmentGain = () => page.evaluate(() => {
+    const face = document.getElementById("face");
+    const centre = (intensity) => {
+      face.world.environmentIntensity = intensity;
+      const renderer = face.renderer, gl = renderer.getContext();
+      renderer.render(face.world, face.camera);
+      const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
+      const pixels = new Uint8Array(width * height * 4);
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      let sum = 0, count = 0;
+      for (let y = Math.floor(height * 0.3); y < height * 0.7; y += 1) for (let x = Math.floor(width * 0.42); x < width * 0.58; x += 1) {
+        const o = (y * width + x) * 4; sum += 0.2126 * pixels[o] + 0.7152 * pixels[o + 1] + 0.0722 * pixels[o + 2]; count += 1;
+      }
+      return sum / count;
+    };
+    const off = centre(0), on = centre(0.32);
+    return { off: Math.round(off), on: Math.round(on) };
+  });
+  const gain = await environmentGain();
+  assert.ok(gain.on - gain.off >= 10, `the environment lights the mask (centre luminance ${gain.off} without, ${gain.on} with)`);
+  // A lost and restored WebGL context regenerates the room rather than leaving it black.
+  await page.evaluate(() => new Promise((resolve) => {
+    const face = document.getElementById("face");
+    face.renderer.domElement.addEventListener("webglcontextrestored", () => setTimeout(resolve, 300), { once: true });
+    face.renderer.forceContextLoss();
+    setTimeout(() => face.renderer.forceContextRestore(), 200);
+  }));
+  const restored = await environmentGain();
+  assert.ok(restored.on - restored.off >= 10, `the environment survives a context restore (${restored.off} without, ${restored.on} with)`);
 
   const presence = await page.evaluate(() => {
     const face = document.getElementById("face");
@@ -101,7 +140,7 @@ try {
   assert.equal(cleared, null);
 
   // Removal releases the renderer; a host may mount and unmount the dock freely.
-  const released = await page.evaluate(() => { const face = document.getElementById("face"); face.remove(); return face.renderer === null; });
+  const released = await page.evaluate(() => { const face = document.getElementById("face"); face.remove(); return face.renderer === null && face.environment === null; });
   assert.equal(released, true);
 
   // The same file defines <llmx-stage>: the picture alone, for a host's own pictures zone.

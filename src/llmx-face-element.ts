@@ -10,12 +10,15 @@ import {
   MeshBasicMaterial,
   PerspectiveCamera,
   PlaneGeometry,
+  PMREMGenerator,
   PointLight,
   Scene,
   SRGBColorSpace,
   Vector3,
   WebGLRenderer,
+  type WebGLRenderTarget,
 } from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { AgentWorldVoxelFace } from "./agent-world-face";
 import { POSE_LIMITS, resolveAgentWorldFace, type AgentWorldFaceLevel } from "./llmx-face-pose";
 import { forgeIntroAt, FORGE_INTRO } from "./llmx-forge";
@@ -61,6 +64,13 @@ function deviceCeiling(): AgentWorldFaceLevel {
   return cores <= 8 ? "balanced" : "high";
 }
 
+/**
+ * The dock's reflected environment. Intensity tuned so the mask reads as it does in the Forge
+ * (llmx-forge.ts lights it with the same lamps plus a night HDRI at 0.32); the studio room is
+ * brighter than that night, so it takes less of it. Yaw as the Forge's.
+ */
+export const DOCK_ENVIRONMENT = Object.freeze({ intensity: 0.32, yawDegrees: 24 });
+
 export class LlmXFaceElement extends HTMLElement {
   static readonly observedAttributes = ["tint", "level"];
 
@@ -70,6 +80,7 @@ export class LlmXFaceElement extends HTMLElement {
   private face: AgentWorldVoxelFace | null = null;
   private aura: Mesh<PlaneGeometry, MeshBasicMaterial> | null = null;
   private rim: PointLight | null = null;
+  private environment: WebGLRenderTarget | null = null;
   private frame = 0;
   private last = 0;
   private elapsed = 0;
@@ -146,6 +157,7 @@ export class LlmXFaceElement extends HTMLElement {
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.setClearColor(0x000000, 0);
+    canvas.addEventListener("webglcontextrestored", this.onContextRestored);
     this.world = new Scene();
     this.camera = new PerspectiveCamera(35, 1, 0.1, 30);
     this.buildLights();
@@ -173,6 +185,7 @@ export class LlmXFaceElement extends HTMLElement {
   }
 
   disconnectedCallback(): void {
+    this.renderer?.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);
     cancelAnimationFrame(this.frame);
     window.removeEventListener("pointermove", this.onPointer);
     this.resize?.disconnect();
@@ -184,6 +197,8 @@ export class LlmXFaceElement extends HTMLElement {
     this.aura?.geometry.dispose();
     this.aura?.material.map?.dispose();
     this.aura?.material.dispose();
+    this.environment?.dispose();
+    this.environment = null;
     this.renderer?.dispose();
     this.renderer = this.world = this.camera = this.face = this.aura = this.rim = null;
     this.readyEmitted = false;
@@ -213,11 +228,41 @@ export class LlmXFaceElement extends HTMLElement {
     this.rim = new PointLight(DEFAULT_TINT, 14, 14);
     this.rim.position.set(0, 1.4, -3.4);
     scene.add(this.rim);
+    // Something for the metal to reflect. The mask is half metal, and a metal lit only by lamps
+    // reflects black between its highlights: in the dock it read a third darker than in the Forge,
+    // whose world reflects a night HDRI. That file is 1.7 MB — twice this whole bundle, and the
+    // host would have to relay it too — so the dock generates the platform's own studio room
+    // instead (platform-host.ts does the same for every world without a sky), once, at startup.
+    this.buildEnvironment();
+    scene.environmentIntensity = DOCK_ENVIRONMENT.intensity;
+    scene.environmentRotation.set(0, (DOCK_ENVIRONMENT.yawDegrees * Math.PI) / 180, 0);
     // The aura: a soft halo behind the head, additive, so it glows on any dock background.
     this.aura = new Mesh(new PlaneGeometry(3.6, 3.6), new MeshBasicMaterial({ color: DEFAULT_TINT, map: haloTexture(), transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }));
     this.aura.position.set(0, 0.1, -0.9);
     scene.add(this.aura);
   }
+
+  /**
+   * Generate the reflected room into a render target. Also run when a lost WebGL context comes
+   * back: Three re-uploads meshes and textures from their sources, but a generated target has no
+   * source — its pixels lived on the GPU — so after a restore it would stay black and the mask
+   * would go dull until the page reloads. Measured: a context lost under the software renderer
+   * left exactly that (the environment set, its intensity changing nothing).
+   */
+  private buildEnvironment(): void {
+    const renderer = this.renderer;
+    const scene = this.world;
+    if (!renderer || !scene) return;
+    this.environment?.dispose();
+    const pmrem = new PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    this.environment = pmrem.fromScene(room, 0.04);
+    room.dispose();
+    pmrem.dispose();
+    scene.environment = this.environment.texture;
+  }
+
+  private readonly onContextRestored = (): void => { this.buildEnvironment(); };
 
   private applyTint(): void {
     const value = this.getAttribute("tint");
