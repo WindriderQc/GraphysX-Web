@@ -14,6 +14,7 @@ import {
 
 import faceAsset from "./llmx-face-forge.json";
 import { applyForgeFinish, SMOOTH_NORMAL_ATTRIBUTE } from "./llmx-face-finish";
+import { EYE_LOOK, gazeRotateInto, irisContrast, irisTone, lidEdgeY, lidShade, pickCatchlight } from "./llmx-face-eyes";
 import {
   buildScale,
   type FaceAsset,
@@ -175,6 +176,17 @@ export class AgentWorldVoxelFace {
   private metalStatic: Uint32Array = new Uint32Array(0);
   private ballCubes: Uint32Array = new Uint32Array(0);
   private irisCubes: Uint32Array = new Uint32Array(0);
+  /**
+   * The iris's look (see llmx-face-eyes): rest position of each iris cube in its eye's frame,
+   * its static tone, the posed positions rewritten each frame, and which cubes belong to which
+   * eye — so the lid shadow and the catchlight follow the gaze and the blink without allocating.
+   */
+  private irisRest = new Float32Array(0);
+  private irisTone = new Float32Array(0);
+  private irisPosed = new Float32Array(0);
+  private irisRight = new Uint32Array(0);
+  private irisLeft = new Uint32Array(0);
+  private irisContrast = 0;
   private lidCubes: Uint32Array = new Uint32Array(0);
   private lowerLidCubes: Uint32Array = new Uint32Array(0);
   private pupilCubes: Set<number> = new Set();
@@ -496,6 +508,7 @@ export class AgentWorldVoxelFace {
     this.lowerLidCubes = Uint32Array.from(lowerLidCubes);
     this.pupilCubes = pupilCubes;
     this.mawCubes = Uint32Array.from(mawCubes);
+    this.prepareIris();
 
     // Cubes are drawn slightly larger than the grid step so neighbours interpenetrate. At
     // exactly one step they only *touch*, and the forge jitter below then rotates them apart:
@@ -512,6 +525,7 @@ export class AgentWorldVoxelFace {
     // open mouth — the very artefact this cavity was added to remove. A hole has to be matte.
     this.mawMesh = this.createMaw("VoxelFaceMaw", edge, this.mawCubes.length);
     this.eyeMesh = this.createMesh("VoxelFaceIris", edge, this.irisCubes.length, true);
+    patchIrisEmissive(this.eyeMesh.material as MeshStandardMaterial);
     this.linerMesh = this.buildLiner("VoxelFaceLiner", edge);
 
     this.writeColors();
@@ -614,10 +628,19 @@ export class AgentWorldVoxelFace {
     const kept: number[] = [];
     const rest: number[] = [];
     const seen = new Set<number>();
+    // Nothing that reaches the eyeballs. The sockets need no backing — the solid eyeball closes
+    // them — and a liner cube there lands in front of the iris: shrunk toward the centre and then
+    // snapped to the coarse grid, the lid's copies poked through the front of the eye and hid
+    // the top two thirds of the iris, so the mask looked half asleep everywhere from 2026-09-14
+    // until this check (found 2026-10-23 by hiding the liner in the dock). Keep every cube's
+    // whole box, corners included, clear of the eyeball plus a cube of margin.
+    const { eye } = weights.anchors;
+    const eyeClearance = eye.radius + cell * 1.15 * Math.sqrt(3) * 0.5 + weights.level.cube;
     for (const i of cubes) {
       const gx = Math.round((weights.rest[i * 3] * shrink) / cell);
       const gy = Math.round((weights.rest[i * 3 + 1] * shrink) / cell);
       const gz = Math.round((weights.rest[i * 3 + 2] * shrink) / cell);
+      if (Math.hypot(Math.abs(gx * cell) - eye.x, gy * cell - eye.y, gz * cell - eye.z) < eyeClearance) continue;
       const key = ((gx + 512) * 1024 + (gy + 512)) * 1024 + (gz + 512);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -809,11 +832,72 @@ export class AgentWorldVoxelFace {
     if (mesh) {
       (mesh.material as MeshStandardMaterial).emissiveIntensity = eye.glow;
       this.writeRotatedAbout(mesh, this.irisCubes, eye.pivot, eye.yaw, eye.pitch, null);
+      this.writeIrisLook(mesh, eye.yaw, eye.pitch, eye.lidRadians);
     }
     this.writeRotatedAbout(this.ballMesh, this.ballCubes, eye.pivot, eye.yaw, eye.pitch, null, eye.pupilScale);
     // Lids live in the metal mesh, so they are re-posed on top of what writeMesh just wrote.
     this.writeRotatedAbout(this.animatedMesh, this.lidCubes, eye.pivot, 0, eye.lidRadians, this.metalAnimated);
     this.writeRotatedAbout(this.animatedMesh, this.lowerLidCubes, eye.pivot, 0, eye.lowerLidRadians, this.metalAnimated);
+  }
+
+  /** Each iris cube's position in its own eye's frame, its static tone, and its eye. */
+  private prepareIris(): void {
+    const { anchors } = this.weights;
+    const { x: ex, y: ey, z: ez, radius } = anchors.eye;
+    const count = this.irisCubes.length;
+    this.irisRest = new Float32Array(count * 3);
+    this.irisPosed = new Float32Array(count * 3);
+    this.irisTone = new Float32Array(count);
+    const right: number[] = [];
+    const left: number[] = [];
+    for (let k = 0; k < count; k += 1) {
+      const i = this.irisCubes[k];
+      const x = this.weights.rest[i * 3];
+      const mirror = x < 0 ? -1 : 1;
+      // The frame writeRotatedAbout turns: raw x about this side's eye centre, not mirrored, so
+      // one light direction serves both eyes.
+      this.irisRest[k * 3] = x - ex * mirror;
+      this.irisRest[k * 3 + 1] = this.weights.rest[i * 3 + 1] - ey;
+      this.irisRest[k * 3 + 2] = this.weights.rest[i * 3 + 2] - ez;
+      (mirror > 0 ? right : left).push(k);
+    }
+    this.irisRight = Uint32Array.from(right);
+    this.irisLeft = Uint32Array.from(left);
+    this.irisContrast = irisContrast(Math.min(right.length, left.length));
+    for (let k = 0; k < count; k += 1) {
+      // The tone is radial about the pupil, so it is mirrored per side: same pattern, each eye.
+      const local = { x: Math.abs(this.irisRest[k * 3]), y: this.irisRest[k * 3 + 1], z: this.irisRest[k * 3 + 2] };
+      this.irisTone[k] = irisTone(local, radius, this.irisContrast);
+    }
+  }
+
+  /**
+   * The iris's per-cube emissive multipliers for this frame: static tone, the upper lid's
+   * shadow at the lid's current height, and one catchlight per eye that stays with the light
+   * while the eye turns. Written into the instance colours, which the patched material applies
+   * to the emissive (see patchIrisEmissive).
+   */
+  private writeIrisLook(mesh: InstancedMesh, yaw: number, pitch: number, lidRadians: number): void {
+    const count = this.irisCubes.length;
+    if (count === 0) return;
+    const { radius } = this.weights.anchors.eye;
+    const cube = this.weights.level.cube;
+    gazeRotateInto(this.irisRest, yaw, pitch, this.irisPosed);
+    const edgeY = lidEdgeY(radius, lidRadians);
+    for (let k = 0; k < count; k += 1) {
+      const shade = 1 + (lidShade(this.irisPosed[k * 3 + 1], edgeY, cube) - 1) * this.irisContrast;
+      const tone = this.irisTone[k] * shade;
+      this.color.setRGB(tone, tone, tone);
+      mesh.setColorAt(k, this.color);
+    }
+    const [r, g, b] = EYE_LOOK.catchlight;
+    for (const members of [this.irisRight, this.irisLeft]) {
+      const m = pickCatchlight(this.irisPosed, members, radius, edgeY, cube);
+      if (m < 0) continue;
+      this.color.setRGB(r, g, b);
+      mesh.setColorAt(members[m], this.color);
+    }
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }
 
   private writeRotatedAbout(
@@ -877,6 +961,30 @@ export class AgentWorldVoxelFace {
  * a binary search rather than a scan — it runs once per lid cube per frame, which is a hundred
  * or so, but a linear scan of three thousand entries for each of them would not be free.
  */
+/**
+ * Let the iris's instance colours scale its emissive, not only its (near-black) diffuse.
+ *
+ * Three multiplies `instanceColor` into the diffuse colour and leaves emissive alone, so on an
+ * emissive iris a per-cube colour changes nothing you can see. The iris's whole look — its
+ * gradient, the lid's shadow, the catchlight — lives in those per-cube values, so the emissive
+ * term takes them too. The material is the rig's own; nothing else shares the program.
+ */
+function patchIrisEmissive(material: MeshStandardMaterial): void {
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <emissivemap_fragment>",
+      [
+        "#include <emissivemap_fragment>",
+        "#if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )",
+        "  totalEmissiveRadiance *= vColor.rgb;",
+        "#endif",
+      ].join("\n"),
+    );
+  };
+  material.customProgramCacheKey = () => "gx-iris-emissive";
+  material.needsUpdate = true;
+}
+
 function indexOfSlot(list: Uint32Array, cube: number): number {
   let low = 0;
   let high = list.length - 1;
