@@ -20,8 +20,10 @@ npm run dev
 
 ## Boards
 
-The menu offers the **3-board film run** or the **7-board run** (the film's race, then the
-other VR scenes in film order, ending in the finale).
+The menu offers the **3-board film run**, the **7-board run** (the film's race, then the other VR
+scenes in film order, ending in the finale) and the **9-board run**, which keeps the film's
+boards intact and adds two boards *inspired* by the film before the finale (marked
+"INSPIRÉ" on screen). Each course has a fixed track, so records and ghosts stay comparable.
 
 | Board | From the film | Content |
 | --- | --- | --- |
@@ -31,7 +33,9 @@ other VR scenes in film order, ending in the finale).
 | 4 Thorn lands | 00:01:36 (opening VR shooter) | Low-poly gold canyon, sunset sky, thorn urchins, spiked logs to pass over or under |
 | 5 Kaleidoscope | 01:00:20–01:02:40 (Jobe's acceleration) | A turning funnel of ornate lace tiles, electric sigils, rotating lightning beams to time, crackling orbs |
 | 6 Golden wave | 01:14:15–01:14:40 (into the network) | Red **WARNING**; a golden grid sheet whose saw-tooth crests rise into the flight zone, the electric brain-globe below, neon interface frames, red wire icosahedra, hex-dot sky |
-| 7 Vortex (finale) | 02:04:58–02:10:20 | Swirl funnel into a blue/pink hex tube with spinning hex tiles; **Cyberjobe's countdown** on the bomb's LCD timer; Cyberjobe screams at the end of the tube |
+| Network (inspired) | after 01:57:40 "NETWORK ACCESS GRANTED" | Square cyan data corridor; red 3 x 3 **firewalls** with a few open cells to aim for; cyan scan beams |
+| Furnace (inspired) | after 01:35:20 | Furnace sky over a lava sea; **fire columns** erupting on and off through the flight zone; charred rocks with glowing cracks |
+| Vortex (finale) | 02:04:58–02:10:20 | Swirl funnel into a blue/pink hex tube; **Cyberjobe flies ahead and throws hex tiles** (three at a time in the second half); three red **ACCESS DENIED** doors (02:09:40) open and close; **Cyberjobe's countdown** on the bomb's LCD timer; at the line he stops and screams |
 
 **Finale.** Entering the vortex starts Cyberjobe's LCD countdown (the film's bomb timer, 02:08:30),
 sized from the board's length and the difficulty. Seconds left at the line become points; a
@@ -49,6 +53,31 @@ in the menu (fourth row), **off by default**.
 
 Everything in the repository is procedural (canvas textures, primitive geometry, Web Audio);
 no film frames or sounds are committed.
+
+## Story mode
+
+The book button (fourth row) opens **L'histoire de Jobe**: seven chapters in film order, then
+the inspired boards, each with a story card and an objective. A film clip plays before each
+chapter when present. Each first success makes Jobe faster (cruise, turbo, agility), as his mind
+grows in the film; progress is saved in the browser.
+
+| # | Chapter | Board | Objective |
+| --- | --- | --- | --- |
+| 1 | Le jeu de guerre | thorn lands | finish in under 18 s (solo) |
+| 2 | La course avec Peter | the film's 3 boards | beat Peter |
+| 3 | Accélération | kaleidoscope | take 4 rings and finish |
+| 4 | Le réseau | golden wave | finish in under 19 s |
+| 5 | Pare-feu (inspired) | network | finish with 2 hits at most |
+| 6 | La colère (inspired) | furnace | beat Peter |
+| 7 | Cyberjobe | vortex | finish before the countdown ends |
+
+## Records, ghosts and sound
+
+The best time per course (board set, length, difficulty) is kept in the browser with the
+winning flight sampled ten times a second; the next race replays it as a cyan **RECORD** ghost.
+The soundtrack is generated live (Web Audio): one synth theme per board, a calm menu theme,
+urgency rising with Cyberjobe's countdown. English call-outs ("Three, two, one, go", "Warning",
+"Game over", "New record") use the system's speech voices.
 
 ## Controls
 
@@ -70,7 +99,8 @@ pauses itself when the window loses focus or a pad is unplugged.
 node scripts/extract-cyber-race-film.mjs --movie <your copy of the film> --out <package dir> [--ffmpeg <ffmpeg>]
 ```
 
-cuts three clips from **your own copy** of the director's cut into `<package dir>/film/`:
+cuts clips from **your own copy** of the director's cut into `<package dir>/film/` (the three
+below plus one `story-N.mp4` per story chapter):
 `intro.mp4` (00:40:17.6, the boys pick the game and jack in), `attract.mp4` (a montage of the VR
 scenes, looped after 30 s idle in the menu) and `outro.mp4` (00:41:23.4, the checker line, the
 film's GAME OVER, Jobe pulling the headset off). The game plays them when present and skips them

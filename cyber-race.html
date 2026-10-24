@@ -475,9 +475,88 @@
         text-shadow: none;
         color: #0d2a30;
       }
+      #results .record {
+        min-width: 180px;
+        align-self: center;
+        padding: 10px 16px;
+        border: 2px solid #0d2a30;
+        font-size: 0.75em;
+        letter-spacing: 0.1em;
+      }
+      #results .record b {
+        font-size: 1.5em;
+      }
+      #results .record.new {
+        color: #b0102a;
+        border-color: #b0102a;
+        animation: lcdblink 0.6s steps(2) infinite;
+      }
       #results .stats {
         font-size: 0.6em;
         opacity: 0.8;
+      }
+      #story,
+      #chapter {
+        background: var(--film-blue);
+      }
+      #story .choices {
+        flex-direction: column;
+      }
+      .story-title,
+      #chapter .ch-title {
+        font: 900 clamp(22px, 3.4vw, 46px) "Orbitron", "Arial Black", sans-serif;
+        letter-spacing: 0.1em;
+        text-shadow: 0 3px 0 #23408a;
+      }
+      .choice.locked {
+        opacity: 0.45;
+      }
+      #chapter .ch-source {
+        font-size: clamp(11px, 1.2vw, 15px);
+        letter-spacing: 0.15em;
+        opacity: 0.85;
+      }
+      #chapter .ch-story {
+        max-width: 760px;
+        margin: 0 24px;
+        font: 400 clamp(15px, 1.6vw, 21px) / 1.5 system-ui, sans-serif;
+        background: rgba(10, 20, 60, 0.35);
+        padding: 18px 24px;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+      }
+      #chapter .ch-goal {
+        color: #ffe14a;
+        font-size: clamp(13px, 1.5vw, 19px);
+        letter-spacing: 0.1em;
+      }
+      #chapter .ch-jobe {
+        color: #6ff0b4;
+        font-size: clamp(11px, 1.2vw, 15px);
+        letter-spacing: 0.08em;
+      }
+      #results .story-verdict {
+        flex-basis: 100%;
+        padding: 8px 16px;
+        border: 3px solid currentColor;
+        font-size: 0.8em;
+        letter-spacing: 0.08em;
+      }
+      #results .story-verdict b {
+        font-size: 1.6em;
+      }
+      #results .story-verdict.ok {
+        color: #0a6a3a;
+      }
+      #results .story-verdict.ko {
+        color: #b0102a;
+      }
+      #results .story-verdict .grow {
+        color: #0d2a30;
+        font-size: 0.85em;
+      }
+      #results {
+        flex-wrap: wrap;
+        justify-content: center;
       }
       .choices {
         display: flex;
@@ -619,7 +698,13 @@
           <button class="ico" data-action="crosshair" title="Réticule du film (lignes de visée)">
             <svg viewBox="0 0 24 24"><path d="M14 2v20M2 9h20" /><circle cx="14" cy="9" r="2.5" /></svg>
           </button>
-          <span></span><span></span><span></span><span></span><span></span>
+          <button class="ico" data-group="plan" data-value="2" title="9 tableaux : le film, puis des tableaux inspirés (réseau, fournaise) avant la finale">
+            <svg viewBox="0 0 24 24" style="stroke-width: 1.6"><path d="M2 5v14M4.5 5v14M7 5v14M9.5 5v14M12 5v14M14.5 5v14M17 5v14M19.5 5v14M22 5v14" /></svg>
+          </button>
+          <button class="ico" data-action="story" title="Mode Histoire : l'histoire de Jobe, chapitre par chapitre">
+            <svg viewBox="0 0 24 24"><path d="M4 4h7a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-7a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h7z" /></svg>
+          </button>
+          <span></span><span></span><span></span>
         </div>
         <div class="scroll" aria-hidden="true"><div class="box"></div><div class="tri"></div><div class="tri down"></div></div>
       </div>
@@ -643,11 +728,28 @@
       <div class="caption small">
         Film : tunnel, champ de mines, cristaux (hublots, lames qui se ferment, fentes à passer sur la tranche).<br />
         7 tableaux : + terres hostiles, kaléidoscope (éclairs tournants), vague d'or (restez au-dessus des crêtes)<br />
-        et le vortex, où Cyberjobe lance un compte à rebours : arrivez avant zéro.<br />
+        et le vortex, où Cyberjobe vous attaque et lance un compte à rebours : arrivez avant zéro.<br />
+        9 tableaux : + réseau (visez une case ouverte des pare-feux) et fournaise (évitez les colonnes de feu).<br />
+        Le livre (4e rangée) ouvre le mode Histoire. Votre meilleur temps revient en fantôme cyan « RECORD ».<br />
         Les anneaux chromés donnent 1000 points et du turbo. Rester dans le sillage de l'autre donne de la vitesse.<br />
         Le premier à la ligne damier gagne.
       </div>
       <div class="caption small">ÉCHAP, ENTRÉE, A OU B POUR FERMER</div>
+    </div>
+
+    <div id="story" class="overlay hidden">
+      <div class="story-title">L'HISTOIRE DE JOBE</div>
+      <div class="caption small">LE FILM, CHAPITRE PAR CHAPITRE · CHAQUE RÉUSSITE FAIT ÉVOLUER JOBE</div>
+      <div class="choices" id="story-list"></div>
+    </div>
+
+    <div id="chapter" class="overlay hidden">
+      <div class="ch-title"></div>
+      <div class="ch-source"></div>
+      <p class="ch-story"></p>
+      <div class="ch-goal"></div>
+      <div class="ch-jobe"></div>
+      <div class="caption small">A / ENTRÉE : COMMENCER · B / ÉCHAP : RETOUR</div>
     </div>
 
     <div id="pause" class="overlay hidden">

@@ -13,6 +13,15 @@ export class RaceAudio {
   private noise: AudioBuffer | null = null;
   muted = false;
 
+  /** Shared clock and bus for the soundtrack (null until the first gesture). */
+  get context(): AudioContext | null {
+    return this.ctx;
+  }
+
+  get output(): AudioNode | null {
+    return this.master;
+  }
+
   ensure(): void {
     if (this.ctx) {
       void this.ctx.resume();

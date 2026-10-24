@@ -12,8 +12,11 @@ import {
   bandTexture,
   checkerTexture,
   circuitTexture,
+  furnaceSkyTexture,
   goldGridTexture,
   hexDotsTexture,
+  lavaTexture,
+  networkTexture,
   hexTexture,
   lightningTexture,
   ornateTileTexture,
@@ -35,7 +38,10 @@ export type ObstacleKind =
   | "orb"
   | "porthole"
   | "blades"
-  | "slot";
+  | "slot"
+  | "firewall"
+  | "geyser"
+  | "rock";
 
 /** Half-size of a pilot measured across a direction at `angle`, given its roll (wings along roll). */
 export function pilotExtent(roll: number, angle: number): number {
@@ -51,6 +57,20 @@ interface TileRing {
   right: THREE.Vector3;
   up: THREE.Vector3;
   direction: number;
+}
+
+/** A hex tile thrown by Cyberjobe, flying back down the tube towards the pilots. */
+export interface Projectile {
+  s: number;
+  ox: number;
+  oy: number;
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  startS: number;
+  r: number;
+  mesh: THREE.Mesh;
 }
 
 /** The golden sheet: rows of vertices re-heighted every frame near the pilots. */
@@ -113,6 +133,11 @@ interface Spinner {
 
 const TAU = Math.PI * 2;
 const wrapAngle = (a: number): number => ((a % TAU) + TAU) % TAU;
+const countBits = (mask: number): number => {
+  let n = 0;
+  for (let m = mask; m; m &= m - 1) n += 1;
+  return n;
+};
 const PILOT_RADIUS = 0.9;
 const LOG_RADIUS = 0.85;
 /** Distance past the finish line where Cyberjobe stands. */
@@ -122,6 +147,7 @@ export const CYBERJOBE_AHEAD = 46;
 export const GATE_BONUS: Partial<Record<ObstacleKind, number>> = {
   porthole: 400,
   slot: 500,
+  firewall: 450,
   blades: 450,
   log: 250,
   beam: 300,
@@ -147,6 +173,12 @@ export class RaceWorld {
   cyberjobe: Cyberjobe | null = null;
   /** How strongly Cyberjobe rages (0..1), driven by the countdown. */
   rage = 0;
+  /** Live projectiles thrown by Cyberjobe. */
+  readonly projectiles: Projectile[] = [];
+  private projectileGeo: THREE.BufferGeometry | null = null;
+  private projectileMat: THREE.Material | null = null;
+  private throwTimer = 0;
+  private bossS = 0;
   private readonly disposables: Array<{ dispose(): void }> = [];
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpQ2 = new THREE.Quaternion();
@@ -177,6 +209,12 @@ export class RaceWorld {
           break;
         case "wave":
           this.buildWave(sector);
+          break;
+        case "network":
+          this.buildNetwork(sector);
+          break;
+        case "furnace":
+          this.buildFurnace(sector);
           break;
         case "vortex":
           this.buildVortex(sector);
@@ -652,6 +690,80 @@ export class RaceWorld {
     hexes.instanceMatrix.needsUpdate = true;
     if (hexes.instanceColor) hexes.instanceColor.needsUpdate = true;
 
+    // Red ACCESS DENIED doors (02:09:40) that open and close across the tube.
+    if (sector.index === this.track.sectors.length - 1) {
+      const tag = document.createElement("canvas");
+      tag.width = 512;
+      tag.height = 96;
+      const tctx = tag.getContext("2d") as CanvasRenderingContext2D;
+      tctx.fillStyle = "#ffe8a0";
+      tctx.fillRect(0, 0, 512, 96);
+      tctx.strokeStyle = "#7a0010";
+      tctx.lineWidth = 8;
+      tctx.strokeRect(4, 4, 504, 88);
+      tctx.font = "900 58px Arial Black, sans-serif";
+      tctx.textAlign = "center";
+      tctx.fillStyle = "#c0001a";
+      tctx.fillText("ACCESS DENIED", 256, 70);
+      const tagTex = this.keep(new THREE.CanvasTexture(tag));
+      tagTex.colorSpace = THREE.SRGBColorSpace;
+      const tagMat = this.keep(new THREE.MeshBasicMaterial({ map: tagTex, side: THREE.DoubleSide }));
+      const doorTex = this.keep(hexTexture());
+      doorTex.repeat.set(3, 1.5);
+      const tagGeo = this.keep(new THREE.PlaneGeometry(9, 1.7));
+      const doorMat = this.keep(
+        new THREE.MeshStandardMaterial({ map: doorTex, color: 0xff3a5a, emissive: 0x8a0020, emissiveIntensity: 0.8, roughness: 0.4, side: THREE.DoubleSide })
+      );
+      const size = radius * 2 + 6;
+      const doorGeo = this.keep(new THREE.BoxGeometry(size, size / 2, 0.6));
+      const edgeMat = this.keep(new THREE.MeshBasicMaterial({ color: 0xfff0c0 }));
+      const edgeGeo = this.keep(new THREE.BoxGeometry(size, 0.3, 0.7));
+      const span = sector.end - sector.start;
+      for (const k of [0.3, 0.55, 0.8]) {
+        const s = sector.start + span * k;
+        const holder = this.lateralHolder(s);
+        const spinner = new THREE.Group();
+        spinner.userData.offset = 0;
+        const parts: THREE.Object3D[] = [];
+        for (const side of [1, -1]) {
+          const door = new THREE.Mesh(doorGeo, doorMat);
+          const edge = new THREE.Mesh(edgeGeo, edgeMat);
+          edge.position.y = (-side * size) / 4;
+          door.add(edge);
+          if (side === 1) {
+            const label = new THREE.Mesh(tagGeo, tagMat);
+            label.position.set(0, -size / 4 + 1.4, 0.4);
+            door.add(label);
+          }
+          door.userData.side = side;
+          spinner.add(door);
+          parts.push(door);
+        }
+        holder.add(spinner);
+        this.group.add(holder);
+        const gate: Obstacle = {
+          kind: "blades",
+          s,
+          ox: 0,
+          oy: 0,
+          r: 0,
+          angle: 0,
+          span: 0,
+          spin: 1.5 + this.difficulty.plateSpin * 0.6,
+          gap: 4.5,
+          phase: k * 7,
+          parts
+        };
+        this.obstacles.push(gate);
+        this.bladeSets.push(gate);
+        this.applyBlades(gate, 0);
+      }
+      this.projectileGeo = this.keep(createHexGeometry());
+      this.projectileMat = this.keep(
+        new THREE.MeshStandardMaterial({ color: 0xffc04a, emissive: 0xff3a8a, emissiveIntensity: 0.9, metalness: 0.4, roughness: 0.3, flatShading: true })
+      );
+    }
+
     // Cyberjobe waits past the line when the run ends here (02:08-02:10).
     if (sector.index === this.track.sectors.length - 1) {
       const boss = new Cyberjobe();
@@ -1079,6 +1191,213 @@ export class RaceWorld {
     }
   }
 
+  // ------------------------------------------------------------ inspired board: network (after 01:57:40)
+  private readonly geysers: Obstacle[] = [];
+
+  /** Firewall half-size: the square cross-section is 3 x 3 cells. */
+  static readonly NET_HALF = 9;
+
+  /** Which firewall cell (0..8) a lateral point falls in, plus its position inside the cell. */
+  firewallCell(ox: number, oy: number): { index: number; u: number; v: number } {
+    const half = RaceWorld.NET_HALF;
+    const cell = (half * 2) / 3;
+    const cx = Math.min(2, Math.max(0, Math.floor((ox + half) / cell)));
+    const cy = Math.min(2, Math.max(0, Math.floor((oy + half) / cell)));
+    return { index: cy * 3 + cx, u: ox + half - cx * cell, v: oy + half - cy * cell };
+  }
+
+  /** A flat ribbon between two lateral points, following the line from s0 to s1. */
+  private ribbon(s0: number, s1: number, a: [number, number], b: [number, number], step: number): THREE.BufferGeometry {
+    const pos: number[] = [];
+    const uv: number[] = [];
+    const idx: number[] = [];
+    let row = 0;
+    for (let s = s0; s <= s1; s += step, row += 1) {
+      const pa = this.track.toWorld(s, a[0], a[1], new THREE.Vector3());
+      const pb = this.track.toWorld(s, b[0], b[1], new THREE.Vector3());
+      pos.push(pa.x, pa.y, pa.z, pb.x, pb.y, pb.z);
+      const v = (s - s0) / (s1 - s0);
+      uv.push(0, v, 1, v);
+      if (row > 0) {
+        const i = (row - 1) * 2;
+        idx.push(i, i + 2, i + 1, i + 1, i + 2, i + 3);
+      }
+    }
+    const geo = this.keep(new THREE.BufferGeometry());
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  private buildNetwork(sector: Sector): void {
+    const half = RaceWorld.NET_HALF;
+    const cell = (half * 2) / 3;
+    const s0 = sector.start - 2;
+    const s1 = this.track.sectorTail(sector) + 4;
+    const tex = this.keep(networkTexture());
+    tex.repeat.set(1.5, (s1 - s0) / 18);
+    this.scrolling.push(tex);
+    const wallMat = this.keep(
+      new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.6, side: THREE.DoubleSide })
+    );
+    // Four walls built in the line's own frame, so they stay square to the firewalls.
+    const e = half + 0.5;
+    const corners: Array<[number, number]> = [
+      [-e, -e],
+      [e, -e],
+      [e, e],
+      [-e, e]
+    ];
+    for (let side = 0; side < 4; side += 1) {
+      this.group.add(new THREE.Mesh(this.ribbon(s0, s1, corners[side], corners[(side + 1) % 4], 4), wallMat));
+    }
+
+    // Firewalls: 3 x 3 grids with a few open cells; aim for an open one.
+    const red = this.keep(networkTexture());
+    const blockMat = this.keep(
+      new THREE.MeshStandardMaterial({ map: red, color: 0xff6a8a, emissive: 0xc0103a, emissiveIntensity: 0.7, transparent: true, opacity: 0.85 })
+    );
+    const frameMat = this.keep(new THREE.LineBasicMaterial({ color: 0x5af0ff }));
+    const blockGeo = this.keep(new THREE.BoxGeometry(cell - 0.15, cell - 0.15, 0.4));
+    const frameGeo = this.keep(new THREE.EdgesGeometry(new THREE.BoxGeometry(cell - 0.3, cell - 0.3, 0.2)));
+    const liveEnd = Math.min(sector.end, this.track.raceLength) - 40;
+    for (let s = sector.start + 70; s < liveEnd; s += (120 / this.difficulty.density) * (0.8 + this.rng() * 0.4)) {
+      const opens = Math.max(1, 4 - Math.round(this.difficulty.density));
+      let mask = 0;
+      while (countBits(mask) < opens) mask |= 1 << Math.floor(this.rng() * 9);
+      const holder = this.lateralHolder(s);
+      for (let i = 0; i < 9; i += 1) {
+        const x = -half + cell * (i % 3) + cell / 2;
+        const y = -half + cell * Math.floor(i / 3) + cell / 2;
+        const open = (mask & (1 << i)) !== 0;
+        const part = open ? new THREE.LineSegments(frameGeo, frameMat) : new THREE.Mesh(blockGeo, blockMat);
+        part.position.set(x, y, 0);
+        holder.add(part);
+      }
+      this.group.add(holder);
+      this.obstacles.push({ kind: "firewall", s, ox: 0, oy: 0, r: 0, angle: 0, span: mask, spin: 0, gap: cell });
+    }
+
+    // Cyan scan beams sweeping through the corridor between firewalls.
+    const beamMat = this.keep(new THREE.MeshBasicMaterial({ color: 0xe0fbff }));
+    const glowMat = this.keep(
+      new THREE.MeshBasicMaterial({ color: 0x1ad8ff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    const coreGeo = this.keep(new THREE.CylinderGeometry(0.16, 0.16, half * 3, 6));
+    coreGeo.rotateZ(Math.PI / 2);
+    const haloGeo = this.keep(new THREE.CylinderGeometry(0.7, 0.7, half * 3, 10, 1, true));
+    haloGeo.rotateZ(Math.PI / 2);
+    for (let s = sector.start + 130; s < liveEnd; s += (220 / this.difficulty.density) * (0.8 + this.rng() * 0.4)) {
+      const holder = this.lateralHolder(s);
+      const spinner = new THREE.Group();
+      spinner.add(new THREE.Mesh(coreGeo, beamMat), new THREE.Mesh(haloGeo, glowMat));
+      holder.add(spinner);
+      this.group.add(holder);
+      const beam: Obstacle = {
+        kind: "beam",
+        s,
+        ox: 0,
+        oy: 0,
+        r: 0,
+        angle: this.rng() * TAU,
+        span: 0,
+        spin: (this.rng() < 0.5 ? -1 : 1) * (0.7 + this.rng() * 0.6),
+        mesh: spinner
+      };
+      this.obstacles.push(beam);
+      this.beams.push(beam);
+    }
+  }
+
+  // ------------------------------------------------------------ inspired board: furnace (after 01:35:20)
+  /** Is a fire column erupting at `time`? */
+  geyserActive(o: Obstacle, time: number): boolean {
+    return Math.sin(time * o.spin + (o.phase ?? 0)) > 0.15;
+  }
+
+  private buildFurnace(sector: Sector): void {
+    const tail = this.track.sectorTail(sector);
+    const s0 = sector.start - 30;
+    const s1 = Math.min(tail, sector.end + 120);
+    // Lava sea far below.
+    const lava = this.keep(lavaTexture());
+    lava.repeat.set(8, (s1 - s0) / 40);
+    this.scrolling.push(lava);
+    const lavaMat = this.keep(new THREE.MeshBasicMaterial({ map: lava, side: THREE.DoubleSide }));
+    this.group.add(new THREE.Mesh(this.ribbon(s0, s1, [-220, -46], [220, -46], 8), lavaMat));
+
+    // Fire columns erupting from the lava through the flight zone.
+    const fireMat = this.keep(
+      new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    const coreMat = this.keep(
+      new THREE.MeshBasicMaterial({ color: 0xfff0a0, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    const fireGeo = this.keep(new THREE.CylinderGeometry(2.4, 3.6, 70, 14, 1, true));
+    fireGeo.translate(0, 35, 0);
+    const coreGeo = this.keep(new THREE.CylinderGeometry(1.1, 1.8, 70, 10, 1, true));
+    coreGeo.translate(0, 35, 0);
+    const liveEnd = Math.min(sector.end, this.track.raceLength) - 40;
+    for (let s = sector.start + 60; s < liveEnd; s += (90 / this.difficulty.density) * (0.7 + this.rng() * 0.6)) {
+      const x = (this.rng() * 2 - 1) * (OPEN_RADIUS - 3);
+      const holder = this.lateralHolder(s);
+      const column = new THREE.Group();
+      column.position.set(x, -46, 0);
+      column.add(new THREE.Mesh(fireGeo, fireMat), new THREE.Mesh(coreGeo, coreMat));
+      holder.add(column);
+      this.group.add(holder);
+      const geyser: Obstacle = {
+        kind: "geyser",
+        s,
+        ox: x,
+        oy: 0,
+        r: 2.6,
+        angle: 0,
+        span: 0,
+        spin: 1.2 + this.rng() * 0.9,
+        phase: this.rng() * TAU,
+        mesh: column
+      };
+      this.obstacles.push(geyser);
+      this.geysers.push(geyser);
+    }
+
+    // Charred rocks with glowing cracks drifting in the heat.
+    const rockMat = this.keep(
+      new THREE.MeshStandardMaterial({
+        color: 0x2a1a14,
+        emissive: 0xff5a10,
+        emissiveMap: this.keep(lavaTexture()),
+        emissiveIntensity: 0.6,
+        roughness: 0.9,
+        flatShading: true
+      })
+    );
+    const rockGeo = this.keep(new THREE.IcosahedronGeometry(1, 0));
+    const live = this.liveCount(liveEnd - sector.start - 40, 1.4);
+    const decor = 140;
+    const rocks = this.makeInstanced(rockGeo, rockMat, live + decor);
+    let index = 0;
+    for (let i = 0; i < live; i += 1) {
+      const s = sector.start + 40 + this.rng() * (liveEnd - sector.start - 40);
+      const [ox, oy] = this.randomLateral(OPEN_RADIUS - 1, 0.8);
+      const r = 1.4 + this.rng() * 1.6;
+      this.obstacles.push({ kind: "rock", s, ox, oy, r, angle: 0, span: 0, spin: 0 });
+      this.addSpinner(rocks, index, s, ox, oy, r, 0.2 + this.rng() * 0.5);
+      index += 1;
+    }
+    for (let i = 0; i < decor; i += 1) {
+      const s = s0 + this.rng() * (s1 - s0);
+      const a = this.rng() * TAU;
+      const rr = 22 + this.rng() * 100;
+      this.addSpinner(rocks, index, s, Math.cos(a) * rr, Math.sin(a) * rr * 0.6, 3 + this.rng() * 9, 0.05 + this.rng() * 0.2);
+      index += 1;
+    }
+    rocks.instanceMatrix.needsUpdate = true;
+  }
+
   // ------------------------------------------------------------ rings and finish
   private buildRings(): void {
     const geometry = this.keep(new THREE.TorusGeometry(3.1, 0.32, 12, 32));
@@ -1176,6 +1495,28 @@ export class RaceWorld {
       }
       return null;
     }
+    if (o.kind === "firewall") {
+      if (!crossedPlane) return null;
+      const cell = o.gap ?? 6;
+      const { index, u, v } = this.firewallCell(ox, oy);
+      const open = (o.span & (1 << index)) !== 0;
+      // Wings and body must clear the open cell's edges (a little forgiveness).
+      const ex = pilotExtent(roll, 0) * 0.55;
+      const ey = pilotExtent(roll, Math.PI / 2) * 0.55;
+      const inside = u > ex && u < cell - ex && v > ey && v < cell - ey;
+      if (!open || !inside) {
+        const cu = u - cell / 2;
+        const cv = v - cell / 2;
+        return open ? [-cu, -cv] : [cu || 1, cv];
+      }
+      return null;
+    }
+    if (o.kind === "geyser") {
+      if (!(prevS < o.s + 2.6 && s > o.s - 2.6) || !this.geyserActive(o, time)) return null;
+      const dx = ox - o.ox;
+      if (Math.abs(dx) < o.r + pilotExtent(roll, 0) * 0.5) return [dx >= 0 ? 1 : -1, 0.3];
+      return null;
+    }
     if (o.kind === "beam") {
       if (!(prevS < o.s + 0.8 && s > o.s - 0.8)) return null;
       const a = this.beamAngle(o, time);
@@ -1227,6 +1568,67 @@ export class RaceWorld {
     return lo;
   }
 
+  /**
+   * The finale fight: Cyberjobe flies ahead of the leader inside the vortex and throws hex
+   * tiles at the pilots' lines; three at a time in the second half. At the line he stops.
+   */
+  updateBoss(time: number, dt: number, leaderS: number, targets: Array<[number, number]>, rearS: number): void {
+    const boss = this.cyberjobe;
+    if (!boss) return;
+    const last = this.track.sectors[this.track.sectors.length - 1];
+    const finalS = this.track.raceLength + CYBERJOBE_AHEAD;
+    const fighting = leaderS >= last.start && leaderS < this.track.raceLength - 40;
+    this.bossS = fighting ? Math.min(leaderS + 78, finalS) : finalS;
+    const sway = fighting ? Math.sin(time * 0.9) * 3 : 0;
+    this.placeOnTrack(boss.root, this.bossS, sway, -1.5 + (fighting ? Math.sin(time * 1.4) * 1.2 : 0));
+    boss.root.rotateY(Math.PI);
+
+    if (fighting && this.projectileGeo && this.projectileMat && targets.length > 0) {
+      this.throwTimer -= dt;
+      if (this.throwTimer <= 0) {
+        const progress = (leaderS - last.start) / Math.max(1, last.end - last.start);
+        this.throwTimer = 1.9 / (0.6 + 0.4 * this.difficulty.density) * (progress > 0.5 ? 1.15 : 1);
+        const [tx, ty] = targets[Math.floor(this.rng() * targets.length)];
+        const spread = progress > 0.5 ? [-4, 0, 4] : [0];
+        for (const offset of spread) {
+          const mesh = new THREE.Mesh(this.projectileGeo, this.projectileMat);
+          mesh.scale.setScalar(1.3);
+          this.group.add(mesh);
+          this.projectiles.push({
+            s: this.bossS - 4,
+            ox: sway,
+            oy: 2,
+            fromX: sway,
+            fromY: 2,
+            toX: tx + offset,
+            toY: ty,
+            startS: this.bossS - 4,
+            r: 1.3,
+            mesh
+          });
+        }
+      }
+    }
+    for (let i = this.projectiles.length - 1; i >= 0; i -= 1) {
+      const p = this.projectiles[i];
+      p.s -= 46 * dt;
+      // Reach the aimed lateral point about 60 m down the tube.
+      const k = Math.min(1, (p.startS - p.s) / 60);
+      p.ox = p.fromX + (p.toX - p.fromX) * k;
+      p.oy = p.fromY + (p.toY - p.fromY) * k;
+      this.track.toWorld(p.s, p.ox, p.oy, p.mesh.position);
+      p.mesh.rotation.set(time * 4 + i, time * 3, 0);
+      if (p.s < rearS - 25 || !fighting) {
+        this.removeProjectile(i);
+      }
+    }
+  }
+
+  removeProjectile(index: number): void {
+    const [p] = this.projectiles.splice(index, 1);
+    if (p) p.mesh.removeFromParent();
+  }
+
   /** Animate the course; `focus` lists the pilots' distances so per-vertex work stays near them. */
   update(time: number, dt: number, focus: number[] = []): void {
     for (const plate of this.plates) {
@@ -1239,6 +1641,12 @@ export class RaceWorld {
     }
     for (const blade of this.bladeSets) {
       this.applyBlades(blade, time);
+    }
+    for (const g of this.geysers) {
+      if (!g.mesh) continue;
+      const strength = Math.max(0, Math.sin(time * g.spin + (g.phase ?? 0)));
+      const active = this.geyserActive(g, time);
+      g.mesh.scale.set(active ? 1 + 0.15 * Math.sin(time * 20) : 0.6, active ? 1 : 0.05 + strength * 0.2, active ? 1 : 0.6);
     }
     this.orbs.forEach((orb, i) => {
       orb.rotation.set(time * 1.3 + i, time * 0.9, 0);
@@ -1297,6 +1705,7 @@ export interface Skies {
   circuit: THREE.Mesh;
   sunset: THREE.Mesh;
   hexdots: THREE.Mesh;
+  furnace: THREE.Mesh;
 }
 
 export function createSkies(): Skies {
@@ -1313,8 +1722,12 @@ export function createSkies(): Skies {
     new THREE.MeshBasicMaterial({ map: hexDotsTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
   );
   (hexdots.material as THREE.MeshBasicMaterial).map?.repeat.set(8, 4);
-  for (const sky of [circuit, sunset, hexdots]) {
+  const furnace = new THREE.Mesh(
+    new THREE.SphereGeometry(900, 32, 16),
+    new THREE.MeshBasicMaterial({ map: furnaceSkyTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
+  );
+  for (const sky of [circuit, sunset, hexdots, furnace]) {
     sky.renderOrder = -1;
   }
-  return { circuit, sunset, hexdots };
+  return { circuit, sunset, hexdots, furnace };
 }
