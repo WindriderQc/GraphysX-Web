@@ -5,7 +5,8 @@
  * cuts them from the player's own copy of the film into a `film/` folder next to the packaged
  * page. When a clip is missing the game simply skips that moment.
  */
-export type ClipName = "intro" | "attract" | "outro";
+/** "intro", "attract", "outro", or a story chapter clip ("story-N"). */
+export type ClipName = string;
 
 export interface PlayOptions {
   loop?: boolean;

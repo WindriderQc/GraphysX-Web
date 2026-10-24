@@ -3,7 +3,7 @@ import type { Rng } from "./textures";
 
 export const OPEN_RADIUS = 14;
 
-export type SectorKind = "tunnel" | "mines" | "shards" | "thorns" | "kaleido" | "wave" | "vortex";
+export type SectorKind = "tunnel" | "mines" | "shards" | "thorns" | "kaleido" | "wave" | "network" | "furnace" | "vortex";
 
 export interface SectorInfo {
   name: string;
@@ -15,9 +15,11 @@ export interface SectorInfo {
   weight: number;
   fog: number;
   fogColor: number;
-  sky: "circuit" | "sunset" | "hexdots" | "none";
+  sky: "circuit" | "sunset" | "hexdots" | "furnace" | "none";
   /** Keep the line nearly level (boards with a floor). */
   flat: boolean;
+  /** Board invented in the film's style rather than taken from a scene. */
+  inspired?: boolean;
 }
 
 export const SECTOR_INFO: Record<SectorKind, SectorInfo> = {
@@ -29,13 +31,19 @@ export const SECTOR_INFO: Record<SectorKind, SectorInfo> = {
   kaleido: { name: "KALÉIDOSCOPE", tube: 11, amp: 14, weight: 1, fog: 0.006, fogColor: 0x10061c, sky: "none", flat: false },
   // Jobe reaching into the network (01:14): golden waves over the electric globe.
   wave: { name: "VAGUE D'OR", tube: 0, amp: 22, weight: 1, fog: 0.0026, fogColor: 0x1a0830, sky: "hexdots", flat: true },
+  // Inspired by "NETWORK ACCESS GRANTED" (01:57:40): a square data corridor with firewalls.
+  network: { name: "RÉSEAU", tube: 9.8, amp: 12, weight: 1, fog: 0.007, fogColor: 0x02121c, sky: "none", flat: false, inspired: true },
+  // Inspired by Jobe's fire (01:35:20): eruptions over a distant lava sea.
+  furnace: { name: "FOURNAISE", tube: 0, amp: 22, weight: 1, fog: 0.004, fogColor: 0x5a1a04, sky: "furnace", flat: true, inspired: true },
   vortex: { name: "VORTEX", tube: 11, amp: 14, weight: 1, fog: 0.0065, fogColor: 0x120626, sky: "circuit", flat: false }
 };
 
 /** The race the two boys play in the film, then the extended run. */
-export const PLANS: Record<"film" | "extended", SectorKind[]> = {
+export const PLANS: Record<"film" | "extended" | "ultimate", SectorKind[]> = {
   film: ["tunnel", "mines", "shards"],
-  extended: ["tunnel", "mines", "shards", "thorns", "kaleido", "wave", "vortex"]
+  extended: ["tunnel", "mines", "shards", "thorns", "kaleido", "wave", "vortex"],
+  // The film's boards stay intact; inspired boards continue the theme before the finale.
+  ultimate: ["tunnel", "mines", "shards", "thorns", "kaleido", "wave", "network", "furnace", "vortex"]
 };
 
 export interface Sector {

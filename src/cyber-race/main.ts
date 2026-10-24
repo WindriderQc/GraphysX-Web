@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import { RaceAudio } from "./audio";
 import { FilmPlayer } from "./film";
+import { Music, Voice, type Theme } from "./music";
+import { CHAPTERS, evolution, loadProgress, objectiveMet, objectiveText, saveProgress, type Chapter } from "./story";
+import { GhostRecorder, courseSeed, formatTime, ghostAt, loadRecord, recordKey, saveRecord, type RunRecord } from "./records";
 import { RaceInput, type PilotInput, type UiEvent } from "./input";
 import { JOBE_LOOK, PETER_LOOK, createFlyer, type FlyerLook, type FlyerModel } from "./models";
 import { mulberry32 } from "./textures";
@@ -29,8 +32,8 @@ const LEVELS: Array<{ label: string; diff: Difficulty }> = [
 ];
 
 const MODES = ["2 JOUEURS", "1 JOUEUR CONTRE L'ORDINATEUR"];
-const PLAN_KEYS = ["film", "extended"] as const;
-const PLAN_LABELS = ["3 TABLEAUX DU FILM", "7 TABLEAUX"];
+const PLAN_KEYS = ["film", "extended", "ultimate"] as const;
+const PLAN_LABELS = ["3 TABLEAUX DU FILM", "7 TABLEAUX", "9 TABLEAUX (+ INSPIRÉS)"];
 
 const CRUISE = 62;
 const BOOST = 50;
@@ -56,7 +59,7 @@ scene.fog = fog;
 const background = new THREE.Color(0x050b0d);
 scene.background = background;
 const skies = createSkies();
-scene.add(skies.circuit, skies.sunset, skies.hexdots);
+scene.add(skies.circuit, skies.sunset, skies.hexdots, skies.furnace);
 scene.add(new THREE.HemisphereLight(0xa8d4e0, 0x10181c, 1.1));
 const sun = new THREE.DirectionalLight(0xffffff, 1.6);
 sun.position.set(0.4, 1, 0.3);
@@ -64,6 +67,25 @@ scene.add(sun);
 
 const audio = new RaceAudio();
 const film = new FilmPlayer(document.body);
+const voice = new Voice();
+let music: Music | null = null;
+
+/** Pick the soundtrack for what is on screen (board of the leading pilot, menu, silence under clips). */
+function updateMusic(): void {
+  if (!music && audio.context && audio.output) music = new Music(audio.context, audio.output);
+  if (!music) return;
+  if (film.playing || !settings.sound) {
+    if (music.current) music.stop();
+    return;
+  }
+  let theme: Theme = "menu";
+  if (track && (phase === "race" || phase === "countdown")) {
+    const lead = Math.max(...pilots.filter((p) => p.active).map((p) => p.s));
+    theme = track.sectorAt(lead).kind as Theme;
+  }
+  music.play(theme);
+  music.urgency = world ? world.rage : 0;
+}
 /** Seconds the menu has been left alone (starts the film attract loop). */
 let menuIdle = 0;
 const input = new RaceInput();
@@ -447,6 +469,13 @@ interface Pilot {
   /** Current roll around the line (0 level, ±π/2 on the side). */
   roll: number;
   destroyed: boolean;
+  /** Test hook: let the computer fly a human pilot (still counted as human for records). */
+  autopilot: boolean;
+  recorder: GhostRecorder;
+  /** False when the pilot sits out (solo story chapters). */
+  active: boolean;
+  /** Jobe's story growth: multipliers on cruise speed, turbo and lateral agility. */
+  power: { cruise: number; boost: number; agility: number };
 }
 
 const hudContainer = document.getElementById("huds") as HTMLDivElement;
@@ -493,13 +522,75 @@ function makePilot(index: 0 | 1, name: string, look: FlyerLook, color: string): 
     rings: 0,
     hits: 0,
     roll: 0,
-    destroyed: false
+    destroyed: false,
+    autopilot: false,
+    recorder: new GhostRecorder(),
+    active: true,
+    power: { cruise: 1, boost: 1, agility: 1 }
   };
+}
+
+/** A pilot no longer racing: finished, destroyed or sitting out. */
+function isDone(p: Pilot): boolean {
+  return !p.active || p.finished || p.destroyed;
+}
+
+// ---------------------------------------------------------------- records and ghost
+let currentKey = "";
+let record: RunRecord | null = null;
+let newRecord = false;
+const ghostCursor = { index: 0 };
+const ghost = createFlyer(JOBE_LOOK);
+{
+  const ghostMat = new THREE.MeshBasicMaterial({
+    color: 0x3ff6ff,
+    transparent: true,
+    opacity: 0.42,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  ghost.root.traverse((child) => {
+    if (child instanceof THREE.Mesh) child.material = ghostMat;
+  });
+  // Floating "RECORD" tag so the ghost never reads as the rival.
+  const tag = document.createElement("canvas");
+  tag.width = 256;
+  tag.height = 64;
+  const tctx = tag.getContext("2d") as CanvasRenderingContext2D;
+  tctx.font = "900 40px Orbitron, Arial Black, sans-serif";
+  tctx.textAlign = "center";
+  tctx.fillStyle = "#3ff6ff";
+  tctx.shadowColor = "#3ff6ff";
+  tctx.shadowBlur = 10;
+  tctx.fillText("RECORD", 128, 46);
+  const label = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(tag), transparent: true, depthWrite: false, fog: false })
+  );
+  label.scale.set(3.2, 0.8, 1);
+  label.position.set(0, 1.6, 0);
+  ghost.root.add(label);
+  ghost.root.visible = false;
+  scene.add(ghost.root);
+}
+
+function placeGhost(): void {
+  const t = track;
+  const pose = record && t && (phase === "race" || phase === "countdown") ? ghostAt(record.ghost, raceTime, ghostCursor) : null;
+  if (!pose || !t) {
+    ghost.root.visible = false;
+    return;
+  }
+  ghost.root.visible = true;
+  t.toWorld(pose.s, pose.ox, pose.oy, ghost.root.position);
+  t.basis(pose.s, ghost.root.quaternion);
+  tmpE.set(0, 0, pose.roll);
+  ghost.root.quaternion.multiply(tmpQ.setFromEuler(tmpE));
 }
 
 const pilots: [Pilot, Pilot] = [makePilot(0, "JOBE", JOBE_LOOK, "#c45cff"), makePilot(1, "PETER", PETER_LOOK, "#4f9bff")];
 
 function isLeading(p: Pilot, other: Pilot): boolean {
+  if (!other.active) return true;
   if (p.finished || other.finished) {
     return p.finished && (!other.finished || p.place < other.place);
   }
@@ -618,7 +709,11 @@ const pauseChoices = new ChoiceList(pauseEl, (choice) => {
 
 const overChoices = new ChoiceList(overEl, (choice) => {
   if (choice === "again") startRace(false);
-  else if (choice === "menu") showMenu();
+  else if (choice === "menu") {
+    const fromStory = storyChapter !== null;
+    showMenu();
+    if (fromStory) openStory();
+  }
 });
 
 // ---------------------------------------------------------------- race state
@@ -772,8 +867,13 @@ function exitVr(): void {
   void vrSession?.end();
 }
 
+// ---------------------------------------------------------------- story mode
+let storyChapter: Chapter | null = null;
+let storyProgress = loadProgress();
+let storyVerdict: { met: boolean; newlyDone: boolean } | null = null;
+
 function twoPlayers(): boolean {
-  return settings.mode === 0 && !vrSession;
+  return settings.mode === 0 && !vrSession && !storyChapter;
 }
 
 // ---------------------------------------------------------------- flow
@@ -791,14 +891,21 @@ function setPaused(value: boolean): void {
 function startRace(newSeed: boolean): void {
   if (settings.sound) audio.ensure();
   audio.setMuted(!settings.sound);
-  if (newSeed) {
-    seed = Math.floor(Math.random() * 1e9);
-  }
+  voice.muted = !settings.sound;
+  // Fixed track per course: records and ghosts stay comparable.
+  void newSeed;
+  seed = storyChapter ? 7000 + storyChapter.id * 131 : courseSeed(settings.plan, settings.course);
+  currentKey = storyChapter ? `graphysx.cyberRace.story.record.${storyChapter.id}` : recordKey(settings.plan, settings.course, settings.level);
+  record = loadRecord(currentKey);
+  ghostCursor.index = 0;
+  newRecord = false;
   world?.dispose();
   const rng = mulberry32(seed);
-  const plan: SectorKind[] = PLANS[PLAN_KEYS[settings.plan]];
-  track = new Track(plan, COURSES[settings.course].perSector * plan.length, rng);
-  world = new RaceWorld(track, LEVELS[settings.level].diff, rng);
+  const plan: SectorKind[] = storyChapter ? storyChapter.plan : PLANS[PLAN_KEYS[settings.plan]];
+  const perSector = storyChapter ? storyChapter.perSector : COURSES[settings.course].perSector;
+  track = new Track(plan, perSector * plan.length, rng);
+  world = new RaceWorld(track, LEVELS[storyChapter ? 1 : settings.level].diff, rng);
+  storyVerdict = null;
   scene.add(world.group);
   sparks.clear();
 
@@ -831,7 +938,14 @@ function startRace(newSeed: boolean): void {
     p.hud.setTimer(null);
     p.hud.setLock(null);
     p.cpu = p.index === 1 && !twoPlayers();
+    p.active = !(storyChapter && p.index === 1 && !storyChapter.rival);
+    p.power = storyChapter && p.index === 0 ? evolution(storyProgress.completed) : { cruise: 1, boost: 1, agility: 1 };
+    if (!p.active) p.s = p.prevS = -10000;
+    p.model.root.visible = p.active;
+    p.light.visible = p.active;
+    p.trail.mesh.visible = p.active;
     p.trail.reset();
+    p.recorder.reset();
     p.hud.setSectors(track);
     p.hud.clearMessage();
     placePilot(p, 0);
@@ -858,6 +972,13 @@ function startRace(newSeed: boolean): void {
 
 function showMenu(): void {
   if (vrSession) exitVr();
+  storyChapter = null;
+  for (const p of pilots) {
+    p.active = true;
+    p.model.root.visible = true;
+    p.light.visible = true;
+    p.trail.mesh.visible = true;
+  }
   phase = "menu";
   paused = false;
   document.body.classList.remove("racing");
@@ -886,14 +1007,54 @@ function layoutHuds(): void {
   }
 }
 
+/** Keep the fastest human finish of this race if it beats the stored record. */
+function settleRecord(): void {
+  const humans = pilots.filter((p) => !p.cpu && p.finished && !p.destroyed);
+  if (humans.length === 0) return;
+  const best = humans.reduce((a, b) => (b.finishTime < a.finishTime ? b : a));
+  if (record && record.time <= best.finishTime) return;
+  const run: RunRecord = {
+    name: best.name,
+    time: Math.round(best.finishTime * 100) / 100,
+    score: best.score,
+    date: new Date().toISOString().slice(0, 10),
+    ghost: best.recorder.samples.slice()
+  };
+  newRecord = saveRecord(currentKey, run);
+  if (newRecord) record = run;
+}
+
+/** Judge a story chapter on Jobe's run and unlock the next one. */
+function settleStory(): void {
+  if (!storyChapter) return;
+  const p = pilots[0];
+  const met = objectiveMet(storyChapter.objective, {
+    finished: p.finished,
+    destroyed: p.destroyed,
+    place: p.place,
+    time: p.finishTime,
+    rings: p.rings,
+    hits: p.hits
+  });
+  const newlyDone = met && storyChapter.id > storyProgress.completed;
+  if (newlyDone) {
+    storyProgress = { completed: storyChapter.id };
+    saveProgress(storyProgress);
+  }
+  storyVerdict = { met, newlyDone };
+}
+
 function endRace(): void {
   phase = "over";
+  settleRecord();
+  settleStory();
+  voice.say(newRecord ? "Game over. New record." : "Game over.", true);
   document.body.classList.remove("racing");
   audio.gameOver();
   for (let i = 0; i < 2; i += 1) {
     audio.engine(i, 0, false, false);
   }
-  const ranked = [...pilots].sort((a, b) => {
+  const ranked = pilots.filter((p) => p.active).sort((a, b) => {
     const pa = a.place || 3;
     const pb = b.place || 3;
     return pa !== pb ? pa - pb : b.s - a.s;
@@ -907,6 +1068,23 @@ function endRace(): void {
         <div class="stats">${p.rings} ANNEAUX · ${p.hits} CHOCS</div></div>`;
     })
     .join("");
+  if (storyChapter && storyVerdict) {
+    const grow = evolution(storyProgress.completed);
+    resultsEl.insertAdjacentHTML(
+      "afterbegin",
+      `<div class="story-verdict ${storyVerdict.met ? "ok" : "ko"}">CHAPITRE ${storyChapter.id} · ${storyChapter.title}<br /><b>${storyVerdict.met ? "RÉUSSI" : "ÉCHEC"}</b><br />${objectiveText(storyChapter.objective)}${
+        storyVerdict.newlyDone
+          ? `<br /><span class="grow">JOBE ÉVOLUE · VITESSE +${Math.round((grow.cruise - 1) * 100)} % · TURBO +${Math.round((grow.boost - 1) * 100)} % · MANIABILITÉ +${Math.round((grow.agility - 1) * 100)} %</span>`
+          : ""
+      }</div>`
+    );
+  }
+  resultsEl.insertAdjacentHTML(
+    "beforeend",
+    record
+      ? `<div class="record${newRecord ? " new" : ""}">${newRecord ? "NOUVEAU RECORD !" : "RECORD"}<br /><b>${formatTime(record.time)}</b><br />${record.name} · ${record.date}</div>`
+      : ""
+  );
   const showResults = (): void => {
     if (phase !== "over") return;
     // White flash, then GAME OVER on brushed silver (00:41:25).
@@ -934,7 +1112,7 @@ const tmpE = new THREE.Euler();
 const sparkColor = new THREE.Color();
 
 function pilotInput(p: Pilot): PilotInput {
-  return p.cpu ? cpuInput(p) : input.pilot(p.index);
+  return p.cpu || p.autopilot ? cpuInput(p) : input.pilot(p.index);
 }
 
 function cpuInput(p: Pilot): PilotInput {
@@ -980,6 +1158,33 @@ function cpuInput(p: Pilot): PilotInput {
       danger = true;
       break;
     }
+    if (o.kind === "firewall") {
+      // Head for the open cell nearest to where we are.
+      const half = RaceWorld.NET_HALF;
+      const cell = (half * 2) / 3;
+      let best = Infinity;
+      for (let i = 0; i < 9; i += 1) {
+        if ((o.span & (1 << i)) === 0) continue;
+        const cx = -half + cell * (i % 3) + cell / 2;
+        const cy = -half + cell * Math.floor(i / 3) + cell / 2;
+        const d = Math.hypot(cx - p.ox, cy - p.oy);
+        if (d < best) {
+          best = d;
+          tx = cx;
+          ty = cy;
+        }
+      }
+      danger = true;
+      break;
+    }
+    if (o.kind === "geyser") {
+      const eta = (o.s - p.s) / Math.max(p.speed, 10);
+      if (w.geyserActive(o, worldTime + eta) && Math.abs(tx - o.ox) < o.r + 3) {
+        tx = o.ox + (tx >= o.ox ? 1 : -1) * (o.r + 4);
+        danger = true;
+      }
+      continue;
+    }
     if (o.kind === "beam") {
       const eta = (o.s - p.s) / Math.max(p.speed, 10);
       const a = w.beamAngle(o, worldTime + eta);
@@ -1015,6 +1220,13 @@ function cpuInput(p: Pilot): PilotInput {
       danger = true;
     }
     if (o.s - p.s < 25 && Math.hypot(p.ox - o.ox, p.oy - o.oy) < need) {
+      danger = true;
+    }
+  }
+  for (const q of w.projectiles) {
+    if (q.s < p.s || q.s > p.s + 60) continue;
+    if (Math.hypot(tx - q.toX, ty - q.toY) < q.r + 2.5) {
+      tx += (tx >= q.toX ? 1 : -1) * 4;
       danger = true;
     }
   }
@@ -1061,6 +1273,18 @@ function hit(p: Pilot, dx: number, dy: number): void {
 function collide(p: Pilot): void {
   const w = world as RaceWorld;
   if (p.hitTimer > 0) return;
+  for (let i = w.projectiles.length - 1; i >= 0; i -= 1) {
+    const q = w.projectiles[i];
+    const ds = p.s - q.s;
+    const dx = p.ox - q.ox;
+    const dy = p.oy - q.oy;
+    const rr = q.r + 0.9;
+    if (ds * ds + dx * dx + dy * dy < rr * rr) {
+      w.removeProjectile(i);
+      hit(p, dx, dy);
+      return;
+    }
+  }
   for (let i = w.firstObstacleFrom(p.s - 5); i < w.obstacles.length; i += 1) {
     const o = w.obstacles[i];
     if (o.s > p.s + 5) break;
@@ -1101,6 +1325,7 @@ function collectRings(p: Pilot): void {
 function updatePilot(p: Pilot, other: Pilot, dt: number): void {
   const t = track as Track;
   const racing = phase === "race";
+  if (!p.active) return;
   if (p.destroyed) {
     p.speed = 0;
     p.boosting = false;
@@ -1114,8 +1339,8 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
   p.roll += (rollTarget - p.roll) * (1 - Math.exp(-7 * dt));
 
   // Lateral flight inside the cross-section.
-  p.vx += control.x * LAT_ACC * dt;
-  p.vy += control.y * LAT_ACC * dt;
+  p.vx += control.x * LAT_ACC * p.power.agility * dt;
+  p.vy += control.y * LAT_ACC * p.power.agility * dt;
   const damp = Math.exp(-3 * dt);
   p.vx *= damp;
   p.vy *= damp;
@@ -1164,7 +1389,7 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
   const ahead = other.s - p.s;
   p.drafting = racing && !p.finished && ahead > 3 && ahead < 22 && Math.hypot(p.ox - other.ox, p.oy - other.oy) < 3;
   if (p.boosting && !wasBoosting && !p.cpu) p.hud.wash();
-  let target = racing ? CRUISE + (p.boosting ? BOOST : 0) + (p.drafting ? DRAFT : 0) : 0;
+  let target = racing ? CRUISE * p.power.cruise + (p.boosting ? BOOST * p.power.boost : 0) + (p.drafting ? DRAFT : 0) : 0;
   if (p.finished) {
     target = 30;
     // Coast to a halt in front of Cyberjobe rather than through him.
@@ -1187,9 +1412,12 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
     if (sector.kind === "wave") {
       // The film flashes a red WARNING as Jobe reaches into the network (01:14:35).
       p.hud.message("WARNING", 2.4, false, "warning");
-      if (!p.cpu) audio.warning();
+      if (!p.cpu) {
+        audio.warning();
+        voice.say("Warning. Warning.", true);
+      }
     } else {
-      p.hud.message(`TABLEAU ${sector.index + 1} · ${sector.info.name}`, 2.2);
+      p.hud.message(`TABLEAU ${sector.index + 1} · ${sector.info.name}${sector.info.inspired ? " (INSPIRÉ)" : ""}`, 2.2);
       if (!p.cpu) audio.sector();
     }
   }
@@ -1231,6 +1459,7 @@ function bump(a: Pilot, b: Pilot): void {
 }
 
 function placePilot(p: Pilot, time: number): void {
+  if (!p.active) return;
   const t = track as Track;
   const root = p.model.root;
   t.toWorld(p.s, p.ox, p.oy, root.position);
@@ -1339,9 +1568,10 @@ function updateFinale(dt: number): void {
     finale.lastTick = Math.ceil(finale.left);
     for (const p of pilots) p.hud.message("CYBERJOBE !", 2.2, false, "alert");
     audio.warning();
+    voice.say("Cyberjobe. Countdown initiated.", true);
   }
   if (finale.exploded) return;
-  if (pilots.every((p) => p.finished || p.destroyed)) return;
+  if (pilots.every(isDone)) return;
   finale.left -= dt;
   w.rage = clamp(1 - finale.left / finale.total, 0, 1);
   const whole = Math.ceil(finale.left);
@@ -1352,6 +1582,7 @@ function updateFinale(dt: number): void {
   if (finale.left <= 0) {
     finale.exploded = true;
     audio.explode();
+    voice.say("System destroyed.", true);
     for (const p of pilots) {
       if (p.finished) continue;
       p.destroyed = true;
@@ -1375,6 +1606,7 @@ function step(dt: number): void {
       lastCount = n;
       if (n > 0) {
         audio.countdown(false);
+        voice.say(["", "One", "Two", "Three"][n] ?? "", true);
         for (const p of pilots) p.hud.message(String(n), 0.9, true);
       }
     }
@@ -1382,30 +1614,48 @@ function step(dt: number): void {
       phase = "race";
       document.body.classList.add("racing");
       audio.countdown(true);
+      voice.say("Go!", true);
       for (const p of pilots) p.hud.message("GO !", 1.0, true);
     }
   }
   if (phase === "race") raceTime += dt;
   worldTime += dt;
-  world.update(worldTime, dt, [pilots[0].s, pilots[1].s]);
+  const racers = pilots.filter((p) => p.active);
+  world.update(worldTime, dt, racers.map((p) => p.s));
+  if (phase === "race") {
+    const flying = racers.filter((p) => !p.finished && !p.destroyed);
+    world.updateBoss(
+      worldTime,
+      dt,
+      Math.max(...racers.map((p) => p.s)),
+      flying.map((p) => [p.ox, p.oy] as [number, number]),
+      Math.min(...racers.map((p) => p.s))
+    );
+  }
   if (phase === "race" && world.cyberjobe) updateFinale(dt);
   updatePilot(pilots[0], pilots[1], dt);
   updatePilot(pilots[1], pilots[0], dt);
-  if (phase === "race") bump(pilots[0], pilots[1]);
+  if (phase === "race" && pilots[1].active) bump(pilots[0], pilots[1]);
   for (const p of pilots) {
     placePilot(p, worldTime);
     updateCamera(p, dt);
-    audio.engine(p.index, p.speed, p.boosting, phase === "race" || phase === "countdown");
+    audio.engine(p.index, p.speed, p.boosting, p.active && (phase === "race" || phase === "countdown"));
   }
   updateRig(dt);
+  if (phase === "race") {
+    for (const p of pilots) {
+      if (!p.cpu && !p.finished && !p.destroyed) p.recorder.sample(raceTime, p.s, p.ox, p.oy, p.roll);
+    }
+  }
+  placeGhost();
   sparks.update(dt);
-  pilots[0].hud.update(pilots[0], pilots[1], track, dt, !twoPlayers());
+  pilots[0].hud.update(pilots[0], pilots[1], track, dt, !twoPlayers() && pilots[1].active);
   pilots[1].hud.update(pilots[1], pilots[0], track, dt, false);
-  const running = finale.started && !finale.exploded && !pilots.every((p) => p.finished || p.destroyed);
+  const running = finale.started && !finale.exploded && !pilots.every(isDone);
   const timer = running ? finale.left : null;
   for (const p of pilots) p.hud.setTimer(timer);
   // Once everyone is home, hold the view a moment (Cyberjobe screams), then GAME OVER.
-  if (phase === "race" && pilots.every((p) => p.finished || p.destroyed)) {
+  if (phase === "race" && pilots.every(isDone)) {
     endDeadline = Math.min(endDeadline, raceTime + 3);
   }
   if (phase === "race" && raceTime > endDeadline) {
@@ -1433,6 +1683,8 @@ function applyAtmosphere(s: number, at: THREE.Vector3): void {
   skies.circuit.visible = info.sky === "circuit";
   skies.sunset.visible = info.sky === "sunset";
   skies.hexdots.visible = info.sky === "hexdots";
+  skies.furnace.visible = info.sky === "furnace";
+  skies.furnace.position.copy(at);
   skies.circuit.position.copy(at);
   skies.sunset.position.copy(at);
   skies.hexdots.position.copy(at);
@@ -1458,7 +1710,7 @@ function renderView(p: Pilot, x: number, w: number): void {
 /** Red lock-on marks around the rival ahead, as in the film's pilot view (00:41:13-00:41:24). */
 function updateLock(p: Pilot, other: Pilot): void {
   const ahead = other.s - p.s;
-  if ((phase !== "race" && phase !== "countdown") || other.destroyed || ahead < 4 || ahead > 140) {
+  if ((phase !== "race" && phase !== "countdown") || !other.active || other.destroyed || ahead < 4 || ahead > 140) {
     p.hud.setLock(null);
     return;
   }
@@ -1523,6 +1775,8 @@ function refreshMenu(): void {
   }
   document.body.classList.toggle("crosshair", settings.crosshair);
   captionEl.textContent = `${PLAN_LABELS[settings.plan]} · PARCOURS ${COURSES[settings.course].label} · ${LEVELS[settings.level].label} · ${MODES[settings.mode]}`;
+  const best = loadRecord(recordKey(settings.plan, settings.course, settings.level));
+  captionEl.textContent += best ? ` · RECORD ${formatTime(best.time)} (${best.name})` : "";
   const pads = input.padCount();
   statusEl.textContent = `MANETTES : ${pads} · CASQUE VR : ${vrSupported ? "PRÊT (BOUTON LUNETTES)" : "NON DÉTECTÉ"}`;
 }
@@ -1548,6 +1802,10 @@ function activate(b: HTMLButtonElement): void {
     if (settings.sound) audio.ensure();
     audio.setMuted(!settings.sound);
     film.setMuted(!settings.sound);
+    voice.muted = !settings.sound;
+  } else if (action === "story") {
+    openStory();
+    return;
   } else if (action === "crosshair") {
     settings.crosshair = !settings.crosshair;
     toast(settings.crosshair ? "Réticule du film activé" : "Réticule du film désactivé", 2);
@@ -1617,6 +1875,7 @@ function handleEvents(events: UiEvent[]): void {
       if (action === "ok" || action === "back" || action === "pause") helpEl.classList.add("hidden");
       continue;
     }
+    if (phase === "menu" && handleStoryEvent(action)) continue;
     if (phase === "menu") {
       if (action in DIRS) {
         const [dx, dy] = DIRS[action as keyof typeof DIRS];
@@ -1669,6 +1928,100 @@ window.addEventListener("gamepaddisconnected", (e) => {
   refreshMenu();
 });
 
+// ---------------------------------------------------------------- story screens
+const storyEl = document.getElementById("story") as HTMLDivElement;
+const storyListEl = document.getElementById("story-list") as HTMLDivElement;
+const chapterEl = document.getElementById("chapter") as HTMLDivElement;
+let storyChoices: ChoiceList | null = null;
+let chapterCard: Chapter | null = null;
+
+function openStory(): void {
+  storyProgress = loadProgress();
+  storyListEl.innerHTML = CHAPTERS.map((ch) => {
+    const done = ch.id <= storyProgress.completed;
+    const locked = ch.id > storyProgress.completed + 1;
+    const mark = done ? " ✓" : locked ? " · VERROUILLÉ" : "";
+    return `<button class="choice${locked ? " locked" : ""}" data-choice="${ch.id}">${ch.id}. ${ch.title}${mark}</button>`;
+  }).join("") + `<button class="choice" data-choice="back">RETOUR</button>`;
+  storyChoices = new ChoiceList(storyEl, (choice) => {
+    if (choice === "back") {
+      closeStory();
+      return;
+    }
+    const ch = CHAPTERS.find((c) => String(c.id) === choice);
+    if (!ch) return;
+    if (ch.id > storyProgress.completed + 1) {
+      toast("Termine d'abord le chapitre précédent.", 2.5);
+      return;
+    }
+    openChapter(ch);
+  });
+  const next = Math.min(storyProgress.completed, CHAPTERS.length - 1);
+  storyChoices.reset();
+  for (let i = 0; i < next; i += 1) storyChoices.move(1);
+  menuEl.classList.add("hidden");
+  storyEl.classList.remove("hidden");
+}
+
+function closeStory(): void {
+  storyEl.classList.add("hidden");
+  chapterEl.classList.add("hidden");
+  storyChoices = null;
+  chapterCard = null;
+  menuEl.classList.remove("hidden");
+  refreshMenu();
+}
+
+function openChapter(ch: Chapter): void {
+  chapterCard = ch;
+  const grow = evolution(storyProgress.completed);
+  (chapterEl.querySelector(".ch-title") as HTMLElement).textContent = `CHAPITRE ${ch.id} · ${ch.title}`;
+  (chapterEl.querySelector(".ch-source") as HTMLElement).textContent = ch.source.startsWith("inspiré") ? ch.source.toUpperCase() : `D'APRÈS LE FILM, ${ch.source}`;
+  (chapterEl.querySelector(".ch-story") as HTMLElement).textContent = ch.story;
+  (chapterEl.querySelector(".ch-goal") as HTMLElement).textContent = `OBJECTIF : ${objectiveText(ch.objective)}`;
+  (chapterEl.querySelector(".ch-jobe") as HTMLElement).textContent =
+    `JOBE · VITESSE ${Math.round(grow.cruise * 100)} % · TURBO ${Math.round(grow.boost * 100)} % · MANIABILITÉ ${Math.round(grow.agility * 100)} %`;
+  storyEl.classList.add("hidden");
+  chapterEl.classList.remove("hidden");
+}
+
+function startChapter(): void {
+  const ch = chapterCard;
+  if (!ch) return;
+  chapterEl.classList.add("hidden");
+  storyChoices = null;
+  chapterCard = null;
+  storyChapter = ch;
+  saveSettings();
+  if (film.has(ch.clip) && !vrSession) {
+    void film.play(ch.clip, { title: `CHAPITRE ${ch.id} · ${ch.title}`, muted: !settings.sound }).then(() => {
+      if (storyChapter === ch && phase === "menu") startRace(true);
+    });
+  } else {
+    startRace(true);
+  }
+}
+
+/** Story screens take menu input while open. Returns true when they consumed it. */
+function handleStoryEvent(action: UiEvent["action"]): boolean {
+  if (!chapterEl.classList.contains("hidden")) {
+    if (action === "ok" || action === "pause") startChapter();
+    else if (action === "back") {
+      chapterEl.classList.add("hidden");
+      openStory();
+    }
+    return true;
+  }
+  if (!storyEl.classList.contains("hidden") && storyChoices) {
+    if (action === "up" || action === "left") storyChoices.move(-1);
+    else if (action === "down" || action === "right") storyChoices.move(1);
+    else if (action === "ok") storyChoices.pick();
+    else if (action === "back") closeStory();
+    return true;
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------- main loop
 const clock = new THREE.Clock();
 /** Test hook: stop the live loop's simulation so a check can pose an exact frame. */
@@ -1697,6 +2050,7 @@ function frame(): void {
     }
   }
   if (vrSession) vrHud.update(dt);
+  updateMusic();
   if (toastTimer > 0) {
     toastTimer -= dt;
     if (toastTimer <= 0) toastEl.style.opacity = "0";
@@ -1706,7 +2060,7 @@ function frame(): void {
 
 refreshMenu();
 void checkVrSupport();
-void film.probe(["intro", "attract", "outro"]).then(async () => {
+void film.probe(["intro", "attract", "outro", ...CHAPTERS.map((c) => c.clip)]).then(async () => {
   if (!film.has("intro") || phase !== "menu") return;
   menuEl.classList.add("hidden");
   await film.play("intro", { title: "CYBER RACE 1992", muted: !settings.sound });
@@ -1746,5 +2100,16 @@ renderer.setAnimationLoop(frame);
   get world() {
     return world;
   },
-  finale
+  finale,
+  story: {
+    open: () => openStory(),
+    chapter: (id: number) => {
+      const ch = CHAPTERS.find((c) => c.id === id);
+      if (ch) openChapter(ch);
+    },
+    start: () => startChapter(),
+    get progress() {
+      return storyProgress;
+    }
+  }
 };

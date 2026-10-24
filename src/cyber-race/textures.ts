@@ -473,3 +473,84 @@ export function goldCircuitTexture(): THREE.CanvasTexture {
   }
   return toTexture(canvas);
 }
+
+/** Cyan maze traces on deep navy: the network corridor (after 01:57:40). */
+export function networkTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const [canvas, ctx] = makeCanvas(size, size);
+  const rng = mulberry32(91);
+  ctx.fillStyle = "#031628";
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = "rgba(60,200,255,0.18)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= size; i += 16) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, size);
+    ctx.moveTo(0, i);
+    ctx.lineTo(size, i);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 40; i += 1) {
+    let x = Math.floor(rng() * 16) * 16;
+    let y = Math.floor(rng() * 16) * 16;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let s = 0; s < 5; s += 1) {
+      if (rng() < 0.5) x += (rng() < 0.5 ? -1 : 1) * 32;
+      else y += (rng() < 0.5 ? -1 : 1) * 32;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = rng() < 0.15 ? "#ff3a8c" : "#3ad8ff";
+    ctx.shadowColor = ctx.strokeStyle;
+    ctx.shadowBlur = 6;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  return toTexture(canvas);
+}
+
+/** Molten orange with dark crust, for the lava sea and glowing rock cracks. */
+export function lavaTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const [canvas, ctx] = makeCanvas(size, size);
+  const rng = mulberry32(97);
+  const g = ctx.createLinearGradient(0, 0, size, size);
+  g.addColorStop(0, "#ff7a10");
+  g.addColorStop(0.5, "#ffd23a");
+  g.addColorStop(1, "#ff5a08");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 60; i += 1) {
+    ctx.fillStyle = `rgba(${40 + rng() * 40},${10 + rng() * 10},4,${0.6 + rng() * 0.3})`;
+    ctx.beginPath();
+    const x = rng() * size;
+    const y = rng() * size;
+    for (let k = 0; k < 7; k += 1) {
+      const a = (k / 7) * Math.PI * 2;
+      const r = 8 + rng() * 22;
+      ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  return toTexture(canvas);
+}
+
+/** Furnace sky: yellow-white glare low, deep red and smoke high (after 01:35:20). */
+export function furnaceSkyTexture(): THREE.CanvasTexture {
+  const [canvas, ctx] = makeCanvas(8, 256);
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, "#1a0402");
+  g.addColorStop(0.3, "#6a1404");
+  g.addColorStop(0.46, "#ff7a14");
+  g.addColorStop(0.5, "#fff0a0");
+  g.addColorStop(0.56, "#ff5a08");
+  g.addColorStop(1, "#2a0602");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 8, 256);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}

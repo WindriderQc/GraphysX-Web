@@ -65,3 +65,11 @@ montage("attract", [
 ]);
 // Outro: the checker line, the film's own GAME OVER, Jobe pulling the headset off.
 cut("outro", "00:41:23.4", 17.6);
+// Story mode: one clip before each chapter.
+cut("story-1", "00:01:06", 30); // VSI lab, then the war game
+cut("story-2", "00:40:17.6", 19); // the boys pick the race on the blue panel
+cut("story-3", "00:59:40", 40); // Jobe and Angelo in the lab, just before the acceleration
+cut("story-4", "01:14:05", 35); // reaching into the network: golden wave, WARNING
+cut("story-5", "01:57:25", 15); // PLEASE ENTER PASS CODE
+cut("story-6", "01:35:15", 20); // the fire
+cut("story-7", "02:04:10", 48); // the bomb timer, Jobe goes in
