@@ -2,6 +2,8 @@ export interface PilotInput {
   x: number;
   y: number;
   boost: boolean;
+  /** Knife-edge: -1 roll left, +1 roll right, 0 level. */
+  roll: number;
 }
 
 /** Menu-level actions shared by keyboard, Xbox pads and Quest controllers. */
@@ -17,7 +19,9 @@ const P1 = {
   right: ["KeyD"],
   up: ["KeyW"],
   down: ["KeyS"],
-  boost: ["Space", "ShiftLeft", "KeyF"]
+  boost: ["Space", "ShiftLeft", "KeyF"],
+  rollLeft: ["KeyQ"],
+  rollRight: ["KeyE"]
 };
 
 const P2 = {
@@ -25,7 +29,9 @@ const P2 = {
   right: ["ArrowRight"],
   up: ["ArrowUp"],
   down: ["ArrowDown"],
-  boost: ["ShiftRight", "Enter", "NumpadEnter", "Numpad0", "ControlRight", "Slash"]
+  boost: ["ShiftRight", "Enter", "NumpadEnter", "Numpad0", "ControlRight", "Slash"],
+  rollLeft: ["Comma", "Numpad1"],
+  rollRight: ["Period", "Numpad3"]
 };
 
 const KEY_ACTIONS: Record<string, UiAction> = {
@@ -176,6 +182,7 @@ export class RaceInput {
     let x = Number(this.any(map.right)) - Number(this.any(map.left));
     let y = Number(this.any(map.up)) - Number(this.any(map.down));
     let boost = this.any(map.boost);
+    let roll = Number(this.any(map.rollRight)) - Number(this.any(map.rollLeft));
     const pad = this.pads()[index];
     if (pad) {
       const ax = pad.axes[0] ?? 0;
@@ -187,7 +194,9 @@ export class RaceInput {
       if (button(PAD.right)) x = 1;
       if (button(PAD.up)) y = 1;
       if (button(PAD.down)) y = -1;
-      boost = boost || button(PAD.a) || button(PAD.rb) || button(PAD.rt) || button(PAD.lb);
+      boost = boost || button(PAD.a) || button(PAD.rt);
+      if (button(PAD.lb)) roll = -1;
+      if (button(PAD.rb)) roll = 1;
     }
     if (index === 0) {
       for (const xr of this.xrPads) {
@@ -195,9 +204,11 @@ export class RaceInput {
         const ay = xr.axes[3] ?? 0;
         if (Math.abs(ax) > DEADZONE) x = ax;
         if (Math.abs(ay) > DEADZONE) y = -ay;
-        boost = boost || Boolean(xr.buttons[0]?.pressed) || Boolean(xr.buttons[1]?.pressed);
+        boost = boost || Boolean(xr.buttons[0]?.pressed);
+        // Grip: knife-edge, towards the stick (right by default).
+        if (xr.buttons[1]?.pressed) roll = ax < -DEADZONE ? -1 : 1;
       }
     }
-    return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), boost };
+    return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), boost, roll };
   }
 }

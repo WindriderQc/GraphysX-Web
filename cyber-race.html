@@ -108,10 +108,16 @@
       .hud.boosting .chev i.on {
         background: #fff3a8;
       }
+      /* The film's thin sighting lines (00:40:54 onwards), optional. */
       .hud .cross-v,
       .hud .cross-h {
         position: absolute;
         background: rgba(200, 230, 255, 0.35);
+        display: none;
+      }
+      body.crosshair .hud .cross-v,
+      body.crosshair .hud .cross-h {
+        display: block;
       }
       .hud .cross-v {
         left: 58%;
@@ -190,6 +196,75 @@
         font-size: clamp(11px, 1.4vw, 20px);
         color: var(--p2);
       }
+      .hud .msg.warning {
+        color: #ff3a4a;
+        font-size: clamp(40px, 8vw, 120px);
+        text-shadow: 0 0 18px #ff2030, 3px 3px 0 #3a0008;
+      }
+      .hud .msg.alert {
+        color: #ff4a5a;
+        text-shadow: 0 0 12px #ff2030, 2px 2px 0 #3a0008;
+      }
+      .hud .wash {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.55), rgba(255, 170, 230, 0.45));
+        opacity: 0;
+        transition: opacity 0.45s;
+        pointer-events: none;
+      }
+      .hud .wash.on {
+        opacity: 1;
+        transition: none;
+      }
+      /* Cyberjobe's LCD timer in its grey case (02:08:30). */
+      .hud .lcd {
+        position: absolute;
+        top: 13%;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px 14px;
+        background: #9fb8c6;
+        border: 6px solid #4a5258;
+        border-radius: 6px;
+        box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.35), 0 4px 0 #2a3034;
+        color: #12202a;
+        font: 700 clamp(22px, 3.4vw, 50px) "Courier New", monospace;
+        letter-spacing: 0.06em;
+      }
+      .hud .lcd i {
+        font-size: 0.45em;
+        font-style: normal;
+        margin: 0 0.15em;
+      }
+      .hud .lcd.urgent {
+        animation: lcdblink 0.5s steps(2) infinite;
+      }
+      @keyframes lcdblink {
+        50% {
+          color: #8a1020;
+        }
+      }
+      /* Red lock-on marks around the rival (00:41:13-00:41:24). */
+      .hud .lock {
+        position: absolute;
+        width: var(--lock, 40px);
+        height: var(--lock, 40px);
+        transform: translate(-50%, -50%);
+      }
+      .hud .lock i {
+        position: absolute;
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 10px solid #ff2a3a;
+        filter: drop-shadow(0 0 3px #ff2a3a);
+      }
+      .hud .lock i:nth-child(1) { left: 50%; top: -12px; transform: translateX(-50%); }
+      .hud .lock i:nth-child(2) { left: 50%; bottom: -12px; transform: translateX(-50%) rotate(180deg); }
+      .hud .lock i:nth-child(3) { top: 50%; left: -12px; transform: translateY(-50%) rotate(-90deg); }
+      .hud .lock i:nth-child(4) { top: 50%; right: -12px; transform: translateY(-50%) rotate(90deg); }
       #divider {
         position: fixed;
         top: 0;
@@ -353,6 +428,23 @@
           repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.12) 0 30px, rgba(0, 40, 50, 0.1) 30px 90px),
           radial-gradient(circle at 50% 45%, #e7f2f4, #8fb0b6 55%, #3e5a60);
       }
+      #gameover.flashin {
+        animation: whitein 0.5s ease-out;
+      }
+      @keyframes whitein {
+        0% {
+          background: #ffffff;
+        }
+      }
+      #gameover.flashin h1 {
+        animation: titlein 0.5s ease-out;
+      }
+      @keyframes titlein {
+        0%,
+        40% {
+          opacity: 0;
+        }
+      }
       #gameover h1 {
         margin: 0;
         font-size: clamp(60px, 13vw, 200px);
@@ -418,6 +510,35 @@
       body.racing * {
         cursor: none !important;
       }
+      #film {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: #000;
+        cursor: pointer;
+      }
+      #film video {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      #film .film-title {
+        position: absolute;
+        top: 4%;
+        left: 4%;
+        font: 900 clamp(22px, 3.6vw, 56px) "Orbitron", "Arial Black", sans-serif;
+        color: #6ff0b4;
+        text-shadow: 0 0 10px rgba(80, 255, 170, 0.6), 3px 3px 0 #000;
+        letter-spacing: 0.08em;
+      }
+      #film .film-hint {
+        position: absolute;
+        right: 4%;
+        bottom: 4%;
+        font: 700 clamp(11px, 1.2vw, 15px) "Orbitron", "Arial Black", sans-serif;
+        color: rgba(255, 255, 255, 0.75);
+        letter-spacing: 0.1em;
+      }
       #toast {
         position: fixed;
         left: 50%;
@@ -472,8 +593,8 @@
           <button class="ico" data-group="plan" data-value="0" title="Les 3 tableaux du film">
             <svg viewBox="0 0 24 24"><path d="M6 5v14M12 5v14M18 5v14" /></svg>
           </button>
-          <button class="ico" data-group="plan" data-value="1" title="5 tableaux : film + terres hostiles + vortex">
-            <svg viewBox="0 0 24 24"><path d="M3 5v14M7.5 5v14M12 5v14M16.5 5v14M21 5v14" /></svg>
+          <button class="ico" data-group="plan" data-value="1" title="7 tableaux : le film + terres hostiles, kaléidoscope, vague d'or, vortex">
+            <svg viewBox="0 0 24 24" style="stroke-width: 2.2"><path d="M3 5v14M6 5v14M9 5v14M12 5v14M15 5v14M18 5v14M21 5v14" /></svg>
           </button>
           <div class="sep"></div>
           <button class="ico" data-group="mode" data-value="0" title="Deux joueurs">
@@ -494,6 +615,11 @@
           <button class="ico" data-action="quit" title="Quitter le jeu">
             <svg viewBox="0 0 24 24"><path d="M12 3v8" /><path d="M7 6.5a7 7 0 1 0 10 0" /></svg>
           </button>
+          <div class="sep"></div>
+          <button class="ico" data-action="crosshair" title="Réticule du film (lignes de visée)">
+            <svg viewBox="0 0 24 24"><path d="M14 2v20M2 9h20" /><circle cx="14" cy="9" r="2.5" /></svg>
+          </button>
+          <span></span><span></span><span></span><span></span><span></span>
         </div>
         <div class="scroll" aria-hidden="true"><div class="box"></div><div class="tri"></div><div class="tri down"></div></div>
       </div>
@@ -509,12 +635,15 @@
         <tr><td>Monter / descendre</td><td>W / S (Z / S en AZERTY)</td><td>↑ / ↓</td></tr>
         <tr><td>Gauche / droite</td><td>A / D (Q / D en AZERTY)</td><td>← / →</td></tr>
         <tr><td>Turbo</td><td>Espace ou Maj gauche</td><td>Maj droite, Entrée ou 0</td></tr>
-        <tr><td>Manette Xbox</td><td>Manette 1 : stick ou croix · turbo A / RB / RT</td><td>Manette 2 : stick ou croix · turbo A / RB / RT</td></tr>
+        <tr><td>Sur la tranche</td><td>Q / E</td><td>virgule / point (ou 1 / 3)</td></tr>
+        <tr><td>Manette Xbox</td><td>Manette 1 : stick ou croix · turbo A / RT · tranche LB / RB</td><td>Manette 2 : pareil</td></tr>
         <tr><td>Pause</td><td colspan="2">Échap, P ou START</td></tr>
-        <tr><td>Casque VR</td><td colspan="2">Joystick pour voler · gâchette = turbo · A = valider · B = retour</td></tr>
+        <tr><td>Casque VR</td><td colspan="2">Joystick pour voler · gâchette = turbo · poignée = tranche · A = valider · B = retour</td></tr>
       </table>
       <div class="caption small">
-        Film : tunnel, champ de mines, cristaux. Étendu : + terres hostiles (passez dessus ou dessous les troncs) et le vortex.<br />
+        Film : tunnel, champ de mines, cristaux (hublots, lames qui se ferment, fentes à passer sur la tranche).<br />
+        7 tableaux : + terres hostiles, kaléidoscope (éclairs tournants), vague d'or (restez au-dessus des crêtes)<br />
+        et le vortex, où Cyberjobe lance un compte à rebours : arrivez avant zéro.<br />
         Les anneaux chromés donnent 1000 points et du turbo. Rester dans le sillage de l'autre donne de la vitesse.<br />
         Le premier à la ligne damier gagne.
       </div>

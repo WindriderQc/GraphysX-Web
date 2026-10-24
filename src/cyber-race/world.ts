@@ -6,12 +6,17 @@ import {
   createShardGeometry,
   createUrchinGeometry
 } from "./models";
+import { Cyberjobe } from "./cyberjobe";
 import { OPEN_RADIUS, Track, TrackSlice, type Sector } from "./track";
 import {
   bandTexture,
   checkerTexture,
   circuitTexture,
+  goldGridTexture,
+  hexDotsTexture,
   hexTexture,
+  lightningTexture,
+  ornateTileTexture,
   rivetedMetalTexture,
   sunsetTexture,
   swirlTexture,
@@ -19,7 +24,42 @@ import {
   type Rng
 } from "./textures";
 
-export type ObstacleKind = "plate" | "mine" | "shard" | "urchin" | "log" | "hex";
+export type ObstacleKind =
+  | "plate"
+  | "mine"
+  | "shard"
+  | "urchin"
+  | "log"
+  | "hex"
+  | "beam"
+  | "orb"
+  | "porthole"
+  | "blades"
+  | "slot";
+
+/** Half-size of a pilot measured across a direction at `angle`, given its roll (wings along roll). */
+export function pilotExtent(roll: number, angle: number): number {
+  return 0.5 + 1.9 * Math.abs(Math.cos(roll - angle));
+}
+
+/** One ring of the kaleidoscope spiral, re-posed every frame near the pilots. */
+interface TileRing {
+  s: number;
+  first: number;
+  centre: THREE.Vector3;
+  tangent: THREE.Vector3;
+  right: THREE.Vector3;
+  up: THREE.Vector3;
+  direction: number;
+}
+
+/** The golden sheet: rows of vertices re-heighted every frame near the pilots. */
+interface WaveSheet {
+  sector: Sector;
+  geometry: THREE.BufferGeometry;
+  rows: Array<{ s: number; centre: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3 }>;
+  columns: number[];
+}
 
 export interface Obstacle {
   kind: ObstacleKind;
@@ -35,7 +75,13 @@ export interface Obstacle {
   span: number;
   /** Plates: angular speed. */
   spin: number;
+  /** Portholes: hole radius. Blades: widest half-gap. Slots: half-gap. */
+  gap?: number;
+  /** Blades: phase of the closing cycle. */
+  phase?: number;
   mesh?: THREE.Object3D;
+  /** Blades: the two moving slabs. */
+  parts?: THREE.Object3D[];
 }
 
 export interface Ring {
@@ -69,6 +115,18 @@ const TAU = Math.PI * 2;
 const wrapAngle = (a: number): number => ((a % TAU) + TAU) % TAU;
 const PILOT_RADIUS = 0.9;
 const LOG_RADIUS = 0.85;
+/** Distance past the finish line where Cyberjobe stands. */
+export const CYBERJOBE_AHEAD = 46;
+
+/** Points for clearing a set piece, read off the film's score counter (00:41:12-00:41:24). */
+export const GATE_BONUS: Partial<Record<ObstacleKind, number>> = {
+  porthole: 400,
+  slot: 500,
+  blades: 450,
+  log: 250,
+  beam: 300,
+  plate: 200
+};
 
 /** Everything that makes up one course; disposed between races. */
 export class RaceWorld {
@@ -79,6 +137,16 @@ export class RaceWorld {
   private readonly plates: Obstacle[] = [];
   private readonly swirls: THREE.Mesh[] = [];
   private readonly scrolling: THREE.Texture[] = [];
+  private readonly beams: Obstacle[] = [];
+  private readonly orbs: THREE.Mesh[] = [];
+  private readonly sigils: THREE.Object3D[] = [];
+  private tileMesh: THREE.InstancedMesh | null = null;
+  private readonly tileRings: TileRing[] = [];
+  private wave: WaveSheet | null = null;
+  /** Finale boss standing past the line when the run ends in the vortex. */
+  cyberjobe: Cyberjobe | null = null;
+  /** How strongly Cyberjobe rages (0..1), driven by the countdown. */
+  rage = 0;
   private readonly disposables: Array<{ dispose(): void }> = [];
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpQ2 = new THREE.Quaternion();
@@ -103,6 +171,12 @@ export class RaceWorld {
           break;
         case "thorns":
           this.buildThorns(sector);
+          break;
+        case "kaleido":
+          this.buildKaleido(sector);
+          break;
+        case "wave":
+          this.buildWave(sector);
           break;
         case "vortex":
           this.buildVortex(sector);
@@ -216,21 +290,30 @@ export class RaceWorld {
 
     const next = this.track.sectors[sector.index + 1];
     if (next && next.info.tube === 0) {
-      // Exit funnel: red and tan panels, as the film's tunnel mouth.
-      const funnelGeo = this.keep(new THREE.CylinderGeometry(radius, radius * 3.4, 16, 12, 1, true).toNonIndexed());
+      // Exit funnel (00:40:58): the tube ends inside a cone of tan panels that flares
+      // forward into the mine field, rimmed with red segments.
+      const twoTone = (geo: THREE.BufferGeometry, a: number, b: number): THREE.BufferGeometry => {
+        const colors: number[] = [];
+        const ca = new THREE.Color(a);
+        const cb = new THREE.Color(b);
+        const count = geo.getAttribute("position").count;
+        for (let i = 0; i < count; i += 1) {
+          const c = Math.floor(i / 6) % 2 === 0 ? ca : cb;
+          colors.push(c.r, c.g, c.b);
+        }
+        geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+        geo.computeVertexNormals();
+        return geo;
+      };
+      const flare = radius * 3.6;
+      const funnelGeo = this.keep(twoTone(new THREE.CylinderGeometry(flare, radius, 16, 12, 1, true).toNonIndexed(), 0xd8b98a, 0xb8946a));
       funnelGeo.rotateX(Math.PI / 2);
-      const colors: number[] = [];
-      const red = new THREE.Color(0xc8283c);
-      const tan = new THREE.Color(0xd8b98a);
-      const count = funnelGeo.getAttribute("position").count;
-      for (let i = 0; i < count; i += 1) {
-        const c = Math.floor(i / 6) % 2 === 0 ? red : tan;
-        colors.push(c.r, c.g, c.b);
-      }
-      funnelGeo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-      funnelGeo.computeVertexNormals();
+      const rimGeo = this.keep(twoTone(new THREE.CylinderGeometry(flare + 0.4, flare + 0.4, 2.6, 12, 1, true).toNonIndexed(), 0xc8283c, 0x6a1420));
+      rimGeo.rotateX(Math.PI / 2);
+      rimGeo.translate(0, 0, 8);
       const funnelMat = this.keep(new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true, roughness: 0.5 }));
       const funnel = new THREE.Mesh(funnelGeo, funnelMat);
+      funnel.add(new THREE.Mesh(rimGeo, funnelMat));
       this.placeOnTrack(funnel, sector.end + 8, 0, 0);
       this.group.add(funnel);
     }
@@ -291,7 +374,10 @@ export class RaceWorld {
     const geometry = this.keep(createMineGeometry());
     const live = this.liveCount(s1 - s0);
     const decor = 260;
-    const mesh = this.makeInstanced(geometry, [body, spikes], live + decor);
+    const mesh = this.makeInstanced(geometry, [body, spikes], live + decor + 1);
+    // A big mine waits just outside the tunnel mouth (00:40:58).
+    this.obstacles.push({ kind: "mine", s: sector.start + 26, ox: 6.5, oy: 2.5, r: 3.6, angle: 0, span: 0, spin: 0 });
+    this.addSpinner(mesh, live + decor, sector.start + 26, 6.5, 2.5, 3.6, 0.35);
     let index = 0;
     for (let i = 0; i < live; i += 1) {
       const s = s0 + this.rng() * (s1 - s0);
@@ -356,6 +442,73 @@ export class RaceWorld {
       strip.rotateY((this.rng() * 2 - 1) * 0.35);
       this.group.add(strip);
     }
+
+    // Red / tan bars sweeping across the line as the shards begin (00:41:07-00:41:12),
+    // and one long riveted beam later on (00:41:19): pass above or below.
+    const span = OPEN_RADIUS * 2 + 16;
+    const barGeo = this.keep(new THREE.BoxGeometry(span, 1.5, 2.6));
+    const beamGeo = this.keep(new THREE.BoxGeometry(span, 2.2, 2.2));
+    const beamMat = this.keep(new THREE.MeshStandardMaterial({ map: metal, color: 0xdcecf0, metalness: 0.35, roughness: 0.4, emissive: 0x1c3034 }));
+    const crossBar = (s: number, angle: number, offset: number, geo: THREE.BufferGeometry, material: THREE.Material): void => {
+      const nx = -Math.sin(angle);
+      const ny = Math.cos(angle);
+      const bar = new THREE.Mesh(geo, material);
+      this.placeOnTrack(bar, s, nx * offset, ny * offset);
+      bar.rotateZ(-angle);
+      this.group.add(bar);
+      this.obstacles.push({ kind: "log", s, ox: nx * offset, oy: ny * offset, r: LOG_RADIUS, angle, span: 0, spin: 0, mesh: bar });
+    };
+    crossBar(sector.start + 30, 0.45, 3, barGeo, stripMat);
+    crossBar(sector.start + 52, -0.35, -2, barGeo, stripMat);
+    crossBar(sector.start + 74, 0.2, 5, barGeo, stripMat);
+    crossBar(sector.start + (sector.end - sector.start) * 0.62, 0.55, -1, beamGeo, beamMat);
+
+    // Dark rippled floor and the glittering "highway" of triangles (00:41:13-00:41:24).
+    const floorTex = this.keep(circuitTexture(13, 6, 60));
+    this.scrolling.push(floorTex);
+    const floorMat = this.keep(
+      new THREE.MeshStandardMaterial({ map: floorTex, color: 0x3a6a72, metalness: 0.85, roughness: 0.28, side: THREE.DoubleSide })
+    );
+    const floorRows: THREE.Vector3[][] = [];
+    for (let s = sector.start - 20; s <= decorEnd; s += 8) {
+      floorRows.push([-150, 150].map((x) => this.track.toWorld(s, x, -19, new THREE.Vector3())));
+    }
+    const fp: number[] = [];
+    const fuv: number[] = [];
+    floorRows.forEach((row, i) => {
+      fp.push(row[0].x, row[0].y, row[0].z, row[1].x, row[1].y, row[1].z);
+      fuv.push(0, i / floorRows.length, 1, i / floorRows.length);
+    });
+    const fi: number[] = [];
+    for (let i = 0; i < floorRows.length - 1; i += 1) {
+      const a = i * 2;
+      fi.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+    }
+    const floorGeo = this.keep(new THREE.BufferGeometry());
+    floorGeo.setAttribute("position", new THREE.Float32BufferAttribute(fp, 3));
+    floorGeo.setAttribute("uv", new THREE.Float32BufferAttribute(fuv, 2));
+    floorGeo.setIndex(fi);
+    floorGeo.computeVertexNormals();
+    this.group.add(new THREE.Mesh(floorGeo, floorMat));
+
+    const glitter = this.keep(
+      new THREE.MeshStandardMaterial({ map: metal, color: 0xf4ffff, metalness: 0.4, roughness: 0.3, emissive: 0x6a9aa0, emissiveIntensity: 0.5, flatShading: true })
+    );
+    const hwCount = Math.floor((decorEnd - sector.start) / 1.4);
+    const highway = this.makeInstanced(geometry, glitter, hwCount);
+    for (let i = 0; i < hwCount; i += 1) {
+      const s = sector.start + i * 1.4 + this.rng();
+      const p = this.track.toWorld(s, (this.rng() * 2 - 1) * 4, -9 + this.rng() * 1.5, new THREE.Vector3());
+      this.track.basis(s, this.tmpQ);
+      this.tmpQ2.setFromEuler(new THREE.Euler(this.rng() * 6.28, this.rng() * 6.28, this.rng() * 6.28));
+      this.tmpQ.multiply(this.tmpQ2);
+      this.tmpS.setScalar(0.5 + this.rng() * 0.9);
+      this.tmpM.compose(p, this.tmpQ, this.tmpS);
+      highway.setMatrixAt(i, this.tmpM);
+    }
+    highway.instanceMatrix.needsUpdate = true;
+
+    this.buildCrystalGates(sector, metal);
   }
 
   // ------------------------------------------------------------ sector 4: thorn lands (opening VR game)
@@ -449,7 +602,8 @@ export class RaceWorld {
       const ny = Math.cos(angle);
       const log = new THREE.Mesh(logGeo, [bark, thorn, bandMat]);
       this.placeOnTrack(log, s, nx * offset, ny * offset);
-      log.rotateZ(angle);
+      // placeOnTrack puts local +x on the left; mirror so the mesh matches the collision line.
+      log.rotateZ(-angle);
       this.group.add(log);
       this.obstacles.push({ kind: "log", s, ox: nx * offset, oy: ny * offset, r: LOG_RADIUS, angle, span: 0, spin: 0, mesh: log });
     }
@@ -497,6 +651,432 @@ export class RaceWorld {
     }
     hexes.instanceMatrix.needsUpdate = true;
     if (hexes.instanceColor) hexes.instanceColor.needsUpdate = true;
+
+    // Cyberjobe waits past the line when the run ends here (02:08-02:10).
+    if (sector.index === this.track.sectors.length - 1) {
+      const boss = new Cyberjobe();
+      this.placeOnTrack(boss.root, this.track.raceLength + CYBERJOBE_AHEAD, 0, -1.5);
+      boss.root.rotateY(Math.PI);
+      boss.root.scale.setScalar(1.5);
+      this.group.add(boss.root);
+      this.cyberjobe = boss;
+    }
+  }
+
+  // ------------------------------------------------------------ crystal gates (00:41:11-00:41:22)
+  /**
+   * The film's crystal run has set pieces between the shards: a riveted wall with a chrome
+   * porthole, slabs that close like blades, and narrow slots the pilots pass on their side.
+   */
+  private buildCrystalGates(sector: Sector, metal: THREE.Texture): void {
+    const wallMat = this.keep(
+      new THREE.MeshStandardMaterial({ map: metal, color: 0xdcecf0, metalness: 0.35, roughness: 0.4, emissive: 0x1c3034, side: THREE.DoubleSide })
+    );
+    const chrome = this.keep(new THREE.MeshStandardMaterial({ color: 0xf4f8fa, metalness: 1, roughness: 0.12, emissive: 0x204048 }));
+    const warn = this.keep(new THREE.MeshBasicMaterial({ color: 0xff4fd0 }));
+    const size = OPEN_RADIUS * 2 + 10;
+    const liveEnd = Math.min(sector.end, this.track.raceLength) - 90;
+    const kinds: Array<"porthole" | "blades" | "slot"> = ["porthole", "blades", "slot"];
+    let s = sector.start + 110;
+    let n = 0;
+    while (s < liveEnd) {
+      const kind = kinds[n % kinds.length];
+      n += 1;
+      if (kind === "porthole") {
+        const [hx, hy] = this.randomLateral(OPEN_RADIUS - 5, 0.6);
+        const hole = 3.6;
+        const shape = new THREE.Shape();
+        shape.moveTo(-size / 2, -size / 2);
+        shape.lineTo(size / 2, -size / 2);
+        shape.lineTo(size / 2, size / 2);
+        shape.lineTo(-size / 2, size / 2);
+        shape.closePath();
+        const path = new THREE.Path();
+        path.absarc(hx, hy, hole, 0, TAU, true);
+        shape.holes.push(path);
+        const geo = this.keep(new THREE.ExtrudeGeometry(shape, { depth: 0.6, bevelEnabled: false, curveSegments: 32 }));
+        geo.translate(0, 0, -0.3);
+        // Shape x/y are lateral right/up; the holder's basis (right, up, -tangent) matches.
+        const holder = this.lateralHolder(s);
+        holder.add(new THREE.Mesh(geo, wallMat));
+        const rim = new THREE.Mesh(this.keep(new THREE.TorusGeometry(hole, 0.35, 12, 40)), chrome);
+        rim.position.set(hx, hy, 0);
+        holder.add(rim);
+        this.group.add(holder);
+        this.obstacles.push({ kind: "porthole", s, ox: hx, oy: hy, r: 0, angle: 0, span: 0, spin: 0, gap: hole });
+      } else if (kind === "blades") {
+        // Slot direction: mostly horizontal (blades close up/down), sometimes tilted.
+        const angle = this.rng() < 0.7 ? 0 : (this.rng() * 2 - 1) * 0.6;
+        const offset = (this.rng() * 2 - 1) * 4;
+        const nx = -Math.sin(angle);
+        const ny = Math.cos(angle);
+        const holder = this.lateralHolder(s);
+        const spinner = new THREE.Group();
+        spinner.rotation.z = angle;
+        const slabGeo = this.keep(new THREE.BoxGeometry(size, size / 2, 0.7));
+        const parts: THREE.Object3D[] = [];
+        for (const side of [1, -1]) {
+          const slab = new THREE.Mesh(slabGeo, wallMat);
+          const edge = new THREE.Mesh(this.keep(new THREE.BoxGeometry(size, 0.25, 0.8)), warn);
+          edge.position.y = (-side * size) / 4;
+          slab.add(edge);
+          slab.userData.side = side;
+          spinner.add(slab);
+          parts.push(slab);
+        }
+        holder.add(spinner);
+        this.group.add(holder);
+        const blade: Obstacle = {
+          kind: "blades",
+          s,
+          ox: nx * offset,
+          oy: ny * offset,
+          r: 0,
+          angle,
+          span: 0,
+          spin: 1.3 + this.rng() * 0.9 * this.difficulty.plateSpin,
+          gap: 4.2,
+          phase: this.rng() * TAU,
+          parts
+        };
+        spinner.userData.offset = offset;
+        this.obstacles.push(blade);
+        this.bladeSets.push(blade);
+        this.applyBlades(blade, 0);
+      } else {
+        // A narrow vertical slot through a wall of shards: pass on your side.
+        const angle = Math.PI / 2 + (this.rng() * 2 - 1) * 0.25;
+        const offset = (this.rng() * 2 - 1) * 5;
+        const nx = -Math.sin(angle);
+        const ny = Math.cos(angle);
+        const gap = 1.6;
+        const holder = this.lateralHolder(s);
+        const spinner = new THREE.Group();
+        spinner.rotation.z = angle;
+        const slabGeo = this.keep(new THREE.BoxGeometry(size, size / 2, 0.7));
+        for (const side of [1, -1]) {
+          const slab = new THREE.Mesh(slabGeo, wallMat);
+          slab.position.y = side * (gap + size / 4) + offset;
+          const edge = new THREE.Mesh(this.keep(new THREE.BoxGeometry(size, 0.22, 0.8)), warn);
+          edge.position.y = (-side * size) / 4;
+          slab.add(edge);
+          spinner.add(slab);
+        }
+        holder.add(spinner);
+        this.group.add(holder);
+        this.obstacles.push({ kind: "slot", s, ox: nx * offset, oy: ny * offset, r: 0, angle, span: 0, spin: 0, gap });
+      }
+      s += (260 / this.difficulty.density) * (0.75 + this.rng() * 0.5);
+    }
+  }
+
+  private readonly bladeSets: Obstacle[] = [];
+
+  /** Group at s whose local x, y are the lateral right / up axes (z points back along the line). */
+  private lateralHolder(s: number): THREE.Group {
+    const holder = new THREE.Group();
+    this.track.position(s, holder.position);
+    const t = this.track.tangent(s, new THREE.Vector3());
+    const u = this.track.upAt(s, new THREE.Vector3());
+    const r = this.track.rightAt(s, new THREE.Vector3());
+    holder.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(r, u, t.negate()));
+    return holder;
+  }
+
+  /** Current half-gap of a blade pair. */
+  bladeGap(o: Obstacle, time: number): number {
+    return 0.25 + (o.gap ?? 4) * (0.5 + 0.5 * Math.sin(time * o.spin + (o.phase ?? 0)));
+  }
+
+  private applyBlades(o: Obstacle, time: number): void {
+    const g = this.bladeGap(o, time);
+    const size = OPEN_RADIUS * 2 + 10;
+    for (const slab of o.parts ?? []) {
+      const side = slab.userData.side as number;
+      const offset = (slab.parent?.userData.offset as number) ?? 0;
+      slab.position.y = offset + side * (g + size / 4);
+    }
+  }
+
+  // ------------------------------------------------------------ board: kaleidoscope (01:00:20-01:02:40)
+  private buildKaleido(sector: Sector): void {
+    const radius = 12.6;
+    const perRing = 20;
+    const step = 3.0;
+    const tail = this.track.sectorTail(sector);
+    const s0 = sector.start;
+    const s1 = Math.min(tail, sector.end + 40);
+    const rings = Math.ceil((s1 - s0) / step);
+    const tex = this.keep(ornateTileTexture());
+    const tileMat = this.keep(
+      new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.14, roughness: 0.6, side: THREE.DoubleSide })
+    );
+    const tileGeo = this.keep(new THREE.BoxGeometry(4.0, 4.0, 0.2));
+    const mesh = this.makeInstanced(tileGeo, tileMat, rings * perRing);
+    const tints = [0xfff4e0, 0xfff4e0, 0x5ac84a, 0xd8384a, 0x8a4aff, 0x4a6aff, 0xb02a3a, 0x3a9a5a].map((c) => new THREE.Color(c));
+    for (let i = 0; i < rings; i += 1) {
+      const s = s0 + i * step;
+      const ring: TileRing = {
+        s,
+        first: i * perRing,
+        centre: this.track.position(s, new THREE.Vector3()),
+        tangent: this.track.tangent(s, new THREE.Vector3()),
+        right: this.track.rightAt(s, new THREE.Vector3()),
+        up: this.track.upAt(s, new THREE.Vector3()),
+        direction: Math.floor(i / 40) % 2 === 0 ? 1 : -1
+      };
+      this.tileRings.push(ring);
+      for (let k = 0; k < perRing; k += 1) {
+        // Patches of colour follow the spiral, as in the film.
+        const band = Math.floor((k + i * 0.35) / 3) % tints.length;
+        mesh.setColorAt(ring.first + k, tints[(band * 3 + Math.floor(i / 25)) % tints.length]);
+      }
+    }
+    this.tileMesh = mesh;
+    this.kaleidoRadius = radius;
+    this.kaleidoPerRing = perRing;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    this.poseTiles(0, [s0], Infinity);
+
+    // Electric sigils: thin glowing rings with a triangle, turning near the wall (decor).
+    const sigilMat = this.keep(
+      new THREE.MeshBasicMaterial({ color: 0x8ab8ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    const ringGeo = this.keep(new THREE.TorusGeometry(10.4, 0.07, 6, 64));
+    const triShape = new THREE.Shape();
+    for (let k = 0; k < 3; k += 1) {
+      const a = Math.PI / 2 + (k * TAU) / 3;
+      if (k === 0) triShape.moveTo(Math.cos(a) * 10.2, Math.sin(a) * 10.2);
+      else triShape.lineTo(Math.cos(a) * 10.2, Math.sin(a) * 10.2);
+    }
+    triShape.closePath();
+    const triGeo = this.keep(new THREE.BufferGeometry().setFromPoints(triShape.getPoints().map((p) => new THREE.Vector3(p.x, p.y, 0))));
+    for (let s = s0 + 30; s < sector.end; s += 48) {
+      const holder = this.lateralHolder(s);
+      const spinner = new THREE.Group();
+      spinner.add(new THREE.Mesh(ringGeo, sigilMat), new THREE.LineLoop(triGeo, sigilMat));
+      holder.add(spinner);
+      this.group.add(holder);
+      this.sigils.push(spinner);
+    }
+
+    // Rotating lightning beams through the centre: time the crossing.
+    const beamMat = this.keep(new THREE.MeshBasicMaterial({ color: 0xe8f6ff }));
+    const glowMat = this.keep(
+      new THREE.MeshBasicMaterial({ color: 0x4a8aff, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    const coreGeo = this.keep(new THREE.CylinderGeometry(0.18, 0.18, 24, 6));
+    coreGeo.rotateZ(Math.PI / 2);
+    const haloGeo = this.keep(new THREE.CylinderGeometry(0.75, 0.75, 24, 10, 1, true));
+    haloGeo.rotateZ(Math.PI / 2);
+    const liveEnd = Math.min(sector.end, this.track.raceLength) - 40;
+    for (let s = s0 + 90; s < liveEnd; s += (150 / this.difficulty.density) * (0.7 + this.rng() * 0.6)) {
+      const holder = this.lateralHolder(s);
+      const spinner = new THREE.Group();
+      spinner.add(new THREE.Mesh(coreGeo, beamMat), new THREE.Mesh(haloGeo, glowMat));
+      holder.add(spinner);
+      this.group.add(holder);
+      const beam: Obstacle = {
+        kind: "beam",
+        s,
+        ox: 0,
+        oy: 0,
+        r: 0,
+        angle: this.rng() * TAU,
+        span: 0,
+        spin: (this.rng() < 0.5 ? -1 : 1) * (0.5 + this.rng() * 0.7) * (0.6 + this.difficulty.plateSpin),
+        mesh: spinner
+      };
+      this.obstacles.push(beam);
+      this.beams.push(beam);
+    }
+
+    // Electric orbs drifting in the spiral.
+    const orbGeo = this.keep(new THREE.IcosahedronGeometry(1, 2));
+    const orbMat = this.keep(new THREE.MeshBasicMaterial({ color: 0xbfe8ff }));
+    const orbGlowMat = this.keep(
+      new THREE.MeshBasicMaterial({ color: 0x3a6aff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    const orbs = this.liveCount(liveEnd - s0 - 60, 1.2);
+    for (let i = 0; i < orbs; i += 1) {
+      const s = s0 + 60 + this.rng() * (liveEnd - s0 - 60);
+      const [ox, oy] = this.randomLateral(8.5, 0.7);
+      const r = 0.9 + this.rng() * 0.7;
+      const orb = new THREE.Mesh(orbGeo, orbMat);
+      orb.scale.setScalar(r * 0.6);
+      const glow = new THREE.Mesh(orbGeo, orbGlowMat);
+      glow.scale.setScalar(1.7);
+      orb.add(glow);
+      this.track.toWorld(s, ox, oy, orb.position);
+      this.group.add(orb);
+      this.orbs.push(orb);
+      this.obstacles.push({ kind: "orb", s, ox, oy, r, angle: 0, span: 0, spin: 0, mesh: orb });
+    }
+  }
+
+  private kaleidoRadius = 12.6;
+  private kaleidoPerRing = 20;
+  private readonly tmpM2 = new THREE.Matrix4();
+  private readonly tmpA = new THREE.Vector3();
+  private readonly tmpB = new THREE.Vector3();
+  private readonly tmpC = new THREE.Vector3();
+
+  /** Re-pose kaleidoscope rings within `reach` of any focus distance: a turning spiral. */
+  private poseTiles(time: number, focus: number[], reach: number): void {
+    const mesh = this.tileMesh;
+    if (!mesh) return;
+    const R = this.kaleidoRadius;
+    const per = this.kaleidoPerRing;
+    let touched = false;
+    for (const ring of this.tileRings) {
+      if (!focus.some((f) => ring.s > f - 40 && ring.s < f + reach)) continue;
+      touched = true;
+      const twist = ring.s * 0.045 + time * 0.6 * ring.direction;
+      for (let k = 0; k < per; k += 1) {
+        const a = (k / per) * TAU + twist;
+        const radial = this.tmpA.copy(ring.right).multiplyScalar(Math.cos(a)).addScaledVector(ring.up, Math.sin(a));
+        const around = this.tmpB.crossVectors(ring.tangent, radial);
+        this.tmpM2.makeBasis(around, ring.tangent, radial);
+        // Lean each tile to face the incoming pilots: the rings read as a funnel of scales.
+        this.tmpQ.setFromRotationMatrix(this.tmpM2);
+        this.tmpQ2.setFromAxisAngle(this.tmpC.set(1, 0, 0), 1.1);
+        this.tmpQ.multiply(this.tmpQ2);
+        const pos = this.tmpC.copy(ring.centre).addScaledVector(radial, R);
+        this.tmpS.setScalar(1);
+        this.tmpM.compose(pos, this.tmpQ, this.tmpS);
+        mesh.setMatrixAt(ring.first + k, this.tmpM);
+      }
+    }
+    if (touched) mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  beamAngle(o: Obstacle, time: number): number {
+    return o.angle + o.spin * time;
+  }
+
+  // ------------------------------------------------------------ board: golden wave (01:14)
+  /** Height of the golden sheet under lateral x at s (lateral up axis), or -Infinity outside. */
+  waveHeight(s: number, x: number, time: number): number {
+    const w = this.wave;
+    if (!w || s < w.sector.start - 20 || s > w.sector.end + 30) return -Infinity;
+    const fadeIn = THREE.MathUtils.smoothstep(s, w.sector.start, w.sector.start + 80);
+    const fadeOut = 1 - THREE.MathUtils.smoothstep(s, w.sector.end - 80, w.sector.end);
+    const amp = fadeIn * fadeOut * (0.6 + 0.4 * this.difficulty.density);
+    const along = Math.sin(s * 0.045 - time * 1.6);
+    const across = Math.cos(x * 0.09 + s * 0.01 + time * 0.5);
+    const swell = Math.max(0, Math.sin(s * 0.012 + time * 0.35));
+    // Sharp ridges racing across the sheet, like the film's saw-tooth crests.
+    const ridge = Math.pow(Math.max(0, Math.sin(s * 0.08 + x * 0.11 - time * 2.1)), 6);
+    return -13 + amp * (4.5 * along * across + 11 * swell * swell * (0.55 + 0.45 * along) + 6 * ridge * (0.4 + swell));
+  }
+
+  private buildWave(sector: Sector): void {
+    const tail = this.track.sectorTail(sector);
+    const s0 = sector.start - 20;
+    const s1 = Math.min(tail, sector.end + 30);
+    const columns: number[] = [];
+    for (let x = -64; x <= 64; x += 2.5) columns.push(x);
+    const rows: WaveSheet["rows"] = [];
+    for (let s = s0; s <= s1; s += 2) {
+      rows.push({
+        s,
+        centre: this.track.position(s, new THREE.Vector3()),
+        right: this.track.rightAt(s, new THREE.Vector3()),
+        up: this.track.upAt(s, new THREE.Vector3())
+      });
+    }
+    const geometry = this.keep(new THREE.BufferGeometry());
+    const positions = new Float32Array(rows.length * columns.length * 3);
+    const uvs = new Float32Array(rows.length * columns.length * 2);
+    const index: number[] = [];
+    for (let r = 0; r < rows.length; r += 1) {
+      for (let c = 0; c < columns.length; c += 1) {
+        const i = r * columns.length + c;
+        uvs[i * 2] = c;
+        uvs[i * 2 + 1] = r * 0.75;
+        if (r < rows.length - 1 && c < columns.length - 1) {
+          const a = i;
+          const b = i + 1;
+          const d = i + columns.length;
+          const e = d + 1;
+          index.push(a, d, b, b, d, e);
+        }
+      }
+    }
+    geometry.setIndex(index);
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+    geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+    const grid = this.keep(goldGridTexture());
+    const mat = this.keep(
+      new THREE.MeshStandardMaterial({ map: grid, metalness: 0.55, roughness: 0.35, emissive: 0x6a4000, emissiveIntensity: 0.6, side: THREE.DoubleSide })
+    );
+    const sheet = new THREE.Mesh(geometry, mat);
+    sheet.frustumCulled = false;
+    this.group.add(sheet);
+    this.wave = { sector, geometry, rows, columns };
+    this.poseWave(0, [s0], Infinity);
+
+    // The electric brain-globe far below.
+    const mid = (sector.start + sector.end) / 2;
+    const globe = new THREE.Mesh(
+      this.keep(new THREE.SphereGeometry(320, 48, 32)),
+      this.keep(new THREE.MeshBasicMaterial({ map: this.keep(lightningTexture()), fog: false }))
+    );
+    this.track.toWorld(mid, 0, -370, globe.position);
+    this.group.add(globe);
+    this.globe = globe;
+
+    // Neon-framed panels of Jobe's interface, floating beside the line.
+    const panelTex = this.keep(lightningTexture());
+    const panelMat = this.keep(new THREE.MeshBasicMaterial({ map: panelTex, side: THREE.DoubleSide, color: 0xb0a0ff }));
+    const panelGeo = this.keep(new THREE.PlaneGeometry(12, 8));
+    const edgeGeo = this.keep(new THREE.EdgesGeometry(panelGeo));
+    const neon = this.keep(new THREE.LineBasicMaterial({ color: 0xff5ae0 }));
+    for (let i = 0; i < 16; i += 1) {
+      const s = sector.start + this.rng() * (sector.end - sector.start);
+      const side = this.rng() < 0.5 ? -1 : 1;
+      const panel = new THREE.Mesh(panelGeo, panelMat);
+      panel.add(new THREE.LineSegments(edgeGeo, neon));
+      this.placeOnTrack(panel, s, side * (24 + this.rng() * 20), 2 + this.rng() * 14);
+      panel.rotateY(side * 1.1);
+      this.group.add(panel);
+    }
+    // Red wire icosahedra hovering high above, as the one over Jobe's desk.
+    const icoGeo = this.keep(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(3, 0)));
+    const icoMat = this.keep(new THREE.LineBasicMaterial({ color: 0xff3a3a }));
+    for (let i = 0; i < 6; i += 1) {
+      const ico = new THREE.LineSegments(icoGeo, icoMat);
+      this.track.toWorld(sector.start + ((i + 0.5) / 6) * (sector.end - sector.start), (this.rng() * 2 - 1) * 10, 22, ico.position);
+      this.group.add(ico);
+      this.sigils.push(ico);
+    }
+  }
+
+  private globe: THREE.Mesh | null = null;
+
+  private poseWave(time: number, focus: number[], reach: number): void {
+    const w = this.wave;
+    if (!w) return;
+    const pos = w.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const arr = pos.array as Float32Array;
+    let touched = false;
+    w.rows.forEach((row, r) => {
+      if (!focus.some((f) => row.s > f - 60 && row.s < f + reach)) return;
+      touched = true;
+      for (let c = 0; c < w.columns.length; c += 1) {
+        const x = w.columns[c];
+        const h = this.waveHeight(row.s, x, time);
+        const y = Number.isFinite(h) ? h : -12;
+        const i = (r * w.columns.length + c) * 3;
+        arr[i] = row.centre.x + row.right.x * x + row.up.x * y;
+        arr[i + 1] = row.centre.y + row.right.y * x + row.up.y * y;
+        arr[i + 2] = row.centre.z + row.right.z * x + row.up.z * y;
+      }
+    });
+    if (touched) {
+      pos.needsUpdate = true;
+      w.geometry.computeVertexNormals();
+    }
   }
 
   // ------------------------------------------------------------ rings and finish
@@ -522,7 +1102,9 @@ export class RaceWorld {
     const L = this.track.raceLength;
     const tube = this.track.tubeAt(L);
     if (tube > 0) {
-      this.addBand(L, tube - 0.05, 4);
+      // Stay inside the tube's flat walls (a hexagon's inner radius is r·cos 30°).
+      const sides = this.track.sectorAt(L).kind === "vortex" ? 6 : 12;
+      this.addBand(L, tube * Math.cos(Math.PI / sides) - 0.2, 4);
       return;
     }
     const checker = this.keep(checkerTexture(30, 1));
@@ -569,7 +1151,41 @@ export class RaceWorld {
    * Collision of a pilot moving from prevS to s at lateral (ox, oy).
    * Returns the lateral push direction, or null.
    */
-  collision(o: Obstacle, prevS: number, s: number, ox: number, oy: number, time: number): [number, number] | null {
+  collision(o: Obstacle, prevS: number, s: number, ox: number, oy: number, time: number, roll = 0): [number, number] | null {
+    const crossedPlane = prevS < o.s && s >= o.s;
+    if (o.kind === "porthole") {
+      if (!crossedPlane) return null;
+      const dx = ox - o.ox;
+      const dy = oy - o.oy;
+      const d = Math.hypot(dx, dy);
+      const reach = 1.1 + 0.8 * Math.abs(Math.cos(roll - Math.atan2(dy, dx)));
+      if (d + reach > (o.gap ?? 3.6)) {
+        return d > 0.01 ? [-dx, -dy] : [0, 1];
+      }
+      return null;
+    }
+    if (o.kind === "blades" || o.kind === "slot") {
+      if (!crossedPlane) return null;
+      const nx = -Math.sin(o.angle);
+      const ny = Math.cos(o.angle);
+      const across = (ox - o.ox) * nx + (oy - o.oy) * ny;
+      const half = o.kind === "blades" ? this.bladeGap(o, time) : (o.gap ?? 1.3);
+      if (Math.abs(across) + pilotExtent(roll, o.angle + Math.PI / 2) > half) {
+        const sign = across >= 0 ? -1 : 1;
+        return [nx * sign, ny * sign];
+      }
+      return null;
+    }
+    if (o.kind === "beam") {
+      if (!(prevS < o.s + 0.8 && s > o.s - 0.8)) return null;
+      const a = this.beamAngle(o, time);
+      const across = -ox * Math.sin(a) + oy * Math.cos(a);
+      if (Math.abs(across) < 0.75 + pilotExtent(roll, a + Math.PI / 2) * 0.6) {
+        const sign = across >= 0 ? 1 : -1;
+        return [-Math.sin(a) * sign, Math.cos(a) * sign];
+      }
+      return null;
+    }
     if (o.kind === "plate") {
       if (prevS < o.s && s >= o.s && (Math.hypot(ox, oy) < 0.9 || this.plateBlocks(o, ox, oy, time))) {
         const gap = this.plateGap(o, time);
@@ -580,7 +1196,7 @@ export class RaceWorld {
     if (o.kind === "log") {
       const crossed = prevS < o.s + 1.2 && s > o.s - 1.2;
       const d = this.logDistance(o, ox, oy);
-      if (crossed && Math.abs(d) < LOG_RADIUS + 0.5 + PILOT_RADIUS) {
+      if (crossed && Math.abs(d) < LOG_RADIUS + 0.3 + pilotExtent(roll, o.angle + Math.PI / 2)) {
         const sign = d >= 0 ? 1 : -1;
         return [-Math.sin(o.angle) * sign, Math.cos(o.angle) * sign];
       }
@@ -611,12 +1227,33 @@ export class RaceWorld {
     return lo;
   }
 
-  update(time: number, dt: number): void {
+  /** Animate the course; `focus` lists the pilots' distances so per-vertex work stays near them. */
+  update(time: number, dt: number, focus: number[] = []): void {
     for (const plate of this.plates) {
       if (plate.mesh) {
         plate.mesh.rotation.z = this.plateAngle(plate, time);
       }
     }
+    for (const beam of this.beams) {
+      if (beam.mesh) beam.mesh.rotation.z = this.beamAngle(beam, time);
+    }
+    for (const blade of this.bladeSets) {
+      this.applyBlades(blade, time);
+    }
+    this.orbs.forEach((orb, i) => {
+      orb.rotation.set(time * 1.3 + i, time * 0.9, 0);
+      const glow = orb.children[0];
+      if (glow) glow.scale.setScalar(1.5 + 0.35 * Math.abs(Math.sin(time * 11 + i * 1.7)));
+    });
+    this.sigils.forEach((sigil, i) => {
+      sigil.rotation.z = time * (i % 2 === 0 ? 0.5 : -0.4);
+    });
+    if (focus.length > 0) {
+      this.poseTiles(time, focus, 260);
+      this.poseWave(time, focus, 320);
+    }
+    if (this.globe) this.globe.rotation.y = time * 0.02;
+    this.cyberjobe?.update(time, this.rage);
     const touched = new Set<THREE.InstancedMesh>();
     for (const sp of this.spinners) {
       this.applySpinner(sp, time);
@@ -644,6 +1281,7 @@ export class RaceWorld {
 
   dispose(): void {
     this.group.removeFromParent();
+    this.cyberjobe?.dispose();
     for (const item of this.disposables) {
       item.dispose();
     }
@@ -658,6 +1296,7 @@ export class RaceWorld {
 export interface Skies {
   circuit: THREE.Mesh;
   sunset: THREE.Mesh;
+  hexdots: THREE.Mesh;
 }
 
 export function createSkies(): Skies {
@@ -669,8 +1308,13 @@ export function createSkies(): Skies {
     new THREE.SphereGeometry(900, 32, 16),
     new THREE.MeshBasicMaterial({ map: sunsetTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
   );
-  for (const sky of [circuit, sunset]) {
+  const hexdots = new THREE.Mesh(
+    new THREE.SphereGeometry(900, 32, 16),
+    new THREE.MeshBasicMaterial({ map: hexDotsTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
+  );
+  (hexdots.material as THREE.MeshBasicMaterial).map?.repeat.set(8, 4);
+  for (const sky of [circuit, sunset, hexdots]) {
     sky.renderOrder = -1;
   }
-  return { circuit, sunset };
+  return { circuit, sunset, hexdots };
 }

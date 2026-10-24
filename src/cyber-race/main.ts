@@ -1,10 +1,11 @@
 import * as THREE from "three";
 import { RaceAudio } from "./audio";
+import { FilmPlayer } from "./film";
 import { RaceInput, type PilotInput, type UiEvent } from "./input";
 import { JOBE_LOOK, PETER_LOOK, createFlyer, type FlyerLook, type FlyerModel } from "./models";
 import { mulberry32 } from "./textures";
 import { PLANS, Track, type SectorKind } from "./track";
-import { RaceWorld, createSkies, type Difficulty, type Obstacle } from "./world";
+import { CYBERJOBE_AHEAD, GATE_BONUS, RaceWorld, createSkies, type Difficulty, type Obstacle } from "./world";
 
 /*
  * Cyber Race: the two-player virtual race Jobe and Peter play in
@@ -29,7 +30,7 @@ const LEVELS: Array<{ label: string; diff: Difficulty }> = [
 
 const MODES = ["2 JOUEURS", "1 JOUEUR CONTRE L'ORDINATEUR"];
 const PLAN_KEYS = ["film", "extended"] as const;
-const PLAN_LABELS = ["3 TABLEAUX DU FILM", "5 TABLEAUX"];
+const PLAN_LABELS = ["3 TABLEAUX DU FILM", "7 TABLEAUX"];
 
 const CRUISE = 62;
 const BOOST = 50;
@@ -55,13 +56,16 @@ scene.fog = fog;
 const background = new THREE.Color(0x050b0d);
 scene.background = background;
 const skies = createSkies();
-scene.add(skies.circuit, skies.sunset);
+scene.add(skies.circuit, skies.sunset, skies.hexdots);
 scene.add(new THREE.HemisphereLight(0xa8d4e0, 0x10181c, 1.1));
 const sun = new THREE.DirectionalLight(0xffffff, 1.6);
 sun.position.set(0.4, 1, 0.3);
 scene.add(sun);
 
 const audio = new RaceAudio();
+const film = new FilmPlayer(document.body);
+/** Seconds the menu has been left alone (starts the film attract loop). */
+let menuIdle = 0;
 const input = new RaceInput();
 input.onActivity = () => {
   if (settings.sound) audio.ensure();
@@ -159,6 +163,20 @@ class Trail {
 }
 
 // ---------------------------------------------------------------- sparks
+/** Soft round dot so sparks are not drawn as squares. */
+function roundSprite(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 32;
+  const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+  const g = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.4, "rgba(255,255,255,0.6)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 32, 32);
+  return new THREE.CanvasTexture(canvas);
+}
+
 class Sparks {
   readonly points: THREE.Points;
   private readonly max = 600;
@@ -174,7 +192,14 @@ class Sparks {
     geometry.setAttribute("color", new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
     this.points = new THREE.Points(
       geometry,
-      new THREE.PointsMaterial({ size: 0.35, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })
+      new THREE.PointsMaterial({
+        size: 0.22,
+        map: roundSprite(),
+        vertexColors: true,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        depthWrite: false
+      })
     );
     this.points.frustumCulled = false;
   }
@@ -230,8 +255,12 @@ class Hud {
   private readonly chevrons: HTMLElement[] = [];
   private readonly dots: HTMLDivElement[] = [];
   private marks: HTMLElement[] = [];
+  private readonly lcd: HTMLDivElement;
+  private readonly lock: HTMLDivElement;
+  private readonly washEl: HTMLDivElement;
   private msgTimer = 0;
   private flashTimer = 0;
+  private washTimer = 0;
   messageText = "";
 
   constructor(container: HTMLElement, name: string, color: string) {
@@ -253,7 +282,10 @@ class Hud {
       <div class="rival hidden"></div>
       <div class="progress"></div>
       <div class="speed"></div>
+      <div class="lcd hidden"></div>
+      <div class="lock hidden"><i></i><i></i><i></i><i></i></div>
       <div class="msg"></div>
+      <div class="wash"></div>
       <div class="flash"></div>`;
     container.appendChild(this.root);
     const q = <T extends Element>(sel: string): T => this.root.querySelector(sel) as T;
@@ -264,6 +296,9 @@ class Hud {
     this.flashEl = q(".flash");
     this.rival = q(".rival");
     this.progress = q(".progress");
+    this.lcd = q(".lcd");
+    this.lock = q(".lock");
+    this.washEl = q(".wash");
     const chev = q<HTMLDivElement>(".chev");
     for (let i = 0; i < CHEVRONS; i += 1) {
       const c = document.createElement("i");
@@ -295,10 +330,12 @@ class Hud {
     });
   }
 
-  message(text: string, seconds: number, big = false): void {
+  message(text: string, seconds: number, big = false, tone: "normal" | "warning" | "alert" = "normal"): void {
     this.messageText = text;
     this.msg.textContent = text;
     this.msg.classList.toggle("big", big);
+    this.msg.classList.toggle("warning", tone === "warning");
+    this.msg.classList.toggle("alert", tone === "alert");
     this.msg.style.opacity = "1";
     this.msgTimer = seconds;
   }
@@ -312,6 +349,32 @@ class Hud {
   flash(): void {
     this.flashEl.classList.add("on");
     this.flashTimer = 0.12;
+  }
+
+  /** White-pink wash, as the film's screen flares on a burst of speed (00:40:54). */
+  wash(): void {
+    this.washEl.classList.add("on");
+    this.washTimer = 0.1;
+  }
+
+  /** Cyberjobe's LCD timer (02:08:30): null hides it. */
+  setTimer(seconds: number | null): void {
+    this.lcd.classList.toggle("hidden", seconds === null);
+    if (seconds === null) return;
+    const s = Math.max(0, Math.ceil(seconds));
+    const mm = String(Math.floor(s / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    this.lcd.innerHTML = `<b>${mm}</b><i>m</i><b>${ss}</b><i>s</i>`;
+    this.lcd.classList.toggle("urgent", s <= 10);
+  }
+
+  /** Red lock-on marks around the rival (percent of this HUD), or null to hide. */
+  setLock(x: number | null, y = 0, size = 0): void {
+    this.lock.classList.toggle("hidden", x === null);
+    if (x === null) return;
+    this.lock.style.left = `${x}%`;
+    this.lock.style.top = `${y}%`;
+    this.lock.style.setProperty("--lock", `${size}px`);
   }
 
   update(p: Pilot, other: Pilot, track: Track, dt: number, showRival: boolean): void {
@@ -338,6 +401,10 @@ class Hud {
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
       if (this.flashTimer <= 0) this.flashEl.classList.remove("on");
+    }
+    if (this.washTimer > 0) {
+      this.washTimer -= dt;
+      if (this.washTimer <= 0) this.washEl.classList.remove("on");
     }
   }
 }
@@ -377,6 +444,9 @@ interface Pilot {
   noiseY: number;
   rings: number;
   hits: number;
+  /** Current roll around the line (0 level, ±π/2 on the side). */
+  roll: number;
+  destroyed: boolean;
 }
 
 const hudContainer = document.getElementById("huds") as HTMLDivElement;
@@ -421,7 +491,9 @@ function makePilot(index: 0 | 1, name: string, look: FlyerLook, color: string): 
     noiseX: 0,
     noiseY: 0,
     rings: 0,
-    hits: 0
+    hits: 0,
+    roll: 0,
+    destroyed: false
   };
 }
 
@@ -441,10 +513,12 @@ interface Settings {
   mode: number;
   plan: number;
   sound: boolean;
+  /** The film's sighting lines across the HUD (off by default). */
+  crosshair: boolean;
 }
 
 const SETTINGS_KEY = "graphysx.cyberRace.settings";
-const settings: Settings = { course: 1, level: 1, mode: 0, plan: 0, sound: true };
+const settings: Settings = { course: 1, level: 1, mode: 0, plan: 0, sound: true, crosshair: false };
 try {
   const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null") as Partial<Settings> | null;
   if (saved && typeof saved === "object") {
@@ -455,6 +529,7 @@ try {
     settings.mode = pick(saved.mode, MODES.length - 1, settings.mode);
     settings.plan = pick(saved.plan, PLAN_KEYS.length - 1, settings.plan);
     settings.sound = typeof saved.sound === "boolean" ? saved.sound : settings.sound;
+    settings.crosshair = typeof saved.crosshair === "boolean" ? saved.crosshair : settings.crosshair;
   }
 } catch {
   // Storage unavailable or corrupt: keep defaults.
@@ -560,6 +635,10 @@ let endDeadline = Infinity;
 let worldTime = 0;
 let seed = 1992;
 
+/** Cyberjobe's countdown over the final vortex (02:08-02:10). */
+const finale = { started: false, exploded: false, left: 0, total: 0, lastTick: 0 };
+const FINALE_SLACK = [1.35, 1.2, 1.08, 0.98];
+
 // ---------------------------------------------------------------- VR (Quest through Link)
 let vrSession: XRSession | null = null;
 let vrSupported = false;
@@ -637,6 +716,11 @@ class VrHud {
         ctx.fillStyle = i === overlay.focus ? "#ffe14a" : "#c8d4dc";
         ctx.fillText(`${i === overlay.focus ? "▶ " : ""}${label}`, 512, 140 + i * 48);
       });
+    } else if (finale.started && !finale.exploded) {
+      ctx.font = "900 80px Orbitron, Arial Black, sans-serif";
+      ctx.fillStyle = finale.left <= 10 ? "#ff4058" : "#bfe8ff";
+      const s = Math.max(0, Math.ceil(finale.left));
+      ctx.fillText(`${String(Math.floor(s / 60)).padStart(2, "0")}m ${String(s % 60).padStart(2, "0")}s`, 512, 200);
     } else if (p.hud.messageText) {
       ctx.font = "900 70px Orbitron, Arial Black, sans-serif";
       ctx.fillStyle = "#ffffff";
@@ -739,8 +823,13 @@ function startRace(newSeed: boolean): void {
       finishTime: 0,
       sectorIndex: 0,
       rings: 0,
-      hits: 0
+      hits: 0,
+      roll: 0,
+      destroyed: false
     });
+    p.model.root.visible = true;
+    p.hud.setTimer(null);
+    p.hud.setLock(null);
     p.cpu = p.index === 1 && !twoPlayers();
     p.trail.reset();
     p.hud.setSectors(track);
@@ -753,6 +842,8 @@ function startRace(newSeed: boolean): void {
   finishers = 0;
   endDeadline = Infinity;
   raceTime = 0;
+  Object.assign(finale, { started: false, exploded: false, left: 0, total: 0, lastTick: 0 });
+  world.rage = 0;
   countdown = 3.6;
   lastCount = 4;
   phase = "countdown";
@@ -809,16 +900,28 @@ function endRace(): void {
   });
   resultsEl.innerHTML = ranked
     .map((p, i) => {
-      const status = p.finished ? `${p.finishTime.toFixed(2)} s` : "N'A PAS FINI";
+      const status = p.destroyed ? "DÉTRUIT PAR CYBERJOBE" : p.finished ? `${p.finishTime.toFixed(2)} s` : "N'A PAS FINI";
       const who = p.cpu ? `${p.name} (CPU)` : p.name;
       return `<div><div class="who" style="color:${p.index === 0 ? "#7a1fa8" : "#1f4fb0"}">${i === 0 ? "GAGNANT · " : ""}${who}</div>
         <div class="pts">${String(p.score).padStart(5, "0")}</div><div>${status}</div>
         <div class="stats">${p.rings} ANNEAUX · ${p.hits} CHOCS</div></div>`;
     })
     .join("");
-  overEl.classList.remove("hidden");
-  overChoices.reset();
-  vrHud.update(0, true);
+  const showResults = (): void => {
+    if (phase !== "over") return;
+    // White flash, then GAME OVER on brushed silver (00:41:25).
+    overEl.classList.remove("hidden", "flashin");
+    void overEl.offsetWidth;
+    overEl.classList.add("flashin");
+    overChoices.reset();
+    vrHud.update(0, true);
+  };
+  if (film.has("outro") && !vrSession) {
+    // The film's own ending first: checker line, GAME OVER, Jobe pulling the headset off.
+    void film.play("outro", { muted: !settings.sound }).then(showResults);
+  } else {
+    showResults();
+  }
 }
 
 // ---------------------------------------------------------------- simulation
@@ -848,6 +951,7 @@ function cpuInput(p: Pilot): PilotInput {
   }
   const look = 30 + p.speed * 0.6;
   let danger = false;
+  let roll = 0;
   for (let i = w.firstObstacleFrom(p.s); i < w.obstacles.length; i += 1) {
     const o: Obstacle = w.obstacles[i];
     if (o.s > p.s + look) break;
@@ -857,6 +961,31 @@ function cpuInput(p: Pilot): PilotInput {
       const radius = (track as Track).boundAt(o.s) * 0.6;
       tx = Math.cos(gap) * radius;
       ty = Math.sin(gap) * radius;
+      danger = true;
+      break;
+    }
+    if (o.kind === "porthole") {
+      tx = o.ox;
+      ty = o.oy;
+      danger = true;
+      break;
+    }
+    if (o.kind === "blades" || o.kind === "slot") {
+      const nx = -Math.sin(o.angle);
+      const ny = Math.cos(o.angle);
+      const across = (tx - o.ox) * nx + (ty - o.oy) * ny;
+      tx -= nx * across;
+      ty -= ny * across;
+      if (o.kind === "slot" && o.s - p.s < 45) roll = 1;
+      danger = true;
+      break;
+    }
+    if (o.kind === "beam") {
+      const eta = (o.s - p.s) / Math.max(p.speed, 10);
+      const a = w.beamAngle(o, worldTime + eta);
+      const side = -p.ox * Math.sin(a) + p.oy * Math.cos(a) >= 0 ? 1 : -1;
+      tx = -Math.sin(a) * side * 6;
+      ty = Math.cos(a) * side * 6;
       danger = true;
       break;
     }
@@ -889,6 +1018,11 @@ function cpuInput(p: Pilot): PilotInput {
       danger = true;
     }
   }
+  const floor = w.waveHeight(p.s + 25, tx, worldTime + 25 / Math.max(p.speed, 10));
+  if (Number.isFinite(floor)) {
+    ty = Math.max(ty, floor + 4);
+    danger = true;
+  }
   const bound = (track as Track).boundAt(p.s + 20) - 0.5;
   const tr = Math.hypot(tx, ty);
   if (tr > bound) {
@@ -897,13 +1031,15 @@ function cpuInput(p: Pilot): PilotInput {
   }
   p.noiseX = clamp(p.noiseX + (Math.random() - 0.5) * 0.6, -2.5, 2.5);
   p.noiseY = clamp(p.noiseY + (Math.random() - 0.5) * 0.6, -2.5, 2.5);
-  const sloppiness = 1 - settings.level * 0.25;
+  // Steadier aim near set pieces that need precision.
+  const sloppiness = (1 - settings.level * 0.25) * (danger ? 0.25 : 1);
   const ex = tx - p.ox + p.noiseX * sloppiness;
   const ey = ty - p.oy + p.noiseY * sloppiness;
   return {
     x: clamp(ex * 0.3 - p.vx * 0.1, -1, 1),
     y: clamp(ey * 0.3 - p.vy * 0.1, -1, 1),
-    boost: !danger && p.energy > 30 && p.hitTimer <= 0
+    boost: !danger && p.energy > 30 && p.hitTimer <= 0,
+    roll
   };
 }
 
@@ -928,11 +1064,17 @@ function collide(p: Pilot): void {
   for (let i = w.firstObstacleFrom(p.s - 5); i < w.obstacles.length; i += 1) {
     const o = w.obstacles[i];
     if (o.s > p.s + 5) break;
-    const push = w.collision(o, p.prevS, p.s, p.ox, p.oy, worldTime);
+    const push = w.collision(o, p.prevS, p.s, p.ox, p.oy, worldTime, p.roll);
     if (push) {
-      if (o.kind === "plate") p.s = o.s - 0.6;
+      if (o.kind === "plate" || o.kind === "porthole" || o.kind === "blades" || o.kind === "slot") p.s = o.s - 0.6;
       hit(p, push[0], push[1]);
       return;
+    }
+    const bonus = GATE_BONUS[o.kind];
+    if (bonus && p.prevS < o.s && p.s >= o.s) {
+      p.bonus += bonus;
+      p.hud.message(`+${bonus}`, 0.8);
+      if (!p.cpu) audio.gate();
     }
   }
 }
@@ -959,7 +1101,17 @@ function collectRings(p: Pilot): void {
 function updatePilot(p: Pilot, other: Pilot, dt: number): void {
   const t = track as Track;
   const racing = phase === "race";
+  if (p.destroyed) {
+    p.speed = 0;
+    p.boosting = false;
+    p.drafting = false;
+    return;
+  }
   const control = pilotInput(p);
+
+  // Knife-edge: roll onto the side to slip through narrow slots (00:41:17).
+  const rollTarget = (control.roll * Math.PI) / 2;
+  p.roll += (rollTarget - p.roll) * (1 - Math.exp(-7 * dt));
 
   // Lateral flight inside the cross-section.
   p.vx += control.x * LAT_ACC * dt;
@@ -995,19 +1147,34 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
     }
   }
 
+  // The golden sheet is solid: crests that reach a pilot knock it back up (01:14).
+  const floor = (world as RaceWorld).waveHeight(p.s, p.ox, worldTime);
+  if (Number.isFinite(floor) && p.oy < floor + 1) {
+    p.oy = floor + 1;
+    if (p.vy < 4) p.vy = 4;
+    if (racing && !p.finished && p.hitTimer <= 0) hit(p, 0, 1);
+  }
+
   // Forward speed, turbo and slipstream.
+  const wasBoosting = p.boosting;
   p.hitTimer = Math.max(0, p.hitTimer - dt);
   p.shake = Math.max(0, p.shake - dt);
   p.boosting = racing && !p.finished && control.boost && p.energy > 2 && p.hitTimer <= 0;
   p.energy = clamp(p.energy + (p.boosting ? -30 : 7) * dt, 0, 100);
   const ahead = other.s - p.s;
   p.drafting = racing && !p.finished && ahead > 3 && ahead < 22 && Math.hypot(p.ox - other.ox, p.oy - other.oy) < 3;
+  if (p.boosting && !wasBoosting && !p.cpu) p.hud.wash();
   let target = racing ? CRUISE + (p.boosting ? BOOST : 0) + (p.drafting ? DRAFT : 0) : 0;
-  if (p.finished) target = 30;
-  const rate = p.speed < target ? 0.9 : 1.6;
+  if (p.finished) {
+    target = 30;
+    // Coast to a halt in front of Cyberjobe rather than through him.
+    if (world?.cyberjobe) target = 30 * clamp((t.raceLength + CYBERJOBE_AHEAD - 14 - p.s) / 18, 0, 1);
+  }
+  const rate = p.speed < target ? 0.9 : p.finished ? 3 : 1.6;
   p.speed += (target - p.speed) * (1 - Math.exp(-rate * dt));
   p.prevS = p.s;
   p.s = Math.min(p.s + p.speed * dt, t.totalLength - 30);
+  if (p.finished && world?.cyberjobe) p.s = Math.min(p.s, t.raceLength + CYBERJOBE_AHEAD - 12);
 
   if (racing && !p.finished) {
     collide(p);
@@ -1017,8 +1184,14 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
   const sector = t.sectorAt(p.s);
   if (sector.index !== p.sectorIndex && p.s < t.raceLength) {
     p.sectorIndex = sector.index;
-    p.hud.message(`TABLEAU ${sector.index + 1} · ${sector.info.name}`, 2.2);
-    if (!p.cpu) audio.sector();
+    if (sector.kind === "wave") {
+      // The film flashes a red WARNING as Jobe reaches into the network (01:14:35).
+      p.hud.message("WARNING", 2.4, false, "warning");
+      if (!p.cpu) audio.warning();
+    } else {
+      p.hud.message(`TABLEAU ${sector.index + 1} · ${sector.info.name}`, 2.2);
+      if (!p.cpu) audio.sector();
+    }
   }
 
   if (!p.finished && p.s >= t.raceLength) {
@@ -1027,7 +1200,13 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
     p.place = finishers;
     p.finishTime = raceTime;
     p.bonus += p.place === 1 ? 5000 : 2500;
-    p.hud.message(p.place === 1 ? "ARRIVÉE · 1ER !" : "ARRIVÉE · 2E", 4);
+    let extra = "";
+    if (finale.started && !finale.exploded) {
+      const saved = Math.ceil(finale.left) * 100;
+      p.bonus += saved;
+      extra = ` +${saved}`;
+    }
+    p.hud.message(p.place === 1 ? `ARRIVÉE · 1ER !${extra}` : `ARRIVÉE · 2E${extra}`, 4);
     audio.finish();
     if (finishers === 1) endDeadline = raceTime + 12;
   }
@@ -1057,7 +1236,8 @@ function placePilot(p: Pilot, time: number): void {
   t.toWorld(p.s, p.ox, p.oy, root.position);
   root.position.addScaledVector(t.upAt(p.s, tmpV), Math.sin(time * 2.2 + p.index * 2) * 0.12);
   t.basis(p.s, root.quaternion);
-  tmpE.set(clamp(-p.vy * 0.025, -0.4, 0.4), 0, clamp(p.vx * 0.05, -0.7, 0.7));
+  const level = 1 - Math.min(1, Math.abs(p.roll) / (Math.PI / 2));
+  tmpE.set(clamp(-p.vy * 0.025, -0.4, 0.4), 0, p.roll + clamp(p.vx * 0.05, -0.7, 0.7) * level);
   tmpQ.setFromEuler(tmpE);
   if (p.hitTimer > 0) {
     tmpQ2.setFromAxisAngle(tmpV2.set(0, 0, 1), p.hitTimer * 9);
@@ -1147,6 +1327,45 @@ function updateRig(dt: number, snap = false): void {
   t.basis(p.s, rig.quaternion).multiply(flipY);
 }
 
+function updateFinale(dt: number): void {
+  const t = track as Track;
+  const w = world as RaceWorld;
+  const last = t.sectors[t.sectors.length - 1];
+  if (!finale.started) {
+    if (Math.max(pilots[0].s, pilots[1].s) < last.start) return;
+    finale.started = true;
+    finale.total = ((t.raceLength - last.start) / CRUISE) * FINALE_SLACK[settings.level] + 1;
+    finale.left = finale.total;
+    finale.lastTick = Math.ceil(finale.left);
+    for (const p of pilots) p.hud.message("CYBERJOBE !", 2.2, false, "alert");
+    audio.warning();
+  }
+  if (finale.exploded) return;
+  if (pilots.every((p) => p.finished || p.destroyed)) return;
+  finale.left -= dt;
+  w.rage = clamp(1 - finale.left / finale.total, 0, 1);
+  const whole = Math.ceil(finale.left);
+  if (whole !== finale.lastTick) {
+    finale.lastTick = whole;
+    if (whole <= 10 && whole > 0) audio.tick(whole <= 3);
+  }
+  if (finale.left <= 0) {
+    finale.exploded = true;
+    audio.explode();
+    for (const p of pilots) {
+      if (p.finished) continue;
+      p.destroyed = true;
+      p.speed = 0;
+      sparkColor.setHex(0xfff2c0);
+      sparks.burst(p.model.root.position, sparkColor, 160, 22);
+      p.model.root.visible = false;
+      p.hud.message("DÉTRUIT PAR CYBERJOBE", 3, false, "alert");
+      p.hud.flash();
+    }
+    endDeadline = Math.min(endDeadline, raceTime + 2.6);
+  }
+}
+
 function step(dt: number): void {
   if (!track || !world) return;
   if (phase === "countdown") {
@@ -1168,7 +1387,8 @@ function step(dt: number): void {
   }
   if (phase === "race") raceTime += dt;
   worldTime += dt;
-  world.update(worldTime, dt);
+  world.update(worldTime, dt, [pilots[0].s, pilots[1].s]);
+  if (phase === "race" && world.cyberjobe) updateFinale(dt);
   updatePilot(pilots[0], pilots[1], dt);
   updatePilot(pilots[1], pilots[0], dt);
   if (phase === "race") bump(pilots[0], pilots[1]);
@@ -1181,7 +1401,14 @@ function step(dt: number): void {
   sparks.update(dt);
   pilots[0].hud.update(pilots[0], pilots[1], track, dt, !twoPlayers());
   pilots[1].hud.update(pilots[1], pilots[0], track, dt, false);
-  if (phase === "race" && (finishers >= 2 || raceTime > endDeadline)) {
+  const running = finale.started && !finale.exploded && !pilots.every((p) => p.finished || p.destroyed);
+  const timer = running ? finale.left : null;
+  for (const p of pilots) p.hud.setTimer(timer);
+  // Once everyone is home, hold the view a moment (Cyberjobe screams), then GAME OVER.
+  if (phase === "race" && pilots.every((p) => p.finished || p.destroyed)) {
+    endDeadline = Math.min(endDeadline, raceTime + 3);
+  }
+  if (phase === "race" && raceTime > endDeadline) {
     endRace();
   }
 }
@@ -1205,8 +1432,10 @@ function applyAtmosphere(s: number, at: THREE.Vector3): void {
   const info = (track as Track).sectorAt(s).info;
   skies.circuit.visible = info.sky === "circuit";
   skies.sunset.visible = info.sky === "sunset";
+  skies.hexdots.visible = info.sky === "hexdots";
   skies.circuit.position.copy(at);
   skies.sunset.position.copy(at);
+  skies.hexdots.position.copy(at);
   fog.density = info.fog;
   fog.color.setHex(info.fogColor);
   background.setHex(info.fogColor);
@@ -1223,6 +1452,22 @@ function renderView(p: Pilot, x: number, w: number): void {
   renderer.setScissor(x, 0, w, viewH);
   applyAtmosphere(p.s - 6, cam.position);
   renderer.render(scene, cam);
+  updateLock(p, p.index === 0 ? pilots[1] : pilots[0]);
+}
+
+/** Red lock-on marks around the rival ahead, as in the film's pilot view (00:41:13-00:41:24). */
+function updateLock(p: Pilot, other: Pilot): void {
+  const ahead = other.s - p.s;
+  if ((phase !== "race" && phase !== "countdown") || other.destroyed || ahead < 4 || ahead > 140) {
+    p.hud.setLock(null);
+    return;
+  }
+  tmpV.copy(other.model.root.position).project(p.camera);
+  if (tmpV.z > 1 || Math.abs(tmpV.x) > 0.95 || Math.abs(tmpV.y) > 0.95) {
+    p.hud.setLock(null);
+    return;
+  }
+  p.hud.setLock((tmpV.x * 0.5 + 0.5) * 100, (0.5 - tmpV.y * 0.5) * 100, clamp(1800 / ahead, 18, 90));
 }
 
 function render(): void {
@@ -1268,11 +1513,15 @@ function refreshMenu(): void {
       b.classList.toggle("disabled", !vrSupported);
       b.classList.toggle("selected", Boolean(vrSession));
     }
+    if (b.dataset.action === "crosshair") {
+      b.classList.toggle("selected", settings.crosshair);
+    }
     if (b.dataset.action === "fullscreen") {
       b.classList.toggle("selected", Boolean(document.fullscreenElement));
     }
     b.classList.toggle("focus", menuButtons[focusIndex] === b);
   }
+  document.body.classList.toggle("crosshair", settings.crosshair);
   captionEl.textContent = `${PLAN_LABELS[settings.plan]} · PARCOURS ${COURSES[settings.course].label} · ${LEVELS[settings.level].label} · ${MODES[settings.mode]}`;
   const pads = input.padCount();
   statusEl.textContent = `MANETTES : ${pads} · CASQUE VR : ${vrSupported ? "PRÊT (BOUTON LUNETTES)" : "NON DÉTECTÉ"}`;
@@ -1298,6 +1547,10 @@ function activate(b: HTMLButtonElement): void {
     settings.sound = !settings.sound;
     if (settings.sound) audio.ensure();
     audio.setMuted(!settings.sound);
+    film.setMuted(!settings.sound);
+  } else if (action === "crosshair") {
+    settings.crosshair = !settings.crosshair;
+    toast(settings.crosshair ? "Réticule du film activé" : "Réticule du film désactivé", 2);
   } else if (action === "help") {
     helpEl.classList.remove("hidden");
   } else if (action === "fullscreen") {
@@ -1354,6 +1607,11 @@ function moveFocus(dx: number, dy: number): void {
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] } as const;
 
 function handleEvents(events: UiEvent[]): void {
+  if (events.length > 0) menuIdle = 0;
+  if (film.playing) {
+    if (events.some((e) => e.action === "ok" || e.action === "back" || e.action === "pause")) film.stop();
+    return;
+  }
   for (const { action, source } of events) {
     if (!helpEl.classList.contains("hidden")) {
       if (action === "ok" || action === "back" || action === "pause") helpEl.classList.add("hidden");
@@ -1413,6 +1671,8 @@ window.addEventListener("gamepaddisconnected", (e) => {
 
 // ---------------------------------------------------------------- main loop
 const clock = new THREE.Clock();
+/** Test hook: stop the live loop's simulation so a check can pose an exact frame. */
+let frozen = false;
 
 function frame(): void {
   const dt = Math.min(clock.getDelta(), 1 / 20);
@@ -1426,8 +1686,15 @@ function frame(): void {
   }
   input.poll(dt);
   handleEvents(input.takeEvents());
-  if (phase !== "menu" && !paused) {
+  if (phase !== "menu" && !paused && !frozen) {
     step(dt);
+  }
+  if (phase === "menu" && !film.playing && helpEl.classList.contains("hidden")) {
+    menuIdle += dt;
+    if (menuIdle > 30 && film.has("attract")) {
+      menuIdle = 0;
+      void film.play("attract", { loop: true, title: "APPUYEZ SUR START", muted: !settings.sound });
+    }
   }
   if (vrSession) vrHud.update(dt);
   if (toastTimer > 0) {
@@ -1439,6 +1706,12 @@ function frame(): void {
 
 refreshMenu();
 void checkVrSupport();
+void film.probe(["intro", "attract", "outro"]).then(async () => {
+  if (!film.has("intro") || phase !== "menu") return;
+  menuEl.classList.add("hidden");
+  await film.play("intro", { title: "CYBER RACE 1992", muted: !settings.sound });
+  if (phase === "menu") menuEl.classList.remove("hidden");
+});
 renderer.setAnimationLoop(frame);
 
 // Exposed for automated checks in the browser.
@@ -1461,6 +1734,10 @@ renderer.setAnimationLoop(frame);
     render();
     return phase;
   },
+  /** Freeze the live loop (rendering continues) for exact captures. */
+  freeze: (value: boolean) => {
+    frozen = value;
+  },
   /** Feed menu actions as if a pad sent them. */
   ui: (actions: UiEvent["action"][], source: UiEvent["source"] = "pad") => {
     handleEvents(actions.map((action) => ({ action, source })));
@@ -1468,5 +1745,6 @@ renderer.setAnimationLoop(frame);
   },
   get world() {
     return world;
-  }
+  },
+  finale
 };

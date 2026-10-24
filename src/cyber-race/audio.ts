@@ -134,6 +134,41 @@ export class RaceAudio {
     [392, 330, 262, 196].forEach((f, i) => this.tone(f, 0.45, "sawtooth", 0.12, i * 0.22));
   }
 
+  /** Countdown tick of Cyberjobe's timer. */
+  tick(urgent: boolean): void {
+    this.tone(urgent ? 1760 : 1320, 0.07, "square", urgent ? 0.14 : 0.08);
+  }
+
+  /** Two-tone alarm under the red WARNING. */
+  warning(): void {
+    [880, 660, 880, 660].forEach((f, i) => this.tone(f, 0.16, "square", 0.1, i * 0.18));
+  }
+
+  /** The system blows: noise sweep and a falling tone. */
+  explode(): void {
+    if (!this.ctx || !this.master || !this.noise) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(4000, t);
+    filter.frequency.exponentialRampToValueAtTime(60, t + 1.6);
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.7, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+    src.connect(filter).connect(gain).connect(this.master);
+    src.start(t);
+    src.stop(t + 1.9);
+    this.tone(220, 1.5, "sawtooth", 0.2, 0, 30);
+  }
+
+  /** Bright chime when a set piece is cleared. */
+  gate(): void {
+    [1568, 2093].forEach((f, i) => this.tone(f, 0.12, "triangle", 0.1, i * 0.05));
+  }
+
   click(): void {
     this.tone(1200, 0.05, "square", 0.08);
   }
