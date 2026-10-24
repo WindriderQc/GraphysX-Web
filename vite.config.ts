@@ -1,6 +1,7 @@
+import { realpathSync } from "node:fs";
 import { cp, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { build, defineConfig, type Plugin } from "vite";
+import { build, defineConfig, loadEnv, type Plugin } from "vite";
 // @ts-expect-error -- plain .mjs build script, no type declarations
 import { productAssetManifest } from "./scripts/product-assets.mjs";
 // @ts-expect-error -- local development middleware, not browser code
@@ -11,8 +12,10 @@ import { createKidxTeamRoute } from "./scripts/kidx-team-server.mjs";
 import { createLlmXRoute } from "./scripts/llmx-server.mjs";
 // @ts-expect-error -- local agent relay (Codex / Claude Code MCP), never part of the browser bundle
 import { createGraphysXAgentRoute } from "./scripts/graphysx-agent-relay.mjs";
+// @ts-expect-error -- local read-only bridge to AgentX Data for DiskX, never part of the browser bundle
+import { createDiskxRoute } from "./scripts/diskx-server.mjs";
 
-function kidxDocuments(): Plugin {
+function kidxDocuments(diskxDataUrl?: string): Plugin {
   return { name: "kidx-local-instructions", apply: "serve", async configureServer(server) {
     const route = await createKidxDocumentRoute();
     const teams = createKidxTeamRoute();
@@ -21,8 +24,10 @@ function kidxDocuments(): Plugin {
     // dev server is reachable by the graphysx MCP too (GRAPHYSX_URL=http://127.0.0.1:<dev port>/).
     // The relay itself refuses anything but loopback, same-origin requests.
     const agents = createGraphysXAgentRoute();
+    // DiskX reads AgentX Data through the page's own origin; `DISKX_DATA_URL` unset means fixture.
+    const diskx = createDiskxRoute({ dataUrl: diskxDataUrl });
     server.httpServer?.once("close", () => agents.dispose());
-    server.middlewares.use((req, res, next) => { if (!agents(req, res) && !llmx(req, res) && !teams(req, res) && !route(req, res)) next(); });
+    server.middlewares.use((req, res, next) => { if (!agents(req, res) && !llmx(req, res) && !diskx(req, res) && !teams(req, res) && !route(req, res)) next(); });
   } };
 }
 
@@ -70,7 +75,10 @@ function faceEmbed(): Plugin {
   };
 }
 
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
+  // `DISKX_DATA_URL` may come from the shell or from an ignored `.env.local`, so a developer on
+  // the home LAN can point DiskX at AgentX Data without exporting anything per terminal.
+  const diskxDataUrl = process.env.DISKX_DATA_URL || loadEnv(mode, process.cwd(), "DISKX_").DISKX_DATA_URL || undefined;
   // GRAPHYSX_FULL_ASSETS=1 builds the unpruned dist — for driving an archive world in the
   // legacy player against a real build, which the pruned release cannot serve.
   const fullAssets = process.env.GRAPHYSX_FULL_ASSETS === "1";
@@ -78,12 +86,15 @@ export default defineConfig(({ command }) => {
   return {
     // Dev always serves all of public/, so the legacy route keeps its archive locally.
     publicDir: prune ? false : "public",
-    plugins: prune ? [productAssets(), faceEmbed()] : command === "build" ? [faceEmbed()] : [kidxDocuments()],
+    plugins: prune ? [productAssets(), faceEmbed()] : command === "build" ? [faceEmbed()] : [kidxDocuments(diskxDataUrl)],
     optimizeDeps: { entries: ["index.html"] },
     server: {
       // PORT lets a second checkout/session run its own dev server beside the default one.
       port: Number(process.env.PORT ?? 4173),
       watch: { ignored: ["**/output/**", "**/docs/Lego/**"] },
+      // A worktree links node_modules to the main checkout; Vite resolves the junction and
+      // would refuse the fonts behind it as outside the root, so allow the real path too.
+      fs: { allow: [process.cwd(), realpathSync("node_modules")] },
     }
   };
 });

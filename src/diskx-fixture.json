@@ -1,0 +1,2089 @@
+{
+"schema": "graphysx.diskx-fixture/v1",
+"capturedAt": "2026-10-24T02:47:00Z",
+"source": "AgentX Data · /api/data-toolbox/storage (ugfrank-storage)",
+"roots": [
+"/mnt/datalake",
+"/mnt/media"
+],
+"summary": {
+"totalFiles": 273653,
+"totalSize": 2524931014064,
+"directories": 26640,
+"lastScanAt": "2026-10-23T07:03:18.228Z"
+},
+"directories": [
+{
+"path": "/mnt/media/Movies",
+"fileCount": 309,
+"totalSize": 414614215947,
+"largestFile": "/mnt/media/Movies/avatar.2009.1080p.bluray.x264.mkv"
+},
+{
+"path": "/mnt/media/Movies/Kidz",
+"fileCount": 60,
+"totalSize": 141917455622,
+"largestFile": "/mnt/media/Movies/Kidz/The.LEGO.Ninjago.Movie.2017.MULTi.VFQ.2160p.UHD.BLURAY.REMUX.HEVC.TrueHD.Atmos.AC3-TDPG.mkv"
+},
+{
+"path": "/mnt/datalake/LLMs/blobs",
+"fileCount": 59,
+"totalSize": 130372540286,
+"largestFile": "/mnt/datalake/LLMs/blobs/sha256-b2c12d46c1eec7e6536b759f1b6d5f98e254ade8a25c293f0fc01cce9489af69"
+},
+{
+"path": "/mnt/datalake/VM/DevHQ",
+"fileCount": 3,
+"totalSize": 60573102073,
+"largestFile": "/mnt/datalake/VM/DevHQ/DevHQ.vdi"
+},
+{
+"path": "/mnt/media/Varia/Skydive",
+"fileCount": 255,
+"totalSize": 53652361138,
+"largestFile": "/mnt/media/Varia/Skydive/GOPR0238.MP4"
+},
+{
+"path": "/mnt/datalake/ISO",
+"fileCount": 21,
+"totalSize": 44811771263,
+"largestFile": "/mnt/datalake/ISO/Win10_21H2_FrenchCanadian_x64.iso"
+},
+{
+"path": "/mnt/media/LQ Movies",
+"fileCount": 60,
+"totalSize": 40464438521,
+"largestFile": "/mnt/media/LQ Movies/The.Good.Shepherd[2006]DvDrip[Eng]-aXXo.avi"
+},
+{
+"path": "/mnt/media/TV Shows/TrueBlood/True Blood S05 Season 5 720p BluRay x264-PublicHash",
+"fileCount": 13,
+"totalSize": 29622901486,
+"largestFile": "/mnt/media/TV Shows/TrueBlood/True Blood S05 Season 5 720p BluRay x264-PublicHash/true.blood.s05e09.720p.bluray.x264-demand.mkv"
+},
+{
+"path": "/mnt/media/Varia/Souvenirs",
+"fileCount": 489,
+"totalSize": 29003603441,
+"largestFile": "/mnt/media/Varia/Souvenirs/Yanik Isa_Jeunesse et Hockey 1989.bin"
+},
+{
+"path": "/mnt/media/TV Shows/TrueBlood/True.Blood.S06.720p.BluRay.x264-SNOW [PublicHD]",
+"fileCount": 10,
+"totalSize": 26454988801,
+"largestFile": "/mnt/media/TV Shows/TrueBlood/True.Blood.S06.720p.BluRay.x264-SNOW [PublicHD]/True.Blood.S06E03.You're.No.Good.720p.BluRay.x264-SNOW.mkv"
+},
+{
+"path": "/mnt/datalake/backups",
+"fileCount": 2,
+"totalSize": 24537235537,
+"largestFile": "/mnt/datalake/backups/linuxmint_backup.tar.gz"
+},
+{
+"path": "/mnt/media/Varia/Skydive/bcp sept",
+"fileCount": 54,
+"totalSize": 19351352669,
+"largestFile": "/mnt/media/Varia/Skydive/bcp sept/GOPR5132.MP4"
+},
+{
+"path": "/mnt/media/Varia/Skydive/SD Backup",
+"fileCount": 113,
+"totalSize": 18078144455,
+"largestFile": "/mnt/media/Varia/Skydive/SD Backup/GOPR3463.MP4"
+},
+{
+"path": "/mnt/media/TV Shows/TrueBlood/True.Blood.S01.720p.HDTV.x264.AC3",
+"fileCount": 13,
+"totalSize": 18001338280,
+"largestFile": "/mnt/media/TV Shows/TrueBlood/True.Blood.S01.720p.HDTV.x264.AC3/True.Blood.1x05.Sparks.Fly.Out.720p.HDTV.x264.AC3-2HD.mkv"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Zhills avril 2012",
+"fileCount": 62,
+"totalSize": 17011825370,
+"largestFile": "/mnt/media/Varia/Skydive/Zhills avril 2012/GOPR0191.MP4"
+},
+{
+"path": "/mnt/media/images/Phones",
+"fileCount": 4090,
+"totalSize": 16979751661,
+"largestFile": "/mnt/media/images/Phones/20230612_184032.jpg"
+},
+{
+"path": "/mnt/datalake",
+"fileCount": 161,
+"totalSize": 14772631014,
+"largestFile": "/mnt/datalake/3D Print.zip"
+},
+{
+"path": "/mnt/media/Varia/Skydive/New folder",
+"fileCount": 39,
+"totalSize": 13015305304,
+"largestFile": "/mnt/media/Varia/Skydive/New folder/GOPR0289.MP4"
+},
+{
+"path": "/mnt/media/Varia/Skydive/2 sur 2",
+"fileCount": 3,
+"totalSize": 11804173797,
+"largestFile": "/mnt/media/Varia/Skydive/2 sur 2/GOPR0002 (2).MP4"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Tunnel",
+"fileCount": 5,
+"totalSize": 10549166367,
+"largestFile": "/mnt/media/Varia/Skydive/Tunnel/GOPR0018.MP4"
+},
+{
+"path": "/mnt/media/TV Shows/Westworld/Westworld.S01.MULTi.1080p.WEBRip.5.1x265-R3MiX",
+"fileCount": 11,
+"totalSize": 10388756280,
+"largestFile": "/mnt/media/TV Shows/Westworld/Westworld.S01.MULTi.1080p.WEBRip.5.1x265-R3MiX/Westworld.S01E10.MULTi.1080p.WEBRip.5.1x265-R3MiX.mkv"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Movies",
+"fileCount": 9,
+"totalSize": 10367027757,
+"largestFile": "/mnt/media/Varia/Skydive/Movies/2011.v1.wmv"
+},
+{
+"path": "/mnt/media/TV Shows/Westworld/Westworld.S02.MULTi.1080p.WEBRip.5.1x265-R3MiX",
+"fileCount": 11,
+"totalSize": 10271592943,
+"largestFile": "/mnt/media/TV Shows/Westworld/Westworld.S02.MULTi.1080p.WEBRip.5.1x265-R3MiX/Westworld.S02E10.MULTi.1080p.WEBRip.5.1.x265-R3MiX.mkv"
+},
+{
+"path": "/mnt/media/Varia/X-Sports",
+"fileCount": 20,
+"totalSize": 9189125725,
+"largestFile": "/mnt/media/Varia/X-Sports/The.Art.Of.Flight.2011.720p.BRRiP.XViD.AC3-FLAWL3SS.avi"
+},
+{
+"path": "/mnt/media/Varia/Skydive/atmos",
+"fileCount": 21,
+"totalSize": 8960167665,
+"largestFile": "/mnt/media/Varia/Skydive/atmos/GOPR0174.MP4"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Beginner Acoustic",
+"fileCount": 20,
+"totalSize": 8703260672,
+"largestFile": "/mnt/media/Varia/Guitare/Beginner Acoustic/1.Start.E.G.A.VOB"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Skydive 2015",
+"fileCount": 24,
+"totalSize": 8602824453,
+"largestFile": "/mnt/media/Varia/Skydive/Skydive 2015/GOPR8309.MP4"
+},
+{
+"path": "/mnt/media/Varia/Beachbody.com - Shaun T - Insanity Deluxe",
+"fileCount": 16,
+"totalSize": 8530443951,
+"largestFile": "/mnt/media/Varia/Beachbody.com - Shaun T - Insanity Deluxe/08 - Max Interval Circuit.m4v"
+},
+{
+"path": "/mnt/media/Movies/GREEN_ZONE/VIDEO_TS",
+"fileCount": 33,
+"totalSize": 8414701568,
+"largestFile": "/mnt/media/Movies/GREEN_ZONE/VIDEO_TS/VTS_06_6.VOB"
+},
+{
+"path": "/mnt/media/Beat",
+"fileCount": 1561,
+"totalSize": 8395436137,
+"largestFile": "/mnt/media/Beat/Delerium_feat_sarah_mclachlan_-_silence_2008_(niels_van_gogh_vs_thomas_gold_remix).mp3"
+},
+{
+"path": "/mnt/media/Movies/PICHE_ENTRE_CIEL_ET_TERRE/VIDEO_TS",
+"fileCount": 59,
+"totalSize": 8373685248,
+"largestFile": "/mnt/media/Movies/PICHE_ENTRE_CIEL_ET_TERRE/VIDEO_TS/VTS_02_1.VOB"
+},
+{
+"path": "/mnt/media/Movies/CHARLIE_ST_CLOUD/VIDEO_TS",
+"fileCount": 33,
+"totalSize": 8358662144,
+"largestFile": "/mnt/media/Movies/CHARLIE_ST_CLOUD/VIDEO_TS/VTS_05_5.VOB"
+},
+{
+"path": "/mnt/media/images/Diaporamas",
+"fileCount": 2177,
+"totalSize": 8224905265,
+"largestFile": "/mnt/media/images/Diaporamas/20200424_155536.mp4"
+},
+{
+"path": "/mnt/media/Movies/COACH_CARTER_169/VIDEO_TS",
+"fileCount": 36,
+"totalSize": 8198963200,
+"largestFile": "/mnt/media/Movies/COACH_CARTER_169/VIDEO_TS/VTS_05_1.VOB"
+},
+{
+"path": "/mnt/media/Movies/BUMRUSH/VIDEO_TS",
+"fileCount": 42,
+"totalSize": 8192847872,
+"largestFile": "/mnt/media/Movies/BUMRUSH/VIDEO_TS/VTS_01_1.VOB"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Guitar courses - Blues",
+"fileCount": 98,
+"totalSize": 8119486836,
+"largestFile": "/mnt/media/Varia/Guitare/Guitar courses - Blues/IntermediatePart2-Lesson1.mp4"
+},
+{
+"path": "/mnt/datalake/bckup",
+"fileCount": 406,
+"totalSize": 8049207264,
+"largestFile": "/mnt/datalake/bckup/Unity Projects.zip"
+},
+{
+"path": "/mnt/datalake/Tech",
+"fileCount": 33,
+"totalSize": 7941931400,
+"largestFile": "/mnt/datalake/Tech/SurfacePro3_BMR_10_7.102.0 (1).zip"
+},
+{
+"path": "/mnt/media/Movies/Moneyball/VIDEO_TS",
+"fileCount": 104,
+"totalSize": 7934035968,
+"largestFile": "/mnt/media/Movies/Moneyball/VIDEO_TS/VTS_01_1.VOB"
+},
+{
+"path": "/mnt/media/Movies/ADJUSTMENT_BUREAU/VIDEO_TS",
+"fileCount": 44,
+"totalSize": 7920863232,
+"largestFile": "/mnt/media/Movies/ADJUSTMENT_BUREAU/VIDEO_TS/VTS_04_5.VOB"
+},
+{
+"path": "/mnt/media/TV Shows/Fringe",
+"fileCount": 21,
+"totalSize": 7917707248,
+"largestFile": "/mnt/media/TV Shows/Fringe/Fringe.S01E01.HDTV.XviD-NoTV.avi"
+},
+{
+"path": "/mnt/media",
+"fileCount": 96,
+"totalSize": 7917546373,
+"largestFile": "/mnt/media/GH010355.MP4"
+},
+{
+"path": "/mnt/datalake/Shared Software/Games/Rocksmith 2014 + All DLC's (including RS1) and No Cable Fix",
+"fileCount": 2,
+"totalSize": 7494959426,
+"largestFile": "/mnt/datalake/Shared Software/Games/Rocksmith 2014 + All DLC's (including RS1) and No Cable Fix/Rocksmith 2014 + All DLC's (including RS1) and No Cable Fix.iso"
+},
+{
+"path": "/mnt/media/TV Shows/Westworld/Westworld.S04.MULTi.1080p.WEBRip.DDP5.1.x265-R3MiX",
+"fileCount": 9,
+"totalSize": 7441629801,
+"largestFile": "/mnt/media/TV Shows/Westworld/Westworld.S04.MULTi.1080p.WEBRip.DDP5.1.x265-R3MiX/Westworld.S04E08.MULTi.1080p.WEBRip.DDP5.1.x265-R3MiX.mkv"
+},
+{
+"path": "/mnt/media/Movies/WHITEMENCANTJUMP/VIDEO_TS",
+"fileCount": 30,
+"totalSize": 7431481856,
+"largestFile": "/mnt/media/Movies/WHITEMENCANTJUMP/VIDEO_TS/VTS_04_1.VOB"
+},
+{
+"path": "/mnt/media/Movies/IN_TIME/VIDEO_TS",
+"fileCount": 32,
+"totalSize": 7038371840,
+"largestFile": "/mnt/media/Movies/IN_TIME/VIDEO_TS/VTS_02_2.VOB"
+},
+{
+"path": "/mnt/media/TV Shows/Dexter/Dexter - The Complete Season 5 [HDTV]",
+"fileCount": 15,
+"totalSize": 6921902699,
+"largestFile": "/mnt/media/TV Shows/Dexter/Dexter - The Complete Season 5 [HDTV]/Dexter.S05E09.Teenage.Wasteland.HDTV.XviD-FEVER.avi"
+},
+{
+"path": "/mnt/media/TV Shows/Californication/Californication - Season 1 - 720p",
+"fileCount": 13,
+"totalSize": 6920919386,
+"largestFile": "/mnt/media/TV Shows/Californication/Californication - Season 1 - 720p/Californication.S01E10.720p.HDTV.x264-hdq.mkv"
+},
+{
+"path": "/mnt/media/TV Shows/Dexter/S6",
+"fileCount": 13,
+"totalSize": 6915784012,
+"largestFile": "/mnt/media/TV Shows/Dexter/S6/Dexter.S06E02.Once.Upon.a.Time.HDTV.XviD-FQM.avi"
+},
+{
+"path": "/mnt/media/TV Shows/TrueBlood/Season 2",
+"fileCount": 12,
+"totalSize": 6914554520,
+"largestFile": "/mnt/media/TV Shows/TrueBlood/Season 2/True.Blood.S02E12.HDTV.XviD-NoTV.avi"
+},
+{
+"path": "/mnt/media/TV Shows/Dexter/Dexter Season 3",
+"fileCount": 13,
+"totalSize": 6905691956,
+"largestFile": "/mnt/media/TV Shows/Dexter/Dexter Season 3/Dexter.S03E03.HDTV.XviD-NoTV.avi"
+},
+{
+"path": "/mnt/media/TV Shows/Dexter/Dexter - Season 4",
+"fileCount": 13,
+"totalSize": 6711336620,
+"largestFile": "/mnt/media/TV Shows/Dexter/Dexter - Season 4/Dexter.S04E04.avi"
+},
+{
+"path": "/mnt/media/TV Shows/TrueBlood/TrueBlood_S03",
+"fileCount": 13,
+"totalSize": 6711287442,
+"largestFile": "/mnt/media/TV Shows/TrueBlood/TrueBlood_S03/True.Blood.S03E03.HDTV.XviD.avi"
+},
+{
+"path": "/mnt/media/TV Shows/TrueBlood/TrueBlood.season.4",
+"fileCount": 12,
+"totalSize": 6701824732,
+"largestFile": "/mnt/media/TV Shows/TrueBlood/TrueBlood.season.4/4.I'm Alive and On Fire.avi"
+},
+{
+"path": "/mnt/media/TV Shows/Spartacus - Blood and Sand",
+"fileCount": 14,
+"totalSize": 6590149572,
+"largestFile": "/mnt/media/TV Shows/Spartacus - Blood and Sand/spartacus.blood.and.sand.106.hdtv.xvid-sys.avi"
+},
+{
+"path": "/mnt/media/TV Shows/Westworld/Westworld.S03.MULTi.1080p.WEBRip.5.1x265-R3MiX",
+"fileCount": 9,
+"totalSize": 6577352293,
+"largestFile": "/mnt/media/TV Shows/Westworld/Westworld.S03.MULTi.1080p.WEBRip.5.1x265-R3MiX/Westworld.S03E08.MULTi.1080p.WEBRip.5.1x265-R3MiX.mkv"
+},
+{
+"path": "/mnt/media/Movies/LES_HOMMES_DAFFAIRES/VIDEO_TS",
+"fileCount": 33,
+"totalSize": 6435670016,
+"largestFile": "/mnt/media/Movies/LES_HOMMES_DAFFAIRES/VIDEO_TS/VTS_02_1.VOB"
+},
+{
+"path": "/mnt/media/Varia/Skydive/2012",
+"fileCount": 27,
+"totalSize": 6353513925,
+"largestFile": "/mnt/media/Varia/Skydive/2012/GOPR3426.MP4"
+},
+{
+"path": "/mnt/media/Movies/HITMAN_UNRATED/VIDEO_TS",
+"fileCount": 27,
+"totalSize": 5982208000,
+"largestFile": "/mnt/media/Movies/HITMAN_UNRATED/VIDEO_TS/VTS_01_1.VOB"
+},
+{
+"path": "/mnt/media/Movies/Butterfly Effect Trilogy 2004 2006 2009 Bluray 720p x264 aac",
+"fileCount": 12,
+"totalSize": 5863951829,
+"largestFile": "/mnt/media/Movies/Butterfly Effect Trilogy 2004 2006 2009 Bluray 720p x264 aac/Butterfly Effect 1 2004.mp4"
+},
+{
+"path": "/mnt/datalake/Shared Software",
+"fileCount": 1,
+"totalSize": 5558550528,
+"largestFile": "/mnt/datalake/Shared Software/Win11_24H2_FrenchCanadian_x64.iso"
+},
+{
+"path": "/mnt/media/priv",
+"fileCount": 943,
+"totalSize": 5122179493,
+"largestFile": "/mnt/media/priv/20171113_222639.mp4"
+},
+{
+"path": "/mnt/media/Movies/Dawn.Of.The.Planet.of.The.Apes.2014.1080p.WEB-DL.DD51.H264-RARBG",
+"fileCount": 6,
+"totalSize": 5059403773,
+"largestFile": "/mnt/media/Movies/Dawn.Of.The.Planet.of.The.Apes.2014.1080p.WEB-DL.DD51.H264-RARBG/Dawn.Of.The.Planet.of.The.Apes.2014.1080p.WEB-DL.DD51.H264-RARBG.mkv"
+},
+{
+"path": "/mnt/media/TV Shows/TrueBlood/True.Blood.S07.HDTV.x264-Pack (Silver Torrent)",
+"fileCount": 12,
+"totalSize": 4894690002,
+"largestFile": "/mnt/media/TV Shows/TrueBlood/True.Blood.S07.HDTV.x264-Pack (Silver Torrent)/True.Blood.S07E07.HDTV.x264-KILLERS.mp4"
+},
+{
+"path": "/mnt/media/TV Shows/Dexter/Dexter Season 7",
+"fileCount": 25,
+"totalSize": 4821095809,
+"largestFile": "/mnt/media/TV Shows/Dexter/Dexter Season 7/Dexter - 07x09 - Helter Skelter.mp4"
+},
+{
+"path": "/mnt/media/Varia/Skydive/21 ways 27 juillet",
+"fileCount": 19,
+"totalSize": 4780180974,
+"largestFile": "/mnt/media/Varia/Skydive/21 ways 27 juillet/GOPR0053.MP4"
+},
+{
+"path": "/mnt/media/Varia/Shaolin Kung Fu Fundamental Training - DVD5/VIDEO_TS",
+"fileCount": 28,
+"totalSize": 4689207296,
+"largestFile": "/mnt/media/Varia/Shaolin Kung Fu Fundamental Training - DVD5/VIDEO_TS/VTS_02_1.VOB"
+},
+{
+"path": "/mnt/media/Varia/Crosswind.2001.PAL.DVDR-Leeched",
+"fileCount": 1,
+"totalSize": 4681428992,
+"largestFile": "/mnt/media/Varia/Crosswind.2001.PAL.DVDR-Leeched/cbypp-Leeched.ISO"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Crosswind.2001.PAL.DVDR-Leeched",
+"fileCount": 1,
+"totalSize": 4681428992,
+"largestFile": "/mnt/media/Varia/Skydive/Crosswind.2001.PAL.DVDR-Leeched/cbypp-Leeched.ISO"
+},
+{
+"path": "/mnt/media/Movies/Wimbledon fr/VIDEO_TS",
+"fileCount": 34,
+"totalSize": 4680853504,
+"largestFile": "/mnt/media/Movies/Wimbledon fr/VIDEO_TS/VTS_01_1.VOB"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Atmosphair",
+"fileCount": 17,
+"totalSize": 4561724570,
+"largestFile": "/mnt/media/Varia/Skydive/Atmosphair/GOPR0002 - VR6 2 rondes 360.MP4"
+},
+{
+"path": "/mnt/datalake/bckup/zoo & bungee",
+"fileCount": 38,
+"totalSize": 4472734641,
+"largestFile": "/mnt/datalake/bckup/zoo & bungee/GOPR8540.MP4"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Easy Songs vol 6",
+"fileCount": 13,
+"totalSize": 4446208000,
+"largestFile": "/mnt/media/Varia/Guitare/Easy Songs vol 6/VTS_04_1.VOB"
+},
+{
+"path": "/mnt/media/Movies/Rocky-The.Complete.Saga[2007]DvDrip-aXXo",
+"fileCount": 9,
+"totalSize": 4411173772,
+"largestFile": "/mnt/media/Movies/Rocky-The.Complete.Saga[2007]DvDrip-aXXo/Rocky.VI.Balboa[2006]DvDrip-aXXo.avi"
+},
+{
+"path": "/mnt/media/TV Shows/Dexter/S2",
+"fileCount": 13,
+"totalSize": 4406830740,
+"largestFile": "/mnt/media/TV Shows/Dexter/S2/dexter.204.hdtv.xvid.notv.avi"
+},
+{
+"path": "/mnt/media/Movies/FRENCH_KISS/VIDEO_TS",
+"fileCount": 54,
+"totalSize": 4406452224,
+"largestFile": "/mnt/media/Movies/FRENCH_KISS/VIDEO_TS/VTS_02_3.VOB"
+},
+{
+"path": "/mnt/media/Varia/Georges St-Pierre 'Rushfit' Workout Program/Dvds",
+"fileCount": 6,
+"totalSize": 4405248000,
+"largestFile": "/mnt/media/Varia/Georges St-Pierre 'Rushfit' Workout Program/Dvds/Rushfit Full Body Strength and Conditioning Dvd.avi"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Mustang Sally Lessons",
+"fileCount": 9,
+"totalSize": 4399976448,
+"largestFile": "/mnt/media/Varia/Guitare/Mustang Sally Lessons/VTS_03_1.VOB"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Beginner Rock Guitar",
+"fileCount": 10,
+"totalSize": 4398923776,
+"largestFile": "/mnt/media/Varia/Guitare/Beginner Rock Guitar/2.Basics.VOB"
+},
+{
+"path": "/mnt/media/TV Shows/Dexter/S1",
+"fileCount": 13,
+"totalSize": 4397168640,
+"largestFile": "/mnt/media/TV Shows/Dexter/S1/dexter.108.hdtv-lol.avi"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Country Guitar 1",
+"fileCount": 75,
+"totalSize": 4385617920,
+"largestFile": "/mnt/media/Varia/Guitare/Country Guitar 1/VTS_21_1.VOB"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Easy Songs vol 5",
+"fileCount": 11,
+"totalSize": 4385222656,
+"largestFile": "/mnt/media/Varia/Guitare/Easy Songs vol 5/VTS_09_1.VOB"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Funk Guitar",
+"fileCount": 7,
+"totalSize": 4361553920,
+"largestFile": "/mnt/media/Varia/Guitare/Funk Guitar/1.Funk.VOB"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Easy Songs vol 7",
+"fileCount": 11,
+"totalSize": 4357093376,
+"largestFile": "/mnt/media/Varia/Guitare/Easy Songs vol 7/VTS_10_1.VOB"
+},
+{
+"path": "/mnt/media/Movies/THE_SON_OF_NO_ONE/VIDEO_TS",
+"fileCount": 54,
+"totalSize": 4248252416,
+"largestFile": "/mnt/media/Movies/THE_SON_OF_NO_ONE/VIDEO_TS/VTS_02_1.VOB"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Easy Songs vol 2",
+"fileCount": 8,
+"totalSize": 4241733632,
+"largestFile": "/mnt/media/Varia/Guitare/Easy Songs vol 2/session 8.VOB"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Easy Songs vol 9",
+"fileCount": 10,
+"totalSize": 4225271808,
+"largestFile": "/mnt/media/Varia/Guitare/Easy Songs vol 9/VTS_05_1.VOB"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Easy Songs vol 1",
+"fileCount": 8,
+"totalSize": 4141303808,
+"largestFile": "/mnt/media/Varia/Guitare/Easy Songs vol 1/Lesson 1.VOB"
+},
+{
+"path": "/mnt/datalake/Tech/Unity n Blender",
+"fileCount": 15,
+"totalSize": 4121012830,
+"largestFile": "/mnt/datalake/Tech/Unity n Blender/blender-creating-game-animation-2460.zip"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Easy Songs vol 4",
+"fileCount": 8,
+"totalSize": 4069834752,
+"largestFile": "/mnt/media/Varia/Guitare/Easy Songs vol 4/VTS_02_1.VOB"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Easy Songs vol 3",
+"fileCount": 10,
+"totalSize": 4066693120,
+"largestFile": "/mnt/media/Varia/Guitare/Easy Songs vol 3/VTS_06_1.VOB"
+},
+{
+"path": "/mnt/media/Varia/Guitare/Easy Songs vol 8",
+"fileCount": 10,
+"totalSize": 4066525184,
+"largestFile": "/mnt/media/Varia/Guitare/Easy Songs vol 8/VTS_03_1.VOB"
+},
+{
+"path": "/mnt/datalake/Tech/Unity n Blender/Added",
+"fileCount": 7,
+"totalSize": 4011125828,
+"largestFile": "/mnt/datalake/Tech/Unity n Blender/Added/UnityNavigationFundamentalsDemos.unitypackage"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Sequentielle + freefly",
+"fileCount": 10,
+"totalSize": 3881111754,
+"largestFile": "/mnt/media/Varia/Skydive/Sequentielle + freefly/GOPR8663.MP4"
+},
+{
+"path": "/mnt/media/Cadre Photo",
+"fileCount": 1157,
+"totalSize": 3801945270,
+"largestFile": "/mnt/media/Cadre Photo/DSC00361.JPG"
+},
+{
+"path": "/mnt/media/Movies/Skydive Movies",
+"fileCount": 5,
+"totalSize": 3690774784,
+"largestFile": "/mnt/media/Movies/Skydive Movies/IMAX.Adrenaline.Rush.720p.Atmosphair.avi"
+},
+{
+"path": "/mnt/media/TV Shows/Spartacus - Gods of the arena",
+"fileCount": 7,
+"totalSize": 3462323774,
+"largestFile": "/mnt/media/TV Shows/Spartacus - Gods of the arena/spartacus.gods.of.the.arena.part03.hdtv.xvid-asap.avi"
+},
+{
+"path": "/mnt/media/TV Shows/Spartacus Vengeance - Complete Season",
+"fileCount": 10,
+"totalSize": 3326855414,
+"largestFile": "/mnt/media/TV Shows/Spartacus Vengeance - Complete Season/Spartacus Vengeance - 2x07 - Sacramentum.divx"
+},
+{
+"path": "/mnt/media/TV Shows/Californication/Californication - Season 3",
+"fileCount": 13,
+"totalSize": 2927200444,
+"largestFile": "/mnt/media/TV Shows/Californication/Californication - Season 3/californication.312.hdtv.xvid-sys.avi"
+},
+{
+"path": "/mnt/media/Movies/The Hobbit An Unexpected Journey (2012) [1080p]",
+"fileCount": 3,
+"totalSize": 2684496145,
+"largestFile": "/mnt/media/Movies/The Hobbit An Unexpected Journey (2012) [1080p]/The.Hobbit.An.Unexpected.Journey.2012.1080p.BRrip.x264.GAZ.YIFY.mp4"
+},
+{
+"path": "/mnt/media/TV Shows/Dexter/Dexter Season 8 Complete HDTV.rip [KiNFi]",
+"fileCount": 12,
+"totalSize": 2412536997,
+"largestFile": "/mnt/media/TV Shows/Dexter/Dexter Season 8 Complete HDTV.rip [KiNFi]/12.mkv"
+},
+{
+"path": "/mnt/media/Movies/Noah (2014) [1080p]",
+"fileCount": 2,
+"totalSize": 2211776695,
+"largestFile": "/mnt/media/Movies/Noah (2014) [1080p]/Noah.2014.1080p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/The Hobbit The Desolation of Smaug (2013) [1080p]",
+"fileCount": 3,
+"totalSize": 2208581697,
+"largestFile": "/mnt/media/Movies/The Hobbit The Desolation of Smaug (2013) [1080p]/The.Hobbit.The.Desolation.of.Smaug.2013.1080p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/images/Pictures/Bar Down Bullies",
+"fileCount": 306,
+"totalSize": 2118766409,
+"largestFile": "/mnt/media/images/Pictures/Bar Down Bullies/4XP_3189.JPG"
+},
+{
+"path": "/mnt/media/Movies/DIVERGENT 2014",
+"fileCount": 1,
+"totalSize": 2047174767,
+"largestFile": "/mnt/media/Movies/DIVERGENT 2014/DIVERGENT.mp4"
+},
+{
+"path": "/mnt/media/Movies/A Million Ways to Die in the West (2014) [1080p]",
+"fileCount": 3,
+"totalSize": 1986940490,
+"largestFile": "/mnt/media/Movies/A Million Ways to Die in the West (2014) [1080p]/A.Million.Ways.to.Die.in.the.West.2014.1080p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/Godzilla (2014) [1080p]",
+"fileCount": 3,
+"totalSize": 1978875782,
+"largestFile": "/mnt/media/Movies/Godzilla (2014) [1080p]/Godzilla.2014.1080p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Montages",
+"fileCount": 50,
+"totalSize": 1975952751,
+"largestFile": "/mnt/media/Varia/Skydive/Montages/Tunnel.P2b.wmv"
+},
+{
+"path": "/mnt/datalake/bckup/Downloads",
+"fileCount": 35,
+"totalSize": 1931661447,
+"largestFile": "/mnt/datalake/bckup/Downloads/backup-11.29.2021_13-58-08_coach031.tar.gz"
+},
+{
+"path": "/mnt/media/Movies/Resident Evil Trilogy 720p BDRip x264-HDLiTE/Resident Evil 2002 720p BDRip x264-HDLiTE",
+"fileCount": 3,
+"totalSize": 1929020011,
+"largestFile": "/mnt/media/Movies/Resident Evil Trilogy 720p BDRip x264-HDLiTE/Resident Evil 2002 720p BDRip x264-HDLiTE/Resident Evil.mp4"
+},
+{
+"path": "/mnt/datalake/bckup/Optel Backup",
+"fileCount": 167,
+"totalSize": 1928241322,
+"largestFile": "/mnt/datalake/bckup/Optel Backup/Domino FPAC_FINAL-V1.mp4"
+},
+{
+"path": "/mnt/media/Varia/Skydive/NOUVEL AIR",
+"fileCount": 13,
+"totalSize": 1827162457,
+"largestFile": "/mnt/media/Varia/Skydive/NOUVEL AIR/yanik en pac.MOV"
+},
+{
+"path": "/mnt/media/TV Shows/Californication",
+"fileCount": 6,
+"totalSize": 1782418076,
+"largestFile": "/mnt/media/TV Shows/Californication/Californication.S04E02.DVDRip.XviD-NoGrp.avi"
+},
+{
+"path": "/mnt/media/Movies/The Conjuring (2013) [1080p]",
+"fileCount": 2,
+"totalSize": 1774000294,
+"largestFile": "/mnt/media/Movies/The Conjuring (2013) [1080p]/The.Conjuring.2013.1080p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/Draft Day (2014) [1080p]",
+"fileCount": 2,
+"totalSize": 1773125109,
+"largestFile": "/mnt/media/Movies/Draft Day (2014) [1080p]/Draft.Day.2014.1080p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/300 Rise of an Empire (2014) [1080p]",
+"fileCount": 3,
+"totalSize": 1762127682,
+"largestFile": "/mnt/media/Movies/300 Rise of an Empire (2014) [1080p]/300.Rise.of.an.Empire.2014.1080p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/Begin.Again.2013.HDRip.XviD.AC3-EVO",
+"fileCount": 3,
+"totalSize": 1751094261,
+"largestFile": "/mnt/media/Movies/Begin.Again.2013.HDRip.XviD.AC3-EVO/Begin.Again.2013.HDRip.XviD.AC3-EVO.avi"
+},
+{
+"path": "/mnt/media/Movies/Kidz/Tinker Bell Secret of the Wings (2012)",
+"fileCount": 2,
+"totalSize": 1716768087,
+"largestFile": "/mnt/media/Movies/Kidz/Tinker Bell Secret of the Wings (2012)/Tinker Bell Secret of the Wings (2012) MULTi [1080p] BluRay x264-PopHD.mkv"
+},
+{
+"path": "/mnt/media/Varia/Voyages/Australia",
+"fileCount": 9,
+"totalSize": 1697791131,
+"largestFile": "/mnt/media/Varia/Voyages/Australia/GOPR8570.MP4"
+},
+{
+"path": "/mnt/media/Movies/Resident Evil Trilogy 720p BDRip x264-HDLiTE/Resident Evil Extinction 2007 720p BDRip x264-HDLiTE",
+"fileCount": 3,
+"totalSize": 1662507116,
+"largestFile": "/mnt/media/Movies/Resident Evil Trilogy 720p BDRip x264-HDLiTE/Resident Evil Extinction 2007 720p BDRip x264-HDLiTE/Resident Evil Extinction.mp4"
+},
+{
+"path": "/mnt/media/Movies/Resident Evil Trilogy 720p BDRip x264-HDLiTE/Resident Evil Apocalypse 2004 720p BDRip x264-HDLiTE",
+"fileCount": 3,
+"totalSize": 1660686076,
+"largestFile": "/mnt/media/Movies/Resident Evil Trilogy 720p BDRip x264-HDLiTE/Resident Evil Apocalypse 2004 720p BDRip x264-HDLiTE/Resident Evil Apocalypse.mp4"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Newyear",
+"fileCount": 11,
+"totalSize": 1642314649,
+"largestFile": "/mnt/media/Varia/Skydive/Newyear/z hills rw5 ene 2012-4.MP4"
+},
+{
+"path": "/mnt/media/Movies/Spaceballs (1987) [1080p]",
+"fileCount": 2,
+"totalSize": 1610146597,
+"largestFile": "/mnt/media/Movies/Spaceballs (1987) [1080p]/Spaceballs.1987.1080p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/datalake/Tech/Arduino n RaspberryPI",
+"fileCount": 18,
+"totalSize": 1586235047,
+"largestFile": "/mnt/datalake/Tech/Arduino n RaspberryPI/NOOBS_v2_4_3.zip"
+},
+{
+"path": "/mnt/media/Movies/Amsterdam.2013.DVDrip.XviD.AC3-exvet",
+"fileCount": 4,
+"totalSize": 1571854460,
+"largestFile": "/mnt/media/Movies/Amsterdam.2013.DVDrip.XviD.AC3-exvet/Amsterdam.2013.DVDrip.XviD.AC3-exvet.avi"
+},
+{
+"path": "/mnt/media/Movies/Patrick Swayze Movie Pack-TL/George.And.The.Dragon.2004.DVDRip.XviD.AC3-Shtbusters",
+"fileCount": 3,
+"totalSize": 1566334157,
+"largestFile": "/mnt/media/Movies/Patrick Swayze Movie Pack-TL/George.And.The.Dragon.2004.DVDRip.XviD.AC3-Shtbusters/George.And.The.Dragon.2004.DVDRip.XviD.AC3-Shitbusters.avi"
+},
+{
+"path": "/mnt/media/Movies/Patrick Swayze Movie Pack-TL/Steel.Dawn.1987.DVDRip.AC3.XviD-TMRC",
+"fileCount": 1,
+"totalSize": 1562746930,
+"largestFile": "/mnt/media/Movies/Patrick Swayze Movie Pack-TL/Steel.Dawn.1987.DVDRip.AC3.XviD-TMRC/Steel.Dawn.1987.DVDRip.AC3.XviD-TMRC.avi"
+},
+{
+"path": "/mnt/datalake/linux downloads",
+"fileCount": 110,
+"totalSize": 1542017729,
+"largestFile": "/mnt/datalake/linux downloads/Baby Groot - 2014307.zip"
+},
+{
+"path": "/mnt/media/Movies/The.Wolf.of.Wall.Street.2013.DVDSCR.XviD-BiDA",
+"fileCount": 3,
+"totalSize": 1491716252,
+"largestFile": "/mnt/media/Movies/The.Wolf.of.Wall.Street.2013.DVDSCR.XviD-BiDA/The.Wolf.of.Wall.Street.2013.DVDScr.XviD-BiDA.avi"
+},
+{
+"path": "/mnt/media/Movies/The Hunger.Games.2012.FRENCH",
+"fileCount": 3,
+"totalSize": 1478316666,
+"largestFile": "/mnt/media/Movies/The Hunger.Games.2012.FRENCH/[www.Cpasbien.com] The Hunger.Games.2012.FRENCH.DVDRIP.XViD-S.V.avi"
+},
+{
+"path": "/mnt/media/Movies/Resident Evil Trilogy 720p BDRip x264-HDLiTE/Resident Evil Afterlife (2010) R5 XviD-MAXSPEED",
+"fileCount": 9,
+"totalSize": 1477521721,
+"largestFile": "/mnt/media/Movies/Resident Evil Trilogy 720p BDRip x264-HDLiTE/Resident Evil Afterlife (2010) R5 XviD-MAXSPEED/Resident Evil Afterlife (2010) R5 XviD-MAXSPEED www.torentz.3xforum.ro.avi"
+},
+{
+"path": "/mnt/media/Movies/Transcendence.2014.FRENCH",
+"fileCount": 2,
+"totalSize": 1472950980,
+"largestFile": "/mnt/media/Movies/Transcendence.2014.FRENCH/[www.Cpasbien.pe] Transcendence.2014.FRENCH.BRRiP.XviD.AC3-BROTHERS.avi"
+},
+{
+"path": "/mnt/media/Movies/Patrick Swayze Movie Pack-TL/Ghost.1990.DVDRip.XviD.AC3-GaPPA",
+"fileCount": 1,
+"totalSize": 1468612608,
+"largestFile": "/mnt/media/Movies/Patrick Swayze Movie Pack-TL/Ghost.1990.DVDRip.XviD.AC3-GaPPA/dmg.ghost.avi"
+},
+{
+"path": "/mnt/media/Movies/Hercules.2014.FRENCH",
+"fileCount": 1,
+"totalSize": 1467651225,
+"largestFile": "/mnt/media/Movies/Hercules.2014.FRENCH/[www.Cpasbien.pe] Hercules.2014.FRENCH.SUBFORCED.BRRip.x264.AC3-SP3CTR3.mkv"
+},
+{
+"path": "/mnt/media/Movies/Guardians.of.the.Galaxy.2014.FRENCH",
+"fileCount": 3,
+"totalSize": 1466140910,
+"largestFile": "/mnt/media/Movies/Guardians.of.the.Galaxy.2014.FRENCH/[www.Cpasbien.pe] guardians.of.the.Galaxy.glups.avi"
+},
+{
+"path": "/mnt/media/Movies/Transformers.Age.Of.Extinction.2014.FRENCH",
+"fileCount": 2,
+"totalSize": 1465651918,
+"largestFile": "/mnt/media/Movies/Transformers.Age.Of.Extinction.2014.FRENCH/[www.Cpasbien.pe] destroy-transformersageofextinction.avi"
+},
+{
+"path": "/mnt/media/Movies/The.Giver.2014.TRUEFRENCH",
+"fileCount": 2,
+"totalSize": 1370270776,
+"largestFile": "/mnt/media/Movies/The.Giver.2014.TRUEFRENCH/[www.Cpasbien.pe] The.Giver.2014.TRUEFRENCH.BRRiP.MD.XviD-SHiFT.avi"
+},
+{
+"path": "/mnt/media/Movies/Maleficent (2014) DVDRip XviD-MAXSPEED",
+"fileCount": 4,
+"totalSize": 1330569270,
+"largestFile": "/mnt/media/Movies/Maleficent (2014) DVDRip XviD-MAXSPEED/Maleficent (2014) DVDRip XviD-MAXSPEED www.torentz.3xforum.ro.avi"
+},
+{
+"path": "/mnt/media/Varia/Skydive/dernier coaching 2012",
+"fileCount": 4,
+"totalSize": 1289359783,
+"largestFile": "/mnt/media/Varia/Skydive/dernier coaching 2012/GOPR5178.MP4"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Skydive newyear",
+"fileCount": 6,
+"totalSize": 1242960428,
+"largestFile": "/mnt/media/Varia/Skydive/Skydive newyear/VR5.Colombian view.Nice YB star entering.MP4"
+},
+{
+"path": "/mnt/media/Movies/Flu.2013.FRENCH.BDRip.x264-AKATSUKi",
+"fileCount": 2,
+"totalSize": 1239823331,
+"largestFile": "/mnt/media/Movies/Flu.2013.FRENCH.BDRip.x264-AKATSUKi/flu.2013.french.bdrip.x264-akatsuki.mkv"
+},
+{
+"path": "/mnt/media/Varia/Skydive/wingsuit",
+"fileCount": 2,
+"totalSize": 1195787806,
+"largestFile": "/mnt/media/Varia/Skydive/wingsuit/GOPR1406.MP4"
+},
+{
+"path": "/mnt/media/Beat/Great Punk Compo!! (133 Bands – 421 Tracks)",
+"fileCount": 438,
+"totalSize": 1149136142,
+"largestFile": "/mnt/media/Beat/Great Punk Compo!! (133 Bands – 421 Tracks)/12 Swimming Through Molasses.mp3"
+},
+{
+"path": "/mnt/media/images/Pictures/MEXIQUE 2015",
+"fileCount": 271,
+"totalSize": 1087278685,
+"largestFile": "/mnt/media/images/Pictures/MEXIQUE 2015/MOV03112.AVI"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Funny skydive and vr camp",
+"fileCount": 4,
+"totalSize": 1050865108,
+"largestFile": "/mnt/media/Varia/Skydive/Funny skydive and vr camp/GOPR9195.MP4"
+},
+{
+"path": "/mnt/media/Varia/Skydive/Provinciaux 2014",
+"fileCount": 9,
+"totalSize": 1031311929,
+"largestFile": "/mnt/media/Varia/Skydive/Provinciaux 2014/GOPR9031.MP4"
+},
+{
+"path": "/mnt/media/images",
+"fileCount": 208,
+"totalSize": 964393873,
+"largestFile": "/mnt/media/images/20200319_135438.mp4"
+},
+{
+"path": "/mnt/media/Beat/Non Classé",
+"fileCount": 186,
+"totalSize": 947854696,
+"largestFile": "/mnt/media/Beat/Non Classé/Armin Van Buren - Club Oxygen.mp3"
+},
+{
+"path": "/mnt/media/Movies/The Hunger Games (2012)",
+"fileCount": 2,
+"totalSize": 946574252,
+"largestFile": "/mnt/media/Movies/The Hunger Games (2012)/The.Hunger.Games.720p.BluRay.X264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/The Fault in Our Stars (2014)",
+"fileCount": 2,
+"totalSize": 922408669,
+"largestFile": "/mnt/media/Movies/The Fault in Our Stars (2014)/The.Fault.in.Our.Stars.2014.720p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/3 Days to Kill (2014)",
+"fileCount": 3,
+"totalSize": 910918490,
+"largestFile": "/mnt/media/Movies/3 Days to Kill (2014)/3.Days.to.Kill.2014.720p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/Transcendence (2014)",
+"fileCount": 2,
+"totalSize": 908835292,
+"largestFile": "/mnt/media/Movies/Transcendence (2014)/Transcendence.2014.720p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/The.Captive.2014.DVDRip.XviD-EVO",
+"fileCount": 5,
+"totalSize": 904016835,
+"largestFile": "/mnt/media/Movies/The.Captive.2014.DVDRip.XviD-EVO/The.Captive.2014.DVDRip.XviD-EVO.avi"
+},
+{
+"path": "/mnt/media/Movies/Tower.Heist.2011.DVDRip-PA",
+"fileCount": 3,
+"totalSize": 890021646,
+"largestFile": "/mnt/media/Movies/Tower.Heist.2011.DVDRip-PA/Tower.Heist.2011.DVDRip-PA.avi"
+},
+{
+"path": "/mnt/media/Movies/Think Like a Man Too (2014)",
+"fileCount": 3,
+"totalSize": 851500198,
+"largestFile": "/mnt/media/Movies/Think Like a Man Too (2014)/Think.Like.a.Man.Too.2014.720p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/Non Stop (2014)",
+"fileCount": 2,
+"totalSize": 850977125,
+"largestFile": "/mnt/media/Movies/Non Stop (2014)/Non.Stop.2014.720p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/The Rover (2014)",
+"fileCount": 3,
+"totalSize": 850357206,
+"largestFile": "/mnt/media/Movies/The Rover (2014)/The.Rover.2014.720p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/The.Karate.Kid[1984]DvDrip[Eng]-KLAXXON700MB",
+"fileCount": 3,
+"totalSize": 838856574,
+"largestFile": "/mnt/media/Movies/The.Karate.Kid[1984]DvDrip[Eng]-KLAXXON700MB/The.Karate.Kid[1984]DvDrip[Eng]-KLAXXON700MB.avi"
+},
+{
+"path": "/mnt/media/Movies/The Greatest Game Ever Played (2005)",
+"fileCount": 3,
+"totalSize": 834027757,
+"largestFile": "/mnt/media/Movies/The Greatest Game Ever Played (2005)/The.Greatest.Game.Ever.Played.BrRip.YIFY.mkv"
+},
+{
+"path": "/mnt/media/Movies/Neighbors (2014)",
+"fileCount": 2,
+"totalSize": 793554404,
+"largestFile": "/mnt/media/Movies/Neighbors (2014)/Neighbors.2014.720p.BluRay.x264.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/Rise of the Planet of the Apes (2011)",
+"fileCount": 3,
+"totalSize": 774812596,
+"largestFile": "/mnt/media/Movies/Rise of the Planet of the Apes (2011)/Rise.of.the.Planet.of.the.Apes.2011.BluRay.720p.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Movies/Earth.To.Echo.2014.FRENCH",
+"fileCount": 2,
+"totalSize": 772442072,
+"largestFile": "/mnt/media/Movies/Earth.To.Echo.2014.FRENCH/[www.Cpasbien.pe] Earth.To.Echo.2014.FRENCH.BRRiP.XViD-ARTEFAC.avi"
+},
+{
+"path": "/mnt/datalake/bckup/CellPics",
+"fileCount": 196,
+"totalSize": 741445400,
+"largestFile": "/mnt/datalake/bckup/CellPics/20151113_035715.mp4"
+},
+{
+"path": "/mnt/media/Movies/War.Horse.2011.DVDSCR.XVID.Une-CM8",
+"fileCount": 4,
+"totalSize": 740735059,
+"largestFile": "/mnt/media/Movies/War.Horse.2011.DVDSCR.XVID.Une-CM8/War.Horse.2011.DVDSCR.XVID.Une-CM8.avi"
+},
+{
+"path": "/mnt/media/Movies/Falcon.Rising.2014.HDRip.XViD-juggs[ETRG]",
+"fileCount": 7,
+"totalSize": 740277076,
+"largestFile": "/mnt/media/Movies/Falcon.Rising.2014.HDRip.XViD-juggs[ETRG]/Falcon.Rising.2014.HDRip.XViD-juggs[ETRG].avi"
+},
+{
+"path": "/mnt/media/Movies/Homefront.2013.FRENCH.BRRiP.XviD-CARPEDIEM",
+"fileCount": 2,
+"totalSize": 737158656,
+"largestFile": "/mnt/media/Movies/Homefront.2013.FRENCH.BRRiP.XviD-CARPEDIEM/Homefront 2013 FRENCH BRRiP XviD-CARPEDIEM.avi"
+},
+{
+"path": "/mnt/media/Movies/The.Anomaly.2014.TRUEFRENCH",
+"fileCount": 3,
+"totalSize": 736173798,
+"largestFile": "/mnt/media/Movies/The.Anomaly.2014.TRUEFRENCH/[www.Cpasbien.pe] The.Anomaly.2014.TRUEFRENCH.DVDRiP.XViD-ARTEFAC.avi"
+},
+{
+"path": "/mnt/media/Movies/The.Signal.2014.FRENCH",
+"fileCount": 2,
+"totalSize": 735283828,
+"largestFile": "/mnt/media/Movies/The.Signal.2014.FRENCH/[www.Cpasbien.pe] the.signal.glups.avi"
+},
+{
+"path": "/mnt/media/Movies/Begin.Again.2013.FRENCH",
+"fileCount": 2,
+"totalSize": 734164480,
+"largestFile": "/mnt/media/Movies/Begin.Again.2013.FRENCH/begin again.avi"
+},
+{
+"path": "/mnt/media/Movies/Lets.Be.Cops.2014.FRENCH",
+"fileCount": 2,
+"totalSize": 733770752,
+"largestFile": "/mnt/media/Movies/Lets.Be.Cops.2014.FRENCH/[www.Cpasbien.pe] destroy-letsbecops.avi"
+},
+{
+"path": "/mnt/media/Movies/Top gun 720P Dual Audio{English-Hindi}700mb.BRRip.aaaevilacharya",
+"fileCount": 1,
+"totalSize": 732378534,
+"largestFile": "/mnt/media/Movies/Top gun 720P Dual Audio{English-Hindi}700mb.BRRip.aaaevilacharya/Top gun. 720P.Dual Audio{English-Hindi}700mb.BRRip.aaaevilacharya-1.mkv"
+},
+{
+"path": "/mnt/media/Movies/Le.Prenom.2012.FRENCH.BDRiP.XViD-SEiGHT",
+"fileCount": 1,
+"totalSize": 731920384,
+"largestFile": "/mnt/media/Movies/Le.Prenom.2012.FRENCH.BDRiP.XViD-SEiGHT/Le.Prenom.2012.FRENCH.BDRiP.XViD-SEiGHT.avi"
+},
+{
+"path": "/mnt/media/Movies/Neighbors.2014.FRENCH",
+"fileCount": 1,
+"totalSize": 727997076,
+"largestFile": "/mnt/media/Movies/Neighbors.2014.FRENCH/[www.Cpasbien.pe] Neighbors.2014.FRENCH.BRRiP.XViD-ARTEFAC.avi"
+},
+{
+"path": "/mnt/media/Beat/Coupes Ton Pad Vol.1",
+"fileCount": 157,
+"totalSize": 725948989,
+"largestFile": "/mnt/media/Beat/Coupes Ton Pad Vol.1/Snap! - Rhythm Is A Dancer 2003.mp3"
+},
+{
+"path": "/mnt/media/Varia",
+"fileCount": 1,
+"totalSize": 724162249,
+"largestFile": "/mnt/media/Varia/Nationals 2013 full video.m4v"
+},
+{
+"path": "/mnt/media/Beat/instraz",
+"fileCount": 148,
+"totalSize": 638203613,
+"largestFile": "/mnt/media/Beat/instraz/deltron 3030 - 01 - deltron 3030- the instrumentals - 3030.mp3"
+},
+{
+"path": "/mnt/media/Beat/Party Beat",
+"fileCount": 105,
+"totalSize": 633784081,
+"largestFile": "/mnt/media/Beat/Party Beat/Drake Ft.Eminem, Lil Wayne And Kanye West-Forever-[NoFS].mp3"
+},
+{
+"path": "/mnt/media/Movies/Goon (2011)",
+"fileCount": 2,
+"totalSize": 630717361,
+"largestFile": "/mnt/media/Movies/Goon (2011)/Goon.2011.BrRip.x264.720p.YIFY.mp4"
+},
+{
+"path": "/mnt/media/Beat/EMINEM Greatest Hits",
+"fileCount": 86,
+"totalSize": 527978514,
+"largestFile": "/mnt/media/Beat/EMINEM Greatest Hits/Stan.mp3"
+},
+{
+"path": "/mnt/datalake/Tech/3dprints",
+"fileCount": 83,
+"totalSize": 516224830,
+"largestFile": "/mnt/datalake/Tech/3dprints/20160814_145508.mp4"
+},
+{
+"path": "/mnt/datalake/bckup/2016-03-17 Day in Jerusalem",
+"fileCount": 36,
+"totalSize": 502618763,
+"largestFile": "/mnt/datalake/bckup/2016-03-17 Day in Jerusalem/DSCN0333.MOV"
+},
+{
+"path": "/mnt/datalake/Bureau/phone docs",
+"fileCount": 200,
+"totalSize": 449860834,
+"largestFile": "/mnt/datalake/Bureau/phone docs/20230204_211534.jpg"
+},
+{
+"path": "/mnt/media/Beat/Punk",
+"fileCount": 83,
+"totalSize": 443799154,
+"largestFile": "/mnt/media/Beat/Punk/03 Hearts burst into fire.mp3"
+},
+{
+"path": "/mnt/media/Beat/OldSkool PunkRock",
+"fileCount": 101,
+"totalSize": 363648395,
+"largestFile": "/mnt/media/Beat/OldSkool PunkRock/07 - Infected.mp3"
+},
+{
+"path": "/mnt/datalake/Desktop",
+"fileCount": 10,
+"totalSize": 339487105,
+"largestFile": "/mnt/datalake/Desktop/20221029_210305.mp4"
+},
+{
+"path": "/mnt/media/images/textures",
+"fileCount": 8,
+"totalSize": 333292961,
+"largestFile": "/mnt/media/images/textures/TilesZelligeSquaresWeathered001.zip"
+},
+{
+"path": "/mnt/media/Beat/VA - Coolsweat (The Best Urban And RnB Collection) [2009] - R&B [www.torrentazos.com]",
+"fileCount": 68,
+"totalSize": 332903954,
+"largestFile": "/mnt/media/Beat/VA - Coolsweat (The Best Urban And RnB Collection) [2009] - R&B [www.torrentazos.com]/217-justin_timberlake_-_what_goes_around____comes_around.mp3"
+},
+{
+"path": "/mnt/media/Beat/MiXeD",
+"fileCount": 59,
+"totalSize": 291253504,
+"largestFile": "/mnt/media/Beat/MiXeD/1-Various-Le Monde à l'envers - P.O.R.C..mp3"
+},
+{
+"path": "/mnt/media/Beat/VA - 2009 Billboard Top 50 So Far 08-2009 [Bubanee]",
+"fileCount": 50,
+"totalSize": 283766137,
+"largestFile": "/mnt/media/Beat/VA - 2009 Billboard Top 50 So Far 08-2009 [Bubanee]/17 - Beautiful.mp3"
+},
+{
+"path": "/mnt/datalake/Tech/YB Printer",
+"fileCount": 51,
+"totalSize": 272940082,
+"largestFile": "/mnt/datalake/Tech/YB Printer/PrintYB.v0.1.blend"
+},
+{
+"path": "/mnt/datalake/bckup/YB Printer",
+"fileCount": 51,
+"totalSize": 272940082,
+"largestFile": "/mnt/datalake/bckup/YB Printer/PrintYB.v0.1.blend"
+},
+{
+"path": "/mnt/datalake/blenderModel/textures",
+"fileCount": 7,
+"totalSize": 270667546,
+"largestFile": "/mnt/datalake/blenderModel/textures/kiara_9_dusk_8k.hdr"
+},
+{
+"path": "/mnt/datalake/bckup/ti poux",
+"fileCount": 81,
+"totalSize": 266834088,
+"largestFile": "/mnt/datalake/bckup/ti poux/20190315_160349.mp4"
+},
+{
+"path": "/mnt/media/Beat/Eminem - MMLP2 (All 22 tracks Deluxe + Bonus)",
+"fileCount": 27,
+"totalSize": 257831711,
+"largestFile": "/mnt/media/Beat/Eminem - MMLP2 (All 22 tracks Deluxe + Bonus)/01. Bad Guy.mp3"
+},
+{
+"path": "/mnt/datalake/bckup/toprint",
+"fileCount": 35,
+"totalSize": 256594374,
+"largestFile": "/mnt/datalake/bckup/toprint/kbricks+construction+system.zip"
+},
+{
+"path": "/mnt/media/Beat/Eminem - Relapse (2009) (320 Kbps)",
+"fileCount": 26,
+"totalSize": 238957532,
+"largestFile": "/mnt/media/Beat/Eminem - Relapse (2009) (320 Kbps)/17 Beautiful (Prod. Eminem).mp3"
+},
+{
+"path": "/mnt/media/Beat/House MD The Soundtrack Season 3",
+"fileCount": 36,
+"totalSize": 227743702,
+"largestFile": "/mnt/media/Beat/House MD The Soundtrack Season 3/3.01 - The Rolling Stones - You Can't Always Get What You Want.mp3"
+},
+{
+"path": "/mnt/media/Beat/OST Step Up 3D (2010)",
+"fileCount": 35,
+"totalSize": 214065717,
+"largestFile": "/mnt/media/Beat/OST Step Up 3D (2010)/03 Benny Benassi ft Channing - Come Fly Away.mp3"
+},
+{
+"path": "/mnt/media/Beat/Hollywood Undead - American Tragedy",
+"fileCount": 23,
+"totalSize": 205167183,
+"largestFile": "/mnt/media/Beat/Hollywood Undead - American Tragedy/15 Mother Murder.mp3"
+},
+{
+"path": "/mnt/datalake/dump/BallZ2015",
+"fileCount": 19,
+"totalSize": 198811587,
+"largestFile": "/mnt/datalake/dump/BallZ2015/SimulatorZ.sdf"
+},
+{
+"path": "/mnt/datalake/Codes/BallZ2015",
+"fileCount": 19,
+"totalSize": 198811587,
+"largestFile": "/mnt/datalake/Codes/BallZ2015/SimulatorZ.sdf"
+},
+{
+"path": "/mnt/media/Beat/Roxette - 20 Greatest Songs",
+"fileCount": 20,
+"totalSize": 191962737,
+"largestFile": "/mnt/media/Beat/Roxette - 20 Greatest Songs/Listen To Your Heart.mp3"
+},
+{
+"path": "/mnt/media/Beat/Chanson de noel",
+"fileCount": 87,
+"totalSize": 191913115,
+"largestFile": "/mnt/media/Beat/Chanson de noel/La magie de noël.mp3"
+},
+{
+"path": "/mnt/media/Beat/Hip Hop Québécois",
+"fileCount": 35,
+"totalSize": 191000971,
+"largestFile": "/mnt/media/Beat/Hip Hop Québécois/03-Section Z ft Fiston-De là où on vient.mp3"
+},
+{
+"path": "/mnt/media/Beat/Eminem-Recovery-(Retail)-2010-[NoFS]",
+"fileCount": 25,
+"totalSize": 186068151,
+"largestFile": "/mnt/media/Beat/Eminem-Recovery-(Retail)-2010-[NoFS]/13-Eminem-So Bad (Prod. by Dr. Dre).mp3"
+},
+{
+"path": "/mnt/media/Beat/Ultimate Dirty Dancing (Soundtrack, 1987)",
+"fileCount": 44,
+"totalSize": 179880565,
+"largestFile": "/mnt/media/Beat/Ultimate Dirty Dancing (Soundtrack, 1987)/Dirty Dancing - Ultimate - 26 - Bill Medley & Jennifer Warnes - (I've Had) The Time Of My Life.mp3"
+},
+{
+"path": "/mnt/media/Beat/Dido - One Step Too Far",
+"fileCount": 27,
+"totalSize": 173559538,
+"largestFile": "/mnt/media/Beat/Dido - One Step Too Far/Dido - 02 - worthless.mp3"
+},
+{
+"path": "/mnt/datalake/Bureau/wma",
+"fileCount": 37,
+"totalSize": 173188313,
+"largestFile": "/mnt/datalake/Bureau/wma/Charging Loki.wma"
+},
+{
+"path": "/mnt/media/Beat/Slipknot - All Hope Is Gone",
+"fileCount": 16,
+"totalSize": 173085871,
+"largestFile": "/mnt/media/Beat/Slipknot - All Hope Is Gone/08  - Gehenna.mp3"
+},
+{
+"path": "/mnt/media/Beat/Dido",
+"fileCount": 45,
+"totalSize": 172235610,
+"largestFile": "/mnt/media/Beat/Dido/Dido - 15 - take my hand.mp3"
+},
+{
+"path": "/mnt/media/Beat/Arcade Fire - The Suburbs [mp3-320-2010]",
+"fileCount": 17,
+"totalSize": 164535878,
+"largestFile": "/mnt/media/Beat/Arcade Fire - The Suburbs [mp3-320-2010]/15 - Sprawl II (Mountains Beyond Mountains).mp3"
+},
+{
+"path": "/mnt/media/Beat/Bullet for my Valentine - Scream Aim Fire [2008]",
+"fileCount": 19,
+"totalSize": 162212212,
+"largestFile": "/mnt/media/Beat/Bullet for my Valentine - Scream Aim Fire [2008]/11 Forever and always.mp3"
+},
+{
+"path": "/mnt/media/images/Archive",
+"fileCount": 49,
+"totalSize": 162023294,
+"largestFile": "/mnt/media/images/Archive/20171109_204900.jpg"
+},
+{
+"path": "/mnt/media/Beat/Red Hot Chili Peppers - Greatest Hits (2003)",
+"fileCount": 22,
+"totalSize": 161859860,
+"largestFile": "/mnt/media/Beat/Red Hot Chili Peppers - Greatest Hits (2003)/Red Hot Chili Peppers - 03 - Californication.mp3"
+},
+{
+"path": "/mnt/media/Beat/Sublime",
+"fileCount": 61,
+"totalSize": 161556580,
+"largestFile": "/mnt/media/Beat/Sublime/09 Pawn Shop.wma"
+},
+{
+"path": "/mnt/datalake/Tech/to print",
+"fileCount": 46,
+"totalSize": 154497043,
+"largestFile": "/mnt/datalake/Tech/to print/Lynx_-_Fully_3D-printable_1_10_4wd_buggy.zip"
+},
+{
+"path": "/mnt/media/Beat/Kid.Cudi-Man.on.The.Moon.II-The.Legend.of.Mr.Rager-(Retail)-2010-[NoFS]",
+"fileCount": 29,
+"totalSize": 150622559,
+"largestFile": "/mnt/media/Beat/Kid.Cudi-Man.on.The.Moon.II-The.Legend.of.Mr.Rager-(Retail)-2010-[NoFS]/12-Kid Cudi - Mr. Rager.mp3"
+},
+{
+"path": "/mnt/media/Beat/The Fugees - The Score",
+"fileCount": 18,
+"totalSize": 149480420,
+"largestFile": "/mnt/media/Beat/The Fugees - The Score/The Fugees-The Score-13-Manifest-Outro.mp3"
+},
+{
+"path": "/mnt/datalake/Carrera",
+"fileCount": 7,
+"totalSize": 149414221,
+"largestFile": "/mnt/datalake/Carrera/Carrera track safety zone _ Sicherheitszone mit Bande - 3426019.zip"
+},
+{
+"path": "/mnt/media/Beat/Kid CuDi-Man On The Moon The End Of Day[2009][320kbps]",
+"fileCount": 23,
+"totalSize": 148824244,
+"largestFile": "/mnt/media/Beat/Kid CuDi-Man On The Moon The End Of Day[2009][320kbps]/13-kid cudi-pusuit of happiness (ft. mgmt & ratatat).mp3"
+},
+{
+"path": "/mnt/media/Beat/Breaking Benjamins",
+"fileCount": 28,
+"totalSize": 148778847,
+"largestFile": "/mnt/media/Beat/Breaking Benjamins/Breaking Benjamin - Until The End.mp3"
+},
+{
+"path": "/mnt/media/Beat/ACDC - The Very Best",
+"fileCount": 19,
+"totalSize": 148257531,
+"largestFile": "/mnt/media/Beat/ACDC - The Very Best/02. Let There Be Rock.mp3"
+},
+{
+"path": "/mnt/media/Beat/Chroniques de Mars",
+"fileCount": 21,
+"totalSize": 147443635,
+"largestFile": "/mnt/media/Beat/Chroniques de Mars/19-Fonky Family, Le ze Oeil, Faf Larage, K. Rhyme Le Roi, Freeman & Akhenaton-Le Retour Du ---- Squad.mp3"
+},
+{
+"path": "/mnt/datalake/WinApps/blender-2.79b-windows64",
+"fileCount": 28,
+"totalSize": 143087802,
+"largestFile": "/mnt/datalake/WinApps/blender-2.79b-windows64/blender.exe"
+},
+{
+"path": "/mnt/media/Beat/Daugtry - Break the Spell (Deluxe Version)",
+"fileCount": 21,
+"totalSize": 142097549,
+"largestFile": "/mnt/media/Beat/Daugtry - Break the Spell (Deluxe Version)/15 Everything But Me.mp3"
+},
+{
+"path": "/mnt/media/Beat/La Cliqua",
+"fileCount": 18,
+"totalSize": 141448645,
+"largestFile": "/mnt/media/Beat/La Cliqua/18-La Cliqua-Un Dernier Jour Sur Terre.mp3"
+},
+{
+"path": "/mnt/media/Beat/SemiBruce - Pleurer Avec Le Sourir - 2006 - 320 kbps",
+"fileCount": 17,
+"totalSize": 141298642,
+"largestFile": "/mnt/media/Beat/SemiBruce - Pleurer Avec Le Sourir - 2006 - 320 kbps/17 Dernière Rime.mp3"
+},
+{
+"path": "/mnt/datalake/Perso/Work",
+"fileCount": 38,
+"totalSize": 141295975,
+"largestFile": "/mnt/datalake/Perso/Work/reportExport.csv"
+},
+{
+"path": "/mnt/media/Beat/Invasion 2",
+"fileCount": 18,
+"totalSize": 139230862,
+"largestFile": "/mnt/media/Beat/Invasion 2/05-La Umma-Quelle loi-.mp3"
+},
+{
+"path": "/mnt/media/Beat/David_Guetta-The_Best_Of_2010",
+"fileCount": 25,
+"totalSize": 138268602,
+"largestFile": "/mnt/media/Beat/David_Guetta-The_Best_Of_2010/04 Love Is Gone (Eddie Thoneick's Liberte Remix).mp3"
+},
+{
+"path": "/mnt/media/Beat/Face cachée de mars",
+"fileCount": 16,
+"totalSize": 133386938,
+"largestFile": "/mnt/media/Beat/Face cachée de mars/13-Freestyle-Lumière de mars.mp3"
+},
+{
+"path": "/mnt/media/Beat/Angus And Julia Stone - Memories Of An Old Friend [2011] [mp3 320kbps]-Dita496 {1337x}",
+"fileCount": 15,
+"totalSize": 130719185,
+"largestFile": "/mnt/media/Beat/Angus And Julia Stone - Memories Of An Old Friend [2011] [mp3 320kbps]-Dita496 {1337x}/10 Angus & Julia Stone - Choking.mp3"
+},
+{
+"path": "/mnt/media/Beat/Dido - No Angel MLRG 320kbps",
+"fileCount": 23,
+"totalSize": 125931099,
+"largestFile": "/mnt/media/Beat/Dido - No Angel MLRG 320kbps/Dido - 12 - Take My Hand.Mp3"
+},
+{
+"path": "/mnt/media/Beat/Eric Lapointe",
+"fileCount": 29,
+"totalSize": 125735884,
+"largestFile": "/mnt/media/Beat/Eric Lapointe/Eric Lapointe--Un Beau Grand Slow.mp3"
+},
+{
+"path": "/mnt/media/Beat/Rock On",
+"fileCount": 24,
+"totalSize": 125564886,
+"largestFile": "/mnt/media/Beat/Rock On/System of A Down - Mezmerize - 02 - B.Y.O.B (Bring Your Own .mp3"
+},
+{
+"path": "/mnt/media/Beat/Disturbed-The_Lost_Children-2011",
+"fileCount": 19,
+"totalSize": 125053384,
+"largestFile": "/mnt/media/Beat/Disturbed-The_Lost_Children-2011/11-disturbed-mine.mp3"
+},
+{
+"path": "/mnt/media/Beat/The Doors - The Very Best Of 40th Av [MP3-M3U-Log-Cov-CD][Bubanee]",
+"fileCount": 25,
+"totalSize": 124222284,
+"largestFile": "/mnt/media/Beat/The Doors - The Very Best Of 40th Av [MP3-M3U-Log-Cov-CD][Bubanee]/08. The Doors - The Very Best Of The Doors - L.A. Woman.mp3"
+},
+{
+"path": "/mnt/media/Beat/Jack Johnson - Sleep Through The Static (highest quality)",
+"fileCount": 15,
+"totalSize": 123619512,
+"largestFile": "/mnt/media/Beat/Jack Johnson - Sleep Through The Static (highest quality)/08-jack_johnson-what_you_thought_you_need.mp3"
+},
+{
+"path": "/mnt/media/Beat/Soilwork -2010- The Panic Broadcast [Limited Box Edition]",
+"fileCount": 33,
+"totalSize": 122400766,
+"largestFile": "/mnt/media/Beat/Soilwork -2010- The Panic Broadcast [Limited Box Edition]/10- Enter Dog Of Pavlov.mp3"
+},
+{
+"path": "/mnt/media/Beat/Atreyu - The Best Of Atreyu",
+"fileCount": 21,
+"totalSize": 121418906,
+"largestFile": "/mnt/media/Beat/Atreyu - The Best Of Atreyu/15-atreyu-untitled_finale.mp3"
+},
+{
+"path": "/mnt/media/Beat/Live - Throwing Copper",
+"fileCount": 24,
+"totalSize": 120321645,
+"largestFile": "/mnt/media/Beat/Live - Throwing Copper/12 - Pillar Of Davidson.mp3"
+},
+{
+"path": "/mnt/media/Beat/1990 - Flesh & Blood (Rem 2006)",
+"fileCount": 29,
+"totalSize": 119828153,
+"largestFile": "/mnt/media/Beat/1990 - Flesh & Blood (Rem 2006)/15-Something To Believe In (Acoustic Version).Mp3"
+},
+{
+"path": "/mnt/media/Beat/Juanes",
+"fileCount": 33,
+"totalSize": 117297149,
+"largestFile": "/mnt/media/Beat/Juanes/Juanes Feat. Taboo From The Black Eyed Peas - La Paga.mp3"
+},
+{
+"path": "/mnt/media/Beat/Guns N Roses - 2004 - Greatest Hits",
+"fileCount": 17,
+"totalSize": 115887031,
+"largestFile": "/mnt/media/Beat/Guns N Roses - 2004 - Greatest Hits/09 - November rain.mp3"
+},
+{
+"path": "/mnt/media/Beat/Armin van Buuren - State of Trance 2005",
+"fileCount": 32,
+"totalSize": 115155661,
+"largestFile": "/mnt/media/Beat/Armin van Buuren - State of Trance 2005/09 Shivers.wma"
+},
+{
+"path": "/mnt/media/Beat/Sniper-Trait_Pour_Trait-FR-2006-ANH",
+"fileCount": 15,
+"totalSize": 114065239,
+"largestFile": "/mnt/media/Beat/Sniper-Trait_Pour_Trait-FR-2006-ANH/15-sniper-fallait_que_je_te_dise.mp3"
+},
+{
+"path": "/mnt/media/Beat/Night Love Songs Vol.3",
+"fileCount": 27,
+"totalSize": 113654009,
+"largestFile": "/mnt/media/Beat/Night Love Songs Vol.3/04 Il Divo - Regresa A Mi.mp3"
+},
+{
+"path": "/mnt/media/Beat/Fonky_Family-Marginale_Musique-FR-2006-TiLT",
+"fileCount": 19,
+"totalSize": 113653139,
+"largestFile": "/mnt/media/Beat/Fonky_Family-Marginale_Musique-FR-2006-TiLT/15-fonky_family-cherche_pas.mp3"
+},
+{
+"path": "/mnt/media/Beat/Silverstein 2006 - 18 Candles - The Early Years",
+"fileCount": 18,
+"totalSize": 113282674,
+"largestFile": "/mnt/media/Beat/Silverstein 2006 - 18 Candles - The Early Years/11 - Last Days of Summer.mp3"
+},
+{
+"path": "/mnt/media/Beat/Silverstein - A Shipwreck in the Sand (2009)",
+"fileCount": 14,
+"totalSize": 113210130,
+"largestFile": "/mnt/media/Beat/Silverstein - A Shipwreck in the Sand (2009)/Silverstein - A Shipwreck in the Sand (2009) - 14 - The End (feat. Lights).mp3"
+},
+{
+"path": "/mnt/datalake/bckup/optel-iot-freds",
+"fileCount": 3,
+"totalSize": 113133720,
+"largestFile": "/mnt/datalake/bckup/optel-iot-freds/servers.zip"
+},
+{
+"path": "/mnt/datalake/Codes/optel-iot-freds",
+"fileCount": 3,
+"totalSize": 113133720,
+"largestFile": "/mnt/datalake/Codes/optel-iot-freds/servers.zip"
+},
+{
+"path": "/mnt/media/Beat/Sniper - Gravé Dans La Roche - Album Complet",
+"fileCount": 17,
+"totalSize": 112741764,
+"largestFile": "/mnt/media/Beat/Sniper - Gravé Dans La Roche - Album Complet/16-sniper-panam_all_starz-fsp.mp3"
+},
+{
+"path": "/mnt/media/Beat/Outkast - Idlewild - Retail - 2006",
+"fileCount": 25,
+"totalSize": 111746152,
+"largestFile": "/mnt/media/Beat/Outkast - Idlewild - Retail - 2006/25-outkast-a_bad_note-ukp.mp3"
+},
+{
+"path": "/mnt/media/Beat/Good_Charlotte-Fast_Future_Generation_(DVD)-2006-FKK",
+"fileCount": 19,
+"totalSize": 111683154,
+"largestFile": "/mnt/media/Beat/Good_Charlotte-Fast_Future_Generation_(DVD)-2006-FKK/15-good_charlotte-live_8-fkk.mp3"
+},
+{
+"path": "/mnt/media/Beat/Loco Locass",
+"fileCount": 17,
+"totalSize": 111560622,
+"largestFile": "/mnt/media/Beat/Loco Locass/12-Loco Locass-Lieberez-Nous des Liberaux.mp3"
+},
+{
+"path": "/mnt/media/Beat/Coldplay - Viva La Vida 2008",
+"fileCount": 17,
+"totalSize": 110971011,
+"largestFile": "/mnt/media/Beat/Coldplay - Viva La Vida 2008/06  Coldplay - Yes.mp3"
+},
+{
+"path": "/mnt/media/Beat/Rise Against - Endgame (2011)",
+"fileCount": 13,
+"totalSize": 110705519,
+"largestFile": "/mnt/media/Beat/Rise Against - Endgame (2011)/06 Midnight Hands.mp3"
+},
+{
+"path": "/mnt/media/Beat/Puissance Nord - Avertissement",
+"fileCount": 18,
+"totalSize": 110322198,
+"largestFile": "/mnt/media/Beat/Puissance Nord - Avertissement/Puissance Nord - Track18.mp3"
+},
+{
+"path": "/mnt/media/Beat/Eminem - Months After Relapse.(2010).(MUsic.Mp3).Www.LokoTorrents.Com",
+"fileCount": 22,
+"totalSize": 110185762,
+"largestFile": "/mnt/media/Beat/Eminem - Months After Relapse.(2010).(MUsic.Mp3).Www.LokoTorrents.Com/22 - Eminem - Forever [Travis Barker Remix].(Www.LokoTorrents.Com).mp3"
+},
+{
+"path": "/mnt/media/Beat/Ja_Rule_-_Venni_Vetti_Vecci_-_1999_-_mp3_full_album.tf_-_192kbps",
+"fileCount": 20,
+"totalSize": 110158631,
+"largestFile": "/mnt/media/Beat/Ja_Rule_-_Venni_Vetti_Vecci_-_1999_-_mp3_full_album.tf_-_192kbps/Ja Rule - Venni Vetti Vecci - 17 - Daddy's Little Baby.mp3"
+},
+{
+"path": "/mnt/media/Beat/Atreyu - Congregation Of The Damned 2009 CDRip [Cov+CD][Bubanee]",
+"fileCount": 19,
+"totalSize": 110012432,
+"largestFile": "/mnt/media/Beat/Atreyu - Congregation Of The Damned 2009 CDRip [Cov+CD][Bubanee]/08. You Were The King, And Know Your Unconscious - Atreyu.mp3"
+},
+{
+"path": "/mnt/media/Beat/Passi - Les Tentations - 224 kbps",
+"fileCount": 18,
+"totalSize": 109103394,
+"largestFile": "/mnt/media/Beat/Passi - Les Tentations - 224 kbps/02 - 79 A 97.mp3"
+},
+{
+"path": "/mnt/media/Beat/Metallica - Death Magnetic - 2008",
+"fileCount": 10,
+"totalSize": 109027750,
+"largestFile": "/mnt/media/Beat/Metallica - Death Magnetic - 2008/9. suicide and redemption.mp3"
+},
+{
+"path": "/mnt/media/Beat/Diams-Dans_Ma_Bulle-FR-2006-SAW - verifie par la team ANY",
+"fileCount": 15,
+"totalSize": 108094420,
+"largestFile": "/mnt/media/Beat/Diams-Dans_Ma_Bulle-FR-2006-SAW - verifie par la team ANY/15-diams-petite_banlieusarde.mp3"
+},
+{
+"path": "/mnt/media/Beat/Mika - Life In Cartoon Motion (2007)",
+"fileCount": 16,
+"totalSize": 107420823,
+"largestFile": "/mnt/media/Beat/Mika - Life In Cartoon Motion (2007)/10 - Happy Ending + Ring-Ring.mp3"
+},
+{
+"path": "/mnt/media/Beat/Sans Préssion - La Réplique Aux Offusqués",
+"fileCount": 17,
+"totalSize": 106979459,
+"largestFile": "/mnt/media/Beat/Sans Préssion - La Réplique Aux Offusqués/Sans Pression - La Réplique Aux Offusqués - 08 - Ti Moun.mp3"
+},
+{
+"path": "/mnt/datalake/WinApps/PhoenixMiner_6.2c_Windows",
+"fileCount": 14,
+"totalSize": 105609002,
+"largestFile": "/mnt/datalake/WinApps/PhoenixMiner_6.2c_Windows/log20220511_232801.txt"
+},
+{
+"path": "/mnt/media/Beat/+44",
+"fileCount": 12,
+"totalSize": 105604150,
+"largestFile": "/mnt/media/Beat/+44/12 Chapter 13.mp3"
+},
+{
+"path": "/mnt/media/Beat/Newton Faulkner - Hand Built By Robots (music by Darren)",
+"fileCount": 17,
+"totalSize": 105140568,
+"largestFile": "/mnt/media/Beat/Newton Faulkner - Hand Built By Robots (music by Darren)/517 - Dream Catch Me.mp3"
+},
+{
+"path": "/mnt/media/Beat/Billy Talent III",
+"fileCount": 14,
+"totalSize": 104942460,
+"largestFile": "/mnt/media/Beat/Billy Talent III/08 Diamond On A Landmine.Mp3"
+},
+{
+"path": "/mnt/media/Beat/Nickleback",
+"fileCount": 21,
+"totalSize": 104311626,
+"largestFile": "/mnt/media/Beat/Nickleback/Nickleback - Animals.mp3"
+},
+{
+"path": "/mnt/media/Beat/Funeral for a friend - Hours",
+"fileCount": 12,
+"totalSize": 103743439,
+"largestFile": "/mnt/media/Beat/Funeral for a friend - Hours/05 Drive.mp3"
+},
+{
+"path": "/mnt/media/Beat/2 Ball 2 Neg - 3X plus Efficace",
+"fileCount": 25,
+"totalSize": 103735881,
+"largestFile": "/mnt/media/Beat/2 Ball 2 Neg - 3X plus Efficace/2 Ball 2 Neg - Track13.mp3"
+},
+{
+"path": "/mnt/media/Beat/The_Wallflowers-Collected_1996-2005-2009-MTD",
+"fileCount": 20,
+"totalSize": 102508280,
+"largestFile": "/mnt/media/Beat/The_Wallflowers-Collected_1996-2005-2009-MTD/02-the_wallflowers-6th_avenue_heartache.mp3"
+},
+{
+"path": "/mnt/media/Beat/Barenaked Ladies - Greatest Hits (1991-2001)",
+"fileCount": 25,
+"totalSize": 102317070,
+"largestFile": "/mnt/media/Beat/Barenaked Ladies - Greatest Hits (1991-2001)/09 Call and Answer.wma"
+},
+{
+"path": "/mnt/media/Beat/Stone Sour - Stone Sour",
+"fileCount": 24,
+"totalSize": 101715581,
+"largestFile": "/mnt/media/Beat/Stone Sour - Stone Sour/Stone Sour - Stone Sour - 15 - The Wicked.mp3"
+},
+{
+"path": "/mnt/media/Beat/Busta Flex",
+"fileCount": 19,
+"totalSize": 101573963,
+"largestFile": "/mnt/media/Beat/Busta Flex/08-Busta Flex-1 Pour La Basse.mp3"
+},
+{
+"path": "/mnt/media/Beat/Cirque_Du_Soleil-Zumanity-2005[www.pctorrent.com]",
+"fileCount": 20,
+"totalSize": 100669265,
+"largestFile": "/mnt/media/Beat/Cirque_Du_Soleil-Zumanity-2005[www.pctorrent.com]/17-cirque_du_soleil-per_sempre-musiq.mp3"
+},
+{
+"path": "/mnt/media/Beat/Tunisiano-Le_Regard_Des_Gens-CD-FR-2008-OBC",
+"fileCount": 25,
+"totalSize": 99022779,
+"largestFile": "/mnt/media/Beat/Tunisiano-Le_Regard_Des_Gens-CD-FR-2008-OBC/08-tunisiano-citoyen_du_monde_ft_zaho.mp3"
+},
+{
+"path": "/mnt/media/Beat/Nouveau dossier",
+"fileCount": 21,
+"totalSize": 98783994,
+"largestFile": "/mnt/media/Beat/Nouveau dossier/01 Devil On My Shoulder.Mp3"
+},
+{
+"path": "/mnt/media/Beat/Billy Talent I",
+"fileCount": 12,
+"totalSize": 98695309,
+"largestFile": "/mnt/media/Beat/Billy Talent I/Billy Talent - Billy Talent - 03 - Try Honesty.mp3"
+},
+{
+"path": "/mnt/media/Beat/Ben Harper - Rocky Mountain High",
+"fileCount": 14,
+"totalSize": 97509376,
+"largestFile": "/mnt/media/Beat/Ben Harper - Rocky Mountain High/Ben Harper - Roses for My Friends.mp3"
+},
+{
+"path": "/mnt/datalake/WinApps",
+"fileCount": 2,
+"totalSize": 97361448,
+"largestFile": "/mnt/datalake/WinApps/balenaEtcher-1.7.9-x64.AppImage"
+},
+{
+"path": "/mnt/media/Beat/The Better Ballads of the Rock in English. By nik Arg",
+"fileCount": 24,
+"totalSize": 96838167,
+"largestFile": "/mnt/media/Beat/The Better Ballads of the Rock in English. By nik Arg/02.Bon Jovi - Bed Of Roses.mp3"
+},
+{
+"path": "/mnt/datalake/dump",
+"fileCount": 40,
+"totalSize": 96273927,
+"largestFile": "/mnt/datalake/dump/explosion1_package.zip"
+},
+{
+"path": "/mnt/media/Beat/Wyclef_Jean-Carnival_Vol_II_Memoirs_Of_An_Immigrant-2007-404",
+"fileCount": 21,
+"totalSize": 96252972,
+"largestFile": "/mnt/media/Beat/Wyclef_Jean-Carnival_Vol_II_Memoirs_Of_An_Immigrant-2007-404/013-wyclef_jean-touch_your_button_carnival_jam_(feat_will_i_am_melissa_jimenez_machel_montana_daniela_mercury_black_alex_and_djakout_mizik).mp3"
+},
+{
+"path": "/mnt/media/Beat/MB20-ExileOnMainstream[2007][CD+3SkidVid_XviD+Cov]",
+"fileCount": 22,
+"totalSize": 95914041,
+"largestFile": "/mnt/media/Beat/MB20-ExileOnMainstream[2007][CD+3SkidVid_XviD+Cov]/11  Matchbox Twenty - Back 2 Good.mp3"
+},
+{
+"path": "/mnt/media/Beat/Shurik'N - Où Je Vis",
+"fileCount": 16,
+"totalSize": 95912491,
+"largestFile": "/mnt/media/Beat/Shurik'N - Où Je Vis/Shurik'n - Manifeste (featuring akhenaton).mp3"
+},
+{
+"path": "/mnt/media/Beat/Rancid - 1995 - And out come the wolves - 256kbps",
+"fileCount": 20,
+"totalSize": 95644861,
+"largestFile": "/mnt/media/Beat/Rancid - 1995 - And out come the wolves - 256kbps/05 - Olympia WA.mp3"
+},
+{
+"path": "/mnt/media/Beat/Anti-Flag - The Terror State - 2003",
+"fileCount": 15,
+"totalSize": 95638410,
+"largestFile": "/mnt/media/Beat/Anti-Flag - The Terror State - 2003/02 - Anti-Flag - Rank-N-File - The Terror State - 320kbps.mp3"
+},
+{
+"path": "/mnt/media/Beat/Matchbox 20 - Exile on main stream",
+"fileCount": 17,
+"totalSize": 95322885,
+"largestFile": "/mnt/media/Beat/Matchbox 20 - Exile on main stream/11  Matchbox Twenty - Back 2 Good.mp3"
+},
+{
+"path": "/mnt/media/Beat/Ben_Harper_Give - Till_Its_Gone_ (2011)",
+"fileCount": 14,
+"totalSize": 95083194,
+"largestFile": "/mnt/media/Beat/Ben_Harper_Give - Till_Its_Gone_ (2011)/07-ben_harper-get_there_from_here-caheso.mp3"
+},
+{
+"path": "/mnt/media/Beat/B Double E- My City Mixtape 2.5",
+"fileCount": 22,
+"totalSize": 94527317,
+"largestFile": "/mnt/media/Beat/B Double E- My City Mixtape 2.5/11-B Double E-KC, Say Yeah.mp3"
+},
+{
+"path": "/mnt/media/Beat/Natalie Cole",
+"fileCount": 48,
+"totalSize": 94316289,
+"largestFile": "/mnt/media/Beat/Natalie Cole/Natalie Cole - Calling You quick.mp3"
+},
+{
+"path": "/mnt/media/Beat/Silvertstein 2005 - Discovering the Waterfront",
+"fileCount": 11,
+"totalSize": 94210048,
+"largestFile": "/mnt/media/Beat/Silvertstein 2005 - Discovering the Waterfront/05 - Discovering the Waterfront.mp3"
+},
+{
+"path": "/mnt/media/Beat/Wallflowers [1996] Bringing Down The Horse",
+"fileCount": 12,
+"totalSize": 94139139,
+"largestFile": "/mnt/media/Beat/Wallflowers [1996] Bringing Down The Horse/02. 6th Avenue Heartache.mp3"
+},
+{
+"path": "/mnt/media/Beat/All.That.Remains-Overcome[2008][MP3@320kbps]-antecho",
+"fileCount": 17,
+"totalSize": 93787310,
+"largestFile": "/mnt/media/Beat/All.That.Remains-Overcome[2008][MP3@320kbps]-antecho/05 Chiron.mp3"
+},
+{
+"path": "/mnt/media/Beat/Crossfade",
+"fileCount": 18,
+"totalSize": 93443641,
+"largestFile": "/mnt/media/Beat/Crossfade/Crossfade - Falling Away - 12 - Breathing Slowly (Acoustic).mp3"
+},
+{
+"path": "/mnt/media/Beat/3 Doors Down - (2008)",
+"fileCount": 15,
+"totalSize": 92487686,
+"largestFile": "/mnt/media/Beat/3 Doors Down - (2008)/3 Doors Down - 3 Doors Down - 06 - It's the Only One You've Got.mp3"
+},
+{
+"path": "/mnt/media/Beat/LinkinPark - Hybrid Theory",
+"fileCount": 12,
+"totalSize": 92363176,
+"largestFile": "/mnt/media/Beat/LinkinPark - Hybrid Theory/Linkin' Park Hybrid Theory - 8.  In  The End.mp3"
+},
+{
+"path": "/mnt/media/Beat/Stone_Temple_Pilots-Stone_Temple_Pilots_(Deluxe_Edition)-2010-DOH",
+"fileCount": 19,
+"totalSize": 92129915,
+"largestFile": "/mnt/media/Beat/Stone_Temple_Pilots-Stone_Temple_Pilots_(Deluxe_Edition)-2010-DOH/05-stone_temple_pilots-dare_if_you_dare.mp3"
+},
+{
+"path": "/mnt/media/Beat/Ironik - Seul a Seul - FR - 2003",
+"fileCount": 23,
+"totalSize": 91910525,
+"largestFile": "/mnt/media/Beat/Ironik - Seul a Seul - FR - 2003/13-comme_un_condamne_(ft._LAssemblee)-CHR.mp3"
+},
+{
+"path": "/mnt/media/Beat/NTM - Suprême NTM",
+"fileCount": 16,
+"totalSize": 91824153,
+"largestFile": "/mnt/media/Beat/NTM - Suprême NTM/15 - Hardcore Sur Le Beat.mp3"
+},
+{
+"path": "/mnt/media/Beat/Fred Pellerin",
+"fileCount": 13,
+"totalSize": 90710262,
+"largestFile": "/mnt/media/Beat/Fred Pellerin/01_006-Mille_Apres_Mille.mp3"
+},
+{
+"path": "/mnt/media/Beat/Fred Pellerin - Silence",
+"fileCount": 12,
+"totalSize": 90636534,
+"largestFile": "/mnt/media/Beat/Fred Pellerin - Silence/01_006-Mille_Apres_Mille.mp3"
+},
+{
+"path": "/mnt/media/Beat/Justin Timberlake - Future Sex-Love Sounds (2006)",
+"fileCount": 17,
+"totalSize": 90394648,
+"largestFile": "/mnt/media/Beat/Justin Timberlake - Future Sex-Love Sounds (2006)/06 Justin Timberlake - What Goes Around......Comes Around Interlude - www.torrentazos.com.mp3"
+},
+{
+"path": "/mnt/media/Beat/Metallica - Metallica",
+"fileCount": 15,
+"totalSize": 90274764,
+"largestFile": "/mnt/media/Beat/Metallica - Metallica/11-My_Friend_Of_Misery.mp3"
+},
+{
+"path": "/mnt/media/Beat/Cramberries",
+"fileCount": 37,
+"totalSize": 89661344,
+"largestFile": "/mnt/media/Beat/Cramberries/Cramberries - Promises.mp3"
+},
+{
+"path": "/mnt/media/Beat/Rascalz - Re-Loaded - 2002",
+"fileCount": 18,
+"totalSize": 88714097,
+"largestFile": "/mnt/media/Beat/Rascalz - Re-Loaded - 2002/17 Politricks (Porsupuesto Hidden Track feat. Sazon Diamante.mp3"
+},
+{
+"path": "/mnt/media/Beat/Jack Johnson - Brushfire Fairytales",
+"fileCount": 13,
+"totalSize": 88319878,
+"largestFile": "/mnt/media/Beat/Jack Johnson - Brushfire Fairytales/It's All Understood.mp3"
+},
+{
+"path": "/mnt/media/Beat/Papa_Roach-The_Paramour_Sessions-2006-RNS",
+"fileCount": 14,
+"totalSize": 88194342,
+"largestFile": "/mnt/media/Beat/Papa_Roach-The_Paramour_Sessions-2006-RNS/09-papa_roach-my_heart_is_a_fist.mp3"
+},
+{
+"path": "/mnt/media/Beat/Mssy Elliot - Under Construction",
+"fileCount": 17,
+"totalSize": 88050398,
+"largestFile": "/mnt/media/Beat/Mssy Elliot - Under Construction/Missy Elliott - Intro.mp3"
+},
+{
+"path": "/mnt/media/Beat/Smashing Pumpkins - Machina- The Machines of God - 2000",
+"fileCount": 15,
+"totalSize": 88025685,
+"largestFile": "/mnt/media/Beat/Smashing Pumpkins - Machina- The Machines of God - 2000/smashing_pumpkins-10-glass_and_the_ghost_children.mp3"
+},
+{
+"path": "/mnt/media/Beat/Alexisonfire -  Old  Crows Young Cardinals",
+"fileCount": 12,
+"totalSize": 88005980,
+"largestFile": "/mnt/media/Beat/Alexisonfire -  Old  Crows Young Cardinals/06 The Northern.mp3"
+},
+{
+"path": "/mnt/media/Beat/IllScarlett - All Day With It",
+"fileCount": 11,
+"totalSize": 87880117,
+"largestFile": "/mnt/media/Beat/IllScarlett - All Day With It/10 - IllScarlett - Danse Macabre.m4a"
+},
+{
+"path": "/mnt/media/Beat/Stone Temple Pilots - Purple",
+"fileCount": 12,
+"totalSize": 87812649,
+"largestFile": "/mnt/media/Beat/Stone Temple Pilots - Purple/Stone Temple Pilots - 11 - Kitchenware & Candybars.mp3"
+},
+{
+"path": "/mnt/media/Beat/Eminem-Relapse Refill.Instrumental Edition.2009[speedzone]",
+"fileCount": 14,
+"totalSize": 87317434,
+"largestFile": "/mnt/media/Beat/Eminem-Relapse Refill.Instrumental Edition.2009[speedzone]/06. Eminem - Music Box (Produced By Dr. Dre).mp3"
+},
+{
+"path": "/mnt/media/Beat/psykopat-qu_est_ce_qu_y_a-fr-2004-hmc",
+"fileCount": 18,
+"totalSize": 87253841,
+"largestFile": "/mnt/media/Beat/psykopat-qu_est_ce_qu_y_a-fr-2004-hmc/12_ujours dasn lpera_ksf.mp3"
+},
+{
+"path": "/mnt/media/Beat/Hedley - (2009) The Show Must Go",
+"fileCount": 23,
+"totalSize": 86787253,
+"largestFile": "/mnt/media/Beat/Hedley - (2009) The Show Must Go/08 - Perfect.mp3"
+}
+],
+"files": {
+"/mnt/datalake": [
+{
+"path": "/mnt/datalake/Finance/WalletBeefer/secretary/bundle-manifest.json",
+"size": 143785,
+"category": "config",
+"mtime": 1792726207
+},
+{
+"path": "/mnt/datalake/Finance/WalletBeefer/secretary/invoice-register.json",
+"size": 1805438,
+"category": "config",
+"mtime": 1792726207
+},
+{
+"path": "/mnt/datalake/Finance/WalletBeefer/releves/corp/2021/secretary-ca1fd5973c774abc-2021-01-31-2021.01.pdf",
+"size": 9737,
+"category": "document",
+"mtime": 1792186084
+},
+{
+"path": "/mnt/datalake/Finance/WalletBeefer/releves/corp/2020/secretary-00904288b5689117-2020-09-30-2020.09.pdf",
+"size": 11563,
+"category": "document",
+"mtime": 1792186084
+},
+{
+"path": "/mnt/datalake/Finance/WalletBeefer/releves/corp/2020/secretary-0c8c70d89efb51a2-2020-06-30-2020.06.pdf",
+"size": 9684,
+"category": "document",
+"mtime": 1792186084
+},
+{
+"path": "/mnt/datalake/Finance/WalletBeefer/releves/corp/2020/secretary-422ef22aa7d772fc-2020-07-31-2020.07.pdf",
+"size": 9884,
+"category": "document",
+"mtime": 1792186084
+},
+{
+"path": "/mnt/datalake/Finance/WalletBeefer/releves/corp/2020/secretary-ac2fa71e709c0ff5-2020-11-30-2020.11.pdf",
+"size": 9866,
+"category": "document",
+"mtime": 1792186084
+},
+{
+"path": "/mnt/datalake/Finance/WalletBeefer/releves/corp/2020/secretary-d10cf3b60a5b2ca0-2020-12-31-2020.12.pdf",
+"size": 9842,
+"category": "document",
+"mtime": 1792186084
+}
+],
+"/mnt/datalake/ISO": [
+{
+"path": "/mnt/datalake/ISO/debian-12.13.0-amd64-netinst.iso",
+"size": 708837376,
+"category": "disk_image",
+"mtime": 1771789297
+},
+{
+"path": "/mnt/datalake/ISO/ubuntu-24.04.4-live-server-amd64.iso",
+"size": 3405469696,
+"category": "disk_image",
+"mtime": 1771134732
+},
+{
+"path": "/mnt/datalake/ISO/TrueNAS-SCALE-25.10.0.1.iso",
+"size": 2118514688,
+"category": "disk_image",
+"mtime": 1765344941
+},
+{
+"path": "/mnt/datalake/ISO/bodhi-7.0.0-64-hwe.iso",
+"size": 1335623680,
+"category": "disk_image",
+"mtime": 1760408508
+},
+{
+"path": "/mnt/datalake/ISO/Win11_24H2_FrenchCanadian_x64.iso",
+"size": 5558550528,
+"category": "disk_image",
+"mtime": 1754528963
+},
+{
+"path": "/mnt/datalake/ISO/haos_ova-15.2.vdi.zip",
+"size": 406433218,
+"category": "archive",
+"mtime": 1747797401
+},
+{
+"path": "/mnt/datalake/ISO/linuxmint-22.1-mate-64bit.iso.torrent",
+"size": 28713,
+"category": "resource",
+"mtime": 1745992750
+},
+{
+"path": "/mnt/datalake/ISO/TrueNAS-SCALE-25.04.0.iso",
+"size": 1966432256,
+"category": "disk_image",
+"mtime": 1745866948
+}
+],
+"/mnt/media/Movies": [
+{
+"path": "/mnt/media/Movies/Kidz/[zza]Harry.Potter.2.et.la.Chambre.des.Secrets.2002.1080p.x265.AC3.mkv",
+"size": 2727086037,
+"category": "media",
+"mtime": 1746282535
+},
+{
+"path": "/mnt/media/Movies/Kidz/[zza]Harry.Potter.2.et.la.Chambre.des.Secrets.2002.1080p.x265.AC3.nfo",
+"size": 7204,
+"category": "document",
+"mtime": 1746282529
+},
+{
+"path": "/mnt/media/Movies/Kidz/cover - Harry Potter - 2.jpg",
+"size": 80360,
+"category": "media",
+"mtime": 1746282529
+},
+{
+"path": "/mnt/media/Movies/Kidz/[zza]Harry.Potter.8.et.les.Reliques.de.la.Mort.partie.2.2011.1080p.x265.AC3.mkv",
+"size": 2332911667,
+"category": "media",
+"mtime": 1746224843
+},
+{
+"path": "/mnt/media/Movies/Kidz/cover - Harry Potter - 8.jpg",
+"size": 80709,
+"category": "media",
+"mtime": 1746224841
+},
+{
+"path": "/mnt/media/Movies/Kidz/[zza]Harry.Potter.8.et.les.Reliques.de.la.Mort.partie.2.2011.1080p.x265.AC3.nfo",
+"size": 7235,
+"category": "document",
+"mtime": 1746224840
+},
+{
+"path": "/mnt/media/Movies/Kidz/[zza]Harry.Potter.7.et.les.Reliques.de.la.Mort.partie.1.2010.1080p.x265.AC3.mkv",
+"size": 1978289608,
+"category": "media",
+"mtime": 1746224753
+},
+{
+"path": "/mnt/media/Movies/Kidz/[zza]Harry.Potter.5.et.l.Ordre.du.Phénix.2007.1080p.x265.AC3.mkv",
+"size": 2475260469,
+"category": "media",
+"mtime": 1746224665
+}
+]
+}
+}

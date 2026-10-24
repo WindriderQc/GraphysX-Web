@@ -112,6 +112,7 @@ Preserve `.graphysx-store/`: it is user content, not disposable build output.
 | Scene vocabulary, simulation and agent API | `src/agent-world-runtime.ts`, `src/agent-world-api.ts` |
 | Human editor and shared styling | `src/platform-editor.ts`, `src/platform-theme.ts` |
 | KidX programs and controls | `src/ev3-first-program.ts`, `src/ev3-program-library.ts`, `src/ev3-mission-strip.ts` |
+| DiskX (AgentX Data disks as a 3D city) | `src/diskx-app.ts`, `src/diskx-data.ts`; see [docs/DISKX.md](docs/DISKX.md) |
 | Persistence, media and collaboration | `server/scene-store.mjs` and its imported `server/` modules |
 | Verification coverage | `scripts/verify-manifest.mjs`; `scripts/verify.mjs` executes it |
 

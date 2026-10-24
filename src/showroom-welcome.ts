@@ -43,6 +43,7 @@ export function mountWelcome(
   hooks?: {
     onOpenKidX?: () => void;
     onOpenLlmX?: () => void;
+    onOpenDiskX?: () => void;
     coauthor?: { onAccept?: () => void; onDiscard?: () => void; onToggleCommand?: (index: number) => void };
     tour?: { onStart?: () => void; onNext?: () => void; onPrevious?: () => void; onStop?: () => void };
   },
@@ -681,6 +682,16 @@ export function mountWelcome(
     llmx.textContent = "LLMx · Forge nocturne";
     llmx.addEventListener("click", hooks.onOpenLlmX);
     overlay.querySelector(".gx-actions")?.append(llmx);
+  }
+  if (hooks?.onOpenDiskX) {
+    const diskx = document.createElement("button");
+    diskx.type = "button";
+    diskx.className = "gx-go-diskx";
+    // A third application takes its own full row under the KidX/LLMx pair.
+    diskx.style.gridColumn = "1 / -1";
+    diskx.textContent = "DiskX · Vos disques en ville";
+    diskx.addEventListener("click", hooks.onOpenDiskX);
+    overlay.querySelector(".gx-actions")?.append(diskx);
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);
