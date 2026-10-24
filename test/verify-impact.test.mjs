@@ -11,6 +11,15 @@ import { findDeploymentBase } from "../scripts/plan-verification.mjs";
 const names = (plan) => plan.smokes.map((smoke) => smoke.name);
 
 describe("verification by changed area", () => {
+  it("keeps the standalone Cyber Race page out of product checks and deployment", () => {
+    const plan = selectVerification(["cyber-race.html", "src/cyber-race/main.ts", "src/cyber-race/world.ts", "scripts/package-cyber-race.mjs", "docs/CYBER_RACE.md"]);
+    assert.equal(plan.mode, "static");
+    assert.equal(plan.deploy, false);
+    assert.deepEqual(names(plan), []);
+    // A neighbouring file is not swept into the rule.
+    assert.equal(selectVerification(["src/cyber-racer.ts"]).mode, "full");
+  });
+
   it("runs no 3D checks and does not deploy documentation or verification tooling", () => {
     const plan = selectVerification(["README.md", "docs/CI_PERFORMANCE.md", "CLAUDE.md", "test/README.md", "test/verify-impact.test.mjs", "scripts/verify.mjs", "scripts/verify-impact.mjs", "scripts/plan-verification.mjs", ".github/workflows/ci.yml"]);
     assert.equal(plan.mode, "static");
