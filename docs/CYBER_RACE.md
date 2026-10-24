@@ -107,6 +107,23 @@ film's GAME OVER, Jobe pulling the headset off). The game plays them when presen
 otherwise; A, Enter or Escape skips a clip. **Never commit the clips or publish them with the
 site.**
 
+## GamX (owner's Playnite library)
+
+Cyber Race follows the GamX channel convention used for the owner's other reworked games
+(see StarFoX-SNES `docs/PLAYNITE.md`): an **Atelier** development channel and a frozen
+**Validee** (validated edition) channel that changes only with the owner's explicit approval.
+
+```bash
+node scripts/install-cyber-race-gamx.mjs --gamx <GamX dir>            # build + install Atelier
+node scripts/install-cyber-race-gamx.mjs --gamx <GamX dir> --promote  # Atelier -> Validee (owner approval only)
+```
+
+Each channel lives in `<GamX dir>/CyberRace1992/<Channel>/` with its page, a `channel.json` receipt
+(SHA-256, source commit, date), its own Edge profile (settings and records stay per channel) and a
+junction to the shared local `film/` clips. `Start-CyberRace.ps1 -Channel Atelier|Validee` verifies
+the receipt, opens the page fullscreen and waits for the window, so Playnite tracks play time;
+`-CheckOnly` verifies without launching.
+
 ## Playnite and other launchers
 
 ```bash

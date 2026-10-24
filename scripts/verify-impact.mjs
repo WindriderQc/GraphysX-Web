@@ -23,7 +23,7 @@ const RULES = [
   // Cyber Race is a standalone page with its own renderer, outside the shared runtime and
   // outside the product build (vite.config.ts builds index.html only). It cannot change any
   // product route, so it selects no product smoke and never triggers a deployment.
-  { match: /^(?:cyber-race\.html|src\/cyber-race\/[\w-]+\.ts|scripts\/(?:package-cyber-race|extract-cyber-race-film)\.mjs)$/, checks: [], label: "Cyber Race standalone page (not in the product build)", deploy: false },
+  { match: /^(?:cyber-race\.html|src\/cyber-race\/[\w-]+\.ts|scripts\/(?:package-cyber-race|extract-cyber-race-film|install-cyber-race-gamx)\.mjs|scripts\/gamx\/[\w-]+\.ps1)$/, checks: [], label: "Cyber Race standalone page (not in the product build)", deploy: false },
   { match: /^(?:\.github\/workflows\/deploy\.yml|scripts\/(?:write-release-metadata|smoke-live-release)\.mjs|ops\/)/, checks: BASELINE, label: "deployment configuration", deploy: true },
   // Conversation changes affect opening/replay, corrected scene speech and profile
   // switching. The native renderer/host, schema and dependencies keep their broad rules.
