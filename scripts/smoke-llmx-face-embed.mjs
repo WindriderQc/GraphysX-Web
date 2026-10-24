@@ -44,6 +44,13 @@ try {
   })));
   const idle = await sampleLit();
   assert.ok(idle > 0.08 && idle < 0.7, `the mask fills part of the dock (${idle.toFixed(3)})`);
+  // The metal has something to reflect, generated in the file itself: without it the docked mask
+  // read a third darker than in the Forge (mean luminance 50 against 72 at the same intensity).
+  const lighting = await page.evaluate(() => {
+    const face = document.getElementById("face");
+    return { environment: !!face.world.environment, intensity: face.world.environmentIntensity };
+  });
+  assert.deepEqual(lighting, { environment: true, intensity: 0.32 }, "the docked mask reflects a generated room, as the Forge's mask reflects its sky");
 
   const presence = await page.evaluate(() => {
     const face = document.getElementById("face");
@@ -101,7 +108,7 @@ try {
   assert.equal(cleared, null);
 
   // Removal releases the renderer; a host may mount and unmount the dock freely.
-  const released = await page.evaluate(() => { const face = document.getElementById("face"); face.remove(); return face.renderer === null; });
+  const released = await page.evaluate(() => { const face = document.getElementById("face"); face.remove(); return face.renderer === null && face.environment === null; });
   assert.equal(released, true);
 
   // The same file defines <llmx-stage>: the picture alone, for a host's own pictures zone.
