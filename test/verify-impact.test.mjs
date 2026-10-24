@@ -12,7 +12,7 @@ const names = (plan) => plan.smokes.map((smoke) => smoke.name);
 
 describe("verification by changed area", () => {
   it("keeps the standalone Cyber Race page out of product checks and deployment", () => {
-    const plan = selectVerification(["cyber-race.html", "src/cyber-race/main.ts", "src/cyber-race/world.ts", "scripts/package-cyber-race.mjs", "scripts/extract-cyber-race-film.mjs", "src/cyber-race/cyberjobe.ts", "src/cyber-race/film.ts", "docs/CYBER_RACE.md"]);
+    const plan = selectVerification(["cyber-race.html", "src/cyber-race/main.ts", "src/cyber-race/world.ts", "scripts/package-cyber-race.mjs", "scripts/extract-cyber-race-film.mjs", "scripts/install-cyber-race-gamx.mjs", "scripts/gamx/Start-CyberRace.ps1", "src/cyber-race/cyberjobe.ts", "src/cyber-race/film.ts", "docs/CYBER_RACE.md"]);
     assert.equal(plan.mode, "static");
     assert.equal(plan.deploy, false);
     assert.deepEqual(names(plan), []);
