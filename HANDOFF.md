@@ -13,13 +13,16 @@ Read `PRODUCT_SPEC.md` §8.1 (the honest status table) for what ships versus wha
 as the v1 target. Read `CLAUDE.md` for the short list of rules that exist because breaking them
 cost real sessions real hours.
 
-## Current state (audited 2026-10-23)
+## Current state (publication checked 2026-10-25)
 
-**Production is `main` at `61580c7`**, deployed 2026-10-10 by
-[run 38025977946](https://github.com/WindriderQc/GraphysX-Web/actions/runs/38025977946);
-public `release.json` confirms that SHA. The twelve most recent hosted runs are green. On that
-HEAD `npm run check` passes: typecheck clean, 590 unit tests passing, one intentional Windows
-skip. No `TODO`/`FIXME` exists in `src/`, `server/` or `scripts/`.
+**Publication observed on 2026-10-25 is `237f474`**, deployed by
+[run 40230465312](https://github.com/WindriderQc/GraphysX-Web/actions/runs/40230465312);
+public `release.json` confirms that SHA. PR 52 adds DiskX report correlation, safe presentation
+link replacement and embed cleanup. Its branch passed typecheck/lint, 640 unit tests with one
+existing skip, the three focused DiskX browser checks and a composed Core presentation journey.
+That local journey used synthetic domain data and the branch bundle; it does not receive a
+live Nestor conversation, the final published bundle or the whole-product WebGL gate. The
+September/October release list below is historical, not an inventory of every later change.
 
 **What shipped between 2026-09-14 and 2026-10-10** (eight PRs, five direct commits; the
 section below this one is the September release they build on):
@@ -73,14 +76,39 @@ section below this one is the September release they build on):
    by living-system nondeterminism, the two-file split, HDRI sky curation. See
    [AGENTX_ROADMAP.md](docs/AGENTX_ROADMAP.md) "What is actually left".
 
-**Ecosystem seams, as they are now.** The relationship with AgentX became two-way in
-September. GraphysX is AgentX's client on `?app=llmx`: the public bundle calls
-`https://agentx.specialblend.icu/api/consumers/nestor/v1/llmx` and `/llmx/family` directly
-(`server/llmx-target.mjs` is the route map); on 2026-10-23 both profiles answer `enabled`,
-`commandsVersion 2`, `mathVersion 1`. AgentX is GraphysX's client for the dock: `agentx-home`
-sets `HOUSEHOLD_AVATAR_MODULE_URL` to `/embed/llmx-face.js`. The division holds: AgentX owns
-conversation, memory, tools, personas and family access; GraphysX renders and never sees a
-session. Repository landmarks in older docs have moved: the `aiOPs` checkout named in
+**Ecosystem seams.** AgentX owns canonical conversations, memory, domain data, permissions,
+tools and execution. Nestor explains and requests a presentation. GraphysX owns the visual
+document, simulation, rendering, camera and graphical interaction. A graphical applied
+receipt never proves that a file moved or a physical device acted. Runtime adapters consume
+the [shared AgentX capabilities](https://github.com/WindriderQc/AgentX/blob/main/docs/SHARED_AGENT_CAPABILITIES.md).
+
+| Consumer | Transport and authority | Contract and reception |
+|---|---|---|
+| DISKX in Nestor | Private Core `/diskx`; Core relays the published module on its own origin; bounded Data Toolbox GETs | [DISKX_EMBED.md](docs/DISKX_EMBED.md). AgentX PRs 1057/1071 reuse the same path. Report date and selected group correlate the Core snapshot and the view. Public standalone DiskX remains a demo without the Data relay. |
+| LLMx personal / Family | Public `?app=llmx` currently calls the consumer routes directly; `server/llmx-target.mjs` shares the client/server route map | [LLMX_PUBLIC_CONNECTION.md](docs/LLMX_PUBLIC_CONNECTION.md). A readable config alone does not prove a working browser conversation: the current Core cross-site POST guard and absent cross-origin read header require transport reception. Keep personal and Family permissions distinct. |
+| KidX voice branch | Dedicated server relay with a server-held Family credential; local branch described above | Read that branch's `docs/KIDX_VOICE.md`; retain its bounded routes and Family context. It is not a generic proxy and is not installed by DiskX. |
+| Household mask / math stage | Core relays `/embed/llmx-face.js`; presence and math presentation events flow into the element | [LLMX_FACE_EMBED.md](docs/LLMX_FACE_EMBED.md). Visual events convey presentation state, not business authorization. |
+
+Core network access controls remain independent of an owner-only tool selection, profile,
+same origin or absence from `tools/list`. The module relayed under Core's origin is approved
+code with that origin's access. Record its published revision and hash separately from the
+Core revision. Share bounded contracts where useful; do not combine these powers behind a
+universal client/proxy or introduce a fourth DiskX data path.
+
+**Application capabilities and temporary effects.** Keep one frame loop per host; isolated
+embeds and Cyber Race have their own canvases. When extracting the repeated application
+opening code, expose only demonstrated capabilities: document API, framing, frame subscription,
+picking and owned effects, including LLMx's required render pass. Do not impose an interface
+that drops that pass. Reuse `reconcileTransientEntities` for temporary world entities; Three
+effects and render passes retain explicit owners and cleanup. Avoid a universal transient
+layer or a wholesale migration. Cyber Race stays isolated from shared-host imports.
+
+Receive DiskX first through the existing Core route, then reuse the Math Teacher browser
+evidence and receive the pedagogical journey with the children. Extract a shared capability
+only when those uses show the duplication. A future 3D ecosystem map projects native service
+identities and freshness; it does not need a new graph database or collector now.
+
+Repository landmarks in older docs have moved: the `aiOPs` checkout named in
 `docs/LLMX_CURRENT_HANDOFF.md` and `docs/KIDX_NESTOR_VOICE_SESSION.md` no longer exists
 locally, Household lives in `WindriderQc/AgentX`, and the `GraphysX-Web-llmx-integration` /
 `GraphysX-Web-llmx-verified` checkouts are gone (their worktree entries are prunable). The
