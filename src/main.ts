@@ -842,6 +842,22 @@ if (mode === "previews" && import.meta.env.DEV) {
               enterBrowsedEditor();
             }),
             {
+              id: "family-iss-live",
+              label: "ISS Live",
+              summary: "The station over the Earth, propagated from the live TLE — geometric track, honest epoch and age, no visibility claims.",
+              meta: "real TLE  ·  SGP4 orbit + ground track  ·  Family Earth3D",
+              open: async () => {
+                const { composeIssLive, mountIssLive, frameIssLive } = await import("./family-iss-scene");
+                if (nestorBlockedByLiveSession()) return;
+                showroomEnvironment?.();
+                showroomEnvironment = null;
+                composeIssLive(host.api);
+                host.applyEnvironment();
+                mountIssLive(host);
+                frameIssLive(host);
+              },
+            },
+            {
               id: "archive-garage",
               label: "Archive Garage",
               summary: "The recovered Impreza and Cobra on turntables, with the Piste Ovale as a table model.",
@@ -1016,6 +1032,15 @@ if (mode === "previews" && import.meta.env.DEV) {
         // Suzanne 1 — the 40×40 ASCII arena as a composed scene (complement to the
         // machinery run: same family, different record). Lazy like World 1, so the 200 KB
         // decoded arena stays off the boot path until someone opens it.
+        // ISS Live — the Family Earth3D adapter over the real TLE. `options` lets a smoke
+        // inject {tleText, nowMs} so the gate never touches the network; the returned
+        // handle carries setNow/refresh/state for deterministic driving.
+        composeIssLive: (options?: import("./family-iss-scene").IssLiveOptions) =>
+          import("./family-iss-scene").then(({ composeIssLive, mountIssLive, ISS_PROVENANCE }) => {
+            const result = composeIssLive(host.api);
+            const live = mountIssLive(host, options);
+            return { ...result, live, provenance: ISS_PROVENANCE };
+          }),
         composeSuzanne1: () => import("./archive-suzanne1-scene").then(({ composeSuzanne1 }) => composeSuzanne1(host.api)),
         // Suzanne 2 — distinct authored arena and its source-shaped any-two-of-fifteen rule.
         composeSuzanne2: () => import("./archive-suzanne2-scene").then(({ composeSuzanne2, SUZANNE2_PROVENANCE }) => {
