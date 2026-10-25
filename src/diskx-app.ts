@@ -36,7 +36,7 @@ import {
   type DiskxVolume,
 } from "./diskx-data";
 import { composeDiskxWorld, DISKX_DISTRICT_TAG, diskxPathOf, FREE_COLOUR } from "./diskx-scene";
-import { createFixtureSource, DISKX_FIXTURE, resolveDiskxSource, type DiskxSource, type DiskxSummary } from "./diskx-source";
+import { createFixtureSource, createLiveSource, DISKX_FIXTURE, RELAY_ENDPOINTS, resolveDiskxSource, type DiskxEndpoints, type DiskxSource, type DiskxSummary } from "./diskx-source";
 import { replaceScope, redactedInventory } from "./diskx-snapshot";
 import { readJanitorSummary, readJanitorGroups, type JanitorGroupPage } from './diskx-janitor-source';
 import { createPresentationOverlay } from './presentation-overlay';
@@ -59,11 +59,30 @@ const CITY_SIZE = 40;
 const LABEL_BUDGET = 18;
 const OVERVIEW_DIRECTION = new Vector3(0.44, 0.52, 0.74).normalize();
 
-export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () => void): DiskxApplication {
-  const params = new URLSearchParams(window.location.search);
+/**
+ * How a host page mounts DiskX. The GraphysX app passes nothing and reads its own query string;
+ * the `<diskx-city>` embed (an AgentX Core page) passes Core's routes, the roots, and what to
+ * open on. Events are presentation receipts: "group-shown" never means a file was touched.
+ */
+export type DiskxMountOptions = {
+  live?: { endpoints: DiskxEndpoints; roots: string[]; origin: string };
+  focus?: string | null;
+  janitor?: "latest" | null;
+  group?: string | null;
+  embedded?: boolean;
+  onEvent?: (type: "ready" | "group-shown" | "error", detail: Record<string, unknown>) => void;
+};
+
+export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () => void, options: DiskxMountOptions = {}): DiskxApplication {
+  const params = options.live ? new URLSearchParams() : new URLSearchParams(window.location.search);
   const reduced = motionIsReduced();
-  const forceFixture = params.get("source") === "fixture";
+  const forceFixture = !options.live && params.get("source") === "fixture";
   const janitorDemo = forceFixture && params.get('janitor') === 'demo';
+  const endpoints = options.live?.endpoints ?? RELAY_ENDPOINTS;
+  const emit = (type: "ready" | "group-shown" | "error", detail: Record<string, unknown>): void => {
+    try { options.onEvent?.(type, detail); } catch { /* a host listener never breaks the city */ }
+  };
+  let announcedReady = false;
   let candidateIndex = 0;
   const presentation = createPresentationOverlay();
   host.scene.add(presentation.group);
@@ -99,8 +118,11 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
 
   // ---- data -----------------------------------------------------------------------------
   const rows = new Map<string, DiskxDirectoryRow>();
-  for (const row of DISKX_FIXTURE.directories) rows.set(row.path, row);
-  let source: DiskxSource = createFixtureSource();
+  // Embedded on a Core page there is no demo city to show first: it starts empty and live.
+  if (!options.live) for (const row of DISKX_FIXTURE.directories) rows.set(row.path, row);
+  let source: DiskxSource = options.live
+    ? createLiveSource(globalThis.fetch.bind(globalThis), [...options.live.roots], options.live.origin, options.live.endpoints)
+    : createFixtureSource();
   let summary: DiskxSummary | null = null;
   let tree: DiskxTree = buildDiskxTree(source.roots, [...rows.values()]);
   let all = makeAllNode(tree);
@@ -112,7 +134,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   let loading = 0;
   let listLimit = 40;
   let notice = "";
-  let focus: DiskxNode = resolveInitialFocus(params.get("root"));
+  let focus: DiskxNode = resolveInitialFocus(options.focus ?? params.get("root"));
   const history: string[] = [];
   let layout: DiskxCityLayout | null = null;
   let listMode: { kind: "top" } | { kind: "rest"; nodes: DiskxNode[] } = { kind: "top" };
@@ -220,7 +242,8 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     ? 'Démonstration synthétique · contrat de présentation provisoire · aucun run réel'
     : janitorAvailability().reason;
   element('[data-janitor-demo]').hidden = !janitorDemo;
-  element('[data-janitor-demo-link]').hidden = janitorDemo;
+  element('[data-janitor-demo-link]').hidden = janitorDemo || Boolean(options.embedded);
+  button('exit').hidden = Boolean(options.embedded);
   const candidateSelect = element<HTMLSelectElement>('[data-janitor-candidate]');
   for (const candidate of JANITOR_DEMO.candidates) {
     const option = document.createElement('option'); option.value = candidate.id;
@@ -241,10 +264,10 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     const panel = element('[data-janitor-live]');
     button('janitor-read').disabled = true; button('janitor-next').disabled = true;
     try {
-      const summary = janitorDemo ? JANITOR_DEMO_SUMMARY : await readJanitorSummary();
+      const summary = janitorDemo ? JANITOR_DEMO_SUMMARY : await readJanitorSummary(fetch, endpoints.janitorStrategy);
       if (disposed) return;
       if (!summary.available) { janitorState = 'absent'; panel.textContent = 'Aucun rapport Janitor disponible. Aucun rapport généré ici.'; janitorPage = null; return; }
-      const page = janitorDemo ? JANITOR_DEMO_GROUPS : await readJanitorGroups(next ? janitorPage?.nextOffset ?? 0 : 0);
+      const page = janitorDemo ? JANITOR_DEMO_GROUPS : await readJanitorGroups(next ? janitorPage?.nextOffset ?? 0 : 0, fetch, endpoints.janitorGroups);
       if (disposed) return;
       if (next && janitorPage && page.report.id !== janitorPage.report.id) throw new Error('Le rapport a changé. Relire depuis la première page.');
       if (page.report.generatedAt && page.report.generatedAt !== summary.generatedAt) throw new Error('Le rapport a changé pendant la lecture. Réessayer.');
@@ -454,7 +477,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     if (refreshing) return;
     refreshing = true; setLoading(1);
     try {
-      const resolved = await resolveDiskxSource({ forceFixture, requireLive: source.kind === 'live' });
+      const resolved = options.live ? source : await resolveDiskxSource({ forceFixture, requireLive: source.kind === 'live' });
       const before = await resolved.summary();
       let nextRows: DiskxDirectoryRow[] = [];
       const limited = new Set<string>();
@@ -478,9 +501,33 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       observedAt = new Date().toISOString(); observationId = `${source.kind}:${observedAt}`;
       notice = source.kind === "live" ? "Lecture d’un index : cohérence non garantie par l’API, aucun suivi temps réel. Maximum 2 000 lignes par périmètre, sans pagination." : "Démonstration synthétique : aucun fichier réel, aucun travail Janitor exécuté.";
       rebuildTree(); buildCity();
+      if (!announcedReady) {
+        announcedReady = true;
+        emit("ready", { source: source.kind, roots: [...source.roots], totalFiles: after.totalFiles, totalSize: after.totalSize });
+        void openRequested();
+      }
     } catch (error) {
-      if (!disposed) { notice = `Lecture échouée : ${error instanceof Error ? error.message : String(error)}. Observation précédente conservée ; Actualiser pour réessayer.`; render(); }
+      if (!disposed) {
+        notice = `Lecture échouée : ${error instanceof Error ? error.message : String(error)}. Observation précédente conservée ; Actualiser pour réessayer.`; render();
+        emit("error", { stage: "inventory", message: error instanceof Error ? error.message : String(error) });
+      }
     } finally { refreshing = false; if (!disposed) setLoading(-1); }
+  }
+  /** What the host asked to open on: the latest report, and optionally one named group. */
+  async function openRequested(): Promise<void> {
+    if (!options.janitor && !options.group) return;
+    await loadJanitor();
+    if (!options.group || disposed) return;
+    try {
+      const page = await readJanitorGroups(0, fetch, endpoints.janitorGroups, options.group);
+      if (disposed) return;
+      const group = page.groups.find((candidate) => candidate.sha256 === options.group);
+      if (group) showGroup(group);
+      else { element('[data-janitor-focus]').textContent = 'Ce groupe n’est pas dans le dernier rapport.'; emit("error", { stage: "group", message: "group not in the latest report" }); }
+    } catch (error) {
+      element('[data-janitor-focus]').textContent = `Groupe illisible : ${error instanceof Error ? error.message : String(error)}.`;
+      emit("error", { stage: "group", message: error instanceof Error ? error.message : String(error) });
+    }
   }
   void refresh();
 
@@ -824,6 +871,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       };
     });
     relations.set(places, duplicateLinks(anchors));
+    emit('group-shown', { sha256: view.sha256, places: places.length, links: relations.state().links, outside: outside.length });
     setGroupTags(anchors.map((anchor, index) => ({
       role: anchor.role,
       at: new Vector3(places[index].center[0], places[index].center[1], places[index].center[2]),

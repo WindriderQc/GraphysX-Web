@@ -62,8 +62,8 @@ function productAssets(): Plugin {
 }
 
 /**
- * Build the `<llmx-face>` embed (vite.face.config.ts) with every release build, so the gate, CI
- * and deploy all ship `dist/embed/llmx-face.js` — they run `vite build`, not the npm script.
+ * Build the `<llmx-face>` and `<diskx-city>` embeds (vite.face.config.ts, vite.diskx.config.ts) with
+ * every release build, so the gate, CI and deploy all ship `dist/embed/llmx-face.js` and `diskx.js` — they run `vite build`, not the npm script.
  */
 function faceEmbed(): Plugin {
   return {
@@ -71,6 +71,8 @@ function faceEmbed(): Plugin {
     apply: "build",
     async closeBundle() {
       await build({ configFile: path.resolve("vite.face.config.ts"), logLevel: "warn" });
+      // `<diskx-city>` for an AgentX Core page (vite.diskx.config.ts), shipped the same way.
+      await build({ configFile: path.resolve("vite.diskx.config.ts"), logLevel: "warn" });
     },
   };
 }

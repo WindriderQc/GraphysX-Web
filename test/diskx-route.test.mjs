@@ -22,3 +22,14 @@ test('Janitor relay exposes fixed GET reads only and never run/generate/approve'
   assert.equal((await request(route, '/diskx-api/janitor-groups?offset=-1')).status, 400);
   assert.equal(targets.length, 2);
 });
+test('a named group is read by its SHA-256 only', async () => {
+  const targets = [];
+  const route = createDiskxRoute({ dataUrl: 'https://example.invalid', volumesSpec: '', fetchImpl: async target => {
+    targets.push(String(target)); return new Response(JSON.stringify({ status: 'success', data: {} }));
+  } });
+  const sha = 'a'.repeat(64);
+  assert.equal((await request(route, `/diskx-api/janitor-groups?sha256=${sha}`)).status, 200);
+  assert.deepEqual(targets, [`https://example.invalid/api/data-toolbox/janitor/strategy/latest/groups?sha256=${sha}`]);
+  for (const bad of ['ABC', `${sha},${sha}`, `${sha}x`]) assert.equal((await request(route, `/diskx-api/janitor-groups?sha256=${encodeURIComponent(bad)}`)).status, 400, bad);
+  assert.equal(targets.length, 1);
+});

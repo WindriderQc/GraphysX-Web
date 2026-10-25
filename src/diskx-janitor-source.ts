@@ -29,8 +29,8 @@ async function read(fetchImpl: typeof fetch, route: string) {
   if (envelope.status !== 'success') throw new Error('Réponse Janitor incompatible');
   return object(envelope.data);
 }
-export async function readJanitorSummary(fetchImpl: typeof fetch = fetch) {
-  const data = await read(fetchImpl, '/diskx-api/janitor-strategy');
+export async function readJanitorSummary(fetchImpl: typeof fetch = fetch, route = '/diskx-api/janitor-strategy') {
+  const data = await read(fetchImpl, route);
   if (data.available === false || data.status === 'unavailable') return { available: false as const };
   const summary = object(data.summary);
   return { available: true as const, generatedAt: text(data.generatedAt), status: text(data.status),
@@ -39,9 +39,10 @@ export async function readJanitorSummary(fetchImpl: typeof fetch = fetch) {
     filesToHash: count(summary.filesToHash), bytesToHash: count(summary.bytesToHash),
     executableActions: count(summary.executableActions) };
 }
-export async function readJanitorGroups(offset = 0, fetchImpl: typeof fetch = fetch): Promise<JanitorGroupPage> {
+export async function readJanitorGroups(offset = 0, fetchImpl: typeof fetch = fetch, route = '/diskx-api/janitor-groups', sha256: string | null = null): Promise<JanitorGroupPage> {
   count(offset);
-  const data = await read(fetchImpl, `/diskx-api/janitor-groups?offset=${offset}&limit=20`);
+  if (sha256 !== null && !/^[0-9a-f]{64}$/.test(sha256)) throw new Error('SHA-256 invalide');
+  const data = await read(fetchImpl, sha256 ? `${route}?sha256=${sha256}` : `${route}?offset=${offset}&limit=20`);
   const report = object(data.report);
   if (!Array.isArray(data.groups) || data.groups.length > 100) throw new Error('Groupes Janitor invalides');
   const nextOffset = data.nextOffset === null ? null : count(data.nextOffset);
