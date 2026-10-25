@@ -68,3 +68,100 @@ The compiled preview is present at **http://127.0.0.1:4207/?app=llmx**, using th
 Codex and Claude can use the existing local MCP tools for an open connected world or a separate scene. Ordinary public-site visits do not automatically attach the loopback MCP bridge. See [GRAPHYSX_MCP.md](GRAPHYSX_MCP.md) and [LLMX_CREATION.md](LLMX_CREATION.md).
 
 Preserve the other GraphysX/Claude worktrees. The committed MCP integration `2a4f7be` is included in the published release; its code/tests match that commit exactly. Its owning task independently verified the public standalone editor and final release identity. Other uncommitted integration-checkout files still belong to their owners. This preview uses a dependency junction into that checkout. AIOps evidence is archived under `C:\Users\Yanik\codes\aiOPs\output\llmx-public-voice-20260914` and `output\llmx-opening-greeting-20260914`. Both completed AIOps worktrees and their branches were removed normally after integration/archive checks; the Lead is released. Historical attempts and receipts belong in `progress.md`.
+
+## Local MCP repair and Nestor Family inventory (2026-10-24 UTC)
+
+This local check does not supersede the historical release receipts above.
+Only the GraphysX script argument in `C:\Users\Yanik\.codex\config.toml` changed:
+`GraphysX-Web-llmx-integration\tools\graphysx-mcp.mjs` became
+`GraphysX-Web\tools\graphysx-mcp.mjs`. Claude's user registration already targets
+that file; its configuration was preserved. Both global skill junctions resolve to
+`.agentx\runtime\skills\graphysx-20261023`, with identical SKILL.md hashes.
+No security settings, credentials, model/persona configuration or network exposure changed.
+
+Validation levels remain separate:
+
+- The bundled Codex CLI reread the repaired registration. An older CLI rejects the
+  existing `service_tier = "default"`; it was not changed for this repair.
+- Standard MCP initialization exposes eight tools and the World API resource.
+  Two protocol clients exercised a real isolated browser against the existing dist:
+  create a cube, sphere and connecting bar, read, frame, capture, inspect, then
+  remove all four entities (including light), leaving entityCount zero. No save,
+  audio or user browser profile was used; the temporary browser and preview closed.
+  These clients are protocol harnesses, not Codex and Claude models.
+- A fresh ephemeral Codex model session read its skill and exposed all eight tools.
+  The initial observe lost the test tab during cleanup. A bounded follow-up kept
+  the browser open until client completion: model calls worlds, observe, read/query
+  and final observe succeeded on isolated `codex-client-proof`, revision 1.
+  The single edit/spawn of `codex-client-marker` was rejected before execution:
+  `MCP tool call requires approval, but approval policy is never`. No retry or
+  permission-policy change was made. Query confirmed the marker absent and both
+  model and independent harness confirmed entityCount 0, revision 1. The temporary
+  browser and owned loopback preview then closed. Real client reading is validated;
+  model-driven mutation remains blocked by the client's approval policy.
+- Claude skill/config files are readable, but no fresh Claude model session was
+  validated. No Claude CLI was found in the inspected normal installation paths;
+  Get-AppxPackage discovery returned Access denied and was not retried.
+- This dot task exposes no GraphysX tool. Local MCP registration does not install
+  tools into dot, its parent or voice. The existing Household/LLMx browser proposal
+  path is a separate integration and was not exercised here.
+
+Evidence and rollback copies are under
+`C:\Users\Yanik\AppData\Local\Temp\graphysx-mcp-repair-e733b38c-dd16-4d35-83d5-e3a47a020305`:
+`protocol-browser-receipt.json`, `world.png`, `browser.png`, `codex-fresh.txt`,
+`codex-client-receipt.json`, `codex-client-events.jsonl`, `codex-client-final.txt`,
+`codex-config.before.toml`, `claude-config.before.json`, and this document's before copy.
+For rollback, reverse only the MCP script-path replacement after checking for
+concurrent edits; restoring the entire config is safe only if it is otherwise unchanged.
+The prior `.claude/launch.json` modification belongs to another task and is preserved.
+
+### Product inventory and next scope (proposal, not implementation)
+
+Priority: Nestor's expressive avatar and reusable 3D explanations, with **Family
+Earth3D/ISS first**, then sky guidance/stars; weather with dated cloud imagery is
+part of the proposed visual package. No recurring notification or subscription is authorized.
+
+- **Avatar, source verified:** `src/agent-world-face.ts`, `llmx-face-pose.ts`,
+  `llmx-face-reactions.ts` and `llmx-face-forge.json`. Reactions follow observable
+  creation/voice events (glance, warmth, attention, nod). Context-driven expression
+  is not reliable detection of a person's emotions. No new audio test was run.
+- **Prefabs, source verified:** `src/agent-world-prefabs.ts` provides composable
+  entity templates with position, scale, palette and tags (including CubX assembly,
+  signal beacon and orbital sculpture). The simple MCP relation diagram was rendered
+  and inspected in this task; these prefab families were not newly smoke-tested.
+- **Earth/ISS, source verified:** `src/orbital-observatory.ts` preserves SBQC Earth3D,
+  Globe, Trajectory and Starfield provenance, observer radius and pass estimates.
+  It uses a fixed inclination/phase/altitude and accelerated simulated period;
+  its cloud map is `/assets/sbqc/orbital/earth-clouds.png`. This is a simulation and
+  local image, not demonstrated live orbital predictions or refreshed weather.
+- **Family route, documented:** `docs/LLMX_CREATION.md` describes `profile=family`,
+  separate browser library/session identity, bounded observations and the existing
+  Household `graphysx_reply` proposal/receipt path. This task did not validate the
+  current AgentX deployment or its available Family tools.
+- **External inventory limit:** reading `C:\Users\Yanik\codes\AgentX-Ecosystem`
+  with Git returned Permission denied. No retry or alternate access was attempted.
+  DataAPI and the current ISS detector remain unverified; do not infer absence.
+
+The next scoped design should identify the existing authorized orbital/weather
+sources and Family tools before proposing adapters or new prefabs. Separate a
+geometric pass from actual viewing conditions: observer horizon, illumination,
+local darkness and weather; show data source, epoch, update time/timezone and stale
+status. Keep precise observer location local unless separately authorized.
+A sky background is not a calibrated sky map. Any later cloud layer must disclose
+image timestamp/coverage and distinguish observations from forecasts. Integrating
+these data and Nestor guidance is still to be specified; no product code, paid source,
+scheduler, deployment or automatic implementation was added by this inventory.
+### Original SBQC ISS view recovered (2026-10-24 UTC)
+
+The historical + TLE forecast view was found in SBQC-public and its identical
+SBQC-graphysx-public copy: `views/issDetector.ejs`, `/iss-detector`, with
+`iss-main.js`, `issDetector.js`, `issOrbitPredictor.js` and `Trajectory.js`.
+https://specialblend.ca/iss-detector returned HTTP 200; its `/api/tle` and `/api/iss`
+returned HTTP 500, while `/api/live-cloud-map` returned PNG/200. This is a different,
+more relevant source than the GraphysX simulated orbit inventoried above.
+32 files were recovered unchanged into `output/sbqc-iss-recovery-20261024/source`;
+all match the 2026-10-23 consolidation manifest. That folder's `RECOVERY.md`,
+`manifest.json` and `http-receipt.json` contain the dependency map, useful SBQC
+project triage, provenance limits and minimal Family/Nestor proposal. The copy is
+source recovery, not a runnable installation or accepted live forecast. No service,
+location transmission, runtime implementation, commit or deployment was performed.
