@@ -39,6 +39,7 @@ import { composeDiskxWorld, DISKX_DISTRICT_TAG, diskxPathOf, FREE_COLOUR } from 
 import { createFixtureSource, createLiveSource, DISKX_FIXTURE, RELAY_ENDPOINTS, resolveDiskxSource, type DiskxEndpoints, type DiskxSource, type DiskxSummary } from "./diskx-source";
 import { replaceScope, redactedInventory } from "./diskx-snapshot";
 import { readJanitorSummary, readJanitorGroups, type JanitorGroupPage } from './diskx-janitor-source';
+import { requireJanitorVersion } from './diskx-report-version';
 import { createPresentationOverlay } from './presentation-overlay';
 import { createRelationOverlay, type RelationPlace } from './presentation-links';
 import { anchorDuplicates, duplicateLinks, planDuplicateView, DUPLICATE_ALL_SCOPE, type DuplicateView } from './diskx-duplicates';
@@ -69,8 +70,9 @@ export type DiskxMountOptions = {
   focus?: string | null;
   janitor?: "latest" | null;
   group?: string | null;
+  report?: string | null;
   embedded?: boolean;
-  onEvent?: (type: "ready" | "group-shown" | "error", detail: Record<string, unknown>) => void;
+  onEvent?: (type: "ready" | "report-read" | "group-shown" | "error", detail: Record<string, unknown>) => void;
 };
 
 export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () => void, options: DiskxMountOptions = {}): DiskxApplication {
@@ -79,7 +81,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   const forceFixture = !options.live && params.get("source") === "fixture";
   const janitorDemo = forceFixture && params.get('janitor') === 'demo';
   const endpoints = options.live?.endpoints ?? RELAY_ENDPOINTS;
-  const emit = (type: "ready" | "group-shown" | "error", detail: Record<string, unknown>): void => {
+  const emit = (type: "ready" | "report-read" | "group-shown" | "error", detail: Record<string, unknown>): void => {
     try { options.onEvent?.(type, detail); } catch { /* a host listener never breaks the city */ }
   };
   let announcedReady = false;
@@ -266,12 +268,17 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     try {
       const summary = janitorDemo ? JANITOR_DEMO_SUMMARY : await readJanitorSummary(fetch, endpoints.janitorStrategy);
       if (disposed) return;
-      if (!summary.available) { janitorState = 'absent'; panel.textContent = 'Aucun rapport Janitor disponible. Aucun rapport généré ici.'; janitorPage = null; return; }
+      if (!summary.available) {
+        janitorState = 'absent'; panel.textContent = 'Aucun rapport Janitor disponible. Aucun rapport généré ici.'; janitorPage = null;
+        emit('error', { stage: 'report', message: 'Aucun rapport Janitor disponible.' }); return;
+      }
+      if (options.report) requireJanitorVersion(summary.generatedAt, options.report);
       const page = janitorDemo ? JANITOR_DEMO_GROUPS : await readJanitorGroups(next ? janitorPage?.nextOffset ?? 0 : 0, fetch, endpoints.janitorGroups);
       if (disposed) return;
       if (next && janitorPage && page.report.id !== janitorPage.report.id) throw new Error('Le rapport a changé. Relire depuis la première page.');
-      if (page.report.generatedAt && page.report.generatedAt !== summary.generatedAt) throw new Error('Le rapport a changé pendant la lecture. Réessayer.');
+      requireJanitorVersion(page.report.generatedAt, summary.generatedAt);
       janitorPage = page; janitorState = 'ready';
+      emit('report-read', { reportGeneratedAt: page.report.generatedAt, reportId: page.report.id });
       element('[data-janitor-availability]').textContent = janitorDemo
         ? 'Démonstration synthétique · rapport fictif · aucun run réel'
         : 'Dernier rapport lu par GET. Lecture seule : rien n’est lancé, approuvé ni modifié ici.';
@@ -309,7 +316,10 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       }
       const coverage = document.createElement('p'); coverage.textContent = `Page à partir de ${page.offset}, ${page.groups.length} groupes affichés sur ${page.total}. ${page.scanBoundReached ? 'Limite de parcours atteinte : couverture partielle.' : ''}`; panel.append(coverage);
     } catch (error) {
-      if (!disposed) { janitorState = 'error'; panel.textContent = `Lecture Janitor indisponible : ${error instanceof Error ? error.message : String(error)}. Réessayer avec Lire le dernier rapport.`; janitorPage = null; }
+      if (!disposed) {
+        janitorState = 'error'; panel.textContent = `Lecture Janitor indisponible : ${error instanceof Error ? error.message : String(error)}. Réessayer avec Lire le dernier rapport.`; janitorPage = null;
+        emit('error', { stage: 'report', message: error instanceof Error ? error.message : String(error) });
+      }
     } finally {
       janitorReading = false;
       if (!disposed) { button('janitor-read').disabled = false; button('janitor-next').disabled = false; button('janitor-next').hidden = janitorPage?.nextOffset == null; }
@@ -517,14 +527,17 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   async function openRequested(): Promise<void> {
     if (!options.janitor && !options.group) return;
     await loadJanitor();
-    if (!options.group || disposed) return;
+    if (!options.group || disposed || !janitorPage) return;
     try {
       const page = await readJanitorGroups(0, fetch, endpoints.janitorGroups, options.group);
       if (disposed) return;
+      if (page.report.id !== janitorPage.report.id) throw new Error('Le rapport a changé avant la lecture du groupe. Relire le rapport.');
+      requireJanitorVersion(page.report.generatedAt, janitorPage.report.generatedAt);
       const group = page.groups.find((candidate) => candidate.sha256 === options.group);
       if (group) showGroup(group);
       else { element('[data-janitor-focus]').textContent = 'Ce groupe n’est pas dans le dernier rapport.'; emit("error", { stage: "group", message: "group not in the latest report" }); }
     } catch (error) {
+      if (disposed) return;
       element('[data-janitor-focus]').textContent = `Groupe illisible : ${error instanceof Error ? error.message : String(error)}.`;
       emit("error", { stage: "group", message: error instanceof Error ? error.message : String(error) });
     }
@@ -871,7 +884,8 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       };
     });
     relations.set(places, duplicateLinks(anchors));
-    emit('group-shown', { sha256: view.sha256, places: places.length, links: relations.state().links, outside: outside.length });
+    emit('group-shown', { sha256: view.sha256, places: places.length, links: relations.state().links, outside: outside.length,
+      reportGeneratedAt: janitorPage?.report.generatedAt ?? null, reportId: janitorPage?.report.id ?? null });
     setGroupTags(anchors.map((anchor, index) => ({
       role: anchor.role,
       at: new Vector3(places[index].center[0], places[index].center[1], places[index].center[2]),

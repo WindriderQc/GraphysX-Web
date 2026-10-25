@@ -24,5 +24,8 @@ export function parseDiskxCityAttributes(read: (name: string) => string | null) 
   const focus = read("focus");
   if (focus && !roots.some((root) => focus === root || focus.startsWith(`${root}/`))) throw new Error("focus must sit under a root");
   const janitor = read("janitor") === "latest" ? "latest" as const : null;
-  return { endpoints, roots: [...new Set(roots)], group: group || null, focus: focus || null, janitor };
+  const report = read("report");
+  if (report && (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(report) || !Number.isFinite(Date.parse(report)))) throw new Error("report must be a UTC report date");
+  return { endpoints, roots: [...new Set(roots)], group: group || null, focus: focus || null, janitor,
+    report: report ? new Date(report).toISOString() : null };
 }
