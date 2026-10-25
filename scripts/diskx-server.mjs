@@ -81,7 +81,7 @@ export function createDiskxRoute({ dataUrl = process.env.DISKX_DATA_URL, volumes
   const endpoints = new Map([
     ["summary", { target: "summary", params: [] }],
     ["janitor-strategy", { target: "../janitor/strategy/latest", params: [] }],
-    ["janitor-groups", { target: "../janitor/strategy/latest/groups", params: ["offset", "limit"] }],
+    ["janitor-groups", { target: "../janitor/strategy/latest/groups", params: ["offset", "limit", "sha256"] }],
     ["tree", { target: "tree", params: ["root", "limit"] }],
     ["files", { target: "files", params: ["root", "limit", "sort"] }],
   ]);
@@ -114,6 +114,7 @@ export function createDiskxRoute({ dataUrl = process.env.DISKX_DATA_URL, volumes
       if (value === null) continue;
       if ((key === "limit" || key === "offset") && !/^\d{1,5}$/.test(value)) { json(res, 400, { message: "limit invalide." }); return true; }
       if (key === "sort" && !/^[a-z_-]{1,24}$/i.test(value)) { json(res, 400, { message: "sort invalide." }); return true; }
+      if (key === "sha256" && !/^[0-9a-f]{64}$/.test(value)) { json(res, 400, { message: "sha256 invalide." }); return true; }
       if (key === "root" && (value.length > 1024 || value.includes("\0"))) { json(res, 400, { message: "root invalide." }); return true; }
       target.searchParams.set(key, value);
     }

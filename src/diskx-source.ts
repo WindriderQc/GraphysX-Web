@@ -107,7 +107,20 @@ export function createFixtureSource(fixture: DiskxFixture = DISKX_FIXTURE): Disk
   };
 }
 
-export function createLiveSource(fetchImpl: typeof fetch, roots: string[], origin: string): DiskxSource {
+/**
+ * Where the live reads go. GraphysX's own dev/preview server relays them under `/diskx-api/`;
+ * an AgentX Core page serves the same Data Toolbox routes on its own origin (`/api/data-toolbox`).
+ * The response shapes are identical: the relay forwards Core's bodies unchanged.
+ */
+export type DiskxEndpoints = {
+  summary: string; tree: string; files: string; volumes: string | null;
+  janitorStrategy: string; janitorGroups: string;
+};
+export const RELAY_ENDPOINTS: DiskxEndpoints = {
+  summary: "/diskx-api/summary", tree: "/diskx-api/tree", files: "/diskx-api/files", volumes: "/diskx-api/volumes",
+  janitorStrategy: "/diskx-api/janitor-strategy", janitorGroups: "/diskx-api/janitor-groups",
+};
+export function createLiveSource(fetchImpl: typeof fetch, roots: string[], origin: string, endpoints: DiskxEndpoints = RELAY_ENDPOINTS): DiskxSource {
   type TreeData = { tree: { path: string; fileCount: number; totalSize: number; largestFile?: string | null }[]; truncated?: boolean; limit?: number };
   type SummaryData = { totalFiles: number; totalSize: number; lastScan?: { finished_at?: string | null } | null };
   type FilesData = { files: { path: string; size: number; category?: string; mtime?: number }[] };
@@ -115,7 +128,7 @@ export function createLiveSource(fetchImpl: typeof fetch, roots: string[], origi
     kind: "live",
     roots,
     summary: async () => {
-      const data = await unwrap<SummaryData>(await fetchImpl("/diskx-api/summary", { cache: "no-store" }));
+      const data = await unwrap<SummaryData>(await fetchImpl(endpoints.summary, { cache: "no-store" }));
       return {
         totalFiles: data.totalFiles,
         totalSize: data.totalSize,
@@ -126,7 +139,7 @@ export function createLiveSource(fetchImpl: typeof fetch, roots: string[], origi
     },
     tree: async (root) => {
       const params = new URLSearchParams({ root, limit: String(PAGE) });
-      const data = await unwrap<TreeData>(await fetchImpl(`/diskx-api/tree?${params}`, { cache: "no-store" }));
+      const data = await unwrap<TreeData>(await fetchImpl(`${endpoints.tree}?${params}`, { cache: "no-store" }));
       return {
         rows: data.tree.filter(row => row.path === root || row.path.startsWith(`${root}/`)).map((row) => ({ path: row.path, fileCount: row.fileCount, totalSize: row.totalSize, largestFile: row.largestFile ?? null })),
         truncated: data.truncated !== false || data.tree.length >= PAGE,
@@ -134,12 +147,13 @@ export function createLiveSource(fetchImpl: typeof fetch, roots: string[], origi
     },
     files: async (root, limit = 8) => {
       const params = new URLSearchParams({ root, limit: String(limit), sort: "size" });
-      const data = await unwrap<FilesData>(await fetchImpl(`/diskx-api/files?${params}`, { cache: "no-store" }));
+      const data = await unwrap<FilesData>(await fetchImpl(`${endpoints.files}?${params}`, { cache: "no-store" }));
       return data.files.map((file) => ({ path: file.path, size: file.size, category: file.category, mtime: file.mtime }));
     },
     volumes: async () => {
       // Absent or unconfigured is "unknown", never the fixture's dated numbers.
-      const response = await fetchImpl("/diskx-api/volumes", { cache: "no-store" });
+      if (!endpoints.volumes) return [];
+      const response = await fetchImpl(endpoints.volumes, { cache: "no-store" });
       if (!response.ok) return [];
       const payload = (await response.json()) as { volumes?: unknown };
       return sanitiseVolumes(payload.volumes);
