@@ -1,5 +1,7 @@
 # LLMx — reprise après redémarrage et partage Codex / Claude
 
+> **Document historique — plan LLMx de septembre 2026.** Fusionné tel quel depuis `codex/llmx-experience-plan` le 2026-10-25; non mis à jour depuis le 2026-09-13. L'état courant de LLMx est décrit dans [LLMX_CURRENT_HANDOFF.md](LLMX_CURRENT_HANDOFF.md) et [LLMX_CREATION.md](LLMX_CREATION.md). Les worktrees et branches cités ci-dessous n'existent plus.
+
 Date : 2026-09-13. État actuel : Forge et visage intégrés; conversation texte/voix et vrai accueil « Hello » raccordés à Household 1.54.0, déployé sur UGFrank (AIOps PR600, 71968ac5). La passation dans le worktree d’intégration ci-dessous fait autorité pour le lancement et les derniers résultats. Le plan historique conserve les étapes initialement proposées; les maths et la création validée de scènes constituent la prochaine étape.
 
 Objectif demandé par Yanik : terminer rapidement en partageant le travail entre Codex et son agent Claude après le redémarrage du PC.

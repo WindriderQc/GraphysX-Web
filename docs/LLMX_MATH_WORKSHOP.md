@@ -1,5 +1,7 @@
 # LLMx — atelier de mathématiques dans la Forge
 
+> **Document historique — plan LLMx de septembre 2026.** Fusionné tel quel depuis `codex/llmx-experience-plan` le 2026-10-25; non mis à jour depuis le 2026-09-13. L'état courant de LLMx est décrit dans [LLMX_CURRENT_HANDOFF.md](LLMX_CURRENT_HANDOFF.md) et [LLMX_CREATION.md](LLMX_CREATION.md). Les worktrees et branches cités ci-dessous n'existent plus.
+
 Date : 2026-09-13. Ajout demandé par Yanik au plan LLMx. Statut : réutilisation analysée et planifiée; aucun tuteur LLMx implémenté ici.
 
 ## Ce que nous avons encore

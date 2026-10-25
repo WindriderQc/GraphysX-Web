@@ -1,12 +1,14 @@
 # LLMx — plan de réalisation
 
+> **Document historique — plan LLMx de septembre 2026.** Fusionné tel quel depuis `codex/llmx-experience-plan` le 2026-10-25; non mis à jour depuis le 2026-09-13. L'état courant de LLMx est décrit dans [LLMX_CURRENT_HANDOFF.md](LLMX_CURRENT_HANDOFF.md) et [LLMX_CREATION.md](LLMX_CREATION.md). Les worktrees et branches cités ci-dessous n'existent plus.
+
 Date : 2026-09-13. Statut : plan proposé, aucune fonctionnalité LLMx implémentée par ce document.
 
 **Mise à jour du 13 septembre :** le premier jalon d'ambiance est maintenant implémenté dans
 `GraphysX-Web-llmx-integration`, branche `codex/llmx-integration` : entrée, visage persistant,
 éclairage, particules et sauvegarde locale. La conversation, la voix et le vrai « Hello »
 restent la prochaine étape. Le présent document conserve l'analyse et le plan complet;
-la [passation actuelle](../../GraphysX-Web-llmx-integration/docs/LLMX_CURRENT_HANDOFF.md)
+la [passation actuelle](LLMX_CURRENT_HANDOFF.md)
 donne les instructions de reprise et les reçus de validation du code intégré.
 
 Reprise après redémarrage, partage du travail avec Claude et participation proposée de Qwen 3.8 local : [LLMX_RESTART_HANDOFF.md](LLMX_RESTART_HANDOFF.md).
