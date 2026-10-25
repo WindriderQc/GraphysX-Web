@@ -42,6 +42,26 @@ SHA-256 avec métadonnées courantes est distinct d’une similarité. candidate
 pas économie ; provenSavingsBytes reste une estimation logique du rapport. Une règle de
 survivant ne vaut pas autorisation, un run complete ne prouve aucun déplacement terminé.
 
+## Doublons dans la ville (lot 2)
+
+Chaque groupe lu porte un bouton « Montrer dans la ville ». DiskX plonge dans le dossier
+commun aux copies (s'il en contient une directement, un niveau plus haut ; si l'index ne le
+connaît pas, le premier parent connu ; copies sur deux disques : « Tous les disques »).
+Les quartiers qui tiennent une copie sont entourés : cyan pour la copie gardée selon la règle
+du rapport, ambre pour les copies en trop, gris si le rapport ne nomme aucun survivant (rien
+n'est alors marqué en trop). Un arc relie chaque quartier ambre au quartier cyan ; une étiquette
+indique « gardée » ou la taille logique que les copies en trop libéreraient. Les copies hors du
+niveau affiché ou omises par la page sont annoncées, jamais placées ailleurs.
+
+Le curseur actuel → cible fait voyager un repère sur chaque arc et éteint les quartiers ambre :
+« après la règle ». Le document de scène ne change pas (le smoke le compare avant et après).
+La démo synthétique contient deux groupes sur les dossiers de la capture fictive.
+
+Règles pures et testées : `diskx-duplicates.ts`. Calque réutilisable : `presentation-links.ts`
+(lieux par rôle source / cible / neutre, arcs, repères, budget de 64 lieux refusé au-delà).
+Couleurs communes à toute la présentation : ambre = ce qui partirait, cyan = ce qui reste ou la
+destination. La démo de déplacement fictif suit la même convention.
+
 ## Démonstration et primitives
 
 Ouvrir ?app=diskx&source=fixture&janitor=demo. Choisir un statut fictif puis Voir actuel et cible.
@@ -95,9 +115,10 @@ bloqué, navigateur muet). Math : scripts/smoke-llmx-creation-math.mjs, fixtures
   impossible). Elle est maintenant une empreinte de 16 caractères, testée sur un chemin long.
 - Bundle construit : aucun nom de l'ancienne capture réelle.
 
-Reste à faire avant de parler d'une vue Janitor complète : dessiner les groupes réels dans la
-ville (liens entre copies), l'aperçu actuel → cible sur une proposition réelle, et l'ergonomie
-Maths avec un enfant. La publication du site reste une décision séparée.
+Lot 2 (même jour) : huit vrais groupes montrés dans la ville, tous ancrés, aucune copie hors
+vue ; un groupe aux deux copies dans le même quartier reste un seul quartier « gardée », sans arc.
+Reste à faire : progression d'un run en direct, propositions de déplacement réelles (les
+`workItems` d'organisation), le lien depuis Nestor, et l'ergonomie Maths avec un enfant. La publication du site reste une décision séparée.
 
 Futur : activité réelle, replay durable, historique de snapshots, déplacements prouvés,
 autorisation métier, quarantaine/restauration, similarité, liens physiques, gain récupéré.

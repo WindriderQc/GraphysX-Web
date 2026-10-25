@@ -6,8 +6,8 @@ export function createPresentationOverlay() {
   const group = new Group(); group.name = 'presentation-preview'; group.visible = false;
   const geometry = new BoxGeometry(1, 1, 1);
   const edges = new EdgesGeometry(geometry);
-  const startMaterial = new LineBasicMaterial({ color: '#4ff2ff', depthTest: false });
-  const targetMaterial = new LineBasicMaterial({ color: '#ffb13b', depthTest: false });
+  const startMaterial = new LineBasicMaterial({ color: '#ffb13b', depthTest: false });
+  const targetMaterial = new LineBasicMaterial({ color: '#4ff2ff', depthTest: false });
   const start = new LineSegments(edges, startMaterial), target = new LineSegments(edges, targetMaterial);
   const ghostMaterial = new MeshBasicMaterial({ color: '#ffb13b', transparent: true, opacity: 0.45, depthWrite: false });
   const ghost = new Mesh(geometry, ghostMaterial);

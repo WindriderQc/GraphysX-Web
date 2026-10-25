@@ -30,12 +30,29 @@ try {
   await page.getByRole('combobox', { name: 'État du candidat' }).selectOption('demo-candidate-3');
   assert.match(await page.locator('[data-janitor-proof]').textContent(), /Terminé \(fictif\)/);
   assert.match(await page.locator('[data-janitor-proof]').textContent(), /Aucun résultat du backend/);
+  // Duplicate group from the synthetic report: kept copy, three extras, arcs; still no document edit.
+  await page.getByRole('button', { name: 'Lire le dernier rapport', exact: true }).click();
+  await page.waitForFunction(`(${app})()?.janitor.availability === 'ready'`);
+  await page.locator('[data-janitor-live] details').first().evaluate(node => { node.open = true; });
+  await page.getByRole('button', { name: 'Montrer dans la ville', exact: true }).first().click();
+  await page.waitForFunction(`(${app})()?.janitor.group?.places === 4`);
+  const group = await page.evaluate(`(${app})().janitor.group`);
+  assert.deepEqual([group.scope, group.keep, group.links, group.outside, group.copies], ['/mnt/datalake', true, 3, 0, 4]);
+  assert.equal(await page.locator('.gx-diskx-tag').count(), 4, 'one tag per outlined district');
+  assert.match(await page.locator('[data-group-view]').textContent(), /3 copies en trop/);
+  const beforeGroup = await page.evaluate(() => JSON.stringify(window.__GRAPHYSX__.exportDocument()));
+  await page.getByRole('button', { name: 'Voir la cible', exact: true }).click();
+  await page.waitForFunction(`(${app})()?.janitor.preview.progress === 1`);
+  await page.screenshot({ path: `${output}/group-target.png` });
+  const afterGroup = await page.evaluate(() => JSON.stringify(window.__GRAPHYSX__.exportDocument()));
+  assert.equal(afterGroup, beforeGroup, 'playing the group preview to its target never edits the scene document');
+  assert.ok(!afterGroup.includes('presentation-relations'), 'the relation overlay lives outside the document');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: `${output}/mobile.png`, fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
 
   // Mock the documented GET inventory, then change it to prove stale paths disappear.
-  let version = 1, fail = false;
+  let version = 1, fail = false, reportReady = false;
   await page.route('**/diskx-api/**', async route => {
     const url = new URL(route.request().url());
     assert.equal(route.request().method(), 'GET');
@@ -48,7 +65,11 @@ try {
     }
     if (url.pathname.endsWith('/files')) return respond({ status: 'success', data: { files: [] } });
     if (url.pathname.endsWith('/volumes')) return respond({ volumes: [] });
-    if (url.pathname.endsWith('/janitor-strategy')) return respond({ status: 'success', data: { available: false, status: 'unavailable' } });
+    if (url.pathname.endsWith('/janitor-strategy')) return respond(reportReady
+      ? { status: 'success', data: { generatedAt: '2026-10-25T00:00:00Z', status: 'ready_for_review', summary: { verifiedGroups: 1, provenSavingsBytes: 50, candidateGroups: 0, candidateBytes: 0, filesToHash: 0, bytesToHash: 0, executableActions: 0 } } }
+      : { status: 'success', data: { available: false, status: 'unavailable' } });
+    if (url.pathname.endsWith('/janitor-groups')) return respond({ status: 'success', data: { report: { id: 'r1', generatedAt: '2026-10-25T00:00:00Z', status: 'ready_for_review' }, total: 1, offset: 0, limit: 20, nextOffset: null, scanBoundReached: false,
+      groups: [{ sha256: 'b'.repeat(64), proof: 'sha256-current-metadata', size: 50, count: 2, provenSavingsBytes: 50, filesOmitted: 0, policySurvivorPath: '/test/new/a.bin', review: null, files: [{ path: '/test/new/a.bin' }, { path: '/test/new/sub/a.bin' }] }] } });
     throw new Error(`Unexpected route ${url}`);
   });
   await page.goto(`${server.url}?app=diskx`);
@@ -65,6 +86,14 @@ try {
   assert.ok(!document.includes('/mnt/media') && !document.includes('/testing'), 'no fixture or prefix-neighbor contamination');
   await page.getByRole('button', { name: 'Lire le dernier rapport', exact: true }).click();
   await page.getByText('Aucun rapport Janitor disponible. Aucun rapport généré ici.', { exact: true }).waitFor();
+  reportReady = true;
+  await page.getByRole('button', { name: 'Lire le dernier rapport', exact: true }).click();
+  await page.waitForFunction(`(${app})()?.janitor.availability === 'ready'`);
+  await page.locator('[data-janitor-live] details').first().evaluate(node => { node.open = true; });
+  await page.getByRole('button', { name: 'Montrer dans la ville', exact: true }).first().click();
+  await page.waitForFunction(`(() => { const s = (${app})(); return s?.loading === false && s.janitor.group?.places === 1; })()`);
+  const liveGroup = await page.evaluate(`(${app})().janitor.group`);
+  assert.deepEqual([liveGroup.scope, liveGroup.keep, liveGroup.links, liveGroup.freedBytes], ['/test', true, 0, 50], 'both copies in one district: kept, no arc, one extra freed logically');
   assert.deepEqual(errors, []);
-  console.log('PASS: synthetic Janitor, read-only preview, mobile capture, atomic inventory refresh, retry, root boundary and absent report. No backend execution.');
+  console.log('PASS: synthetic Janitor, duplicate group in the city (demo and served), read-only preview, mobile capture, atomic inventory refresh, retry, root boundary and absent report. No backend execution.');
 } finally { await browser.close(); await server.close(); }
