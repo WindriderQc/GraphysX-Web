@@ -49,7 +49,7 @@ try {
   // Pad: Start launches a race from the menu. A short film run, computer on both sides.
   out.race = await page.evaluate(() => {
     const c = window.cyberRace;
-    Object.assign(c.settings, { plan: 0, course: 0, level: 1, mode: 0 });
+    Object.assign(c.settings, { plan: 0, course: 0, level: 1, mode: 0, sound: false });
     c.ui(["pause"]);
     const started = c.phase;
     c.pilots[0].autopilot = true;

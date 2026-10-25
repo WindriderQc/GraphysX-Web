@@ -72,7 +72,39 @@ async function capture(id, shelf, selector) {
   await page.close();
 }
 
+/**
+ * Cyber Race 1992 is a separate page with its own renderer, so its preview is taken from that
+ * page rather than the platform canvas: the film's green tunnel with Peter just ahead of Jobe,
+ * HUD hidden. Everything on screen is the game's own procedural rendering.
+ */
+async function captureCyberRace() {
+  const id = "cyber-race-1992";
+  const page = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 });
+  await page.goto(`http://127.0.0.1:${PORT}/cyber-race.html`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.waitForFunction(() => Boolean(window.cyberRace), null, { timeout: 60_000 });
+  await page.evaluate(() => {
+    const c = window.cyberRace;
+    Object.assign(c.settings, { plan: 0, course: 1, level: 1, mode: 1, crosshair: false, sound: false });
+    c.start();
+    c.pilots[0].autopilot = true;
+    c.advance(9);
+    // Frame Peter a few lengths ahead, slightly off-axis, both on the race line.
+    const [jobe, peter] = c.pilots;
+    Object.assign(peter, { s: jobe.s + 6, prevS: jobe.s + 6, ox: jobe.ox + 3, oy: jobe.oy + 1.6, vx: 0, vy: 0 });
+    for (const p of c.pilots) p.hud.clearMessage();
+    c.advance(0.05);
+    c.freeze(true);
+    c.advance(0.01);
+  });
+  await page.addStyleTag({ content: "#huds,#divider,#toast,#film{display:none!important}" });
+  await page.waitForTimeout(800);
+  await page.locator("#race-canvas").screenshot({ path: path.join(OUTPUT, `${id}.jpg`), type: "jpeg", quality: 84 });
+  console.log(`captured ${id}`);
+  await page.close();
+}
+
 try {
+  if (shouldCapture("cyber-race-1992")) await captureCyberRace();
   for (const id of BROWSE_IDS) {
     if (!shouldCapture(id)) continue;
     const selector = id.startsWith("archive-") && id !== "archive-great-slide"
