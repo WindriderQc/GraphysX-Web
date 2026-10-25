@@ -13,8 +13,8 @@ import {
 } from "three";
 
 import faceAsset from "./llmx-face-forge.json";
-import { applyForgeFinish, SMOOTH_NORMAL_ATTRIBUTE } from "./llmx-face-finish";
-import { EYE_LOOK, gazeRotateInto, irisContrast, irisTone, lidEdgeY, lidShade, pickCatchlight } from "./llmx-face-eyes";
+import { applyForgeFinish, LID_NORMAL_ATTRIBUTE, setLidClosure, SMOOTH_NORMAL_ATTRIBUTE } from "./llmx-face-finish";
+import { EYE_LOOK, gazeRotateInto, irisContrast, irisTone, lidEdgeY, lidShade, pickCatchlight, pupilAxis, pupilRadius } from "./llmx-face-eyes";
 import { classifyMouth, emberLevel, glowWeight, MOUTH_LOOK, MOUTH_ROLE, toothReveal, wallTone, type MouthInterior } from "./llmx-face-mouth";
 import {
   buildScale,
@@ -30,6 +30,7 @@ import {
   deriveWeights,
   effectiveFaceLevel,
   eyeTransform,
+  lidClosure,
   hash01,
   poseInto,
 } from "./llmx-face-pose";
@@ -90,9 +91,9 @@ const REGION_TINT: Record<string, keyof Pick<ResolvedAgentWorldFace, "metalColor
 /**
  * Regions darker than the base metal, so the orbits stay deep under a strong key light.
  *
- * `pupil` and `maw` are near-black on purpose. They are the two places where the mask has to
- * read as a *hole* — something the viewer looks into — and a hole that catches a highlight
- * stops being one.
+ * `maw` is near-black on purpose: it is where the mask has to read as a *hole* — something the
+ * viewer looks into — and a hole that catches a highlight stops being one. The pupil is the
+ * other hole; the iris's shader draws it as a disc (see patchIrisEmissive), not a cube shade.
  */
 const REGION_SHADE: Record<string, number> = {
   socket: 0.55,
@@ -101,7 +102,6 @@ const REGION_SHADE: Record<string, number> = {
   lid: 1.12,
   cheek: 1.1,
   eye: 0.42,
-  pupil: 0.06,
   maw: 0.05,
 };
 
@@ -190,7 +190,10 @@ export class AgentWorldVoxelFace {
   private irisContrast = 0;
   private lidCubes: Uint32Array = new Uint32Array(0);
   private lowerLidCubes: Uint32Array = new Uint32Array(0);
+  /** Which iris-mesh cubes are the sculpt's pupil region: drawn as iris, darkened by the disc. */
   private pupilCubes: Set<number> = new Set();
+  /** The pupil disc's uniforms on the iris material (see patchIrisEmissive). */
+  private pupilUniforms: PupilUniforms | null = null;
   /** The liner's cubes and their shrunk rest positions, so it can assemble with the shell. */
   private linerCubes: Uint32Array = new Uint32Array(0);
   private linerRest: Float32Array = new Float32Array(0);
@@ -479,9 +482,9 @@ export class AgentWorldVoxelFace {
 
     const metalAnimated: number[] = [];
     const metalStatic: number[] = [];
-    // The eyeball is two meshes, not one. A single emissive material cannot hold a dark pupil:
-    // `instanceColor` multiplies the diffuse colour and leaves emissive alone, so a pupil on the
-    // iris material would still glow — which is exactly the lit disc this pass exists to fix.
+    // The eyeball is two meshes: the dark ball and the emissive iris. The pupil region goes with
+    // the iris, and the iris's shader draws the pupil as a disc on it (see patchIrisEmissive):
+    // made of its own dark cubes it was a square or a little house, never a circle.
     const ballCubes: number[] = [];
     const irisCubes: number[] = [];
     const lidCubes: number[] = [];
@@ -490,12 +493,12 @@ export class AgentWorldVoxelFace {
     const mawCubes: number[] = [];
     for (let i = 0; i < count; i += 1) {
       const name = regionNames[weights.region[i]];
-      if (name === "iris") {
+      if (name === "iris" || name === "pupil") {
+        if (name === "pupil") pupilCubes.add(i);
         irisCubes.push(i);
         continue;
       }
-      if (name === "eye" || name === "pupil") {
-        if (name === "pupil") pupilCubes.add(i);
+      if (name === "eye") {
         ballCubes.push(i);
         continue;
       }
@@ -524,7 +527,8 @@ export class AgentWorldVoxelFace {
     // opened a lattice of lit seams across the cranium under a grazing key light. Overlap is
     // free (the cubes are opaque) and it is what makes the mask read as one solid mass.
     const edge = weights.level.cube * CUBE_OVERLAP;
-    this.animatedMesh = this.createMesh("VoxelFaceAnimated", edge, this.metalAnimated.length, false, this.metalAnimated);
+    // The lids are in the animated shell, and only there: it alone carries their closed normals.
+    this.animatedMesh = this.createMesh("VoxelFaceAnimated", edge, this.metalAnimated.length, false, this.metalAnimated, true);
     this.staticMesh = this.createMesh("VoxelFaceStatic", edge, this.metalStatic.length, false, this.metalStatic);
     this.ballMesh = this.createMesh("VoxelFaceEyeball", edge, this.ballCubes.length, false);
     // The mouth cavity gets its own matte black material rather than a dark tint on the metal.
@@ -534,7 +538,7 @@ export class AgentWorldVoxelFace {
     this.mawMesh = this.createMaw("VoxelFaceMaw", edge, this.mawCubes.length);
     this.prepareMouth();
     this.eyeMesh = this.createMesh("VoxelFaceIris", edge, this.irisCubes.length, true);
-    patchIrisEmissive(this.eyeMesh.material as MeshStandardMaterial);
+    this.pupilUniforms = patchIrisEmissive(this.eyeMesh.material as MeshStandardMaterial);
     this.linerMesh = this.buildLiner("VoxelFaceLiner", edge);
 
     this.writeColors();
@@ -552,8 +556,10 @@ export class AgentWorldVoxelFace {
    * @param smoothOver When given, the cubes this mesh draws (in instance order): each instance
    *   carries its surface normal so the finish can shade it as part of the sculpt rather than as
    *   six axis-aligned faces. The metal shell opts in; eyes and the cavity keep their facets.
+   * @param lidNormals With `smoothOver`: also carry the upper lid's closed normals, blended in
+   *   as the lid closes (see `eyelidNormals` in the pose module).
    */
-  private createMesh(name: string, edge: number, count: number, emissive: boolean, smoothOver?: Uint32Array): InstancedMesh {
+  private createMesh(name: string, edge: number, count: number, emissive: boolean, smoothOver?: Uint32Array, lidNormals = false): InstancedMesh {
     const material = new MeshStandardMaterial(
       emissive
         ? { color: "#0b1418", emissive: this.config.eyeColor, emissiveIntensity: 0.8, roughness: 0.25, metalness: 0 }
@@ -564,7 +570,7 @@ export class AgentWorldVoxelFace {
           // the copper and the specular while letting the volumes carry the light.
           { roughness: 0.54, metalness: 0.5 },
     );
-    if (!emissive) applyForgeFinish(material, undefined, { smoothNormals: smoothOver !== undefined });
+    if (!emissive) applyForgeFinish(material, undefined, { smoothNormals: smoothOver !== undefined, lidNormals: smoothOver !== undefined && lidNormals });
     const geometry = new BoxGeometry(edge, edge, edge);
     if (smoothOver) {
       const normals = new Float32Array(Math.max(count, 1) * 3);
@@ -576,6 +582,17 @@ export class AgentWorldVoxelFace {
         normals[j * 3 + 2] = source[i * 3 + 2];
       }
       geometry.setAttribute(SMOOTH_NORMAL_ATTRIBUTE, new InstancedBufferAttribute(normals, 3));
+      if (lidNormals) {
+        const closed = new Float32Array(Math.max(count, 1) * 3);
+        const lid = this.weights.lidNormal;
+        for (let j = 0; j < smoothOver.length; j += 1) {
+          const i = smoothOver[j];
+          closed[j * 3] = lid[i * 3];
+          closed[j * 3 + 1] = lid[i * 3 + 1];
+          closed[j * 3 + 2] = lid[i * 3 + 2];
+        }
+        geometry.setAttribute(LID_NORMAL_ATTRIBUTE, new InstancedBufferAttribute(closed, 3));
+      }
     }
     const mesh = new InstancedMesh(geometry, material, Math.max(count, 1));
     mesh.name = name;
@@ -851,7 +868,7 @@ export class AgentWorldVoxelFace {
         // A touch of per-cube variation, so a large flat plane of metal is not one flat colour:
         // brightness, and a hint of patina — some cubes a shade warmer, some cooler.
         this.color.multiplyScalar(0.93 + hash01(i + 977) * 0.14);
-        if (name !== "eye" && name !== "pupil") this.color.offsetHSL((hash01(i + 1409) - 0.5) * 0.05, (hash01(i + 2003) - 0.5) * 0.08, 0);
+        if (name !== "eye") this.color.offsetHSL((hash01(i + 1409) - 0.5) * 0.05, (hash01(i + 2003) - 0.5) * 0.08, 0);
         mesh.setColorAt(j, this.color);
       }
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -936,11 +953,21 @@ export class AgentWorldVoxelFace {
     if (mesh) {
       (mesh.material as MeshStandardMaterial).emissiveIntensity = eye.glow;
       this.writeRotatedAbout(mesh, this.irisCubes, eye.pivot, eye.yaw, eye.pitch, null);
-      this.writeIrisLook(mesh, eye.yaw, eye.pitch, eye.lidRadians);
+      this.writeIrisLook(mesh, eye.yaw, eye.pitch, eye.lidRadians, eye.pupilScale);
     }
-    this.writeRotatedAbout(this.ballMesh, this.ballCubes, eye.pivot, eye.yaw, eye.pitch, null, eye.pupilScale);
+    const pupil = this.pupilUniforms;
+    if (pupil) {
+      const { radius } = this.weights.anchors.eye;
+      const [ax, ay, az] = pupilAxis(eye.yaw, eye.pitch);
+      pupil.gxPupilPivot.value.set(eye.pivot.x, eye.pivot.y, eye.pivot.z);
+      pupil.gxPupilAxis.value.set(ax, ay, az);
+      pupil.gxPupilRadius.value = pupilRadius(radius, eye.pupilScale);
+      pupil.gxEyeRadius.value = radius;
+    }
+    this.writeRotatedAbout(this.ballMesh, this.ballCubes, eye.pivot, eye.yaw, eye.pitch, null);
     // Lids live in the metal mesh, so they are re-posed on top of what writeMesh just wrote.
     this.writeRotatedAbout(this.animatedMesh, this.lidCubes, eye.pivot, 0, eye.lidRadians, this.metalAnimated);
+    if (this.animatedMesh) setLidClosure(this.animatedMesh.material as MeshStandardMaterial, lidClosure(eye.lidRadians));
     this.writeRotatedAbout(this.animatedMesh, this.lowerLidCubes, eye.pivot, 0, eye.lowerLidRadians, this.metalAnimated);
   }
 
@@ -967,7 +994,10 @@ export class AgentWorldVoxelFace {
     }
     this.irisRight = Uint32Array.from(right);
     this.irisLeft = Uint32Array.from(left);
-    this.irisContrast = irisContrast(Math.min(right.length, left.length));
+    // Counted without the pupil region, which joined the iris mesh only to carry the disc: the
+    // look a level can carry depends on how many cubes the ring itself has.
+    const ring = (members: number[]) => members.filter((k) => !this.pupilCubes.has(this.irisCubes[k])).length;
+    this.irisContrast = irisContrast(Math.min(ring(right), ring(left)));
     for (let k = 0; k < count; k += 1) {
       // The tone is radial about the pupil, so it is mirrored per side: same pattern, each eye.
       const local = { x: Math.abs(this.irisRest[k * 3]), y: this.irisRest[k * 3 + 1], z: this.irisRest[k * 3 + 2] };
@@ -981,7 +1011,7 @@ export class AgentWorldVoxelFace {
    * while the eye turns. Written into the instance colours, which the patched material applies
    * to the emissive (see patchIrisEmissive).
    */
-  private writeIrisLook(mesh: InstancedMesh, yaw: number, pitch: number, lidRadians: number): void {
+  private writeIrisLook(mesh: InstancedMesh, yaw: number, pitch: number, lidRadians: number, pupilScale: number): void {
     const count = this.irisCubes.length;
     if (count === 0) return;
     const { radius } = this.weights.anchors.eye;
@@ -995,8 +1025,9 @@ export class AgentWorldVoxelFace {
       mesh.setColorAt(k, this.color);
     }
     const [r, g, b] = EYE_LOOK.catchlight;
+    const pupil = { axis: pupilAxis(yaw, pitch), radius: pupilRadius(radius, pupilScale) };
     for (const members of [this.irisRight, this.irisLeft]) {
-      const m = pickCatchlight(this.irisPosed, members, radius, edgeY, cube);
+      const m = pickCatchlight(this.irisPosed, members, radius, edgeY, cube, pupil);
       if (m < 0) continue;
       this.color.setRGB(r, g, b);
       mesh.setColorAt(members[m], this.color);
@@ -1011,7 +1042,6 @@ export class AgentWorldVoxelFace {
     yaw: number,
     pitch: number,
     slotLookup: Uint32Array | null,
-    pupilScale = 1,
   ): void {
     if (!mesh || cubes.length === 0) return;
     for (let k = 0; k < cubes.length; k += 1) {
@@ -1035,7 +1065,7 @@ export class AgentWorldVoxelFace {
       this.spin.set(this.jitter[i * 4], this.jitter[i * 4 + 1], this.jitter[i * 4 + 2], this.jitter[i * 4 + 3]);
       this.quaternion.multiply(this.spin);
 
-      const s = this.scale[i] * (pupilScale !== 1 && this.pupilCubes.has(i) ? pupilScale : 1);
+      const s = this.scale[i];
       this.scaleVector.set(s, s, s);
       this.matrix.compose(this.vector, this.quaternion, this.scaleVector);
       mesh.setMatrixAt(slotLookup ? indexOfSlot(slotLookup, i) : k, this.matrix);
@@ -1065,14 +1095,6 @@ export class AgentWorldVoxelFace {
  * a binary search rather than a scan — it runs once per lid cube per frame, which is a hundred
  * or so, but a linear scan of three thousand entries for each of them would not be free.
  */
-/**
- * Let the iris's instance colours scale its emissive, not only its (near-black) diffuse.
- *
- * Three multiplies `instanceColor` into the diffuse colour and leaves emissive alone, so on an
- * emissive iris a per-cube colour changes nothing you can see. The iris's whole look — its
- * gradient, the lid's shadow, the catchlight — lives in those per-cube values, so the emissive
- * term takes them too. The material is the rig's own; nothing else shares the program.
- */
 /** The per-instance attribute carrying each cavity cube's share of the ember. */
 const MOUTH_GLOW_ATTRIBUTE = "gxGlow";
 
@@ -1093,20 +1115,101 @@ function patchMouthGlow(material: MeshStandardMaterial): void {
   material.needsUpdate = true;
 }
 
-function patchIrisEmissive(material: MeshStandardMaterial): void {
-  material.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace(
-      "#include <emissivemap_fragment>",
-      [
-        "#include <emissivemap_fragment>",
-        "#if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )",
-        "  totalEmissiveRadiance *= vColor.rgb;",
-        "#endif",
-      ].join("\n"),
-    );
+type PupilUniforms = {
+  /** The right eye's centre in the mask's frame; the left eye mirrors x. */
+  gxPupilPivot: { value: Vector3 };
+  /** Unit gaze axis, shared by both eyes. */
+  gxPupilAxis: { value: Vector3 };
+  /** Disc radius, metres. */
+  gxPupilRadius: { value: number };
+  gxEyeRadius: { value: number };
+};
+
+/**
+ * Let the iris's instance colours scale its emissive, not only its (near-black) diffuse, and
+ * draw the pupil on it.
+ *
+ * Three multiplies `instanceColor` into the diffuse colour and leaves emissive alone, so on an
+ * emissive iris a per-cube colour changes nothing you can see. The iris's whole look — its
+ * gradient, the lid's shadow, the catchlight — lives in those per-cube values, so the emissive
+ * term takes them too. The material is the rig's own; nothing else shares the program.
+ *
+ * The pupil is a disc on the smooth eyeball the cubes approximate, seen from the camera: each
+ * fragment follows its view ray to that sphere and, if the ray meets it within the disc's
+ * radius of the gaze axis, loses its glow and most of its colour (`pupilSeenAt` and `inPupil`
+ * in llmx-face-eyes are the JS twin). Tested on the cube faces themselves, the disc followed
+ * their relief: seen at an angle, the steps between cube depths bit notches out of its edge.
+ * Through the sphere it stays a circle — an ellipse as the eye turns — painted over whatever
+ * facet is in front, so the cubes keep their shading. The edge is antialiased over about a
+ * pixel. The catchlight is picked off the disc (see `pickCatchlight`).
+ */
+function patchIrisEmissive(material: MeshStandardMaterial): PupilUniforms {
+  const uniforms: PupilUniforms = {
+    gxPupilPivot: { value: new Vector3() },
+    gxPupilAxis: { value: new Vector3(0, 0, 1) },
+    gxPupilRadius: { value: 0 },
+    gxEyeRadius: { value: 1 },
   };
-  material.customProgramCacheKey = () => "gx-iris-emissive";
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace("void main() {", ["varying vec3 vGxMask;", "varying vec3 vGxEye;", "void main() {"].join("\n"))
+      .replace(
+        "#include <project_vertex>",
+        [
+          "#include <project_vertex>",
+          "#ifdef USE_INSTANCING",
+          "  vGxMask = ( instanceMatrix * vec4( transformed, 1.0 ) ).xyz;",
+          "#else",
+          "  vGxMask = transformed;",
+          "#endif",
+          // The camera in the mask's frame, where the eye centres and the gaze axis are given.
+          "  vGxEye = ( inverse( modelMatrix ) * vec4( cameraPosition, 1.0 ) ).xyz;",
+        ].join("\n"),
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "void main() {",
+        [
+          "varying vec3 vGxMask;",
+          "varying vec3 vGxEye;",
+          "uniform vec3 gxPupilPivot;",
+          "uniform vec3 gxPupilAxis;",
+          "uniform float gxPupilRadius;",
+          "uniform float gxEyeRadius;",
+          "void main() {",
+        ].join("\n"),
+      )
+      .replace(
+        "#include <emissivemap_fragment>",
+        [
+          "#include <emissivemap_fragment>",
+          "#if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )",
+          "  totalEmissiveRadiance *= vColor.rgb;",
+          "#endif",
+          "  {",
+          "    vec3 gxCentre = vec3( vGxMask.x < 0.0 ? -gxPupilPivot.x : gxPupilPivot.x, gxPupilPivot.yz );",
+          "    vec3 gxRay = normalize( vGxMask - vGxEye );",
+          "    vec3 gxFrom = vGxEye - gxCentre;",
+          "    float gxB = dot( gxFrom, gxRay );",
+          "    float gxHit = gxB * gxB - dot( gxFrom, gxFrom ) + gxEyeRadius * gxEyeRadius;",
+          "    vec3 gxV = gxFrom + ( -gxB - sqrt( max( gxHit, 0.0 ) ) ) * gxRay;",
+          "    float gxAlong = dot( gxV, gxPupilAxis );",
+          "    float gxOff = length( gxV - gxAlong * gxPupilAxis );",
+          "    float gxEdge = max( fwidth( gxOff ), 1e-5 );",
+          "    float gxPupil = ( 1.0 - smoothstep( gxPupilRadius - gxEdge, gxPupilRadius + gxEdge, gxOff ) )",
+          "      * step( 0.0, gxHit ) * step( 0.0, gxAlong ) * step( length( vGxMask - gxCentre ), 2.0 * gxEyeRadius );",
+          "    totalEmissiveRadiance *= 1.0 - gxPupil;",
+          "    diffuseColor.rgb *= 1.0 - 0.85 * gxPupil;",
+          "  }",
+        ].join("\n"),
+      );
+  };
+  // Readable from outside (tests, probes) the way the finish exposes its own uniforms.
+  material.userData.gxPupilUniforms = uniforms;
+  material.customProgramCacheKey = () => "gx-iris-emissive-pupil";
   material.needsUpdate = true;
+  return uniforms;
 }
 
 function indexOfSlot(list: Uint32Array, cube: number): number {

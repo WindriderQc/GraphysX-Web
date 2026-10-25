@@ -43,9 +43,21 @@ export const FORGE_FINISH: ForgeFinish = Object.freeze({ rimColor: "#c97a3c", ri
 /** The per-instance attribute a mesh must carry to opt into smooth normals. */
 export const SMOOTH_NORMAL_ATTRIBUTE = "gxNormal";
 
+/**
+ * Optional second per-instance normal for cubes whose surface changes with the pose: the upper
+ * lid's closed normal (zero on every other cube). Blended in by the `gxLidClosure` uniform; see
+ * `eyelidNormals` in the pose module for why the lid needs it.
+ */
+export const LID_NORMAL_ATTRIBUTE = "gxLidNormal";
+
 export type ForgeFinishOptions = Readonly<{
   /** The mesh's geometry carries {@link SMOOTH_NORMAL_ATTRIBUTE}; shade with it. */
   smoothNormals?: boolean;
+  /**
+   * It also carries {@link LID_NORMAL_ATTRIBUTE}: the material gets a `gxLidClosure` uniform
+   * (0..1, see {@link setLidClosure}) that blends each lid cube's smooth normal toward it.
+   */
+  lidNormals?: boolean;
 }>;
 
 type ShaderHandle = { uniforms: Record<string, { value: unknown }>; vertexShader: string; fragmentShader: string };
@@ -64,12 +76,14 @@ export function applyForgeFinish(material: MeshStandardMaterial, finish: ForgeFi
     return;
   }
   const smooth = options.smoothNormals === true;
+  const lids = smooth && options.lidNormals === true;
   const uniforms = {
     gxRimColor: { value: new Color(finish.rimColor) },
     gxRimStrength: { value: finish.rimStrength },
     gxRimPower: { value: finish.rimPower },
     gxSmooth: { value: finish.smoothNormals },
     gxFill: { value: smooth ? finish.fill : 0 },
+    gxLidClosure: { value: 0 },
   };
   material.userData.gxForgeFinishUniforms = uniforms;
   material.userData.gxSmoothNormals = smooth;
@@ -81,15 +95,23 @@ export function applyForgeFinish(material: MeshStandardMaterial, finish: ForgeFi
       // normal. All eight corners of a cube get the same tilt, so a face stays flat — it just no
       // longer faces the axis it was extruded along, and the staircase stops catching the light
       // as a contour. Neither the shadow pass nor the silhouette is touched.
+      // A lid cube's surface normal is its estimate while open and its closed normal while shut
+      // (zero, and so ignored, on every other cube). The small extra share of the closed normal
+      // keeps the mix from vanishing where the estimate points straight back into the eye.
+      const surface = lids
+        ? `normalize( mix( ${SMOOTH_NORMAL_ATTRIBUTE}, ${LID_NORMAL_ATTRIBUTE}, gxLidClosure * step( 0.5, dot( ${LID_NORMAL_ATTRIBUTE}, ${LID_NORMAL_ATTRIBUTE} ) ) ) + 1e-3 * ${LID_NORMAL_ATTRIBUTE} + vec3( 0.0, 0.0, 1e-6 ) )`
+        : SMOOTH_NORMAL_ATTRIBUTE;
       shader.vertexShader = shader.vertexShader
         .replace("void main() {", /* glsl */ `
 attribute vec3 ${SMOOTH_NORMAL_ATTRIBUTE};
+${lids ? `attribute vec3 ${LID_NORMAL_ATTRIBUTE};
+uniform float gxLidClosure;` : ""}
 uniform float gxSmooth;
 
 void main() {`)
         .replace("#include <beginnormal_vertex>", /* glsl */ `
 #include <beginnormal_vertex>
-objectNormal = normalize( mix( objectNormal, ${SMOOTH_NORMAL_ATTRIBUTE}, gxSmooth ) );`);
+objectNormal = normalize( mix( objectNormal, ${surface}, gxSmooth ) );`);
     }
     shader.fragmentShader = shader.fragmentShader
       .replace("void main() {", /* glsl */ `
@@ -114,6 +136,12 @@ void main() {`)
   };
   // Distinct program per finish, so a patched material never shares a compiled program with a
   // plain standard material that has the same defines.
-  material.customProgramCacheKey = () => (smooth ? "gx-forge-finish-smooth" : "gx-forge-finish");
+  material.customProgramCacheKey = () => (lids ? "gx-forge-finish-lids" : smooth ? "gx-forge-finish-smooth" : "gx-forge-finish");
   material.needsUpdate = true;
+}
+
+/** Set how far the lids drawn by `material` have closed, 0..1. No-op on a material without lid normals. */
+export function setLidClosure(material: MeshStandardMaterial, closure: number): void {
+  const uniforms = material.userData.gxForgeFinishUniforms as { gxLidClosure?: { value: number } } | undefined;
+  if (uniforms?.gxLidClosure) uniforms.gxLidClosure.value = Math.min(1, Math.max(0, closure));
 }

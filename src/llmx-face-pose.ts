@@ -163,6 +163,11 @@ export type FaceWeights = {
    * already carry. See {@link estimateNormals}.
    */
   normal: Float32Array;
+  /**
+   * The upper lid's normal once it is closed, 3 floats per cube: the direction from the eye
+   * centre for lid cubes, zero for every other cube. See {@link eyelidNormals}.
+   */
+  lidNormal: Float32Array;
   /** Bounding box of the rest pose: [minX, minY, minZ, maxX, maxY, maxZ]. */
   bounds: Float32Array;
 };
@@ -324,6 +329,7 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
   for (let i = 0; i < count; i += 1) rise[i] = clamp01((rest[i * 3 + 1] - minY) / span);
 
   const normal = estimateNormals(level, rest, (minY + maxY) / 2);
+  const lidNormal = eyelidNormals(rest, region, lidIndex, anchors.eye);
 
   return {
     level,
@@ -340,6 +346,7 @@ export function deriveWeights(asset: FaceAsset, levelName: string): FaceWeights 
     cavity,
     rise,
     normal,
+    lidNormal,
     bounds: new Float32Array([minX, minY, minZ, maxX, maxY, maxZ]),
   };
 }
@@ -365,6 +372,59 @@ const NORMAL_RADIUS = 2;
  * on the inner face of the shell are flipped to agree with it. One averaging pass over the
  * immediate neighbours then smooths what the finite neighbourhood left jagged.
  */
+/**
+ * The upper lid's normal once closed: the direction from its eye's centre, per lid cube.
+ *
+ * The lid is a shell over the eyeball that the rig turns about the eye centre, and the smooth
+ * normal turns with it (it goes through each cube's instance matrix). Estimated at rest, that
+ * normal describes where the lid is parked: folded under the brow, where its neighbourhood is
+ * the brow's mass, so many of its cubes got normals pointing up, back or into the eye. Open,
+ * those cubes are hidden and the visible edge shades correctly. Closed, they face the viewer
+ * with normals turned away: the shading went dark and the finish's Fresnel rim lit the whole
+ * lid copper, orange goggles on every blink (measured 2026-10-25, dense level: median posed
+ * normal z of the front lid cubes −0.06; 8046 warm pixels across the closed eyes against 78
+ * open). The radial direction is the closed shell's own normal; the rig blends to it as the
+ * lid closes ({@link lidClosure}) so the open lid keeps the shading it was tuned with — radial
+ * normals on an open lid read as a pale visor with a copper underside.
+ *
+ * @returns 3 floats per cube, zero outside the lid.
+ */
+export function eyelidNormals(
+  rest: Float32Array,
+  region: Uint8Array,
+  lidRegion: number,
+  eye: Readonly<{ x: number; y: number; z: number }>,
+): Float32Array {
+  const out = new Float32Array(region.length * 3);
+  if (lidRegion < 0) return out;
+  for (let i = 0; i < region.length; i += 1) {
+    if (region[i] !== lidRegion) continue;
+    const x = rest[i * 3];
+    const dx = x - (x < 0 ? -eye.x : eye.x);
+    const dy = rest[i * 3 + 1] - eye.y;
+    const dz = rest[i * 3 + 2] - eye.z;
+    const length = Math.hypot(dx, dy, dz);
+    if (length < 1e-9) continue;
+    out[i * 3] = dx / length;
+    out[i * 3 + 1] = dy / length;
+    out[i * 3 + 2] = dz / length;
+  }
+  return out;
+}
+
+/** Upper lid rotation of a full blink, radians (see {@link eyeTransform}). */
+export const BLINK_LID_RADIANS = 1.55;
+
+/**
+ * How far the upper lid has closed, 0..1, from its rotation: 0 at the neutral resting lid and
+ * anything more open, 1 at a full blink. The rig blends lid normals to {@link eyelidNormals}
+ * by this amount.
+ */
+export function lidClosure(lidRadians: number): number {
+  const t = clamp01((lidRadians - POSE_LIMITS.neutralLidRadians) / (BLINK_LID_RADIANS - POSE_LIMITS.neutralLidRadians));
+  return t * t * (3 - 2 * t);
+}
+
 export function estimateNormals(level: FaceLevel, rest: Float32Array, midY: number): Float32Array {
   const count = level.indices.length;
   const [nx, ny, nz] = level.grid;
@@ -824,7 +884,7 @@ export function eyeTransform(anchors: FaceAnchors, input: Partial<FaceDrivers>):
     // — so an upward gaze (gazeY > 0) is a negative pitch. This shipped without the sign and
     // the eyes tracked the camera upside down; the test below pins the convention.
     pitch: -gazeY * POSE_LIMITS.gazeRadians * 0.6,
-    lidRadians: d.blink * 1.55 + (1 - d.blink) * restingLid,
+    lidRadians: d.blink * BLINK_LID_RADIANS + (1 - d.blink) * restingLid,
     lowerLidRadians: -(d.blink * POSE_LIMITS.blinkLowerLidRadians + (1 - d.blink) * (POSE_LIMITS.smileSquintRadians * Math.max(0, d.warmth) + 0.08 * d.attention)),
     // Pupils: wide with attention and warmth, narrow while thinking — the readable part of an
     // eye at a distance, after the lids.
