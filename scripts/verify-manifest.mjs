@@ -45,6 +45,7 @@ export const VERIFY_SMOKES = [
   { name: "archive-levels", tier: "apps", script: "scripts/smoke-archive-levels.mjs", covers: "recovered BallZ arenas: census fidelity, containment, reachable, completable" },
   { name: "spiral", tier: "apps", script: "scripts/smoke-spiral.mjs", covers: "Skybox Spiral port: composes, ball rests, movers move, markerless light, completable, round-trips" },
   { name: "world1", tier: "apps", script: "scripts/smoke-world1.mjs", covers: "World 1 mesh port: six meshes ready, physics-only descent through both holes, elevator moves, completable" },
+  { name: "iss", tier: "apps", script: "scripts/smoke-iss.mjs", covers: "ISS Live: fixture TLE + injected clock — marker on the station shell, propagated orbit/ground splines, real arc per 10 min, stale and error panels honest" },
   { name: "vehicles", tier: "apps", script: "scripts/smoke-vehicles.mjs", covers: "Archive Garage: recovered meshes register, ship in dist, and resolve" },
   { name: "model-recentre", tier: "apps", script: "scripts/smoke-model-recentre.mjs", covers: "A model remains centred on its entity origin and fits at three fitSize values" },
   { name: "playgrounds", tier: "apps", script: "scripts/smoke-playgrounds.mjs", covers: "Nature Lab playgrounds: preset fidelity, fields do work, mass-independent attraction" },
