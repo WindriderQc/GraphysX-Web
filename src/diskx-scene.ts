@@ -14,6 +14,7 @@
  * and reload and lives in the scene, not in a TypeScript table beside it.
  */
 
+import { diskxEntityKey } from "./diskx-snapshot";
 import type { AgentWorldDefinition, AgentWorldEntityDefinition } from "./agent-world-runtime";
 import { DISKX_PALETTE, DISKX_REST_PATH, formatBytes, type DiskxBlock, type DiskxCityLayout } from "./diskx-data";
 
@@ -45,7 +46,7 @@ function blockEntities(block: DiskxBlock, index: number): AgentWorldEntityDefini
   const isRest = node.path === DISKX_REST_PATH;
   if (block.kind === "free") return freeTileEntities(block, index);
   const baseY = level === 0 ? 0 : blockTop(block);
-  const prefix = level === 0 ? `diskx-d${index}` : `diskx-b${index}`;
+  const prefix = `diskx-${level === 0 ? "d" : "b"}-${diskxEntityKey(node.path)}`;
   const label = isRest ? node.name : `${node.name} · ${node.totalSize ? sizeLabel(node.totalSize) : ""}`.trim();
   const pathTag = `${DISKX_PATH_TAG_PREFIX}${node.path}`;
   const tags = [DISKX_TAG, level === 0 ? DISKX_DISTRICT_TAG : DISKX_BUILDING_TAG, pathTag];
@@ -95,12 +96,12 @@ function blockEntities(block: DiskxBlock, index: number): AgentWorldEntityDefini
  * where nothing stands yet, and clickable only for its card. Same byte-to-area scale as the
  * districts around it, which is the whole point of drawing it at all.
  */
-function freeTileEntities(block: DiskxBlock, index: number): AgentWorldEntityDefinition[] {
+function freeTileEntities(block: DiskxBlock, _index: number): AgentWorldEntityDefinition[] {
   const { rect, height, node } = block;
   const colour = FREE_COLOUR;
   const cx = round(rect.x + rect.width / 2);
   const cz = round(rect.z + rect.depth / 2);
-  const prefix = `diskx-f${index}`;
+  const prefix = `diskx-f-${diskxEntityKey(node.path)}`;
   const pathTag = `${DISKX_PATH_TAG_PREFIX}${node.path}`;
   const slab: AgentWorldEntityDefinition = {
     id: prefix,

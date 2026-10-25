@@ -63,7 +63,7 @@ export async function resolveDiskxVolumes(declared, statfsImpl = statfs, now = (
       }
     }
     if (capacityBytes === null || freeBytes === null) continue;
-    volumes.push({ id: volume.id, label: volume.label, roots: volume.roots, capacityBytes, freeBytes, source, measuredAt: now(), note: volume.note });
+    volumes.push({ id: volume.id, label: volume.label, roots: volume.roots, capacityBytes, freeBytes, source, measuredAt: source === "measured" ? now() : null, note: volume.note });
   }
   return volumes;
 }
@@ -80,6 +80,8 @@ export function createDiskxRoute({ dataUrl = process.env.DISKX_DATA_URL, volumes
     : null;
   const endpoints = new Map([
     ["summary", { target: "summary", params: [] }],
+    ["janitor-strategy", { target: "../janitor/strategy/latest", params: [] }],
+    ["janitor-groups", { target: "../janitor/strategy/latest/groups", params: ["offset", "limit"] }],
     ["tree", { target: "tree", params: ["root", "limit"] }],
     ["files", { target: "files", params: ["root", "limit", "sort"] }],
   ]);
@@ -93,7 +95,7 @@ export function createDiskxRoute({ dataUrl = process.env.DISKX_DATA_URL, volumes
     const name = url.pathname.slice("/diskx-api/".length);
     if (req.method !== "GET") { json(res, 405, { message: "Lecture seule." }); return true; }
     if (name === "config") {
-      json(res, 200, { enabled: Boolean(base), source: base ? base.host : null, volumes: declaredVolumes.length });
+      json(res, 200, { enabled: Boolean(base), source: base ? base.host : null, volumes: declaredVolumes.length, roots: ["/mnt/datalake", "/mnt/media"] });
       return true;
     }
     if (name === "volumes") {
@@ -110,7 +112,7 @@ export function createDiskxRoute({ dataUrl = process.env.DISKX_DATA_URL, volumes
     for (const key of endpoint.params) {
       const value = url.searchParams.get(key);
       if (value === null) continue;
-      if (key === "limit" && !/^\d{1,5}$/.test(value)) { json(res, 400, { message: "limit invalide." }); return true; }
+      if ((key === "limit" || key === "offset") && !/^\d{1,5}$/.test(value)) { json(res, 400, { message: "limit invalide." }); return true; }
       if (key === "sort" && !/^[a-z_-]{1,24}$/i.test(value)) { json(res, 400, { message: "sort invalide." }); return true; }
       if (key === "root" && (value.length > 1024 || value.includes("\0"))) { json(res, 400, { message: "root invalide." }); return true; }
       target.searchParams.set(key, value);
