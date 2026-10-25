@@ -557,7 +557,7 @@ const ghost = createFlyer(JOBE_LOOK);
   tag.width = 256;
   tag.height = 64;
   const tctx = tag.getContext("2d") as CanvasRenderingContext2D;
-  tctx.font = "900 40px Orbitron, Arial Black, sans-serif";
+  tctx.font = "900 40px Bahnschrift, Arial Black, sans-serif";
   tctx.textAlign = "center";
   tctx.fillStyle = "#3ff6ff";
   tctx.shadowColor = "#3ff6ff";
@@ -779,14 +779,14 @@ class VrHud {
     ctx.clearRect(0, 0, 1024, 512);
     ctx.fillStyle = "rgba(4,12,16,0.55)";
     ctx.fillRect(0, 300, 1024, 212);
-    ctx.font = "900 72px Orbitron, Arial Black, sans-serif";
+    ctx.font = "900 72px Bahnschrift, Arial Black, sans-serif";
     ctx.fillStyle = "#6ff0b4";
     ctx.textAlign = "right";
     ctx.fillText(String(p.score).padStart(5, "0"), 1000, 390);
     ctx.textAlign = "left";
     ctx.fillStyle = "#ffffff";
     ctx.fillText(isLeading(p, o) ? "1ER" : "2E", 24, 390);
-    ctx.font = "700 30px Orbitron, Arial Black, sans-serif";
+    ctx.font = "700 30px Bahnschrift, Arial Black, sans-serif";
     ctx.fillStyle = "#4f9bff";
     ctx.fillText(`${o.name} ${String(o.score).padStart(5, "0")}`, 24, 440);
     ctx.fillStyle = "#6ff0b4";
@@ -803,21 +803,21 @@ class VrHud {
     if (overlay) {
       ctx.fillStyle = "rgba(10,20,40,0.85)";
       ctx.fillRect(112, 0, 800, 290);
-      ctx.font = "900 64px Orbitron, Arial Black, sans-serif";
+      ctx.font = "900 64px Bahnschrift, Arial Black, sans-serif";
       ctx.fillStyle = phase === "over" ? "#ff4058" : "#ffffff";
       ctx.fillText(phase === "over" ? "GAME OVER" : "PAUSE", 512, 76);
-      ctx.font = "700 34px Orbitron, Arial Black, sans-serif";
+      ctx.font = "700 34px Bahnschrift, Arial Black, sans-serif";
       overlay.labels.forEach((label, i) => {
         ctx.fillStyle = i === overlay.focus ? "#ffe14a" : "#c8d4dc";
         ctx.fillText(`${i === overlay.focus ? "▶ " : ""}${label}`, 512, 140 + i * 48);
       });
     } else if (finale.started && !finale.exploded) {
-      ctx.font = "900 80px Orbitron, Arial Black, sans-serif";
+      ctx.font = "900 80px Bahnschrift, Arial Black, sans-serif";
       ctx.fillStyle = finale.left <= 10 ? "#ff4058" : "#bfe8ff";
       const s = Math.max(0, Math.ceil(finale.left));
       ctx.fillText(`${String(Math.floor(s / 60)).padStart(2, "0")}m ${String(s % 60).padStart(2, "0")}s`, 512, 200);
     } else if (p.hud.messageText) {
-      ctx.font = "900 70px Orbitron, Arial Black, sans-serif";
+      ctx.font = "900 70px Bahnschrift, Arial Black, sans-serif";
       ctx.fillStyle = "#ffffff";
       ctx.fillText(p.hud.messageText, 512, 200);
     }

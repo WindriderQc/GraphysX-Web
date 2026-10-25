@@ -24,6 +24,7 @@ export const SHELF_SCENE_THUMBNAIL_IDS: ReadonlySet<string> = new Set([
   "physics-sketchbook",
   "archive-skybox-spiral",
   "archive-world1",
+  "cyber-race-1992",
 ] as const);
 
 export function createSceneThumbnail(id: string, label: string): HTMLImageElement {
