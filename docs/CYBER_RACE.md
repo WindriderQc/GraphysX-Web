@@ -6,9 +6,13 @@ the film's other VR scenes.
 
 It is a **separate page**, not part of the GraphysX runtime: `cyber-race.html` with its code in
 `src/cyber-race/`, its own three.js renderer and its own frame loop. The product build
-(`vite.config.ts`) builds `index.html` only, so the page is **not deployed** with the site;
-`scripts/verify-impact.mjs` classifies its files as selecting no product smoke and no
-deployment. Porting it onto the shared runtime (Games shelf, `api.steer`, AgentX ghost) would be
+(`vite.config.ts`) publishes it beside `index.html` at **`/cyber-race.html`**
+(<https://graphysx.specialblend.ca/cyber-race.html>), and the **Games & Playgrounds** shelf lists
+it as "Cyber Race 1992" (a row that opens the page). Online, Quit returns to the front door.
+`scripts/verify-impact.mjs` sends changes to the page through the `cyber-race` smoke and a
+deployment; its local packaging tools (Playnite/GamX, film clips) select nothing and never
+deploy. **No film material is ever online:** the page only looks for clips from a local
+`file://` install. Porting the game onto the shared runtime (`api.steer`, AgentX ghost) would be
 a separate piece of work.
 
 ## Run

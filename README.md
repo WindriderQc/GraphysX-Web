@@ -115,7 +115,7 @@ Preserve `.graphysx-store/`: it is user content, not disposable build output.
 | DiskX (AgentX Data disks as a 3D city) | `src/diskx-app.ts`, `src/diskx-data.ts`; see [docs/DISKX.md](docs/DISKX.md) |
 | Persistence, media and collaboration | `server/scene-store.mjs` and its imported `server/` modules |
 | Verification coverage | `scripts/verify-manifest.mjs`; `scripts/verify.mjs` executes it |
-| Cyber Race 1992 (standalone page, not in the product build) | `cyber-race.html`, `src/cyber-race/`; see [docs/CYBER_RACE.md](docs/CYBER_RACE.md) |
+| Cyber Race 1992 (standalone page at /cyber-race.html, listed on the Games shelf) | `cyber-race.html`, `src/cyber-race/`; see [docs/CYBER_RACE.md](docs/CYBER_RACE.md) |
 
 Read [PRODUCT_SPEC.md](PRODUCT_SPEC.md) for the product contract and
 [HANDOFF.md](HANDOFF.md) for current priorities and constraints. Search `progress.md` only

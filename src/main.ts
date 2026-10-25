@@ -542,6 +542,17 @@ if (mode === "previews" && import.meta.env.DEV) {
           return;
         }
         const composed = [
+          // Cyber Race 1992 is a separate page with its own renderer, so its row is a link,
+          // not a world: it leaves the platform and the page keeps the row busy meanwhile.
+          {
+            id: "cyber-race-1992",
+            label: "Cyber Race 1992",
+            meta: "the two-player VR race from The Lawnmower Man  ·  9 boards  ·  story mode  ·  opens its own page",
+            play: () => {
+              window.location.assign(`${import.meta.env.BASE_URL}cyber-race.html`);
+              return new Promise<void>(() => {});
+            },
+          },
           // Archive courses composed as whole scenes rather than grid levels. Same deal as
           // the garage row in Browse: main.ts supplies them because composing needs the host.
             {

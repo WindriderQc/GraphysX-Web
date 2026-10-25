@@ -37,11 +37,14 @@ La branche `claude/cyber-race-gamx` ajoute les outils GamX et ce document (voir 
   `git add -A` ; un seul `npm run verify` à la fois sur la machine ; ne jamais affaiblir une
   assertion ; **regarder des captures** avant de livrer du visuel ; ne pas lancer `npm run build`
   nu pendant un gate.
-- Le jeu est **une page autonome hors du build produit** (`vite.config.ts` ne construit que
-  `index.html`). `scripts/verify-impact.mjs` a une règle « Cyber Race standalone page » (aucun
-  smoke, `deploy: false`), verrouillée par `test/verify-impact.test.mjs`. **Tout nouveau fichier du
-  jeu doit matcher cette règle** (sinon le plan devient « full » et déploie) : ajoute-le au motif
-  et au test.
+- Le jeu est **une page autonome publiée** à `https://graphysx.specialblend.ca/cyber-race.html`
+  (entrée du build dans `vite.config.ts`, ligne « Cyber Race 1992 » de l'étagère Games dans
+  `src/main.ts`). `scripts/verify-impact.mjs` a deux règles : la page (`cyber-race.html`,
+  `src/cyber-race/*.ts`) lance le smoke `cyber-race` **et déploie** ; les outils locaux
+  (package, extraits, GamX) ne déploient pas. Verrouillé par `test/verify-impact.test.mjs`.
+  **Tout nouveau fichier du jeu doit matcher une de ces règles** (sinon le plan devient « full »).
+  Une fusion sur `main` qui touche la page **met le jeu à jour en production** : fusionne
+  seulement quand je le demande.
 - **Jamais d'extrait, d'image ou de son du film dans Git ni sur le site.** Les extraits sont
   découpés de ma copie, en local, à côté du jeu installé. Tout le visuel du dépôt est procédural.
 - Les règles d'`agentx-home` sur la file de travaux lourds ne s'appliquent pas ici : pas de modèle,
@@ -123,13 +126,10 @@ Pièges vus pendant la session :
 3. **Édition validée**, seulement quand je l'approuve explicitement : `install-cyber-race-gamx.mjs
    --gamx ... --promote`, puis ajoute dans Playnite « Cyber Race 1992 - GamX - Édition validée »
    (même lanceur, `-Channel Validee`, même art). Ne la remplace jamais sans mon accord.
-4. **Publication web** (décision à me faire prendre, avec ses conséquences) : le jeu tourne dans
-   n'importe quel navigateur. Pour l'offrir sur `https://graphysx.specialblend.ca/cyber-race.html` :
-   ajouter la page aux entrées du build produit (`vite.config.ts`, multi-page), vérifier
-   `scripts/product-assets.mjs`, passer la règle d'impact à `deploy: true` avec un smoke adapté,
-   et la fusion sur `main` la mettra en ligne. **Sans aucun extrait du film.** Bonus : en HTTPS, le
-   Quest peut jouer directement dans son navigateur, sans câble. À peser : le titre et le thème
-   empruntés au film sur un site public. Le `.icu` (`agentx.specialblend.icu`) est l'entrée privée
+4. **Publication web** : faite dans la branche `claude/cyber-race-online` (PR à fusionner sur mon
+   accord) : le jeu est servi à `/cyber-race.html` et listé sur l'étagère Games. **Aucun extrait du
+   film en ligne** : la page ne les cherche qu'en `file://` (install GamX). Le Quest peut désormais
+   jouer dans son navigateur, sans câble. Le `.icu` (`agentx.specialblend.icu`) est l'entrée privée
    d'AgentX, pas un hébergement de jeu.
 5. **VR** : tester sur le Quest (Link + Edge, ou le navigateur du Quest si publié en HTTPS) ;
    envisager une vue cockpit en option et une rotation par crans pour le confort.

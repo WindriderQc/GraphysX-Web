@@ -1787,6 +1787,11 @@ function toggleFullscreen(): void {
 }
 
 function quitGame(): void {
+  // Online, "quit" means back to the GraphysX front door.
+  if (window.location.protocol.startsWith("http")) {
+    window.location.assign(new URL("./", window.location.href).href);
+    return;
+  }
   window.close();
   window.setTimeout(() => toast("Fermez la fenêtre avec Alt+F4 (le navigateur bloque la fermeture).", 4), 300);
 }
@@ -2060,7 +2065,10 @@ function frame(): void {
 
 refreshMenu();
 void checkVrSupport();
-void film.probe(["intro", "attract", "outro", ...CHAPTERS.map((c) => c.clip)]).then(async () => {
+// Film clips only ever come from a local install (file://, e.g. GamX); online the game never
+// looks for them, so no film material is requested from the site. ?film=1 forces the probe.
+const filmAllowed = window.location.protocol === "file:" || new URLSearchParams(window.location.search).has("film");
+void (filmAllowed ? film.probe(["intro", "attract", "outro", ...CHAPTERS.map((c) => c.clip)]) : Promise.resolve()).then(async () => {
   if (!film.has("intro") || phase !== "menu") return;
   menuEl.classList.add("hidden");
   await film.play("intro", { title: "CYBER RACE 1992", muted: !settings.sound });
