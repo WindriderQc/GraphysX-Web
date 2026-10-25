@@ -37,6 +37,10 @@ import {
 } from "./diskx-data";
 import { composeDiskxWorld, DISKX_DISTRICT_TAG, diskxPathOf, FREE_COLOUR } from "./diskx-scene";
 import { createFixtureSource, DISKX_FIXTURE, resolveDiskxSource, type DiskxSource, type DiskxSummary } from "./diskx-source";
+import { replaceScope, redactedInventory } from "./diskx-snapshot";
+import { readJanitorSummary, readJanitorGroups, type JanitorGroupPage } from './diskx-janitor-source';
+import { createPresentationOverlay } from './presentation-overlay';
+import { JANITOR_DEMO, JANITOR_STATUS_LABELS, janitorAvailability } from './diskx-janitor';
 import type { PlatformHost } from "./platform-host";
 import { motionIsReduced } from "./platform-theme";
 
@@ -57,6 +61,10 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   const params = new URLSearchParams(window.location.search);
   const reduced = motionIsReduced();
   const forceFixture = params.get("source") === "fixture";
+  const janitorDemo = forceFixture && params.get('janitor') === 'demo';
+  let candidateIndex = 0;
+  const presentation = createPresentationOverlay();
+  host.scene.add(presentation.group);
 
   // ---- data -----------------------------------------------------------------------------
   const rows = new Map<string, DiskxDirectoryRow>();
@@ -67,7 +75,11 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   let all = makeAllNode(tree);
   const fetched = new Set<string>();
   const truncated = new Set<string>();
+  let observationId = "synthetic-v1";
+  let observedAt = new Date().toISOString();
+  let refreshing = false;
   let loading = 0;
+  let listLimit = 40;
   let notice = "";
   let focus: DiskxNode = resolveInitialFocus(params.get("root"));
   const history: string[] = [];
@@ -126,19 +138,40 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
         <nav class="gx-diskx-crumbs" aria-label="Chemin" data-crumbs></nav>
       </div>
       <div class="gx-diskx-actions">
-        <div class="row"><button type="button" data-action="up">↑ Remonter</button><button type="button" data-action="editor">Éditeur</button><button type="button" data-action="exit">Quitter DiskX</button></div>
+        <div class="row"><button type="button" data-action="up">↑ Remonter</button><button type="button" data-action="refresh">Actualiser</button><button type="button" data-action="export">Exporter les agrégats</button><button type="button" data-action="exit">Quitter DiskX</button></div>
         <span class="gx-diskx-source" data-source data-kind="fixture" role="status" aria-live="polite"></span>
       </div>
     </header>
     <p class="gx-diskx-notice" role="status" data-notice></p>
     <aside class="gx-diskx-panel" aria-label="Détails du dossier">
+      <section class="gx-diskx-janitor" aria-label="Rapport Janitor">
+        <h2>Data Janitor</h2>
+        <p data-janitor-availability></p>
+        <button type="button" data-action="janitor-read">Lire le dernier rapport</button><p data-janitor-focus role="status" aria-live="polite"></p><div data-janitor-live></div><button type="button" data-action="janitor-next" hidden>Groupes suivants</button>
+        <a href="?app=diskx&source=fixture&janitor=demo" data-janitor-demo-link>Ouvrir la démonstration synthétique</a>
+        <div data-janitor-demo hidden>
+          <label>État fictif <select data-janitor-candidate aria-label="État du candidat"></select></label>
+          <p data-janitor-proof></p>
+          <p class="gx-diskx-warning">Aperçu graphique uniquement. Aucun fichier déplacé ; aucune autorisation accordée.</p>
+          <button type="button" data-action="candidate">Voir actuel et cible</button>
+          <div class="gx-diskx-preview-controls">
+            <button type="button" data-action="preview-play">Lire</button>
+            <button type="button" data-action="preview-pause">Pause</button>
+            <button type="button" data-action="preview-reset">Retour à l’actuel</button>
+            <button type="button" data-action="preview-target">Voir la cible</button>
+          </div>
+          <label>Transition <input type="range" data-preview-progress aria-label="Progression de l’aperçu" min="0" max="100" value="0"></label>
+          <output data-preview-status aria-live="polite">Aperçu non ouvert</output>
+          <p>Contour cyan : actuel. Ambre : cible proposée. Le cube mobile est un repère, sans échelle de taille de fichier.</p>
+        </div>
+      </section>
       <h2>Ce niveau</h2>
       <div class="gx-diskx-totals" data-totals></div>
       <div class="gx-diskx-volumes" data-volumes></div>
       <h2>Par type</h2>
       <ul class="gx-diskx-legend" data-legend></ul>
       <h2 data-list-title>Dossiers</h2>
-      <ul class="gx-diskx-list" data-list></ul>
+      <ul class="gx-diskx-list" data-list></ul><button type="button" data-action="more">Afficher 40 dossiers de plus</button>
       <div data-files-section hidden><h2 style="margin-top:14px">Plus gros fichiers</h2><ul class="gx-diskx-list" data-files></ul></div>
     </aside>
     <div class="gx-diskx-card" data-card data-empty="true"><h3>Survole un quartier</h3><p>Chaque bloc est un dossier. Sa surface, ce sont ses octets; sa hauteur, sa part du niveau.</p></div>
@@ -147,6 +180,78 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   const button = (action: string): HTMLButtonElement => element<HTMLButtonElement>(`[data-action="${action}"]`);
   const labelsLayer = element<HTMLDivElement>(".gx-diskx-labels");
   root.append(surface);
+
+  element('[data-janitor-availability]').textContent = janitorDemo
+    ? 'Démonstration synthétique · contrat de présentation provisoire · aucun run réel'
+    : janitorAvailability().reason;
+  element('[data-janitor-demo]').hidden = !janitorDemo;
+  element('[data-janitor-demo-link]').hidden = janitorDemo;
+  const candidateSelect = element<HTMLSelectElement>('[data-janitor-candidate]');
+  for (const candidate of JANITOR_DEMO.candidates) {
+    const option = document.createElement('option'); option.value = candidate.id;
+    option.textContent = JANITOR_STATUS_LABELS[candidate.status]; candidateSelect.append(option);
+  }
+  function candidateProof(): void {
+    const candidate = JANITOR_DEMO.candidates[candidateIndex];
+    element('[data-janitor-proof]').textContent = `${JANITOR_STATUS_LABELS[candidate.status]} (fictif) · ${JANITOR_DEMO.runId} / ${candidate.operationId}. ${candidate.evidence} Taille logique : ${formatBytes(candidate.logicalBytes)}. Espace récupérable : inconnu (liens, snapshots et blocs non vérifiés).`;
+  }
+  candidateSelect.addEventListener('change', () => { candidateIndex = candidateSelect.selectedIndex; presentation.hide(); candidateProof(); });
+  candidateProof();
+  let janitorPage: JanitorGroupPage | null = null;
+  let janitorReading = false;
+  let janitorState: 'not-loaded' | 'reading' | 'absent' | 'ready' | 'error' = 'not-loaded';
+  async function loadJanitor(next = false): Promise<void> {
+    if (janitorReading) return;
+    janitorReading = true; janitorState = 'reading';
+    const panel = element('[data-janitor-live]');
+    button('janitor-read').disabled = true; button('janitor-next').disabled = true;
+    try {
+      const summary = await readJanitorSummary();
+      if (disposed) return;
+      if (!summary.available) { janitorState = 'absent'; panel.textContent = 'Aucun rapport Janitor disponible. Aucun rapport généré ici.'; janitorPage = null; return; }
+      const page = await readJanitorGroups(next ? janitorPage?.nextOffset ?? 0 : 0);
+      if (disposed) return;
+      if (next && janitorPage && page.report.id !== janitorPage.report.id) throw new Error('Le rapport a changé. Relire depuis la première page.');
+      if (page.report.generatedAt && page.report.generatedAt !== summary.generatedAt) throw new Error('Le rapport a changé pendant la lecture. Réessayer.');
+      janitorPage = page; janitorState = 'ready';
+      panel.replaceChildren();
+      const heading = document.createElement('p');
+      heading.textContent = `Rapport ${page.report.id} · ${page.report.generatedAt ?? 'date inconnue'} · état du rapport : ${page.report.status}. ${summary.verifiedGroups} groupes vérifiés ; ${summary.candidateGroups} groupes candidats. Estimation logique du rapport : ${formatBytes(summary.provenSavingsBytes)}. Candidats : ${formatBytes(summary.candidateBytes)} (pas des économies). Espace physique récupérable inconnu. Autorisation et exécution non vérifiées.`;
+      panel.append(heading);
+      for (const group of page.groups) {
+        const detail = document.createElement('details'), title = document.createElement('summary');
+        title.textContent = `${group.count} copies · ${formatBytes(group.size)} · SHA-256 ${group.sha256.slice(0, 12)}`;
+        detail.append(title);
+        const evidence = document.createElement('p');
+        evidence.textContent = `Preuve : ${JSON.stringify(group.proof)}. Revue : ${JSON.stringify(group.review)}. ${group.filesOmitted} fichiers omis. Chemin conservé selon politique : ${group.policySurvivorPath ?? 'non fourni'}. La politique ne vaut pas autorisation.`;
+        detail.append(evidence);
+        for (const file of group.files) {
+          const link = document.createElement('button'); link.type = 'button'; link.textContent = file.path;
+          link.addEventListener('click', () => {
+            let path = file.path.slice(0, file.path.lastIndexOf('/'));
+            while (path && !nodeAt(path)) path = path.slice(0, path.lastIndexOf('/'));
+            const node = nodeAt(path);
+            // Its own status line: the inventory reload that follows a dive rewrites the notice.
+            element('[data-janitor-focus]').textContent = node
+              ? `Dossier indexé du candidat : ${file.path}. Aucun fichier modifié.`
+              : 'Ce candidat est hors du périmètre de cet inventaire.';
+            if (node) goTo(node);
+          });
+          detail.append(link);
+        }
+        panel.append(detail);
+      }
+      const coverage = document.createElement('p'); coverage.textContent = `Page à partir de ${page.offset}, ${page.groups.length} groupes affichés sur ${page.total}. ${page.scanBoundReached ? 'Limite de parcours atteinte : couverture partielle.' : ''}`; panel.append(coverage);
+    } catch (error) {
+      if (!disposed) { janitorState = 'error'; panel.textContent = `Lecture Janitor indisponible : ${error instanceof Error ? error.message : String(error)}. Réessayer avec Lire le dernier rapport.`; janitorPage = null; }
+    } finally {
+      janitorReading = false;
+      if (!disposed) { button('janitor-read').disabled = false; button('janitor-next').disabled = false; button('janitor-next').hidden = janitorPage?.nextOffset == null; }
+    }
+  }
+  button('janitor-read').addEventListener('click', () => { void loadJanitor(); });
+  button('janitor-next').addEventListener('click', () => { void loadJanitor(true); });
+  button('janitor-read').hidden = janitorDemo;
 
   // ---- presentation: hover outline ----------------------------------------------------------
   const halo = new LineSegments(new EdgesGeometry(new BoxGeometry(1, 1, 1)), new LineBasicMaterial({ color: "#4ff2ff", transparent: true, opacity: 0.95, depthTest: false }));
@@ -169,6 +274,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     return layout?.blocks.find((block) => block.kind === "free" && block.node.path === path)?.node ?? null;
   }
   function buildCity(): void {
+    presentation.hide();
     // Free space is laid out once, beside the disks, at the level where the disks are the
     // districts. Inside a disk the HUD still shows the volume's gauge; the plaza does not.
     layout = layoutDiskxCity(focus, { size: CITY_SIZE, freeVolumes: focus.path === DISKX_ALL_PATH ? volumes : [] });
@@ -277,30 +383,18 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     renderSource();
   }
   async function refine(node: DiskxNode): Promise<void> {
-    if (source.kind !== "live" || node.path === DISKX_ALL_PATH || fetched.has(node.path)) return;
-    fetched.add(node.path);
-    setLoading(1);
-    try {
-      const page = await source.tree(node.path);
-      if (disposed) return;
-      for (const row of page.rows) rows.set(row.path, row);
-      if (page.truncated) truncated.add(node.path); else truncated.delete(node.path);
-      rebuildTree();
-      if (focus.path === node.path) {
-        buildCity();
-      } else render();
-    } catch (error) {
-      notice = `AgentX Data n’a pas répondu pour ${node.name}: ${error instanceof Error ? error.message : String(error)}`;
-      render();
-    } finally {
-      setLoading(-1);
-    }
+    if (source.kind !== "live" || refreshing || node.path === DISKX_ALL_PATH || fetched.has(node.path)) return;
+    // Legacy API has no immutable snapshot/cursor. Reload the whole observation together,
+    // including this narrower scope, instead of merging responses from unrelated scans.
+    await refresh(node.path);
   }
   async function loadFiles(node: DiskxNode, show = false): Promise<void> {
     if (node.path === DISKX_ALL_PATH || node.path === DISKX_REST_PATH) return;
     const path = node.path;
+    const requestedObservation = observationId;
     try {
       const list = await source.files(path, 8);
+      if (requestedObservation !== observationId) return;
       if (disposed || (focus.path !== path && !show)) return;
       files = list;
       filesFor = path;
@@ -309,40 +403,39 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       // Files are a garnish; the city stands without them.
     }
   }
-  void resolveDiskxSource({ forceFixture }).then(async (resolved) => {
-    if (disposed) return;
-    source = resolved;
-    renderSource();
-    setLoading(1);
+  async function refresh(scope?: string): Promise<void> {
+    if (refreshing) return;
+    refreshing = true; setLoading(1);
     try {
-      summary = await source.summary();
-      try {
-        volumes = await source.volumes();
-      } catch {
-        volumes = [];
+      const resolved = await resolveDiskxSource({ forceFixture, requireLive: source.kind === 'live' });
+      const before = await resolved.summary();
+      let nextRows: DiskxDirectoryRow[] = [];
+      const limited = new Set<string>();
+      const scopes = [...resolved.roots];
+      if (scope && resolved.roots.some(root => scope.startsWith(`${root}/`))) scopes.push(scope);
+      for (const root of scopes) {
+        const page = await resolved.tree(root);
+        nextRows = replaceScope(nextRows, root, page.rows);
+        if (page.truncated) limited.add(root);
       }
-      if (source.kind === "live") {
-        for (const diskRoot of source.roots) {
-          fetched.add(diskRoot);
-          const page = await source.tree(diskRoot);
-          if (disposed) return;
-          for (const row of page.rows) rows.set(row.path, row);
-          if (page.truncated) truncated.add(diskRoot);
-        }
-        rebuildTree();
-        buildCity();
-        if (focus.path !== DISKX_ALL_PATH) await refine(focus);
-      } else render();
-    } catch (error) {
+      const after = await resolved.summary();
+      if (before.lastScanAt !== after.lastScanAt || before.totalFiles !== after.totalFiles || before.totalSize !== after.totalSize)
+        throw new Error("L'inventaire a changé pendant la lecture. Réessayer.");
+      const nextVolumes = await resolved.volumes().catch(() => []);
       if (disposed) return;
-      notice = `AgentX Data injoignable, capture affichée: ${error instanceof Error ? error.message : String(error)}`;
-      source = createFixtureSource();
-      summary = await source.summary();
-      render();
-    } finally {
-      if (!disposed) setLoading(-1);
-    }
-  });
+      source = resolved; summary = after;
+      rows.clear(); for (const row of nextRows) rows.set(row.path, row);
+      fetched.clear(); for (const root of scopes) fetched.add(root);
+      truncated.clear(); for (const root of limited) truncated.add(root);
+      volumes = nextVolumes;
+      observedAt = new Date().toISOString(); observationId = `${source.kind}:${observedAt}`;
+      notice = source.kind === "live" ? "Lecture d’un index : cohérence non garantie par l’API, aucun suivi temps réel. Maximum 2 000 lignes par périmètre, sans pagination." : "Démonstration synthétique : aucun fichier réel, aucun travail Janitor exécuté.";
+      rebuildTree(); buildCity();
+    } catch (error) {
+      if (!disposed) { notice = `Lecture échouée : ${error instanceof Error ? error.message : String(error)}. Observation précédente conservée ; Actualiser pour réessayer.`; render(); }
+    } finally { refreshing = false; if (!disposed) setLoading(-1); }
+  }
+  void refresh();
 
   // ---- HUD rendering ------------------------------------------------------------------------
   function renderSource(): void {
@@ -351,8 +444,8 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     badge.dataset.loading = String(loading > 0);
     const when = summary?.lastScanAt ? new Date(summary.lastScanAt).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" }) : null;
     badge.textContent = source.kind === "live"
-      ? `${loading ? "Lecture… " : ""}AgentX Data en direct${when ? ` · scan ${when}` : ""}`
-      : `Capture AgentX Data${when ? ` · ${when}` : ""}${loading ? " · connexion…" : ""}`;
+      ? `${loading ? "Lecture… " : ""}Index AgentX · cohérence non vérifiée${when ? ` · scan ${when}` : ""}`
+      : `Démonstration synthétique${when ? ` · ${when}` : ""}${loading ? " · connexion…" : ""}`;
     badge.title = summary?.origin ?? "";
   }
   function render(): void {
@@ -419,9 +512,10 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
 
     const title = element("[data-list-title]");
     const list = element("[data-list]");
+    button("more").hidden = (listMode.kind === "rest" ? listMode.nodes.length : blocks.length) <= listLimit;
     const listed = listMode.kind === "rest" ? listMode.nodes : blocks.map((block) => block.node);
     title.textContent = listMode.kind === "rest" ? `${listed.length} autres dossiers` : "Dossiers";
-    list.replaceChildren(...listed.slice(0, 40).map((node) => {
+    list.replaceChildren(...listed.slice(0, listLimit).map((node) => {
       const li = document.createElement("li");
       li.className = "folder";
       const isFree = node.path.startsWith(DISKX_FREE_PATH_PREFIX);
@@ -630,12 +724,52 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   window.addEventListener("keydown", onKey);
   button("up").addEventListener("click", up);
   button("exit").addEventListener("click", onExit);
-  button("editor").addEventListener("click", () => { void host.enterEditor(); });
+  function showCandidate(): boolean {
+    if (!janitorDemo || source.kind !== 'fixture') return false;
+    const parent = nodeAt('/mnt/media');
+    if (!parent) return false;
+    goTo(parent);
+    const candidate = JANITOR_DEMO.candidates[candidateIndex];
+    const a = blocks.find(block => block.node.path === candidate.source);
+    const b = blocks.find(block => block.node.path === candidate.target);
+    if (!a || !b) { notice = 'Candidat hors du périmètre visible.'; render(); return false; }
+    presentation.set([a.top.x, a.top.y + 1, a.top.z], [b.top.x, b.top.y + 1, b.top.z],
+      [a.halfWidth * 2, 0.4, a.halfDepth * 2], [b.halfWidth * 2, 0.4, b.halfDepth * 2]);
+    const center = a.top.clone().add(b.top).multiplyScalar(0.5);
+    host.frameView([center.x + 20, 32, center.z + 30], [center.x, center.y, center.z], reduced ? 0 : 0.5);
+    element('[data-preview-status]').textContent = 'Actuel — aperçu uniquement';
+    return true;
+  }
+  button('candidate').addEventListener('click', showCandidate);
+  button('preview-play').addEventListener('click', () => {
+    if (!presentation.group.visible && !showCandidate()) return;
+    if (reduced) presentation.clock.seek(1); else presentation.clock.play();
+  });
+  button('preview-pause').addEventListener('click', () => presentation.clock.pause());
+  button('preview-reset').addEventListener('click', () => { if (presentation.group.visible || showCandidate()) presentation.clock.seek(0); });
+  button('preview-target').addEventListener('click', () => { if (presentation.group.visible || showCandidate()) presentation.clock.seek(1); });
+  element<HTMLInputElement>('[data-preview-progress]').addEventListener('input', event => {
+    if (presentation.group.visible || showCandidate()) presentation.clock.seek(Number((event.target as HTMLInputElement).value) / 100);
+  });
+  button("refresh").addEventListener("click", () => { void refresh(focus.path); });
+  button("more").addEventListener("click", () => { listLimit += 40; render(); });
+  button("export").addEventListener("click", () => {
+    const payload = redactedInventory({ id: observationId, observedAt, roots: source.roots, rows: [...rows.values()], incomplete: [...truncated], consistency: source.kind === 'fixture' ? 'synthetic' : 'unversioned' });
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'diskx-aggregates.json'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
 
   // ---- frame -----------------------------------------------------------------------------------
   let editing = false;
   const frame = (delta: number): void => {
     if (disposed) return;
+    if (presentation.group.visible) {
+      presentation.tick(delta);
+      const preview = presentation.clock.state();
+      element<HTMLInputElement>('[data-preview-progress]').value = String(Math.round(preview.progress * 100));
+      element('[data-preview-status]').textContent = `${preview.progress === 1 ? 'Cible proposée' : preview.progress === 0 ? 'Actuel' : 'Comparaison'} · ${Math.round(preview.progress * 100)} % · ${preview.playing ? 'lecture' : 'pause'} · aucun fichier modifié`;
+    }
     if (entryRemaining > 0) entryRemaining = Math.max(0, entryRemaining - delta);
     const nowEditing = host.mode === "editor";
     if (nowEditing !== editing) {
@@ -681,6 +815,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     return {
       application: "diskx",
       source: source.kind,
+      observationId, observedAt, consistency: source.kind === "fixture" ? "synthetic" : "unversioned",
       loading: loading > 0,
       focus: { path: focus.path, name: focus.name, totalSize: focus.totalSize, totalFiles: focus.totalFiles, children: focus.children.length },
       crumbs: crumbsOf(focus).map((node) => node.path),
@@ -700,6 +835,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
         };
       }),
       summary,
+      janitor: { availability: janitorState, reportId: janitorPage?.report.id ?? null, synthetic: janitorDemo, candidate: janitorDemo ? JANITOR_DEMO.candidates[candidateIndex] : null, preview: presentation.clock.state(), visible: presentation.group.visible },
     };
   };
 
@@ -708,6 +844,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     advanceTime: (milliseconds: number) => { frame(Math.max(0, milliseconds) / 1000); return state(); },
     dispose: () => {
       disposed = true;
+      presentation.dispose();
       unsubscribe();
       dom.removeEventListener("pointerdown", onPointerDown);
       dom.removeEventListener("pointerdown", settleEntry);

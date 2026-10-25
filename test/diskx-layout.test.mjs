@@ -161,8 +161,10 @@ test("the recorded fixture is coherent with its summary", () => {
   const tree = buildDiskxTree(fixture.roots, fixture.directories);
   assert.equal(tree.roots.length, 2);
   const total = tree.roots.reduce((sum, root) => sum + root.totalSize, 0);
-  // The fixture keeps only the first levels, so it covers most but not all of the bytes.
-  assert.ok(total > fixture.summary.totalSize * 0.6 && total <= fixture.summary.totalSize);
+  assert.equal(fixture.synthetic, true);
+  assert.equal(fixture.complete, true);
+  assert.equal(total, fixture.summary.totalSize);
+  assert.equal(tree.roots.reduce((sum, root) => sum + root.totalFiles, 0), fixture.summary.totalFiles);
   const shares = categoryShares(tree.roots.find((root) => root.path === "/mnt/media"));
   assert.equal(shares[0].category, "video");
 });
@@ -194,7 +196,7 @@ test("free space is one honest tile per volume at the disks level, and a gauge e
   const occupancy = volumeOccupancy(volume, tree);
   assert.equal(occupancy.capacity, volume.capacityBytes);
   assert.equal(occupancy.used, volume.capacityBytes - volume.freeBytes);
-  assert.ok(occupancy.usedShare > 0.3 && occupancy.usedShare < 0.4, `pool Media is about a third used, got ${occupancy.usedShare}`);
+  assert.equal(occupancy.usedShare, 0.5, "synthetic volume is exactly half used");
 });
 
 test("DISKX_VOLUMES parses declared sizes and measures mounts through statfs", async () => {

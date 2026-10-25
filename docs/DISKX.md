@@ -1,5 +1,9 @@
 # DiskX — vos disques, en ville
 
+> Mise à jour : [parcours Janitor et limites actuelles](DISKX_JANITOR.md). La capture
+> distribuée est désormais synthétique. Les mesures privées ci-dessous sont historiques,
+> pas une mesure actuelle. Le rechargement atomique remplace l’ancien cumul de pages.
+
 `?app=diskx` ouvre une vue TreeSize en 3D des disques qu'AgentX Data a indexés : chaque
 dossier est un bloc dont la **surface** est proportionnelle à ses octets et la **hauteur** à sa
 part du niveau (échelle log). Un clic sur un quartier plonge dans ce dossier ; `Échap`,

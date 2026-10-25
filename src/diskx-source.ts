@@ -2,10 +2,8 @@
  * DiskX data source: AgentX Data through the page's own `/diskx-api/` route, or the recorded
  * fixture when no route is configured, the LAN is out of reach, or `?source=fixture` asks.
  *
- * The fixture is the first thing the city is built from either way — a visitor sees a city
- * on the first frame, and the live scan replaces it when it lands. Rows accumulate in one
- * map keyed by path, so a deeper live page (`tree?root=<folder>`) refines the subtree it was
- * asked for without discarding what the first page already said about the rest.
+ * Synthetic data is replaced atomically by the app. The legacy API has no immutable
+ * snapshot or tree cursor: consistency remains explicitly unverified.
  */
 
 import fixtureJson from "./diskx-fixture.json" with { type: "json" };
@@ -13,6 +11,8 @@ import type { DiskxDirectoryRow, DiskxFileRow, DiskxVolume } from "./diskx-data"
 
 export type DiskxFixture = {
   schema: string;
+  synthetic?: boolean;
+  complete?: boolean;
   capturedAt: string;
   source: string;
   roots: string[];
@@ -59,6 +59,7 @@ const sanitiseVolumes = (value: unknown): DiskxVolume[] => {
   return value.flatMap((entry) => {
     const record = entry as Partial<DiskxVolume> | null;
     if (!record || typeof record.id !== "string" || !Array.isArray(record.roots)) return [];
+    if (record.source !== 'measured' && record.source !== 'declared') return [];
     const capacityBytes = Number(record.capacityBytes);
     const freeBytes = Number(record.freeBytes);
     if (!Number.isFinite(capacityBytes) || !Number.isFinite(freeBytes) || capacityBytes <= 0) return [];
@@ -99,7 +100,7 @@ export function createFixtureSource(fixture: DiskxFixture = DISKX_FIXTURE): Disk
     }),
     tree: async (root) => ({
       rows: fixture.directories.filter((row) => row.path === root || row.path.startsWith(`${root}/`)),
-      truncated: false,
+      truncated: fixture.complete !== true,
     }),
     files: async (root, limit = 8) => (fixture.files[root] ?? []).slice(0, limit),
     volumes: async () => sanitiseVolumes(fixture.volumes),
@@ -127,8 +128,8 @@ export function createLiveSource(fetchImpl: typeof fetch, roots: string[], origi
       const params = new URLSearchParams({ root, limit: String(PAGE) });
       const data = await unwrap<TreeData>(await fetchImpl(`/diskx-api/tree?${params}`, { cache: "no-store" }));
       return {
-        rows: data.tree.map((row) => ({ path: row.path, fileCount: row.fileCount, totalSize: row.totalSize, largestFile: row.largestFile ?? null })),
-        truncated: data.truncated === true,
+        rows: data.tree.filter(row => row.path === root || row.path.startsWith(`${root}/`)).map((row) => ({ path: row.path, fileCount: row.fileCount, totalSize: row.totalSize, largestFile: row.largestFile ?? null })),
+        truncated: data.truncated !== false || data.tree.length >= PAGE,
       };
     },
     files: async (root, limit = 8) => {
@@ -150,17 +151,20 @@ export function createLiveSource(fetchImpl: typeof fetch, roots: string[], origi
  * Pick the source for this page. Live needs the route to say it is configured; anything else —
  * a static deploy with no route, a 503, a network error — is the fixture, announced as such.
  */
-export async function resolveDiskxSource(options: { fetchImpl?: typeof fetch; forceFixture?: boolean; fixture?: DiskxFixture } = {}): Promise<DiskxSource> {
+export async function resolveDiskxSource(options: { fetchImpl?: typeof fetch; forceFixture?: boolean; fixture?: DiskxFixture; requireLive?: boolean } = {}): Promise<DiskxSource> {
   const fixture = options.fixture ?? DISKX_FIXTURE;
   if (options.forceFixture) return createFixtureSource(fixture);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   try {
     const response = await fetchImpl("/diskx-api/config", { cache: "no-store" });
-    if (!response.ok) return createFixtureSource(fixture);
-    const config = (await response.json()) as { enabled?: boolean; source?: string | null };
-    if (config.enabled !== true) return createFixtureSource(fixture);
-    return createLiveSource(fetchImpl, [...fixture.roots], config.source ?? "LAN");
-  } catch {
+    if (!response.ok) { if (options.requireLive) throw new Error('Configuration indisponible'); return createFixtureSource(fixture); }
+    const config = (await response.json()) as { enabled?: boolean; source?: string | null; roots?: string[] };
+    if (config.enabled !== true) { if (options.requireLive) throw new Error('Source désactivée'); return createFixtureSource(fixture); }
+    const roots = config.roots;
+    if (!Array.isArray(roots) || !roots.length || roots.some(root => typeof root !== 'string' || !root.startsWith('/') || root.endsWith('/'))) throw new Error('Racines non configurées');
+    return createLiveSource(fetchImpl, [...new Set(roots)], config.source ?? "LAN");
+  } catch (error) {
+    if (options.requireLive) throw error;
     return createFixtureSource(fixture);
   }
 }
