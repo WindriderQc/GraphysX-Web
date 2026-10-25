@@ -43,13 +43,13 @@ export class DiskxCityElement extends HTMLElement {
     }
     const stage = document.createElement("div");
     stage.style.cssText = "position:absolute;inset:0;overflow:hidden";
-    this.append(stage);
+    this.replaceChildren(stage);
     this.stage = stage;
     try {
       this.host = new PlatformHost(stage, { interactive: false, editorVisible: false, autoOrbit: false, intro: false });
       this.app = mountDiskxApp(stage, this.host, () => undefined, {
         live: { endpoints: options.endpoints, roots: options.roots, origin: window.location.host },
-        focus: options.focus, janitor: options.janitor, group: options.group, embedded: true,
+        focus: options.focus, janitor: options.janitor, group: options.group, report: options.report, embedded: true,
         onEvent: (type, detail) => this.dispatchEvent(new CustomEvent(`diskx-${type}`, { detail, bubbles: true, composed: true })),
       });
     } catch (error) {
@@ -58,16 +58,24 @@ export class DiskxCityElement extends HTMLElement {
   }
 
   disconnectedCallback(): void {
-    this.app?.dispose();
-    this.host?.dispose();
-    this.stage?.remove();
+    this.release();
+  }
+
+  private release(): void {
+    const app = this.app, host = this.host, stage = this.stage;
     this.app = null; this.host = null; this.stage = null;
+    try { app?.dispose(); }
+    finally {
+      try { host?.dispose(); }
+      finally { stage?.remove(); }
+    }
   }
 
   /** The city's own text state, for the host page's checks (same shape as the GraphysX app's). */
   state(): unknown { return this.app?.state() ?? null; }
 
   private fail(stage: string, error: unknown): void {
+    this.release();
     const message = error instanceof Error ? error.message : String(error);
     const note = document.createElement("p");
     note.setAttribute("role", "alert");

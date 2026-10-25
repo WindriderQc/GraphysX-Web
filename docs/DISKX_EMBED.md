@@ -50,3 +50,11 @@ Ce sont des reçus de présentation : aucun ne prouve qu'un fichier a été dép
 
 `npm run smoke:diskx-embed` après un build : page hôte façon Core, routes simulées, aucune
 requête hors origine, reçus, dimension imposée par la page, refus des attributs invalides.
+
+## Report version and presentation lifecycle
+
+The optional `report` attribute is the UTC generation date returned by Core. Summary, page and named-group reads must match that version; changed or missing group versions are refused before a presentation is shown. Equivalent ISO timestamps are compared as instants.
+
+`diskx-report-read` carries `reportGeneratedAt` and `reportId` after a coherent report read. `diskx-group-shown` carries those fields with the selected SHA-256 and coverage. `diskx-ready` only attests the inventory mount. These events are presentation observations, never file execution receipts.
+
+A mount failure immediately releases its host. Disconnect releases app and host even if app disposal fails, and reconnect removes the prior error state. Relation replacements validate all places and links before releasing the previous picture; one picture accepts at most 64 unique places and 256 links.

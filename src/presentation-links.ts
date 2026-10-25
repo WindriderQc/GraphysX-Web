@@ -21,6 +21,23 @@ export type RelationLink = { from: string; to: string };
 
 const COLOURS: Record<RelationRole, string> = { target: "#4ff2ff", source: "#ffb13b", neutral: "#c9d6e2" };
 const MAX_PLACES = 64;
+const MAX_LINKS = 256;
+
+/** Validate the whole replacement before releasing the currently displayed picture. */
+function validateRelations(places: readonly RelationPlace[], links: readonly RelationLink[]): void {
+  if (places.length > MAX_PLACES) throw new Error(`Too many places for one picture (${places.length} > ${MAX_PLACES})`);
+  if (links.length > MAX_LINKS) throw new Error(`Too many links for one picture (${links.length} > ${MAX_LINKS})`);
+  const ids = new Set<string>();
+  for (const place of places) {
+    if (typeof place.id !== "string" || !place.id || place.id.length > 4096 || ids.has(place.id)) throw new Error("Invalid or duplicate place id");
+    if (!Object.hasOwn(COLOURS, place.role) || place.center.length !== 3 || place.size.length !== 3
+      || ![...place.center, ...place.size].every(Number.isFinite) || place.size.some(value => value <= 0)) throw new Error(`Invalid place ${place.id}`);
+    ids.add(place.id);
+  }
+  for (const link of links) {
+    if (!ids.has(link.from) || !ids.has(link.to)) throw new Error(`Link names an unknown place: ${link.from} -> ${link.to}`);
+  }
+}
 
 export function relationArc(from: Vector3, to: Vector3): QuadraticBezierCurve3 {
   const lift = Math.max(2, from.distanceTo(to) * 0.35);
@@ -69,11 +86,10 @@ export function createRelationOverlay(seconds = 3) {
     clock,
     /** Replace the picture. Places beyond the budget are refused, not silently dropped. */
     set(places: readonly RelationPlace[], links: readonly RelationLink[]): void {
-      if (places.length > MAX_PLACES) throw new Error(`Too many places for one picture (${places.length} > ${MAX_PLACES})`);
+      validateRelations(places, links);
       clear();
       const byId = new Map<string, RelationPlace>();
       for (const place of places) {
-        if (![...place.center, ...place.size].every(Number.isFinite)) throw new Error(`Invalid place ${place.id}`);
         byId.set(place.id, place);
         const colour = COLOURS[place.role];
         const outlineMaterial = own(new LineBasicMaterial({ color: colour, transparent: true, depthTest: false }));
