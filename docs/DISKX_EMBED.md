@@ -13,7 +13,7 @@ origine (CSP `script-src 'self'`, sans CORS) et lui sert ses routes Data Toolbox
 - Il ne contient aucune donnée réelle et n'utilise jamais la capture fictive.
 - La feuille de style de DiskX est injectée par le module. Les polices de marque sont absentes :
   la page retombe sur les polices système. L'éditeur n'est pas inclus.
-- Pas de ciel en images dans l'élément : fond de nuit uni, aucune requête vers `/assets/` de la
+- Pas de ciel en images dans l'élément : les étoiles sont dessinées en code, aucune requête vers `/assets/` de la
   page hôte. CSP : `'wasm-unsafe-eval'` (Manifold) suffit ; rien d'autre n'est demandé.
 
 ## Élément

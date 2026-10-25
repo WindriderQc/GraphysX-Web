@@ -42,6 +42,7 @@ import { readJanitorSummary, readJanitorGroups, type JanitorGroupPage } from './
 import { requireJanitorVersion } from './diskx-report-version';
 import { createPresentationOverlay } from './presentation-overlay';
 import { createRelationOverlay, type RelationPlace } from './presentation-links';
+import { createStarfield } from './presentation-starfield';
 import { anchorDuplicates, duplicateLinks, planDuplicateView, DUPLICATE_ALL_SCOPE, type DuplicateView } from './diskx-duplicates';
 import { JANITOR_DEMO, JANITOR_DEMO_GROUPS, JANITOR_DEMO_SUMMARY, JANITOR_STATUS_LABELS, janitorAvailability } from './diskx-janitor';
 import { createDiskxShow, relayGroupPages, type ShowEvent } from './diskx-show';
@@ -100,6 +101,9 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   host.scene.add(presentation.group);
   const relations = createRelationOverlay();
   host.scene.add(relations.group);
+  // Embedded on a Core page: no skybox files there, so the night sky is drawn in code.
+  const starfield = options.embedded ? createStarfield(CITY_SIZE * 7) : null;
+  if (starfield) host.scene.add(starfield);
   let groupView: DuplicateView | null = null;
   let groupOutside = 0;
   let groupFrame = false;
@@ -386,7 +390,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     // Free space is laid out once, beside the disks, at the level where the disks are the
     // districts. Inside a disk the HUD still shows the volume's gauge; the plaza does not.
     layout = layoutDiskxCity(focus, { size: CITY_SIZE, freeVolumes: focus.path === DISKX_ALL_PATH ? volumes : [] });
-    const world = composeDiskxWorld(layout, { motes: !reduced, sky: options.embedded ? null : "clearnight" });
+    const world = composeDiskxWorld(layout, { motes: !reduced, sky: !options.embedded });
     const result = host.api.create(world);
     if (!result.ok) throw new Error(result.error);
     host.api.pause(false);
@@ -1086,6 +1090,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       show.dispose();
       presentation.dispose();
       relations.dispose();
+      if (starfield) { starfield.removeFromParent(); starfield.geometry.dispose(); (starfield.material as { dispose(): void }).dispose(); }
       setGroupTags([]);
       unsubscribe();
       dom.removeEventListener("pointerdown", onPointerDown);
