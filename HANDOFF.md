@@ -55,13 +55,15 @@ section below this one is the September release they build on):
 
 **Open, in the order that adds the most:**
 
-1. **KidX Nestor voice is integrated locally and nowhere else.** `codex/kidx-voice-integration`
+1. **KidX Nestor voice is integrated locally and parked.** `codex/kidx-voice-integration`
    (`57d4677`, Codex worktree `~/.codex/worktrees/kidx-voice-review/GraphysX-Web`) carries the
    optional Household Family voice/text panel, bounded workshop actions, a fixed server relay
    and the `kidx-voice` check. Its full local gate passed 93/93 with 599 unit tests. It is not
-   pushed, has no PR, and no child, microphone, speaker or ugKid acceptance exists. Read
-   `docs/KIDX_VOICE.md` on that branch before touching it; its HANDOFF/progress hunks will
-   conflict with this section and should be merged, not dropped.
+   pushed, has no PR, and no child, microphone, speaker or ugKid acceptance exists. It stays
+   unmerged on purpose: its relay-with-server-held-credential pattern is one of three ways this
+   product reaches AgentX, and the AgentX access work may change which one survives.
+   [KIDX_VOICE_BRANCH.md](docs/KIDX_VOICE_BRANCH.md) records the branch, its AgentX
+   touchpoints, the decisions it waits on and how to merge it (three known conflicts).
 2. **`<llmx-stage>` acceptance** (AgentX archive issue 131). v1 shipped on both sides on
    2026-09-25 and the receipt is stored on the family turn (AgentX PR 133). Remaining: the
    owner's acceptance on `/panel` and on the kids' device.
@@ -86,7 +88,7 @@ the [shared AgentX capabilities](https://github.com/WindriderQc/AgentX/blob/main
 |---|---|---|
 | DISKX in Nestor | Private Core `/diskx`; Core relays the published module on its own origin; bounded Data Toolbox GETs | [DISKX_EMBED.md](docs/DISKX_EMBED.md). AgentX PRs 1057/1071 reuse the same path. Report date and selected group correlate the Core snapshot and the view. Public standalone DiskX remains a demo without the Data relay. |
 | LLMx personal / Family | Public `?app=llmx` currently calls the consumer routes directly; `server/llmx-target.mjs` shares the client/server route map | [LLMX_PUBLIC_CONNECTION.md](docs/LLMX_PUBLIC_CONNECTION.md). A readable config alone does not prove a working browser conversation: the current Core cross-site POST guard and absent cross-origin read header require transport reception. Keep personal and Family permissions distinct. |
-| KidX voice branch | Dedicated server relay with a server-held Family credential; local branch described above | Read that branch's `docs/KIDX_VOICE.md`; retain its bounded routes and Family context. It is not a generic proxy and is not installed by DiskX. |
+| KidX voice branch | Dedicated server relay with a server-held Family credential; local branch described above | [KIDX_VOICE_BRANCH.md](docs/KIDX_VOICE_BRANCH.md), then that branch's `docs/KIDX_VOICE.md`; retain its bounded routes and Family context. It is not a generic proxy and is not installed by DiskX. |
 | Household mask / math stage | Core relays `/embed/llmx-face.js`; presence and math presentation events flow into the element | [LLMX_FACE_EMBED.md](docs/LLMX_FACE_EMBED.md). Visual events convey presentation state, not business authorization. |
 
 Core network access controls remain independent of an owner-only tool selection, profile,
