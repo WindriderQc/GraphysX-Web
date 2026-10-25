@@ -51,7 +51,11 @@ try {
           files: [{ path: "/data/a/x.bin" }, { path: "/data/c/x.bin" }] }] }));
       return route.fulfill({ status: 404, body: "{}" });
     }
-    return route.continue();
+    // A Core page serves this one module and its own routes, none of GraphysX's assets
+    // (skies, textures, fonts): anything else the module asks for would be a 404 there.
+    if (url.pathname === "/embed/diskx.js") return route.continue();
+    requests.push(`UNEXPECTED ${request.method()} ${url.pathname}`);
+    return route.fulfill({ status: 404, body: "" });
   };
   await page.route("**/*", handler);
   // Each refusal case opens its own page: navigating away from a live WebGL page is slow in CI.
@@ -91,7 +95,7 @@ try {
     const el = document.querySelector("diskx-city"); const c = el.querySelector("canvas"); const hud = el.querySelector(".gx-diskx");
     return { el: el.getBoundingClientRect().toJSON(), canvas: c && { w: c.width, h: c.height, css: c.getBoundingClientRect().toJSON(), display: getComputedStyle(c).display }, hud: hud && { hidden: [...hud.children].filter(n => n.hidden).length, children: hud.children.length, display: getComputedStyle(hud).display, z: getComputedStyle(hud).zIndex }, mode: document.documentElement.dataset.gxMode, kids: [...el.firstElementChild.children].map(n => n.tagName + "." + n.className).slice(0, 10) };
   })));
-  assert.ok(requests.every((line) => line.startsWith("GET /api/data-toolbox/")), `GET on Core routes only: ${requests.join(" | ")}`);
+  assert.ok(requests.every((line) => line.startsWith("GET /api/data-toolbox/")), `GET on Core routes only, no GraphysX asset: ${requests.join(" | ")}`);
   assert.ok(requests.includes(`GET /api/data-toolbox/janitor/strategy/latest/groups?sha256=${SHA}`), "the named group is read by its SHA-256");
 
   // 2. Bad attributes are refused with a visible message and an error receipt, not guessed.
