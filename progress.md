@@ -4838,3 +4838,42 @@ Yanik asked where the project stands after a long stretch on AgentX. Method: HAN
 - **Ecosystem:** the AgentX relationship is two-way since 2026-09-25 (GraphysX calls `/api/consumers/nestor/v1/llmx` and `/llmx/family`; Household relays `/embed/llmx-face.js` via `HOUSEHOLD_AVATAR_MODULE_URL` in `agentx-home`). Live on 2026-10-23: both consumer profiles `enabled`, `commandsVersion 2`, `mathVersion 1`, `presence false`; core, Mongo, Benchmark and RAG up; UGBrutal's Ollama (192.168.2.12, the secondary host) offline, 95 active alerts, 12 recorded failovers; `voice_persona_chat` routed to `gemma4:12b-it-qat` on the tertiary host. The pipeline (221 tasks) has no GraphysX task; the RAG corpus returns nothing for GraphysX. Local `AgentX-Ecosystem` equals its origin at 2026-09-20; the `aiOPs` checkout is gone locally; Household is `WindriderQc/AgentX`.
 - **Workstation:** `~/.claude.json` still launched the MCP server from the deleted `GraphysX-Web-llmx-integration` checkout, the cause of `graphysx CONNECTION_CLOSED` at session start; repointed to `codes/GraphysX-Web/tools/graphysx-mcp.mjs` with the same `GRAPHYSX_URL`, backup kept in the session temp folder. Five `GraphysX-Web-*` worktree entries are prunable; `claude/llmx-face-forge` holds 12 unreviewed commits 123 behind `main`; the main checkout has an uncommitted `launch.json` entry for the stale `llmx-forge` worktree. None of these were touched.
 - Not done here: no push, no commit of the KidX voice branch, no device or microphone acceptance, no verify gate (documentation-only change; `npm run check` is the matching validation).
+
+## iss-r1 — ISS Live ships: the Family Earth3D opener (2026-10-25 America/Toronto)
+
+**Merged as PR #50 (`b2b964e`), production deploy in flight at time of writing.** The
+recovery map's "bounded read-only adapter" became a Browse scene: the real TLE from
+`specialblend.ca/api/tle` (Celestrak via the SBQC proxy — the endpoint recovered between
+the 2026-10-24 inventory and this build), propagated with satellite.js, drives the ISS
+marker, a 64-point orbit ring and the ground track **through the public API** over a
+textured Earth. The panel states source, TLE epoch with age, computed-at stamped
+America/Toronto, a STALE badge past 48 h, and that a geometric track says nothing about
+visibility. On TLE failure the scene degrades to an honest error panel and invents no
+position.
+
+- **satellite.js pinned to the pure-JS v5 line** — v6 ships a WASM pthreads worker that
+  vite's worker bundler rejects (top-level await in iife), and SGP4 needs none of it.
+- **The lock eviction struck a third time** (`4a5fa0e` lineage): regenerating
+  `package-lock.json` drops exactly `node_modules/@emnapi/runtime`, and only CI's npm
+  notices. Fixed by rebuilding from main's lock base plus the one new dependency and
+  splicing main's runtime entry back verbatim; `npm ci --dry-run` on a copied pair in an
+  isolated directory is the local reproduction that finally matched CI.
+- **Evidence:** `smoke-iss.mjs` (apps tier) — fixture TLE + injected clock, zero network;
+  marker on the station shell (1.0668 R⊕), orbit band 1.0656–1.0681 (the eccentricity is
+  visible in the assertion), ground track surface-pinned, a measured 10-minute arc of
+  3.40 units, stale/error/disclaimer honesty. Visual receipt
+  (`output/visual-receipts-20261025/iss-live-real-tle.jpg`): with the live TLE the marker
+  sits over the eastern Pacific at the panel's own 4.64°N 104.35°W — the lat/lon→texture
+  mapping proven by geography, not derivation.
+- **Deliberately absent, gates unchanged:** pass prediction and observer coordinates
+  (location stays local unless separately authorized), visibility claims, history
+  (`/api/iss` 503: `DATAAPI_API_KEY` missing on the SBQC server — their ops, not this
+  repo), and the live cloud layer (EUMETSAT-derived map serves with CORS `*`, but image
+  timestamp/coverage disclosure comes first).
+
+Same session, swept before building: the stranded MCP-repair/SBQC-recovery receipts
+landed (PR #47); the stale lean-platform memory was corrected against HEAD; and two
+July acceptance debts closed with captures in `output/visual-receipts-20261025/` —
+bloom's glow with rings visible, and dominus-village placement after the recentring fix
+(pilings grounded, ramp meeting the deck — the port tool's assumption vindicated on
+screen).
