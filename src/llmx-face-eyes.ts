@@ -47,7 +47,7 @@ export const EYE_LOOK = Object.freeze({
 });
 
 /** The iris's inner and outer radius as fractions of the eyeball radius (sculptor `eyePart`). */
-const PUPIL_EDGE = 0.3;
+export const PUPIL_EDGE = 0.3;
 const IRIS_EDGE = 0.66;
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -122,10 +122,16 @@ export function gazeRotateInto(rest: Float32Array, yaw: number, pitch: number, o
  * Cubes under the lid, or not on the visible front of the eye, are not eligible — a glint on a
  * closed eye would read as a hole in the lid — and neither are cubes inside the eyeball: it is
  * solid, so the cube pointing most nearly at the light can be one buried behind the surface,
- * and a glint there is never seen (it was, the first time: 2.6 cm behind the iris).
+ * and a glint there is never seen (it was, the first time: 2.6 cm behind the iris). Nor are
+ * cubes reaching into the pupil disc: a square glint across its edge bit a notch out of the
+ * circle the disc exists to draw. With those gone, the nearest cube left could be on the far
+ * side of the pupil from the light (the balanced level's iris is a ring two cubes wide), so a
+ * glint must also sit within {@link CATCHLIGHT_SPREAD} of the light's side; with no such cube
+ * the eye has no glint rather than one in the wrong place.
  *
  * @param posed Posed eye-local positions, three floats per iris cube (see {@link gazeRotateInto}).
  * @param members Which iris cubes belong to this eye, as cube indices into `posed`.
+ * @param pupil The pupil disc this frame (see {@link pupilAxis}); omitted, no cube is excluded.
  */
 export function pickCatchlight(
   posed: Float32Array,
@@ -133,6 +139,7 @@ export function pickCatchlight(
   radius: number,
   edgeY: number,
   cube: number,
+  pupil?: Readonly<{ axis: readonly [number, number, number]; radius: number }>,
 ): number {
   if (members.length < EYE_LOOK.minIrisCubes) return -1;
   const [lx, ly, lz] = EYE_LOOK.catchlightFrom;
@@ -146,6 +153,17 @@ export function pickCatchlight(
     const z = posed[k + 2];
     const length = Math.hypot(x, y, z);
     if (y > edgeY - cube || z < radius * 0.7 || length < radius - 1.2 * cube) continue;
+    if (pupil) {
+      const [ax, ay, az] = pupil.axis;
+      const along = x * ax + y * ay + z * az;
+      const ox = x - along * ax;
+      const oy = y - along * ay;
+      const off = Math.hypot(ox, oy, z - along * az);
+      // The cube's nearest edge to the axis is about 0.6 of a cube nearer than its centre.
+      if (off - 0.6 * cube < pupil.radius) continue;
+      // Its side of the eye, seen from in front, against the light's.
+      if ((ox * lx + oy * ly) / ((Math.hypot(ox, oy) || 1) * Math.hypot(lx, ly)) < Math.cos(CATCHLIGHT_SPREAD)) continue;
+    }
     const dot = (x * lx + y * ly + z * lz) / ((length || 1) * ll);
     if (dot > bestDot) {
       bestDot = dot;
@@ -155,7 +173,66 @@ export function pickCatchlight(
   return best;
 }
 
+/** How far round the eye from the light's side a glint may sit, radians. */
+export const CATCHLIGHT_SPREAD = Math.PI / 3;
+
 /** How much of the look a level can carry, from its iris cube count per eye. */
 export function irisContrast(irisCubesPerEye: number): number {
   return smoothstep(EYE_LOOK.minIrisCubes * 0.5, EYE_LOOK.minIrisCubes * 2, irisCubesPerEye);
+}
+
+/**
+ * The pupil is a disc, not a set of cubes.
+ *
+ * Drawn as the darkest cubes of the eye, a pupil two cubes across is a rounded square at best;
+ * on the dense mask's grid, which does not centre on the eye, it read as a square or a little
+ * house (owner review, 2026-10-24). The iris's shader instead paints a disc on the smooth
+ * eyeball the cubes approximate, as the camera sees it, so the outline is a circle at any
+ * density, laid over the cube faces with the facets still showing, and dilation is a radius
+ * rather than cubes swelling in place. These are the shader's terms, in JS, for the rig and the
+ * tests.
+ */
+
+/** Unit gaze axis of both eyes for the rig's yaw and pitch (see {@link gazeRotateInto}). */
+export function pupilAxis(yaw: number, pitch: number): [number, number, number] {
+  return [Math.sin(yaw), -Math.cos(yaw) * Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)];
+}
+
+/** The pupil's radius in metres for an eyeball `radius` and the pose's pupil scale. */
+export function pupilRadius(radius: number, pupilScale: number): number {
+  return PUPIL_EDGE * radius * pupilScale;
+}
+
+/**
+ * Where a view ray meets the smooth eyeball: the nearer intersection of the ray from `from`
+ * through `through` (eye-local, origin at the eye centre) with the sphere of `eyeRadius`, or null
+ * when it misses. The shader's first step.
+ */
+export function pupilSeenAt(
+  from: readonly [number, number, number],
+  through: readonly [number, number, number],
+  eyeRadius: number,
+): [number, number, number] | null {
+  let dx = through[0] - from[0];
+  let dy = through[1] - from[1];
+  let dz = through[2] - from[2];
+  const length = Math.hypot(dx, dy, dz) || 1;
+  dx /= length;
+  dy /= length;
+  dz /= length;
+  const b = from[0] * dx + from[1] * dy + from[2] * dz;
+  const hit = b * b - (from[0] * from[0] + from[1] * from[1] + from[2] * from[2]) + eyeRadius * eyeRadius;
+  if (hit < 0) return null;
+  const t = -b - Math.sqrt(hit);
+  return [from[0] + t * dx, from[1] + t * dy, from[2] + t * dz];
+}
+
+/**
+ * Whether a point on the eyeball (eye-local, see {@link pupilSeenAt}) lies in the pupil: within
+ * `radius` of the gaze axis, on the front of the eye. The shader's test without its antialiasing.
+ */
+export function inPupil(x: number, y: number, z: number, axis: readonly [number, number, number], radius: number, eyeRadius: number): boolean {
+  const along = x * axis[0] + y * axis[1] + z * axis[2];
+  if (along <= 0 || Math.hypot(x, y, z) > eyeRadius * 2) return false;
+  return Math.hypot(x - along * axis[0], y - along * axis[1], z - along * axis[2]) < radius;
 }
