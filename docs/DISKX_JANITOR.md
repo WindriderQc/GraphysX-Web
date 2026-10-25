@@ -62,6 +62,27 @@ Règles pures et testées : `diskx-duplicates.ts`. Calque réutilisable : `prese
 Couleurs communes à toute la présentation : ambre = ce qui partirait, cyan = ce qui reste ou la
 destination. La démo de déplacement fictif suit la même convention.
 
+## Présentation animée (lot 3)
+
+Une liste d'animations jouée sur la ville (contrat dans `DISKX_EMBED.md`, attribut `play`, ou
+`?play=` sur `?app=diskx`) : vue d'ensemble → doublons seulement → copies reliées → vers la
+cible → résumé, plus des étapes de groupe et des visites des plus gros groupes. Nestor compose la
+liste selon la conversation ; Core la passe à la page. Les actions sur les fichiers restent dans
+Data : la ville ne fait que montrer.
+
+| Rôle | Fichier |
+| --- | --- |
+| Registre des doublons par dossier, paires, couverture (pur) | `src/diskx-show-ledger.ts` |
+| Vocabulaire `play` et lecteur (pur) | `src/diskx-show-script.ts` |
+| Formes de chaque scène, cible recomposée (pur) | `src/diskx-show-looks.ts` |
+| Couche three.js : coques, colonnes, arcs, gestes | `src/diskx-show-layer.ts` |
+| Barre, narration, filtres, sélection, résumé | `src/diskx-show-hud.ts` |
+| Orchestration, événements | `src/diskx-show.ts` |
+
+Pendant les scènes, la couche de présentation remplace l'affichage du monde (propriété de vue) ;
+le document de scène ne change pas. Tests : `test/diskx-show.test.mjs`, smoke
+`scripts/smoke-diskx-show.mjs`.
+
 ## Démonstration et primitives
 
 Ouvrir ?app=diskx&source=fixture&janitor=demo. Choisir un statut fictif puis Voir actuel et cible.

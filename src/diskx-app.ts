@@ -44,6 +44,8 @@ import { createPresentationOverlay } from './presentation-overlay';
 import { createRelationOverlay, type RelationPlace } from './presentation-links';
 import { anchorDuplicates, duplicateLinks, planDuplicateView, DUPLICATE_ALL_SCOPE, type DuplicateView } from './diskx-duplicates';
 import { JANITOR_DEMO, JANITOR_DEMO_GROUPS, JANITOR_DEMO_SUMMARY, JANITOR_STATUS_LABELS, janitorAvailability } from './diskx-janitor';
+import { createDiskxShow, relayGroupPages, type ShowEvent } from './diskx-show';
+import { DEFAULT_SHOW_SCRIPT } from './diskx-show-script';
 import type { PlatformHost } from "./platform-host";
 import { motionIsReduced } from "./platform-theme";
 
@@ -51,6 +53,8 @@ export type DiskxApplication = {
   dispose: () => void;
   state: () => unknown;
   advanceTime: (milliseconds: number) => unknown;
+  /** The Janitor show's controls, for a host page steering the animation list. */
+  show: { play(): void; pause(): void; next(): void; previous(): void; goto(index: number): void; setScript(text: string, autoplay: boolean): void };
 };
 
 /** Virtual level above the scanned roots: one district per disk. */
@@ -72,8 +76,14 @@ export type DiskxMountOptions = {
   group?: string | null;
   report?: string | null;
   embedded?: boolean;
-  onEvent?: (type: "ready" | "report-read" | "group-shown" | "error", detail: Record<string, unknown>) => void;
+  /** Animation list of the Janitor show (`diskx-show-script.ts`); a given list plays at once. */
+  play?: string | null;
+  /** Same-origin page where the owner decides and acts on files (Data Toolbox). Linked, never called. */
+  actionsHref?: string | null;
+  onEvent?: (type: DiskxEventType, detail: Record<string, unknown>) => void;
 };
+
+type DiskxEventType = "ready" | "report-read" | "group-shown" | "error" | ShowEvent;
 
 export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () => void, options: DiskxMountOptions = {}): DiskxApplication {
   const params = options.live ? new URLSearchParams() : new URLSearchParams(window.location.search);
@@ -81,7 +91,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   const forceFixture = !options.live && params.get("source") === "fixture";
   const janitorDemo = forceFixture && params.get('janitor') === 'demo';
   const endpoints = options.live?.endpoints ?? RELAY_ENDPOINTS;
-  const emit = (type: "ready" | "report-read" | "group-shown" | "error", detail: Record<string, unknown>): void => {
+  const emit = (type: DiskxEventType, detail: Record<string, unknown>): void => {
     try { options.onEvent?.(type, detail); } catch { /* a host listener never breaks the city */ }
   };
   let announcedReady = false;
@@ -239,6 +249,28 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   const button = (action: string): HTMLButtonElement => element<HTMLButtonElement>(`[data-action="${action}"]`);
   const labelsLayer = element<HTMLDivElement>(".gx-diskx-labels");
   root.append(surface);
+  const show = createDiskxShow({
+    surface, labelsLayer, canvas: host.renderer.domElement, camera: host.camera, scene: host.scene, reduced, citySize: CITY_SIZE,
+    roots: () => source.roots,
+    level: () => (layout ? { focus, blocks: layout.blocks } : null),
+    setWorldVisible: (visible) => { host.world.group.visible = visible; },
+    goToPath: (path) => { const node = nodeAt(path); if (node) goTo(node); },
+    dive: (node) => dive(node, blocks.find((block) => block.node === node)),
+    overviewCamera, clearGroup, emit,
+    frame: (box, seconds) => {
+      const span = Math.max(8, box.maxX - box.minX, box.maxZ - box.minZ);
+      const center = new Vector3((box.minX + box.maxX) / 2, 0, (box.minZ + box.maxZ) / 2);
+      const at = OVERVIEW_DIRECTION.clone().multiplyScalar(span * 1.45 + box.maxY).add(center);
+      host.frameView([at.x, at.y, at.z], [center.x, Math.min(box.maxY * 0.35, 3), center.z], seconds);
+    },
+    openGroup: async (sha256, known) => {
+      const group = known ?? await readNamedGroup(sha256);
+      if (!group || disposed) return false;
+      showGroup(group);
+      if (relations.group.visible) { if (reduced) relations.seek(1); else relations.clock.play(); }
+      return true;
+    },
+  }, options.actionsHref ?? null);
 
   element('[data-janitor-availability]').textContent = janitorDemo
     ? 'Démonstration synthétique · contrat de présentation provisoire · aucun run réel'
@@ -278,6 +310,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       if (next && janitorPage && page.report.id !== janitorPage.report.id) throw new Error('Le rapport a changé. Relire depuis la première page.');
       requireJanitorVersion(page.report.generatedAt, summary.generatedAt);
       janitorPage = page; janitorState = 'ready';
+      if (!next) startShow(summary, page);
       emit('report-read', { reportGeneratedAt: page.report.generatedAt, reportId: page.report.id });
       element('[data-janitor-availability]').textContent = janitorDemo
         ? 'Démonstration synthétique · rapport fictif · aucun run réel'
@@ -353,7 +386,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     // Free space is laid out once, beside the disks, at the level where the disks are the
     // districts. Inside a disk the HUD still shows the volume's gauge; the plaza does not.
     layout = layoutDiskxCity(focus, { size: CITY_SIZE, freeVolumes: focus.path === DISKX_ALL_PATH ? volumes : [] });
-    const world = composeDiskxWorld(layout, { motes: !reduced });
+    const world = composeDiskxWorld(layout, { motes: !reduced, sky: options.embedded ? null : "clearnight" });
     const result = host.api.create(world);
     if (!result.ok) throw new Error(result.error);
     host.api.pause(false);
@@ -380,6 +413,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       else clearGroup();
       groupFrame = false;
     }
+    show.onLevel();
   }
 
   function overviewCamera(seconds: number): void {
@@ -523,24 +557,38 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       }
     } finally { refreshing = false; if (!disposed) setLoading(-1); }
   }
-  /** What the host asked to open on: the latest report, and optionally one named group. */
+  /** What the host asked to open on: the latest report, its animation list, a named group. */
   async function openRequested(): Promise<void> {
-    if (!options.janitor && !options.group) return;
-    await loadJanitor();
-    if (!options.group || disposed || !janitorPage) return;
+    if (options.janitor || options.group || options.play || params.get('play')) await loadJanitor();
+  }
+  function startShow(summary: { generatedAt: string; verifiedGroups: number; provenSavingsBytes: number }, page: JanitorGroupPage): void {
+    const requested = options.play ?? params.get('play');
+    const script = requested || (options.group ? `group-${options.group}` : DEFAULT_SHOW_SCRIPT);
     try {
-      const page = await readJanitorGroups(0, fetch, endpoints.janitorGroups, options.group);
-      if (disposed) return;
+      show.start({ reportId: page.report.id, generatedAt: page.report.generatedAt, groupsTotal: summary.verifiedGroups, savingsBytes: summary.provenSavingsBytes,
+        script, autoplay: Boolean(requested),
+        readPage: janitorDemo ? async () => JANITOR_DEMO_GROUPS : relayGroupPages(endpoints.janitorGroups) });
+    } catch (error) {
+      emit('error', { stage: 'play', message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  /** One group of the latest report by its SHA-256, checked against the report on screen. */
+  async function readNamedGroup(sha256: string): Promise<Parameters<typeof planDuplicateView>[0] | null> {
+    if (!janitorPage) return null;
+    try {
+      const page = janitorDemo ? JANITOR_DEMO_GROUPS : await readJanitorGroups(0, fetch, endpoints.janitorGroups, sha256);
+      if (disposed) return null;
       if (page.report.id !== janitorPage.report.id) throw new Error('Le rapport a changé avant la lecture du groupe. Relire le rapport.');
       requireJanitorVersion(page.report.generatedAt, janitorPage.report.generatedAt);
-      const group = page.groups.find((candidate) => candidate.sha256 === options.group);
-      if (group) showGroup(group);
-      else { element('[data-janitor-focus]').textContent = 'Ce groupe n’est pas dans le dernier rapport.'; emit("error", { stage: "group", message: "group not in the latest report" }); }
+      const group = page.groups.find((candidate) => candidate.sha256 === sha256);
+      if (group) return group;
+      element('[data-janitor-focus]').textContent = 'Ce groupe n’est pas dans le dernier rapport.'; emit("error", { stage: "group", message: "group not in the latest report" });
     } catch (error) {
-      if (disposed) return;
+      if (disposed) return null;
       element('[data-janitor-focus]').textContent = `Groupe illisible : ${error instanceof Error ? error.message : String(error)}.`;
       emit("error", { stage: "group", message: error instanceof Error ? error.message : String(error) });
     }
+    return null;
   }
   void refresh();
 
@@ -813,6 +861,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     down = null;
     if (!start || host.mode === "editor" || pending) return;
     if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 5) return;
+    if (show.click(event.clientX, event.clientY)) return;
     const block = pick(event.clientX, event.clientY);
     if (block) dive(block.node, block);
   };
@@ -975,9 +1024,11 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     }
     if (pointer.dirty && !editing && !pending) {
       pointer.dirty = false;
-      const block = pointer.inside ? pick(pointer.x, pointer.y) : null;
+      show.hover(pointer.x, pointer.y, pointer.inside);
+      const block = pointer.inside && !show.capturesPointer() ? pick(pointer.x, pointer.y) : null;
       setHovered(block?.node ?? null, block?.entityId ?? null);
     }
+    show.frame(delta);
     if (!editing) { updateLabels(); updateGroupTags(); }
   };
   const unsubscribe = host.subscribeFrame(frame);
@@ -1019,6 +1070,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
         };
       }),
       summary,
+      show: show.state(),
       janitor: { availability: janitorState, reportId: janitorPage?.report.id ?? null, synthetic: janitorDemo, candidate: janitorDemo ? JANITOR_DEMO.candidates[candidateIndex] : null, preview: relations.group.visible ? relations.clock.state() : presentation.clock.state(), visible: presentation.group.visible || relations.group.visible,
         group: groupView ? { sha256: groupView.sha256.slice(0, 12), scope: groupView.scope, keep: groupView.keepPath !== null, copies: groupView.copies.length, outside: groupOutside, places: relations.state().places, links: relations.state().links, freedBytes: groupView.freedBytes } : null },
     };
@@ -1027,8 +1079,11 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   return {
     state,
     advanceTime: (milliseconds: number) => { frame(Math.max(0, milliseconds) / 1000); return state(); },
+    show: { play: () => show.play(), pause: () => show.pause(), next: () => show.next(), previous: () => show.previous(),
+      goto: (index) => show.goto(index), setScript: (text, autoplay) => show.setScript(text, autoplay) },
     dispose: () => {
       disposed = true;
+      show.dispose();
       presentation.dispose();
       relations.dispose();
       setGroupTags([]);

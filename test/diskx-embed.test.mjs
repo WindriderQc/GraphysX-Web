@@ -40,3 +40,13 @@ test("element attributes: roots required and absolute, group is a SHA-256, focus
   assert.equal(parse({ roots: "/data", report: "2026-01-01T00:00:00Z" }).report, "2026-01-01T00:00:00.000Z");
   assert.throws(() => parse({ roots: "/data", report: "https://other.example/report" }), /report/);
 });
+
+test("play is a known animation list, normalised; actions-href is a same-origin path", () => {
+  assert.equal(parse({ roots: "/data" }).play, null);
+  assert.equal(parse({ roots: "/data", play: " Duplicates, tour-3 " }).play, "duplicates,tour-3");
+  assert.throws(() => parse({ roots: "/data", play: "duplicates,delete" }), /play/);
+  assert.equal(parse({ roots: "/data", "actions-href": "/data-toolbox?tab=janitor" }).actionsHref, "/data-toolbox?tab=janitor");
+  for (const bad of ["https://elsewhere.example/", "//elsewhere.example", "/a/../b", "javascript:alert(1)"]) {
+    assert.throws(() => parse({ roots: "/data", "actions-href": bad }), /actions-href/, bad);
+  }
+});
