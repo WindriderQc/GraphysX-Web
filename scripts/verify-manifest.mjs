@@ -37,6 +37,7 @@ export const VERIFY_SMOKES = [
   { name: "rules", tier: "core", script: "scripts/smoke-rules.mjs", covers: "rules layer: ordered checkpoints, laps, sim-time clock, document round-trip, dropped -> resync" },
   { name: "ballz", tier: "apps", script: "scripts/smoke-ballz.mjs", covers: "levels.play(): grid materialises, ball rests, walls stop it, gate + ring fire" },
   { name: "games", tier: "apps", script: "scripts/smoke-games.mjs", covers: "front door: showroom -> Games shelf -> playing a level -> back" },
+  { name: "cyber-race", tier: "apps", script: "scripts/smoke-cyber-race.mjs", covers: "Cyber Race page: Games shelf row opens it, pad menu starts a race, a full film run reaches GAME OVER, no film requests online, Quit returns to the front door" },
   { name: "archive-cup", tier: "apps", script: "scripts/smoke-archive-cup.mjs", covers: "nine-round campaign: persistent unlocks, medal totals, personal ghost, return to standings" },
   { name: "overlay", tier: "apps", script: "scripts/smoke-overlay.mjs", covers: "2D overlay layer: off by default, one shared loop, draws over 3D, round-trips" },
   { name: "surfaces", tier: "apps", script: "scripts/smoke-surfaces.mjs", covers: "generative surfaces: off by default, one shared loop (surfaceRedraws tracks frames), scene data round-trip, retune + remove" },

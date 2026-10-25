@@ -11,12 +11,16 @@ import { findDeploymentBase } from "../scripts/plan-verification.mjs";
 const names = (plan) => plan.smokes.map((smoke) => smoke.name);
 
 describe("verification by changed area", () => {
-  it("keeps the standalone Cyber Race page out of product checks and deployment", () => {
-    const plan = selectVerification(["cyber-race.html", "src/cyber-race/main.ts", "src/cyber-race/world.ts", "scripts/package-cyber-race.mjs", "scripts/extract-cyber-race-film.mjs", "scripts/install-cyber-race-gamx.mjs", "scripts/gamx/Start-CyberRace.ps1", "src/cyber-race/cyberjobe.ts", "src/cyber-race/film.ts", "docs/CYBER_RACE.md"]);
-    assert.equal(plan.mode, "static");
-    assert.equal(plan.deploy, false);
-    assert.deepEqual(names(plan), []);
-    // A neighbouring file is not swept into the rule.
+  it("ships the Cyber Race page with its own smoke and keeps its local tools off the site", () => {
+    const page = selectVerification(["cyber-race.html", "src/cyber-race/main.ts", "src/cyber-race/world.ts", "src/cyber-race/story.ts"]);
+    assert.equal(page.mode, "targeted");
+    assert.equal(page.deploy, true);
+    assert.ok(names(page).includes("cyber-race"));
+    const tools = selectVerification(["scripts/package-cyber-race.mjs", "scripts/extract-cyber-race-film.mjs", "scripts/install-cyber-race-gamx.mjs", "scripts/gamx/Start-CyberRace.ps1", "docs/CYBER_RACE.md"]);
+    assert.equal(tools.mode, "static");
+    assert.equal(tools.deploy, false);
+    assert.deepEqual(names(tools), []);
+    // A neighbouring file is not swept into either rule.
     assert.equal(selectVerification(["src/cyber-racer.ts"]).mode, "full");
   });
 

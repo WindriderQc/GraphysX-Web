@@ -93,6 +93,16 @@ export default defineConfig(({ command, mode }) => {
     publicDir: prune ? false : "public",
     plugins: prune ? [productAssets(), faceEmbed()] : command === "build" ? [faceEmbed()] : [kidxDocuments(diskx)],
     optimizeDeps: { entries: ["index.html"] },
+    // Cyber Race 1992 is a standalone page (its own renderer and loop) published beside the
+    // product at /cyber-race.html; the Games shelf links to it. See docs/CYBER_RACE.md.
+    build: {
+      rollupOptions: {
+        input: {
+          main: path.resolve("index.html"),
+          "cyber-race": path.resolve("cyber-race.html"),
+        },
+      },
+    },
     server: {
       // PORT lets a second checkout/session run its own dev server beside the default one.
       port: Number(process.env.PORT ?? 4173),
