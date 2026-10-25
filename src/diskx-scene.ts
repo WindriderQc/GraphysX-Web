@@ -148,6 +148,11 @@ export type DiskxSceneOptions = {
   label?: string;
   /** Disable the ambient emitter for reduced-motion visitors or deterministic captures. */
   motes?: boolean;
+  /**
+   * Ask for the "clearnight" skybox (six image files). Default true. The `<diskx-city>` embed
+   * passes false: a Core page serves none of GraphysX's assets, so it draws stars in code.
+   */
+  sky?: boolean;
 };
 
 /**
@@ -225,7 +230,7 @@ export function composeDiskxWorld(layout: DiskxCityLayout, options: DiskxSceneOp
     label: options.label ?? `DiskX · ${layout.focus.name}`,
     environment: {
       background: "#04060d",
-      sky: "clearnight",
+      ...(options.sky === false ? {} : { sky: "clearnight" as const }),
       lighting: { source: "studio", intensity: 0.3, yawDegrees: 0, backgroundIntensity: 0.6, backgroundBlur: 0 },
       envelope: { fogNear: size * 1.6, fogFar: size * 4.2, cameraFar: size * 9 },
       post: { bloom: { strength: 0.55, threshold: 0.68, radius: 0.5 } },

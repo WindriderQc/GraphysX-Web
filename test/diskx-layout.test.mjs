@@ -131,6 +131,8 @@ test("composeDiskxWorld emits a valid-looking v2 document whose blocks name thei
   const world = composeDiskxWorld(layout, { motes: false });
   assert.equal(world.schema, "graphysx.agent-world/v2");
   assert.ok(world.environment.post.bloom.strength > 0, "the city blooms");
+  assert.equal(world.environment.sky, "clearnight", "the GraphysX app keeps its skybox");
+  assert.equal("sky" in composeDiskxWorld(layout, { motes: false, sky: false }).environment, false, "the embed asks for no skybox files");
   const ids = new Set();
   for (const entity of world.entities) {
     assert.ok(entity.id && !ids.has(entity.id), `unique id ${entity.id}`);
