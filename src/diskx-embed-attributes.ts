@@ -1,5 +1,6 @@
 /** Attribute rules of `<diskx-city>`, kept apart from the element so Node tests can run them. */
 import type { DiskxEndpoints } from "./diskx-source";
+import { parseShowScript, showScriptText } from "./diskx-show-script";
 
 /** Core's Data Toolbox routes under a same-origin base path such as `/api/data-toolbox`. */
 export function coreEndpoints(apiBase: string): DiskxEndpoints {
@@ -26,6 +27,18 @@ export function parseDiskxCityAttributes(read: (name: string) => string | null) 
   const janitor = read("janitor") === "latest" ? "latest" as const : null;
   const report = read("report");
   if (report && (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(report) || !Number.isFinite(Date.parse(report)))) throw new Error("report must be a UTC report date");
+  const play = parsePlayAttribute(read("play"));
+  const actionsHref = read("actions-href");
+  if (actionsHref && (!/^\/[A-Za-z0-9._~\/-]{0,200}(?:\?[A-Za-z0-9._~=&%-]{0,200})?$/.test(actionsHref) || actionsHref.startsWith("//") || actionsHref.includes(".."))) {
+    throw new Error("actions-href must be a same-origin path");
+  }
   return { endpoints, roots: [...new Set(roots)], group: group || null, focus: focus || null, janitor,
-    report: report ? new Date(report).toISOString() : null };
+    report: report ? new Date(report).toISOString() : null, play, actionsHref: actionsHref || null };
+}
+
+/** The `play` animation list, normalised, or null when absent. Unknown steps are refused. */
+export function parsePlayAttribute(value: string | null): string | null {
+  if (value === null || value.trim() === "") return null;
+  try { return showScriptText(parseShowScript(value)); }
+  catch (error) { throw new Error(`play: ${error instanceof Error ? error.message : String(error)}`); }
 }
