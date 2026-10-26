@@ -17,6 +17,7 @@
 import { mountDiskxApp, type DiskxApplication } from "./diskx-app";
 import { parseDiskxCityAttributes, parsePlayAttribute } from "./diskx-embed-attributes";
 import { PlatformHost } from "./platform-host";
+import "./ecosystem-embed";
 
 /**
  * A default box for the element, at zero specificity and first in <head>: any rule of the host
