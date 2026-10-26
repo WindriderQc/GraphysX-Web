@@ -50,6 +50,12 @@ of him, then GAME OVER.
 knife-edge slot +500, blades +450, bars/logs +250, lightning beam +300, tunnel plate +200,
 chrome ring +1000.
 
+**Menu card.** Under the icon panel, a card describes the focused button (keyboard, pad or
+mouse pointer): its category, name, a one-line explanation and its state (chosen, on/off,
+flight-stick/arcade, story progress). Below it, five chips sum up the race to come (boards,
+course, level, mode, record for that combination); the chip of the focused group lights up.
+Keycaps recall A / Start / ?, and two lights show connected pads and a VR headset.
+
 The HUD follows the film's game: green five-digit score, yellow chevron turbo gauge, blue gloves,
 red lock-on marks around the rival, white-pink flares on turbo (00:40:54), and a white flash into
 the red **GAME OVER** on brushed silver (00:41:25). The film's thin sighting lines are an option
@@ -88,9 +94,16 @@ urgency rising with Cyberjobe's countdown. English call-outs ("Three, two, one, 
 | | Jobe (left) | Peter (right) |
 | --- | --- | --- |
 | Fly | W A S D (Z Q S D on AZERTY) | arrows |
+| Up / down style | menu, row 4, stick button **1** | menu, row 4, stick button **2** |
 | Turbo | Space or Left Shift | Right Shift, Enter or Numpad 0 |
 | Knife-edge | Q / E | comma / period (or Numpad 1 / 3) |
 | Xbox pad | pad 1: stick or d-pad, turbo A / RT, knife-edge LB / RB | pad 2: same |
+
+**Up / down** defaults to the flight-stick style: pull back (S, down arrow, stick down) to
+climb, push forward to dive. Each pilot can switch to the arcade style (stick up climbs) with
+their stick button in the menu's fourth row; the choice is saved, applies to keyboard, Xbox pad
+and Quest controllers, and never changes menu navigation. The help panel shows each pilot's
+current keys.
 
 Fly flat through horizontal gaps (blades) and on your side through vertical slots: the pilot's
 extent across a gap depends on its roll. Menus: d-pad or stick, **A** confirm, **B** back,

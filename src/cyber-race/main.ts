@@ -33,7 +33,6 @@ const LEVELS: Array<{ label: string; diff: Difficulty }> = [
 
 const MODES = ["2 JOUEURS", "1 JOUEUR CONTRE L'ORDINATEUR"];
 const PLAN_KEYS = ["film", "extended", "ultimate"] as const;
-const PLAN_LABELS = ["3 TABLEAUX DU FILM", "7 TABLEAUX", "9 TABLEAUX (+ INSPIRÉS)"];
 
 const CRUISE = 62;
 const BOOST = 50;
@@ -606,10 +605,15 @@ interface Settings {
   sound: boolean;
   /** The film's sighting lines across the HUD (off by default). */
   crosshair: boolean;
+  /**
+   * Per pilot (Jobe, Peter): flight-stick style, pull back to climb. On by default; off is the
+   * arcade style, stick up to climb. Applies to keyboard, pads and Quest, never to menus.
+   */
+  invertY: [boolean, boolean];
 }
 
 const SETTINGS_KEY = "graphysx.cyberRace.settings";
-const settings: Settings = { course: 1, level: 1, mode: 0, plan: 0, sound: true, crosshair: false };
+const settings: Settings = { course: 1, level: 1, mode: 0, plan: 0, sound: true, crosshair: false, invertY: [true, true] };
 try {
   const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null") as Partial<Settings> | null;
   if (saved && typeof saved === "object") {
@@ -621,6 +625,10 @@ try {
     settings.plan = pick(saved.plan, PLAN_KEYS.length - 1, settings.plan);
     settings.sound = typeof saved.sound === "boolean" ? saved.sound : settings.sound;
     settings.crosshair = typeof saved.crosshair === "boolean" ? saved.crosshair : settings.crosshair;
+    const inv = saved.invertY;
+    if (Array.isArray(inv)) {
+      settings.invertY = [typeof inv[0] === "boolean" ? inv[0] : true, typeof inv[1] === "boolean" ? inv[1] : true];
+    }
   }
 } catch {
   // Storage unavailable or corrupt: keep defaults.
@@ -643,6 +651,11 @@ const resultsEl = document.getElementById("results") as HTMLDivElement;
 const dividerEl = document.getElementById("divider") as HTMLDivElement;
 const captionEl = document.getElementById("menu-caption") as HTMLDivElement;
 const statusEl = document.getElementById("menu-status") as HTMLDivElement;
+const detailScreen = document.getElementById("d-screen") as HTMLDivElement;
+const detailKicker = document.getElementById("d-kicker") as HTMLSpanElement;
+const detailState = document.getElementById("d-state") as HTMLSpanElement;
+const detailTitle = document.getElementById("d-title") as HTMLDivElement;
+const detailText = document.getElementById("d-text") as HTMLDivElement;
 const toastEl = document.getElementById("toast") as HTMLDivElement;
 let toastTimer = 0;
 
@@ -1112,7 +1125,10 @@ const tmpE = new THREE.Euler();
 const sparkColor = new THREE.Color();
 
 function pilotInput(p: Pilot): PilotInput {
-  return p.cpu || p.autopilot ? cpuInput(p) : input.pilot(p.index);
+  if (p.cpu || p.autopilot) return cpuInput(p);
+  const control = input.pilot(p.index);
+  if (settings.invertY[p.index]) control.y = -control.y;
+  return control;
 }
 
 function cpuInput(p: Pilot): PilotInput {
@@ -1750,6 +1766,137 @@ const menuButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("#me
 let focusIndex = menuButtons.findIndex((b) => b.dataset.action === "start");
 type MenuGroup = "course" | "level" | "mode" | "plan";
 
+interface ButtonDetail {
+  kicker: string;
+  title: string;
+  text: string;
+  /** Short state tag; `on` tints it green, `off` red, undefined neutral. */
+  state?: string;
+  on?: boolean;
+}
+
+const COURSE_TEXT = [
+  "600 m par tableau. Une course éclair.",
+  "1 000 m par tableau. La longueur de la course du film.",
+  "1 500 m par tableau. Pour les pilotes endurants.",
+  "2 300 m par tableau. L'épreuve d'endurance."
+];
+const LEVEL_TEXT = [
+  "Peu d'obstacles, plaques lentes. Pour découvrir le jeu.",
+  "La densité d'obstacles du film.",
+  "Plus d'obstacles, des plaques plus larges qui tournent plus vite.",
+  "Deux fois plus d'obstacles. Seuls les meilleurs passent."
+];
+const PLAN_TEXT = [
+  ["LES 3 TABLEAUX DU FILM", "Tunnel, champ de mines, cristaux : la course exacte du film (00:40:17)."],
+  ["7 TABLEAUX", "Le film, puis terres hostiles, kaléidoscope, vague d'or et le vortex final contre Cyberjobe."],
+  ["9 TABLEAUX", "Les 7 tableaux, plus le réseau et la fournaise, inspirés du film, avant la finale."]
+];
+const MODE_TEXT = [
+  ["2 JOUEURS", "Écran partagé : Jobe à gauche, Peter à droite. Deux manettes, ou un clavier à deux."],
+  ["1 JOUEUR", "Vous êtes Jobe. Peter est piloté par l'ordinateur."]
+];
+const PILOT_NAMES = ["JOBE", "PETER"];
+
+function pilotStyle(index: number): ButtonDetail {
+  const avion = settings.invertY[index];
+  return {
+    kicker: `PILOTAGE · JOUEUR ${index + 1}`,
+    title: `HAUT / BAS · ${PILOT_NAMES[index]}`,
+    text: avion
+      ? "Style avion : tirez le manche vers vous pour monter, poussez pour descendre. A pour passer en arcade."
+      : "Style arcade : poussez vers le haut pour monter. A pour passer en style avion.",
+    state: avion ? "AVION" : "ARCADE",
+    on: true
+  };
+}
+
+function describe(b: HTMLButtonElement): ButtonDetail {
+  const value = Number(b.dataset.value);
+  const chosen = (group: MenuGroup): Pick<ButtonDetail, "state" | "on"> =>
+    settings[group] === value ? { state: "CHOISI", on: true } : { state: "A POUR CHOISIR" };
+  switch (b.dataset.group as MenuGroup | undefined) {
+    case "course":
+      return { kicker: "PARCOURS", title: `PARCOURS ${COURSES[value].label}`, text: COURSE_TEXT[value], ...chosen("course") };
+    case "level":
+      return { kicker: "NIVEAU", title: LEVELS[value].label, text: LEVEL_TEXT[value], ...chosen("level") };
+    case "plan":
+      return { kicker: "TABLEAUX", title: PLAN_TEXT[value][0], text: PLAN_TEXT[value][1], ...chosen("plan") };
+    case "mode":
+      return { kicker: "MODE DE JEU", title: MODE_TEXT[value][0], text: MODE_TEXT[value][1], ...chosen("mode") };
+  }
+  switch (b.dataset.action) {
+    case "start":
+      return { kicker: "DÉPART", title: "LANCER LA COURSE", text: "La boule noire du film. A ou START pour partir avec ces réglages." };
+    case "help":
+      return { kicker: "AIDE", title: "COMMANDES", text: "Les touches du clavier, la manette Xbox et le casque VR." };
+    case "sound":
+      return { kicker: "OPTION", title: "SON", text: "Musique synthé par tableau, effets et voix.", state: settings.sound ? "ACTIVÉ" : "COUPÉ", on: settings.sound };
+    case "fullscreen":
+      return { kicker: "OPTION", title: "PLEIN ÉCRAN", text: "Le jeu occupe tout l'écran. F11 marche aussi.", state: document.fullscreenElement ? "ACTIVÉ" : "DÉSACTIVÉ", on: Boolean(document.fullscreenElement) };
+    case "vr":
+      return {
+        kicker: "CASQUE VR",
+        title: "QUEST PAR LINK",
+        text: vrSupported ? "Un joueur contre l'ordinateur, assis derrière Jobe. A pour mettre le casque." : "Branchez le Quest, lancez Meta Quest Link et activez Link.",
+        state: vrSupported ? "PRÊT" : "NON DÉTECTÉ",
+        on: vrSupported
+      };
+    case "quit":
+      return {
+        kicker: "QUITTER",
+        title: "QUITTER LE JEU",
+        text: window.location.protocol.startsWith("http") ? "Retour à l'accueil GraphysX." : "Fermer la fenêtre du jeu."
+      };
+    case "crosshair":
+      return {
+        kicker: "OPTION",
+        title: "RÉTICULE DU FILM",
+        text: "Les fines lignes de visée de l'écran du film, pour un réalisme total.",
+        state: settings.crosshair ? "ACTIVÉ" : "DÉSACTIVÉ",
+        on: settings.crosshair
+      };
+    case "story":
+      return {
+        kicker: "MODE HISTOIRE",
+        title: "L'HISTOIRE DE JOBE",
+        text: "Le film en 7 chapitres, chacun avec son objectif. Chaque réussite rend Jobe plus rapide.",
+        state: `${storyProgress.completed} / ${CHAPTERS.length}`,
+        on: storyProgress.completed > 0
+      };
+    case "invert":
+      return pilotStyle(Number(b.dataset.player));
+  }
+  return { kicker: "", title: b.title.toUpperCase(), text: "" };
+}
+
+let detailShown: HTMLButtonElement | null = null;
+
+function refreshDetail(): void {
+  const b = menuButtons[focusIndex];
+  const d = describe(b);
+  detailKicker.textContent = d.kicker;
+  detailTitle.textContent = d.title;
+  detailText.textContent = d.text;
+  detailState.textContent = d.state ?? "";
+  detailState.className = `d-state${d.on === true ? " on" : d.on === false ? " off" : ""}`;
+  if (detailShown !== b) {
+    detailShown = b;
+    detailScreen.classList.remove("flash");
+    void detailScreen.offsetWidth;
+    detailScreen.classList.add("flash");
+  }
+  // The loadout chip of the focused group lights up.
+  const group = b.dataset.group ?? "";
+  for (const chip of captionEl.querySelectorAll<HTMLElement>(".chip")) {
+    chip.classList.toggle("lit", chip.dataset.group === group);
+  }
+}
+
+function chip(group: string, label: string, value: string): string {
+  return `<span class="chip" data-group="${group}"><i>${label}</i><b>${value}</b></span>`;
+}
+
 function refreshMenu(): void {
   for (const b of menuButtons) {
     const group = b.dataset.group as MenuGroup | undefined;
@@ -1771,14 +1918,30 @@ function refreshMenu(): void {
     if (b.dataset.action === "fullscreen") {
       b.classList.toggle("selected", Boolean(document.fullscreenElement));
     }
+    if (b.dataset.action === "invert") {
+      b.classList.toggle("selected", settings.invertY[Number(b.dataset.player)]);
+    }
     b.classList.toggle("focus", menuButtons[focusIndex] === b);
   }
   document.body.classList.toggle("crosshair", settings.crosshair);
-  captionEl.textContent = `${PLAN_LABELS[settings.plan]} · PARCOURS ${COURSES[settings.course].label} · ${LEVELS[settings.level].label} · ${MODES[settings.mode]}`;
   const best = loadRecord(recordKey(settings.plan, settings.course, settings.level));
-  captionEl.textContent += best ? ` · RECORD ${formatTime(best.time)} (${best.name})` : "";
+  captionEl.innerHTML =
+    chip("plan", "TABLEAUX", ["3 · FILM", "7", "9 · INSPIRÉS"][settings.plan]) +
+    chip("course", "PARCOURS", COURSES[settings.course].label) +
+    chip("level", "NIVEAU", LEVELS[settings.level].label) +
+    chip("mode", "MODE", ["2 JOUEURS", "1 JOUEUR"][settings.mode]) +
+    chip("record", "RECORD", best ? `${formatTime(best.time)} · ${best.name}` : "—");
   const pads = input.padCount();
-  statusEl.textContent = `MANETTES : ${pads} · CASQUE VR : ${vrSupported ? "PRÊT (BOUTON LUNETTES)" : "NON DÉTECTÉ"}`;
+  statusEl.innerHTML =
+    `<span class="led${pads > 0 ? " on" : ""}">${pads} MANETTE${pads > 1 ? "S" : ""}</span>` +
+    `<span class="led${vrSupported ? " on" : ""}">CASQUE VR</span>`;
+  for (const i of [0, 1]) {
+    const cell = document.getElementById(`help-y-${i}`);
+    if (!cell) continue;
+    const [up, down] = i === 0 ? ["W (Z en AZERTY)", "S"] : ["↑", "↓"];
+    cell.textContent = settings.invertY[i] ? `${down} monte · ${up} descend (style avion)` : `${up} monte · ${down} descend (style arcade)`;
+  }
+  refreshDetail();
 }
 
 function toggleFullscreen(): void {
@@ -1811,6 +1974,9 @@ function activate(b: HTMLButtonElement): void {
   } else if (action === "story") {
     openStory();
     return;
+  } else if (action === "invert") {
+    const i = Number(b.dataset.player);
+    settings.invertY[i] = !settings.invertY[i];
   } else if (action === "crosshair") {
     settings.crosshair = !settings.crosshair;
     toast(settings.crosshair ? "Réticule du film activé" : "Réticule du film désactivé", 2);
@@ -1838,6 +2004,12 @@ for (const [i, b] of menuButtons.entries()) {
   b.addEventListener("click", () => {
     focusIndex = i;
     activate(b);
+  });
+  // The mouse also moves the focus, so the card describes what is under the pointer.
+  b.addEventListener("mouseenter", () => {
+    if (focusIndex === i) return;
+    focusIndex = i;
+    refreshMenu();
   });
 }
 helpEl.addEventListener("click", () => helpEl.classList.add("hidden"));
