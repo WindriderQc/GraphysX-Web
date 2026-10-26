@@ -67,8 +67,12 @@ Dans la ville, le libre est **une tuile translucide par volume, au niveau « Tou
 disques »**, à la même échelle octets → surface que les disques ; il n'est jamais dessiné
 dans un dossier, parce qu'il appartient au volume et serait compté deux fois. Le HUD
 affiche la jauge du volume (utilisé / capacité / libre) à tous les niveaux, ou « capacité
-inconnue » quand l'agent n'a publié aucun volume pour ces racines. L'infobulle de la jauge
-dit la méthode, la date, l'hôte et la note de l'agent.
+inconnue » quand l'agent n'a publié aucun volume pour ces racines. Un volume qui ne porte
+aucune racine de la ville est écarté (`sanitiseVolumes`), pour qu'une tuile libre siège
+toujours à côté d'un disque qu'elle sert. La jauge se nomme `label · host` et porte sous sa
+barre une ligne de provenance visible (« Mesuré (statfs) le … · note de l'agent »), parce
+qu'une infobulle n'apparaît pas sur un écran tactile ; l'infobulle se réduit à
+`id · type de système de fichiers`.
 
 ## Branchement
 

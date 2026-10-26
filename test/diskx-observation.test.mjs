@@ -55,7 +55,7 @@ test('live volumes come from storage/summary as the storage agent publishes them
   const volumes = await live.volumes();
   assert.deepEqual(calls, ['/diskx-api/summary'], 'no separate volumes endpoint is asked for');
   assert.deepEqual(volumes, [{ id: 'ugfrank:media/media', label: 'Media/Media', roots: ['/mnt/datalake', '/mnt/media'], capacityBytes: 7380882554880, freeBytes: 4923464220672,
-    source: 'measured', measuredAt: '2026-10-26T00:59:32.656Z', host: 'UGFrank', method: 'statfs', note: 'dataset, not pool' }]);
+    source: 'measured', measuredAt: '2026-10-26T00:59:32.656Z', host: 'UGFrank', method: 'statfs', filesystemType: 'zfs', note: 'dataset, not pool' }]);
   const silent = createLiveSource(summary({ totalFiles: 1, totalSize: 1 }), ['/mnt/datalake'], 'test');
   assert.deepEqual(await silent.volumes(), [], 'a summary without volumes is unknown capacity, not the fixture');
   const core = createLiveSource(summary({ totalFiles: 1, totalSize: 1, volumes: published }), ['/mnt/media'], 'core',
