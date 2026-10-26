@@ -4905,6 +4905,37 @@ screen).
 - Kept `codex/kidx-voice-integration` unmerged on purpose and wrote `docs/KIDX_VOICE_BRANCH.md`: where the work is, its exact AgentX touchpoints (relay route map, pinned session shape, assumed Family contract v1 and VoiX routes), why it is parked (three coexisting AgentX access patterns while that boundary is being corrected), the decisions it waits on, and the three-file merge conflict to expect. HANDOFF item 1 and the access table point there.
 - Local only until the PR: no deployment implied, docs and Node-only changes, no 3D checks apply.
 
+## 2026-10-25 — DiskX reads volumes from AgentX Data's summary (America/Toronto)
+
+The storage agent on UGFrank (`ugfrank-storage`, `storage-1.5.0`) now measures its mounts with
+statfs and publishes them as `volumes` inside `storage/summary` (and `storage/agents`): one
+entry for `/mnt/media` + `/mnt/datalake` on the ZFS dataset `Media/Media`, with `host`,
+`method`, `measuredAt`, filesystem and the agent's note that statfs reports the dataset's used
+plus available, not the pool. Probed 2026-10-25 21:00 America/Toronto on the public gateway.
+
+- `diskx-source.ts`: the live `volumes()` reads `summary.data.volumes` through the same
+  sanitiser as before (unknown `source`, zero capacity dropped) and now keeps `host` and
+  `method`. The `DiskxEndpoints.volumes` slot is gone, so a Core page gets the volumes from
+  its own `storage/summary` route with nothing added to the embed contract.
+- `scripts/diskx-server.mjs`: `DISKX_VOLUMES`, `parseBytes`, statfs and the `/diskx-api/volumes`
+  endpoint are removed; the relay declares and measures nothing. `vite.config.ts` only reads
+  `DISKX_DATA_URL` now. `config` no longer reports a volumes count.
+- HUD: the "unknown capacity" message names the storage agent instead of a variable to set;
+  gauge and free-tile tooltips add the method and host ("Mesuré (statfs) le … sur UGFrank").
+- Tests: the `DISKX_VOLUMES` parsing test is replaced by a live-source contract on the exact
+  payload the agent returned (`test/diskx-observation.test.mjs`); the route test asserts
+  `/diskx-api/volumes` is a 404 and `config` carries no count. `smoke:diskx-janitor` mocks a
+  volume inside its summary and reads the gauge, the tooltip and the refresh.
+- Docs: DISKX.md (section rewritten; the fixture's volume is fictitious, not the 2026-10-24
+  zpool numbers the doc claimed), DISKX_EMBED.md, DISKX_JANITOR.md.
+- Validation, worktree `claude/diskx-volumes-graphysx-web-b441c6`, 2026-10-25 21:00–21:20
+  America/Toronto: `tsc --noEmit`, scoped eslint, `npm test` (661 pass, 1 pre-existing skip),
+  `smoke:diskx`, `smoke:diskx-janitor`, `smoke:diskx-embed` all PASS on the worktree build.
+  Live evidence: the build served with the relay pointed at the public gateway shows one
+  measured volume, the free tile "libre · Media/Media 4.5 To" beside the two disks and the
+  gauge "2.2 To utilisés sur 6.7 To · 33 %", tooltip "Mesuré (statfs) le 25 oct. 2026 … sur
+  UGFrank" (`output/diskx-live-volumes.png`, inspected). No full gate: the change is confined
+  to the DiskX journey. Not committed in that session.
 ## 2026-10-25 (America/Toronto) — Nestor proposals from AgentX Core: vocabulary, request field, Core route
 
 Owner decision read from the code that morning: the "local Nestor brain" was three scripted
@@ -4998,3 +5029,17 @@ copy of the API; the three demonstrations stay as the fallback when no provider 
 ## 2026-10-26 — Black and white flocks
 
 - Restore the owner's preferred contrast: dark starling silhouettes above the landscape and a white orbital swarm with white trails around CubX. Counts, motion and geometry stay the same.
+
+## 2026-10-26 (America/Toronto) — DiskX volumes: free tiles beside the disks they serve, visible provenance
+
+- PR #74 (another session) delivered the bulk of reading volumes from AgentX Data's
+  `storage/summary` and removing `DISKX_VOLUMES`; PR #62 was rebuilt on top of it as this
+  delta only. `sanitiseVolumes` (`src/diskx-source.ts`, now exported) takes the city's roots
+  and drops a volume that holds none of them, so a free tile always sits beside a disk it
+  serves; `filesystemType` is read from the agent's `filesystem.type`. The HUD gauge is named
+  `label · host` and carries a visible provenance line under the bar (« Mesuré (statfs) le … ·
+  note ZFS de l'agent »), since a tooltip never shows on a touch screen; the tooltip is reduced
+  to `id · filesystemType`.
+- Checks: `test/diskx-source.test.mjs` (new, 3), `diskx-observation`, `diskx-route`,
+  `diskx-embed`, `diskx-layout`; `tsc`, scoped eslint; `smoke-diskx` and `smoke-diskx-embed`
+  (two volumes in the mocked summary, one kept, gauge « pool/data · core », provenance line).

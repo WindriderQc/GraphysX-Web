@@ -38,7 +38,11 @@ try {
     if (url.pathname.startsWith("/api/data-toolbox/")) {
       requests.push(`${request.method()} ${url.pathname}${url.search}`);
       const name = url.pathname.slice("/api/data-toolbox/".length);
-      if (name === "storage/summary") return route.fulfill(ok({ totalFiles: 30, totalSize: 3000, lastScan: { finished_at: "2026-10-25T00:00:00Z" } }));
+      // Two volumes in the summary, as Data publishes them; only the one holding /data may be drawn.
+      if (name === "storage/summary") return route.fulfill(ok({ totalFiles: 30, totalSize: 3000, lastScan: { finished_at: "2026-10-25T00:00:00Z" }, volumes: [
+        { id: "core:pool/data", label: "pool/data", host: "core", roots: ["/data"], capacityBytes: 6144, freeBytes: 2048, source: "measured", method: "statfs", measuredAt: "2026-10-25T00:00:00Z", filesystem: { type: "zfs", mountSource: "pool/data", mountPoint: "/data", device: "0:1" }, scannerIds: ["core-storage"], note: "ZFS statfs reports this dataset's used plus available space, not the pool size." },
+        { id: "core:other", label: "other", host: "core", roots: ["/elsewhere"], capacityBytes: 100, freeBytes: 50, source: "measured", method: "statfs", measuredAt: "2026-10-25T00:00:00Z", filesystem: { type: "ext4" }, scannerIds: ["core-storage"] },
+      ] }));
       if (name === "storage/tree") return route.fulfill(ok({ truncated: false, tree: [
         { path: "/data/a", fileCount: 10, totalSize: 1000 }, { path: "/data/b", fileCount: 10, totalSize: 1000 }, { path: "/data/c", fileCount: 10, totalSize: 1000 },
       ] }));
@@ -87,6 +91,23 @@ try {
   const state = await page.evaluate(() => document.querySelector("diskx-city").state());
   assert.equal(state.source, "live");
   assert.equal(state.janitor.group.keep, true);
+  // Volumes from Core's summary: the one holding the city's root is kept, the other is not drawn;
+  // the gauge names label · host and shows its provenance line under the bar.
+  const city = await page.evaluate(() => {
+    const el = document.querySelector("diskx-city");
+    const app = el.state();
+    return { volumes: app.volumes.map((v) => [v.id, v.capacityBytes, v.freeBytes, v.source]), focus: app.focus.path,
+      freeDistricts: app.districts.filter((d) => d.path.startsWith("diskx://free/")).map((d) => d.path),
+      gauges: [...el.querySelectorAll(".gx-diskx-gauge")].map((g) => ({ name: g.querySelector(".name").textContent, free: g.querySelector(".free").textContent, provenance: g.querySelector(".provenance").textContent, title: g.title })) };
+  });
+  assert.deepEqual(city.volumes, [["core:pool/data", 6144, 2048, "measured"]], "the volume holding none of the roots is dropped");
+  // The group opens the city inside its folder; the free tile lives at the top level only, the gauge everywhere.
+  assert.deepEqual(city.freeDistricts, city.focus === "diskx://all" ? ["diskx://free/core:pool/data"] : [], `free tile only beside the disks (focus ${city.focus})`);
+  assert.equal(city.gauges.length, 1);
+  assert.equal(city.gauges[0].name, "pool/data · core");
+  assert.equal(city.gauges[0].free, "2.0 Ko libres");
+  assert.match(city.gauges[0].provenance, /^Mesuré \(statfs\) le .+ · ZFS statfs reports/, "method, date and the agent's caveat under the bar");
+  assert.equal(city.gauges[0].title, "core:pool/data · zfs");
   assert.equal(await page.locator('[data-action="exit"]').isHidden(), true, "no exit button inside a host page");
   assert.equal(await page.locator("[data-janitor-demo-link]").isHidden(), true, "no demo link inside a host page");
   assert.ok(!(await page.content()).includes("Démonstration synthétique"), "no synthetic city on a Core page");

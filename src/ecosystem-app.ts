@@ -13,6 +13,7 @@
  */
 import { Box3, BoxGeometry, EdgesGeometry, Group, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, Raycaster, RingGeometry, SphereGeometry, TubeGeometry, Vector2, Vector3 } from "three";
 import "./ecosystem.css";
+import { foldPresentationPanel } from "./presentation-mobile";
 import { ecoIssues, ecoNode, ECOSYSTEM_SNAPSHOT_DATE, ECOSYSTEM_SOURCE, type EcoNode } from "./ecosystem-data";
 import { composeEcosystemWorld, ECO_COLOURS, ECO_HALF, ECO_NODE_TAG, ecoNodeIdOf, KIND_COLOUR, STATUS_COLOUR, type EcoModel } from "./ecosystem-scene";
 import { createTourPlayer, DEFAULT_TOUR, parseTour, tourPicture, tourStepLabel, tourText, type TourPicture, type TourStep } from "./ecosystem-tour";
@@ -86,6 +87,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   const labelsLayer = element<HTMLDivElement>(".gx-eco-labels");
   element(".gx-eco-sub").textContent = `${ECOSYSTEM_SOURCE} · carte datée, sans état en direct`;
   root.append(surface);
+  foldPresentationPanel(element(".gx-eco-nestor"), "Nestor · Détails de l’étape");
 
   // ---- the house --------------------------------------------------------------------------
   // Composed at once from primitives; recomposed with the vendored models once the manifest
@@ -338,7 +340,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   const onKey = (event: KeyboardEvent): void => {
     if (event.defaultPrevented || host.mode === "editor") return;
     const target = event.target as HTMLElement | null;
-    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.tagName === "BUTTON")) return;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.tagName === "BUTTON" || target.tagName === "SUMMARY" || target.tagName === "A")) return;
     if (event.key === "Escape") { event.preventDefault(); closeAdhoc(); }
     else if (event.key === "ArrowRight") { event.preventDefault(); button("next").click(); }
     else if (event.key === "ArrowLeft") { event.preventDefault(); button("previous").click(); }
@@ -399,7 +401,9 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     }
     candidates.sort((a, b) => b.priority - a.priority || a.y - b.y);
     const placed: Placed[] = [];
+    const mobileBudget = rect.width <= 820 ? 6 : Infinity;
     for (const candidate of candidates) {
+      if (placed.length >= mobileBudget) { candidate.element.style.opacity = "0"; continue; }
       // Projected anchors can sit at the viewport edge; keep the whole label inside it.
       const margin = 8;
       candidate.x = Math.max(margin + candidate.width / 2, Math.min(rect.width - margin - candidate.width / 2, candidate.x));

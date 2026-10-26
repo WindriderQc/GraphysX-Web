@@ -41,8 +41,9 @@ par défaut a une spécificité nulle et ne gagne jamais contre celui de la page
 
 `storage/summary`, `storage/tree?root&limit`, `storage/files?root&limit&sort`,
 `janitor/strategy/latest`, `janitor/strategy/latest/groups?offset&limit` et `?sha256=` pour un
-groupe nommé. Pas de capacité de volume : la tuile d'espace libre reste absente tant que Data ne
-l'expose pas.
+groupe nommé. La capacité et le libre des volumes arrivent dans `storage/summary` (champ
+`volumes`, mesuré par l'agent de stockage) : la tuile d'espace libre et la jauge apparaissent
+sur une page Core sans route de plus, et restent absentes quand l'agent n'a rien publié.
 
 ## Présentation Janitor (`play`)
 
@@ -70,7 +71,8 @@ scène ne change pas et « Tout remettre » efface les gestes. L'élément expos
 
 Le registre lit les groupes vérifiés par pages de 50, du plus gros au plus petit, 5 000 au plus,
 et affiche sa couverture (sur le rapport du 2026-10-25 : 97,6 % des octets en double). Les
-chiffres portent toujours sur les groupes lus. Mentions toujours affichées : rien n'est lancé,
+chiffres portent toujours sur les groupes lus. Sur mobile, la légende complète et le commentaire
+de l’étape sont dans les détails repliables ; une mention courte reste visible. Mentions : rien n'est lancé,
 approuvé, déplacé ni supprimé ; la règle de conservation n'est pas une autorisation ; octets
 logiques, espace physique libéré non mesuré. Les décisions et les actions passent par Data.
 
@@ -82,6 +84,22 @@ Ils remontent du DOM : `diskx-ready` {source, roots, totalFiles, totalSize},
 `diskx-coverage` {groupsRead, groupsTotal, bytesCovered, bytesTotal, complete, capped, failed} et
 `diskx-block-selected` {path, name, extraBytes, keepBytes, unresolvedBytes, groups}.
 Ce sont des reçus de présentation : aucun ne prouve qu'un fichier a été déplacé ou supprimé.
+
+## Mobile et première frame
+
+DiskX et `<agentx-ecosystem>` réutilisent le même contrôle de détails repliables.
+À 820 pixels et moins, les détails et options sont fermés au départ ; les
+commandes de lecture restent en bas, les labels sont réduits et limités. Sur
+bureau les détails restent ouverts. Le clavier peut ouvrir/fermer les détails
+sans déclencher les raccourcis de la visite.
+
+`diskx-first-frame` et `ecosystem-first-frame` remontent une fois par montage,
+après le rendu par la boucle existante du moteur. Leur champ `at` utilise
+`performance.timeOrigin + performance.now()`. DiskX attend le groupe demandé
+si l'attribut `group` est présent, sinon la ville prête. Le reçu de DiskX porte
+aussi `mountToFrameMs`. Un démontage retire l'observateur. Ces événements ne
+signifient ni fin de chargement du document, ni réception sur un écran physique,
+ni résultat Nestor. Core mesure séparément ces étapes avec son propre lecteur.
 
 ## Vérification
 

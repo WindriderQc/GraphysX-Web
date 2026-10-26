@@ -41,6 +41,27 @@ test('missing completeness is never treated as complete; live roots come from se
   const configured = await resolveDiskxSource({ fetchImpl: async () => new Response(JSON.stringify({ enabled: true, roots: ['/configured'] })) });
   assert.deepEqual(configured.roots, ['/configured']);
 });
+test('live volumes come from storage/summary as the storage agent publishes them, or are unknown', async () => {
+  // The shape AgentX Data returned on 2026-10-25 (ugfrank-storage 1.5.0), plus two entries the city must not draw.
+  const published = [
+    { id: 'ugfrank:media/media', label: 'Media/Media', host: 'UGFrank', roots: ['/mnt/datalake', '/mnt/media'], capacityBytes: 7380882554880, freeBytes: 4923464220672,
+      source: 'measured', method: 'statfs', measuredAt: '2026-10-26T00:59:32.656Z', filesystem: { type: 'zfs' }, scannerIds: ['ugfrank-storage'], note: 'dataset, not pool' },
+    { id: 'guessed', roots: ['/mnt/x'], capacityBytes: 10, freeBytes: 1, source: 'estimated' },
+    { id: 'empty', roots: ['/mnt/y'], capacityBytes: 0, freeBytes: 0, source: 'measured' },
+  ];
+  const calls = [];
+  const summary = (data) => async (url) => { calls.push(String(url)); return new Response(JSON.stringify({ status: 'success', data })); };
+  const live = createLiveSource(summary({ totalFiles: 1, totalSize: 1, volumes: published }), ['/mnt/datalake', '/mnt/media'], 'test');
+  const volumes = await live.volumes();
+  assert.deepEqual(calls, ['/diskx-api/summary'], 'no separate volumes endpoint is asked for');
+  assert.deepEqual(volumes, [{ id: 'ugfrank:media/media', label: 'Media/Media', roots: ['/mnt/datalake', '/mnt/media'], capacityBytes: 7380882554880, freeBytes: 4923464220672,
+    source: 'measured', measuredAt: '2026-10-26T00:59:32.656Z', host: 'UGFrank', method: 'statfs', filesystemType: 'zfs', note: 'dataset, not pool' }]);
+  const silent = createLiveSource(summary({ totalFiles: 1, totalSize: 1 }), ['/mnt/datalake'], 'test');
+  assert.deepEqual(await silent.volumes(), [], 'a summary without volumes is unknown capacity, not the fixture');
+  const core = createLiveSource(summary({ totalFiles: 1, totalSize: 1, volumes: published }), ['/mnt/media'], 'core',
+    { summary: '/api/data-toolbox/storage/summary', tree: '/api/data-toolbox/storage/tree', files: '/api/data-toolbox/storage/files', janitorStrategy: '/x', janitorGroups: '/y' });
+  assert.equal((await core.volumes()).length, 1, 'a Core page gets the same volumes from its own summary route');
+});
 test('presentation supports pause, rewind and target without an execution receipt', () => {
   const clock = createPresentationClock(2); clock.play(); clock.tick(1);
   assert.equal(clock.state().progress, 0.5); clock.pause(); clock.tick(10);

@@ -15,6 +15,7 @@
 
 import { Box3, BoxGeometry, EdgesGeometry, LineBasicMaterial, LineSegments, Raycaster, Vector2, Vector3 } from "three";
 import "./diskx.css";
+import { foldPresentationPanel } from "./presentation-mobile";
 import {
   buildDiskxTree,
   categoryShares,
@@ -253,6 +254,10 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   const button = (action: string): HTMLButtonElement => element<HTMLButtonElement>(`[data-action="${action}"]`);
   const labelsLayer = element<HTMLDivElement>(".gx-diskx-labels");
   root.append(surface);
+  foldPresentationPanel(element(".gx-diskx-panel"), "Rapport et détails");
+  foldPresentationPanel(element(".gx-diskx-actions"), "Options");
+  if (window.matchMedia("(max-width: 820px)").matches)
+    element(".gx-diskx-actions .gx-presentation-detail-body").prepend(element("[data-crumbs]"));
   const show = createDiskxShow({
     surface, labelsLayer, canvas: host.renderer.domElement, camera: host.camera, scene: host.scene, reduced, citySize: CITY_SIZE,
     roots: () => source.roots,
@@ -645,16 +650,20 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       const gauge = document.createElement("div");
       gauge.className = "gx-diskx-gauge";
       gauge.style.setProperty("--used", `${Math.round(occupancy.usedShare * 100)}%`);
-      gauge.innerHTML = `<div class="head"><span class="name"></span><span class="free"><b>${formatBytes(occupancy.free)}</b> libres</span></div><div class="bar"><i></i></div><div class="foot"><span>${formatBytes(occupancy.used)} utilisés sur ${formatBytes(occupancy.capacity)}</span><span>${Math.round(occupancy.usedShare * 100)} %</span></div>`;
-      gauge.querySelector(".name")!.textContent = volume.label;
-      gauge.title = `${volume.source === "measured" ? "Mesuré" : "Déclaré"}${volume.measuredAt ? ` le ${new Date(volume.measuredAt).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" })}` : ""}${volume.note ? ` · ${volume.note}` : ""}`;
+      gauge.innerHTML = `<div class="head"><span class="name"></span><span class="free"><b>${formatBytes(occupancy.free)}</b> libres</span></div><div class="bar"><i></i></div><div class="foot"><span>${formatBytes(occupancy.used)} utilisés sur ${formatBytes(occupancy.capacity)}</span><span>${Math.round(occupancy.usedShare * 100)} %</span></div><p class="provenance"></p>`;
+      gauge.querySelector(".name")!.textContent = volume.host ? `${volume.label} · ${volume.host}` : volume.label;
+      // Method, date and the agent's caveat stay visible under the bar: a tooltip never shows on a touch screen.
+      const measured = volume.measuredAt ? new Date(volume.measuredAt).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" }) : null;
+      const how = volume.source === "measured" ? `Mesuré${volume.method ? ` (${volume.method})` : ""}${measured ? ` le ${measured}` : ""}` : "Déclaré, non mesuré";
+      gauge.querySelector(".provenance")!.textContent = volume.note ? `${how} · ${volume.note}` : how;
+      gauge.title = `${volume.id}${volume.filesystemType ? ` · ${volume.filesystemType}` : ""}`;
       return gauge;
     }));
     if (!shownVolumes.length) {
       const unknown = document.createElement("p");
       unknown.className = "gx-diskx-unknown";
       unknown.textContent = source.kind === "live"
-        ? "Capacité inconnue : AgentX Data n’indexe que les fichiers. Déclare DISKX_VOLUMES ou mesure sur l’hôte."
+        ? "Capacité inconnue : l’agent de stockage d’AgentX Data n’a publié aucun volume pour ces racines."
         : "Capacité inconnue pour ce niveau.";
       gauges.append(unknown);
     }
@@ -728,7 +737,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       card.innerHTML = `<h3></h3><p><b>${formatBytes(node.totalSize)}</b> libres${volume ? ` sur ${formatBytes(volume.capacityBytes)}` : ""}</p><p class="path"></p>`;
       card.querySelector("h3")!.textContent = node.name;
       card.querySelector(".path")!.textContent = volume
-        ? `${volume.source === "measured" ? "Mesuré" : "Déclaré"}${volume.measuredAt ? ` le ${new Date(volume.measuredAt).toLocaleDateString("fr-CA")}` : ""} · partagé par ${volume.roots.map((root) => root.slice(root.lastIndexOf("/") + 1)).join(", ")}`
+        ? `${volume.source === "measured" ? "Mesuré" : "Déclaré"}${volume.measuredAt ? ` le ${new Date(volume.measuredAt).toLocaleDateString("fr-CA")}` : ""}${volume.host ? ` sur ${volume.host}` : ""} · partagé par ${volume.roots.map((root) => root.slice(root.lastIndexOf("/") + 1)).join(", ")}`
         : "";
       return;
     }
@@ -780,7 +789,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   const LABEL_MIN_SPAN = 54;
   function updateLabels(): void {
     const rect = host.renderer.domElement.getBoundingClientRect();
-    const shown = blocks.slice(0, LABEL_BUDGET);
+    const shown = blocks.slice(0, rect.width <= 820 ? 6 : LABEL_BUDGET);
     if (hovered && !shown.some((block) => block.node === hovered)) {
       const extra = blocks.find((block) => block.node === hovered);
       if (extra) shown.push(extra);

@@ -11,7 +11,7 @@ function request(route, url, method = 'GET') {
 }
 test('Janitor relay exposes fixed GET reads only and never run/generate/approve', async () => {
   const targets = [];
-  const route = createDiskxRoute({ dataUrl: 'https://example.invalid', volumesSpec: '', fetchImpl: async target => {
+  const route = createDiskxRoute({ dataUrl: 'https://example.invalid', fetchImpl: async target => {
     targets.push(String(target)); return new Response(JSON.stringify({ status: 'success', data: {} }));
   } });
   assert.equal((await request(route, '/diskx-api/janitor-strategy')).status, 200);
@@ -19,12 +19,16 @@ test('Janitor relay exposes fixed GET reads only and never run/generate/approve'
   assert.deepEqual(targets, ['https://example.invalid/api/data-toolbox/janitor/strategy/latest', 'https://example.invalid/api/data-toolbox/janitor/strategy/latest/groups?offset=20&limit=20']);
   assert.equal((await request(route, '/diskx-api/janitor-strategy', 'POST')).status, 405);
   assert.equal((await request(route, '/diskx-api/janitor-run')).status, 404);
+  assert.equal((await request(route, '/diskx-api/volumes')).status, 404, 'volumes ride inside summary; the relay declares none');
   assert.equal((await request(route, '/diskx-api/janitor-groups?offset=-1')).status, 400);
   assert.equal(targets.length, 2);
+  const config = await request(route, '/diskx-api/config');
+  assert.equal(config.status, 200);
+  assert.equal('volumes' in config.body, false);
 });
 test('a named group is read by its SHA-256 only', async () => {
   const targets = [];
-  const route = createDiskxRoute({ dataUrl: 'https://example.invalid', volumesSpec: '', fetchImpl: async target => {
+  const route = createDiskxRoute({ dataUrl: 'https://example.invalid', fetchImpl: async target => {
     targets.push(String(target)); return new Response(JSON.stringify({ status: 'success', data: {} }));
   } });
   const sha = 'a'.repeat(64);
