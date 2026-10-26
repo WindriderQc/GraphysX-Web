@@ -5022,6 +5022,12 @@ copy of the API; the three demonstrations stay as the fallback when no provider 
 
 - Restore the owner's preferred contrast: dark starling silhouettes above the landscape and a white orbital swarm with white trails around CubX. Counts, motion and geometry stay the same.
 
+## 2026-10-26 — The Center on a Core page, and Nestor's push (phase 2)
+
+- The Center cannot be relayed like `<diskx-city>`: `dist/` measured at 234 MB in 1203 files, 1097 product assets (220 MB), 74 hashed chunks. A bounded static relay would be the universal proxy; a single-file sub-build would still fetch the tree. Chosen: Core serves a small page that frames the public Center and loads `<graphysx-center>`, a 6 KB module published at `/embed/center-host.js` and relayed by Core like `diskx.js`. Both ends of the `postMessage` protocol (`src/center-bridge-protocol.ts`) ship from one build.
+- Framed, the Center answers only a host that says hello from an allowed origin (same-origin, loopback, `VITE_GRAPHYSX_HOST_ORIGINS`), then takes it as its provider: the typed request goes up, the host asks `/api/graphysx/propose` on Core's origin, the reply comes down and is read as any provider reply. A pushed proposal is read with the same rules plus an agent actor and an integer revision, becomes a card through `proposeExternal` with that actor and `expectedRevision` (stale if the scene moved), is refused whole while a card already waits, and always answers with a receipt. Commits now carry the card's actor, so history says `Nestor · Core` when Core pushed.
+- AgentX: `/graphysx`, the relay, one event stream per page, state and receipt routes, the tool `propose_world_change` composing for the most recent page and relaying the page's receipt. Proofs: `test/coauthor-host-bridge.test.mjs`, AgentX `center.test.js`, `scripts/smoke-nestor-push.mjs` (tier `core`), and the harness demonstration with inference on the live Core router recorded in `docs/NESTOR_PROPOSALS.md` with captures. Not seen: a real Nestor conversation, which needs the AgentX pull request deployed.
+
 ## 2026-10-26 (America/Toronto) — DiskX volumes: free tiles beside the disks they serve, visible provenance
 
 - PR #74 (another session) delivered the bulk of reading volumes from AgentX Data's

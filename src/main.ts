@@ -47,6 +47,7 @@ import {
   setProposalProvider,
   summarizeSceneForProvider,
 } from "./coauthor-provider";
+import { createHostBridge, parseHostOriginAllowList, type HostBridge } from "./coauthor-host-bridge";
 import { randomPlayerName } from "./player-name";
 import {
   ARCHIVE_BALLZ_LEVELS,
@@ -111,6 +112,15 @@ const configuredProposalUrl = allowedSessionProposalUrl || (import.meta.env.VITE
 if (configuredProposalUrl) {
   setProposalProvider(createHttpProposalProvider({ url: configuredProposalUrl, label: "Model provider" }));
 }
+/**
+ * Framed by a host page — an AgentX Core page serving the Center under its own origin
+ * (docs/NESTOR_PROPOSALS.md, phase 2). The host becomes the provider once it has said hello from
+ * an allowed origin: same-origin, the build-time `VITE_GRAPHYSX_HOST_ORIGINS`, or loopback in
+ * development only. A framing page from anywhere else gets no answer at all. Top-level pages
+ * have no host.
+ */
+const framedByHost = window.parent !== window;
+const hostOriginAllowList = parseHostOriginAllowList(import.meta.env.VITE_GRAPHYSX_HOST_ORIGINS);
 
 // `?session=<id>` joins a live collaboration session on the store. The invitation itself
 // arrives in the fragment as `#session=<id>&invite=<code>` — never in the query string,
@@ -178,6 +188,8 @@ if (mode === "previews" && import.meta.env.DEV) {
     let interaction: ReturnType<typeof mountShowroomInteraction> | null = null;
     let welcome: ReturnType<typeof mountWelcome> | null = null;
     let nestor: ReturnType<typeof createNestorPresenter> | null = null;
+    // The Center's end of the bridge to a host page; created once the host exists, framed only.
+    let hostBridge: HostBridge | null = null;
     let livePresence: LiveAgentPresenceController | null = null;
     let liveMission: LiveMissionRuntimeController | null = null;
     let tourController: NestorTourController | null = null;
@@ -493,8 +505,10 @@ if (mode === "previews" && import.meta.env.DEV) {
               onAccept: acceptNestorProposal,
               onDiscard: discardNestorProposal,
               onToggleCommand: toggleNestorProposalCommand,
-              // Only with a provider: the field is otherwise disabled and says why.
-              onRequest: proposalProvider() ? requestNestor : undefined,
+              // Only with a provider: the field is otherwise disabled and says why. A host page
+              // is a provider-to-be: the field exists and is enabled once the host says hello.
+              onRequest: proposalProvider() || hostBridge ? requestNestor : undefined,
+              requestEnabled: Boolean(proposalProvider()),
             },
             tour: {
               onStart: startNestorTour,
@@ -1008,6 +1022,63 @@ if (mode === "previews" && import.meta.env.DEV) {
       playExitLabel: () => resumeArchiveCup ? "← Archive Cup" : "← GraphysX",
     });
     connectLocalGraphysXAgent(host);
+    if (framedByHost) {
+      hostBridge = createHostBridge({
+        selfOrigin: window.location.origin,
+        allowedOrigins: hostOriginAllowList,
+        // A loopback host is development: the dev server says so; a build decides by whether
+        // the Center itself is on loopback, so the public build answers no local page.
+        ...(import.meta.env.DEV ? { allowLoopback: true } : {}),
+        hostSource: window.parent,
+        post: (message, targetOrigin) => window.parent.postMessage(message, targetOrigin),
+        // The revision and a bounded summary: ids, types and labels, never the document — the
+        // same thing a typed request sends to a provider.
+        readState: () => {
+          const state = host.api.state();
+          if (!state) return null;
+          return {
+            revision: state.revision,
+            scene: { id: state.world.id, label: state.world.label, entities: summarizeSceneForProvider(host.api.query()) },
+          };
+        },
+        onHost: () => {
+          // The host composes on its own origin; it takes precedence over a baked-in URL.
+          if (hostBridge) setProposalProvider(hostBridge.provider);
+          welcome?.setRequestEnabled(true);
+        },
+        /**
+         * A proposal Core pushed because Nestor announced an intention in a conversation. The
+         * same gate as a typed request's reply — `proposeExternal`, the card, Apply — with two
+         * refusals of its own: a Center that is not showing Nestor, and a card already waiting.
+         * Replacing a proposal a person is reading with one they did not ask for is not a
+         * notification, it is a hijack; the receipt says so and Core tells Nestor.
+         */
+        onPush: (pushed) => {
+          if (!nestor || !welcome || !isNestorCenterReady(host.api)) {
+            return { status: "refused", reason: "The Center is not showing Nestor right now." };
+          }
+          if (nestorBlockedByLiveSession()) {
+            return { status: "refused", reason: "A live session owns this scene; Nestor cannot propose here." };
+          }
+          if (nestor.state().proposal) {
+            return { status: "refused", reason: "A proposal is already waiting for a decision." };
+          }
+          stopNestorTour();
+          welcome.showOutcome(null);
+          const proposal = nestor.proposeExternal("request", pushed.intent, pushed.commands, {
+            actor: pushed.actor,
+            expectedRevision: pushed.expectedRevision,
+          });
+          const stale = proposal.expectedRevision !== (host.api.state()?.revision ?? 0);
+          welcome.showProposal(proposal, stale);
+          return { status: "shown", proposalId: proposal.id, stale };
+        },
+      });
+      const bridge = hostBridge;
+      window.addEventListener("message", (event) => {
+        bridge.receive({ origin: event.origin, source: event.source, data: event.data });
+      });
+    }
     let welcomeSyncQueued = false;
     host.world.subscribeEvents(() => {
       if (welcomeSyncQueued) return;
@@ -1015,6 +1086,9 @@ if (mode === "previews" && import.meta.env.DEV) {
       queueMicrotask(() => {
         welcomeSyncQueued = false;
         syncFrontDoor();
+        // The host keeps Core's picture of the scene current, so a pushed proposal is composed
+        // against the revision on screen.
+        hostBridge?.announce();
       });
     });
     Object.assign(window, {

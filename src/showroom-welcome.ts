@@ -31,6 +31,11 @@ export interface ShowroomWelcomeHandle {
   showNotice: (text: string | null) => void;
   /** While a provider is composing a request: the field waits and says so. */
   setRequestBusy: (busy: boolean) => void;
+  /**
+   * Whether the request field can send. A host page (docs/NESTOR_PROPOSALS.md) becomes the
+   * provider only once it has said hello, which may be after this card mounted.
+   */
+  setRequestEnabled: (enabled: boolean) => void;
   /** Render the tour's current stop, or clear it when the tour is not running. */
   showTour: (state: NestorTourState) => void;
   reset: () => void;
@@ -55,6 +60,8 @@ export function mountWelcome(
       onToggleCommand?: (index: number) => void;
       /** A request in the person's own words. Absent when no provider is configured: the field then says so and sends nothing. */
       onRequest?: (request: string) => void;
+      /** Start with the field disabled although `onRequest` exists: a host page has not said hello yet. */
+      requestEnabled?: boolean;
     };
     tour?: { onStart?: () => void; onNext?: () => void; onPrevious?: () => void; onStop?: () => void };
   },
@@ -399,6 +406,20 @@ export function mountWelcome(
   let proposalOrigin: HTMLElement | null = null;
   const askInput = overlay.querySelector<HTMLInputElement>("[data-nestor-request]");
   const askSend = overlay.querySelector<HTMLButtonElement>("[data-nestor-request-send]");
+  // Whether the field can send. False without a provider, and false while a host page has yet to
+  // say hello; `setRequestEnabled` flips it once one does.
+  let requestEnabled = false;
+  const askPlaceholder = askInput?.placeholder ?? "";
+  const NO_PROVIDER = "No model provider is configured, so Nestor composes the three demonstrations locally.";
+  /** The disabled field says why, in the place the person would have typed; the enabled one invites. */
+  const applyRequestEnabled = (): void => {
+    if (!askInput || !askSend) return;
+    askInput.disabled = !requestEnabled;
+    askSend.disabled = !requestEnabled;
+    askInput.placeholder = requestEnabled ? askPlaceholder : NO_PROVIDER;
+    if (requestEnabled) askInput.removeAttribute("title");
+    else askInput.title = NO_PROVIDER;
+  };
   let liveMissionState: LiveMissionRuntimeState | null = null;
   let liveActivityState: LiveAgentActivity | null = null;
   const observeLiveActivity = (activity: LiveAgentActivity | null): void => {
@@ -617,11 +638,15 @@ export function mountWelcome(
   const setRequestBusy = (busy: boolean): void => {
     if (!nestorEnabled || !askInput || !askSend) return;
     overlay.classList.toggle("gx-welcome--asking", busy);
-    const configured = typeof hooks?.coauthor?.onRequest === "function";
-    askInput.disabled = busy || !configured;
-    askSend.disabled = busy || !configured;
+    askInput.disabled = busy || !requestEnabled;
+    askSend.disabled = busy || !requestEnabled;
     askSend.textContent = busy ? "Composing…" : "Ask";
     askInput.setAttribute("aria-busy", String(busy));
+  };
+
+  const setRequestEnabled = (enabled: boolean): void => {
+    requestEnabled = enabled && typeof hooks?.coauthor?.onRequest === "function";
+    applyRequestEnabled();
   };
 
   /** What actually happened — including "nothing", which is a real and reportable answer. */
@@ -706,12 +731,8 @@ export function mountWelcome(
   // The request field. Without a provider it is disabled and says so — one true sentence in the
   // place the person would have typed, and a form that cannot submit: the page makes no request.
   const onRequest = hooks?.coauthor?.onRequest;
-  if (askInput && askSend && !onRequest) {
-    askInput.disabled = true;
-    askSend.disabled = true;
-    askInput.placeholder = "No model provider is configured, so Nestor composes the three demonstrations locally.";
-    askInput.title = askInput.placeholder;
-  }
+  requestEnabled = typeof onRequest === "function" && hooks?.coauthor?.requestEnabled !== false;
+  applyRequestEnabled();
   overlay.querySelector<HTMLFormElement>("[data-nestor-ask]")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const request = askInput?.value.trim() ?? "";
@@ -818,5 +839,5 @@ export function mountWelcome(
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);
-  return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showNotice, setRequestBusy, showTour, reset, dispose };
+  return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showNotice, setRequestBusy, setRequestEnabled, showTour, reset, dispose };
 }
