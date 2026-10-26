@@ -98,9 +98,10 @@ Propositions/révisions/reçus LLMx restent inchangés. L’aperçu n’émet au
 
 ## Volumes et limites amont
 
-Tuile libre unique par volume et jauge de 0ae87a2 préservées. DISKX_VOLUMES accepte valeurs
-déclarées ou montage local mesuré par statfs. Une déclaration sans date n’obtient plus
-artificiellement la date de lecture comme date de mesure. Données distribuées fictives.
+Tuile libre unique par volume et jauge de 0ae87a2 préservées. Depuis le 2026-10-25 les volumes
+viennent de `storage/summary` (agent de stockage, statfs) ; DISKX_VOLUMES n'existe plus.
+Une déclaration sans date n’obtient plus artificiellement la date de lecture comme date de
+mesure. Données distribuées fictives.
 Index logique != occupation ZFS ; racines partagées ne multiplient pas la capacité.
 Hardlinks, symlinks, aliases, blocs alloués, compression, snapshots et rétention empêchent
 de dériver l’économie physique de la somme des fichiers. Leur détection reste amont.

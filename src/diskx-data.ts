@@ -190,10 +190,11 @@ export function buildDiskxTree(roots: readonly string[], rows: readonly DiskxDir
 }
 
 /**
- * A volume is what the folders sit on: a disk, a pool, a share. AgentX Data indexes files and
- * says nothing about capacity (measured 2026-10-24), so volumes come from a separate source —
- * measured on the host that mounts them, or declared — and may be absent, in which case the
- * city shows what is used and says the capacity is unknown rather than inventing one.
+ * A volume is what the folders sit on: a disk, a pool, a share. AgentX Data's storage agent
+ * measures it with statfs on the host that mounts the roots and publishes it in
+ * `storage/summary` (since 2026-10-25); the fixture declares one. Volumes may be absent, in
+ * which case the city shows what is used and says the capacity is unknown rather than
+ * inventing one.
  */
 export type DiskxVolume = {
   id: string;
@@ -202,9 +203,13 @@ export type DiskxVolume = {
   roots: string[];
   capacityBytes: number;
   freeBytes: number;
-  /** "measured" from statfs/zpool on the host, "declared" by a person or a config file. */
+  /** "measured" on the host (statfs), "declared" by a person or a fixture. */
   source: "measured" | "declared";
   measuredAt?: string | null;
+  /** Host that holds the volume, when the agent names it (UGFrank). */
+  host?: string | null;
+  /** How it was measured ("statfs"), when the agent says. */
+  method?: string | null;
   note?: string | null;
 };
 

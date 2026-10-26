@@ -58,13 +58,14 @@ try {
     assert.equal(route.request().method(), 'GET');
     const respond = data => route.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
     if (url.pathname.endsWith('/config')) return respond({ enabled: true, source: 'synthetic-server', roots: ['/test'] });
-    if (url.pathname.endsWith('/summary')) return respond({ status: 'success', data: { totalFiles: 1, totalSize: version * 100, lastScan: { finished_at: `2026-10-25T00:00:0${version}Z` } } });
+    // Volumes ride inside summary, as the storage agent publishes them (measured 2026-10-25).
+    if (url.pathname.endsWith('/summary')) return respond({ status: 'success', data: { totalFiles: 1, totalSize: version * 100, lastScan: { finished_at: `2026-10-25T00:00:0${version}Z` },
+      volumes: [{ id: 'test:vol', label: 'Volume test', host: 'TestHost', roots: ['/test'], capacityBytes: 1000, freeBytes: 1000 - version * 100, source: 'measured', method: 'statfs', measuredAt: '2026-10-25T00:00:00Z' }] } });
     if (url.pathname.endsWith('/tree')) {
       if (fail) return route.fulfill({ status: 503, body: '{}' });
       return respond({ status: 'success', data: { truncated: false, tree: [{ path: `/test/${version === 1 ? 'old' : 'new'}`, fileCount: 1, totalSize: version * 100 }, { path: '/testing/not-in-scope', fileCount: 99, totalSize: 999 }] } });
     }
     if (url.pathname.endsWith('/files')) return respond({ status: 'success', data: { files: [] } });
-    if (url.pathname.endsWith('/volumes')) return respond({ volumes: [] });
     if (url.pathname.endsWith('/janitor-strategy')) return respond(reportReady
       ? { status: 'success', data: { generatedAt: '2026-10-25T00:00:00Z', status: 'ready_for_review', summary: { verifiedGroups: 1, provenSavingsBytes: 50, candidateGroups: 0, candidateBytes: 0, filesToHash: 0, bytesToHash: 0, executableActions: 0 } } }
       : { status: 'success', data: { available: false, status: 'unavailable' } });
@@ -75,6 +76,9 @@ try {
   await page.goto(`${server.url}?app=diskx`);
   await page.waitForFunction(`(() => { const s = (${app})(); return s?.loading === false && s.source === 'live'; })()`);
   assert.equal(await page.evaluate(() => JSON.parse(window.render_game_to_text()).application.focus.totalSize), 100);
+  assert.deepEqual(await page.evaluate(`(${app})().volumes`), [{ id: 'test:vol', label: 'Volume test', capacityBytes: 1000, freeBytes: 900, source: 'measured' }], 'the live volume comes out of summary');
+  assert.match(await page.locator('[data-volumes] .gx-diskx-gauge .free').textContent(), /^900 o libres$/, 'the gauge shows the agent-measured free space');
+  assert.match(await page.locator('[data-volumes] .gx-diskx-gauge').getAttribute('title'), /^Mesuré \(statfs\) le .* sur TestHost$/);
   fail = true;
   await page.getByRole('button', { name: 'Actualiser', exact: true }).click();
   await page.waitForFunction(`(${app})()?.loading === false`);
@@ -82,6 +86,7 @@ try {
   fail = false; version = 2;
   await page.getByRole('button', { name: 'Actualiser', exact: true }).click();
   await page.waitForFunction(`(() => { const s = (${app})(); return s?.loading === false && s.focus.totalSize === 200; })()`);
+  assert.equal((await page.evaluate(`(${app})().volumes`))[0].freeBytes, 800, 'refreshing the inventory refreshes the volume with it');
   const document = await page.evaluate(() => JSON.stringify(window.__GRAPHYSX__.exportDocument()));
   assert.ok(!document.includes('/mnt/media') && !document.includes('/testing'), 'no fixture or prefix-neighbor contamination');
   await page.getByRole('button', { name: 'Lire le dernier rapport', exact: true }).click();

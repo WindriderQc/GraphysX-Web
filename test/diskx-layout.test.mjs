@@ -19,7 +19,6 @@ const {
 } = await importBrowserModule(new URL("../src/diskx-data.ts", import.meta.url));
 const { composeDiskxWorld, diskxPathOf, DISKX_DISTRICT_TAG, DISKX_FREE_TAG, DISKX_PATH_TAG_PREFIX } =
   await importBrowserModule(new URL("../src/diskx-scene.ts", import.meta.url));
-const { parseBytes, parseDiskxVolumes, resolveDiskxVolumes } = await import("../scripts/diskx-server.mjs");
 
 // AgentX Data reports only directories that directly hold files, with their own bytes. The
 // city must still show a parent that holds nothing but folders, and must never show a total
@@ -201,21 +200,3 @@ test("free space is one honest tile per volume at the disks level, and a gauge e
   assert.equal(occupancy.usedShare, 0.5, "synthetic volume is exactly half used");
 });
 
-test("DISKX_VOLUMES parses declared sizes and measures mounts through statfs", async () => {
-  assert.equal(parseBytes("7.27 TiB"), Math.round(7.27 * 2 ** 40));
-  assert.equal(parseBytes("4.6 TB"), 4.6e12);
-  assert.equal(parseBytes(42), 42);
-  assert.throws(() => parseBytes("beaucoup"));
-  assert.throws(() => parseDiskxVolumes("{"));
-  assert.throws(() => parseDiskxVolumes(JSON.stringify([{ id: "x" }])), /roots/);
-  assert.deepEqual(parseDiskxVolumes(""), []);
-  const declared = parseDiskxVolumes(JSON.stringify([
-    { id: "pool", label: "pool Media", roots: ["/mnt/media"], capacity: "10 TB", free: "4 TB", note: "n" },
-    { id: "local", roots: ["/mnt/x"], path: "/fake" },
-    { id: "gone", roots: ["/mnt/y"], path: "/missing" },
-  ]));
-  const fakeStatfs = async (path) => { if (path === "/fake") return { blocks: 1000, bsize: 4096, bavail: 250 }; throw new Error("ENOENT"); };
-  const volumes = await resolveDiskxVolumes(declared, fakeStatfs, () => "2026-10-24T00:00:00Z");
-  assert.deepEqual(volumes.map((v) => [v.id, v.capacityBytes, v.freeBytes, v.source]), [["pool", 1e13, 4e12, "declared"], ["local", 4096000, 1024000, "measured"]]);
-  assert.equal(volumes[0].note, "n");
-});
