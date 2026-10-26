@@ -41,6 +41,7 @@ export class AgentxEcosystemElement extends HTMLElement {
       this.unsubscribe = this.host.subscribeAfterRender(() => {
         if (!this.app || !this.host) return;
         if (this.revisionDirty) { this.documentRevision = this.host.world.getState().revision; this.revisionDirty = false; }
+        const firstFrame = !this.displayed;
         const state = this.app.state() as EcosystemViewState;
         const observation = ecosystemObservation(state);
         this.displayed = { ...state, presentation: { ...observation,
@@ -49,6 +50,7 @@ export class AgentxEcosystemElement extends HTMLElement {
           version: __GRAPHYSX_EMBED_VERSION__, documentRevision: this.documentRevision } };
         for (const [type, detail] of this.pending) this.emit(type, { ...detail, instance: this.instance, sequence: this.sequence });
         this.pending.clear();
+        if (firstFrame) this.emit("first-frame", { at: performance.timeOrigin + performance.now() });
       });
     } catch (error) { this.fail(error); }
   }

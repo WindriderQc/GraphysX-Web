@@ -4,6 +4,7 @@
  *
  * Every text is set with textContent: report paths and names never reach innerHTML.
  */
+import { foldPresentationPanel } from "./presentation-mobile";
 import { formatBytes, formatCount } from "./diskx-data";
 import { showStepLabel, type ShowStep } from "./diskx-show-script";
 import type { LedgerCoverage, LedgerGroup } from "./diskx-show-ledger";
@@ -62,11 +63,22 @@ export function createShowHud(surface: HTMLElement, actionsHref: string | null) 
   tip.hidden = true;
   for (const node of [bar, summary]) node.querySelectorAll(".gx-show-warning").forEach((line) => { line.textContent = SHOW_WARNING; });
   surface.append(bar, selection, summary, tip);
+  foldPresentationPanel(selection, "Bloc sélectionné · Détails");
+  foldPresentationPanel(summary, "Résumé du rapport · Détails");
 
   const q = <T extends HTMLElement>(root: HTMLElement, selector: string): T => root.querySelector<T>(selector)!;
+  if (window.matchMedia("(max-width: 820px)").matches) {
+    const notes = document.createElement("section"); notes.className = "gx-show-notes";
+    notes.setAttribute("aria-label", "Détails de la présentation");
+    for (const child of bar.querySelectorAll(".gx-show-caption,.gx-show-meta,.gx-show-warning")) notes.append(child);
+    surface.querySelector(".gx-diskx-panel .gx-presentation-detail-body")?.prepend(notes);
+    const warning = document.createElement("p"); warning.className = "gx-show-warning";
+    warning.textContent = "Présentation uniquement · aucune action autorisée. Octets logiques.";
+    bar.append(warning);
+  }
   const minSelect = q<HTMLSelectElement>(bar, "[data-show-min]");
   for (const [value, label] of MIN_SIZES) minSelect.append(new Option(label, String(value)));
-  const actions = q<HTMLAnchorElement>(bar, "[data-show-actions]");
+  const actions = q<HTMLAnchorElement>(surface, "[data-show-actions]");
   if (actionsHref) { actions.href = actionsHref; actions.target = "_blank"; actions.rel = "noopener"; actions.hidden = false; }
 
   const groupLine = (group: LedgerGroup, onShow: (sha: string) => void): HTMLLIElement => {
@@ -110,9 +122,9 @@ export function createShowHud(surface: HTMLElement, actionsHref: string | null) 
       toggle.textContent = playing ? "⏸ Pause" : "▶ Lire";
       toggle.setAttribute("aria-label", playing ? "Pause" : "Lire");
     },
-    caption(text: string): void { q(bar, "[data-show-caption]").textContent = text; },
+    caption(text: string): void { q(surface, "[data-show-caption]").textContent = text; },
     coverage(coverage: LedgerCoverage | null, loading: boolean, failed: string | null): void {
-      const node = q(bar, "[data-show-coverage]");
+      const node = q(surface, "[data-show-coverage]");
       if (failed) { node.textContent = `Lecture des groupes interrompue : ${failed}. Les chiffres portent sur les groupes déjà lus.`; return; }
       if (!coverage) { node.textContent = loading ? "Lecture des groupes du rapport…" : ""; return; }
       const share = coverage.bytesTotal ? Math.min(100, (coverage.bytesCovered / coverage.bytesTotal) * 100) : 0;

@@ -13,7 +13,7 @@ function harness() {
     replaceChildren() {} remove() {} setAttribute() {}
     dispatchEvent(event) { this.events.push(event); }
   }
-  const context = vm.createContext({ HTMLElement: Element,
+  const context = vm.createContext({ HTMLElement: Element, performance,
     document: { createElement: () => new Element() }, customElements: { get: () => true },
     crypto: { randomUUID: () => `${++instances}1111111-1111-4111-8111-111111111111` },
     __GRAPHYSX_EMBED_VERSION__: "a".repeat(64),
@@ -52,6 +52,7 @@ test("ready is deferred until after rendering, and the same tour owns script cha
   assert.equal(shown.documentRevision, 1); assert.equal(h.element.events[0].type, "ecosystem-ready");
   h.element.attributeChangedCallback("play", "memory", "garage");
   assert.equal(h.apps[0].lastScript.script, "garage"); assert.equal(h.apps[0].lastScript.autoplay, true);
+  assert.equal(h.element.events.filter(e => e.type === "ecosystem-first-frame").length, 1);
   h.render(); assert.equal(h.reads(), 1, "display frames do not repeatedly export the full world");
   h.worldEvent(); h.render(); assert.equal(h.reads(), 2);
   h.element.disconnectedCallback();
