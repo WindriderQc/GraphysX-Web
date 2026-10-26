@@ -387,6 +387,190 @@
         opacity: 0.9;
       }
 
+      /* ---------- Menu detail card ---------- */
+      .console {
+        display: grid;
+        gap: 12px;
+      }
+      .detail {
+        /* As wide as the icon panel above, never wider. */
+        width: 0;
+        min-width: 100%;
+        box-sizing: border-box;
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        background: var(--panel);
+        border: 3px solid var(--panel-dark);
+        box-shadow: inset 2px 2px 0 var(--panel-light), inset -2px -2px 0 #99a2aa, 0 10px 30px rgba(0, 0, 40, 0.35);
+        color: #1a1d20;
+      }
+      .screen {
+        position: relative;
+        min-height: clamp(84px, 13vh, 112px);
+        padding: 10px 14px 12px;
+        background:
+          repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px),
+          radial-gradient(ellipse at 30% 0%, #1d3a6e 0%, #0b1426 70%);
+        border: 2px solid #59626a;
+        box-shadow: inset 0 0 0 2px #05080f, inset 0 0 26px rgba(0, 0, 0, 0.7);
+        color: #e8f1ff;
+        overflow: hidden;
+      }
+      .screen .d-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      .d-kicker {
+        color: #ffe14a;
+        font-size: clamp(10px, 1vw, 12px);
+        font-weight: 700;
+        letter-spacing: 0.32em;
+      }
+      .d-kicker::before {
+        content: "\25B8  ";
+      }
+      .d-state {
+        padding: 2px 9px;
+        font-size: clamp(10px, 1vw, 12px);
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        border: 1px solid currentColor;
+        color: #8fa3bf;
+        white-space: nowrap;
+      }
+      .d-state:empty {
+        display: none;
+      }
+      .d-state.on {
+        color: #63ffa8;
+        text-shadow: 0 0 8px rgba(99, 255, 168, 0.6);
+      }
+      .d-state.off {
+        color: #ff7a8a;
+      }
+      .d-title {
+        margin-top: 4px;
+        font-size: clamp(20px, 2.6vw, 32px);
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        line-height: 1.1;
+        text-shadow: 0 0 14px rgba(120, 180, 255, 0.55);
+      }
+      .d-text {
+        margin-top: 6px;
+        color: #a9c3e8;
+        font-size: clamp(12px, 1.25vw, 15px);
+        letter-spacing: 0.04em;
+        line-height: 1.35;
+      }
+      .screen.flash .d-title {
+        animation: d-in 0.22s ease-out;
+      }
+      @keyframes d-in {
+        from {
+          opacity: 0.2;
+          transform: translateX(-8px);
+        }
+      }
+      .loadout {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px;
+      }
+      .chip {
+        display: grid;
+        gap: 1px;
+        padding: 4px 7px;
+        background: #dfe4e8;
+        border: 2px solid #8f99a1;
+        box-shadow: inset 1px 1px 0 #fff;
+        min-width: 0;
+      }
+      .chip i {
+        font-style: normal;
+        font-size: clamp(8px, 0.8vw, 10px);
+        letter-spacing: 0.2em;
+        color: #5d666e;
+      }
+      .chip b {
+        font-size: clamp(11px, 1.1vw, 14px);
+        letter-spacing: 0.06em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .chip.lit {
+        background: #23282c;
+        border-color: #ffe14a;
+        color: #fff;
+      }
+      .chip.lit i {
+        color: #ffe14a;
+      }
+      .d-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        font-size: clamp(9px, 0.95vw, 12px);
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        color: #3c444b;
+      }
+      .keys {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .key {
+        display: inline-grid;
+        place-items: center;
+        min-width: 1.9em;
+        height: 1.9em;
+        padding: 0 0.45em;
+        margin-left: 6px;
+        background: #f4f6f8;
+        border: 1px solid #7d868e;
+        border-bottom-width: 3px;
+        border-radius: 4px;
+        color: #1a1d20;
+        letter-spacing: 0.04em;
+      }
+      .key:first-child {
+        margin-left: 0;
+      }
+      .key.a {
+        background: #3bb54a;
+        border-color: #1f6e29;
+        color: #fff;
+        border-radius: 50%;
+        padding: 0;
+      }
+      .leds {
+        display: flex;
+        gap: 12px;
+      }
+      .led::before {
+        content: "";
+        display: inline-block;
+        width: 0.8em;
+        height: 0.8em;
+        margin-right: 0.45em;
+        border-radius: 50%;
+        vertical-align: -0.05em;
+        background: #7d868e;
+        box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4);
+      }
+      .led.on::before {
+        background: #35e07a;
+        box-shadow: 0 0 6px #35e07a;
+      }
+
       /* ---------- Help, pause, game over ---------- */
       .overlay {
         position: fixed;
@@ -640,6 +824,7 @@
     <div id="divider" class="hidden"></div>
 
     <div id="menu">
+      <div class="console">
       <div class="panel">
         <div class="grid" id="menu-grid">
           <button class="ico" data-group="course" data-value="0" title="Parcours court">
@@ -704,20 +889,40 @@
           <button class="ico" data-action="story" title="Mode Histoire : l'histoire de Jobe, chapitre par chapitre">
             <svg viewBox="0 0 24 24"><path d="M4 4h7a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-7a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h7z" /></svg>
           </button>
-          <span></span><span></span><span></span>
+          <button class="ico" data-action="invert" data-player="0" title="Haut / bas de Jobe (joueur 1)">
+            <svg viewBox="0 0 24 24"><path d="M3 21h10M8 21v-9" /><circle cx="8" cy="8" r="3.5" /><path d="M19 4v10M16.5 6.5L19 4l2.5 2.5M16.5 11.5L19 14l2.5-2.5" style="stroke-width: 2" /><text x="16.5" y="23.5" font-size="8.5" font-weight="700" font-family="Bahnschrift, Arial, sans-serif" fill="currentColor" stroke="none">1</text></svg>
+          </button>
+          <button class="ico" data-action="invert" data-player="1" title="Haut / bas de Peter (joueur 2)">
+            <svg viewBox="0 0 24 24"><path d="M3 21h10M8 21v-9" /><circle cx="8" cy="8" r="3.5" /><path d="M19 4v10M16.5 6.5L19 4l2.5 2.5M16.5 11.5L19 14l2.5-2.5" style="stroke-width: 2" /><text x="16.5" y="23.5" font-size="8.5" font-weight="700" font-family="Bahnschrift, Arial, sans-serif" fill="currentColor" stroke="none">2</text></svg>
+          </button>
+          <span></span>
         </div>
         <div class="scroll" aria-hidden="true"><div class="box"></div><div class="tri"></div><div class="tri down"></div></div>
       </div>
-      <div class="caption" id="menu-caption"></div>
-      <div class="caption small" id="menu-hint">FLÈCHES / WASD / MANETTE + ENTRÉE OU A · BOULE NOIRE OU START = DÉPART · ? = COMMANDES</div>
-      <div class="caption small" id="menu-status"></div>
+      <div class="detail" id="menu-detail">
+        <div class="screen" id="d-screen">
+          <div class="d-top"><span class="d-kicker" id="d-kicker"></span><span class="d-state" id="d-state"></span></div>
+          <div class="d-title" id="d-title"></div>
+          <div class="d-text" id="d-text"></div>
+        </div>
+        <div class="loadout" id="menu-caption"></div>
+        <div class="d-foot">
+          <div class="keys" id="menu-hint">
+            <span class="key a">A</span> CHOISIR
+            <span class="key">START</span> DÉPART
+            <span class="key">?</span> COMMANDES
+          </div>
+          <div class="leds" id="menu-status"></div>
+        </div>
+      </div>
+      </div>
     </div>
 
     <div id="help" class="overlay hidden">
       <div class="caption">COMMANDES</div>
       <table>
         <tr><th></th><th>JOBE (gauche)</th><th>PETER (droite)</th></tr>
-        <tr><td>Monter / descendre</td><td>W / S (Z / S en AZERTY)</td><td>↑ / ↓</td></tr>
+        <tr><td>Monter / descendre<br /><small>(style réglable au menu)</small></td><td id="help-y-0">W / S (Z / S en AZERTY)</td><td id="help-y-1">↑ / ↓</td></tr>
         <tr><td>Gauche / droite</td><td>A / D (Q / D en AZERTY)</td><td>← / →</td></tr>
         <tr><td>Turbo</td><td>Espace ou Maj gauche</td><td>Maj droite, Entrée ou 0</td></tr>
         <tr><td>Sur la tranche</td><td>Q / E</td><td>virgule / point (ou 1 / 3)</td></tr>

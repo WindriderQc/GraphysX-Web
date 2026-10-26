@@ -6,7 +6,7 @@ import { transpileModule, ModuleKind, ScriptTarget } from "typescript";
 
 function harness() {
   const hosts = [], apps = [];
-  let failMount = false, failDispose = false;
+  let failMount = false, failDispose = false, afterRender;
   class Element {
     children = []; style = {}; events = [];
     getAttribute() { return null; }
@@ -17,21 +17,21 @@ function harness() {
     dispatchEvent(event) { this.events.push(event); }
   }
   const context = vm.createContext({
-    HTMLElement: Element, document: { querySelector: () => true, createElement: () => new Element() },
+    performance, HTMLElement: Element, document: { querySelector: () => true, createElement: () => new Element() },
     window: { location: { host: "core.example" } },
     customElements: { get: () => true }, CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
     parseDiskxCityAttributes: () => ({ endpoints: {}, roots: ["/data"] }),
-    PlatformHost: class { disposed = 0; constructor() { hosts.push(this); } dispose() { this.disposed++; } },
-    mountDiskxApp: () => {
+    PlatformHost: class { subscribeAfterRender(fn) { afterRender = fn; return () => { afterRender = null; }; } disposed = 0; constructor() { hosts.push(this); } dispose() { this.disposed++; } },
+    mountDiskxApp: (_root, _host, _exit, options) => {
       if (failMount) throw new Error("mount failed");
       const app = { disposed: 0, state: () => "ready", dispose() { this.disposed++; if (failDispose) throw new Error("dispose failed"); } };
-      apps.push(app); return app;
+      options.onEvent("ready", {}); apps.push(app); return app;
     },
   });
   const source = readFileSync(new URL("../src/diskx-embed.ts", import.meta.url), "utf8").replace(/^import .*;$/gm, "");
   const code = transpileModule(source, { compilerOptions: { module: ModuleKind.ESNext, target: ScriptTarget.ES2022 } }).outputText.replace(/^export /gm, "");
   vm.runInContext(code + "\nglobalThis.ElementUnderTest = DiskxCityElement;", context);
-  return { element: new context.ElementUnderTest(), hosts, apps,
+  return { element: new context.ElementUnderTest(), hosts, apps, render: () => afterRender?.(),
     failMount: value => { failMount = value; }, failDispose: () => { failDispose = true; } };
 }
 
@@ -57,4 +57,15 @@ test("mount and disconnect are idempotent and host cleanup survives an app dispo
   assert.equal(h.hosts[0].disposed, 1); assert.equal(stage.removed, true);
   h.element.disconnectedCallback();
   assert.equal(h.apps[0].disposed, 1); assert.equal(h.hosts[0].disposed, 1);
+});
+
+
+test("first-frame requires a rendered ready city and emits once per mount", () => {
+  const h = harness(); h.element.connectedCallback();
+  assert.equal(h.element.events.some(e => e.type === "diskx-first-frame"), false);
+  h.render(); h.render();
+  const frames = h.element.events.filter(e => e.type === "diskx-first-frame");
+  assert.equal(frames.length, 1); assert.ok(Number.isFinite(frames[0].detail.at));
+  h.element.disconnectedCallback(); h.render();
+  assert.equal(h.element.events.filter(e => e.type === "diskx-first-frame").length, 1);
 });

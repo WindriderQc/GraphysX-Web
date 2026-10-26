@@ -53,6 +53,7 @@ export function mountWelcome(
     onOpenKidX?: () => void;
     onOpenLlmX?: () => void;
     onOpenDiskX?: () => void;
+    onOpenEcosystem?: () => void;
     coauthor?: {
       onAccept?: () => void;
       onDiscard?: () => void;
@@ -82,11 +83,11 @@ export function mountWelcome(
     .gx-welcome h1{margin:0;font-size:clamp(28px,4.2vw,46px);letter-spacing:.035em;font-weight:850;color:var(--gx-ink);line-height:.98;text-shadow:0 4px 38px rgba(70,220,235,.38)}
     .gx-welcome p{margin:0;color:var(--gx-ink-soft);font-size:14.5px;line-height:1.55;text-shadow:0 1px 12px rgba(3,12,20,.7)}
     .gx-welcome .gx-nestor-topics{display:flex;gap:8px;flex-wrap:wrap;pointer-events:auto}
-    .gx-welcome .gx-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%;pointer-events:auto}
+    .gx-welcome .gx-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%;pointer-events:none}
     .gx-welcome button{background:linear-gradient(180deg,var(--gx-accent-deep),#1d7f96);color:#fff;border:1px solid var(--gx-accent-edge);border-radius:12px;padding:12px 24px;font:600 15px var(--gx-font);cursor:pointer;box-shadow:0 8px 30px rgba(30,127,150,.42)}
     .gx-welcome button:hover{filter:brightness(1.08)}
     .gx-welcome button:focus-visible{outline:2px solid #fff;outline-offset:3px;filter:brightness(1.1)}
-    .gx-welcome .gx-actions button{width:100%;min-height:44px;padding-inline:16px}
+    .gx-welcome .gx-actions button{width:100%;min-height:44px;padding-inline:16px;pointer-events:auto}
     .gx-welcome .gx-actions .gx-go-editor{grid-column:1 / -1}
     .gx-welcome .gx-nestor-topics button{padding:8px 13px;border-radius:999px;background:rgba(14,45,58,.8);border-color:rgba(116,223,241,.28);box-shadow:none;color:#bceef7;font-size:12px;letter-spacing:.04em}
     .gx-welcome .gx-nestor-topics button:hover,.gx-welcome .gx-nestor-topics button[aria-pressed="true"]{color:#fff;border-color:#77e9ff;background:rgba(35,117,139,.68);box-shadow:0 0 24px rgba(65,211,232,.22)}
@@ -228,11 +229,13 @@ export function mountWelcome(
     @media (prefers-reduced-motion:reduce){
       .gx-welcome-card > *{animation:none}
     }
-    @media (max-width:640px){
+    @media (max-width:899px){
       .gx-welcome{justify-content:center;align-items:flex-end;padding:14px 14px calc(58px + env(safe-area-inset-bottom))}
-      .gx-welcome-card{align-items:center;text-align:center;max-height:calc(100dvh - 86px);overflow-y:auto;padding:19px 18px 18px}
-      .gx-welcome .gx-actions{gap:8px}
-      .gx-welcome .gx-actions button{padding-inline:10px;font-size:13px}
+      .gx-welcome-card{align-items:center;text-align:center;max-height:min(30dvh,260px);overflow-y:auto;padding:14px 16px;backdrop-filter:none;pointer-events:auto}
+      .gx-welcome{padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+      .gx-welcome .gx-actions{position:fixed;left:14px;right:88px;bottom:calc(14px + env(safe-area-inset-bottom));width:auto;display:flex;gap:8px;overflow-x:auto;padding:4px 0}
+      .gx-welcome .gx-actions button{flex:0 0 138px;padding-inline:10px;font-size:12px;min-height:52px}
+      .gx-welcome .gx-hint{display:none}
       .gx-welcome--presenting{align-items:flex-start;justify-content:flex-start;padding:8px}
       .gx-welcome--presenting .gx-welcome-card{width:min(310px,calc(100vw - 72px));max-height:min(46vh,380px);align-items:flex-start;text-align:left;gap:7px;padding:13px 14px;border-radius:14px}
       .gx-welcome--presenting h1{font-size:clamp(22px,7vw,27px);line-height:1.02}
@@ -279,10 +282,33 @@ export function mountWelcome(
       .gx-welcome--live-observer p{font-size:12.5px;line-height:1.4}
       .gx-welcome--live-observer .gx-hint{display:none}
     }
-    @media (max-height:600px) and (min-width:641px){
+    @media (max-height:600px) and (min-width:900px){
       .gx-welcome{align-items:flex-start;padding:12px}
       .gx-welcome-card{max-height:calc(100dvh - 24px);overflow-y:auto;padding:18px 20px}
     }
+    @media (min-width:641px) and (max-width:899px) and (max-height:480px){
+      .gx-welcome:not(.gx-welcome--touring):not(.gx-welcome--presenting):not(.gx-welcome--live-observer){align-items:flex-start;justify-content:flex-start;padding:12px}
+      .gx-welcome:not(.gx-welcome--touring):not(.gx-welcome--presenting):not(.gx-welcome--live-observer) .gx-welcome-card{width:300px;max-height:calc(100dvh - 112px);align-items:flex-start;text-align:left;padding:12px}
+    }
+    /*
+     * Application destinations must not grow the welcome card over the kinetic stage.
+     * On a desktop, keep the introduction above the stage and the destinations in one
+     * bottom row. The card's blur must stand down here: a backdrop filter establishes a
+     * containing block for fixed descendants and would pin this dock inside the card.
+     * Phones keep a short scrolling card and a horizontally scrollable destination row.
+     */
+    @media (min-width:900px){
+      .gx-welcome{align-items:flex-start;padding:24px}
+      .gx-welcome-card{width:430px;max-height:calc(100dvh - 160px);backdrop-filter:none;padding:18px 20px;gap:8px}
+      .gx-welcome h1{font-size:36px}
+      .gx-welcome p{font-size:13px}
+      .gx-welcome .gx-nestor-topics{gap:6px}
+      .gx-welcome .gx-nestor-topics button{font-size:10.5px;padding:8px 10px}
+      .gx-welcome .gx-actions{position:fixed;left:24px;right:88px;bottom:24px;width:auto;display:flex;gap:8px}
+      .gx-welcome .gx-actions button{flex:1 1 0;min-width:0;min-height:64px;padding:10px;font-size:13px;line-height:1.3}
+    }
+    .gx-welcome .gx-actions button{background:rgba(12,25,35,.9);border-color:rgba(139,181,199,.4);box-shadow:none;color:#d4e1e7}
+    .gx-welcome .gx-actions .gx-go-editor{background:rgba(23,60,73,.94);border-color:#67b8ca}
   `;
   const overlay = document.createElement("div");
   overlay.className = "gx-welcome";
@@ -801,6 +827,15 @@ export function mountWelcome(
     diskx.textContent = "DiskX · Vos disques en ville";
     diskx.addEventListener("click", hooks.onOpenDiskX);
     overlay.querySelector(".gx-actions")?.append(diskx);
+  }
+  if (hooks?.onOpenEcosystem) {
+    const ecosystem = document.createElement("button");
+    ecosystem.type = "button";
+    ecosystem.className = "gx-go-ecosystem";
+    ecosystem.style.gridColumn = "1 / -1";
+    ecosystem.textContent = "La maison connectée · visite 3D par Nestor";
+    ecosystem.addEventListener("click", hooks.onOpenEcosystem);
+    overlay.querySelector(".gx-actions")?.append(ecosystem);
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);

@@ -17,6 +17,7 @@
 import { mountDiskxApp, type DiskxApplication } from "./diskx-app";
 import { parseDiskxCityAttributes, parsePlayAttribute } from "./diskx-embed-attributes";
 import { PlatformHost } from "./platform-host";
+import "./ecosystem-embed";
 
 /**
  * A default box for the element, at zero specificity and first in <head>: any rule of the host
@@ -34,6 +35,7 @@ export class DiskxCityElement extends HTMLElement {
   private host: PlatformHost | null = null;
   private app: DiskxApplication | null = null;
   private stage: HTMLDivElement | null = null;
+  private unsubscribe: (() => void) | null = null;
   static get observedAttributes(): string[] { return ["play"]; }
 
   connectedCallback(): void {
@@ -52,11 +54,23 @@ export class DiskxCityElement extends HTMLElement {
     this.stage = stage;
     try {
       this.host = new PlatformHost(stage, { interactive: false, editorVisible: false, autoOrbit: false, intro: false });
+      let ready = false, rendered = false;
+      const mountedAt = performance.now();
       this.app = mountDiskxApp(stage, this.host, () => undefined, {
         live: { endpoints: options.endpoints, roots: options.roots, origin: window.location.host },
         focus: options.focus, janitor: options.janitor, group: options.group, report: options.report, embedded: true,
         play: options.play, actionsHref: options.actionsHref,
-        onEvent: (type, detail) => this.dispatchEvent(new CustomEvent(`diskx-${type}`, { detail, bubbles: true, composed: true })),
+        onEvent: (type, detail) => {
+          if (type === (options.group ? "group-shown" : "ready")) ready = true;
+          this.dispatchEvent(new CustomEvent(`diskx-${type}`, { detail, bubbles: true, composed: true }));
+        },
+      });
+      this.unsubscribe = this.host.subscribeAfterRender(() => {
+        if (!ready || rendered) return;
+        rendered = true;
+        this.dispatchEvent(new CustomEvent("diskx-first-frame", { detail: {
+          at: performance.timeOrigin + performance.now(), mountToFrameMs: performance.now() - mountedAt,
+        }, bubbles: true, composed: true }));
       });
     } catch (error) {
       this.fail("mount", error);
@@ -85,6 +99,7 @@ export class DiskxCityElement extends HTMLElement {
   }
 
   private release(): void {
+    this.unsubscribe?.(); this.unsubscribe = null;
     const app = this.app, host = this.host, stage = this.stage;
     this.app = null; this.host = null; this.stage = null;
     try { app?.dispose(); }

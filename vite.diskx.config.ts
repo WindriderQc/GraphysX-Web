@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
+// @ts-expect-error -- build-only source fingerprint, never part of the browser runtime
+import { embedSourceVersion } from "./scripts/embed-source-version.mjs";
 
 /**
  * The DiskX LAN embed: one self-contained ES module, `dist/embed/diskx.js`, defining
@@ -44,6 +46,7 @@ export default undefined;`;
 }
 
 export default defineConfig({
+  define: { __GRAPHYSX_EMBED_VERSION__: JSON.stringify(embedSourceVersion(process.cwd())) },
   publicDir: false,
   plugins: [singleFileDiskx()],
   build: {

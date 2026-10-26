@@ -42,6 +42,24 @@ async function filesUnder(relDir) {
   return entries.filter((e) => e.isFile()).map((e) => path.posix.join(relDir, e.name));
 }
 
+/** A model manifest and the mesh/texture files it makes reachable at runtime. */
+export async function modelManifestAssets(publicDir, manifestUrl) {
+  const urls = new Set([manifestUrl]);
+  const readJson = async (url) => JSON.parse(await readFile(path.join(publicDir, url.replace(/^\//, "")), "utf8"));
+  const manifest = await readJson(manifestUrl);
+  for (const entry of Object.values(manifest.models ?? {})) {
+    if (typeof entry?.url !== "string") throw new Error(`Invalid model URL in ${manifestUrl}`);
+    urls.add(entry.url);
+    const payload = await readJson(entry.url);
+    for (const mesh of payload.meshes ?? []) {
+      for (const material of mesh.materials ?? []) {
+        if (material.textureUrl) urls.add(decodeURIComponent(material.textureUrl));
+      }
+    }
+  }
+  return [...urls];
+}
+
 /**
  * The legacy home screen and its Scene Editor card — the surface `scripts/smoke-foundation.mjs`
  * drives — pull a handful of small textures before any archive world is opened. 464 KB total,
@@ -87,6 +105,12 @@ export async function productAssetManifest() {
   // player-visible labs and smokes, and their URLs live beside translation provenance.
   for (const url of await anyAssetLiterals("src/archive-meshlight-material.ts")) wanted.add(url);
   for (const url of await anyAssetLiterals("src/archive-ppl-material.ts")) wanted.add(url);
+
+  // The connected house loads this manifest even when no custom model is installed.
+  // Include its models and their textures too, so adding a GLB works in release builds.
+  for (const url of await anyAssetLiterals("src/ecosystem-app.ts")) {
+    for (const asset of await modelManifestAssets(PUBLIC, url)) wanted.add(asset);
+  }
 
   // Every mesh in the generated catalog, plus the textures each mesh's materials name.
   // The mesh JSON carries absolute `textureUrl`s, so this cannot drift from the meshes.

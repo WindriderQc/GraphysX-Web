@@ -98,9 +98,17 @@ section below this one is the September release they build on):
    set-environment), Apply gave `commit-0001` by `nestor`, the editor outliner listed both
    entities, a scene-store PUT and `?scene=` reload found them; an impossible request came back
    as the model's own French refusal in the card. Captures in
-   `output/visual-receipts-20261025/nestor-request-core-*.jpg` (ignored, local). Caveat: on this
-   machine `smoke-showroom`'s headless canvas clicks fail on every dist including `main`'s;
-   `smoke-nestor-request` (DOM-driven) is green.
+   `output/visual-receipts-20261025/nestor-request-core-*.jpg` (ignored, local). The earlier
+   headless-click caveat was traced to welcome controls covering the physics stage, including
+   on the previous main build. Treat this as a layout regression, not machine acceptance:
+   retain real-pointer and movement assertions. The welcome revision also follows the owner's
+   open-landscape/CubX direction; current delivery evidence belongs to PR 69.
+
+**Generative geometry follow-up (2026-10-26).** The owner wants agents to author arbitrary
+triangles and textures. The model loader already handles indexed geometry, normals, UVs and
+maps, but scene proposals expose primitive dimensions and model references. No inline mesh
+authoring API has shipped. [GENERATIVE_MESH.md](docs/GENERATIVE_MESH.md) records the gap,
+recommended contract and required acceptance without inventing a second engine or vocabulary.
 
 **Ecosystem seams.** AgentX owns canonical conversations, memory, domain data, permissions,
 tools and execution. Nestor explains and requests a presentation. GraphysX owns the visual
@@ -111,6 +119,7 @@ the [shared AgentX capabilities](https://github.com/WindriderQc/AgentX/blob/main
 | Consumer | Transport and authority | Contract and reception |
 |---|---|---|
 | DISKX in Nestor | Private Core `/diskx`; Core relays the published module on its own origin; bounded Data Toolbox GETs | [DISKX_EMBED.md](docs/DISKX_EMBED.md). AgentX PRs 1057/1071 reuse the same path. Report date and selected group correlate the Core snapshot and the view. Public standalone DiskX remains a demo without the Data relay. |
+| Ecosystem tour in Nestor (not wired yet) | Public `?app=ecosystem&play=<stops>`; the map is data in the bundle, no backend call | [ECOSYSTEM_VIEW.md](docs/ECOSYSTEM_VIEW.md). Nestor composes the `play` list; the page plays it. Dated transcription of agentx-home `docs/ECOSYSTEM.md` (2026-10-25); live alerts, work queues and an embeddable element are the next steps, attached to the stable `eco-node:<id>` tags. |
 | LLMx personal / Family | Public Forge links to Core `/llmx`; Core relays the sibling `llmx-room.js` module and its graphical assets. `server/llmx-target.mjs` maps the same-origin conversation/voice routes. | [LLMX_PUBLIC_CONNECTION.md](docs/LLMX_PUBLIC_CONNECTION.md). Core keeps the private gateway, cross-site POST guard and Family-device cookie; only the Family Forge/consumer is available on a pinned device. Public/Core scene libraries stay separate. Qualify the installed pair and native turn independently of fixture checks. |
 | KidX voice branch | Dedicated server relay with a server-held Family credential; local branch described above | [KIDX_VOICE_BRANCH.md](docs/KIDX_VOICE_BRANCH.md), then that branch's `docs/KIDX_VOICE.md`; retain its bounded routes and Family context. It is not a generic proxy and is not installed by DiskX. |
 | Household mask / math stage | Core relays `/embed/llmx-face.js`; presence and math presentation events flow into the element | [LLMX_FACE_EMBED.md](docs/LLMX_FACE_EMBED.md). Visual events convey presentation state, not business authorization. |
