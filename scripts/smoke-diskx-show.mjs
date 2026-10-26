@@ -55,6 +55,9 @@ try {
       policySurvivorPath: index % 10 === 9 ? null : keep, review: null, files: [{ path: keep }, { path: extra }] };
   });
   const SAVINGS = GROUPS.reduce((sum, group) => sum + group.size, 0);
+  // Read by name only (outside the ledger pages): both copies in one folder below a root.
+  const SAME_FOLDER = { sha256: sha(99), proof: "sha256-current-metadata", size: 5e8, count: 2, provenSavingsBytes: 5e8, filesOmitted: 0,
+    policySurvivorPath: "/data/iso/a/same.bin", review: null, files: [{ path: "/data/iso/a/same.bin" }, { path: "/data/iso/b/same.bin" }] };
   const host = (attributes) => `<!doctype html><meta charset="utf-8"><title>Core DiskX</title>
     <style>html,body{margin:0;height:100%;background:#03060c}diskx-city{position:fixed;inset:0}</style>
     <script>window.events=[];for(const t of ["diskx-ready","diskx-report-read","diskx-group-shown","diskx-error","diskx-scene-changed","diskx-coverage","diskx-block-selected"])document.addEventListener(t,e=>window.events.push({type:t,detail:e.detail}));</script>
@@ -81,7 +84,7 @@ try {
     if (name === "janitor/strategy/latest/groups") {
       const report = { id: "r1", generatedAt: "2026-10-25T00:00:00Z", status: "ready_for_review" };
       const named = url.searchParams.get("sha256");
-      if (named) return route.fulfill(ok({ report, total: 70, offset: 0, limit: 1, nextOffset: null, scanBoundReached: false, groups: GROUPS.filter((g) => g.sha256 === named) }));
+      if (named) return route.fulfill(ok({ report, total: 70, offset: 0, limit: 1, nextOffset: null, scanBoundReached: false, groups: [...GROUPS, SAME_FOLDER].filter((g) => g.sha256 === named) }));
       const offset = Number(url.searchParams.get("offset")), limit = Number(url.searchParams.get("limit"));
       const page = GROUPS.slice(offset, offset + limit);
       return route.fulfill(ok({ report, total: 70, offset, limit, nextOffset: offset + limit < 70 ? offset + limit : null, scanBoundReached: false, groups: page }));
@@ -174,6 +177,12 @@ try {
     const scenes = await events(page, "diskx-scene-changed");
     assert.equal(scenes[0].playing, true, "a given list plays at once");
     assert.ok(scenes.some((scene) => scene.kind === "group"), "the tour became group steps");
+    // A group inside one folder dives into a live level whose refresh rebuilds the city and
+    // re-anchors the group; the show keeps playing it to "after" (reduced motion: at once).
+    await page.evaluate((g) => document.querySelector("diskx-city").setAttribute("play", `group-${g}`), SAME_FOLDER.sha256);
+    await page.waitForFunction((g) => window.events.filter((e) => e.type === "diskx-group-shown" && e.detail.sha256 === g).length > 1
+      && !document.querySelector("diskx-city").state().loading, SAME_FOLDER.sha256);
+    assert.equal((await city(page)).janitor.preview.progress, 1, "a group the show opened plays after re-anchoring");
     await page.evaluate(() => document.querySelector("diskx-city").setAttribute("play", "target"));
     await page.waitForFunction(() => document.querySelector("diskx-city").state().show.kind === "target");
     await page.evaluate(() => document.querySelector("diskx-city").setAttribute("play", "delete-everything"));
