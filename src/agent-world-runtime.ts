@@ -1,5 +1,7 @@
 import { resolveAgentAppearance, type AgentAppearance } from "../server/agent-appearance.mjs";
 import { AgentWorldVoxelFace, findVoxelFace, resolveAgentWorldFace } from "./agent-world-face";
+import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates } from "../server/inline-mesh.mjs";
+import { validateInlineMeshDefinition } from "../server/scene-commands.mjs";
 import {
   AgentWorldFormulaField,
   GRAPHYSX_AGENT_WORLD_FORMULAS,
@@ -63,8 +65,11 @@ import { assertWorldDefinition, WORLD_ENTITY_TYPES } from "../server/scene-docum
 
 import {
   AmbientLight,
+  BackSide,
+  FrontSide,
   BoxGeometry,
   BufferGeometry,
+  Float32BufferAttribute,
   CatmullRomCurve3,
   CanvasTexture,
   Color,
@@ -259,6 +264,7 @@ export type AgentWorldEntityType =
   | "plane"
   | "spline"
   | "model"
+  | "mesh"
   | "emitter"
   | "terrain"
   | "water"
@@ -280,9 +286,21 @@ export type AgentWorldTransform = {
 
 export type AgentWorldTexture = {
   id: AgentWorldTextureId;
+  /** id: "inline" uses a portable authored RGBA image, with no URL or asset store. */
+  pixels?: AgentWorldInlinePixels;
   repeat?: AgentWorldVector2;
   offset?: AgentWorldVector2;
   rotationDegrees?: number;
+};
+
+export type AgentWorldInlinePixels = { width: number; height: number; rgba: number[] };
+export type AgentWorldInlineMesh = {
+  positions: number[];
+  indices: number[];
+  normals?: number[];
+  uvs?: number[];
+  groups?: Array<{ start: number; count: number; materialIndex: number }>;
+  materials?: Partial<AgentWorldMaterial>[];
 };
 
 export type AgentWorldAgentProfile = {
@@ -293,6 +311,7 @@ export type AgentWorldAgentProfile = {
 };
 
 export type AgentWorldMaterial = {
+  side?: "front" | "back" | "double";
   color: string;
   emissive: string;
   emissiveIntensity: number;
@@ -623,6 +642,8 @@ export type AgentWorldEntityDefinition = {
     radialSegments?: number;
   };
   path?: AgentWorldSplinePath;
+  /** Indexed triangles in local metres; replaced atomically by update.mesh. */
+  mesh?: AgentWorldInlineMesh;
   asset?: AgentWorldModelAsset;
   /** Persistent visual identity; live conversation state is deliberately separate. */
   appearance?: AgentAppearance | null;
@@ -682,6 +703,7 @@ export type AgentWorldEntityDefinition = {
 };
 
 export type AgentWorldEntityPatch = {
+  mesh?: AgentWorldInlineMesh;
   /** Replace a spline's control points without changing its ID or followers. */
   path?: AgentWorldSplinePath;
   label?: string;
@@ -887,6 +909,7 @@ export type AgentWorldQuery = {
 };
 
 export type AgentWorldEntityState = {
+  mesh?: { vertexCount: number; triangleCount: number; materialCount: number };
   id: string;
   label: string;
   type: AgentWorldEntityType;
@@ -1238,6 +1261,7 @@ type ResolvedEntity = {
   modelMaterialOverrides: AgentWorldModelMaterialOverrides;
   geometry: Required<NonNullable<AgentWorldEntityDefinition["geometry"]>>;
   path: Required<AgentWorldSplinePath> | null;
+  mesh: AgentWorldInlineMesh | null;
   asset: ResolvedAgentWorldModelAsset | null;
   appearance: Required<AgentAppearance> | null;
   agent: Required<AgentWorldAgentProfile> | null;
@@ -1363,6 +1387,8 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "entity.update",
   "entity.remove",
   "entity.model",
+  "entity.mesh",
+  "material.texture.inline",
   "entity.agent-avatar",
   "asset.list",
   "material.texture",
@@ -1902,6 +1928,17 @@ export class AgentWorldRuntime {
       for (const command of commands) {
         assertAuthoredSceneCommandNamespaces(command);
         this.assertCommandTransientBoundary(command);
+        const mesh = command.op === "spawn" ? command.entity?.mesh : command.op === "update" ? command.patch?.mesh : undefined;
+        if (mesh !== undefined) {
+          validateInlineMeshDefinition(mesh);
+          for (const material of mesh.materials ?? []) resolveMaterial(material);
+        }
+        if (command.op === "spawn" && command.entity?.mesh) assertMeshTextureCoordinates(command.entity.mesh, command.entity.material);
+        if (command.op === "update") {
+          const current = this.entities.get(command.id)?.definition;
+          const nextMesh = command.patch?.mesh ?? current?.mesh;
+          if (nextMesh) assertMeshTextureCoordinates(nextMesh, { ...current?.material, ...command.patch.material });
+        }
         // A malformed visual identity must not tear down a live conversation face just to
         // reject its patch. Check its data before taking/reloading a rollback snapshot.
         // Entity-type validation still runs during application, so remove/spawn/update
@@ -2483,6 +2520,19 @@ export class AgentWorldRuntime {
   private updateInternal(id: string, patch: AgentWorldEntityPatch): void {
     const runtime = this.requireEntity(id);
     const definition = runtime.definition;
+    if (patch.mesh !== undefined) {
+      if (definition.type !== "mesh") throw new Error("Only mesh entities accept mesh buffers");
+      validateInlineMeshDefinition(patch.mesh);
+      assertInlineMesh(patch.mesh);
+      assertMeshSceneBudget([...this.entities.values()].map(entry => entry === runtime ? { type: "mesh", mesh: patch.mesh } : entry.definition));
+      definition.mesh = deepClone(patch.mesh);
+      if (runtime.object instanceof Mesh) {
+        const replacement = createInlineMeshObject(definition);
+        disposeObjectTree(runtime.object);
+        runtime.object.geometry = replacement.geometry;
+        runtime.object.material = replacement.material;
+      }
+    }
     if (patch.path !== undefined) {
       definition.path = resolveSplinePath(definition.type, patch.path);
       if (definition.path && runtime.object instanceof Line) {
@@ -2607,7 +2657,7 @@ export class AgentWorldRuntime {
     this.applyResolvedEntity(runtime);
     // A terrain patch reshapes the ground, so the collider has to be rebuilt with it —
     // otherwise the mesh moves and things keep landing on the old landform.
-    if (patch.transform || patch.physics !== undefined || patch.parentId !== undefined || patch.terrain !== undefined) {
+    if (patch.transform || patch.physics !== undefined || patch.parentId !== undefined || patch.terrain !== undefined || patch.mesh !== undefined) {
       this.rebuildPhysicsBody(runtime);
     }
     // Visual-only models do not retain duplicate collision arrays. If the human/agent later
@@ -3652,6 +3702,10 @@ export class AgentWorldRuntime {
   }
 
   private rebuildPhysicsBody(runtime: RuntimeEntity): void {
+    if (runtime.definition.mesh) {
+      const { positions, indices } = runtime.definition.mesh;
+      runtime.collisionMesh = { vertices: positions, indices, vertexCount: positions.length / 3, triangleCount: indices.length / 3 };
+    }
     const affectedJoints = this.detachJointsForEntity(runtime.definition.id);
     if (runtime.body) this.physicsWorld.removeBody(runtime.body);
     // Terrain is the one type whose collider is implied by the entity rather than requested
@@ -3804,7 +3858,11 @@ export class AgentWorldRuntime {
         // Some entity types own their own material, configured from their own field: water
         // from `water`, flock members from `flock.color`/`flock.emissive`. The generic entity
         // material pass would overwrite exactly what they just set, so they opt out.
-        if (child.material instanceof MeshStandardMaterial && child.userData.graphysxMaterialLocked !== true) {
+        if (definition.mesh && child === runtime.object && Array.isArray(child.material)) {
+          child.material.forEach((material, index) => {
+            if (material instanceof MeshStandardMaterial) applyMaterial(material, resolveMaterial(definition.mesh?.materials?.[index], definition.material));
+          });
+        } else if (child.material instanceof MeshStandardMaterial && child.userData.graphysxMaterialLocked !== true) {
           applyMaterial(child.material, child.userData.graphysxAgentAccent === true
             ? { ...definition.material, color: "#ffffff", emissive: definition.material.color, emissiveIntensity: 1.15, texture: null }
             : definition.material);
@@ -3821,6 +3879,12 @@ export class AgentWorldRuntime {
   }
 
   private resolveEntity(source: AgentWorldEntityDefinition, allowUnresolvedLookAt = false): ResolvedEntity {
+    if (source.type === "mesh") {
+      validateInlineMeshDefinition(source.mesh);
+      assertInlineMesh(source.mesh);
+      assertMeshTextureCoordinates(source.mesh, source.material);
+      assertMeshSceneBudget([...Array.from(this.entities.values(), entry => entry.definition), { type: "mesh", mesh: source.mesh }]);
+    } else if (source.mesh !== undefined) throw new Error("Only mesh entities accept mesh buffers");
     if (!source || typeof source !== "object" || !isEntityType(source.type)) throw new Error(`Unsupported entity type: ${String(source?.type)}`);
     const id = source.id?.trim() || `entity-${String(++this.entitySequence).padStart(3, "0")}`;
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/.test(id)) throw new Error(`Invalid entity id: ${id}`);
@@ -3907,6 +3971,7 @@ export class AgentWorldRuntime {
       material: resolveMaterial(source.material),
       modelMaterialOverrides,
       geometry: { ...DEFAULT_GEOMETRY, ...(source.geometry ?? {}) },
+      mesh: source.mesh ? deepClone(source.mesh) : null,
       path,
       asset,
       agent,
@@ -4040,6 +4105,7 @@ export class AgentWorldRuntime {
         ? inspectAgentWorldModelMaterialSlots(runtime.object, runtime.definition.modelMaterialOverrides)
         : null,
       geometry: deepClone(runtime.definition.geometry),
+      ...(runtime.definition.mesh ? { mesh: { vertexCount: runtime.definition.mesh.positions.length / 3, triangleCount: runtime.definition.mesh.indices.length / 3, materialCount: runtime.definition.mesh.materials?.length ?? 1 } } : {}),
       intensity: runtime.definition.intensity,
       distance: runtime.definition.distance,
       marker: runtime.definition.marker,
@@ -4162,7 +4228,22 @@ export class AgentWorldRuntime {
   }
 }
 
+function createInlineMeshObject(definition: ResolvedEntity): Mesh {
+  const source = definition.mesh!;
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(source.positions, 3));
+  geometry.setIndex(source.indices);
+  if (source.normals) geometry.setAttribute("normal", new Float32BufferAttribute(source.normals, 3));
+  else geometry.computeVertexNormals();
+  if (source.uvs) geometry.setAttribute("uv", new Float32BufferAttribute(source.uvs, 2));
+  for (const group of source.groups ?? [{ start: 0, count: source.indices.length, materialIndex: 0 }]) geometry.addGroup(group.start, group.count, group.materialIndex);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return new Mesh(geometry, (source.materials ?? [{}]).map(() => new MeshStandardMaterial({ side: DoubleSide })));
+}
+
 function createEntityObject(definition: ResolvedEntity): Object3D {
+  if (definition.type === "mesh") return createInlineMeshObject(definition);
   if (definition.type === "group") return new Group();
   if (definition.type === "agent") return createAgentAvatar(definition);
   if (definition.type === "model") return new Group();
@@ -4431,6 +4512,7 @@ function createDefaultAgentAvatar(definition: ResolvedEntity): Group {
 }
 
 function applyMaterial(material: MeshStandardMaterial, definition: AgentWorldMaterial): void {
+  if (definition.side !== undefined) material.side = definition.side === "double" ? DoubleSide : definition.side === "back" ? BackSide : FrontSide;
   material.color.set(definition.color);
   material.emissive.set(definition.emissive);
   material.emissiveIntensity = definition.emissiveIntensity;
@@ -4483,9 +4565,12 @@ function applyAgentTexture(material: MeshStandardMaterial, settings: AgentWorldT
   }
   const token = Symbol(`agent-texture:${resolved.id}`);
   material.userData.graphysxTextureToken = token;
-  void loadAgentTexture(resolved.id).then((baseTexture) => {
-    if (material.userData.graphysxTextureToken !== token) return;
-    const texture = baseTexture.clone();
+  void loadAgentTexture(resolved.id, resolved.pixels).then((baseTexture) => {
+    if (material.userData.graphysxTextureToken !== token) {
+      if (resolved.pixels) baseTexture.dispose();
+      return;
+    }
+    const texture = resolved.pixels ? baseTexture : baseTexture.clone();
     texture.wrapS = RepeatWrapping;
     texture.wrapT = RepeatWrapping;
     texture.repeat.set(...(resolved.repeat ?? [1, 1]));
@@ -4538,9 +4623,12 @@ function applyAgentNormalTexture(material: MeshStandardMaterial, settings: Agent
   }
   const token = Symbol(`agent-normal-texture:${resolved.id}`);
   material.userData.graphysxNormalTextureToken = token;
-  void loadAgentTexture(resolved.id).then((baseTexture) => {
-    if (material.userData.graphysxNormalTextureToken !== token) return;
-    const texture = baseTexture.clone();
+  void loadAgentTexture(resolved.id, resolved.pixels).then((baseTexture) => {
+    if (material.userData.graphysxNormalTextureToken !== token) {
+      if (resolved.pixels) baseTexture.dispose();
+      return;
+    }
+    const texture = resolved.pixels ? baseTexture : baseTexture.clone();
     texture.wrapS = RepeatWrapping;
     texture.wrapT = RepeatWrapping;
     texture.repeat.set(...(resolved.repeat ?? [1, 1]));
@@ -4601,9 +4689,12 @@ function applyAgentArchiveShader(material: MeshStandardMaterial, settings: Archi
   }
   const token = Symbol(`meshlight-specular:${resolved.id}`);
   material.userData.graphysxSpecularTextureToken = token;
-  void loadAgentTexture(resolved.id).then((baseTexture) => {
-    if (material.userData.graphysxSpecularTextureToken !== token) return;
-    const texture = baseTexture.clone();
+  void loadAgentTexture(resolved.id, resolved.pixels).then((baseTexture) => {
+    if (material.userData.graphysxSpecularTextureToken !== token) {
+      if (resolved.pixels) baseTexture.dispose();
+      return;
+    }
+    const texture = resolved.pixels ? baseTexture : baseTexture.clone();
     texture.wrapS = RepeatWrapping;
     texture.wrapT = RepeatWrapping;
     texture.repeat.set(...(resolved.repeat ?? [1, 1]));
@@ -4625,7 +4716,11 @@ function applyAgentArchiveShader(material: MeshStandardMaterial, settings: Archi
   });
 }
 
-function loadAgentTexture(id: AgentWorldTextureId): Promise<Texture> {
+function loadAgentTexture(id: AgentWorldTextureId, pixels?: AgentWorldInlinePixels): Promise<Texture> {
+  if (id === "inline") {
+    assertInlinePixels(pixels);
+    return Promise.resolve(new DataTexture(new Uint8Array(pixels.rgba), pixels.width, pixels.height));
+  }
   const cached = agentTextureCache.get(id);
   if (cached) return cached;
   const descriptor = findAgentWorldTexture(id);
@@ -4656,7 +4751,10 @@ function resolveAgentProfile(source: AgentWorldAgentProfile = {}, base?: Require
 }
 
 function resolveMaterial(source?: Partial<AgentWorldMaterial>, base: AgentWorldMaterial = DEFAULT_MATERIAL): AgentWorldMaterial {
+  const side = source?.side ?? base.side;
+  if (side !== undefined && !["front", "back", "double"].includes(side)) throw new Error(`Unsupported material.side: ${String(side)}`);
   return {
+    ...(side !== undefined ? { side } : {}),
     color: source?.color ?? base.color,
     emissive: source?.emissive ?? base.emissive,
     emissiveIntensity: clamp(source?.emissiveIntensity ?? base.emissiveIntensity, 0, 100),
@@ -4694,6 +4792,16 @@ function resolveArchiveShader(source: AgentWorldMaterial["shader"] | undefined):
 
 function resolveTexture(source: AgentWorldTexture | null): AgentWorldTexture | null {
   if (source === null) return null;
+  if (source.id === "inline") {
+    assertInlinePixels(source.pixels);
+    return {
+      id: "inline", pixels: deepClone(source.pixels),
+      repeat: sanitizeVector2(source.repeat ?? [1, 1], 0.01, 128, "material.texture.repeat"),
+      offset: sanitizeVector2(source.offset ?? [0, 0], -128, 128, "material.texture.offset"),
+      rotationDegrees: clamp(source.rotationDegrees ?? 0, -360000, 360000),
+    };
+  }
+  if (source.pixels !== undefined) throw new Error("Texture pixels requires id inline");
   const descriptor = findAgentWorldTexture(source.id);
   if (!descriptor) throw new Error(`Unknown GraphysX texture: ${String(source.id)}`);
   return {
@@ -4901,9 +5009,10 @@ function resolvePhysics(
   if (!["auto", "convex-hull", "trimesh"].includes(collider)) {
     throw new Error(`Unsupported physics collider: ${String(collider)}`);
   }
-  if (collider !== "auto" && entityType !== "model") {
-    throw new Error(`${collider} colliders are only available on model entities`);
+  if (collider !== "auto" && !["model", "mesh"].includes(entityType)) {
+    throw new Error(`${collider} colliders are only available on model or mesh entities`);
   }
+  if (entityType === "mesh" && collider === "auto") throw new Error("Mesh physics requires an explicit convex-hull or static trimesh collider");
   if (collider === "trimesh" && source.mode !== "static") {
     throw new Error("Trimesh colliders must be static; use convex-hull for moving models");
   }
@@ -5358,6 +5467,7 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
       ? { modelMaterialOverrides: deepClone(definition.modelMaterialOverrides) }
       : {}),
     geometry: deepClone(definition.geometry),
+    ...(definition.mesh ? { mesh: deepClone(definition.mesh) } : {}),
     ...(definition.path ? { path: deepClone(definition.path) } : {}),
     ...(definition.asset ? {
       asset: {

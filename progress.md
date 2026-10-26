@@ -2,6 +2,20 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-10-26 — Mesh integration and resource parity
+
+- Full release verification on 459059b passed all 103 checks: 731 Node passes with one existing skip, static/build/Rapier checks, all 97 journeys and 131/131 shared-browser assertions. Preserved the exact log and captures outside Git. Current main's measured-volume and mobile updates were then merged; every mesh feature file except progress remained byte-identical to the full-tested commit before the following contract correction.
+- A targeted boundary probe found server/runtime disagreement for a temporary ninth full-size mesh followed by removal. The document boundary now enforces the same per-operation scene budget as runtime allocation; whole-mesh updates remain atomic and removal-before-spawn remains valid. UV/normal bounds now publish the existing numeric constants. New atomicity/order regression and fresh integration validation cover this Node/contract change; do not claim the merged head ran the older complete gate.
+- Core's prompt support (AgentX #1107) was already installed by a concurrent native deployment; serving revision ancestry and the executing file hash match the tested source. The unstarted duplicate deployment request was cancelled. Real Core composition and final publication receipts remain separate from deterministic fixtures.
+
+## 2026-10-26 — Portable mesh v1 and authored texture
+
+- Owner authorized indexed mesh authoring followed by an actual Nestor composition. Added mesh buffers and optional UVs/normals/material groups to ordinary spawn/update, shared topology/resource checks, inline RGBA textures on the existing material path and explicit exact colliders. Core keeps proposal authority; public anonymous composition and the paused LEGO shader remain unchanged.
+- Extended the machine vocabulary from its validator tables and added an applied mesh/texture example. A small separate Core change renders new vocabulary blocks and resource limits without a second registry; its eight existing/extended route tests pass. Current canonical Core instructions supersede the retired RUNTIME.md/SERVICE_CONTRACTS.md paths, which are absent from its current main.
+- 728 Node contracts pass with one existing skip; typecheck/lint/build and both Rapier probes pass in the initial scoped run. New browser fixture covers inert review, attributed Apply, actual texture buffers, replacement, undo/redo/reload and atomic malformed-index refusal. Initial physics assertion observed a ball rolling correctly off a short ramp; trajectory preserved. The fixture now extends the ramp to keep the same assertion valid for its full observation window. Browser completion, inspected captures, full gate and native model evidence remain pending.
+- Final scoped verification passes all seven checks, including the reviewed mesh journey, exact trimesh/hull physics and shared operation inverse/viewer refusal. Captures revealed backface culling of an open panel: inline surfaces now default to double-sided, with explicit front/back/double material control and an editor Faces selector. A vertical folded-panel fixture makes both indexed groups and the authored texel pattern visible on desktop/mobile. The installed skill action client also loaded the same mesh from a disposable store and produced inspected renderer/state/capture evidence with no errors. Full-release and native Nestor receipts belong to the private task evidence and PR validation; no live-model success is claimed by these deterministic fixtures.
+- Follow-up audit: the 60-entity provider summary could omit a new mesh in the 62-entity welcome. It now prioritizes the current selection/presentation without increasing the cap or sending geometry/private state. The mesh browser regression makes a second ordinary request and verifies its target survives the bounded summary. Shared topology validation also checks the Float32 coordinates actually consumed by Three/Rapier, rejecting distinct JSON vertices that collapse after conversion. The initial full gate on ead3581 was intentionally stopped before these corrections; it is not a completed release receipt. Restart validation on the corrected revision.
+
 ## 2026-10-25 — Mobile LLMx controls and conversation
 
 - Keep the profile visible beside the room title, move its switch into a horizontally scrollable tool strip and place undo/redo with those tools instead of over the conversation. Text, Send and Talk share one compact row; long messages use the full transcript width. The portrait stays clear of the transcript and makes room for reading on short screens; the short-screen maths panel leaves its portrait column available.
@@ -5041,3 +5055,15 @@ copy of the API; the three demonstrations stay as the fallback when no provider 
 - Checks: `test/diskx-source.test.mjs` (new, 3), `diskx-observation`, `diskx-route`,
   `diskx-embed`, `diskx-layout`; `tsc`, scoped eslint; `smoke-diskx` and `smoke-diskx-embed`
   (two volumes in the mocked summary, one kept, gauge « pool/data · core », provenance line).
+
+### 2026-10-26 — DiskX integration smoke receipts
+
+The mesh integration gate on `9126996` passed LLMx embed, DiskX, DiskX embed, Ecosystem,
+showroom/camera, Nestor requests, editor and inline mesh, plus all six static checks.
+It exposed an obsolete Janitor tooltip assertion after visible volume provenance landed;
+the smoke now checks the visible host and measurement text. One 3D selection timeout was
+not reproduced in two instrumented diagnostic runs. Wait for the completed live observation
+and a rendered frame before sampling the roof; retain click state/events and a capture on
+any future failure. Selection still requires the original real pointer event and exact path.
+The full 103-check receipt remains scoped to ancestor `459059b`; final scoped reruns are
+reported separately in the pull request.

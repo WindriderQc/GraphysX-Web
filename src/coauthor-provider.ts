@@ -186,8 +186,13 @@ export function readProviderReply(raw: unknown): ProviderResult {
 export function summarizeSceneForProvider(
   entities: readonly { id: string; type: string; label: string }[],
   limit = 60,
+  priorityIds: readonly string[] = [],
 ): { id: string; type: string; label: string }[] {
-  return entities.slice(0, limit).map((entity) => ({ id: entity.id, type: entity.type, label: entity.label }));
+  // A full showroom must not omit the just-created object from the next request.
+  // Selection/presentation changes which ids fit, never the privacy or size boundary.
+  const priority = new Set(priorityIds);
+  return [...entities.filter(entity => priority.has(entity.id)), ...entities.filter(entity => !priority.has(entity.id))]
+    .slice(0, limit).map((entity) => ({ id: entity.id, type: entity.type, label: entity.label }));
 }
 
 let active: ProposalProvider | null = null;

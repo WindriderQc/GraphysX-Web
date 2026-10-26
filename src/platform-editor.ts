@@ -125,6 +125,7 @@ const TYPE_GLYPHS: Record<AgentWorldEntityType, string> = {
   plane: "▬",
   spline: "∿",
   model: "⬡",
+  mesh: "△",
   emitter: "✷",
   terrain: "⛰",
   water: "≈",
@@ -601,12 +602,14 @@ export class PlatformEditor {
     this.refresh();
   }
 
-  private addPrimitive(kind: "box" | "sphere" | "point-light"): void {
+  private addPrimitive(kind: "box" | "sphere" | "point-light" | "mesh"): void {
     this.addCounter += 1;
     const id = `edit-${kind}-${this.addCounter}`;
     const position: [number, number, number] = [round((this.addCounter % 5) - 2), 4, round((Math.floor(this.addCounter / 5) % 5) - 2)];
     let result;
-    if (kind === "box") {
+    if (kind === "mesh") {
+      result = this.deps.api.spawn({ id, type: "mesh", label: "Authored triangle", mesh: { positions: [-1, 0, 0, 1, 0, 0, 0, 1.5, 0], indices: [0, 1, 2], uvs: [0, 0, 1, 0, 0.5, 1] }, transform: { position }, material: { color: "#8ad9ff" } });
+    } else if (kind === "box") {
       result = this.deps.api.spawn({ id, type: "box", geometry: { width: 1.2, height: 1.2, depth: 1.2 }, transform: { position }, material: { color: "#8ad9ff", roughness: 0.6 }, physics: { mode: "dynamic", mass: 1, material: "default" } });
     } else if (kind === "sphere") {
       result = this.deps.api.spawn({ id, type: "sphere", geometry: { radius: 0.7 }, transform: { position }, material: { color: "#ffce7a", roughness: 0.4 }, physics: { mode: "dynamic", mass: 1, material: "ball", restitution: 0.6 } });
@@ -1014,6 +1017,8 @@ export class PlatformEditor {
     current.className = "gx-ed-value";
     current.textContent = entity.material.texture?.id ?? "none";
     texture.append(current, this.chip("Clear texture", () => patch({ texture: null })));
+    const side = this.selectInput(["front", "back", "double"], entity.material.side ?? (entity.type === "mesh" ? "double" : "front"));
+    side.addEventListener("change", () => patch({ side: side.value as NonNullable<AgentWorldMaterial["side"]> }));
 
     return this.section("Material", [
       this.field("Colour", colour),
@@ -1022,6 +1027,7 @@ export class PlatformEditor {
       this.field("Metalness", metalness),
       this.field("Opacity", opacity),
       this.field("Texture", texture),
+      this.field("Faces", side),
     ]);
   }
 
@@ -1173,8 +1179,8 @@ export class PlatformEditor {
     const extras = this.physicsExtras.get(entity.id) ?? {};
     const requestedCollider = entity.physics?.collider.requested ?? "auto";
     const mode = this.selectInput(["static", "dynamic", "kinematic"], entity.physics?.mode ?? "static");
-    const collider = entity.type === "model"
-      ? this.selectInput(["auto", "convex-hull", "trimesh"], requestedCollider)
+    const collider = ["model", "mesh"].includes(entity.type)
+      ? this.selectInput(entity.type === "mesh" ? ["convex-hull", "trimesh"] : ["auto", "convex-hull", "trimesh"], entity.type === "mesh" && requestedCollider === "auto" ? "convex-hull" : requestedCollider)
       : null;
     const mass = this.numberInput(entity.physics?.mass ?? 1, 0.1, 0);
     const restitution = this.numberInput(extras.restitution, 0.05, 0);
@@ -1711,6 +1717,7 @@ export class PlatformEditor {
       { label: "Export legacy XML", hint: "SceneNET compatibility", run: () => this.exportLegacyXml() },
       { label: "Add box", hint: "primitive", run: () => this.addPrimitive("box") },
       { label: "Add sphere", hint: "primitive", run: () => this.addPrimitive("sphere") },
+      { label: "Add mesh triangle", hint: "indexed geometry", run: () => this.addPrimitive("mesh") },
       { label: "Add point light", hint: "lighting", run: () => this.addPrimitive("point-light") },
       { label: "Duplicate selection", hint: "Ctrl+D", run: () => this.duplicateSelected() },
       { label: "Frame selection", hint: "F", run: () => this.focusSelection() },

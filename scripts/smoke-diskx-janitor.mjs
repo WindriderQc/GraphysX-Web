@@ -78,7 +78,10 @@ try {
   assert.equal(await page.evaluate(() => JSON.parse(window.render_game_to_text()).application.focus.totalSize), 100);
   assert.deepEqual(await page.evaluate(`(${app})().volumes`), [{ id: 'test:vol', label: 'Volume test', capacityBytes: 1000, freeBytes: 900, source: 'measured' }], 'the live volume comes out of summary');
   assert.match(await page.locator('[data-volumes] .gx-diskx-gauge .free').textContent(), /^900 o libres$/, 'the gauge shows the agent-measured free space');
-  assert.match(await page.locator('[data-volumes] .gx-diskx-gauge').getAttribute('title'), /^Mesuré \(statfs\) le .* sur TestHost$/);
+  assert.equal(await page.locator('[data-volumes] .gx-diskx-gauge .name').textContent(), 'Volume test · TestHost');
+  const provenance = page.locator('[data-volumes] .gx-diskx-gauge .provenance');
+  assert.equal(await provenance.isVisible(), true, 'measurement provenance is visible without a tooltip');
+  assert.match(await provenance.textContent(), /^Mesuré \(statfs\) le /);
   fail = true;
   await page.getByRole('button', { name: 'Actualiser', exact: true }).click();
   await page.waitForFunction(`(${app})()?.loading === false`);

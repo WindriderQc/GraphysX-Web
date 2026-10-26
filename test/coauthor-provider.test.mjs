@@ -179,6 +179,13 @@ describe("what the scene summary sends", () => {
     assert.equal(summarizeSceneForProvider(entities).length, 60);
     assert.equal(summarizeSceneForProvider(entities, 5).length, 5);
   });
+  it("keeps the selected or newly presented object in a full summary without sending more data", () => {
+    const summary = summarizeSceneForProvider(entities, 60, ["e99", "e99", "missing"]);
+    assert.equal(summary.length, 60);
+    assert.equal(summary[0].id, "e99");
+    assert.equal(new Set(summary.map(entity => entity.id)).size, 60);
+    assert.ok(summary.every(entity => Object.keys(entity).sort().join(",") === "id,label,type"));
+  });
 });
 
 describe("having a provider at all", () => {

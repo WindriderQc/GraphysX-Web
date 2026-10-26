@@ -1,0 +1,10 @@
+import type { AgentWorldInlineMesh, AgentWorldInlinePixels } from "../src/agent-world-runtime";
+export const MESH_FIELDS: readonly string[];
+export const MESH_GROUP_FIELDS: readonly string[];
+export const PIXEL_FIELDS: readonly string[];
+export const MESH_LIMITS: Readonly<{ vertices: number; triangles: number; materials: number; groups: number; bytes: number; coordinate: number; uv: number; normalComponent: number; normalMinimumLength: number; sceneVertices: number; sceneTriangles: number }>;
+export const PIXEL_LIMITS: Readonly<{ dimension: number; channel: number }>;
+export function assertInlineMesh(value: unknown, label?: string): asserts value is AgentWorldInlineMesh;
+export function assertInlinePixels(value: unknown, label?: string): asserts value is AgentWorldInlinePixels;
+export function assertMeshSceneBudget(entities: Iterable<{ type: string; mesh?: AgentWorldInlineMesh | null }>): void;
+export function assertMeshTextureCoordinates(mesh: AgentWorldInlineMesh, material?: unknown): void;

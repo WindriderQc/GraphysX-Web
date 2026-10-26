@@ -2,7 +2,7 @@
 export const WORLD_SCHEMA = "graphysx.agent-world/v2";
 export const WORLD_ENTITY_TYPES = Object.freeze([
   "group", "agent", "box", "sphere", "icosahedron", "cylinder", "cone", "torus", "plane",
-  "spline", "model", "emitter", "terrain", "water", "flock", "crowd", "force-field",
+  "spline", "model", "mesh", "emitter", "terrain", "water", "flock", "crowd", "force-field",
   "formula-field", "dna-tree", "sound", "ambient-light", "directional-light", "point-light",
 ]);
 

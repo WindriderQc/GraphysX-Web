@@ -6,6 +6,7 @@
 // refuses to load; declining an unproven command is safer than persisting it.
 
 import { resolveAgentAppearance } from "./agent-appearance.mjs";
+import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates, MESH_FIELDS, MESH_GROUP_FIELDS, MESH_LIMITS, PIXEL_FIELDS, PIXEL_LIMITS } from "./inline-mesh.mjs";
 import {
   assertAuthoredSceneCommandNamespaces,
   assertAuthoredWorldEntityNamespaces,
@@ -33,12 +34,12 @@ export const FIELDS = Object.freeze({
   entity: Object.freeze([
     "appearance",
     "id", "label", "type", "parentId", "transform", "material", "modelMaterialOverrides", "geometry",
-    "path", "asset", "emitter", "sound", "terrain", "water", "flock", "crowd", "formula", "surface",
+    "path", "mesh", "asset", "emitter", "sound", "terrain", "water", "flock", "crowd", "formula", "surface",
     "steering", "dna", "forceField", "agent", "physics", "intensity", "distance", "marker", "visible",
     "castShadow", "receiveShadow", "ephemeral", "tags", "behaviors", "interactions",
   ]),
   patch: Object.freeze([
-    "path",
+    "path", "mesh",
     "appearance",
     "label", "parentId", "transform", "material", "modelMaterialOverrides", "surface", "steering", "visible",
     "castShadow", "receiveShadow", "ephemeral", "tags", "intensity", "distance", "marker", "physics", "agent",
@@ -48,10 +49,13 @@ export const FIELDS = Object.freeze({
     "background", "sky", "envelope", "post", "lighting", "dayNight", "overlay", "ground", "physics",
   ]),
   transform: Object.freeze(["position", "rotationDegrees", "scale"]),
-  texture: Object.freeze(["id", "repeat", "offset", "rotationDegrees"]),
+  texture: Object.freeze(["id", "pixels", "repeat", "offset", "rotationDegrees"]),
+  mesh: MESH_FIELDS,
+  meshGroup: MESH_GROUP_FIELDS,
+  pixels: PIXEL_FIELDS,
   material: Object.freeze([
     "color", "emissive", "emissiveIntensity", "roughness", "metalness", "opacity", "wireframe", "texture",
-    "normalTexture", "normalScale", "shader",
+    "normalTexture", "normalScale", "shader", "side",
   ]),
   geometry: Object.freeze(["width", "height", "depth", "radius", "tube", "radialSegments"]),
   path: Object.freeze(["points", "closed", "tension"]),
@@ -128,6 +132,7 @@ export const FIELDS = Object.freeze({
 
 /** Closed enumerations the validators compare against; strings outside them are refused. */
 export const ENUMS = Object.freeze({
+  materialSides: Object.freeze(["front", "back", "double"]),
   physicsModes: Object.freeze(["static", "dynamic", "kinematic", "trigger"]),
   physicsMaterials: Object.freeze(["default", "wall", "finish", "ground", "ball", "human"]),
   colliders: Object.freeze(["auto", "convex-hull", "trimesh"]),
@@ -156,6 +161,8 @@ export const LIMITS = Object.freeze({
   shader: Object.freeze({ bumpAmount: [0, 0.5], parallaxStrength: [0, 0.5], specularMultiplier: [0, 20], lightPosition: [-100_000, 100_000] }),
   modelMaterialOverride: Object.freeze({ unit: [0, 1], emissiveIntensity: [0, 100] }),
   geometry: Object.freeze({ size: [0.0001, 10_000], radialSegments: [3, 512] }),
+  mesh: MESH_LIMITS,
+  pixels: PIXEL_LIMITS,
   path: Object.freeze({ points: [2, 256], point: [-10_000, 10_000], tension: [0, 1] }),
   asset: Object.freeze({ fitSize: [0.0001, 10_000], alphaTest: [0, 1], colorKeyTolerance: [0, 1] }),
   agent: Object.freeze({ perceptionRadius: [0, 10_000] }),
@@ -371,7 +378,11 @@ function validateTexture(value, label, allowImportedMedia = false) {
   if (value === null) return;
   allowedKeys(value, setOf(FIELDS.texture), label);
   requireString(value.id, `${label}.id`, { maximum: LIMITS.strings.textureId });
-  if (!allowImportedMedia && !TEXTURE_IDS.has(value.id)) reject(`${label}.id is not a curated live texture: ${String(value.id)}`);
+  if (value.id === "inline") assertInlinePixels(value.pixels, `${label}.pixels`);
+  else {
+    if (value.pixels !== undefined) reject(`${label}.pixels requires id inline`);
+    if (!allowImportedMedia && !TEXTURE_IDS.has(value.id)) reject(`${label}.id is not a curated live texture: ${String(value.id)}`);
+  }
   if (value.repeat !== undefined) requireVector(value.repeat, 2, `${label}.repeat`, ...LIMITS.texture.repeat);
   if (value.offset !== undefined) requireVector(value.offset, 2, `${label}.offset`, ...LIMITS.texture.offset);
   if (value.rotationDegrees !== undefined) requireFinite(value.rotationDegrees, `${label}.rotationDegrees`, ...LIMITS.texture.rotationDegrees);
@@ -402,6 +413,7 @@ function validateShader(value, label, allowImportedMedia = false) {
 
 function validateMaterial(value, label, allowImportedMedia = false) {
   allowedKeys(value, setOf(FIELDS.material), label);
+  if (value.side !== undefined && !ENUMS.materialSides.includes(value.side)) reject(`Unsupported ${label}.side: ${String(value.side)}`);
   for (const key of ["color", "emissive"]) if (value[key] !== undefined) requireString(value[key], `${label}.${key}`, { maximum: LIMITS.strings.color });
   if (value.emissiveIntensity !== undefined) requireFinite(value.emissiveIntensity, `${label}.emissiveIntensity`, ...LIMITS.material.emissiveIntensity);
   for (const key of ["roughness", "metalness", "opacity"]) if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`, ...LIMITS.material[key]);
@@ -443,6 +455,15 @@ function validateGeometry(value, label) {
     if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`, ...LIMITS.geometry.size);
   }
   if (value.radialSegments !== undefined) requireInteger(value.radialSegments, `${label}.radialSegments`, ...LIMITS.geometry.radialSegments);
+}
+
+function validateMesh(value, label, allowImportedMedia = false) {
+  assertInlineMesh(value, label);
+  for (const material of value.materials ?? []) validateMaterial(material, `${label}.materials`, allowImportedMedia);
+}
+
+export function validateInlineMeshDefinition(value) {
+  validateMesh(value, "mesh", true);
 }
 
 function validatePath(value, label) {
@@ -645,7 +666,8 @@ function validatePhysics(value, label, entity) {
   if (value.angularVelocity !== undefined) requireVector(value.angularVelocity, 3, `${label}.angularVelocity`, ...LIMITS.physics.angularVelocity);
   const collider = value.collider ?? "auto";
   if (!ENUMS.colliders.includes(collider)) reject(`Unsupported ${label}.collider: ${String(collider)}`);
-  if (collider !== "auto" && entity.type !== "model") reject(`${collider} colliders are only available on model entities`);
+  if (collider !== "auto" && !["model", "mesh"].includes(entity.type)) reject(`${collider} colliders are only available on model or mesh entities`);
+  if (entity.type === "mesh" && collider === "auto") reject("Mesh physics requires an explicit convex-hull or static trimesh collider");
   if (collider === "trimesh" && value.mode !== "static") reject("Trimesh colliders must be static");
 }
 
@@ -755,6 +777,11 @@ function validateEntityFields(entity, label, allowImportedMedia = false) {
     validateModelMaterialOverrides(entity.modelMaterialOverrides, `${label}.modelMaterialOverrides`);
   }
   if (entity.geometry !== undefined) validateGeometry(entity.geometry, `${label}.geometry`);
+  if (entity.type === "mesh") {
+    validateMesh(entity.mesh, `${label}.mesh`, allowImportedMedia);
+    assertMeshTextureCoordinates(entity.mesh, entity.material);
+  }
+  else if (entity.mesh !== undefined) reject("Only mesh entities accept mesh buffers");
   if (entity.type === "spline") validatePath(entity.path, `${label}.path`);
   else if (entity.path !== undefined) reject("Only spline entities accept a path");
   if (entity.type === "model") validateAsset(entity.asset, `${label}.asset`, allowImportedMedia);
@@ -785,6 +812,10 @@ function validateEntityFields(entity, label, allowImportedMedia = false) {
 
 function validatePatchFields(current, patch, label) {
   allowedKeys(patch, PATCH_KEYS, label);
+  if (patch.mesh !== undefined) {
+    if (current.type !== "mesh") reject("Only mesh entities accept mesh buffers");
+    validateMesh(patch.mesh, `${label}.mesh`);
+  }
   if (patch.path !== undefined) {
     if (current.type !== "spline") reject("Only spline entities accept path");
     validatePath(patch.path, `${label}.path`);
@@ -869,6 +900,7 @@ function mergeEntityPatch(current, patch) {
 }
 
 function validateUpdatedEntity(entity, label) {
+  if (entity.mesh) assertMeshTextureCoordinates(entity.mesh, entity.material);
   validateAppearance(entity.appearance, entity.type);
   if (entity.parentId && entity.parentId === entity.id) reject("An entity cannot parent itself");
   if (entity.physics !== undefined) validatePhysics(entity.physics, `${label}.physics`, entity);
@@ -1172,6 +1204,7 @@ export function validateStoredSceneDefinition(definition) {
   // browser resolves those resources; the curated-only live-command policy stays separate.
   if (definition.environment !== undefined) validateEnvironmentBlock(definition.environment, "scene.environment", true);
   for (const entity of definition.entities) validateEntityFields(entity, `entity ${entity.id}`, true);
+  assertMeshSceneBudget(definition.entities);
   validateGraph(definition);
 }
 
@@ -1189,7 +1222,13 @@ export function applyCommands(definition, commands) {
   }
   const next = structuredClone(definition);
   entityMap(next.entities);
-  const outputs = commands.map((command) => applyCommand(next, command));
+  const outputs = commands.map((command) => {
+    const output = applyCommand(next, command);
+    // Match the runtime's pre-allocation budget at each step, including temporary peaks
+    // in a batch. A whole-mesh update avoids a spawn-before-remove peak entirely.
+    assertMeshSceneBudget(next.entities);
+    return output;
+  });
   validateGraph(next);
   const serializedBytes = new TextEncoder().encode(JSON.stringify(next)).byteLength;
   if (serializedBytes > MAX_DEFINITION_BYTES) {
