@@ -98,9 +98,17 @@ section below this one is the September release they build on):
    set-environment), Apply gave `commit-0001` by `nestor`, the editor outliner listed both
    entities, a scene-store PUT and `?scene=` reload found them; an impossible request came back
    as the model's own French refusal in the card. Captures in
-   `output/visual-receipts-20261025/nestor-request-core-*.jpg` (ignored, local). Caveat: on this
-   machine `smoke-showroom`'s headless canvas clicks fail on every dist including `main`'s;
-   `smoke-nestor-request` (DOM-driven) is green.
+   `output/visual-receipts-20261025/nestor-request-core-*.jpg` (ignored, local). The earlier
+   headless-click caveat was traced to welcome controls covering the physics stage, including
+   on the previous main build. Treat this as a layout regression, not machine acceptance:
+   retain real-pointer and movement assertions. The welcome revision also follows the owner's
+   open-landscape/CubX direction; current delivery evidence belongs to PR 69.
+
+**Generative geometry follow-up (2026-10-26).** The owner wants agents to author arbitrary
+triangles and textures. The model loader already handles indexed geometry, normals, UVs and
+maps, but scene proposals expose primitive dimensions and model references. No inline mesh
+authoring API has shipped. [GENERATIVE_MESH.md](docs/GENERATIVE_MESH.md) records the gap,
+recommended contract and required acceptance without inventing a second engine or vocabulary.
 
 **Ecosystem seams.** AgentX owns canonical conversations, memory, domain data, permissions,
 tools and execution. Nestor explains and requests a presentation. GraphysX owns the visual
