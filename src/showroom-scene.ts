@@ -73,13 +73,13 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     {
       id: "showroom-starlings", type: "flock", label: "Starling Murmuration", transform: { position: [-7, 11, -16] },
       flock: { preset: "starlings", count: 52, size: [10, 2.8, 7.5], speed: 4.2, cohesion: 1.15, separation: 1.5,
-        separationDistance: 1.7, neighborDistance: 4.5, memberSize: 0.48, color: "#8eb8ca", emissive: "#32647a", emissiveIntensity: 0.6, seed: 11 },
+        separationDistance: 1.7, neighborDistance: 4.5, memberSize: 0.48, color: "#10151c", emissive: "#000000", emissiveIntensity: 0, seed: 11 },
       castShadow: false, tags: ["showroom", "life", "flock"],
     },
     {
       id: "showroom-cubx-swarm", type: "flock", label: "CubX Swarm", parentId: CLUSTER,
       flock: { preset: "orbital-swarm", count: 28, radius: 3.1, speed: 1.15, memberSize: 0.16, trails: true, trailLength: 14,
-        color: "#bff3ff", emissive: "#1c86ad", trailColor: "#5fe0ff" },
+        color: "#f2f5f8", emissive: "#dce5ec", emissiveIntensity: 0.22, trailColor: "#f2f5f8" },
       castShadow: false, tags: ["showroom", "life", "flock"],
     },
     {

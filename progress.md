@@ -4986,3 +4986,7 @@ copy of the API; the three demonstrations stay as the fallback when no provider 
 
 - Public reception found the optional stored-scene inspector expanded over the landscape. Start it collapsed on an idle welcome; explicit stored-scene URLs retain the open inspector. Manual expansion remains available, editor entry expands its docked section, and returning to the welcome folds it again without changing storage authority or writing the scene.
 - The existing scene-store journey now covers the store-present welcome, explicit expansion, editor docking and return, plus unchanged stored data. Unit/typecheck/lint/build, both Rapier probes and that complete focused browser journey pass; the capture was inspected.
+
+## 2026-10-26 — Black and white flocks
+
+- Restore the owner's preferred contrast: dark starling silhouettes above the landscape and a white orbital swarm with white trails around CubX. Counts, motion and geometry stay the same.
