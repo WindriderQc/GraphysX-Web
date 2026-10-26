@@ -29,8 +29,8 @@ export function mountShowroomEnvironment(scene: Scene, renderer: WebGLRenderer):
   // leaving the water with no glint at all. Ahead-and-left instead gives warm rim light down
   // the edges of the props and lays the sun's glitter path across the lake toward the viewer.
   // `showroom-scene.ts` keeps `water.sunDirection` matched to this vector.
-  const sun = new DirectionalLight("#ffd0a0", 1.8);
-  sun.position.set(-30, 28, -35);
+  const sun = new DirectionalLight("#ffd0a0", 1.5);
+  sun.position.set(-30, 14, -35);
 
   // Shadows were off while the showroom had no casters — a per-frame shadow map would have
   // been pure cost. It has casters now (the kinetic stack, the trees, the CubX assembly, the

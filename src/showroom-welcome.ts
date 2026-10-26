@@ -222,11 +222,11 @@ export function mountWelcome(
     @media (prefers-reduced-motion:reduce){
       .gx-welcome-card > *{animation:none}
     }
-    @media (max-width:640px){
+    @media (max-width:899px){
       .gx-welcome{justify-content:center;align-items:flex-end;padding:14px 14px calc(58px + env(safe-area-inset-bottom))}
-      .gx-welcome-card{align-items:center;text-align:center;max-height:min(38dvh,300px);overflow-y:auto;padding:14px 16px;backdrop-filter:none;pointer-events:auto}
+      .gx-welcome-card{align-items:center;text-align:center;max-height:min(30dvh,260px);overflow-y:auto;padding:14px 16px;backdrop-filter:none;pointer-events:auto}
       .gx-welcome{padding-bottom:calc(90px + env(safe-area-inset-bottom))}
-      .gx-welcome .gx-actions{position:fixed;left:14px;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));width:auto;display:flex;gap:8px;overflow-x:auto;padding:4px 0}
+      .gx-welcome .gx-actions{position:fixed;left:14px;right:88px;bottom:calc(14px + env(safe-area-inset-bottom));width:auto;display:flex;gap:8px;overflow-x:auto;padding:4px 0}
       .gx-welcome .gx-actions button{flex:0 0 138px;padding-inline:10px;font-size:12px;min-height:52px}
       .gx-welcome .gx-hint{display:none}
       .gx-welcome--presenting{align-items:flex-start;justify-content:flex-start;padding:8px}
@@ -275,7 +275,7 @@ export function mountWelcome(
       .gx-welcome--live-observer p{font-size:12.5px;line-height:1.4}
       .gx-welcome--live-observer .gx-hint{display:none}
     }
-    @media (max-height:600px) and (min-width:641px){
+    @media (max-height:600px) and (min-width:900px){
       .gx-welcome{align-items:flex-start;padding:12px}
       .gx-welcome-card{max-height:calc(100dvh - 24px);overflow-y:auto;padding:18px 20px}
     }

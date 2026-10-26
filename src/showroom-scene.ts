@@ -8,10 +8,11 @@ const CLUSTER = "showroom-cubx";
 export function composeShowroom(api: GraphysXAgentWorldApi): void {
   const cubes = instantiateAgentWorldPrefab("cubx-assembly", {
     idPrefix: "showroom-cubx-frame",
-    palette: { primary: "#78cbd9", secondary: "#8a5a34", emissive: "#123b48" },
+    palette: { primary: "#4c8799", secondary: "#8a5a34", emissive: "#123b48" },
     tags: ["showroom", "cubx"],
   }).map((part, index) => ({ ...part, ...(index === 0 ? { parentId: CLUSTER } : {}),
-    ...(part.material ? { material: { ...part.material, emissiveIntensity: 0.3, roughness: 0.25, metalness: 0.78 } } : {}) }));
+    ...(part.material ? { material: { ...part.material, emissiveIntensity: 0.3, roughness: 0.32, metalness: 0.78 } } : {}),
+    ...(part.type === "cylinder" ? { geometry: { ...part.geometry, radialSegments: 32 } } : {}) }));
 
   const stack: AgentWorldEntityDefinition[] = [
     ...[-1.15, 0, 1.15].map((x, i) => ({ x, y: 1.07, i })),
@@ -39,16 +40,16 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     { id: "fill-light", type: "ambient-light", intensity: 0.3, material: { color: "#a8c7df" } },
     {
       id: "showroom-terrain", type: "terrain", label: "Twilight Shore",
-      terrain: { heightmap: "highlands", size: 150, segments: 96, heightScale: 16, heightOffset: -12,
+      terrain: { heightmap: "highlands", size: 150, segments: 96, heightScale: 8, heightOffset: -7.5,
         flattenRadius: 12, flattenFalloff: 12, flattenHeight: 0 },
       material: { color: "#293e48", roughness: 0.94, metalness: 0.05, emissive: "#0a1822", emissiveIntensity: 0.12 },
       castShadow: false, tags: ["showroom", "terrain"],
     },
     {
       id: "showroom-water", type: "water", label: "Twilight Lake", transform: { position: [0, -0.25, 0] },
-      water: { size: 150, color: "#083b50", sunColor: "#ffd1a0", sunDirection: [-0.55, 0.52, -0.65],
-        specularStrength: 8, reflectance: 0.02, tintStrength: 0.68, tintDistance: 70,
-        distortionScale: 1.8, rippleScale: 2.4, flowSpeed: 0.35, opacity: 1, reflection: true, reflectionResolution: 256 },
+      water: { size: 150, color: "#083b50", sunColor: "#ffd1a0", sunDirection: [-0.55, 0.25, -0.65],
+        specularStrength: 8, reflectance: 0.02, tintStrength: 0.88, tintDistance: 32,
+        distortionScale: 0.6, rippleScale: 6, flowSpeed: 0.35, opacity: 1, reflection: true, reflectionResolution: 256 },
       tags: ["showroom", "water"],
     },
     {
@@ -109,8 +110,8 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
       transform: { rotationDegrees: [24, 0, 18] }, material: { color: place.color, emissive: "#3d788b", emissiveIntensity: 0.75, metalness: 0.6 }, tags: ["showroom", "waypoint"] },
   );
   const result = api.create({ schema: GRAPHYSX_AGENT_WORLD_SCHEMA, id: "showroom", label: "GraphysX Nocturnal Shore",
-    environment: { background: "#24394b", sky: "lostvalley",
-      lighting: { source: "hdri", hdri: "lilienstein", intensity: 0.65, yawDegrees: 24, backgroundIntensity: 0.42, backgroundBlur: 0.28 },
+    environment: { background: "#2b4154", sky: "clearblue",
+      lighting: { source: "hdri", hdri: "lilienstein", intensity: 0.35, yawDegrees: 24, backgroundIntensity: 0.5, backgroundBlur: 0.06 },
       envelope: { fogNear: 45, fogFar: 145, cameraFar: 240 }, post: { bloom: { strength: 0.28, radius: 0.3, threshold: 0.92 } },
       ground: { visible: false, size: 60, color: "#17242e", grid: false, gridColor: "#243b48" } }, entities });
   if (!result.ok) throw new Error(`Showroom composition failed: ${result.error}`);

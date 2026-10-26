@@ -1041,7 +1041,7 @@ const ok =
   out.composition?.robotHidden === true &&
   out.composition?.robotParts === 0 &&
   out.composition?.largeGates === 0 &&
-  out.composition?.sky === "lostvalley" &&
+  out.composition?.sky === "clearblue" &&
   out.autoOrbiting &&
   // The entry move ran, landed on the authored framing, and restored full exposure.
   out.introLanded?.completed === true &&
