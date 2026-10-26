@@ -60,6 +60,7 @@ const describe = {
     material: "PBR look for meshes and light markers. Colours are CSS strings, `#rrggbb` preferred.",
     modelMaterialOverrides: "Model entities only: per-slot overrides keyed by the slot ids the runtime reports; rarely needed.",
     geometry: "Primitive dimensions in metres: width/height/depth (box, plane), radius/tube (sphere, torus, cylinder, cone).",
+    mesh: "Inline indexed triangles (mesh entities only). Flat positions and indices; optional normals, UVs, groups and materials. Replacing update.mesh is one undoable change. See fields.mesh and limits.mesh.",
     path: "Spline control points (spline entities only): `{ points: [[x,y,z], …], closed?, tension? }`.",
     asset: "Model entities only: a curated id from `modelAssetIds`, or a root-relative / HTTPS URL.",
     emitter: "Particle emitter config (emitter entities only).",
@@ -88,15 +89,26 @@ const describe = {
   },
   transform: { position: "Metres, y is up.", rotationDegrees: "Euler degrees.", scale: "Per axis multiplier, 1 is natural size." },
   material: {
+    side: "front, back or double. Inline meshes default double for open surfaces; other entity types keep their native side when absent.",
     color: "Base colour.", emissive: "Self-lit colour; combine with bloom for glow.", emissiveIntensity: "Emissive strength.",
     roughness: "0 mirror, 1 matte.", metalness: "0 dielectric, 1 metal.", opacity: "Below 1 is translucent.",
-    wireframe: "Draw edges only.", texture: "Curated texture `{ id, repeat?, offset?, rotationDegrees? }` from `textureIds`.",
+    wireframe: "Draw edges only.", texture: "Curated `{ id, repeat?, offset?, rotationDegrees? }`, or authored `{ id: 'inline', pixels: { width, height, rgba } }`. pixels.rgba is flat unsigned RGBA bytes in UV order, bottom row first. Same repeat/offset controls.",
     normalTexture: "Curated normal map, same shape as texture.", normalScale: "Normal map strength.", shader: "Recovered archive shader; leave absent for PBR.",
   },
+  mesh: {
+    positions: "Flat xyz triples in local metres (+Y up). Duplicate vertices for UV seams and hard edges.",
+    indices: "Flat zero-based vertex indices in CCW triangles. Every index must exist; degenerate triangles are refused.",
+    normals: "Optional flat xyz unit-direction triples, one per vertex; computed when absent.",
+    uvs: "Optional flat uv pairs, one per vertex. Required for authored texture mapping.",
+    groups: "Optional {start,count,materialIndex} entries; start/count are INDEX offsets, multiples of 3. Must cover every triangle once, contiguously in order.",
+    materials: "Optional PBR material array, over the entity material. More than one requires groups. Reuse material.texture, including inline pixels.",
+  },
+  texture: { id: "Curated texture id, or inline with pixels.", pixels: "Only id inline: {width,height,rgba}; see fields.pixels and limits.pixels." },
+  pixels: { width: "Integer texel columns.", height: "Integer texel rows.", rgba: "Flat RGBA unsigned byte array, exactly width*height*4 entries, bottom row first." },
   physics: {
     mode: "static never moves; dynamic falls and collides; kinematic moves by behaviors; trigger only notices crossings.",
     mass: "Kilograms, dynamic bodies.", material: "Named friction/restitution preset.", friction: "0..1.", restitution: "Bounciness 0..1.",
-    linearVelocity: "Initial m/s.", angularVelocity: "Initial rad/s.", collider: "Models only: auto, convex-hull, or trimesh (static only).",
+    linearVelocity: "Initial m/s.", angularVelocity: "Initial rad/s.", collider: "Models: auto, convex-hull, or static trimesh. Inline meshes: explicit convex-hull or static trimesh; auto is refused.",
   },
   emitter: {
     preset: "Curated look from `emitterPresets`.", rate: "Particles per second.", maxParticles: "Live particle cap.", lifetimeSeconds: "Per particle.",
@@ -205,6 +217,7 @@ export function buildWorldVocabulary({ descriptors = {} } = {}) {
       config: block,
       ...(type === "spline" ? { requires: ["path"] } : {}),
       ...(type === "model" ? { requires: ["asset"] } : {}),
+      ...(type === "mesh" ? { requires: ["mesh"], collider: "Explicit convex-hull, or static trimesh; auto is refused." } : {}),
       ...(type === "sound" ? { requires: ["sound.source"] } : {}),
       ...(type.endsWith("-light") ? { fields: ["intensity", ...(type === "point-light" ? ["distance", "marker"] : [])] } : {}),
     };
@@ -225,6 +238,9 @@ export function buildWorldVocabulary({ descriptors = {} } = {}) {
       material: fieldList("material", FIELDS.material),
       texture: fieldList("texture", FIELDS.texture),
       geometry: fieldList("geometry", FIELDS.geometry),
+      mesh: fieldList("mesh", FIELDS.mesh),
+      meshGroup: FIELDS.meshGroup,
+      pixels: fieldList("pixels", FIELDS.pixels),
       path: fieldList("path", FIELDS.path, { extraBounds: { points: LIMITS.path.points } }),
       asset: fieldList("asset", FIELDS.asset),
       agent: fieldList("agent", FIELDS.agent),
@@ -255,6 +271,7 @@ export function buildWorldVocabulary({ descriptors = {} } = {}) {
     behaviors: Object.fromEntries(Object.entries(FIELDS.behaviors).map(([type, fields]) => [type, { fields: [...fields], description: describe.behaviors[type] }])),
     interactions: Object.fromEntries(Object.entries(FIELDS.interactions).map(([type, fields]) => [type, { fields: [...fields], description: describe.interactions[type] }])),
     enums: {
+      materialSides: [...ENUMS.materialSides],
       physicsModes: [...ENUMS.physicsModes],
       physicsMaterials: [...ENUMS.physicsMaterials],
       colliders: [...ENUMS.colliders],
@@ -285,6 +302,8 @@ export function buildWorldVocabulary({ descriptors = {} } = {}) {
       strings: { ...LIMITS.strings },
       arrays: { ...LIMITS.arrays },
       document: { ...LIMITS.document },
+      mesh: { ...LIMITS.mesh },
+      pixels: { ...LIMITS.pixels },
     },
     rules: [
       "Reply with JSON only: { \"intent\": string, \"commands\": [ ... ] }. No prose, no markdown fences.",
@@ -293,7 +312,7 @@ export function buildWorldVocabulary({ descriptors = {} } = {}) {
       "`update`, `remove`, `attach-behavior`, `detach-behavior`, `interact`, `steer` and `select` may only name ids present in the scene summary you were given.",
       "`spawn` ids must be new and must match `idPattern`; never use an id starting with one of `reservedIdPrefixes`.",
       "Keep numbers inside the published ranges. The showroom is about 36 metres across; place new things within roughly 20 metres of the origin and above y = 0.",
-      "Prefer a curated preset (emitter, flock, crowd, force field, dna, sky, HDRI, texture, model) over inventing parameters.",
+      "Use curated presets for stock effects. For original geometry use a mesh with indexed triangles and UVs; design its texture with inline pixels when a curated texture does not fit. Keep both within the mesh/pixels limits and the unchanged reply-byte limit.",
       "Nothing you return is applied: a person reviews the commands line by line and accepts or discards them.",
     ],
     examples: EXAMPLES,
@@ -307,6 +326,11 @@ export function buildWorldVocabulary({ descriptors = {} } = {}) {
  * `applyCommands` and every example through the provider's structural validation.
  */
 export const EXAMPLES = Object.freeze({
+  "authored-mesh-and-texture": [
+    { op: "spawn", entity: { id: "folded-panel", type: "mesh", label: "Folded panel", transform: { position: [0, 2, 4] }, mesh: {
+      positions: [-1, 0, -1, 1, 0, -1, 1, 1, 1, -1, 0.3, 1], indices: [0, 2, 1, 0, 3, 2], uvs: [0, 0, 1, 0, 1, 1, 0, 1],
+    }, material: { color: "#ffffff", roughness: 0.6, texture: { id: "inline", pixels: { width: 2, height: 2, rgba: [20, 180, 220, 255, 220, 110, 40, 255, 220, 110, 40, 255, 20, 180, 220, 255] } } } } },
+  ],
   "primitive-and-light": [
     { op: "spawn", entity: { id: "lamp-post", type: "cylinder", label: "Lamp post", transform: { position: [4, 1.5, -2], scale: [1, 1, 1] }, geometry: { radius: 0.08, height: 3 }, material: { color: "#3a4a55", roughness: 0.7, metalness: 0.4 } } },
     { op: "spawn", entity: { id: "lamp-light", type: "point-light", label: "Lamp light", parentId: "lamp-post", transform: { position: [0, 1.7, 0] }, intensity: 5, distance: 14, marker: false, material: { color: "#ffd9a8", emissive: "#ff9a3c", emissiveIntensity: 1.2 } } },

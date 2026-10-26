@@ -28,6 +28,15 @@ gx.update(crate.id, { tags: [...crate.tags, "reviewed-by-agent"] });
 
 ## Portable world files
 
+Original triangle geometry is a portable `type: "mesh"` entity: `mesh.positions` (flat xyz),
+`mesh.indices` (zero-based CCW triples), optional `normals`, `uvs`, `groups` and PBR `materials`.
+`update` with `patch.mesh` replaces the complete buffers as one undoable edit. Custom textures
+use the existing material path with `{ id: "inline", pixels: { width, height, rgba } }`; RGBA
+bytes are bottom row first, with the same repeat/offset/rotation controls as curated textures.
+Textured meshes require UVs. Physics uses explicit convex-hull or static trimesh, never auto.
+See [generative mesh](docs/GENERATIVE_MESH.md) for complete shapes and limits; the published
+world vocabulary carries the validator's exact fields, resource caps and a working example.
+
 The visible editor's **Download JSON** button writes the complete current `graphysx.agent-world/v2` document as `<world-id>.graphysx.json`. **Import JSON / XML** reads that format or migrates an archived GraphysX serializer XML scene into the same validated v2 runtime. Unsupported custom meshes remain labeled visible proxies and the import reports conversion warnings instead of silently inventing assets. Files are limited to 5 MB in the browser UI.
 
 **Legacy XML** is a compatibility export, not a second lossless format. It emits deterministic flat `Scene3D` v1.2 XML for boxes, spheres, cylinders, cones, and planes, preserving position/rotation/scale, visibility, known texture names, and basic static/dynamic/kinematic physics. Geometry dimensions are visibly preserved by baking them into legacy Scale. The result includes structured warnings for omitted environments, rules, joints, PBR material fields, unsupported entity kinds, and other loss. Duplicate v2 IDs and hierarchy are rejected because SceneNET has no stable ID or parent field; they are never silently renamed or flattened.

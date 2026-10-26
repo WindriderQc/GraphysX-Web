@@ -2,6 +2,13 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-10-26 — Portable mesh v1 and authored texture
+
+- Owner authorized indexed mesh authoring followed by an actual Nestor composition. Added mesh buffers and optional UVs/normals/material groups to ordinary spawn/update, shared topology/resource checks, inline RGBA textures on the existing material path and explicit exact colliders. Core keeps proposal authority; public anonymous composition and the paused LEGO shader remain unchanged.
+- Extended the machine vocabulary from its validator tables and added an applied mesh/texture example. A small separate Core change renders new vocabulary blocks and resource limits without a second registry; its eight existing/extended route tests pass. Current canonical Core instructions supersede the retired RUNTIME.md/SERVICE_CONTRACTS.md paths, which are absent from its current main.
+- 728 Node contracts pass with one existing skip; typecheck/lint/build and both Rapier probes pass in the initial scoped run. New browser fixture covers inert review, attributed Apply, actual texture buffers, replacement, undo/redo/reload and atomic malformed-index refusal. Initial physics assertion observed a ball rolling correctly off a short ramp; trajectory preserved. The fixture now extends the ramp to keep the same assertion valid for its full observation window. Browser completion, inspected captures, full gate and native model evidence remain pending.
+- Final scoped verification passes all seven checks, including the reviewed mesh journey, exact trimesh/hull physics and shared operation inverse/viewer refusal. Captures revealed backface culling of an open panel: inline surfaces now default to double-sided, with explicit front/back/double material control and an editor Faces selector. A vertical folded-panel fixture makes both indexed groups and the authored texel pattern visible on desktop/mobile. The installed skill action client also loaded the same mesh from a disposable store and produced inspected renderer/state/capture evidence with no errors. Full-release and native Nestor receipts belong to the private task evidence and PR validation; no live-model success is claimed by these deterministic fixtures.
+
 ## 2026-10-25 — Mobile LLMx controls and conversation
 
 - Keep the profile visible beside the room title, move its switch into a horizontally scrollable tool strip and place undo/redo with those tools instead of over the conversation. Text, Send and Talk share one compact row; long messages use the full transcript width. The portrait stays clear of the transcript and makes room for reading on short screens; the short-screen maths panel leaves its portrait column available.
