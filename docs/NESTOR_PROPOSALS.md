@@ -14,8 +14,8 @@ configured, because the public front door must never require a model, an account
 | Provider seam | `src/coauthor-provider.ts` | Unchanged contract (`{ intent, commands }`), plus `readProviderRefusal`: an explicit `{ ok: false, reason }` reaches the card as a sentence whatever the status was. |
 | Core route | AgentX `core/surfaces/graphysx/index.js`: `POST /api/graphysx/propose`, `GET /api/graphysx/vocabulary` | Reads the vocabulary from `GRAPHYSX_VOCABULARY_URL`, renders the system prompt from it, runs one admitted `analysis` inference with JSON output, validates the answer (known ops and types, scene ids for changes, new ids for creations, no `live-*:` namespace, 40 commands, 200-character intent), retries once with the refusal, answers `{ intent, commands }` or `{ ok: false, reason }`. Full profile only, refused on a family-pinned device. |
 | Dev relay | `scripts/propose-relay.mjs`, mounted by the dev server when `GRAPHYSX_PROPOSE_URL` is set | `POST /propose` on the page's origin forwarded to that one Core URL: one method, one path, a body that must be a `ProposalRequest`, a reply bounded to `PROVIDER_LIMITS.replyBytes`. Without the variable it answers 503 with a sentence. |
-| Host bridge (phase 2) | `src/center-bridge-protocol.ts` (the messages, shared by both ends), `src/coauthor-host-bridge.ts` (the Center's end, wired in `src/main.ts` when the page is framed), `src/center-host-embed.ts` → `dist/embed/center-host.js` (`<graphysx-center>`, the host's end, built by `vite.center-host.config.ts` with every `vite build`) | A framed Center waits for a host page to say hello from an allowed origin (same-origin, loopback, or the build-time `VITE_GRAPHYSX_HOST_ORIGINS`), then takes it as its provider: a typed request goes up as a message, the host asks Core on its own origin, the reply comes down and is read by `readProviderReply` like any other. A pushed proposal comes down the same way, is read by `readPushedProposal` (same rules plus an agent actor and an integer revision) and becomes a card through `proposeExternal` with that actor and that `expectedRevision`; a receipt goes back up. The Center never names its scene to a page that is not on the list. |
-| Core page and push | AgentX `core/surfaces/graphysx/center.js`: `GET /graphysx`, `GET /api/graphysx/center-host.js`, `GET /api/graphysx/center/events`, `POST /api/graphysx/center/state`, `POST /api/graphysx/center/receipts`, MCP tool `propose_world_change` | The page frames the Center from `GRAPHYSX_CENTER_URL` and relays that build's `center-host.js` from Core's origin (CSP `script-src 'self'`; `frame-src` widened to that one origin on this page only). Each open page holds one event stream; the host element reports the Center's revision and bounded scene summary and the receipts. Nestor's tool composes for the most recently active page through the same prompt and validation as `/propose`, pushes the proposal as `Nestor · Core` at the page's reported revision, waits up to five seconds for the receipt and answers `proposed`, `refused` (the Center's reason), `declined` or `no-page`. Core applies nothing and keeps no scene. |
+| Host bridge (phase 2) | `src/center-bridge-protocol.ts` (the messages, shared by both ends), `src/coauthor-host-bridge.ts` (the Center's end, wired in `src/main.ts` when the page is framed), `src/center-host-embed.ts` → `dist/embed/center-host.js` (`<graphysx-center>`, the host's end, built by `vite.center-host.config.ts` with every `vite build`) | A framed Center waits for a host page to say hello from an allowed origin (same-origin, loopback, or the build-time `VITE_GRAPHYSX_HOST_ORIGINS`), then takes it as its provider: a typed request goes up as a message, the host asks Core on its own origin, the reply comes down and is read by `readProviderReply` like any other. A pushed proposal comes down the same way, is read by `readPushedProposal` (same rules plus an agent actor and an integer revision) and becomes a card through `proposeExternal` with that actor and that `expectedRevision`; a receipt goes back up. The proposal keeps Core's push id (`CoauthorProposal.pushId`, set through `ExternalProposalOptions`), so when the person decides — Apply, Discard, or a stale or rejected Apply — `src/main.ts` sends one `push-outcome` message under that id with the status (`accepted`, `discarded`, `stale`, `rejected`), the revision after the decision and, for `accepted`, the commit id. A proposal composed locally or in answer to a typed request carries no push id and reports nothing. The Center never names its scene to a page that is not on the list. |
+| Core page and push | AgentX `core/surfaces/graphysx/center.js`: `GET /graphysx`, `GET /api/graphysx/center-host.js`, `GET /api/graphysx/center/events`, `POST /api/graphysx/center/state`, `POST /api/graphysx/center/receipts`, MCP tool `propose_world_change` | The page frames the Center from `GRAPHYSX_CENTER_URL` and relays that build's `center-host.js` from Core's origin (CSP `script-src 'self'`; `frame-src` widened to that one origin on this page only). Each open page holds one event stream; the host element reports the Center's revision and bounded scene summary and the receipts — first whether the card was shown, then, on the same route under the same push id, what the person decided. Nestor's tool composes for the most recently active page through the same prompt and validation as `/propose`, pushes the proposal as `Nestor · Core` at the page's reported revision, waits up to five seconds for the receipt and answers `proposed`, `refused` (the Center's reason), `declined` or `no-page`. Core keeps a bounded record per push (the last 64), and the read-only tool `world_proposal_status` answers, for one push id or the most recent push, `pending`, `shown`, `refused`, `accepted` (with the revision and commit id), `discarded`, `stale` or `rejected`, so Nestor can say "accepted in revision 9" or "discarded" and nothing more. Core applies nothing and keeps no scene. |
 | Proof | `scripts/smoke-nestor-request.mjs` (tier `core`), `test/coauthor-provider.test.mjs`, `test/propose-relay.test.mjs`, AgentX `core/surfaces/graphysx/test/propose.test.js` | See "Verification". |
 
 ## Transport: how the page reaches Core without a key
@@ -89,6 +89,25 @@ moved meanwhile. Every push ends in a receipt the host posts back to Core, and t
 it: `shown`, `shown` but `stale`, `refused` with the Center's sentence, or `unconfirmed` after
 five seconds. Nestor can say "proposed" and never "done".
 
+**Phase 2, the decision (2026-10-26, America/Toronto): Core learns what the person did.** A
+shown receipt only says a card appeared. When the person presses Apply or Discard on a pushed
+card — or Apply on a card the scene has since outrun, or one the scene refuses — the Center
+sends a second message up, `push-outcome`, under Core's push id: `accepted` with the revision
+the commit produced and the commit id, or `discarded`, `stale`, `rejected` with the unchanged
+revision. The proposal carries the push id from the moment it is composed
+(`ExternalProposalOptions.pushId` → `CoauthorProposal.pushId`), which is what makes the
+report possible and what limits it: a card from a typed request, or one Nestor composed
+locally, has no push id and nobody upstream is told about it. One report per push — the
+panel's `lastOutcome` outlives the decision, and reading it again (leaving the card through
+the tour, say) does not repeat it. The host element relays the message to
+`POST /api/graphysx/center/receipts` with the page id, like the first receipt; Core checks
+the status against the protocol's vocabulary, keeps the decision on its record of the push
+(bounded to 64, surviving the tab's close, forgotten on restart), ignores a decision on a
+push it refused or never sent, and keeps the first decision when two arrive. Nestor reads it
+with `world_proposal_status` and can finally say "accepted in revision 2" — or "discarded".
+Nothing in this adds a path to commit: a provider still proposes, a person still decides, and
+Core still holds no key, no scene and no commit.
+
 The channels weighed and why: *live sessions* (`docs/LIVE_SESSIONS.md`) are SSE too, but their
 operations are scene writes by design and the store would have become a relay for Core —
 rejected, as recorded before; *embedded element ownership* (`docs/LLMX_FACE_EMBED.md`) is the
@@ -139,6 +158,29 @@ Phase 2, local, 2026-10-26 (America/Toronto), worktree build of `claude/jolly-ag
   conversation calling the tool — the live Core carries neither this route nor the tool until
   the AgentX pull request deploys; the tool was called on the MCP transport the way the Nestor
   harness calls every secretary tool.
+
+Phase 2, the decision, local, 2026-10-26 (America/Toronto), worktree build of
+`claude/nestor-push-outcome`:
+
+- `node --test test/coauthor-host-bridge.test.mjs`: `reportOutcome` sends `push-outcome` to
+  the host origin only, nothing before hello or after dispose, the four statuses with their
+  fields (commit id on `accepted`, reason on `rejected`, neither on `discarded`/`stale`).
+  AgentX `core/surfaces/graphysx/test/center.test.js` (11 tests): decision receipts checked
+  field by field (a decision needs the proposal and the revision, carries `stale` never, a
+  commit id on `accepted` only, a reason on `rejected` only; a delivery receipt carries no
+  revision), the status tool through pending → shown → accepted/discarded/stale, a refused push
+  believing no decision, the first decision kept, unknown and forgotten ids, records outliving
+  the page, the bound of 64, both tools listed once. `node scripts/env-catalog.cjs` and
+  `shared/navigationCoverage.test.js` green. GraphysX typecheck and scoped lint green.
+- `scripts/smoke-nestor-push.mjs` (tier `core`, through `npm run verify -- --wait`): the typed
+  request's discard produces no outcome receipt; Apply on the pushed card produces exactly one
+  `accepted` receipt with `revision` 2 and `commitId` `commit-0001`, matching the commit in
+  `api.history()`; Discard on the stale card produces one `discarded` receipt at the unchanged
+  revision and starting the tour afterwards repeats nothing; the refused push has no decision;
+  the host page saw `graphysx-center-outcome` and counts two outcomes. Captures in
+  `output/smoke/nestor-push-*.png`.
+- Not seen: a real Nestor conversation asking `world_proposal_status` on the live Core — the
+  tool reaches it when the AgentX pull request deploys.
 
 GitHub CI runs the Node suites and the build; it never runs the WebGL journeys. A green run is
 not visual acceptance.

@@ -8,7 +8,10 @@
 // event stream, lands in the Center as an inert card attributed to its actor, is applied only on
 // Apply as one commit by that actor, and every push ends in a receipt — shown, shown-but-stale
 // when composed against an older revision, refused while a card is already waiting, refused when
-// forged. The Center itself never talks to `/propose`.
+// forged. Once a person decides on a pushed card, a second receipt under the same push id says
+// what they did: accepted at the committed revision with the commit id, or discarded — and a
+// typed request's card, which Core did not push, produces none. The Center itself never talks
+// to `/propose`.
 
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
@@ -47,7 +50,7 @@ const json = (res, status, value) => {
 };
 const hostPage = (origin) => `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Core · GraphysX</title>
 <style>html,body{margin:0;height:100%;background:#03060c}graphysx-center{position:fixed;inset:0}</style>
-<script>window.events=[];for(const t of ["graphysx-center-ready","graphysx-center-state","graphysx-center-events","graphysx-center-request","graphysx-center-pushed","graphysx-center-receipt","graphysx-center-error"])document.addEventListener(t,e=>window.events.push({type:t,detail:e.detail}));</script>
+<script>window.events=[];for(const t of ["graphysx-center-ready","graphysx-center-state","graphysx-center-events","graphysx-center-request","graphysx-center-pushed","graphysx-center-receipt","graphysx-center-outcome","graphysx-center-error"])document.addEventListener(t,e=>window.events.push({type:t,detail:e.detail}));</script>
 <script type="module" src="/embed/center-host.js"></script></head>
 <body><graphysx-center center="${origin}/" api-base="/api/graphysx"></graphysx-center></body></html>`;
 
@@ -169,6 +172,10 @@ try {
   assert.equal(out.pulled.unchanged, true);
   await frame.click("[data-proposal-discard]");
   await frame.waitForFunction(() => window.__GRAPHYSX_NESTOR__.state().proposal === null, null, { timeout: SMOKE_TIMEOUT });
+  // Core did not push this card; Core hears nothing about its discard.
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  out.pulled.outcomeReceipts = receipts.length;
+  assert.equal(out.pulled.outcomeReceipts, 0, "a typed request's decision is not reported as a push outcome");
 
   // 3. Push: Core composed because Nestor said so in a conversation. A card, attributed, inert.
   const beforePush = await snapshot();
@@ -228,6 +235,15 @@ try {
     };
   }, beforePush);
   await until(() => states.at(-1)?.revision === out.applied.revision, "the host to report the applied revision");
+  await until(() => receipts.some((r) => r.id === "push-1" && r.status === "accepted"), "the accepted outcome for push-1");
+  out.applied.commitId = await frame.evaluate(() => window.__GRAPHYSX__.history().at(-1)?.id ?? null);
+  out.applied.decision = receipts.find((r) => r.id === "push-1" && r.status === "accepted");
+  assert.equal(out.applied.decision.pageId, "page-1");
+  assert.equal(out.applied.decision.proposalId, out.pushed.receipt.proposalId, "the outcome names the card the shown receipt named");
+  assert.equal(out.applied.decision.revision, out.applied.revision, "accepted at the revision the commit produced");
+  assert.equal(out.applied.decision.commitId, out.applied.commitId);
+  assert.equal(out.applied.decision.reason, undefined);
+  assert.equal(receipts.filter((r) => r.id === "push-1").length, 2, "one shown receipt, one outcome, nothing more");
   assert.equal(out.applied.commits, 1);
   assert.equal(out.applied.actor.label, "Nestor · Core");
   assert.equal(out.applied.intent, LAKE.intent);
@@ -256,6 +272,21 @@ try {
   await page.screenshot({ path: path.join(ART, "nestor-push-stale.png") });
   await frame.click("[data-proposal-discard]");
   await frame.waitForFunction(() => window.__GRAPHYSX_NESTOR__.state().proposal === null, null, { timeout: SMOKE_TIMEOUT });
+  await until(() => receipts.some((r) => r.id === "push-3" && r.status === "discarded"), "the discarded outcome for push-3");
+  out.stale.decision = receipts.find((r) => r.id === "push-3" && r.status === "discarded");
+  assert.equal(out.stale.decision.pageId, "page-1");
+  assert.equal(out.stale.decision.proposalId, out.stale.receipt.proposalId);
+  assert.equal(out.stale.decision.revision, out.applied.revision, "discarding moved nothing");
+  assert.equal(out.stale.decision.commitId, undefined, "no commit to name");
+  assert.equal(unchanged(beforeStale, await snapshot()), true);
+  // Leaving the card through the tour is a discard too, but there is no card any more: the
+  // outcome already reported is not reported again.
+  await frame.click("[data-tour-start]");
+  await frame.waitForSelector(".gx-welcome--touring", { timeout: SMOKE_TIMEOUT });
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(receipts.filter((r) => r.id === "push-3").length, 2, "shown once, decided once");
+  await frame.click("[data-tour-stop]");
+  await frame.waitForFunction(() => document.querySelector(".gx-welcome--touring") === null, null, { timeout: SMOKE_TIMEOUT });
 
   // 7. Forged: a reserved namespace never becomes a card; the receipt names the refusal.
   const beforeForged = await snapshot();
@@ -270,6 +301,7 @@ try {
   assert.match(out.forged.receipt.reason, /reserved id namespace/);
   assert.equal(out.forged.proposal, null);
   assert.equal(out.forged.unchanged, true);
+  assert.equal(receipts.filter((r) => r.id === "push-4").length, 1, "a refused push has no decision to report");
 
   // 8. A refusal through the host reaches the card as Core's sentence.
   await frame.fill("[data-nestor-request]", "summon a dragon");
@@ -279,6 +311,10 @@ try {
   assert.match(out.refused, /dragon/);
 
   out.hostEvents = await page.evaluate(() => window.events.map((e) => e.type).filter((type, index, all) => all.indexOf(type) === index));
+  out.decisions = receipts.filter((r) => ["accepted", "discarded", "stale", "rejected"].includes(r.status)).map((r) => `${r.id}:${r.status}@${r.revision}`);
+  assert.deepEqual(out.decisions, [`push-1:accepted@${out.applied.revision}`, `push-3:discarded@${out.applied.revision}`], "exactly the two decisions a person took on pushed cards");
+  assert.ok(out.hostEvents.includes("graphysx-center-outcome"), "the host page saw the outcome event");
+  assert.equal((await page.evaluate(() => document.querySelector("graphysx-center").state())).outcomes, 2);
   assert.ok(!out.hostEvents.includes("graphysx-center-error"), `no host error: ${JSON.stringify(await page.evaluate(() => window.events.filter((e) => e.type === "graphysx-center-error")))}`);
   assert.deepEqual(pageErrors, []);
   const relevantConsoleErrors = consoleErrors.filter((text) => !/favicon/.test(text));
