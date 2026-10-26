@@ -4886,6 +4886,70 @@ screen).
 - Kept `codex/kidx-voice-integration` unmerged on purpose and wrote `docs/KIDX_VOICE_BRANCH.md`: where the work is, its exact AgentX touchpoints (relay route map, pinned session shape, assumed Family contract v1 and VoiX routes), why it is parked (three coexisting AgentX access patterns while that boundary is being corrected), the decisions it waits on, and the three-file merge conflict to expect. HANDOFF item 1 and the access table point there.
 - Local only until the PR: no deployment implied, docs and Node-only changes, no 3D checks apply.
 
+## 2026-10-25 (America/Toronto) — Nestor proposals from AgentX Core: vocabulary, request field, Core route
+
+Owner decision read from the code that morning: the "local Nestor brain" was three scripted
+demonstrations, not a model; the `ProposalProvider` seam existed and nothing was plugged into
+it. Decision: Core composes, always; GraphysX never carries a second brain or a hand-written
+copy of the API; the three demonstrations stay as the fallback when no provider is configured.
+
+- **One vocabulary, published by GraphysX.** `server/scene-commands.mjs` now exports the
+  tables it validates with (`FIELDS`, `ENUMS`, `LIMITS`, `SCENE_COMMAND_TABLES`) instead of
+  closing over inline sets and literal bounds — same checks, same messages, 29/29 validator
+  tests unchanged. `server/world-vocabulary.mjs` builds the machine-readable file from them
+  plus the runtime's own catalogue tables (prefabs, skies, HDRIs, overlays, sketches, presets,
+  passed in by `vite.vocabulary.ts` at build time); every `vite build` writes
+  `dist/embed/world-vocabulary.json` (53 KB), the dev server serves it, and the MCP server
+  exposes `graphysx://world-vocabulary`. `test/world-vocabulary.test.mjs` reads the
+  TypeScript unions from source and holds the file to `AgentWorldCommand`,
+  `AgentWorldEntityType`, `AgentWorldPrefabId`, the behavior and interaction types,
+  `PROPOSABLE_OPS` and `PROVIDER_LIMITS`, and applies every example through `applyCommands`.
+- **The request field.** One row under the topic pills, sending the sentence verbatim as
+  `ProposalRequest.request`; the reply goes through `proposeExternal("request", …)` — a new
+  `NestorTopic` whose narration is pinned to the commit's revision and dropped when the
+  revision moves, because a request's commands say nothing about Nestor's own status. A
+  refusal is the provider's own sentence (`Not proposed — …`); the scene does not move.
+  Without a provider the field is disabled, its placeholder is the one true sentence about
+  why, and the page makes no request. **The layout hazard was real:** the row made the card
+  47px taller at 1280x720 (573 vs 526). Paid for by the card gap (13 → 10px) and a one-line
+  ready briefing; the card is now 527px, and `smoke-nestor-request` measures with
+  `elementFromPoint` that the row blocks no scene body the card did not already block.
+- **Explicit refusals.** `readProviderRefusal`: `{ ok: false, reason }` reaches the card on any
+  status, so Core's sentence replaces "The provider answered 422".
+- **Core.** AgentX `core/surfaces/graphysx/index.js`: `POST /api/graphysx/propose` reads the
+  vocabulary from `GRAPHYSX_VOCABULARY_URL`, renders the prompt from it, runs one admitted
+  `analysis` inference with JSON output, validates (known ops/types, scene ids for changes,
+  new ids for creations, no `live-*:` namespace, 40 commands, 200-char intent), retries once,
+  answers `{ intent, commands }` or `{ ok: false, reason }`. Full profile only, refused on a
+  family-pinned device. 7/7 surface tests. Transport, honestly: the dev server relays
+  `/propose` to `GRAPHYSX_PROPOSE_URL` (`scripts/propose-relay.mjs`, one route, bounded);
+  the Core-served Center page (the DiskX model) is not deliverable in one session — the
+  Center is a chunk graph plus a 44 MB asset tree — and is the recorded next step, together
+  with phase 2 (push). `docs/NESTOR_PROPOSALS.md`.
+- **Seen on screen (dev server, `?propose=/propose`, the Core surface mounted in a loopback
+  harness with inference on the live Core instance — `huihui_ai/Qwen3.8-abliterated:27b-q8_0`
+  on 192.168.2.199, 17.8 s and 16.5 s per composition):** "ajoute un lac avec un vol
+  d'oiseaux au coucher du soleil" → a card "Adds a sunset lake with a starling flock and
+  adjusts the environment for a warm dusk atmosphere", 3 commands (`water`, `flock`,
+  `set-environment` with `lostvalley`, lighting and bloom); Apply → `commit-0001` by `nestor`
+  at revision 10; `sunset-lake` and `sunset-birds` in the editor outliner; PUT to a scene
+  store as `nestor-demo` rev 1 and reload through `?scene=` finds both plus the sky and
+  bloom. "supprime l'entité dont l'id est volcano-42" → the model's own refusal, in French,
+  in the card, revision unchanged. A dragon request produced a valid proposal (an
+  `archive-cobra` model with a `fireball` emitter) rather than a refusal — the vocabulary
+  reaches further than the brief assumed. Captures:
+  `output/visual-receipts-20261025/nestor-request-core-*.jpg`, plus the smoke's
+  `nestor-request-card-without-row.png` / `nestor-request-ready.png` (same framing, with
+  and without the row).
+- **Not verified / environment:** `smoke-showroom` fails on this machine today on *every*
+  dist, including `main`'s (`impulseMoved: 0`, no ball drop, the 3D console click opens no
+  card) — headless canvas clicks, not the diff; DOM clicks in the same runs work and
+  `smoke-nestor-request` is green. The production deploy got no provider and none is wired.
+  Core's live instance does not carry the new route until its PR deploys; the browser proof
+  ran the route's code locally against that instance's router. The scene store CLI prints
+  "scene store failed to start: host is not defined" after it has started (line 832, a
+  pre-existing log bug on `main`); the store serves regardless.
+
 ## 2026-10-25 — La maison connectée : l'écosystème AgentX en 3D, visité par Nestor
 
 - `?app=ecosystem` : les trois infographies du 25 octobre 2026 d'agentx-home transcrites en carte pure (25 nœuds, 12 liens, 4 flux, 3 points ouverts), composées en document v2 et visitées par Nestor (13 étapes, vocabulaire `play=`, étape `node-<id>`, clic 3D sur une machine, Échap). Document de scène inchangé pendant la visite, vérifié par le smoke. Voir `docs/ECOSYSTEM_VIEW.md`.

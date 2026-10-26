@@ -32,7 +32,7 @@ import type { DiskxApplication } from "./diskx-app";
 import type { EcosystemApplication } from "./ecosystem-app";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
-import { nestorTopicRequest, type NestorTopic } from "./showroom-nestor";
+import { nestorTopicRequest, type NestorConsoleTopic } from "./showroom-nestor";
 import { IDLE_TOUR_STATE, createNestorTourController } from "./nestor-tour";
 import type { NestorTourController } from "./nestor-tour";
 import { motionIsReduced } from "./platform-theme";
@@ -250,7 +250,7 @@ if (mode === "previews" && import.meta.env.DEV) {
      * passes a human decision. Two routes with different safety properties would make "no
      * hidden mutation" a claim about one of them rather than about the product.
      */
-    const presentNestor = (topic: NestorTopic): void => {
+    const presentNestor = (topic: NestorConsoleTopic): void => {
       if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
         syncFrontDoor();
         return;
@@ -293,6 +293,48 @@ if (mode === "previews" && import.meta.env.DEV) {
         }
         const proposal = nestor?.proposeExternal(topic, result.proposal.intent, result.proposal.commands);
         welcome?.showOutcome(null);
+        if (proposal) welcome?.showProposal(proposal, false);
+      })();
+    };
+    /**
+     * A request in the person's own words. Only a provider can answer it — there is no local
+     * composition for an arbitrary sentence — so this exists only when one is configured, and
+     * a refusal is shown as the provider's sentence rather than falling back to a demonstration
+     * nobody asked for. Everything after the reply is the topic path: the same card, the same
+     * narrowing, the same accept at the same revision.
+     */
+    const requestNestor = (request: string): void => {
+      const provider = proposalProvider();
+      if (!provider) return;
+      if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
+        syncFrontDoor();
+        return;
+      }
+      stopNestorTour();
+      welcome?.showOutcome(null);
+      welcome?.setRequestBusy(true);
+      void (async () => {
+        const state = host.api.state();
+        const result = await provider.propose({
+          request,
+          revision: state?.revision ?? 0,
+          scene: {
+            id: state?.world.id ?? "",
+            label: state?.world.label ?? "",
+            entities: summarizeSceneForProvider(host.api.query()),
+          },
+        });
+        welcome?.setRequestBusy(false);
+        if (!result.ok) {
+          welcome?.showNotice(result.reason);
+          return;
+        }
+        // Re-checked after the wait: a live session may have attached meanwhile.
+        if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
+          syncFrontDoor();
+          return;
+        }
+        const proposal = nestor?.proposeExternal("request", result.proposal.intent, result.proposal.commands);
         if (proposal) welcome?.showProposal(proposal, false);
       })();
     };
@@ -451,6 +493,8 @@ if (mode === "previews" && import.meta.env.DEV) {
               onAccept: acceptNestorProposal,
               onDiscard: discardNestorProposal,
               onToggleCommand: toggleNestorProposalCommand,
+              // Only with a provider: the field is otherwise disabled and says why.
+              onRequest: proposalProvider() ? requestNestor : undefined,
             },
             tour: {
               onStart: startNestorTour,
