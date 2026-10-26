@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, closeSync, readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import { renderWorldVocabulary } from '../server/world-vocabulary.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 export function localGraphysXUrl(value) {
@@ -21,6 +22,11 @@ export function createGraphysXMcp({ url = process.env.GRAPHYSX_URL ?? 'http://12
   const server = new McpServer({ name: 'graphysx', version: '1.0.0' });
   server.registerResource('world-api', 'graphysx://world-api', { mimeType: 'text/markdown', description: 'Native World API argument shapes, entity types and examples. Read when a tool or entity schema is needed.' },
     async uri => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: readFileSync(path.join(root, 'AGENT_WORLD_API.md'), 'utf8') }] }));
+  // The machine-readable vocabulary (operations, entity types, fields, bounds, curated ids). Built
+  // from the validator tables here, so it carries no prefab catalogue; a release build's
+  // dist/embed/world-vocabulary.json is the complete file.
+  server.registerResource('world-vocabulary', 'graphysx://world-vocabulary', { mimeType: 'application/json', description: 'Machine-readable world command vocabulary: operations, entity types, fields with bounds, enumerations and examples.' },
+    async uri => ({ contents: [{ uri: uri.href, mimeType: 'application/json', text: renderWorldVocabulary() }] }));
   let starting = null;
   async function request(endpoint, body) {
     const response = await fetch(new URL('/graphysx-agent/' + endpoint, base), { redirect: 'error', signal: AbortSignal.timeout(25_000),

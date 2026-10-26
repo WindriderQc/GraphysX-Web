@@ -1,4 +1,4 @@
-import type { NestorPresentation, NestorTopic } from "./showroom-nestor";
+import type { NestorConsoleTopic, NestorPresentation } from "./showroom-nestor";
 import { summarizeProposal } from "./coauthor-proposal";
 import { describeTourPosition } from "./nestor-tour";
 import type { NestorTourState } from "./nestor-tour";
@@ -27,6 +27,10 @@ export interface ShowroomWelcomeHandle {
   showProposal: (proposal: CoauthorProposal | null, stale?: boolean) => void;
   /** Report what happened to the last decided proposal, including a discard. */
   showOutcome: (outcome: CoauthorOutcome | null) => void;
+  /** A sentence about a request that produced no proposal — a provider's refusal — or null to clear it. */
+  showNotice: (text: string | null) => void;
+  /** While a provider is composing a request: the field waits and says so. */
+  setRequestBusy: (busy: boolean) => void;
   /** Render the tour's current stop, or clear it when the tour is not running. */
   showTour: (state: NestorTourState) => void;
   reset: () => void;
@@ -38,13 +42,19 @@ export function mountWelcome(
   onEnter?: () => void,
   onGames?: () => void,
   onBrowse?: () => void,
-  onNestorTopic?: (topic: NestorTopic) => void,
+  onNestorTopic?: (topic: NestorConsoleTopic) => void,
   variant: ShowroomWelcomeVariant = onNestorTopic ? "agentx" : "scene-resume",
   hooks?: {
     onOpenKidX?: () => void;
     onOpenLlmX?: () => void;
     onOpenDiskX?: () => void;
-    coauthor?: { onAccept?: () => void; onDiscard?: () => void; onToggleCommand?: (index: number) => void };
+    coauthor?: {
+      onAccept?: () => void;
+      onDiscard?: () => void;
+      onToggleCommand?: (index: number) => void;
+      /** A request in the person's own words. Absent when no provider is configured: the field then says so and sends nothing. */
+      onRequest?: (request: string) => void;
+    };
     tour?: { onStart?: () => void; onNext?: () => void; onPrevious?: () => void; onStop?: () => void };
   },
 ): ShowroomWelcomeHandle {
@@ -59,7 +69,7 @@ export function mountWelcome(
      * title off the top of a 1280x800 viewport. Content that can vary in length needs a
      * ceiling, and one scroll region here is what lets the command list have none.
      */
-    .gx-welcome-card{position:relative;box-sizing:border-box;width:min(500px,calc(100vw - 40px));max-height:calc(100dvh - 2*clamp(20px,4vw,54px));overflow-y:auto;display:flex;flex-direction:column;align-items:flex-start;gap:13px;text-align:left;padding:22px 24px 20px;border:1px solid rgba(111,233,255,.28);border-radius:20px;background:linear-gradient(145deg,rgba(6,23,34,.86),rgba(8,19,31,.62));box-shadow:0 24px 70px rgba(0,8,16,.48),inset 0 1px rgba(255,255,255,.06);backdrop-filter:blur(16px)}
+    .gx-welcome-card{position:relative;box-sizing:border-box;width:min(500px,calc(100vw - 40px));max-height:calc(100dvh - 2*clamp(20px,4vw,54px));overflow-y:auto;display:flex;flex-direction:column;align-items:flex-start;gap:10px;text-align:left;padding:22px 24px 20px;border:1px solid rgba(111,233,255,.28);border-radius:20px;background:linear-gradient(145deg,rgba(6,23,34,.86),rgba(8,19,31,.62));box-shadow:0 24px 70px rgba(0,8,16,.48),inset 0 1px rgba(255,255,255,.06);backdrop-filter:blur(16px)}
     .gx-welcome .gx-eyebrow{display:flex;align-items:center;gap:8px;color:#91efff;font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase}
     .gx-welcome .gx-online-dot{width:7px;height:7px;border-radius:50%;background:#76f0ae;box-shadow:0 0 0 4px rgba(118,240,174,.1),0 0 18px #76f0ae}
     .gx-welcome h1{margin:0;font-size:clamp(28px,4.2vw,46px);letter-spacing:.035em;font-weight:850;color:var(--gx-ink);line-height:.98;text-shadow:0 4px 38px rgba(70,220,235,.38)}
@@ -73,6 +83,25 @@ export function mountWelcome(
     .gx-welcome .gx-actions .gx-go-editor{grid-column:1 / -1}
     .gx-welcome .gx-nestor-topics button{padding:8px 13px;border-radius:999px;background:rgba(14,45,58,.8);border-color:rgba(116,223,241,.28);box-shadow:none;color:#bceef7;font-size:12px;letter-spacing:.04em}
     .gx-welcome .gx-nestor-topics button:hover,.gx-welcome .gx-nestor-topics button[aria-pressed="true"]{color:#fff;border-color:#77e9ff;background:rgba(35,117,139,.68);box-shadow:0 0 24px rgba(65,211,232,.22)}
+    /*
+     * The free-text request, one row under the topic pills. The card is bottom-anchored and grows
+     * upward over the scene, and its interactive rows are what catch clicks meant for the
+     * kinetic blocks behind it. The row costs 32px plus a gap, paid for twice over so the card's
+     * top edge does not move: the card's gap went from 13px to 10px (nine gaps, 27px back) and
+     * the ready briefing went from two lines to one (~22px). smoke-nestor-request holds the card
+     * to its former height and smoke-showroom still clicks the play console and the blocks in
+     * 3D. Without a provider the field is disabled and its placeholder is the one true sentence
+     * about why; it never sends anything.
+     */
+    .gx-welcome .gx-nestor-ask{display:flex;gap:8px;width:100%;box-sizing:border-box;pointer-events:auto}
+    .gx-welcome .gx-nestor-ask input{flex:1;min-width:0;box-sizing:border-box;min-height:32px;padding:6px 13px;border-radius:999px;border:1px solid rgba(116,223,241,.28);background:rgba(8,32,44,.72);color:var(--gx-ink);font:500 12.5px var(--gx-font)}
+    .gx-welcome .gx-nestor-ask input::placeholder{color:rgba(188,238,247,.6)}
+    .gx-welcome .gx-nestor-ask input:focus-visible{outline:2px solid #fff;outline-offset:2px;border-color:#77e9ff}
+    .gx-welcome .gx-nestor-ask input:disabled{opacity:.75;cursor:not-allowed}
+    .gx-welcome .gx-nestor-ask button{flex:none;min-height:32px;padding:6px 14px;border-radius:999px;background:rgba(14,45,58,.8);border-color:rgba(116,223,241,.28);box-shadow:none;color:#bceef7;font-size:12px;letter-spacing:.04em}
+    .gx-welcome .gx-nestor-ask button:disabled{opacity:.45;cursor:not-allowed;filter:none}
+    .gx-welcome--asking .gx-nestor-ask input{color:var(--gx-ink-soft)}
+    .gx-welcome--proposing .gx-nestor-ask,.gx-welcome--touring .gx-nestor-ask{opacity:.42;pointer-events:none}
     .gx-welcome .gx-go-games{background:linear-gradient(180deg,#2f9e7f,#1d6f5a);border-color:var(--gx-life);box-shadow:0 8px 30px rgba(29,111,90,.42)}
     .gx-welcome .gx-go-browse{background:linear-gradient(180deg,#5a6fb0,#3a4a80);border-color:var(--gx-violet);box-shadow:0 8px 30px rgba(58,74,128,.42)}
     .gx-welcome .gx-commit{min-height:15px;color:#69ddec;font:600 10px/1.4 var(--gx-font);letter-spacing:.08em;text-transform:uppercase}
@@ -165,7 +194,7 @@ export function mountWelcome(
      */
     .gx-welcome .gx-proposal-outcome[data-outcome="pending"]{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
     .gx-welcome .gx-proposal-outcome[data-outcome="discarded"]{color:var(--gx-ink-soft)}
-    .gx-welcome .gx-proposal-outcome[data-outcome="stale"],.gx-welcome .gx-proposal-outcome[data-outcome="rejected"]{color:#ffce7a}
+    .gx-welcome .gx-proposal-outcome[data-outcome="stale"],.gx-welcome .gx-proposal-outcome[data-outcome="rejected"],.gx-welcome .gx-proposal-outcome[data-outcome="declined"]{color:#ffce7a}
     .gx-welcome .gx-hint{color:var(--gx-ink-soft);font-size:12px;line-height:1.45;text-shadow:0 1px 10px rgba(3,12,20,.8)}
     /*
      * The title treatment, staged against the host's 2.6s entry move: each line rises and
@@ -254,12 +283,16 @@ export function mountWelcome(
     <div class="gx-welcome-card">
       <div class="gx-eyebrow"><span class="gx-online-dot"></span><span data-nestor-eyebrow>GraphysX · Nestor online</span><button type="button" class="gx-tour-start" data-tour-start>Show me around</button></div>
       <h1 data-nestor-title>GraphysX</h1>
-      <p class="gx-nestor-briefing" data-nestor-briefing aria-live="polite">Pick a live demo. Nestor will change this scene with the same inspectable commands available to every AgentX collaborator.</p>
+      <p class="gx-nestor-briefing" data-nestor-briefing aria-live="polite">Pick a demo or ask; nothing changes until you accept.</p>
       <div class="gx-nestor-topics" aria-label="Ask Nestor to show a capability">
         <button type="button" data-nestor-topic="build" aria-pressed="false">Build something</button>
         <button type="button" data-nestor-topic="play" aria-pressed="false">Wake the physics</button>
         <button type="button" data-nestor-topic="explore" aria-pressed="false">Reveal living systems</button>
       </div>
+      <form class="gx-nestor-ask" data-nestor-ask autocomplete="off">
+        <input type="text" name="request" data-nestor-request maxlength="2000" aria-label="Ask Nestor for a change in your own words" placeholder="Or ask in your own words: add a lake with a flock of birds at sunset">
+        <button type="submit" data-nestor-request-send>Ask</button>
+      </form>
       <div class="gx-tour" data-nestor-tour role="group" aria-labelledby="gx-tour-position">
         <div class="gx-tour-head">
           <span class="gx-tour-position" id="gx-tour-position" data-tour-position></span>
@@ -318,6 +351,8 @@ export function mountWelcome(
       ? "use the live session panel for shared activity"
       : "your scene remains loaded · re-enter when you are ready";
     overlay.querySelector(".gx-nestor-topics")?.remove();
+    // The request field is a scene operation path too; a live session owns those.
+    overlay.querySelector("[data-nestor-ask]")?.remove();
     // The co-author card and the tour panel go with it.
     //
     // Both are siblings of the topics row rather than children, so removing that row left
@@ -334,8 +369,10 @@ export function mountWelcome(
     overlay.querySelector("[data-tour-start]")?.remove();
   }
   const dispose = () => { overlay.remove(); style.remove(); };
-  /** The topic button that asked for the pending proposal, for focus restoration. */
-  let proposalOrigin: HTMLButtonElement | null = null;
+  /** The topic button or request field that asked for the pending proposal, for focus restoration. */
+  let proposalOrigin: HTMLElement | null = null;
+  const askInput = overlay.querySelector<HTMLInputElement>("[data-nestor-request]");
+  const askSend = overlay.querySelector<HTMLButtonElement>("[data-nestor-request-send]");
   let liveMissionState: LiveMissionRuntimeState | null = null;
   let liveActivityState: LiveAgentActivity | null = null;
   const observeLiveActivity = (activity: LiveAgentActivity | null): void => {
@@ -428,7 +465,8 @@ export function mountWelcome(
     const commit = overlay.querySelector<HTMLElement>("[data-nestor-commit]");
     if (eyebrow) eyebrow.textContent = "GraphysX · Nestor online";
     if (title) title.textContent = "GraphysX";
-    if (briefing) briefing.textContent = "Pick a live demo. Nestor will change this scene with the same inspectable commands available to every AgentX collaborator.";
+    // One line, on purpose: the request row below took the second line's height (see .gx-nestor-ask).
+    if (briefing) briefing.textContent = "Pick a demo or ask; nothing changes until you accept.";
     if (commit) commit.textContent = "Scene-native guide · ready";
     overlay.querySelectorAll<HTMLButtonElement>("[data-nestor-topic]").forEach((button) => button.setAttribute("aria-pressed", "false"));
   };
@@ -475,6 +513,8 @@ export function mountWelcome(
       return;
     }
     overlay.dataset.proposalId = proposal.id;
+    // The request that produced this card has been answered; the field is free for the next one.
+    if (proposalOrigin === askInput && askInput) askInput.value = "";
     const actor = overlay.querySelector<HTMLElement>("[data-proposal-actor]");
     const meta = overlay.querySelector<HTMLElement>("[data-proposal-meta]");
     const intent = overlay.querySelector<HTMLElement>("[data-proposal-intent]");
@@ -525,6 +565,37 @@ export function mountWelcome(
         : `${proposal.actor.label} proposes ${proposal.commandCount} change${proposal.commandCount === 1 ? "" : "s"}. Review and apply or discard.`;
       outcome.dataset.outcome = stale ? "stale" : "pending";
     }
+  };
+
+  /**
+   * A request that produced no proposal. The provider's own sentence, so "that asks for a
+   * dragon" reaches the person as those words rather than as a status code. Shares the outcome
+   * line: both are the answer to the last thing the person asked for.
+   */
+  const showNotice = (text: string | null): void => {
+    if (!nestorEnabled) return;
+    const outcome = overlay.querySelector<HTMLElement>("[data-proposal-outcome]");
+    if (!outcome) return;
+    if (!text) {
+      if (outcome.dataset.outcome === "declined") {
+        outcome.textContent = "";
+        delete outcome.dataset.outcome;
+      }
+      return;
+    }
+    outcome.textContent = `Not proposed — ${text}`;
+    outcome.dataset.outcome = "declined";
+  };
+
+  /** While a provider composes: the field reads as waiting and cannot send twice. */
+  const setRequestBusy = (busy: boolean): void => {
+    if (!nestorEnabled || !askInput || !askSend) return;
+    overlay.classList.toggle("gx-welcome--asking", busy);
+    const configured = typeof hooks?.coauthor?.onRequest === "function";
+    askInput.disabled = busy || !configured;
+    askSend.disabled = busy || !configured;
+    askSend.textContent = busy ? "Composing…" : "Ask";
+    askInput.setAttribute("aria-busy", String(busy));
   };
 
   /** What actually happened — including "nothing", which is a real and reportable answer. */
@@ -604,6 +675,23 @@ export function mountWelcome(
     if ((event as KeyboardEvent).key !== "Escape") return;
     event.stopPropagation();
     hooks?.tour?.onStop?.();
+  });
+
+  // The request field. Without a provider it is disabled and says so — one true sentence in the
+  // place the person would have typed, and a form that cannot submit: the page makes no request.
+  const onRequest = hooks?.coauthor?.onRequest;
+  if (askInput && askSend && !onRequest) {
+    askInput.disabled = true;
+    askSend.disabled = true;
+    askInput.placeholder = "No model provider is configured, so Nestor composes the three demonstrations locally.";
+    askInput.title = askInput.placeholder;
+  }
+  overlay.querySelector<HTMLFormElement>("[data-nestor-ask]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const request = askInput?.value.trim() ?? "";
+    if (!onRequest || !askInput || askInput.disabled || request.length === 0) return;
+    proposalOrigin = askInput;
+    onRequest(request);
   });
 
   overlay.querySelectorAll<HTMLButtonElement>("[data-nestor-topic]").forEach((button) => {
@@ -695,5 +783,5 @@ export function mountWelcome(
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);
-  return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showTour, reset, dispose };
+  return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showNotice, setRequestBusy, showTour, reset, dispose };
 }

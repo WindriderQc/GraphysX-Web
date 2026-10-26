@@ -800,4 +800,6 @@ Behaviors: `spin`, `bob`, `orbit`, `pulse`, `look-at`, and `follow-spline`. Inte
 
 Queries can filter by `ids`, `type`, `tag`, case-insensitive `labelIncludes`, or a world-space `within: { center, radius }` test. Transactions and collaborative commits accept `spawn`, `spawn-prefab`, `update`, `remove`, `attach-behavior`, `detach-behavior`, `interact`, `steer`, `set-environment`, and `select` commands.
 
+The same vocabulary, machine-readable: every build writes `dist/embed/world-vocabulary.json` (operations, entity types, fields with the bounds the validator enforces, curated ids, prefabs, behaviors, interactions, joints, reserved id namespaces, review limits and one example list per family), served at `/embed/world-vocabulary.json` and as the MCP resource `graphysx://world-vocabulary`. It is derived from `server/scene-commands.mjs` and the runtime catalogues, never retyped; `test/world-vocabulary.test.mjs` holds it to the TypeScript unions. AgentX Core builds its proposal prompt from it (`docs/NESTOR_PROPOSALS.md`).
+
 The current contract intentionally stays above Three.js. Future renderers can implement the same world schema while agents keep using the same tools.

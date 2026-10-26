@@ -136,6 +136,28 @@ export function validateProviderIntent(raw: unknown): { ok: true; intent: string
   return { ok: true, intent };
 }
 
+/** The longest refusal a card will show; a provider's sentence, not its stack trace. */
+const REFUSAL_CHARS = 300;
+
+/**
+ * A refusal the provider stated itself: `{ ok: false, reason }`.
+ *
+ * Core validates a model's answer before sending it, so "that asks for something the world has
+ * no word for" is decided at the far end and arrives as a sentence. Without this it arrived as
+ * "The provider answered 422", which tells the person that something was refused and nothing
+ * about what. Read on every status, because an explicit reason beats a status code whatever
+ * the code was. Returns null when the reply is not a refusal at all.
+ */
+export function readProviderRefusal(raw: unknown): { ok: false; reason: string } | null {
+  if (!isRecord(raw) || raw.ok !== false) return null;
+  const text = typeof raw.reason === "string" ? raw.reason : typeof raw.message === "string" ? raw.message : "";
+  // Collapse whitespace and drop control characters; the card renders this with textContent,
+  // so markup is inert, but a reason that is a wall of text is not a reason.
+  const reason = text.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!reason) return { ok: false, reason: "The provider declined without saying why." };
+  return { ok: false, reason: reason.length > REFUSAL_CHARS ? `${reason.slice(0, REFUSAL_CHARS - 1)}…` : reason };
+}
+
 /**
  * The whole reply, checked.
  *
@@ -144,6 +166,8 @@ export function validateProviderIntent(raw: unknown): { ok: true; intent: string
  * session, not an exception to swallow.
  */
 export function readProviderReply(raw: unknown): ProviderResult {
+  const refusal = readProviderRefusal(raw);
+  if (refusal) return refusal;
   if (!isRecord(raw)) return { ok: false, reason: "The reply was not in the expected shape." };
   const intent = validateProviderIntent(raw.intent);
   if (!intent.ok) return intent;
@@ -226,7 +250,6 @@ export function createHttpProposalProvider(options: {
           body: JSON.stringify(request),
           signal: controller.signal,
         });
-        if (!response.ok) return { ok: false, reason: `The provider answered ${response.status}.` };
         const text = await response.text();
         if (text.length > PROVIDER_LIMITS.replyBytes) {
           return { ok: false, reason: "The provider's reply was too large to read." };
@@ -235,8 +258,14 @@ export function createHttpProposalProvider(options: {
         try {
           parsed = JSON.parse(text);
         } catch {
-          return { ok: false, reason: "The provider's reply was not valid JSON." };
+          // A non-JSON error page still has a status to report.
+          return { ok: false, reason: response.ok ? "The provider's reply was not valid JSON." : `The provider answered ${response.status}.` };
         }
+        // An explicit refusal carries the far end's sentence whatever the status was: Core says
+        // why in a 200, a relay says why in a 503, and both beat a bare number.
+        const refusal = readProviderRefusal(parsed);
+        if (refusal) return refusal;
+        if (!response.ok) return { ok: false, reason: `The provider answered ${response.status}.` };
         return readProviderReply(parsed);
       } catch (error) {
         // Including the abort: from the panel's point of view a timeout and a refusal are the
