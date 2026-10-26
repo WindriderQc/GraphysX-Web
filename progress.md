@@ -5070,9 +5070,9 @@ reported separately in the pull request.
 
 ## 2026-10-26 — Mesh construction and focused edits
 
-Owner asked to finish the remaining work after mesh v1. The native Core page was freshly
-received as HTTP200; another session deployed PR1111 and recorded a real Nestor pushed card
-in private instance PR243, so this branch preserves that delivery. LEGO shader stays paused
+Owner asked to finish the remaining work after mesh v1. The native Core page/push counterpart
+is implemented in AgentX PR1111; instance configuration and native receipts remain outside Git.
+This branch preserves that delivery. LEGO shader stays paused
 and Nestor Famille voice stays a discussion.
 
 Shared declarative extrusion/revolution/sweep expand to existing validated indexed/UV buffers.
@@ -5093,6 +5093,14 @@ Final qualification uses the complete local gate because shared runtime/host wir
 plus the installed action client and a native Core-hosted model reception after publication.
 Detailed context is shared only for one opted-in typed request, never in background state or
 demonstration-button traffic. Native receipts and inspected images remain outside Git.
+
+The delayed-reply regression reproduced an actual revision race: typed and topic replies
+were stamped with the scene revision at receipt instead of at observation. They now retain
+the observed revision; changes during composition or card review disable Apply. Three browser
+cases pass without applying any stale command. The matching Core push fix, AgentX PR1127,
+snapshots the scene/revision before composition and optionally addresses an explicit page.
+All 34 native Core surface tests and its CI pass. Visual review also corrected the sharing
+label contrast and stopped mobile card children shrinking over the outcome/commit receipts.
 
 ## 2026-10-26 — DiskX gauge head: `label · host` wraps instead of hiding the host (America/Toronto)
 

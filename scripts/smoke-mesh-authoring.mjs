@@ -8,8 +8,11 @@ import { buildInlineMesh } from '../server/mesh-construction.mjs';
 import { editInlineMesh } from '../server/mesh-authoring.mjs';
 import { startSceneStore } from '../server/scene-store.mjs';
 import { createActor, requestText } from './live-session-harness.mjs';
-import { applySmokeTimeout, launchSmokeBrowser } from './smoke-harness.mjs';
+import { applySmokeTimeout, launchSmokeBrowser, SMOKE_TIMEOUT } from './smoke-harness.mjs';
 const base=process.env.SMOKE_BASE||'http://127.0.0.1:4188/';
+// Undo reloads the parent graph, whose entity storage order is not document meaning.
+// Keep every entity field and nested buffer order strict while comparing by stable ID.
+const keyedDocument=doc=>({...doc,entities:[...doc.entities].sort((a,b)=>a.id.localeCompare(b.id))});
 const output=process.env.SMOKE_ARTIFACTS||path.resolve('output/smoke');mkdirSync(output,{recursive:true});
 const texture={id:'inline',pixels:{width:2,height:2,rgba:[20,180,220,255,220,110,40,255,220,110,40,255,20,180,220,255]}};
 const creations=[
@@ -19,12 +22,15 @@ const creations=[
 ];
 const edits={meshEdits:{positions:[{start:0,delta:[0,-0.3,0]}]},pixelEdits:[{x:0,y:1,width:1,height:1,rgba:[245,245,245,255]}]};
 async function removeFixture(dir){if(!path.resolve(dir).startsWith(path.resolve(tmpdir())+path.sep+'graphysx-authoring-'))throw new Error('Unexpected fixture directory');await rm(dir,{recursive:true,force:true});}
-const replies=[{intent:'Make three original constructed objects',commands:creations},{intent:'Refine one corner and one texel',commands:[{op:'update',id:'made-panel',patch:edits}]}];
+const staleReply={intent:'A material change based on an older observation',commands:[{op:'update',id:'made-vase',patch:{material:{color:'#ff0000'}}}]};
+const replies=[{intent:'Make three original constructed objects',commands:creations},{intent:'Refine one corner and one texel',commands:[{op:'update',id:'made-panel',patch:edits}]},staleReply,staleReply,staleReply];
+const deferred=()=>{let resolve;return{promise:new Promise(done=>{resolve=done;}),resolve:()=>resolve()};};
+const delayed=[{arrived:deferred(),reply:deferred()},{arrived:deferred(),reply:deferred()}];
 const browser=await launchSmokeBrowser(),page=applySmokeTimeout(await browser.newPage({viewport:{width:1365,height:900},reducedMotion:'reduce'}));
 const errors=[],requests=[],out={};let store,dir;
 try {
   page.on('pageerror',error=>errors.push(String(error)));page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
-  await page.route('**/mesh-authoring-propose',route=>{requests.push(route.request().postDataJSON());assert.ok(requests.length<=2);return route.fulfill({json:replies[requests.length-1]});});
+  await page.route('**/mesh-authoring-propose',async route=>{const index=requests.length;requests.push(route.request().postDataJSON());assert.ok(requests.length<=5);if(index>=2&&index<=3){delayed[index-2].arrived.resolve();await delayed[index-2].reply.promise;}return route.fulfill({json:replies[index]});});
   await page.goto(`${base}?propose=${encodeURIComponent(new URL('mesh-authoring-propose',base).href)}`,{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>window.__GRAPHYSX_NESTOR__&&window.__GRAPHYSX_HOST__?.frameCount>3&&!window.__GRAPHYSX_HOST__.introPlaying);
   const snapshot=()=>page.evaluate(()=>({doc:window.__GRAPHYSX__.exportDocument(),revision:window.__GRAPHYSX__.state().revision,commits:window.__GRAPHYSX__.history().length}));
@@ -81,10 +87,37 @@ try {
   });
   assert.deepEqual(slotPixels.bytes.slice(4,8),[240,20,90,255]);assert.equal(slotPixels.undone,true);assert.deepEqual(slotPixels.restored,after);
   await page.waitForFunction(()=>window.__GRAPHYSX_HOST__.world.getEntityObject('made-panel').material[0].map?.image.data[4]===220);
+  out.staleCases=[];
+  for(const [index,kind] of ['typed','topic'].entries()) {
+    if(kind==='typed') {await page.locator('[data-nestor-request]').fill('Refine the vase after a slow model reply');await page.locator('[data-nestor-request-send]').click();}
+    else await page.locator('[data-nestor-topic="build"]').click();
+    let timer;try{await Promise.race([delayed[index].arrived.promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Fixture request did not arrive')),SMOKE_TIMEOUT);})]);}finally{clearTimeout(timer);}
+    const waiting=await snapshot();
+    await page.evaluate(()=>window.__GRAPHYSX__.update('made-vase',{label:'Changed manually while composing'}));const changed=await snapshot();
+    delayed[index].reply.resolve();await page.waitForFunction(()=>window.__GRAPHYSX_NESTOR__.state().proposal!==null);
+    const held=await page.evaluate(()=>{const n=window.__GRAPHYSX_NESTOR__.state();return{revision:n.proposal.expectedRevision,stale:n.proposalStale};});
+    assert.equal(held.revision,requests[index+2].revision,'reply retains the model observation revision');assert.equal(held.stale,true);
+    assert.equal(await page.locator('[data-proposal-accept]').isDisabled(),true,'stale reply cannot be applied');assert.deepEqual(await snapshot(),changed);
+    await page.locator('[data-proposal-discard]').click();assert.equal(await page.evaluate(()=>window.__GRAPHYSX__.undo().ok),true);
+    assert.deepEqual(keyedDocument((await snapshot()).doc),keyedDocument(waiting.doc));
+    assert.equal(requests[index+2].scene.focus,undefined,'context is never carried into an unselected request or demonstration');
+    out.staleCases.push({kind,observation:held.revision,stale:true,applyBlocked:true});
+  }
+  await page.locator('[data-nestor-request]').fill('Keep this vase proposal waiting for my review');await page.locator('[data-nestor-request-send]').click();
+  await page.waitForFunction(()=>window.__GRAPHYSX_NESTOR__.state().proposal!==null);
+  assert.equal(await page.locator('[data-proposal-accept]').isDisabled(),false);
+  const waitingForReview=await snapshot();
+  await page.evaluate(()=>window.__GRAPHYSX__.update('made-vase',{label:'Changed during human review'}));
+  await page.waitForFunction(()=>document.querySelector('[data-proposal-accept]').disabled);
+  assert.equal(await page.evaluate(()=>window.__GRAPHYSX_NESTOR__.state().proposalStale),true);
+  await page.locator('[data-proposal-discard]').click();assert.equal(await page.evaluate(()=>window.__GRAPHYSX__.undo().ok),true);
+  assert.deepEqual(keyedDocument((await snapshot()).doc),keyedDocument(waitingForReview.doc));out.staleCases.push({kind:'after-card',stale:true,applyBlocked:true});
   await page.evaluate(()=>window.__GRAPHYSX__.select(['made-vase']));await page.waitForFunction(()=>!document.querySelector('[data-request-focus]').hidden&&document.querySelector('[data-request-focus-label]').textContent.includes('Turned vase')&&!document.querySelector('[data-request-focus-check]').checked);
   await page.evaluate(()=>{window.__GRAPHYSX_HOST__.frameView([11,13,23],[0,2,7],0.1);});await page.waitForFunction(()=>!window.__GRAPHYSX_HOST__.focusing);
   await page.screenshot({path:path.join(output,'mesh-authoring-desktop.png')});
   await page.setViewportSize({width:390,height:844});const frame=await page.evaluate(()=>window.__GRAPHYSX_HOST__.frameCount);await page.waitForFunction(n=>window.__GRAPHYSX_HOST__.frameCount>n+2,frame);
+  const mobileLayout=await page.evaluate(()=>({outcomeBottom:document.querySelector('[data-proposal-outcome]').getBoundingClientRect().bottom,commitTop:document.querySelector('.gx-commit').getBoundingClientRect().top}));
+  assert.ok(mobileLayout.outcomeBottom<=mobileLayout.commitTop,'Scroll-bounded mobile card keeps the outcome and commit receipt from overlapping');
   await page.screenshot({path:path.join(output,'mesh-authoring-mobile.png')});
   // The authoritative store expands the same commands and computes an ordinary inverse.
   dir=await mkdtemp(path.join(tmpdir(),'graphysx-authoring-'));store=await startSceneStore({port:0,token:'authoring-smoke-token',dir,datalakeDir:null});
@@ -105,4 +138,4 @@ try {
   writeFileSync(path.join(output,'mesh-authoring.scene.json'),JSON.stringify(edited.doc,null,2));
   console.log('PASS mesh authoring: three constructions, explicit one-object context, tuple/texel edits, actual GPU buffers/pixels, undo/redo/reload, atomic refusal and shared inverse/authority');
 }catch(error){writeFileSync(path.join(output,'mesh-authoring-failure.json'),JSON.stringify({error:String(error),requests,errors},null,2));await page.screenshot({path:path.join(output,'mesh-authoring-failure.png')}).catch(()=>{});throw error;}
-finally{await browser.close();await store?.close();if(dir)await removeFixture(dir);}
+finally{for(const delay of delayed)delay.reply.resolve();await browser.close();await store?.close();if(dir)await removeFixture(dir);}

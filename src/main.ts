@@ -274,7 +274,7 @@ if (mode === "previews" && import.meta.env.DEV) {
       const showLocally = (): void => {
         const proposal = nestor?.propose(topic);
         welcome?.showOutcome(null);
-        if (proposal) welcome?.showProposal(proposal, false);
+        if (proposal) welcome?.showProposal(proposal, nestor?.state().proposalStale ?? false);
       };
 
       const provider = proposalProvider();
@@ -288,9 +288,10 @@ if (mode === "previews" && import.meta.env.DEV) {
       // path to give it.
       void (async () => {
         const state = host.api.state();
+        const observedRevision = state?.revision ?? 0;
         const result = await provider.propose({
           request: nestorTopicRequest(topic),
-          revision: state?.revision ?? 0,
+          revision: observedRevision,
           scene: {
             id: state?.world.id ?? "",
             label: state?.world.label ?? "",
@@ -306,9 +307,9 @@ if (mode === "previews" && import.meta.env.DEV) {
           showLocally();
           return;
         }
-        const proposal = nestor?.proposeExternal(topic, result.proposal.intent, result.proposal.commands);
+        const proposal = nestor?.proposeExternal(topic, result.proposal.intent, result.proposal.commands, { expectedRevision: observedRevision });
         welcome?.showOutcome(null);
-        if (proposal) welcome?.showProposal(proposal, false);
+        if (proposal) welcome?.showProposal(proposal, nestor?.state().proposalStale ?? false);
       })();
     };
     /**
@@ -344,9 +345,10 @@ if (mode === "previews" && import.meta.env.DEV) {
       welcome?.setRequestBusy(true);
       void (async () => {
         const state = host.api.state();
+        const observedRevision = state?.revision ?? 0;
         const result = await provider.propose({
           request,
-          revision: state?.revision ?? 0,
+          revision: observedRevision,
           scene: {
             id: state?.world.id ?? "",
             label: state?.world.label ?? "",
@@ -364,8 +366,8 @@ if (mode === "previews" && import.meta.env.DEV) {
           syncFrontDoor();
           return;
         }
-        const proposal = nestor?.proposeExternal("request", result.proposal.intent, result.proposal.commands);
-        if (proposal) welcome?.showProposal(proposal, false);
+        const proposal = nestor?.proposeExternal("request", result.proposal.intent, result.proposal.commands, { expectedRevision: observedRevision });
+        if (proposal) welcome?.showProposal(proposal, nestor?.state().proposalStale ?? false);
       })();
     };
     /**
@@ -584,10 +586,17 @@ if (mode === "previews" && import.meta.env.DEV) {
     const focusFrontDoor = (): void => {
       queueMicrotask(() => document.querySelector<HTMLButtonElement>(".gx-go-editor")?.focus());
     };
+    let observedProposalView = "";
     const syncFrontDoor = (): void => {
       if (host.mode === "editor" || !document.querySelector(".gx-welcome")) return;
       if (desiredWelcomeVariant() !== mountedWelcomeVariant) mountFrontDoor();
       welcome?.setRequestFocus(meshContextTarget());
+      const current = nestor?.state();
+      const view = current?.proposal ? `${current.proposal.id}:${current.proposalStale}` : "";
+      if (view !== observedProposalView) {
+        observedProposalView = view;
+        if (current?.proposal) welcome?.showProposal(current.proposal, current.proposalStale);
+      }
     };
     // Rebuild the front door from scratch. Playing a level REPLACES the world, so coming back
     // cannot just mean un-hiding chrome — the showroom's entities are gone and its host-mounted

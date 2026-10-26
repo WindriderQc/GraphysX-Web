@@ -103,7 +103,7 @@ export function mountWelcome(
      * about why; it never sends anything.
      */
     .gx-welcome .gx-nestor-ask{display:flex;gap:8px;width:100%;box-sizing:border-box;pointer-events:auto}
-    .gx-welcome .gx-request-focus{display:flex;align-items:center;gap:8px;font-size:12px;line-height:1.3;pointer-events:auto}
+    .gx-welcome .gx-request-focus{display:flex;align-items:center;gap:8px;color:var(--gx-ink-soft);font-size:12px;line-height:1.3;pointer-events:auto}
     .gx-welcome .gx-request-focus[hidden]{display:none}
     .gx-welcome .gx-request-focus input{flex:none;width:18px;height:18px;accent-color:#77e9ff}
     .gx-welcome .gx-nestor-ask input{flex:1;min-width:0;box-sizing:border-box;min-height:32px;padding:6px 13px;border-radius:999px;border:1px solid rgba(116,223,241,.28);background:rgba(8,32,44,.72);color:var(--gx-ink);font:500 12.5px var(--gx-font)}
@@ -219,7 +219,7 @@ export function mountWelcome(
      * visitor is never waiting on chrome.
      */
     @keyframes gx-welcome-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-    .gx-welcome-card > *{animation:gx-welcome-rise .72s cubic-bezier(.22,.68,.32,1) both}
+    .gx-welcome-card > *{flex-shrink:0;animation:gx-welcome-rise .72s cubic-bezier(.22,.68,.32,1) both}
     .gx-welcome-card > .gx-eyebrow{animation-delay:.18s}
     .gx-welcome-card > h1{animation-delay:.32s}
     .gx-welcome-card > p{animation-delay:.48s}
