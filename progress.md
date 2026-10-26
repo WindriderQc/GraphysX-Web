@@ -5067,3 +5067,26 @@ and a rendered frame before sampling the roof; retain click state/events and a c
 any future failure. Selection still requires the original real pointer event and exact path.
 The full 103-check receipt remains scoped to ancestor `459059b`; final scoped reruns are
 reported separately in the pull request.
+
+## 2026-10-26 (America/Toronto) — NetX v1: the LAN inventory as a neighbourhood around the router
+
+`?app=netx` composes AgentX Data's network inventory (`network/devices`, `/agents`,
+`/capability`) as a v2 document: the hub at the centre, every device placed by the last
+octet of its address on the ring of its observation state (online 8, recent 13, historical
+18), lighthouses for the collectors (a beam only for the live one), nameless vendorless
+devices no longer seen lined up as ghosts on a passages arc. The classification reproduces
+Data's rule (age of `lastSeen` against the 30 min / 24 h windows; `observation.state` wins
+when Data gives it) and the freshness sentence is Nestor's, word for word. The body comes
+from the recorded type only, the tint from the vendor family; an out-of-list type (seen in
+production: `3d-printer-controller`) is kept as text and drawn as a crate. Read-only: the
+relay gains three GETs, refuses scan and `PATCH`. The public build opens a synthetic capture
+in TEST-NET-1 with locally administered MACs, in the live proportions (55 devices, 31/3/21,
+13 vendorless, 2 named, 3 collectors, 1 active); the unit test refuses any `192.168.` in it.
+Evidence: `test/netx.test.mjs` (8) and `test/diskx-route.test.mjs` (3) green, full suite
+757 pass / 1 skip; `npm run smoke:netx` PASS on this branch's build (222 entities, filter
+"online" hides 24 in the scene with `exportDocument` unchanged, 3D click on the hub from the
+overview, list frames `imprimante-wifi` and the 3D pick agrees); captures
+`output/verify/netx-{overview,filter-online,click-device,mobile}.png` inspected — the first
+overview was too far and the notice only appeared after a filter click; both fixed before
+the final run. What waits on AgentX (the alert's guess on the device record, enrichment as
+a collector request, an IoT join key) is listed in `docs/NETX_PROPOSAL.md` §3.3.
