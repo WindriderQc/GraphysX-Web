@@ -2,6 +2,17 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-10-25 — Mobile LLMx controls and conversation
+
+- Keep the profile visible beside the room title, move its switch into a horizontally scrollable tool strip and place undo/redo with those tools instead of over the conversation. Text, Send and Talk share one compact row; long messages use the full transcript width. The portrait stays clear of the transcript and makes room for reading on short screens; the short-screen maths panel leaves its portrait column available.
+- Core-module proof uses a long Family conversation and a real native scene application with an applied receipt. It measures button hit targets, composer alignment, portrait/message separation, undo/redo placement and document overflow at320x568,390x844 and600x800. Captures inspected; unit/typecheck/lint/build, Rapier and the extended Core-module check all pass. Broader conversation/creation/persistence verification and public reception are recorded separately at closeout.
+- Owner asked to wait before priority3 (LEGO shader). No LEGO or shared-renderer corrective code was changed. Showroom remains diagnostic; Claude retains its active Core-hosted Center/push work.
+
+## 2026-10-25 — LLMx cold bootstrap
+
+- Start the existing conversation handshake after the host's first render, including the face inset, rather than consuming its 15-second network deadline during cold shader work. Connection remains single-shot; no session or user turn is retried. Pending preparation and connection errors retain their status across world changes.
+- The Core-module browser regression deliberately blocks the first instanced draw for 16 seconds. The previous module fails because config starts before that draw completes; the corrected module passes with the original network and browser deadlines. Focused bootstrap/audio/client tests, 685 Node tests with one skip, the two Rapier probes and Core-module browser check passed. Final combined mobile validation and publication follow separately.
+
 ## 2026-09-13 — Full authored world and the existing AgentX voice path
 
 - Yanik assigned the face to Claude and voice/world integration to Codex. Expanded LLMx commands to the authored environment: existing entities, native lights/materials, all native types, spline updates, behaviors, physics interactions and joints. The build zone is now a workshop suggestion. Reuse shared validation and one native commit; retain exact revision/turn receipts and reloadable face/anchor identities.
