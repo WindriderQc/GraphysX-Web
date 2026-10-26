@@ -12,6 +12,7 @@ const {
   CENTER_BRIDGE_SCHEMA,
   createHostBridge,
   isAllowedHostOrigin,
+  isLoopbackOrigin,
   parseHostOriginAllowList,
   readPushedProposal,
 } = await importBrowserModule(new URL("../src/coauthor-host-bridge.ts", import.meta.url));
@@ -42,12 +43,21 @@ function harness(overrides = {}) {
 }
 
 describe("which origins may host the Center", () => {
-  it("allows same-origin, loopback and the build-time list, nothing else", () => {
+  it("allows same-origin and the build-time list, and loopback only where loopback means development", () => {
     const list = [CORE];
     assert.equal(isAllowedHostOrigin(SELF, SELF, list), true);
     assert.equal(isAllowedHostOrigin(CORE, SELF, list), true);
-    assert.equal(isAllowedHostOrigin("http://127.0.0.1:3399", SELF, list), true);
-    assert.equal(isAllowedHostOrigin("http://localhost:5173", SELF, list), true);
+    // The public Center is not on loopback: a page on the visitor's own machine is nobody's host.
+    assert.equal(isAllowedHostOrigin("http://127.0.0.1:3399", SELF, list), false);
+    assert.equal(isAllowedHostOrigin("http://localhost:5173", SELF, list), false);
+    // A Center served from loopback (a worktree build, the smoke) is development: loopback hosts answer.
+    assert.equal(isAllowedHostOrigin("http://127.0.0.1:3399", "http://127.0.0.1:4199", list), true);
+    assert.equal(isAllowedHostOrigin("http://localhost:5173", "http://127.0.0.1:4199", list), true);
+    // So is the dev server on any origin, when it says so.
+    assert.equal(isAllowedHostOrigin("http://127.0.0.1:3399", SELF, list, true), true);
+    assert.equal(isAllowedHostOrigin("http://127.0.0.1:3399", "http://127.0.0.1:4199", list, false), false);
+    assert.equal(isLoopbackOrigin("http://localhost:4173"), true);
+    assert.equal(isLoopbackOrigin(SELF), false);
     assert.equal(isAllowedHostOrigin("https://evil.example", SELF, list), false);
     assert.equal(isAllowedHostOrigin("https://agentx.example.evil.example", SELF, list), false);
     assert.equal(isAllowedHostOrigin("null", SELF, list), false, "an opaque origin (sandboxed frame, file:) is nobody");
@@ -110,7 +120,26 @@ describe("the bridge", () => {
     assert.deepEqual(posted, [{ message: msg("ready", { state: STATE }), origin: CORE }]);
 
     // A second allowed origin does not take over, and the parent is the only source.
-    assert.equal(from("http://127.0.0.1:3399", msg("hello")), false);
+    assert.equal(from("http://127.0.0.1:3399", msg("hello")), false, "loopback: not development here, and not the first host either");
+    assert.equal(from(CORE, msg("hello"), { tag: "popup" }), false);
+    assert.equal(bridge.hostOrigin(), CORE);
+    assert.equal(from(CORE, { type: "hello" }), false, "no schema tag, not ours");
+  });
+
+  it("answers a loopback host only when told loopback is development", () => {
+    const closed = harness();
+    assert.equal(closed.from("http://127.0.0.1:3399", msg("hello")), false);
+    assert.deepEqual(closed.posted, []);
+    const dev = harness({ allowLoopback: true });
+    assert.equal(dev.from("http://127.0.0.1:3399", msg("hello")), true);
+    assert.equal(dev.bridge.hostOrigin(), "http://127.0.0.1:3399");
+    const local = harness({ selfOrigin: "http://127.0.0.1:4199" });
+    assert.equal(local.from("http://localhost:3399", msg("hello")), true, "a Center on loopback is development");
+  });
+
+  it("keeps the first host once chosen", () => {
+    const { bridge, from } = harness();
+    from(CORE, msg("hello"));
     assert.equal(from(CORE, msg("hello"), { tag: "popup" }), false);
     assert.equal(bridge.hostOrigin(), CORE);
     assert.equal(from(CORE, { type: "hello" }), false, "no schema tag, not ours");

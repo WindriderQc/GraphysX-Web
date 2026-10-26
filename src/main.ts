@@ -115,8 +115,9 @@ if (configuredProposalUrl) {
 /**
  * Framed by a host page — an AgentX Core page serving the Center under its own origin
  * (docs/NESTOR_PROPOSALS.md, phase 2). The host becomes the provider once it has said hello from
- * an allowed origin: same-origin, loopback, or the build-time `VITE_GRAPHYSX_HOST_ORIGINS`. A
- * framing page from anywhere else gets no answer at all. Top-level pages have no host.
+ * an allowed origin: same-origin, the build-time `VITE_GRAPHYSX_HOST_ORIGINS`, or loopback in
+ * development only. A framing page from anywhere else gets no answer at all. Top-level pages
+ * have no host.
  */
 const framedByHost = window.parent !== window;
 const hostOriginAllowList = parseHostOriginAllowList(import.meta.env.VITE_GRAPHYSX_HOST_ORIGINS);
@@ -1025,6 +1026,9 @@ if (mode === "previews" && import.meta.env.DEV) {
       hostBridge = createHostBridge({
         selfOrigin: window.location.origin,
         allowedOrigins: hostOriginAllowList,
+        // A loopback host is development: the dev server says so; a build decides by whether
+        // the Center itself is on loopback, so the public build answers no local page.
+        ...(import.meta.env.DEV ? { allowLoopback: true } : {}),
         hostSource: window.parent,
         post: (message, targetOrigin) => window.parent.postMessage(message, targetOrigin),
         // The revision and a bounded summary: ids, types and labels, never the document — the

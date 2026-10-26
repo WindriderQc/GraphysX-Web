@@ -34,7 +34,7 @@ import {
   type ProviderResult,
 } from "./coauthor-provider";
 
-export { CENTER_BRIDGE_SCHEMA, isAllowedHostOrigin, parseHostOriginAllowList } from "./center-bridge-protocol";
+export { CENTER_BRIDGE_SCHEMA, isAllowedHostOrigin, isLoopbackOrigin, parseHostOriginAllowList } from "./center-bridge-protocol";
 export type { CenterState } from "./center-bridge-protocol";
 
 /** A proposal that arrived from the host, checked. */
@@ -97,8 +97,14 @@ export function readPushedProposal(raw: unknown): { ok: true; proposal: PushedPr
 export type HostBridgeOptions = {
   /** `window.location.origin`: a same-origin host is always allowed. */
   selfOrigin: string;
-  /** `VITE_GRAPHYSX_HOST_ORIGINS`, parsed. Loopback is allowed regardless, for development. */
+  /** `VITE_GRAPHYSX_HOST_ORIGINS`, parsed. */
   allowedOrigins: readonly string[];
+  /**
+   * Whether a loopback host is allowed. Defaults to "the Center itself is on loopback"; a
+   * development build passes true. The production build on its public origin leaves it unset,
+   * so a local page on a visitor's machine cannot frame it as a host.
+   */
+  allowLoopback?: boolean;
   /** `window.parent.postMessage(message, targetOrigin)`, injected. */
   post: (message: CenterToHostMessage, targetOrigin: string) => void;
   /** The window a genuine host message comes from (`window.parent`). Any other source is ignored. */
@@ -127,7 +133,10 @@ export type HostBridge = {
 };
 
 export function createHostBridge(options: HostBridgeOptions): HostBridge {
-  const { selfOrigin, allowedOrigins, post, hostSource, readState, onPush, onHost, timeoutMs = 90_000, label = "AgentX Core" } = options;
+  const { selfOrigin, allowedOrigins, allowLoopback, post, hostSource, readState, onPush, onHost, timeoutMs = 90_000, label = "AgentX Core" } = options;
+  const allowedHost = (origin: string): boolean => (allowLoopback === undefined
+    ? isAllowedHostOrigin(origin, selfOrigin, allowedOrigins)
+    : isAllowedHostOrigin(origin, selfOrigin, allowedOrigins, allowLoopback));
   let host: string | null = null;
   let disposed = false;
   let counter = 0;
@@ -171,7 +180,7 @@ export function createHostBridge(options: HostBridgeOptions): HostBridge {
     if (hostSource !== undefined && event.source !== hostSource) return false;
     const { data } = event;
     if (!isBridgeMessage(data)) return false;
-    if (!isAllowedHostOrigin(event.origin, selfOrigin, allowedOrigins)) return false;
+    if (!allowedHost(event.origin)) return false;
 
     if (data.type === "hello") {
       if (host === null) {

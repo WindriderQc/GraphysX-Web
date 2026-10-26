@@ -61,6 +61,16 @@ export function isBridgeMessage(data: unknown): data is BridgeMessage {
 
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
+/** An http(s) origin on the local machine. */
+export function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return (url.protocol === "http:" || url.protocol === "https:") && LOOPBACK.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Whether a page at `origin` may act as the Center's host.
  *
@@ -68,10 +78,18 @@ const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
  * any site can frame the public Center and post to it. Without this, a crafted page would get
  * a scene summary back and could push its own command list as a card inviting the visitor to
  * press Apply. The human gate and the validation still stand behind it; neither is a reason
- * to answer the page at all. So a host is same-origin, loopback (development), or named in
- * the build-time allow-list — set by whoever built the site, who is already trusted with it.
+ * to answer the page at all. So a host is same-origin, or named in the build-time allow-list —
+ * set by whoever built the site, who is already trusted with it — or loopback, but only where
+ * loopback means development: when the Center itself is served from loopback, or when the
+ * caller says so (`import.meta.env.DEV`). The public build framed by a page on a visitor's
+ * own machine answers it nothing.
  */
-export function isAllowedHostOrigin(origin: string, selfOrigin: string, allowList: readonly string[]): boolean {
+export function isAllowedHostOrigin(
+  origin: string,
+  selfOrigin: string,
+  allowList: readonly string[],
+  allowLoopback: boolean = isLoopbackOrigin(selfOrigin),
+): boolean {
   if (typeof origin !== "string" || origin === "" || origin === "null") return false;
   let url: URL;
   try {
@@ -84,7 +102,7 @@ export function isAllowedHostOrigin(origin: string, selfOrigin: string, allowLis
   // did not come from `event.origin` and is not trusted on its word.
   if (url.origin !== origin) return false;
   if (origin === selfOrigin) return true;
-  if (LOOPBACK.has(url.hostname)) return true;
+  if (allowLoopback && LOOPBACK.has(url.hostname)) return true;
   return allowList.includes(origin);
 }
 
