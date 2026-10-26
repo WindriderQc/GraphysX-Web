@@ -1,6 +1,7 @@
 // The Center's end of the bridge to a host page, tested from the hostile side: which framing
-// pages get an answer at all, what a pushed proposal must carry before it becomes a card, and
-// that every push ends in a receipt the host can relay to Core truthfully.
+// pages get an answer at all, what a pushed proposal must carry before it becomes a card, that
+// every push ends in a receipt the host can relay to Core truthfully, and that the decision a
+// person takes on a pushed card reaches the host under the push id — and only the host.
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -199,6 +200,30 @@ describe("the bridge", () => {
     from(CORE, msg("hello"));
     from(CORE, msg("push", { proposal: PUSH }));
     assert.deepEqual(posted.at(-1).message, msg("push-receipt", { id: "push-1", status: "refused", reason: "A proposal is already waiting for a decision." }));
+  });
+
+  it("reports what a person decided about a pushed proposal, to the host only, as it was decided", () => {
+    const { bridge, posted, from } = harness();
+    bridge.reportOutcome({ pushId: "push-1", status: "accepted", proposalId: "Add a lamp.@7", revision: 8, commitId: "commit-0001" });
+    assert.deepEqual(posted, [], "no host yet: nobody to tell");
+    from(CORE, msg("hello"));
+    from(CORE, msg("push", { proposal: PUSH }));
+    bridge.reportOutcome({ pushId: "push-1", status: "accepted", proposalId: "Add a lamp.@7", revision: 8, commitId: "commit-0001" });
+    assert.deepEqual(posted.at(-1), {
+      message: msg("push-outcome", { id: "push-1", status: "accepted", proposalId: "Add a lamp.@7", revision: 8, commitId: "commit-0001" }),
+      origin: CORE,
+    });
+    bridge.reportOutcome({ pushId: "push-2", status: "discarded", proposalId: "Add a lamp.@8", revision: 8 });
+    assert.deepEqual(posted.at(-1).message, msg("push-outcome", { id: "push-2", status: "discarded", proposalId: "Add a lamp.@8", revision: 8 }), "no commitId, no reason: nothing happened");
+    bridge.reportOutcome({ pushId: "push-3", status: "stale", proposalId: "Add a lamp.@7", revision: 9 });
+    assert.deepEqual(posted.at(-1).message, msg("push-outcome", { id: "push-3", status: "stale", proposalId: "Add a lamp.@7", revision: 9 }));
+    bridge.reportOutcome({ pushId: "push-4", status: "rejected", proposalId: "Add a lamp.@9", revision: 9, reason: "The scene rejected the change." });
+    assert.deepEqual(posted.at(-1).message, msg("push-outcome", { id: "push-4", status: "rejected", proposalId: "Add a lamp.@9", revision: 9, reason: "The scene rejected the change." }));
+    assert.ok(posted.every((entry) => entry.origin === CORE), "outcomes go to the host origin and nowhere else");
+    bridge.dispose();
+    const count = posted.length;
+    bridge.reportOutcome({ pushId: "push-5", status: "discarded", proposalId: "x@9", revision: 9 });
+    assert.equal(posted.length, count, "nothing after dispose");
   });
 
   it("announces the scene to the host once there is one, and nothing before", () => {

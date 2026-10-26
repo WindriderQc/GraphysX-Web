@@ -88,11 +88,20 @@ section below this one is the September release they build on):
    renders its prompt from that file, validates the model's answer and replies `{ intent,
    commands }` or `{ ok: false, reason }`. Transport today is the dev server's bounded
    `/propose` relay (`GRAPHYSX_PROPOSE_URL`); the public deploy has no provider and says so.
-   **Not done:** the Core-served Center page (the DiskX model) that would make `/propose`
-   same-origin and let Core push a proposal without a click — the Center is a chunk graph plus a
-   44 MB asset tree, not one module, and relaying that is the proxy the seams forbid. Read
-   [NESTOR_PROPOSALS.md](docs/NESTOR_PROPOSALS.md) for the design, the rejected channels and the
-   evidence. **Seen on screen on 2026-10-25:** the dev server with `?propose=/propose`, the Core
+   **Phase 2 delivered (2026-10-26, America/Toronto; PR 75 and AgentX 1111):** Core serves
+   `/graphysx`, which frames the public Center and loads `<graphysx-center>`
+   (`dist/embed/center-host.js`, relayed by Core like `diskx.js`); the framed Center takes the host
+   page as its provider over `postMessage` (`src/center-bridge-protocol.ts`, one definition for
+   both ends), and Nestor's tool `propose_world_change` pushes a composed proposal into the page
+   as an inert card from `Nestor · Core` with a receipt back. **The decision report
+   (`claude/nestor-push-outcome`):** when the person applies or discards a pushed card the Center
+   sends `push-outcome` under Core's push id (accepted at revision N with the commit id, or
+   discarded, stale, rejected), the host relays it to `/center/receipts`, Core keeps the last 64
+   and the read-only tool `world_proposal_status` answers it. Proof: `smoke-nestor-push` (tier
+   `core`), `test/coauthor-host-bridge.test.mjs`, AgentX `center.test.js`. Still to set for the
+   production page: `VITE_GRAPHYSX_HOST_ORIGINS` in the GraphysX build and `GRAPHYSX_CENTER_URL`
+   in Core's config. Read [NESTOR_PROPOSALS.md](docs/NESTOR_PROPOSALS.md) for the design, the
+   rejected channels and the evidence. **Seen on screen on 2026-10-25:** the dev server with `?propose=/propose`, the Core
    surface mounted in a loopback harness with inference on the live Core router (Qwen3.8 27B,
    ~17 s per composition): the lake-and-birds request became a 3-command card (water, flock,
    set-environment), Apply gave `commit-0001` by `nestor`, the editor outliner listed both
