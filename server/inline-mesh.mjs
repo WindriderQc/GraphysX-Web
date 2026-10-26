@@ -2,7 +2,7 @@
 export const MESH_FIELDS = Object.freeze(["positions", "indices", "normals", "uvs", "groups", "materials"]);
 export const MESH_GROUP_FIELDS = Object.freeze(["start", "count", "materialIndex"]);
 export const PIXEL_FIELDS = Object.freeze(["width", "height", "rgba"]);
-export const MESH_LIMITS = Object.freeze({ vertices: 4096, triangles: 8192, materials: 8, groups: 128, bytes: 128 * 1024, coordinate: 10_000, sceneVertices: 32768, sceneTriangles: 65536 });
+export const MESH_LIMITS = Object.freeze({ vertices: 4096, triangles: 8192, materials: 8, groups: 128, bytes: 128 * 1024, coordinate: 10_000, uv: 128, normalComponent: 1, normalMinimumLength: 0.0001, sceneVertices: 32768, sceneTriangles: 65536 });
 export const PIXEL_LIMITS = Object.freeze({ dimension: 64, channel: 255 });
 
 function record(value, fields, label) {
@@ -28,10 +28,10 @@ export function assertInlineMesh(value, label = "mesh") {
   array(value.indices, `${label}.indices`, 3, MESH_LIMITS.triangles * 3, 3, vertices - 1);
   for (const index of value.indices) if (!Number.isInteger(index) || index < 0) throw new Error(`${label}.indices must be unsigned integer vertex indices`);
   if (value.normals !== undefined) {
-    array(value.normals, `${label}.normals`, vertices * 3, vertices * 3, 3, 1);
-    for (let i = 0; i < value.normals.length; i += 3) if (Math.hypot(...value.normals.slice(i, i + 3)) < 0.0001) throw new Error(`${label}.normals must be nonzero`);
+    array(value.normals, `${label}.normals`, vertices * 3, vertices * 3, 3, MESH_LIMITS.normalComponent);
+    for (let i = 0; i < value.normals.length; i += 3) if (Math.hypot(...value.normals.slice(i, i + 3)) < MESH_LIMITS.normalMinimumLength) throw new Error(`${label}.normals must be nonzero`);
   }
-  if (value.uvs !== undefined) array(value.uvs, `${label}.uvs`, vertices * 2, vertices * 2, 2, 128);
+  if (value.uvs !== undefined) array(value.uvs, `${label}.uvs`, vertices * 2, vertices * 2, 2, MESH_LIMITS.uv);
   for (let i = 0; i < value.indices.length; i += 3) {
     const [a, b, c] = value.indices.slice(i, i + 3).map(index => index * 3);
     // The renderer and Rapier receive Float32 buffers. Distinct JSON doubles may collapse

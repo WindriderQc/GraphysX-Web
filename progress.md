@@ -2,6 +2,12 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-10-26 — Mesh integration and resource parity
+
+- Full release verification on 459059b passed all 103 checks: 731 Node passes with one existing skip, static/build/Rapier checks, all 97 journeys and 131/131 shared-browser assertions. Preserved the exact log and captures outside Git. Current main's measured-volume and mobile updates were then merged; every mesh feature file except progress remained byte-identical to the full-tested commit before the following contract correction.
+- A targeted boundary probe found server/runtime disagreement for a temporary ninth full-size mesh followed by removal. The document boundary now enforces the same per-operation scene budget as runtime allocation; whole-mesh updates remain atomic and removal-before-spawn remains valid. UV/normal bounds now publish the existing numeric constants. New atomicity/order regression and fresh integration validation cover this Node/contract change; do not claim the merged head ran the older complete gate.
+- Core's prompt support (AgentX #1107) was already installed by a concurrent native deployment; serving revision ancestry and the executing file hash match the tested source. The unstarted duplicate deployment request was cancelled. Real Core composition and final publication receipts remain separate from deterministic fixtures.
+
 ## 2026-10-26 — Portable mesh v1 and authored texture
 
 - Owner authorized indexed mesh authoring followed by an actual Nestor composition. Added mesh buffers and optional UVs/normals/material groups to ordinary spawn/update, shared topology/resource checks, inline RGBA textures on the existing material path and explicit exact colliders. Core keeps proposal authority; public anonymous composition and the paused LEGO shader remain unchanged.

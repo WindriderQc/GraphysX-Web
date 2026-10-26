@@ -47,6 +47,9 @@ inverse use the existing runtime. No asset store, model file or external URL is 
   128 KiB serialized per mesh; 32,768 inline vertices and 65,536 inline triangles per scene.
   Pixels are at most 64 by 64. The 256 KiB provider reply and live-operation limit stays
   unchanged. These are conservative resource caps, not an FPS guarantee on physical phones.
+  Scene caps apply after every operation in a batch, including temporary peaks; use an
+  atomic `update.mesh`, or remove an old mesh before spawning its replacement. UV and normal
+  bounds are published from the same constants as their validator.
 - Physics requires explicit `convex-hull` or `trimesh`. Triangle colliders are static;
   moving bodies use the existing hull machinery. `auto` is refused for inline meshes,
   so collision never silently becomes a primitive bounding box.

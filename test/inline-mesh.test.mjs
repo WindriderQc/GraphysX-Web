@@ -58,6 +58,20 @@ describe("portable authored mesh", () => {
     assert.throws(() => assertInlineMesh({ positions: [9999, 0, 0, 9999.00001, 0, 0, 9999, 0.00001, 0], indices: [0, 1, 2] }), /Float32/);
     assert.throws(() => assertInlineMesh({ positions: [0, 0, 0, 1e-30, 0, 0, 0, 1e-30, 0], indices: [0, 1, 2] }), /Float32/);
   });
+  it("keeps the server and runtime budget consistent at temporary batch peaks", () => {
+    const positions = Array(MESH_LIMITS.vertices * 3).fill(0);
+    positions[3] = 1; positions[7] = 1;
+    const buffers = { positions, indices: [0, 1, 2] };
+    const count = MESH_LIMITS.sceneVertices / MESH_LIMITS.vertices;
+    const initial = { ...world(), entities: Array.from({ length: count }, (_, i) => ({ id: `full-${i}`, type: "mesh", mesh: buffers })) };
+    const extra = { id: "replacement", type: "mesh", mesh: buffers };
+    const before = JSON.stringify(initial);
+    assert.throws(() => applyCommands(initial, [{ op: "spawn", entity: extra }, { op: "remove", id: "full-0" }]), /scene geometry budget/);
+    assert.equal(JSON.stringify(initial), before);
+    const accepted = applyCommands(initial, [{ op: "remove", id: "full-0" }, { op: "spawn", entity: extra }]);
+    assert.equal(accepted.definition.entities.length, count);
+    assert.doesNotThrow(() => validateStoredSceneDefinition(accepted.definition));
+  });
   it("requires explicit collider intent and refuses moving triangle colliders", () => {
     for (const physics of [{ mode: "dynamic" }, { mode: "dynamic", collider: "trimesh" }, { mode: "kinematic", collider: "trimesh" }]) {
       assert.throws(() => applyCommands(world(), [{ op: "spawn", entity: { id: "bad", type: "mesh", mesh: mesh(), physics } }]));
@@ -68,6 +82,8 @@ describe("portable authored mesh", () => {
     const vocabulary = buildWorldVocabulary();
     assert.deepEqual(vocabulary.entityTypes.mesh.requires, ["mesh"]);
     assert.deepEqual(vocabulary.limits.mesh, MESH_LIMITS);
+    assert.deepEqual(vocabulary.fields.mesh.find(field => field.name === "uvs").range, [-MESH_LIMITS.uv, MESH_LIMITS.uv]);
+    assert.deepEqual(vocabulary.fields.mesh.find(field => field.name === "normals").range, [-MESH_LIMITS.normalComponent, MESH_LIMITS.normalComponent]);
     assert.ok(vocabulary.fields.texture.some(entry => entry.name === "pixels"));
     assert.ok(vocabulary.rules.some(rule => rule.includes("original geometry")));
   });

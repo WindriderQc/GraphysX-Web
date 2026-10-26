@@ -180,6 +180,10 @@ function boundsFor(block, field) {
   const direct = table[field];
   if (Array.isArray(direct)) return direct;
   if (block === "geometry" && field !== "radialSegments") return LIMITS.geometry.size;
+  if (block === "mesh") {
+    const bound = { positions: LIMITS.mesh.coordinate, uvs: LIMITS.mesh.uv, normals: LIMITS.mesh.normalComponent }[field];
+    if (bound !== undefined) return [-bound, bound];
+  }
   if (block === "material" && ["roughness", "metalness", "opacity"].includes(field)) return LIMITS.material[field];
   return null;
 }

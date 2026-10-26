@@ -1222,8 +1222,13 @@ export function applyCommands(definition, commands) {
   }
   const next = structuredClone(definition);
   entityMap(next.entities);
-  const outputs = commands.map((command) => applyCommand(next, command));
-  assertMeshSceneBudget(next.entities);
+  const outputs = commands.map((command) => {
+    const output = applyCommand(next, command);
+    // Match the runtime's pre-allocation budget at each step, including temporary peaks
+    // in a batch. A whole-mesh update avoids a spawn-before-remove peak entirely.
+    assertMeshSceneBudget(next.entities);
+    return output;
+  });
   validateGraph(next);
   const serializedBytes = new TextEncoder().encode(JSON.stringify(next)).byteLength;
   if (serializedBytes > MAX_DEFINITION_BYTES) {
