@@ -15,7 +15,8 @@ const quiet = () => ({ playing: false, amplitude: 0, brightness: 0 });
 
 /** One private Household session shared by text and the existing microphone conversation. */
 export function mountLlmXConversation(root: HTMLElement, sceneContext: (request?: string) => LlmXSceneContext,
-  options: { profile?: 'personal' | 'family'; onSceneProposal?: (proposal: unknown, turnId: string) => LlmXSceneReceipt } = {}) {
+  options: { profile?: 'personal' | 'family'; deferInitialization?: boolean;
+    onSceneProposal?: (proposal: unknown, turnId: string) => LlmXSceneReceipt } = {}) {
   const surface = document.createElement('section');
   surface.className = 'gx-llmx-conversation';
   surface.setAttribute('aria-label', 'Conversation avec notre agent');
@@ -56,7 +57,8 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: (request?
   let speech: AbortController | null = null;
   let speechTurnId: string | null = null, lastReplyTurnId: string | null = null;
   let replyNeedingVoiceTurnId: string | null = null;
-  let detail = '', voiceState = '', partial = '', lastReply: LlmXReply | null = null;
+  let detail = options.deferInitialization ? 'La Forge se prépare…' : '';
+  let voiceState = '', partial = '', lastReply: LlmXReply | null = null;
   let settling: Promise<void> = Promise.resolve();
   let timings: { turnId?: string; transcriptionMs?: number; replyMs?: number; firstAudioMs?: number; startedAt?: number } = {};
   const client = new LlmXConversationClient({ profile: options.profile, onChange: () => render(), onDelta: (_delta, answer) => {
@@ -387,6 +389,16 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: (request?
   });
   button('reconnect').addEventListener('click', () => window.location.reload());
   const coreEntry = llmxCoreEntry(options.profile ?? 'personal');
+  let connectionStarted = false;
+  function connect() {
+    if (disposed || coreEntry || connectionStarted) return;
+    connectionStarted = true;
+    detail = '';
+    void client.initialize().then(() => {
+      if (disposed) return;
+      initialized = true; render(); return maybeOpening();
+    }).catch(error => { initialized = true; fail(error); });
+  }
   if (coreEntry) {
     const link = document.createElement('a');
     link.href = coreEntry;
@@ -395,18 +407,16 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: (request?
     surface.prepend(link);
     detail = 'La Forge est prête. La conversation s’ouvre dans AgentX.';
     render();
-  } else void client.initialize().then(() => {
-    if (disposed) return;
-    initialized = true; render(); return maybeOpening();
-  }).catch(error => { initialized = true; fail(error); });
+  } else if (!options.deferInitialization) connect();
   const hide = () => { if (!disposed) void stop('Écoute arrêtée. Reprends quand tu reviens.').catch(() => {}); };
   const visibility = () => { if (document.hidden) hide(); };
   document.addEventListener('visibilitychange', visibility);
   window.addEventListener('pagehide', hide);
   return {
+    connect,
     ready() { visualReady = true; void maybeOpening(); },
     collapseHistory() { transcript.hidden = true; button('history').setAttribute('aria-expanded', 'false'); },
-    worldChanged() { void stop(available() ? 'Environnement rechargé. La conversation continue ici.' : '').catch(() => {}); },
+    worldChanged() { void stop(available() ? 'Environnement rechargé. La conversation continue ici.' : detail).catch(() => {}); },
     sample() {
       if (disposed) return quiet();
       const microphoneSpeech = voice?.audio?.readSpeechSample?.();

@@ -176,7 +176,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     ...(lastAction ? { lastAction } : {}),
     ...mathContext(),
     ...llmxWorldContext(host.api, request, !mathPanel.hidden),
-  }), { profile, onSceneProposal: (proposal, turnId) => {
+  }), { profile, deferInitialization: true, onSceneProposal: (proposal, turnId) => {
     lastAction = actions.apply(proposal, turnId);
     notice = lastAction.message ?? ''; render(); return lastAction;
   } });
@@ -499,7 +499,12 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   window.addEventListener('pagehide', preservePage);
   restart();
   const unsubscribe = host.subscribeFrame(frame);
-  const unsubscribeInset = host.subscribeAfterRender(faceInset.render);
+  const unsubscribeInset = host.subscribeAfterRender(() => {
+    faceInset.render();
+    // Cold shader compilation can monopolise the first frame on a small device.
+    // Start the bounded network handshake after that work, in the existing loop.
+    conversation.connect();
+  });
   const state = () => ({
     application: "llmx", environment: "llmx-nocturnal-forge", profile, activeId, worldName, revision: identity().revision, entrance: entrance.state(),
     face: disposed ? null : face.describe(), faceInset: faceInset.state(), conversation: conversation.state(), saved, notice,

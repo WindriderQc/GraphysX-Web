@@ -15,6 +15,25 @@ try {
     const context = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: profile === 'family' ? 390 : 1280, height: 800 } });
     await context.addCookies([{ name: 'agentx_family_device', value: 'synthetic-pin', url: origin }]);
     const page = applySmokeTimeout(await context.newPage());
+    if (profile === 'personal') await page.addInitScript(() => {
+      const probe = window.__llmxColdStart = {};
+      const fetch = window.fetch;
+      window.fetch = (...args) => {
+        if (String(args[0]).endsWith('/llmx/config')) probe.configAt = performance.now();
+        return fetch(...args);
+      };
+      const draw = WebGL2RenderingContext.prototype.drawElementsInstanced;
+      WebGL2RenderingContext.prototype.drawElementsInstanced = function (...args) {
+        if (probe.finishedAt === undefined && document.querySelector('.gx-llmx')) {
+          probe.startedAt = performance.now();
+          // A cold driver can block the main thread longer than the 15s network
+          // deadline. Reproduce that ordering without a model or a slower timeout.
+          while (performance.now() - probe.startedAt < 16_000) { /* cold compile */ }
+          probe.finishedAt = performance.now();
+        }
+        return draw.apply(this, args);
+      };
+    });
     page.on('pageerror', e => errors.push(String(e)));
     page.on('console', e => { if (e.type() === 'error') errors.push(e.text()); });
     const prefix = '/api/consumers/nestor/v1/llmx' + (profile === 'family' ? '/family' : '');
@@ -44,6 +63,12 @@ try {
       return route.abort();
     });
     await page.goto(origin + '/llmx' + (profile === 'family' ? '?profile=family' : ''));
+    if (profile === 'personal') {
+      await page.waitForFunction(() => window.__llmxColdStart?.finishedAt !== undefined
+        && window.__llmxColdStart?.configAt !== undefined);
+      const cold = await page.evaluate(() => window.__llmxColdStart);
+      assert.ok(cold.configAt >= cold.finishedAt, JSON.stringify({ message: 'the network deadline starts after cold rendering', cold }));
+    }
     const input = page.getByRole('textbox', { name: 'Ton message' });
     await input.waitFor();
     await page.waitForFunction(() => !document.querySelector('[data-text]').disabled);
