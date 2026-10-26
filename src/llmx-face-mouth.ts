@@ -107,6 +107,19 @@ export function classifyMouth(
   const gap = new Uint8Array(count);
   const teethFit = MOUTH_LOOK.toothWidth / cube >= MOUTH_LOOK.minCubesPerTooth;
   const reach = mouth.halfWidth * MOUTH_LOOK.toothSpan;
+  // Only the roof/floor surface facing the aperture can be a tooth. The tunnel's thick rim
+  // also contains cubes behind that surface, especially at the lower corners; tinting and
+  // holding those back like teeth made two isolated cubes flash below the lip during speech.
+  // Use grid coordinates relative to this input, avoiding float rounding at half-grid offsets.
+  const columnKey = (x: number, y: number, z: number): string =>
+    `${Math.round((x - positions[0]) / cube)},${Math.round((z - positions[2]) / cube)},${y >= mouth.y ? 1 : 0}`;
+  const rimDistance = new Map<string, number>();
+  for (let k = 0; k < count; k += 1) {
+    if (isBackWall[k]) continue;
+    const x = positions[k * 3], y = positions[k * 3 + 1], z = positions[k * 3 + 2];
+    const key = columnKey(x, y, z);
+    rimDistance.set(key, Math.min(rimDistance.get(key) ?? Infinity, Math.abs(y - mouth.y)));
+  }
   for (let k = 0; k < count; k += 1) {
     const x = positions[k * 3];
     const y = positions[k * 3 + 1];
@@ -122,7 +135,8 @@ export function classifyMouth(
     // mouth line (0.18 of a cube above it at the balanced level) while the side walls' lower
     // cubes sit a third of a cube below it.
     const roofOrFloor = y >= mouth.y ? y - mouth.y >= cube * 0.1 : mouth.y - y >= cube * 0.5;
-    if (front && roofOrFloor && Math.abs(x) < reach) {
+    const facesOpening = Math.abs(y - mouth.y) === rimDistance.get(columnKey(x, y, z));
+    if (front && roofOrFloor && facesOpening && Math.abs(x) < reach) {
       role[k] = y >= mouth.y ? MOUTH_ROLE.upperTooth : MOUTH_ROLE.lowerTooth;
       if (teethFit) {
         // Teeth are centred on the mouth's axis, so the two front teeth meet in the middle.
