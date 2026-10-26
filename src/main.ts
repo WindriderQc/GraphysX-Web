@@ -1221,6 +1221,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           api: host.api,
           client,
           initialScene: liveSessionRequested ? null : storeScene,
+          startCollapsed: !editorFirst && !storeScene,
           actor: "browser",
           onSceneOpened: () => {
             restoreShowroomOnEditorExit = true;
