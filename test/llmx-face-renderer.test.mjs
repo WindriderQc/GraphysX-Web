@@ -4,6 +4,72 @@ import { importBrowserModule } from "./support/import-browser-module.mjs";
 
 const { AgentWorldVoxelFace, resolveAgentWorldFace } = await importBrowserModule(new URL("../src/agent-world-face.ts", import.meta.url));
 
+test("speech onset reveals the teeth while both lower corner cubes keep their wall colour", () => {
+  const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "high", autoBlink: false }));
+  try {
+    face.snapDrivers({ build: 1, speak: 0 });
+    const cavity = face.object.children.find(child => child.name === "VoxelFaceMaw");
+    const slotAt = (x, y, z) => {
+      for (let k = 0; k < cavity.count; k += 1) {
+        const matrix = cavity.instanceMatrix.array;
+        if (Math.abs(matrix[k * 16 + 12] - x) < 1e-5
+          && Math.abs(matrix[k * 16 + 13] - y) < 1e-5
+          && Math.abs(matrix[k * 16 + 14] - z) < 1e-5) return k;
+      }
+      assert.fail(`missing cavity cube at ${x},${y},${z}`);
+    };
+    const corners = [-1, 1].flatMap(side => [
+      slotAt(side * 0.216, -0.576, 0.436),
+      slotAt(side * 0.192, -0.600, 0.436),
+      slotAt(side * 0.168, -0.600, 0.436),
+    ]);
+    const tooth = slotAt(0, -0.504, 0.436);
+    const colour = k => Array.from(cavity.instanceColor.array.slice(k * 3, k * 3 + 3));
+    const walls = corners.map(colour);
+    const hiddenTooth = colour(tooth);
+    for (const speak of [0.05, 0.3, 0.6, 1, 0]) {
+      face.snapDrivers({ speak });
+      assert.deepEqual(corners.map(colour), walls, `corner colours must stay steady at speak=${speak}`);
+      if (speak === 1) assert.ok(colour(tooth)[0] > hiddenTooth[0] * 2, "the real tooth still brightens");
+    }
+  } finally { face.dispose(); }
+});
+
+for (const level of ["high", "balanced", "mobile"]) {
+  test(`${level}: teeth keep one colour through syllables and short pauses, and hide after silence`, () => {
+    const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level, autoBlink: false }));
+    try {
+      face.snapDrivers({ build: 1, speak: 0 });
+      const cavity = face.object.children.find(child => child.name === "VoxelFaceMaw");
+      const restingColours = Array.from(cavity.instanceColor.array);
+      face.setDrivers({ speak: 0.3 });
+      for (let frame = 0; frame < 12; frame += 1) face.update(1 / 60);
+      const speakingColours = Array.from(cavity.instanceColor.array);
+      assert.notDeepEqual(speakingColours, restingColours, "speech reveals actual teeth");
+      const uploads = cavity.instanceColor.version;
+      for (const speak of [0.6, 0.004, 0, 0.15, 1, 0.005, 0, 0.3]) {
+        face.setDrivers({ speak, speakTone: speak > 0.2 ? 1 : 0 });
+        for (let frame = 0; frame < 8; frame += 1) face.update(1 / 60);
+        assert.deepEqual(Array.from(cavity.instanceColor.array), speakingColours, `no colour pulse at speak=${speak}`);
+        assert.equal(cavity.instanceColor.version, uploads, "no colour uploads between syllables");
+      }
+      face.setDrivers({ speak: 0 });
+      for (let frame = 0; frame < 45; frame += 1) face.update(1 / 60);
+      assert.deepEqual(Array.from(cavity.instanceColor.array), restingColours, "silence restores the dark resting mouth");
+      face.snapDrivers({ build: 0 });
+      assert.equal(cavity.material.emissiveIntensity, 0);
+      face.snapDrivers({ build: 1, speak: 0.3 });
+      assert.deepEqual(Array.from(cavity.instanceColor.array), speakingColours, "skip/replay restores the same tooth appearance");
+      face.setQualityCeiling("mobile");
+      const changed = face.object.children.find(child => child.name === "VoxelFaceMaw");
+      const changedColours = Array.from(changed.instanceColor.array);
+      face.setDrivers({ speak: 0.003 });
+      for (let frame = 0; frame < 12; frame += 1) face.update(1 / 60);
+      assert.deepEqual(Array.from(changed.instanceColor.array), changedColours, "a detail change retains stable teeth");
+    } finally { face.dispose(); }
+  });
+}
+
 test("static face instance uploads stop after assembly, including after a replay", () => {
   const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "mobile", autoBlink: false }));
   try {

@@ -1,6 +1,7 @@
 .gx-llmx{position:absolute;inset:0;z-index:45;pointer-events:none;color:#dce7e9;font-family:var(--gx-font,system-ui,sans-serif)}
 .gx-llmx-header{position:absolute;top:24px;left:28px;right:28px;display:flex;justify-content:space-between;align-items:start;gap:16px}
 .gx-llmx-eyebrow{font-size:11px;font-weight:600;letter-spacing:.28em;color:#84bec8}
+.gx-llmx-scope{margin-left:10px;font-size:11px;color:#b9d9de}
 .gx-llmx h1{font-size:20px;line-height:1.4;font-weight:500;margin:4px 0;text-shadow:0 2px 10px #000}
 .gx-llmx button{pointer-events:auto;min-height:44px;padding:10px 16px;border:1px solid #61778266;border-radius:10px;color:inherit;background:#0e161ede;font:500 13px var(--gx-font,system-ui,sans-serif);cursor:pointer;backdrop-filter:blur(10px)}
 .gx-llmx button:hover{background:#1b3039;border-color:#81c4ca}
@@ -43,7 +44,7 @@
 .gx-llmx-environments select{height:140px}.gx-llmx-environments option{padding:9px}
 .gx-llmx-environments label,.gx-llmx-math-panel label{display:block;font-size:13px;color:#b9cbd0}
 .gx-llmx-library-actions{display:flex;flex-wrap:wrap;gap:7px}.gx-llmx-environments{max-height:calc(100dvh - 32px);overflow:auto}
-.gx-llmx-edit-actions{position:absolute;left:24px;bottom:32px;display:flex;gap:5px;flex-direction:column}
+.gx-llmx-edit-actions{position:fixed;left:24px;bottom:32px;display:flex;gap:5px;flex-direction:column}
 .gx-llmx-math-panel{position:absolute;left:24px;top:150px;width:270px;max-height:calc(100dvh - 245px);overflow:auto;box-sizing:border-box;padding:18px;pointer-events:auto;border:1px solid #61778288;border-radius:16px;background:#101c24f2;backdrop-filter:blur(12px)}
 .gx-llmx-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.gx-llmx-panel-heading h2{font-size:17px;font-weight:500;margin:0 0 12px}.gx-llmx-panel-heading button{padding:7px;min-height:36px}
 .gx-llmx-math-panel p{font-size:13px;line-height:1.5}.gx-llmx-math-panel [data-math-result]{display:block;font-size:23px;font-weight:500;color:#a6eee7;margin:12px 0}.gx-llmx-math-panel [data-math-lesson] button{display:block;width:100%;margin-top:8px}
@@ -65,3 +66,30 @@
 @media(max-width:600px){.gx-llmx-header{top:14px;left:16px;right:16px}.gx-llmx h1{font-size:17px}.gx-llmx button{padding:9px 12px;font-size:12px}.gx-llmx-conversation{bottom:52px;width:calc(100% - 24px)}.gx-llmx-composer{flex-wrap:wrap}.gx-llmx-composer input{flex-basis:calc(100% - 110px)}.gx-llmx-composer [data-talk=microphone]{flex:1}.gx-llmx-talk-options{flex-wrap:wrap}.gx-llmx-footer{top:82px}.gx-llmx nav{gap:5px}.gx-llmx nav button{padding:7px 10px;min-height:36px}.gx-llmx-transcript{max-height:28vh}}
 @media(max-width:600px){.gx-llmx.math-open .gx-llmx-conversation{display:block;bottom:48px}.gx-llmx.math-open .gx-llmx-composer input,.gx-llmx.math-open [data-talk=send],.gx-llmx.math-open .gx-llmx-talk-options,.gx-llmx.math-open [data-talk=history],.gx-llmx.math-open .gx-llmx-transcript{display:none}.gx-llmx.math-open .gx-llmx-talk-heading{margin-bottom:4px}.gx-llmx.math-open .gx-llmx-talk-heading p{font-size:11px;padding:5px 9px;max-width:100%}.gx-llmx.math-open .gx-llmx-composer{padding:4px}.gx-llmx.math-open .gx-llmx-edit-actions{bottom:140px}.gx-llmx.math-open .gx-llmx-math-panel{bottom:190px;max-height:36dvh}.gx-llmx.math-open .gx-llmx-math-panel [data-math-result]{font-size:20px;margin:8px 0}.gx-llmx.math-open .gx-llmx-math-panel p{margin:7px 0}}
 @media(max-width:360px){.gx-llmx-header-actions{flex-shrink:0;width:118px}.gx-llmx-header-actions button{font-size:11px;white-space:nowrap}.gx-llmx h1{font-size:15px}.gx-llmx-footer{top:98px}.gx-llmx .gx-llmx-face-inset{top:190px;width:90px}.gx-llmx-face-inset [data-face-inset-view]{height:103px}}
+
+/* One tool strip above the scene; the conversation owns the space below it. */
+@media(max-width:600px){
+  .gx-llmx-header{align-items:center;gap:8px}
+  .gx-llmx-header-actions{width:auto;flex-shrink:0}
+  .gx-llmx-footer{top:82px;text-align:left}
+  .gx-llmx nav{justify-content:flex-start;flex-wrap:nowrap;overflow-x:auto;pointer-events:auto;scrollbar-width:thin;padding-bottom:5px}
+  .gx-llmx nav button{flex:0 0 auto;white-space:nowrap}
+  .gx-llmx-footer>.gx-llmx-notice{display:none}
+  .gx-llmx .gx-llmx-edit-actions,.gx-llmx.math-open .gx-llmx-edit-actions{position:static;display:flex;flex-direction:row;width:auto;margin-top:5px}
+  .gx-llmx .gx-llmx-edit-actions button{min-height:36px;padding:7px 10px}
+  .gx-llmx .gx-llmx-face-inset{top:180px;right:12px;width:90px}
+  .gx-llmx-face-inset [data-face-inset-view]{height:103px}
+  .gx-llmx-face-inset-caption{font-size:10px;padding:5px}
+  .gx-llmx-composer{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px;padding:6px}
+  .gx-llmx-composer input{padding:8px;min-width:0}
+  .gx-llmx-composer button{padding:8px;min-height:44px}
+  .gx-llmx-composer [data-talk=stop]{grid-column:1/-1}
+  .gx-llmx .gx-llmx-transcript,.gx-llmx.face-inset-open .gx-llmx-transcript{left:0;right:0;width:100%;max-height:min(32dvh,max(90px,calc(100dvh - 560px)));margin-bottom:10px}
+  .gx-llmx-talk-heading{gap:8px}
+  .gx-llmx-talk-heading p{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;padding:7px 9px;line-height:1.4}
+  .gx-llmx-talk-options{gap:4px}
+}
+@media(max-width:600px) and (max-height:700px){
+  .gx-llmx:has(.gx-llmx-transcript:not([hidden])) .gx-llmx-face-inset{display:none}
+  .gx-llmx.math-open .gx-llmx-math-panel{right:108px}
+}

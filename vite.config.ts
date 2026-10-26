@@ -14,8 +14,11 @@ import { createLlmXRoute } from "./scripts/llmx-server.mjs";
 import { createGraphysXAgentRoute } from "./scripts/graphysx-agent-relay.mjs";
 // @ts-expect-error -- local read-only bridge to AgentX Data for DiskX, never part of the browser bundle
 import { createDiskxRoute } from "./scripts/diskx-server.mjs";
+// @ts-expect-error -- local same-origin relay to one AgentX Core proposal route, never part of the browser bundle
+import { createProposalRelayRoute } from "./scripts/propose-relay.mjs";
+import { worldVocabulary, worldVocabularyRoute } from "./vite.vocabulary";
 
-function kidxDocuments(diskx?: { dataUrl?: string }): Plugin {
+function kidxDocuments(diskx?: { dataUrl?: string }, proposeUrl?: string): Plugin {
   return { name: "kidx-local-instructions", apply: "serve", async configureServer(server) {
     const route = await createKidxDocumentRoute();
     const teams = createKidxTeamRoute();
@@ -26,8 +29,12 @@ function kidxDocuments(diskx?: { dataUrl?: string }): Plugin {
     const agents = createGraphysXAgentRoute();
     // DiskX reads AgentX Data through the page's own origin; `DISKX_DATA_URL` unset means fixture.
     const diskxRoute = createDiskxRoute({ dataUrl: diskx?.dataUrl });
+    // The published world vocabulary, and `/propose` relayed to one configured AgentX Core route
+    // (`GRAPHYSX_PROPOSE_URL`); without it the relay answers 404 and the page composes locally.
+    const vocabulary = worldVocabularyRoute();
+    const propose = createProposalRelayRoute({ targetUrl: proposeUrl });
     server.httpServer?.once("close", () => agents.dispose());
-    server.middlewares.use((req, res, next) => { if (!agents(req, res) && !llmx(req, res) && !diskxRoute(req, res) && !teams(req, res) && !route(req, res)) next(); });
+    server.middlewares.use((req, res, next) => { if (!agents(req, res) && !llmx(req, res) && !diskxRoute(req, res) && !vocabulary(req, res) && !propose(req, res) && !teams(req, res) && !route(req, res)) next(); });
   } };
 }
 
@@ -73,6 +80,7 @@ function faceEmbed(): Plugin {
       await build({ configFile: path.resolve("vite.face.config.ts"), logLevel: "warn" });
       // `<diskx-city>` for an AgentX Core page (vite.diskx.config.ts), shipped the same way.
       await build({ configFile: path.resolve("vite.diskx.config.ts"), logLevel: "warn" });
+      await build({ configFile: path.resolve("vite.llmx.config.ts"), logLevel: "warn" });
     },
   };
 }
@@ -83,6 +91,10 @@ export default defineConfig(({ command, mode }) => {
   // Volume capacity comes from that API too; nothing is declared here any more.
   const diskxEnv = loadEnv(mode, process.cwd(), "DISKX_");
   const diskx = { dataUrl: process.env.DISKX_DATA_URL || diskxEnv.DISKX_DATA_URL || undefined };
+  // `GRAPHYSX_PROPOSE_URL`: the one AgentX Core route `/propose` relays to in dev (same sources
+  // as DiskX). Unset means the page composes locally and the relay answers 503.
+  const proposeEnv = loadEnv(mode, process.cwd(), "GRAPHYSX_PROPOSE");
+  const proposeUrl = process.env.GRAPHYSX_PROPOSE_URL || proposeEnv.GRAPHYSX_PROPOSE_URL || undefined;
   // GRAPHYSX_FULL_ASSETS=1 builds the unpruned dist — for driving an archive world in the
   // legacy player against a real build, which the pruned release cannot serve.
   const fullAssets = process.env.GRAPHYSX_FULL_ASSETS === "1";
@@ -90,7 +102,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     // Dev always serves all of public/, so the legacy route keeps its archive locally.
     publicDir: prune ? false : "public",
-    plugins: prune ? [productAssets(), faceEmbed()] : command === "build" ? [faceEmbed()] : [kidxDocuments(diskx)],
+    plugins: prune ? [productAssets(), faceEmbed(), worldVocabulary()] : command === "build" ? [faceEmbed(), worldVocabulary()] : [kidxDocuments(diskx, proposeUrl)],
     optimizeDeps: { entries: ["index.html"] },
     // Cyber Race 1992 is a standalone page (its own renderer and loop) published beside the
     // product at /cyber-race.html; the Games shelf links to it. See docs/CYBER_RACE.md.

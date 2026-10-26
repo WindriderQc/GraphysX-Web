@@ -15,6 +15,7 @@
 
 import { Box3, BoxGeometry, EdgesGeometry, LineBasicMaterial, LineSegments, Raycaster, Vector2, Vector3 } from "three";
 import "./diskx.css";
+import { foldPresentationPanel } from "./presentation-mobile";
 import {
   buildDiskxTree,
   categoryShares,
@@ -253,6 +254,10 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   const button = (action: string): HTMLButtonElement => element<HTMLButtonElement>(`[data-action="${action}"]`);
   const labelsLayer = element<HTMLDivElement>(".gx-diskx-labels");
   root.append(surface);
+  foldPresentationPanel(element(".gx-diskx-panel"), "Rapport et détails");
+  foldPresentationPanel(element(".gx-diskx-actions"), "Options");
+  if (window.matchMedia("(max-width: 820px)").matches)
+    element(".gx-diskx-actions .gx-presentation-detail-body").prepend(element("[data-crumbs]"));
   const show = createDiskxShow({
     surface, labelsLayer, canvas: host.renderer.domElement, camera: host.camera, scene: host.scene, reduced, citySize: CITY_SIZE,
     roots: () => source.roots,
@@ -780,7 +785,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   const LABEL_MIN_SPAN = 54;
   function updateLabels(): void {
     const rect = host.renderer.domElement.getBoundingClientRect();
-    const shown = blocks.slice(0, LABEL_BUDGET);
+    const shown = blocks.slice(0, rect.width <= 820 ? 6 : LABEL_BUDGET);
     if (hovered && !shown.some((block) => block.node === hovered)) {
       const extra = blocks.find((block) => block.node === hovered);
       if (extra) shown.push(extra);

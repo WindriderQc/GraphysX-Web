@@ -97,10 +97,16 @@ Production release proof:
    ordered Analyze → Build → Validate progress, authoritative evidence, and safe interruption,
    reassignment, resume, cancellation, and terminal cuts.
 3. Project accepted assignments into Explore, Build, and Play choreography with a runtime-only
-   mission board, evidence holograms, completion response, camera focus, and accessible owner
+   mission board, evidence receipt cards, completion response, camera focus, and accessible owner
    controls—without adding a renderer, animation loop, or exportable entity.
 4. Keep deterministic protocol, hostile-input, multi-browser, transient/export, resource, mobile,
    reduced-motion, and navigation proof attached to the slice.
+
+   The welcome density reduction exposed the relative cost of decorative mission geometry.
+   Persistent director/station rings, synthetic spinning miniatures and connector curves have
+   been removed; the board and bounded evidence cards retain actor, operation, targets,
+   sequence/revision, focus and all authority/replay rules. The existing ten-percent render
+   budget remains unchanged, including four desktop/two mobile artifact caps.
 
 ### C. Add the co-author command queue — partly shipped
 
@@ -136,11 +142,19 @@ Production release proof:
    restricted to same-origin or loopback, because a crafted link would otherwise POST a summary of
    the visitor's scene to a host of the attacker's choosing. No key reaches the browser.
 
-Remaining for this slice: **a free-text request surface.** The three topic buttons are the only
-way to ask for anything today, so a provider composes against one of three fixed requests
-(`nestorTopicRequest`). Note the layout hazard before building it: the welcome card is
-bottom-anchored and grows *upward* over the scene, and adding to it has already killed a kinetic
-block's clickable area once.
+5. **Done (2026-10-25, America/Toronto): the free-text request surface.** One row under the
+   topic pills (`[data-nestor-ask]`). The sentence goes verbatim as `ProposalRequest.request`; the
+   reply is an ordinary proposal through `proposeExternal("request", …)`; a refusal is shown as
+   the provider's sentence and the scene does not move; without a provider the field is disabled,
+   says why, and the page makes no request. The layout hazard was paid for rather than ignored:
+   the card's gap went from 13px to 10px and `scripts/smoke-nestor-request.mjs` measures with
+   `elementFromPoint` that the row blocks no kinetic body the card did not already block. The
+   vocabulary a provider composes against is published by GraphysX itself
+   (`dist/embed/world-vocabulary.json`) and AgentX Core is the provider — see
+   [NESTOR_PROPOSALS.md](NESTOR_PROPOSALS.md).
+
+Remaining for this slice: **a Core-served Center page**, so `/propose` is same-origin in
+production and Core can push a proposal to an open page (phase 2 in NESTOR_PROPOSALS.md).
 
 ## Parallel correctness lane
 
@@ -178,9 +192,10 @@ added.
 Everything above is shipped except these, and each is bounded by something measured rather than
 by someone's estimate.
 
-1. **A free-text request surface** (slice 4). The provider adapter composes against three fixed
-   topic requests because buttons are the only way to ask for anything. The hazard is layout, not
-   plumbing: the welcome card grows upward over the scene.
+1. **A Core-served Center page** (slice 4, the part left on 2026-10-25). The request surface and
+   the Core route exist; what is missing is the page that makes `/propose` same-origin outside the
+   dev server and gives Core a page to push into. It needs a GraphysX build with a configurable
+   asset base, because the Center is a chunk graph plus a 44 MB asset tree, not one module.
 2. **Authored places — deferred** (slice 7). Three doorways make the Center navigable, but they lead to
    content that already existed rather than to a build lab, an overlook and an arena someone
    designed. Those cost entities, and the budget to hold is the showroom's real median frame of

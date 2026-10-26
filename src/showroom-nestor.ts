@@ -7,7 +7,14 @@ import type {
 import { createProposal, includedCommands, isProposalEmpty, isProposalStale, toggleCommandInclusion } from "./coauthor-proposal";
 import type { CoauthorOutcome, CoauthorProposal } from "./coauthor-proposal";
 
-export type NestorTopic = "build" | "play" | "explore";
+/** The three physical consoles, each with a locally composed demonstration. */
+export type NestorConsoleTopic = "build" | "play" | "explore";
+/**
+ * `request` is a change asked for in the person's own words and composed by a provider. It has
+ * no console, no local composition and no fixed target: the card shows the provider's intent
+ * and the camera goes to whatever the accepted commands made.
+ */
+export type NestorTopic = NestorConsoleTopic | "request";
 
 /** One identity for every commit Nestor makes, whether proposed first or not. */
 const NESTOR_ACTOR = { id: "nestor", label: "Nestor", kind: "agent" } as const;
@@ -16,21 +23,21 @@ export const NESTOR_AGENT_ID = "showroom-nestor";
 export const NESTOR_STAGE_ID = "showroom-nestor-stage";
 export const NESTOR_BUILD_ID = "showroom-nestor-build";
 
-export const NESTOR_TOPICS: readonly NestorTopic[] = ["build", "play", "explore"];
+export const NESTOR_TOPICS: readonly NestorConsoleTopic[] = ["build", "play", "explore"];
 
-const TOPIC_COLOR: Record<NestorTopic, string> = {
+const TOPIC_COLOR: Record<NestorConsoleTopic, string> = {
   build: "#63e6ff",
   play: "#76f0ae",
   explore: "#bd9cff",
 };
 
-const TOPIC_EMISSIVE: Record<NestorTopic, string> = {
+const TOPIC_EMISSIVE: Record<NestorConsoleTopic, string> = {
   build: "#126b80",
   play: "#176b4a",
   explore: "#4c328d",
 };
 
-const TOPIC_TARGET: Record<NestorTopic, string> = {
+const TOPIC_TARGET: Record<NestorConsoleTopic, string> = {
   build: NESTOR_BUILD_ID,
   play: "showroom-plinth",
   explore: "showroom-starlings",
@@ -52,6 +59,7 @@ const NESTOR_CENTER_REQUIRED_IDS = [
   "showroom-plinth",
   "showroom-starlings",
   "showroom-cubx-swarm",
+  "showroom-cubx",
 ] as const;
 
 export const isNestorCenterReady = (api: GraphysXAgentWorldApi): boolean =>
@@ -88,7 +96,7 @@ export interface NestorPresenter {
    * Compose a topic's change set and hold it for a human decision. Nothing is committed and
    * the scene does not move — this is the whole point of the co-author queue.
    */
-  propose: (topic: NestorTopic) => CoauthorProposal;
+  propose: (topic: NestorConsoleTopic) => CoauthorProposal;
   /**
    * Compose from a command list somebody else wrote — a model provider. Downstream nothing can
    * tell the difference, which is the point: a provider gets no path the local composer lacks,
@@ -114,7 +122,7 @@ export interface NestorPresenter {
    * the physical console route and the existing showroom smoke; the DOM buttons go through
    * `propose` so the person sees the change before it happens.
    */
-  present: (topic: NestorTopic) => NestorPresentation;
+  present: (topic: NestorConsoleTopic) => NestorPresentation;
   reset: () => NestorPresentation;
   state: () => NestorPresenterState;
 }
@@ -123,340 +131,49 @@ const READY_PRESENTATION: NestorPresentation = {
   topic: null,
   eyebrow: "NESTOR ONLINE",
   title: "What should we make real?",
-  message: "Pick a live demo. I’ll change this scene with the same inspectable commands available to every AgentX collaborator.",
+  message: "Pick a demo or ask; nothing changes until you accept.",
   targetId: NESTOR_STAGE_ID,
   commit: null,
   error: null,
 };
 
 /**
- * Scene-native geometry for the GraphysX guide and its three physical topic consoles.
- * Nothing here relies on private renderer objects: the avatar, light, particles, stage and
- * controls all survive export/load as ordinary v2 entities.
+ * Nestor's document identity, scene lighting and three small physical topic orbs.
+ * The guide stays in the interface; no humanoid geometry competes with the landscape.
+ * All signals and attributed state survive export/load as ordinary v2 entities.
  */
 export function buildNestorCenter(): AgentWorldEntityDefinition[] {
-  // These roots deliberately remain top-level. Interaction routing climbs to the outermost
-  // entity, so each console keeps its physical `nestor-topic:*` contract while its children
-  // provide a much more legible presentation bay.
-  const consoleDefinitions: Array<{
-    topic: NestorTopic;
-    label: string;
-    position: [number, number, number];
-  }> = [
-    { topic: "build", label: "Build Console", position: [2.8, 0, 2.8] },
-    { topic: "play", label: "Play Console", position: [8.2, 0, 2.4] },
-    { topic: "explore", label: "Explore Console", position: [8.4, 0, -1.5] },
-  ];
-
-  const consoles = consoleDefinitions.flatMap(({ topic, label, position }): AgentWorldEntityDefinition[] => {
+  const consoles: AgentWorldEntityDefinition[] = NESTOR_TOPICS.flatMap((topic, index) => {
     const id = `showroom-nestor-console-${topic}`;
-    const color = TOPIC_COLOR[topic];
-    const emissive = TOPIC_EMISSIVE[topic];
-    const topicTags = ["showroom", "agentx-center", "nestor-console", `nestor-topic:${topic}`];
-    const glyph: AgentWorldEntityDefinition = topic === "build"
-      ? {
-          id: `${id}:glyph`,
-          parentId: id,
-          type: "box",
-          label: `${label} Build Glyph`,
-          geometry: { width: 0.72, height: 0.48, depth: 0.08 },
-          transform: { position: [0, 1.2, -0.41] },
-          material: { color, emissive, emissiveIntensity: 1.7, roughness: 0.12, metalness: 0.3 },
-          castShadow: false,
-          tags: topicTags,
-        }
-      : topic === "play"
-        ? {
-            id: `${id}:glyph`,
-            parentId: id,
-            type: "cone",
-            label: `${label} Play Glyph`,
-            geometry: { radius: 0.36, height: 0.58, radialSegments: 3 },
-            transform: { position: [0, 1.2, -0.42], rotationDegrees: [90, 0, 0] },
-            material: { color, emissive, emissiveIntensity: 1.7, roughness: 0.12, metalness: 0.3 },
-            castShadow: false,
-            tags: topicTags,
-          }
-        : {
-            id: `${id}:glyph`,
-            parentId: id,
-            type: "torus",
-            label: `${label} Explore Glyph`,
-            geometry: { radius: 0.31, tube: 0.065, radialSegments: 32 },
-            transform: { position: [0, 1.2, -0.42] },
-            material: { color, emissive, emissiveIntensity: 1.7, roughness: 0.12, metalness: 0.3 },
-            castShadow: false,
-            tags: topicTags,
-          };
-
+    const positions: [number, number, number][] = [[2.8, 0, 2.8], [8.2, 0, 2.4], [8.4, 0, -1.5]];
+    const color = ["#88cddc", "#d5b080", "#96abc6"][index];
     return [
-      {
-        id,
-        type: "group",
-        label,
-        transform: { position },
-        tags: topicTags,
-      },
-      {
-        id: `${id}:base`,
-        parentId: id,
-        type: "cylinder",
-        label: `${label} Base`,
-        geometry: { radius: 0.76, height: 0.28, radialSegments: 16 },
-        transform: { position: [0, 0.14, 0] },
-        material: { color: "#172e39", emissive, emissiveIntensity: 0.24, roughness: 0.4, metalness: 0.72 },
-        castShadow: false,
-        tags: topicTags,
-      },
-      {
-        id: `${id}:screen`,
-        parentId: id,
-        type: "box",
-        label: `${label} Display`,
-        geometry: { width: 1.72, height: 1.18, depth: 0.12 },
-        transform: { position: [0, 1.2, -0.5] },
-        material: { color: "#071722", emissive, emissiveIntensity: 0.72, roughness: 0.16, metalness: 0.76 },
-        castShadow: false,
-        tags: topicTags,
-      },
-      {
-        id: `${id}:screen-header`,
-        parentId: id,
-        type: "box",
-        label: `${label} Display Header`,
-        geometry: { width: 1.22, height: 0.09, depth: 0.06 },
-        transform: { position: [0, 1.61, -0.58] },
-        material: { color, emissive, emissiveIntensity: 1.95, roughness: 0.1, metalness: 0.35 },
-        castShadow: false,
-        tags: topicTags,
-      },
-      glyph,
-      {
-        id: `${id}:ring`,
-        parentId: id,
-        type: "torus",
-        label: `${label} Signal Ring`,
-        geometry: { radius: 0.61, tube: 0.045, radialSegments: 40 },
-        transform: { position: [0, 0.4, 0], rotationDegrees: [90, 0, 0] },
-        material: { color, emissive, emissiveIntensity: 1.05, roughness: 0.2, metalness: 0.65 },
-        behaviors: [{ id: `${topic}-console-spin`, type: "spin", axis: "z", speedDegrees: topic === "play" ? -22 : 18 }],
-        castShadow: false,
-        tags: topicTags,
-      },
-      {
-        id: `${id}:core`,
-        parentId: id,
-        type: "icosahedron",
-        label: `${label} Core`,
-        geometry: { radius: 0.34, radialSegments: 24 },
-        transform: { position: [0, 0.72, 0.08] },
-        material: { color, emissive, emissiveIntensity: 1.2, roughness: 0.16, metalness: 0.44 },
-        behaviors: [{ id: `${topic}-console-pulse`, type: "pulse", minimumScale: 0.86, maximumScale: 1.14, frequencyHz: 0.7 }],
-        castShadow: false,
-        tags: topicTags,
-      },
+      { id, type: "group", label: `${topic} orb`, transform: { position: positions[index] },
+        tags: ["showroom", "agentx-center", "nestor-console", `nestor-topic:${topic}`] },
+      { id: `${id}:core`, parentId: id, type: "sphere", label: `${topic} signal`, geometry: { radius: 0.48, radialSegments: 40 },
+        transform: { position: [0, 1, 0] }, material: { color, emissive: "#1c3c4d", emissiveIntensity: 0.4, roughness: 0.18, metalness: 0.7 },
+        behaviors: [{ id: `${topic}-float`, type: "bob", axis: "y", amplitude: 0.09, frequencyHz: 0.25 }], tags: ["showroom", "nestor-signal"] },
+      { id: `${id}:ring`, parentId: id, type: "torus", label: `${topic} rim`, geometry: { radius: 0.65, tube: 0.014, radialSegments: 48 },
+        transform: { position: [0, 1, 0], rotationDegrees: [80, 0, 12] }, material: { color, emissive: "#376778", emissiveIntensity: 0.7, roughness: 0.25, metalness: 0.7 },
+        tags: ["showroom", "nestor-signal"] },
     ];
   });
-
-  const nestorTags = ["showroom", "agentx-center", "nestor", "nestor-home"];
-  const homeTags = ["showroom", "agentx-center", "nestor-home"];
-
   return [
-    {
-      id: NESTOR_STAGE_ID,
-      type: "group",
-      label: "Nestor Command Stage",
-      // The right-side presentation lane stays clear of the welcome card while keeping CubX
-      // in Nestor's raised-hand sightline.
-      transform: { position: [5.25, 0, 0.8] },
-      tags: homeTags,
-    },
-    {
-      id: "showroom-nestor-dais",
-      parentId: NESTOR_STAGE_ID,
-      type: "cylinder",
-      label: "Nestor Dais",
-      geometry: { radius: 2.12, height: 0.34, radialSegments: 32 },
-      transform: { position: [0, 0.17, 0] },
-      material: { color: "#102c39", emissive: "#0c6076", emissiveIntensity: 0.5, roughness: 0.28, metalness: 0.72 },
-      castShadow: false,
-      tags: homeTags,
-    },
-    {
-      id: "showroom-nestor-dais-ring",
-      parentId: NESTOR_STAGE_ID,
-      type: "torus",
-      label: "Nestor Dais Ring",
-      geometry: { radius: 1.8, tube: 0.055, radialSegments: 64 },
-      transform: { position: [0, 0.38, 0], rotationDegrees: [90, 0, 0] },
-      material: { color: "#70edff", emissive: "#16768f", emissiveIntensity: 1.35, roughness: 0.12, metalness: 0.7 },
-      behaviors: [{ id: "nestor-dais-spin", type: "spin", axis: "z", speedDegrees: 10 }],
-      castShadow: false,
-      tags: homeTags,
-    },
-    {
-      id: NESTOR_AGENT_ID,
-      parentId: NESTOR_STAGE_ID,
-      type: "agent",
-      label: "Nestor · AgentX Guide",
-      geometry: { radius: 1.15, height: 5.2, radialSegments: 28 },
-      // Agent avatars face local -Z. Turn the full scene-native rig toward the +Z camera.
-      transform: { position: [0, 0.38, 0], rotationDegrees: [0, 180, 0] },
-      material: { color: "#3fc8df", emissive: "#0d566b", emissiveIntensity: 0.95, roughness: 0.22, metalness: 0.58 },
-      agent: {
-        role: "GraphysX guide",
-        status: "ready",
-        perceptionRadius: 12,
-        capabilities: ["present", "build", "play", "explore"],
-      },
-      behaviors: [{ id: "nestor-hover", type: "bob", axis: "y", amplitude: 0.08, frequencyHz: 0.32 }],
-      tags: nestorTags,
-    },
-    {
-      id: "showroom-nestor-face",
-      parentId: NESTOR_AGENT_ID,
-      type: "box",
-      label: "Nestor Face Display",
-      geometry: { width: 1.58, height: 0.76, depth: 0.14 },
-      transform: { position: [0, 4.1, -1.02] },
-      material: { color: "#071a25", emissive: "#0a4255", emissiveIntensity: 0.9, roughness: 0.12, metalness: 0.62 },
-      castShadow: false,
-      tags: nestorTags,
-    },
-    {
-      id: "showroom-nestor-eye-left",
-      parentId: NESTOR_AGENT_ID,
-      type: "box",
-      label: "Nestor Left Eye",
-      geometry: { width: 0.25, height: 0.11, depth: 0.07 },
-      transform: { position: [-0.34, 4.12, -1.11] },
-      material: { color: "#d8fbff", emissive: "#5ceaff", emissiveIntensity: 2.2, roughness: 0.08, metalness: 0.2 },
-      castShadow: false,
-      tags: nestorTags,
-    },
-    {
-      id: "showroom-nestor-eye-right",
-      parentId: NESTOR_AGENT_ID,
-      type: "box",
-      label: "Nestor Right Eye",
-      geometry: { width: 0.25, height: 0.11, depth: 0.07 },
-      transform: { position: [0.34, 4.12, -1.11] },
-      material: { color: "#d8fbff", emissive: "#5ceaff", emissiveIntensity: 2.2, roughness: 0.08, metalness: 0.2 },
-      castShadow: false,
-      tags: nestorTags,
-    },
-    {
-      id: "showroom-nestor-chest-display",
-      parentId: NESTOR_AGENT_ID,
-      type: "box",
-      label: "Nestor Chest Display",
-      geometry: { width: 1.42, height: 0.78, depth: 0.14 },
-      transform: { position: [0, 2.38, -1.02] },
-      material: { color: "#071a25", emissive: "#106d82", emissiveIntensity: 1.12, roughness: 0.12, metalness: 0.66 },
-      castShadow: false,
-      tags: nestorTags,
-    },
-    {
-      id: "showroom-nestor-chest-signal",
-      parentId: NESTOR_AGENT_ID,
-      type: "box",
-      label: "Nestor Chest Signal",
-      geometry: { width: 0.92, height: 0.1, depth: 0.07 },
-      transform: { position: [0, 2.38, -1.11] },
-      material: { color: "#aff7ff", emissive: "#4de6ff", emissiveIntensity: 2, roughness: 0.08, metalness: 0.2 },
-      castShadow: false,
-      tags: nestorTags,
-    },
-    {
-      id: "showroom-nestor-arm-present",
-      parentId: NESTOR_AGENT_ID,
-      type: "cylinder",
-      label: "Nestor Presenting Arm",
-      geometry: { radius: 0.17, height: 1.58, radialSegments: 16 },
-      transform: { position: [1.3, 3.05, -0.08], rotationDegrees: [0, 0, -56] },
-      material: { color: "#49cde2", emissive: "#0d566b", emissiveIntensity: 0.82, roughness: 0.24, metalness: 0.54 },
-      tags: nestorTags,
-    },
-    {
-      id: "showroom-nestor-hand-present",
-      parentId: NESTOR_AGENT_ID,
-      type: "sphere",
-      label: "Nestor Presenting Hand",
-      geometry: { radius: 0.29, radialSegments: 18 },
-      transform: { position: [1.72, 3.4, -0.1] },
-      material: { color: "#aff7ff", emissive: "#197d96", emissiveIntensity: 1.08, roughness: 0.2, metalness: 0.45 },
-      tags: nestorTags,
-    },
-    {
-      id: "showroom-nestor-arm-rest",
-      parentId: NESTOR_AGENT_ID,
-      type: "cylinder",
-      label: "Nestor Resting Arm",
-      geometry: { radius: 0.17, height: 1.5, radialSegments: 16 },
-      transform: { position: [-1.25, 2.48, -0.06], rotationDegrees: [0, 0, 44] },
-      material: { color: "#49cde2", emissive: "#0d566b", emissiveIntensity: 0.82, roughness: 0.24, metalness: 0.54 },
-      tags: nestorTags,
-    },
-    {
-      id: "showroom-nestor-hand-rest",
-      parentId: NESTOR_AGENT_ID,
-      type: "sphere",
-      label: "Nestor Resting Hand",
-      geometry: { radius: 0.27, radialSegments: 18 },
-      transform: { position: [-1.66, 1.96, -0.08] },
-      material: { color: "#aff7ff", emissive: "#197d96", emissiveIntensity: 1.02, roughness: 0.2, metalness: 0.45 },
-      tags: nestorTags,
-    },
-    {
-      id: "showroom-nestor-halo",
-      parentId: NESTOR_STAGE_ID,
-      type: "torus",
-      label: "Nestor Holographic Halo",
-      geometry: { radius: 1.66, tube: 0.045, radialSegments: 64 },
-      transform: { position: [0, 4.55, 0], rotationDegrees: [12, 0, 0] },
-      material: { color: "#aaf5ff", emissive: "#197d96", emissiveIntensity: 1.7, roughness: 0.12, metalness: 0.52 },
-      behaviors: [{ id: "nestor-halo-spin", type: "spin", axis: "y", speedDegrees: 28 }],
-      castShadow: false,
-      tags: homeTags,
-    },
-    {
-      id: "showroom-nestor-aura",
-      parentId: NESTOR_STAGE_ID,
-      type: "emitter",
-      label: "Nestor Signal Aura",
-      transform: { position: [0, 3.9, 0] },
-      emitter: { preset: "energy-orb", sizeScale: 2.8, speed: 1.6, spread: 1.6, maxParticles: 24, rate: 30, color: "#6fe9ff" },
-      tags: homeTags,
-    },
-    {
-      id: "showroom-nestor-light",
-      parentId: NESTOR_STAGE_ID,
-      type: "point-light",
-      label: "Nestor Stage Light",
-      transform: { position: [-1.5, 3.7, 1.6] },
-      intensity: 3.8,
-      distance: 11,
-      marker: false,
-      material: { color: "#72eaff", emissive: "#167b94", emissiveIntensity: 1.6 },
-      castShadow: false,
-      tags: homeTags,
-    },
-    {
-      id: "showroom-nestor-key-light",
-      parentId: NESTOR_STAGE_ID,
-      type: "point-light",
-      label: "Nestor Warm Key Light",
-      transform: { position: [2.4, 5.1, 2.8] },
-      intensity: 5.4,
-      distance: 12,
-      marker: false,
-      material: { color: "#ffd5ad", emissive: "#7c3f1a", emissiveIntensity: 1.2 },
-      castShadow: false,
-      tags: homeTags,
-    },
+    { id: NESTOR_STAGE_ID, type: "group", label: "Nestor Presence", transform: { position: [0, 0, -6.2] }, tags: ["showroom", "agentx-center", "nestor-home"] },
+    // Identity and attributed proposals remain canonical. The welcome no longer draws a robot.
+    { id: NESTOR_AGENT_ID, parentId: NESTOR_STAGE_ID, type: "agent", label: "Nestor · AgentX Guide", visible: false,
+      transform: { position: [0, 5.2, 0] }, agent: { role: "GraphysX guide", status: "ready", perceptionRadius: 12, capabilities: ["present", "build", "play", "explore"] },
+      tags: ["showroom", "agentx-center", "nestor", "nestor-home"] },
+    { id: "showroom-nestor-aura", parentId: NESTOR_STAGE_ID, type: "emitter", label: "Nestor Signal Aura", transform: { position: [0, 5.2, 0] },
+      emitter: { preset: "energy-orb", sizeScale: 1.5, speed: 1, spread: 1.4, maxParticles: 18, rate: 12, color: "#6fe9ff" }, tags: ["showroom", "effect"] },
+    { id: "showroom-nestor-light", parentId: NESTOR_STAGE_ID, type: "point-light", label: "CubX Cold Light", transform: { position: [-2.5, 6, 2] },
+      intensity: 6, distance: 18, marker: false, material: { color: "#72d4ee" }, tags: ["showroom", "light"] },
+    { id: "showroom-nestor-key-light", parentId: NESTOR_STAGE_ID, type: "point-light", label: "CubX Copper Light", transform: { position: [3.5, 4, 2.8] },
+      intensity: 9, distance: 18, marker: false, material: { color: "#ffc58d" }, tags: ["showroom", "light"] },
     ...consoles,
   ];
 }
+
 /**
  * Runs Nestor's demos through attributed world commits. The controller owns presentation
  * state only; scene state remains authoritative and exportable through the public API.
@@ -478,8 +195,16 @@ export function createNestorPresenter(options: {
     agentStatus: string | undefined;
     presentation: NestorPresentation;
   } | null = null;
+  /**
+   * An accepted free-text request, pinned to the revision its commit produced. A request's
+   * commands are the provider's and say nothing about Nestor's own status, so unlike a console
+   * demonstration the narration cannot be rebuilt from the agent entity; it is kept here and
+   * dropped the moment the revision moves — undo, another commit, a document load — which is
+   * exactly when claiming it would become false.
+   */
+  let requestPresentation: { revision: number; presentation: NestorPresentation; commit: AgentWorldCommitSummary | null } | null = null;
 
-  const topicFromStatus = (value: string | undefined): NestorTopic | null => {
+  const topicFromStatus = (value: string | undefined): NestorConsoleTopic | null => {
     const topic = value?.startsWith("presenting:") ? value.slice("presenting:".length) : null;
     return topic === "build" || topic === "play" || topic === "explore" ? topic : null;
   };
@@ -503,6 +228,13 @@ export function createNestorPresenter(options: {
       return agent;
     }
     failedPresentation = null;
+    if (requestPresentation && requestPresentation.revision === revision) {
+      status = "presenting:request";
+      lastCommit = requestPresentation.commit;
+      presentation = clonePresentation(requestPresentation.presentation);
+      return agent;
+    }
+    requestPresentation = null;
 
     const topic = topicFromStatus(agent?.status);
     if (!topic) {
@@ -543,7 +275,7 @@ export function createNestorPresenter(options: {
    * Reconciles first so the proposal is built against the world as it is right now — a
    * proposal composed from a stale read would be born stale and refuse itself on accept.
    */
-  const propose = (topic: NestorTopic): CoauthorProposal => {
+  const propose = (topic: NestorConsoleTopic): CoauthorProposal => {
     reconcile();
     lastOutcome = null;
     proposal = createProposal({
@@ -638,10 +370,11 @@ export function createNestorPresenter(options: {
    */
   const present = (topic: NestorTopic, held?: CoauthorProposal): NestorPresentation => {
     reconcile();
-    const targetId = TOPIC_TARGET[topic];
+    // A request has no local composition: without a held proposal there is nothing to commit.
+    if (topic === "request" && !held) return clonePresentation(presentation);
     // `includedCommands`, not `commands`: if the person took lines out, the commit is what
     // they left in. Sending the original set would apply changes they explicitly removed.
-    const commands = held ? includedCommands(held) : presentationCommands(api, topic);
+    const commands = held ? includedCommands(held) : topic === "request" ? [] : presentationCommands(api, topic);
     const result = api.commit({
       actor: NESTOR_ACTOR,
       // The held proposal's own intent, not the topic's. For a locally composed proposal these
@@ -677,7 +410,14 @@ export function createNestorPresenter(options: {
     failedPresentation = null;
     lastCommit = result.value?.commit ?? null;
     status = `presenting:${topic}`;
-    presentation = successfulPresentation(topic, targetId, lastCommit);
+    // A console demonstration has a fixed target. A request's target is whatever it made:
+    // the first created entity still present after the commit, else the first touched one,
+    // else Nestor's stage.
+    const targetId = topic === "request" ? requestTargetId(api, held) : TOPIC_TARGET[topic];
+    presentation = successfulPresentation(topic, targetId, lastCommit, held?.intent);
+    if (topic === "request") {
+      requestPresentation = { revision: api.state()?.revision ?? 0, presentation: clonePresentation(presentation), commit: lastCommit };
+    }
     focusEntity?.(targetId);
     return clonePresentation(presentation);
   };
@@ -688,9 +428,10 @@ export function createNestorPresenter(options: {
     toggleProposalCommand,
     accept,
     discard,
-    present: (topic: NestorTopic) => present(topic),
+    present: (topic: NestorConsoleTopic) => present(topic),
     reset: () => {
       failedPresentation = null;
+      requestPresentation = null;
       status = "ready";
       lastCommit = null;
       proposal = null;
@@ -717,7 +458,16 @@ export function createNestorPresenter(options: {
   };
 }
 
-function presentationCommands(api: GraphysXAgentWorldApi, topic: NestorTopic): AgentWorldCommand[] {
+function requestTargetId(api: GraphysXAgentWorldApi, held: CoauthorProposal | undefined): string {
+  const exists = (id: string): boolean => api.query({ ids: [id] }).length === 1;
+  const touches = held?.touches ?? [];
+  const created = touches.find((touch) => (touch.op === "spawn" || touch.op === "spawn-prefab") && exists(touch.id));
+  if (created) return created.id;
+  const touched = touches.find((touch) => exists(touch.id));
+  return touched?.id ?? NESTOR_STAGE_ID;
+}
+
+function presentationCommands(api: GraphysXAgentWorldApi, topic: NestorConsoleTopic): AgentWorldCommand[] {
   const color = TOPIC_COLOR[topic];
   const emissive = TOPIC_EMISSIVE[topic];
   const commands: AgentWorldCommand[] = [
@@ -807,19 +557,32 @@ function presentationCommands(api: GraphysXAgentWorldApi, topic: NestorTopic): A
  * a provider is being asked to decide *what* to do — handing it the finished intent would make
  * it a paraphrase engine and the result would be Nestor's idea wearing a model's name.
  */
-export function nestorTopicRequest(topic: NestorTopic): string {
+export function nestorTopicRequest(topic: NestorConsoleTopic): string {
   if (topic === "build") return "Build something small and inspectable in this scene, and say what you built.";
   if (topic === "play") return "Make something in this scene move or react, using the entities that are already here.";
   return "Reveal the living systems in this scene — the flocks, emitters and lights — by changing how they read.";
 }
 
 function intentFor(topic: NestorTopic): string {
+  // Unreachable for a request — its intent is the provider's — but the type asks for an answer.
+  if (topic === "request") return "Apply a requested change";
   if (topic === "build") return "Assemble a signal beacon in GraphysX";
   if (topic === "play") return "Wake the kinetic playground with shared scene interactions";
   return "Illuminate the showroom's living flock systems";
 }
 
-function successfulPresentation(topic: NestorTopic, targetId: string, commit: AgentWorldCommitSummary | null): NestorPresentation {
+function successfulPresentation(topic: NestorTopic, targetId: string, commit: AgentWorldCommitSummary | null, intent?: string): NestorPresentation {
+  if (topic === "request") {
+    return {
+      topic,
+      eyebrow: "NESTOR · YOUR REQUEST",
+      title: "Done — that was one attributed transaction.",
+      message: `${intent ?? "Your request was applied."} Everything it made is in the editor's outliner, and Undo reverses it as a whole.`,
+      targetId,
+      commit,
+      error: null,
+    };
+  }
   if (topic === "build") {
     return {
       topic,

@@ -43,6 +43,8 @@ try {
     visible: !document.getElementById("menu").classList.contains("hidden"),
     icons: document.querySelectorAll("#menu-grid .ico").length,
     caption: document.getElementById("menu-caption").textContent,
+    // The card describes the focused button (the start ball on arrival).
+    detail: document.getElementById("d-title").textContent,
   }));
   await page.screenshot({ path: path.join(ART, "cyber-race-menu.png") });
 
@@ -52,10 +54,17 @@ try {
     Object.assign(c.settings, { plan: 0, course: 0, level: 1, mode: 0, sound: false });
     c.ui(["pause"]);
     const started = c.phase;
+    // Up/down defaults to the flight-stick style: holding W (stick forward) makes Jobe dive.
+    c.advance(4);
+    const before = c.pilots[0].oy;
+    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyW", key: "w" }));
+    c.advance(0.3);
+    window.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyW", key: "w" }));
+    const forwardDives = c.pilots[0].oy < before - 0.5;
     c.pilots[0].autopilot = true;
     c.pilots[1].cpu = true;
     c.advance(10);
-    return { started, phase: c.phase, sectors: c.world.track.sectors.map((s) => s.kind), progressed: c.pilots[0].s > 300 };
+    return { started, forwardDives, phase: c.phase, sectors: c.world.track.sectors.map((s) => s.kind), progressed: c.pilots[0].s > 300 };
   });
   await page.evaluate(() => { window.cyberRace.freeze(true); window.cyberRace.advance(0.01); });
   await page.waitForTimeout(500);
@@ -97,6 +106,8 @@ const ok =
   out.row?.label === "Cyber Race 1992" &&
   out.menu?.visible === true &&
   out.menu?.icons >= 20 &&
+  out.menu?.detail === "LANCER LA COURSE" &&
+  out.race?.forwardDives === true &&
   out.race?.started === "countdown" &&
   out.race?.phase === "race" &&
   out.race?.progressed === true &&

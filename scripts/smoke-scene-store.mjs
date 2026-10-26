@@ -1,4 +1,5 @@
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
+import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -274,6 +275,34 @@ applySmokeTimeout(page);
     const stored = await putScene(store.url, `catalog-${id}`, authored);
     out.catalogWrites.push({ id, revision: stored.revision });
   }
+
+  // Production has a store even when no scene was requested. Its inspector must not
+  // cover the welcome landscape; expansion is explicit and editor entry still reveals it.
+  const beforeWelcome = await openScene(store.url, SCENE);
+  const welcomePage = await browser.newPage();
+  applySmokeTimeout(welcomePage);
+  welcomePage.on("pageerror", error => pageErrors.push(String(error)));
+  welcomePage.on("console", message => { if (message.type() === "error") consoleErrors.push(message.text()); });
+  await welcomePage.goto(`${BASE}?store=${encodeURIComponent(store.url)}`, { waitUntil: "domcontentloaded" });
+  await welcomePage.waitForSelector(".gx-sb-collapsed");
+  assert.equal(await welcomePage.locator(".gx-sb-body").isVisible(), false);
+  assert.equal(await welcomePage.locator('.gx-sb [data-action="collapse"]').getAttribute("aria-expanded"), "false");
+  await welcomePage.getByRole("button", { name: "Expand stored scenes", exact: true }).click();
+  await welcomePage.waitForSelector(".gx-sb-body", { state: "visible" });
+  await welcomePage.waitForFunction(() => document.querySelectorAll(".gx-sb-row").length >= 2);
+  assert.ok(await welcomePage.locator(".gx-sb-row").count() >= 2);
+  await welcomePage.getByRole("button", { name: "Collapse stored scenes", exact: true }).click();
+  await welcomePage.locator(".gx-go-editor").click();
+  await welcomePage.waitForFunction(() => document.documentElement.dataset.gxEditor === "visible"
+    && document.querySelector(".gx-sb--docked .gx-sb-body")?.getBoundingClientRect().height > 0
+    && document.querySelector('.gx-sb [data-action="collapse"]')?.getAttribute("aria-expanded") === "true");
+  await welcomePage.locator(".gx-ed-exit").click();
+  await welcomePage.waitForSelector(".gx-sb-collapsed");
+  assert.equal(await welcomePage.locator(".gx-sb-body").isVisible(), false);
+  assert.deepEqual(await openScene(store.url, SCENE), beforeWelcome, "chrome transitions must not write the stored scene");
+  await welcomePage.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing);
+  await welcomePage.screenshot({ path: path.join(ART, "scene-store-welcome.png"), fullPage: false });
+  out.welcomeInspector = { initiallyCollapsed: true, explicitExpansion: true, editorExpanded: true, returnCollapsed: true, storeUnchanged: true };
 } catch (e) {
   out.fatal = String(e);
 } finally {
@@ -311,6 +340,7 @@ const ok =
   out.announcesActor &&
   out.secondSceneListed &&
   out.switchedScene &&
+  Object.values(out.welcomeInspector ?? {}).length === 5 && Object.values(out.welcomeInspector).every(Boolean) &&
   out.catalogWrites?.length > 0 && out.catalogWrites.every((entry) => entry.revision === 1);
 process.exit(out.fatal || consoleErrors.length || pageErrors.length || !ok ? 1 : 0);
 

@@ -1,6 +1,6 @@
 import { Box3, Raycaster, Sphere, Vector2, Vector3, type Camera, type Scene, type WebGLRenderer } from "three";
 import type { AgentWorldRuntime, GraphysXAgentWorldApi } from "./agent-world-runtime";
-import type { NestorTopic } from "./showroom-nestor";
+import type { NestorConsoleTopic } from "./showroom-nestor";
 
 export interface ShowroomInteractionDeps {
   renderer: WebGLRenderer;
@@ -14,7 +14,7 @@ export interface ShowroomInteractionDeps {
    */
   focusOn?: (point: Vector3, subjectRadius: number, viewDirection?: Vector3) => void;
   /** Route scene-native AgentX Center consoles to Nestor's attributed presenter. */
-  onNestorTopic?: (topic: NestorTopic) => void;
+  onNestorTopic?: (topic: NestorConsoleTopic) => void;
 }
 
 /** Dropped spheres are recycled past this many, so a visitor cannot grind the sim down. */
@@ -98,7 +98,7 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
     return true;
   };
 
-  const nestorTopicFor = (id: string): NestorTopic | null => {
+  const nestorTopicFor = (id: string): NestorConsoleTopic | null => {
     const root = api.query({ ids: [rootEntityId(id)] })[0];
     const topicTag = root?.tags.find((tag) => tag.startsWith("nestor-topic:"));
     const topic = topicTag?.slice("nestor-topic:".length);
@@ -151,9 +151,12 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
 
     const terrain = terrainIds();
     const passThrough = passThroughIds();
+    // Hidden document identities are not physical controls. Raycaster itself does not
+    // exclude invisible ancestors, so the retired robot must not cover the visible CubX.
+    const hidden = new Set((api.state()?.entities ?? []).filter((entity) => !entity.visible).map((entity) => entity.id));
     for (const hit of raycaster.intersectObjects(scene.children, true)) {
       const entityId = world.findEntityId(hit.object);
-      if (entityId && passThrough.has(entityId)) continue;
+      if (entityId && (passThrough.has(entityId) || hidden.has(entityId))) continue;
       const nestorTopic = entityId ? nestorTopicFor(entityId) : null;
       if (nestorTopic && onNestorTopic) {
         onNestorTopic(nestorTopic);

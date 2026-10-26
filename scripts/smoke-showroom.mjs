@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -30,6 +31,16 @@ try {
     return !t || getComputedStyle(t).display === "none";
   });
   out.entityCount = await page.evaluate(() => window.__GRAPHYSX__.state().entities.length);
+  out.composition = await page.evaluate(() => {
+    const entities = window.__GRAPHYSX__.state().entities;
+    return {
+      cubeCorners: entities.filter(entity => /^showroom-cubx-frame:cube-\d+$/.test(entity.id)).length,
+      robotHidden: entities.find(entity => entity.id === "showroom-nestor")?.visible === false,
+      robotParts: entities.filter(entity => /showroom-nestor-(face|eye|chest|arm|hand|dais|halo)/.test(entity.id)).length,
+      largeGates: entities.filter(entity => entity.tags.includes("prefab:portal-arch")).length,
+      sky: window.__GRAPHYSX__.state().environment.sky,
+    };
+  });
   out.nestorInitial = await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
     const agent = api.query({ ids: ["showroom-nestor"] })[0] ?? null;
@@ -74,7 +85,7 @@ try {
     return {
       completed: h.introCompleted === true,
       exposure: h.renderer.toneMappingExposure,
-      framed: Math.hypot(p.x - 9, p.y - 12, p.z - 22) < 1.5,
+      framed: Math.hypot(p.x - 9, p.y - 8, p.z - 21) < 1.5,
     };
   });
 
@@ -107,6 +118,10 @@ try {
 
   const blockBefore = await entityPos("showroom-block-5");
   const blockAt = await screenOf("showroom-block-5");
+  assert.ok(blockAt && await page.evaluate(point => {
+    const canvas = window.__GRAPHYSX_HOST__.renderer.domElement;
+    return document.elementFromPoint(point.x, point.y) === canvas;
+  }, blockAt), "the welcome chrome must leave the kinetic body reachable by a real pointer");
   if (blockAt) await page.mouse.click(blockAt.x, blockAt.y);
   // Wait for the body to actually move rather than guessing a duration. Headless software
   // GL runs the frame loop at a few fps, so a fixed timeout races the physics step — this
@@ -320,16 +335,15 @@ try {
   // instead throws `setPointerCapture: No active pointer with the given id` — the interaction
   // layer captures the pointer on press, and there is no pointer to capture.
   //
-  // Aimed at the lintel: the arch root stands in the middle of the gap the arch frames, so a
-  // ray through it reaches the landscape behind and clicks the ground.
-  const portalId = await page.evaluate(() => window.__GRAPHYSX__.query({ tag: "portal" })[0]?.id ?? null);
-  const portalAt = portalId ? await screenOf(`${portalId}:lintel`) : null;
+  // The retired gate frames are now small spherical waypoints. Click their visible core.
+  const portalId = "showroom-portal-overlook";
+  const portalAt = portalId ? await screenOf(`${portalId}:core`) : null;
   if (portalAt) await page.mouse.click(portalAt.x, portalAt.y);
   await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
   out.portal = await page.evaluate((before) => {
     const api = window.__GRAPHYSX__;
     const portals = api.query({ tag: "portal" });
-    const portal = portals[0] ?? null;
+    const portal = portals.find(entry => entry.id === "showroom-portal-overlook") ?? null;
     // The whole set, not just the one that was clicked: a doorway whose destination is missing
     // is a dead click, and that is the failure the interaction layer exists to remove.
     const destinations = portals.map((entry) => entry.tags.find((tag) => tag.startsWith("portal-to:"))?.slice(10) ?? null);
@@ -914,7 +928,7 @@ const tourGuidesWithoutAuthoring =
   tour.line > 20 &&
   tour.dots >= 4 &&
   tour.backDisabled === true &&
-  tour.selected === "showroom-nestor" &&
+  tour.selected === "showroom-cubx" &&
   tour.revisionUnchanged === true &&
   tour.cameraMoved > 0.5 &&
   tour.movedOn === true &&
@@ -1020,7 +1034,14 @@ await browser.close();
 const ok =
   out.welcomePresent &&
   out.editorHiddenInitially &&
-  out.entityCount > 100 &&
+  // Density is a budget, not a goal: keep the eight-cube centrepiece and its two living
+  // systems, but never bring back the robot, gate frames or the old prop accumulation.
+  out.entityCount <= 80 &&
+  out.composition?.cubeCorners === 8 &&
+  out.composition?.robotHidden === true &&
+  out.composition?.robotParts === 0 &&
+  out.composition?.largeGates === 0 &&
+  out.composition?.sky === "clearblue" &&
   out.autoOrbiting &&
   // The entry move ran, landed on the authored framing, and restored full exposure.
   out.introLanded?.completed === true &&

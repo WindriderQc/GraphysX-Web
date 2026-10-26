@@ -29,9 +29,10 @@ import { showStartupError } from "./startup-error";
 import type { KidxApplication } from "./kidx-app";
 import type { LlmXApplication } from "./llmx-contracts";
 import type { DiskxApplication } from "./diskx-app";
+import type { EcosystemApplication } from "./ecosystem-app";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
-import { nestorTopicRequest, type NestorTopic } from "./showroom-nestor";
+import { nestorTopicRequest, type NestorConsoleTopic } from "./showroom-nestor";
 import { IDLE_TOUR_STATE, createNestorTourController } from "./nestor-tour";
 import type { NestorTourController } from "./nestor-tour";
 import { motionIsReduced } from "./platform-theme";
@@ -249,7 +250,7 @@ if (mode === "previews" && import.meta.env.DEV) {
      * passes a human decision. Two routes with different safety properties would make "no
      * hidden mutation" a claim about one of them rather than about the product.
      */
-    const presentNestor = (topic: NestorTopic): void => {
+    const presentNestor = (topic: NestorConsoleTopic): void => {
       if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
         syncFrontDoor();
         return;
@@ -292,6 +293,48 @@ if (mode === "previews" && import.meta.env.DEV) {
         }
         const proposal = nestor?.proposeExternal(topic, result.proposal.intent, result.proposal.commands);
         welcome?.showOutcome(null);
+        if (proposal) welcome?.showProposal(proposal, false);
+      })();
+    };
+    /**
+     * A request in the person's own words. Only a provider can answer it — there is no local
+     * composition for an arbitrary sentence — so this exists only when one is configured, and
+     * a refusal is shown as the provider's sentence rather than falling back to a demonstration
+     * nobody asked for. Everything after the reply is the topic path: the same card, the same
+     * narrowing, the same accept at the same revision.
+     */
+    const requestNestor = (request: string): void => {
+      const provider = proposalProvider();
+      if (!provider) return;
+      if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
+        syncFrontDoor();
+        return;
+      }
+      stopNestorTour();
+      welcome?.showOutcome(null);
+      welcome?.setRequestBusy(true);
+      void (async () => {
+        const state = host.api.state();
+        const result = await provider.propose({
+          request,
+          revision: state?.revision ?? 0,
+          scene: {
+            id: state?.world.id ?? "",
+            label: state?.world.label ?? "",
+            entities: summarizeSceneForProvider(host.api.query()),
+          },
+        });
+        welcome?.setRequestBusy(false);
+        if (!result.ok) {
+          welcome?.showNotice(result.reason);
+          return;
+        }
+        // Re-checked after the wait: a live session may have attached meanwhile.
+        if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
+          syncFrontDoor();
+          return;
+        }
+        const proposal = nestor?.proposeExternal("request", result.proposal.intent, result.proposal.commands);
         if (proposal) welcome?.showProposal(proposal, false);
       })();
     };
@@ -365,16 +408,29 @@ if (mode === "previews" && import.meta.env.DEV) {
      * Keyed by id rather than a boolean because this is the seam a second application uses, not
      * a special case for EV3.
      */
-    let appSurface: KidxApplication | LlmXApplication | DiskxApplication | null = null;
+    let appSurface: KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | null = null;
     // Application surfaces own the whole play viewport. Keep this separate from the lazy
     // surface module so later host chrome (notably the asynchronously mounted scene browser)
     // can respect the route before the application's import has finished.
     let applicationOpen = false;
     const openApplication = (id: string): boolean => {
-      if (id !== "ev3-lab" && id !== "llmx" && id !== "diskx") return false;
+      if (id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem") return false;
       if (applicationOpen) return true;
       applicationOpen = true;
       requestShowroomInteraction(false);
+      if (id === "ecosystem") {
+        showroomEnvironment?.();
+        showroomEnvironment = null;
+        void import("./ecosystem-app").then(({ mountEcosystemApp }) => {
+          appSurface = mountEcosystemApp(root, host, () => {
+            appSurface?.dispose();
+            appSurface = null;
+            applicationOpen = false;
+            window.location.search = "";
+          });
+        }).catch((error: unknown) => showStartupError(root, error));
+        return true;
+      }
       if (id === "diskx") {
         showroomEnvironment?.();
         showroomEnvironment = null;
@@ -432,10 +488,13 @@ if (mode === "previews" && import.meta.env.DEV) {
             onOpenKidX: () => { window.location.search = "?app=ev3-lab"; },
             onOpenLlmX: () => { window.location.search = "?app=llmx"; },
             onOpenDiskX: () => { window.location.search = "?app=diskx"; },
+            onOpenEcosystem: () => { window.location.search = "?app=ecosystem"; },
             coauthor: {
               onAccept: acceptNestorProposal,
               onDiscard: discardNestorProposal,
               onToggleCommand: toggleNestorProposalCommand,
+              // Only with a provider: the field is otherwise disabled and says why.
+              onRequest: proposalProvider() ? requestNestor : undefined,
             },
             tour: {
               onStart: startNestorTour,
@@ -904,20 +963,18 @@ if (mode === "previews" && import.meta.env.DEV) {
       });
     };
     const host = new PlatformHost(root, {
-      autoOrbit: !editorFirst && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx",
+      autoOrbit: !motionIsReduced() && !editorFirst && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem",
+      autoOrbitSpeed: 0.2,
       editorVisible: editorFirst,
-      // The showroom is a composed set, not an overview of a demo world: frame it closer
-      // and slightly off-axis so the kinetic plinth reads and the sky stays in shot.
-      // Framed for depth rather than for coverage: close enough that the foreground trees
-      // crop and loom, high enough to see over the plinth to the lake and the far ridges, and
-      // aimed slightly past the CubX assembly so the flock and the shoreline occupy the upper
-      // two thirds instead of a flat horizon band.
-      framing: editorFirst ? undefined : { position: [9, 12, 22], target: [-0.5, 3.4, -5] },
+      // CubX and its living shell are the focal point; the shore and physics stay below.
+      framing: editorFirst ? undefined : { position: [9, 8, 21], target: [0, 4.6, -6.2] },
       // The entry move belongs to the front door only: arriving in the editor or via a
       // screenshot harness should put you where you asked to be, immediately. `?intro=0`
-      // opts out, which is how smoke-showroom measures the idle orbit without an intro
-      // moving the camera underneath its probe.
-      intro: !editorFirst && appParam !== "llmx" && appParam !== "diskx" && new URLSearchParams(window.location.search).get("intro") !== "0",
+      // opts out. The default welcome approaches slowly; application entry keeps its
+      // existing short move. Both use the host's interruptible focus mechanism.
+      intro: !motionIsReduced() && !editorFirst && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && new URLSearchParams(window.location.search).get("intro") !== "0"
+        ? appParam ? true : { durationSeconds: 10, distanceScale: 2.15, azimuthDegrees: 18 }
+        : false,
       // `?post=bloom` turns the demo post stack on for any route (bloom + SMAA through the
       // composer). Scenes whose documents carry their own `environment.post` keep their
       // tuning either way; this is the demo/preview switch, not a scene setting.
@@ -1164,6 +1221,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           api: host.api,
           client,
           initialScene: liveSessionRequested ? null : storeScene,
+          startCollapsed: !editorFirst && !storeScene,
           actor: "browser",
           onSceneOpened: () => {
             restoreShowroomOnEditorExit = true;

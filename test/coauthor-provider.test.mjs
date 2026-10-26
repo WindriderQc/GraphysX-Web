@@ -14,6 +14,7 @@ import {
   describeProposalSource,
   isAllowedSessionProviderUrl,
   proposalProvider,
+  readProviderRefusal,
   readProviderReply,
   setProposalProvider,
   summarizeSceneForProvider,
@@ -201,9 +202,61 @@ describe("having a provider at all", () => {
   });
 });
 
+describe("an explicit refusal", () => {
+  it("is read when the far end says ok: false with a reason", () => {
+    const result = readProviderRefusal({ ok: false, reason: "That asks for a dragon;\n the world has  no such type." });
+    assert.deepEqual(result, { ok: false, reason: "That asks for a dragon; the world has no such type." });
+  });
+
+  it("is not read from anything else", () => {
+    for (const raw of [null, "no", { ok: true }, { intent: "x", commands: [] }, { ok: false, reason: 7, message: 8 }].slice(0, 4)) {
+      assert.equal(readProviderRefusal(raw), null);
+    }
+  });
+
+  it("still names the refusal when the far end forgot to say why", () => {
+    assert.match(readProviderRefusal({ ok: false }).reason, /without saying why/);
+    assert.match(readProviderRefusal({ ok: false, reason: "   " }).reason, /without saying why/);
+    // Core's error envelope says `message`; that is a reason too.
+    assert.equal(readProviderRefusal({ ok: false, message: "Model busy." }).reason, "Model busy.");
+  });
+
+  it("bounds the sentence to what a card can show", () => {
+    const result = readProviderRefusal({ ok: false, reason: "x".repeat(2_000) });
+    assert.ok(result.reason.length <= 300);
+    assert.ok(result.reason.endsWith("…"));
+  });
+
+  it("wins over the command list in a whole reply", () => {
+    // A reply that both refuses and lists commands is refusing; the commands are not offered.
+    const result = readProviderReply({ ok: false, reason: "No.", intent: "x", commands: [spawn("a")] });
+    assert.deepEqual(result, { ok: false, reason: "No." });
+  });
+});
+
 describe("the HTTP provider", () => {
   const ok = (body) => async () => ({ ok: true, status: 200, text: async () => JSON.stringify(body) });
   const url = "/propose";
+
+  it("shows Core's own sentence when it refuses in a 200", async () => {
+    const provider = createHttpProposalProvider({ url, fetchImpl: ok({ ok: false, reason: "That asks for a dragon; the world has no such type." }) });
+    const result = await provider.propose({ request: "add a dragon", revision: 3, scene: { id: "s", label: "S", entities: [] } });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /dragon/);
+    assert.doesNotMatch(result.reason, /answered/);
+  });
+
+  it("prefers an explicit reason to a bare status, and keeps the status without one", async () => {
+    const refused = createHttpProposalProvider({ url, fetchImpl: async () => ({ ok: false, status: 503, text: async () => JSON.stringify({ ok: false, reason: "No proposal provider is configured on this server." }) }) });
+    const withReason = await refused.propose({ request: "x", revision: 0, scene: { id: "s", label: "S", entities: [] } });
+    assert.match(withReason.reason, /No proposal provider/);
+    const bare = createHttpProposalProvider({ url, fetchImpl: async () => ({ ok: false, status: 422, text: async () => "Unprocessable" }) });
+    const withoutReason = await bare.propose({ request: "x", revision: 0, scene: { id: "s", label: "S", entities: [] } });
+    assert.equal(withoutReason.reason, "The provider answered 422.");
+    // A non-OK JSON body that is not a refusal still reads as the status, not as a proposal.
+    const odd = createHttpProposalProvider({ url, fetchImpl: async () => ({ ok: false, status: 500, text: async () => JSON.stringify({ intent: "x", commands: [spawn("a")] }) }) });
+    assert.equal((await odd.propose({ request: "x", revision: 0, scene: { id: "s", label: "S", entities: [] } })).reason, "The provider answered 500.");
+  });
 
   it("returns a proposal for a well-formed reply", async () => {
     const provider = createHttpProposalProvider({ url, fetchImpl: ok({ intent: "Add a lamp", commands: [spawn("lamp")] }) });

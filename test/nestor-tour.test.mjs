@@ -41,8 +41,8 @@ describe("the AgentX Center tour", () => {
     assert.equal(new Set(entities).size, entities.length, "a tour that revisits reads as lost");
   });
 
-  it("opens on Nestor himself", () => {
-    assert.equal(AGENTX_CENTER_TOUR.stops[0].entityId, "showroom-nestor");
+  it("opens on the CubX focal point", () => {
+    assert.equal(AGENTX_CENTER_TOUR.stops[0].entityId, "showroom-cubx");
   });
 });
 
@@ -162,8 +162,8 @@ describe("the controller", () => {
     const state = controller.start();
     assert.equal(state.status, "running");
     assert.equal(state.position, 1);
-    assert.deepEqual(events.focused, ["showroom-nestor"]);
-    assert.deepEqual(events.highlighted, [["showroom-nestor"]]);
+    assert.deepEqual(events.focused, ["showroom-cubx"]);
+    assert.deepEqual(events.highlighted, [["showroom-cubx"]]);
   });
 
   it("advances on its own when the dwell elapses", () => {
@@ -171,7 +171,7 @@ describe("the controller", () => {
     controller.start();
     tick();
     assert.equal(controller.state().position, 2);
-    assert.deepEqual(events.focused, ["showroom-nestor", "showroom-nestor-console-build"]);
+    assert.deepEqual(events.focused, ["showroom-cubx", "showroom-nestor-console-build"]);
   });
 
   it("finishes after the last stop and releases the highlight", () => {

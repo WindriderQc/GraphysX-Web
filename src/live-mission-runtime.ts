@@ -12,7 +12,6 @@ import {
 } from "three";
 import type {
   AgentWorldEntityDefinition,
-  AgentWorldEntityType,
   AgentWorldRuntime,
   AgentWorldVector3,
 } from "./agent-world-runtime";
@@ -43,7 +42,6 @@ const BOARD_WORLD_POSITION: AgentWorldVector3 = [1, 3.25, -0.3];
 const TERMINAL_MISSION_STATES = new Set<LiveMissionView["status"]>(["completed", "failed", "cancelled"]);
 
 type MissionQualityProfile = "high" | "balanced" | "mobile";
-type ArtifactPrimitive = Extract<AgentWorldEntityType, "box" | "sphere" | "icosahedron" | "cylinder" | "cone" | "torus">;
 
 export type LiveMissionDirectorMode =
   | "neutral"
@@ -248,7 +246,7 @@ export function createLiveMissionRuntime(options: {
   };
 
   const projectArtifacts = (value: LiveMissionView): boolean => {
-    const nextArtifacts = evidenceArtifacts(runtime, value, qualityProfile, operations);
+    const nextArtifacts = evidenceArtifacts(value, qualityProfile, operations);
     const signature = JSON.stringify({
       missionId: value.missionId,
       reduced: motionIsReduced(),
@@ -545,86 +543,23 @@ function boardDefinitions(value: LiveMissionView, inCenter: boolean): AgentWorld
   const ids = boardIds(value.missionId);
   const statusColor = colorForMissionStatus(value.status);
   const rootPosition: AgentWorldVector3 = inCenter ? [-4.25, 3.25, -1.1] : BOARD_WORLD_POSITION;
-  const definitions: AgentWorldEntityDefinition[] = [
-    {
-      id: ids.root,
-      ...(inCenter ? { parentId: NESTOR_STAGE_ID } : {}),
-      type: "group",
-      label: `${value.title} mission board`,
-      transform: { position: rootPosition },
-      ephemeral: true,
-      tags: ["live-mission", "mission-board", `mission:${value.missionId}`],
-    },
-    {
-      id: ids.card,
-      parentId: ids.root,
-      type: "plane",
-      label: `${value.title} live mission status`,
-      geometry: { width: 4.42, depth: 2.74 },
+  // Stage status already lives on this card and the accessible panel. Extra floor/director
+  // rings duplicated that information and were rendered again in the water reflection.
+  return [
+    { id: ids.root, ...(inCenter ? { parentId: NESTOR_STAGE_ID } : {}), type: "group", label: `${value.title} mission board`,
+      transform: { position: rootPosition }, ephemeral: true, tags: ["live-mission", "mission-board", `mission:${value.missionId}`] },
+    { id: ids.card, parentId: ids.root, type: "plane", label: `${value.title} live mission status`, geometry: { width: 4.42, depth: 2.74 },
       transform: { position: [0, 0, 0.071], rotationDegrees: [90, 0, 0] },
-      material: {
-        color: "#ffffff",
-        emissive: statusColor,
-        emissiveIntensity: 0.16,
-        roughness: 0.46,
-        metalness: 0.08,
-        opacity: 1,
-      },
-      castShadow: false,
-      receiveShadow: false,
-      ephemeral: true,
-      tags: ["live-mission", "mission-board-card", `mission:${value.missionId}`],
-    },
-    {
-      id: `${ids.root}:director-ring`,
-      ...(inCenter ? { parentId: NESTOR_STAGE_ID } : {}),
-      type: "torus",
-      label: `Nestor directing ${value.title} · ${value.status}`,
-      geometry: { radius: 1.02, tube: 0.045, radialSegments: 42 },
-      transform: { position: inCenter ? [0, 4.15, 0.05] : [5.25, 4.15, 0.85], rotationDegrees: [90, 0, 0] },
-      material: { color: statusColor, emissive: statusColor, emissiveIntensity: 1.55, roughness: 0.15, metalness: 0.6, opacity: 0.86 },
-      behaviors: motionIsReduced() || value.status === "paused"
-        ? []
-        : [{ id: `live-mission-director-pulse-${stableKey(value.missionId)}`, type: "pulse", minimumScale: 0.96, maximumScale: 1.07, frequencyHz: 0.58 }],
-      castShadow: false,
-      receiveShadow: false,
-      ephemeral: true,
-      tags: ["live-mission", "nestor-mission-director", `mission:${value.missionId}`],
-    },
+      material: { color: "#ffffff", emissive: statusColor, emissiveIntensity: 0.16, roughness: 0.46, metalness: 0.08, opacity: 1 },
+      behaviors: motionIsReduced() || value.status === "paused" ? [] : [{
+        id: `live-mission-director-pulse-${stableKey(value.missionId)}`, type: "pulse",
+        minimumScale: 0.99, maximumScale: 1.01, frequencyHz: 0.58,
+      }],
+      castShadow: false, receiveShadow: false, ephemeral: true, tags: ["live-mission", "mission-board-card", `mission:${value.missionId}`] },
   ];
-  for (const stage of value.stages) {
-    const target = AGENTX_STATIONS[stage.station];
-    const color = colorForStageStatus(stage.status);
-    definitions.push({
-      id: `live-mission:${stableKey(value.missionId)}:station:${stableKey(stage.stageId)}`,
-      type: "torus",
-      label: `${stage.title} · ${stage.status}`,
-      geometry: { radius: 0.72, tube: 0.055, radialSegments: 40 },
-      transform: {
-        position: [target.facingPosition[0], 1.32, target.facingPosition[2]],
-        rotationDegrees: [90, 0, 0],
-      },
-      material: { color, emissive: color, emissiveIntensity: 1.3, roughness: 0.18, metalness: 0.62, opacity: 0.88 },
-      behaviors: motionIsReduced() || !new Set(["working", "blocked", "interrupted"]).has(stage.status)
-        ? []
-        : [{
-          id: `live-mission-stage-pulse-${stableKey(stage.stageId)}`,
-          type: "pulse",
-          minimumScale: 0.94,
-          maximumScale: 1.08,
-          frequencyHz: stage.status === "working" ? 0.7 : 1.05,
-        }],
-      castShadow: false,
-      receiveShadow: false,
-      ephemeral: true,
-      tags: ["live-mission", "mission-stage-signal", `mission-stage:${stage.stageId}`, `mission-status:${stage.status}`],
-    });
-  }
-  return definitions;
 }
 
 function evidenceArtifacts(
-  runtime: AgentWorldRuntime,
   mission: LiveMissionView,
   qualityProfile: MissionQualityProfile,
   operations: Map<string, LiveSessionOperation>,
@@ -639,12 +574,11 @@ function evidenceArtifacts(
   return bounded.map(({ stage, evidence }) => {
     const stationIndex = stationCounts.get(stage.station) ?? 0;
     stationCounts.set(stage.station, stationIndex + 1);
-    return evidenceArtifact(runtime, mission, stage, evidence, stationIndex, operations);
+    return evidenceArtifact(mission, stage, evidence, stationIndex, operations);
   });
 }
 
 function evidenceArtifact(
-  runtime: AgentWorldRuntime,
   mission: LiveMissionView,
   stage: LiveMissionStage,
   evidence: LiveMissionEvidence,
@@ -659,8 +593,6 @@ function evidenceArtifact(
   const operation = evidence.operation ?? null;
   const acceptedOperation = operation?.opId ? operations.get(operation.opId) : undefined;
   const targetIds = [...new Set(operation?.touched ?? [])].slice(0, 16);
-  const targetState = targetIds.length ? runtime.query({ ids: [targetIds[0]] })[0] : null;
-  const primitive = artifactPrimitive(targetState?.type, operation?.path ?? acceptedOperation?.path ?? "");
   const lateral = (stationIndex % 3 - 1) * 1.18;
   const row = Math.floor(stationIndex / 3);
   const stand = target.standPosition;
@@ -688,7 +620,8 @@ function evidenceArtifact(
     operationIntent: operation?.intent ?? acceptedOperation?.intent ?? null,
     targetIds,
   };
-  const miniatureId = `${artifactId}:miniature`;
+  // The readable receipt is the artifact. Generic spinning tokens and connector curves
+  // duplicated its operation/target information and multiplied the reflection-pass cost.
   const definitions: AgentWorldEntityDefinition[] = [
     {
       id: artifactId,
@@ -706,25 +639,6 @@ function evidenceArtifact(
       ],
     },
     {
-      id: miniatureId,
-      parentId: artifactId,
-      type: primitive,
-      label: `${evidence.kind} evidence miniature`,
-      geometry: primitiveGeometry(primitive),
-      transform: { position: [0, 0.72, 0], rotationDegrees: [0, stableHash(evidence.evidenceId) % 360, 0], scale: [0.72, 0.72, 0.72] },
-      material: { color, emissive: color, emissiveIntensity: 1.05, roughness: 0.22, metalness: 0.56, opacity: 0.94 },
-      behaviors: motionIsReduced() ? [] : [{
-        id: `live-mission-artifact-spin-${evidenceKey}`,
-        type: "spin",
-        axis: "y",
-        speedDegrees: 16,
-      }],
-      castShadow: false,
-      receiveShadow: false,
-      ephemeral: true,
-      tags: ["live-mission", "mission-artifact-miniature", `evidence:${evidence.evidenceId}`],
-    },
-    {
       id: cardId,
       parentId: artifactId,
       type: "plane",
@@ -738,24 +652,6 @@ function evidenceArtifact(
       tags: ["live-mission", "mission-artifact-card", `evidence:${evidence.evidenceId}`],
     },
   ];
-  const artifactWorld: AgentWorldVector3 = [position[0], position[1] + 0.8, position[2]];
-  const connectorPoints: AgentWorldVector3[] = [
-    BOARD_WORLD_POSITION,
-    [target.standPosition[0], 1.25, target.standPosition[2]],
-    artifactWorld,
-  ];
-  if (targetState) connectorPoints.push(targetState.position);
-  definitions.push({
-    id: `${artifactId}:connector`,
-    type: "spline",
-    label: `${evidence.evidenceId} evidence link`,
-    path: { points: connectorPoints, tension: 0.4 },
-    material: { color, opacity: 0.46 },
-    castShadow: false,
-    receiveShadow: false,
-    ephemeral: true,
-    tags: ["live-mission", "mission-evidence-link", `evidence:${evidence.evidenceId}`],
-  });
   return { view, definitions };
 }
 
@@ -1117,23 +1013,6 @@ function cloneMember(member: LiveSessionMemberView): LiveSessionMemberView {
       selection: [...member.presence.selection],
     } : null,
   };
-}
-
-function artifactPrimitive(type: AgentWorldEntityType | undefined, path: string): ArtifactPrimitive {
-  if (type && new Set<AgentWorldEntityType>(["box", "sphere", "icosahedron", "cylinder", "cone", "torus"]).has(type)) {
-    return type as ArtifactPrimitive;
-  }
-  if (/spawn|create|prefab/i.test(path)) return "box";
-  if (/update|transform|material/i.test(path)) return "torus";
-  if (/remove|clear/i.test(path)) return "icosahedron";
-  return "icosahedron";
-}
-
-function primitiveGeometry(type: ArtifactPrimitive): AgentWorldEntityDefinition["geometry"] {
-  if (type === "box") return { width: 0.82, height: 0.82, depth: 0.82 };
-  if (type === "cylinder" || type === "cone") return { radius: 0.52, height: 0.9, radialSegments: 18 };
-  if (type === "torus") return { radius: 0.5, tube: 0.15, radialSegments: 28 };
-  return { radius: 0.58, radialSegments: 18 };
 }
 
 function colorForMissionStatus(status: LiveMissionView["status"]): string {

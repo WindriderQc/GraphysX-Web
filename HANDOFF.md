@@ -73,10 +73,42 @@ section below this one is the September release they build on):
    host contract. The consumer config still advertises `presence: false`.
 4. **KidX hardware**: chassis direction/calibration, USB unplug, host power loss and stopping
    latency remain unqualified (see the 2026-08-13 baseline list below; do not repeat bench checks).
-5. **AgentX Center leftovers, unchanged since August**: a free-text request surface, authored
-   places (measure the current entity count on real hardware first), long coach courses blocked
-   by living-system nondeterminism, the two-file split, HDRI sky curation. See
-   [AGENTX_ROADMAP.md](docs/AGENTX_ROADMAP.md) "What is actually left".
+5. **AgentX Center leftovers, unchanged since August**: authored places (measure the current
+   entity count on real hardware first), long coach courses blocked by living-system
+   nondeterminism, the two-file split, HDRI sky curation. See
+   [AGENTX_ROADMAP.md](docs/AGENTX_ROADMAP.md) "What is actually left". The free-text request
+   surface shipped on 2026-10-25 (America/Toronto); what remains of it is the Core-served
+   Center page, below.
+6. **Nestor proposals from Core (2026-10-25, America/Toronto).** Owner decision: Core composes,
+   GraphysX never carries a second brain or a hand-written copy of the API. GraphysX publishes
+   `dist/embed/world-vocabulary.json` on every build (derived from the validator tables and the
+   runtime catalogues, proven against the TypeScript unions by `test/world-vocabulary.test.mjs`);
+   the welcome card has a request field that sends the sentence verbatim to the configured
+   provider and shows a refusal as the provider's own words; AgentX `POST /api/graphysx/propose`
+   renders its prompt from that file, validates the model's answer and replies `{ intent,
+   commands }` or `{ ok: false, reason }`. Transport today is the dev server's bounded
+   `/propose` relay (`GRAPHYSX_PROPOSE_URL`); the public deploy has no provider and says so.
+   **Not done:** the Core-served Center page (the DiskX model) that would make `/propose`
+   same-origin and let Core push a proposal without a click — the Center is a chunk graph plus a
+   44 MB asset tree, not one module, and relaying that is the proxy the seams forbid. Read
+   [NESTOR_PROPOSALS.md](docs/NESTOR_PROPOSALS.md) for the design, the rejected channels and the
+   evidence. **Seen on screen on 2026-10-25:** the dev server with `?propose=/propose`, the Core
+   surface mounted in a loopback harness with inference on the live Core router (Qwen3.8 27B,
+   ~17 s per composition): the lake-and-birds request became a 3-command card (water, flock,
+   set-environment), Apply gave `commit-0001` by `nestor`, the editor outliner listed both
+   entities, a scene-store PUT and `?scene=` reload found them; an impossible request came back
+   as the model's own French refusal in the card. Captures in
+   `output/visual-receipts-20261025/nestor-request-core-*.jpg` (ignored, local). The earlier
+   headless-click caveat was traced to welcome controls covering the physics stage, including
+   on the previous main build. Treat this as a layout regression, not machine acceptance:
+   retain real-pointer and movement assertions. The welcome revision also follows the owner's
+   open-landscape/CubX direction; current delivery evidence belongs to PR 69.
+
+**Generative geometry follow-up (2026-10-26).** The owner wants agents to author arbitrary
+triangles and textures. The model loader already handles indexed geometry, normals, UVs and
+maps, but scene proposals expose primitive dimensions and model references. No inline mesh
+authoring API has shipped. [GENERATIVE_MESH.md](docs/GENERATIVE_MESH.md) records the gap,
+recommended contract and required acceptance without inventing a second engine or vocabulary.
 
 **Ecosystem seams.** AgentX owns canonical conversations, memory, domain data, permissions,
 tools and execution. Nestor explains and requests a presentation. GraphysX owns the visual
@@ -87,9 +119,11 @@ the [shared AgentX capabilities](https://github.com/WindriderQc/AgentX/blob/main
 | Consumer | Transport and authority | Contract and reception |
 |---|---|---|
 | DISKX in Nestor | Private Core `/diskx`; Core relays the published module on its own origin; bounded Data Toolbox GETs | [DISKX_EMBED.md](docs/DISKX_EMBED.md). AgentX PRs 1057/1071 reuse the same path. Report date and selected group correlate the Core snapshot and the view. Public standalone DiskX remains a demo without the Data relay. |
-| LLMx personal / Family | Public `?app=llmx` currently calls the consumer routes directly; `server/llmx-target.mjs` shares the client/server route map | [LLMX_PUBLIC_CONNECTION.md](docs/LLMX_PUBLIC_CONNECTION.md). A readable config alone does not prove a working browser conversation: the current Core cross-site POST guard and absent cross-origin read header require transport reception. Keep personal and Family permissions distinct. |
+| Ecosystem tour in Nestor (not wired yet) | Public `?app=ecosystem&play=<stops>`; the map is data in the bundle, no backend call | [ECOSYSTEM_VIEW.md](docs/ECOSYSTEM_VIEW.md). Nestor composes the `play` list; the page plays it. Dated transcription of agentx-home `docs/ECOSYSTEM.md` (2026-10-25); live alerts, work queues and an embeddable element are the next steps, attached to the stable `eco-node:<id>` tags. |
+| LLMx personal / Family | Public Forge links to Core `/llmx`; Core relays the sibling `llmx-room.js` module and its graphical assets. `server/llmx-target.mjs` maps the same-origin conversation/voice routes. | [LLMX_PUBLIC_CONNECTION.md](docs/LLMX_PUBLIC_CONNECTION.md). Core keeps the private gateway, cross-site POST guard and Family-device cookie; only the Family Forge/consumer is available on a pinned device. Public/Core scene libraries stay separate. Qualify the installed pair and native turn independently of fixture checks. |
 | KidX voice branch | Dedicated server relay with a server-held Family credential; local branch described above | [KIDX_VOICE_BRANCH.md](docs/KIDX_VOICE_BRANCH.md), then that branch's `docs/KIDX_VOICE.md`; retain its bounded routes and Family context. It is not a generic proxy and is not installed by DiskX. |
 | Household mask / math stage | Core relays `/embed/llmx-face.js`; presence and math presentation events flow into the element | [LLMX_FACE_EMBED.md](docs/LLMX_FACE_EMBED.md). Visual events convey presentation state, not business authorization. |
+| Nestor proposals in the AgentX Center | Core `POST /api/graphysx/propose` composes from `/embed/world-vocabulary.json`; the page reaches it through one bounded same-origin `/propose` relay (dev server today, `GRAPHYSX_PROPOSE_URL`); no key in the browser | [NESTOR_PROPOSALS.md](docs/NESTOR_PROPOSALS.md). A provider proposes; the card, the human gate, the attributed commit and undo stay in GraphysX. The public deploy has no provider and composes the three demonstrations locally. |
 
 Core network access controls remain independent of an owner-only tool selection, profile,
 same origin or absence from `tools/list`. The module relayed under Core's origin is approved
