@@ -34,12 +34,13 @@
 .gx-eco-controls progress{flex:1 1 120px;height:6px;accent-color:var(--eco-cyan)}
 .gx-eco-count{color:#8fa6c6}
 .gx-eco-labels{position:absolute;inset:0;overflow:hidden;pointer-events:none}
-.gx-eco-label{position:absolute;left:0;top:0;transform:translate(-50%,-100%);padding:3px 8px 4px;border-radius:7px;border:1px solid color-mix(in srgb,var(--c) 55%,#0000);background:#060b14d9;color:#e7f1fa;font:11px/1.25 var(--eco-mono);white-space:nowrap;text-shadow:0 1px 6px #000;will-change:transform,opacity;transition:opacity .2s}
+.gx-eco-label{position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:min(238px,calc(100% - 16px));padding:3px 8px 4px;border-radius:7px;border:1px solid color-mix(in srgb,var(--c) 55%,#0000);background:#060b14d9;color:#e7f1fa;font:11px/1.25 var(--eco-mono);white-space:nowrap;text-shadow:0 1px 6px #000;will-change:transform,opacity;transition:opacity .2s}
+.gx-eco-label span{display:block;overflow:hidden;text-overflow:ellipsis}
 .gx-eco-label::after{content:"";position:absolute;left:50%;bottom:-6px;width:1px;height:6px;background:var(--c);box-shadow:0 0 6px var(--c)}
 .gx-eco-label small{display:block;color:var(--c);font-size:10px;letter-spacing:.04em;max-width:220px;overflow:hidden;text-overflow:ellipsis}
 .gx-eco-label[data-lit=true]{border-color:var(--c);box-shadow:0 0 18px color-mix(in srgb,var(--c) 45%,transparent);background:#0a1424f2;z-index:2}
 .gx-eco-label[data-status=planned]{border-style:dashed}
-.gx-eco-flowtag{position:absolute;left:0;top:0;pointer-events:none;font:600 11px/1.2 var(--eco-mono);padding:3px 7px;border-radius:5px;background:rgba(5,12,20,.86);border:1px solid var(--eco-cyan);color:#aef8ff;white-space:nowrap;transition:opacity .2s}
+.gx-eco-flowtag{position:absolute;left:0;top:0;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;pointer-events:none;font:600 11px/1.2 var(--eco-mono);padding:3px 7px;border-radius:5px;background:rgba(5,12,20,.86);border:1px solid var(--eco-cyan);color:#aef8ff;white-space:nowrap;transition:opacity .2s}
 .gx-eco-flowtag[data-role=amber]{border-color:var(--eco-amber);color:#ffcf78}
 .gx-eco-card{position:absolute;left:24px;bottom:150px;width:min(380px,calc(100% - 48px));padding:12px 16px;border:1px solid var(--eco-line);border-left:3px solid var(--c,var(--eco-cyan));border-radius:14px;background:var(--eco-panel);backdrop-filter:blur(14px);box-shadow:0 18px 60px #0009;pointer-events:none;transition:opacity .15s}
 .gx-eco-card[data-empty=true]{opacity:0}

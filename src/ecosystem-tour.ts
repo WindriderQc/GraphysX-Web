@@ -121,8 +121,8 @@ export function tourPicture(step: TourStep): TourPicture {
       narration: `UGAlien, un Aurora R12 : Core i9-11900F, 128 Go de RAM et exactement deux RTX 3090 de 24 Go. C'est la voie GPU lourde de la maison : IA locale, embeddings et ComfyUI, une voie GPU qui s'étend sur les deux cartes et une voie CPU sur le port 11435 pour le LLM de fond et les embeddings de secours. Les files viennent de Core, sur UGFrank.`,
     };
     case "brutal": return {
-      title: "UGBrutal héberge devX", wide: false, focus: ["ugbrutal", "devx"], amber: [], flow: [],
-      narration: `UGBrutal, le poste Windows : Ryzen 7 3700X, 64 Go de RAM, RTX 5070 Ti de 16 Go. Poste personnel, jeux, copies. À l'intérieur, en pointillé, devX : une VM Hyper-V sous Debian 12 avec 8 vCPU et 16 Go pris sur UGBrutal, sans GPU. C'est là que le code se développe et se teste. devX n'est jamais un serveur à part : si UGBrutal s'éteint, devX aussi.`,
+      title: "UGBrutal héberge devX", wide: false, focus: ["ugbrutal", "devx"], amber: ["ugbrutal"], flow: [],
+      narration: `UGBrutal, le poste Windows : Ryzen 7 3700X, 64 Go de RAM, RTX 5070 Ti de 16 Go. Poste personnel, jeux, copies. À l'intérieur, en pointillé, devX : une VM Hyper-V sous Debian 12 avec 8 vCPU et 16 Go pris sur UGBrutal, sans GPU. C'est là que le code se développe et se teste. devX n'est jamais un serveur à part : si UGBrutal s'éteint, devX aussi. Point ouvert au relevé du 25 octobre : l'espace libre du disque système est critique.`,
     };
     case "network": return {
       title: "Le réseau domestique", wide: false, focus: ["deco", "piusb", "ugfrank", "ugalien", "ugbrutal"], amber: [],
@@ -130,7 +130,7 @@ export function tourPicture(step: TourStep): TourPicture {
       narration: `Deux bornes Deco X90 font le Wi-Fi de la maison et relient les trois hôtes. Le DNS de tout le monde passe par piUSB, avec Pi-hole, et Gatus y fait des sondes indépendantes du reste. Les commutateurs de réserve ne sont pas branchés : ils ne sont pas dessinés comme actifs.`,
     };
     case "edge": return {
-      title: "Périphériques en bordure du réseau", wide: false, focus: ["piusb", "pit", "babypi", "pitft"], amber: issues.map((node) => node.id), flow: [],
+      title: "Périphériques en bordure du réseau", wide: false, focus: ["piusb", "pit", "babypi", "pitft"], amber: issues.filter((node) => node.kind === "edge").map((node) => node.id), flow: [],
       narration: `Quatre Raspberry Pi. piUSB, un Pi 3B+ sous Debian 13 sur clé USB : Pi-hole et Gatus, et une alimentation à corriger. PI-T, un Pi 3B+ sous OctoPi avec son écran tactile : OctoPrint et OctoDash pour l'imprimante 3D, une impression de validation encore à faire. BabyPi, un Pi 3B au garage : caméra, micro, audio Bluetooth du téléphone, et des clips envoyés au NAS pour trente jours. piTFT, un Pi 4 de 8 Go avec un écran de 7 pouces : l'écran est installé et accessible, le tableau de bord du bureau, lui, n'existe pas encore.`,
     };
     case "spare": return {

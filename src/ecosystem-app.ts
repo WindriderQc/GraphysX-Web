@@ -82,7 +82,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   const element = <T extends HTMLElement>(selector: string): T => surface.querySelector<T>(selector)!;
   const button = (action: string): HTMLButtonElement => element<HTMLButtonElement>(`[data-action="${action}"]`);
   const labelsLayer = element<HTMLDivElement>(".gx-eco-labels");
-  element(".gx-eco-sub").textContent = `${ECOSYSTEM_SOURCE} · installé ≠ entièrement qualifié`;
+  element(".gx-eco-sub").textContent = `${ECOSYSTEM_SOURCE} · carte datée, sans état en direct`;
   root.append(surface);
 
   // ---- the house --------------------------------------------------------------------------
@@ -192,7 +192,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
 
   // ---- camera -----------------------------------------------------------------------------
   function overviewCamera(seconds: number): void {
-    const position = OVERVIEW_DIRECTION.clone().multiplyScalar(ECO_HALF * 2.25).add(new Vector3(0, 0.6, 1));
+    const position = OVERVIEW_DIRECTION.clone().multiplyScalar(ECO_HALF * 2.25 * Math.max(1, 1 / host.camera.aspect)).add(new Vector3(0, 0.6, 1));
     host.frameView([position.x, position.y, position.z], [0, 0.6, 1], seconds);
   }
   function frameNodes(ids: readonly string[], seconds: number): void {
@@ -203,7 +203,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     const center = box.getCenter(new Vector3());
     const extent = box.getSize(new Vector3());
     const span = Math.max(9, extent.x, extent.z);
-    const at = OVERVIEW_DIRECTION.clone().multiplyScalar(span * 1.35 + extent.y * 1.2 + 6).add(new Vector3(center.x, 0, center.z));
+    const at = OVERVIEW_DIRECTION.clone().multiplyScalar((span * 1.35 + extent.y * 1.2 + 6) * Math.max(1, 1 / host.camera.aspect)).add(new Vector3(center.x, 0, center.z));
     host.frameView([at.x, at.y, at.z], [center.x, Math.min(extent.y * 0.4, 3), center.z], seconds);
   }
 
@@ -240,6 +240,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     const toggle = button("toggle");
     toggle.textContent = state.playing ? "⏸ Pause" : "▶ Lire";
     toggle.setAttribute("aria-label", state.playing ? "Pause" : "Lire");
+    toggle.title = "Faire défiler les étapes et le texte, sans voix";
     element("[data-count]").textContent = `${state.index + 1} / ${state.count}`;
   }
   function enter(seconds = reduced ? 0 : 1.1): void {
@@ -350,7 +351,6 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   const projected = new Vector3();
   const labelPool: HTMLDivElement[] = [];
   type Placed = { element: HTMLElement; x: number; y: number; width: number; height: number; priority: number; anchor: "bottom" | "centre" };
-  const CHAR = 6.8;
   const overlaps = (a: Placed, b: Placed): boolean => Math.abs(a.x - b.x) < (a.width + b.width) / 2 && Math.abs(a.y - b.y) < (a.height + b.height) / 2;
   function updateLabels(): void {
     const rect = dom.getBoundingClientRect();
@@ -381,7 +381,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
       if (nameNode.textContent !== block.node.name) nameNode.textContent = block.node.name;
       const sub = block.node.attention ? `⚠ ${block.node.attention}` : block.node.subtitle;
       if (subNode.textContent !== sub) subNode.textContent = sub;
-      const width = 18 + Math.min(220, Math.max(block.node.name.length, sub.length) * CHAR);
+      const width = label.offsetWidth;
       candidates.push({ element: label, x: (projected.x + 1) / 2 * rect.width, y: (1 - projected.y) / 2 * rect.height - 8 - 16, width, height: 34,
         priority: hovered === block ? 4 : lit ? 3 : small ? 1 : 2, anchor: "bottom" });
     });
@@ -390,13 +390,17 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
       const visible = projected.z < 1 && Math.abs(projected.x) < 1.05 && Math.abs(projected.y) < 1.05;
       if (!visible) { tag.element.style.opacity = "0"; continue; }
       tag.element.style.opacity = "1";
-      candidates.push({ element: tag.element, x: (projected.x + 1) / 2 * rect.width, y: (1 - projected.y) / 2 * rect.height, width: 14 + (tag.element.textContent?.length ?? 0) * CHAR, height: 22, priority: 3, anchor: "centre" });
+      candidates.push({ element: tag.element, x: (projected.x + 1) / 2 * rect.width, y: (1 - projected.y) / 2 * rect.height, width: tag.element.offsetWidth, height: 22, priority: 3, anchor: "centre" });
     }
     candidates.sort((a, b) => b.priority - a.priority || a.y - b.y);
     const placed: Placed[] = [];
     for (const candidate of candidates) {
+      // Projected anchors can sit at the viewport edge; keep the whole label inside it.
+      const margin = 8;
+      candidate.x = Math.max(margin + candidate.width / 2, Math.min(rect.width - margin - candidate.width / 2, candidate.x));
+      candidate.y = Math.max(margin + candidate.height / 2, Math.min(rect.height - margin - candidate.height / 2, candidate.y));
       let tries = candidate.priority >= 3 ? 4 : 0;
-      while (placed.some((other) => overlaps(candidate, other)) && tries > 0) { candidate.y -= candidate.height + 4; tries -= 1; }
+      while (placed.some((other) => overlaps(candidate, other)) && tries > 0 && candidate.y - candidate.height - 4 >= margin + candidate.height / 2) { candidate.y -= candidate.height + 4; tries -= 1; }
       if (placed.some((other) => overlaps(candidate, other))) { candidate.element.style.opacity = "0"; candidate.element.style.transform = "translate(-9999px,-9999px)"; continue; }
       placed.push(candidate);
       candidate.element.style.transform = candidate.anchor === "bottom"
@@ -407,9 +411,14 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
 
   // ---- frame ---------------------------------------------------------------------------------
   let editing = false;
+  let viewAspect = host.camera.aspect;
   const frame = (delta: number): void => {
     if (disposed) return;
     time += delta;
+    if (viewAspect !== host.camera.aspect && picture && host.mode !== "editor") {
+      viewAspect = host.camera.aspect;
+      if (picture.wide) overviewCamera(0); else frameNodes([...picture.focus, ...picture.amber], 0);
+    }
     const nowEditing = host.mode === "editor";
     if (nowEditing !== editing) {
       editing = nowEditing;
