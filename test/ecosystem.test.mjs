@@ -16,7 +16,9 @@ test("the ecosystem map is self-consistent", () => {
   assert.equal(data.ecoNode("devx").host, "ugbrutal", "devX is hosted by UGBrutal, never a server of its own");
   assert.ok(data.ecoServicesOn("ugfrank").every((node) => node.status === "installed"));
   // Open issues are named and amber; planned roles are kept apart from installed ones.
-  assert.deepEqual(data.ecoIssues().map((node) => node.id), ["piusb", "pit", "babypi"]);
+  assert.deepEqual(data.ecoIssues().map((node) => node.id), ["ugbrutal", "piusb", "pit", "babypi"]);
+  assert.match(data.describeNode(data.ecoNode("ugbrutal")), /espace libre critique au relevé du 25 octobre/);
+  assert.doesNotMatch(data.describeNode(data.ecoNode("nas")), /\/mnt\//, "container mounts are not NAS host paths");
   assert.ok(data.ecoNode("pitft").planned && data.ecoNode("pitft").status === "installed", "piTFT exists; its dashboard is planned, not installed");
   assert.ok(data.ecoPlanned().some((node) => node.id === "ugsmall"));
   // No link claims health, and nothing links devX as a peer of the hosts.
@@ -56,7 +58,7 @@ test("the world has one tagged entity per node and no two nodes share ground", (
   }
   // Status is visible without a legend: amber rails and a beacon on open issues, a wireframe on spare hardware.
   const beacons = world.entities.filter((entity) => entity.id.endsWith("-beacon"));
-  assert.deepEqual(beacons.map((entity) => scene.ecoNodeIdOf(entity.tags)), ["piusb", "pit", "babypi"]);
+  assert.deepEqual(beacons.map((entity) => scene.ecoNodeIdOf(entity.tags)), ["ugbrutal", "piusb", "pit", "babypi"]);
   assert.ok(world.entities.filter((entity) => entity.id.endsWith("-cage") && entity.material.wireframe).length >= 5, "spare hardware, Google Calendar and devX are drawn as cages");
   assert.ok(world.entities.some((entity) => entity.id === "eco-ugalien-gpu-1") && !world.entities.some((entity) => entity.id === "eco-ugalien-gpu-2"), "exactly two GPU cards on UGAlien");
   assert.ok(world.environment.post.bloom.strength > 0);
@@ -80,7 +82,10 @@ test("the tour parses, refuses, and every stop has a picture and a narration", (
     assert.ok(tour.tourStepSeconds(step) >= 5);
   }
   // The pictures tell the truth of the map.
-  assert.deepEqual(tour.tourPicture({ kind: "watch" }).amber, ["piusb", "pit", "babypi"]);
+  assert.deepEqual(tour.tourPicture({ kind: "watch" }).amber, ["ugbrutal", "piusb", "pit", "babypi"]);
+  assert.deepEqual(tour.tourPicture({ kind: "edge" }).amber, ["piusb", "pit", "babypi"], "the Pi stop frames only edge issues");
+  assert.deepEqual(tour.tourPicture({ kind: "brutal" }).amber, ["ugbrutal"]);
+  assert.match(tour.tourPicture({ kind: "brutal" }).narration, /disque système est critique/);
   assert.deepEqual(tour.tourPicture({ kind: "brutal" }).focus, ["ugbrutal", "devx"]);
   assert.equal(tour.tourPicture({ kind: "services" }).flow.length, 8, "each service arcs to UGFrank");
   const voice = tour.tourPicture({ kind: "voice" });

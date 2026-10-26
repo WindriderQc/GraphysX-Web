@@ -8,8 +8,8 @@ et le matériel en réserve sans rôle. Nestor fait la visite : une liste d'éta
 image (machines soulignées, arcs avec un repère qui circule) et une narration.
 
 Premier parcours : une visite en lecture seule. Rien ici n'est vivant : pas d'alertes, pas de
-travaux, pas de goulots d'étranglement, pas d'état de santé. Les trois points ouverts en ambre
-(piUSB, PI-T, BabyPi) viennent de la carte datée, pas d'une sonde. C'est volontaire : la carte
+travaux, pas de goulots d'étranglement, pas d'état de santé. Les quatre points ouverts en ambre
+(disque système d'UGBrutal, piUSB, PI-T, BabyPi) viennent de la carte datée, pas d'une sonde. C'est volontaire : la carte
 porte des identifiants stables (`eco-node:<id>`) sur lesquels les alertes et les files de
 travaux viendront s'accrocher sans changer la forme de l'image.
 
@@ -96,6 +96,10 @@ s'ouvre par-dessus l'étape courante, la visite se met en pause, `Échap` revien
 `watch` est la graine du futur tableau d'alertes : elle allume les points ouverts et les
 remontées de métriques.
 
+« Lire » fait défiler les étapes et leur texte ; aucune voix n'est synthétisée. Le bandeau
+précise que la carte est datée. Sur un écran étroit, le cadrage recule pour conserver le
+champ horizontal et les étiquettes restent entièrement dans les bords de l'écran.
+
 ## Vérification
 
 - `node --test test/ecosystem.test.mjs` : carte cohérente (références, comptes des
@@ -106,7 +110,10 @@ remontées de métriques.
   pause, sept étapes jouées avec les bons nœuds, arcs et narration, document inchangé,
   lecture qui avance sur l'horloge, vrai clic 3D sur UGAlien puis `Échap`, flèches, liste
   `play` honorée, mot inconnu refusé, barre de visite sur un téléphone, retour à la porte
-  d'entrée. Inscrit dans `scripts/verify-manifest.mjs` (palier `apps`).
+  d'entrée, étiquettes mobiles contenues dans l'écran et aucun asset manquant dans le build
+  de production. Inscrit dans `scripts/verify-manifest.mjs` (palier `apps`).
+- `node --test test/model-manifest-assets.test.mjs` : le manifeste vide est publié ; les
+  modèles convertis et leurs textures sont inclus quand le manifeste les référence.
 - Captures dans `output/verify/ecosystem-*.png` ; regarde-les.
 
 ## Suite

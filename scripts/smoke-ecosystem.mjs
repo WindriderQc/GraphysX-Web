@@ -17,6 +17,8 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
   applySmokeTimeout(page);
   const errors = [];
+  const failedAssets = [];
+  page.on("response", (response) => { if (response.status() >= 400 && new URL(response.url()).pathname.startsWith("/assets/")) failedAssets.push(`${response.status()} ${response.url()}`); });
   page.on("pageerror", (error) => errors.push(String(error)));
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
   await page.route("**/*", (route) => (new URL(route.request().url()).origin !== new URL(base).origin ? route.abort() : route.continue()));
@@ -35,7 +37,7 @@ try {
   assert.equal(initial.nodes.length, 25, "one entity per node of the map");
   assert.ok(initial.entityCount > 100, "lights, kerbs, shelves, nodes, rails, beacons, cages");
   assert.ok(initial.nodes.every((entity) => entity.tags.some((tag) => tag.startsWith("eco-node:"))), "nodes carry their id in tags");
-  assert.equal(initial.nodes.filter((entity) => entity.tags.includes("eco-status:attention")).length, 3, "three open issues");
+  assert.equal(initial.nodes.filter((entity) => entity.tags.includes("eco-status:attention")).length, 4, "four dated open issues including system disk capacity");
   assert.ok(initial.bloom && initial.bloom.strength > 0);
   // Default list, paused on the overview, Nestor speaking.
   assert.deepEqual([initial.app.tour.index, initial.app.tour.count, initial.app.tour.playing, initial.app.tour.kind], [0, 13, false, "overview"]);
@@ -52,7 +54,7 @@ try {
     brutal: { focus: ["ugbrutal", "devx"], arcs: 0, says: /VM Hyper-V/ },
     voice: { focus: ["browser", "core", "ugfrank", "nestor"], arcs: 6, says: /Whisper/ },
     garage: { focus: ["babypi", "nas", "phone"], arcs: 2, says: /trente jours/ },
-    watch: { focus: ["monitoring", "piusb", "pit", "babypi"], arcs: 4, says: /3 points ouverts/ },
+    watch: { focus: ["monitoring", "ugbrutal", "piusb", "pit", "babypi"], arcs: 4, says: /4 points ouverts/ },
     summary: { focus: [], arcs: 0, says: /Installé ne veut pas dire entièrement qualifié/ },
   };
   for (const [kind, expected] of Object.entries(expectations)) {
@@ -126,6 +128,11 @@ try {
   await mobile.waitForFunction(`(${app})()?.application === "ecosystem" && (${app})().narrationComplete`);
   const bar = await mobile.locator(".gx-eco-tour").boundingBox();
   assert.ok(bar && bar.x >= 0 && bar.x + bar.width <= 390 && bar.y + bar.height <= 844, `tour bar fits the phone: ${JSON.stringify(bar)}`);
+  const labels = await mobile.locator(".gx-eco-label, .gx-eco-flowtag").evaluateAll((elements) => elements
+    .filter((element) => Number(getComputedStyle(element).opacity) > 0.1)
+    .map((element) => { const rect = element.getBoundingClientRect(); return { text: element.textContent, left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }; }));
+  assert.ok(labels.length > 0, "projected labels are visible on mobile");
+  for (const label of labels) assert.ok(label.left >= 0 && label.right <= 390 && label.top >= 0 && label.bottom <= 844, `the whole mobile label fits: ${JSON.stringify(label)}`);
   await mobile.screenshot({ path: path.join(artifacts, "ecosystem-mobile-edge.png") });
   await mobile.close();
 
@@ -133,6 +140,7 @@ try {
   await page.locator('[data-action="exit"]').click();
   await page.waitForFunction(() => new URLSearchParams(window.location.search).get("app") === null);
   assert.deepEqual(errors, [], `no page errors: ${errors.join("\n")}`);
+  assert.deepEqual(failedAssets, [], "the production build serves every requested ecosystem asset");
   console.log("ecosystem smoke: PASS");
 } finally {
   await browser.close();
