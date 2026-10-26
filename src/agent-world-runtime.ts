@@ -2,6 +2,8 @@ import { resolveAgentAppearance, type AgentAppearance } from "../server/agent-ap
 import { AgentWorldVoxelFace, findVoxelFace, resolveAgentWorldFace } from "./agent-world-face";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates } from "../server/inline-mesh.mjs";
 import { validateInlineMeshDefinition } from "../server/scene-commands.mjs";
+import { materializeMeshCommands, type MeshEdits, type PixelEdit } from "../server/mesh-authoring.mjs";
+import type { MeshConstruction } from "../server/mesh-construction.mjs";
 import {
   AgentWorldFormulaField,
   GRAPHYSX_AGENT_WORLD_FORMULAS,
@@ -703,6 +705,9 @@ export type AgentWorldEntityDefinition = {
 };
 
 export type AgentWorldEntityPatch = {
+  meshBuild?: MeshConstruction;
+  meshEdits?: MeshEdits;
+  pixelEdits?: PixelEdit[];
   mesh?: AgentWorldInlineMesh;
   /** Replace a spline's control points without changing its ID or followers. */
   path?: AgentWorldSplinePath;
@@ -886,7 +891,7 @@ export type AgentWorldDefinition = {
 };
 
 export type AgentWorldCommand =
-  | { op: "spawn"; entity: AgentWorldEntityDefinition }
+  | { op: "spawn"; entity: AgentWorldEntityDefinition; meshBuild?: MeshConstruction }
   | { op: "spawn-prefab"; prefabId: AgentWorldPrefabId; options?: AgentWorldPrefabOptions }
   | { op: "update"; id: string; patch: AgentWorldEntityPatch }
   | { op: "remove"; id: string }
@@ -1388,6 +1393,9 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "entity.remove",
   "entity.model",
   "entity.mesh",
+  "entity.mesh-construction",
+  "entity.mesh-range-edit",
+  "entity.pixel-edit",
   "material.texture.inline",
   "entity.agent-avatar",
   "asset.list",
@@ -1922,6 +1930,7 @@ export class AgentWorldRuntime {
       return this.failure("A transaction requires at least one command");
     }
     try {
+      commands = materializeMeshCommands(commands, [...this.entities.values()].map(entry => entry.definition));
       // Reject host-transient targets before taking a rollback snapshot. Besides being
       // safer, this avoids reloading the whole authored world for a command that was never
       // allowed to touch it in the first place.
@@ -2043,6 +2052,9 @@ export class AgentWorldRuntime {
       .filter((id) => this.entities.has(id) && !this.isScopedTransientEntity(id));
     return [...this.selectedIds];
   }
+
+  /** Cheap ephemeral selection read for host UI; does not build a whole scene state. */
+  getSelectedIds(): string[] { return [...this.selectedIds]; }
 
   setPaused(paused: boolean): AgentWorldResult<boolean> {
     this.paused = paused;

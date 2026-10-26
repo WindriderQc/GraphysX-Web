@@ -48,6 +48,7 @@ import {
   summarizeSceneForProvider,
 } from "./coauthor-provider";
 import { createHostBridge, parseHostOriginAllowList, type HostBridge } from "./coauthor-host-bridge";
+import { meshProposalFocus } from "./mesh-proposal-focus";
 import { randomPlayerName } from "./player-name";
 import {
   ARCHIVE_BALLZ_LEVELS,
@@ -315,7 +316,21 @@ if (mode === "previews" && import.meta.env.DEV) {
      * nobody asked for. Everything after the reply is the topic path: the same card, the same
      * narrowing, the same accept at the same revision.
      */
-    const requestNestor = (request: string): void => {
+    const meshContextTarget = (): { id: string; label: string } | null => {
+      const selected = host.world.getSelectedIds();
+      const ids = selected.length ? selected : [nestor?.state().targetId ?? ""];
+      const entity = host.api.query({ ids }).find(entry => entry.type === "mesh");
+      return entity ? { id: entity.id, label: entity.label } : null;
+    };
+    const focusedMeshContext = (sharedMeshContextId?: string) => {
+      if (!sharedMeshContextId) return {};
+      const target = meshContextTarget();
+      if (target?.id !== sharedMeshContextId) return {};
+      const entity = target && host.api.exportDocument()?.entities.find(entry => entry.id === target.id);
+      const focus = entity ? meshProposalFocus(entity) : undefined;
+      return focus ? { focus } : {};
+    };
+    const requestNestor = (request: string, sharedMeshContextId?: string): void => {
       const provider = proposalProvider();
       if (!provider) return;
       if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
@@ -334,6 +349,7 @@ if (mode === "previews" && import.meta.env.DEV) {
             id: state?.world.id ?? "",
             label: state?.world.label ?? "",
             entities: summarizeSceneForProvider(host.api.query(), 60, [...(state?.selectedIds ?? []), nestor?.state().targetId ?? ""]),
+            ...focusedMeshContext(sharedMeshContextId),
           },
         });
         welcome?.setRequestBusy(false);
@@ -526,6 +542,7 @@ if (mode === "previews" && import.meta.env.DEV) {
         return;
       }
       if (variant !== "agentx") return;
+      welcome.setRequestFocus(meshContextTarget());
       const nestorState = nestor?.state();
       const current = nestorState?.presentation;
       // Returning from the editor should keep the last demonstration's explanation beside
@@ -542,6 +559,7 @@ if (mode === "previews" && import.meta.env.DEV) {
     const syncFrontDoor = (): void => {
       if (host.mode === "editor" || !document.querySelector(".gx-welcome")) return;
       if (desiredWelcomeVariant() !== mountedWelcomeVariant) mountFrontDoor();
+      welcome?.setRequestFocus(meshContextTarget());
     };
     // Rebuild the front door from scratch. Playing a level REPLACES the world, so coming back
     // cannot just mean un-hiding chrome — the showroom's entities are gone and its host-mounted
@@ -1038,13 +1056,14 @@ if (mode === "previews" && import.meta.env.DEV) {
           if (!state) return null;
           return {
             revision: state.revision,
-            scene: { id: state.world.id, label: state.world.label, entities: summarizeSceneForProvider(host.api.query()) },
+            scene: { id: state.world.id, label: state.world.label, entities: summarizeSceneForProvider(host.api.query(), 60, [...state.selectedIds, nestor?.state().targetId ?? ""]) },
           };
         },
         onHost: () => {
           // The host composes on its own origin; it takes precedence over a baked-in URL.
           if (hostBridge) setProposalProvider(hostBridge.provider);
           welcome?.setRequestEnabled(true);
+          syncFrontDoor();
         },
         /**
          * A proposal Core pushed because Nestor announced an intention in a conversation. The
@@ -1090,6 +1109,17 @@ if (mode === "previews" && import.meta.env.DEV) {
         // against the revision on screen.
         hostBridge?.announce();
       });
+    });
+    // Selection is ephemeral and intentionally emits no authored world event. Observe it
+    // through the existing host loop; never serialize the scene on each frame.
+    let observedSelection: string | null = null;
+    host.subscribeAfterRender(() => {
+      if (!welcome || host.mode === "editor") return;
+      const selection = host.world.getSelectedIds().join("\0");
+      if (selection === observedSelection) return;
+      observedSelection = selection;
+      syncFrontDoor();
+      hostBridge?.announce();
     });
     Object.assign(window, {
       __GRAPHYSX_HOST__: host,

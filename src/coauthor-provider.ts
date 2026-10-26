@@ -24,6 +24,8 @@
 
 import { hostOnlyEntityIdPrefix } from "../server/host-entity-id-policy.mjs";
 import type { AgentWorldCommand } from "./agent-world-runtime";
+import type { MeshProposalFocus } from "./mesh-proposal-focus";
+export const PROPOSAL_TIMEOUT_MS = 90_000;
 
 /** Every `op` the runtime understands. A reply naming anything else is refused. */
 export const PROPOSABLE_OPS: ReadonlySet<string> = new Set([
@@ -51,7 +53,7 @@ export type ProposalRequest = {
   /** The revision the scene is at, so the proposal can be born against a known world. */
   revision: number;
   /** A bounded description of what is in the scene. Never the whole document. */
-  scene: { id: string; label: string; entities: { id: string; type: string; label: string }[] };
+  scene: { id: string; label: string; entities: { id: string; type: string; label: string }[]; focus?: MeshProposalFocus };
 };
 
 export type ProviderProposal = { intent: string; commands: AgentWorldCommand[] };
@@ -237,7 +239,7 @@ export function createHttpProposalProvider(options: {
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }): ProposalProvider {
-  const { url, label = "Model provider", timeoutMs = 20_000, fetchImpl = fetch } = options;
+  const { url, label = "Model provider", timeoutMs = PROPOSAL_TIMEOUT_MS, fetchImpl = fetch } = options;
   return {
     id: `http:${url}`,
     label,

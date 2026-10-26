@@ -5067,3 +5067,29 @@ and a rendered frame before sampling the roof; retain click state/events and a c
 any future failure. Selection still requires the original real pointer event and exact path.
 The full 103-check receipt remains scoped to ancestor `459059b`; final scoped reruns are
 reported separately in the pull request.
+
+## 2026-10-26 — Mesh construction and focused edits
+
+Owner asked to finish the remaining work after mesh v1. The native Core page was freshly
+received as HTTP200; another session deployed PR1111 and recorded a real Nestor pushed card
+in private instance PR243, so this branch preserves that delivery. LEGO shader stays paused
+and Nestor Famille voice stays a discussion.
+
+Shared declarative extrusion/revolution/sweep expand to existing validated indexed/UV buffers.
+Optional spawn.meshBuild and update.patch.meshBuild avoid long literal coordinate lists;
+meshEdits tuple ranges and pixelEdits rectangles retain untouched data. Legacy command batches
+bypass the expander. The ordinary authoring/history/store/live inverse paths remain authoritative.
+A target-bound unchecked option shares at most16 KiB of one mesh with Core. Larger meshes carry
+an explicit incomplete summary. HTTP and host proposal transports share the existing90s host
+budget; no test deadline is raised. Core support is isolated in AgentX PR1120.
+
+Initial acceptance: all Node contracts, typecheck/lint/build and Rapier probes, plus inline-mesh
+and mesh-authoring pass. It caught host-libm numeric differences; construction now uses fixed
+arithmetic and canonical Float32 buffers, preserving strict Node/browser comparison. It also
+checks asynchronous texture readiness and exact201 creation receipts. Selection is observed
+through the existing frame loop using a cheap getter; selection remains ephemeral.
+
+Final qualification uses the complete local gate because shared runtime/host wiring changed,
+plus the installed action client and a native Core-hosted model reception after publication.
+Detailed context is shared only for one opted-in typed request, never in background state or
+demonstration-button traffic. Native receipts and inspected images remain outside Git.

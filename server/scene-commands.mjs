@@ -6,6 +6,7 @@
 // refuses to load; declining an unproven command is safer than persisting it.
 
 import { resolveAgentAppearance } from "./agent-appearance.mjs";
+import { materializeMeshCommand } from "./mesh-authoring.mjs";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates, MESH_FIELDS, MESH_GROUP_FIELDS, MESH_LIMITS, PIXEL_FIELDS, PIXEL_LIMITS } from "./inline-mesh.mjs";
 import {
   assertAuthoredSceneCommandNamespaces,
@@ -39,7 +40,7 @@ export const FIELDS = Object.freeze({
     "castShadow", "receiveShadow", "ephemeral", "tags", "behaviors", "interactions",
   ]),
   patch: Object.freeze([
-    "path", "mesh",
+    "path", "mesh", "meshBuild", "meshEdits", "pixelEdits",
     "appearance",
     "label", "parentId", "transform", "material", "modelMaterialOverrides", "surface", "steering", "visible",
     "castShadow", "receiveShadow", "ephemeral", "tags", "intensity", "distance", "marker", "physics", "agent",
@@ -1103,6 +1104,7 @@ function validateUpdateReferences(entity, entities) {
 }
 
 function applyCommand(definition, command) {
+  command = materializeMeshCommand(command, definition.entities);
   requireRecord(command, "command");
   const entities = definition.entities;
 

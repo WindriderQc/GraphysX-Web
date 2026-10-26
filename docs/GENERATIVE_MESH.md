@@ -1,6 +1,6 @@
 # Generative geometry: the authoring gap
 
-Status: mesh v1 implementation, 2026-10-26. Browser/authority acceptance and native model
+Status: mesh v1 plus construction and focused editing implementation, 2026-10-26. Browser/authority acceptance and native model
 acceptance are recorded separately; a deterministic fixture is not a model result.
 
 ## Mesh v1
@@ -59,8 +59,60 @@ materials and document edits. The machine vocabulary publishes the same tables/l
 a valid mesh+texture example. Core must render newly published field blocks and limits in
 its prompt, rather than keeping a second fixed list of known blocks.
 
-Vertex-range patches, construction operators and richer texture recipes remain future work.
-For v1, changing even one triangle or texel replaces the bounded mesh block as one undo step.
+### Construction and focused edits
+
+`spawn.meshBuild` builds a mesh instead of supplying `spawn.entity.mesh`. Existing meshes can
+be rebuilt with `update.patch.meshBuild`. Pick exactly one geometry source per command:
+
+- `{"kind":"extrude","profile":[[-1,-1],[1,-1],[1,1],[-1,1]],"depth":0.5}`:
+  a simple XZ polygon, extruded along +Y with triangulated caps; concave profiles work.
+- `{"kind":"revolve","profile":[[0,0],[0.8,0],[0.5,1.5],[0.7,2]],"segments":24}`:
+  an open radius/Y profile turned around +Y. Optional `angleDegrees` defaults to360;
+  partial turns have open cut edges. Axis vertices produce fans without degenerate triangles.
+- `{"kind":"sweep","profile":[[-0.2,-0.2],[0.2,-0.2],[0.2,0.2],[-0.2,0.2]],"path":[[0,0,0],[0,2,1],[2,3,2]]}`:
+  a polygon transported along a spatial path, with capped ends.
+
+Profiles have at most64 points, paths64 points and revolution3..64 segments. Polygon profiles
+omit the repeated endpoint; self-crossing, touching, repeated and collinear corners are refused.
+All operators generate UVs and expand through the existing shared validator into ordinary
+portable buffers. Recipes are command intent; the saved scene contains only the resulting mesh.
+They add no executable script, service, renderer loop, CSG or alternate scene authority.
+
+`update.patch.meshEdits` replaces fixed-size, nonoverlapping tuple ranges:
+
+```json
+{"op":"update","id":"folded-sail","patch":{"meshEdits":{"positions":[{"start":2,"values":[1,2,1]}]}}}
+```
+
+`start` counts vertices for positions/normals, triangles for indices, and UV pairs for uvs.
+It never counts individual scalar components. For positions, use `delta:[dx,dy,dz,...]` instead
+of `values` to move tuples relatively, preserving unchanged coordinates without copying them.
+Generated positions/UVs are canonical Float32 values; construction uses fixed-arithmetic
+trigonometry so Node and Chromium produce the same portable buffers.
+Unchanged buffers remain exact. Position/index
+edits drop stale explicit normals unless normals are also supplied; `normals:"recompute"`
+requests the same behavior explicitly. There is no insertion, buffer extension or overlap.
+
+`update.patch.pixelEdits:[{x,y,width,height,rgba}]` patches disjoint rectangles in the entity's
+existing inline base texture, bottom row first. It preserves size, other texels and UV transforms.
+For a material slot's own inline texture, supply `materialIndex` on its rectangles; omitting it
+targets the entity base texture. Slot edits require an unchanged material layout. They can be
+combined with position/index/UV edits, keeping other slots and textures exact.
+Each edit permits at most64 ranges/rectangles. The completed mesh/texture is validated before
+allocation; a bad edit rejects the whole batch. Review, one commit, undo/redo, JSON reload and
+shared-scene inverse use the same paths as whole-block replacement.
+
+For a selected or Nestor-targeted mesh, the request panel offers an unchecked geometry-sharing
+option for one typed request. Checking it binds consent to that object; submission or changing
+targets resets it. Background Center state reports and demonstration buttons keep summary-only
+context. Only id/type/label,
+counts, transform, mesh and material can enter optional `scene.focus`, at most16 KiB. Larger
+meshes send counts with `complete:false`, omitting buffers/materials; no partial geometry is
+presented as complete. Core validates this context before inference and treats it as untrusted
+data. Normal requests retain the60-id summary. Core still composes; the browser still reviews.
+
+Remaining geometry work is optional sophistication: hole profiles, CSG and richer surface
+recipes, rather than a missing triangle/range/construction path.
 
 ## Original gap and direction
 

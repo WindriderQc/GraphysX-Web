@@ -1,0 +1,13 @@
+import type { AgentWorldCommand, AgentWorldInlineMesh } from '../src/agent-world-runtime';
+export type MeshValuesRange = { start: number; values: number[]; delta?: never };
+export type MeshRange = MeshValuesRange | { start: number; delta: number[]; values?: never };
+export type MeshEdits = { positions?: MeshRange[]; indices?: MeshValuesRange[]; uvs?: MeshValuesRange[]; normals?: MeshValuesRange[] | 'recompute' };
+export type PixelEdit = { x: number; y: number; width: number; height: number; rgba: number[]; materialIndex?: number };
+type Source = { id?: string; type: string; mesh?: AgentWorldInlineMesh | null; material?: unknown };
+export const EDIT_LIMITS: Readonly<{ ranges: number; rectangles: number }>;
+export const EDIT_FIELDS: readonly string[];
+export const RANGE_FIELDS: readonly string[];
+export const PIXEL_EDIT_FIELDS: readonly string[];
+export function editInlineMesh(mesh: AgentWorldInlineMesh, edits: MeshEdits): AgentWorldInlineMesh;
+export function materializeMeshCommand(command: AgentWorldCommand, entities: readonly Source[]): AgentWorldCommand;
+export function materializeMeshCommands(commands: AgentWorldCommand[], entities: readonly Source[]): AgentWorldCommand[];

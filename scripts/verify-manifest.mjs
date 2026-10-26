@@ -90,6 +90,7 @@ export const VERIFY_SMOKES = [
   { name: "ballz18-sky", tier: "apps", script: "scripts/smoke-ballz18-sky.mjs", covers: "exact authored 2048px BallZ18 sky: release manifest, six SHA-256 hashes, decode, orientation, scene application" },
   { name: "scenenet-xml", tier: "apps", script: "scripts/smoke-scenenet-xml.mjs", covers: "SceneNET v1.0/v1.1/v1.2/split-enum import-export-import, deterministic XML, structured loss warnings, ambiguity rejection, editor download" },
   { name: "inline-mesh", tier: "core", script: "scripts/smoke-inline-mesh.mjs", covers: "reviewed indexed mesh/UV/RGBA authoring, replace/undo/redo/reload, atomic rejection, exact colliders, shared inverse and viewer authority" },
+  { name: "mesh-authoring", tier: "core", script: "scripts/smoke-mesh-authoring.mjs", covers: "extrusion/revolution/sweep through reviewed Apply, explicit bounded object context, tuple and texel edits, GPU buffers, undo/redo/reload, atomic refusal and shared inverse/authority" },
   { name: "mesh-colliders", tier: "apps", script: "scripts/smoke-mesh-colliders.mjs", covers: "scene-native model colliders: Great Slide trimesh, dynamic convex hull, rejection, bridge + round-trip" },
   { name: "great-slide", tier: "apps", script: "scripts/smoke-great-slide.mjs", covers: "Great Slide gravity run: Games launch, exact collider gate, subject controls, checkpoints, results, replay + return" },
   { name: "map1", tier: "apps", script: "scripts/smoke-map1.mjs", covers: "Map 1 gravity descent: Games launch, exact recovered collider, halfway gate, results, replay + return" },

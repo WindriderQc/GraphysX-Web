@@ -32,6 +32,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { applyCommands, describeCommands } from "./scene-commands.mjs";
+import { materializeMeshCommands } from "./mesh-authoring.mjs";
 import { httpError, readJsonBody, sendJson } from "./http-util.mjs";
 import {
   LIVE_MISSION_EVENT_SCHEMA,
@@ -275,6 +276,7 @@ export function touchedEntityIds(commands, outputs) {
  * where it started while reporting success.
  */
 export function computeInverseCommands(preDefinition, commands, outputs) {
+  commands = materializeMeshCommands(commands, preDefinition.entities ?? []);
   const byId = new Map((preDefinition.entities ?? []).map((entity) => [entity.id, entity]));
   const order = new Map((preDefinition.entities ?? []).map((entity, index) => [entity.id, index]));
   const inverseGroups = [];
