@@ -210,6 +210,9 @@ export type DiskxVolume = {
   host?: string | null;
   /** How it was measured ("statfs"), when the agent says. */
   method?: string | null;
+  /** Filesystem type (`zfs`, `ext4`…) from the agent's mount identity, when read. */
+  filesystemType?: string | null;
+  /** The agent's caveat, shown beside the gauge (ZFS: the dataset, not the pool). */
   note?: string | null;
 };
 

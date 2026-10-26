@@ -5021,3 +5021,17 @@ copy of the API; the three demonstrations stay as the fallback when no provider 
 ## 2026-10-26 — Black and white flocks
 
 - Restore the owner's preferred contrast: dark starling silhouettes above the landscape and a white orbital swarm with white trails around CubX. Counts, motion and geometry stay the same.
+
+## 2026-10-26 (America/Toronto) — DiskX volumes: free tiles beside the disks they serve, visible provenance
+
+- PR #74 (another session) delivered the bulk of reading volumes from AgentX Data's
+  `storage/summary` and removing `DISKX_VOLUMES`; PR #62 was rebuilt on top of it as this
+  delta only. `sanitiseVolumes` (`src/diskx-source.ts`, now exported) takes the city's roots
+  and drops a volume that holds none of them, so a free tile always sits beside a disk it
+  serves; `filesystemType` is read from the agent's `filesystem.type`. The HUD gauge is named
+  `label · host` and carries a visible provenance line under the bar (« Mesuré (statfs) le … ·
+  note ZFS de l'agent »), since a tooltip never shows on a touch screen; the tooltip is reduced
+  to `id · filesystemType`.
+- Checks: `test/diskx-source.test.mjs` (new, 3), `diskx-observation`, `diskx-route`,
+  `diskx-embed`, `diskx-layout`; `tsc`, scoped eslint; `smoke-diskx` and `smoke-diskx-embed`
+  (two volumes in the mocked summary, one kept, gauge « pool/data · core », provenance line).

@@ -54,25 +54,35 @@ export type DiskxSource = {
   volumes: () => Promise<DiskxVolume[]>;
 };
 
-const sanitiseVolumes = (value: unknown): DiskxVolume[] => {
+type VolumeRecord = Partial<DiskxVolume> & { filesystem?: { type?: unknown } | null };
+
+/**
+ * Keep only volumes with an id, roots and a positive capacity, as Data publishes them. With
+ * `roots`, a volume that holds none of the city's roots is dropped too: a free tile always sits
+ * beside a disk it serves, never beside disks it has nothing to do with.
+ */
+export const sanitiseVolumes = (value: unknown, roots?: readonly string[]): DiskxVolume[] => {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
-    const record = entry as Partial<DiskxVolume> | null;
+    const record = entry as VolumeRecord | null;
     if (!record || typeof record.id !== "string" || !Array.isArray(record.roots)) return [];
     if (record.source !== 'measured' && record.source !== 'declared') return [];
     const capacityBytes = Number(record.capacityBytes);
     const freeBytes = Number(record.freeBytes);
     if (!Number.isFinite(capacityBytes) || !Number.isFinite(freeBytes) || capacityBytes <= 0) return [];
+    const volumeRoots = record.roots.filter((root): root is string => typeof root === "string");
+    if (roots && !volumeRoots.some((root) => roots.includes(root))) return [];
     return [{
       id: record.id,
       label: typeof record.label === "string" && record.label ? record.label : record.id,
-      roots: record.roots.filter((root): root is string => typeof root === "string"),
+      roots: volumeRoots,
       capacityBytes,
       freeBytes: Math.max(0, Math.min(freeBytes, capacityBytes)),
       source: record.source === "declared" ? "declared" : "measured",
       measuredAt: typeof record.measuredAt === "string" ? record.measuredAt : null,
       host: typeof record.host === "string" && record.host ? record.host : null,
       method: typeof record.method === "string" && record.method ? record.method : null,
+      filesystemType: typeof record.filesystem?.type === "string" && record.filesystem.type ? record.filesystem.type : null,
       note: typeof record.note === "string" ? record.note : null,
     }];
   });
@@ -105,7 +115,7 @@ export function createFixtureSource(fixture: DiskxFixture = DISKX_FIXTURE): Disk
       truncated: fixture.complete !== true,
     }),
     files: async (root, limit = 8) => (fixture.files[root] ?? []).slice(0, limit),
-    volumes: async () => sanitiseVolumes(fixture.volumes),
+    volumes: async () => sanitiseVolumes(fixture.volumes, fixture.roots),
   };
 }
 
@@ -158,7 +168,7 @@ export function createLiveSource(fetchImpl: typeof fetch, roots: string[], origi
       // rather than reusing the last summary: the app pairs volumes with the inventory it
       // just verified, not with an earlier read.
       const data = await unwrap<SummaryData>(await fetchImpl(endpoints.summary, { cache: "no-store" }));
-      return sanitiseVolumes(data.volumes);
+      return sanitiseVolumes(data.volumes, roots);
     },
   };
 }

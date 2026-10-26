@@ -650,9 +650,13 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       const gauge = document.createElement("div");
       gauge.className = "gx-diskx-gauge";
       gauge.style.setProperty("--used", `${Math.round(occupancy.usedShare * 100)}%`);
-      gauge.innerHTML = `<div class="head"><span class="name"></span><span class="free"><b>${formatBytes(occupancy.free)}</b> libres</span></div><div class="bar"><i></i></div><div class="foot"><span>${formatBytes(occupancy.used)} utilisés sur ${formatBytes(occupancy.capacity)}</span><span>${Math.round(occupancy.usedShare * 100)} %</span></div>`;
-      gauge.querySelector(".name")!.textContent = volume.label;
-      gauge.title = `${volume.source === "measured" ? "Mesuré" : "Déclaré"}${volume.method ? ` (${volume.method})` : ""}${volume.measuredAt ? ` le ${new Date(volume.measuredAt).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" })}` : ""}${volume.host ? ` sur ${volume.host}` : ""}${volume.note ? ` · ${volume.note}` : ""}`;
+      gauge.innerHTML = `<div class="head"><span class="name"></span><span class="free"><b>${formatBytes(occupancy.free)}</b> libres</span></div><div class="bar"><i></i></div><div class="foot"><span>${formatBytes(occupancy.used)} utilisés sur ${formatBytes(occupancy.capacity)}</span><span>${Math.round(occupancy.usedShare * 100)} %</span></div><p class="provenance"></p>`;
+      gauge.querySelector(".name")!.textContent = volume.host ? `${volume.label} · ${volume.host}` : volume.label;
+      // Method, date and the agent's caveat stay visible under the bar: a tooltip never shows on a touch screen.
+      const measured = volume.measuredAt ? new Date(volume.measuredAt).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" }) : null;
+      const how = volume.source === "measured" ? `Mesuré${volume.method ? ` (${volume.method})` : ""}${measured ? ` le ${measured}` : ""}` : "Déclaré, non mesuré";
+      gauge.querySelector(".provenance")!.textContent = volume.note ? `${how} · ${volume.note}` : how;
+      gauge.title = `${volume.id}${volume.filesystemType ? ` · ${volume.filesystemType}` : ""}`;
       return gauge;
     }));
     if (!shownVolumes.length) {
