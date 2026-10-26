@@ -5,7 +5,7 @@ import type {
   GraphysXAgentWorldApi,
 } from "./agent-world-runtime";
 import { createProposal, includedCommands, isProposalEmpty, isProposalStale, toggleCommandInclusion } from "./coauthor-proposal";
-import type { CoauthorOutcome, CoauthorProposal } from "./coauthor-proposal";
+import type { CoauthorActor, CoauthorOutcome, CoauthorProposal } from "./coauthor-proposal";
 
 /** The three physical consoles, each with a locally composed demonstration. */
 export type NestorConsoleTopic = "build" | "play" | "explore";
@@ -15,6 +15,18 @@ export type NestorConsoleTopic = "build" | "play" | "explore";
  * and the camera goes to whatever the accepted commands made.
  */
 export type NestorTopic = NestorConsoleTopic | "request";
+
+/** What a proposal composed elsewhere may say about itself beyond its intent and commands. */
+export type ExternalProposalOptions = {
+  /** Who proposes. Defaults to Nestor; a pushed proposal says which Nestor (`Nestor · Core`). */
+  actor?: CoauthorActor;
+  /**
+   * The revision the composer read. Defaults to the current one. A pushed proposal composed
+   * against an older revision is held at that revision, so the card shows it stale and Apply
+   * refuses it, rather than silently re-reading the world the composer never saw.
+   */
+  expectedRevision?: number;
+};
 
 /** One identity for every commit Nestor makes, whether proposed first or not. */
 const NESTOR_ACTOR = { id: "nestor", label: "Nestor", kind: "agent" } as const;
@@ -99,9 +111,10 @@ export interface NestorPresenter {
   /**
    * Compose from a command list somebody else wrote — a model provider. Downstream nothing can
    * tell the difference, which is the point: a provider gets no path the local composer lacks,
-   * and no path around the human gate.
+   * and no path around the human gate. A pushed proposal (docs/NESTOR_PROPOSALS.md, phase 2)
+   * names who proposes and the revision it was composed against; a reply to a request does not.
    */
-  proposeExternal: (topic: NestorTopic, intent: string, commands: AgentWorldCommand[]) => CoauthorProposal;
+  proposeExternal: (topic: NestorTopic, intent: string, commands: AgentWorldCommand[], options?: ExternalProposalOptions) => CoauthorProposal;
   /**
    * Include or exclude one command of the pending proposal, keeping the selection consistent:
    * dropping a command that creates an entity drops what needs it, and restoring a dependent
@@ -591,13 +604,13 @@ export function createNestorPresenter(options: {
    * not re-check them: a second validator would drift from the first, and the runtime refuses
    * anything malformed on commit regardless.
    */
-  const proposeExternal = (topic: NestorTopic, intent: string, commands: AgentWorldCommand[]): CoauthorProposal => {
+  const proposeExternal = (topic: NestorTopic, intent: string, commands: AgentWorldCommand[], options?: ExternalProposalOptions): CoauthorProposal => {
     reconcile();
     lastOutcome = null;
     proposal = createProposal({
-      actor: NESTOR_ACTOR,
+      actor: options?.actor ?? NESTOR_ACTOR,
       intent,
-      expectedRevision: api.state()?.revision ?? 0,
+      expectedRevision: options?.expectedRevision ?? api.state()?.revision ?? 0,
       commands,
     });
     // The topic is retained even though the commands did not come from it. `accept` refuses a
@@ -666,7 +679,9 @@ export function createNestorPresenter(options: {
     // they left in. Sending the original set would apply changes they explicitly removed.
     const commands = held ? includedCommands(held) : topic === "request" ? [] : presentationCommands(api, topic);
     const result = api.commit({
-      actor: NESTOR_ACTOR,
+      // The actor the card named. For a locally composed proposal that is Nestor; for one Core
+      // pushed it is the Nestor of that conversation, and history should say so.
+      actor: held?.actor ?? NESTOR_ACTOR,
       // The held proposal's own intent, not the topic's. For a locally composed proposal these
       // are the same string. For one a model composed they are not, and committing the topic's
       // intent would file the change in history under a description nobody wrote and the card

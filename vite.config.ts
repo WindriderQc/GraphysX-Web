@@ -81,6 +81,9 @@ function faceEmbed(): Plugin {
       // `<diskx-city>` for an AgentX Core page (vite.diskx.config.ts), shipped the same way.
       await build({ configFile: path.resolve("vite.diskx.config.ts"), logLevel: "warn" });
       await build({ configFile: path.resolve("vite.llmx.config.ts"), logLevel: "warn" });
+      // `<graphysx-center>` (vite.center-host.config.ts): the host end of the Center bridge, for
+      // the Core page that frames the Center (docs/NESTOR_PROPOSALS.md).
+      await build({ configFile: path.resolve("vite.center-host.config.ts"), logLevel: "warn" });
     },
   };
 }

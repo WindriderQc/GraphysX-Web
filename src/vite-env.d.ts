@@ -11,6 +11,17 @@ interface ImportMetaEnv {
    * store is proxied there; see docs/DEPLOYING_THE_STORE.md.
    */
   readonly VITE_GRAPHYSX_STORE_URL?: string;
+  /**
+   * A model provider for Nestor's requests, baked in at build time. Unset (the default) means the
+   * page makes no request and composes the three demonstrations locally; see docs/NESTOR_PROPOSALS.md.
+   */
+  readonly VITE_GRAPHYSX_PROPOSAL_URL?: string;
+  /**
+   * Origins allowed to frame the Center as its host (an AgentX Core page), separated by commas
+   * or whitespace. Same-origin and loopback hosts are always allowed; nothing else is, so an
+   * unset variable means the public Center answers no framing page.
+   */
+  readonly VITE_GRAPHYSX_HOST_ORIGINS?: string;
 }
 
 interface ImportMeta {
