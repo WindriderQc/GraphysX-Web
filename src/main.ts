@@ -49,6 +49,7 @@ import {
   summarizeSceneForProvider,
 } from "./coauthor-provider";
 import { createHostBridge, parseHostOriginAllowList, type HostBridge } from "./coauthor-host-bridge";
+import type { CoauthorOutcome } from "./coauthor-proposal";
 import { randomPlayerName } from "./player-name";
 import {
   ARCHIVE_BALLZ_LEVELS,
@@ -351,17 +352,41 @@ if (mode === "previews" && import.meta.env.DEV) {
         if (proposal) welcome?.showProposal(proposal, false);
       })();
     };
+    /**
+     * A decision on a proposal Core pushed goes back up to the host under the push id the
+     * proposal carried, once: Core learns "accepted at revision N" or "discarded" instead of
+     * only "shown", and Nestor can say so. A locally composed proposal, or a typed request's
+     * reply, carries no push id and is nobody's business upstream. `lastOutcome` outlives the
+     * decision (it is what the panel shows), so the same outcome read again is not reported twice.
+     */
+    let reportedPushId: string | null = null;
+    const reportPushOutcome = (outcome: CoauthorOutcome | null): void => {
+      const pushId = outcome?.proposal.pushId;
+      if (!outcome || !pushId || !hostBridge || pushId === reportedPushId) return;
+      reportedPushId = pushId;
+      const currentRevision = host.api.state()?.revision ?? 0;
+      hostBridge.reportOutcome({
+        pushId,
+        status: outcome.status,
+        proposalId: outcome.proposal.id,
+        revision: outcome.status === "accepted" ? outcome.commit?.revision ?? currentRevision : currentRevision,
+        ...(outcome.status === "accepted" && outcome.commit ? { commitId: outcome.commit.id } : {}),
+        ...(outcome.status === "rejected" ? { reason: outcome.error } : {}),
+      });
+    };
     const acceptNestorProposal = (): void => {
       // Re-checked at the moment of the decision, not when the card was drawn: a live session
       // may have attached while the person was reading, and that path owns scene operations.
       if (nestorBlockedByLiveSession() || !isNestorCenterReady(host.api)) {
         nestor?.discard();
+        reportPushOutcome(nestor?.state().lastOutcome ?? null);
         welcome?.showProposal(null);
         syncFrontDoor();
         return;
       }
       const next = nestor?.accept();
       const outcome = nestor?.state().lastOutcome ?? null;
+      reportPushOutcome(outcome);
       welcome?.showProposal(null);
       welcome?.showOutcome(outcome);
       if (next && outcome?.status === "accepted") welcome?.present(next);
@@ -403,8 +428,10 @@ if (mode === "previews" && import.meta.env.DEV) {
     };
     const discardNestorProposal = (): void => {
       nestor?.discard();
+      const outcome = nestor?.state().lastOutcome ?? null;
+      reportPushOutcome(outcome);
       welcome?.showProposal(null);
-      welcome?.showOutcome(nestor?.state().lastOutcome ?? null);
+      welcome?.showOutcome(outcome);
     };
     const desiredWelcomeVariant = (): WelcomeVariant => {
       if (nestorBlockedByLiveSession()) return "live-observer";
@@ -1083,6 +1110,8 @@ if (mode === "previews" && import.meta.env.DEV) {
           const proposal = nestor.proposeExternal("request", pushed.intent, pushed.commands, {
             actor: pushed.actor,
             expectedRevision: pushed.expectedRevision,
+            // Kept with the card so the decision on it can be reported under Core's id.
+            pushId: pushed.id,
           });
           const stale = proposal.expectedRevision !== (host.api.state()?.revision ?? 0);
           welcome.showProposal(proposal, stale);

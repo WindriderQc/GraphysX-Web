@@ -43,6 +43,12 @@ export type CoauthorProposal = {
    * whole thing the agent asked for, and narrowing it is a deliberate act.
    */
   excluded: number[];
+  /**
+   * Core's id for the push this proposal arrived by (docs/NESTOR_PROPOSALS.md, phase 2), so
+   * the decision on it can be reported back under that id. Absent for a proposal composed
+   * here or in answer to a typed request: nobody upstream is waiting to hear about those.
+   */
+  pushId?: string;
 };
 
 export type CoauthorOutcome =
@@ -130,6 +136,7 @@ export function createProposal(input: {
   intent: string;
   expectedRevision: number;
   commands: AgentWorldCommand[];
+  pushId?: string;
 }): CoauthorProposal {
   const touches: CoauthorTouch[] = [];
   const seen = new Set<string>();
@@ -149,6 +156,7 @@ export function createProposal(input: {
     touches,
     lines: input.commands.map(describeCommand),
     excluded: [],
+    ...(input.pushId !== undefined ? { pushId: input.pushId } : {}),
   };
 }
 

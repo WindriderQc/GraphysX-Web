@@ -26,6 +26,8 @@ export type ExternalProposalOptions = {
    * refuses it, rather than silently re-reading the world the composer never saw.
    */
   expectedRevision?: number;
+  /** Core's id for the push that carried this proposal; the decision is reported under it. */
+  pushId?: string;
 };
 
 /** One identity for every commit Nestor makes, whether proposed first or not. */
@@ -322,6 +324,7 @@ export function createNestorPresenter(options: {
       intent,
       expectedRevision: options?.expectedRevision ?? api.state()?.revision ?? 0,
       commands,
+      ...(options?.pushId !== undefined ? { pushId: options.pushId } : {}),
     });
     // The topic is retained even though the commands did not come from it. `accept` refuses a
     // proposal with no topic, and the narration and camera cue after a successful commit are
