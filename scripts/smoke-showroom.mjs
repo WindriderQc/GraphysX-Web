@@ -336,14 +336,14 @@ try {
   // layer captures the pointer on press, and there is no pointer to capture.
   //
   // The retired gate frames are now small spherical waypoints. Click their visible core.
-  const portalId = await page.evaluate(() => window.__GRAPHYSX__.query({ tag: "portal" })[0]?.id ?? null);
+  const portalId = "showroom-portal-overlook";
   const portalAt = portalId ? await screenOf(`${portalId}:core`) : null;
   if (portalAt) await page.mouse.click(portalAt.x, portalAt.y);
   await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing, null, { timeout: SMOKE_TIMEOUT }).catch(() => {});
   out.portal = await page.evaluate((before) => {
     const api = window.__GRAPHYSX__;
     const portals = api.query({ tag: "portal" });
-    const portal = portals[0] ?? null;
+    const portal = portals.find(entry => entry.id === "showroom-portal-overlook") ?? null;
     // The whole set, not just the one that was clicked: a doorway whose destination is missing
     // is a dead click, and that is the failure the interaction layer exists to remove.
     const destinations = portals.map((entry) => entry.tags.find((tag) => tag.startsWith("portal-to:"))?.slice(10) ?? null);
@@ -928,7 +928,7 @@ const tourGuidesWithoutAuthoring =
   tour.line > 20 &&
   tour.dots >= 4 &&
   tour.backDisabled === true &&
-  tour.selected === "showroom-nestor" &&
+  tour.selected === "showroom-cubx" &&
   tour.revisionUnchanged === true &&
   tour.cameraMoved > 0.5 &&
   tour.movedOn === true &&
