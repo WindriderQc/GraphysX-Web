@@ -36,6 +36,7 @@ export interface ShowroomWelcomeHandle {
    * provider only once it has said hello, which may be after this card mounted.
    */
   setRequestEnabled: (enabled: boolean) => void;
+  setRequestFocus: (target: { id: string; label: string } | null) => void;
   /** Render the tour's current stop, or clear it when the tour is not running. */
   showTour: (state: NestorTourState) => void;
   reset: () => void;
@@ -60,7 +61,7 @@ export function mountWelcome(
       onDiscard?: () => void;
       onToggleCommand?: (index: number) => void;
       /** A request in the person's own words. Absent when no provider is configured: the field then says so and sends nothing. */
-      onRequest?: (request: string) => void;
+      onRequest?: (request: string, sharedMeshId?: string) => void;
       /** Start with the field disabled although `onRequest` exists: a host page has not said hello yet. */
       requestEnabled?: boolean;
     };
@@ -103,6 +104,9 @@ export function mountWelcome(
      * about why; it never sends anything.
      */
     .gx-welcome .gx-nestor-ask{display:flex;gap:8px;width:100%;box-sizing:border-box;pointer-events:auto}
+    .gx-welcome .gx-request-focus{display:flex;align-items:center;gap:8px;color:var(--gx-ink-soft);font-size:12px;line-height:1.3;pointer-events:auto}
+    .gx-welcome .gx-request-focus[hidden]{display:none}
+    .gx-welcome .gx-request-focus input{flex:none;width:18px;height:18px;accent-color:#77e9ff}
     .gx-welcome .gx-nestor-ask input{flex:1;min-width:0;box-sizing:border-box;min-height:32px;padding:6px 13px;border-radius:999px;border:1px solid rgba(116,223,241,.28);background:rgba(8,32,44,.72);color:var(--gx-ink);font:500 12.5px var(--gx-font)}
     .gx-welcome .gx-nestor-ask input::placeholder{color:rgba(188,238,247,.6)}
     .gx-welcome .gx-nestor-ask input:focus-visible{outline:2px solid #fff;outline-offset:2px;border-color:#77e9ff}
@@ -216,7 +220,7 @@ export function mountWelcome(
      * visitor is never waiting on chrome.
      */
     @keyframes gx-welcome-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-    .gx-welcome-card > *{animation:gx-welcome-rise .72s cubic-bezier(.22,.68,.32,1) both}
+    .gx-welcome-card > *{flex-shrink:0;animation:gx-welcome-rise .72s cubic-bezier(.22,.68,.32,1) both}
     .gx-welcome-card > .gx-eyebrow{animation-delay:.18s}
     .gx-welcome-card > h1{animation-delay:.32s}
     .gx-welcome-card > p{animation-delay:.48s}
@@ -323,6 +327,7 @@ export function mountWelcome(
         <button type="button" data-nestor-topic="play" aria-pressed="false">Wake the physics</button>
         <button type="button" data-nestor-topic="explore" aria-pressed="false">Reveal living systems</button>
       </div>
+      <label class="gx-request-focus" data-request-focus hidden><input type="checkbox" data-request-focus-check><span data-request-focus-label></span></label>
       <form class="gx-nestor-ask" data-nestor-ask autocomplete="off">
         <input type="text" name="request" data-nestor-request maxlength="2000" aria-label="Ask Nestor for a change in your own words" placeholder="Or ask in your own words: add a lake with a flock of birds at sunset">
         <button type="submit" data-nestor-request-send>Ask</button>
@@ -407,6 +412,17 @@ export function mountWelcome(
   let proposalOrigin: HTMLElement | null = null;
   const askInput = overlay.querySelector<HTMLInputElement>("[data-nestor-request]");
   const askSend = overlay.querySelector<HTMLButtonElement>("[data-nestor-request-send]");
+  const focusRow = overlay.querySelector<HTMLElement>("[data-request-focus]")!;
+  const focusCheck = overlay.querySelector<HTMLInputElement>("[data-request-focus-check]")!;
+  let focusId: string | null = null;
+  const setRequestFocus = (target: { id: string; label: string } | null): void => {
+    if (!requestEnabled) target = null;
+    if (focusId !== (target?.id ?? null)) {
+      focusId = target?.id ?? null; focusCheck.checked = false;
+    }
+    focusRow.hidden = !target;
+    overlay.querySelector<HTMLElement>("[data-request-focus-label]")!.textContent = target ? `Include geometry of ${target.label} in this request` : "";
+  };
   // Whether the field can send. False without a provider, and false while a host page has yet to
   // say hello; `setRequestEnabled` flips it once one does.
   let requestEnabled = false;
@@ -417,6 +433,7 @@ export function mountWelcome(
     if (!askInput || !askSend) return;
     askInput.disabled = !requestEnabled;
     askSend.disabled = !requestEnabled;
+    focusCheck.disabled = !requestEnabled;
     askInput.placeholder = requestEnabled ? askPlaceholder : NO_PROVIDER;
     if (requestEnabled) askInput.removeAttribute("title");
     else askInput.title = NO_PROVIDER;
@@ -739,7 +756,8 @@ export function mountWelcome(
     const request = askInput?.value.trim() ?? "";
     if (!onRequest || !askInput || askInput.disabled || request.length === 0) return;
     proposalOrigin = askInput;
-    onRequest(request);
+    onRequest(request, focusCheck.checked ? focusId ?? undefined : undefined);
+    focusCheck.checked = false;
   });
 
   overlay.querySelectorAll<HTMLButtonElement>("[data-nestor-topic]").forEach((button) => {
@@ -849,5 +867,5 @@ export function mountWelcome(
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);
-  return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showNotice, setRequestBusy, setRequestEnabled, showTour, reset, dispose };
+  return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showNotice, setRequestBusy, setRequestEnabled, setRequestFocus, showTour, reset, dispose };
 }

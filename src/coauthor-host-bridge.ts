@@ -32,6 +32,7 @@ import {
 import type { CoauthorActor } from "./coauthor-proposal";
 import {
   readProviderReply,
+  PROPOSAL_TIMEOUT_MS,
   type ProposalProvider,
   type ProposalRequest,
   type ProviderResult,
@@ -154,7 +155,7 @@ export type HostBridge = {
 };
 
 export function createHostBridge(options: HostBridgeOptions): HostBridge {
-  const { selfOrigin, allowedOrigins, allowLoopback, post, hostSource, readState, onPush, onHost, timeoutMs = 90_000, label = "AgentX Core" } = options;
+  const { selfOrigin, allowedOrigins, allowLoopback, post, hostSource, readState, onPush, onHost, timeoutMs = PROPOSAL_TIMEOUT_MS, label = "AgentX Core" } = options;
   const allowedHost = (origin: string): boolean => (allowLoopback === undefined
     ? isAllowedHostOrigin(origin, selfOrigin, allowedOrigins)
     : isAllowedHostOrigin(origin, selfOrigin, allowedOrigins, allowLoopback));

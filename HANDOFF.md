@@ -113,11 +113,13 @@ section below this one is the September release they build on):
    retain real-pointer and movement assertions. The welcome revision also follows the owner's
    open-landscape/CubX direction; current delivery evidence belongs to PR 69.
 
-**Generative geometry follow-up (2026-10-26).** The owner wants agents to author arbitrary
-triangles and textures. The model loader already handles indexed geometry, normals, UVs and
-maps, but scene proposals expose primitive dimensions and model references. No inline mesh
-authoring API has shipped. [GENERATIVE_MESH.md](docs/GENERATIVE_MESH.md) records the gap,
-recommended contract and required acceptance without inventing a second engine or vocabulary.
+**Generative geometry (2026-10-26).** Inline indexed meshes, normals, UVs and RGBA textures
+are available through the ordinary scene commands. Optional `meshBuild` recipes construct
+extrusions, revolutions and sweeps; `meshEdits` and `pixelEdits` refine fixed ranges without
+replacing untouched data. One unchecked option shares at most 16 KiB of one mesh for a single
+typed request. Revision-bound review, history, persistence and live authority remain canonical.
+[GENERATIVE_MESH.md](docs/GENERATIVE_MESH.md) records the contract and separate browser/model
+acceptance; native receipts remain outside Git. LEGO shader stays paused; family voice stays discussion.
 
 **Ecosystem seams.** AgentX owns canonical conversations, memory, domain data, permissions,
 tools and execution. Nestor explains and requests a presentation. GraphysX owns the visual

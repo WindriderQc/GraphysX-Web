@@ -30,7 +30,11 @@ gx.update(crate.id, { tags: [...crate.tags, "reviewed-by-agent"] });
 
 Original triangle geometry is a portable `type: "mesh"` entity: `mesh.positions` (flat xyz),
 `mesh.indices` (zero-based CCW triples), optional `normals`, `uvs`, `groups` and PBR `materials`.
-`update` with `patch.mesh` replaces the complete buffers as one undoable edit. Custom textures
+`spawn.meshBuild` (or `update.patch.meshBuild`) generates these same buffers by extrusion,
+revolution or sweep. `update.patch.meshEdits` changes fixed tuple ranges; a positions `delta`
+moves vertices relative to their current coordinates. `pixelEdits` changes texture rectangles,
+optionally in one face-material slot. `update` with `patch.mesh` still replaces the complete
+buffers as one undoable edit. Custom textures
 use the existing material path with `{ id: "inline", pixels: { width, height, rgba } }`; RGBA
 bytes are bottom row first, with the same repeat/offset/rotation controls as curated textures.
 Textured meshes require UVs. Physics uses explicit convex-hull or static trimesh, never auto.

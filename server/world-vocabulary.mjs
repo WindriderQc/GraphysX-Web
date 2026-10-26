@@ -22,6 +22,8 @@
 import { HOST_ONLY_ENTITY_ID_PREFIXES } from "./host-entity-id-policy.mjs";
 import { ENUMS, FIELDS, ID_PATTERN, LIMITS, SCENE_COMMAND_TABLES } from "./scene-commands.mjs";
 import { WORLD_SCHEMA } from "./scene-document.mjs";
+import { CONSTRUCTION_FIELDS, CONSTRUCTION_LIMITS } from "./mesh-construction.mjs";
+import { EDIT_FIELDS, RANGE_FIELDS, PIXEL_EDIT_FIELDS, EDIT_LIMITS } from "./mesh-authoring.mjs";
 
 export const WORLD_VOCABULARY_SCHEMA = "graphysx.world-vocabulary/v1";
 
@@ -30,7 +32,7 @@ export const PROPOSAL_LIMITS = Object.freeze({ commands: 40, intentChars: 200, r
 
 /** Every command the browser runtime accepts in a transaction or a commit. */
 export const OPERATIONS = Object.freeze({
-  "spawn": { shape: { op: "spawn", entity: "<entity>" }, description: "Create one entity. `entity.id` must be new; `entity.type` picks which config block applies." },
+  "spawn": { shape: { op: "spawn", entity: "<entity>" }, description: "Create one entity. entity.id must be new. For type mesh choose entity.mesh buffers or optional top-level spawn.meshBuild from fields.meshBuild; never both." },
   "spawn-prefab": { shape: { op: "spawn-prefab", prefabId: "<prefabId>", options: { idPrefix: "<id>", position: "[x,y,z]", rotationDegrees: "[x,y,z]", scale: "[x,y,z]", palette: { primary: "#rrggbb", secondary: "#rrggbb", accent: "#rrggbb", emissive: "#rrggbb" }, tags: ["<tag>"] } }, description: "Create a curated multi-entity assembly. The root gets `options.idPrefix` as its id and the parts `${idPrefix}:part`. Every option is optional." },
   "update": { shape: { op: "update", id: "<existing id>", patch: "<patch>" }, description: "Change an existing entity. Nested config blocks (emitter, flock, water…) merge over the current values; `null` on a nullable field clears it." },
   "remove": { shape: { op: "remove", id: "<existing id>" }, description: "Delete an existing entity and everything parented under it." },
@@ -50,6 +52,17 @@ export const OPERATIONS = Object.freeze({
  * vocabulary (its name comes from the validator); it just carries no explanation.
  */
 const describe = {
+  meshBuild: {
+    kind: "extrude, revolve or sweep. Optional spawn.meshBuild instead of entity.mesh, or update.patch.meshBuild. Expands to portable buffers with UVs. Closed profiles omit the repeated endpoint. No holes/scripts.",
+    profile: "extrude: simple polygon [[x,z],...] on XZ. revolve: open [[radius,y],...] around +Y, nonnegative radii. sweep: simple polygon [[u,v],...] transported along the path.",
+    depth: "extrude only: positive extrusion height along +Y, at most10000m; capped ends.",
+    segments: "revolve only: integer3..64, default24.",
+    angleDegrees: "revolve only: 0<angle<=360, default360. Partial turns remain open at their cut edges.",
+    path: "sweep only: [[x,y,z],...], 2..64 distinct adjacent points, capped ends, transported frames.",
+  },
+  meshEdits: Object.fromEntries(EDIT_FIELDS.map(name=>[name, `[{start,values}] replacing fixed-length disjoint tuple ranges of ${name}. start counts ${name==='indices'?'triangles':name==='uvs'?'UV pairs':'vertices'}, never scalar offsets. At most64 ranges. ${name==='normals'?'Also accepts recompute.':''} Position/index edits recompute normals unless explicitly supplied. No buffer extension.`])),
+  meshRange: { delta: "Positions only: flat XYZ offsets added to existing vertices. Mutually exclusive with values; zero components preserve the exact other coordinates.", start: "Nonnegative vertex/triangle/UV-pair index.", values: "Flat whole tuples. Existing data outside these ranges is preserved." },
+  pixelEdits: { materialIndex: "Optional existing mesh.materials slot owning its inline texture; omit for entity material.texture. No simultaneous material-layout replacement.", x: "Nonnegative pixel column of a rectangle in the existing entity-owned inline texture.", y: "Nonnegative row, bottom row first.", width: "Positive rectangle width, fitting the original texture.", height: "Positive rectangle height, fitting the original texture.", rgba: "Unsigned RGBA bytes, width*height*4. Disjoint rectangles; preserves texture size and UV transforms. No simultaneous replacement texture." },
   entity: {
     appearance: "Agent entities only: avatar look, or null for the default avatar.",
     id: "Stable id, unique in the scene. Pattern in `idPattern`. Choose short kebab-case names.",
@@ -244,6 +257,10 @@ export function buildWorldVocabulary({ descriptors = {} } = {}) {
       geometry: fieldList("geometry", FIELDS.geometry),
       mesh: fieldList("mesh", FIELDS.mesh),
       meshGroup: FIELDS.meshGroup,
+      meshBuild: fieldList("meshBuild", [...new Set(Object.values(CONSTRUCTION_FIELDS).flat())]),
+      meshEdits: fieldList("meshEdits", EDIT_FIELDS),
+      meshRange: fieldList("meshRange", RANGE_FIELDS),
+      pixelEdits: fieldList("pixelEdits", PIXEL_EDIT_FIELDS),
       pixels: fieldList("pixels", FIELDS.pixels),
       path: fieldList("path", FIELDS.path, { extraBounds: { points: LIMITS.path.points } }),
       asset: fieldList("asset", FIELDS.asset),
@@ -275,6 +292,7 @@ export function buildWorldVocabulary({ descriptors = {} } = {}) {
     behaviors: Object.fromEntries(Object.entries(FIELDS.behaviors).map(([type, fields]) => [type, { fields: [...fields], description: describe.behaviors[type] }])),
     interactions: Object.fromEntries(Object.entries(FIELDS.interactions).map(([type, fields]) => [type, { fields: [...fields], description: describe.interactions[type] }])),
     enums: {
+      meshBuildKinds: Object.entries(CONSTRUCTION_FIELDS).map(([id, fields]) => ({ id, label: id, description: `Allowed fields: ${fields.join(", ")}.` })),
       materialSides: [...ENUMS.materialSides],
       physicsModes: [...ENUMS.physicsModes],
       physicsMaterials: [...ENUMS.physicsMaterials],
@@ -308,11 +326,14 @@ export function buildWorldVocabulary({ descriptors = {} } = {}) {
       document: { ...LIMITS.document },
       mesh: { ...LIMITS.mesh },
       pixels: { ...LIMITS.pixels },
+      meshConstruction: { ...CONSTRUCTION_LIMITS },
+      meshEditing: { ...EDIT_LIMITS },
     },
     rules: [
       "Reply with JSON only: { \"intent\": string, \"commands\": [ ... ] }. No prose, no markdown fences.",
       `At most ${PROPOSAL_LIMITS.commands} commands; the intent is one sentence under ${PROPOSAL_LIMITS.intentChars} characters saying what the change does.`,
       "Use only the operations listed in `operations`, the entity types in `entityTypes` and the fields listed for each block.",
+      "For a mesh spawn, entity.mesh supplies raw buffers OR top-level spawn.meshBuild generates them. Omit entity.mesh when using meshBuild; the canonical saved entity receives the generated mesh. Existing meshes accept one of patch.mesh, patch.meshBuild or patch.meshEdits.",
       "`update`, `remove`, `attach-behavior`, `detach-behavior`, `interact`, `steer` and `select` may only name ids present in the scene summary you were given.",
       "`spawn` ids must be new and must match `idPattern`; never use an id starting with one of `reservedIdPrefixes`.",
       "Keep numbers inside the published ranges. The showroom is about 36 metres across; place new things within roughly 20 metres of the origin and above y = 0.",
@@ -330,6 +351,10 @@ export function buildWorldVocabulary({ descriptors = {} } = {}) {
  * `applyCommands` and every example through the provider's structural validation.
  */
 export const EXAMPLES = Object.freeze({
+  "constructed-mesh-and-edits": [
+    { op: "spawn", entity: { id: "carved-panel", type: "mesh", material: { texture: { id: "inline", pixels: { width: 1, height: 1, rgba: [20,180,220,255] } } } }, meshBuild: { kind: "extrude", profile: [[-1,-1],[1,-1],[1,1],[-1,1]], depth: 0.4 } },
+    { op: "update", id: "carved-panel", patch: { meshEdits: { positions: [{ start: 0, values: [-1,-0.2,-1] }] }, pixelEdits: [{ x: 0, y: 0, width: 1, height: 1, rgba: [220,110,40,255] }] } },
+  ],
   "authored-mesh-and-texture": [
     { op: "spawn", entity: { id: "folded-panel", type: "mesh", label: "Folded panel", transform: { position: [0, 2, 4] }, mesh: {
       positions: [-1, 0, -1, 1, 0, -1, 1, 1, 1, -1, 0.3, 1], indices: [0, 2, 1, 0, 3, 2], uvs: [0, 0, 1, 0, 1, 1, 0, 1],
