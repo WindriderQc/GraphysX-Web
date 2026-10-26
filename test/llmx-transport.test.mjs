@@ -2,8 +2,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { importBrowserModule } from './support/import-browser-module.mjs';
 
-const { llmxUrl, createLlmXFetch } = await importBrowserModule(new URL('../src/llmx-transport.ts', import.meta.url));
+const { llmxUrl, createLlmXFetch, llmxCoreEntry } = await importBrowserModule(new URL('../src/llmx-transport.ts', import.meta.url));
 const origin = 'https://agentx.specialblend.icu';
+
+test('Core hosting uses native relative routes and keeps personal and Family distinct', () => {
+  assert.equal(llmxUrl('/llmx-api/sessions', 'POST', '', true), '/api/consumers/nestor/v1/llmx/sessions');
+  assert.equal(llmxUrl('/llmx-api/family/config', 'GET', '', true), '/api/consumers/nestor/v1/llmx/family/config');
+  assert.equal(llmxUrl('/llmx-api/transcribe', 'POST', '', true), '/api/voix/transcribe');
+  assert.throws(() => llmxUrl('/api/private', 'GET', '', true), /inconnue/);
+  assert.equal(llmxCoreEntry('personal', origin), origin + '/llmx');
+  assert.equal(llmxCoreEntry('family', origin), origin + '/llmx?profile=family');
+  assert.equal(llmxCoreEntry('family', ''), null);
+});
 
 test('public LLMx reaches the same private Household and VoiX routes as the local relay', () => {
   const routes = [
