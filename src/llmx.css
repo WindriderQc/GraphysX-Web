@@ -77,9 +77,9 @@
   .gx-llmx-footer>.gx-llmx-notice{display:none}
   .gx-llmx .gx-llmx-edit-actions,.gx-llmx.math-open .gx-llmx-edit-actions{position:static;display:flex;flex-direction:row;width:auto;margin-top:5px}
   .gx-llmx .gx-llmx-edit-actions button{min-height:36px;padding:7px 10px}
-  .gx-llmx .gx-llmx-face-inset{top:180px;right:12px;width:78px}
-  .gx-llmx-face-inset [data-face-inset-view]{height:89px}
-  .gx-llmx-face-inset-caption{font-size:9px;padding:5px}
+  .gx-llmx .gx-llmx-face-inset{top:180px;right:12px;width:90px}
+  .gx-llmx-face-inset [data-face-inset-view]{height:103px}
+  .gx-llmx-face-inset-caption{font-size:10px;padding:5px}
   .gx-llmx-composer{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px;padding:6px}
   .gx-llmx-composer input{padding:8px;min-width:0}
   .gx-llmx-composer button{padding:8px;min-height:44px}
