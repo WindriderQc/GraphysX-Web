@@ -11,7 +11,8 @@
 //
 //   host → center   `hello` (which Core this is), a reply to a request, a pushed proposal
 //   center → host   `ready` / `state` (revision and a bounded scene summary), a request in the
-//                   person's words, a receipt for each pushed proposal
+//                   person's words, a receipt for each pushed proposal, and the outcome once a
+//                   person has decided on one (accepted, discarded, stale, rejected)
 //
 // Commands cross in one direction only — into the Center, as a proposal. Nothing here can
 // commit: a pushed proposal goes through `proposeExternal` and the same card, narrowing,
@@ -35,6 +36,12 @@ export type HostToCenterMessage =
 
 export type PushReceiptStatus = "shown" | "refused";
 
+/**
+ * What became of a pushed proposal once a person decided. `accepted` is the only status that
+ * moved the scene, and it carries the commit; the other three left the document as it was.
+ */
+export type PushOutcomeStatus = "accepted" | "discarded" | "stale" | "rejected";
+
 export type CenterToHostMessage =
   | { schema: typeof CENTER_BRIDGE_SCHEMA; type: "ready"; state: CenterState | null }
   | { schema: typeof CENTER_BRIDGE_SCHEMA; type: "state"; state: CenterState | null }
@@ -46,6 +53,21 @@ export type CenterToHostMessage =
     status: PushReceiptStatus;
     proposalId?: string;
     stale?: boolean;
+    reason?: string;
+  }
+  /**
+   * A person decided on a pushed proposal. `id` is Core's push id, `revision` the scene's
+   * revision after the decision (the commit's for `accepted`), `commitId` only for `accepted`,
+   * `reason` only for `rejected`. Sent once per push, for pushed proposals only.
+   */
+  | {
+    schema: typeof CENTER_BRIDGE_SCHEMA;
+    type: "push-outcome";
+    id: string;
+    status: PushOutcomeStatus;
+    proposalId: string;
+    revision: number;
+    commitId?: string;
     reason?: string;
   };
 

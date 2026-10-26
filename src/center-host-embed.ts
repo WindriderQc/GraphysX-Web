@@ -10,7 +10,9 @@
 //   - `${api-base}/center/events` is Core's stream for this page. Core says hello with a page
 //     id, the element reports the Center's revision and bounded scene summary to
 //     `${api-base}/center/state` whenever they change, and when Core pushes a proposal the
-//     element hands it down and reports the Center's receipt to `${api-base}/center/receipts`.
+//     element hands it down and reports the Center's receipt to `${api-base}/center/receipts` —
+//     first whether the card was shown, then what the person decided (accepted at which
+//     revision, discarded, stale, rejected), on the same route under the same push id.
 //
 // Nothing here applies a change or holds scene state. The element relays; the Center decides
 // what becomes a card, and a person decides what becomes a commit.
@@ -21,6 +23,7 @@ import {
   type CenterState,
   type CenterToHostMessage,
   type HostToCenterMessage,
+  type PushOutcomeStatus,
 } from "./center-bridge-protocol";
 
 const TAG = "graphysx-center";
@@ -59,7 +62,9 @@ export function readCenterHostAttributes(center: string | null, apiBase: string 
   return { ok: true, value: { center: url.href, origin: url.origin, apiBase: base.replace(/\/+$/, "") || "/" } };
 }
 
-type ReceiptBody = { pageId: string; id: string; status: "shown" | "refused"; proposalId?: string; stale?: boolean; reason?: string };
+type ReceiptBody =
+  | { pageId: string; id: string; status: "shown" | "refused"; proposalId?: string; stale?: boolean; reason?: string }
+  | { pageId: string; id: string; status: PushOutcomeStatus; proposalId: string; revision: number; commitId?: string; reason?: string };
 
 const STYLE_ID = "graphysx-center-style";
 function ensureStyle(): void {
@@ -81,6 +86,7 @@ export class GraphysXCenterElement extends HTMLElement {
   #helloTimer: ReturnType<typeof setInterval> | null = null;
   #stateTimer: ReturnType<typeof setTimeout> | null = null;
   #pushes = 0;
+  #outcomes = 0;
   readonly #onMessage = (event: MessageEvent): void => { this.#receive(event); };
 
   connectedCallback(): void {
@@ -120,7 +126,7 @@ export class GraphysXCenterElement extends HTMLElement {
   }
 
   /** What the page can read about the bridge: no commands, no scene document. */
-  state(): { ready: boolean; centerOrigin: string | null; pageId: string | null; revision: number | null; entities: number | null; pushes: number } {
+  state(): { ready: boolean; centerOrigin: string | null; pageId: string | null; revision: number | null; entities: number | null; pushes: number; outcomes: number } {
     return {
       ready: this.#ready,
       centerOrigin: this.#attributes?.origin ?? null,
@@ -128,6 +134,7 @@ export class GraphysXCenterElement extends HTMLElement {
       revision: this.#state?.revision ?? null,
       entities: this.#state?.scene.entities.length ?? null,
       pushes: this.#pushes,
+      outcomes: this.#outcomes,
     };
   }
 
@@ -198,6 +205,22 @@ export class GraphysXCenterElement extends HTMLElement {
           status: message.status,
           ...(message.proposalId ? { proposalId: message.proposalId } : {}),
           ...(message.stale !== undefined ? { stale: message.stale } : {}),
+          ...(message.reason ? { reason: message.reason } : {}),
+        } satisfies ReceiptBody);
+        return;
+      case "push-outcome":
+        // What the person decided, relayed as it came; the status vocabulary is the protocol's
+        // and Core checks it again on arrival.
+        if (typeof message.id !== "string" || typeof message.proposalId !== "string" || !Number.isInteger(message.revision)) return;
+        this.#outcomes += 1;
+        this.#emit("graphysx-center-outcome", { id: message.id, status: message.status, proposalId: message.proposalId, revision: message.revision, commitId: message.commitId ?? null, reason: message.reason ?? null });
+        void this.#send("/center/receipts", {
+          pageId: this.#pageId ?? "",
+          id: message.id,
+          status: message.status,
+          proposalId: message.proposalId,
+          revision: message.revision,
+          ...(message.commitId ? { commitId: message.commitId } : {}),
           ...(message.reason ? { reason: message.reason } : {}),
         } satisfies ReceiptBody);
         return;

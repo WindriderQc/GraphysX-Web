@@ -10,7 +10,9 @@
 //     announced an intention on the world. It is validated here exactly like a provider reply,
 //     plus the two fields a push carries that a reply does not — who proposes, and the revision
 //     it was composed against — and then it is a card, inert until a person presses Apply. A
-//     receipt goes back up saying whether it was shown, so Core can tell Nestor the truth.
+//     receipt goes back up saying whether it was shown, and once the person decides, the
+//     outcome goes up too — accepted at which revision, or discarded, stale, rejected — so
+//     Core can tell Nestor the truth about what happened, not only that a card appeared.
 //
 // The bridge trusts one host: the first allow-listed origin that says hello. Everything from
 // any other origin, or from a window that is not the parent, is ignored without a reply — a
@@ -25,6 +27,7 @@ import {
   isBridgeMessage,
   type CenterState,
   type CenterToHostMessage,
+  type PushOutcomeStatus,
 } from "./center-bridge-protocol";
 import type { CoauthorActor } from "./coauthor-proposal";
 import {
@@ -36,7 +39,7 @@ import {
 } from "./coauthor-provider";
 
 export { CENTER_BRIDGE_SCHEMA, isAllowedHostOrigin, isLoopbackOrigin, parseHostOriginAllowList } from "./center-bridge-protocol";
-export type { CenterState } from "./center-bridge-protocol";
+export type { CenterState, PushOutcomeStatus } from "./center-bridge-protocol";
 
 /** A proposal that arrived from the host, checked. */
 export type PushedProposal = {
@@ -52,6 +55,22 @@ export type PushedProposal = {
 export type PushReceipt =
   | { status: "shown"; proposalId: string; stale: boolean }
   | { status: "refused"; reason: string };
+
+/**
+ * What a person did with a pushed proposal. `revision` is the scene's revision after the
+ * decision: the commit's for `accepted`, the unchanged one otherwise.
+ */
+export type PushOutcome = {
+  /** Core's id for the push, as the proposal carried it. */
+  pushId: string;
+  status: PushOutcomeStatus;
+  proposalId: string;
+  revision: number;
+  /** The commit `accepted` produced. */
+  commitId?: string;
+  /** Why the scene refused an `accepted` proposal (`rejected`). */
+  reason?: string;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -129,6 +148,8 @@ export type HostBridge = {
   receive: (event: { origin: string; source?: unknown; data: unknown }) => boolean;
   /** Tell the host the scene moved. No-op before a host is known. */
   announce: () => void;
+  /** Tell the host what a person decided about a pushed proposal. No-op before a host is known. */
+  reportOutcome: (outcome: PushOutcome) => void;
   hostOrigin: () => string | null;
   dispose: () => void;
 };
@@ -222,6 +243,16 @@ export function createHostBridge(options: HostBridgeOptions): HostBridge {
     provider,
     receive,
     announce: () => send({ schema: CENTER_BRIDGE_SCHEMA, type: "state", state: readState() }),
+    reportOutcome: (outcome) => send({
+      schema: CENTER_BRIDGE_SCHEMA,
+      type: "push-outcome",
+      id: outcome.pushId,
+      status: outcome.status,
+      proposalId: outcome.proposalId,
+      revision: outcome.revision,
+      ...(outcome.commitId !== undefined ? { commitId: outcome.commitId } : {}),
+      ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
+    }),
     hostOrigin: () => host,
     dispose: () => {
       disposed = true;

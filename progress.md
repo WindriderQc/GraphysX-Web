@@ -5093,3 +5093,9 @@ Final qualification uses the complete local gate because shared runtime/host wir
 plus the installed action client and a native Core-hosted model reception after publication.
 Detailed context is shared only for one opted-in typed request, never in background state or
 demonstration-button traffic. Native receipts and inspected images remain outside Git.
+
+## 2026-10-26 — DiskX gauge head: `label · host` wraps instead of hiding the host (America/Toronto)
+
+- After PR #62 named the gauge `label · host`, the real gateway (`Media/Media · UGFrank`, `4.5 To libres`) overflowed the HUD: the name was clipped to « UGFra… » by `text-overflow: ellipsis` and the free figure broke onto two lines (`output/diskx-volumes-pr74/diskx-live-pr62.png` in the main checkout). `src/diskx.css`: the name is `flex:1; min-width:0; overflow-wrap:anywhere` and wraps, `.free` is `flex:none; white-space:nowrap`, head and foot align on the baseline.
+- `scripts/smoke-diskx-janitor.mjs` now mocks the production label, host, filesystem and figures (7.38e12 / 4.92e12 bytes, « 4.5 To libres ») and asserts the name is not clipped and the free figure holds one line; it also checks the `id · filesystemType` tooltip. Measured A/B on this worktree's build: with the old CSS the new assertion fails (`{"nameClipped":true,"freeLines":2}`), with the fix `smoke:diskx-janitor`, `smoke:diskx` and `smoke:diskx-embed` pass; the live capture against the gateway shows « Media/Media · » / « UGFrank » on two lines and « 4.5 To libres » intact.
+- Not a full gate: CSS of one HUD block and one smoke script.
