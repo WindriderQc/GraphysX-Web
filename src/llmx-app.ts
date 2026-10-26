@@ -81,13 +81,14 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
   surface.setAttribute("aria-label", "LLMx");
   surface.innerHTML = `
     <header class="gx-llmx-header">
-      <div><span class="gx-llmx-eyebrow">LLMx</span><h1>Forge nocturne</h1></div>
-      <div class="gx-llmx-header-actions"><button type="button" data-action="profile"></button>
+      <div><span class="gx-llmx-eyebrow">LLMx</span><span class="gx-llmx-scope"></span><h1>Forge nocturne</h1></div>
+      <div class="gx-llmx-header-actions">
       <button type="button" data-action="exit">Quitter LLMx</button></div>
     </header>
     <footer class="gx-llmx-footer">
       <p class="gx-llmx-phase" role="status" aria-live="polite"></p>
       <nav aria-label="La Forge">
+        <button type="button" data-action="profile"></button>
         <button type="button" data-action="skip">Passer l’entrée</button>
         <button type="button" data-action="replay" hidden>Rejouer l’entrée</button>
         <button type="button" data-action="environments">Environnements</button>
@@ -95,6 +96,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
         <button type="button" data-action="math">Atelier maths</button>
       </nav>
       <p class="gx-llmx-notice" role="status" aria-live="polite"></p>
+      <div class="gx-llmx-edit-actions"><button data-action="undo" type="button">Annuler</button><button data-action="redo" type="button">Rétablir</button><button data-action="face" type="button">Voir le visage</button></div>
     </footer>
     <dialog aria-labelledby="llmx-environments-title" class="gx-llmx-environments">
       <h2 id="llmx-environments-title">Vos environnements</h2>
@@ -125,8 +127,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
         <button data-action="math-start" type="button">Recommencer</button></div>
       <p data-math-notice role="status" aria-live="polite"></p>
       <p class="gx-llmx-caption">De 0 à 20. Chaque cube vaut 1.</p>
-    </aside>
-    <div class="gx-llmx-edit-actions"><button data-action="undo" type="button">Annuler</button><button data-action="redo" type="button">Rétablir</button><button data-action="face" type="button">Voir le visage</button></div>`;
+    </aside>`;
   const element = <T extends HTMLElement>(selector: string): T => surface.querySelector<T>(selector)!;
   const button = (action: string) => element<HTMLButtonElement>(`[data-action="${action}"]`);
   const dialog = element<HTMLDialogElement>("dialog");
@@ -190,6 +191,7 @@ export function mountLlmXApp(root: HTMLElement, host: PlatformHost, onExit: () =
     }
     element(".gx-llmx-notice").textContent = notice;
     element('h1').textContent = worldName;
+    element('.gx-llmx-scope').textContent = profile === 'family' ? 'Famille' : 'Personnel';
     button('profile').textContent = profile === 'family' ? 'En famille · quitter' : 'Passer en famille';
     element(".gx-llmx-saved").textContent = profile === 'family' ? 'Vos mondes en famille. Les mondes personnels restent dans leur espace.' : 'Vos mondes personnels, dans ce navigateur.';
     button('save').textContent = saved && savedRevision === host.api.state()?.revision ? 'Sauvegardé' : 'Sauvegarder';

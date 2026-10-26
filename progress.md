@@ -2,6 +2,12 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-10-25 — Mobile LLMx controls and conversation
+
+- Keep the profile visible beside the room title, move its switch into a horizontally scrollable tool strip and place undo/redo with those tools instead of over the conversation. Text, Send and Talk share one compact row; long messages use the full transcript width. The portrait stays clear of the transcript and makes room for reading on short screens; the short-screen maths panel leaves its portrait column available.
+- Core-module proof uses a long Family conversation and a real native scene application with an applied receipt. It measures button hit targets, composer alignment, portrait/message separation, undo/redo placement and document overflow at320x568,390x844 and600x800. Captures inspected; unit/typecheck/lint/build, Rapier and the extended Core-module check all pass. Broader conversation/creation/persistence verification and public reception are recorded separately at closeout.
+- Owner asked to wait before priority3 (LEGO shader). No LEGO or shared-renderer corrective code was changed. Showroom remains diagnostic; Claude retains its active Core-hosted Center/push work.
+
 ## 2026-10-25 — LLMx cold bootstrap
 
 - Start the existing conversation handshake after the host's first render, including the face inset, rather than consuming its 15-second network deadline during cold shader work. Connection remains single-shot; no session or user turn is retried. Pending preparation and connection errors retain their status across world changes.
