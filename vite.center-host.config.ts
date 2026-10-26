@@ -14,6 +14,6 @@ export default defineConfig({
     emptyOutDir: false,
     copyPublicDir: false,
     lib: { entry: "src/center-host-embed.ts", formats: ["es"], fileName: () => "center-host.js" },
-    rollupOptions: { output: { inlineDynamicImports: true, minify: true } },
+    rollupOptions: { output: { codeSplitting: false, minify: true } },
   },
 });
