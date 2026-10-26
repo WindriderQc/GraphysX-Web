@@ -4949,3 +4949,11 @@ copy of the API; the three demonstrations stay as the fallback when no provider 
   ran the route's code locally against that instance's router. The scene store CLI prints
   "scene store failed to start: host is not defined" after it has started (line 832, a
   pre-existing log bug on `main`); the store serves regardless.
+
+## 2026-10-25 — La maison connectée : l'écosystème AgentX en 3D, visité par Nestor
+
+- `?app=ecosystem` : les trois infographies du 25 octobre 2026 d'agentx-home transcrites en carte pure (25 nœuds, 12 liens, 4 flux, 3 points ouverts), composées en document v2 et visitées par Nestor (13 étapes, vocabulaire `play=`, étape `node-<id>`, clic 3D sur une machine, Échap). Document de scène inchangé pendant la visite, vérifié par le smoke. Voir `docs/ECOSYSTEM_VIEW.md`.
+- Yanik a refusé des « cubes » : chaque machine est composée (tour HP avec voies d'inférence vivantes, NAS à tiroirs, Aurora avec deux RTX 3090 à ventilateurs, bureau et moniteur avec devX visible dans la vitre, Pi sur `electronic-board`, imprimante, caméra, écran 7 pouces, services avec icônes), plateaux bois, murs bas, plantes ADN, balises ambre pulsantes.
+- Modèles externes (Blender, CC0) : `scripts/vendor-ecosystem-models.mjs` convertit un GLB en `graphysx-mesh-json` sans dépendance (hiérarchie, UV, couleur, texture embarquée) et écrit `public/assets/ecosystem/models.json`, que la vue lit au montage. Prouvé en direct sur `Airplane.glb` (texturé, dans le coin réserve), puis retiré ; le manifeste livré est vide.
+- Validation locale : `node --test test/ecosystem.test.mjs` (4), `npm test` 665 pass / 1 skip existant, `tsc`, `eslint --max-warnings 0`, build, `smoke:ecosystem` PASS (inscrit au manifeste, palier apps). Captures `output/verify/ecosystem-*.png` inspectées : vue d'ensemble encore sobre, étiquettes désencombrées, mobile OK. Pas de gate complet, pas de push.
+- Suite : modèles GLB de Yanik dans `assets-src/ecosystem/`, alertes/travaux vivants sur les `eco-node:<id>` (étape `watch`), élément embarquable pour Core.

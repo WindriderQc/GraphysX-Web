@@ -1,0 +1,4 @@
+{
+  "models": {},
+  "note": "Models for ?app=ecosystem, keyed by node id (src/ecosystem-data.ts). A node listed here is drawn with its model; one not listed keeps the composed primitives. Regenerate with scripts/vendor-ecosystem-models.mjs."
+}
