@@ -113,6 +113,7 @@ Preserve `.graphysx-store/`: it is user content, not disposable build output.
 | Human editor and shared styling | `src/platform-editor.ts`, `src/platform-theme.ts` |
 | KidX programs and controls | `src/ev3-first-program.ts`, `src/ev3-program-library.ts`, `src/ev3-mission-strip.ts` |
 | DiskX (AgentX Data disks as a 3D city) | `src/diskx-app.ts`, `src/diskx-data.ts`; see [docs/DISKX.md](docs/DISKX.md) |
+| The connected house (AgentX ecosystem in 3D, toured by Nestor) | `src/ecosystem-app.ts`, `src/ecosystem-data.ts`, `src/ecosystem-tour.ts`; see [docs/ECOSYSTEM_VIEW.md](docs/ECOSYSTEM_VIEW.md) |
 | Persistence, media and collaboration | `server/scene-store.mjs` and its imported `server/` modules |
 | Verification coverage | `scripts/verify-manifest.mjs`; `scripts/verify.mjs` executes it |
 | Cyber Race 1992 (standalone page at /cyber-race.html, listed on the Games shelf) | `cyber-race.html`, `src/cyber-race/`; see [docs/CYBER_RACE.md](docs/CYBER_RACE.md) |

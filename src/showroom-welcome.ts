@@ -44,6 +44,7 @@ export function mountWelcome(
     onOpenKidX?: () => void;
     onOpenLlmX?: () => void;
     onOpenDiskX?: () => void;
+    onOpenEcosystem?: () => void;
     coauthor?: { onAccept?: () => void; onDiscard?: () => void; onToggleCommand?: (index: number) => void };
     tour?: { onStart?: () => void; onNext?: () => void; onPrevious?: () => void; onStop?: () => void };
   },
@@ -692,6 +693,15 @@ export function mountWelcome(
     diskx.textContent = "DiskX · Vos disques en ville";
     diskx.addEventListener("click", hooks.onOpenDiskX);
     overlay.querySelector(".gx-actions")?.append(diskx);
+  }
+  if (hooks?.onOpenEcosystem) {
+    const ecosystem = document.createElement("button");
+    ecosystem.type = "button";
+    ecosystem.className = "gx-go-ecosystem";
+    ecosystem.style.gridColumn = "1 / -1";
+    ecosystem.textContent = "La maison connectée · visite 3D par Nestor";
+    ecosystem.addEventListener("click", hooks.onOpenEcosystem);
+    overlay.querySelector(".gx-actions")?.append(ecosystem);
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);
