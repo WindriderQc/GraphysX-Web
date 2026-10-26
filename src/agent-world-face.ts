@@ -15,7 +15,7 @@ import {
 import faceAsset from "./llmx-face-forge.json";
 import { applyForgeFinish, LID_NORMAL_ATTRIBUTE, setLidClosure, SMOOTH_NORMAL_ATTRIBUTE } from "./llmx-face-finish";
 import { EYE_LOOK, gazeRotateInto, irisContrast, irisTone, lidEdgeY, lidShade, pickCatchlight, pupilAxis, pupilRadius } from "./llmx-face-eyes";
-import { classifyMouth, emberLevel, glowWeight, MOUTH_LOOK, MOUTH_ROLE, toothReveal, wallTone, type MouthInterior } from "./llmx-face-mouth";
+import { advanceToothReveal, classifyMouth, emberLevel, glowWeight, MOUTH_LOOK, MOUTH_ROLE, wallTone, type MouthInterior } from "./llmx-face-mouth";
 import {
   buildScale,
   type FaceAsset,
@@ -202,6 +202,7 @@ export class AgentWorldVoxelFace {
   private mouthInterior: MouthInterior | null = null;
   /** Instance slots of the teeth, and the reveal their colours were last written for. */
   private toothSlots = new Uint32Array(0);
+  private readonly toothReveal = { value: 0, quietSeconds: 0 };
   private toothRevealWritten = -1;
   private readonly toothRgb = [0, 0, 0];
 
@@ -331,6 +332,10 @@ export class AgentWorldVoxelFace {
     for (const key of Object.keys(drivers) as (keyof FaceDrivers)[]) {
       if (key !== "breath") this.current[key] = this.target[key];
     }
+    if (drivers.speak !== undefined) {
+      this.toothReveal.value = this.target.speak >= MOUTH_LOOK.toothSpeechThreshold ? 1 : 0;
+      this.toothReveal.quietSeconds = 0;
+    }
     this.staticDirty = true;
     this.update(0);
   }
@@ -352,6 +357,12 @@ export class AgentWorldVoxelFace {
     // Exponential convergence otherwise stays infinitesimally below 1 forever, uploading the
     // entire static mask every frame even after assembly has visibly finished.
     if (Math.abs(current.build - target.build) < 1e-5) current.build = target.build;
+    if (current.build < 1) {
+      this.toothReveal.value = 0;
+      this.toothReveal.quietSeconds = 0;
+    } else {
+      advanceToothReveal(this.toothReveal, target.speak, dt);
+    }
     current.speak = approach(
       current.speak,
       target.speak,
@@ -759,8 +770,8 @@ export class AgentWorldVoxelFace {
 
   /**
    * The inside of the mouth: teeth on the tunnel's front rim, walls that darken with depth, and
-   * the ember's weight per cube. Colours are written once; only the teeth change, with the
-   * opening (writeMouth).
+   * the ember's weight per cube. Colours are written once; teeth fade only on speech onset
+   * and after a sustained silence, keeping their colour between syllables (writeMouth).
    */
   private prepareMouth(): void {
     const mesh = this.mawMesh;
@@ -797,7 +808,7 @@ export class AgentWorldVoxelFace {
     this.toothRevealWritten = -1;
   }
 
-  /** The ember's intensity, and the teeth coming in as the lips part. Once per frame. */
+  /** The ember follows amplitude; the teeth hold their appearance throughout a phrase. */
   private writeMouth(): void {
     const mesh = this.mawMesh;
     const interior = this.mouthInterior;
@@ -805,9 +816,10 @@ export class AgentWorldVoxelFace {
     const open = Math.pow(this.current.speak, POSE_LIMITS.mouthResponse);
     const whole = this.current.build >= 1 ? 1 : 0;
     (mesh.material as MeshStandardMaterial).emissiveIntensity = whole * emberLevel(open, this.current.think, this.idleClock);
-    const reveal = toothReveal(open) * whole;
+    const reveal = this.toothReveal.value * whole;
     this.writeTeeth(mesh, interior, reveal);
-    if (Math.abs(reveal - this.toothRevealWritten) < 0.01) return;
+    if (reveal === this.toothRevealWritten
+      || (reveal > 0 && reveal < 1 && Math.abs(reveal - this.toothRevealWritten) < 0.01)) return;
     this.toothRevealWritten = reveal;
     const tooth = MOUTH_LOOK.tooth;
     for (let t = 0; t < this.toothSlots.length; t += 1) {

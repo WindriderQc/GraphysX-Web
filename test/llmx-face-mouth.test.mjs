@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { deriveWeights } from "../src/llmx-face-pose.ts";
-import { classifyMouth, emberLevel, glowWeight, MOUTH_ROLE, mouthDepth, toothReveal, wallTone } from "../src/llmx-face-mouth.ts";
+import { advanceToothReveal, classifyMouth, emberLevel, glowWeight, MOUTH_LOOK, MOUTH_ROLE, mouthDepth, wallTone } from "../src/llmx-face-mouth.ts";
 
 const asset = JSON.parse(readFileSync(new URL("../src/llmx-face-forge.json", import.meta.url), "utf8"));
 
@@ -78,9 +78,28 @@ test("only the far wall and the deep throat glow; teeth never do", () => {
   assert.ok(glowWeight(MOUTH_ROLE.wall, 0.95) > 0.5, "the deep throat carries the ember");
 });
 
-test("a closed, idle mouth shows neither teeth nor light; speech and thought light it", () => {
-  assert.equal(toothReveal(0), 0);
-  assert.equal(toothReveal(1), 1);
+test("teeth stay steady through quiet syllables and short pauses, then fade after silence", () => {
+  const state = { value: 0, quietSeconds: 0 };
+  const step = (speak, frames) => {
+    for (let frame = 0; frame < frames; frame += 1) advanceToothReveal(state, speak, 1 / 60);
+  };
+  step(0, 60);
+  assert.equal(state.value, 0, "idle never reveals teeth by itself");
+  step(0.3, 6);
+  assert.equal(state.value, 1, "one smooth onset reveals the teeth");
+  for (const speak of [1, 0.005, 0, 0.04, 0.8, 0, 0.003]) {
+    step(speak, 8);
+    assert.equal(state.value, 1, `no flash during a syllable or short pause at speak=${speak}`);
+  }
+  step(0, Math.floor(MOUTH_LOOK.toothHold * 60));
+  assert.equal(state.value, 1, "the short-pause hold does not dim the teeth");
+  step(0, 2);
+  assert.ok(state.value > 0 && state.value < 1, "the final fade is gradual");
+  step(0, Math.ceil(MOUTH_LOOK.toothRelease * 60));
+  assert.equal(state.value, 0, "sustained silence leaves no pale line");
+});
+
+test("a closed, idle mouth has no light; speech and thought light it", () => {
   assert.equal(emberLevel(0, 0, 3), 0);
   assert.ok(emberLevel(0.66, 0, 3) > 0.3 && emberLevel(1, 0, 3) > emberLevel(0.4, 0, 3) * 2, "speaking: the ember follows the opening");
   const breaths = [0, 1, 2, 3, 4].map((t) => emberLevel(0, 1, t));

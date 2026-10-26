@@ -4,7 +4,7 @@ import { importBrowserModule } from "./support/import-browser-module.mjs";
 
 const { AgentWorldVoxelFace, resolveAgentWorldFace } = await importBrowserModule(new URL("../src/agent-world-face.ts", import.meta.url));
 
-test("speech changes the teeth's colour while both lower corner cubes keep their wall colour", () => {
+test("speech onset reveals the teeth while both lower corner cubes keep their wall colour", () => {
   const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "high", autoBlink: false }));
   try {
     face.snapDrivers({ build: 1, speak: 0 });
@@ -34,6 +34,41 @@ test("speech changes the teeth's colour while both lower corner cubes keep their
     }
   } finally { face.dispose(); }
 });
+
+for (const level of ["high", "balanced", "mobile"]) {
+  test(`${level}: teeth keep one colour through syllables and short pauses, and hide after silence`, () => {
+    const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level, autoBlink: false }));
+    try {
+      face.snapDrivers({ build: 1, speak: 0 });
+      const cavity = face.object.children.find(child => child.name === "VoxelFaceMaw");
+      const restingColours = Array.from(cavity.instanceColor.array);
+      face.setDrivers({ speak: 0.3 });
+      for (let frame = 0; frame < 12; frame += 1) face.update(1 / 60);
+      const speakingColours = Array.from(cavity.instanceColor.array);
+      assert.notDeepEqual(speakingColours, restingColours, "speech reveals actual teeth");
+      const uploads = cavity.instanceColor.version;
+      for (const speak of [0.6, 0.004, 0, 0.15, 1, 0.005, 0, 0.3]) {
+        face.setDrivers({ speak, speakTone: speak > 0.2 ? 1 : 0 });
+        for (let frame = 0; frame < 8; frame += 1) face.update(1 / 60);
+        assert.deepEqual(Array.from(cavity.instanceColor.array), speakingColours, `no colour pulse at speak=${speak}`);
+        assert.equal(cavity.instanceColor.version, uploads, "no colour uploads between syllables");
+      }
+      face.setDrivers({ speak: 0 });
+      for (let frame = 0; frame < 45; frame += 1) face.update(1 / 60);
+      assert.deepEqual(Array.from(cavity.instanceColor.array), restingColours, "silence restores the dark resting mouth");
+      face.snapDrivers({ build: 0 });
+      assert.equal(cavity.material.emissiveIntensity, 0);
+      face.snapDrivers({ build: 1, speak: 0.3 });
+      assert.deepEqual(Array.from(cavity.instanceColor.array), speakingColours, "skip/replay restores the same tooth appearance");
+      face.setQualityCeiling("mobile");
+      const changed = face.object.children.find(child => child.name === "VoxelFaceMaw");
+      const changedColours = Array.from(changed.instanceColor.array);
+      face.setDrivers({ speak: 0.003 });
+      for (let frame = 0; frame < 12; frame += 1) face.update(1 / 60);
+      assert.deepEqual(Array.from(changed.instanceColor.array), changedColours, "a detail change retains stable teeth");
+    } finally { face.dispose(); }
+  });
+}
 
 test("static face instance uploads stop after assembly, including after a replay", () => {
   const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "mobile", autoBlink: false }));
