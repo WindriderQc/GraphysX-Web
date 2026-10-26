@@ -12,6 +12,7 @@ export const VERIFY_STATIC_CHECKS = {
 };
 
 export const VERIFY_SMOKES = [
+  { name: "llmx-core-embed", tier: "apps", script: "scripts/smoke-llmx-core-embed.mjs", covers: "Core-hosted Forge module: native scoped routes, Family cookie, one text turn, graphical assets and mobile" },
   { name: "llmx-world", tier: "apps", script: "scripts/smoke-llmx-world.mjs", covers: "Full world proposals: authored scenery, textures, lights, paths, physics/impulse/joints, undo and saved reload" },
   { name: "agent-mcp", tier: "core", script: "scripts/smoke-agent-mcp.mjs", covers: "Two MCP clients share a visible native world: edits, revision conflict, save/reload, camera and real PNG capture" },
   { name: "llmx-creation-actions", tier: "apps", script: "scripts/smoke-llmx-creation-actions.mjs", covers: "Native scene proposals and exact receipts, stale undo rejection, corrected French math history and workshop separation" },
@@ -25,6 +26,7 @@ export const VERIFY_SMOKES = [
   { name: "llmx", tier: "apps", script: "scripts/smoke-llmx.mjs", covers: "Forge appearance lifecycle, save/reload, reduced motion, immediate camera, environment selection and Center return" },
   { name: "diskx", tier: "apps", script: "scripts/smoke-diskx.mjs", covers: "DiskX city from the synthetic fixture: districts as entities, real 3D click dive, breadcrumb/up, hover card, HUD list parity, Center return" },
   { name: "diskx-embed", tier: "apps", script: "scripts/smoke-diskx-embed.mjs", covers: "Built <diskx-city> module alone on a Core-like page: same-origin Data Toolbox GETs only, ready and group receipts, host CSS sizing, refused attributes" },
+  { name: "diskx-show", tier: "apps", script: "scripts/smoke-diskx-show.mjs", covers: "Janitor show over the city: demo scenes leave the document unchanged; Core page default list, paged ledger, duplicates/pairs/target/summary, selection and gestures, tour, live play attribute, refused steps, GET only" },
   { name: "diskx-janitor", tier: "apps", script: "scripts/smoke-diskx-janitor.mjs", covers: "Synthetic Janitor evidence, presentation-only transitions, inventory refresh/retry, root boundaries, absence of report; no live backend" },
   { name: "startup", tier: "core", script: "scripts/smoke-startup.mjs", covers: "renderer and lazy-import failures: accessible recovery page and working retry" },
   { name: "showroom", tier: "core", script: "scripts/smoke-showroom.mjs", covers: "default route: welcome showroom, gated editor, auto-orbit" },

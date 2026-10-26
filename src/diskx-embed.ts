@@ -7,11 +7,15 @@
  *               janitor="latest" group="<sha256>" focus="/mnt/datalake/ISO"></diskx-city>
  *
  * GET only. It carries no inventory of its own (no fixture is used). Events bubble as
- * `diskx-ready`, `diskx-group-shown` {sha256, places, links, outside} and `diskx-error`
+ * `diskx-ready`, `diskx-report-read`, `diskx-group-shown` {sha256, places, links, outside},
+ * `diskx-scene-changed`, `diskx-coverage`, `diskx-block-selected` and `diskx-error`
  * {stage, message}: presentation receipts, never proof that a file was moved or deleted.
+ *
+ * `play` is the Janitor show's animation list (`diskx-show-script.ts`); changing it on a mounted
+ * element replaces the list and plays it. `actions-href` links the page where files are acted on.
  */
 import { mountDiskxApp, type DiskxApplication } from "./diskx-app";
-import { parseDiskxCityAttributes } from "./diskx-embed-attributes";
+import { parseDiskxCityAttributes, parsePlayAttribute } from "./diskx-embed-attributes";
 import { PlatformHost } from "./platform-host";
 
 /**
@@ -30,6 +34,7 @@ export class DiskxCityElement extends HTMLElement {
   private host: PlatformHost | null = null;
   private app: DiskxApplication | null = null;
   private stage: HTMLDivElement | null = null;
+  static get observedAttributes(): string[] { return ["play"]; }
 
   connectedCallback(): void {
     if (this.app) return;
@@ -50,12 +55,30 @@ export class DiskxCityElement extends HTMLElement {
       this.app = mountDiskxApp(stage, this.host, () => undefined, {
         live: { endpoints: options.endpoints, roots: options.roots, origin: window.location.host },
         focus: options.focus, janitor: options.janitor, group: options.group, report: options.report, embedded: true,
+        play: options.play, actionsHref: options.actionsHref,
         onEvent: (type, detail) => this.dispatchEvent(new CustomEvent(`diskx-${type}`, { detail, bubbles: true, composed: true })),
       });
     } catch (error) {
       this.fail("mount", error);
     }
   }
+
+  /** A new `play` list on a mounted city replaces the animation list and plays it. */
+  attributeChangedCallback(name: string, previous: string | null, value: string | null): void {
+    if (name !== "play" || previous === value || !this.app) return;
+    try {
+      const script = parsePlayAttribute(value);
+      if (script) this.app.show.setScript(script, true);
+    } catch (error) {
+      this.dispatchEvent(new CustomEvent("diskx-error", { detail: { stage: "play", message: error instanceof Error ? error.message : String(error) }, bubbles: true, composed: true }));
+    }
+  }
+
+  /** Host controls of the animation list. Presentation only, like the rest of the element. */
+  play(): void { this.app?.show.play(); }
+  pause(): void { this.app?.show.pause(); }
+  next(): void { this.app?.show.next(); }
+  previous(): void { this.app?.show.previous(); }
 
   disconnectedCallback(): void {
     this.release();

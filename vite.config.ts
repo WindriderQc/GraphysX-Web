@@ -80,6 +80,7 @@ function faceEmbed(): Plugin {
       await build({ configFile: path.resolve("vite.face.config.ts"), logLevel: "warn" });
       // `<diskx-city>` for an AgentX Core page (vite.diskx.config.ts), shipped the same way.
       await build({ configFile: path.resolve("vite.diskx.config.ts"), logLevel: "warn" });
+      await build({ configFile: path.resolve("vite.llmx.config.ts"), logLevel: "warn" });
     },
   };
 }

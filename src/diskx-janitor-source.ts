@@ -39,10 +39,11 @@ export async function readJanitorSummary(fetchImpl: typeof fetch = fetch, route 
     filesToHash: count(summary.filesToHash), bytesToHash: count(summary.bytesToHash),
     executableActions: count(summary.executableActions) };
 }
-export async function readJanitorGroups(offset = 0, fetchImpl: typeof fetch = fetch, route = '/diskx-api/janitor-groups', sha256: string | null = null): Promise<JanitorGroupPage> {
+export async function readJanitorGroups(offset = 0, fetchImpl: typeof fetch = fetch, route = '/diskx-api/janitor-groups', sha256: string | null = null, limit = 20): Promise<JanitorGroupPage> {
   count(offset);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new Error('Taille de page Janitor invalide');
   if (sha256 !== null && !/^[0-9a-f]{64}$/.test(sha256)) throw new Error('SHA-256 invalide');
-  const data = await read(fetchImpl, sha256 ? `${route}?sha256=${sha256}` : `${route}?offset=${offset}&limit=20`);
+  const data = await read(fetchImpl, sha256 ? `${route}?sha256=${sha256}` : `${route}?offset=${offset}&limit=${limit}`);
   const report = object(data.report);
   if (!Array.isArray(data.groups) || data.groups.length > 100) throw new Error('Groupes Janitor invalides');
   const nextOffset = data.nextOffset === null ? null : count(data.nextOffset);

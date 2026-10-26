@@ -4878,6 +4878,14 @@ bloom's glow with rings visible, and dominus-village placement after the recentr
 (pilings grounded, ramp meeting the deck — the port tool's assumption vindicated on
 screen).
 
+## 2026-10-25 — Branch, worktree and repository cleanup; KidX voice parked on record
+
+- Production verified at `237f474` then `0451757` (PR 54) via public `release.json`; the only undeployed main commit was a docs-only HANDOFF change the impact plan correctly skipped. No open PRs.
+- Deleted 25 merged remote branches and 17 merged local branches; removed five worktrees whose branches were merged (3d-disk-visualization, project-status-agentx, diskx-janitor-presentation, GraphysX-Web-cyber-race, GraphysX-Web-diskx-validation), archiving their `output/`, `.graphysx-store/` and `.env.local` under `output/archived-worktrees/<name>/` in the main checkout first. Three had `node_modules` junctions into other checkouts (unlinked with `rmdir` before removal); one was held by an orphaned Vite dev server on port 4231, stopped. `git gc --prune=now` took `.git` from 979 MB to 140 MB; fsck clean.
+- Reviewed the six unmerged branches against HEAD, two search methods each. Dropped four whose substance main already has by other code: `claude/confident-haslett-5c63c8` (`b33f73f`; the re-entry collectible bug is closed on main by the hidden-trigger guard, `set-visibility` never adopted), `codex/center-navigation` (`653d4d4`; `GraphysX` title and `playExitLabel` landed), `codex/kidx-nestor-voice` (`e9cbbd5`; byte-identical code to the integration branch), `feature/kickass-waves` (`20c0758`; PBR cars, glass, wood floor, key-hold steering all re-done on main). Merged `codex/llmx-experience-plan` as PR 55 with historical headers, repointing the dead `LLMX_FORGE.md` link.
+- Kept `codex/kidx-voice-integration` unmerged on purpose and wrote `docs/KIDX_VOICE_BRANCH.md`: where the work is, its exact AgentX touchpoints (relay route map, pinned session shape, assumed Family contract v1 and VoiX routes), why it is parked (three coexisting AgentX access patterns while that boundary is being corrected), the decisions it waits on, and the three-file merge conflict to expect. HANDOFF item 1 and the access table point there.
+- Local only until the PR: no deployment implied, docs and Node-only changes, no 3D checks apply.
+
 ## 2026-10-25 (America/Toronto) — Nestor proposals from AgentX Core: vocabulary, request field, Core route
 
 Owner decision read from the code that morning: the "local Nestor brain" was three scripted

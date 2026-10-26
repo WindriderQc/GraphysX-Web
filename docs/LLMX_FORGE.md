@@ -9,7 +9,7 @@ the proposed wiring and preview behavior below describe the visual author's earl
 Owner: the Claude "Forge" session (branch `claude/llmx-forge`, base `d7c9937`). The face
 (sculpt, data, pose, rig `agent-world-face.ts`) belongs to the Claude "face" session on
 `claude/llmx-face-forge`; the application mount, contracts, conversation and catalogues belong to
-Codex per [LLMX_RESTART_HANDOFF](../../GraphysX-Web-llmx-plan/docs/LLMX_RESTART_HANDOFF.md).
+Codex per [LLMX_RESTART_HANDOFF](LLMX_RESTART_HANDOFF.md).
 
 ## What exists
 
