@@ -41,8 +41,9 @@ par défaut a une spécificité nulle et ne gagne jamais contre celui de la page
 
 `storage/summary`, `storage/tree?root&limit`, `storage/files?root&limit&sort`,
 `janitor/strategy/latest`, `janitor/strategy/latest/groups?offset&limit` et `?sha256=` pour un
-groupe nommé. Pas de capacité de volume : la tuile d'espace libre reste absente tant que Data ne
-l'expose pas.
+groupe nommé. La capacité et le libre des volumes arrivent dans `storage/summary` (champ
+`volumes`, mesuré par l'agent de stockage) : la tuile d'espace libre et la jauge apparaissent
+sur une page Core sans route de plus, et restent absentes quand l'agent n'a rien publié.
 
 ## Présentation Janitor (`play`)
 

@@ -16,7 +16,7 @@ test("report reads accept equivalent timestamps and reject changed or missing ve
 
 test("a Core page reads its own Data Toolbox routes; the relay keeps its names", () => {
   assert.deepEqual(coreEndpoints("/api/data-toolbox/"), {
-    summary: "/api/data-toolbox/storage/summary", tree: "/api/data-toolbox/storage/tree", files: "/api/data-toolbox/storage/files", volumes: null,
+    summary: "/api/data-toolbox/storage/summary", tree: "/api/data-toolbox/storage/tree", files: "/api/data-toolbox/storage/files",
     janitorStrategy: "/api/data-toolbox/janitor/strategy/latest", janitorGroups: "/api/data-toolbox/janitor/strategy/latest/groups",
   });
   assert.equal(RELAY_ENDPOINTS.janitorGroups, "/diskx-api/janitor-groups");

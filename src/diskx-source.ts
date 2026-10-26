@@ -19,7 +19,7 @@ export type DiskxFixture = {
   summary: { totalFiles: number; totalSize: number; directories: number; lastScanAt: string | null };
   directories: DiskxDirectoryRow[];
   files: Record<string, DiskxFileRow[]>;
-  /** Capacity and free space per volume, measured outside AgentX Data (which has none). */
+  /** Capacity and free space per volume, declared by the capture (the live source reads AgentX Data's). */
   volumes?: DiskxVolume[];
 };
 
@@ -50,7 +50,7 @@ export type DiskxSource = {
   tree: (root: string) => Promise<DiskxTreePage>;
   /** Largest files directly in or under `root`. */
   files: (root: string, limit?: number) => Promise<DiskxFileRow[]>;
-  /** Volumes with capacity and free space; empty when nothing measured or declared them. */
+  /** Volumes with capacity and free space; empty when the storage agent published none. */
   volumes: () => Promise<DiskxVolume[]>;
 };
 
@@ -71,6 +71,8 @@ const sanitiseVolumes = (value: unknown): DiskxVolume[] => {
       freeBytes: Math.max(0, Math.min(freeBytes, capacityBytes)),
       source: record.source === "declared" ? "declared" : "measured",
       measuredAt: typeof record.measuredAt === "string" ? record.measuredAt : null,
+      host: typeof record.host === "string" && record.host ? record.host : null,
+      method: typeof record.method === "string" && record.method ? record.method : null,
       note: typeof record.note === "string" ? record.note : null,
     }];
   });
@@ -113,16 +115,16 @@ export function createFixtureSource(fixture: DiskxFixture = DISKX_FIXTURE): Disk
  * The response shapes are identical: the relay forwards Core's bodies unchanged.
  */
 export type DiskxEndpoints = {
-  summary: string; tree: string; files: string; volumes: string | null;
+  summary: string; tree: string; files: string;
   janitorStrategy: string; janitorGroups: string;
 };
 export const RELAY_ENDPOINTS: DiskxEndpoints = {
-  summary: "/diskx-api/summary", tree: "/diskx-api/tree", files: "/diskx-api/files", volumes: "/diskx-api/volumes",
+  summary: "/diskx-api/summary", tree: "/diskx-api/tree", files: "/diskx-api/files",
   janitorStrategy: "/diskx-api/janitor-strategy", janitorGroups: "/diskx-api/janitor-groups",
 };
 export function createLiveSource(fetchImpl: typeof fetch, roots: string[], origin: string, endpoints: DiskxEndpoints = RELAY_ENDPOINTS): DiskxSource {
   type TreeData = { tree: { path: string; fileCount: number; totalSize: number; largestFile?: string | null }[]; truncated?: boolean; limit?: number };
-  type SummaryData = { totalFiles: number; totalSize: number; lastScan?: { finished_at?: string | null } | null };
+  type SummaryData = { totalFiles: number; totalSize: number; lastScan?: { finished_at?: string | null } | null; volumes?: unknown };
   type FilesData = { files: { path: string; size: number; category?: string; mtime?: number }[] };
   return {
     kind: "live",
@@ -151,12 +153,12 @@ export function createLiveSource(fetchImpl: typeof fetch, roots: string[], origi
       return data.files.map((file) => ({ path: file.path, size: file.size, category: file.category, mtime: file.mtime }));
     },
     volumes: async () => {
-      // Absent or unconfigured is "unknown", never the fixture's dated numbers.
-      if (!endpoints.volumes) return [];
-      const response = await fetchImpl(endpoints.volumes, { cache: "no-store" });
-      if (!response.ok) return [];
-      const payload = (await response.json()) as { volumes?: unknown };
-      return sanitiseVolumes(payload.volumes);
+      // The storage agent publishes the volumes it measured inside `storage/summary`; a
+      // summary without them means "unknown", never the fixture's dated numbers. Read anew
+      // rather than reusing the last summary: the app pairs volumes with the inventory it
+      // just verified, not with an earlier read.
+      const data = await unwrap<SummaryData>(await fetchImpl(endpoints.summary, { cache: "no-store" }));
+      return sanitiseVolumes(data.volumes);
     },
   };
 }

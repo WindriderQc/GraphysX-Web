@@ -652,14 +652,14 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       gauge.style.setProperty("--used", `${Math.round(occupancy.usedShare * 100)}%`);
       gauge.innerHTML = `<div class="head"><span class="name"></span><span class="free"><b>${formatBytes(occupancy.free)}</b> libres</span></div><div class="bar"><i></i></div><div class="foot"><span>${formatBytes(occupancy.used)} utilisés sur ${formatBytes(occupancy.capacity)}</span><span>${Math.round(occupancy.usedShare * 100)} %</span></div>`;
       gauge.querySelector(".name")!.textContent = volume.label;
-      gauge.title = `${volume.source === "measured" ? "Mesuré" : "Déclaré"}${volume.measuredAt ? ` le ${new Date(volume.measuredAt).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" })}` : ""}${volume.note ? ` · ${volume.note}` : ""}`;
+      gauge.title = `${volume.source === "measured" ? "Mesuré" : "Déclaré"}${volume.method ? ` (${volume.method})` : ""}${volume.measuredAt ? ` le ${new Date(volume.measuredAt).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" })}` : ""}${volume.host ? ` sur ${volume.host}` : ""}${volume.note ? ` · ${volume.note}` : ""}`;
       return gauge;
     }));
     if (!shownVolumes.length) {
       const unknown = document.createElement("p");
       unknown.className = "gx-diskx-unknown";
       unknown.textContent = source.kind === "live"
-        ? "Capacité inconnue : AgentX Data n’indexe que les fichiers. Déclare DISKX_VOLUMES ou mesure sur l’hôte."
+        ? "Capacité inconnue : l’agent de stockage d’AgentX Data n’a publié aucun volume pour ces racines."
         : "Capacité inconnue pour ce niveau.";
       gauges.append(unknown);
     }
@@ -733,7 +733,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       card.innerHTML = `<h3></h3><p><b>${formatBytes(node.totalSize)}</b> libres${volume ? ` sur ${formatBytes(volume.capacityBytes)}` : ""}</p><p class="path"></p>`;
       card.querySelector("h3")!.textContent = node.name;
       card.querySelector(".path")!.textContent = volume
-        ? `${volume.source === "measured" ? "Mesuré" : "Déclaré"}${volume.measuredAt ? ` le ${new Date(volume.measuredAt).toLocaleDateString("fr-CA")}` : ""} · partagé par ${volume.roots.map((root) => root.slice(root.lastIndexOf("/") + 1)).join(", ")}`
+        ? `${volume.source === "measured" ? "Mesuré" : "Déclaré"}${volume.measuredAt ? ` le ${new Date(volume.measuredAt).toLocaleDateString("fr-CA")}` : ""}${volume.host ? ` sur ${volume.host}` : ""} · partagé par ${volume.roots.map((root) => root.slice(root.lastIndexOf("/") + 1)).join(", ")}`
         : "";
       return;
     }
