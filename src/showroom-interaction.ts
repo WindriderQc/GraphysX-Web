@@ -151,9 +151,12 @@ export function mountShowroomInteraction(deps: ShowroomInteractionDeps): {
 
     const terrain = terrainIds();
     const passThrough = passThroughIds();
+    // Hidden document identities are not physical controls. Raycaster itself does not
+    // exclude invisible ancestors, so the retired robot must not cover the visible CubX.
+    const hidden = new Set((api.state()?.entities ?? []).filter((entity) => !entity.visible).map((entity) => entity.id));
     for (const hit of raycaster.intersectObjects(scene.children, true)) {
       const entityId = world.findEntityId(hit.object);
-      if (entityId && passThrough.has(entityId)) continue;
+      if (entityId && (passThrough.has(entityId) || hidden.has(entityId))) continue;
       const nestorTopic = entityId ? nestorTopicFor(entityId) : null;
       if (nestorTopic && onNestorTopic) {
         onNestorTopic(nestorTopic);

@@ -97,10 +97,16 @@ Production release proof:
    ordered Analyze → Build → Validate progress, authoritative evidence, and safe interruption,
    reassignment, resume, cancellation, and terminal cuts.
 3. Project accepted assignments into Explore, Build, and Play choreography with a runtime-only
-   mission board, evidence holograms, completion response, camera focus, and accessible owner
+   mission board, evidence receipt cards, completion response, camera focus, and accessible owner
    controls—without adding a renderer, animation loop, or exportable entity.
 4. Keep deterministic protocol, hostile-input, multi-browser, transient/export, resource, mobile,
    reduced-motion, and navigation proof attached to the slice.
+
+   The welcome density reduction exposed the relative cost of decorative mission geometry.
+   Persistent director/station rings, synthetic spinning miniatures and connector curves have
+   been removed; the board and bounded evidence cards retain actor, operation, targets,
+   sequence/revision, focus and all authority/replay rules. The existing ten-percent render
+   budget remains unchanged, including four desktop/two mobile artifact caps.
 
 ### C. Add the co-author command queue — partly shipped
 

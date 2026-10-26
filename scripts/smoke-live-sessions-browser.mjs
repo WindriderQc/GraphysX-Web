@@ -1853,7 +1853,9 @@ try {
       && state.document === missionBaseline[index].document
       && state.fullExport === missionBaseline[index].fullExport
       && JSON.stringify(state.selectedIds) === JSON.stringify(missionBaseline[index].selectedIds)
-      && state.boardIds.length === 1 && state.missionIds.length >= 6
+      && state.boardIds.length === 1 && state.missionIds.length === 2
+      && state.missionIds.includes(state.boardIds[0])
+      && state.missionIds.includes(`${state.boardIds[0]}-card`)
       && !state.document.includes("live-mission:") && !state.fullExport.includes("live-mission:")),
     JSON.stringify(briefingProof.map((state) => ({ board: state.boardIds, missionIds: state.missionIds.length }))));
 

@@ -80,6 +80,7 @@ export interface PlatformHostOptions {
   editorVisible?: boolean;
   /** Idle screensaver orbit (stops on first user interaction). Default false. */
   autoOrbit?: boolean;
+  autoOrbitSpeed?: number;
   /** Called when the visitor leaves the editor, so the host page can restore the welcome. */
   onExitEditor?: () => void;
   /**
@@ -105,7 +106,7 @@ export interface PlatformHostOptions {
    * and abandonment the instant the visitor grabs the camera. An intro you cannot interrupt
    * is a splash screen.
    */
-  intro?: boolean;
+  intro?: boolean | { durationSeconds: number; distanceScale: number; azimuthDegrees: number };
   /**
    * Force the post stack on regardless of what the loaded scene's `environment.post` says.
    * Default false — post remains a per-scene opt-in (§4: a pass must earn its frame budget),
@@ -362,8 +363,8 @@ export class PlatformHost {
     this.controls.target.set(...(options.framing?.target ?? [0, 3, 0]));
     this.homeTarget.copy(this.controls.target);
     this.controls.autoRotate = options.autoOrbit === true;
-    this.controls.autoRotateSpeed = 0.6;
-    if (options.intro === true) this.beginIntro();
+    this.controls.autoRotateSpeed = options.autoOrbitSpeed ?? 0.6;
+    if (options.intro) this.beginIntro(typeof options.intro === "object" ? options.intro : undefined);
     this.controls.addEventListener("start", () => {
       this.controls.autoRotate = false;
       // A grab is the visitor taking the camera back; abandon any move in flight rather than
@@ -707,18 +708,20 @@ export class PlatformHost {
    * its own framing gets an intro composed for *it* — the alternative is a fixed start pose
    * that flies through the ground in a scene framed tighter than the showroom's.
    */
-  private beginIntro(): void {
+  private beginIntro(settings?: { durationSeconds: number; distanceScale: number; azimuthDegrees: number }): void {
     const target = this.controls.target.clone();
     const offset = this.camera.position.clone().sub(target);
     // Start wider and higher, looking at the same point. 1.7x out and 1.35x up reads as
     // "arriving at" the scene; much more and the opening frame is an empty horizon.
-    const start = target.clone().add(offset.clone().multiplyScalar(1.7));
+    const duration = settings?.durationSeconds ?? 2.6;
+    const startOffset = offset.clone().applyAxisAngle(new Vector3(0, 1, 0), (settings?.azimuthDegrees ?? 0) * Math.PI / 180);
+    const start = target.clone().add(startOffset.multiplyScalar(settings?.distanceScale ?? 1.7));
     start.y = target.y + offset.y * 1.35 + 6;
     this.camera.position.copy(start);
 
     const toExposure = this.renderer.toneMappingExposure;
     this.renderer.toneMappingExposure = toExposure * 0.22;
-    this.intro = { elapsed: 0, duration: 2.6, fromExposure: toExposure * 0.22, toExposure };
+    this.intro = { elapsed: 0, duration, fromExposure: toExposure * 0.22, toExposure };
 
     // The camera half is a plain focusMove, which also means a visitor grabbing the camera
     // cancels it through the existing "start" handler with no extra wiring.
@@ -729,7 +732,7 @@ export class PlatformHost {
       fromTarget: target.clone(),
       toTarget: target,
       elapsed: 0,
-      duration: 2.6,
+      duration,
     };
   }
 
