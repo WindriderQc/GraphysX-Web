@@ -551,6 +551,10 @@ function boardDefinitions(value: LiveMissionView, inCenter: boolean): AgentWorld
     { id: ids.card, parentId: ids.root, type: "plane", label: `${value.title} live mission status`, geometry: { width: 4.42, depth: 2.74 },
       transform: { position: [0, 0, 0.071], rotationDegrees: [90, 0, 0] },
       material: { color: "#ffffff", emissive: statusColor, emissiveIntensity: 0.16, roughness: 0.46, metalness: 0.08, opacity: 1 },
+      behaviors: motionIsReduced() || value.status === "paused" ? [] : [{
+        id: `live-mission-director-pulse-${stableKey(value.missionId)}`, type: "pulse",
+        minimumScale: 0.99, maximumScale: 1.01, frequencyHz: 0.58,
+      }],
       castShadow: false, receiveShadow: false, ephemeral: true, tags: ["live-mission", "mission-board-card", `mission:${value.missionId}`] },
   ];
 }
