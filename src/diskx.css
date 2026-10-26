@@ -37,6 +37,7 @@
 .gx-diskx-gauge .bar{position:relative;height:7px;margin:7px 0 6px;border-radius:4px;background:repeating-linear-gradient(90deg,#123a46 0 4px,#0d2a33 4px 8px);overflow:hidden}
 .gx-diskx-gauge .bar i{position:absolute;inset:0;width:var(--used);border-radius:4px;background:linear-gradient(90deg,#ff4fd8,#b76bff 60%,#6a7bff);box-shadow:0 0 10px #ff4fd888}
 .gx-diskx-gauge .foot{font-size:11px}
+.gx-diskx-gauge .provenance{margin:5px 0 0;font:10px/1.4 var(--dx-mono);color:#7fa3b8}
 .gx-diskx-unknown{margin:0;font:11px/1.45 var(--dx-mono);color:#d4b98a}
 .gx-diskx-list li.free .size{color:#39e0ff}
 .gx-diskx-legend{list-style:none;margin:0 0 14px;padding:0;display:grid;gap:6px}

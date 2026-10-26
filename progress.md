@@ -4897,6 +4897,37 @@ screen).
 - Kept `codex/kidx-voice-integration` unmerged on purpose and wrote `docs/KIDX_VOICE_BRANCH.md`: where the work is, its exact AgentX touchpoints (relay route map, pinned session shape, assumed Family contract v1 and VoiX routes), why it is parked (three coexisting AgentX access patterns while that boundary is being corrected), the decisions it waits on, and the three-file merge conflict to expect. HANDOFF item 1 and the access table point there.
 - Local only until the PR: no deployment implied, docs and Node-only changes, no 3D checks apply.
 
+## 2026-10-25 — DiskX reads volumes from AgentX Data's summary (America/Toronto)
+
+The storage agent on UGFrank (`ugfrank-storage`, `storage-1.5.0`) now measures its mounts with
+statfs and publishes them as `volumes` inside `storage/summary` (and `storage/agents`): one
+entry for `/mnt/media` + `/mnt/datalake` on the ZFS dataset `Media/Media`, with `host`,
+`method`, `measuredAt`, filesystem and the agent's note that statfs reports the dataset's used
+plus available, not the pool. Probed 2026-10-25 21:00 America/Toronto on the public gateway.
+
+- `diskx-source.ts`: the live `volumes()` reads `summary.data.volumes` through the same
+  sanitiser as before (unknown `source`, zero capacity dropped) and now keeps `host` and
+  `method`. The `DiskxEndpoints.volumes` slot is gone, so a Core page gets the volumes from
+  its own `storage/summary` route with nothing added to the embed contract.
+- `scripts/diskx-server.mjs`: `DISKX_VOLUMES`, `parseBytes`, statfs and the `/diskx-api/volumes`
+  endpoint are removed; the relay declares and measures nothing. `vite.config.ts` only reads
+  `DISKX_DATA_URL` now. `config` no longer reports a volumes count.
+- HUD: the "unknown capacity" message names the storage agent instead of a variable to set;
+  gauge and free-tile tooltips add the method and host ("Mesuré (statfs) le … sur UGFrank").
+- Tests: the `DISKX_VOLUMES` parsing test is replaced by a live-source contract on the exact
+  payload the agent returned (`test/diskx-observation.test.mjs`); the route test asserts
+  `/diskx-api/volumes` is a 404 and `config` carries no count. `smoke:diskx-janitor` mocks a
+  volume inside its summary and reads the gauge, the tooltip and the refresh.
+- Docs: DISKX.md (section rewritten; the fixture's volume is fictitious, not the 2026-10-24
+  zpool numbers the doc claimed), DISKX_EMBED.md, DISKX_JANITOR.md.
+- Validation, worktree `claude/diskx-volumes-graphysx-web-b441c6`, 2026-10-25 21:00–21:20
+  America/Toronto: `tsc --noEmit`, scoped eslint, `npm test` (661 pass, 1 pre-existing skip),
+  `smoke:diskx`, `smoke:diskx-janitor`, `smoke:diskx-embed` all PASS on the worktree build.
+  Live evidence: the build served with the relay pointed at the public gateway shows one
+  measured volume, the free tile "libre · Media/Media 4.5 To" beside the two disks and the
+  gauge "2.2 To utilisés sur 6.7 To · 33 %", tooltip "Mesuré (statfs) le 25 oct. 2026 … sur
+  UGFrank" (`output/diskx-live-volumes.png`, inspected). No full gate: the change is confined
+  to the DiskX journey. Not committed in that session.
 ## 2026-10-25 (America/Toronto) — Nestor proposals from AgentX Core: vocabulary, request field, Core route
 
 Owner decision read from the code that morning: the "local Nestor brain" was three scripted
@@ -4996,3 +5027,17 @@ copy of the API; the three demonstrations stay as the fallback when no provider 
 - The Center cannot be relayed like `<diskx-city>`: `dist/` measured at 234 MB in 1203 files, 1097 product assets (220 MB), 74 hashed chunks. A bounded static relay would be the universal proxy; a single-file sub-build would still fetch the tree. Chosen: Core serves a small page that frames the public Center and loads `<graphysx-center>`, a 6 KB module published at `/embed/center-host.js` and relayed by Core like `diskx.js`. Both ends of the `postMessage` protocol (`src/center-bridge-protocol.ts`) ship from one build.
 - Framed, the Center answers only a host that says hello from an allowed origin (same-origin, loopback, `VITE_GRAPHYSX_HOST_ORIGINS`), then takes it as its provider: the typed request goes up, the host asks `/api/graphysx/propose` on Core's origin, the reply comes down and is read as any provider reply. A pushed proposal is read with the same rules plus an agent actor and an integer revision, becomes a card through `proposeExternal` with that actor and `expectedRevision` (stale if the scene moved), is refused whole while a card already waits, and always answers with a receipt. Commits now carry the card's actor, so history says `Nestor · Core` when Core pushed.
 - AgentX: `/graphysx`, the relay, one event stream per page, state and receipt routes, the tool `propose_world_change` composing for the most recent page and relaying the page's receipt. Proofs: `test/coauthor-host-bridge.test.mjs`, AgentX `center.test.js`, `scripts/smoke-nestor-push.mjs` (tier `core`), and the harness demonstration with inference on the live Core router recorded in `docs/NESTOR_PROPOSALS.md` with captures. Not seen: a real Nestor conversation, which needs the AgentX pull request deployed.
+
+## 2026-10-26 (America/Toronto) — DiskX volumes: free tiles beside the disks they serve, visible provenance
+
+- PR #74 (another session) delivered the bulk of reading volumes from AgentX Data's
+  `storage/summary` and removing `DISKX_VOLUMES`; PR #62 was rebuilt on top of it as this
+  delta only. `sanitiseVolumes` (`src/diskx-source.ts`, now exported) takes the city's roots
+  and drops a volume that holds none of them, so a free tile always sits beside a disk it
+  serves; `filesystemType` is read from the agent's `filesystem.type`. The HUD gauge is named
+  `label · host` and carries a visible provenance line under the bar (« Mesuré (statfs) le … ·
+  note ZFS de l'agent »), since a tooltip never shows on a touch screen; the tooltip is reduced
+  to `id · filesystemType`.
+- Checks: `test/diskx-source.test.mjs` (new, 3), `diskx-observation`, `diskx-route`,
+  `diskx-embed`, `diskx-layout`; `tsc`, scoped eslint; `smoke-diskx` and `smoke-diskx-embed`
+  (two volumes in the mocked summary, one kept, gauge « pool/data · core », provenance line).

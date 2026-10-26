@@ -18,7 +18,7 @@ import { createDiskxRoute } from "./scripts/diskx-server.mjs";
 import { createProposalRelayRoute } from "./scripts/propose-relay.mjs";
 import { worldVocabulary, worldVocabularyRoute } from "./vite.vocabulary";
 
-function kidxDocuments(diskx?: { dataUrl?: string; volumesSpec?: string }, proposeUrl?: string): Plugin {
+function kidxDocuments(diskx?: { dataUrl?: string }, proposeUrl?: string): Plugin {
   return { name: "kidx-local-instructions", apply: "serve", async configureServer(server) {
     const route = await createKidxDocumentRoute();
     const teams = createKidxTeamRoute();
@@ -28,7 +28,7 @@ function kidxDocuments(diskx?: { dataUrl?: string; volumesSpec?: string }, propo
     // The relay itself refuses anything but loopback, same-origin requests.
     const agents = createGraphysXAgentRoute();
     // DiskX reads AgentX Data through the page's own origin; `DISKX_DATA_URL` unset means fixture.
-    const diskxRoute = createDiskxRoute({ dataUrl: diskx?.dataUrl, volumesSpec: diskx?.volumesSpec });
+    const diskxRoute = createDiskxRoute({ dataUrl: diskx?.dataUrl });
     // The published world vocabulary, and `/propose` relayed to one configured AgentX Core route
     // (`GRAPHYSX_PROPOSE_URL`); without it the relay answers 404 and the page composes locally.
     const vocabulary = worldVocabularyRoute();
@@ -89,14 +89,11 @@ function faceEmbed(): Plugin {
 }
 
 export default defineConfig(({ command, mode }) => {
-  // `DISKX_DATA_URL` / `DISKX_VOLUMES` may come from the shell or from an ignored `.env.local`,
-  // so a developer on the home LAN can point DiskX at AgentX Data (and declare or measure the
-  // volumes' capacity, which AgentX Data lacks) without exporting anything per terminal.
+  // `DISKX_DATA_URL` may come from the shell or from an ignored `.env.local`, so a developer
+  // on the home LAN can point DiskX at AgentX Data without exporting anything per terminal.
+  // Volume capacity comes from that API too; nothing is declared here any more.
   const diskxEnv = loadEnv(mode, process.cwd(), "DISKX_");
-  const diskx = {
-    dataUrl: process.env.DISKX_DATA_URL || diskxEnv.DISKX_DATA_URL || undefined,
-    volumesSpec: process.env.DISKX_VOLUMES || diskxEnv.DISKX_VOLUMES || undefined,
-  };
+  const diskx = { dataUrl: process.env.DISKX_DATA_URL || diskxEnv.DISKX_DATA_URL || undefined };
   // `GRAPHYSX_PROPOSE_URL`: the one AgentX Core route `/propose` relays to in dev (same sources
   // as DiskX). Unset means the page composes locally and the relay answers 503.
   const proposeEnv = loadEnv(mode, process.cwd(), "GRAPHYSX_PROPOSE");

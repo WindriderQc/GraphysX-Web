@@ -7,7 +7,7 @@ export function coreEndpoints(apiBase: string): DiskxEndpoints {
   if (!/^\/[A-Za-z0-9._~\/-]{0,200}$/.test(apiBase) || apiBase.includes("..") || apiBase.startsWith("//")) throw new Error("api-base must be a same-origin path");
   const base = apiBase.replace(/\/+$/, "");
   return {
-    summary: `${base}/storage/summary`, tree: `${base}/storage/tree`, files: `${base}/storage/files`, volumes: null,
+    summary: `${base}/storage/summary`, tree: `${base}/storage/tree`, files: `${base}/storage/files`,
     janitorStrategy: `${base}/janitor/strategy/latest`, janitorGroups: `${base}/janitor/strategy/latest/groups`,
   };
 }
