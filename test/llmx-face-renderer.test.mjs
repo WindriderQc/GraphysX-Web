@@ -4,6 +4,37 @@ import { importBrowserModule } from "./support/import-browser-module.mjs";
 
 const { AgentWorldVoxelFace, resolveAgentWorldFace } = await importBrowserModule(new URL("../src/agent-world-face.ts", import.meta.url));
 
+test("speech changes the teeth's colour while both lower corner cubes keep their wall colour", () => {
+  const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "high", autoBlink: false }));
+  try {
+    face.snapDrivers({ build: 1, speak: 0 });
+    const cavity = face.object.children.find(child => child.name === "VoxelFaceMaw");
+    const slotAt = (x, y, z) => {
+      for (let k = 0; k < cavity.count; k += 1) {
+        const matrix = cavity.instanceMatrix.array;
+        if (Math.abs(matrix[k * 16 + 12] - x) < 1e-5
+          && Math.abs(matrix[k * 16 + 13] - y) < 1e-5
+          && Math.abs(matrix[k * 16 + 14] - z) < 1e-5) return k;
+      }
+      assert.fail(`missing cavity cube at ${x},${y},${z}`);
+    };
+    const corners = [-1, 1].flatMap(side => [
+      slotAt(side * 0.216, -0.576, 0.436),
+      slotAt(side * 0.192, -0.600, 0.436),
+      slotAt(side * 0.168, -0.600, 0.436),
+    ]);
+    const tooth = slotAt(0, -0.504, 0.436);
+    const colour = k => Array.from(cavity.instanceColor.array.slice(k * 3, k * 3 + 3));
+    const walls = corners.map(colour);
+    const hiddenTooth = colour(tooth);
+    for (const speak of [0.05, 0.3, 0.6, 1, 0]) {
+      face.snapDrivers({ speak });
+      assert.deepEqual(corners.map(colour), walls, `corner colours must stay steady at speak=${speak}`);
+      if (speak === 1) assert.ok(colour(tooth)[0] > hiddenTooth[0] * 2, "the real tooth still brightens");
+    }
+  } finally { face.dispose(); }
+});
+
 test("static face instance uploads stop after assembly, including after a replay", () => {
   const face = new AgentWorldVoxelFace(resolveAgentWorldFace({ level: "mobile", autoBlink: false }));
   try {

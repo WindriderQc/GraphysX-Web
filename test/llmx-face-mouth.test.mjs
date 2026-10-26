@@ -40,6 +40,37 @@ test("the walls darken from the lips to the back", () => {
   assert.equal(mouthDepth(0.16), 1);
 });
 
+test("the two lower mouth corners stay walls instead of flashing with the teeth", () => {
+  const { interior, positions } = interiorOf("high");
+  for (const side of [-1, 1]) {
+    const corner = [...interior.role.keys()].find(k =>
+      Math.abs(positions[k * 3] - side * 0.216) < 1e-5
+      && Math.abs(positions[k * 3 + 1] + 0.576) < 1e-5
+      && Math.abs(positions[k * 3 + 2] - 0.436) < 1e-5);
+    assert.notEqual(corner, undefined, "sample the actual corner cube in the shipped sculpt");
+    assert.equal(interior.role[corner], MOUTH_ROLE.wall, `corner ${side} must not follow tooth reveal`);
+  }
+});
+
+for (const level of ["high", "balanced", "mobile"]) {
+  test(`${level}: teeth face the aperture, without extra rows behind them`, () => {
+    const { w, interior, positions } = interiorOf(level);
+    let teeth = 0;
+    for (let k = 0; k < interior.role.length; k += 1) {
+      if (![MOUTH_ROLE.upperTooth, MOUTH_ROLE.lowerTooth].includes(interior.role[k])) continue;
+      teeth += 1;
+      const x = positions[k * 3], y = positions[k * 3 + 1], z = positions[k * 3 + 2];
+      const blocked = [...interior.role.keys()].some(j =>
+        Math.abs(positions[j * 3] - x) < 1e-5
+        && (positions[j * 3 + 1] - w.anchors.mouth.y) * (y - w.anchors.mouth.y) > 0
+        && Math.abs(positions[j * 3 + 1] - w.anchors.mouth.y) < Math.abs(y - w.anchors.mouth.y) - 1e-5
+        && Math.abs(positions[j * 3 + 2] - z) < 1e-5);
+      assert.equal(blocked, false, `tooth at ${x},${y},${z} is behind another cavity cube`);
+    }
+    assert.ok(teeth > 0, "the regression must still inspect real teeth");
+  });
+}
+
 test("only the far wall and the deep throat glow; teeth never do", () => {
   assert.equal(glowWeight(MOUTH_ROLE.back, 1), 1);
   assert.equal(glowWeight(MOUTH_ROLE.upperTooth, 1), 0);
