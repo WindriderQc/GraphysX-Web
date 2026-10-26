@@ -29,6 +29,8 @@ export type SceneBrowserOptions = {
   client: SceneStoreClient;
   /** Scene to open on mount. Omitted leaves the browser idle on whatever is on screen. */
   initialScene?: string | null;
+  /** Keep discovery available without an open storage inspector over the welcome scene. */
+  startCollapsed?: boolean;
   /** Identifies this tab's writes. */
   actor?: string;
   /** Called when a scene is opened, so the host can hand the pointer back to the scene. */
@@ -486,6 +488,7 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     if (event.key === "Escape") closeSaveAs();
   });
 
+  setCollapsed(options.startCollapsed === true);
   container.append(style, panel);
 
   // Editor chrome already owns the right side of the viewport. While it is visible, Scenes is
@@ -501,13 +504,16 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
   };
   const reposition = (): void => {
     const column = editorColumn();
+    const wasDocked = panel.classList.contains("gx-sb--docked");
     if (column) {
       if (panel.parentElement !== column) column.append(panel);
       panel.classList.add("gx-sb--docked");
+      if (!wasDocked) setCollapsed(false);
       return;
     }
     if (panel.parentElement !== container) container.append(panel);
     panel.classList.remove("gx-sb--docked");
+    if (wasDocked && options.startCollapsed) setCollapsed(true);
   };
   reposition();
   window.addEventListener("resize", reposition);

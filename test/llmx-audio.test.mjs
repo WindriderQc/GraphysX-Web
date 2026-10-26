@@ -124,7 +124,12 @@ test('Parler and text/replay drive the face equally for identical output RMS', a
   await playing;
   const root = new ElementFixture();
   mounted = mountLlmXConversation(root, () => ({ schemaVersion: 1,
-    environment: { id: 'audio-fixture', name: 'Audio fixture' } }));
+    environment: { id: 'audio-fixture', name: 'Audio fixture' } }), { deferInitialization: true });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(requests, [], 'cold rendering must not start the connection deadline');
+  assert.equal(mounted.state().detail, 'La Forge se prépare…');
+  mounted.connect();
+  mounted.connect();
   await until(() => mounted.state().available);
   const microphone = root.children[0].querySelector('[data-talk="microphone"]');
   microphone.dispatchEvent(new Event('click'));

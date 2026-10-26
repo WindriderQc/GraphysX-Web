@@ -2,6 +2,17 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-10-25 — Mobile LLMx controls and conversation
+
+- Keep the profile visible beside the room title, move its switch into a horizontally scrollable tool strip and place undo/redo with those tools instead of over the conversation. Text, Send and Talk share one compact row; long messages use the full transcript width. The portrait stays clear of the transcript and makes room for reading on short screens; the short-screen maths panel leaves its portrait column available.
+- Core-module proof uses a long Family conversation and a real native scene application with an applied receipt. It measures button hit targets, composer alignment, portrait/message separation, undo/redo placement and document overflow at320x568,390x844 and600x800. Captures inspected; unit/typecheck/lint/build, Rapier and the extended Core-module check all pass. Broader conversation/creation/persistence verification and public reception are recorded separately at closeout.
+- Owner asked to wait before priority3 (LEGO shader). No LEGO or shared-renderer corrective code was changed. Showroom remains diagnostic; Claude retains its active Core-hosted Center/push work.
+
+## 2026-10-25 — LLMx cold bootstrap
+
+- Start the existing conversation handshake after the host's first render, including the face inset, rather than consuming its 15-second network deadline during cold shader work. Connection remains single-shot; no session or user turn is retried. Pending preparation and connection errors retain their status across world changes.
+- The Core-module browser regression deliberately blocks the first instanced draw for 16 seconds. The previous module fails because config starts before that draw completes; the corrected module passes with the original network and browser deadlines. Focused bootstrap/audio/client tests, 685 Node tests with one skip, the two Rapier probes and Core-module browser check passed. Final combined mobile validation and publication follow separately.
+
 ## 2026-09-13 — Full authored world and the existing AgentX voice path
 
 - Yanik assigned the face to Claude and voice/world integration to Codex. Expanded LLMx commands to the authored environment: existing entities, native lights/materials, all native types, spline updates, behaviors, physics interactions and joints. The build zone is now a workshop suggestion. Reuse shared validation and one native commit; retain exact revision/turn receipts and reloadable face/anchor identities.
@@ -4957,3 +4968,25 @@ copy of the API; the three demonstrations stay as the fallback when no provider 
 - Modèles externes (Blender, CC0) : `scripts/vendor-ecosystem-models.mjs` convertit un GLB en `graphysx-mesh-json` sans dépendance (hiérarchie, UV, couleur, texture embarquée) et écrit `public/assets/ecosystem/models.json`, que la vue lit au montage. Prouvé en direct sur `Airplane.glb` (texturé, dans le coin réserve), puis retiré ; le manifeste livré est vide.
 - Validation locale : `node --test test/ecosystem.test.mjs` (4), `npm test` 665 pass / 1 skip existant, `tsc`, `eslint --max-warnings 0`, build, `smoke:ecosystem` PASS (inscrit au manifeste, palier apps). Captures `output/verify/ecosystem-*.png` inspectées : vue d'ensemble encore sobre, étiquettes désencombrées, mobile OK. Pas de gate complet, pas de push.
 - Suite : modèles GLB de Yanik dans `assets-src/ecosystem/`, alertes/travaux vivants sur les `eco-node:<id>` (étape `watch`), élément embarquable pour Core.
+
+## 2026-10-26 — Showroom pointer gaps
+
+- A real-pointer probe found the transparent launcher grid (`div.gx-actions`) above the projected kinetic body. Its grid gaps intercepted presses before the renderer's interaction layer received them. Make only the grid pointer-transparent and retain pointer events on its actual buttons; picking, scene commands, renderer and live-session authority are unchanged.
+- Strengthen the showroom smoke with a real DOM hit-target assertion before the existing kinetic-body click. Existing movement, focus, portal, Nestor and lifecycle assertions/deadlines remain unchanged. The initial run stopped on a missing assertion import before exercising the change; corrected. Focused showroom and related request/startup/live-session validation are recorded separately at closeout.
+- LEGO shader priority3 remains on hold at the owner's request. This change does not modify the workshop or shared graphics code.
+
+## 2026-10-26 — CubX, living motion and an open shore
+
+- Owner direction: combine the Forge's copper/cyan finishes with an open landscape; keep CubX, flocks and spheres; remove the humanoid/tower accumulation. The welcome now uses a bounded composition, a low island surrounded by water, small topic/waypoint orbs and existing scene-native physics. Nestor retains its document identity and attributed review/undo path, with its visible interface replacing the robot geometry.
+- The default arrival uses the existing interruptible focus path for a slow wide-to-near move, followed by a slower orbit around CubX. Application entry retains its existing short move. Reduced-motion preferences suppress automatic camera motion. The camera smoke checks a visibly slow approach, fixed-radius orbit, immediate manual takeover and continuing live rendering with a stationary camera under reduced motion.
+- The original click failure was chrome above the canvas, including transparent launcher gaps and actual buttons over the kinetic stage. The desktop dock clears all seven authored pointer targets. Small screens use a shorter scrolling panel and a horizontal destination row clear of Display. Real pointer, movement, proposal/undo, navigation and authority assertions remain; composition acceptance now constrains density and absence of robot/gate geometry instead of rewarding more than100 entities. Final source, browser/CI scope and publication receipt are recorded in PR69; private captures remain outside Git.
+- Arbitrary textured triangles render through the existing model loader: a local deterministic6144-triangle/UV/texture experiment proved that path. Inline mesh authoring in scene proposals remains unimplemented. docs/GENERATIVE_MESH.md records the contract gap and a minimal extension of the existing engine/vocabulary rather than a new service. LEGO shader priority3 remains paused; family voice discussion and Claude's Core Center/push work are separate.
+
+## 2026-10-26 — Quiet welcome with an online scene store
+
+- Public reception found the optional stored-scene inspector expanded over the landscape. Start it collapsed on an idle welcome; explicit stored-scene URLs retain the open inspector. Manual expansion remains available, editor entry expands its docked section, and returning to the welcome folds it again without changing storage authority or writing the scene.
+- The existing scene-store journey now covers the store-present welcome, explicit expansion, editor docking and return, plus unchanged stored data. Unit/typecheck/lint/build, both Rapier probes and that complete focused browser journey pass; the capture was inspected.
+
+## 2026-10-26 — Black and white flocks
+
+- Restore the owner's preferred contrast: dark starling silhouettes above the landscape and a white orbital swarm with white trails around CubX. Counts, motion and geometry stay the same.

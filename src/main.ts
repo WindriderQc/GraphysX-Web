@@ -963,20 +963,18 @@ if (mode === "previews" && import.meta.env.DEV) {
       });
     };
     const host = new PlatformHost(root, {
-      autoOrbit: !editorFirst && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem",
+      autoOrbit: !motionIsReduced() && !editorFirst && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem",
+      autoOrbitSpeed: 0.2,
       editorVisible: editorFirst,
-      // The showroom is a composed set, not an overview of a demo world: frame it closer
-      // and slightly off-axis so the kinetic plinth reads and the sky stays in shot.
-      // Framed for depth rather than for coverage: close enough that the foreground trees
-      // crop and loom, high enough to see over the plinth to the lake and the far ridges, and
-      // aimed slightly past the CubX assembly so the flock and the shoreline occupy the upper
-      // two thirds instead of a flat horizon band.
-      framing: editorFirst ? undefined : { position: [9, 12, 22], target: [-0.5, 3.4, -5] },
+      // CubX and its living shell are the focal point; the shore and physics stay below.
+      framing: editorFirst ? undefined : { position: [9, 8, 21], target: [0, 4.6, -6.2] },
       // The entry move belongs to the front door only: arriving in the editor or via a
       // screenshot harness should put you where you asked to be, immediately. `?intro=0`
-      // opts out, which is how smoke-showroom measures the idle orbit without an intro
-      // moving the camera underneath its probe.
-      intro: !editorFirst && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && new URLSearchParams(window.location.search).get("intro") !== "0",
+      // opts out. The default welcome approaches slowly; application entry keeps its
+      // existing short move. Both use the host's interruptible focus mechanism.
+      intro: !motionIsReduced() && !editorFirst && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && new URLSearchParams(window.location.search).get("intro") !== "0"
+        ? appParam ? true : { durationSeconds: 10, distanceScale: 2.15, azimuthDegrees: 18 }
+        : false,
       // `?post=bloom` turns the demo post stack on for any route (bloom + SMAA through the
       // composer). Scenes whose documents carry their own `environment.post` keep their
       // tuning either way; this is the demo/preview switch, not a scene setting.
@@ -1223,6 +1221,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           api: host.api,
           client,
           initialScene: liveSessionRequested ? null : storeScene,
+          startCollapsed: !editorFirst && !storeScene,
           actor: "browser",
           onSceneOpened: () => {
             restoreShowroomOnEditorExit = true;

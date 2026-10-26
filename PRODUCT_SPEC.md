@@ -105,10 +105,13 @@ in the 2D layer — so top menus and 2D effects use the same model.
 
 ## 5. Front door & navigation
 
-- **Welcome showroom scene loads first** — the "boom" scene: warm sunlight, a CubX
-  assembly rotating over heightmap terrain, trees with water reflection, a slow cinematic
-  idle/screensaver orbit. It exists to *show the engine's capabilities at a glance*, not to
-  be an index. Clicking focuses the camera (the recovered CubX behavior).
+- **Welcome showroom scene loads first** — an open lakeside scene with the Forge's copper
+  and cyan finishes. The eight-cube CubX assembly and its flocks are the focal point; water,
+  light, particles and the small kinetic stage demonstrate the engine without a crowd of
+  humanoid towers, trees and large gates. A wide arrival approaches slowly, then an idle
+  orbit circles CubX. Manual input interrupts it and reduced-motion preferences suppress it.
+  Nestor stays in the interface, with small physical topic orbs. Clicking scenery focuses
+  the camera (the recovered CubX behavior).
 - **CubX assembly / side menu is the spatial navigator** → **Scene Editor** · **Browse
   Scenes** (load an existing 3D scene) · **Games & Apps** (a small, *expandable* category;
   seeded with a few of the strongest recovered experiences) · *(later: multiplayer rooms,
