@@ -76,11 +76,11 @@ export function mountWelcome(
     .gx-welcome h1{margin:0;font-size:clamp(28px,4.2vw,46px);letter-spacing:.035em;font-weight:850;color:var(--gx-ink);line-height:.98;text-shadow:0 4px 38px rgba(70,220,235,.38)}
     .gx-welcome p{margin:0;color:var(--gx-ink-soft);font-size:14.5px;line-height:1.55;text-shadow:0 1px 12px rgba(3,12,20,.7)}
     .gx-welcome .gx-nestor-topics{display:flex;gap:8px;flex-wrap:wrap;pointer-events:auto}
-    .gx-welcome .gx-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%;pointer-events:auto}
+    .gx-welcome .gx-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%;pointer-events:none}
     .gx-welcome button{background:linear-gradient(180deg,var(--gx-accent-deep),#1d7f96);color:#fff;border:1px solid var(--gx-accent-edge);border-radius:12px;padding:12px 24px;font:600 15px var(--gx-font);cursor:pointer;box-shadow:0 8px 30px rgba(30,127,150,.42)}
     .gx-welcome button:hover{filter:brightness(1.08)}
     .gx-welcome button:focus-visible{outline:2px solid #fff;outline-offset:3px;filter:brightness(1.1)}
-    .gx-welcome .gx-actions button{width:100%;min-height:44px;padding-inline:16px}
+    .gx-welcome .gx-actions button{width:100%;min-height:44px;padding-inline:16px;pointer-events:auto}
     .gx-welcome .gx-actions .gx-go-editor{grid-column:1 / -1}
     .gx-welcome .gx-nestor-topics button{padding:8px 13px;border-radius:999px;background:rgba(14,45,58,.8);border-color:rgba(116,223,241,.28);box-shadow:none;color:#bceef7;font-size:12px;letter-spacing:.04em}
     .gx-welcome .gx-nestor-topics button:hover,.gx-welcome .gx-nestor-topics button[aria-pressed="true"]{color:#fff;border-color:#77e9ff;background:rgba(35,117,139,.68);box-shadow:0 0 24px rgba(65,211,232,.22)}

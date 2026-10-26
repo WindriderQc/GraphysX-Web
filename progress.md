@@ -4968,3 +4968,9 @@ copy of the API; the three demonstrations stay as the fallback when no provider 
 - Modèles externes (Blender, CC0) : `scripts/vendor-ecosystem-models.mjs` convertit un GLB en `graphysx-mesh-json` sans dépendance (hiérarchie, UV, couleur, texture embarquée) et écrit `public/assets/ecosystem/models.json`, que la vue lit au montage. Prouvé en direct sur `Airplane.glb` (texturé, dans le coin réserve), puis retiré ; le manifeste livré est vide.
 - Validation locale : `node --test test/ecosystem.test.mjs` (4), `npm test` 665 pass / 1 skip existant, `tsc`, `eslint --max-warnings 0`, build, `smoke:ecosystem` PASS (inscrit au manifeste, palier apps). Captures `output/verify/ecosystem-*.png` inspectées : vue d'ensemble encore sobre, étiquettes désencombrées, mobile OK. Pas de gate complet, pas de push.
 - Suite : modèles GLB de Yanik dans `assets-src/ecosystem/`, alertes/travaux vivants sur les `eco-node:<id>` (étape `watch`), élément embarquable pour Core.
+
+## 2026-10-26 — Showroom pointer gaps
+
+- A real-pointer probe found the transparent launcher grid (`div.gx-actions`) above the projected kinetic body. Its grid gaps intercepted presses before the renderer's interaction layer received them. Make only the grid pointer-transparent and retain pointer events on its actual buttons; picking, scene commands, renderer and live-session authority are unchanged.
+- Strengthen the showroom smoke with a real DOM hit-target assertion before the existing kinetic-body click. Existing movement, focus, portal, Nestor and lifecycle assertions/deadlines remain unchanged. The initial run stopped on a missing assertion import before exercising the change; corrected. Focused showroom and related request/startup/live-session validation are recorded separately at closeout.
+- LEGO shader priority3 remains on hold at the owner's request. This change does not modify the workshop or shared graphics code.

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -107,6 +108,10 @@ try {
 
   const blockBefore = await entityPos("showroom-block-5");
   const blockAt = await screenOf("showroom-block-5");
+  assert.ok(blockAt && await page.evaluate(point => {
+    const canvas = window.__GRAPHYSX_HOST__.renderer.domElement;
+    return document.elementFromPoint(point.x, point.y) === canvas;
+  }, blockAt), "the welcome chrome must leave the kinetic body reachable by a real pointer");
   if (blockAt) await page.mouse.click(blockAt.x, blockAt.y);
   // Wait for the body to actually move rather than guessing a duration. Headless software
   // GL runs the frame loop at a few fps, so a fixed timeout races the physics step — this
