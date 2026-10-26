@@ -12,6 +12,7 @@ export const VERIFY_STATIC_CHECKS = {
 };
 
 export const VERIFY_SMOKES = [
+  { name: "llmx-core-embed", tier: "apps", script: "scripts/smoke-llmx-core-embed.mjs", covers: "Core-hosted Forge module: native scoped routes, Family cookie, one text turn, graphical assets and mobile" },
   { name: "llmx-world", tier: "apps", script: "scripts/smoke-llmx-world.mjs", covers: "Full world proposals: authored scenery, textures, lights, paths, physics/impulse/joints, undo and saved reload" },
   { name: "agent-mcp", tier: "core", script: "scripts/smoke-agent-mcp.mjs", covers: "Two MCP clients share a visible native world: edits, revision conflict, save/reload, camera and real PNG capture" },
   { name: "llmx-creation-actions", tier: "apps", script: "scripts/smoke-llmx-creation-actions.mjs", covers: "Native scene proposals and exact receipts, stale undo rejection, corrected French math history and workshop separation" },

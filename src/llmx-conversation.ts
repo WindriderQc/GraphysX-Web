@@ -3,7 +3,7 @@ import type { LlmXSceneReceipt } from './llmx-actions';
 import { LlmXSpeechOutput, loadLlmXAudio, llmxSpeechSampleFromRms, type LlmXReply, type LlmXVoiceConversation } from './llmx-audio';
 import type { LlmXConversationPhase } from './llmx-contracts';
 import { llmxSpeechChunks, playLlmXSpeech } from './llmx-speech-queue';
-import { createLlmXFetch } from "./llmx-transport";
+import { createLlmXFetch, llmxCoreEntry } from "./llmx-transport";
 
 const labels: Record<string, string> = {
   initializing: 'Connexion à AgentX…', opening: 'Notre agent arrive…', sending: 'Il réfléchit…',
@@ -386,7 +386,16 @@ export function mountLlmXConversation(root: HTMLElement, sceneContext: (request?
     finally { acting = false; render(); }
   });
   button('reconnect').addEventListener('click', () => window.location.reload());
-  void client.initialize().then(() => {
+  const coreEntry = llmxCoreEntry(options.profile ?? 'personal');
+  if (coreEntry) {
+    const link = document.createElement('a');
+    link.href = coreEntry;
+    link.textContent = 'Ouvrir Nestor sur le réseau de la maison';
+    link.className = 'gx-llmx-core-entry';
+    surface.prepend(link);
+    detail = 'La Forge est prête. La conversation s’ouvre dans AgentX.';
+    render();
+  } else void client.initialize().then(() => {
     if (disposed) return;
     initialized = true; render(); return maybeOpening();
   }).catch(error => { initialized = true; fail(error); });
