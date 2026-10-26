@@ -71,9 +71,9 @@ export const AGENTX_CENTER_TOUR: NestorTour = {
   stops: [
     {
       id: "host",
-      entityId: "showroom-nestor",
-      title: "Nestor",
-      line: "I am an ordinary scene entity — an agent with a role, a status and capabilities. Open the editor and you will find me in the outliner.",
+      entityId: "showroom-cubx",
+      title: "CubX",
+      line: "Eight cubes, one living assembly. Nestor stays in the interface; the landscape, materials and motion are editable scene data shared by people and agents.",
     },
     {
       id: "build",

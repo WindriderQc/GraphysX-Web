@@ -224,9 +224,11 @@ export function mountWelcome(
     }
     @media (max-width:640px){
       .gx-welcome{justify-content:center;align-items:flex-end;padding:14px 14px calc(58px + env(safe-area-inset-bottom))}
-      .gx-welcome-card{align-items:center;text-align:center;max-height:calc(100dvh - 86px);overflow-y:auto;padding:19px 18px 18px}
-      .gx-welcome .gx-actions{gap:8px}
-      .gx-welcome .gx-actions button{padding-inline:10px;font-size:13px}
+      .gx-welcome-card{align-items:center;text-align:center;max-height:min(38dvh,300px);overflow-y:auto;padding:14px 16px;backdrop-filter:none;pointer-events:auto}
+      .gx-welcome{padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+      .gx-welcome .gx-actions{position:fixed;left:14px;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));width:auto;display:flex;gap:8px;overflow-x:auto;padding:4px 0}
+      .gx-welcome .gx-actions button{flex:0 0 138px;padding-inline:10px;font-size:12px;min-height:52px}
+      .gx-welcome .gx-hint{display:none}
       .gx-welcome--presenting{align-items:flex-start;justify-content:flex-start;padding:8px}
       .gx-welcome--presenting .gx-welcome-card{width:min(310px,calc(100vw - 72px));max-height:min(46vh,380px);align-items:flex-start;text-align:left;gap:7px;padding:13px 14px;border-radius:14px}
       .gx-welcome--presenting h1{font-size:clamp(22px,7vw,27px);line-height:1.02}
@@ -282,14 +284,20 @@ export function mountWelcome(
      * On a desktop, keep the introduction above the stage and the destinations in one
      * bottom row. The card's blur must stand down here: a backdrop filter establishes a
      * containing block for fixed descendants and would pin this dock inside the card.
-     * Phones keep the existing bounded, scrolling card and its two-column destinations.
+     * Phones keep a short scrolling card and a horizontally scrollable destination row.
      */
     @media (min-width:900px){
       .gx-welcome{align-items:flex-start;padding:24px}
-      .gx-welcome-card{max-height:calc(100dvh - 160px);backdrop-filter:none}
+      .gx-welcome-card{width:430px;max-height:calc(100dvh - 160px);backdrop-filter:none;padding:18px 20px;gap:8px}
+      .gx-welcome h1{font-size:36px}
+      .gx-welcome p{font-size:13px}
+      .gx-welcome .gx-nestor-topics{gap:6px}
+      .gx-welcome .gx-nestor-topics button{font-size:10.5px;padding:8px 10px}
       .gx-welcome .gx-actions{position:fixed;left:24px;right:88px;bottom:24px;width:auto;display:flex;gap:8px}
       .gx-welcome .gx-actions button{flex:1 1 0;min-width:0;min-height:64px;padding:10px;font-size:13px;line-height:1.3}
     }
+    .gx-welcome .gx-actions button{background:rgba(12,25,35,.9);border-color:rgba(139,181,199,.4);box-shadow:none;color:#d4e1e7}
+    .gx-welcome .gx-actions .gx-go-editor{background:rgba(23,60,73,.94);border-color:#67b8ca}
   `;
   const overlay = document.createElement("div");
   overlay.className = "gx-welcome";

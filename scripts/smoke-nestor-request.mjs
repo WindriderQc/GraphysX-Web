@@ -84,7 +84,7 @@ try {
   out.noProvider.requests = proposeRequests.length;
   out.noProvider.proposal = await page.evaluate(() => window.__GRAPHYSX_NESTOR__.state().proposal === null);
 
-  // 2. A loopback provider: the card is bottom-anchored; the field must not have covered the
+  // 2. A loopback provider: the field must not have covered the
   //    kinetic blocks and consoles a visitor can click.
   await page.goto(`${BASE}?propose=${encodeURIComponent(providerUrl)}`, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await ready();
