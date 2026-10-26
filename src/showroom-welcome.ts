@@ -277,6 +277,19 @@ export function mountWelcome(
       .gx-welcome{align-items:flex-start;padding:12px}
       .gx-welcome-card{max-height:calc(100dvh - 24px);overflow-y:auto;padding:18px 20px}
     }
+    /*
+     * Application destinations must not grow the welcome card over the kinetic stage.
+     * On a desktop, keep the introduction above the stage and the destinations in one
+     * bottom row. The card's blur must stand down here: a backdrop filter establishes a
+     * containing block for fixed descendants and would pin this dock inside the card.
+     * Phones keep the existing bounded, scrolling card and its two-column destinations.
+     */
+    @media (min-width:900px){
+      .gx-welcome{align-items:flex-start;padding:24px}
+      .gx-welcome-card{max-height:calc(100dvh - 160px);backdrop-filter:none}
+      .gx-welcome .gx-actions{position:fixed;left:24px;right:88px;bottom:24px;width:auto;display:flex;gap:8px}
+      .gx-welcome .gx-actions button{flex:1 1 0;min-width:0;min-height:64px;padding:10px;font-size:13px;line-height:1.3}
+    }
   `;
   const overlay = document.createElement("div");
   overlay.className = "gx-welcome";

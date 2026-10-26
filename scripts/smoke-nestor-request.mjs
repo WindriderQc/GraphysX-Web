@@ -240,11 +240,9 @@ const ok = !out.fatal
   && out.noProvider?.requests === 0
   && out.noProvider?.proposal === true
   && out.layout?.fieldEnabled === true
-  // The row may not block any scene body the card did not already block at this framing, and the
-  // card may not be taller than it was before the row existed (526px at 1280x720, measured on
-  // 2026-10-25 before the change; 527px after it, the one pixel being line-height rounding of the
-  // shortened briefing): a taller bottom-anchored card is the hazard the roadmap records.
-  && Array.isArray(out.layout?.covered) && out.layout.covered.every((entry) => out.layout.coveredWithoutRow.some((other) => other.split(" -> ")[0] === entry.split(" -> ")[0]))
+  // All seven authored physics/console targets must remain reachable through real pointers.
+  // Added destinations must not regress the original 528px welcome-card height budget.
+  && Array.isArray(out.layout?.covered) && out.layout.covered.length === 0
   && out.layout?.cardHeight <= 528
   && out.asked?.intent === LAKE_REPLY.intent
   && out.asked?.cardIntent === LAKE_REPLY.intent
