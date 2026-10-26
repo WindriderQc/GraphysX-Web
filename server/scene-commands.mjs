@@ -12,7 +12,7 @@ import {
 } from "./host-entity-id-policy.mjs";
 import { WORLD_SCHEMA, WORLD_ENTITY_TYPES, assertWorldDefinition, assertRulesDefinition } from "./scene-document.mjs";
 
-const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/;
+export const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/;
 const MAX_AUTHORED_ENTITIES = 1_024;
 const MAX_DEFINITION_BYTES = 8 * 1024 * 1024;
 
@@ -23,23 +23,162 @@ const PHYSICS_FORBIDDEN_TYPES = new Set([
   "formula-field", "dna-tree", "ambient-light", "directional-light", "point-light",
 ]);
 const MOTION_BEHAVIORS = new Set(["spin", "bob", "orbit", "pulse", "look-at", "follow-spline"]);
-const ENTITY_KEYS = new Set([
-  "appearance",
-  "id", "label", "type", "parentId", "transform", "material", "modelMaterialOverrides", "geometry",
-  "path", "asset", "emitter", "sound", "terrain", "water", "flock", "crowd", "formula", "surface",
-  "steering", "dna", "forceField", "agent", "physics", "intensity", "distance", "marker", "visible",
-  "castShadow", "receiveShadow", "ephemeral", "tags", "behaviors", "interactions",
-]);
-const PATCH_KEYS = new Set([
-  "path",
-  "appearance",
-  "label", "parentId", "transform", "material", "modelMaterialOverrides", "surface", "steering", "visible",
-  "castShadow", "receiveShadow", "ephemeral", "tags", "intensity", "distance", "marker", "physics", "agent",
-  "emitter", "sound", "terrain", "water", "flock", "crowd", "formula", "dna", "forceField", "interactions",
-]);
-const ENVIRONMENT_KEYS = new Set([
-  "background", "sky", "envelope", "post", "lighting", "dayNight", "overlay", "ground", "physics",
-]);
+
+/**
+ * The field names each block accepts. One table, read by the validators below and by
+ * `world-vocabulary.mjs`, so the vocabulary a model composes against is the vocabulary this
+ * boundary enforces rather than a description of it that can drift.
+ */
+export const FIELDS = Object.freeze({
+  entity: Object.freeze([
+    "appearance",
+    "id", "label", "type", "parentId", "transform", "material", "modelMaterialOverrides", "geometry",
+    "path", "asset", "emitter", "sound", "terrain", "water", "flock", "crowd", "formula", "surface",
+    "steering", "dna", "forceField", "agent", "physics", "intensity", "distance", "marker", "visible",
+    "castShadow", "receiveShadow", "ephemeral", "tags", "behaviors", "interactions",
+  ]),
+  patch: Object.freeze([
+    "path",
+    "appearance",
+    "label", "parentId", "transform", "material", "modelMaterialOverrides", "surface", "steering", "visible",
+    "castShadow", "receiveShadow", "ephemeral", "tags", "intensity", "distance", "marker", "physics", "agent",
+    "emitter", "sound", "terrain", "water", "flock", "crowd", "formula", "dna", "forceField", "interactions",
+  ]),
+  environment: Object.freeze([
+    "background", "sky", "envelope", "post", "lighting", "dayNight", "overlay", "ground", "physics",
+  ]),
+  transform: Object.freeze(["position", "rotationDegrees", "scale"]),
+  texture: Object.freeze(["id", "repeat", "offset", "rotationDegrees"]),
+  material: Object.freeze([
+    "color", "emissive", "emissiveIntensity", "roughness", "metalness", "opacity", "wireframe", "texture",
+    "normalTexture", "normalScale", "shader",
+  ]),
+  geometry: Object.freeze(["width", "height", "depth", "radius", "tube", "radialSegments"]),
+  path: Object.freeze(["points", "closed", "tension"]),
+  asset: Object.freeze(["id", "url", "format", "fitSize", "alphaTest", "colorKey", "colorKeyTolerance"]),
+  agent: Object.freeze(["role", "status", "perceptionRadius", "capabilities"]),
+  sound: Object.freeze(["source", "volume", "loop", "autoplay", "positional", "refDistance"]),
+  emitter: Object.freeze([
+    "preset", "rate", "maxParticles", "lifetimeSeconds", "speed", "sizeScale", "volumeScale", "color", "gravity",
+    "direction", "spread", "seed", "enabled",
+  ]),
+  terrain: Object.freeze([
+    "heightmap", "heights", "size", "segments", "heightScale", "heightOffset", "flattenRadius", "flattenFalloff", "flattenHeight",
+  ]),
+  water: Object.freeze([
+    "size", "color", "sunColor", "sunDirection", "distortionScale", "rippleScale", "flowSpeed", "opacity", "reflectance",
+    "tintStrength", "tintDistance", "specularStrength", "reflection", "reflectionResolution",
+  ]),
+  flock: Object.freeze([
+    "preset", "count", "bounds", "radius", "size", "separation", "alignment", "cohesion", "separationDistance",
+    "neighborDistance", "speed", "maxForce", "memberSize", "color", "emissive", "emissiveIntensity", "trails",
+    "trailLength", "trailColor", "seed",
+  ]),
+  crowd: Object.freeze([
+    "preset", "count", "pursuers", "size", "speed", "pursuitSpeedRatio", "turnRate", "separationDistance", "separation",
+    "focus", "conversion", "memberSize", "wanderColor", "pursuerColor", "emissiveIntensity", "seed",
+  ]),
+  crowdConversion: Object.freeze(["from", "to", "radius", "afterSeconds"]),
+  formula: Object.freeze([
+    "preset", "kind", "a", "b", "c", "m", "xOffset", "lanes", "perLane", "spacing", "moleculeSize", "nearColor", "farColor",
+  ]),
+  dna: Object.freeze([
+    "preset", "seed", "generation", "mutationRate", "trees", "columns", "spacing", "layoutJitter", "genome", "growSeconds",
+    "seasonSeconds", "barkColor", "leaves",
+  ]),
+  dnaGenome: Object.freeze([
+    "trunkLength", "lengthRatio", "branchAngle", "rollTurns", "depth", "splitChance", "leafHue", "leafHueSpread",
+    "leafSize", "branchThickness",
+  ]),
+  forceField: Object.freeze([
+    "preset", "kind", "shape", "radius", "size", "strength", "minimumDistance", "scale", "speed", "edgeSoftness",
+    "affectsTags", "affectsBodies", "affectsParticles", "affectsFlocks", "visualize", "visualizeResolution", "color", "enabled",
+  ]),
+  surface: Object.freeze(["sketch", "resolution", "fps", "emissive", "tint"]),
+  // thrust/turn are live inputs and are intentionally not document-authoring fields.
+  steering: Object.freeze([
+    "headingDegrees", "force", "speedCap", "turnRateDegrees", "kickImpulse", "jumpImpulse", "arrowId", "arrowLift",
+  ]),
+  physics: Object.freeze([
+    "mode", "mass", "material", "friction", "restitution", "linearVelocity", "angularVelocity", "collider",
+  ]),
+  behaviors: Object.freeze({
+    spin: Object.freeze(["id", "type", "axis", "speedDegrees"]),
+    bob: Object.freeze(["id", "type", "axis", "amplitude", "frequencyHz", "phaseDegrees"]),
+    orbit: Object.freeze(["id", "type", "center", "radius", "speedDegrees", "phaseDegrees", "axis"]),
+    pulse: Object.freeze(["id", "type", "minimumScale", "maximumScale", "frequencyHz", "phaseDegrees"]),
+    "look-at": Object.freeze(["id", "type", "targetId"]),
+    "follow-spline": Object.freeze(["id", "type", "splineId", "speed", "phase", "loop", "orientToPath"]),
+  }),
+  interactions: Object.freeze({
+    "toggle-visibility": Object.freeze(["id", "label", "type", "targetIds"]),
+    "apply-impulse": Object.freeze(["id", "label", "type", "targetIds", "impulse", "relativePoint"]),
+    "play-sound": Object.freeze(["id", "label", "type", "targetIds", "sound", "volume", "positional", "refDistance"]),
+  }),
+  ground: Object.freeze(["visible", "size", "color", "grid", "gridColor"]),
+  environmentPhysics: Object.freeze(["gravity"]),
+  envelope: Object.freeze(["fogNear", "fogFar", "cameraFar"]),
+  post: Object.freeze(["bloom"]),
+  bloom: Object.freeze(["strength", "threshold", "radius"]),
+  lighting: Object.freeze(["source", "hdri", "intensity", "yawDegrees", "backgroundIntensity", "backgroundBlur"]),
+  dayNight: Object.freeze(["cycleSeconds", "phaseOffset", "day", "night"]),
+  dayNightLook: Object.freeze(["sky", "lighting", "background"]),
+  joint: Object.freeze(["id", "type", "bodyA", "bodyB", "anchorA", "anchorB", "axis", "length", "frameRotationDegreesA", "frameRotationDegreesB"]),
+});
+
+/** Closed enumerations the validators compare against; strings outside them are refused. */
+export const ENUMS = Object.freeze({
+  physicsModes: Object.freeze(["static", "dynamic", "kinematic", "trigger"]),
+  physicsMaterials: Object.freeze(["default", "wall", "finish", "ground", "ball", "human"]),
+  colliders: Object.freeze(["auto", "convex-hull", "trimesh"]),
+  axes: Object.freeze(["x", "y", "z"]),
+  jointTypes: Object.freeze(["fixed", "revolute", "rope"]),
+  lightingSources: Object.freeze(["sky", "studio", "hdri"]),
+  flockBounds: Object.freeze(["sphere", "box"]),
+  crowdRoles: Object.freeze(["wander", "pursue"]),
+  formulaKinds: Object.freeze(["parabola", "slope"]),
+  forceFieldKinds: Object.freeze(["attractor", "flow", "drag", "vortex"]),
+  forceFieldShapes: Object.freeze(["sphere", "box", "infinite"]),
+  surfaceSketches: Object.freeze(["waveform", "grid-pulse", "plasma"]),
+  shaderIds: Object.freeze(["archive-ppl", "archive-meshlight"]),
+  assetFormats: Object.freeze(["graphysx-mesh-json"]),
+});
+
+/**
+ * Numeric bounds, as `[minimum, maximum]`. The validators spread these into `requireFinite` /
+ * `requireVector`; the vocabulary publishes them so a model is told the same numbers the
+ * boundary will hold it to.
+ */
+export const LIMITS = Object.freeze({
+  transform: Object.freeze({ position: [-10_000, 10_000], rotationDegrees: [-360_000, 360_000], scale: [0.001, 1_000] }),
+  texture: Object.freeze({ repeat: [0.01, 128], offset: [-128, 128], rotationDegrees: [-360_000, 360_000] }),
+  material: Object.freeze({ emissiveIntensity: [0, 100], roughness: [0, 1], metalness: [0, 1], opacity: [0, 1], normalScale: [0, 8] }),
+  shader: Object.freeze({ bumpAmount: [0, 0.5], parallaxStrength: [0, 0.5], specularMultiplier: [0, 20], lightPosition: [-100_000, 100_000] }),
+  modelMaterialOverride: Object.freeze({ unit: [0, 1], emissiveIntensity: [0, 100] }),
+  geometry: Object.freeze({ size: [0.0001, 10_000], radialSegments: [3, 512] }),
+  path: Object.freeze({ points: [2, 256], point: [-10_000, 10_000], tension: [0, 1] }),
+  asset: Object.freeze({ fitSize: [0.0001, 10_000], alphaTest: [0, 1], colorKeyTolerance: [0, 1] }),
+  agent: Object.freeze({ perceptionRadius: [0, 10_000] }),
+  sound: Object.freeze({ volume: [0, 1], refDistance: [Number.MIN_VALUE, 1_000] }),
+  terrain: Object.freeze({ heightsSamples: [2, 513] }),
+  formula: Object.freeze({ molecules: [1, 10_000] }),
+  physics: Object.freeze({ mass: [0, 100_000], friction: [0, 1], restitution: [0, 1], linearVelocity: [-10_000, 10_000], angularVelocity: [-10_000, 10_000] }),
+  interactions: Object.freeze({ impulse: [-100_000, 100_000], relativePoint: [-10_000, 10_000], volume: [0, 1], refDistance: [Number.MIN_VALUE, 1_000], targetIds: [0, 32] }),
+  joint: Object.freeze({ anchor: [-10_000, 10_000], length: [0.001, 10_000], axis: [-1, 1], frameRotationDegrees: [-360_000, 360_000] }),
+  ground: Object.freeze({ size: [0.001, 100_000] }),
+  gravity: Object.freeze([-1_000, 1_000]),
+  envelope: Object.freeze([0, 100_000]),
+  bloom: Object.freeze({ strength: [0, 3], threshold: [0, 1], radius: [0, 1] }),
+  lighting: Object.freeze({ intensity: [0, 3], yawDegrees: [-180, 180], backgroundIntensity: [0, 3], backgroundBlur: [0, 1] }),
+  dayNight: Object.freeze({ cycleSeconds: [5, 86_400], phaseOffset: [0, 1 - Number.EPSILON] }),
+  strings: Object.freeze({ label: 240, agentText: 80, interactionLabel: 80, color: 128, textureId: 160, skyId: 160, url: 2_048, arrayItem: 128 }),
+  arrays: Object.freeze({ behaviors: 128, interactions: 128, tags: 128, affectsTags: 32, materialSlots: 128 }),
+  document: Object.freeze({ entities: MAX_AUTHORED_ENTITIES, bytes: MAX_DEFINITION_BYTES }),
+});
+const ENTITY_KEYS = new Set(FIELDS.entity);
+const PATCH_KEYS = new Set(FIELDS.patch);
+const ENVIRONMENT_KEYS = new Set(FIELDS.environment);
+const setOf = (keys) => new Set(keys);
 
 const SKY_IDS = new Set(["clearblue", "ballz18-clear-sky", "lostvalley", "skyx", "winter", "clearnight", "nightsky"]);
 const OVERLAY_IDS = new Set(["vignette", "starfield", "scanlines"]);
@@ -93,6 +232,35 @@ const NESTED_PATCH_FIELDS = new Set([
   "agent", "emitter", "sound", "terrain", "water", "flock", "crowd", "dna", "forceField", "steering",
 ]);
 const PRESET_RESET_FIELDS = new Set(["emitter", "flock", "crowd", "dna", "forceField"]);
+
+/**
+ * Everything above, for `world-vocabulary.mjs`. Read-only views of the same values the
+ * validators close over: there is no second copy to keep in step.
+ */
+export const SCENE_COMMAND_TABLES = Object.freeze({
+  entityTypes: WORLD_ENTITY_TYPES,
+  primitiveTypes: Object.freeze([...PRIMITIVE_TYPES]),
+  physicsForbiddenTypes: Object.freeze([...PHYSICS_FORBIDDEN_TYPES]),
+  motionBehaviors: Object.freeze([...MOTION_BEHAVIORS]),
+  skyIds: Object.freeze([...SKY_IDS]),
+  overlayIds: Object.freeze([...OVERLAY_IDS]),
+  hdriIds: Object.freeze([...HDRI_IDS]),
+  textureIds: Object.freeze([...TEXTURE_IDS]),
+  modelAssetIds: Object.freeze([...MODEL_ASSET_IDS]),
+  emitterPresets: Object.freeze([...EMITTER_PRESETS]),
+  heightmapIds: Object.freeze([...HEIGHTMAP_IDS]),
+  flockPresets: Object.freeze([...FLOCK_PRESETS]),
+  crowdPresets: Object.freeze([...CROWD_PRESETS]),
+  formulaPresets: Object.freeze([...FORMULA_PRESETS]),
+  dnaPresets: Object.freeze([...DNA_PRESETS]),
+  forceFieldPresets: Object.freeze([...FORCE_FIELD_PRESETS]),
+  nestedPatchFields: Object.freeze([...NESTED_PATCH_FIELDS]),
+  presetResetFields: Object.freeze([...PRESET_RESET_FIELDS]),
+  /** Commands `applyCommands` accepts; the browser runtime also runs spawn-prefab, interact, steer and select. */
+  documentOps: Object.freeze([
+    "spawn", "update", "remove", "set-environment", "attach-behavior", "detach-behavior", "add-joint", "update-joint", "remove-joint",
+  ]),
+});
 
 export class SceneCommandError extends Error {
   constructor(message, status = 400) {
@@ -193,20 +361,20 @@ function validateJsonValue(value, label, depth = 0) {
 }
 
 function validateTransform(value, label) {
-  allowedKeys(value, new Set(["position", "rotationDegrees", "scale"]), label);
-  if (value.position !== undefined) requireVector(value.position, 3, `${label}.position`, -10_000, 10_000);
-  if (value.rotationDegrees !== undefined) requireVector(value.rotationDegrees, 3, `${label}.rotationDegrees`, -360_000, 360_000);
-  if (value.scale !== undefined) requireVector(value.scale, 3, `${label}.scale`, 0.001, 1_000);
+  allowedKeys(value, setOf(FIELDS.transform), label);
+  if (value.position !== undefined) requireVector(value.position, 3, `${label}.position`, ...LIMITS.transform.position);
+  if (value.rotationDegrees !== undefined) requireVector(value.rotationDegrees, 3, `${label}.rotationDegrees`, ...LIMITS.transform.rotationDegrees);
+  if (value.scale !== undefined) requireVector(value.scale, 3, `${label}.scale`, ...LIMITS.transform.scale);
 }
 
 function validateTexture(value, label, allowImportedMedia = false) {
   if (value === null) return;
-  allowedKeys(value, new Set(["id", "repeat", "offset", "rotationDegrees"]), label);
-  requireString(value.id, `${label}.id`, { maximum: 160 });
+  allowedKeys(value, setOf(FIELDS.texture), label);
+  requireString(value.id, `${label}.id`, { maximum: LIMITS.strings.textureId });
   if (!allowImportedMedia && !TEXTURE_IDS.has(value.id)) reject(`${label}.id is not a curated live texture: ${String(value.id)}`);
-  if (value.repeat !== undefined) requireVector(value.repeat, 2, `${label}.repeat`, 0.01, 128);
-  if (value.offset !== undefined) requireVector(value.offset, 2, `${label}.offset`, -128, 128);
-  if (value.rotationDegrees !== undefined) requireFinite(value.rotationDegrees, `${label}.rotationDegrees`, -360_000, 360_000);
+  if (value.repeat !== undefined) requireVector(value.repeat, 2, `${label}.repeat`, ...LIMITS.texture.repeat);
+  if (value.offset !== undefined) requireVector(value.offset, 2, `${label}.offset`, ...LIMITS.texture.offset);
+  if (value.rotationDegrees !== undefined) requireFinite(value.rotationDegrees, `${label}.rotationDegrees`, ...LIMITS.texture.rotationDegrees);
 }
 
 function validateShader(value, label, allowImportedMedia = false) {
@@ -214,36 +382,33 @@ function validateShader(value, label, allowImportedMedia = false) {
   requireRecord(value, label);
   if (value.id === "archive-ppl") {
     allowedKeys(value, new Set(["id", "bumpAmount", "lightPosition"]), label);
-    requireFinite(value.bumpAmount, `${label}.bumpAmount`, 0, 0.5);
-    requireVector(value.lightPosition, 3, `${label}.lightPosition`, -100_000, 100_000);
+    requireFinite(value.bumpAmount, `${label}.bumpAmount`, ...LIMITS.shader.bumpAmount);
+    requireVector(value.lightPosition, 3, `${label}.lightPosition`, ...LIMITS.shader.lightPosition);
     return;
   }
   if (value.id === "archive-meshlight") {
     allowedKeys(value, new Set([
       "id", "parallaxStrength", "specularMultiplier", "specularTexture", "lightPosition", "lightColor",
     ]), label);
-    requireFinite(value.parallaxStrength, `${label}.parallaxStrength`, 0, 0.5);
-    requireFinite(value.specularMultiplier, `${label}.specularMultiplier`, 0, 20);
+    requireFinite(value.parallaxStrength, `${label}.parallaxStrength`, ...LIMITS.shader.parallaxStrength);
+    requireFinite(value.specularMultiplier, `${label}.specularMultiplier`, ...LIMITS.shader.specularMultiplier);
     validateTexture(value.specularTexture, `${label}.specularTexture`, allowImportedMedia);
-    requireVector(value.lightPosition, 3, `${label}.lightPosition`, -100_000, 100_000);
-    requireString(value.lightColor, `${label}.lightColor`, { maximum: 128 });
+    requireVector(value.lightPosition, 3, `${label}.lightPosition`, ...LIMITS.shader.lightPosition);
+    requireString(value.lightColor, `${label}.lightColor`, { maximum: LIMITS.strings.color });
     return;
   }
   reject(`Unknown ${label}.id: ${String(value.id)}`);
 }
 
 function validateMaterial(value, label, allowImportedMedia = false) {
-  allowedKeys(value, new Set([
-    "color", "emissive", "emissiveIntensity", "roughness", "metalness", "opacity", "wireframe", "texture",
-    "normalTexture", "normalScale", "shader",
-  ]), label);
-  for (const key of ["color", "emissive"]) if (value[key] !== undefined) requireString(value[key], `${label}.${key}`, { maximum: 128 });
-  if (value.emissiveIntensity !== undefined) requireFinite(value.emissiveIntensity, `${label}.emissiveIntensity`, 0, 100);
-  for (const key of ["roughness", "metalness", "opacity"]) if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`, 0, 1);
+  allowedKeys(value, setOf(FIELDS.material), label);
+  for (const key of ["color", "emissive"]) if (value[key] !== undefined) requireString(value[key], `${label}.${key}`, { maximum: LIMITS.strings.color });
+  if (value.emissiveIntensity !== undefined) requireFinite(value.emissiveIntensity, `${label}.emissiveIntensity`, ...LIMITS.material.emissiveIntensity);
+  for (const key of ["roughness", "metalness", "opacity"]) if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`, ...LIMITS.material[key]);
   if (value.wireframe !== undefined) requireBoolean(value.wireframe, `${label}.wireframe`);
   if (value.texture !== undefined) validateTexture(value.texture, `${label}.texture`, allowImportedMedia);
   if (value.normalTexture !== undefined) validateTexture(value.normalTexture, `${label}.normalTexture`, allowImportedMedia);
-  if (value.normalScale !== undefined) requireFinite(value.normalScale, `${label}.normalScale`, 0, 8);
+  if (value.normalScale !== undefined) requireFinite(value.normalScale, `${label}.normalScale`, ...LIMITS.material.normalScale);
   if (value.shader !== undefined) validateShader(value.shader, `${label}.shader`, allowImportedMedia);
 }
 
@@ -254,7 +419,7 @@ const MODEL_OVERRIDE_KEYS = new Set([
 function validateModelMaterialOverrides(value, label, { patch = false } = {}) {
   if (value === null && patch) return;
   requireRecord(value, label);
-  if (Object.keys(value).length > 128) reject(`${label} supports at most 128 material slots`);
+  if (Object.keys(value).length > LIMITS.arrays.materialSlots) reject(`${label} supports at most ${LIMITS.arrays.materialSlots} material slots`);
   for (const [slotId, override] of Object.entries(value)) {
     if (!/^mesh:\d+:[a-z0-9-]+:material:\d+:[a-z0-9-]+$/.test(slotId)) reject(`Invalid material slot id: ${slotId}`);
     if (override === null && patch) continue;
@@ -266,89 +431,84 @@ function validateModelMaterialOverrides(value, label, { patch = false } = {}) {
       }
     }
     for (const key of ["roughness", "metalness", "clearcoat", "clearcoatRoughness", "opacity"]) {
-      if (override[key] !== undefined) requireFinite(override[key], `${label}.${slotId}.${key}`, 0, 1);
+      if (override[key] !== undefined) requireFinite(override[key], `${label}.${slotId}.${key}`, ...LIMITS.modelMaterialOverride.unit);
     }
-    if (override.emissiveIntensity !== undefined) requireFinite(override.emissiveIntensity, `${label}.${slotId}.emissiveIntensity`, 0, 100);
+    if (override.emissiveIntensity !== undefined) requireFinite(override.emissiveIntensity, `${label}.${slotId}.emissiveIntensity`, ...LIMITS.modelMaterialOverride.emissiveIntensity);
   }
 }
 
 function validateGeometry(value, label) {
-  allowedKeys(value, new Set(["width", "height", "depth", "radius", "tube", "radialSegments"]), label);
+  allowedKeys(value, setOf(FIELDS.geometry), label);
   for (const key of ["width", "height", "depth", "radius", "tube"]) {
-    if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`, 0.0001, 10_000);
+    if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`, ...LIMITS.geometry.size);
   }
-  if (value.radialSegments !== undefined) requireInteger(value.radialSegments, `${label}.radialSegments`, 3, 512);
+  if (value.radialSegments !== undefined) requireInteger(value.radialSegments, `${label}.radialSegments`, ...LIMITS.geometry.radialSegments);
 }
 
 function validatePath(value, label) {
-  allowedKeys(value, new Set(["points", "closed", "tension"]), label);
-  if (!Array.isArray(value.points) || value.points.length < 2 || value.points.length > 256) {
-    reject(`${label}.points must contain 2 to 256 vectors`);
+  allowedKeys(value, setOf(FIELDS.path), label);
+  if (!Array.isArray(value.points) || value.points.length < LIMITS.path.points[0] || value.points.length > LIMITS.path.points[1]) {
+    reject(`${label}.points must contain ${LIMITS.path.points[0]} to ${LIMITS.path.points[1]} vectors`);
   }
-  value.points.forEach((point, index) => requireVector(point, 3, `${label}.points[${index}]`, -10_000, 10_000));
+  value.points.forEach((point, index) => requireVector(point, 3, `${label}.points[${index}]`, ...LIMITS.path.point));
   if (value.closed !== undefined) requireBoolean(value.closed, `${label}.closed`);
-  if (value.tension !== undefined) requireFinite(value.tension, `${label}.tension`, 0, 1);
+  if (value.tension !== undefined) requireFinite(value.tension, `${label}.tension`, ...LIMITS.path.tension);
 }
 
 function validateAsset(value, label, allowImportedMedia = false) {
-  allowedKeys(value, new Set(["id", "url", "format", "fitSize", "alphaTest", "colorKey", "colorKeyTolerance"]), label);
-  if (value.id !== undefined) requireString(value.id, `${label}.id`, { maximum: 160 });
+  allowedKeys(value, setOf(FIELDS.asset), label);
+  if (value.id !== undefined) requireString(value.id, `${label}.id`, { maximum: LIMITS.strings.textureId });
   if (value.url !== undefined) {
-    requireString(value.url, `${label}.url`, { maximum: 2_048 });
+    requireString(value.url, `${label}.url`, { maximum: LIMITS.strings.url });
     const protocols = allowImportedMedia ? /^(?:\/|https?:\/\/)/i : /^(?:\/|https:\/\/)/i;
     if (!protocols.test(value.url)) reject(`${label}.url must be root-relative or ${allowImportedMedia ? "HTTP(S)" : "HTTPS"}`);
   }
   if (!value.url && !MODEL_ASSET_IDS.has(value.id)) reject(`${label} requires a curated asset id or a root-relative/HTTPS URL`);
-  if (value.format !== undefined && value.format !== "graphysx-mesh-json") reject(`Unsupported ${label}.format: ${String(value.format)}`);
-  if (value.fitSize !== undefined) requireFinite(value.fitSize, `${label}.fitSize`, 0.0001, 10_000);
-  if (value.alphaTest !== undefined) requireFinite(value.alphaTest, `${label}.alphaTest`, 0, 1);
+  if (value.format !== undefined && !ENUMS.assetFormats.includes(value.format)) reject(`Unsupported ${label}.format: ${String(value.format)}`);
+  if (value.fitSize !== undefined) requireFinite(value.fitSize, `${label}.fitSize`, ...LIMITS.asset.fitSize);
+  if (value.alphaTest !== undefined) requireFinite(value.alphaTest, `${label}.alphaTest`, ...LIMITS.asset.alphaTest);
   if (value.colorKey !== undefined && (typeof value.colorKey !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value.colorKey))) {
     reject(`${label}.colorKey must be #rrggbb`);
   }
-  if (value.colorKeyTolerance !== undefined) requireFinite(value.colorKeyTolerance, `${label}.colorKeyTolerance`, 0, 1);
+  if (value.colorKeyTolerance !== undefined) requireFinite(value.colorKeyTolerance, `${label}.colorKeyTolerance`, ...LIMITS.asset.colorKeyTolerance);
 }
 
 function validateAgent(value, label) {
-  allowedKeys(value, new Set(["role", "status", "perceptionRadius", "capabilities"]), label);
-  for (const key of ["role", "status"]) if (value[key] !== undefined) requireString(value[key], `${label}.${key}`, { maximum: 80 });
-  if (value.perceptionRadius !== undefined) requireFinite(value.perceptionRadius, `${label}.perceptionRadius`, 0, 10_000);
-  if (value.capabilities !== undefined) requireStringArray(value.capabilities, `${label}.capabilities`, 128);
+  allowedKeys(value, setOf(FIELDS.agent), label);
+  for (const key of ["role", "status"]) if (value[key] !== undefined) requireString(value[key], `${label}.${key}`, { maximum: LIMITS.strings.agentText });
+  if (value.perceptionRadius !== undefined) requireFinite(value.perceptionRadius, `${label}.perceptionRadius`, ...LIMITS.agent.perceptionRadius);
+  if (value.capabilities !== undefined) requireStringArray(value.capabilities, `${label}.capabilities`, LIMITS.arrays.tags);
 }
 
 function validateSound(value, label, { requireSource = false } = {}) {
-  allowedKeys(value, new Set(["source", "volume", "loop", "autoplay", "positional", "refDistance"]), label);
-  if (requireSource || value.source !== undefined) requireString(value.source, `${label}.source`, { maximum: 2_048 });
-  if (value.volume !== undefined) requireFinite(value.volume, `${label}.volume`, 0, 1);
+  allowedKeys(value, setOf(FIELDS.sound), label);
+  if (requireSource || value.source !== undefined) requireString(value.source, `${label}.source`, { maximum: LIMITS.strings.url });
+  if (value.volume !== undefined) requireFinite(value.volume, `${label}.volume`, ...LIMITS.sound.volume);
   for (const key of ["loop", "autoplay", "positional"]) if (value[key] !== undefined) requireBoolean(value[key], `${label}.${key}`);
-  if (value.refDistance !== undefined) requireFinite(value.refDistance, `${label}.refDistance`, Number.MIN_VALUE, 1_000);
+  if (value.refDistance !== undefined) requireFinite(value.refDistance, `${label}.refDistance`, ...LIMITS.sound.refDistance);
 }
 
 function validateEmitter(value, label) {
-  allowedKeys(value, new Set([
-    "preset", "rate", "maxParticles", "lifetimeSeconds", "speed", "sizeScale", "volumeScale", "color", "gravity",
-    "direction", "spread", "seed", "enabled",
-  ]), label);
+  allowedKeys(value, setOf(FIELDS.emitter), label);
   if (value.preset !== undefined && !EMITTER_PRESETS.has(value.preset)) reject(`Unknown ${label}.preset: ${String(value.preset)}`);
   for (const key of ["rate", "maxParticles", "lifetimeSeconds", "speed", "sizeScale", "volumeScale", "spread", "seed"]) {
     if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`);
   }
-  if (value.color !== undefined && value.color !== null) requireString(value.color, `${label}.color`, { maximum: 128 });
+  if (value.color !== undefined && value.color !== null) requireString(value.color, `${label}.color`, { maximum: LIMITS.strings.color });
   if (value.gravity !== undefined) requireVector(value.gravity, 3, `${label}.gravity`);
   if (value.direction !== undefined) requireVector(value.direction, 3, `${label}.direction`);
   if (value.enabled !== undefined) requireBoolean(value.enabled, `${label}.enabled`);
 }
 
 function validateTerrain(value, label) {
-  allowedKeys(value, new Set([
-    "heightmap", "heights", "size", "segments", "heightScale", "heightOffset", "flattenRadius", "flattenFalloff", "flattenHeight",
-  ]), label);
+  allowedKeys(value, setOf(FIELDS.terrain), label);
   if (value.heightmap !== undefined && value.heightmap !== null && !HEIGHTMAP_IDS.has(value.heightmap)) {
     reject(`Unknown ${label}.heightmap: ${String(value.heightmap)}`);
   }
   if (value.heights !== undefined && value.heights !== null) {
     if (!Array.isArray(value.heights)) reject(`${label}.heights must be an array or null`);
     const samples = Math.round(Math.sqrt(value.heights.length));
-    if (samples < 2 || samples > 513 || samples * samples !== value.heights.length) {
+    if (samples < LIMITS.terrain.heightsSamples[0] || samples > LIMITS.terrain.heightsSamples[1] || samples * samples !== value.heights.length) {
       reject(`${label}.heights must be a square grid from 2x2 through 513x513`);
     }
     value.heights.forEach((height, index) => requireFinite(height, `${label}.heights[${index}]`));
@@ -359,10 +519,7 @@ function validateTerrain(value, label) {
 }
 
 function validateWater(value, label) {
-  allowedKeys(value, new Set([
-    "size", "color", "sunColor", "sunDirection", "distortionScale", "rippleScale", "flowSpeed", "opacity", "reflectance",
-    "tintStrength", "tintDistance", "specularStrength", "reflection", "reflectionResolution",
-  ]), label);
+  allowedKeys(value, setOf(FIELDS.water), label);
   for (const key of ["color", "sunColor"]) if (value[key] !== undefined) requireResolvedColor(value[key], `${label}.${key}`);
   if (value.sunDirection !== undefined) requireVector(value.sunDirection, 3, `${label}.sunDirection`);
   for (const key of [
@@ -373,13 +530,9 @@ function validateWater(value, label) {
 }
 
 function validateFlock(value, label) {
-  allowedKeys(value, new Set([
-    "preset", "count", "bounds", "radius", "size", "separation", "alignment", "cohesion", "separationDistance",
-    "neighborDistance", "speed", "maxForce", "memberSize", "color", "emissive", "emissiveIntensity", "trails",
-    "trailLength", "trailColor", "seed",
-  ]), label);
+  allowedKeys(value, setOf(FIELDS.flock), label);
   if (value.preset !== undefined && value.preset !== null && !FLOCK_PRESETS.has(value.preset)) reject(`Unknown ${label}.preset: ${String(value.preset)}`);
-  if (value.bounds !== undefined && !["sphere", "box"].includes(value.bounds)) reject(`${label}.bounds must be sphere or box`);
+  if (value.bounds !== undefined && !ENUMS.flockBounds.includes(value.bounds)) reject(`${label}.bounds must be sphere or box`);
   if (value.size !== undefined) requireVector(value.size, 3, `${label}.size`);
   for (const key of [
     "count", "radius", "separation", "alignment", "cohesion", "separationDistance", "neighborDistance", "speed",
@@ -390,10 +543,7 @@ function validateFlock(value, label) {
 }
 
 function validateCrowd(value, label) {
-  allowedKeys(value, new Set([
-    "preset", "count", "pursuers", "size", "speed", "pursuitSpeedRatio", "turnRate", "separationDistance", "separation",
-    "focus", "conversion", "memberSize", "wanderColor", "pursuerColor", "emissiveIntensity", "seed",
-  ]), label);
+  allowedKeys(value, setOf(FIELDS.crowd), label);
   if (value.preset !== undefined && value.preset !== null && !CROWD_PRESETS.has(value.preset)) reject(`Unknown ${label}.preset: ${String(value.preset)}`);
   if (value.size !== undefined) requireVector(value.size, 2, `${label}.size`);
   if (value.focus !== undefined) requireVector(value.focus, 3, `${label}.focus`);
@@ -403,8 +553,8 @@ function validateCrowd(value, label) {
   ]) if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`);
   for (const key of ["wanderColor", "pursuerColor"]) if (value[key] !== undefined) requireResolvedColor(value[key], `${label}.${key}`);
   if (value.conversion !== undefined && value.conversion !== null) {
-    allowedKeys(value.conversion, new Set(["from", "to", "radius", "afterSeconds"]), `${label}.conversion`);
-    if (!["wander", "pursue"].includes(value.conversion.from) || !["wander", "pursue"].includes(value.conversion.to)) {
+    allowedKeys(value.conversion, setOf(FIELDS.crowdConversion), `${label}.conversion`);
+    if (!ENUMS.crowdRoles.includes(value.conversion.from) || !ENUMS.crowdRoles.includes(value.conversion.to)) {
       reject(`${label}.conversion roles must be wander or pursue`);
     }
     if (value.conversion.from === value.conversion.to) reject(`${label}.conversion roles must differ`);
@@ -414,58 +564,46 @@ function validateCrowd(value, label) {
 }
 
 function validateFormula(value, label) {
-  allowedKeys(value, new Set([
-    "preset", "kind", "a", "b", "c", "m", "xOffset", "lanes", "perLane", "spacing", "moleculeSize", "nearColor", "farColor",
-  ]), label);
+  allowedKeys(value, setOf(FIELDS.formula), label);
   if (value.preset !== undefined && value.preset !== null && !FORMULA_PRESETS.has(value.preset)) reject(`Unknown ${label}.preset: ${String(value.preset)}`);
-  if (value.kind !== undefined && !["parabola", "slope"].includes(value.kind)) reject(`${label}.kind must be parabola or slope`);
+  if (value.kind !== undefined && !ENUMS.formulaKinds.includes(value.kind)) reject(`${label}.kind must be parabola or slope`);
   for (const key of ["a", "b", "c", "m", "xOffset", "lanes", "perLane", "spacing", "moleculeSize"]) {
     if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`);
   }
-  for (const key of ["nearColor", "farColor"]) if (value[key] !== undefined) requireString(value[key], `${label}.${key}`, { maximum: 128 });
+  for (const key of ["nearColor", "farColor"]) if (value[key] !== undefined) requireString(value[key], `${label}.${key}`, { maximum: LIMITS.strings.color });
   const presetSize = value.preset === "archive-molecules" ? 100 : 48;
   const lanes = value.lanes ?? presetSize;
   const perLane = value.perLane ?? presetSize;
-  if (Math.min(200, Math.max(1, Math.round(lanes))) * Math.min(200, Math.max(1, Math.round(perLane))) > 10_000) {
-    reject(`${label} exceeds the 10000 molecule budget`);
+  if (Math.min(200, Math.max(1, Math.round(lanes))) * Math.min(200, Math.max(1, Math.round(perLane))) > LIMITS.formula.molecules[1]) {
+    reject(`${label} exceeds the ${LIMITS.formula.molecules[1]} molecule budget`);
   }
 }
 
 function validateDna(value, label) {
-  allowedKeys(value, new Set([
-    "preset", "seed", "generation", "mutationRate", "trees", "columns", "spacing", "layoutJitter", "genome", "growSeconds",
-    "seasonSeconds", "barkColor", "leaves",
-  ]), label);
+  allowedKeys(value, setOf(FIELDS.dna), label);
   if (value.preset !== undefined && value.preset !== null && !DNA_PRESETS.has(value.preset)) reject(`Unknown ${label}.preset: ${String(value.preset)}`);
   for (const key of ["seed", "generation", "mutationRate", "trees", "columns", "layoutJitter", "growSeconds", "seasonSeconds"]) {
     if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`);
   }
   if (value.spacing !== undefined) requireVector(value.spacing, 2, `${label}.spacing`);
-  if (value.barkColor !== undefined) requireString(value.barkColor, `${label}.barkColor`, { maximum: 128 });
+  if (value.barkColor !== undefined) requireString(value.barkColor, `${label}.barkColor`, { maximum: LIMITS.strings.color });
   if (value.leaves !== undefined) requireBoolean(value.leaves, `${label}.leaves`);
   if (value.genome !== undefined) {
-    const genomeKeys = new Set([
-      "trunkLength", "lengthRatio", "branchAngle", "rollTurns", "depth", "splitChance", "leafHue", "leafHueSpread",
-      "leafSize", "branchThickness",
-    ]);
-    allowedKeys(value.genome, genomeKeys, `${label}.genome`);
+    allowedKeys(value.genome, setOf(FIELDS.dnaGenome), `${label}.genome`);
     for (const [key, entry] of Object.entries(value.genome)) requireFinite(entry, `${label}.genome.${key}`);
   }
 }
 
 function validateForceField(value, label) {
-  allowedKeys(value, new Set([
-    "preset", "kind", "shape", "radius", "size", "strength", "minimumDistance", "scale", "speed", "edgeSoftness",
-    "affectsTags", "affectsBodies", "affectsParticles", "affectsFlocks", "visualize", "visualizeResolution", "color", "enabled",
-  ]), label);
+  allowedKeys(value, setOf(FIELDS.forceField), label);
   if (value.preset !== undefined && value.preset !== null && !FORCE_FIELD_PRESETS.has(value.preset)) reject(`Unknown ${label}.preset: ${String(value.preset)}`);
-  if (value.kind !== undefined && !["attractor", "flow", "drag", "vortex"].includes(value.kind)) reject(`Unknown ${label}.kind: ${String(value.kind)}`);
-  if (value.shape !== undefined && !["sphere", "box", "infinite"].includes(value.shape)) reject(`Unknown ${label}.shape: ${String(value.shape)}`);
+  if (value.kind !== undefined && !ENUMS.forceFieldKinds.includes(value.kind)) reject(`Unknown ${label}.kind: ${String(value.kind)}`);
+  if (value.shape !== undefined && !ENUMS.forceFieldShapes.includes(value.shape)) reject(`Unknown ${label}.shape: ${String(value.shape)}`);
   if (value.size !== undefined) requireVector(value.size, 3, `${label}.size`);
   for (const key of ["radius", "strength", "minimumDistance", "scale", "speed", "edgeSoftness", "visualizeResolution"]) {
     if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`);
   }
-  if (value.affectsTags !== undefined) requireStringArray(value.affectsTags, `${label}.affectsTags`, 32);
+  if (value.affectsTags !== undefined) requireStringArray(value.affectsTags, `${label}.affectsTags`, LIMITS.arrays.affectsTags);
   for (const key of ["affectsBodies", "affectsParticles", "affectsFlocks", "visualize", "enabled"]) {
     if (value[key] !== undefined) requireBoolean(value[key], `${label}.${key}`);
   }
@@ -474,8 +612,8 @@ function validateForceField(value, label) {
 
 function validateSurface(value, label) {
   if (value === null) return;
-  allowedKeys(value, new Set(["sketch", "resolution", "fps", "emissive", "tint"]), label);
-  if (!["waveform", "grid-pulse", "plasma"].includes(value.sketch)) reject(`Unknown ${label}.sketch: ${String(value.sketch)}`);
+  allowedKeys(value, setOf(FIELDS.surface), label);
+  if (!ENUMS.surfaceSketches.includes(value.sketch)) reject(`Unknown ${label}.sketch: ${String(value.sketch)}`);
   if (value.resolution !== undefined) requireFinite(value.resolution, `${label}.resolution`);
   if (value.fps !== undefined) requireFinite(value.fps, `${label}.fps`);
   if (value.emissive !== undefined) requireBoolean(value.emissive, `${label}.emissive`);
@@ -484,10 +622,7 @@ function validateSurface(value, label) {
 
 function validateSteering(value, label) {
   if (value === null) return;
-  // thrust/turn are live inputs and are intentionally not document-authoring fields.
-  allowedKeys(value, new Set([
-    "headingDegrees", "force", "speedCap", "turnRateDegrees", "kickImpulse", "jumpImpulse", "arrowId", "arrowLift",
-  ]), label);
+  allowedKeys(value, setOf(FIELDS.steering), label);
   for (const key of ["headingDegrees", "force", "speedCap", "turnRateDegrees", "kickImpulse", "jumpImpulse", "arrowLift"]) {
     if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`);
   }
@@ -496,28 +631,26 @@ function validateSteering(value, label) {
 
 function validatePhysics(value, label, entity) {
   if (value === null) return;
-  allowedKeys(value, new Set([
-    "mode", "mass", "material", "friction", "restitution", "linearVelocity", "angularVelocity", "collider",
-  ]), label);
-  if (!["static", "dynamic", "kinematic", "trigger"].includes(value.mode)) reject(`Unsupported ${label}.mode: ${String(value.mode)}`);
+  allowedKeys(value, setOf(FIELDS.physics), label);
+  if (!ENUMS.physicsModes.includes(value.mode)) reject(`Unsupported ${label}.mode: ${String(value.mode)}`);
   if (PHYSICS_FORBIDDEN_TYPES.has(entity.type)) reject(`Entity type cannot have physics: ${entity.type}`);
   if (entity.type === "plane" && value.mode === "dynamic") reject("Plane physics can only be static or kinematic");
   if (entity.parentId) reject("Physics entities must remain at the world root");
-  if (value.mass !== undefined) requireFinite(value.mass, `${label}.mass`, 0, 100_000);
-  if (value.material !== undefined && !["default", "wall", "finish", "ground", "ball", "human"].includes(value.material)) {
+  if (value.mass !== undefined) requireFinite(value.mass, `${label}.mass`, ...LIMITS.physics.mass);
+  if (value.material !== undefined && !ENUMS.physicsMaterials.includes(value.material)) {
     reject(`Unsupported ${label}.material: ${String(value.material)}`);
   }
-  for (const key of ["friction", "restitution"]) if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`, 0, 1);
-  if (value.linearVelocity !== undefined) requireVector(value.linearVelocity, 3, `${label}.linearVelocity`, -10_000, 10_000);
-  if (value.angularVelocity !== undefined) requireVector(value.angularVelocity, 3, `${label}.angularVelocity`, -10_000, 10_000);
+  for (const key of ["friction", "restitution"]) if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`, ...LIMITS.physics[key]);
+  if (value.linearVelocity !== undefined) requireVector(value.linearVelocity, 3, `${label}.linearVelocity`, ...LIMITS.physics.linearVelocity);
+  if (value.angularVelocity !== undefined) requireVector(value.angularVelocity, 3, `${label}.angularVelocity`, ...LIMITS.physics.angularVelocity);
   const collider = value.collider ?? "auto";
-  if (!["auto", "convex-hull", "trimesh"].includes(collider)) reject(`Unsupported ${label}.collider: ${String(collider)}`);
+  if (!ENUMS.colliders.includes(collider)) reject(`Unsupported ${label}.collider: ${String(collider)}`);
   if (collider !== "auto" && entity.type !== "model") reject(`${collider} colliders are only available on model entities`);
   if (collider === "trimesh" && value.mode !== "static") reject("Trimesh colliders must be static");
 }
 
 function validateBehaviors(value, label) {
-  if (!Array.isArray(value) || value.length > 128) reject(`${label} must be an array of at most 128 behaviors`);
+  if (!Array.isArray(value) || value.length > LIMITS.arrays.behaviors) reject(`${label} must be an array of at most ${LIMITS.arrays.behaviors} behaviors`);
   const ids = new Set();
   for (let index = 0; index < value.length; index += 1) {
     const behavior = value[index];
@@ -527,26 +660,26 @@ function validateBehaviors(value, label) {
     if (ids.has(behavior.id)) reject(`Behavior ids must be unique on an entity: ${behavior.id}`);
     ids.add(behavior.id);
     if (behavior.type === "spin") {
-      allowedKeys(behavior, new Set(["id", "type", "axis", "speedDegrees"]), itemLabel);
-      if (behavior.axis !== undefined && !["x", "y", "z"].includes(behavior.axis)) reject(`${itemLabel}.axis is invalid`);
+      allowedKeys(behavior, setOf(FIELDS.behaviors.spin), itemLabel);
+      if (behavior.axis !== undefined && !ENUMS.axes.includes(behavior.axis)) reject(`${itemLabel}.axis is invalid`);
       if (behavior.speedDegrees !== undefined) requireFinite(behavior.speedDegrees, `${itemLabel}.speedDegrees`);
     } else if (behavior.type === "bob") {
-      allowedKeys(behavior, new Set(["id", "type", "axis", "amplitude", "frequencyHz", "phaseDegrees"]), itemLabel);
-      if (behavior.axis !== undefined && !["x", "y", "z"].includes(behavior.axis)) reject(`${itemLabel}.axis is invalid`);
+      allowedKeys(behavior, setOf(FIELDS.behaviors.bob), itemLabel);
+      if (behavior.axis !== undefined && !ENUMS.axes.includes(behavior.axis)) reject(`${itemLabel}.axis is invalid`);
       for (const key of ["amplitude", "frequencyHz", "phaseDegrees"]) if (behavior[key] !== undefined) requireFinite(behavior[key], `${itemLabel}.${key}`);
     } else if (behavior.type === "orbit") {
-      allowedKeys(behavior, new Set(["id", "type", "center", "radius", "speedDegrees", "phaseDegrees", "axis"]), itemLabel);
-      if (behavior.axis !== undefined && !["x", "y", "z"].includes(behavior.axis)) reject(`${itemLabel}.axis is invalid`);
+      allowedKeys(behavior, setOf(FIELDS.behaviors.orbit), itemLabel);
+      if (behavior.axis !== undefined && !ENUMS.axes.includes(behavior.axis)) reject(`${itemLabel}.axis is invalid`);
       if (behavior.center !== undefined) requireVector(behavior.center, 3, `${itemLabel}.center`);
       for (const key of ["radius", "speedDegrees", "phaseDegrees"]) if (behavior[key] !== undefined) requireFinite(behavior[key], `${itemLabel}.${key}`);
     } else if (behavior.type === "pulse") {
-      allowedKeys(behavior, new Set(["id", "type", "minimumScale", "maximumScale", "frequencyHz", "phaseDegrees"]), itemLabel);
+      allowedKeys(behavior, setOf(FIELDS.behaviors.pulse), itemLabel);
       for (const key of ["minimumScale", "maximumScale", "frequencyHz", "phaseDegrees"]) if (behavior[key] !== undefined) requireFinite(behavior[key], `${itemLabel}.${key}`);
     } else if (behavior.type === "look-at") {
-      allowedKeys(behavior, new Set(["id", "type", "targetId"]), itemLabel);
+      allowedKeys(behavior, setOf(FIELDS.behaviors["look-at"]), itemLabel);
       requireStableId(behavior.targetId, `${itemLabel}.targetId`);
     } else if (behavior.type === "follow-spline") {
-      allowedKeys(behavior, new Set(["id", "type", "splineId", "speed", "phase", "loop", "orientToPath"]), itemLabel);
+      allowedKeys(behavior, setOf(FIELDS.behaviors["follow-spline"]), itemLabel);
       requireStableId(behavior.splineId, `${itemLabel}.splineId`);
       if (behavior.speed !== undefined) requireFinite(behavior.speed, `${itemLabel}.speed`);
       if (behavior.phase !== undefined) requireFinite(behavior.phase, `${itemLabel}.phase`);
@@ -558,7 +691,7 @@ function validateBehaviors(value, label) {
 }
 
 function validateInteractions(value, label) {
-  if (!Array.isArray(value) || value.length > 128) reject(`${label} must be an array of at most 128 interactions`);
+  if (!Array.isArray(value) || value.length > LIMITS.arrays.interactions) reject(`${label} must be an array of at most ${LIMITS.arrays.interactions} interactions`);
   const ids = new Set();
   for (let index = 0; index < value.length; index += 1) {
     const interaction = value[index];
@@ -568,25 +701,23 @@ function validateInteractions(value, label) {
     if (ids.has(interaction.id)) reject(`Interaction ids must be unique on an entity: ${interaction.id}`);
     ids.add(interaction.id);
     if (interaction.type === "toggle-visibility") {
-      allowedKeys(interaction, new Set(["id", "label", "type", "targetIds"]), itemLabel);
+      allowedKeys(interaction, setOf(FIELDS.interactions["toggle-visibility"]), itemLabel);
     } else if (interaction.type === "apply-impulse") {
-      allowedKeys(interaction, new Set(["id", "label", "type", "targetIds", "impulse", "relativePoint"]), itemLabel);
-      requireVector(interaction.impulse, 3, `${itemLabel}.impulse`, -100_000, 100_000);
-      if (interaction.relativePoint !== undefined) requireVector(interaction.relativePoint, 3, `${itemLabel}.relativePoint`, -10_000, 10_000);
+      allowedKeys(interaction, setOf(FIELDS.interactions["apply-impulse"]), itemLabel);
+      requireVector(interaction.impulse, 3, `${itemLabel}.impulse`, ...LIMITS.interactions.impulse);
+      if (interaction.relativePoint !== undefined) requireVector(interaction.relativePoint, 3, `${itemLabel}.relativePoint`, ...LIMITS.interactions.relativePoint);
     } else if (interaction.type === "play-sound") {
-      allowedKeys(interaction, new Set([
-        "id", "label", "type", "targetIds", "sound", "volume", "positional", "refDistance",
-      ]), itemLabel);
-      requireString(interaction.sound, `${itemLabel}.sound`, { maximum: 2_048 });
-      if (interaction.volume !== undefined) requireFinite(interaction.volume, `${itemLabel}.volume`, 0, 1);
+      allowedKeys(interaction, setOf(FIELDS.interactions["play-sound"]), itemLabel);
+      requireString(interaction.sound, `${itemLabel}.sound`, { maximum: LIMITS.strings.url });
+      if (interaction.volume !== undefined) requireFinite(interaction.volume, `${itemLabel}.volume`, ...LIMITS.interactions.volume);
       if (interaction.positional !== undefined) requireBoolean(interaction.positional, `${itemLabel}.positional`);
-      if (interaction.refDistance !== undefined) requireFinite(interaction.refDistance, `${itemLabel}.refDistance`, Number.MIN_VALUE, 1_000);
+      if (interaction.refDistance !== undefined) requireFinite(interaction.refDistance, `${itemLabel}.refDistance`, ...LIMITS.interactions.refDistance);
     } else {
       reject(`Unsupported interaction: ${String(interaction.type)}`);
     }
-    if (interaction.label !== undefined) requireString(interaction.label, `${itemLabel}.label`, { maximum: 80 });
+    if (interaction.label !== undefined) requireString(interaction.label, `${itemLabel}.label`, { maximum: LIMITS.strings.interactionLabel });
     const targets = interaction.targetIds ?? [];
-    if (!Array.isArray(targets) || targets.length > 32) reject(`${itemLabel}.targetIds must be an array of at most 32 ids`);
+    if (!Array.isArray(targets) || targets.length > LIMITS.interactions.targetIds[1]) reject(`${itemLabel}.targetIds must be an array of at most ${LIMITS.interactions.targetIds[1]} ids`);
     if (interaction.type !== "play-sound" && targets.length === 0) reject(`${interaction.type} requires at least one target id`);
     targets.forEach((targetId, targetIndex) => requireStableId(targetId, `${itemLabel}.targetIds[${targetIndex}]`));
   }
@@ -615,7 +746,7 @@ function validateEntityFields(entity, label, allowImportedMedia = false) {
   validateAppearance(entity.appearance, entity.type);
   requireStableId(entity.id, `${label}.id`);
   if (!ENTITY_TYPES.has(entity.type)) reject(`Unsupported entity type: ${String(entity.type)}`);
-  if (entity.label !== undefined) requireString(entity.label, `${label}.label`, { maximum: 240 });
+  if (entity.label !== undefined) requireString(entity.label, `${label}.label`, { maximum: LIMITS.strings.label });
   if (entity.parentId !== undefined) requireStableId(entity.parentId, `${label}.parentId`);
   if (entity.transform !== undefined) validateTransform(entity.transform, `${label}.transform`);
   if (entity.material !== undefined) validateMaterial(entity.material, `${label}.material`, allowImportedMedia);
@@ -760,65 +891,58 @@ function validateAppearance(value, type) {
 
 function validateEnvironmentBlock(value, label, allowImportedMedia = false) {
   allowedKeys(value, ENVIRONMENT_KEYS, label);
-  if (value.background !== undefined) requireString(value.background, `${label}.background`, { maximum: 128 });
+  if (value.background !== undefined) requireString(value.background, `${label}.background`, { maximum: LIMITS.strings.color });
   if (value.sky !== undefined && value.sky !== null) {
-    requireString(value.sky, `${label}.sky`, { maximum: 160 });
+    requireString(value.sky, `${label}.sky`, { maximum: LIMITS.strings.skyId });
     if (!allowImportedMedia && !SKY_IDS.has(value.sky)) reject(`Unknown ${label}.sky: ${String(value.sky)}`);
   }
   if (value.overlay !== undefined && value.overlay !== null && !OVERLAY_IDS.has(value.overlay)) reject(`Unknown ${label}.overlay: ${String(value.overlay)}`);
   if (value.ground !== undefined) {
-    allowedKeys(value.ground, new Set(["visible", "size", "color", "grid", "gridColor"]), `${label}.ground`);
+    allowedKeys(value.ground, setOf(FIELDS.ground), `${label}.ground`);
     for (const key of ["visible", "grid"]) if (value.ground[key] !== undefined) requireBoolean(value.ground[key], `${label}.ground.${key}`);
-    if (value.ground.size !== undefined) requireFinite(value.ground.size, `${label}.ground.size`, 0.001, 100_000);
-    for (const key of ["color", "gridColor"]) if (value.ground[key] !== undefined) requireString(value.ground[key], `${label}.ground.${key}`, { maximum: 128 });
+    if (value.ground.size !== undefined) requireFinite(value.ground.size, `${label}.ground.size`, ...LIMITS.ground.size);
+    for (const key of ["color", "gridColor"]) if (value.ground[key] !== undefined) requireString(value.ground[key], `${label}.ground.${key}`, { maximum: LIMITS.strings.color });
   }
   if (value.physics !== undefined) {
-    allowedKeys(value.physics, new Set(["gravity"]), `${label}.physics`);
-    if (value.physics.gravity !== undefined) requireVector(value.physics.gravity, 3, `${label}.physics.gravity`, -1_000, 1_000);
+    allowedKeys(value.physics, setOf(FIELDS.environmentPhysics), `${label}.physics`);
+    if (value.physics.gravity !== undefined) requireVector(value.physics.gravity, 3, `${label}.physics.gravity`, ...LIMITS.gravity);
   }
   if (value.envelope !== undefined && value.envelope !== null) {
-    allowedKeys(value.envelope, new Set(["fogNear", "fogFar", "cameraFar"]), `${label}.envelope`);
-    for (const key of ["fogNear", "fogFar", "cameraFar"]) requireFinite(value.envelope[key], `${label}.envelope.${key}`, 0, 100_000);
+    allowedKeys(value.envelope, setOf(FIELDS.envelope), `${label}.envelope`);
+    for (const key of FIELDS.envelope) requireFinite(value.envelope[key], `${label}.envelope.${key}`, ...LIMITS.envelope);
     if (value.envelope.fogFar <= value.envelope.fogNear) reject(`${label}.envelope.fogFar must exceed fogNear`);
     if (value.envelope.cameraFar <= value.envelope.fogNear) reject(`${label}.envelope.cameraFar must exceed fogNear`);
   }
   if (value.post !== undefined && value.post !== null) {
-    allowedKeys(value.post, new Set(["bloom"]), `${label}.post`);
-    allowedKeys(value.post.bloom, new Set(["strength", "threshold", "radius"]), `${label}.post.bloom`);
-    requireFinite(value.post.bloom.strength, `${label}.post.bloom.strength`, 0, 3);
-    requireFinite(value.post.bloom.threshold, `${label}.post.bloom.threshold`, 0, 1);
-    requireFinite(value.post.bloom.radius, `${label}.post.bloom.radius`, 0, 1);
+    allowedKeys(value.post, setOf(FIELDS.post), `${label}.post`);
+    allowedKeys(value.post.bloom, setOf(FIELDS.bloom), `${label}.post.bloom`);
+    for (const key of FIELDS.bloom) requireFinite(value.post.bloom[key], `${label}.post.bloom.${key}`, ...LIMITS.bloom[key]);
   }
   if (value.lighting !== undefined && value.lighting !== null) validateLighting(value.lighting, `${label}.lighting`);
   if (value.dayNight !== undefined && value.dayNight !== null) {
-    allowedKeys(value.dayNight, new Set(["cycleSeconds", "phaseOffset", "day", "night"]), `${label}.dayNight`);
-    requireFinite(value.dayNight.cycleSeconds, `${label}.dayNight.cycleSeconds`, 5, 86_400);
-    requireFinite(value.dayNight.phaseOffset, `${label}.dayNight.phaseOffset`, 0, 1 - Number.EPSILON);
+    allowedKeys(value.dayNight, setOf(FIELDS.dayNight), `${label}.dayNight`);
+    requireFinite(value.dayNight.cycleSeconds, `${label}.dayNight.cycleSeconds`, ...LIMITS.dayNight.cycleSeconds);
+    requireFinite(value.dayNight.phaseOffset, `${label}.dayNight.phaseOffset`, ...LIMITS.dayNight.phaseOffset);
     for (const key of ["day", "night"]) {
       const look = value.dayNight[key];
-      allowedKeys(look, new Set(["sky", "lighting", "background"]), `${label}.dayNight.${key}`);
+      allowedKeys(look, setOf(FIELDS.dayNightLook), `${label}.dayNight.${key}`);
       if (look.sky !== null) {
-        requireString(look.sky, `${label}.dayNight.${key}.sky`, { maximum: 160 });
+        requireString(look.sky, `${label}.dayNight.${key}.sky`, { maximum: LIMITS.strings.skyId });
         if (!allowImportedMedia && !SKY_IDS.has(look.sky)) reject(`Unknown ${label}.dayNight.${key}.sky: ${String(look.sky)}`);
       }
       validateLighting(look.lighting, `${label}.dayNight.${key}.lighting`);
-      requireString(look.background, `${label}.dayNight.${key}.background`, { maximum: 128 });
+      requireString(look.background, `${label}.dayNight.${key}.background`, { maximum: LIMITS.strings.color });
     }
   }
 }
 
 function validateLighting(value, label) {
-  allowedKeys(value, new Set([
-    "source", "hdri", "intensity", "yawDegrees", "backgroundIntensity", "backgroundBlur",
-  ]), label);
-  if (!["sky", "studio", "hdri"].includes(value.source)) reject(`${label}.source must be sky, studio, or hdri`);
+  allowedKeys(value, setOf(FIELDS.lighting), label);
+  if (!ENUMS.lightingSources.includes(value.source)) reject(`${label}.source must be sky, studio, or hdri`);
   if (value.source === "hdri") {
     if (!HDRI_IDS.has(value.hdri)) reject(`Unknown ${label}.hdri: ${String(value.hdri)}`);
   } else if (value.hdri !== undefined) reject(`${label}.hdri is only valid for an hdri source`);
-  requireFinite(value.intensity, `${label}.intensity`, 0, 3);
-  requireFinite(value.yawDegrees, `${label}.yawDegrees`, -180, 180);
-  requireFinite(value.backgroundIntensity, `${label}.backgroundIntensity`, 0, 3);
-  requireFinite(value.backgroundBlur, `${label}.backgroundBlur`, 0, 1);
+  for (const key of ["intensity", "yawDegrees", "backgroundIntensity", "backgroundBlur"]) requireFinite(value[key], `${label}.${key}`, ...LIMITS.lighting[key]);
 }
 
 function entityMap(entities) {
@@ -888,22 +1012,22 @@ function validateGraph(definition) {
       requireStableId(joint.id, "joint id");
       if (jointIds.has(joint.id)) reject(`Duplicate joint id: ${joint.id}`);
       jointIds.add(joint.id);
-      if (!["fixed", "revolute", "rope"].includes(joint.type)) reject(`Unsupported joint type: ${String(joint.type)}`);
+      if (!ENUMS.jointTypes.includes(joint.type)) reject(`Unsupported joint type: ${String(joint.type)}`);
       if (joint.bodyA === joint.bodyB) reject(`Joint ${joint.id} requires two different bodies`);
       for (const key of ["anchorA", "anchorB"]) {
-        if (joint[key] !== undefined) requireVector(joint[key], 3, `joint ${joint.id}.${key}`, -10_000, 10_000);
+        if (joint[key] !== undefined) requireVector(joint[key], 3, `joint ${joint.id}.${key}`, ...LIMITS.joint.anchor);
       }
-      if (joint.type === "rope") requireFinite(joint.length, `joint ${joint.id}.length`, 0.001, 10_000);
+      if (joint.type === "rope") requireFinite(joint.length, `joint ${joint.id}.length`, ...LIMITS.joint.length);
       else if (joint.length !== undefined) reject(`Only rope joints accept length: ${joint.id}`);
       if (joint.axis !== undefined) {
         if (joint.type !== "revolute") reject(`Only revolute joints accept axis: ${joint.id}`);
-        requireVector(joint.axis, 3, `joint ${joint.id}.axis`, -1, 1);
+        requireVector(joint.axis, 3, `joint ${joint.id}.axis`, ...LIMITS.joint.axis);
         if (Math.hypot(...joint.axis) === 0) reject(`Joint ${joint.id} axis cannot be zero`);
       }
       for (const key of ["frameRotationDegreesA", "frameRotationDegreesB"]) {
         if (joint[key] === undefined) continue;
         if (joint.type !== "fixed") reject(`Only fixed joints accept frame rotations: ${joint.id}`);
-        requireVector(joint[key], 3, `joint ${joint.id}.${key}`, -360_000, 360_000);
+        requireVector(joint[key], 3, `joint ${joint.id}.${key}`, ...LIMITS.joint.frameRotationDegrees);
       }
       const bodyA = map.get(joint.bodyA);
       const bodyB = map.get(joint.bodyB);
@@ -1030,7 +1154,7 @@ function applyCommand(definition, command) {
     if (command.op === "remove-joint") definition.joints.splice(index, 1);
     else {
       const values = adding ? command.joint : command.patch;
-      allowedKeys(values, new Set([...(adding ? ["id"] : []), "type", "bodyA", "bodyB", "anchorA", "anchorB", "axis", "length", "frameRotationDegreesA", "frameRotationDegreesB"]), "joint");
+      allowedKeys(values, new Set(FIELDS.joint.filter((key) => adding || key !== "id")), "joint");
       const joint = { ...(adding ? {} : definition.joints[index]), ...structuredClone(values), id };
       if (adding) definition.joints.push(joint); else definition.joints[index] = joint;
     }

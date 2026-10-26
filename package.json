@@ -13,6 +13,7 @@
     "lint": "eslint . --max-warnings 0",
     "verify": "node scripts/verify.mjs",
     "smoke:showroom": "node scripts/smoke-showroom.mjs",
+    "smoke:nestor-request": "node scripts/smoke-nestor-request.mjs",
     "smoke:editor": "node scripts/smoke-editor.mjs",
     "smoke:top20": "node scripts/smoke-top20.mjs",
     "smoke:standalone": "node scripts/smoke-standalone.mjs",

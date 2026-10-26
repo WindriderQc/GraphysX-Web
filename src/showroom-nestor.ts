@@ -7,7 +7,14 @@ import type {
 import { createProposal, includedCommands, isProposalEmpty, isProposalStale, toggleCommandInclusion } from "./coauthor-proposal";
 import type { CoauthorOutcome, CoauthorProposal } from "./coauthor-proposal";
 
-export type NestorTopic = "build" | "play" | "explore";
+/** The three physical consoles, each with a locally composed demonstration. */
+export type NestorConsoleTopic = "build" | "play" | "explore";
+/**
+ * `request` is a change asked for in the person's own words and composed by a provider. It has
+ * no console, no local composition and no fixed target: the card shows the provider's intent
+ * and the camera goes to whatever the accepted commands made.
+ */
+export type NestorTopic = NestorConsoleTopic | "request";
 
 /** One identity for every commit Nestor makes, whether proposed first or not. */
 const NESTOR_ACTOR = { id: "nestor", label: "Nestor", kind: "agent" } as const;
@@ -16,21 +23,21 @@ export const NESTOR_AGENT_ID = "showroom-nestor";
 export const NESTOR_STAGE_ID = "showroom-nestor-stage";
 export const NESTOR_BUILD_ID = "showroom-nestor-build";
 
-export const NESTOR_TOPICS: readonly NestorTopic[] = ["build", "play", "explore"];
+export const NESTOR_TOPICS: readonly NestorConsoleTopic[] = ["build", "play", "explore"];
 
-const TOPIC_COLOR: Record<NestorTopic, string> = {
+const TOPIC_COLOR: Record<NestorConsoleTopic, string> = {
   build: "#63e6ff",
   play: "#76f0ae",
   explore: "#bd9cff",
 };
 
-const TOPIC_EMISSIVE: Record<NestorTopic, string> = {
+const TOPIC_EMISSIVE: Record<NestorConsoleTopic, string> = {
   build: "#126b80",
   play: "#176b4a",
   explore: "#4c328d",
 };
 
-const TOPIC_TARGET: Record<NestorTopic, string> = {
+const TOPIC_TARGET: Record<NestorConsoleTopic, string> = {
   build: NESTOR_BUILD_ID,
   play: "showroom-plinth",
   explore: "showroom-starlings",
@@ -88,7 +95,7 @@ export interface NestorPresenter {
    * Compose a topic's change set and hold it for a human decision. Nothing is committed and
    * the scene does not move — this is the whole point of the co-author queue.
    */
-  propose: (topic: NestorTopic) => CoauthorProposal;
+  propose: (topic: NestorConsoleTopic) => CoauthorProposal;
   /**
    * Compose from a command list somebody else wrote — a model provider. Downstream nothing can
    * tell the difference, which is the point: a provider gets no path the local composer lacks,
@@ -114,7 +121,7 @@ export interface NestorPresenter {
    * the physical console route and the existing showroom smoke; the DOM buttons go through
    * `propose` so the person sees the change before it happens.
    */
-  present: (topic: NestorTopic) => NestorPresentation;
+  present: (topic: NestorConsoleTopic) => NestorPresentation;
   reset: () => NestorPresentation;
   state: () => NestorPresenterState;
 }
@@ -123,7 +130,7 @@ const READY_PRESENTATION: NestorPresentation = {
   topic: null,
   eyebrow: "NESTOR ONLINE",
   title: "What should we make real?",
-  message: "Pick a live demo. I’ll change this scene with the same inspectable commands available to every AgentX collaborator.",
+  message: "Pick a demo or ask; nothing changes until you accept.",
   targetId: NESTOR_STAGE_ID,
   commit: null,
   error: null,
@@ -139,7 +146,7 @@ export function buildNestorCenter(): AgentWorldEntityDefinition[] {
   // entity, so each console keeps its physical `nestor-topic:*` contract while its children
   // provide a much more legible presentation bay.
   const consoleDefinitions: Array<{
-    topic: NestorTopic;
+    topic: NestorConsoleTopic;
     label: string;
     position: [number, number, number];
   }> = [
@@ -478,8 +485,16 @@ export function createNestorPresenter(options: {
     agentStatus: string | undefined;
     presentation: NestorPresentation;
   } | null = null;
+  /**
+   * An accepted free-text request, pinned to the revision its commit produced. A request's
+   * commands are the provider's and say nothing about Nestor's own status, so unlike a console
+   * demonstration the narration cannot be rebuilt from the agent entity; it is kept here and
+   * dropped the moment the revision moves — undo, another commit, a document load — which is
+   * exactly when claiming it would become false.
+   */
+  let requestPresentation: { revision: number; presentation: NestorPresentation; commit: AgentWorldCommitSummary | null } | null = null;
 
-  const topicFromStatus = (value: string | undefined): NestorTopic | null => {
+  const topicFromStatus = (value: string | undefined): NestorConsoleTopic | null => {
     const topic = value?.startsWith("presenting:") ? value.slice("presenting:".length) : null;
     return topic === "build" || topic === "play" || topic === "explore" ? topic : null;
   };
@@ -503,6 +518,13 @@ export function createNestorPresenter(options: {
       return agent;
     }
     failedPresentation = null;
+    if (requestPresentation && requestPresentation.revision === revision) {
+      status = "presenting:request";
+      lastCommit = requestPresentation.commit;
+      presentation = clonePresentation(requestPresentation.presentation);
+      return agent;
+    }
+    requestPresentation = null;
 
     const topic = topicFromStatus(agent?.status);
     if (!topic) {
@@ -543,7 +565,7 @@ export function createNestorPresenter(options: {
    * Reconciles first so the proposal is built against the world as it is right now — a
    * proposal composed from a stale read would be born stale and refuse itself on accept.
    */
-  const propose = (topic: NestorTopic): CoauthorProposal => {
+  const propose = (topic: NestorConsoleTopic): CoauthorProposal => {
     reconcile();
     lastOutcome = null;
     proposal = createProposal({
@@ -638,10 +660,11 @@ export function createNestorPresenter(options: {
    */
   const present = (topic: NestorTopic, held?: CoauthorProposal): NestorPresentation => {
     reconcile();
-    const targetId = TOPIC_TARGET[topic];
+    // A request has no local composition: without a held proposal there is nothing to commit.
+    if (topic === "request" && !held) return clonePresentation(presentation);
     // `includedCommands`, not `commands`: if the person took lines out, the commit is what
     // they left in. Sending the original set would apply changes they explicitly removed.
-    const commands = held ? includedCommands(held) : presentationCommands(api, topic);
+    const commands = held ? includedCommands(held) : topic === "request" ? [] : presentationCommands(api, topic);
     const result = api.commit({
       actor: NESTOR_ACTOR,
       // The held proposal's own intent, not the topic's. For a locally composed proposal these
@@ -677,7 +700,14 @@ export function createNestorPresenter(options: {
     failedPresentation = null;
     lastCommit = result.value?.commit ?? null;
     status = `presenting:${topic}`;
-    presentation = successfulPresentation(topic, targetId, lastCommit);
+    // A console demonstration has a fixed target. A request's target is whatever it made:
+    // the first created entity still present after the commit, else the first touched one,
+    // else Nestor's stage.
+    const targetId = topic === "request" ? requestTargetId(api, held) : TOPIC_TARGET[topic];
+    presentation = successfulPresentation(topic, targetId, lastCommit, held?.intent);
+    if (topic === "request") {
+      requestPresentation = { revision: api.state()?.revision ?? 0, presentation: clonePresentation(presentation), commit: lastCommit };
+    }
     focusEntity?.(targetId);
     return clonePresentation(presentation);
   };
@@ -688,9 +718,10 @@ export function createNestorPresenter(options: {
     toggleProposalCommand,
     accept,
     discard,
-    present: (topic: NestorTopic) => present(topic),
+    present: (topic: NestorConsoleTopic) => present(topic),
     reset: () => {
       failedPresentation = null;
+      requestPresentation = null;
       status = "ready";
       lastCommit = null;
       proposal = null;
@@ -717,7 +748,16 @@ export function createNestorPresenter(options: {
   };
 }
 
-function presentationCommands(api: GraphysXAgentWorldApi, topic: NestorTopic): AgentWorldCommand[] {
+function requestTargetId(api: GraphysXAgentWorldApi, held: CoauthorProposal | undefined): string {
+  const exists = (id: string): boolean => api.query({ ids: [id] }).length === 1;
+  const touches = held?.touches ?? [];
+  const created = touches.find((touch) => (touch.op === "spawn" || touch.op === "spawn-prefab") && exists(touch.id));
+  if (created) return created.id;
+  const touched = touches.find((touch) => exists(touch.id));
+  return touched?.id ?? NESTOR_STAGE_ID;
+}
+
+function presentationCommands(api: GraphysXAgentWorldApi, topic: NestorConsoleTopic): AgentWorldCommand[] {
   const color = TOPIC_COLOR[topic];
   const emissive = TOPIC_EMISSIVE[topic];
   const commands: AgentWorldCommand[] = [
@@ -807,19 +847,32 @@ function presentationCommands(api: GraphysXAgentWorldApi, topic: NestorTopic): A
  * a provider is being asked to decide *what* to do — handing it the finished intent would make
  * it a paraphrase engine and the result would be Nestor's idea wearing a model's name.
  */
-export function nestorTopicRequest(topic: NestorTopic): string {
+export function nestorTopicRequest(topic: NestorConsoleTopic): string {
   if (topic === "build") return "Build something small and inspectable in this scene, and say what you built.";
   if (topic === "play") return "Make something in this scene move or react, using the entities that are already here.";
   return "Reveal the living systems in this scene — the flocks, emitters and lights — by changing how they read.";
 }
 
 function intentFor(topic: NestorTopic): string {
+  // Unreachable for a request — its intent is the provider's — but the type asks for an answer.
+  if (topic === "request") return "Apply a requested change";
   if (topic === "build") return "Assemble a signal beacon in GraphysX";
   if (topic === "play") return "Wake the kinetic playground with shared scene interactions";
   return "Illuminate the showroom's living flock systems";
 }
 
-function successfulPresentation(topic: NestorTopic, targetId: string, commit: AgentWorldCommitSummary | null): NestorPresentation {
+function successfulPresentation(topic: NestorTopic, targetId: string, commit: AgentWorldCommitSummary | null, intent?: string): NestorPresentation {
+  if (topic === "request") {
+    return {
+      topic,
+      eyebrow: "NESTOR · YOUR REQUEST",
+      title: "Done — that was one attributed transaction.",
+      message: `${intent ?? "Your request was applied."} Everything it made is in the editor's outliner, and Undo reverses it as a whole.`,
+      targetId,
+      commit,
+      error: null,
+    };
+  }
   if (topic === "build") {
     return {
       topic,

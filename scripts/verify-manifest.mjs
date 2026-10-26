@@ -30,6 +30,7 @@ export const VERIFY_SMOKES = [
   { name: "diskx-janitor", tier: "apps", script: "scripts/smoke-diskx-janitor.mjs", covers: "Synthetic Janitor evidence, presentation-only transitions, inventory refresh/retry, root boundaries, absence of report; no live backend" },
   { name: "startup", tier: "core", script: "scripts/smoke-startup.mjs", covers: "renderer and lazy-import failures: accessible recovery page and working retry" },
   { name: "showroom", tier: "core", script: "scripts/smoke-showroom.mjs", covers: "default route: welcome showroom, gated editor, auto-orbit" },
+  { name: "nestor-request", tier: "core", script: "scripts/smoke-nestor-request.mjs", covers: "free-text Nestor request against a loopback provider: disabled field and zero requests without one, card from a provider reply, apply = one attributed commit, undo, explicit refusal shown, forged namespace refused, kinetic blocks stay clickable" },
   { name: "editor", tier: "core", script: "scripts/smoke-editor.mjs", covers: "editor: library palette, model + texture + behaviour, bloom authoring, exit path" },
   { name: "top20", tier: "deep", script: "scripts/smoke-top20.mjs", covers: "top-20 release: redo, draft recovery, import/copy/slots/palette, shelf personalization, accessible display, touch/gamepad/pause/fullscreen" },
   { name: "standalone", tier: "core", script: "scripts/smoke-standalone.mjs", covers: "?host=standalone: agent API, tool bridge, human editor" },
