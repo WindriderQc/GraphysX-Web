@@ -54,6 +54,10 @@ describe("portable authored mesh", () => {
     assert.throws(() => assertInlinePixels({ width: 65, height: 1, rgba: [] }));
     assert.throws(() => assertInlinePixels({ width: 1, height: 1, rgba: [0.5, 1, 2, 255] }));
   });
+  it("refuses distinct JSON vertices that collapse in the actual Float32 geometry", () => {
+    assert.throws(() => assertInlineMesh({ positions: [9999, 0, 0, 9999.00001, 0, 0, 9999, 0.00001, 0], indices: [0, 1, 2] }), /Float32/);
+    assert.throws(() => assertInlineMesh({ positions: [0, 0, 0, 1e-30, 0, 0, 0, 1e-30, 0], indices: [0, 1, 2] }), /Float32/);
+  });
   it("requires explicit collider intent and refuses moving triangle colliders", () => {
     for (const physics of [{ mode: "dynamic" }, { mode: "dynamic", collider: "trimesh" }, { mode: "kinematic", collider: "trimesh" }]) {
       assert.throws(() => applyCommands(world(), [{ op: "spawn", entity: { id: "bad", type: "mesh", mesh: mesh(), physics } }]));

@@ -25,8 +25,12 @@ page.on("pageerror", error => errors.push(String(error)));
 page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
 let store, dir;
 const out = {};
+const requests = [];
 try {
-  await page.route("**/mesh-fixture-propose", route => route.fulfill({ json: reply }));
+  await page.route("**/mesh-fixture-propose", route => {
+    requests.push(route.request().postDataJSON());
+    return route.fulfill({ json: requests.length === 1 ? reply : { intent: "Refine the folded sail label", commands: [{ op: "update", id: entity.id, patch: { label: "Refined folded sail" } }] } });
+  });
   await page.goto(`${base}?propose=${encodeURIComponent(new URL("mesh-fixture-propose", base).href)}`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => window.__GRAPHYSX_NESTOR__ && window.__GRAPHYSX_HOST__?.frameCount > 0);
   await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.introPlaying && window.__GRAPHYSX_HOST__.frameCount > 3);
@@ -60,6 +64,20 @@ try {
   await page.evaluate(() => window.__GRAPHYSX__.select(["authored-sail"]));
   await page.waitForFunction(frame => window.__GRAPHYSX_HOST__.frameCount > frame + 2, out.view.frame);
   await page.screenshot({ path: path.join(output, "inline-mesh-desktop.png") });
+
+  // The welcome has more than 60 entities. The next ordinary request must still carry
+  // the object Nestor just presented, rather than only the first 60 original decorations.
+  await page.evaluate(() => window.__GRAPHYSX__.select([]));
+  await page.locator("[data-nestor-request]").fill("Refine the label on the folded sail you just made");
+  await page.locator("[data-nestor-request-send]").click();
+  await page.waitForSelector("[data-proposal-accept]");
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].scene.entities.length, 60);
+  assert.ok(requests[1].scene.entities.some(entry => entry.id === entity.id));
+  assert.ok(requests[1].scene.entities.every(entry => Object.keys(entry).sort().join(",") === "id,label,type"));
+  await page.locator("[data-proposal-accept]").click();
+  await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["authored-sail"] })[0]?.label === "Refined folded sail");
+  out.followup = { boundedSummary: true, targetPresent: true, applied: true };
 
   out.edit = await page.evaluate(next => {
     const api = window.__GRAPHYSX__, read = () => JSON.stringify(api.exportDocument().entities.find(e => e.id === "authored-sail").mesh);

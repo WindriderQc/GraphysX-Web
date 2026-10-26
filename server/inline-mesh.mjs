@@ -34,10 +34,14 @@ export function assertInlineMesh(value, label = "mesh") {
   if (value.uvs !== undefined) array(value.uvs, `${label}.uvs`, vertices * 2, vertices * 2, 2, 128);
   for (let i = 0; i < value.indices.length; i += 3) {
     const [a, b, c] = value.indices.slice(i, i + 3).map(index => index * 3);
+    // The renderer and Rapier receive Float32 buffers. Distinct JSON doubles may collapse
+    // to the same vertex there; validate the geometry they will actually consume.
     const p = value.positions;
-    const u = [p[b] - p[a], p[b + 1] - p[a + 1], p[b + 2] - p[a + 2]];
-    const v = [p[c] - p[a], p[c + 1] - p[a + 1], p[c + 2] - p[a + 2]];
-    if (Math.hypot(u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]) === 0) throw new Error(`${label} contains a degenerate triangle at ${i / 3}`);
+    const point = index => [Math.fround(p[index]), Math.fround(p[index + 1]), Math.fround(p[index + 2])];
+    const [pa, pb, pc] = [point(a), point(b), point(c)];
+    const u = pb.map((number, axis) => number - pa[axis]);
+    const v = pc.map((number, axis) => number - pa[axis]);
+    if (Math.hypot(Math.fround(u[1]*v[2]-u[2]*v[1]), Math.fround(u[2]*v[0]-u[0]*v[2]), Math.fround(u[0]*v[1]-u[1]*v[0])) === 0) throw new Error(`${label} contains a degenerate Float32 triangle at ${i / 3}`);
   }
   const materials = value.materials?.length ?? 1;
   if (value.materials !== undefined && (!Array.isArray(value.materials) || materials < 1 || materials > MESH_LIMITS.materials)) throw new Error(`${label}.materials supports 1 to ${MESH_LIMITS.materials} materials`);

@@ -279,7 +279,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           scene: {
             id: state?.world.id ?? "",
             label: state?.world.label ?? "",
-            entities: summarizeSceneForProvider(host.api.query()),
+            entities: summarizeSceneForProvider(host.api.query(), 60, [...(state?.selectedIds ?? []), nestor?.state().targetId ?? ""]),
           },
         });
         // A provider that refuses, times out or answers with nonsense must not leave the
@@ -321,7 +321,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           scene: {
             id: state?.world.id ?? "",
             label: state?.world.label ?? "",
-            entities: summarizeSceneForProvider(host.api.query()),
+            entities: summarizeSceneForProvider(host.api.query(), 60, [...(state?.selectedIds ?? []), nestor?.state().targetId ?? ""]),
           },
         });
         welcome?.setRequestBusy(false);
