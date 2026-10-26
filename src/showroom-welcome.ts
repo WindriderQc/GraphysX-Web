@@ -279,6 +279,10 @@ export function mountWelcome(
       .gx-welcome{align-items:flex-start;padding:12px}
       .gx-welcome-card{max-height:calc(100dvh - 24px);overflow-y:auto;padding:18px 20px}
     }
+    @media (min-width:641px) and (max-width:899px) and (max-height:480px){
+      .gx-welcome:not(.gx-welcome--touring):not(.gx-welcome--presenting):not(.gx-welcome--live-observer){align-items:flex-start;justify-content:flex-start;padding:12px}
+      .gx-welcome:not(.gx-welcome--touring):not(.gx-welcome--presenting):not(.gx-welcome--live-observer) .gx-welcome-card{width:300px;max-height:calc(100dvh - 112px);align-items:flex-start;text-align:left;padding:12px}
+    }
     /*
      * Application destinations must not grow the welcome card over the kinetic stage.
      * On a desktop, keep the introduction above the stage and the destinations in one
