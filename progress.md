@@ -5049,3 +5049,15 @@ copy of the API; the three demonstrations stay as the fallback when no provider 
 - Checks: `test/diskx-source.test.mjs` (new, 3), `diskx-observation`, `diskx-route`,
   `diskx-embed`, `diskx-layout`; `tsc`, scoped eslint; `smoke-diskx` and `smoke-diskx-embed`
   (two volumes in the mocked summary, one kept, gauge « pool/data · core », provenance line).
+
+### 2026-10-26 — DiskX integration smoke receipts
+
+The mesh integration gate on `9126996` passed LLMx embed, DiskX, DiskX embed, Ecosystem,
+showroom/camera, Nestor requests, editor and inline mesh, plus all six static checks.
+It exposed an obsolete Janitor tooltip assertion after visible volume provenance landed;
+the smoke now checks the visible host and measurement text. One 3D selection timeout was
+not reproduced in two instrumented diagnostic runs. Wait for the completed live observation
+and a rendered frame before sampling the roof; retain click state/events and a capture on
+any future failure. Selection still requires the original real pointer event and exact path.
+The full 103-check receipt remains scoped to ancestor `459059b`; final scoped reruns are
+reported separately in the pull request.

@@ -3,7 +3,7 @@
 // routes (default list paused, a `play` list that tours groups, a live `play` change, a refused
 // step, GET only and nothing asked of the page's own /assets).
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 import { startStaticServer } from "./static-server.mjs";
@@ -120,11 +120,25 @@ try {
     assert.match(await page.locator("[data-show-caption]").textContent(), /copies en trop \(ambre\)/);
     // Dive into one disk through the list, then select a block with a real click on its roof.
     await page.locator('[data-list] button[data-path="/data"]').click();
-    await page.waitForFunction(() => document.querySelector("diskx-city").state().focus.path === "/data");
-    await page.waitForFunction(() => document.querySelector("diskx-city").state().districts.some((d) => d.screen));
-    const target = (await city(page)).districts.find((d) => d.path === "/data/iso");
+    // Entering a live level also refreshes its observation. Read projected coordinates only
+    // after that refresh and a rendered frame, so a rebuilt city cannot invalidate the click.
+    await page.waitForFunction(() => {
+      const state = document.querySelector("diskx-city").state();
+      return state.focus.path === "/data" && !state.loading && !state.pendingDive && !state.show.loading
+        && state.districts.some((d) => d.path === "/data/iso" && d.screen);
+    });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const clickState = await city(page);
+    const target = clickState.districts.find((d) => d.path === "/data/iso");
     await page.mouse.click(target.screen[0], target.screen[1] + 6);
-    await page.waitForFunction(() => window.events.some((e) => e.type === "diskx-block-selected"));
+    try {
+      await page.waitForFunction(() => window.events.some((e) => e.type === "diskx-block-selected"));
+    } catch (error) {
+      await page.screenshot({ path: `${output}/selection-failed.png` });
+      writeFileSync(`${output}/selection-failed.json`, JSON.stringify({ clickState, after: await city(page),
+        events: await page.evaluate(() => window.events) }, null, 2));
+      throw error;
+    }
     const [selectedBlock] = await events(page, "diskx-block-selected");
     assert.equal(selectedBlock.path, "/data/iso");
     assert.ok(selectedBlock.keepBytes > 0 && selectedBlock.groups > 0, JSON.stringify(selectedBlock));
