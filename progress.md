@@ -5102,6 +5102,12 @@ snapshots the scene/revision before composition and optionally addresses an expl
 All 34 native Core surface tests and its CI pass. Visual review also corrected the sharing
 label contrast and stopped mobile card children shrinking over the outcome/commit receipts.
 
+The complete local gate passed all 105 checks on source 6f688101a544b358b5a0d05c58a109fa7209b0fb;
+the final desktop/mobile mesh captures were inspected. Incoming NetX PR79 and DiskX show PR80
+then merged without conflict. Their bounded app/route changes receive a separate integration
+gate with static checks and the affected NetX, DiskX, welcome, proposal and mesh journeys.
+The full-gate receipt is retained as evidence for its actual source, not relabeled as the merge.
+
 ## 2026-10-26 — DiskX gauge head: `label · host` wraps instead of hiding the host (America/Toronto)
 
 - After PR #62 named the gauge `label · host`, the real gateway (`Media/Media · UGFrank`, `4.5 To libres`) overflowed the HUD: the name was clipped to « UGFra… » by `text-overflow: ellipsis` and the free figure broke onto two lines (`output/diskx-volumes-pr74/diskx-live-pr62.png` in the main checkout). `src/diskx.css`: the name is `flex:1; min-width:0; overflow-wrap:anywhere` and wraps, `.free` is `flex:none; white-space:nowrap`, head and foot align on the baseline.
