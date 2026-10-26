@@ -7,6 +7,22 @@ import { importBrowserModule } from "./support/import-browser-module.mjs";
 const data = await importBrowserModule(new URL("../src/ecosystem-data.ts", import.meta.url));
 const scene = await importBrowserModule(new URL("../src/ecosystem-scene.ts", import.meta.url));
 const tour = await importBrowserModule(new URL("../src/ecosystem-tour.ts", import.meta.url));
+const { ecosystemObservation } = await importBrowserModule(new URL("../src/ecosystem-presentation.ts", import.meta.url));
+
+test("presentation observes the current tour, deduplicates focus and selects only a displayed node step", () => {
+  const ids = data.ecoNodeIds().slice(0, 2);
+  const node = data.ecoNode(ids[0]);
+  const state = { application: "ecosystem", tour: { index: 0, count: 1, kind: "memory", script: "memory", adhoc: null },
+    focus: [...ids, ids[0]], narration: "Visible narration", narrationComplete: true };
+  const observed = ecosystemObservation(state);
+  assert.equal(observed.selection, null, "a multi-node workflow never invents a selected component");
+  assert.equal(observed.focus.length, 2);
+  const selected = ecosystemObservation({ ...state, tour: { ...state.tour, kind: "node", adhoc: `node-${node.id}` } });
+  assert.equal(selected.selection.id, node.id);
+  assert.equal(selected.selection.description, data.describeNode(node));
+  const scripted = ecosystemObservation({ ...state, tour: { ...state.tour, kind: "node", script: `node-${node.id}` } });
+  assert.equal(scripted.selection.id, node.id);
+});
 
 test("the ecosystem map is self-consistent", () => {
   data.validateEcosystem();

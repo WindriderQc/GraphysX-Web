@@ -102,6 +102,41 @@ champ horizontal et les étiquettes restent entièrement dans les bords de l'éc
 
 ## Vérification
 
+### Visite accompagnée dans Nestor
+
+Le bundle LAN existant `embed/diskx.js` définit aussi `<agentx-ecosystem>`.
+Cet adaptateur monte `mountEcosystemApp` et ses contrôles existants :
+`tour.setScript`, `tour.goto`, `tour.pause` et `state()`. Il n'ajoute ni scène,
+ni boucle de rendu, ni proxy. Core utilise son relais DiskX existant et la page
+`/diskx?app=ecosystem` pour l'afficher auprès de la conversation.
+
+`presentation-id` lie l'élément à la carte Nestor. `state().presentation` reste
+absent avant le premier rendu. Après `subscribeAfterRender`, il indique l'instance,
+la séquence, l'instant rendu, la révision du document, le hash des sources réelles
+du bundle, la date de la carte, l'étape, les candidats en focus et le nœud
+explicitement sélectionné. Les événements `ecosystem-ready`,
+`ecosystem-scene-changed` et `ecosystem-node-selected` suivent ce rendu.
+Une reconnexion change d'instance et efface le reçu précédent ; fermeture ou
+échec libèrent l'application et son renderer. Core distingue cette observation
+navigateur d'une lecture métier, refuse les observations périmées et demande une
+précision lorsqu'aucun composant unique n'est sélectionné.
+
+Ce mode conserve les géométries, couleurs, animations et étapes de la visite,
+avec les finitions locales sans textures, ciel externe ni modèles optionnels à
+télécharger. Le module reste autonome sous le plafond DiskX existant de 6 Mio.
+La vue autonome `app=ecosystem` conserve ses ressources. Aucun réglage de
+permissions, CORS ou nouvelle origine réseau n'est requis.
+
+Les tests CPU de projection, cycle de vie et empreinte des sources se trouvent dans
+`test/ecosystem.test.mjs`, `test/ecosystem-embed-lifecycle.test.mjs` et
+`test/embed-source-version.test.mjs`. Les parcours composés Core de visite et
+de non-régression Janitor utilisent ce même bundle. Une conversation simulée et
+une interface locale composée ne constituent pas une réception du dialogue
+Nestor natif : après accord séparé, publier le module compatible avant le raccord
+Core, puis vérifier les versions effectivement servies et les deux tours réels.
+
+### Contrôles de la visite autonome
+
 - `node --test test/ecosystem.test.mjs` : carte cohérente (références, comptes des
   infographies, devX hébergé, points ouverts nommés), une entité par nœud, aucun chevauchement
   au sol sauf devX dans UGBrutal, balises ambre et cages, deux GPU, vocabulaire `play` accepté

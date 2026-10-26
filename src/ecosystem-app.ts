@@ -29,6 +29,8 @@ export type EcosystemApplication = {
 export type EcosystemEvent = "ready" | "scene-changed" | "node-selected" | "models" | "error";
 export type EcosystemMountOptions = {
   play?: string | null;
+  /** Self-contained LAN embed: geometry and tour are identical; no external sky/models/textures. */
+  embedded?: boolean;
   onEvent?: (type: EcosystemEvent, detail: Record<string, unknown>) => void;
 };
 
@@ -91,7 +93,10 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   let blocks: Block[] = [];
   let models: Record<string, EcoModel> = {};
   function buildHouse(): void {
-    const world = composeEcosystemWorld({ motes: !reduced, models });
+    const world = composeEcosystemWorld({ motes: !reduced, models, ...(options.embedded ? { sky: false } : {}) });
+    if (options.embedded) for (const entity of world.entities) {
+      if (entity.material?.texture) { entity.material = { ...entity.material }; delete entity.material.texture; }
+    }
     const created = host.api.create(world);
     if (!created.ok) throw new Error(created.error);
     host.api.pause(false);
@@ -109,7 +114,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   }
   buildHouse();
   const blockOf = (id: string): Block | null => blocks.find((block) => block.id === id) ?? null;
-  void fetch(ECO_MODELS_MANIFEST).then(async (response) => {
+  if (!options.embedded) void fetch(ECO_MODELS_MANIFEST).then(async (response) => {
     if (!response.ok) return;
     const manifest = await response.json() as { models?: Record<string, { url?: unknown; size?: unknown }> };
     const next: Record<string, EcoModel> = {};
