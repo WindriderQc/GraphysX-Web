@@ -108,6 +108,8 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
   let groupView: DuplicateView | null = null;
   let groupOutside = 0;
   let groupFrame = false;
+  /** The show opened this group: a re-anchor (live refresh rebuilding the city) plays it again. */
+  let groupPlay = false;
   /** HTML tags over the outlined districts: "gardée" on the kept one, the logical bytes on extras. */
   let groupTags: { element: HTMLDivElement; at: Vector3 }[] = [];
   function setGroupTags(tags: { text: string; role: string; at: Vector3 }[]): void {
@@ -275,8 +277,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
     openGroup: async (sha256, known) => {
       const group = known ?? await readNamedGroup(sha256);
       if (!group || disposed) return false;
-      showGroup(group);
-      if (relations.group.visible) { if (reduced) relations.seek(1); else relations.clock.play(); }
+      showGroup(group, true);
       return true;
     },
   }, options.actionsHref ?? null);
@@ -915,13 +916,14 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
 
   // ---- Janitor duplicate group in the city ---------------------------------------------------
   function clearGroup(): void {
-    groupView = null; groupOutside = 0;
+    groupView = null; groupOutside = 0; groupPlay = false;
     relations.hide();
     setGroupTags([]);
     if (!presentation.group.visible) element('[data-preview]').hidden = true;
   }
-  function showGroup(group: Parameters<typeof planDuplicateView>[0]): void {
+  function showGroup(group: Parameters<typeof planDuplicateView>[0], play = false): void {
     presentation.hide();
+    groupPlay = play;
     const view = planDuplicateView(group, source.roots, (path) => nodeAt(path) !== null);
     const target = view.scope === DUPLICATE_ALL_SCOPE ? all : nodeAt(view.scope) ?? all;
     view.scope = target.path;
@@ -946,6 +948,7 @@ export function mountDiskxApp(root: HTMLElement, host: PlatformHost, onExit: () 
       };
     });
     relations.set(places, duplicateLinks(anchors));
+    if (groupPlay && relations.group.visible) { if (reduced) relations.seek(1); else relations.clock.play(); }
     emit('group-shown', { sha256: view.sha256, places: places.length, links: relations.state().links, outside: outside.length,
       reportGeneratedAt: janitorPage?.report.generatedAt ?? null, reportId: janitorPage?.report.id ?? null });
     setGroupTags(anchors.map((anchor, index) => ({

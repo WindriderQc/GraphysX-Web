@@ -37,3 +37,16 @@ test('a named group is read by its SHA-256 only', async () => {
   for (const bad of ['ABC', `${sha},${sha}`, `${sha}x`]) assert.equal((await request(route, `/diskx-api/janitor-groups?sha256=${encodeURIComponent(bad)}`)).status, 400, bad);
   assert.equal(targets.length, 1);
 });
+test('NetX reads the LAN inventory through three fixed GETs and relays no network write', async () => {
+  const targets = [];
+  const route = createDiskxRoute({ dataUrl: 'https://example.invalid', fetchImpl: async target => {
+    targets.push(String(target)); return new Response(JSON.stringify({ status: 'success', data: { devices: [] } }));
+  } });
+  for (const name of ['devices', 'agents', 'capability']) assert.equal((await request(route, `/diskx-api/network/${name}?limit=5`)).status, 200, name);
+  assert.deepEqual(targets, ['https://example.invalid/api/data-toolbox/network/devices', 'https://example.invalid/api/data-toolbox/network/agents', 'https://example.invalid/api/data-toolbox/network/capability'], 'no parameter is forwarded');
+  assert.equal((await request(route, '/diskx-api/network/scan', 'POST')).status, 405, 'a scan request is refused before it is even looked up');
+  assert.equal((await request(route, '/diskx-api/network/devices', 'PATCH')).status, 405, 'naming a device is not relayed in v1');
+  assert.equal((await request(route, '/diskx-api/network/scan')).status, 404);
+  assert.equal((await request(route, '/diskx-api/network/scan-requests/1')).status, 404);
+  assert.equal(targets.length, 3);
+});

@@ -5,9 +5,11 @@
  * headers (measured 2026-10-23), so a browser page on another origin cannot call it directly.
  * This route forwards a fixed, read-only subset of that API under `/diskx-api/` on the page's
  * own origin, the way `llmx-server.mjs` fronts the Household conversation. Nothing else is
- * reachable through it: five GET endpoints, five whitelisted query parameters, no body.
+ * reachable through it: eight GET endpoints, five whitelisted query parameters, no body.
  * Volume capacity rides inside `summary` since the storage agent measures it (2026-10-25);
- * this server declares and measures nothing itself.
+ * this server declares and measures nothing itself. Since 2026-10-26 the same route also
+ * relays the three network inventory reads NetX needs (`network/devices`, `network/agents`,
+ * `network/capability`), still GET only.
  *
  * Without `DISKX_DATA_URL` the route answers `enabled: false` and the app shows its recorded
  * fixture — the public static deploy has no server at all, and must still open to a city.
@@ -28,6 +30,12 @@ export function createDiskxRoute({ dataUrl = process.env.DISKX_DATA_URL, fetchIm
     ["janitor-groups", { target: "../janitor/strategy/latest/groups", params: ["offset", "limit", "sha256"] }],
     ["tree", { target: "tree", params: ["root", "limit"] }],
     ["files", { target: "files", params: ["root", "limit", "sort"] }],
+    // NetX (docs/NETX_PROPOSAL.md): the LAN inventory, its collectors and whether Data itself can
+    // scan. Three GET reads, no parameter; the two Toolbox writes (device record, scan request)
+    // are deliberately not relayed — v1 is read-only.
+    ["network/devices", { target: "../network/devices", params: [] }],
+    ["network/agents", { target: "../network/agents", params: [] }],
+    ["network/capability", { target: "../network/capability", params: [] }],
   ]);
   const json = (res, status, data) => {
     res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });

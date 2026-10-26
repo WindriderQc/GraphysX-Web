@@ -5107,3 +5107,26 @@ label contrast and stopped mobile card children shrinking over the outcome/commi
 - After PR #62 named the gauge `label · host`, the real gateway (`Media/Media · UGFrank`, `4.5 To libres`) overflowed the HUD: the name was clipped to « UGFra… » by `text-overflow: ellipsis` and the free figure broke onto two lines (`output/diskx-volumes-pr74/diskx-live-pr62.png` in the main checkout). `src/diskx.css`: the name is `flex:1; min-width:0; overflow-wrap:anywhere` and wraps, `.free` is `flex:none; white-space:nowrap`, head and foot align on the baseline.
 - `scripts/smoke-diskx-janitor.mjs` now mocks the production label, host, filesystem and figures (7.38e12 / 4.92e12 bytes, « 4.5 To libres ») and asserts the name is not clipped and the free figure holds one line; it also checks the `id · filesystemType` tooltip. Measured A/B on this worktree's build: with the old CSS the new assertion fails (`{"nameClipped":true,"freeLines":2}`), with the fix `smoke:diskx-janitor`, `smoke:diskx` and `smoke:diskx-embed` pass; the live capture against the gateway shows « Media/Media · » / « UGFrank » on two lines and « 4.5 To libres » intact.
 - Not a full gate: CSS of one HUD block and one smoke script.
+
+## 2026-10-26 (America/Toronto) — NetX v1: the LAN inventory as a neighbourhood around the router
+
+`?app=netx` composes AgentX Data's network inventory (`network/devices`, `/agents`,
+`/capability`) as a v2 document: the hub at the centre, every device placed by the last
+octet of its address on the ring of its observation state (online 8, recent 13, historical
+18), lighthouses for the collectors (a beam only for the live one), nameless vendorless
+devices no longer seen lined up as ghosts on a passages arc. The classification reproduces
+Data's rule (age of `lastSeen` against the 30 min / 24 h windows; `observation.state` wins
+when Data gives it) and the freshness sentence is Nestor's, word for word. The body comes
+from the recorded type only, the tint from the vendor family; an out-of-list type (seen in
+production: `3d-printer-controller`) is kept as text and drawn as a crate. Read-only: the
+relay gains three GETs, refuses scan and `PATCH`. The public build opens a synthetic capture
+in TEST-NET-1 with locally administered MACs, in the live proportions (55 devices, 31/3/21,
+13 vendorless, 2 named, 3 collectors, 1 active); the unit test refuses any `192.168.` in it.
+Evidence: `test/netx.test.mjs` (8) and `test/diskx-route.test.mjs` (3) green, full suite
+757 pass / 1 skip; `npm run smoke:netx` PASS on this branch's build (222 entities, filter
+"online" hides 24 in the scene with `exportDocument` unchanged, 3D click on the hub from the
+overview, list frames `imprimante-wifi` and the 3D pick agrees); captures
+`output/verify/netx-{overview,filter-online,click-device,mobile}.png` inspected — the first
+overview was too far and the notice only appeared after a filter click; both fixed before
+the final run. What waits on AgentX (the alert's guess on the device record, enrichment as
+a collector request, an IoT join key) is listed in `docs/NETX_PROPOSAL.md` §3.3.

@@ -55,6 +55,7 @@ export function mountWelcome(
     onOpenLlmX?: () => void;
     onOpenDiskX?: () => void;
     onOpenEcosystem?: () => void;
+    onOpenNetX?: () => void;
     coauthor?: {
       onAccept?: () => void;
       onDiscard?: () => void;
@@ -854,6 +855,15 @@ export function mountWelcome(
     ecosystem.textContent = "La maison connectée · visite 3D par Nestor";
     ecosystem.addEventListener("click", hooks.onOpenEcosystem);
     overlay.querySelector(".gx-actions")?.append(ecosystem);
+  }
+  if (hooks?.onOpenNetX) {
+    const netx = document.createElement("button");
+    netx.type = "button";
+    netx.className = "gx-go-netx";
+    netx.style.gridColumn = "1 / -1";
+    netx.textContent = "NetX · Le réseau de la maison en 3D";
+    netx.addEventListener("click", hooks.onOpenNetX);
+    overlay.querySelector(".gx-actions")?.append(netx);
   }
   if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
   container.append(style, overlay);
