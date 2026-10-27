@@ -10,6 +10,11 @@ Original prompt: "lets go then, lets make this happen!!"
 - The arrival regression queues six ordinary Forward blocks at 320 and 390px, checks that
   all six rendered labels remain inside the readout, and measures the native CAD robot's
   visibility again. Help and the program retain their existing behavior.
+- Arrival coaching is published as soon as its ordinary controls are connected. A cold-load
+  regression exposed a missing highlight before the first render frame; no wait was added.
+- The same six-block regression runs to the real finish. At 320x740 the previous result panel
+  covered 52.65% of the robot. Compact completion retains the verdict and program; opening
+  Help also reveals the original objective. Chip spacing leaves all six orders readable.
 - The previous broad KidX run stopped before its final summary and is not counted as a
   passing gate. Its partial log is retained outside Git; final qualification names the actual
   tested revision and distinguishes local checks from published and physical-device reception.
