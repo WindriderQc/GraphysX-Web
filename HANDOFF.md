@@ -119,7 +119,7 @@ extrusions, revolutions and sweeps; `meshEdits` and `pixelEdits` refine fixed ra
 replacing untouched data. One unchecked option shares at most 16 KiB of one mesh for a single
 typed request. Revision-bound review, history, persistence and live authority remain canonical.
 [GENERATIVE_MESH.md](docs/GENERATIVE_MESH.md) records the contract and separate browser/model
-acceptance; native receipts remain outside Git. LEGO shader stays paused; family voice stays discussion.
+acceptance; native receipts remain outside Git. LEGO rendering stability is resumed; family voice stays discussion.
 
 **Ecosystem seams.** AgentX owns canonical conversations, memory, domain data, permissions,
 tools and execution. Nestor explains and requests a presentation. GraphysX owns the visual

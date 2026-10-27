@@ -27,6 +27,11 @@ The workbench uses a dark teal background, a green cutting mat, a warm desk and
 separated key/rim lighting. The backdrop does not cast a wall shadow over the robot.
 These shared EV3 scene lighting changes also apply to the full lab.
 
+Direct KidX entry starts from an empty native world and lets the application load its own
+workshop or mission. It no longer constructs the welcome showroom before replacing it:
+the unused sky cubemap and shore HDRI must not enter the KidX startup pipeline. Mission
+lighting still loads its selected `studio-small-08` HDRI through the existing host.
+
 Regenerate the committed native mesh after changing its generator:
 
 ```sh

@@ -1046,7 +1046,15 @@ if (mode === "previews" && import.meta.env.DEV) {
         });
       });
     };
+    // KidX supplies its own scenes. Boot it without constructing and then discarding the
+    // showroom and its asynchronous cubemap/HDR lighting work. Stored/live/editor entries
+    // retain their existing boot path.
+    const directKidxEntry = appParam === "ev3-lab" && !editorFirst && !storeScene && !liveSessionRequested;
     const host = new PlatformHost(root, {
+      world: directKidxEntry ? {
+        schema: "graphysx.agent-world/v2", id: "kidx-startup", label: "KidX",
+        environment: { background: "#142d38", sky: null }, entities: [],
+      } : undefined,
       autoOrbit: !motionIsReduced() && !editorFirst && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx",
       autoOrbitSpeed: 0.2,
       editorVisible: editorFirst,
@@ -1308,7 +1316,9 @@ if (mode === "previews" && import.meta.env.DEV) {
         seed: seedArchiveBallzLevels,
       },
     });
-    if (!editorFirst) {
+    if (directKidxEntry) {
+      openApplication("ev3-lab");
+    } else if (!editorFirst) {
       composeShowroom(host.api);
       host.applyEnvironment();
       showroomEnvironment = mountShowroomEnvironment(host.scene, host.renderer);
@@ -1329,9 +1339,8 @@ if (mode === "previews" && import.meta.env.DEV) {
       });
       requestShowroomInteraction(true);
       Object.assign(window, { __GRAPHYSX_NESTOR__: nestor });
-      // `?app=<id>` replaces the front door with one application surface. Checked after the
-      // showroom composes so there is always something on screen if the application refuses to
-      // load, and so the app loads its own starter over the top exactly as a Browse row does.
+      // Other applications retain their existing showroom-backed entry. KidX starts above
+      // from its own empty world; a rejected lazy import uses the accessible startup recovery.
       if (!appParam || !openApplication(appParam)) mountFrontDoor();
     }
 
