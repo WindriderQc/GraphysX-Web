@@ -61,12 +61,15 @@ export function mountKidxMissionGuide(root: HTMLElement, host: HTMLElement, tool
   host.querySelector(".gx-ev3-nestor")!.after(panel);
   const labHint = document.createElement("p"); labHint.className = "kx-guide-lab-hint"; labHint.dataset.guideLabHint = ""; labHint.hidden = true;
   root.querySelector(".kx-code-tools")!.before(labHint);
-  let expanded = true, wasRunning = false;
+  // Keep the next-control highlight without putting the full reading panel over the
+  // robot. An explicit close still turns coaching off; Run folds it as before.
+  const compact = window.matchMedia("(max-width:700px), (max-height:520px)");
+  let enabled = true, expanded = !compact.matches, wasRunning = false;
   let current: GuideStep | null = null, target: HTMLElement | null = null, targetSelector: string | null = null;
   const clearTarget = () => { target?.removeAttribute("data-kidx-guide-target"); target = null; };
   const update = () => {
     const snapshot = read();
-    if (snapshot.running && !wasRunning) expanded = false;
+    if (snapshot.running && !wasRunning) { enabled = false; expanded = false; }
     wasRunning = snapshot.running;
     const next = kidxMissionGuideStep(mission, snapshot);
     if (next.key !== current?.key || next.text !== current?.text) {
@@ -78,25 +81,35 @@ export function mountKidxMissionGuide(root: HTMLElement, host: HTMLElement, tool
     }
     const visible = expanded && !snapshot.labOpen;
     if (panel.hidden === visible) panel.hidden = !visible;
-    const labVisible = expanded && snapshot.labOpen;
+    const labVisible = enabled && snapshot.labOpen;
     if (labHint.hidden === labVisible) labHint.hidden = !labVisible;
     if (button.getAttribute("aria-expanded") !== String(visible)) button.setAttribute("aria-expanded", String(visible));
     if (host.dataset.guideOpen !== String(visible)) host.dataset.guideOpen = String(visible);
-    const selector = expanded ? next.target : null;
+    const selector = enabled ? next.target : null;
     if (selector !== targetSelector || (target && !target.isConnected) || (selector && !target)) {
       clearTarget(); targetSelector = selector; target = selector ? root.querySelector<HTMLElement>(selector) : null;
     }
     if (target && !target.matches(":disabled")) { if (target.dataset.kidxGuideTarget !== "true") target.dataset.kidxGuideTarget = "true"; }
     else target?.removeAttribute("data-kidx-guide-target");
   };
-  button.addEventListener("click", () => { expanded = !expanded; update(); });
-  panel.querySelector("[data-guide-close]")!.addEventListener("click", () => { expanded = false; update(); button.focus(); });
+  const close = () => { enabled = false; expanded = false; update(); button.focus(); };
+  button.addEventListener("click", () => { expanded = !expanded; enabled = expanded; update(); });
+  panel.querySelector("[data-guide-close]")!.addEventListener("click", close);
+  const resize = () => { expanded = enabled && !compact.matches; update(); };
+  compact.addEventListener("change", resize);
+  const escape = (event: KeyboardEvent) => {
+    if (event.key === "Escape" && !panel.hidden && event.target instanceof Node
+      && (panel.contains(event.target) || event.target === button)) {
+      event.preventDefault(); event.stopPropagation(); close();
+    }
+  };
+  root.addEventListener("keydown", escape);
   const clicked = (event: Event) => {
     if (!(event.target instanceof Element)) return;
     update();
   };
   root.addEventListener("click", clicked);
   update();
-  return { update, state: () => ({ expanded: !panel.hidden || !labHint.hidden, enabled: expanded, stage: current?.key, step: current?.step, target: expanded ? current?.target : null }),
-    dispose() { clearTarget(); root.removeEventListener("click", clicked); panel.remove(); labHint.remove(); button.remove(); delete host.dataset.guideOpen; } };
+  return { update, state: () => ({ expanded: !panel.hidden || !labHint.hidden, enabled, stage: current?.key, step: current?.step, target: enabled ? current?.target : null }),
+    dispose() { clearTarget(); compact.removeEventListener("change", resize); root.removeEventListener("keydown", escape); root.removeEventListener("click", clicked); panel.remove(); labHint.remove(); button.remove(); delete host.dataset.guideOpen; } };
 }

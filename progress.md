@@ -2,6 +2,27 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-10-26 — Keep the mobile LEGO robot visible
+
+- Owner requested lighter mobile instructions. A native-CAD projection regression reproduces
+  100% coverage of the robot by the old mission panel at 320x740, despite reachable controls.
+- Compact screens start with the full guide folded while retaining the next-control highlight.
+  Objective, status, program, help, advanced blocks and emergency stop remain available. The
+  full guide opens on request, closes with focus restoration, and supports Escape. A deliberate
+  close still disables coaching; a running program folds the guide as before.
+- Compact mission rows use less space; the active stop explanation remains visible. The short
+  landscape camera aims at the same height as portrait, above the bottom controls. Physics,
+  geometry, mission verdicts and source-of-truth ownership retain their existing paths.
+- Initial focused qualification passed ten checks: static/build/Rapier, real program turns and
+  portrait completion, arrival at 320x740/390x844/800x480/844x390, attempts and laboratory stop.
+  Inspected the native robot in portrait, short landscape and completion captures. The final
+  regression also checks visibility after closing Help and that reading never edits blocks.
+  The release uses the existing KidX impact plan; exact revision/log/public receipts stay outside Git.
+- Voice discussion is separate from this UI change: same Nestor Famille, first target Android,
+  explicit Parler à Nestor entry, conversation reopening listening after replies until closed,
+  direct simulator-block edits on explicit requests and gentle guidance at useful milestones.
+  The historical voice branch remains preserved and unmerged; no voice is activated here.
+
 ## 2026-10-26 — Resume LEGO rendering stability
 
 - Owner resumed LEGO; Nestor Famille voice remains a later discussion. Current public source

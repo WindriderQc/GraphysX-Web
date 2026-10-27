@@ -35,7 +35,7 @@ body:has(.kx-mechanism) .gx-display-settings,body:has(.kx-build-ui) .gx-display-
 @media(max-width:600px){.kx-debrief{padding:14px}.kx-debrief h2{font-size:21px}.kx-debrief-layout{grid-template-columns:1fr;gap:14px}.kx-debrief svg{max-height:260px}.kx-debrief footer{flex-direction:column;align-items:stretch}.kx-debrief footer button{width:100%}}
 @media(max-width:600px){.kx-build-footer button{flex:1;min-width:0;padding:9px 4px}.kx-build-footer button:first-child{flex:1.3}.kx-build-footer label{flex:0 0 72px;text-align:center}.kx-build-side{bottom:108px}}
 .kx-mission-tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;pointer-events:auto}
-/* Arrival guidance stays beside the program, then collapses when the robot starts. */
+/* Compact arrival keeps the robot visible; the full guide opens on demand. */
 .kx-mission-guide{margin-top:8px;padding:8px 12px;background:#fff4cc;border:1px solid #d8bc63;border-radius:10px;color:#384737;font:600 13px/1.4 var(--gx-font);pointer-events:auto}
 .kx-mission-guide[hidden],.kx-guide-lab-hint[hidden]{display:none}
 .kx-guide-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:800}
@@ -54,6 +54,28 @@ body:has(.kx-mechanism) .gx-display-settings,body:has(.kx-build-ui) .gx-display-
 .kx-emergency{background:#fae4dd;color:#9e352e;border-color:#d3a196}
 .kx-tool-detail{display:block;margin-top:4px;font-size:10px;font-weight:500;line-height:1.3}
 .kx-emergency:disabled{background:#e5e8e3;color:#606b65;border-color:#b7c0b9;cursor:default}
+@media(max-width:700px),(max-height:520px){
+  .gx-ev3-mission[data-guide-open=false]{padding:8px 10px}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-mission-head{gap:8px;margin-bottom:4px}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-kicker{font-size:9px;letter-spacing:.03em}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-clock{font-size:12px;padding:6px;min-width:38px}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-objective{font-size:15px;line-height:1.2}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-nestor{margin-top:5px;font-size:12px}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-nestor-mark,
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-nestor-name,
+  .gx-ev3-mission[data-guide-open=false] [data-kidx-lab] .kx-tool-detail,
+  .gx-ev3-mission[data-guide-open=false] [data-kidx-stop]:disabled .kx-tool-detail{display:none}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-status{white-space:nowrap}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-program-readout{margin-top:5px;padding-top:5px;align-items:center}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-program-blocks{flex-wrap:nowrap;overflow-x:auto}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-program-chip{flex-shrink:0}
+  .gx-ev3-mission[data-guide-open=false] .kx-mission-tools{gap:4px;margin-top:6px}
+  .gx-ev3-mission[data-guide-open=false] .kx-mission-tools>.kx-lab-toggle{flex:1;min-width:0;margin-left:0;padding:5px 4px;font-size:11px;white-space:normal}
+  .gx-ev3-mission[data-guide-open=false] .kx-mission-tools>.kx-debrief-toggle{flex-basis:100%}
+}
+@media(max-height:520px) and (min-width:701px){
+  .gx-ev3-mission[data-guide-open=false]{box-sizing:border-box;width:min(36vw,360px)}
+}
 .kx-code-intro{font-size:12px;line-height:1.5;color:#c4d9d4;margin:0 0 12px}
 .kx-code-lab{box-sizing:border-box;position:fixed;top:76px;right:14px;bottom:106px;width:min(470px,calc(100vw - 28px));z-index:44;overflow:auto;background:#12313d;color:#eef3e7;border:1px solid #547a80;border-radius:16px;box-shadow:0 12px 50px #06192388;padding:16px;font-family:var(--gx-font);overscroll-behavior:contain}
 .kx-code-lab[hidden]{display:none}.kx-code-lab *{box-sizing:border-box}

@@ -53,7 +53,9 @@ export function mountKidxApp(root: HTMLElement, api: GraphysXAgentWorldApi, onEx
     reframe = () => {
       const aspect = root.clientWidth / Math.max(1, root.clientHeight);
       const distance = Math.max(1, .95 / aspect);
-      const targetY = root.clientHeight <= 520 ? 2 : 1.1;
+      // The compact mission panel leaves room above the pad: keep the rover clear
+      // of that bottom control band on short landscape screens as well.
+      const targetY = 1.1;
       const x = mission.id === "first-drive" ? 0 : mission.finish[0] * .28;
       const z = mission.id === "first-drive" ? 14.25 : 14.5;
       options.frameView([x + 5 * distance, targetY + 9.2 * distance, z + 14.25 * distance], [x, targetY, z], 0);

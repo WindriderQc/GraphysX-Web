@@ -21,6 +21,7 @@ export async function runKidxGuidance({ part = "all" } = {}) {
     const state = () => page.evaluate(() => JSON.parse(window.render_game_to_text()).application);
     const guide = () => page.locator("#kidx-mission-guide");
     const capture = name => page.screenshot({ path: path.join(ART, `kidx-guidance-${name}.png`) });
+    const robotView = () => inspectKidxRobotView(page);
     const highlighted = async selector => assert.equal(await page.locator(selector).getAttribute("data-kidx-guide-target"), "true", selector);
     const reachable = async selector => {
       const bounds = await page.locator(selector).evaluate(button => {
@@ -51,8 +52,23 @@ export async function runKidxGuidance({ part = "all" } = {}) {
       await page.evaluate(() => window.advanceTime(17));
       assert.equal((await state()).guidance.stage, "block-0", "a physics frame is not a child's attempt");
       await capture("desktop");
-      for (const [width, height] of [[320, 740], [390, 844], [800, 480]]) {
+      for (const [index, [width, height]] of [[320, 740], [390, 844], [800, 480], [844, 390]].entries()) {
         await page.setViewportSize({ width, height });
+        if (index > 0) await page.reload({ waitUntil: "domcontentloaded" });
+        await page.waitForFunction(() => window.__GRAPHYSX_HOST__?.world.getEntityObject("ev3-drive-base:technic")?.getObjectByName("ev3-driving-base source model")?.children.length === 14);
+        const view = await robotView();
+        assert.ok(view.meshes >= 18 && view.robot.right - view.robot.left >= 80 && view.coveredFraction <= .05
+          && view.robot.left >= 0 && view.robot.right <= width && view.robot.top >= 0 && view.robot.bottom <= height,
+        `the real CAD robot stays in view, clear of the mission and controls: ${JSON.stringify({ width, height, ...view })}`);
+        console.log(`ok: real CAD visible at ${width}x${height}; UI covers ${(view.coveredFraction * 100).toFixed(2)}% of its projected bounds`);
+        assert.equal(await guide().isVisible(), false, "compact arrival keeps the full instructions closed");
+        assert.equal((await state()).guidance.enabled, true, "compact coaching still highlights the next ordinary control");
+        await highlighted("[data-ev3-block='forward']");
+        await capture(`${width}-robot-visible`);
+        for (const selector of ["[data-kidx-guide]", "[data-ev3-block='forward']", ".gx-ev3-exit", "[data-kidx-lab]", "[data-kidx-stop]"]) await reachable(selector);
+        await page.locator("[data-kidx-guide]").click();
+        await guide().waitFor();
+        assert.equal(await page.locator("[data-kidx-guide]").getAttribute("aria-expanded"), "true");
         for (const selector of ["[data-kidx-guide]", "[data-ev3-block='forward']", ".gx-ev3-exit", "[data-guide-close]", "[data-kidx-lab]", "[data-kidx-stop]"]) await reachable(selector);
         await capture(`${width}`);
         await guide().locator("summary").click();
@@ -61,8 +77,22 @@ export async function runKidxGuidance({ part = "all" } = {}) {
         await reachable("[data-kidx-guide]");
         await capture(`${width}-landmarks`);
         await guide().locator("summary").click();
+        await page.locator("[data-guide-close]").click();
+        assert.equal(await page.locator("[data-kidx-guide]").evaluate(e => e === document.activeElement), true);
+        assert.equal(await guide().isVisible(), false);
+        assert.ok((await robotView()).coveredFraction <= .05, "closing Help restores the unobstructed robot");
+        assert.deepEqual((await state()).program.blocks, [], "reading Help never changes the child's program");
+        if (width === 390) {
+          await page.locator("[data-kidx-guide]").click();
+          await page.locator("[data-guide-close]").focus();
+          await page.keyboard.press("Escape");
+          assert.equal(await guide().isVisible(), false);
+          assert.equal(await page.locator("[data-kidx-guide]").evaluate(e => e === document.activeElement), true);
+        }
       }
       await page.setViewportSize({ width: 1280, height: 800 });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await guide().waitFor();
       await page.locator("[data-ev3-block='stop']").click();
       assert.deepEqual((await state()).program.blocks, ["stop"], "Stop queues an instruction instead of stopping or starting an attempt");
       assert.equal((await state()).program.running, false);
@@ -155,6 +185,39 @@ export async function runKidxGuidance({ part = "all" } = {}) {
     if (browser) await browser.close();
     if (server) await server.close();
   }
+}
+
+/** Project native CAD meshes, not the chassis collider or DOM status. Also used for release reception. */
+export function inspectKidxRobotView(page) {
+  return page.evaluate(() => {
+    const host = window.__GRAPHYSX_HOST__, canvas = host.renderer.domElement.getBoundingClientRect();
+    const points = [];
+    let meshes = 0;
+    for (const id of ["ev3-drive-base:technic", "ev3-drive-base:wheel-left", "ev3-drive-base:wheel-right"]) {
+      const object = host.world.getEntityObject(id);
+      object.updateWorldMatrix(true, true);
+      object.traverse(mesh => {
+        if (!mesh.isMesh || !mesh.visible) return;
+        mesh.geometry.computeBoundingBox();
+        const { min, max } = mesh.geometry.boundingBox;
+        meshes++;
+        for (const x of [min.x, max.x]) for (const y of [min.y, max.y]) for (const z of [min.z, max.z]) {
+          const p = mesh.position.clone().set(x, y, z).applyMatrix4(mesh.matrixWorld).project(host.camera);
+          points.push({ x: canvas.left + (p.x + 1) * canvas.width / 2, y: canvas.top + (1 - p.y) * canvas.height / 2 });
+        }
+      });
+    }
+    const robot = { left: Math.min(...points.map(p => p.x)), right: Math.max(...points.map(p => p.x)),
+      top: Math.min(...points.map(p => p.y)), bottom: Math.max(...points.map(p => p.y)) };
+    const area = (robot.right - robot.left) * (robot.bottom - robot.top);
+    const obstacles = [".gx-ev3-mission", ".gx-ev3", ".gx-ev3-exit"].map(selector => {
+      const r = document.querySelector(selector).getBoundingClientRect();
+      return { selector, left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    });
+    const covered = obstacles.reduce((sum, r) => sum + Math.max(0, Math.min(robot.right, r.right) - Math.max(robot.left, r.left))
+      * Math.max(0, Math.min(robot.bottom, r.bottom) - Math.max(robot.top, r.top)), 0);
+    return { robot, meshes, obstacles, coveredFraction: covered / area };
+  });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
