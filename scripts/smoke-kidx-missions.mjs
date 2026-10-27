@@ -17,6 +17,8 @@ export async function runKidxMissions({ missionIds } = {}) {
 
   let browser, server;
   const errors = [];
+  const skyRequests = [];
+  const hdriRequests = [];
   try {
     if (!process.env.SMOKE_BASE) server = await startStaticServer({ root: path.resolve("dist"), port: Number(process.env.SMOKE_PORT || 4588) });
     const base = (process.env.SMOKE_BASE ?? server.url).replace(/\/$/, "");
@@ -24,12 +26,19 @@ export async function runKidxMissions({ missionIds } = {}) {
     const page = applySmokeTimeout(await browser.newPage({ viewport: { width: 1440, height: 900 }, hasTouch: true }));
     page.on("pageerror", (error) => errors.push(String(error)));
     page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+    page.on("request", (request) => {
+      const pathname = new URL(request.url()).pathname;
+      if (pathname.startsWith("/assets/sky/")) skyRequests.push(pathname);
+      if (pathname.startsWith("/assets/hdri/")) hdriRequests.push(pathname);
+    });
     const state = () => page.evaluate(() => JSON.parse(window.render_game_to_text()).application);
     const capture = (name) => page.screenshot({ path: path.join(ART, `kidx-${name}.png`) });
     const home = async () => { await page.locator(".gx-ev3-exit").click(); };
     await page.goto(`${base}/?app=ev3-lab&view=atelier`, { waitUntil: "domcontentloaded" });
     await page.locator("[data-kidx-mission='first-drive']").waitFor();
     await capture("missions");
+    assert.equal(await page.evaluate(() => window.__GRAPHYSX_HOST__.renderer.debug.checkShaderErrors), true, "shader validation stays enabled");
+    assert.deepEqual(skyRequests, [], "direct KidX entry must not prepare an unrelated showroom cubemap");
     for (const id of missionIds ?? Object.keys(solutions)) {
       const blocks = solutions[id];
       assert.ok(blocks, `Unknown mission: ${id}`);
@@ -51,11 +60,20 @@ export async function runKidxMissions({ missionIds } = {}) {
         const run = await page.evaluate(() => window.__GRAPHYSX__.rules.status());
         assert.equal(run.checkpointIndex, 1, JSON.stringify(run));
       }
+      await page.waitForFunction(() => window.__GRAPHYSX_HOST__.renderer.info.programs.some((program) => program.name === "EquirectangularToCubeUV"));
       await capture(`mission-${id}`);
       await home("missions");
     }
     console.log("  ok  selected French missions finish through real block controls and physics, including mandatory checkpoints");
+    const missionHdri = await page.evaluate(() => window.__GRAPHYSX__.hdris().find((hdri) => hdri.id === "studio-small-08")?.url);
+    assert.ok(missionHdri, "the mission's real lighting asset remains available");
+    assert.ok(hdriRequests.length > 0, "the CAD keeps its HDR image lighting");
+    assert.deepEqual([...new Set(hdriRequests)], [missionHdri], "only KidX's selected HDRI is prepared");
+    assert.deepEqual(skyRequests, [], "mission changes never start a discarded showroom sky");
+    const cubemapPrograms = await page.evaluate(() => window.__GRAPHYSX_HOST__.renderer.info.programs.filter((program) => program.name === "CubemapToCubeUV").length);
+    assert.equal(cubemapPrograms, 0, "the unrelated cubemap conversion never enters the KidX renderer");
     assert.deepEqual(errors, []);
+    console.log(`  ok  KidX-only lighting: zero sky requests, zero cubemap programs, real mission HDRI ${missionHdri}, shader validation enabled`);
     console.log("KidX missions smoke passed; no console or page errors.");
   } finally {
     if (browser) await browser.close();
