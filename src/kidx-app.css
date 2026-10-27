@@ -67,8 +67,9 @@ body:has(.kx-mechanism) .gx-display-settings,body:has(.kx-build-ui) .gx-display-
   .gx-ev3-mission[data-guide-open=false] [data-kidx-stop]:disabled .kx-tool-detail{display:none}
   .gx-ev3-mission[data-guide-open=false] .gx-ev3-status{white-space:nowrap}
   .gx-ev3-mission[data-guide-open=false] .gx-ev3-program-readout{margin-top:5px;padding-top:5px;align-items:center}
-  .gx-ev3-mission[data-guide-open=false] .gx-ev3-program-blocks{flex-wrap:nowrap;overflow-x:auto}
-  .gx-ev3-mission[data-guide-open=false] .gx-ev3-program-chip{flex-shrink:0}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-program-blocks{flex-wrap:wrap;overflow:visible;gap:3px}
+  .gx-ev3-mission[data-guide-open=false] .gx-ev3-program-chip{flex-shrink:0;padding:2px;font-size:10px}
+  .gx-ev3-mission[data-guide-open=false][data-phase=complete] .gx-ev3-objective{display:none}
   .gx-ev3-mission[data-guide-open=false] .kx-mission-tools{gap:4px;margin-top:6px}
   .gx-ev3-mission[data-guide-open=false] .kx-mission-tools>.kx-lab-toggle{flex:1;min-width:0;margin-left:0;padding:5px 4px;font-size:11px;white-space:normal}
   .gx-ev3-mission[data-guide-open=false] .kx-mission-tools>.kx-debrief-toggle{flex-basis:100%}
