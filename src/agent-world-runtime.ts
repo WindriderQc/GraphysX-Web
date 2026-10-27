@@ -2846,6 +2846,9 @@ export class AgentWorldRuntime {
         this.physicsWorld.wakeBody(runtime.body);
       }
     }
+    // Absolute aim is an immediate write, even when simulation is paused. Reuse the
+    // same visual projection as a physics tick without advancing the world clock.
+    if (input.headingDegrees !== undefined) this.placeSteeringArrows();
     if (runtime.body) this.physicsWorld.readLinearVelocity(runtime.body, this.physicsScratch.linearVelocity);
     else this.physicsScratch.linearVelocity.set(0, 0, 0);
     return {
@@ -3133,6 +3136,8 @@ export class AgentWorldRuntime {
     this.rulesCursor = this.streamSequence;
     this.armSubjectRuns();
     this.run = this.armPrimaryRun();
+    // A paused reset must move the existing visual anchors with their subjects.
+    this.placeSteeringArrows();
     this.recordEvent("rules.reset", spawn?.entityId ?? "clock only");
     return this.success(deepClone(this.run));
   }

@@ -2,6 +2,20 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-10-27 — Synchronize paused steering visuals after Retry
+
+- Visual review of the published mobile fix found a pre-existing reset mismatch: the
+  authoritative drive base returned to [0, .83, 17], but its native CAD anchor remained
+  near [0, .779, 12.897] until another simulation step. The old browser checks verified
+  mission state, not the rendered anchor. The new paused-Retry regression fails there.
+- Reuse the runtime's existing steering-arrow projection after a rules reset and an
+  explicit heading write. This keeps native geometry, query/export and steering state
+  together while paused, without spending mission/world time or adding another loop.
+- The regression compares both queried and native-object positions/yaw after the real
+  Retry control, checks zero time advance, and changes absolute aim while still paused.
+  This shared runtime change requires complete release coverage; exact-source logs and
+  rendered/public receipts remain outside Git. Voice integration remains separate.
+
 ## 2026-10-27 — Keep all six compact program blocks readable
 
 - Preserve the robot space gained by the compact mission panel while keeping every queued
