@@ -12,14 +12,22 @@ Original prompt: "lets go then, lets make this happen!!"
   A deterministic browser regression fails on all six unrelated clearblue face requests.
   The KidX-only entry now supplies an empty native world and opens the existing application
   directly. Mission HDR lighting, model geometry, materials, physics and controls are unchanged.
-- Verification and rendered acceptance are in progress. The regression also requires the real
-  mission HDRI and rejects any discarded showroom HDRI. No model, voice, service or hardware
-  command is involved.
+- The regression requires the real mission HDRI and rejects any discarded showroom HDRI.
+  No model, voice, service or hardware command is involved.
 - Initial fixed-source qualification passes all eight checks: static/build/Rapier, accessible
   startup recovery and the right/left mission journey. Inspected the rendered robot and course.
   The final regression additionally waits for actual HDR prefiltering, keeps shader validation
   enabled and requires zero unrelated cubemap programs. The full local plan follows because
   `main.ts` is shared; its receipt and public reception must name their actual tested revision.
+- Full local release qualification on 1143f80343d34b37d4873005c6fd91d10c572e9d passed
+  all 106 checks (100 release smokes plus the six unit/static/build/Rapier checks),
+  without a transport retry. This includes the original failing turns, both native CAD guides,
+  saved programs, sensors, construction, compact controls and measured debriefs. The shared
+  session browser check passed all 131 assertions. Inspected desktop and portrait captures.
+- The unmodified installed web-game action client also passed direct First Drive entry and
+  an ordinary Forward-block click; inspected its final image and projected program state.
+  The qualification log, captures and public release receipts stay outside Git. Public browser
+  reception and physical phone/EV3 acceptance remain distinct from local source qualification.
 
 ## 2026-10-26 — Mesh integration and resource parity
 
