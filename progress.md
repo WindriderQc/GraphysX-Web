@@ -2,6 +2,18 @@
 
 Original prompt: "lets go then, lets make this happen!!"
 
+## 2026-10-27 — Keep all six compact program blocks readable
+
+- Preserve the robot space gained by the compact mission panel while keeping every queued
+  instruction visible. Compact chips wrap within the readout; they do not rely on horizontal
+  swiping through the mission panel's pointer-transparent layer.
+- The arrival regression queues six ordinary Forward blocks at 320 and 390px, checks that
+  all six rendered labels remain inside the readout, and measures the native CAD robot's
+  visibility again. Help and the program retain their existing behavior.
+- The previous broad KidX run stopped before its final summary and is not counted as a
+  passing gate. Its partial log is retained outside Git; final qualification names the actual
+  tested revision and distinguishes local checks from published and physical-device reception.
+
 ## 2026-10-26 — Keep the mobile LEGO robot visible
 
 - Owner requested lighter mobile instructions. A native-CAD projection regression reproduces

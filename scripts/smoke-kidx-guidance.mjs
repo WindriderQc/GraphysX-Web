@@ -89,6 +89,16 @@ export async function runKidxGuidance({ part = "all" } = {}) {
           assert.equal(await guide().isVisible(), false);
           assert.equal(await page.locator("[data-kidx-guide]").evaluate(e => e === document.activeElement), true);
         }
+        if (width <= 390) {
+          for (let block = 0; block < 6; block++) await page.locator("[data-ev3-block='forward']").click();
+          const readout = await inspectKidxProgramView(page);
+          assert.equal(readout.chips.length, 6);
+          assert.ok(readout.allVisible, `all six instructions stay readable without scrolling: ${JSON.stringify(readout)}`);
+          assert.deepEqual((await state()).program.blocks, Array(6).fill("forward"));
+          assert.ok((await robotView()).coveredFraction <= .05, "six visible blocks still leave the robot unobstructed");
+          await capture(`${width}-six-blocks-robot-visible`);
+          console.log(`ok: all six program blocks and real CAD visible at ${width}px`);
+        }
       }
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.reload({ waitUntil: "domcontentloaded" });
@@ -217,6 +227,21 @@ export function inspectKidxRobotView(page) {
     const covered = obstacles.reduce((sum, r) => sum + Math.max(0, Math.min(robot.right, r.right) - Math.max(robot.left, r.left))
       * Math.max(0, Math.min(robot.bottom, r.bottom) - Math.max(robot.top, r.top)), 0);
     return { robot, meshes, obstacles, coveredFraction: covered / area };
+  });
+}
+
+/** Check the visible readout, not just the saved/projected program array. */
+export function inspectKidxProgramView(page) {
+  return page.evaluate(() => {
+    const list = document.querySelector(".gx-ev3-program-blocks"), bounds = list.getBoundingClientRect();
+    const chips = [...list.querySelectorAll(".gx-ev3-program-chip")].map(chip => {
+      const r = chip.getBoundingClientRect();
+      return { text: chip.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom,
+        height: r.height, fontSize: Number.parseFloat(getComputedStyle(chip).fontSize) };
+    });
+    return { bounds: { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }, chips,
+      allVisible: chips.every(c => c.left >= bounds.left - .5 && c.right <= bounds.right + .5
+        && c.top >= bounds.top - .5 && c.bottom <= bounds.bottom + .5 && c.height >= 16 && c.fontSize >= 10) };
   });
 }
 
