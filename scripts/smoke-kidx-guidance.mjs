@@ -107,6 +107,18 @@ export async function runKidxGuidance({ part = "all" } = {}) {
           assert.ok(completeView.coveredFraction <= .05, `completion still leaves the robot visible: ${JSON.stringify({ width, height, ...completeView })}`);
           assert.ok((await inspectKidxProgramView(page)).allVisible, "completion retains all six readable instructions");
           await capture(`${width}-six-blocks-complete`);
+          const beforeRetry = await page.evaluate(() => window.__GRAPHYSX__.state().elapsedSeconds);
+          await page.locator("[data-ev3-retry]").click();
+          const resetView = await inspectKidxSteeringView(page);
+          assert.ok(resetView.matches, `paused Retry immediately puts the native CAD at the real spawn: ${JSON.stringify(resetView)}`);
+          assert.equal((await state()).mission.elapsedSeconds, 0);
+          assert.equal(await page.evaluate(() => window.__GRAPHYSX__.state().elapsedSeconds), beforeRetry, "visual reset does not advance simulation time");
+          await page.evaluate(() => window.__GRAPHYSX__.steer("ev3-drive-base", { headingDegrees: 37, thrust: 0, turn: 0 }));
+          assert.ok((await inspectKidxSteeringView(page)).matches, "absolute aim updates the native model while paused");
+          await page.evaluate(() => window.__GRAPHYSX__.steer("ev3-drive-base", { headingDegrees: 0, thrust: 0, turn: 0 }));
+          const repainted = await page.evaluate(() => window.__GRAPHYSX_HOST__.frameCount);
+          await page.waitForFunction(n => window.__GRAPHYSX_HOST__.frameCount > n + 2, repainted);
+          await capture(`${width}-retry-real-pose`);
         }
       }
       await page.setViewportSize({ width: 1280, height: 800 });
@@ -236,6 +248,22 @@ export function inspectKidxRobotView(page) {
     const covered = obstacles.reduce((sum, r) => sum + Math.max(0, Math.min(robot.right, r.right) - Math.max(robot.left, r.left))
       * Math.max(0, Math.min(robot.bottom, r.bottom) - Math.max(robot.top, r.top)), 0);
     return { robot, meshes, obstacles, coveredFraction: covered / area };
+  });
+}
+
+/** Compare the real scene anchor with the authoritative steering subject, without stepping. */
+export function inspectKidxSteeringView(page) {
+  return page.evaluate(() => {
+    const subject = window.__GRAPHYSX__.query({ ids: ["ev3-drive-base"] })[0];
+    const arrow = window.__GRAPHYSX__.query({ ids: [subject.steering.arrowId] })[0];
+    const object = window.__GRAPHYSX_HOST__.world.getEntityObject(arrow.id);
+    const expected = [...subject.position]; expected[1] += subject.steering.arrowLift;
+    const native = object.position.toArray(), nativeYaw = object.rotation.y * 180 / Math.PI;
+    const aligned = yaw => Math.abs(((yaw + subject.steering.headingDegrees + 180) % 360 + 360) % 360 - 180) < .01;
+    return { subject: subject.position, expected, arrow: arrow.position, native, heading: subject.steering.headingDegrees,
+      arrowYaw: arrow.rotationDegrees[1], nativeYaw,
+      matches: [arrow.position, native].every(p => p.every((v, i) => Math.abs(v - expected[i]) < .002))
+        && aligned(arrow.rotationDegrees[1]) && aligned(nativeYaw) };
   });
 }
 
