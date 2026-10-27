@@ -98,6 +98,15 @@ export async function runKidxGuidance({ part = "all" } = {}) {
           assert.ok((await robotView()).coveredFraction <= .05, "six visible blocks still leave the robot unobstructed");
           await capture(`${width}-six-blocks-robot-visible`);
           console.log(`ok: all six program blocks and real CAD visible at ${width}px`);
+          await page.locator("[data-ev3-run]").click();
+          await page.evaluate(() => window.advanceTime(3500));
+          const painted = await page.evaluate(() => window.__GRAPHYSX_HOST__.frameCount);
+          await page.waitForFunction(n => window.__GRAPHYSX_HOST__.frameCount > n + 2, painted);
+          assert.equal((await state()).mission.phase, "complete");
+          const completeView = await robotView();
+          assert.ok(completeView.coveredFraction <= .05, `completion still leaves the robot visible: ${JSON.stringify({ width, height, ...completeView })}`);
+          assert.ok((await inspectKidxProgramView(page)).allVisible, "completion retains all six readable instructions");
+          await capture(`${width}-six-blocks-complete`);
         }
       }
       await page.setViewportSize({ width: 1280, height: 800 });

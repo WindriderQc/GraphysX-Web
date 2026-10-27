@@ -753,6 +753,9 @@ export function mountEv3MissionStrip(
   });
 
   root.append(mission, exit, strip);
+  // Resolve the arrival highlight now that its ordinary controls are connected.
+  // It must not wait for the first physics/render frame after a cold import.
+  guidance?.update();
 
   const surfaceState = (): Ev3MissionStripState => {
     const run = api.rules.status();
