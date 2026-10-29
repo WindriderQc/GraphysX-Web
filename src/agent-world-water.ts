@@ -8,10 +8,12 @@ import {
   Object3D,
   PlaneGeometry,
   RepeatWrapping,
+  type Texture,
   Vector2,
   Vector3,
 } from "three";
 import { ManagedWater } from "./managed-water";
+import { headlessTexture, isHeadless } from "./headless";
 
 /**
  * Reflective water as first-class `graphysx.agent-world/v2` scene vocabulary.
@@ -181,7 +183,7 @@ function isColor(value: unknown): boolean {
   return black.equals(white);
 }
 
-let sharedNormals: CanvasTexture | null = null;
+let sharedNormals: Texture | null = null;
 
 /**
  * A seamless tangent-space normal map for the surface, drawn once and shared.
@@ -190,8 +192,9 @@ let sharedNormals: CanvasTexture | null = null;
  * RGB the usual way. Every wavelength divides the 256px edge a whole number of times, so the
  * texture wraps without a seam.
  */
-function waterNormalsTexture(): CanvasTexture {
+function waterNormalsTexture(): Texture {
   if (sharedNormals) return sharedNormals;
+  if (isHeadless()) return (sharedNormals = headlessTexture());
   const size = 256;
   const canvas = document.createElement("canvas");
   canvas.width = size;

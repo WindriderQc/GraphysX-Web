@@ -1,35 +1,53 @@
-// The Clawblox Mesa island, re-expressed as a GraphysX agent-world/v2 document.
+// The Clawblox Mesa island as a GraphysX agent-world/v2 document.
 //
-// Geometry, colours and pickup metadata come from a real `GET /observe` of
-// clawblox/worlds/mesa-island (fixtures/mesa-island-observe.json). Clawblox studs are used
-// as GraphysX units one-to-one so agent coordinates stay identical across both worlds.
+// Geometry, colours, physical properties and pickup metadata follow
+// clawblox/worlds/mesa-island/main.lua and a real `GET /observe` of it (test fixture).
+// Clawblox studs are GraphysX units one to one, so agent coordinates, prompts and memories
+// carry over unchanged.
 
-import type { AgentWorldDefinition, AgentWorldEntityDefinition } from "../../src/agent-world-runtime";
+import type { AgentWorldDefinition, AgentWorldEntityDefinition } from "../src/agent-world-runtime";
 
 export type Vec3 = [number, number, number];
 
-/** Clawblox attributes that agents read from `world.entities[].attributes`. */
+/** Clawblox attributes agents read from `world.entities[].attributes`. */
 export type MesaAttributes = Record<string, string | number | boolean>;
 
-/** Per-entity facts the world service needs and the v2 document has no field for. */
+/** What the observation needs about an entity that the v2 document has no field for. */
 export interface MesaEntityMeta {
-  /** Clawblox `name`, kept so agent prompts and memories transfer unchanged. */
+  /** Clawblox `name`: kept so agent prompts and memories transfer unchanged. */
   name: string;
-  /** Clawblox `shape` (Block, Ring, Cylinder). */
   shape: string;
   material: string;
   color: Vec3;
   size: Vec3;
+  mass: number;
   attributes?: MesaAttributes;
   transparency?: number;
-  /** Visual only: no rigid body (the ocean). */
+  /** No rigid body (the ocean). */
   decorative?: boolean;
+  static?: boolean;
 }
+
+export const BLOCK_SIZE = 0.75;
+export const ROCK_ID = "rock_1";
+export const PLAYER_SPAWN: Vec3 = [0, 5, 0];
 
 const GROUND: Vec3 = [0.333, 0.937, 0.769];
 const MESA: Vec3 = [0.784, 0.627, 0.392];
 const WALL: Vec3 = [0.6, 0.6, 0.6];
-const SLATE: Vec3 = [0.58, 0.53, 0.49];
+export const SLATE: Vec3 = [0.58, 0.533, 0.486];
+
+/**
+ * Mesa's CustomPhysicalProperties. GraphysX clamps friction to [0, 1], so terrain's 1.4 becomes
+ * 1; mass is Clawblox density x part volume.
+ */
+const TERRAIN_SURFACE = { friction: 1, restitution: 0 } as const;
+export const BLOCK_SURFACE = { friction: 0.9, restitution: 0.03 } as const;
+export const BLOCK_MASS = BLOCK_SIZE ** 3 * 0.7;
+const ROCK_SIZE: Vec3 = [3.2, 2.1, 2.8];
+const ROCK_MASS = ROCK_SIZE[0] * ROCK_SIZE[1] * ROCK_SIZE[2] * 8;
+const RING_SIZE: Vec3 = [3.6, 0.56, 3.6];
+const RING_MASS = RING_SIZE[0] * RING_SIZE[1] * RING_SIZE[2] * 0.45;
 
 type StaticBox = { name: string; position: Vec3; size: Vec3; color: Vec3; role?: string; material?: string };
 
@@ -63,20 +81,32 @@ const BLOCK_SPAWNS: Vec3[] = [
   [15.2, 8.34, -0.52], [15.32, 9.15, -1.3], [14.82, 10.13, -1.98], [15.4, 10.06, -1.0],
 ];
 
-export const BLOCK_SIZE = 0.75;
-
-// Clawblox parts use Roblox-like surfaces (Slate friction 0.4, Plastic 0.3) and density x
-// volume for mass. GraphysX's "default" preset (friction 0.18) lets a nudged block slide
-// ten studs, so the island states its surfaces explicitly.
-const SLATE_SURFACE = { friction: 0.4, restitution: 0.2 } as const;
-
-function hex([r, g, b]: Vec3): string {
+export function hex([r, g, b]: Vec3): string {
   const part = (value: number) => Math.round(value * 255).toString(16).padStart(2, "0");
   return `#${part(r)}${part(g)}${part(b)}`;
 }
 
-function pickupAttributes(color: string, kind: string): MesaAttributes {
+export function pickupAttributes(color: string, kind: string): MesaAttributes {
   return { RenderRole: kind, ItemColorName: color, IsPickupObject: true, IsCarryable: true, CarryKind: kind };
+}
+
+/** A loose slate block (the twelve pile blocks and every rock-impact cube). */
+export function blockEntity(id: string, name: string, position: Vec3, velocity?: Vec3, spin?: Vec3): AgentWorldEntityDefinition {
+  return {
+    id, label: name, type: "box",
+    transform: { position, scale: [BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE] },
+    material: { color: hex(SLATE) },
+    physics: {
+      mode: "dynamic", mass: BLOCK_MASS, ...BLOCK_SURFACE,
+      ...(velocity ? { linearVelocity: velocity } : {}),
+      ...(spin ? { angularVelocity: spin } : {}),
+    },
+    tags: ["pickup"],
+  };
+}
+
+export function blockMeta(name: string): MesaEntityMeta {
+  return { name, shape: "Block", material: "Slate", color: SLATE, size: [BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE], mass: BLOCK_MASS, attributes: pickupAttributes("Slate", "PickupObject") };
 }
 
 export interface MesaIsland {
@@ -88,48 +118,45 @@ export function buildMesaIsland(): MesaIsland {
   const entities: AgentWorldEntityDefinition[] = [];
   const meta = new Map<string, MesaEntityMeta>();
   const add = (entity: AgentWorldEntityDefinition, info: MesaEntityMeta) => {
-    entities.push(entity);
     if (!entity.id) throw new Error("Island entities need ids");
+    entities.push(entity);
     meta.set(entity.id, info);
   };
 
   add(
-    { id: "ocean", label: "Ocean", type: "box", transform: { position: [0, -0.73, 0], scale: [600, 0.45, 600] }, material: { color: "#3480a8", opacity: 0.82 } },
-    { name: "Ocean", shape: "Block", material: "Glass", color: [0.204, 0.502, 0.659], size: [600, 0.45, 600], transparency: 0.18, attributes: { RenderRole: "Ocean" }, decorative: true },
+    { id: "ocean", label: "Ocean", type: "box", transform: { position: [0, -0.725, 0], scale: [600, 0.45, 600] }, material: { color: "#3480a8", opacity: 0.82 } },
+    { name: "Ocean", shape: "Block", material: "Glass", color: [0.204, 0.502, 0.659], size: [600, 0.45, 600], mass: 0, transparency: 0.18, attributes: { RenderRole: "Ocean" }, decorative: true },
   );
   for (const box of STATIC_BOXES) {
     add(
-      { id: box.name.toLowerCase(), label: box.name, type: "box", transform: { position: box.position, scale: box.size }, material: { color: hex(box.color) }, physics: { mode: "static", friction: 0.3, restitution: 0.2 } },
-      { name: box.name, shape: "Block", material: box.material ?? "Plastic", color: box.color, size: box.size, ...(box.role ? { attributes: { RenderRole: box.role } } : {}) },
+      { id: box.name.toLowerCase(), label: box.name, type: "box", transform: { position: box.position, scale: box.size }, material: { color: hex(box.color) }, physics: { mode: "static", ...TERRAIN_SURFACE } },
+      { name: box.name, shape: "Block", material: box.material ?? "Plastic", color: box.color, size: box.size, mass: 0, static: true, ...(box.role ? { attributes: { RenderRole: box.role } } : {}) },
     );
   }
   BLOCK_SPAWNS.forEach((position, index) => {
     const name = `Block_${index + 1}`;
-    add(
-      { id: name.toLowerCase(), label: name, type: "box", transform: { position, scale: [BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE] }, material: { color: hex(SLATE) }, physics: { mode: "dynamic", mass: 1.14, ...SLATE_SURFACE }, tags: ["pickup"] },
-      { name, shape: "Block", material: "Slate", color: SLATE, size: [BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE], attributes: pickupAttributes("Slate", "PickupObject") },
-    );
+    add(blockEntity(name.toLowerCase(), name, position), blockMeta(name));
   });
   add(
-    { id: "rock_1", label: "Rock_1", type: "box", transform: { position: [-31.4, 3.05, 26.9], scale: [3.2, 2.1, 2.8] }, material: { color: "#34312c" }, physics: { mode: "dynamic", mass: 50.6, ...SLATE_SURFACE }, tags: ["pickup"] },
-    { name: "Rock_1", shape: "Block", material: "Slate", color: [0.204, 0.192, 0.173], size: [3.2, 2.1, 2.8], attributes: pickupAttributes("Slate", "Rock") },
+    { id: ROCK_ID, label: "Rock_1", type: "box", transform: { position: [-31.4, 3.05, 26.9], scale: ROCK_SIZE }, material: { color: "#34312c" }, physics: { mode: "dynamic", mass: ROCK_MASS, friction: 0.9, restitution: 0 }, tags: ["pickup"] },
+    { name: "Rock_1", shape: "Block", material: "Slate", color: [0.204, 0.192, 0.173], size: ROCK_SIZE, mass: ROCK_MASS, attributes: pickupAttributes("Slate", "Rock") },
   );
   // A torus gets a flat box collider (diameter x tube, thin along local Y) from the runtime,
-  // matching the Clawblox ring's 3.6 x 0.56 x 3.6 part. Whether the rendered torus lies flat
-  // with it is a visual check for the viewer phase (the Three torus is thin along Z).
+  // matching the Clawblox ring part. Whether the rendered torus lies flat with it is a check
+  // for the viewer (the Three torus is thin along Z).
   add(
-    { id: "ring_1", label: "Ring_1", type: "torus", geometry: { radius: 1.52, tube: 0.28, radialSegments: 32 }, transform: { position: [40, 0.28, -42] }, material: { color: "#e8bf4a" }, physics: { mode: "dynamic", mass: 5.1, friction: 0.3, restitution: 0.2 }, tags: ["pickup"] },
-    { name: "Ring_1", shape: "Ring", material: "Plastic", color: [0.91, 0.75, 0.29], size: [3.6, 0.56, 3.6], attributes: pickupAttributes("Yellow", "Ring") },
+    { id: "ring_1", label: "Ring_1", type: "torus", geometry: { radius: 1.52, tube: 0.28, radialSegments: 32 }, transform: { position: [40, 0.28, -42], rotationDegrees: [0, 32, 0] }, material: { color: "#e8c04a" }, physics: { mode: "dynamic", mass: RING_MASS, friction: 0.35, restitution: 0.18 }, tags: ["pickup"] },
+    { name: "Ring_1", shape: "Ring", material: "Plastic", color: [0.91, 0.753, 0.29], size: RING_SIZE, mass: RING_MASS, attributes: pickupAttributes("Yellow", "Ring") },
   );
 
   const document: AgentWorldDefinition = {
     schema: "graphysx.agent-world/v2",
     id: "mesa-island",
-    label: "Mesa island (GraphysX world service spike)",
+    label: "Mesa island",
     environment: {
       background: "#9fd3ec",
       ground: { visible: false, size: 0, color: "#000000", grid: false, gridColor: "#000000" },
-      // Clawblox's world gravity. Characters use their own, heavier gravity (see character.ts).
+      // Clawblox world gravity. Characters fall with their own, heavier gravity.
       physics: { gravity: [0, -30, 0] },
     },
     entities: [

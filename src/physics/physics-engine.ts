@@ -112,6 +112,50 @@ declare const physicsJointHandleBrand: unique symbol;
 /** Identity-only token for a constraint owned by one physics adapter. */
 export type PhysicsJointHandle = Readonly<{ [physicsJointHandleBrand]: true }>;
 
+declare const physicsCharacterHandleBrand: unique symbol;
+
+/** Identity-only token for a walking character owned by one physics adapter. */
+export type PhysicsCharacterHandle = Readonly<{ [physicsCharacterHandleBrand]: true }>;
+
+/**
+ * A walking capsule moved by a character controller: kinematic, blocked by solid colliders,
+ * able to climb small steps and to shove dynamic bodies out of its path. Sensors (triggers,
+ * bodies whose collision is off) never block it.
+ */
+export interface PhysicsCharacterDefinition {
+  position: PhysicsVector3;
+  radius: number;
+  /** Half of the straight segment; the capsule is `2 * (halfHeight + radius)` tall. */
+  halfHeight: number;
+  /** Gap kept between the capsule and obstacles. Default 0.05. */
+  offset?: number;
+  /** Climbs ledges up to this height. Omit to disable. */
+  autostepHeight?: number;
+  autostepMinWidth?: number;
+  /** Steepest walkable slope, radians. Default 45 degrees. */
+  maxSlopeClimbRadians?: number;
+  /** Sticks to the ground across drops up to this distance. Omit to disable. */
+  snapToGround?: number;
+  /** Mass used when shoving dynamic bodies; 0 (default) never pushes. */
+  pushMass?: number;
+}
+
+/** Result of one {@link PhysicsEngine.moveCharacter} call. */
+export interface PhysicsCharacterMove {
+  /** The translation applied at the next step, after collisions. */
+  movement: PhysicsVector3;
+  grounded: boolean;
+}
+
+export type PhysicsStateHandle = PhysicsBodyHandle | PhysicsCharacterHandle | PhysicsJointHandle;
+
+/** Complete solver state (contacts and warm-start caches included). Opaque to callers. */
+export interface PhysicsEngineState {
+  format: string;
+  bytes: Uint8Array;
+  accumulator: number;
+}
+
 /**
  * Minimal world/body seam needed by AgentWorld today.
  *
@@ -142,6 +186,48 @@ export interface PhysicsEngine {
   applyImpulse(body: PhysicsBodyHandle, impulse: PhysicsVector3, worldPoint?: PhysicsVector3): void;
 
   readAabb(body: PhysicsBodyHandle, out: PhysicsAabb): void;
+
+  // Host seams: a server that runs game rules on top of the scene (the world service) carries
+  // bodies, walks characters, asks whether a spot is free and saves the exact solver state.
+
+  /**
+   * Hand a dynamic body to the host (`kinematic`) or give it back to the solver. A body given
+   * back keeps the velocity it was moved with; zero it to set the body down.
+   */
+  setBodyMotion(body: PhysicsBodyHandle, motion: "dynamic" | "kinematic"): void;
+  /** With collision off a body still moves and is still reported, but touches nothing. */
+  setBodyCollision(body: PhysicsBodyHandle, enabled: boolean): void;
+  /** Kinematic bodies only: the pose reached at the next step, swept by the solver. */
+  writeKinematicTarget(body: PhysicsBodyHandle, transform: PhysicsTransform): void;
+  /** True when a solid collider, other than those of `exclude`, overlaps the box. */
+  overlapsBox(
+    center: PhysicsVector3,
+    halfExtents: PhysicsVector3,
+    rotation: PhysicsQuaternion,
+    exclude?: readonly PhysicsStateHandle[],
+  ): boolean;
+
+  /** Bodies and characters touching this body after the last step (solid contacts only). */
+  readContacts(body: PhysicsBodyHandle, out: PhysicsStateHandle[]): void;
+
+  createCharacter(definition: PhysicsCharacterDefinition): PhysicsCharacterHandle;
+  removeCharacter(character: PhysicsCharacterHandle): void;
+  /** Resolve a desired translation against the world; it takes effect at the next step. */
+  moveCharacter(character: PhysicsCharacterHandle, desired: PhysicsVector3, out: PhysicsCharacterMove): void;
+  readCharacterPosition(character: PhysicsCharacterHandle, out: PhysicsVector3): void;
+  /** Teleport (respawn). */
+  writeCharacterPosition(character: PhysicsCharacterHandle, position: PhysicsVector3): void;
+
+  /** Serialise the whole solver. Pair with {@link stateId} to remember what each handle was. */
+  saveState(): PhysicsEngineState;
+  /** The id a handle has inside the state {@link saveState} produces. */
+  stateId(handle: PhysicsStateHandle): number;
+  /**
+   * Replace the simulated world with a saved one. Every live handle must be bound to the id it
+   * had when saved; saved bodies, characters and joints left unbound are removed. Stepping
+   * afterwards continues the saved simulation bit for bit.
+   */
+  restoreState(state: PhysicsEngineState, bindings: Iterable<readonly [PhysicsStateHandle, number]>): void;
   readSleepState(body: PhysicsBodyHandle): PhysicsSleepState;
   wakeBody(body: PhysicsBodyHandle): void;
   sleepBody(body: PhysicsBodyHandle): void;

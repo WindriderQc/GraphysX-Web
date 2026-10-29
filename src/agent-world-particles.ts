@@ -12,6 +12,7 @@ import {
   Vector3,
   type WebGLRenderer
 } from "three";
+import { headlessTexture, isHeadless } from "./headless";
 
 /**
  * Particle emitters as first-class `graphysx.agent-world/v2` scene vocabulary.
@@ -662,6 +663,7 @@ function drawSoftGlow(context: CanvasRenderingContext2D, size: number): void {
 }
 
 function createSpriteTexture(sprite: AgentWorldEmitterSprite): Texture {
+  if (isHeadless()) return headlessTexture();
   const size = 64;
   const canvas = document.createElement("canvas");
   canvas.width = size;
