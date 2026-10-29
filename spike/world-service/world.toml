@@ -1,0 +1,17 @@
+# Lets Clawblox start this spike as an external world:
+#   clawblox run /home/yb/codes/GraphysX-Web-world-service/spike/world-service
+# Clawblox passes WORLD_HOST / WORLD_PORT / WORLD_RECORD / WORLD_RECORD_DIR /
+# WORLD_OPERATOR_TOKEN; main.ts reads them. Build first: node spike/world-service/build.mjs
+name = "Mesa island (GraphysX world service spike)"
+description = "The Clawblox Mesa island simulated headless by the GraphysX scene runtime."
+
+[run]
+command = ["node", ".build/main.js"]
+
+[scripts]
+# Clawblox's parser requires `main` even when [run].command delegates startup; unused here.
+main = "main.ts"
+api = "API.md"
+
+[observation]
+radius = 40000
