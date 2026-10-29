@@ -93,6 +93,8 @@ agent « Eko » piloté sans modèle par le smoke) :
 | Ce que voit Eko (`GET /observe/image`, 1088×640) | ![vue d'Eko](island-view/world-eko-view.jpg) |
 | Reprise en pause juste après l'impact | ![reprise](island-view/world-replay.jpg) |
 | Téléphone (375 px), panneau replié | ![téléphone](island-view/world-phone.jpg) |
+| Chemin de l'onglet « Île » : adresse construite comme AgentX#1179, dans un cadre d'une autre origine (direct) | ![onglet, direct](island-view/world-tab-live.jpg) |
+| Idem, reprise lancée d'elle-même (`embed=1`) | ![onglet, reprise](island-view/world-tab-replay.jpg) |
 
 ## Captures (2026-10-29, devX, Chromium sans écran)
 
