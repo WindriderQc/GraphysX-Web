@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// CPU cost of the headless island: ms per 1/60 s tick with N wandering agents, and the
-// size of one spectator pose frame. Run after build: node spike/world-service/bench.mjs [agents...]
-import { IslandWorld } from "./.build/index.js";
+// CPU cost of the headless island: ms per 1/60 s tick with N wandering agents, and the size of
+// one spectator pose frame and one observation. Build first: npm run build:world-service
+//   node world-service/bench.mjs 1 4 8 16
+const { IslandWorld } = await import(new URL("./dist/world.js", import.meta.url).href);
 
 const counts = process.argv.slice(2).map(Number).filter((n) => n > 0);
 for (const agents of counts.length ? counts : [1, 4, 8, 16]) {
@@ -21,5 +22,6 @@ for (const agents of counts.length ? counts : [1, 4, 8, 16]) {
   const msPerTick = (performance.now() - started) / ticks;
   const frameBytes = Buffer.byteLength(JSON.stringify(world.poseFrame()));
   const observeBytes = Buffer.byteLength(JSON.stringify(world.observe(sessions[0])));
-  console.log(JSON.stringify({ agents, msPerTick: +msPerTick.toFixed(3), coreShareAt60Hz: `${(msPerTick * 6).toFixed(1)}%`, frameBytes, spectatorKBpsAt10Hz: +(frameBytes * 10 / 1024).toFixed(1), observeBytes }));
+  const snapshotBytes = Buffer.byteLength(JSON.stringify(world.snapshot()));
+  console.log(JSON.stringify({ agents, msPerTick: +msPerTick.toFixed(3), coreShareAt60Hz: `${(msPerTick * 6).toFixed(1)}%`, frameBytes, spectatorKBpsAt10Hz: +(frameBytes * 10 / 1024).toFixed(1), observeBytes, snapshotBytes }));
 }

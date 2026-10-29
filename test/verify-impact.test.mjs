@@ -36,6 +36,16 @@ describe("verification by changed area", () => {
     assert.equal(options.fullRelease, false);
   });
 
+  it("keeps the headless world service to Node tests and off the site", () => {
+    const plan = selectVerification(["world-service/island-world.ts", "world-service/server.mjs", "world-service/world.toml", "vite.world-service.config.ts"]);
+    assert.equal(plan.mode, "static");
+    assert.equal(plan.deploy, false);
+    assert.deepEqual(names(plan), []);
+    // The runtime it bundles is shared with the site and keeps its own rule.
+    assert.equal(selectVerification(["world-service/island-world.ts", "src/agent-world-runtime.ts"]).mode, "full");
+    assert.equal(selectVerification(["src/world-service.ts"]).mode, "full");
+  });
+
   it("checks arrival guidance without testing every game or the collaboration system", () => {
     const plan = selectVerification(["src/kidx-mission-guide.ts"]);
     assert.equal(plan.mode, "targeted");

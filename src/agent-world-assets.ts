@@ -23,6 +23,7 @@ import {
   registerAgentWorldModelMaterialSlots,
   type AgentWorldModelMaterialRegistration,
 } from "./agent-world-model-materials";
+import { isHeadless } from "./headless";
 
 export type AgentWorldModelFormat = "graphysx-mesh-json";
 
@@ -305,12 +306,25 @@ export function resolveAgentWorldModelAsset(source?: AgentWorldModelAsset): Reso
   return { id, url, format, fitSize, alphaTest, colorKey, colorKeyTolerance };
 }
 
+type AgentWorldAssetFetch = (url: string) => Promise<Response>;
+const browserAssetFetch: AgentWorldAssetFetch = (url) => fetch(url);
+let assetFetch = browserAssetFetch;
+
+/**
+ * Where model payloads come from. A page fetches them over HTTP; the headless world service
+ * reads the same catalog files from disk so model collision surfaces exist server-side too.
+ * `null` restores the page default.
+ */
+export function setAgentWorldAssetFetch(next: AgentWorldAssetFetch | null): void {
+  assetFetch = next ?? browserAssetFetch;
+}
+
 export async function loadAgentWorldModel(
   target: Group,
   asset: ResolvedAgentWorldModelAsset,
   collision?: AgentWorldModelCollisionRequest,
 ): Promise<void> {
-  const response = await fetch(asset.url);
+  const response = await assetFetch(asset.url);
   if (!response.ok) throw new Error(`Model request failed (${response.status}): ${asset.url}`);
   const payload = await response.json() as AssetPayload;
   validatePayload(payload, collision);
@@ -324,7 +338,8 @@ export async function loadAgentWorldModel(
   const textureLoader = new TextureLoader();
   // One texture per (url, orientation): two materials may read the same file differently.
   const textureRequests = new Map<string, { url: string; flipY: boolean }>();
-  for (const mesh of payload.meshes) {
+  // Headless: no image decoding exists, and nothing is drawn; materials keep their colours.
+  for (const mesh of isHeadless() ? [] : payload.meshes) {
     for (const material of mesh.materials ?? []) {
       if (!material.textureUrl) continue;
       const flipY = material.textureFlipY !== false;
@@ -464,7 +479,7 @@ export async function loadAgentWorldCollisionMesh(
   asset: ResolvedAgentWorldModelAsset,
   limits: Pick<AgentWorldModelCollisionRequest, "maxVertices" | "maxTriangles">,
 ): Promise<AgentWorldModelCollisionMesh> {
-  const response = await fetch(asset.url);
+  const response = await assetFetch(asset.url);
   if (!response.ok) throw new Error(`Model request failed (${response.status}): ${asset.url}`);
   const payload = await response.json() as AssetPayload;
   validatePayload(payload, limits);

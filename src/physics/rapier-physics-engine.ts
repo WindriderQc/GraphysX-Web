@@ -2,6 +2,7 @@ import type {
   Collider,
   ColliderDesc,
   ImpulseJoint,
+  KinematicCharacterController,
   RigidBody,
   RigidBodyDesc,
   World,
@@ -15,13 +16,18 @@ import type {
   PhysicsAabb,
   PhysicsBodyDefinition,
   PhysicsBodyHandle,
+  PhysicsCharacterDefinition,
+  PhysicsCharacterHandle,
+  PhysicsCharacterMove,
   PhysicsEngine,
+  PhysicsEngineState,
   PhysicsJointDefinition,
   PhysicsJointHandle,
   PhysicsMaterialDefinition,
   PhysicsQuaternion,
   PhysicsShapeDefinition,
   PhysicsSleepState,
+  PhysicsStateHandle,
   PhysicsStepOptions,
   PhysicsTransform,
   PhysicsVector3,
@@ -42,6 +48,10 @@ const FALLBACK_MATERIAL: PhysicsMaterialDefinition = {
 const IDENTITY_ROTATION: PhysicsQuaternion = { x: 0, y: 0, z: 0, w: 1 };
 const MAX_AABB = Number.MAX_VALUE;
 const PLANE_AXIS_EPSILON = 1e-10;
+/** A contact point this close (metres) counts as touching; farther ones are speculative. */
+const CONTACT_TOUCH_DISTANCE = 0.01;
+/** Saved states name the exact solver build: Rapier snapshots do not cross versions. */
+const STATE_FORMAT = `rapier3d-compat/${RAPIER.version()}`;
 
 type FiniteShapeBounds = {
   kind: "finite";
@@ -60,6 +70,17 @@ type RapierColliderRecord = {
 type RapierBodyRecord = {
   body: RigidBody;
   colliders: RapierColliderRecord[];
+  /** Trigger colliders stay sensors whatever {@link RapierPhysicsEngine.setBodyCollision} says. */
+  trigger: boolean;
+};
+
+type ResolvedCharacterDefinition = Required<Omit<PhysicsCharacterDefinition, "position">>;
+
+type RapierCharacterRecord = {
+  body: RigidBody;
+  collider: Collider;
+  controller: KinematicCharacterController;
+  definition: ResolvedCharacterDefinition;
 };
 
 type RapierJointRecord = {
@@ -83,8 +104,9 @@ type PreparedShape = {
  * Rapier's Multiply rule, yielding GraphysX's geometric mean for each contacting surface pair.
  */
 export class RapierPhysicsEngine implements PhysicsEngine {
-  private readonly world: World;
+  private world: World;
   private readonly bodies = new Map<PhysicsBodyHandle, RapierBodyRecord>();
+  private readonly characters = new Map<PhysicsCharacterHandle, RapierCharacterRecord>();
   private readonly joints = new Map<PhysicsJointHandle, RapierJointRecord>();
   private readonly forcedBodies = new Set<RigidBody>();
   private readonly materials = new Map<string, PhysicsMaterialDefinition>();
@@ -177,7 +199,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     }
 
     const handle = Object.freeze({}) as PhysicsBodyHandle;
-    this.bodies.set(handle, { body, colliders });
+    this.bodies.set(handle, { body, colliders, trigger });
     return handle;
   }
 
@@ -333,6 +355,207 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     }
   }
 
+  setBodyMotion(handle: PhysicsBodyHandle, motion: "dynamic" | "kinematic"): void {
+    const body = this.recordFor(handle).body;
+    if (body.isFixed()) throw new Error("Static bodies cannot change motion");
+    if (motion !== "dynamic" && motion !== "kinematic") throw new Error(`Unsupported body motion: ${String(motion)}`);
+    body.setBodyType(motion === "dynamic" ? RAPIER.RigidBodyType.Dynamic : RAPIER.RigidBodyType.KinematicPositionBased, true);
+    if (motion === "dynamic") body.wakeUp();
+  }
+
+  setBodyCollision(handle: PhysicsBodyHandle, enabled: boolean): void {
+    const record = this.recordFor(handle);
+    for (const item of record.colliders) item.collider.setSensor(record.trigger || !enabled);
+  }
+
+  writeKinematicTarget(handle: PhysicsBodyHandle, transform: PhysicsTransform): void {
+    const body = this.recordFor(handle).body;
+    if (!body.isKinematic()) throw new Error("Only kinematic bodies take a kinematic target");
+    const normalized = normalizeTransform(transform);
+    body.setNextKinematicTranslation(toRapierVector(normalized.position));
+    body.setNextKinematicRotation(normalized.rotation);
+  }
+
+  overlapsBox(
+    center: PhysicsVector3,
+    halfExtents: PhysicsVector3,
+    rotation: PhysicsQuaternion,
+    exclude: readonly PhysicsStateHandle[] = [],
+  ): boolean {
+    this.assertLive();
+    assertVector(center, "Overlap centre");
+    const shape = new RAPIER.Cuboid(
+      positive(halfExtents.x, "Overlap half extent"),
+      positive(halfExtents.y, "Overlap half extent"),
+      positive(halfExtents.z, "Overlap half extent"),
+    );
+    const excluded = new Set<number>();
+    for (const handle of exclude) {
+      const body = this.bodies.get(handle as PhysicsBodyHandle);
+      if (body) body.colliders.forEach((item) => excluded.add(item.collider.handle));
+      const character = this.characters.get(handle as PhysicsCharacterHandle);
+      if (character) excluded.add(character.collider.handle);
+    }
+    let hit = false;
+    // Answers against the broad phase as of the last step, like every Rapier scene query.
+    this.world.intersectionsWithShape(toRapierVector(center), normalizeQuaternion(rotation, "Overlap rotation"), shape, (collider) => {
+      if (excluded.has(collider.handle)) return true;
+      hit = true;
+      return false;
+    }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
+    return hit;
+  }
+
+  readContacts(handle: PhysicsBodyHandle, out: PhysicsStateHandle[]): void {
+    const record = this.recordFor(handle);
+    out.length = 0;
+    const owners = new Map<number, PhysicsStateHandle>();
+    for (const [other, item] of this.bodies) owners.set(item.body.handle, other);
+    for (const [other, item] of this.characters) owners.set(item.body.handle, other);
+    const seen = new Set<PhysicsStateHandle>();
+    for (const { collider } of record.colliders) {
+      if (collider.isSensor()) continue;
+      this.world.contactPairsWith(collider, (other) => {
+        if (other.isSensor()) return;
+        let touching = false;
+        // Pairs include speculative contacts inside the prediction margin; keep real ones.
+        this.world.contactPair(collider, other, (manifold) => {
+          for (let index = 0; index < manifold.numContacts(); index += 1) {
+            if (manifold.contactDist(index) <= CONTACT_TOUCH_DISTANCE) touching = true;
+          }
+        });
+        const parent = other.parent();
+        const owner = touching && parent ? owners.get(parent.handle) : undefined;
+        if (owner && owner !== handle && !seen.has(owner)) {
+          seen.add(owner);
+          out.push(owner);
+        }
+      });
+    }
+  }
+
+  createCharacter(source: PhysicsCharacterDefinition): PhysicsCharacterHandle {
+    this.assertLive();
+    assertVector(source.position, "Character position");
+    const definition = normalizeCharacter(source);
+    const body = this.world.createRigidBody(
+      RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(source.position.x, source.position.y, source.position.z),
+    );
+    const collider = this.world.createCollider(RAPIER.ColliderDesc.capsule(definition.halfHeight, definition.radius), body);
+    const handle = Object.freeze({}) as PhysicsCharacterHandle;
+    this.characters.set(handle, { body, collider, controller: this.createController(definition), definition });
+    return handle;
+  }
+
+  removeCharacter(handle: PhysicsCharacterHandle): void {
+    const record = this.characterFor(handle);
+    this.world.removeCharacterController(record.controller);
+    this.world.removeRigidBody(record.body);
+    this.characters.delete(handle);
+  }
+
+  moveCharacter(handle: PhysicsCharacterHandle, desired: PhysicsVector3, out: PhysicsCharacterMove): void {
+    const record = this.characterFor(handle);
+    assertVector(desired, "Character movement");
+    record.controller.computeColliderMovement(record.collider, toRapierVector(desired), RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
+    const movement = record.controller.computedMovement();
+    copyVector(movement, out.movement);
+    out.grounded = record.controller.computedGrounded();
+    const position = record.body.translation();
+    record.body.setNextKinematicTranslation({ x: position.x + movement.x, y: position.y + movement.y, z: position.z + movement.z });
+  }
+
+  readCharacterPosition(handle: PhysicsCharacterHandle, out: PhysicsVector3): void {
+    copyVector(this.characterFor(handle).body.translation(), out);
+  }
+
+  writeCharacterPosition(handle: PhysicsCharacterHandle, position: PhysicsVector3): void {
+    assertVector(position, "Character position");
+    const body = this.characterFor(handle).body;
+    body.setTranslation(toRapierVector(position), true);
+    body.setNextKinematicTranslation(toRapierVector(position));
+  }
+
+  saveState(): PhysicsEngineState {
+    this.assertLive();
+    return { format: STATE_FORMAT, bytes: this.world.takeSnapshot(), accumulator: this.accumulator };
+  }
+
+  stateId(handle: PhysicsStateHandle): number {
+    this.assertLive();
+    const body = this.bodies.get(handle as PhysicsBodyHandle);
+    if (body) return body.body.handle;
+    const character = this.characters.get(handle as PhysicsCharacterHandle);
+    if (character) return character.body.handle;
+    const joint = this.joints.get(handle as PhysicsJointHandle);
+    if (joint) return joint.joint.handle;
+    throw new Error("Unknown or removed physics handle");
+  }
+
+  restoreState(state: PhysicsEngineState, bindings: Iterable<readonly [PhysicsStateHandle, number]>): void {
+    this.assertLive();
+    if (state.format !== STATE_FORMAT) throw new Error(`Saved physics state is ${state.format}; this engine is ${STATE_FORMAT}`);
+    const bodyIds = new Map<PhysicsBodyHandle, number>();
+    const characterIds = new Map<PhysicsCharacterHandle, number>();
+    const jointIds = new Map<PhysicsJointHandle, number>();
+    for (const [handle, id] of bindings) {
+      if (this.bodies.has(handle as PhysicsBodyHandle)) bodyIds.set(handle as PhysicsBodyHandle, id);
+      else if (this.characters.has(handle as PhysicsCharacterHandle)) characterIds.set(handle as PhysicsCharacterHandle, id);
+      else if (this.joints.has(handle as PhysicsJointHandle)) jointIds.set(handle as PhysicsJointHandle, id);
+      else throw new Error("Restore bindings name an unknown physics handle");
+    }
+    if (bodyIds.size !== this.bodies.size || characterIds.size !== this.characters.size || jointIds.size !== this.joints.size) {
+      throw new Error("Every live body, character and joint must be bound when restoring");
+    }
+    const restored = RAPIER.World.restoreSnapshot(state.bytes);
+    if (!restored) throw new Error("Rapier could not read the saved physics state");
+    // Resolve every binding before changing anything, so a bad state leaves this engine intact.
+    const bodyTargets = new Map<PhysicsBodyHandle, RigidBody>();
+    const characterTargets = new Map<PhysicsCharacterHandle, RigidBody>();
+    const jointTargets = new Map<PhysicsJointHandle, ImpulseJoint>();
+    try {
+      for (const [handle, id] of bodyIds) bodyTargets.set(handle, requireSaved(restored.getRigidBody(id), "body", id));
+      for (const [handle, id] of characterIds) characterTargets.set(handle, requireSaved(restored.getRigidBody(id), "character", id));
+      for (const [handle, id] of jointIds) jointTargets.set(handle, requireSaved(restored.getImpulseJoint(id), "joint", id));
+      for (const [handle, target] of bodyTargets) {
+        if (target.numColliders() !== this.recordFor(handle).colliders.length) throw new Error(`Saved body ${target.handle} has a different shape`);
+      }
+    } catch (error) {
+      restored.free();
+      throw error;
+    }
+    const keptBodies = new Set<number>([...bodyIds.values(), ...characterIds.values()]);
+    const keptJoints = new Set<number>(jointIds.values());
+    const extraJoints: ImpulseJoint[] = [];
+    restored.impulseJoints.forEach((joint) => { if (!keptJoints.has(joint.handle)) extraJoints.push(joint); });
+    for (const joint of extraJoints) restored.removeImpulseJoint(joint, false);
+    const extraBodies: RigidBody[] = [];
+    restored.forEachRigidBody((body) => { if (!keptBodies.has(body.handle)) extraBodies.push(body); });
+    for (const body of extraBodies) restored.removeRigidBody(body);
+
+    for (const record of this.characters.values()) this.world.removeCharacterController(record.controller);
+    const previous = this.world;
+    this.world = restored;
+    previous.free();
+    for (const [handle, body] of bodyTargets) {
+      const record = this.recordFor(handle);
+      record.body = body;
+      record.colliders = record.colliders.map((item, index) => ({ collider: body.collider(index), bounds: item.bounds }));
+    }
+    for (const [handle, body] of characterTargets) {
+      const record = this.characterFor(handle);
+      record.body = body;
+      record.collider = body.collider(0);
+      record.controller = this.createController(record.definition);
+    }
+    for (const [handle, joint] of jointTargets) {
+      const record = this.joints.get(handle);
+      if (record) record.joint = joint;
+    }
+    this.forcedBodies.clear();
+    this.accumulator = state.accumulator;
+  }
+
   readSleepState(handle: PhysicsBodyHandle): PhysicsSleepState {
     return this.recordFor(handle).body.isSleeping() ? "sleeping" : "awake";
   }
@@ -349,6 +572,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     if (this.disposed) return;
     this.joints.clear();
     this.bodies.clear();
+    this.characters.clear();
     this.forcedBodies.clear();
     this.materials.clear();
     this.world.free();
@@ -361,6 +585,24 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     const record = this.bodies.get(handle);
     if (!record) throw new Error("Unknown or removed physics body handle");
     return record;
+  }
+
+  private characterFor(handle: PhysicsCharacterHandle): RapierCharacterRecord {
+    this.assertLive();
+    const record = this.characters.get(handle);
+    if (!record) throw new Error("Unknown or removed physics character handle");
+    return record;
+  }
+
+  private createController(definition: ResolvedCharacterDefinition): KinematicCharacterController {
+    const controller = this.world.createCharacterController(definition.offset);
+    controller.setUp({ x: 0, y: 1, z: 0 });
+    controller.setMaxSlopeClimbAngle(definition.maxSlopeClimbRadians);
+    if (definition.autostepHeight > 0) controller.enableAutostep(definition.autostepHeight, definition.autostepMinWidth, true);
+    if (definition.snapToGround > 0) controller.enableSnapToGround(definition.snapToGround);
+    controller.setApplyImpulsesToDynamicBodies(definition.pushMass > 0);
+    if (definition.pushMass > 0) controller.setCharacterMass(definition.pushMass);
+    return controller;
   }
 
   private assertLive(): void {
@@ -379,6 +621,24 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     this.materials.set(definition.id, definition);
     return definition;
   }
+}
+
+function normalizeCharacter(source: PhysicsCharacterDefinition): ResolvedCharacterDefinition {
+  return {
+    radius: positive(source.radius, "Character radius"),
+    halfHeight: nonNegative(source.halfHeight, "Character half height"),
+    offset: positive(source.offset ?? 0.05, "Character offset"),
+    autostepHeight: nonNegative(source.autostepHeight ?? 0, "Character autostep height"),
+    autostepMinWidth: nonNegative(source.autostepMinWidth ?? 0.01, "Character autostep width"),
+    maxSlopeClimbRadians: nonNegative(source.maxSlopeClimbRadians ?? Math.PI / 4, "Character slope"),
+    snapToGround: nonNegative(source.snapToGround ?? 0, "Character snap distance"),
+    pushMass: nonNegative(source.pushMass ?? 0, "Character push mass"),
+  };
+}
+
+function requireSaved<T>(value: T | null | undefined, kind: string, id: number): T {
+  if (!value) throw new Error(`The saved physics state has no ${kind} ${id}`);
+  return value;
 }
 
 function createJointData(definition: PhysicsJointDefinition) {

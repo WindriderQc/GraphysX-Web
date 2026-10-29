@@ -64,6 +64,7 @@ import {
   assertAuthoredWorldEntityNamespaces,
 } from "../server/host-entity-id-policy.mjs";
 import { assertWorldDefinition, WORLD_ENTITY_TYPES } from "../server/scene-document.mjs";
+import { isHeadless } from "./headless";
 
 import {
   AmbientLight,
@@ -1507,6 +1508,17 @@ export const GRAPHYSX_AGENT_DEMO_WORLD: AgentWorldDefinition = {
   ]
 };
 
+/** `hostBody()` id of the environment ground plane (present while the ground is visible). */
+export const AGENT_WORLD_HOST_GROUND_ID = "@ground";
+
+/** Where an authoritative host (the world service) says an entity is. */
+export type AgentWorldHostPose = {
+  id: string;
+  position: AgentWorldVector3;
+  /** x, y, z, w */
+  quaternion: readonly [number, number, number, number];
+};
+
 export class AgentWorldRuntime {
   readonly group = new Group();
   private readonly worldRoot = new Group();
@@ -1633,6 +1645,48 @@ export class AgentWorldRuntime {
   /** Simulation clock without allocating the full public state snapshot (host atmosphere). */
   getElapsedSeconds(): number {
     return this.elapsedSeconds;
+  }
+
+  /**
+   * Host seam: the physics body behind an entity, or null when it has none. A server running
+   * game rules on top of the scene uses it with the engine it constructed this runtime with.
+   */
+  hostBody(id: string): PhysicsBodyHandle | null {
+    if (id === AGENT_WORLD_HOST_GROUND_ID) return this.groundBody;
+    return this.entities.get(id)?.body ?? null;
+  }
+
+  /**
+   * Host seam: set the simulation clock when restoring a saved world, so time-driven behaviors
+   * (orbit, bob, pulse, splines) resume in phase. Not an editing command: no event, no undo.
+   */
+  hostRestoreClock(seconds: number): void {
+    if (!Number.isFinite(seconds) || seconds < 0) throw new Error("Restored clock must be a finite non-negative number");
+    this.elapsedSeconds = seconds;
+  }
+
+  /**
+   * Viewer seam: place entities where an authoritative host says they are. No revision, undo
+   * entry or event is recorded: the pose is presentation, the host owns the truth. Use while
+   * paused; a local step would move dynamic bodies again. Unknown ids are skipped. Returns how
+   * many entities moved.
+   */
+  applyHostPoses(poses: readonly AgentWorldHostPose[]): number {
+    let applied = 0;
+    for (const pose of poses) {
+      const runtime = this.entities.get(pose.id);
+      if (!runtime) continue;
+      const [x, y, z] = pose.position;
+      const [qx, qy, qz, qw] = pose.quaternion;
+      if (![x, y, z, qx, qy, qz, qw].every(Number.isFinite)) continue;
+      runtime.object.position.set(x, y, z);
+      runtime.object.quaternion.set(qx, qy, qz, qw).normalize();
+      if (runtime.body) {
+        this.physicsWorld.writeTransform(runtime.body, { position: runtime.object.position, rotation: runtime.object.quaternion }, false);
+      }
+      applied += 1;
+    }
+    return applied;
   }
 
   /** The generative 2D overlays a scene can select. Off (null) is always also valid. */
@@ -4404,6 +4458,8 @@ type EntitySurfaceState = {
  * The draw itself happens in the runtime's one per-frame pass; this only builds and seeds it.
  */
 function mountEntitySurface(mesh: Mesh, material: MeshStandardMaterial, surface: ResolvedAgentWorldSurface): void {
+  // Without a page there is nothing to draw on; the same outcome as a missing 2D context.
+  if (isHeadless()) return;
   const canvas = document.createElement("canvas");
   canvas.width = surface.resolution;
   canvas.height = surface.resolution;
