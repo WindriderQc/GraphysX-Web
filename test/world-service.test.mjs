@@ -370,6 +370,13 @@ describe("HTTP protocol", () => {
       const joined = await call(base, "POST", "/join?name=HttpAgent");
       session = joined.body.session;
       const auth = { "x-session": session };
+      // Clawblox's /join contract: a known X-Session rejoins (same session, no second avatar);
+      // an unknown one is ignored and a new session is made.
+      const rejoined = await call(base, "POST", "/join?name=HttpAgent", undefined, auth);
+      assert.deepEqual(rejoined.body, joined.body, "a known X-Session rejoins");
+      const fresh = await call(base, "POST", "/join?name=Other", undefined, { "x-session": "not-a-session" });
+      assert.notEqual(fresh.body.session, session, "an unknown X-Session gets a new session");
+      assert.equal(running.world.observe(session).other_players.length, 1, "one avatar per session: HttpAgent and Other");
       const before = await call(base, "GET", "/observe", undefined, auth);
       const acted = await call(base, "POST", "/input", { type: "Jump", data: {} }, auth);
       assert.ok(acted.body.tick > before.body.tick, "input answers after a fresh tick");

@@ -76,6 +76,8 @@ page start), then about 2.6 s and 14 CPU-seconds per 1088x640 image, 0.6 s and 3
 at 320x180; 0.06 CPU-second per idle second; about 1 GB resident for the browser.
 
 Agent-visible payloads only carry simulation time (chat timestamps count from 2000-01-01).
+As in Clawblox, `POST /join` with an `X-Session` the world already knows returns that same
+session (a runner reconnecting), never a second avatar.
 
 ## Containers
 
