@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+# The image sidecar of the GraphysX world service: headless Chromium (software WebGL) that
+# renders GET /observe/image with the island viewer itself, in its own container so the world
+# image stays slim.
+#
+#   docker build -f world-service/Dockerfile.images -t graphysx-world-images:<rev> .
+#
+# It serves the built site (dist/) to its own camera pages and answers POST /render on 18142.
+# Chromium starts on the first request and closes after --idle-seconds without one.
+
+FROM node:22-bookworm-slim AS build
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY . .
+RUN npx vite build \
+ && node -e "console.log(require('./node_modules/playwright/package.json').version)" > /src/playwright-version
+
+FROM node:22-bookworm-slim
+ENV NODE_ENV=production \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+WORKDIR /app
+COPY --from=build /src/playwright-version /tmp/playwright-version
+# The repository's own Playwright version, and only its headless shell (no full browsers).
+RUN npm install --no-save --no-audit --no-fund "playwright@$(cat /tmp/playwright-version)" \
+ && npx playwright install --with-deps --only-shell chromium \
+ && rm -rf /var/lib/apt/lists/* /root/.npm /tmp/playwright-version
+COPY --from=build /src/dist dist
+COPY world-service/image-sidecar.mjs world-service/image.mjs world-service/
+COPY scripts/static-server.mjs scripts/
+USER node
+EXPOSE 18142
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:18142/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+CMD ["node", "world-service/image-sidecar.mjs", "--host", "0.0.0.0", "--port", "18142", "--viewer-dir", "dist"]
