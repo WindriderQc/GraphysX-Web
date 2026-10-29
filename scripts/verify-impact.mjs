@@ -36,6 +36,7 @@ const RULES = [
   { match: /^src\/kidx-(?:pdf-reader|library|document-catalog)\.(?:ts|json)$/, checks: family("kidx-workshop"), label: "KidX documents", deploy: true },
   { match: /^src\/kidx-code(?:-lab)?\.ts$/, checks: family("kidx-interactive", "kidx-challenges", "kidx-guidance"), label: "KidX code laboratory", deploy: true },
   { match: /^(?:src\/(?:kidx-|ev3-)|public\/assets\/kidx\/|scripts\/kidx-)/, checks: KIDX, label: "KidX workshop", deploy: true },
+  { match: /^src\/island[-.]/, checks: family("island"), label: "Clawblox island viewer", deploy: true },
   { match: /^src\/(?:ballz-|archive-ballz-levels\.ts)/, checks: GAMES, label: "BallZ games", deploy: true },
   { match: /^(?:src\/results-client\.ts|server\/results-store\.mjs)$/, checks: ["results", "results-browser"], label: "results", deploy: true },
   { match: /^(?:server\/|src\/(?:live-|scene-store-))/, checks: [...STORE, "scene-command-validation", "media"], label: "store and collaboration", deploy: true },

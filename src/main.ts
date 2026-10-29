@@ -31,6 +31,7 @@ import type { LlmXApplication } from "./llmx-contracts";
 import type { DiskxApplication } from "./diskx-app";
 import type { EcosystemApplication } from "./ecosystem-app";
 import type { NetxApplication } from "./netx-app";
+import type { IslandApplication } from "./island-app";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
 import { nestorTopicRequest, type NestorConsoleTopic } from "./showroom-nestor";
@@ -467,13 +468,13 @@ if (mode === "previews" && import.meta.env.DEV) {
      * Keyed by id rather than a boolean because this is the seam a second application uses, not
      * a special case for EV3.
      */
-    let appSurface: KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | null = null;
+    let appSurface: KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | IslandApplication | null = null;
     // Application surfaces own the whole play viewport. Keep this separate from the lazy
     // surface module so later host chrome (notably the asynchronously mounted scene browser)
     // can respect the route before the application's import has finished.
     let applicationOpen = false;
     const openApplication = (id: string): boolean => {
-      if (id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx") return false;
+      if (id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island") return false;
       if (applicationOpen) return true;
       applicationOpen = true;
       requestShowroomInteraction(false);
@@ -482,6 +483,19 @@ if (mode === "previews" && import.meta.env.DEV) {
         showroomEnvironment = null;
         void import("./netx-app").then(({ mountNetxApp }) => {
           appSurface = mountNetxApp(root, host, () => {
+            appSurface?.dispose();
+            appSurface = null;
+            applicationOpen = false;
+            window.location.search = "";
+          });
+        }).catch((error: unknown) => showStartupError(root, error));
+        return true;
+      }
+      if (id === "island") {
+        showroomEnvironment?.();
+        showroomEnvironment = null;
+        void import("./island-app").then(({ mountIslandApp }) => {
+          appSurface = mountIslandApp(root, host, () => {
             appSurface?.dispose();
             appSurface = null;
             applicationOpen = false;
