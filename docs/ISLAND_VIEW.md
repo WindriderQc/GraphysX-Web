@@ -38,8 +38,9 @@ puis, depuis un navigateur du réseau local :
 | Reprise de l'essai 1 (panneau Messages retiré : journal réel de l'agent) | ![essai 1](island-view/replay-trial1.jpg) |
 | Reprise de l'essai 2 (idem) | ![essai 2](island-view/replay-trial2.jpg) |
 | Île en direct, sans agent | ![direct](island-view/live-no-agent.jpg) |
-| Suivre : Eko porte un bloc (capture de démonstration, messages synthétiques) | ![suivre](island-view/follow-carrying.jpg) |
-| Téléphone (390 px), feuille ouverte | ![téléphone](island-view/phone.jpg) |
+| Caméra qui suit Eko (capture de démonstration, messages synthétiques) | ![suivre](island-view/follow-carrying.jpg) |
+| Téléphone (375 px), panneau replié | ![téléphone replié](island-view/phone-folded.jpg) |
+| Téléphone (375 px), panneau ouvert | ![téléphone](island-view/phone.jpg) |
 | 4K (3840 px, réduite ici à 1920) | ![4K](island-view/4k.jpg) |
 
 ## Ce que montre la page
@@ -61,10 +62,14 @@ puis, depuis un navigateur du réseau local :
 - Panneau **Messages** : en reprise lancée avec `--agent`, ce que l'agent dit et les outils
   qu'il appelle (résumé), jusqu'au tick affiché. En direct : les messages de clavardage du
   monde ; le journal de l'agent n'existe qu'en reprise.
-- Barre de lecture (reprise seulement) : lecture/pause, position, vitesse ×1 à ×8.
-- **Suivre** garde l'agent au centre tout en laissant tourner la caméra ; **Vue d'ensemble**
-  recadre l'île.
-- Téléphone : le panneau devient une feuille repliée en bas. Écran 4K : même mise en page,
+- Une seule vue 3D plein écran, sans menu : pas de barre de navigation, pas de réglages
+  d'affichage de l'hôte, pas d'outil de débogage.
+- La caméra **suit l'agent par défaut** ; glisser tourne librement autour de lui. Un clic sur
+  la carte de l'agent (« suivie » / « libre ») libère la caméra vers la vue d'ensemble, un
+  second clic la remet sur lui.
+- Un seul panneau repliable (pensées de l'agent), ouvert sur ordinateur, replié sur téléphone.
+- Barre de lecture compacte (reprise seulement) : lecture/pause, position, vitesse ×1 à ×8.
+- Téléphone (lisible dès 375 px) : le panneau devient une feuille en bas. Écran 4K : même mise en page,
   texte et contrôles ×1,6 (≥ 2400 px) ou ×2 (≥ 3400 px).
 
 ## Deux comportements de Clawblox à connaître

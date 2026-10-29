@@ -79,9 +79,10 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   const reduced = motionIsReduced();
   let disposed = false;
   let mode: Mode = source ? "unknown" : "fixture";
+  // Only a refused source is worth a banner; a missing one is the demonstration, said in the status line.
   let notice = sourceParam && sourceParam !== "fixture" && !source
     ? "Source refusée : il faut une adresse http(s), par exemple ?source=http://devx:18090. Capture de démonstration affichée."
-    : !sourceParam ? "Aucune source : capture de démonstration de l'île (ajoute ?source=http://hôte:port)." : "";
+    : "";
 
   // ---- surface ----------------------------------------------------------------------------
   const surface = document.createElement("section");
@@ -96,17 +97,16 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
         <p class="gx-island-sub"><span class="gx-island-dot" data-dot></span><span data-status>Connexion…</span></p>
       </div>
       <div class="gx-island-actions">
-        <button type="button" data-action="follow" aria-pressed="false" title="La caméra suit l'agent">Suivre</button>
-        <button type="button" data-action="overview" title="Vue d'ensemble de l'île">Vue d'ensemble</button>
         <button type="button" data-action="exit">Quitter</button>
       </div>
     </header>
     <p class="gx-island-notice" role="status" data-notice></p>
     <aside class="gx-island-panel" aria-label="Agent et messages">
-      <div class="gx-island-agent">
+      <button type="button" class="gx-island-agent" data-action="follow" aria-pressed="true" title="La caméra suit l'agent ; glisser pour tourner autour. Cliquer pour la libérer.">
         <span class="gx-island-mark" aria-hidden="true" data-agent-mark>E</span>
-        <div><span class="gx-island-agent-name" data-agent-name>—</span><span class="gx-island-agent-state" data-agent-state></span></div>
-      </div>
+        <span><span class="gx-island-agent-name" data-agent-name>—</span><span class="gx-island-agent-state" data-agent-state></span></span>
+        <span class="gx-island-follow" data-follow-label>suivie</span>
+      </button>
       <p class="gx-island-action" data-agent-action></p>
       <h2>Messages</h2>
       <ol class="gx-island-messages" data-messages aria-live="polite"></ol>
@@ -122,14 +122,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   if (embedded) button("exit").hidden = true;
   root.append(surface);
   foldPresentationPanel(element(".gx-island-panel"), "Eko · Messages");
-  // The fold is chosen at mount; a window that grows past phone width (a rotated tablet, a
-  // resized pane) opens it again, since the desktop layout hides the summary.
-  const wide = window.matchMedia("(min-width: 821px)");
-  const openWhenWide = (event: MediaQueryListEvent): void => {
-    const details = surface.querySelector<HTMLDetailsElement>(".gx-island-panel details");
-    if (event.matches && details) details.open = true;
-  };
-  wide.addEventListener("change", openWhenWide);
+
 
   // ---- the world --------------------------------------------------------------------------
   const created = host.api.create(islandWorld() as never);
@@ -152,7 +145,9 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   let placements: IslandPlacement[] = [];
   let reconcileError: string | null = null;
   let framedOnce = false;
-  let follow = false;
+  // The camera follows the agent by default; dragging still orbits around it.
+  let follow = true;
+  let followFramed = false;
   let lastFollow: Vector3 | null = null;
   let frames = 0;
   let snapshots = 0;
@@ -309,15 +304,13 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     void post(`/replay/speed?value=${Number((event.target as HTMLSelectElement).value)}`);
   });
 
-  button("overview").addEventListener("click", () => { setFollow(false); frameOverview(1.2); });
   const setFollow = (on: boolean): void => {
     follow = on;
+    followFramed = false;
     lastFollow = null;
     button("follow").setAttribute("aria-pressed", String(on));
-    if (on) {
-      const at = agentObjectPosition();
-      if (at) host.focusOn(at.clone().setY(at.y + 2.5), 3, reduced ? 0.15 : 0.9, 26);
-    }
+    element("[data-follow-label]").textContent = on ? "suivie" : "libre";
+    if (!on) frameOverview(reduced ? 0 : 1.2);
   };
   button("follow").addEventListener("click", () => setFollow(!follow));
   button("exit").addEventListener("click", () => onExit());
@@ -446,21 +439,31 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     placeAll(performance.now(), true);
     if (follow) {
       const at = agentObjectPosition();
-      if (at && lastFollow && !host.focusing) {
+      // Ease onto the agent once (after the opening overview), then carry the camera with it.
+      if (at && !followFramed && !host.focusing) {
+        followFramed = true;
+        host.focusOn(at.clone().setY(at.y + 2.5), 7, reduced ? 0 : 1.1, 40);
+        // The ease lands on where the agent was; whatever it walks meanwhile is caught up after.
+        lastFollow = at;
+      }
+      if (at && lastFollow && followFramed && !host.focusing) {
         const delta = at.clone().sub(lastFollow);
         if (delta.lengthSq() > 1e-8) {
           const target = host.orbitTarget.add(delta);
           const position = host.camera.position.clone().add(delta);
           host.frameView([position.x, position.y, position.z], [target.x, target.y, target.z], 0);
         }
+        lastFollow = at;
       }
-      if (at) lastFollow = at;
     }
   };
   const unsubscribe = host.subscribeFrame(frame);
 
   const snapshotState = (): unknown => {
     const agentAt = agentObjectPosition();
+    const pivot = host.orbitTarget;
+    const eye = host.camera.position;
+    const round2 = (n: number): number => Math.round(n * 100) / 100;
     return {
       application: "island",
       mode,
@@ -479,6 +482,11 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       reconcileError,
       agent: { ...describeAgent(state?.players[0]), position: agentAt ? [agentAt.x, agentAt.y, agentAt.z].map((n) => Math.round(n * 100) / 100) : null },
       follow,
+      camera: {
+        azimuth: round2(Math.atan2(eye.x - pivot.x, eye.z - pivot.z)),
+        distanceToAgent: agentAt ? round2(eye.distanceTo(agentAt)) : null,
+        pivotToAgent: agentAt ? round2(Math.hypot(pivot.x - agentAt.x, pivot.z - agentAt.z)) : null,
+      },
       replay,
       messages: element("[data-messages]").children.length,
       messageLog: messages.length,
@@ -497,7 +505,6 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       const ws = socket;
       socket = null;
       ws?.close();
-      wide.removeEventListener("change", openWhenWide);
       host.world.clearTransientEntities(ISLAND_SCOPE);
       surface.remove();
     },

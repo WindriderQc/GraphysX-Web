@@ -6,7 +6,8 @@ import { startStaticServer } from "./static-server.mjs";
 
 // L'île: the Clawblox island rendered in GraphysX's look. Without a Clawblox server the page
 // plays its short real capture (fixture): 32 parts in one transient scope, the agent carrying a
-// block, nothing in the authored document, the HUD in French, phone and 4K layouts.
+// block, nothing in the authored document, the camera following the agent with free orbit, one
+// collapsible panel, phone (375 px) and 4K layouts.
 //
 // ISLAND_SOURCES=http://host:18090,http://host:18086#spectator_token=… additionally opens each running Clawblox
 // replay or live server and captures it (local evidence only; never part of CI).
@@ -40,7 +41,7 @@ try {
   assert.deepEqual(first.kinds, { water: 1, ground: 5, mesa: 11, pickup: 12, ring: 1, rock: 1, agent: 1 }, "every visible Clawblox part is drawn once; the four invisible walls are not");
   assert.equal(first.reconcileError, null);
   assert.equal(first.agent.name, "Eko");
-  assert.match(first.notice, /capture de démonstration/);
+  assert.equal(first.notice, "");
   const scene = await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
     return {
@@ -66,18 +67,41 @@ try {
   assert.ok(messages.some((text) => /Fixture line/.test(text)), "the agent's lines appear in the Messages panel");
   assert.ok(messages.some((text) => /exec_command/.test(text)), "tool calls are shown by their summary");
   assert.equal(await page.locator("[data-transport]").isHidden(), true, "no replay transport without a replay server");
-  await page.getByRole("button", { name: "Suivre" }).click();
-  assert.equal(await page.getByRole("button", { name: "Suivre" }).getAttribute("aria-pressed"), "true");
-  await page.waitForTimeout(1200);
+  // Lean by default: no host display menu, no notice, one exit, and the camera on the agent.
+  assert.equal(await page.locator(".gx-display-settings").isVisible().catch(() => false), false, "no host display menu over the island");
+  assert.equal(await page.locator("[data-notice]").isVisible(), false, "the demonstration is said in the status line, not a banner");
+  assert.equal(await page.locator(".gx-island-header button:visible").count(), 1, "only Quitter in the header");
+  const follow = page.locator('[data-action="follow"]');
+  assert.equal(await follow.getAttribute("aria-pressed"), "true", "the camera follows the agent by default");
+  await page.waitForFunction(`(${app})()?.camera?.distanceToAgent < 60 && (${app})().camera.pivotToAgent < 3`);
+  const near = await page.evaluate(() => JSON.parse(window.render_game_to_text()).application.camera);
+  assert.ok(near.distanceToAgent < 60, `the camera came to the agent (${near.distanceToAgent})`);
+  // Free orbit on drag while following: the view direction turns, the agent stays near the pivot.
+  const box = await page.locator("canvas").first().boundingBox();
+  await page.mouse.move(box.x + box.width * 0.35, box.y + box.height * 0.55);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.5, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(600);
+  const turned = await page.evaluate(() => JSON.parse(window.render_game_to_text()).application.camera);
+  assert.ok(Math.abs(turned.azimuth - near.azimuth) > 0.15, `a drag orbits (${near.azimuth} -> ${turned.azimuth})`);
+  assert.ok(turned.pivotToAgent < 3, `the pivot stays on the agent while following (${turned.pivotToAgent})`);
+  assert.equal(await follow.getAttribute("aria-pressed"), "true");
+  await page.waitForTimeout(800);
   await page.screenshot({ path: `${artifacts}/island-fixture-desktop.png` });
-  await page.getByRole("button", { name: "Vue d'ensemble" }).click();
+  // The panel folds on desktop too.
+  await page.locator(".gx-island-panel summary").click();
+  assert.equal(await page.locator(".gx-island-panel details").evaluate((d) => d.open), false);
+  await page.locator(".gx-island-panel summary").click();
+  await follow.click();
+  assert.equal(await follow.getAttribute("aria-pressed"), "false", "a click frees the camera");
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${artifacts}/island-fixture-overview.png` });
   assert.deepEqual(errors, []);
   await page.close();
 
   // ---- phone: folded bottom sheet, no horizontal scroll --------------------------------------
-  const phone = await open({ width: 390, height: 844 }, "");
+  const phone = await open({ width: 375, height: 812 }, "");
   await phone.page.waitForFunction(`(${app})()?.parts === 32`);
   const phoneLayout = await phone.page.evaluate(() => {
     const panel = document.querySelector(".gx-island-panel").getBoundingClientRect();
@@ -88,7 +112,7 @@ try {
   assert.equal(phoneLayout.open, false, "the panel starts folded on a phone");
   assert.ok(phoneLayout.scrollWidth <= phoneLayout.innerWidth, "no horizontal page scroll");
   assert.ok(phoneLayout.panelBottom <= phoneLayout.innerHeight && phoneLayout.panelWidth <= phoneLayout.innerWidth - 20);
-  await phone.page.waitForTimeout(1500);
+  await phone.page.waitForFunction(`(${app})()?.camera?.pivotToAgent < 1.5 && (${app})().camera.distanceToAgent < 60`);
   await phone.page.screenshot({ path: `${artifacts}/island-fixture-phone.png` });
   await phone.page.locator(".gx-island-panel summary").click();
   await phone.page.waitForTimeout(300);
