@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // CPU cost of the headless island: ms per 1/60 s tick with N wandering agents, and the size of
 // one spectator pose frame and one observation. Build first: npm run build:world-service
-//   node world-service/bench.mjs 1 4 8 16
+//   node world-service/bench.mjs 1 4 8 16        (WORLD_ID=living-island for the living island)
 const { IslandWorld } = await import(new URL("./dist/world.js", import.meta.url).href);
 
 const counts = process.argv.slice(2).map(Number).filter((n) => n > 0);
 for (const agents of counts.length ? counts : [1, 4, 8, 16]) {
-  const world = new IslandWorld();
+  const world = new IslandWorld(undefined, { world: process.env.WORLD_ID || undefined });
   const sessions = Array.from({ length: agents }, (_, index) => world.join(`agent-${index}`).session);
   world.advance(2);
   let seed = 7;

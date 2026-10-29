@@ -19,6 +19,13 @@ reste à décider (phase 4, non commencée).
   WindriderQc/AgentX#1177 (empilée sur #1175, où le test a déménagé) ; il passe
   maintenant sur Clawblox **et** sur GraphysX.
 
+## Suite : l'île vivante (chantier D, 2026-10-29)
+
+Un second monde, `living-island` (`--world living-island`), ajoute à Mesa une Forêt vivante,
+une volée et un vent, avec les actions `GatherSeed`, `Sow` et `NextGeneration` : ce sont les
+agents qui sélectionnent les arbres. Mesa ne change pas (même empreinte). Détails, mesures et
+questions : [`LIVING_ISLAND.md`](LIVING_ISLAND.md).
+
 ## État après les phases 1 et 2
 
 | Pièce | Où | État |

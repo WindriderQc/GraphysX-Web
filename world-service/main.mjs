@@ -33,9 +33,17 @@ const { values } = parseArgs({
     "no-images": { type: "boolean" },
     "image-sidecar": { type: "string" },
     "image-viewer": { type: "string" },
+    world: { type: "string" },
   },
 });
 const env = process.env;
+// Which island: `mesa-island` (the Clawblox copy, default) or `living-island` (Mesa plus trees,
+// birds and wind: docs/LIVING_ISLAND.md). A resumed snapshot names its own world.
+const worldId = values.world ?? env.WORLD_ID ?? undefined;
+if (worldId && !module.WORLD_IDS.includes(worldId)) {
+  console.error(`Unknown world ${worldId}: use one of ${module.WORLD_IDS.join(", ")}`);
+  process.exit(1);
+}
 
 // Model payloads come from the same catalog the site serves, read from disk.
 const publicRoot = join(here, "..", "public");
@@ -96,17 +104,21 @@ const loopback = () => {
   return `http://${host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host}:${bound}`;
 };
 const renderImage = images ? imageRenderer(loopback) : null;
+const snapshot = resumePath ? JSON.parse(readFileSync(resumePath, "utf8")) : undefined;
+const mesaApi = readFileSync(join(here, "API.md"), "utf8");
+const living = (snapshot?.world?.id ?? worldId) === module.LIVING_WORLD_ID;
 running = await startWorldServer({
   module,
-  apiMarkdown: readFileSync(join(here, "API.md"), "utf8"),
-  snapshot: resumePath ? JSON.parse(readFileSync(resumePath, "utf8")) : undefined,
+  apiMarkdown: living ? module.livingApiMarkdown(mesaApi) : mesaApi,
+  snapshot,
+  world: worldId,
   host,
   port,
   renderImage: renderImage ?? undefined,
   operatorToken: env.WORLD_OPERATOR_TOKEN ?? null,
   recordDir: record ? (values["record-dir"] ?? env.WORLD_RECORD_DIR ?? "recordings") : null,
 });
-console.log(`graphysx world service on ${running.url}${resumePath ? ` (resumed at tick ${running.world.tick})` : ""}${images ? "" : " (images off)"}`);
+console.log(`graphysx world service (${running.world.worldId}) on ${running.url}${resumePath ? ` (resumed at tick ${running.world.tick})` : ""}${images ? "" : " (images off)"}`);
 
 const statsEvery = Number(values["stats-every"] ?? 0);
 if (statsEvery > 0) {

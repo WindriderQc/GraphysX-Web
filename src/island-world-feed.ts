@@ -7,8 +7,11 @@
  *
  * - `hello`: `{format, tickHz, tick, document, ids}` — the current agent-world/v2 document and
  *   numeric id → entity id (a replay sends a fresh hello after every seek);
- * - `frame` at 10 Hz: `{tick, t, poses: [[id, x, y, z, qx, qy, qz, qw], …]}` for moving things;
- * - `entities`: `{tick, added?: [{entity, numericId}], removed?: [numericId]}`;
+ * - `frame` at 10 Hz: `{tick, t, poses: [[id, x, y, z, qx, qy, qz, qw], …]}` for moving things,
+ *   plus, on the living island, `swarms: [[id, x, y, z, x, y, z, …]]`: every member of a flock in
+ *   flock-local space (the flock entity itself stays put);
+ * - `entities`: `{tick, added?: [{entity, numericId}], removed?: [numericId]}` (an entity re-added
+ *   under its id replaces the old definition: a tree that changed generation or grew);
  * - `action`: `{tick, agent, input, result}` — every agent action with its LastActionResult.
  *
  * This module parses that stream, keeps the scene's entity list, turns it into transient
@@ -34,7 +37,7 @@ export type WorldDocument = {
 
 /** `replay` is set by the replay server (world-service/replay.mjs), never by a live world. */
 export type WorldHello = { format: string; tickHz: number; tick: number; document: WorldDocument; ids: Record<string, string>; replay: boolean };
-export type WorldFrame = { tick: number; t: number; poses: number[][] };
+export type WorldFrame = { tick: number; t: number; poses: number[][]; swarms?: number[][] };
 export type WorldEntitiesChange = { tick: number; added?: { entity: WorldEntityDefinition; numericId: number }[]; removed?: number[] };
 export type WorldAction = { tick: number; agent: string; input: { type: string; data?: Record<string, unknown> | null }; result: string };
 
@@ -81,7 +84,12 @@ export function parseWorldEvent(event: string, data: string): WorldEventResult {
     case "frame": {
       if (!finite(raw.tick) || !Array.isArray(raw.poses)) return { kind: "error", message: "Malformed frame event" };
       const poses = (raw.poses as unknown[]).filter((pose): pose is number[] => Array.isArray(pose) && pose.length >= 8 && pose.slice(0, 8).every(finite));
-      return { kind: "frame", frame: { tick: raw.tick, t: finite(raw.t) ? raw.t : 0, poses } };
+      const frame: WorldFrame = { tick: raw.tick, t: finite(raw.t) ? raw.t : 0, poses };
+      if (Array.isArray(raw.swarms)) {
+        frame.swarms = (raw.swarms as unknown[]).filter((swarm): swarm is number[] =>
+          Array.isArray(swarm) && swarm.length >= 4 && (swarm.length - 1) % 3 === 0 && swarm.every(finite));
+      }
+      return { kind: "frame", frame };
     }
     case "entities": {
       if (!finite(raw.tick)) return { kind: "ignored" };
@@ -163,9 +171,13 @@ export function applyWorldEntities(scene: WorldScene, change: WorldEntitiesChang
   return { ...scene, tick: Math.max(scene.tick, change.tick), entities, ids };
 }
 
-/** Changes here mean reconciling the transient scope again; poses alone never do. */
+/**
+ * Changes here mean reconciling the transient scope again; poses alone never do. The whole
+ * definition counts, so an entity re-sent with a new definition (a tree's next generation) is
+ * rebuilt. Structure events are rare (joins, impact cubes, sowing), so the cost is small.
+ */
 export function worldStructureKey(scene: WorldScene): string {
-  return scene.entities.map((entity) => `${entity.id}:${entity.type ?? ""}`).join("|");
+  return scene.entities.map((entity) => JSON.stringify(entity)).join("|");
 }
 
 /**
@@ -233,7 +245,10 @@ export function pickWorldAgent(agents: readonly WorldAgent[], name: string | nul
 // ---- motion between frames ----------------------------------------------------------------
 
 export type WorldPose = { p: ClawVec3; q: ClawQuat };
-type FrameSnapshot = { at: number; tick: number; t: number; poses: Map<number, WorldPose> };
+type FrameSnapshot = { at: number; tick: number; t: number; poses: Map<number, WorldPose>; swarms: Map<number, number[]> };
+
+/** One flock's members (flock-local, flat x, y, z), with velocities when two frames bracket them. */
+export type WorldSwarm = { positions: number[]; velocities: number[] | null };
 
 /**
  * A short arrival-time buffer, drawn about `delayMs` behind the newest frame so two frames
@@ -250,7 +265,9 @@ export class WorldPoseBuffer {
     if (last && (frame.tick < last.tick || frame.tick - last.tick > jumpTicks)) { this.snapshots = []; reset = true; }
     const poses = new Map<number, WorldPose>();
     for (const [id, x, y, z, qx, qy, qz, qw] of frame.poses) poses.set(id, { p: [x, y, z], q: [qx, qy, qz, qw] });
-    this.snapshots.push({ at, tick: frame.tick, t: frame.t, poses });
+    const swarms = new Map<number, number[]>();
+    for (const [id, ...members] of frame.swarms ?? []) swarms.set(id, members);
+    this.snapshots.push({ at, tick: frame.tick, t: frame.t, poses, swarms });
     if (this.snapshots.length > this.maxSnapshots) this.snapshots.shift();
     return reset;
   }
@@ -286,6 +303,34 @@ export class WorldPoseBuffer {
     };
   }
 
+  /** Flock numeric ids in the newest frame. */
+  swarmIds(): number[] { return [...(this.snapshots[this.snapshots.length - 1]?.swarms.keys() ?? [])]; }
+
+  /**
+   * A flock's members at `now - delay`, interpolated like poses, with each member's velocity
+   * over the bracketing frames (it orients the bodies). A member count change between frames
+   * shows the newest frame as is.
+   */
+  sampleSwarm(id: number, now: number): WorldSwarm | null {
+    const list = this.snapshots;
+    if (!list.length) return null;
+    const at = now - this.delayMs;
+    let i = list.length - 1;
+    while (i > 0 && list[i - 1].at > at) i -= 1;
+    const b = list[i];
+    const a = i > 0 ? list[i - 1] : null;
+    const mb = b.swarms.get(id);
+    if (!mb) return null;
+    const ma = a?.swarms.get(id);
+    if (!a || !ma || ma.length !== mb.length) return { positions: [...mb], velocities: null };
+    const dt = b.t - a.t;
+    const velocities = dt > 0 ? mb.map((value, index) => (value - ma[index]) / dt) : null;
+    if (at >= b.at) return { positions: [...mb], velocities };
+    const span = b.at - a.at;
+    const t = span > 0 ? Math.min(1, Math.max(0, (at - a.at) / span)) : 1;
+    return { positions: mb.map((value, index) => ma[index] + (value - ma[index]) * t), velocities };
+  }
+
   /** Velocity of one id over its last two frames, in units per simulated second. */
   velocity(id: number): ClawVec3 | null {
     const list = this.snapshots;
@@ -308,6 +353,17 @@ export function worldHostPoses(buffer: WorldPoseBuffer, ids: ReadonlyMap<number,
     if (!id) continue;
     const pose = buffer.sample(numeric, now);
     if (pose) out.push({ id, position: pose.p, quaternion: pose.q });
+  }
+  return out;
+}
+
+/** Flock members for every flock the buffer knows: entity id, positions and velocities. */
+export function worldHostSwarms(buffer: WorldPoseBuffer, ids: ReadonlyMap<number, string>, now: number): ({ id: string } & WorldSwarm)[] {
+  const out: ({ id: string } & WorldSwarm)[] = [];
+  for (const numeric of buffer.swarmIds()) {
+    const id = ids.get(numeric);
+    const swarm = id ? buffer.sampleSwarm(numeric, now) : null;
+    if (id && swarm) out.push({ id, ...swarm });
   }
   return out;
 }

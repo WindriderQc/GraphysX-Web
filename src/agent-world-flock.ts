@@ -135,6 +135,9 @@ export const AGENT_WORLD_FLOCK_MAX_COUNT = 240;
 /** Trail memory is `count × trailLength × 6` floats, rewritten every step. */
 export const AGENT_WORLD_FLOCK_MAX_TRAIL_LENGTH = 48;
 
+/** Live member state for a host (see `AgentWorldFlockSystem.readMembers`). */
+export type AgentWorldFlockMembers = { positions: number[]; velocities: number[]; elapsed: number };
+
 export type AgentWorldFlockPresetId = "starlings" | "koi" | "orbital-swarm";
 
 export type AgentWorldFlockDescriptor = {
@@ -375,6 +378,13 @@ export class AgentWorldFlockSystem {
    * to know that force fields exist.
    */
   externalAcceleration: ((position: Vector3, velocity: Vector3, out: Vector3) => void) | null = null;
+  /**
+   * Host seam: one more steering term, owned by a host running rules on top of the scene (the
+   * headless world service makes birds shy of agents and of thrown blocks). Same contract as
+   * {@link externalAcceleration} — entity-local, added to the steering sum, under the same
+   * speed clamp — but the runtime never sets or clears it.
+   */
+  hostAcceleration: ((position: Vector3, velocity: Vector3, out: Vector3) => void) | null = null;
   private config: ResolvedAgentWorldFlock;
   private mesh!: InstancedMesh;
   private trails: LineSegments | null = null;
@@ -424,6 +434,45 @@ export class AgentWorldFlockSystem {
     let total = 0;
     for (const velocity of this.velocities) total += velocity.length();
     return round(total / this.velocities.length);
+  }
+
+  /**
+   * Host seam: every member's position and velocity (entity-local, flat `x, y, z` triples) and
+   * the swirl clock. A headless world saves it so a resumed flock continues exactly; a viewer
+   * reads nothing back. Not scene data: the document still only describes the population.
+   */
+  readMembers(): AgentWorldFlockMembers {
+    const positions: number[] = [];
+    const velocities: number[] = [];
+    for (let index = 0; index < this.positions.length; index += 1) {
+      const p = this.positions[index];
+      const v = this.velocities[index];
+      positions.push(p.x, p.y, p.z);
+      velocities.push(v.x, v.y, v.z);
+    }
+    return { positions, velocities, elapsed: this.elapsed };
+  }
+
+  /**
+   * Host seam: place the members where an authoritative host says they are, then redraw. A
+   * viewer of a headless world uses it while paused (velocities only orient the bodies); a
+   * resumed world uses it with the saved state. Refuses a different member count rather than
+   * resizing the population. Without velocities, each member keeps its own.
+   */
+  writeMembers(state: { positions: ArrayLike<number>; velocities?: ArrayLike<number> | null; elapsed?: number }): boolean {
+    const count = this.positions.length;
+    if (state.positions.length !== count * 3) return false;
+    if (state.velocities && state.velocities.length !== count * 3) return false;
+    for (let index = 0; index < count; index += 1) {
+      const i = index * 3;
+      this.positions[index].set(state.positions[i], state.positions[i + 1], state.positions[i + 2]);
+      if (state.velocities) this.velocities[index].set(state.velocities[i], state.velocities[i + 1], state.velocities[i + 2]);
+    }
+    if (state.elapsed !== undefined && Number.isFinite(state.elapsed)) this.elapsed = state.elapsed;
+    if (this.trails) for (let index = 0; index < count; index += 1) for (const sample of this.trailHistory[index]) sample.copy(this.positions[index]);
+    this.writeInstances();
+    this.writeTrails();
+    return true;
   }
 
   private build(config: ResolvedAgentWorldFlock): void {
@@ -635,6 +684,12 @@ export class AgentWorldFlockSystem {
         this.externalAcceleration(position, this.velocities[index], external);
         // On a shell, anything radial is cancelled a few lines later by the snap-back;
         // projecting first keeps the field's in-plane part intact instead of throwing it away.
+        if (onSphere) external.projectOnPlane(normal);
+        acceleration.add(external);
+      }
+      if (this.hostAcceleration) {
+        const external = this.scratch.external;
+        this.hostAcceleration(position, this.velocities[index], external);
         if (onSphere) external.projectOnPlane(normal);
         acceleration.add(external);
       }

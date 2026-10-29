@@ -142,3 +142,32 @@ test("source detection and the opening overview", () => {
   assert.deepEqual(bounds, { center: [-2, 0, 0], radius: 50 }, "the visible land (static bodies, not the invisible wall) frames the overview");
   assert.deepEqual(feed.worldBounds(feed.worldSceneFromHello({ ...hello, document: { entities: [] } })), { center: [0, 0, 0], radius: 40 });
 });
+
+test("living island: flock members ride the frames, interpolated, and re-sent trees rebuild the scene", () => {
+  // Frames carry `swarms`: [numericId, x, y, z, …] per flock, members in flock-local space.
+  const frame = (tick, t, x) => ({ tick, t, poses: [], swarms: [[70, x, 0, 0, x + 1, 1, 0]] });
+  const parsed = feed.parseWorldEvent(...sse("frame", { ...frame(6, 0.1, 0), swarms: [[70, 0, 0, 0, 1, 1, 0], [71, 1, 2], "bad", [72, 0, 0, Number.NaN]] }));
+  assert.equal(parsed.kind, "frame");
+  assert.deepEqual(parsed.frame.swarms, [[70, 0, 0, 0, 1, 1, 0]], "malformed swarms are dropped");
+  assert.equal(feed.parseWorldEvent(...sse("frame", { tick: 1, poses: [] })).frame.swarms, undefined, "Mesa frames have none");
+
+  const buffer = new feed.WorldPoseBuffer(100);
+  buffer.push(frame(6, 0.1, 0), 1000);
+  assert.deepEqual(buffer.sampleSwarm(70, 1000), { positions: [0, 0, 0, 1, 1, 0], velocities: null }, "one frame: as is");
+  buffer.push(frame(12, 0.2, 2), 1100);
+  assert.deepEqual(buffer.swarmIds(), [70]);
+  const mid = buffer.sampleSwarm(70, 1150);
+  assert.deepEqual(mid.positions, [1, 0, 0, 2, 1, 0], "halfway between the two frames");
+  assert.deepEqual(mid.velocities.map((v) => Math.round(v)), [20, 0, 0, 20, 0, 0], "units per simulated second");
+  assert.equal(buffer.sampleSwarm(99, 1150), null);
+  const ids = new Map([[70, "flock_1"]]);
+  assert.deepEqual(feed.worldHostSwarms(buffer, ids, 1300).map((swarm) => [swarm.id, swarm.positions[0]]), [["flock_1", 2]]);
+
+  const tree = { id: "tree_6", label: "Tree_6", type: "dna-tree", transform: { position: [-2, 0, 12], scale: [1.44, 1.44, 1.44] }, dna: { seed: 5, generation: 1 } };
+  const before = feed.applyWorldEntities(feed.worldSceneFromHello(hello), { tick: 200, added: [{ entity: tree, numericId: 80 }] });
+  const grown = feed.applyWorldEntities(before, { tick: 260, added: [{ entity: { ...tree, dna: { seed: 5, generation: 2 } }, numericId: 80 }] });
+  assert.equal(grown.entities.filter((entity) => entity.id === "tree_6").length, 1, "re-added under its id: replaced");
+  assert.equal(grown.entities.find((entity) => entity.id === "tree_6").dna.generation, 2);
+  assert.notEqual(feed.worldStructureKey(grown), feed.worldStructureKey(before), "a new definition rebuilds the scope");
+  assert.equal(feed.worldStructureKey(feed.applyWorldEntities(grown, { tick: 300 })), feed.worldStructureKey(grown));
+});

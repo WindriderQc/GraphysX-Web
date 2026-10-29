@@ -31,10 +31,11 @@ import {
 } from "./island-feed";
 import {
   applyWorldEntities, isEventStream, isWorldServiceHealth, lastWorldAction, parseWorldEvent, pickWorldAgent, worldActionMessages,
-  worldAgentPlayer, worldAgents, worldBounds, worldEntityKinds, worldHostPoses, WorldPoseBuffer, worldSceneFromHello, worldShellDocument,
+  worldAgentPlayer, worldAgents, worldBounds, worldEntityKinds, worldHostPoses, worldHostSwarms, WorldPoseBuffer, worldSceneFromHello, worldShellDocument,
   worldStructureKey, worldTransientDefinitions, WORLD_SCOPE,
   type WorldAction, type WorldAgent, type WorldScene,
 } from "./island-world-feed";
+import { findFlockSystem } from "./agent-world-flock";
 import type { PlatformHost } from "./platform-host";
 import { foldPresentationPanel } from "./presentation-mobile";
 import { motionIsReduced } from "./platform-theme";
@@ -527,6 +528,11 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   const applyWorldPoses = (now: number): void => {
     if (!world) return;
     host.world.applyHostPoses(worldHostPoses(worldPoses, world.ids, now));
+    // A flock's members fly where the server says (living island); the local flock is paused.
+    for (const swarm of worldHostSwarms(worldPoses, world.ids, now)) {
+      const object = host.world.getEntityObject(swarm.id);
+      if (object) findFlockSystem(object)?.writeMembers(swarm);
+    }
   };
 
   /** Load the scene's look once, then (re)build its entities as one transient scope. */
