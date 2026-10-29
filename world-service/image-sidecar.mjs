@@ -30,8 +30,10 @@ import { verticalFovDegrees } from "./image.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MAX_BODY_BYTES = 16 * 1024;
-const PAGE_READY_MS = 30_000;
-const RENDER_TIMEOUT_MS = 15_000;
+// Two separate bounds: starting a camera page (Chromium, the site, the world's first frames)
+// is slow once — 12.9 s measured on UGFrank — and must not eat the capture's own budget.
+const PAGE_READY_MS = 90_000;
+const CAPTURE_TIMEOUT_MS = 45_000;
 
 const finiteVec = (value) => Array.isArray(value) && value.length >= 3 && value.slice(0, 3).every((n) => typeof n === "number" && Number.isFinite(n));
 
@@ -56,10 +58,14 @@ const withTimeout = (promise, ms, label) => new Promise((done, fail) => {
  * @param {string} options.viewer   base URL of a GraphysX-Web page (vite dev, a static dist/, …)
  * @param {number} [options.idleSeconds]
  * @param {() => Promise<import("playwright").Browser>} [options.launch] for tests
+ * @param {number} [options.pageReadyMs]      bound on starting a camera page (default 90 s)
+ * @param {number} [options.captureTimeoutMs] bound on one capture once the page is ready (default 45 s)
  */
 export function createImageRenderer(options) {
   const viewer = options.viewer.replace(/\/+$/, "");
   const idleMs = Math.max(10, options.idleSeconds ?? 300) * 1000;
+  const pageReadyMs = options.pageReadyMs ?? PAGE_READY_MS;
+  const captureTimeoutMs = options.captureTimeoutMs ?? CAPTURE_TIMEOUT_MS;
   let browser = null;
   let launching = null;
   const pages = new Map(); // source -> { page, ready: Promise, size }
@@ -96,8 +102,8 @@ export function createImageRenderer(options) {
       const page = await instance.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
       const url = `${viewer}/?app=island&embed=1&capture=1&source=${encodeURIComponent(source)}`;
       const ready = (async () => {
-        await page.goto(url, { waitUntil: "domcontentloaded" });
-        await page.waitForFunction(() => window.__graphysxIslandCapture?.ready() === true, null, { timeout: PAGE_READY_MS, polling: 100 });
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: pageReadyMs });
+        await page.waitForFunction(() => window.__graphysxIslandCapture?.ready() === true, null, { timeout: pageReadyMs, polling: 100 });
         await page.evaluate(() => window.__graphysxIslandCapture.release());
       })();
       entry = { page, ready, width, height };
@@ -131,9 +137,12 @@ export function createImageRenderer(options) {
       entityId: typeof request.entityId === "string" ? request.entityId : null,
       tick: Number.isFinite(request.tick) ? request.tick : 0,
     };
-    const aimed = await page.evaluate((value) => window.__graphysxIslandCapture.aim(value), aim);
-    const png = await page.screenshot({ type: "png", animations: "allow", caret: "initial" });
-    await page.evaluate(() => window.__graphysxIslandCapture.release());
+    const { aimed, png } = await withTimeout((async () => {
+      const aimedAt = await page.evaluate((value) => window.__graphysxIslandCapture.aim(value), aim);
+      const shot = await page.screenshot({ type: "png", animations: "allow", caret: "initial" });
+      await page.evaluate(() => window.__graphysxIslandCapture.release());
+      return { aimed: aimedAt, png: shot };
+    })(), captureTimeoutMs, "capture");
     const elapsed = performance.now() - started;
     stats.renders += 1;
     stats.totalMs += elapsed;
@@ -149,7 +158,7 @@ export function createImageRenderer(options) {
     const run = queue.then(async () => {
       armIdle();
       try {
-        return await withTimeout(renderOnce(request), RENDER_TIMEOUT_MS, "render");
+        return await renderOnce(request);
       } catch (error) {
         stats.failures += 1;
         // A broken page is rebuilt on the next request rather than reused.
@@ -197,7 +206,7 @@ export async function startImageSidecar(options) {
     staticServer = await startStaticServer({ root, port: 0, host: "127.0.0.1" });
     viewer = staticServer.url;
   }
-  const renderer = createImageRenderer({ viewer, idleSeconds: options.idleSeconds, launch: options.launch });
+  const renderer = createImageRenderer({ viewer, idleSeconds: options.idleSeconds, launch: options.launch, pageReadyMs: options.pageReadyMs, captureTimeoutMs: options.captureTimeoutMs });
   const server = createServer(async (request, response) => {
     const reply = (status, body) => {
       response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" });
