@@ -36,11 +36,11 @@ describe("verification by changed area", () => {
     assert.equal(options.fullRelease, false);
   });
 
-  it("keeps the headless world service to Node tests and off the site", () => {
+  it("keeps the headless world service off the site, checked by Node tests and the island-world journey", () => {
     const plan = selectVerification(["world-service/island-world.ts", "world-service/server.mjs", "world-service/world.toml", "vite.world-service.config.ts"]);
-    assert.equal(plan.mode, "static");
     assert.equal(plan.deploy, false);
-    assert.deepEqual(names(plan), []);
+    assert.deepEqual(names(plan), ["island-world"]);
+    assert.ok(names(selectVerification(["src/island-world-feed.ts"])).includes("island-world"), "the viewer's adapter selects it too");
     // The runtime it bundles is shared with the site and keeps its own rule.
     assert.equal(selectVerification(["world-service/island-world.ts", "src/agent-world-runtime.ts"]).mode, "full");
     assert.equal(selectVerification(["src/world-service.ts"]).mode, "full");

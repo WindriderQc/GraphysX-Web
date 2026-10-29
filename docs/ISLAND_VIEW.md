@@ -3,9 +3,11 @@
 `?app=island` affiche l'île « Is this machine playing? » reconstruite dans Clawblox (moteur
 Rust/Rapier, protocole agent HTTP) avec le rendu de GraphysX : ciel, eau réfléchissante,
 ombres, matériaux, interface. **Clawblox reste l'autorité** de la physique et de l'agent :
-cette page ne simule rien, elle dessine l'état que Clawblox diffuse. C'est l'étape 1 de 3
-(1 : cette vue ; 2 : un service de monde GraphysX sans écran qui parle le protocole
-Clawblox ; 3 : plus tard, l'île dans ce service).
+cette page ne simule rien, elle dessine l'état que Clawblox diffuse.
+
+Depuis le 2026-10-29 (phase 3 du service de monde), la même page affiche aussi une île
+**du service de monde GraphysX** (`world-service/`), en direct ou en reprise : seule l'adresse
+`source=` change (section suivante).
 
 ## Ouvrir la vue
 
@@ -30,6 +32,69 @@ puis, depuis un navigateur du réseau local :
   jamais dans la query string. `clawblox run` l'affiche au démarrage ; on peut le fixer avec
   `WORLD_SPECTATOR_TOKEN`.
 - `embed=1` retire le bouton Quitter et compacte l'en-tête (pour l'onglet « Île » de Benchmark).
+
+## Une île du service de monde GraphysX
+
+Le service de monde (`world-service/`, docs/WORLD_SERVICE_DESIGN.md) parle le protocole agent
+de Clawblox, mais diffuse ses spectateurs autrement : un flux SSE `GET /spectate` (document v2
+au départ, poses 10 fois par seconde, ajouts et retraits d'objets, actions des agents). La page
+le reconnaît seule : `GET /healthz` répond `{ok, tick}` **et** `GET /spectate` répond
+`text/event-stream`. Un serveur Clawblox répond 404 à `/healthz` et garde son chemin d'avant.
+
+Sur devX (exemple, ports libres au moment de l'essai) :
+
+```bash
+npm run build:world-service
+npm run serve:world -- --host 0.0.0.0 --port 18140 --record --record-dir /tmp/ile/rec
+node world-service/replay.mjs /tmp/ile/rec --host 0.0.0.0 --port 18141   # reprise de cet enregistrement
+npx vite --host 0.0.0.0 --port 18143
+```
+
+| Ce qu'on veut voir | Adresse |
+| --- | --- |
+| L'île en direct, caméra sur Eko | `http://192.168.2.117:18143/?app=island&source=http://192.168.2.117:18140&agent=Eko` |
+| La reprise de l'enregistrement | `http://192.168.2.117:18143/?app=island&source=http://192.168.2.117:18141&agent=Eko` |
+| Comme l'onglet « Île » de Benchmark | ajouter `&embed=1` |
+
+Le contrat de l'onglet « Île » (AgentX#1179,
+`<vue>/?app=island&embed=1&source=<base>[#spectator_token=…]&agent=<nom>`) fonctionne tel quel :
+il suffit que `source` désigne le service de monde ou sa reprise. Le service n'a pas de jeton
+spectateur ; un `#spectator_token=` éventuel est ignoré.
+
+Ce qui change par rapport à une île Clawblox :
+
+- **Le document vient du serveur.** La page charge le document v2 reçu (`hello`) dans une
+  portée transitoire (`graphysx-world`, étiquette `world-part`), sans `physics` et avec la
+  physique locale **en pause** : rien ne simule ici. Elle garde l'apparence du document et ne
+  complète que ce qu'il ne dit pas (ciel `clearblue`, éclairage, distances de brouillard).
+- **Les poses** arrivent 10 fois par seconde ; la page les place avec `applyHostPoses` (sans
+  révision ni annulation), interpolées environ 150 ms en arrière.
+- **Les objets qui apparaissent ou disparaissent** (cubes d'ardoise de l'impact du rocher,
+  blocs tombés hors de l'île, agent qui arrive) mettent la portée à jour.
+- **`&agent=<nom>`** choisit l'agent suivi ; s'il y a plusieurs sessions de ce nom (un monde
+  qui dure garde les anciennes), la plus récente. Sans nom : le premier arrivé.
+- **Panneau** : chaque action de l'agent avec son résultat (`Pickup (14.2, 0.4, -2.1) →
+  PickupSuccess`). Un déplacement ou un saut ne change pas `LastActionResult` (comme dans
+  Clawblox) : la page ne lui accole donc pas un résultat ancien.
+- **Reprise** : `world-service/replay.mjs` répond comme `clawblox replay` (`/replay/info`,
+  lecture, pause, recherche, vitesse, saut des temps morts, lecture partagée par tous). Après
+  chaque recherche, le serveur renvoie le document à ce tick : la page repart de là. Ouverte en
+  `embed=1` au début d'une reprise en pause, la page la lance elle-même en sautant l'attente
+  avant la première action, comme pour Clawblox. Le journal des actions vient de
+  `/replay/actions`.
+- Les murs de bordure de Mesa sont invisibles, comme dans Clawblox.
+
+Captures du 2026-10-29 vers 11:15 America/Toronto (devX, Chromium sans écran, monde réel avec un
+agent « Eko » piloté sans modèle par le smoke) :
+
+| | |
+| --- | --- |
+| Direct : Eko a posé un bloc et lancé le rocher (cubes d'impact) | ![direct](island-view/world-live.jpg) |
+| Ce que voit Eko (`GET /observe/image`, 1088×640) | ![vue d'Eko](island-view/world-eko-view.jpg) |
+| Reprise en pause juste après l'impact | ![reprise](island-view/world-replay.jpg) |
+| Téléphone (375 px), panneau replié | ![téléphone](island-view/world-phone.jpg) |
+| Chemin de l'onglet « Île » : adresse construite comme AgentX#1179, dans un cadre d'une autre origine (direct) | ![onglet, direct](island-view/world-tab-live.jpg) |
+| Idem, reprise lancée d'elle-même (`embed=1`) | ![onglet, reprise](island-view/world-tab-replay.jpg) |
 
 ## Captures (2026-10-29, devX, Chromium sans écran)
 
@@ -99,9 +164,11 @@ Clawblox. À l'étape 3, seule la source change : la vue restera la même.
 | Rôle | Fichier |
 | --- | --- |
 | Pur : flux Clawblox (état complet, deltas), correspondance pièce → entité, interpolation, messages | `src/island-feed.ts` |
+| Pur : flux du service de monde GraphysX (hello, poses, ajouts/retraits, actions), interpolation, panneau | `src/island-world-feed.ts` |
 | Surface : connexion, HUD, panneau, transport, caméra, boucle d'image | `src/island-app.ts`, `src/island.css` |
 | Capture réelle en boucle (géométrie et pose de l'agent, ticks 60000-61200 de l'essai 1 ; messages synthétiques) | `src/island-fixture.json` |
 | Tests Node et smoke navigateur | `test/island.test.mjs`, `scripts/smoke-island.mjs` |
+| Idem pour le service de monde (direct, images, reprise contre un vrai monde) | `test/island-world-feed.test.mjs`, `test/world-replay.test.mjs`, `scripts/smoke-island-world.mjs` |
 
 Le smoke accepte des serveurs réels pour produire des captures locales :
 `ISLAND_SOURCES=http://localhost:18094,http://localhost:18086#spectator_token=… node scripts/smoke-island.mjs`

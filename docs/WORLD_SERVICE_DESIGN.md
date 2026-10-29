@@ -1,9 +1,10 @@
-# Service de monde GraphysX : conception, phases 1 et 2
+# Service de monde GraphysX : conception, phases 1 à 3
 
 Rédigé le 2026-10-29 vers 02:30 America/Toronto ; mis à jour le 2026-10-29 vers
-04:00 America/Toronto après les phases 1 et 2. Rien n'est déployé, le site
-public n'est pas touché, le MCP GraphysX reste éteint et aucun modèle n'a été
-appelé. L'hébergement sur UGFrank reste à décider.
+04:00 America/Toronto après les phases 1 et 2, puis vers 11:45 America/Toronto
+après la phase 3. Rien n'est déployé, le site public n'est pas touché, le MCP
+GraphysX reste éteint et aucun modèle n'a été appelé. L'hébergement sur UGFrank
+reste à décider (phase 4, non commencée).
 
 ## Décisions du propriétaire (2026-10-29)
 
@@ -44,9 +45,60 @@ Vérifié sur devX, sans modèle :
   0,31 ms avec 8, 0,72 ms avec 16 (≈ 4 % d'un cœur) ; image spectateur 0,7 à
   1,4 Ko ; sauvegarde 85 à 116 Ko.
 
-Une règle de vérification (`scripts/verify-impact.mjs`) limite désormais un
-changement de `world-service/` aux tests Node, sans déploiement ; un changement
-du runtime partagé garde la vérification complète.
+Une règle de vérification (`scripts/verify-impact.mjs`) limite un changement de
+`world-service/` aux tests Node et au parcours `island-world` (ajouté en phase 3),
+sans déploiement ; un changement du runtime partagé garde la vérification complète.
+
+## État après la phase 3 (2026-10-29)
+
+| Pièce | Où | État |
+|---|---|---|
+| Spectateur : `?app=island&source=<service>` reconnaît le service (`/healthz` + `/spectate` en `text/event-stream`), charge le document dans une portée transitoire, physique locale en pause, poses par `applyHostPoses` interpolées ~150 ms | `src/island-world-feed.ts` (pur), `src/island-app.ts` | ✔ les chemins Clawblox sont inchangés ; le contrat de l'onglet « Île » (AgentX#1179) marche tel quel |
+| Objets ajoutés/retirés (cubes d'impact, blocs tombés, agents), caméra qui suit `&agent=<nom>`, actions et résultats dans le panneau | idem | ✔ |
+| Flux : nouvel événement `action` ; `/spectate` et `/healthz` ouverts à toute origine (lecture seule) | `world-service/server.mjs` | ✔ |
+| Reprise d'un enregistrement : serveur en lecture seule qui répond comme `clawblox replay` (`/replay/info`, lecture, pause, recherche, vitesse, saut des temps morts, `/replay/actions`) ; un nouveau `hello` après chaque recherche | `world-service/recording.mjs`, `world-service/replay.mjs` | ✔ même page, même code que le direct |
+| `GET /observe/image` (X-Session, `width`/`height`, 1088×640 par défaut, œil = joueur + 2, 105° horizontal), avatar de l'agent caché | `world-service/image.mjs`, `world-service/image-sidecar.mjs`, `main.mjs` | ✔ le 501 est retiré ; `API.md` l'annonce comme celle de Mesa |
+| Murs de bordure de Mesa invisibles (comme Clawblox : `Transparency = 1`) | `world-service/mesa-island.ts` | ✔ l'observation donne aussi `transparency: 1` ; les anciennes sauvegardes du monde sont refusées (empreinte changée), aucune n'est en service |
+| Point d'accès de l'hôte : `PlatformHost.setFramesSuspended` (arrête la boucle d'images unique, sans en créer une autre) | `src/platform-host.ts` | ✔ utilisé seulement par la page caméra |
+| Tests | `test/island-world-feed.test.mjs` (7), `test/world-replay.test.mjs` (6), 2 de plus dans `test/world-service.test.mjs` ; smoke `scripts/smoke-island-world.mjs` | ✔ `npm test` : 811 ; vérification complète : voir la PR |
+
+### La vue image : comment elle est faite
+
+Comme Clawblox (`src/capture.rs`), l'image est **une capture de la vraie page de l'île**
+dans un Chromium sans écran, en WebGL logiciel (SwiftShader) : ce que voit l'agent ressemble
+à ce que voit un spectateur. Choix :
+
+- **Un processus séparé** (`image-sidecar.mjs`). Le service de monde ne charge jamais de
+  navigateur : il envoie la caméra au « sidecar », qui répond un PNG. Une future image Docker du
+  monde reste donc légère ; le sidecar peut vivre dans une autre image (avec Chromium) et être
+  désigné par `WORLD_IMAGE_SIDECAR`. Par défaut, `main.mjs` le lance lui-même à la première
+  demande d'image et l'arrête avec lui.
+- **Un seul Chromium partagé**, lancé à la première demande, fermé après 5 minutes sans
+  demande ; **une page caméra par monde**, qui suit `/spectate` comme un spectateur
+  (`?app=island&embed=1&capture=1`). Les demandes passent une à la fois.
+- **Au repos, la page ne dessine rien** : sa boucle d'images est suspendue entre deux
+  captures (`setFramesSuspended`) ; le flux continue de tenir les positions à jour. Sans cela,
+  la page dessinait sans arrêt et occupait environ 4,5 cœurs de devX (mesuré, puis corrigé).
+- La caméra : l'œil de l'agent (joueur + 2), son regard horizontal, 105° de champ horizontal
+  (le vertical dépend du format : 74,9° en 1088×640). L'avatar de l'agent est caché, car l'œil
+  est à l'intérieur ; les autres agents restent visibles.
+
+Coût mesuré sur devX (VM 8 vCPU, WebGL logiciel, le 2026-10-29 vers 11:00
+America/Toronto) :
+
+| Mesure | Valeur |
+|---|---|
+| Première image (Chromium et page à démarrer) | 9 à 15 s |
+| Image 1088×640 ensuite | ≈ 2,6 s, ≈ 14 secondes-CPU (≈ 5,5 cœurs pendant la capture) |
+| Image 320×180 | ≈ 0,6 s, ≈ 3,4 secondes-CPU |
+| Au repos (page suspendue) | ≈ 0,06 seconde-CPU par seconde |
+| Mémoire du navigateur | ≈ 1 Go résident |
+
+Clawblox annonce environ 1 s par image ; la nôtre est plus lente parce que la page dessine le
+rendu complet de GraphysX (ombres douces, lumière du ciel, bloom). Si Eko demande une image à
+chaque tour (toutes les 10 à 20 s), cela représente environ un cœur en moyenne. Pistes si
+c'est trop : une taille par défaut plus petite, une page caméra sans bloom ni ombres douces,
+ou un hôte avec GPU (UGStation).
 
 ## En bref (conception initiale)
 
@@ -330,11 +382,10 @@ numéro de pas dans les deux cas.
 | 0 (fait) | prototype : île Mesa, protocole, personnage, actions, flux, enregistrement, tests | — |
 | 1 (fait) | points d'accès du runtime (profil sans tête, `hostBody`, mode/collision, personnage, chevauchement, `applyHostPoses`), modèles chargés depuis le disque, tests Node | 2 à 3 j |
 | 2 (fait) | service : paquet serveur, règles Mesa complètes (impacts, `MoveToFinished`, `events`), sauvegarde et reprise exactes, tests de conformité contre une île Clawblox réelle | 3 à 4 j |
-| 3 (suivante) | vue image décidée ; spectateur derrière le contrat de l’onglet « Île » (AgentX#1179 : `<viewer>/?app=island&embed=1&source=<base>&agent=<name>`), alimenté par `/spectate` dans GraphysX-Web (pause physique, poses, interpolation, captures d'écran vérifiées) ; relecture dans l'onglet « Île » | 3 à 4 j |
+| 3 (fait) | spectateur derrière le contrat de l'onglet « Île » (AgentX#1179 : `<viewer>/?app=island&embed=1&source=<base>&agent=<name>`), alimenté par `/spectate` (pause physique, poses, interpolation, captures d'écran vérifiées) ; reprise d'un enregistrement GraphysX dans la même page ; vue image (`/observe/image`) rendue par la page de l'île dans un Chromium sans écran, en processus séparé | 3 à 4 j + ≈ 2 j |
 | 4 | conteneur, Caddy, jetons, volume sur UGFrank ; essai sans modèle ; puis un essai Eko mis dans la file de Core | 1 à 2 j, après accord |
-| (dans la phase 3) | vue image (`/observe/image`), rendue par le spectateur dans un Chromium sans écran | ≈ 2 j |
 
-Total : 9 à 13 jours de session plus la vue image ; il reste les phases 3 et 4.
+Il reste la phase 4, qui attend la décision d'hébergement.
 
 ### L'option économique : Clawblox reste le monde
 
@@ -361,7 +412,8 @@ l'hébergement avec un service qui marche.
 ## Questions ouvertes pour le propriétaire
 
 Réglées le 2026-10-29 : la vue image (oui) et le système d'UGStation (Linux
-Mint). Restent :
+Mint). La phase 3 répond techniquement aux questions 2 et 3 : la même page affiche les deux
+mondes, en direct et en reprise ; il reste à décider si l'onglet « Île » s'en sert. Restent :
 
 1. **Placement** : accepter que le service de monde GraphysX tourne sur UGFrank
    en Docker, séparé du site public `graphysx.specialblend.ca` ?
@@ -378,6 +430,12 @@ Mint). Restent :
    parties Clawblox) ou une île propre à GraphysX (terrain, eau, modèles) ?
 6. **Plusieurs agents** : Mesa est prévu pour un joueur. Veut-on des îles
    GraphysX à plusieurs agents ?
+7. **Les images dans l'invite d'Eko** : `API.md` annonce `GET /observe/image` comme celle de
+   Mesa dans Clawblox. Faut-il que l'invite d'Eko (dans AgentX) l'encourage à regarder, et à
+   quelle fréquence, vu le coût mesuré (≈ 2,6 s et 14 secondes-CPU par image) ?
+8. **L'avatar** : l'agent est l'avatar GraphysX par défaut, plus petit que le personnage
+   Clawblox (2×5×2). Le mettre à la taille de Clawblox change l'empreinte du monde (anciennes
+   sauvegardes refusées) ; à faire en même temps qu'un autre changement du document.
 
 ## Annexe : reproduire (devX)
 
@@ -386,8 +444,12 @@ npm ci
 npm run build:world-service
 node --test test/world-service.test.mjs          # 16 tests, sans modèle
 node world-service/bench.mjs 1 4 8 16            # coût par pas
-npm run serve:world -- --port 18120              # île en direct
+npm run serve:world -- --port 18120 --record     # île en direct, enregistrée dans recordings/
+node world-service/replay.mjs recordings --port 18121   # reprise de l'enregistrement
 clawblox run world-service --port 18122          # lancée par Clawblox
+curl -H "X-Session: $SESSION" http://127.0.0.1:18120/observe/image -o vue.png   # après npm run build
+npx vite --port 18123   # puis /?app=island&source=http://127.0.0.1:18120&agent=Eko
+node scripts/smoke-island-world.mjs              # direct, images et reprise, après npm run build
 ```
 
 Détails dans [`world-service/README.md`](../world-service/README.md).

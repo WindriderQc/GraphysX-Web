@@ -252,6 +252,7 @@ export class PlatformHost {
   private postOverride: AgentWorldPost | null = null;
   private frame = 0;
   private disposed = false;
+  private framesSuspended = false;
   private readonly unsubscribeEvents: () => void;
   /**
    * The audio half of `sound` entities: the runtime keeps a placed marker + config, this
@@ -475,6 +476,28 @@ export class PlatformHost {
     this.resizeObserver?.observe(this.container);
     this.resize();
     this.renderer.setAnimationLoop(() => this.tick());
+  }
+
+  /**
+   * Stop or restart the one shared frame loop: while suspended nothing steps, no frame listener
+   * runs and nothing renders. For a page that draws only on request — the island image sidecar's
+   * camera, which would otherwise software-render continuously between captures. Resuming does
+   * not replay the suspended time: the next frame's delta starts at the resume.
+   */
+  setFramesSuspended(suspended: boolean): void {
+    if (this.disposed || suspended === this.framesSuspended) return;
+    this.framesSuspended = suspended;
+    if (suspended) {
+      this.renderer.setAnimationLoop(null);
+      return;
+    }
+    this.clock.getDelta();
+    this.renderer.setAnimationLoop(() => this.tick());
+  }
+
+  /** True while {@link setFramesSuspended} holds the frame loop. */
+  get framesAreSuspended(): boolean {
+    return this.framesSuspended;
   }
 
   /** Frames rendered since construction (used by smoke tests to prove the loop runs). */

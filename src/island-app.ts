@@ -14,14 +14,27 @@
  *
  * Live worlds behind a spectator token take it in the fragment (`#spectator_token=…`), never
  * the query string.
+ *
+ * `source=` may also name a GraphysX world service (`world-service/`) or its replay server
+ * (`world-service/replay.mjs`). The page tells them apart by `GET /healthz` (`{ok, tick}`) plus
+ * `GET /spectate` answering `text/event-stream`, and then reads that SSE stream instead
+ * (`island-world-feed.ts`): the hello document becomes one transient scope with local physics
+ * paused, and frames are applied with `applyHostPoses`, interpolated about 150 ms behind.
+ * `capture=1` turns the page into the image sidecar's camera (`world-service/image-sidecar.mjs`).
  */
-import { DirectionalLight, Quaternion, Vector3 } from "three";
+import { DirectionalLight, MathUtils, Quaternion, Vector3 } from "three";
 import "./island.css";
 import {
   agentPossessive, applyClawMessage, composeIsland, describeAgent, formatClock, islandBounds, islandMessages, islandMessagesAt,
   islandStructureKey, IslandPoseBuffer, ISLAND_SCOPE, parseIslandSource,
   type ClawObservation, type IslandMessage, type IslandPlacement,
 } from "./island-feed";
+import {
+  applyWorldEntities, isEventStream, isWorldServiceHealth, lastWorldAction, parseWorldEvent, pickWorldAgent, worldActionMessages,
+  worldAgentPlayer, worldAgents, worldBounds, worldEntityKinds, worldHostPoses, WorldPoseBuffer, worldSceneFromHello, worldShellDocument,
+  worldStructureKey, worldTransientDefinitions, WORLD_SCOPE,
+  type WorldAction, type WorldAgent, type WorldScene,
+} from "./island-world-feed";
 import type { PlatformHost } from "./platform-host";
 import { foldPresentationPanel } from "./presentation-mobile";
 import { motionIsReduced } from "./platform-theme";
@@ -39,6 +52,11 @@ export type IslandMountOptions = {
 
 type ReplayInfo = { current_tick: number; total_ticks: number; first_tick?: number; tick_rate: number; speed: number; paused: boolean };
 type Mode = "fixture" | "live" | "replay" | "unknown";
+/** Which stream feeds the page: a Clawblox server, or a GraphysX world service / replay. */
+type Feed = "clawblox" | "graphysx" | null;
+type ProbeResult = "graphysx" | "other" | "unreachable";
+/** The image sidecar's request: the agent's eye, its forward and the vertical field of view. */
+type CaptureAim = { position: [number, number, number]; forward: [number, number, number]; verticalFovDeg: number; entityId: string | null; tick: number };
 
 const WORLD_ID = "clawblox-island";
 const SUN_ID = "island-sun";
@@ -46,22 +64,31 @@ const RECONNECT_MS = 2500;
 const INFO_POLL_MS = 1000;
 const FIXTURE_FRAME_MS = 250;
 const SPEEDS = [1, 2, 4, 8];
+/** A busy machine can be slow to answer; a probe that times out falls back to Clawblox and retries. */
+const PROBE_MS = 6000;
+const WORLD_ACTION_LIMIT = 2000;
+const CAPTURE_CATCH_UP_MS = 1500;
+/** Frames rendered after aiming: the first draws with the new camera, the second lets budgeted passes (shadows) catch up. */
+const CAPTURE_SETTLE_FRAMES = 2;
+
+/** The island's look. A world-service document keeps its own settings and borrows only the rest. */
+const ISLAND_ENVIRONMENT: Record<string, unknown> = {
+  background: "#9fc9e8",
+  sky: "clearblue",
+  lighting: { source: "sky", intensity: 1.05, yawDegrees: 35, backgroundIntensity: 1, backgroundBlur: 0 },
+  // The island spans ~130 units inside an ocean drawn to the horizon; the host's showroom fog would swallow it.
+  envelope: { fogNear: 160, fogFar: 1500, cameraFar: 2600 },
+  post: { bloom: { strength: 0.22, radius: 0.4, threshold: 0.9 } },
+  ground: { visible: false },
+  physics: { gravity: [0, -9.81, 0] },
+};
 
 function islandWorld(): Record<string, unknown> {
   return {
     schema: "graphysx.agent-world/v2",
     id: WORLD_ID,
     label: "L'île · Clawblox",
-    environment: {
-      background: "#9fc9e8",
-      sky: "clearblue",
-      lighting: { source: "sky", intensity: 1.05, yawDegrees: 35, backgroundIntensity: 1, backgroundBlur: 0 },
-      // The island spans ~130 units inside an ocean drawn to the horizon; the host's showroom fog would swallow it.
-      envelope: { fogNear: 160, fogFar: 1500, cameraFar: 2600 },
-      post: { bloom: { strength: 0.22, radius: 0.4, threshold: 0.9 } },
-      ground: { visible: false },
-      physics: { gravity: [0, -9.81, 0] },
-    },
+    environment: structuredClone(ISLAND_ENVIRONMENT),
     entities: [
       { id: "island-ambient", label: "Lumière ambiante", type: "ambient-light", intensity: 0.55, material: { color: "#dfeeff" }, tags: ["lighting", "island"] },
       { id: SUN_ID, label: "Soleil", type: "directional-light", intensity: 2.6, transform: { position: [60, 90, 40] }, material: { color: "#fff1d8" }, tags: ["lighting", "island"], castShadow: true },
@@ -76,11 +103,13 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   const sourceParam = params.get("source");
   const source = sourceParam && sourceParam !== "fixture" ? parseIslandSource(sourceParam) : null;
   const spectatorToken = fragment.get("spectator_token") ?? params.get("spectator_token");
+  const capture = params.get("capture") === "1" && !!source;
   // The run's agent name, so the title and card hold steady before the agent first joins.
   let agentName: string | null = (params.get("agent") ?? "").trim().slice(0, 40) || null;
   const reduced = motionIsReduced();
   let disposed = false;
   let mode: Mode = source ? "unknown" : "fixture";
+  let feed: Feed = source ? null : "clawblox";
   // Only a refused source is worth a banner; a missing one is the demonstration, said in the status line.
   let notice = sourceParam && sourceParam !== "fixture" && !source
     ? "Source refusée : il faut une adresse http(s), par exemple ?source=http://devx:18090. Capture de démonstration affichée."
@@ -125,6 +154,8 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   if (embedded) button("exit").hidden = true;
   root.append(surface);
   foldPresentationPanel(element(".gx-island-panel"), "Eko · Messages");
+  // The sidecar's camera page draws the world only: no header, panel or transport.
+  if (capture) surface.style.display = "none";
 
 
   // ---- the world --------------------------------------------------------------------------
@@ -133,15 +164,17 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   host.api.pause(false);
   host.applyEnvironment();
   // The host's shadow box (±38) is sized for showroom scenes; the island needs ±75.
-  const sunObject = host.world.getEntityObject(SUN_ID);
-  sunObject?.traverse((child) => {
-    if (!(child instanceof DirectionalLight)) return;
-    const camera = child.shadow.camera;
-    camera.left = -75; camera.right = 75; camera.top = 75; camera.bottom = -75; camera.far = 400;
-    camera.updateProjectionMatrix();
-    child.shadow.bias = -0.0004;
-    child.shadow.normalBias = 0.04;
-  });
+  const widenShadows = (id: string): void => {
+    host.world.getEntityObject(id)?.traverse((child) => {
+      if (!(child instanceof DirectionalLight)) return;
+      const camera = child.shadow.camera;
+      camera.left = -75; camera.right = 75; camera.top = 75; camera.bottom = -75; camera.far = 400;
+      camera.updateProjectionMatrix();
+      child.shadow.bias = -0.0004;
+      child.shadow.normalBias = 0.04;
+    });
+  };
+  widenShadows(SUN_ID);
 
   let state: ClawObservation | null = null;
   let structureKey = "";
@@ -149,13 +182,24 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   let reconcileError: string | null = null;
   let framedOnce = false;
   // The camera follows the agent by default; dragging still orbits around it.
-  let follow = true;
+  let follow = !capture;
   let followFramed = false;
   let lastFollow: Vector3 | null = null;
   let frames = 0;
   let snapshots = 0;
   let resets = 0;
   const poses = new IslandPoseBuffer(reduced ? 0 : 110);
+  // ---- GraphysX world-service state (feed === "graphysx") ----
+  let world: WorldScene | null = null;
+  let worldKey = "";
+  let worldEnvironmentKey = "";
+  let worldAgent: WorldAgent | null = null;
+  let worldActions: WorldAction[] = [];
+  let worldFrames = 0;
+  // The camera page draws the newest frame; viewers draw ~150 ms behind to interpolate.
+  const worldPoses = new WorldPoseBuffer(capture || reduced ? 0 : 150);
+  let captureAim: CaptureAim | null = null;
+  const frameWaiters: { frame: number; resolve: () => void }[] = [];
   const tmpQuat = new Quaternion();
   const fixQuat = new Quaternion();
   const tmpOffset = new Vector3();
@@ -193,14 +237,16 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
 
   const agentPlacement = (): IslandPlacement | null => placements.find((p) => p.kind === "agent") ?? null;
   const agentObjectPosition = (): Vector3 | null => {
-    const placement = agentPlacement();
-    const object = placement ? host.world.getEntityObject(placement.entityId) : null;
+    const entityId = feed === "graphysx" ? worldAgent?.entityId : agentPlacement()?.entityId;
+    const object = entityId ? host.world.getEntityObject(entityId) : null;
     return object ? object.position.clone() : null;
   };
 
   const frameOverview = (seconds: number): void => {
-    if (!state) return;
-    const { center, radius } = islandBounds(state);
+    if (capture) return;
+    const bounds = feed === "graphysx" ? (world ? worldBounds(world) : null) : state ? islandBounds(state) : null;
+    if (!bounds) return;
+    const { center, radius } = bounds;
     const narrow = (root.clientWidth || window.innerWidth) < (root.clientHeight || window.innerHeight);
     const distance = radius * (narrow ? 2.6 : 1.55);
     host.frameView([center[0] + distance * 0.62, center[1] + distance * 0.72, center[2] + distance * 0.78], [center[0], 0, center[2]], reduced ? 0 : seconds);
@@ -240,8 +286,18 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   };
   setNotice(notice);
 
+  const currentTick = (): number => replay?.current_tick ?? (feed === "graphysx" ? worldPoses.latestTick ?? world?.tick : state?.tick) ?? 0;
+  // A replay shows actions up to its clock; a live world's actions have all happened already
+  // (one can arrive just before the frame of its tick).
+  const shownTick = (): number => (feed === "graphysx" && mode !== "replay" ? Number.POSITIVE_INFINITY : currentTick());
+  const worldPlayer = () => worldAgentPlayer(
+    worldAgent,
+    lastWorldAction(worldActions, worldAgent?.name ?? null, shownTick()),
+    worldAgent?.numericId != null ? worldPoses.velocity(worldAgent.numericId) : null,
+  );
+
   const updateAgentCard = (): void => {
-    const player = state?.players[0];
+    const player = feed === "graphysx" ? worldPlayer() : state?.players[0];
     if (player?.name) agentName = player.name;
     const agent = describeAgent(player);
     const shownName = player ? agent.name : agentName ?? agent.name;
@@ -254,8 +310,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   };
 
   const renderMessages = (): void => {
-    const tick = replay?.current_tick ?? state?.tick ?? 0;
-    const visible = [...islandMessagesAt(messages, tick, 30), ...chat.slice(-10)];
+    const visible = [...islandMessagesAt(messages, shownTick(), 30), ...chat.slice(-10)];
     const key = visible.map((m) => m.id).join(",");
     if (key === shownMessageKey) return;
     shownMessageKey = key;
@@ -269,7 +324,9 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     if (!visible.length) {
       const empty = document.createElement("li");
       empty.dataset.role = "empty";
-      empty.textContent = mode === "live" ? "Aucun message de clavardage. Le journal de l'agent n'est lu qu'en reprise." : "Aucun message pour l'instant.";
+      empty.textContent = feed === "graphysx"
+        ? "Aucune action pour l'instant."
+        : mode === "live" ? "Aucun message de clavardage. Le journal de l'agent n'est lu qu'en reprise." : "Aucun message pour l'instant.";
       list.append(empty);
     }
     list.scrollTop = list.scrollHeight;
@@ -337,7 +394,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
         const wasReplay = mode === "replay";
         mode = "replay";
         replay = info;
-        if (!wasReplay) void loadAgentLog();
+        if (!wasReplay) void (feed === "graphysx" ? loadWorldActions() : loadAgentLog());
         // An embedded view of a freshly opened replay session (paused at its first tick) starts
         // itself, skipping the idle stretches before the agent acts. Once per page, and never
         // when the shared replay is already somewhere else.
@@ -345,7 +402,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
           autoStarted = true;
           void post("/replay/skip-idle?enabled=true").then(() => post("/replay/play"));
         }
-      } else {
+      } else if (feed !== "graphysx") {
         mode = "live";
         replay = null;
       }
@@ -372,11 +429,12 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
 
   const updateStatus = (): void => {
     if (mode === "fixture") { setStatus("Capture de démonstration · boucle", "ok"); return; }
-    if (!connected) { setStatus("Connexion au serveur Clawblox…", "wait"); return; }
+    if (!connected) { setStatus(feed === "graphysx" ? "Connexion au monde GraphysX…" : "Connexion au serveur Clawblox…", "wait"); return; }
     if (mode === "replay" && replay) {
       setStatus(`Reprise · ×${replay.speed}${replay.paused ? " · en pause" : ""}`, "ok");
       return;
     }
+    if (feed === "graphysx") { setStatus(mode === "live" ? "En direct · monde GraphysX" : "Connecté", "ok"); return; }
     setStatus(mode === "live" ? `En direct · ${state?.game_status ?? "…"}` : "Connecté", "ok");
   };
 
@@ -386,7 +444,8 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     if (spectatorToken) url.searchParams.set("spectator_token", spectatorToken);
     const ws = new WebSocket(url);
     socket = ws;
-    ws.addEventListener("open", () => { connected = true; updateStatus(); });
+    let opened = false;
+    ws.addEventListener("open", () => { opened = true; connected = true; updateStatus(); });
     ws.addEventListener("message", (event) => {
       if (typeof event.data !== "string") return;
       let raw: unknown;
@@ -405,10 +464,227 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       socket = null;
       state = null; // the next connection starts from a full observation
       updateStatus();
-      if (!disposed) reconnectTimer = window.setTimeout(connect, RECONNECT_MS);
+      if (disposed) return;
+      // A world service that was not up at the first look is recognised when it comes up.
+      if (!opened) {
+        reconnectTimer = window.setTimeout(() => {
+          void probeWorldService().then((kind) => {
+            if (disposed || socket) return;
+            if (kind === "graphysx") startWorld();
+            else connect();
+          });
+        }, RECONNECT_MS);
+        return;
+      }
+      reconnectTimer = window.setTimeout(connect, RECONNECT_MS);
     });
     ws.addEventListener("error", () => { setNotice(`Serveur Clawblox injoignable : ${source.http}`); });
   };
+
+  // ---- the GraphysX world-service feed --------------------------------------------------------
+  let events: EventSource | null = null;
+
+  /** `/healthz` answering `{ok, tick}` and `/spectate` answering an event stream: a world service. */
+  const probeWorldService = async (): Promise<ProbeResult> => {
+    if (!source) return "other";
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), PROBE_MS);
+    try {
+      const health = await fetch(`${source.http}/healthz`, { cache: "no-store", signal: controller.signal });
+      if (!health.ok || !isWorldServiceHealth(await health.json().catch(() => null))) return "other";
+      const stream = await fetch(`${source.http}/spectate`, { cache: "no-store", signal: controller.signal });
+      return stream.ok && isEventStream(stream.headers.get("content-type")) ? "graphysx" : "other";
+    } catch {
+      return "unreachable";
+    } finally {
+      window.clearTimeout(timer);
+      controller.abort(); // closes the probe's stream
+    }
+  };
+
+  const refreshWorldMessages = (): void => {
+    messages = worldActionMessages(worldActions, world ? worldAgents(world).length > 1 : false);
+    shownMessageKey = null;
+    renderMessages();
+    updateAgentCard();
+  };
+
+  const loadWorldActions = async (): Promise<void> => {
+    if (!source) return;
+    try {
+      const response = await fetch(`${source.http}/replay/actions`, { cache: "no-store" });
+      if (!response.ok) return;
+      const body = await response.json() as { actions?: unknown[] };
+      worldActions = [];
+      for (const raw of body.actions ?? []) {
+        const parsed = parseWorldEvent("action", JSON.stringify(raw));
+        if (parsed.kind === "action") worldActions.push(parsed.action);
+      }
+      refreshWorldMessages();
+    } catch { /* the world still renders without its action log */ }
+  };
+
+  const applyWorldPoses = (now: number): void => {
+    if (!world) return;
+    host.world.applyHostPoses(worldHostPoses(worldPoses, world.ids, now));
+  };
+
+  /** Load the scene's look once, then (re)build its entities as one transient scope. */
+  const applyWorldStructure = (force: boolean): void => {
+    if (!world) return;
+    const environmentKey = JSON.stringify(world.environment);
+    if (environmentKey !== worldEnvironmentKey) {
+      worldEnvironmentKey = environmentKey;
+      const { background: _background, ...look } = ISLAND_ENVIRONMENT;
+      void _background;
+      const created = host.api.create(worldShellDocument(world, look) as never);
+      if (!created.ok) { reconcileError = created.error ?? "create failed"; return; }
+      // The server is the only truth: nothing simulates here.
+      host.api.pause(true);
+      host.applyEnvironment();
+      force = true;
+    }
+    const key = worldStructureKey(world);
+    if (!force && key === worldKey) return;
+    worldKey = key;
+    const result = host.world.reconcileTransientEntities(WORLD_SCOPE, worldTransientDefinitions(world) as never);
+    reconcileError = result.ok ? null : result.error ?? "reconcile failed";
+    for (const entity of world.entities) if (entity.type === "directional-light") widenShadows(entity.id);
+    worldAgent = pickWorldAgent(worldAgents(world), agentName);
+    applyWorldPoses(performance.now());
+  };
+
+  const onWorldEvent = (name: string, data: string): void => {
+    const result = parseWorldEvent(name, data);
+    if (result.kind === "hello") {
+      world = worldSceneFromHello(result.hello);
+      worldPoses.clear();
+      // A replay server's hello says so; pollInfo then switches to replay (transport, action
+      // log, embedded auto-start) exactly as for a Clawblox replay.
+      if (result.hello.replay) {
+        if (infoTimer === null) {
+          void pollInfo();
+          infoTimer = window.setInterval(() => { void pollInfo(); }, INFO_POLL_MS);
+        }
+      } else mode = "live";
+      applyWorldStructure(true);
+      snapshots += 1;
+      updateAgentCard();
+      updateStatus();
+    } else if (result.kind === "frame") {
+      if (!world) return;
+      if (worldPoses.push(result.frame, performance.now())) resets += 1;
+      world.tick = result.frame.tick;
+      worldFrames += 1;
+      snapshots += 1;
+      if (worldFrames === 1) applyWorldPoses(performance.now());
+      if (!framedOnce && world.entities.length) { framedOnce = true; frameOverview(reduced ? 0 : 1.4); }
+      updateAgentCard();
+      if (mode === "replay") renderMessages();
+    } else if (result.kind === "entities") {
+      if (!world) return;
+      world = applyWorldEntities(world, result.change);
+      applyWorldStructure(false);
+    } else if (result.kind === "action") {
+      // A replay's whole action log comes from /replay/actions; the stream repeats it.
+      if (mode === "replay") return;
+      worldActions.push(result.action);
+      if (worldActions.length > WORLD_ACTION_LIMIT) worldActions.splice(0, worldActions.length - WORLD_ACTION_LIMIT);
+      refreshWorldMessages();
+    } else if (result.kind === "error") setNotice(result.message);
+  };
+
+  const connectWorld = (): void => {
+    if (!source || disposed) return;
+    const stream = new EventSource(`${source.http}/spectate`);
+    events = stream;
+    stream.addEventListener("open", () => { connected = true; updateStatus(); });
+    for (const name of ["hello", "frame", "entities", "action"]) {
+      stream.addEventListener(name, (event) => { if (events === stream) onWorldEvent(name, String((event as MessageEvent).data)); });
+    }
+    stream.addEventListener("error", () => {
+      if (events !== stream) return;
+      connected = false;
+      updateStatus();
+      // EventSource retries a dropped stream by itself (and the server re-sends hello);
+      // a refused one (capacity, 4xx) is closed and retried here.
+      if (stream.readyState === EventSource.CLOSED) {
+        events = null;
+        if (!disposed) reconnectTimer = window.setTimeout(connectWorld, RECONNECT_MS);
+      }
+    });
+  };
+
+  const startWorld = (): void => {
+    feed = "graphysx";
+    // Coming from the Clawblox path (the world was not up, or the first probe timed out):
+    // its replay poller and transport state do not apply to a world service.
+    if (infoTimer !== null) { window.clearInterval(infoTimer); infoTimer = null; }
+    mode = "unknown";
+    replay = null;
+    renderTransport();
+    surface.setAttribute("aria-label", "L'île GraphysX");
+    element(".gx-island-eyebrow").textContent = "AgentX · Île · GraphysX";
+    setNotice("");
+    // The Clawblox island parts (none yet) give way to the world's own scene on its first hello.
+    host.world.clearTransientEntities(ISLAND_SCOPE);
+    placements = [];
+    structureKey = "";
+    updateStatus();
+    connectWorld();
+  };
+
+  const startClawblox = (): void => {
+    feed = "clawblox";
+    setStatus("Connexion au serveur Clawblox…", "wait");
+    void pollInfo();
+    infoTimer = window.setInterval(() => { void pollInfo(); }, INFO_POLL_MS);
+    connect();
+  };
+
+  // ---- the image sidecar's camera (capture=1) ---------------------------------------------------
+  const nextFrames = (count: number): Promise<void> => new Promise((resolve) => frameWaiters.push({ frame: frames + count, resolve }));
+  const aimCapture = (aim: CaptureAim): void => {
+    if (world) {
+      for (const agent of worldAgents(world)) {
+        const object = host.world.getEntityObject(agent.entityId);
+        if (object) object.visible = agent.entityId !== aim.entityId;
+      }
+    }
+    const [x, y, z] = aim.position;
+    const [fx, , fz] = aim.forward;
+    const length = Math.hypot(fx, fz) || 1;
+    host.frameView([x, y, z], [x + (fx / length) * 10, y, z + (fz / length) * 10], 0);
+    const fov = MathUtils.clamp(aim.verticalFovDeg, 1, 179);
+    if (host.camera.fov !== fov) { host.camera.fov = fov; host.camera.updateProjectionMatrix(); }
+  };
+  type CaptureHook = {
+    ready: () => boolean;
+    aim: (aim: CaptureAim) => Promise<{ tick: number | null; waitedMs: number }>;
+    release: () => void;
+  };
+  const captureWindow = window as unknown as { __graphysxIslandCapture?: CaptureHook };
+  if (capture) {
+    captureWindow.__graphysxIslandCapture = {
+      ready: () => feed === "graphysx" && !!world && worldPoses.size > 0 && reconcileError === null,
+      // Draw again: the stream kept the poses current while the frame loop was suspended.
+      aim: async (aim) => {
+        const started = performance.now();
+        host.setFramesSuspended(false);
+        // The request names the world tick it was asked at; draw a frame at least that recent
+        // (frames come every 6 ticks), or the newest one after a short wait.
+        // Frames arrive over the stream whatever the renderer does, so wait on a timer, not on renders.
+        while ((worldPoses.latestTick ?? -1) < aim.tick - 6 && performance.now() - started < CAPTURE_CATCH_UP_MS) {
+          await new Promise((resolve) => window.setTimeout(resolve, 20));
+        }
+        captureAim = aim;
+        await nextFrames(CAPTURE_SETTLE_FRAMES);
+        return { tick: worldPoses.latestTick, waitedMs: Math.round(performance.now() - started) };
+      },
+      // Between captures the camera page draws nothing (software WebGL would keep cores busy).
+      release: () => host.setFramesSuspended(true),
+    };
+  }
 
   const startFixture = async (): Promise<void> => {
     const { default: fixture } = await import("./island-fixture.json");
@@ -430,10 +706,13 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   };
 
   if (source) {
-    setStatus("Connexion au serveur Clawblox…", "wait");
-    void pollInfo();
-    infoTimer = window.setInterval(() => { void pollInfo(); }, INFO_POLL_MS);
-    connect();
+    setStatus("Connexion…", "wait");
+    // A Clawblox server answers /healthz with 404 (or not at all): its paths start as before.
+    void probeWorldService().then((kind) => {
+      if (disposed) return;
+      if (kind === "graphysx") startWorld();
+      else startClawblox();
+    });
   } else {
     void startFixture();
   }
@@ -449,8 +728,17 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       for (const node of surface.children) if (node instanceof HTMLElement) node.hidden = editing || (node.hasAttribute("data-transport") && mode !== "replay");
       if (!editing) setNotice(notice);
     }
-    if (!placements.length) return;
-    placeAll(performance.now(), true);
+    for (let i = frameWaiters.length - 1; i >= 0; i -= 1) {
+      if (frames >= frameWaiters[i].frame) { frameWaiters[i].resolve(); frameWaiters.splice(i, 1); }
+    }
+    if (feed === "graphysx") {
+      if (!world) return;
+      applyWorldPoses(performance.now());
+      if (captureAim) { aimCapture(captureAim); return; }
+    } else {
+      if (!placements.length) return;
+      placeAll(performance.now(), true);
+    }
     if (follow) {
       const at = agentObjectPosition();
       // Ease onto the agent once (after the opening overview), then carry the camera with it.
@@ -478,24 +766,36 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     const pivot = host.orbitTarget;
     const eye = host.camera.position;
     const round2 = (n: number): number => Math.round(n * 100) / 100;
+    const graphysx = feed === "graphysx";
     return {
       application: "island",
       mode,
+      feed,
+      capture,
       source: source?.http ?? "fixture",
       connected: mode === "fixture" ? true : connected,
       embedded,
       notice,
-      tick: state?.tick ?? null,
-      gameStatus: state?.game_status ?? null,
+      tick: graphysx ? worldPoses.latestTick ?? world?.tick ?? null : state?.tick ?? null,
+      gameStatus: graphysx ? (world ? "active" : null) : state?.game_status ?? null,
       snapshots,
       resets,
       frames,
-      parts: placements.length,
-      moving: placements.filter((p) => p.moving).length,
-      kinds: placements.reduce<Record<string, number>>((counts, p) => { counts[p.kind] = (counts[p.kind] ?? 0) + 1; return counts; }, {}),
+      parts: graphysx ? world?.entities.length ?? 0 : placements.length,
+      moving: graphysx ? worldPoses.ids().length : placements.filter((p) => p.moving).length,
+      kinds: graphysx
+        ? (world ? worldEntityKinds(world) : {})
+        : placements.reduce<Record<string, number>>((counts, p) => { counts[p.kind] = (counts[p.kind] ?? 0) + 1; return counts; }, {}),
+      world: graphysx && world ? {
+        label: world.label,
+        agents: worldAgents(world).map((agent) => agent.name),
+        followed: worldAgent?.name ?? null,
+        frames: worldFrames,
+        actions: worldActions.length,
+      } : null,
       reconcileError,
       autoStarted,
-      agent: { ...describeAgent(state?.players[0]), title: agentPossessive(agentName), position: agentAt ? [agentAt.x, agentAt.y, agentAt.z].map((n) => Math.round(n * 100) / 100) : null },
+      agent: { ...describeAgent(graphysx ? worldPlayer() : state?.players[0]), title: agentPossessive(agentName), position: agentAt ? [agentAt.x, agentAt.y, agentAt.z].map((n) => Math.round(n * 100) / 100) : null },
       follow,
       camera: {
         azimuth: round2(Math.atan2(eye.x - pivot.x, eye.z - pivot.z)),
@@ -520,7 +820,15 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       const ws = socket;
       socket = null;
       ws?.close();
+      events?.close();
+      events = null;
+      if (capture) {
+        delete captureWindow.__graphysxIslandCapture;
+        host.setFramesSuspended(false);
+      }
+      for (const waiter of frameWaiters.splice(0)) waiter.resolve();
       host.world.clearTransientEntities(ISLAND_SCOPE);
+      host.world.clearTransientEntities(WORLD_SCOPE);
       surface.remove();
     },
   };

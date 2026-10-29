@@ -691,12 +691,15 @@ export class IslandWorld {
     };
   }
 
-  /** First-person camera of a session: what GET /observe/image renders. */
-  camera(session: string): { position: Vec3; forward: Vec3; fovDeg: number } {
+  /**
+   * First-person camera of a session: what GET /observe/image renders. `fovDeg` is horizontal;
+   * `entityId` is the agent's own avatar (the eye sits inside it, so the renderer hides it).
+   */
+  camera(session: string): { position: Vec3; forward: Vec3; fovDeg: number; entityId: string } {
     const character = this.characters.get(session);
     if (!character) throw new InputError("Unknown session");
     const p = this.position(character);
-    return { position: [p[0], p[1] + VIEW_EYE_HEIGHT, p[2]], forward: character.forward, fovDeg: VIEW_FOV };
+    return { position: [p[0], p[1] + VIEW_EYE_HEIGHT, p[2]], forward: [...character.forward], fovDeg: VIEW_FOV, entityId: character.entityId };
   }
 
   observe(session: string): Record<string, unknown> {

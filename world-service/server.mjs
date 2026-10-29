@@ -3,8 +3,13 @@
 //   POST /join?name=X -> {session, agent_id}      GET /observe            (X-Session)
 //   POST /input {type, data} -> observation         POST /chat, GET /chat/messages
 //   GET /api.md                                     GET /snapshot           (X-Operator-Token)
-//   GET /spectate  SSE: hello (v2 document), frame (poses), entities (added/removed)
+//   GET /observe/image?width&height -> PNG of the agent's first-person view (X-Session)
+//   GET /spectate  SSE: hello (v2 document), frame (poses), entities (added/removed), action
 //   GET /healthz
+//
+// /spectate and /healthz are read only and answer any origin (the island viewer runs on
+// another one). First-person images come from a separate renderer (`options.renderImage`, the
+// image sidecar in main.mjs), so this process never loads a browser.
 //
 // One fixed-tick loop owns the world. HTTP handlers queue input or read state between ticks.
 // The world itself (TypeScript, bundled by Vite) is passed in, so tests can build it anywhere.
@@ -12,11 +17,13 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
+import { parseImageSize } from "./image.mjs";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_SPECTATORS = 32;
 const SPECTATOR_BUFFER_LIMIT = 1 << 20;
 const HEARTBEAT_MS = 25_000;
+const READ_ONLY_CORS = { "access-control-allow-origin": "*" };
 
 function send(response, status, body, headers = {}) {
   const text = typeof body === "string" ? body : JSON.stringify(body);
@@ -50,6 +57,8 @@ async function readJson(request, InputError) {
  * @param {string} options.apiMarkdown agent-facing API.md
  * @param {object} [options.snapshot]  resume from this GET /snapshot body
  * @param {boolean} [options.realtime] false: the caller drives `world.step()` (tests)
+ * @param {(request: {position: number[], forward: number[], fovDeg: number, entityId: string, tick: number, width: number, height: number}) => Promise<Buffer>} [options.renderImage]
+ *        renders one first-person PNG; without it GET /observe/image answers 503
  */
 export async function startWorldServer(options) {
   const { IslandWorld, InputError, validateInput, TICK_HZ } = options.module;
@@ -94,7 +103,10 @@ export async function startWorldServer(options) {
       record({ kind: "frame", ...frame });
     }
     if (world.actions.length > recordedActions) {
-      for (const action of world.actions.slice(recordedActions)) record({ kind: "action", ...action });
+      for (const action of world.actions.slice(recordedActions)) {
+        broadcast("action", action);
+        record({ kind: "action", ...action });
+      }
       recordedActions = world.actions.length;
     }
   };
@@ -126,7 +138,7 @@ export async function startWorldServer(options) {
         return false;
       };
       switch (route) {
-        case "GET /healthz": return send(response, 200, { ok: true, tick: world.tick });
+        case "GET /healthz": return send(response, 200, { ok: true, tick: world.tick }, READ_ONLY_CORS);
         case "GET /api.md": return send(response, 200, options.apiMarkdown);
         case "POST /join": {
           const joined = world.join(url.searchParams.get("name") ?? "Agent");
@@ -148,15 +160,30 @@ export async function startWorldServer(options) {
         }
         case "GET /chat/messages":
           return needSession() ? send(response, 200, world.chatMessages(url.searchParams.get("after"), Number(url.searchParams.get("limit") ?? 20))) : undefined;
-        case "GET /observe/image":
-          return send(response, 501, { error: "First-person images are not served yet (docs/WORLD_SERVICE_DESIGN.md, phase 3)" });
+        case "GET /observe/image": {
+          if (!needSession()) return undefined;
+          const size = parseImageSize(url.searchParams);
+          if ("error" in size) throw new InputError(size.error);
+          if (!options.renderImage) return send(response, 503, { error: "First-person images are turned off on this world (see world-service/README.md)" });
+          // The pose between ticks: the renderer waits until its view has caught up with `tick`.
+          const request = { ...world.camera(session), tick: world.tick, ...size };
+          let png;
+          try {
+            png = await options.renderImage(request);
+          } catch (error) {
+            return send(response, 503, { error: `The image renderer is unavailable: ${String(error?.message ?? error)}` }, { "retry-after": "5" });
+          }
+          response.writeHead(200, { "content-type": "image/png", "cache-control": "no-store", "content-length": png.length });
+          response.end(png);
+          return undefined;
+        }
         case "GET /snapshot":
           if (!options.operatorToken || request.headers["x-operator-token"] !== options.operatorToken) return send(response, 403, { error: "Operator token required" });
           // Handlers run between ticks, so this is a whole-tick state.
           return send(response, 200, world.snapshot());
         case "GET /spectate": {
           if (spectators.size >= MAX_SPECTATORS) return send(response, 429, { error: "Spectator capacity reached; retry later" }, { "retry-after": "5" });
-          response.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
+          response.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no", ...READ_ONLY_CORS });
           response.write(`event: hello\ndata: ${JSON.stringify(world.sceneHello())}\n\n`);
           response.write(`event: frame\ndata: ${JSON.stringify(world.poseFrame())}\n\n`);
           spectators.add(response);
