@@ -115,6 +115,7 @@ Preserve `.graphysx-store/`: it is user content, not disposable build output.
 | DiskX (AgentX Data disks as a 3D city) | `src/diskx-app.ts`, `src/diskx-data.ts`; see [docs/DISKX.md](docs/DISKX.md) |
 | The connected house (AgentX ecosystem in 3D, toured by Nestor) | `src/ecosystem-app.ts`, `src/ecosystem-data.ts`, `src/ecosystem-tour.ts`; see [docs/ECOSYSTEM_VIEW.md](docs/ECOSYSTEM_VIEW.md) |
 | NetX (AgentX Data LAN inventory as a neighbourhood around the router, read-only) | `src/netx-app.ts`, `src/netx-data.ts`, `src/netx-scene.ts`; see [docs/NETX.md](docs/NETX.md) |
+| The Clawblox island (Clawblox stays the authority; GraphysX renders its live or replay spectator stream) | `src/island-app.ts`, `src/island-feed.ts`; see [docs/ISLAND_VIEW.md](docs/ISLAND_VIEW.md) |
 | Persistence, media and collaboration | `server/scene-store.mjs` and its imported `server/` modules |
 | Verification coverage | `scripts/verify-manifest.mjs`; `scripts/verify.mjs` executes it |
 | Cyber Race 1992 (standalone page at /cyber-race.html, listed on the Games shelf) | `cyber-race.html`, `src/cyber-race/`; see [docs/CYBER_RACE.md](docs/CYBER_RACE.md) |
