@@ -49,7 +49,7 @@ const ROCK_MASS = ROCK_SIZE[0] * ROCK_SIZE[1] * ROCK_SIZE[2] * 8;
 const RING_SIZE: Vec3 = [3.6, 0.56, 3.6];
 const RING_MASS = RING_SIZE[0] * RING_SIZE[1] * RING_SIZE[2] * 0.45;
 
-type StaticBox = { name: string; position: Vec3; size: Vec3; color: Vec3; role?: string; material?: string };
+type StaticBox = { name: string; position: Vec3; size: Vec3; color: Vec3; role?: string; material?: string; transparency?: number };
 
 const STATIC_BOXES: StaticBox[] = [
   { name: "GroundCenter", position: [-2, -5, 0], size: [96, 10, 100], color: GROUND, role: "Ground", material: "SmoothPlastic" },
@@ -57,10 +57,10 @@ const STATIC_BOXES: StaticBox[] = [
   { name: "GroundS", position: [-12, -5, -55], size: [36, 10, 14], color: GROUND, role: "Ground", material: "SmoothPlastic" },
   { name: "GroundW", position: [-56, -5, -3], size: [14, 10, 40], color: GROUND, role: "Ground", material: "SmoothPlastic" },
   { name: "GroundE", position: [48, -5, 5], size: [10, 10, 58], color: GROUND, role: "Ground", material: "SmoothPlastic" },
-  { name: "BoundaryNorth", position: [0, 40, 83], size: [160, 80, 6], color: WALL },
-  { name: "BoundarySouth", position: [0, 40, -83], size: [160, 80, 6], color: WALL },
-  { name: "BoundaryEast", position: [83, 40, 0], size: [6, 80, 160], color: WALL },
-  { name: "BoundaryWest", position: [-83, 40, 0], size: [6, 80, 160], color: WALL },
+  { name: "BoundaryNorth", position: [0, 40, 83], size: [160, 80, 6], color: WALL, transparency: 1 },
+  { name: "BoundarySouth", position: [0, 40, -83], size: [160, 80, 6], color: WALL, transparency: 1 },
+  { name: "BoundaryEast", position: [83, 40, 0], size: [6, 80, 160], color: WALL, transparency: 1 },
+  { name: "BoundaryWest", position: [-83, 40, 0], size: [6, 80, 160], color: WALL, transparency: 1 },
   { name: "LowStep", position: [8, 1, 18], size: [8, 2, 10], color: MESA, role: "Mesa" },
   { name: "LargeMesa", position: [20, 2, 20], size: [20, 4, 16], color: MESA, role: "Mesa" },
   { name: "SmallPlateau", position: [-30, 1, 28], size: [10, 2, 8], color: MESA, role: "Mesa" },
@@ -129,8 +129,9 @@ export function buildMesaIsland(): MesaIsland {
   );
   for (const box of STATIC_BOXES) {
     add(
-      { id: box.name.toLowerCase(), label: box.name, type: "box", transform: { position: box.position, scale: box.size }, material: { color: hex(box.color) }, physics: { mode: "static", ...TERRAIN_SURFACE } },
-      { name: box.name, shape: "Block", material: box.material ?? "Plastic", color: box.color, size: box.size, mass: 0, static: true, ...(box.role ? { attributes: { RenderRole: box.role } } : {}) },
+      // Clawblox's boundary walls are fully transparent (Transparency = 1): they block, nobody sees them.
+      { id: box.name.toLowerCase(), label: box.name, type: "box", transform: { position: box.position, scale: box.size }, material: { color: hex(box.color) }, physics: { mode: "static", ...TERRAIN_SURFACE }, ...(box.transparency !== undefined && box.transparency >= 1 ? { visible: false } : {}) },
+      { name: box.name, shape: "Block", material: box.material ?? "Plastic", color: box.color, size: box.size, mass: 0, static: true, ...(box.transparency !== undefined ? { transparency: box.transparency } : {}), ...(box.role ? { attributes: { RenderRole: box.role } } : {}) },
     );
   }
   BLOCK_SPAWNS.forEach((position, index) => {

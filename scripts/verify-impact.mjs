@@ -20,9 +20,10 @@ const RULES = [
   { match: /^(?:(?!(?:src|public)\/).+\.md|test\/.*\.test\.mjs|\.gitignore|\.gitattributes)$/, checks: [], label: "documentation or Node tests", deploy: false },
   { match: /^scripts\/(?:verify(?:-[\w-]+)?|plan-verification|counts)\.(?:mjs|json)$/, checks: [], label: "verification tooling", deploy: false },
   // The headless world service is a Node program built by its own Vite config; it is not part
-  // of the published site and its contract is test/world-service.test.mjs. Changes to the
-  // shared runtime it bundles still select their own (full) rules.
-  { match: /^(?:world-service\/|vite\.world-service\.config\.ts$)/, checks: [], label: "headless world service (Node tests, not published)", deploy: false },
+  // of the published site and its contract is test/world-service.test.mjs. The island viewer
+  // reads its stream, replay and images, so the island-world journey checks it locally.
+  // Changes to the shared runtime it bundles still select their own (full) rules.
+  { match: /^(?:world-service\/|vite\.world-service\.config\.ts$)/, checks: ["island-world"], label: "headless world service (Node tests and the island-world journey, not published)", deploy: false },
   { match: /^\.github\/workflows\/(?:ci|staging)\.yml$/, checks: [], label: "CI configuration", deploy: false },
   // Cyber Race is a standalone page with its own renderer, outside the shared runtime but
   // published beside the product at /cyber-race.html. Its files select its own smoke and

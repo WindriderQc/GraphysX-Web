@@ -13,6 +13,7 @@ import { after, before, describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { build } from "vite";
 import { startWorldServer } from "../world-service/server.mjs";
+import { helloAt, parseRecording } from "../world-service/recording.mjs";
 
 const root = new URL("..", import.meta.url);
 const fixture = JSON.parse(readFileSync(new URL("fixtures/mesa-island-observe.json", import.meta.url), "utf8"));
@@ -193,6 +194,13 @@ describe("Mesa island rules", () => {
     assert.deepEqual(names(observation), names(fixture));
     for (const key of Object.keys(entity(fixture, "Block_1"))) assert.ok(key in entity(observation, "Block_1"), `entity field ${key}`);
     assert.equal(observation.game_status, fixture.game_status);
+    // Clawblox's boundary walls are fully transparent: agents see that, viewers draw nothing.
+    for (const wall of fixture.world.entities.filter((item) => item.name.startsWith("Boundary"))) {
+      assert.equal(entity(observation, wall.name).transparency, wall.transparency, `${wall.name} transparency`);
+    }
+    const walls = world.runtime.exportDefinition().entities.filter((item) => item.label?.startsWith("Boundary"));
+    assert.equal(walls.length, 4);
+    assert.ok(walls.every((item) => item.visible === false && item.physics?.mode === "static"), "invisible, still solid");
   });
 
   it("settles the pile and stands the character where Clawblox does", () => {
@@ -394,5 +402,106 @@ describe("HTTP protocol", () => {
     } finally {
       await resumed.close();
     }
+  });
+});
+
+describe("viewers and first-person images (phase 3)", () => {
+  const call = async (base, method, path, headers = {}) => {
+    const response = await fetch(base + path, { method, headers });
+    const type = response.headers.get("content-type") ?? "";
+    return {
+      status: response.status,
+      headers: response.headers,
+      body: type.includes("json") ? await response.json() : Buffer.from(await response.arrayBuffer()),
+    };
+  };
+
+  it("serves GET /observe/image through its renderer, with Clawblox's sizes and camera", async () => {
+    const requests = [];
+    let fail = false;
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const renderImage = async (request) => {
+      requests.push(request);
+      if (fail) throw new Error("browser gone");
+      return png;
+    };
+    const running = await startWorldServer({ module: m, apiMarkdown, port: 0, realtime: false, renderImage });
+    const off = await startWorldServer({ module: m, apiMarkdown, port: 0, realtime: false });
+    try {
+      assert.equal((await call(running.url, "GET", "/observe/image")).status, 401, "X-Session required");
+      const { session } = running.world.join("Viewer");
+      running.world.advance(1);
+      const auth = { "x-session": session };
+      const image = await call(running.url, "GET", "/observe/image", auth);
+      assert.equal(image.status, 200);
+      assert.equal(image.headers.get("content-type"), "image/png");
+      assert.equal(image.headers.get("cache-control"), "no-store");
+      assert.deepEqual(image.body, png);
+      const [request] = requests;
+      const player = running.world.observe(session).player.position;
+      assert.deepEqual([request.width, request.height, request.fovDeg], [1088, 640, 105]);
+      assert.ok(dist(request.position, [player[0], player[1] + 2, player[2]]) < 0.01, "eye = player + 2");
+      assert.deepEqual(request.forward, [0, 0, -1]);
+      assert.match(request.entityId, /^agent-\d+$/, "the avatar to hide");
+      assert.equal(request.tick, running.world.tick);
+
+      assert.equal((await call(running.url, "GET", "/observe/image?width=320&height=180", auth)).status, 200);
+      assert.deepEqual([requests[1].width, requests[1].height], [320, 180]);
+      assert.deepEqual([(await call(running.url, "GET", "/observe/image?width=99999&height=1", auth)).status, requests[2].width, requests[2].height], [200, 1920, 64]);
+      const bad = await call(running.url, "GET", "/observe/image?width=wide", auth);
+      assert.equal(bad.status, 400);
+      assert.match(bad.body.error, /whole number/);
+      assert.equal(requests.length, 3, "a refused size never reaches the renderer");
+
+      fail = true;
+      const down = await call(running.url, "GET", "/observe/image", auth);
+      assert.equal(down.status, 503);
+      assert.equal(down.headers.get("retry-after"), "5");
+      assert.match(down.body.error, /browser gone/);
+
+      const { session: other } = off.world.join("Blind");
+      const disabled = await call(off.url, "GET", "/observe/image", { "x-session": other });
+      assert.equal(disabled.status, 503);
+      assert.match(disabled.body.error, /turned off/);
+    } finally {
+      await running.close();
+      await off.close();
+    }
+  });
+
+  it("streams actions to spectators, answers any origin on read-only routes, and records a replayable file", async () => {
+    const recordDir = mkdtempSync(join(tmpdir(), "graphysx-world-record-"));
+    const running = await startWorldServer({ module: m, apiMarkdown, port: 0, spectateHz: 10, recordDir });
+    try {
+      const health = await call(running.url, "GET", "/healthz", { origin: "http://viewer.test" });
+      assert.equal(health.headers.get("access-control-allow-origin"), "*");
+      assert.equal(typeof health.body.tick, "number");
+      const joined = await call(running.url, "POST", "/join?name=Streamer");
+      assert.equal(joined.headers.get("access-control-allow-origin"), null, "agent routes stay same-origin");
+
+      const controller = new AbortController();
+      const stream = await fetch(`${running.url}/spectate`, { signal: controller.signal, headers: { origin: "http://viewer.test" } });
+      assert.equal(stream.headers.get("access-control-allow-origin"), "*");
+      const reader = stream.body.getReader();
+      let text = "";
+      const auth = { "content-type": "application/json", "x-session": joined.body.session };
+      const acted = fetch(`${running.url}/input`, { method: "POST", headers: auth, body: JSON.stringify({ type: "Pickup", data: { position: [40, 1, 40] } }) });
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline && !text.includes("event: action")) text += new TextDecoder().decode((await reader.read()).value);
+      controller.abort();
+      await acted;
+      const block = text.split("\n\n").find((item) => item.startsWith("event: action"));
+      assert.ok(block, "an action event reaches spectators");
+      const action = JSON.parse(block.split("\n").find((item) => item.startsWith("data: ")).slice(6));
+      assert.deepEqual([action.agent, action.input.type, action.result], ["Streamer", "Pickup", "PickupFailed:OutOfRange"]);
+    } finally {
+      await running.close();
+    }
+    const recording = parseRecording(readFileSync(join(recordDir, "graphysx-recording.ndjson"), "utf8"));
+    rmSync(recordDir, { recursive: true, force: true });
+    assert.equal(recording.actions.at(-1).result, "PickupFailed:OutOfRange");
+    const hello = helloAt(recording, recording.lastTick);
+    assert.ok(hello.document.entities.some((item) => item.type === "agent" && item.label === "Streamer"), "the join is replayed into the document");
+    assert.equal(recording.lastTick, Math.max(recording.actions.at(-1).tick, recording.frames.at(-1)?.tick ?? 0, recording.changes.at(-1).tick));
   });
 });
