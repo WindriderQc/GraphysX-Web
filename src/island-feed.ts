@@ -539,6 +539,13 @@ export function parseIslandSource(value: string | null): { http: string; ws: str
   return { http: base, ws: base.replace(/^http/, "ws") };
 }
 
+/** "d'Eko", "de Nestor": the French possessive for the title, or null without a name. */
+export function agentPossessive(name: string | null | undefined): string | null {
+  const clean = (name ?? "").trim().slice(0, 40);
+  if (!clean) return null;
+  return /^[aeiouyhàâäéèêëîïôöûüù]/i.test(clean) ? `d'${clean}` : `de ${clean}`;
+}
+
 /** What the agent is doing, in French, from its player record. */
 export function describeAgent(player: ClawPlayer | undefined): { name: string; state: string; action: string | null } {
   if (!player) return { name: "Aucun agent", state: "absent", action: null };

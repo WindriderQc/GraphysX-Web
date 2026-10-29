@@ -41,6 +41,7 @@ try {
   assert.deepEqual(first.kinds, { water: 1, ground: 5, mesa: 11, pickup: 12, ring: 1, rock: 1, agent: 1 }, "every visible Clawblox part is drawn once; the four invisible walls are not");
   assert.equal(first.reconcileError, null);
   assert.equal(first.agent.name, "Eko");
+  assert.equal(first.agent.title, "d'Eko");
   assert.equal(first.notice, "");
   const scene = await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
@@ -131,8 +132,9 @@ try {
   await big.page.close();
 
   // ---- embedded (Benchmark Île tab) ---------------------------------------------------------
-  const embed = await open({ width: 960, height: 540 }, "&embed=1");
+  const embed = await open({ width: 960, height: 540 }, "&embed=1&agent=Nestor");
   await embed.page.waitForFunction(`(${app})()?.parts === 32`);
+  assert.equal(await embed.page.locator("[data-agent-title]").textContent(), "d'Eko", "the run's agent name gives way to the live one");
   assert.equal((await appState(embed.page)).embedded, true);
   assert.equal(await embed.page.getByRole("button", { name: "Quitter" }).isHidden(), true, "an embedded view has no exit");
   await embed.page.close();

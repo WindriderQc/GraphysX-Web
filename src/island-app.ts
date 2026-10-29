@@ -18,7 +18,7 @@
 import { DirectionalLight, Quaternion, Vector3 } from "three";
 import "./island.css";
 import {
-  applyClawMessage, composeIsland, describeAgent, formatClock, islandBounds, islandMessages, islandMessagesAt,
+  agentPossessive, applyClawMessage, composeIsland, describeAgent, formatClock, islandBounds, islandMessages, islandMessagesAt,
   islandStructureKey, IslandPoseBuffer, ISLAND_SCOPE, parseIslandSource,
   type ClawObservation, type IslandMessage, type IslandPlacement,
 } from "./island-feed";
@@ -76,6 +76,8 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   const sourceParam = params.get("source");
   const source = sourceParam && sourceParam !== "fixture" ? parseIslandSource(sourceParam) : null;
   const spectatorToken = fragment.get("spectator_token") ?? params.get("spectator_token");
+  // The run's agent name, so the title and card hold steady before the agent first joins.
+  let agentName: string | null = (params.get("agent") ?? "").trim().slice(0, 40) || null;
   const reduced = motionIsReduced();
   let disposed = false;
   let mode: Mode = source ? "unknown" : "fixture";
@@ -93,7 +95,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     <header class="gx-island-header">
       <div>
         <span class="gx-island-eyebrow">AgentX · Île · Clawblox</span>
-        <h1>L'île <em data-agent-title>d'Eko</em></h1>
+        <h1>L'île <em data-agent-title></em></h1>
         <p class="gx-island-sub"><span class="gx-island-dot" data-dot></span><span data-status>Connexion…</span></p>
       </div>
       <div class="gx-island-actions">
@@ -115,6 +117,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       <button type="button" data-action="toggle" aria-label="Pause">⏸</button>
       <input type="range" min="0" max="1" step="1" value="0" data-seek aria-label="Position dans la reprise">
       <span class="gx-island-clock" data-clock>0:00 / 0:00</span>
+      <span class="gx-island-shared" title="Ces contrôles appartiennent au serveur de reprise : ils changent la lecture pour tous ceux qui la regardent.">lecture partagée</span>
       <label class="gx-island-speed">×<select data-speed aria-label="Vitesse">${SPEEDS.map((s) => `<option value="${s}">${s}</option>`).join("")}</select></label>
     </section>`;
   const element = <T extends HTMLElement>(selector: string): T => surface.querySelector<T>(selector)!;
@@ -239,11 +242,14 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
 
   const updateAgentCard = (): void => {
     const player = state?.players[0];
+    if (player?.name) agentName = player.name;
     const agent = describeAgent(player);
-    element("[data-agent-name]").textContent = agent.name;
-    element("[data-agent-title]").textContent = player?.name ? `d'${player.name}` : "Clawblox";
-    element("[data-agent-mark]").textContent = player ? (agent.name[0] ?? "?").toUpperCase() : "·";
-    element("[data-agent-state]").textContent = agent.state;
+    const shownName = player ? agent.name : agentName ?? agent.name;
+    element("[data-agent-name]").textContent = shownName;
+    element("[data-agent-title]").textContent = agentPossessive(agentName) ?? "";
+    element("[data-agent-mark]").textContent = player || agentName ? (shownName[0] ?? "?").toUpperCase() : "·";
+    // Before the agent joins (a replay's opening, a world still starting) it is waiting, not gone.
+    element("[data-agent-state]").textContent = player ? agent.state : agentName ? "pas encore arrivé" : agent.state;
     element("[data-agent-action]").textContent = agent.action ? `Dernière action : ${agent.action}` : "";
   };
 
@@ -321,6 +327,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   let infoTimer: number | null = null;
   let fixtureTimer: number | null = null;
 
+  let autoStarted = false;
   const pollInfo = async (): Promise<void> => {
     if (!source || disposed) return;
     try {
@@ -331,6 +338,13 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
         mode = "replay";
         replay = info;
         if (!wasReplay) void loadAgentLog();
+        // An embedded view of a freshly opened replay session (paused at its first tick) starts
+        // itself, skipping the idle stretches before the agent acts. Once per page, and never
+        // when the shared replay is already somewhere else.
+        if (!wasReplay && embedded && !autoStarted && info.paused && info.current_tick <= (info.first_tick ?? 0) + 1) {
+          autoStarted = true;
+          void post("/replay/skip-idle?enabled=true").then(() => post("/replay/play"));
+        }
       } else {
         mode = "live";
         replay = null;
@@ -480,7 +494,8 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       moving: placements.filter((p) => p.moving).length,
       kinds: placements.reduce<Record<string, number>>((counts, p) => { counts[p.kind] = (counts[p.kind] ?? 0) + 1; return counts; }, {}),
       reconcileError,
-      agent: { ...describeAgent(state?.players[0]), position: agentAt ? [agentAt.x, agentAt.y, agentAt.z].map((n) => Math.round(n * 100) / 100) : null },
+      autoStarted,
+      agent: { ...describeAgent(state?.players[0]), title: agentPossessive(agentName), position: agentAt ? [agentAt.x, agentAt.y, agentAt.z].map((n) => Math.round(n * 100) / 100) : null },
       follow,
       camera: {
         azimuth: round2(Math.atan2(eye.x - pivot.x, eye.z - pivot.z)),

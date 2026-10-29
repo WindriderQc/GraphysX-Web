@@ -105,4 +105,7 @@ test("sources, clock and agent wording", () => {
   assert.deepEqual(feed.describeAgent({ id: "p", name: "Eko", humanoid_state: "Running", attributes: { LastActionResult: "PickupSuccess" } }),
     { name: "Eko", state: "se déplace", action: "PickupSuccess" });
   assert.equal(feed.describeAgent(undefined).state, "absent");
+  assert.equal(feed.agentPossessive("Eko"), "d'Eko");
+  assert.equal(feed.agentPossessive("Nestor"), "de Nestor");
+  assert.equal(feed.agentPossessive("  "), null);
 });
