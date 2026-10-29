@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import { frameAt, helloAt, nextActionAfter, parseRecording } from "../world-service/recording.mjs";
 import { startReplayServer } from "../world-service/replay.mjs";
 import { IMAGE_DEFAULT, parseImageSize, pngSize, verticalFovDegrees } from "../world-service/image.mjs";
+import { createImageRenderer } from "../world-service/image-sidecar.mjs";
 
 const FORMAT = "graphysx-world-stream/v1";
 const doc = (entities) => ({ schema: "graphysx.agent-world/v2", id: "mesa-island", label: "Mesa island", environment: {}, entities });
@@ -178,5 +179,67 @@ describe("first-person image contract", () => {
     header.writeUInt32BE(640, 20);
     assert.deepEqual(pngSize(header), { width: 1088, height: 640 });
     assert.equal(pngSize(Buffer.from("not a png at all, really")), null);
+  });
+});
+
+describe("image sidecar timeouts", () => {
+  /** A stand-in for Playwright: the page becomes ready after `readyMs`, a capture takes `captureMs`. */
+  function fakeBrowser({ readyMs, captureMs }) {
+    const calls = { pages: 0, closed: 0, goto: [] };
+    const page = {
+      closed: false,
+      isClosed() { return this.closed; },
+      async close() { this.closed = true; calls.closed += 1; },
+      async goto(url) { calls.goto.push(url); },
+      async waitForFunction(_fn, _arg, { timeout }) {
+        if (readyMs > timeout) throw new Error("page never became ready");
+        await new Promise((resolve) => setTimeout(resolve, readyMs));
+      },
+      async evaluate(_fn, value) {
+        if (value && value.position) {
+          await new Promise((resolve) => setTimeout(resolve, captureMs));
+          return { tick: value.tick, waitedMs: captureMs };
+        }
+        return undefined;
+      },
+      async screenshot() { return Buffer.from([0x89, 0x50, 0x4e, 0x47]); },
+      async setViewportSize() {},
+    };
+    const browser = {
+      isConnected: () => true,
+      on() {},
+      async newPage() { calls.pages += 1; page.closed = false; return page; },
+      async close() {},
+    };
+    return { browser, calls };
+  }
+  const request = { source: "http://world:18120", position: [0, 4.5, 0], forward: [0, 0, -1], fovDeg: 105, entityId: "agent-8", tick: 60, width: 1088, height: 640 };
+
+  it("a slow camera page start does not count against the capture (UGFrank: 12.9 s start, 8.6 s capture)", async () => {
+    const { browser, calls } = fakeBrowser({ readyMs: 120, captureMs: 30 });
+    const renderer = createImageRenderer({ viewer: "http://127.0.0.1:1/", launch: async () => browser, pageReadyMs: 1000, captureTimeoutMs: 60 });
+    try {
+      const first = await renderer.render(request);
+      assert.equal(first.png[0], 0x89);
+      assert.equal(first.tick, 60);
+      await renderer.render(request);
+      assert.equal(calls.pages, 1, "the ready page is reused, not rebuilt");
+      assert.match(calls.goto[0], /\?app=island&embed=1&capture=1&source=http%3A%2F%2Fworld%3A18120$/);
+      assert.equal(renderer.stats().failures, 0);
+    } finally {
+      await renderer.close();
+    }
+  });
+
+  it("a capture slower than its bound fails, and the page is rebuilt next time", async () => {
+    const { browser, calls } = fakeBrowser({ readyMs: 10, captureMs: 200 });
+    const renderer = createImageRenderer({ viewer: "http://127.0.0.1:1/", launch: async () => browser, pageReadyMs: 1000, captureTimeoutMs: 50 });
+    try {
+      await assert.rejects(renderer.render(request), /capture timed out after 50 ms/);
+      assert.equal(calls.closed, 1);
+      assert.equal(renderer.stats().failures, 1);
+    } finally {
+      await renderer.close();
+    }
   });
 });
