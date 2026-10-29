@@ -3,6 +3,9 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  // The bundle loads model payloads from disk at run time (setAgentWorldAssetFetch); copying the
+  // site's public/ (270 MB) next to it would only bloat world-service/dist and the image.
+  publicDir: false,
   build: {
     ssr: true,
     outDir: "world-service/dist",

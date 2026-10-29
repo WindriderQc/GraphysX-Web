@@ -1,0 +1,35 @@
+# Local test of the world service containers (the household deployment lives in agentx-home).
+#
+#   docker compose -f world-service/compose.yaml up --build
+#
+# World on 127.0.0.1:${WORLD_HOST_PORT:-18120}; the image sidecar is reachable only from the world.
+
+name: graphysx-world-local
+
+services:
+  world:
+    build: { context: .., dockerfile: world-service/Dockerfile }
+    image: graphysx-world:local
+    environment:
+      WORLD_IMAGES: "1"
+      WORLD_IMAGE_SIDECAR: http://images:18142
+      # The camera pages run in the sidecar's Chromium and follow this world's /spectate.
+      WORLD_IMAGE_SOURCE: http://world:18120
+      WORLD_OPERATOR_TOKEN: ${WORLD_OPERATOR_TOKEN:-}
+    ports: ["127.0.0.1:${WORLD_HOST_PORT:-18120}:18120"]
+    volumes: ["world-data:/data"]
+    depends_on: [images]
+    restart: unless-stopped
+    cpus: 1
+    mem_limit: 512m
+
+  images:
+    build: { context: .., dockerfile: world-service/Dockerfile.images }
+    image: graphysx-world-images:local
+    restart: unless-stopped
+    cpus: 4
+    mem_limit: 2g
+    shm_size: 512m
+
+volumes:
+  world-data:

@@ -77,6 +77,36 @@ at 320x180; 0.06 CPU-second per idle second; about 1 GB resident for the browser
 
 Agent-visible payloads only carry simulation time (chat timestamps count from 2000-01-01).
 
+## Containers
+
+Two images, built from the repository root (each Dockerfile has its own `*.dockerignore`):
+
+| Image | Dockerfile | Contents | Size (2026-10-29) |
+|---|---|---|---|
+| `graphysx-world` | `world-service/Dockerfile` | Node 22 slim, `dist/world.js`, the server, replay and recording modules; no `node_modules`, no browser | 332 MB |
+| `graphysx-world-images` | `world-service/Dockerfile.images` | the image sidecar: the built site, Playwright at the repository's version and its Chromium headless shell only | 1.55 GB |
+
+```bash
+docker build -f world-service/Dockerfile -t graphysx-world:<rev> .
+docker build -f world-service/Dockerfile.images -t graphysx-world-images:<rev> .
+WORLD_HOST_PORT=18150 docker compose -f world-service/compose.yaml up --build   # local test
+```
+
+- The world container records each start to `/data/recordings/<UTC start>/` (a fresh island
+  never appends to an older timeline); `WORLD_RECORD_DIR` overrides it. It runs as uid 1000.
+- Images are off unless `WORLD_IMAGES=1` with `WORLD_IMAGE_SIDECAR` (the sidecar's address)
+  and `WORLD_IMAGE_SOURCE` (the world as the sidecar sees it), as `compose.yaml` sets them.
+- Model payloads are not in the image (`publicDir: false`): Mesa needs none. A world with models
+  would mount `public/` next to `world-service/`.
+- Replay: `docker run … graphysx-world:<rev> node world-service/replay.mjs /recording --host 0.0.0.0 --port 18121`
+  with a recording directory mounted read-only.
+- The household deployment (UGFrank, behind Caddy) lives in agentx-home
+  `instance/graphysx-world/`.
+
+Measured on devX with `compose.yaml` (world `cpus: 1`, sidecar `cpus: 4`): the Clawblox kit's
+model-free smoke (`integrations/island/smoke_island.py` in AgentX) passes; first image 11.8 s,
+then 3.3 s per 1088x640 image and 0.5 s at 320x180; memory 101 MB (world) and 470 MB (sidecar).
+
 ## Physics seams it relies on
 
 The rules touch physics only through public seams, also usable by other hosts:

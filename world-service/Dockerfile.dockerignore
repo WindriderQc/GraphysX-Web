@@ -1,0 +1,15 @@
+# Build context of world-service/Dockerfile (repository root): sources only.
+.git
+node_modules
+dist
+output
+world-service/dist
+.graphysx-store
+.playwright-cli
+patches
+_to_delete
+assets-src
+docs
+*.log
+.env
+.env.*

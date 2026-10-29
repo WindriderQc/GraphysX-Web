@@ -385,7 +385,8 @@ numéro de pas dans les deux cas.
 | 3 (fait) | spectateur derrière le contrat de l'onglet « Île » (AgentX#1179 : `<viewer>/?app=island&embed=1&source=<base>&agent=<name>`), alimenté par `/spectate` (pause physique, poses, interpolation, captures d'écran vérifiées) ; reprise d'un enregistrement GraphysX dans la même page ; vue image (`/observe/image`) rendue par la page de l'île dans un Chromium sans écran, en processus séparé | 3 à 4 j + ≈ 2 j |
 | 4 | conteneur, Caddy, jetons, volume sur UGFrank ; essai sans modèle ; puis un essai Eko mis dans la file de Core | 1 à 2 j, après accord |
 
-Il reste la phase 4, qui attend la décision d'hébergement.
+Il reste la phase 4. Le propriétaire a choisi UGFrank le 2026-10-29 ; images et plan
+d'installation préparés (section suivante), rien n'est installé.
 
 ### L'option économique : Clawblox reste le monde
 
@@ -408,6 +409,25 @@ GraphysX soit le monde, le surcoût réel est d'environ une semaine, et le risqu
 principal (« le runtime ne tournera pas sans navigateur ») est levé. Ma
 recommandation : faire les phases 1 et 2 sur devX, sans modèle, puis décider de
 l'hébergement avec un service qui marche.
+
+## Phase 4 : préparée (2026-10-29)
+
+- **Images** : `world-service/Dockerfile` (monde seul, Node 22, 332 Mo, sans navigateur) et
+  `world-service/Dockerfile.images` (le « sidecar » des images : site compilé et Chromium sans
+  écran, 1,55 Go). `world-service/compose.yaml` les lance ensemble pour un essai local.
+- **Vérifié sur devX dans les conteneurs** : le test sans modèle du kit Clawblox (saisir, poser :
+  OK) ; images 1088×640 en 3,3 s avec 4 cœurs au plus (11,8 s pour la première), 320×180 en
+  0,5 s ; mémoire 101 Mo (monde) et 470 Mo (images) ; un dossier d'enregistrement par démarrage ;
+  reprise d'un enregistrement dans un conteneur ; la vue en direct et en reprise.
+- **Installation sur UGFrank** : plan, fichiers et retour arrière dans agentx-home
+  `instance/graphysx-world/` (deux ports HTTPS réservés au réseau maison, 18794 pour le monde et
+  18795 pour une reprise ; les routes d'agent réservées aux hôtes de l'île). Elle attend l'accord
+  du propriétaire, et un redémarrage de Caddy (quelques secondes de coupure).
+- **Pas encore possible** : faire jouer Eko sur cette île. Le kit démarre toujours son monde sur
+  l'hôte de l'île ; il lui faut un mode « se joindre à un monde en marche » (correctif Clawblox
+  d'AgentX et runner), plus une ouverture du pare-feu d'UGStation vers UGFrank:18794. C'est la
+  question 4 ci-dessous, à traiter dans AgentX avec accord.
+- `vite.world-service.config.ts` ne recopie plus `public/` (270 Mo) à côté du paquet.
 
 ## Questions ouvertes pour le propriétaire
 
