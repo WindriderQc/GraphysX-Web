@@ -80,10 +80,15 @@ export async function startReplayServer(options) {
     const now = Math.floor(clock.tick);
     if (now <= emitted) return;
     let text = "";
-    for (let i = lastAtOrBefore(recording.changes, emitted) + 1; i < recording.changes.length && recording.changes[i].tick <= now; i += 1) text += event("entities", recording.changes[i]);
+    const latestHello = recording.hellos[lastAtOrBefore(recording.hellos, now)];
+    const resumed = latestHello && latestHello.tick > emitted;
+    // A recorded resume is a new whole scene, including changes which need
+    // not appear as deltas. Playing across it must reset existing viewers too.
+    if (resumed) text = opening(now);
+    else for (let i = lastAtOrBefore(recording.changes, emitted) + 1; i < recording.changes.length && recording.changes[i].tick <= now; i += 1) text += event("entities", recording.changes[i]);
     for (let i = lastAtOrBefore(recording.actions, emitted) + 1; i < recording.actions.length && recording.actions[i].tick <= now; i += 1) text += event("action", recording.actions[i]);
     const frame = frameAt(recording, now);
-    if (frame && frame.tick > emitted) text += event("frame", frame);
+    if (!resumed && frame && frame.tick > emitted) text += event("frame", frame);
     emitted = now;
     if (text && spectators.size) broadcast(text);
   };

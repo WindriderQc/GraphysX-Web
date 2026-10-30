@@ -107,6 +107,29 @@ async function readEvents(url, done, ms = 3000) {
 }
 
 describe("replay server", () => {
+  it("resets connected viewers when forward playback crosses a recorded resume", async () => {
+    const resumed = [
+      { kind: "hello", format: FORMAT, tickHz: 60, tick: 600, document: doc([{ id: "resumed-tree", type: "box" }]), ids: { 51: "resumed-tree" } },
+      { kind: "frame", tick: 606, t: 10.1, poses: [[51, 2, 3, 4, 0, 0, 0, 1]] },
+    ].map(line).join("\n");
+    const recording = parseRecording(sampleRecording() + resumed);
+    assert.equal(frameAt(recording, 600), null, "a pose from before the new scene must not overwrite it");
+    const running = await startReplayServer({ recording, port: 0, realtime: false, play: true });
+    try {
+      let advanced = false;
+      const { events } = await readEvents(`${running.url}/spectate`, (items) => {
+        if (!advanced && items.some((item) => item.name === "hello")) {
+          advanced = true;
+          running.advance(20);
+        }
+        return items.filter((item) => item.name === "hello").length >= 2;
+      });
+      const hello = events.filter((item) => item.name === "hello").at(-1);
+      assert.equal(hello.data.tick, 606);
+      assert.deepEqual(hello.data.document.entities.map((entity) => entity.id), ["resumed-tree"]);
+    } finally { await running.close(); }
+  });
+
   it("answers like a replay source: health, info, actions, shared transport and SSE", async () => {
     const running = await startReplayServer({ recording: parseRecording(sampleRecording()), port: 0, realtime: false });
     const get = async (path, init) => {

@@ -49,11 +49,14 @@ async function readJson(request, InputError) {
     chunks.push(chunk);
   }
   if (size === 0) return {};
+  let value;
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
     throw new InputError("Body is not valid JSON");
   }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new InputError("Body must be a JSON object");
+  return value;
 }
 
 /**
@@ -76,6 +79,8 @@ export async function startWorldServer(options) {
   let switches = 0;
   const tickTimes = { count: 0, total: 0, max: 0 };
   let recordedActions = world.actions.length;
+  let closing = false;
+  let shutdown = null;
   const apiMarkdown = () => (typeof options.apiMarkdown === "function" ? options.apiMarkdown(world.worldId) : options.apiMarkdown);
 
   const record = (line) => { if (recordFile) appendFileSync(recordFile, `${JSON.stringify(line)}\n`); };
@@ -140,7 +145,9 @@ export async function startWorldServer(options) {
   }
 
   const server = createServer(async (request, response) => {
+    response.once("finish", () => { if (closing) server.closeIdleConnections(); });
     try {
+      if (closing) return send(response, 503, { error: "World is stopping" });
       const url = new URL(request.url ?? "/", "http://world.local");
       const session = request.headers["x-session"];
       const route = `${request.method} ${url.pathname}`;
@@ -177,6 +184,7 @@ export async function startWorldServer(options) {
         case "POST /input": {
           if (!needSession()) return undefined;
           const input = validateInput(await readJson(request, InputError));
+          if (closing) return send(response, 503, { error: "World is stopping" });
           if (options.realtime === false) world.apply(session, input);
           else await world.enqueue(session, input);
           return send(response, 200, world.observe(session));
@@ -236,12 +244,17 @@ export async function startWorldServer(options) {
     server,
     url: `http://${options.host ?? "127.0.0.1"}:${port}`,
     stats: () => ({ ticks: tickTimes.count, meanTickMs: tickTimes.count ? tickTimes.total / tickTimes.count : 0, maxTickMs: tickTimes.max, spectators: spectators.size }),
-    close: async () => {
+    close: () => shutdown ??= (async () => {
+      closing = true;
+      // Stop admitting sockets before draining the queued inputs. Otherwise
+      // disabling the tick loop strands their HTTP handlers forever.
+      const closed = new Promise((resolve) => server.close(() => resolve()));
       if (timer) clearInterval(timer);
       if (heartbeat) clearInterval(heartbeat);
+      if (options.realtime !== false) tickOnce();
       for (const response of spectators) response.end();
       spectators.clear();
-      await new Promise((resolve) => server.close(() => resolve()));
-    },
+      await closed;
+    })(),
   };
 }

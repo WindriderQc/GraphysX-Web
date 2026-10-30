@@ -43,7 +43,8 @@ export function parseRecording(text) {
       if (rest.format !== STREAM_FORMAT || !rest.document || !Array.isArray(rest.document.entities)) { skipped += 1; continue; }
       while (hellos.length && hellos[hellos.length - 1].tick >= rest.tick) hellos.pop();
       hellos.push(rest);
-      frames = trim(frames, rest.tick);
+      // At the resume tick, the new hello replaces the old branch's pose too.
+      frames = frames.filter((frame) => frame.tick < rest.tick);
       changes = trim(changes, rest.tick);
       actions = trim(actions, rest.tick);
     } else if (kind === "frame" && Array.isArray(rest.poses)) frames.push(rest);
@@ -100,7 +101,8 @@ export function helloAt(recording, tick) {
 
 export function frameAt(recording, tick) {
   const index = lastAtOrBefore(recording.frames, tick);
-  return index >= 0 ? recording.frames[index] : null;
+  const base = recording.hellos[Math.max(0, lastAtOrBefore(recording.hellos, tick))];
+  return index >= 0 && recording.frames[index].tick >= base.tick ? recording.frames[index] : null;
 }
 
 /** First action strictly after `tick`, or null (skip-idle jumps towards it). */
