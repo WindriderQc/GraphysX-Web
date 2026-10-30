@@ -440,15 +440,20 @@ export function isEventStream(contentType: string | null | undefined): boolean {
   return typeof contentType === "string" && /^text\/event-stream\b/i.test(contentType.trim());
 }
 
-/** Footprint of the visible land (static-physics entities) for the opening overview: centre and half-extent. */
+/**
+ * Footprint of the visible land for the opening overview: centre and half-extent. Land is a
+ * visible static body, or decor tagged `land` (a world that hides its physics slabs and draws
+ * grass slabs over them, like the service's islands).
+ */
 export function worldBounds(scene: WorldScene): { center: ClawVec3; radius: number } {
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, top = 0;
   const vec = (value: unknown, fallback: number): ClawVec3 =>
     Array.isArray(value) && value.length >= 3 && value.slice(0, 3).every(finite) ? [value[0], value[1], value[2]] as ClawVec3 : [fallback, fallback, fallback];
   for (const entity of scene.entities) {
     const physics = isRecord(entity.physics) ? entity.physics : null;
+    const land = Array.isArray(entity.tags) && entity.tags.includes("land");
     // Invisible blockers (Mesa's boundary walls) are not land.
-    if (!physics || physics.mode !== "static" || entity.visible === false) continue;
+    if (entity.visible === false || !(land || physics?.mode === "static")) continue;
     const transform = isRecord(entity.transform) ? entity.transform : {};
     const geometry = isRecord(entity.geometry) ? entity.geometry : {};
     const [x, y, z] = vec(transform.position, 0);
