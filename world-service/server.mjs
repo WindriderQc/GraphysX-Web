@@ -141,7 +141,8 @@ export async function startWorldServer(options) {
         case "GET /healthz": return send(response, 200, { ok: true, tick: world.tick }, READ_ONLY_CORS);
         case "GET /api.md": return send(response, 200, options.apiMarkdown);
         case "POST /join": {
-          const joined = world.join(url.searchParams.get("name") ?? "Agent");
+          // An X-Session the world already knows rejoins it (Clawblox's /join contract).
+          const joined = world.join(url.searchParams.get("name") ?? "Agent", typeof session === "string" ? session : null);
           return send(response, 200, joined);
         }
         case "GET /observe": return needSession() ? send(response, 200, world.observe(session)) : undefined;

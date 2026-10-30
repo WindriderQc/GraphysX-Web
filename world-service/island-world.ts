@@ -251,7 +251,13 @@ export class IslandWorld {
 
   // ---- sessions -------------------------------------------------------------------------
 
-  join(name: string): { session: string; agent_id: string } {
+  /**
+   * Clawblox semantics: a caller that presents a session it already holds gets that same
+   * session back (a runner reconnecting after a restart), never a second avatar.
+   */
+  join(name: string, existingSession?: string | null): { session: string; agent_id: string } {
+    const existing = existingSession ? this.characters.get(existingSession) : undefined;
+    if (existing) return { session: existing.session, agent_id: existing.id };
     const numericId = this.nextNumericId++;
     const position = this.spawnPoint(this.characters.size);
     const entityId = `agent-${numericId}`;
