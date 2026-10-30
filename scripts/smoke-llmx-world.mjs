@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { startStaticServer } from './static-server.mjs';
-import { launchSmokeBrowser, applySmokeTimeout } from './smoke-harness.mjs';
+import { launchSmokeBrowser, applySmokeTimeout, useLightRender } from './smoke-harness.mjs';
 
 const artifacts = process.env.SMOKE_ARTIFACTS || 'output/playwright/llmx-world';
 mkdirSync(artifacts, { recursive: true });
@@ -11,6 +11,8 @@ const base = process.env.SMOKE_BASE || server.url;
 const nativeGpu = process.env.LLMX_NATIVE_GPU === '1';
 const browser = await launchSmokeBrowser(nativeGpu ? { args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] } : {});
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+// Behaviour journey: proposals are checked through native scene state, not the desktop look.
+await useLightRender(page);
 applySmokeTimeout(page);
 const errors = [], turns = [], receipts = [];
 page.on('pageerror', error => errors.push(String(error)));

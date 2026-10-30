@@ -230,3 +230,17 @@ not the full inventory. The split EV3 program took 6m30s; the three debrief jour
 took 5m23s to 5m35s, within their unchanged ten-minute deadlines. The existing compact
 program-library and checkpoint-mission checks still reported headroom warnings at
 8m43s and 9m04s. Those passed; the warnings remain visible for future maintenance.
+
+## Opt-in light rendering for behaviour journeys
+
+`useLightRender(pageOrContext)` in `scripts/smoke-harness.mjs` installs an init
+script before navigation. The host reads the opt-in once: mobile render tier at
+any width, no MSAA and no post-processing stack. Scene state, controls and viewport
+size remain unchanged. The document carries `data-gx-light-render="true"` so a
+behaviour capture can be distinguished from evidence of the full desktop look.
+
+Only the LLMx core-embed, conversation, creation and world behaviour families opt
+in. Visual journeys and ordinary product sessions retain their normal renderer.
+Screenshots retain their requested resolution; this option does not downscale
+them. A shared runtime change still requires the complete local gate, including
+the visual journeys with their normal renderer, before integration.

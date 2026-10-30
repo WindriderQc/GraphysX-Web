@@ -148,11 +148,25 @@ const RENDER_PROFILES: Record<PlatformRenderProfileName, PlatformRenderProfile> 
 };
 
 /**
+ * Opt-in renderer for browser journeys that check behaviour rather than looks. Such a journey
+ * sets `window.__GRAPHYSX_LIGHT_RENDER__ = true` from an init script before the page loads
+ * (`useLightRender` in scripts/smoke-harness.mjs); the product never sets it. It keeps the
+ * mobile tier at any width, which lightens the face and the shadow map, and it drops MSAA and
+ * the post stack. Scene state, layout and the API are unchanged. The page is marked
+ * `data-gx-light-render` so a capture taken this way is never read as the desktop look.
+ */
+function lightRenderRequested(): boolean {
+  return typeof window !== "undefined"
+    && (window as Window & { __GRAPHYSX_LIGHT_RENDER__?: unknown }).__GRAPHYSX_LIGHT_RENDER__ === true;
+}
+
+/**
  * Choose from stable, inspectable tiers rather than continuously degrading authored scene data.
  * Width makes the result deterministic in browser QA; explicit low-memory/CPU signals also keep
  * a large but modest device out of the expensive desktop path.
  */
-function chooseRenderProfile(width: number): PlatformRenderProfile {
+function chooseRenderProfile(width: number, lightRender = false): PlatformRenderProfile {
+  if (lightRender) return RENDER_PROFILES.mobile;
   const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches === true;
   if (width <= 700 || coarsePointer) return RENDER_PROFILES.mobile;
   const navigatorWithMemory = navigator as Navigator & { deviceMemory?: number };
@@ -238,6 +252,8 @@ export class PlatformHost {
   private readonly frameListeners = new Set<PlatformFrameListener>();
   private readonly afterRenderListeners = new Set<PlatformFrameListener>();
   private renderProfile: PlatformRenderProfile;
+  /** See {@link lightRenderRequested}. Read once: a page never switches renderer mid-life. */
+  private readonly lightRender = lightRenderRequested();
   private shadowRefreshElapsed = Number.POSITIVE_INFINITY;
   private reflectionRefreshElapsed = Number.POSITIVE_INFINITY;
   private auxiliaryPassTurn: "shadow" | "reflection" = "shadow";
@@ -318,8 +334,9 @@ export class PlatformHost {
     // Tokens + brand font for every DOM module this host mounts. Idempotent, so the host
     // is the one place that guarantees it rather than each overlay hoping another did.
     installPlatformTheme();
-    this.renderProfile = chooseRenderProfile(this.container.clientWidth || window.innerWidth);
-    this.renderer = new WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    this.renderProfile = chooseRenderProfile(this.container.clientWidth || window.innerWidth, this.lightRender);
+    this.renderer = new WebGLRenderer({ antialias: !this.lightRender, powerPreference: "high-performance" });
+    if (this.lightRender) document.documentElement.dataset.gxLightRender = "true";
     // `setSize(..., false)` deliberately leaves CSS sizing alone. The clean-host route does
     // not load the legacy `.viewport canvas` stylesheet, so without an explicit client size a
     // DPR 1.5 mobile backing buffer also became a 585×1266 CSS box and was cropped by the
@@ -847,7 +864,7 @@ export class PlatformHost {
    * shader passes).
    */
   private applyPost(post: AgentWorldPost | null): void {
-    if (!post) {
+    if (!post || this.lightRender) {
       this.teardownComposer();
       return;
     }
@@ -1524,7 +1541,7 @@ export class PlatformHost {
   private resize(): void {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
-    this.applyRenderProfile(chooseRenderProfile(width));
+    this.applyRenderProfile(chooseRenderProfile(width, this.lightRender));
     this.renderer.setSize(width, height, false);
     this.composer?.setSize(width, height);
     this.camera.aspect = width / height || 1;
