@@ -129,6 +129,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
         <p class="gx-island-sub"><span class="gx-island-dot" data-dot></span><span data-status>Connexion…</span></p>
       </div>
       <div class="gx-island-actions">
+        <button type="button" data-action="fullscreen" aria-pressed="false" title="L'île sur tout l'écran ; Échap pour revenir">Plein écran</button>
         <button type="button" data-action="exit">Quitter</button>
       </div>
     </header>
@@ -153,6 +154,27 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   const element = <T extends HTMLElement>(selector: string): T => surface.querySelector<T>(selector)!;
   const button = (action: string): HTMLButtonElement => element<HTMLButtonElement>(`[data-action="${action}"]`);
   if (embedded) button("exit").hidden = true;
+
+  // ---- full screen ------------------------------------------------------------------------
+  // The whole page goes full screen (view, header, panel); Escape leaves it natively. A page
+  // that embeds the screen without allow="fullscreen" cannot, so the screen opens in its own tab.
+  const fullscreenButton = button("fullscreen");
+  const showFullscreen = (): void => {
+    const on = !!document.fullscreenElement;
+    fullscreenButton.textContent = on ? "Quitter le plein écran" : "Plein écran";
+    fullscreenButton.setAttribute("aria-pressed", String(on));
+  };
+  const openOwnTab = (): void => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("embed");
+    window.open(url.toString(), "_blank", "noopener");
+  };
+  fullscreenButton.addEventListener("click", () => {
+    if (document.fullscreenElement) { void document.exitFullscreen().catch(() => undefined); return; }
+    if (!document.fullscreenEnabled) { openOwnTab(); return; }
+    document.documentElement.requestFullscreen().catch(openOwnTab);
+  });
+  document.addEventListener("fullscreenchange", showFullscreen);
   root.append(surface);
   foldPresentationPanel(element(".gx-island-panel"), "Eko · Messages");
   // The sidecar's camera page draws the world only: no header, panel or transport.
@@ -781,6 +803,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       source: source?.http ?? "fixture",
       connected: mode === "fixture" ? true : connected,
       embedded,
+      fullscreen: { active: !!document.fullscreenElement, available: document.fullscreenEnabled },
       notice,
       tick: graphysx ? worldPoses.latestTick ?? world?.tick ?? null : state?.tick ?? null,
       gameStatus: graphysx ? (world ? "active" : null) : state?.game_status ?? null,
@@ -820,6 +843,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     dispose: () => {
       disposed = true;
       unsubscribe();
+      document.removeEventListener("fullscreenchange", showFullscreen);
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
       if (infoTimer !== null) window.clearInterval(infoTimer);
       if (fixtureTimer !== null) window.clearInterval(fixtureTimer);

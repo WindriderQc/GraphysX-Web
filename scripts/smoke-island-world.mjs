@@ -135,7 +135,7 @@ try {
   assert.equal(scene.sky, "clearblue", "the document says nothing about the sky; the island look fills it in");
   assert.equal(await page.locator(".gx-island-eyebrow").textContent(), "AgentX · Île · GraphysX");
   assert.equal(await page.locator('[data-action="follow"]').getAttribute("aria-pressed"), "true");
-  assert.equal(await page.locator(".gx-island-header button:visible").count(), 0, "embedded: no exit button");
+  assert.deepEqual(await page.locator(".gx-island-header button:visible").allTextContents(), ["Plein écran"], "embedded: fullscreen is available, with no exit button");
 
   // Eko works: pick up a block and place it, then throw the rock so it bursts into cubes.
   let observation = await observe();

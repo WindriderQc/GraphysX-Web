@@ -7,7 +7,8 @@ import { startStaticServer } from "./static-server.mjs";
 // L'île: the Clawblox island rendered in GraphysX's look. Without a Clawblox server the page
 // plays its short real capture (fixture): 32 parts in one transient scope, the agent carrying a
 // block, nothing in the authored document, the camera following the agent with free orbit, one
-// collapsible panel, phone (375 px) and 4K layouts.
+// collapsible panel, a full-screen button (own tab when the embedding page forbids it), phone
+// (375 px) and 4K layouts.
 //
 // ISLAND_SOURCES=http://host:18090,http://host:18086#spectator_token=… additionally opens each running Clawblox
 // replay or live server and captures it (local evidence only; never part of CI).
@@ -71,7 +72,7 @@ try {
   // Lean by default: no host display menu, no notice, one exit, and the camera on the agent.
   assert.equal(await page.locator(".gx-display-settings").isVisible().catch(() => false), false, "no host display menu over the island");
   assert.equal(await page.locator("[data-notice]").isVisible(), false, "the demonstration is said in the status line, not a banner");
-  assert.equal(await page.locator(".gx-island-header button:visible").count(), 1, "only Quitter in the header");
+  assert.deepEqual(await page.locator(".gx-island-header button:visible").allTextContents(), ["Plein écran", "Quitter"], "only Plein écran and Quitter in the header");
   const follow = page.locator('[data-action="follow"]');
   assert.equal(await follow.getAttribute("aria-pressed"), "true", "the camera follows the agent by default");
   await page.waitForFunction(`(${app})()?.camera?.distanceToAgent < 60 && (${app})().camera.pivotToAgent < 3`);
@@ -136,8 +137,38 @@ try {
   await embed.page.waitForFunction(`(${app})()?.parts === 32`);
   assert.equal(await embed.page.locator("[data-agent-title]").textContent(), "d'Eko", "the run's agent name gives way to the live one");
   assert.equal((await appState(embed.page)).embedded, true);
-  assert.equal(await embed.page.getByRole("button", { name: "Quitter" }).isHidden(), true, "an embedded view has no exit");
+  assert.equal(await embed.page.getByRole("button", { name: "Quitter", exact: true }).isHidden(), true, "an embedded view has no exit");
+  // Full screen: the whole page, and back.
+  const full = embed.page.getByRole("button", { name: "Plein écran" });
+  assert.deepEqual((await appState(embed.page)).fullscreen, { active: false, available: true });
+  await full.click();
+  await embed.page.waitForFunction(`(${app})()?.fullscreen?.active === true`);
+  const leave = embed.page.getByRole("button", { name: "Quitter le plein écran" });
+  assert.equal(await leave.getAttribute("aria-pressed"), "true");
+  assert.equal(await embed.page.evaluate(() => document.fullscreenElement === document.documentElement), true, "the whole page goes full screen");
+  await embed.page.waitForTimeout(600);
+  await embed.page.screenshot({ path: `${artifacts}/island-embed-fullscreen.png` });
+  await leave.click();
+  await embed.page.waitForFunction(`(${app})()?.fullscreen?.active === false`);
+  assert.equal(await full.getAttribute("aria-pressed"), "false");
+  assert.deepEqual(embed.errors, []);
   await embed.page.close();
+
+  // An embedding page without allow="fullscreen": the button opens the screen in its own tab.
+  const holder = await browser.newPage({ viewport: { width: 960, height: 600 }, deviceScaleFactor: 1 });
+  applySmokeTimeout(holder);
+  const framed = `${base}?app=island&embed=1&agent=Nestor`;
+  await holder.setContent(`<iframe src="${framed}" style="width:900px;height:540px;border:0"></iframe>`);
+  const frame = holder.frameLocator("iframe");
+  await frame.getByRole("heading", { level: 1, name: /L.île/ }).waitFor();
+  const popupOpened = holder.waitForEvent("popup");
+  await frame.getByRole("button", { name: "Plein écran" }).click();
+  const popup = await popupOpened;
+  const opened = new URL(popup.url());
+  assert.equal(opened.searchParams.get("embed"), null, "the own tab is not embedded");
+  assert.equal(opened.searchParams.get("agent"), "Nestor", "the own tab keeps the view's parameters");
+  await popup.close();
+  await holder.close();
 
   // ---- optional: real Clawblox servers ------------------------------------------------------
   for (const [index, source] of sources.entries()) {
