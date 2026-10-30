@@ -43,6 +43,14 @@ const TREE_SPACING = 4;
 const MESA_CLEARANCE = 1;
 export const MAX_TREES = 24;
 const MAX_GENERATION = 64;
+/**
+ * Each trunk is solid: an invisible static cylinder as tall as the tree's first segment (the
+ * drawn trunk is about 0.17 wide at full size; the collider is a little fatter so agents stop
+ * just short of the bark). Branches and leaves stay walk-through.
+ */
+const TRUNK_RADIUS = 0.35;
+/** Sowing right under an agent would spawn a trunk inside its capsule (radius 1). */
+const SOW_CLEARANCE = TRUNK_RADIUS + 1.3;
 
 type Founder = { name: string; root: Vec3; seed: number; genome: AgentWorldDnaGenome };
 
@@ -172,6 +180,32 @@ function treeDefinition(tree: TreeRecord): AgentWorldEntityDefinition {
   };
 }
 
+/** The tree's own form, at scale 1 (pure: same record, same form). */
+function treeForm(tree: TreeRecord) {
+  return growAgentWorldDnaForest(resolveAgentWorldDna(treeDefinition(tree).dna));
+}
+
+/** Height of the first (trunk) segment at scale 1. */
+function trunkHeightOf(form: ReturnType<typeof growAgentWorldDnaForest>): number {
+  let top = 0;
+  for (const segment of form.segments) if (segment.level === 0) top = Math.max(top, segment.end.y);
+  return top;
+}
+
+function trunkDefinition(tree: TreeRecord, trunkHeight: number): AgentWorldEntityDefinition {
+  const height = round(Math.max(0.5, trunkHeight * TREE_SCALE * GROWTH_STAGES[tree.stage]), 3);
+  return {
+    id: `${tree.id}-trunk`,
+    label: `${tree.name} trunk`,
+    type: "cylinder",
+    geometry: { radius: TRUNK_RADIUS, height, radialSegments: 8 },
+    transform: { position: [tree.root[0], height / 2, tree.root[2]] },
+    visible: false,
+    physics: { mode: "static", friction: 0.8, restitution: 0 },
+    tags: ["living", "trunk"],
+  };
+}
+
 function perchDefinition(tree: TreeRecord): AgentWorldEntityDefinition {
   return {
     id: `${tree.id}-perch`,
@@ -236,7 +270,7 @@ export function buildLivingIsland(): LivingIslandBase {
   const mesa = buildMesaIsland();
   const trees = FOUNDERS.map(founderRecord);
   const living: AgentWorldEntityDefinition[] = [
-    ...trees.flatMap((tree) => [treeDefinition(tree), perchDefinition(tree)]),
+    ...trees.flatMap((tree) => [treeDefinition(tree), perchDefinition(tree), trunkDefinition(tree, trunkHeightOf(treeForm(tree)))]),
     flockDefinition(),
     windDefinition(),
   ];
@@ -249,7 +283,7 @@ export function buildLivingIsland(): LivingIslandBase {
 
 /** Ids of the living entities in a fresh island, in document order (for numeric ids). */
 export function livingEntityIds(base: LivingIslandBase): string[] {
-  return [...base.trees.flatMap((tree) => [tree.id, `${tree.id}-perch`]), FLOCK_ID, WIND_ID];
+  return [...base.trees.flatMap((tree) => [tree.id, `${tree.id}-perch`, `${tree.id}-trunk`]), FLOCK_ID, WIND_ID];
 }
 
 // ---- the rules -------------------------------------------------------------------------------
@@ -262,7 +296,7 @@ export interface LivingHost {
   pushChange(change: EntityChange): void;
 }
 
-type TreeStats = { height: number; width: number; branches: number; leaves: number; hue: number; expressed: ResolvedAgentWorldDnaGenome };
+type TreeStats = { height: number; width: number; branches: number; leaves: number; hue: number; trunk: number; expressed: ResolvedAgentWorldDnaGenome };
 
 export class LivingIsland {
   private readonly trees = new Map<string, TreeRecord>();
@@ -365,6 +399,7 @@ export class LivingIsland {
     if (distance(actor.position, target) > SOW_RANGE) return "SowFailed:OutOfRange";
     if (!this.isGround(target)) return "SowFailed:NotGround";
     for (const tree of this.trees.values()) if (flatDistance(target, tree.root) < TREE_SPACING) return "SowFailed:TooClose";
+    if (this.agents.some((agent) => flatDistance(agent, target) < SOW_CLEARANCE)) return "SowFailed:Occupied";
     if (this.trees.size >= MAX_TREES) return "SowFailed:ForestFull";
     this.treeCounter += 1;
     const name = `Tree_${this.treeCounter}`;
@@ -376,7 +411,7 @@ export class LivingIsland {
       sownBy: actor.name, bornAt: now, changedAt: now, stage: 0,
     };
     const added: NonNullable<EntityChange["added"]> = [];
-    for (const entity of [treeDefinition(tree), perchDefinition(tree)]) {
+    for (const entity of [treeDefinition(tree), perchDefinition(tree), trunkDefinition(tree, this.treeStats(tree).trunk)]) {
       const spawned = this.host.runtime.spawn(entity);
       if (!spawned.ok) throw new Error(`Could not sow ${name}: ${JSON.stringify(spawned.error ?? "")}`);
       added.push({ entity, numericId: this.host.allocateNumericId(entity.id!) });
@@ -401,13 +436,18 @@ export class LivingIsland {
     return "NextGenerationSuccess";
   }
 
-  /** Re-send a changed tree: viewers replace an entity re-added under the same id. */
+  /** Re-send a changed tree and its trunk: viewers replace an entity re-added under the same id. */
   private redefine(tree: TreeRecord): void {
     this.stats.delete(tree.id);
     const entity = treeDefinition(tree);
+    const trunk = trunkDefinition(tree, this.treeStats(tree).trunk);
     const updated = this.host.runtime.updateEntity(tree.id, { dna: entity.dna, transform: entity.transform });
     if (!updated.ok) throw new Error(`Could not update ${tree.name}: ${JSON.stringify(updated.error ?? "")}`);
-    this.host.pushChange({ added: [{ entity, numericId: this.host.numericId(tree.id)! }] });
+    // A cylinder's size is not patchable: the trunk collider is rebuilt at its new height.
+    this.host.runtime.remove(trunk.id!);
+    const spawned = this.host.runtime.spawn(trunk);
+    if (!spawned.ok) throw new Error(`Could not rebuild ${trunk.id}: ${JSON.stringify(spawned.error ?? "")}`);
+    this.host.pushChange({ added: [entity, trunk].map((definition) => ({ entity: definition, numericId: this.host.numericId(definition.id!)! })) });
   }
 
   // ---- simulation -------------------------------------------------------------------------------
@@ -458,7 +498,7 @@ export class LivingIsland {
     const cached = this.stats.get(tree.id);
     if (cached) return cached;
     const config = resolveAgentWorldDna(treeDefinition(tree).dna);
-    const form = growAgentWorldDnaForest(config);
+    const form = treeForm(tree);
     let top = 0;
     let reach = 0;
     for (const segment of form.segments) {
@@ -469,7 +509,7 @@ export class LivingIsland {
     const scale = TREE_SCALE * GROWTH_STAGES[tree.stage];
     const stats: TreeStats = {
       height: round(top * scale), width: round(reach * 2 * scale), branches: form.segments.length, leaves: form.leaves.length,
-      hue: expressed.leafHue, expressed,
+      hue: expressed.leafHue, trunk: trunkHeightOf(form), expressed,
     };
     this.stats.set(tree.id, stats);
     return stats;
@@ -566,6 +606,7 @@ This island also has trees and birds.
 | Sow | \`{"position": [x, 0, z]}\` (open ground) |
 | NextGeneration | \`{"position": [x, y, z]}\` (a tree's root) |
 
+- Tree trunks are solid; branches and leaves are not.
 - Trees are entities with \`attributes.RenderRole = "Tree"\` (\`Tree_1\`, \`Tree_2\`, …). Each grows
   from its genes; its attributes show them (\`TrunkLength\`, \`BranchAngle\`, \`LeafColor\`, …), with
   its \`Generation\`, \`Parent\` and \`Lineage\`. \`Ready\` says whether it can be used now; \`ReadyIn\`
@@ -573,12 +614,12 @@ This island also has trees and birds.
 - \`GatherSeed\` takes a seed from a ready tree within ${GATHER_RANGE} studs. You carry one seed
   (\`player.attributes.HeldSeed\`); gathering another replaces it.
 - \`Sow\` plants your seed on open ground within ${SOW_RANGE} studs, at least ${TREE_SPACING} studs from
-  other trees: a new tree with the genes of the tree the seed came from. It grows for
+  other trees and not where someone stands: a new tree with the genes of the tree the seed came from. It grows for
   ${READY_SECONDS} seconds before it is ready. At most ${MAX_TREES} trees.
 - \`NextGeneration\` makes a ready tree within ${GATHER_RANGE} studs express its next generation:
   its genes drift a little, then it rests ${READY_SECONDS} seconds.
 - Results: \`GatherSeedSuccess\`, \`SowSuccess\`, \`NextGenerationSuccess\`, or \`…Failed:<reason>\`
-  (\`OutOfRange\`, \`NoTree\`, \`NotReady\`, \`NoSeed\`, \`NotGround\`, \`TooClose\`, \`ForestFull\`,
+  (\`OutOfRange\`, \`NoTree\`, \`NotReady\`, \`NoSeed\`, \`NotGround\`, \`TooClose\`, \`Occupied\`, \`ForestFull\`,
   \`LastGeneration\`).
 - Birds fly above the island (\`Flock_1\`, \`RenderRole = "Flock"\`, with \`Members\`, \`Spread\`,
   \`MeanSpeed\`, \`Startled\`).

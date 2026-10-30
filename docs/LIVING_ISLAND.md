@@ -1,6 +1,7 @@
 # L'île vivante (chantier D)
 
-Rédigé le 2026-10-29 vers 19:30 America/Toronto. Rien n'est déployé, aucun modèle n'a été
+Rédigé le 2026-10-29 vers 19:30 America/Toronto, complété vers 22:30 (sélecteur de monde,
+troncs solides) après les réponses de Yanik. Rien n'est déployé, aucun modèle n'a été
 appelé, le MCP GraphysX reste éteint. Code : `world-service/living-island.ts`, lancé avec
 `--world living-island` (ou `WORLD_ID=living-island`). Mesa reste identique, au bit près
 (même empreinte `187f609d63a3204b`).
@@ -59,6 +60,7 @@ seule pression de sélection. C'est de l'**auto-télie**, un des signes de jeu d
 | Élément | Où | Règle |
 |---|---|---|
 | Forêt | 5 fondateurs `Tree_1` à `Tree_5` au nord-ouest du départ, chacun un génome différent (vert, orange, jaune, bleu, rose) ; jusqu'à 24 arbres | un arbre semé pousse en 3 tailles (0, 15, 30 s) puis est prêt |
+| Troncs | un cylindre invisible et statique par arbre (rayon 0,35, haut comme le premier segment), reconstruit quand l'arbre grandit ou change de génération | on bute contre le tronc, on traverse branches et feuilles ; pas de semis là où quelqu'un se tient (`SowFailed:Occupied`) |
 | `GatherSeed {position}` | racine d'un arbre prêt, à 6 unités | une graine dans la poche (`HeldSeed: "Tree_4@1"`) ; une nouvelle remplace l'ancienne |
 | `Sow {position}` | sol libre à 7 unités, à 4 unités des autres arbres, hors des mesas | nouvel arbre avec les gènes exprimés du parent, nouvelle graine, génération 1 |
 | `NextGeneration {position}` | arbre prêt à 6 unités | génération +1 (gènes qui dérivent), puis 30 s de repos |
@@ -88,6 +90,27 @@ Le jardinier scripté vient de garder une graine de `Tree_4` (le plus touffu), d
 | Ce que voit le jardinier (`GET /observe/image`, 1088×640) | ![vue du jardinier](living-island/gardener-view.jpg) |
 | Téléphone (375 px), panneau replié | ![téléphone](living-island/phone.jpg) |
 | 4K (3840×2160, HUD à l'échelle 2), `Tree_6` adulte | ![4K](living-island/4k.jpg) |
+
+## Choisir le monde : un seul conteneur, un sélecteur
+
+Décision de Yanik (2026-10-29) : tout dans le même conteneur, avec un sélecteur. Le service
+démarre sur `WORLD_ID` (Mesa par défaut) et l'opérateur change d'île sans redémarrer :
+
+```bash
+curl -X POST -H "X-Operator-Token: $WORLD_OPERATOR_TOKEN" -H "content-type: application/json"   -d '{"world": "living-island"}' http://127.0.0.1:18120/world
+```
+
+- La route est réservée à l'opérateur (jeton), comme `/snapshot`. Les agents ne peuvent pas
+  changer de monde.
+- Elle refuse (409) tant qu'un agent est sur l'île, sauf avec `"force": true` : ses sessions
+  se terminent avec l'ancienne île.
+- Les spectateurs reçoivent le nouveau document (la vue `?app=island` suit sans recharger).
+  `/healthz` dit le monde en cours (`{ok, tick, world}`) et `/api.md` suit le monde.
+- Chaque changement ouvre un nouvel enregistrement à côté du premier
+  (`<dossier>-1-living-island`, `<dossier>-2-mesa-island`…), pour qu'une reprise reste une
+  seule ligne de temps.
+- Pas encore fait : le bouton dans Benchmark ou la file de Core. Le runner d'AgentX choisira le
+  monde avant de lancer une partie.
 
 ## Garanties conservées
 
@@ -137,7 +160,7 @@ goût fixe (`bushy`, `tall` ou `warm`), en garde une graine, la sème, puis fait
 
 ## Limites
 
-- Les arbres n'ont pas de collision : on les traverse.
+- Seuls les troncs sont solides ; branches et feuilles se traversent.
 - La vue 4K n'est pas dans le parcours automatique : en WebGL logiciel, toute page du service
   de monde met environ 48 s à afficher ses premières images en 3840×2160, avec ou sans la
   forêt (mesuré le 2026-10-29). La capture 4K de la PR a été faite à part.
