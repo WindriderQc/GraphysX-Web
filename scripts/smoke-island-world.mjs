@@ -225,7 +225,9 @@ try {
   try {
     const watched = await open({ width: 1440, height: 900 }, replay.url, { agent: "Eko" });
     const r = watched.page;
-    await r.waitForFunction(`(${app})()?.feed === "graphysx" && (${app})().mode === "replay" && (${app})().replay && (${app})().autoStarted && (${app})().replay.paused === false && (${app})().messageLog > 0`);
+    // /play answers before the replay clock's next advance. Wait for the skipped tick
+    // itself; a fast browser can observe the playing state before the idle jump happens.
+    await r.waitForFunction(`(${app})()?.feed === "graphysx" && (${app})().mode === "replay" && (${app})().replay && (${app})().autoStarted && (${app})().replay.paused === false && (${app})().messageLog > 0 && (${app})().replay.current_tick >= ${recording.actions[0].tick - 60}`);
     let state = await appState(r);
     assert.equal(state.messageLog, recording.actions.length, "the whole action log is loaded");
     assert.equal(state.replay.paused, false, "an embedded replay starts itself");

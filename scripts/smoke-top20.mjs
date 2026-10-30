@@ -152,7 +152,9 @@ try {
     editor.waitForEvent("download"),
     editor.locator('.gx-ed-toolbar').getByRole('button', { name: 'Export', exact: true }).click(),
   ]);
-  const exportedDocument = JSON.parse(readFileSync(await sceneDownload.path(), "utf8"));
+  const exportedPath = path.join(ART, "top20-export.graphysx.json");
+  await sceneDownload.saveAs(exportedPath);
+  const exportedDocument = JSON.parse(readFileSync(exportedPath, "utf8"));
   out.exported = {
     id: exportedDocument.id,
     documentOnly: !exportedDocument.entities.some((entity) => entity.id === "session-only-export-probe" || entity.ephemeral),
