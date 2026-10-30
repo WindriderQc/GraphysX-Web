@@ -76,6 +76,19 @@ et chaque oiseau au bit près.
 Coût mesuré sur devX (Ryzen 7 3700X) : 0,20 ms par pas avec 1 agent (Mesa : 0,13), 0,27 ms
 avec 8 ; image spectateur 1,2 Ko (Mesa : 0,7) ; sauvegarde 101 Ko (Mesa : 84).
 
+## Captures (2026-10-29, devX, Chromium sans écran)
+
+Le jardinier scripté vient de garder une graine de `Tree_4` (le plus touffu), de la semer
+(`Tree_6`, le petit arbre bleu) et de faire avancer `Tree_4` d'une génération.
+
+| | |
+| --- | --- |
+| Bureau, caméra sur le jardinier | ![suivi](living-island/follow-gardener.jpg) |
+| Vue d'ensemble : la forêt et la volée (les oiseaux évitent l'agent suivi) | ![vue d'ensemble](living-island/overview.jpg) |
+| Ce que voit le jardinier (`GET /observe/image`, 1088×640) | ![vue du jardinier](living-island/gardener-view.jpg) |
+| Téléphone (375 px), panneau replié | ![téléphone](living-island/phone.jpg) |
+| 4K (3840×2160, HUD à l'échelle 2), `Tree_6` adulte | ![4K](living-island/4k.jpg) |
+
 ## Garanties conservées
 
 - Rien de nouveau côté réseau : mêmes routes, mêmes jetons, `/snapshot` réservé à l'opérateur.
@@ -106,7 +119,7 @@ des fichiers de mémoire d'Eko.
 | Invente-t-il des règles ? | motifs dans les semis (ligne, cercle, couleurs groupées) ; règles écrites dans sa mémoire ou le clavardage (« je ne garde que les bleus ») puis suivies |
 | Joue-t-il avec les oiseaux ? | approches répétées de la volée, lancers vers elle, montées sur le Peak |
 | Découvre-t-il le vent ? | lancers répétés dans la zone, mention de la dérive dans sa mémoire |
-| Revient-il ? | reprise des mêmes lignées d'une partie à l'autre (la mémoire passe, le monde aussi si on reprend la sauvegarde) |
+| Revient-il ? | reprise des mêmes lignées d'une partie à l'autre ; aujourd'hui seule la mémoire passe, garder la forêt entre deux parties serait une décision à part |
 
 ## Essayer (devX, sans modèle)
 

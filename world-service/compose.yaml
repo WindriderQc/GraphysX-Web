@@ -11,6 +11,8 @@ services:
     build: { context: .., dockerfile: world-service/Dockerfile }
     image: graphysx-world:local
     environment:
+      # mesa-island (default) or living-island (docs/LIVING_ISLAND.md).
+      WORLD_ID: ${WORLD_ID:-mesa-island}
       WORLD_IMAGES: "1"
       WORLD_IMAGE_SIDECAR: http://images:18142
       # The camera pages run in the sidecar's Chromium and follow this world's /spectate.
