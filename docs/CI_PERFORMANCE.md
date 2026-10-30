@@ -58,6 +58,59 @@ No journey is deleted or weakened. The 84 checks comprise 10 Node contracts and
 for a documentation or Node-only change. GitHub configuration and the HTTP checker
 can be validated with Node tests, including explicit bad-publication fixtures.
 
+## Local LLMx journey cost on devX (2026-10-29)
+
+devX is a Hyper-V VM without a GPU; Chromium renders WebGL with SwiftShader on its
+8 vCPUs. Each of the 11 LLMx journeys ran alone under the machine verify lock
+(`node scripts/smoke-<name>.mjs` against a fresh `vite build` of `67a2993`). Every journey
+passed. Wall time:
+
+| Journey | Seconds | Journey | Seconds |
+|---|---:|---|---:|
+| llmx-face-embed | 36 | llmx-conversation-turns | 207 |
+| llmx | 82 | llmx-core-embed | 243 |
+| llmx-conversation-session | 122 | llmx-creation-math | 296 |
+| llmx-conversation-replay | 131 | llmx-creation-library | 298 |
+| llmx-world | 142 | llmx-creation-family | 418 |
+| llmx-creation-actions | 177 | **total** | **2152** |
+
+Chromium kept 5.7 to 6.9 of the 8 cores busy throughout. A preloaded probe timed every
+Playwright call and sampled the page's frame rate:
+
+- At 1280x800 the room draws about **1 frame per second** (0.7 to 1.2). Narrow viewports
+  are faster: about 3 fps at 390 px and 5 fps at 320 px.
+- Over 98% of each journey's wall time was spent inside Playwright calls that wait for
+  rendered frames. A click costs 9 to 14 s (about ten frames: actionability, hit target,
+  pointer events); clicks are 55 to 65% of every creation and conversation journey.
+  Even a bare `page.evaluate` costs about one frame.
+- Browser launch (0.1 s), navigation (0.2 to 1 s) and the stubbed network are negligible.
+
+Wall time is therefore close to *frames waited x frame cost*. Idle frame rate of the
+room at 1280x800 under diagnostic variants (20 s windows; about +-15% run to run):
+
+| Variant | fps | Triangles/frame |
+|---|---:|---:|
+| As shipped (`high` profile: 8 cores, width > 1180) | 1.1 | 350k |
+| Without the post stack (bloom + SMAA) | 1.2 | 350k |
+| Without post, MSAA and shadows | 1.7 | 314k |
+| `balanced` profile (4 reported cores) | 1.4 | n/a |
+| `mobile` profile at the same 1280x800 | 2.0 | 63k |
+| `mobile` profile, no post | 3.0 | 63k |
+| `mobile` profile, no post, no MSAA | 3.9 | 63k |
+| Device scale factor 0.5 (640x400 canvas, same layout) | 1.6 | 350k |
+
+The largest single cost is the full-density voxel face that the `high` profile selects
+(drawn again in the 2048 shadow map). No Chromium flag helped
+(`--disable-gpu-compositing`, `--in-process-gpu`, vsync/frame-limit flags, explicit
+ANGLE SwiftShader). Running journeys in parallel cannot help either: one journey
+already saturates the cores. Reusing a browser would save at most about 8 s per journey.
+
+`llmx-core-embed` spent 157 of its 243 s on 27 `scrollIntoViewIfNeeded` + `evaluate`
+pairs in its mobile layout loop. One page call per size now performs the same scroll and
+hit test, plus the single-match and non-empty-box conditions the locator implied: 89 s on
+an otherwise idle machine. A run overlapped by another session's unlocked 4K capture
+took 133 s. The captures are unchanged.
+
 ## First delivery without hosted rendering
 
 [PR23](https://github.com/WindriderQc/GraphysX-Web/pull/23) merged as `d2c70b0`.
