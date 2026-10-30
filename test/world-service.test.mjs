@@ -370,6 +370,10 @@ describe("HTTP protocol", () => {
       const joined = await call(base, "POST", "/join?name=HttpAgent");
       session = joined.body.session;
       const auth = { "x-session": session };
+      for (const body of [null, [], false]) {
+        assert.equal((await call(base, "POST", "/chat", body, auth)).status, 400, "non-object JSON is a client error");
+        assert.equal((await call(base, "POST", "/input", body, auth)).status, 400);
+      }
       // Clawblox's /join contract: a known X-Session rejoins (same session, no second avatar);
       // an unknown one is ignored and a new session is made.
       const rejoined = await call(base, "POST", "/join?name=HttpAgent", undefined, auth);
@@ -409,6 +413,28 @@ describe("HTTP protocol", () => {
     } finally {
       await resumed.close();
     }
+  });
+});
+
+describe("world shutdown", () => {
+  it("drains an accepted input before disabling the tick loop and closing HTTP", { timeout: 5000 }, async () => {
+    const running = await startWorldServer({ module: m, apiMarkdown, port: 0 });
+    const { session } = running.world.join("Agent");
+    const enqueue = running.world.enqueue.bind(running.world);
+    let closed;
+    running.world.enqueue = (...args) => {
+      const pending = enqueue(...args);
+      closed = running.close();
+      return pending;
+    };
+    try {
+      const response = await fetch(`${running.url}/input`, { method: "POST", headers: { "x-session": session, "content-type": "application/json" }, body: JSON.stringify({ type: "Jump" }) });
+      assert.equal(response.status, 200);
+      await response.json();
+      assert.equal(running.world.actions.length, 1);
+      assert.equal(running.close(), closed, "shutdown is idempotent");
+      await closed;
+    } finally { await running.close(); }
   });
 });
 
