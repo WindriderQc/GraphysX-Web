@@ -18,7 +18,7 @@ function family(...prefixes) {
 // suite. This is an explicit coverage map, not a guess based on import reachability.
 const RULES = [
   { match: /^(?:(?!(?:src|public)\/).+\.md|test\/.*\.test\.mjs|\.gitignore|\.gitattributes)$/, checks: [], label: "documentation or Node tests", deploy: false },
-  { match: /^scripts\/(?:verify(?:-[\w-]+)?|plan-verification|counts)\.(?:mjs|json)$/, checks: [], label: "verification tooling", deploy: false },
+  { match: /^scripts\/(?:verify(?:-[\w-]+)?|with-verify-lock|plan-verification|counts)\.(?:mjs|json)$/, checks: [], label: "verification tooling", deploy: false },
   // The headless world service is a Node program built by its own Vite config; it is not part
   // of the published site and its contract is test/world-service.test.mjs. The island viewer
   // reads its stream, replay and images, so the island-world and island-living journeys check

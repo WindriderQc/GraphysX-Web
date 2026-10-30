@@ -14,6 +14,10 @@ of rules that exist because breaking them has already cost real sessions real ho
   worktrees too. Queue politely with `npm run verify -- --wait`; never `--force-lock` unless
   you have verified the holder is dead. Measured cost of overlap: five of six runs losing a
   random smoke to `net::ERR_CONNECTION_RESET`.
+- **Heavy browser work outside the gate takes the same lock.** 4K captures, render probes and
+  frame-rate measurements also software-render on most cores: wrap them in
+  `node scripts/with-verify-lock.mjs -- <command>`. Measured 2026-10-29: an unlocked 4K capture
+  stretched a concurrent journey from 89 s to 133 s.
 - **Match local validation to the change.** Use unit/contract tests and scoped lint for
   Node-only tooling; check links and commands for documentation. Use focused browser smokes
   for an affected journey and a full gate for changes spanning shared runtime behavior.

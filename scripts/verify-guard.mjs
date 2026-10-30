@@ -140,11 +140,14 @@ export async function acquireVerifyLock(lockPath, { force = false, wait = false 
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 15_000));
   }
   if (waiting) console.log("verify: lock freed, starting.");
-  let released = false;
-  return async () => {
-    if (released) return;
-    released = true;
-    if ((await readHolder())?.token === owner.token) await rm(lockPath, { force: true });
+  // Every caller gets the same removal. A signal handler and the normal exit path can both
+  // release; the second must wait for the file to go, or the process exits with it in place.
+  let releasing = null;
+  return () => {
+    releasing ??= (async () => {
+      if ((await readHolder())?.token === owner.token) await rm(lockPath, { force: true });
+    })();
+    return releasing;
   };
 }
 
