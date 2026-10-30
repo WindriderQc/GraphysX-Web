@@ -25,7 +25,8 @@ import { runGardener } from "../world-service/gardener.mjs";
 //    folded), one page at a time. No 4K page: on devX's software WebGL any world-service page
 //    takes about 48 s to show its first frames at 3840x2160, with or without the forest
 //    (measured 2026-10-29), so a 4K capture is taken by hand (docs/LIVING_ISLAND.md).
-// 4. The recording carries the birds (`swarms`) in every frame.
+// 4. The operator's world selector (POST /world) swaps the island back to Mesa under the same
+//    page, and the living island's recording carries the birds (`swarms`) in every frame.
 const artifacts = process.env.SMOKE_ARTIFACTS || "output/verify";
 mkdirSync(artifacts, { recursive: true });
 const server = process.env.SMOKE_BASE ? null : await startStaticServer({ root: path.resolve("dist"), port: 0 });
@@ -45,6 +46,7 @@ world = await startWorldServer({
   world: module.LIVING_WORLD_ID,
   apiMarkdown: module.livingApiMarkdown(readFileSync("world-service/API.md", "utf8")),
   port: 0,
+  operatorToken: "smoke-operator",
   recordDir: path.join(scratch, "rec"),
   renderImage: async (request) => {
     const response = await fetch(`${sidecar.url}/render`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: world.url, ...request }) });
@@ -137,6 +139,11 @@ try {
   await phone.page.waitForFunction(`(${app})()?.kinds?.["dna-tree"] === 6 && (${app})()?.camera?.pivotToAgent < 2`);
   await phone.page.waitForTimeout(1200);
   await phone.page.screenshot({ path: `${artifacts}/living-island-phone.png` });
+  // The operator's world selector swaps the island in place: the same page follows.
+  const switched = await fetch(`${world.url}/world`, { method: "POST", headers: { "content-type": "application/json", "x-operator-token": "smoke-operator" }, body: JSON.stringify({ world: "mesa-island", force: true }) });
+  assert.equal(switched.status, 200);
+  await phone.page.waitForFunction(`(${app})()?.world?.label === "Mesa island" && !(${app})().kinds["dna-tree"] && !(${app})().kinds.flock`, null, { timeout: 15000 });
+  assert.equal((await appState(phone.page)).reconcileError, null);
   assert.deepEqual(phone.errors, []);
   await phone.page.close();
 

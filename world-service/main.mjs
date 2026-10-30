@@ -106,10 +106,10 @@ const loopback = () => {
 const renderImage = images ? imageRenderer(loopback) : null;
 const snapshot = resumePath ? JSON.parse(readFileSync(resumePath, "utf8")) : undefined;
 const mesaApi = readFileSync(join(here, "API.md"), "utf8");
-const living = (snapshot?.world?.id ?? worldId) === module.LIVING_WORLD_ID;
 running = await startWorldServer({
   module,
-  apiMarkdown: living ? module.livingApiMarkdown(mesaApi) : mesaApi,
+  // Per world, since POST /world (operator) can switch the island in place.
+  apiMarkdown: (id) => (id === module.LIVING_WORLD_ID ? module.livingApiMarkdown(mesaApi) : mesaApi),
   snapshot,
   world: worldId,
   host,

@@ -5,7 +5,12 @@
 //   GET /api.md                                     GET /snapshot           (X-Operator-Token)
 //   GET /observe/image?width&height -> PNG of the agent's first-person view (X-Session)
 //   GET /spectate  SSE: hello (v2 document), frame (poses), entities (added/removed), action
-//   GET /healthz
+//   GET /healthz -> {ok, tick, world}                 POST /world {world, force?} (X-Operator-Token)
+//
+// POST /world is the world selector: it replaces the running island with a fresh one of the
+// named world (`mesa-island`, `living-island`) in the same process. It refuses while agents are
+// joined unless `force` is true (their sessions end), sends spectators a new hello and starts a
+// new recording directory beside the first, so each recording stays one monotonic timeline.
 //
 // /spectate and /healthz are read only and answer any origin (the island viewer runs on
 // another one). First-person images come from a separate renderer (`options.renderImage`, the
@@ -57,7 +62,7 @@ async function readJson(request, InputError) {
 /**
  * @param {object} options
  * @param {object} options.module      the bundled world: { IslandWorld, InputError, validateInput, TICK_HZ }
- * @param {string} options.apiMarkdown agent-facing API.md
+ * @param {string | ((worldId: string) => string)} options.apiMarkdown agent-facing API.md, or one per world
  * @param {object} [options.snapshot]  resume from this GET /snapshot body
  * @param {string} [options.world]     `mesa-island` (default) or `living-island`; a snapshot names its own
  * @param {boolean} [options.realtime] false: the caller drives `world.step()` (tests)
@@ -66,20 +71,26 @@ async function readJson(request, InputError) {
  */
 export async function startWorldServer(options) {
   const { IslandWorld, InputError, validateInput, TICK_HZ } = options.module;
-  const world = new IslandWorld(options.snapshot, { world: options.world });
+  let world = new IslandWorld(options.snapshot, { world: options.world });
   const spectators = new Set();
   const spectateEvery = Math.max(1, Math.round(TICK_HZ / (options.spectateHz ?? 10)));
-  const recordFile = options.recordDir ? join(options.recordDir, "graphysx-recording.ndjson") : null;
+  const recordDir = options.recordDir ?? null;
+  let recordFile = null;
+  let switches = 0;
   const tickTimes = { count: 0, total: 0, max: 0 };
   let recordedActions = world.actions.length;
   let closing = false;
   let shutdown = null;
+  const apiMarkdown = () => (typeof options.apiMarkdown === "function" ? options.apiMarkdown(world.worldId) : options.apiMarkdown);
 
   const record = (line) => { if (recordFile) appendFileSync(recordFile, `${JSON.stringify(line)}\n`); };
-  if (recordFile) {
-    mkdirSync(options.recordDir, { recursive: true });
-    record({ kind: "hello", ...world.sceneHello(), resumedFromTick: options.snapshot ? world.tick : null });
-  }
+  const startRecording = (dir, resumedFromTick) => {
+    if (!dir) return;
+    mkdirSync(dir, { recursive: true });
+    recordFile = join(dir, "graphysx-recording.ndjson");
+    record({ kind: "hello", ...world.sceneHello(), resumedFromTick });
+  };
+  startRecording(recordDir, options.snapshot ? world.tick : null);
 
   const write = (response, frame) => {
     // A slow viewer is dropped rather than buffered without bound.
@@ -146,8 +157,24 @@ export async function startWorldServer(options) {
         return false;
       };
       switch (route) {
-        case "GET /healthz": return send(response, 200, { ok: true, tick: world.tick }, READ_ONLY_CORS);
-        case "GET /api.md": return send(response, 200, options.apiMarkdown);
+        case "GET /healthz": return send(response, 200, { ok: true, tick: world.tick, world: world.worldId }, READ_ONLY_CORS);
+        case "GET /api.md": return send(response, 200, apiMarkdown());
+        case "POST /world": {
+          if (!options.operatorToken || request.headers["x-operator-token"] !== options.operatorToken) return send(response, 403, { error: "Operator token required" });
+          const body = await readJson(request, InputError);
+          const wanted = typeof body.world === "string" ? body.world : "";
+          if (!options.module.WORLD_IDS.includes(wanted)) throw new InputError(`Body must be {"world": one of ${options.module.WORLD_IDS.join(", ")}, "force"?: boolean}`);
+          if (world.agentCount > 0 && body.force !== true) return send(response, 409, { error: `${world.agentCount} agent(s) on this island; pass "force": true to end their sessions` });
+          const previous = world.worldId;
+          // Handlers run between ticks, so the swap is whole-tick.
+          world = new IslandWorld(undefined, { world: wanted });
+          recordedActions = 0;
+          switches += 1;
+          if (recordDir) startRecording(`${options.recordDir}-${switches}-${wanted}`, null);
+          broadcast("hello", world.sceneHello());
+          broadcast("frame", world.poseFrame());
+          return send(response, 200, { world: world.worldId, previous, tick: world.tick, recordDir: recordFile ? `${options.recordDir}-${switches}-${wanted}` : null });
+        }
         case "POST /join": {
           // An X-Session the world already knows rejoins it (Clawblox's /join contract).
           const joined = world.join(url.searchParams.get("name") ?? "Agent", typeof session === "string" ? session : null);
@@ -212,7 +239,8 @@ export async function startWorldServer(options) {
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : options.port;
   return {
-    world,
+    /** The running island (POST /world replaces it). */
+    get world() { return world; },
     server,
     url: `http://${options.host ?? "127.0.0.1"}:${port}`,
     stats: () => ({ ticks: tickTimes.count, meanTickMs: tickTimes.count ? tickTimes.total / tickTimes.count : 0, maxTickMs: tickTimes.max, spectators: spectators.size }),

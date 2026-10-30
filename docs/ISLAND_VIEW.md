@@ -1,4 +1,17 @@
-# L'île — l'île Clawblox avec le rendu GraphysX
+# GraphysX-screen — l'écran de l'île
+
+**Les noms** (choisis par le propriétaire le 2026-10-29), pour ne plus confondre l'écran et
+les terrains :
+
+| Nom | Ce que c'est |
+|---|---|
+| **GraphysX-screen** | l'écran : cette page (`?app=island`). Elle dessine une île en direct ou en reprise ; elle ne simule rien. |
+| **Île Clawblox** | un terrain : l'île Mesa simulée par Clawblox (`clawblox run`, `clawblox replay`). |
+| **L'île de Frank** | l'autre terrain : la même île simulée par le service de monde de ce dépôt (`world-service/`), en service sur UGFrank depuis le 2026-10-29. |
+
+GraphysX-screen affiche l'un ou l'autre terrain : seule l'adresse `source=` change.
+
+## L'île Clawblox avec le rendu GraphysX
 
 `?app=island` affiche l'île « Is this machine playing? » reconstruite dans Clawblox (moteur
 Rust/Rapier, protocole agent HTTP) avec le rendu de GraphysX : ciel, eau réfléchissante,
@@ -6,8 +19,8 @@ ombres, matériaux, interface. **Clawblox reste l'autorité** de la physique et 
 cette page ne simule rien, elle dessine l'état que Clawblox diffuse.
 
 Depuis le 2026-10-29 (phase 3 du service de monde), la même page affiche aussi une île
-**du service de monde GraphysX** (`world-service/`), en direct ou en reprise : seule l'adresse
-`source=` change (section suivante).
+**du service de monde** (`world-service/`), en direct ou en reprise : seule l'adresse
+`source=` change (section suivante). Celle qui tourne sur UGFrank s'appelle l'île de Frank.
 
 ## Ouvrir la vue
 
@@ -33,7 +46,12 @@ puis, depuis un navigateur du réseau local :
   `WORLD_SPECTATOR_TOKEN`.
 - `embed=1` retire le bouton Quitter et compacte l'en-tête (pour l'onglet « Île » de Benchmark).
 
-## Une île du service de monde GraphysX
+## Une île du service de monde (l'île de Frank)
+
+L'île de Frank, en service sur UGFrank, se regarde à
+`https://agentx.specialblend.icu:18793/?app=island&embed=1&source=https://agentx.specialblend.icu:18794&agent=Eko`
+(réseau maison). Les exemples ci-dessous montent une île du service de monde sur devX pour
+l'essayer.
 
 Le service de monde (`world-service/`, docs/WORLD_SERVICE_DESIGN.md) parle le protocole agent
 de Clawblox, mais diffuse ses spectateurs autrement : un flux SSE `GET /spectate` (document v2

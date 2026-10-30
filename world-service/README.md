@@ -38,6 +38,12 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
 
 ## Endpoints beyond the agent loop
 
+- `POST /world` with `X-Operator-Token` and `{"world": "living-island" | "mesa-island", "force"?: true}`:
+  the world selector. It replaces the running island with a fresh one in the same process,
+  refuses (409) while agents are joined unless `force` is true (their sessions end), sends
+  spectators a new `hello`, and records into a new directory beside the first
+  (`<record-dir>-<n>-<world>`). `/healthz` answers `{ok, tick, world}`; `/api.md` follows the world.
+
 - `GET /snapshot` with `X-Operator-Token: $WORLD_OPERATOR_TOKEN`: the whole state, including
   Rapier's serialised solver. `--resume <file>` (or `WORLD_RESUME_PATH`) continues it bit for
   bit; the same `X-Session` tokens keep working. A snapshot of another world or rules version
