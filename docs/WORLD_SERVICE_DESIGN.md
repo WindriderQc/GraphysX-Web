@@ -23,7 +23,9 @@ reste à décider (phase 4, non commencée).
 
 Un second monde, `living-island` (`--world living-island`), ajoute à Mesa une Forêt vivante,
 une volée et un vent, avec les actions `GatherSeed`, `Sow` et `NextGeneration` : ce sont les
-agents qui sélectionnent les arbres. Mesa ne change pas (même empreinte). Détails, mesures et
+agents qui sélectionnent les arbres. L'île vivante ne change rien à Mesa ; les deux portent
+depuis le décor de la vue Clawblox (herbe, mer, sans physique ; empreinte de Mesa changée,
+anciennes sauvegardes refusées). Détails, mesures et
 questions : [`LIVING_ISLAND.md`](LIVING_ISLAND.md).
 
 ## État après les phases 1 et 2

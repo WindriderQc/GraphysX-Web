@@ -3,8 +3,9 @@
 Rédigé le 2026-10-29 vers 19:30 America/Toronto, complété vers 22:30 (sélecteur de monde,
 troncs solides) après les réponses de Yanik. Rien n'est déployé, aucun modèle n'a été
 appelé, le MCP GraphysX reste éteint. Code : `world-service/living-island.ts`, lancé avec
-`--world living-island` (ou `WORLD_ID=living-island`). Mesa reste identique, au bit près
-(même empreinte `187f609d63a3204b`).
+`--world living-island` (ou `WORLD_ID=living-island`). L'île vivante ne change rien à Mesa :
+mêmes corps, mêmes règles. Les deux îles partagent depuis le 2026-10-29 au soir le décor de
+l'île Clawblox (section « Le décor »).
 
 ## Pourquoi
 
@@ -89,7 +90,28 @@ Le jardinier scripté vient de garder une graine de `Tree_4` (le plus touffu), d
 | Vue d'ensemble : la forêt et la volée (les oiseaux évitent l'agent suivi) | ![vue d'ensemble](living-island/overview.jpg) |
 | Ce que voit le jardinier (`GET /observe/image`, 1088×640) | ![vue du jardinier](living-island/gardener-view.jpg) |
 | Téléphone (375 px), panneau replié | ![téléphone](living-island/phone.jpg) |
-| 4K (3840×2160, HUD à l'échelle 2), `Tree_6` adulte | ![4K](living-island/4k.jpg) |
+| 4K (3840×2160, HUD à l'échelle 2 ; image réduite à 2560 px), `Tree_6` adulte | ![4K](living-island/4k.jpg) |
+
+## Le décor
+
+Remarque du 2026-10-29 au soir : dans la vue, le sol des îles du service sortait menthe et uni,
+loin de l'île Clawblox vue dans la même page. La vue habille une île Clawblox (herbe texturée,
+chapeau d'herbe sur chaque mesa, mer réfléchissante, `src/island-feed.ts`) ; une île du service
+s'affiche depuis son propre document, qui n'avait que des boîtes de couleur.
+
+Le document de Mesa (donc aussi celui de l'île vivante) porte maintenant le même habillage,
+en **décor sans physique** : les dalles de sol gardent leurs corps mais sont cachées sous une
+dalle d'herbe ; chaque mesa reçoit son chapeau d'herbe ; l'océan reste une dalle cachée sous une
+surface d'eau ; les lampes sont celles de la vue (ambiante 0,55 bleutée, soleil 2,6 chaud).
+Les corps, les règles et l'observation ne changent pas (même position de l'océan, mêmes noms,
+mêmes couleurs annoncées). L'empreinte de Mesa change (`3bdeced47efb7c86`) : les sauvegardes
+d'avant sont refusées ; aucune n'est en service. La vue à la première personne d'Eko voit le
+même décor.
+
+| | |
+| --- | --- |
+| Vue d'ensemble, avant et après | ![décor, vue d'ensemble](living-island/look-overview-before-after.jpg) |
+| Téléphone (375 px), avant et après | ![décor, téléphone](living-island/look-phone-before-after.jpg) |
 
 ## Choisir le monde : un seul conteneur, un sélecteur
 

@@ -14,8 +14,12 @@ import { runGardener } from "../world-service/gardener.mjs";
 
 const root = new URL("..", import.meta.url);
 const mesaApi = readFileSync(new URL("world-service/API.md", root), "utf8");
-/** Mesa's content hash on main before the living island existed (2026-10-29, 99a1186). */
-const MESA_HASH = "187f609d63a3204b";
+/**
+ * Mesa's content hash: pinned so a change to Mesa's document or rules is deliberate. It last
+ * changed on 2026-10-29 for the island look (grass, mesa caps, sea: decor only, no physics);
+ * the living island never changes it.
+ */
+const MESA_HASH = "3bdeced47efb7c86";
 let outDir;
 let m;
 
@@ -53,8 +57,13 @@ function gatherAndSow(world, session) {
 
 describe("living island", () => {
   it("adds a forest, a flock and a wind field to Mesa without changing Mesa", () => {
+    // The island look is decor without physics: hidden physics slabs, grass and sea on top.
+    const look = new m.IslandWorld().sceneHello().document.entities;
+    assert.ok(look.filter((entity) => entity.tags?.includes("land")).length === 5 && look.some((entity) => entity.type === "water"), "grass slabs and a sea");
+    assert.ok(look.filter((entity) => entity.tags?.includes("decor")).every((entity) => !entity.physics), "decor has no physics");
+    assert.ok(look.filter((entity) => /^ground/.test(entity.id) && entity.physics).every((entity) => entity.visible === false), "the ground's bodies are hidden under their grass");
     const mesa = new m.IslandWorld();
-    assert.equal(mesa.snapshot().world.contentHash, MESA_HASH, "Mesa's world hash is unchanged");
+    assert.equal(mesa.snapshot().world.contentHash, MESA_HASH, "Mesa's world hash is the pinned one");
     const mesaSession = mesa.join("Eko").session;
     assert.equal(mesa.observe(mesaSession).world.entities.filter((entity) => entity.attributes?.IsLiving).length, 0);
     assert.equal(mesa.apply(mesaSession, { type: "Sow", data: { position: [0, 0, 0] } }), "InvalidAction", "Mesa has no living actions");

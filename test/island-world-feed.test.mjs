@@ -141,6 +141,13 @@ test("source detection and the opening overview", () => {
   const bounds = feed.worldBounds(feed.worldSceneFromHello(hello));
   assert.deepEqual(bounds, { center: [-2, 0, 0], radius: 50 }, "the visible land (static bodies, not the invisible wall) frames the overview");
   assert.deepEqual(feed.worldBounds(feed.worldSceneFromHello({ ...hello, document: { entities: [] } })), { center: [0, 0, 0], radius: 40 });
+  // The service's islands hide their ground bodies and draw grass slabs tagged `land` over them.
+  const dressed = { ...hello, document: { ...document, entities: [
+    { id: "groundcenter", type: "box", visible: false, transform: { position: [-2, -5, 0], scale: [96, 10, 100] }, physics: { mode: "static" } },
+    { id: "groundcenter-grass", type: "box", geometry: { width: 96, height: 10, depth: 100 }, transform: { position: [-2, -5, 0] }, tags: ["decor", "land"] },
+    { id: "lowstep-grass", type: "box", geometry: { width: 8, height: 0.35, depth: 10 }, transform: { position: [8, 1.9, 18] }, tags: ["decor"] },
+  ] } };
+  assert.deepEqual(feed.worldBounds(feed.worldSceneFromHello(dressed)), { center: [-2, 0, 0], radius: 50 }, "grass slabs tagged land frame it; a mesa cap does not");
 });
 
 test("living island: flock members ride the frames, interpolated, and re-sent trees rebuild the scene", () => {

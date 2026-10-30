@@ -95,7 +95,7 @@ export function blockEntity(id: string, name: string, position: Vec3, velocity?:
   return {
     id, label: name, type: "box",
     transform: { position, scale: [BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE] },
-    material: { color: hex(SLATE) },
+    material: { color: hex(SLATE), roughness: 0.78, metalness: 0.04 },
     physics: {
       mode: "dynamic", mass: BLOCK_MASS, ...BLOCK_SURFACE,
       ...(velocity ? { linearVelocity: velocity } : {}),
@@ -107,6 +107,44 @@ export function blockEntity(id: string, name: string, position: Vec3, velocity?:
 
 export function blockMeta(name: string): MesaEntityMeta {
   return { name, shape: "Block", material: "Slate", color: SLATE, size: [BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE], mass: BLOCK_MASS, attributes: pickupAttributes("Slate", "PickupObject") };
+}
+
+// ---- the look ------------------------------------------------------------------------------
+//
+// The island viewer dresses a Clawblox island (src/island-feed.ts): grass-textured ground, a
+// grass cap on every mesa, a reflecting sea. A GraphysX world is drawn from its own document,
+// so the same dressing lives here as decor entities without physics: bodies, observation and
+// every rule stay exactly what they were. The ground's physics slabs are hidden and each one gets
+// a grass slab; overlapping slabs share their top plane, so smaller ones sit a few centimetres
+// lower (as in the viewer's Clawblox mapping) instead of flickering.
+
+const GRASS_TEXTURE = "grass-sample";
+/** Same constants as the viewer's Clawblox mapping (src/island-feed.ts). */
+const GROUND_STEP = 0.04;
+const WATER_HORIZON = 6;
+const grassRepeat = (w: number, d: number): [number, number] => [Math.round(Math.max(1, w / 6) * 1000) / 1000, Math.round(Math.max(1, d / 6) * 1000) / 1000];
+
+function groundGrass(box: StaticBox, rank: number): AgentWorldEntityDefinition {
+  const [w, h, d] = box.size;
+  return {
+    id: `${box.name.toLowerCase()}-grass`, label: `${box.name} grass`, type: "box",
+    geometry: { width: w, height: h, depth: d },
+    transform: { position: [box.position[0], box.position[1] - GROUND_STEP * rank, box.position[2]] },
+    material: { color: "#a9dc8c", roughness: 0.92, metalness: 0, texture: { id: GRASS_TEXTURE, repeat: grassRepeat(w, d) } },
+    castShadow: false, receiveShadow: true, tags: ["decor", "land"],
+  };
+}
+
+function mesaCap(box: StaticBox): AgentWorldEntityDefinition {
+  const [w, h, d] = box.size;
+  const cap = Math.min(0.35, h * 0.2);
+  return {
+    id: `${box.name.toLowerCase()}-grass`, label: `${box.name} grass`, type: "box",
+    geometry: { width: w + 0.04, height: cap, depth: d + 0.04 },
+    transform: { position: [box.position[0], box.position[1] + h / 2 - cap / 2 + 0.02, box.position[2]] },
+    material: { color: "#9fd38c", roughness: 0.9, metalness: 0, texture: { id: GRASS_TEXTURE, repeat: grassRepeat(w, d) } },
+    castShadow: false, receiveShadow: true, tags: ["decor"],
+  };
 }
 
 export interface MesaIsland {
@@ -123,30 +161,44 @@ export function buildMesaIsland(): MesaIsland {
     meta.set(entity.id, info);
   };
 
+  // The Clawblox ocean slab stays (hidden) so the observation keeps it; the sea is drawn by a
+  // reflecting water surface on its top face, out to the horizon.
   add(
-    { id: "ocean", label: "Ocean", type: "box", transform: { position: [0, -0.725, 0], scale: [600, 0.45, 600] }, material: { color: "#3480a8", opacity: 0.82 } },
+    { id: "ocean", label: "Ocean", type: "box", transform: { position: [0, -0.725, 0], scale: [600, 0.45, 600] }, material: { color: "#3480a8", opacity: 0.82 }, visible: false },
     { name: "Ocean", shape: "Block", material: "Glass", color: [0.204, 0.502, 0.659], size: [600, 0.45, 600], mass: 0, transparency: 0.18, attributes: { RenderRole: "Ocean" }, decorative: true },
   );
+  const decor: AgentWorldEntityDefinition[] = [{
+    id: "ocean-surface", label: "Sea", type: "water", transform: { position: [0, -0.5, 0] },
+    water: { size: 600 * WATER_HORIZON, color: "#0e4f63", sunColor: "#fff3d6", rippleScale: 4, distortionScale: 0.9, flowSpeed: 0.45, tintStrength: 0.75, tintDistance: 180, reflection: true, reflectionResolution: 512 },
+    tags: ["decor"],
+  }];
+  const groundRank = new Map(STATIC_BOXES.filter((box) => box.role === "Ground")
+    .sort((a, b) => b.size[0] * b.size[2] - a.size[0] * a.size[2])
+    .map((box, rank) => [box.name, rank]));
   for (const box of STATIC_BOXES) {
+    const ground = box.role === "Ground";
     add(
-      // Clawblox's boundary walls are fully transparent (Transparency = 1): they block, nobody sees them.
-      { id: box.name.toLowerCase(), label: box.name, type: "box", transform: { position: box.position, scale: box.size }, material: { color: hex(box.color) }, physics: { mode: "static", ...TERRAIN_SURFACE }, ...(box.transparency !== undefined && box.transparency >= 1 ? { visible: false } : {}) },
+      // Clawblox's boundary walls are fully transparent (Transparency = 1): they block, nobody sees
+      // them. Ground slabs block too but are drawn by their grass slab.
+      { id: box.name.toLowerCase(), label: box.name, type: "box", transform: { position: box.position, scale: box.size }, material: { color: hex(box.color), roughness: 0.9, metalness: 0 }, physics: { mode: "static", ...TERRAIN_SURFACE }, ...((box.transparency !== undefined && box.transparency >= 1) || ground ? { visible: false } : {}), ...(box.role === "Mesa" ? { castShadow: true, receiveShadow: true } : {}) },
       { name: box.name, shape: "Block", material: box.material ?? "Plastic", color: box.color, size: box.size, mass: 0, static: true, ...(box.transparency !== undefined ? { transparency: box.transparency } : {}), ...(box.role ? { attributes: { RenderRole: box.role } } : {}) },
     );
+    if (ground) decor.push(groundGrass(box, groundRank.get(box.name)!));
+    else if (box.role === "Mesa") decor.push(mesaCap(box));
   }
   BLOCK_SPAWNS.forEach((position, index) => {
     const name = `Block_${index + 1}`;
     add(blockEntity(name.toLowerCase(), name, position), blockMeta(name));
   });
   add(
-    { id: ROCK_ID, label: "Rock_1", type: "box", transform: { position: [-31.4, 3.05, 26.9], scale: ROCK_SIZE }, material: { color: "#34312c" }, physics: { mode: "dynamic", mass: ROCK_MASS, friction: 0.9, restitution: 0 }, tags: ["pickup"] },
+    { id: ROCK_ID, label: "Rock_1", type: "box", transform: { position: [-31.4, 3.05, 26.9], scale: ROCK_SIZE }, material: { color: "#34312c", roughness: 0.96, metalness: 0.02 }, physics: { mode: "dynamic", mass: ROCK_MASS, friction: 0.9, restitution: 0 }, tags: ["pickup"] },
     { name: "Rock_1", shape: "Block", material: "Slate", color: [0.204, 0.192, 0.173], size: ROCK_SIZE, mass: ROCK_MASS, attributes: pickupAttributes("Slate", "Rock") },
   );
   // A torus gets a flat box collider (diameter x tube, thin along local Y) from the runtime,
   // matching the Clawblox ring part. Whether the rendered torus lies flat with it is a check
   // for the viewer (the Three torus is thin along Z).
   add(
-    { id: "ring_1", label: "Ring_1", type: "torus", geometry: { radius: 1.52, tube: 0.28, radialSegments: 32 }, transform: { position: [40, 0.28, -42], rotationDegrees: [0, 32, 0] }, material: { color: "#e8c04a" }, physics: { mode: "dynamic", mass: RING_MASS, friction: 0.35, restitution: 0.18 }, tags: ["pickup"] },
+    { id: "ring_1", label: "Ring_1", type: "torus", geometry: { radius: 1.52, tube: 0.28, radialSegments: 32 }, transform: { position: [40, 0.28, -42], rotationDegrees: [0, 32, 0] }, material: { color: "#e8c04a", roughness: 0.35, metalness: 0.55, emissive: "#e8c04a", emissiveIntensity: 0.12 }, physics: { mode: "dynamic", mass: RING_MASS, friction: 0.35, restitution: 0.18 }, tags: ["pickup"] },
     { name: "Ring_1", shape: "Ring", material: "Plastic", color: [0.91, 0.753, 0.29], size: RING_SIZE, mass: RING_MASS, attributes: pickupAttributes("Yellow", "Ring") },
   );
 
@@ -161,9 +213,11 @@ export function buildMesaIsland(): MesaIsland {
       physics: { gravity: [0, -30, 0] },
     },
     entities: [
-      { id: "ambient", type: "ambient-light", intensity: 0.8 },
-      { id: "sun", type: "directional-light", intensity: 2.4, transform: { position: [-40, 80, 30] }, castShadow: true },
+      // The island viewer's lights for a Clawblox island (src/island-app.ts), so both look alike.
+      { id: "ambient", type: "ambient-light", intensity: 0.55, material: { color: "#dfeeff" } },
+      { id: "sun", type: "directional-light", intensity: 2.6, transform: { position: [60, 90, 40] }, material: { color: "#fff1d8" }, castShadow: true },
       ...entities,
+      ...decor,
     ],
   };
   return { document, meta };

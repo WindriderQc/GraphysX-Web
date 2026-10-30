@@ -114,9 +114,10 @@ try {
   assert.equal(first.world.followed, "Eko");
   assert.equal(first.agent.title, "d'Eko");
   assert.equal(first.kinds.agent, 1, "the avatar is an ordinary agent entity of the document");
-  // 2 lights, ocean, 5 ground slabs, 4 invisible walls, 11 mesas, 12 blocks, rock, ring, Eko;
-  // the 12 blocks, the rock, the ring and Eko move.
-  assert.deepEqual([first.parts, first.moving], [38, 15], "the whole Mesa island and its moving things");
+  // 2 lights, ocean, 5 ground slabs, 4 invisible walls, 11 mesas, 12 blocks, rock, ring, Eko,
+  // plus the look (sea surface, 5 grass slabs, 11 mesa caps); the 12 blocks, the rock, the ring
+  // and Eko move.
+  assert.deepEqual([first.parts, first.moving], [55, 15], "the whole Mesa island and its moving things");
   const scene = await page.evaluate(() => {
     const api = window.__GRAPHYSX__;
     return {
