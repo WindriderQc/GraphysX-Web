@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { applySmokeTimeout, launchSmokeBrowser, SMOKE_TIMEOUT } from './smoke-harness.mjs';
+import { applySmokeTimeout, launchSmokeBrowser, SMOKE_TIMEOUT, useLightRender } from './smoke-harness.mjs';
 import { startStaticServer } from './static-server.mjs';
 
 // Mounted product controls and native scene reads. HTTP fixtures replace only AgentX;
@@ -24,6 +24,8 @@ export async function runLlmXCreation({ part = 'all' } = {}) {
   const sessions = new Map(), expectedHttpErrors = new Set();
   let sessionSequence = 0, originalProposal = null;
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+  // Behaviour journey: receipts, native scene state and layout, not the desktop look.
+  await useLightRender(page);
   applySmokeTimeout(page);
   const action = name => page.locator(`[data-action="${name}"]`);
   const talk = name => page.locator(`[data-talk="${name}"]`);

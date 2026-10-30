@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { applySmokeTimeout, launchSmokeBrowser, SMOKE_TIMEOUT } from './smoke-harness.mjs';
+import { applySmokeTimeout, launchSmokeBrowser, SMOKE_TIMEOUT, useLightRender } from './smoke-harness.mjs';
 import { startStaticServer } from './static-server.mjs';
 
 // Controller acceptance with intercepted HTTP and silent audio fixtures. This does not
@@ -33,6 +33,8 @@ const envelope = data => JSON.stringify({ ok: true, status: 'success', data });
 async function fixture(options = {}) {
   const scenarioStartedAt = Date.now();
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+  // Behaviour journey: sessions, turns and replay over intercepted transport, not the desktop look.
+  await useLightRender(page);
   applySmokeTimeout(page);
   const calls = [], errors = [], navigations = [], expectedHttpErrors = new Map();
   const sessions = new Map();

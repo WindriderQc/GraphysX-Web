@@ -78,6 +78,19 @@ function hookOnce() {
 }
 
 /**
+ * Opts a page or browser context into the light renderer (`lightRenderRequested` in
+ * src/platform-host.ts): mobile render tier at any width, no MSAA, no post stack. For journeys
+ * that assert behaviour, state and layout, never for journeys that judge how a scene looks.
+ * On a software renderer every Playwright action waits on several frames, so frame cost is
+ * most of a journey's wall time. Registered as an init script, it survives reloads and
+ * navigations of that page or context.
+ */
+export async function useLightRender(target) {
+  await target.addInitScript(() => { window.__GRAPHYSX_LIGHT_RENDER__ = true; });
+  return target;
+}
+
+/**
  * Launches the browser every smoke uses, and guarantees it is closed however the script
  * ends. Prefer this over calling `chromium.launch` directly.
  */

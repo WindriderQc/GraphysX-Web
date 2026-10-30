@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { startStaticServer } from './static-server.mjs';
-import { launchSmokeBrowser, applySmokeTimeout } from './smoke-harness.mjs';
+import { launchSmokeBrowser, applySmokeTimeout, useLightRender } from './smoke-harness.mjs';
 
 // The real release module on a Core-like origin. No model, microphone or audio.
 const output = process.env.SMOKE_ARTIFACTS || 'output/playwright/llmx-core-embed';
@@ -13,6 +13,8 @@ const origin = new URL(server.url).origin, calls = [], errors = [], unexpected =
 try {
   for (const profile of ['personal', 'family']) {
     const context = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: profile === 'family' ? 390 : 1280, height: 800 } });
+    // Behaviour journey: routes, cookie, turn, assets and mobile reachability, not the desktop look.
+    await useLightRender(context);
     await context.addCookies([{ name: 'agentx_family_device', value: 'synthetic-pin', url: origin }]);
     const page = applySmokeTimeout(await context.newPage());
     if (profile === 'personal') await page.addInitScript(() => {
