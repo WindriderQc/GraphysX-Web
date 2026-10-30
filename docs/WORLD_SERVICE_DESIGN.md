@@ -417,6 +417,15 @@ principal (« le runtime ne tournera pas sans navigateur ») est levé. Ma
 recommandation : faire les phases 1 et 2 sur devX, sans modèle, puis décider de
 l'hébergement avec un service qui marche.
 
+## Les noms (2026-10-29)
+
+Le propriétaire a choisi des noms pour ne plus dire « GraphysX » à la fois pour l'écran et pour
+le monde : **GraphysX-screen** est l'écran (`?app=island`), **l'île de Frank** est l'île Mesa
+simulée par ce service de monde sur UGFrank, et **l'île Clawblox** est la même île simulée par
+Clawblox. Côté AgentX, le monde se lance avec `--world ile-de-frank` (agentx-home
+`instance/island/worlds/ile-de-frank`). Les noms techniques restent : `world-service/`,
+conteneurs et images `graphysx-world`.
+
 ## Phase 4 : préparée (2026-10-29)
 
 - **Images** : `world-service/Dockerfile` (monde seul, Node 22, 332 Mo, sans navigateur) et
