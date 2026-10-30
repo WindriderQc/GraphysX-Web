@@ -357,6 +357,11 @@ export class IslandWorld {
     return [PLAYER_SPAWN[0] + Math.cos(angle) * radius, PLAYER_SPAWN[1], PLAYER_SPAWN[2] + Math.sin(angle) * radius];
   }
 
+  /** Agents joined to this island (POST /world refuses to replace it while any are). */
+  get agentCount(): number {
+    return this.characters.size;
+  }
+
   hasSession(session: string | undefined): boolean {
     return !!session && this.characters.has(session);
   }
