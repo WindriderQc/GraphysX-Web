@@ -98,14 +98,22 @@ try {
       assert.equal(receipts[0].status, 'applied');
       for (const [width, height] of [[320, 568], [390, 844], [600, 800]]) {
         await page.setViewportSize({ width, height });
-        for (const selector of ['[data-action="save"]', '[data-action="math"]', '[data-action="undo"]', '[data-action="redo"]', '[data-action="face"]', '[data-text]', '[data-talk="send"]', '[data-talk="microphone"]', '[data-talk="history"]']) {
-          const control = page.locator(selector);
-          await control.scrollIntoViewIfNeeded();
-          assert.ok(await control.evaluate(element => {
+        // One page call per size instead of two per control. Each Playwright call waits on
+        // several rendered frames, about 3 s apiece on a software renderer. The checks are
+        // unchanged: after the resize settles, each control must match exactly once, have a
+        // box, scroll into view (centred if needed, as Playwright does) and win the hit test.
+        const reach = await page.evaluate(async selectors => {
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          return selectors.map(selector => {
+            const matches = document.querySelectorAll(selector);
+            if (matches.length !== 1) return { selector, reachable: false, detail: `${matches.length} matches` };
+            const element = matches[0];
+            element.scrollIntoViewIfNeeded(true);
             const r = element.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-            return hit === element || element.contains(hit);
-          }), `${width}x${height}: ${selector} is reachable`);
-        }
+            return { selector, reachable: r.width > 0 && r.height > 0 && (hit === element || element.contains(hit)), detail: hit?.outerHTML.slice(0, 80) ?? 'nothing' };
+          });
+        }, ['[data-action="save"]', '[data-action="math"]', '[data-action="undo"]', '[data-action="redo"]', '[data-action="face"]', '[data-text]', '[data-talk="send"]', '[data-talk="microphone"]', '[data-talk="history"]']);
+        for (const { selector, reachable, detail } of reach) assert.ok(reachable, `${width}x${height}: ${selector} is reachable (hit: ${detail})`);
         const layout = await page.evaluate(() => {
           const rect = selector => { const e = document.querySelector(selector), r = e.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; };
           return { input: rect('[data-text]'), send: rect('[data-talk="send"]'), microphone: rect('[data-talk="microphone"]'),
