@@ -56,13 +56,14 @@ async function readJson(request, InputError) {
  * @param {object} options.module      the bundled world: { IslandWorld, InputError, validateInput, TICK_HZ }
  * @param {string} options.apiMarkdown agent-facing API.md
  * @param {object} [options.snapshot]  resume from this GET /snapshot body
+ * @param {string} [options.world]     `mesa-island` (default) or `living-island`; a snapshot names its own
  * @param {boolean} [options.realtime] false: the caller drives `world.step()` (tests)
  * @param {(request: {position: number[], forward: number[], fovDeg: number, entityId: string, tick: number, width: number, height: number}) => Promise<Buffer>} [options.renderImage]
  *        renders one first-person PNG; without it GET /observe/image answers 503
  */
 export async function startWorldServer(options) {
   const { IslandWorld, InputError, validateInput, TICK_HZ } = options.module;
-  const world = new IslandWorld(options.snapshot);
+  const world = new IslandWorld(options.snapshot, { world: options.world });
   const spectators = new Set();
   const spectateEvery = Math.max(1, Math.round(TICK_HZ / (options.spectateHz ?? 10)));
   const recordFile = options.recordDir ? join(options.recordDir, "graphysx-recording.ndjson") : null;

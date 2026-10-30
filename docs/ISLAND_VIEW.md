@@ -56,6 +56,12 @@ npx vite --host 0.0.0.0 --port 18143
 | La reprise de l'enregistrement | `http://192.168.2.117:18143/?app=island&source=http://192.168.2.117:18141&agent=Eko` |
 | Comme l'onglet « Île » de Benchmark | ajouter `&embed=1` |
 
+**L'île vivante** (`--world living-island`, docs/LIVING_ISLAND.md) passe par la même page : ses
+arbres (`dna-tree`), sa volée et son vent arrivent dans le document du `hello`. Les oiseaux
+volent parce que chaque image du flux porte leurs positions (`swarms`, interpolées comme les
+poses), la volée locale restant en pause ; un arbre qui pousse ou change de génération est
+renvoyé sous le même identifiant et la page le reconstruit. Parcours : `scripts/smoke-living-island.mjs`.
+
 Le contrat de l'onglet « Île » (AgentX#1179,
 `<vue>/?app=island&embed=1&source=<base>[#spectator_token=…]&agent=<nom>`) fonctionne tel quel :
 il suffit que `source` désigne le service de monde ou sa reprise. Le service n'a pas de jeton

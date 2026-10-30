@@ -5,7 +5,10 @@ fixed 1/60 s in Node, behind the [Clawblox](https://github.com/nacloos/clawblox)
 protocol, so Clawblox agents (AgentX's Eko) live in a GraphysX world unchanged. Design and
 measurements (French): [`docs/WORLD_SERVICE_DESIGN.md`](../docs/WORLD_SERVICE_DESIGN.md).
 
-Not deployed anywhere. The first world is the Clawblox Mesa island.
+Not deployed anywhere. The first world is the Clawblox Mesa island; `--world living-island`
+(or `WORLD_ID=living-island`) runs the **living island**: Mesa unchanged plus a Living Forest,
+a flock and a wind field, with the agent actions `GatherSeed`, `Sow` and `NextGeneration`
+(French: [`docs/LIVING_ISLAND.md`](../docs/LIVING_ISLAND.md)).
 
 ```bash
 npm run build:world-service            # world-service/dist/world.js
@@ -22,10 +25,12 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
 | File | Role |
 |---|---|
 | `mesa-island.ts` | the Mesa island as an `agent-world/v2` document, with Clawblox names, attributes and physical properties |
-| `island-world.ts` | fixed tick, characters, MoveTo/Jump/Stop/Pickup/Place/Throw, carry, rock impacts, observation, pose frames, exact snapshot/resume |
+| `island-world.ts` | fixed tick, characters, MoveTo/Jump/Stop/Pickup/Place/Throw, carry, rock impacts, observation, pose frames, exact snapshot/resume; the world registry (`mesa-island`, `living-island`) |
+| `living-island.ts` | the living island: five founder `dna-tree`s, a `flock` shy of agents and thrown blocks, an invisible `force-field` wind, the GatherSeed/Sow/NextGeneration rules, their observation, `swarms` in pose frames and the living part of snapshots |
+| `gardener.mjs` | a scripted, model-free agent that gathers a seed, sows it and advances a generation over HTTP |
 | `index.ts` | the bundled world (rules + simulation, no I/O) |
 | `server.mjs` | HTTP: `/join` `/observe` `/input` `/chat` `/chat/messages` `/api.md` `/snapshot` `/spectate` `/healthz` |
-| `main.mjs` | CLI; honours `WORLD_HOST/PORT/RECORD/RECORD_DIR/RESUME_PATH/OPERATOR_TOKEN` and the image settings below; reads model payloads from `public/` |
+| `main.mjs` | CLI; honours `WORLD_ID` (`--world`) and `WORLD_HOST/PORT/RECORD/RECORD_DIR/RESUME_PATH/OPERATOR_TOKEN` and the image settings below; reads model payloads from `public/` |
 | `image.mjs`, `image-sidecar.mjs` | the `/observe/image` contract, and the separate process that renders it in headless Chromium |
 | `recording.mjs`, `replay.mjs` | a `--record` file as a seekable timeline, and the read-only replay server the viewer plays |
 | `world.toml`, `API.md` | the Clawblox world manifest and the agent-facing API |
@@ -38,8 +43,10 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
   bit; the same `X-Session` tokens keep working. A snapshot of another world or rules version
   is refused.
 - `GET /spectate` (SSE, read only): `hello` (the current v2 document and numeric id → entity
-  id), `frame` 10 times a second (`[id, x, y, z, qx, qy, qz, qw]` per moving thing), `entities`
-  when something is added or removed. At most 32 viewers; slow ones are dropped.
+  id), `frame` 10 times a second (`[id, x, y, z, qx, qy, qz, qw]` per moving thing; on the
+  living island also `swarms`: `[id, x, y, z, …]` with every flock member in flock-local space),
+  `entities` when something is added or removed (an entity re-added under its id replaces its
+  definition: a tree that grew or changed generation). At most 32 viewers; slow ones are dropped.
 - `GET /spectate` also sends `action` (`{tick, agent, input, result}`) for every agent action.
   `/spectate` and `/healthz` answer any origin (`access-control-allow-origin: *`); the agent
   routes do not.

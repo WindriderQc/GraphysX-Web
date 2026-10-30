@@ -23,8 +23,19 @@ import {
   blockMeta,
   buildMesaIsland,
   type MesaEntityMeta,
+  type MesaIsland,
   type Vec3,
 } from "./mesa-island";
+import {
+  LIVING_RULES_VERSION,
+  LIVING_WORLD_ID,
+  LivingIsland,
+  buildLivingIsland,
+  livingEntityIds,
+  type LivingHost,
+  type LivingIslandBase,
+  type LivingSnapshot,
+} from "./living-island";
 
 export const TICK_HZ = 60;
 const DT = 1 / TICK_HZ;
@@ -121,6 +132,8 @@ export interface WorldSnapshot {
   rocks: [string, RockState][];
   chat: ChatMessage[];
   physics: { format: string; accumulator: number; bytes: string };
+  /** The living island's own state (trees, seeds, flock members); absent on Mesa. */
+  living?: LivingSnapshot;
 }
 
 const scratchTransform = (): PhysicsTransform => ({ position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 } });
@@ -182,12 +195,40 @@ export function validateInput(input: unknown): ActionInput {
   return action;
 }
 
-const BASE = buildMesaIsland();
-const BASE_HASH = contentHash(JSON.stringify(BASE.document) + RULES_VERSION);
+export const MESA_WORLD_ID = "mesa-island";
+/** The worlds this service can run (`--world` / WORLD_ID). */
+export const WORLD_IDS = [MESA_WORLD_ID, LIVING_WORLD_ID] as const;
+
+interface WorldBase { id: string; base: MesaIsland | LivingIslandBase; rules: string; hash: string; livingIds: string[] }
+const WORLD_BASES = new Map<string, WorldBase>();
+
+/** A world's authored start, built once. Mesa's hash is unchanged by the living island. */
+function worldBase(id: string): WorldBase {
+  const known = WORLD_BASES.get(id);
+  if (known) return known;
+  let made: WorldBase;
+  if (id === MESA_WORLD_ID) {
+    const base = buildMesaIsland();
+    made = { id, base, rules: RULES_VERSION, hash: contentHash(JSON.stringify(base.document) + RULES_VERSION), livingIds: [] };
+  } else if (id === LIVING_WORLD_ID) {
+    const base = buildLivingIsland();
+    const rules = `${RULES_VERSION}+${LIVING_RULES_VERSION}`;
+    made = { id, base, rules, hash: contentHash(JSON.stringify(base.document) + rules), livingIds: livingEntityIds(base) };
+  } else {
+    throw new Error(`Unknown world: ${id}. Use one of ${WORLD_IDS.join(", ")}`);
+  }
+  WORLD_BASES.set(id, made);
+  return made;
+}
 
 export class IslandWorld {
   readonly engine: PhysicsEngine;
   readonly runtime: AgentWorldRuntime;
+  /** `mesa-island` or `living-island`. */
+  readonly worldId: string;
+  private readonly world: WorldBase;
+  /** The living island's rules (trees, seeds, birds); null on Mesa. */
+  private readonly living: LivingIsland | null = null;
   tick = 0;
   readonly actions: ActionRecord[] = [];
   private readonly meta: Map<string, MesaEntityMeta>;
@@ -206,18 +247,27 @@ export class IslandWorld {
   private readonly move: PhysicsCharacterMove = { movement: { x: 0, y: 0, z: 0 }, grounded: false };
   private readonly contacts: PhysicsStateHandle[] = [];
 
-  /** A fresh island, or the exact continuation of a snapshot. */
-  constructor(snapshot?: WorldSnapshot) {
+  /**
+   * A fresh island, or the exact continuation of a snapshot. `options.world` picks the world
+   * (default Mesa); a snapshot carries its own and refuses to resume as another one.
+   */
+  constructor(snapshot?: WorldSnapshot, options: { world?: string } = {}) {
     this.engine = new RapierPhysicsEngine({ gravity: { x: 0, y: -30, z: 0 }, allowSleep: true });
+    const worldId = snapshot?.world?.id ?? options.world ?? MESA_WORLD_ID;
+    if (snapshot && options.world && options.world !== worldId) throw new Error(`This snapshot is of ${worldId}, not ${options.world}`);
+    this.world = worldBase(worldId);
+    this.worldId = worldId;
     if (!snapshot) {
-      this.meta = new Map(BASE.meta);
-      this.runtime = new AgentWorldRuntime(structuredClone(BASE.document), this.engine);
+      this.meta = new Map(this.world.base.meta);
+      this.runtime = new AgentWorldRuntime(structuredClone(this.world.base.document), this.engine);
       for (const id of this.meta.keys()) this.numericIds.set(id, this.nextNumericId++);
+      for (const id of this.world.livingIds) this.numericIds.set(id, this.nextNumericId++);
       this.rocks.set(ROCK_ID, { ignoreUntil: ROCK_IMPACT_ARM_DELAY, lastImpactAt: Number.NEGATIVE_INFINITY, touching: [], speedBefore: 0 });
+      if (this.world.livingIds.length) this.living = new LivingIsland(this.livingHost(), this.meta, this.world.base as LivingIslandBase);
       return;
     }
     if (snapshot.format !== SNAPSHOT_FORMAT) throw new Error(`Unsupported snapshot format: ${String(snapshot.format)}`);
-    if (snapshot.world?.contentHash !== BASE_HASH) throw new Error("This snapshot belongs to another world or rules version");
+    if (snapshot.world?.contentHash !== this.world.hash) throw new Error("This snapshot belongs to another world or rules version");
     this.meta = new Map(snapshot.meta);
     this.runtime = new AgentWorldRuntime(snapshot.document, this.engine);
     this.runtime.hostRestoreClock(snapshot.time);
@@ -243,6 +293,24 @@ export class IslandWorld {
     for (const [id, left] of snapshot.ghosts) this.ghosts.set(id, left);
     for (const [id, state] of snapshot.rocks) this.rocks.set(id, { ...state, lastImpactAt: state.lastImpactAt ?? Number.NEGATIVE_INFINITY });
     this.chat = snapshot.chat;
+    if (this.world.livingIds.length) {
+      if (!snapshot.living) throw new Error("This living-island snapshot has no living state");
+      this.living = new LivingIsland(this.livingHost(), this.meta, this.world.base as LivingIslandBase, snapshot.living);
+    }
+  }
+
+  private livingHost(): LivingHost {
+    return {
+      runtime: this.runtime,
+      simSeconds: () => this.simSeconds,
+      allocateNumericId: (id) => {
+        const numeric = this.nextNumericId++;
+        this.numericIds.set(id, numeric);
+        return numeric;
+      },
+      numericId: (id) => this.numericIds.get(id),
+      pushChange: (change) => { this.changes.push(change); },
+    };
   }
 
   get simSeconds(): number {
@@ -317,7 +385,10 @@ export class IslandWorld {
       case "Pickup": this.pickup(character, data); break;
       case "Place": this.place(character, data); break;
       case "Throw": this.throwHeld(character, data); break;
-      default: character.lastActionResult = "InvalidAction";
+      default: {
+        const living = this.living?.apply({ id: character.id, name: character.name, position: this.position(character) }, input.type, data);
+        character.lastActionResult = living ?? "InvalidAction";
+      }
     }
     this.actions.push({ tick: this.tick, agent: character.name, input, result: character.lastActionResult });
     return character.lastActionResult;
@@ -471,12 +542,27 @@ export class IslandWorld {
       this.engine.readLinearVelocity(body, this.velocity);
       rock.speedBefore = Math.hypot(this.velocity.x, this.velocity.y, this.velocity.z);
     }
+    if (this.living) this.living.beforeUpdate([...this.characters.values()].map((character) => this.position(character)), this.movingPickups());
     this.runtime.update(DT);
     this.tick += 1;
+    this.living?.afterUpdate();
     this.syncAvatars();
     this.checkRockImpacts();
     this.cullOutOfBounds();
     for (const entry of applied) entry.resolve();
+  }
+
+  /** Loose blocks, rock and ring with their velocity: what can startle the birds. */
+  private movingPickups(): { position: Vec3; velocity: Vec3 }[] {
+    const out: { position: Vec3; velocity: Vec3 }[] = [];
+    for (const [id, info] of this.meta) {
+      if (!info.attributes?.IsPickupObject) continue;
+      const body = this.body(id);
+      if (!body) continue;
+      this.engine.readLinearVelocity(body, this.velocity);
+      out.push({ position: this.pose(body).position, velocity: v3(this.velocity) });
+    }
+    return out;
   }
 
   /** Run whole ticks synchronously: deterministic tests and fast-forward. */
@@ -694,6 +780,7 @@ export class IslandWorld {
       ViewOriginX: round(p[0], 3), ViewOriginY: round(p[1] + VIEW_EYE_HEIGHT, 3), ViewOriginZ: round(p[2], 3),
       ViewForwardX: round(character.forward[0], 3), ViewForwardY: 0, ViewForwardZ: round(character.forward[2], 3),
       ViewFovDeg: VIEW_FOV,
+      ...(this.living ? this.living.playerAttributes(character.id) : {}),
     };
   }
 
@@ -718,6 +805,7 @@ export class IslandWorld {
     });
     const entities: Record<string, unknown>[] = [];
     for (const [id, info] of this.meta) entities.push(this.entityObservation(id, info));
+    if (this.living) entities.push(...this.living.observations());
     for (const other of this.characters.values()) {
       entities.push({
         id: other.numericId, name: "HumanoidRootPart", entity_type: "part", position: this.position(other).map((value) => round(value)), size: [2, 5, 2],
@@ -737,8 +825,11 @@ export class IslandWorld {
 
   // ---- spectators -----------------------------------------------------------------------
 
-  /** Compact pose frame: [numericId, x, y, z, qx, qy, qz, qw] for every moving thing. */
-  poseFrame(): { tick: number; t: number; poses: number[][] } {
+  /**
+   * Compact pose frame: [numericId, x, y, z, qx, qy, qz, qw] for every moving thing. The living
+   * island adds `swarms`: [numericId, x, y, z, …] per flock, its members in flock-local space.
+   */
+  poseFrame(): { tick: number; t: number; poses: number[][]; swarms?: number[][] } {
     const poses: number[][] = [];
     for (const [id, info] of this.meta) {
       if (info.decorative || info.static) continue;
@@ -752,7 +843,9 @@ export class IslandWorld {
       const yaw = Math.atan2(-character.forward[0], -character.forward[2]);
       poses.push([character.numericId, round(p[0], 3), round(p[1], 3), round(p[2], 3), 0, round(Math.sin(yaw / 2), 4), 0, round(Math.cos(yaw / 2), 4)]);
     }
-    return { tick: this.tick, t: round(this.simSeconds, 3), poses };
+    const frame: { tick: number; t: number; poses: number[][]; swarms?: number[][] } = { tick: this.tick, t: round(this.simSeconds, 3), poses };
+    if (this.living) frame.swarms = this.living.swarms();
+    return frame;
   }
 
   /** What a viewer needs once: the current v2 document and numeric id -> entity id. */
@@ -785,7 +878,7 @@ export class IslandWorld {
       format: SNAPSHOT_FORMAT,
       time: this.simSeconds,
       tick: this.tick,
-      world: { id: BASE.document.id, contentHash: BASE_HASH, rules: RULES_VERSION },
+      world: { id: this.worldId, contentHash: this.world.hash, rules: this.world.rules },
       document: this.runtime.exportDefinition(),
       meta: [...this.meta],
       numericIds: [...this.numericIds],
@@ -801,6 +894,7 @@ export class IslandWorld {
       rocks: [...this.rocks].map(([id, rock]) => [id, { ...rock, touching: [...rock.touching] }]),
       chat: structuredClone(this.chat),
       physics: { format: physics.format, accumulator: physics.accumulator, bytes: toBase64(physics.bytes) },
+      ...(this.living ? { living: this.living.snapshot() } : {}),
     };
   }
 }
