@@ -26,6 +26,13 @@ describe("machine verify lock", () => {
   };
 
   it("admits only one simultaneous claimant", async () => { await assertOneOwner(lock); });
+  it("has the lock gone for every caller of a concurrent release", async () => {
+    const release = await acquireVerifyLock(lock);
+    const first = release();
+    await release();
+    await assert.rejects(readFile(lock, "utf8"), { code: "ENOENT" });
+    await first;
+  });
   it("admits only one claimant when reclaiming a dead owner", async () => {
     // Windows and POSIX cannot have this PID; it remains a valid positive PID value.
     await writeFile(lock, JSON.stringify({ pid: 2147483647, started: 1 }));

@@ -25,7 +25,7 @@ describe("verification by changed area", () => {
   });
 
   it("runs no 3D checks and does not deploy documentation or verification tooling", () => {
-    const plan = selectVerification(["README.md", "docs/CI_PERFORMANCE.md", "CLAUDE.md", "test/README.md", "test/verify-impact.test.mjs", "scripts/verify.mjs", "scripts/verify-impact.mjs", "scripts/plan-verification.mjs", ".github/workflows/ci.yml"]);
+    const plan = selectVerification(["README.md", "docs/CI_PERFORMANCE.md", "CLAUDE.md", "test/README.md", "test/verify-impact.test.mjs", "scripts/verify.mjs", "scripts/verify-impact.mjs", "scripts/with-verify-lock.mjs", "scripts/plan-verification.mjs", ".github/workflows/ci.yml"]);
     assert.equal(plan.mode, "static");
     assert.equal(plan.deploy, false);
     assert.deepEqual(names(plan), []);
