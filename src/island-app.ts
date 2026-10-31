@@ -22,7 +22,7 @@
  * paused, and frames are applied with `applyHostPoses`, interpolated about 150 ms behind.
  * `capture=1` turns the page into the image sidecar's camera (`world-service/image-sidecar.mjs`).
  */
-import { Box3, DirectionalLight, MathUtils, Quaternion, Raycaster, Vector2, Vector3, type Object3D } from "three";
+import { Box3, Mesh, MeshBasicMaterial, SphereGeometry, DirectionalLight, MathUtils, Quaternion, Raycaster, Vector2, Vector3, type Object3D } from "three";
 import "./island.css";
 import {
   agentPossessive, applyClawMessage, composeIsland, describeAgent, formatClock, islandBounds, islandMessages, islandMessagesAt,
@@ -40,6 +40,7 @@ import type { PlatformHost } from "./platform-host";
 import { foldPresentationPanel } from "./presentation-mobile";
 import { motionIsReduced } from "./platform-theme";
 import { buildIslandExplorer, islandDashboardLink, type ExplorerItem } from "./island-explorer-data";
+import { mergeWorldActions, type ObservedChange } from "./island-workspace-data";
 import { mountIslandExplorer } from "./island-explorer";
 
 export type IslandApplication = {
@@ -57,7 +58,7 @@ type ReplayInfo = { current_tick: number; total_ticks: number; first_tick?: numb
 type Mode = "fixture" | "live" | "replay" | "unknown";
 /** Which stream feeds the page: a Clawblox server, or a GraphysX world service / replay. */
 type Feed = "clawblox" | "graphysx" | null;
-type ProbeResult = "graphysx" | "other" | "unreachable";
+type ProbeResult = "graphysx" | "other" | "unreachable" | "mismatch";
 /** The image sidecar's request: the agent's eye, its forward and the vertical field of view. */
 type CaptureAim = { position: [number, number, number]; forward: [number, number, number]; verticalFovDeg: number; entityId: string | null; tick: number };
 
@@ -222,6 +223,20 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   let worldAgent: WorldAgent | null = null;
   let worldActions: WorldAction[] = [];
   let worldFrames = 0;
+  let legacyConnection = 0;
+  let lastClawReceipt = 0;
+  let lastWorldReceipt = 0;
+  let lastWorldFrame = 0;
+  let streamOpened = 0;
+  let frozen = false;
+  let replayInfoAt = 0;
+  let observedChanges: ObservedChange[] = [];
+  const expectedInstance = sourceParam && source ? new URL(sourceParam).searchParams.get("instance") : null;
+  const sourcePath = (path: string): string => {
+    const url = new URL(`${source!.http}${path}`);
+    if (expectedInstance) url.searchParams.set("instance", expectedInstance);
+    return url.href;
+  };
   // The camera page draws the newest frame; viewers draw ~150 ms behind to interpolate.
   const worldPoses = new WorldPoseBuffer(capture || reduced ? 0 : 150);
   let captureAim: CaptureAim | null = null;
@@ -281,6 +296,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
 
   const accept = (next: ClawObservation): void => {
     state = next;
+    lastClawReceipt = performance.now();
     snapshots += 1;
     const now = performance.now();
     if (poses.push(next, now)) resets += 1;
@@ -333,6 +349,8 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     element("[data-agent-mark]").textContent = player || agentName ? (shownName[0] ?? "?").toUpperCase() : "·";
     // Before the agent joins (a replay's opening, a world still starting) it is waiting, not gone.
     element("[data-agent-state]").textContent = player ? agent.state : agentName ? "pas encore arrivé" : agent.state;
+    const presence = world?.inspection?.agents.find(a => a.id === worldAgent?.entityId)?.attributes?.Presence;
+    if (presence === "idle") element("[data-agent-state]").textContent = "présence inactive · avatar conservé";
     element("[data-agent-action]").textContent = agent.action ? `Dernière action : ${agent.action}` : "";
   };
 
@@ -421,6 +439,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
         const wasReplay = mode === "replay";
         mode = "replay";
         replay = info;
+        replayInfoAt = performance.now();
         if (!wasReplay) void (feed === "graphysx" ? loadWorldActions() : loadAgentLog());
         // An embedded view of a freshly opened replay session (paused at its first tick) starts
         // itself, skipping the idle stretches before the agent acts. Once per page, and never
@@ -456,6 +475,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
 
   const updateStatus = (): void => {
     if (mode === "fixture") { setStatus("Capture de démonstration · boucle", "ok"); return; }
+    if (frozen) { setStatus("Flux figé · dernière observation conservée", "bad"); return; }
     if (!connected) { setStatus(feed === "graphysx" ? "Connexion au monde GraphysX…" : "Connexion au serveur Clawblox…", "wait"); return; }
     if (mode === "replay" && replay) {
       setStatus(`Reprise · ×${replay.speed}${replay.paused ? " · en pause" : ""}`, "ok");
@@ -501,7 +521,8 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
         reconnectTimer = window.setTimeout(() => {
           void probeWorldService().then((kind) => {
             if (disposed || socket) return;
-            if (kind === "graphysx") startWorld();
+            if (kind === "mismatch") { setNotice("L’instance de cette partie n’est plus active. Ouvrir une relecture depuis les parties."); setStatus("Instance indisponible", "bad"); }
+      else if (kind === "graphysx") startWorld();
             else connect();
           });
         }, RECONNECT_MS);
@@ -521,9 +542,10 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), PROBE_MS);
     try {
-      const health = await fetch(`${source.http}/healthz`, { cache: "no-store", signal: controller.signal });
+      const health = await fetch(sourcePath("/healthz"), { cache: "no-store", signal: controller.signal });
+      if (health.status === 409) return "mismatch";
       if (!health.ok || !isWorldServiceHealth(await health.json().catch(() => null))) return "other";
-      const stream = await fetch(`${source.http}/spectate`, { cache: "no-store", signal: controller.signal });
+      const stream = await fetch(sourcePath("/spectate"), { cache: "no-store", signal: controller.signal });
       return stream.ok && isEventStream(stream.headers.get("content-type")) ? "graphysx" : "other";
     } catch {
       return "unreachable";
@@ -543,14 +565,15 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   const loadWorldActions = async (): Promise<void> => {
     if (!source) return;
     try {
-      const response = await fetch(`${source.http}/replay/actions`, { cache: "no-store" });
+      const response = await fetch(sourcePath("/replay/actions"), { cache: "no-store" });
       if (!response.ok) return;
       const body = await response.json() as { actions?: unknown[] };
-      worldActions = [];
+      const actions: WorldAction[] = [];
       for (const raw of body.actions ?? []) {
         const parsed = parseWorldEvent("action", JSON.stringify(raw));
-        if (parsed.kind === "action") worldActions.push(parsed.action);
+        if (parsed.kind === "action") actions.push(parsed.action);
       }
+      worldActions = mergeWorldActions(worldActions, actions, world?.instanceId, Number.MAX_SAFE_INTEGER);
       refreshWorldMessages();
     } catch { /* the world still renders without its action log */ }
   };
@@ -593,6 +616,18 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   const onWorldEvent = (name: string, data: string): void => {
     const result = parseWorldEvent(name, data);
     if (result.kind === "hello") {
+      if (expectedInstance && result.hello.instanceId !== expectedInstance) {
+        connected = false; events?.close(); setNotice("Cette partie n’est plus le monde actif. Ouvrir sa relecture depuis les parties."); setStatus("Instance indisponible", "bad"); return;
+      }
+      const identityChanged = world && (world.instanceId !== result.hello.instanceId || world.worldId !== result.hello.document.id);
+      const journalChanged = world && result.hello.journal?.generation !== world.journal?.generation;
+      if (identityChanged || journalChanged || result.hello.journal?.reset || !world) {
+        worldActions = []; observedChanges = []; worldFrames = 0; worldAgent = null;
+        messages = []; shownMessageKey = null; framedOnce = false;
+      }
+      // A legacy stream has no durable identity: do not retain an unbound live action tail.
+      if (!result.hello.instanceId && !result.hello.replay) { worldActions = []; observedChanges = []; legacyConnection++; }
+      lastWorldReceipt = performance.now(); lastWorldFrame = 0; frozen = false;
       world = worldSceneFromHello(result.hello);
       worldPoses.clear();
       // A replay server's hello says so; pollInfo then switches to replay (transport, action
@@ -605,10 +640,16 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       } else mode = "live";
       applyWorldStructure(true);
       snapshots += 1;
+      refreshWorldMessages();
+      if (result.hello.replay) void loadWorldActions();
       updateAgentCard();
       updateStatus();
     } else if (result.kind === "frame") {
-      if (!world) return;
+      if (!world || (world.instanceId && result.frame.instanceId && world.instanceId !== result.frame.instanceId)) return;
+      const advanced = world.tick !== result.frame.tick || mode === "replay";
+      if (advanced) lastWorldReceipt = performance.now();
+      lastWorldFrame = performance.now();
+      if (frozen && advanced) { frozen = false; updateStatus(); }
       if (worldPoses.push(result.frame, performance.now())) resets += 1;
       world.tick = result.frame.tick;
       if (result.frame.inspection) world.inspection = result.frame.inspection;
@@ -619,23 +660,25 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       updateAgentCard();
       if (mode === "replay") renderMessages();
     } else if (result.kind === "entities") {
-      if (!world) return;
+      if (!world || (world.instanceId && result.change.instanceId && world.instanceId !== result.change.instanceId)) return;
+      const changed = [ ...(result.change.added || []).map(row => ({ id: `${result.change.tick}:added:${row.entity.id}`, tick: result.change.tick, target: row.entity.id, text: `${world!.entities.some(e => e.id === row.entity.id) ? "Mise à jour" : "Apparition"} · ${row.entity.label || row.entity.id}` })),
+        ...(result.change.removed || []).map(id => ({ id: `${result.change.tick}:removed:${id}`, tick: result.change.tick, target: world!.ids.get(id) || String(id), text: `Disparition · ${world!.ids.get(id) || id}` })) ];
+      observedChanges = [...new Map([...observedChanges, ...changed].map(c => [c.id, c])).values()].slice(-500);
       world = applyWorldEntities(world, result.change);
       applyWorldStructure(false);
     } else if (result.kind === "action") {
       // A replay's whole action log comes from /replay/actions; the stream repeats it.
       if (mode === "replay") return;
-      worldActions.push(result.action);
-      if (worldActions.length > WORLD_ACTION_LIMIT) worldActions.splice(0, worldActions.length - WORLD_ACTION_LIMIT);
+      worldActions = mergeWorldActions(worldActions, [result.action], world?.instanceId, WORLD_ACTION_LIMIT);
       refreshWorldMessages();
     } else if (result.kind === "error") setNotice(result.message);
   };
 
   const connectWorld = (): void => {
     if (!source || disposed) return;
-    const stream = new EventSource(`${source.http}/spectate`);
+    const stream = new EventSource(sourcePath("/spectate"));
     events = stream;
-    stream.addEventListener("open", () => { connected = true; updateStatus(); });
+    stream.addEventListener("open", () => { connected = true; streamOpened = performance.now(); updateStatus(); });
     for (const name of ["hello", "frame", "entities", "action"]) {
       stream.addEventListener(name, (event) => { if (events === stream) onWorldEvent(name, String((event as MessageEvent).data)); });
     }
@@ -747,7 +790,8 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     // A Clawblox server answers /healthz with 404 (or not at all): its paths start as before.
     void probeWorldService().then((kind) => {
       if (disposed) return;
-      if (kind === "graphysx") startWorld();
+      if (kind === "mismatch") { setNotice("L’instance de cette partie n’est plus active. Ouvrir une relecture depuis les parties."); setStatus("Instance indisponible", "bad"); }
+      else if (kind === "graphysx") startWorld();
       else startClawblox();
     });
   } else {
@@ -755,10 +799,21 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   }
 
   // ---- the one frame loop -----------------------------------------------------------------
+  let selectedBird: ExplorerItem | null = null;
+  const birdMarker = new Mesh(new SphereGeometry(0.8, 12, 8), new MeshBasicMaterial({ color: "#ffe2a5", wireframe: true, depthTest: false }));
+  birdMarker.raycast = () => {};
+  birdMarker.name = "IslandIndividualSelection"; birdMarker.visible = false; birdMarker.renderOrder = 1000;
+  let cameraOffset = "";
   const explorer = capture ? null : mountIslandExplorer(surface, {
+    runId: params.get("run"),
+    seek: tick => { void post(`/replay/seek?tick=${Math.round(tick)}`); },
     initialOpen: window.innerWidth > 1100 || params.get("explore") === "1",
     dashboard: islandDashboardLink(params.get("dashboard"), params.get("run")),
-    select: item => { host.api.select(item ? [item.entityId] : []); },
+    select: item => {
+      selectedBird = item?.kind === "bird" ? item : null;
+      birdMarker.visible = !!selectedBird;
+      host.api.select(item && item.kind !== "bird" ? [item.entityId] : []);
+    },
     focus: item => {
       if (!item.position) return;
       setFollow(false);
@@ -810,12 +865,41 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     frames += 1;
     if (explorer && performance.now() >= explorerAt) {
       explorerAt = performance.now() + 350;
-      explorerModel = buildIslandExplorer({ world: feed === "graphysx" ? world : null, claw: state, mode,
-        connected: mode === "fixture" || connected, actions: worldActions,
+      explorerModel = buildIslandExplorer({ legacyConnection, ageMs: performance.now() - (feed === "graphysx" ? mode === "replay" ? lastWorldFrame || lastWorldReceipt : lastWorldReceipt : lastClawReceipt), world: feed === "graphysx" ? world : null, claw: state, mode,
+        connected: mode === "fixture" || (connected && !frozen), actions: worldActions, messages,
         position: id => { const object = host.world.getEntityObject(id); return object ? object.getWorldPosition(new Vector3()).toArray() as [number, number, number] : null; },
         swarms: world ? worldHostSwarms(worldPoses, world.ids, performance.now()) : [],
       });
-      explorer.update(explorerModel);
+      if (mode === "replay") explorerModel.tick = currentTick();
+      else if (worldActions.length >= WORLD_ACTION_LIMIT) explorerModel.journalTruncated = true;
+      explorer.update(explorerModel, observedChanges);
+    }
+    if (feed === "graphysx" && world && connected) {
+      const now = performance.now();
+      const stopped = mode === "replay" && replay?.paused ? now - replayInfoAt > 6000 : now - (lastWorldFrame || streamOpened) > 6000 || (mode === "live" && now - lastWorldReceipt > 6000);
+      if (stopped !== frozen) { frozen = stopped; updateStatus(); }
+    }
+    if (!capture) {
+      const panel = surface.querySelector<HTMLElement>(".gx-island-explorer");
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      const shown = panel && !panel.hidden && host.mode !== "editor";
+      const narrow = w <= 820;
+      const dx = shown && !narrow ? -panel.getBoundingClientRect().width / 2 : 0;
+      const dy = shown && narrow ? panel.getBoundingClientRect().height / 2 : 0;
+      const offset = `${w}:${h}:${dx}:${dy}`;
+      if (w && h && offset !== cameraOffset) {
+        cameraOffset = offset;
+        if (dx || dy) host.camera.setViewOffset(w, h, dx, dy, w, h); else host.camera.clearViewOffset();
+      }
+      if (selectedBird && world) {
+        const flock = host.world.getEntityObject(selectedBird.entityId);
+        const index = Number(selectedBird.id.split(":bird:")[1]);
+        const members = flock && findFlockSystem(flock)?.readMembers();
+        if (flock && members && index < members.positions.length / 3) {
+          if (birdMarker.parent !== flock) flock.add(birdMarker);
+          birdMarker.position.fromArray(members.positions, index * 3); birdMarker.visible = true;
+        } else birdMarker.visible = false;
+      }
     }
     const nowEditing = host.mode === "editor";
     if (nowEditing !== editing) {
@@ -868,11 +952,14 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       feed,
       capture,
       source: source?.http ?? "fixture",
-      connected: mode === "fixture" ? true : connected,
+      connected: mode === "fixture" ? true : connected && !frozen,
+      frozen,
+      selectedIndividual: selectedBird?.id || null,
       embedded,
       fullscreen: { active: !!document.fullscreenElement, available: document.fullscreenEnabled },
       notice,
-      tick: graphysx ? worldPoses.latestTick ?? world?.tick ?? null : state?.tick ?? null,
+      tick: currentTick(),
+      renderedTick: graphysx ? worldPoses.latestTick ?? world?.tick ?? null : state?.tick ?? null,
       gameStatus: graphysx ? (world ? "active" : null) : state?.game_status ?? null,
       snapshots,
       resets,
@@ -914,6 +1001,8 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       unsubscribe();
       explorer?.dispose();
       host.api.select([]);
+      host.camera.clearViewOffset();
+      birdMarker.removeFromParent(); birdMarker.geometry.dispose(); birdMarker.material.dispose();
       canvas.removeEventListener("pointerdown", pointerDown);
       canvas.removeEventListener("pointerup", pointerUp);
       document.removeEventListener("fullscreenchange", showFullscreen);

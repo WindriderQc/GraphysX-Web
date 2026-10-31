@@ -187,9 +187,47 @@ de l’agent. Une catégorie vide, un élément disparu et un changement de mond
 ont des états explicites. Les valeurs sont rafraîchies dans la boucle existante.
 
 L’explorateur nomme le monde réel et distingue **Direct**, **Relecture** et
-**Démonstration**. Une connexion interrompue indique « dernière observation ».
+**Démonstration**. Une connexion interrompue ou figée indique « dernière observation » et son âge. Un transport ouvert sans progression pendant six secondes ne prouve pas le direct ; une relecture en pause reste vérifiée par son état de transport.
 Le journal d’une fiche d’agent filtre ses actions ; les autres fiches nomment
 le journal du monde, sans attribuer une action à un objet par sa proximité.
+
+### Un espace pour explorer
+
+Les vues **Explorer**, **Carte**, **Chronologie**, **Lignées** et **Comparer**
+partagent la sélection. Fermer le panneau conserve cette sélection et libère
+la scène. Sur téléphone, la feuille occupe 46 % de la hauteur ; le cadrage de
+la caméra réserve l’espace visible. Les contrôles et textes secondaires
+suivent le facteur de taille du bureau et du 4K. Les boutons se parcourent au
+clavier ; Entrée ou Espace sélectionne un nœud de carte ou de généalogie.
+
+La carte projette x/z, avec couches agents, arbres, objets, volées ou individus,
+terrain, forces connues et déplacements reçus récemment. Les caps de rendu
+ne doublent pas leur relief logique. Les déplacements sont propres à la
+connexion ; un retour en arrière les efface. Zoom et déplacements de carte
+restent indépendants de la caméra 3D. Un oiseau sélectionné reçoit un repère
+individuel, sans souligner toute sa volée.
+
+La chronologie présente les actions, les messages effectivement reçus et les
+apparitions, mises à jour et disparitions observées pendant la connexion. Un
+clic sélectionne le sujet connu ; en relecture, il déplace aussi la lecture
+partagée à son tick. Les événements sans objet identifié ne reçoivent pas de
+cible inventée. Le clavardage absent du flux et le raisonnement privé de
+l’agent ne sont pas reconstitués. Le journal retenu peut être incomplet.
+
+La généalogie relie graphiquement les fondateurs et descendants connus, donne
+accès aux semeurs et aux événements d’arbres reçus, et signale les parents
+absents. La profondeur de lignée et la génération de mutation restent deux
+propriétés différentes. La taille physique est distincte de l’échelle de
+transformation ; une donnée non transmise reste non renseignée.
+
+Le comparateur conserve deux états observés dans la page. Il montre leurs
+propriétés, les données absentes et leurs différences ; chaque état conserve
+monde, instance, enregistrement, génération du journal et tick disponibles.
+Les silhouettes utilisent le générateur ADN du moteur et la définition source
+conservée, à croissance complète et saison initiale, avec un cadrage individuel.
+Elles ne prétendent pas reproduire l’état de croissance visible à ce tick et
+ne proposent aucun nouveau modèle d’évolution. Recharger la page efface ces
+captures de comparaison.
 
 ### Données et compatibilité
 
@@ -209,11 +247,29 @@ valeurs natives après mutation.
 L’hôte peut passer `dashboard=<URL HTTP(S)>` et `run=<UUID>`. Le lien
 « Parties et mémoire » revient au tableau de bord canonique et à la mémoire
 de la partie connue. Le viewer n’en copie pas le stockage. AgentX prépare
-ces paramètres lors de l’ouverture d’une vue.
+ces paramètres lors de l’ouverture d’une vue. Dans le cadre Benchmark, la demande
+mémoire est envoyée uniquement à l’origine du tableau de bord ; celui-ci
+vérifie l’origine, la fenêtre du cadre et l’identité de la partie, puis ouvre
+les fichiers en conservant le cadre et sa sélection. Hors cadre, le lien ouvre
+le tableau de bord dans un autre onglet. Les quatre fichiers mémoire sont des
+captures de fin de partie, sans synchronisation revendiquée avec le replay.
+
+Les ajouts `instanceId`, `recordingId`, `journal` et les identifiants opaques
+d’action sont facultatifs. `?instance=` dans la source est conservé lors des
+requêtes ; un refus d’identité ne bascule pas vers Clawblox. Une nouvelle
+instance, une nouvelle génération du journal ou `journal.reset` efface les
+actions précédentes avant le rattrapage. La reconnexion accepte la queue
+retenue et dédoublonne par identifiant opaque. Un ancien flux sans identité
+est explicitement signalé et ne conserve pas un historique direct non lié
+à travers ses nouvelles connexions. Les anciens chemins de relecture et
+les préfixes `/recordings/<id>` restent utilisables par le viewer.
 
 Sources : `src/island-explorer*.ts`, `src/island-inspection.ts`.
 Contrôles : `test/island-explorer.test.mjs`, tests natifs de l’île et
-`scripts/smoke-island-explorer.mjs` (captures bureau, lignée et téléphone).
+`scripts/smoke-island-explorer.mjs`, `scripts/smoke-island-workspace.mjs` et
+`scripts/smoke-island-stream.mjs` (parcours, bureau, téléphone, 4K, anciennes
+relectures, coupures et restauration de journal). Les rendus passent par la
+file de travail de l’instance et le verrou natif de vérification.
 
 ## Deux comportements de Clawblox à connaître
 
