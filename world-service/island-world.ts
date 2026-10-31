@@ -834,7 +834,7 @@ export class IslandWorld {
    * Compact pose frame: [numericId, x, y, z, qx, qy, qz, qw] for every moving thing. The living
    * island adds `swarms`: [numericId, x, y, z, …] per flock, its members in flock-local space.
    */
-  poseFrame(): { tick: number; t: number; poses: number[][]; swarms?: number[][] } {
+  poseFrame(): { tick: number; t: number; poses: number[][]; swarms?: number[][]; inspection: ReturnType<IslandWorld["spectatorInspection"]> } {
     const poses: number[][] = [];
     for (const [id, info] of this.meta) {
       if (info.decorative || info.static) continue;
@@ -848,7 +848,7 @@ export class IslandWorld {
       const yaw = Math.atan2(-character.forward[0], -character.forward[2]);
       poses.push([character.numericId, round(p[0], 3), round(p[1], 3), round(p[2], 3), 0, round(Math.sin(yaw / 2), 4), 0, round(Math.cos(yaw / 2), 4)]);
     }
-    const frame: { tick: number; t: number; poses: number[][]; swarms?: number[][] } = { tick: this.tick, t: round(this.simSeconds, 3), poses };
+    const frame: ReturnType<IslandWorld["poseFrame"]> = { tick: this.tick, t: round(this.simSeconds, 3), poses, inspection: this.spectatorInspection() };
     if (this.living) frame.swarms = this.living.swarms();
     return frame;
   }
@@ -861,7 +861,27 @@ export class IslandWorld {
       tick: this.tick,
       document: this.runtime.exportDefinition(),
       ids: Object.fromEntries([...this.numericIds].map(([id, numeric]) => [numeric, id])),
+      inspection: this.spectatorInspection(),
     };
+  }
+
+  /** Native observation fields for a human spectator, without joining as an agent. */
+  spectatorInspection(): import("../src/island-inspection").IslandInspection {
+    const entities: import("../src/island-inspection").InspectionEntity[] = [...this.meta].map(([id, info]) => ({
+      id, name: info.name, shape: info.shape, material: info.material, mass: info.mass,
+      size: [...info.size], anchored: !!info.static, attributes: { ...info.attributes },
+    }));
+    const ids = new Map([...this.numericIds].map(([id, numeric]) => [numeric, id]));
+    for (const value of this.living?.observations() ?? []) {
+      const id = ids.get(Number(value.id));
+      if (id) entities.push({ id, name: String(value.name), position: value.position as number[], size: value.size as number[],
+        shape: String(value.shape), material: String(value.material), anchored: value.anchored === true,
+        attributes: value.attributes as Record<string, unknown> });
+    }
+    return { worldId: this.worldId, entities, agents: [...this.characters.values()].map((character) => ({
+      id: character.entityId, name: character.name, position: this.position(character).map((value) => round(value, 3)),
+      attributes: { ...this.playerAttributes(character), HeldObject: character.held ?? "" },
+    })) };
   }
 
   /** Entities added or removed since the last call (impact cubes, culls, joins). */

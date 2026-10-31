@@ -161,6 +161,60 @@ agent « Eko » piloté sans modèle par le smoke) :
 - Téléphone (lisible dès 375 px) : le panneau devient une feuille en bas. Écran 4K : même mise en page,
   texte et contrôles ×1,6 (≥ 2400 px) ou ×2 (≥ 3400 px).
 
+## Explorer l’île : du monde à chaque élément
+
+« Explorer l’île » ouvre une navigation en lecture seule : **île → catégorie →
+élément → relations**. Elle utilise la simulation qui alimente déjà l’écran.
+Sur ordinateur large, elle est ouverte au départ ; sur téléphone, le bouton
+ouvre une feuille que l’on ferme pour reprendre la caméra et les messages.
+
+| Catégorie | Fiches disponibles |
+| --- | --- |
+| Agents | Position, résultat, objet et graine portés ; centrage et suivi |
+| Objets | Blocs, roche, anneau, forme, dimensions, masse, état fixe/mobile |
+| Arbres | Croissance, repos, dix gènes exprimés, génération, parent, descendants, semeur et lignée |
+| Oiseaux et volées | Volée, puis chaque oiseau avec position et vitesse issue des frames |
+| Terrain | Sol, relief et océan |
+| Forces | Vent et attracteurs, paramètres et cibles ; réservés à la lecture spectateur |
+| Décor et lumière | Habillage et éclairage du document |
+| Éléments techniques | Limites invisibles et collisions, sans les rendre visibles |
+
+La recherche porte sur noms, identifiants et attributs, sans distinguer les
+accents. Le clic 3D sélectionne aussi l’élément. Les liens de parenté et les
+individus d’une volée ouvrent leurs propres fiches. Le centrage et le suivi
+utilisent les contrôles natifs, sans modifier le document ni agir à la place
+de l’agent. Une catégorie vide, un élément disparu et un changement de monde
+ont des états explicites. Les valeurs sont rafraîchies dans la boucle existante.
+
+L’explorateur nomme le monde réel et distingue **Direct**, **Relecture** et
+**Démonstration**. Une connexion interrompue indique « dernière observation ».
+Le journal d’une fiche d’agent filtre ses actions ; les autres fiches nomment
+le journal du monde, sans attribuer une action à un objet par sa proximité.
+
+### Données et compatibilité
+
+`hello` et `frame` peuvent porter `inspection: {worldId, entities, agents}`.
+Cette projection réutilise les observations natives : génération, lignée,
+disponibilité, gènes exprimés et inventaire porté. Elle ne contient ni session,
+ni jeton, ni mémoire. Elle s’enregistre dans le flux spectateur existant sans
+ouvrir de route d’agent ou d’opérateur. Déployer serveur et viewer de la même
+révision pour disposer des fiches complètes. Les anciens enregistrements gardent
+les formes et positions, avec un avertissement pour les données manquantes ;
+aucune parenté ou disponibilité n’est inventée.
+
+Un oiseau porte un numéro stable dans sa volée pendant l’épisode. Les génomes
+initiaux restent sous « Données source » ; « Gènes exprimés » montre les
+valeurs natives après mutation.
+
+L’hôte peut passer `dashboard=<URL HTTP(S)>` et `run=<UUID>`. Le lien
+« Parties et mémoire » revient au tableau de bord canonique et à la mémoire
+de la partie connue. Le viewer n’en copie pas le stockage. AgentX prépare
+ces paramètres lors de l’ouverture d’une vue.
+
+Sources : `src/island-explorer*.ts`, `src/island-inspection.ts`.
+Contrôles : `test/island-explorer.test.mjs`, tests natifs de l’île et
+`scripts/smoke-island-explorer.mjs` (captures bureau, lignée et téléphone).
+
 ## Deux comportements de Clawblox à connaître
 
 - Les contrôles de reprise (`/replay/play`, `/pause`, `/seek`, `/speed`) appartiennent au

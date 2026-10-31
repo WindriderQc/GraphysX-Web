@@ -19,6 +19,7 @@
  * things are drawn between server frames. No DOM and no three.js, so Node tests run it as is.
  */
 import { slerpQuat, type ClawPlayer, type ClawQuat, type ClawVec3, type IslandMessage } from "./island-feed";
+import { parseIslandInspection, type IslandInspection } from "./island-inspection";
 
 export const WORLD_STREAM_FORMAT = "graphysx-world-stream/v1";
 /** Transient scope holding every entity of a world-service island in the viewer. */
@@ -36,8 +37,8 @@ export type WorldDocument = {
 };
 
 /** `replay` is set by the replay server (world-service/replay.mjs), never by a live world. */
-export type WorldHello = { format: string; tickHz: number; tick: number; document: WorldDocument; ids: Record<string, string>; replay: boolean };
-export type WorldFrame = { tick: number; t: number; poses: number[][]; swarms?: number[][] };
+export type WorldHello = { format: string; tickHz: number; tick: number; document: WorldDocument; ids: Record<string, string>; replay: boolean; inspection?: IslandInspection };
+export type WorldFrame = { tick: number; t: number; poses: number[][]; swarms?: number[][]; inspection?: IslandInspection };
 export type WorldEntitiesChange = { tick: number; added?: { entity: WorldEntityDefinition; numericId: number }[]; removed?: number[] };
 export type WorldAction = { tick: number; agent: string; input: { type: string; data?: Record<string, unknown> | null }; result: string };
 
@@ -78,6 +79,7 @@ export function parseWorldEvent(event: string, data: string): WorldEventResult {
           document: { ...(document as Omit<WorldDocument, "entities">), entities: (document.entities as unknown[]).filter(isEntity) },
           ids,
           replay: raw.replay === true,
+          inspection: parseIslandInspection(raw.inspection),
         },
       };
     }
@@ -85,6 +87,8 @@ export function parseWorldEvent(event: string, data: string): WorldEventResult {
       if (!finite(raw.tick) || !Array.isArray(raw.poses)) return { kind: "error", message: "Malformed frame event" };
       const poses = (raw.poses as unknown[]).filter((pose): pose is number[] => Array.isArray(pose) && pose.length >= 8 && pose.slice(0, 8).every(finite));
       const frame: WorldFrame = { tick: raw.tick, t: finite(raw.t) ? raw.t : 0, poses };
+      const inspection = parseIslandInspection(raw.inspection);
+      if (inspection) frame.inspection = inspection;
       if (Array.isArray(raw.swarms)) {
         frame.swarms = (raw.swarms as unknown[]).filter((swarm): swarm is number[] =>
           Array.isArray(swarm) && swarm.length >= 4 && (swarm.length - 1) % 3 === 0 && swarm.every(finite));
@@ -118,6 +122,8 @@ export function parseWorldEvent(event: string, data: string): WorldEventResult {
 // ---- the scene ----------------------------------------------------------------------------
 
 export type WorldScene = {
+  worldId?: string;
+  inspection?: IslandInspection;
   tick: number;
   tickHz: number;
   label: string;
@@ -135,6 +141,8 @@ export function worldSceneFromHello(hello: WorldHello): WorldScene {
     if (Number.isInteger(numeric)) ids.set(numeric, value);
   }
   return {
+    worldId: typeof hello.document.id === "string" ? hello.document.id : undefined,
+    inspection: hello.inspection,
     tick: hello.tick,
     tickHz: hello.tickHz,
     label: typeof hello.document.label === "string" ? hello.document.label : "Monde GraphysX",
