@@ -127,7 +127,7 @@ export async function startReplayServer(options) {
     const route = `${request.method} ${url.pathname}`;
     if (request.method === "OPTIONS") { response.writeHead(204, CORS); response.end(); return; }
     switch (route) {
-      case "GET /healthz": return send(response, 200, { ok: true, tick: Math.floor(clock.tick), replay: true });
+      case "GET /healthz": return send(response, 200, { ok: true, tick: Math.floor(clock.tick), replay: true, ...(recording.hellos[0].instanceId ? { instanceId: recording.hellos[0].instanceId, ...(recording.hellos[0].identitySource ? { identitySource: recording.hellos[0].identitySource } : {}) } : {}) });
       case "GET /replay/info": return send(response, 200, info());
       case "GET /replay/actions": return send(response, 200, { tick_rate: tickHz, actions: recording.actions });
       case "POST /replay/play":
@@ -172,6 +172,8 @@ export async function startReplayServer(options) {
   return {
     url: `http://${options.host ?? "127.0.0.1"}:${port}`,
     info,
+    server,
+    get spectatorCount() { return spectators.size; },
     advance,
     close: async () => {
       if (timer) clearInterval(timer);

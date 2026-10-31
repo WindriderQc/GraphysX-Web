@@ -41,27 +41,88 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
 - `POST /world` with `X-Operator-Token` and `{"world": "living-island" | "mesa-island", "force"?: true}`:
   the world selector. It replaces the running island with a fresh one in the same process,
   refuses (409) while agents are joined unless `force` is true (their sessions end), sends
-  spectators a new `hello`, and records into a new directory beside the first
-  (`<record-dir>-<n>-<world>`). `/healthz` answers `{ok, tick, world}`; `/api.md` follows the world.
+  unbound spectators a new `hello`. Each fresh island gets an `instanceId` UUID and records
+  in `<record-root>/instances/<instanceId>/graphysx-recording.ndjson`. `/healthz` includes
+  `{ok, tick, world, instanceId, recordingId, recording, checkpoint}`; `/api.md` follows the world.
+  Optional `runId` binds the preparation to one request: repeating it on the current world
+  returns the existing identity. Operator callers reconcile lost replies by that identity.
 
 - `GET /snapshot` with `X-Operator-Token: $WORLD_OPERATOR_TOKEN`: the whole state, including
   Rapier's serialised solver. `--resume <file>` (or `WORLD_RESUME_PATH`) continues it bit for
   bit; the same `X-Session` tokens keep working. A snapshot of another world or rules version
-  is refused.
+  is refused. `WORLD_SNAPSHOT_PATH` enables atomic fsync checkpoints every
+  `WORLD_SNAPSHOT_EVERY_MS` (default 60000). They include physics, sessions, identity, journal
+  tail and a SHA-256 envelope verified before resume. `/healthz.checkpoint.lastSaved` names
+  the tick, identity, digest and successful write time. Corrupt checkpoints fail startup.
+  Set `WORLD_START_MODE=resume` to restore this file on service restart; a missing file is
+  startup refusal, so recovery cannot silently become a fresh world. Initialize explicitly
+  with `fresh` (default) or an existing native snapshot.
+  Explicit `--resume` / `WORLD_RESUME_PATH` must exist. Legacy snapshots remain readable.
+  Experiment preparation stays a fresh `POST /world`, independently of crash recovery.
 - `GET /spectate` (SSE, read only): `hello` (the current v2 document and numeric id → entity
   id), `frame` 10 times a second (`[id, x, y, z, qx, qy, qz, qw]` per moving thing; on the
   living island also `swarms`: `[id, x, y, z, …]` with every flock member in flock-local space),
   `entities` when something is added or removed (an entity re-added under its id replaces its
   definition: a tree that grew or changed generation). At most 32 viewers; slow ones are dropped.
-- `GET /spectate` also sends `action` (`{tick, agent, input, result}`) for every agent action.
+- `GET /spectate` also sends `action` (`{tick, agent, input, result, id, sequence, instanceId}`).
+  On connection it sends a bounded tail (200 actions and 256 KiB maximum) after `hello`,
+  before the first frame. Resume with `Last-Event-ID` or `?after=<id>`. IDs are opaque;
+  current form is `<instanceId>:<generation>:<sequence>`. Deduplicate by `action.id`.
+  `hello.journal` reports `generation`, `oldest`, `latest`, `limit`, `truncated` and `reset`.
+  A restart creates a new journal generation because checkpoints can precede received
+  actions: clear local actions on generation change or `reset`, then rebuild from the tail.
+  Same-generation reconnects send strictly newer actions; an expired cursor reports a gap.
+  `?instance=<UUID>` (or the runner's `X-World-Instance`) fences all live requests.
+  A changed instance returns 409, even for the same world type; a bound live SSE ends
+  at replacement. World-level unbound spectators can follow intentional world switches.
+- `POST /leave` with `X-Session` releases only that member, including a held block.
+  Inspection `agents[].attributes.Presence` is `active` after an agent request within
+  120 seconds, otherwise `idle`. Spectator traffic never refreshes it; restored sessions
+  start idle. An avatar alone is not proof of an active process.
+- Pose frames remain at 10 Hz. Full inspection is sent in `hello`, the first frame,
+  and once per simulated second; intermediate frames omit it. Consumers retain the last
+  inspection and use poses for motion. Recordings follow the same optional-field contract.
   `/spectate` and `/healthz` answer any origin (`access-control-allow-origin: *`); the agent
   routes do not.
-- `--record`: `graphysx-recording.ndjson` with the hello, frames, entity changes and every
+- `--record`: `<record-root>/instances/<instanceId>/graphysx-recording.ndjson` with the hello, frames, entity changes and every
   action with its `LastActionResult`. `node world-service/replay.mjs <dir> --port <p>` serves it
   read-only like `clawblox replay`: `/healthz`, `/spectate` (same events; a fresh `hello` after
   every seek), `/replay/info`, `/replay/actions`, and the shared transport `POST /replay/play`,
   `/pause`, `/seek?tick=`, `/speed?value=`, `/skip-idle?enabled=`. A resumed world appends a new
-  hello to the same file; the replay follows the resumed timeline.
+  hello to the same file; the replay follows the resumed timeline. A torn final line is
+  retained as skipped data before the resume hello. Old recordings without new fields
+  remain supported by `replay.mjs`.
+- `GET /recordings/<recordingId>/healthz`, `/spectate`, `/replay/*` serve the selected
+  recording through the existing replay protocol. Only opaque UUIDs under the configured
+  recording root are accepted; there is no HTTP file-path parameter and no agent routes.
+  Replay transport controls change playback only. Deploy behind the same spectator access
+  boundary. Up to four replays share a total NDJSON byte budget equal to the archive limit;
+  idle replays are retired for capacity or after five minutes (429 when active capacity is full).
+  A connected spectator prevents idle eviction.
+  File reads are asynchronous and bounded by its byte limit. Recordings still being
+  written are a frozen view at opening; close/expire before opening a newer view.
+- Recording uses asynchronous ordered writes: 8 MiB pending bytes maximum and 256 MiB
+  per archive by default (`WORLD_RECORD_MAX_BYTES` configures archive/replay size).
+  Hitting either limit stops recording explicitly, retains existing data and reports
+  `recording.error` plus `ok:false` in health; simulation continues. No archive is deleted.
+  Checkpoints flush the accepted recording bytes before becoming durable. Provision replay
+  memory for parsed data (several times NDJSON size); the instance template uses 2 GiB.
+  These are safety ceilings, not long-campaign capacity measurements. Qualify/tune capacity
+  before long experiments rather than assuming a 27-hour synthetic projection is measured use.
+
+Old GraphysX archives can be registered explicitly on the recording host without copying
+or deleting them:
+
+```sh
+node world-service/register-recording.mjs --root /configured/recordings --directory /configured/recordings/old-directory --id <UUID>
+```
+
+This local command verifies containment and writes an immutable byte-count/SHA-256 binding.
+The HTTP router verifies it before reading and labels its identity `registered-legacy`.
+An existing identity cannot be reassigned; changed archives refuse. Bind the returned IDs
+into the owning run's report via its existing dispatch identity. A legacy directory receipt
+alone never substitutes the current live world. Large legacy archives remain usable with
+`replay.mjs` under an appropriately provisioned operator process.
 
 ## First-person images (`GET /observe/image`)
 
@@ -107,8 +168,8 @@ docker build -f world-service/Dockerfile.images -t graphysx-world-images:<rev> .
 WORLD_HOST_PORT=18150 docker compose -f world-service/compose.yaml up --build   # local test
 ```
 
-- The world container records each start to `/data/recordings/<UTC start>/` (a fresh island
-  never appends to an older timeline); `WORLD_RECORD_DIR` overrides it. It runs as uid 1000.
+- The world container uses the stable root `/data/recordings`, with a UUID directory per
+  island; `WORLD_RECORD_DIR` overrides the root. A crash resume appends to that instance. It runs as uid 1000.
 - Images are off unless `WORLD_IMAGES=1` with `WORLD_IMAGE_SIDECAR` (the sidecar's address)
   and `WORLD_IMAGE_SOURCE` (the world as the sidecar sees it), as `compose.yaml` sets them.
 - Model payloads are not in the image (`publicDir: false`): Mesa needs none. A world with models

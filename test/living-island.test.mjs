@@ -342,12 +342,12 @@ describe("living island", () => {
       assert.match(await (await fetch(`${running.url}/api.md`)).text(), /^# Living Mesa World/);
       assert.equal(running.world.agentCount, 0, "sessions ended with the old island");
       assert.equal((await fetch(`${running.url}/observe`, { headers: { "x-session": "anything" } })).status, 401);
-      assert.ok(existsSync(join(`${recordDir}-1-living-island`, "graphysx-recording.ndjson")), "a new recording beside the first");
-      assert.equal(body.recordDir, `${recordDir}-1-living-island`);
+      assert.ok(existsSync(join(recordDir, "instances", body.instanceId, "graphysx-recording.ndjson")), "a recording bound to the new instance");
+      assert.equal(body.recordingId, body.instanceId);
 
       assert.equal((await post({ world: "mesa-island" })).status, 200, "and back, with nobody joined");
       assert.equal(running.world.worldId, "mesa-island");
-      assert.ok(existsSync(join(`${recordDir}-2-mesa-island`, "graphysx-recording.ndjson")));
+      assert.ok(existsSync(join(recordDir, "instances", running.world.instanceId, "graphysx-recording.ndjson")));
     } finally {
       await running.close();
     }

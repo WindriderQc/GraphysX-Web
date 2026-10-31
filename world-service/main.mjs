@@ -12,6 +12,7 @@ import { dirname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createInterface } from "node:readline";
+import { loadStartupSnapshot } from "./startup.mjs";
 import { startWorldServer } from "./server.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -93,9 +94,11 @@ function imageRenderer(worldUrl) {
 }
 
 const resumePath = values.resume ?? env.WORLD_RESUME_PATH;
-const record = values.record ?? env.WORLD_RECORD === "1";
+const record = values.record ?? ["1", "true"].includes(env.WORLD_RECORD);
 const host = values.host ?? env.WORLD_HOST ?? "127.0.0.1";
 const port = Number(values.port ?? env.WORLD_PORT ?? 18120);
+const recordMaxBytes = Number(env.WORLD_RECORD_MAX_BYTES ?? 256 * 1024 * 1024);
+if (!Number.isSafeInteger(recordMaxBytes) || recordMaxBytes < 1024) throw new Error("WORLD_RECORD_MAX_BYTES needs a positive byte limit >= 1024");
 const images = !(values["no-images"] || env.WORLD_IMAGES === "0");
 // The sidecar reaches this world on loopback when it listens on every interface.
 let running = null;
@@ -104,21 +107,29 @@ const loopback = () => {
   return `http://${host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host}:${bound}`;
 };
 const renderImage = images ? imageRenderer(loopback) : null;
-const snapshot = resumePath ? JSON.parse(readFileSync(resumePath, "utf8")) : undefined;
+// A crash restart resumes only when explicitly configured. Experiments use fresh /world.
+const snapshotPath = env.WORLD_SNAPSHOT_PATH;
+const startMode = env.WORLD_START_MODE ?? "fresh";
+const { snapshot, path: restoredPath } = loadStartupSnapshot({ startMode, snapshotPath, resumePath });
+const snapshotEveryMs = Number(env.WORLD_SNAPSHOT_EVERY_MS ?? 60000);
+if (!Number.isSafeInteger(snapshotEveryMs) || snapshotEveryMs < 1000) throw new Error("WORLD_SNAPSHOT_EVERY_MS needs an integer >= 1000");
 const mesaApi = readFileSync(join(here, "API.md"), "utf8");
 running = await startWorldServer({
   module,
   // Per world, since POST /world (operator) can switch the island in place.
   apiMarkdown: (id) => (id === module.LIVING_WORLD_ID ? module.livingApiMarkdown(mesaApi) : mesaApi),
   snapshot,
+  snapshotPath,
+  snapshotEveryMs,
   world: worldId,
   host,
   port,
   renderImage: renderImage ?? undefined,
   operatorToken: env.WORLD_OPERATOR_TOKEN ?? null,
+  recordingLimits: { maxBytes: recordMaxBytes },
   recordDir: record ? (values["record-dir"] ?? env.WORLD_RECORD_DIR ?? "recordings") : null,
 });
-console.log(`graphysx world service (${running.world.worldId}) on ${running.url}${resumePath ? ` (resumed at tick ${running.world.tick})` : ""}${images ? "" : " (images off)"}`);
+console.log(`graphysx world service (${running.world.worldId}) on ${running.url}${restoredPath ? ` (resumed at tick ${running.world.tick})` : ""}${images ? "" : " (images off)"}`);
 
 const statsEvery = Number(values["stats-every"] ?? 0);
 if (statsEvery > 0) {

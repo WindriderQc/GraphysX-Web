@@ -10,7 +10,7 @@ export type InspectionEntity = {
   anchored?: boolean;
   attributes?: Record<string, unknown>;
 };
-export type IslandInspection = { worldId: string; entities: InspectionEntity[]; agents: InspectionEntity[] };
+export type IslandInspection = { worldId: string; instanceId?: string; entities: InspectionEntity[]; agents: InspectionEntity[] };
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const scalar = (value: unknown): boolean => typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)) || (typeof value === "string" && value.length <= 4096);
