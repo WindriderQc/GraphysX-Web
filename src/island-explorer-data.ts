@@ -1,5 +1,5 @@
 /** Pure projections for the island explorer. The server remains the only world owner. */
-import type { ClawObservation, ClawVec3 } from "./island-feed";
+import type { ClawObservation, ClawVec3, IslandMessage } from "./island-feed";
 import type { InspectionEntity } from "./island-inspection";
 import type { WorldAction, WorldScene } from "./island-world-feed";
 
@@ -17,12 +17,12 @@ export type ExplorerItem = {
   relations: { id: string; label: string }[]; parent: string | null; raw: unknown; visible: boolean;
 };
 export type ExplorerModel = {
-  key: string; label: string; mode: string; connected: boolean; tick: number; tickHz: number;
-  items: ExplorerItem[]; counts: Record<ExplorerCategory, number>; actions: WorldAction[]; metadata: boolean;
+  journalGeneration?: string; ageMs?: number; instanceId?: string; recordingId?: string; journalTruncated?: boolean; key: string; label: string; mode: string; connected: boolean; tick: number; tickHz: number;
+  items: ExplorerItem[]; counts: Record<ExplorerCategory, number>; actions: WorldAction[]; messages?: IslandMessage[]; metadata: boolean;
 };
 export type ExplorerInput = {
-  world: WorldScene | null; claw: ClawObservation | null; mode: string; connected: boolean;
-  actions: WorldAction[]; position?: (id: string) => ClawVec3 | null;
+  legacyConnection?: number; ageMs?: number; world: WorldScene | null; claw: ClawObservation | null; mode: string; connected: boolean;
+  actions: WorldAction[]; messages?: IslandMessage[]; position?: (id: string) => ClawVec3 | null;
   swarms?: { id: string; positions: number[]; velocities: number[] | null }[];
 };
 
@@ -36,13 +36,13 @@ export const explorerValue = (v: unknown): string => {
   return typeof v === "object" ? JSON.stringify(v) : String(v);
 };
 const LABELS: Record<string, string> = {
-  Generation: "Génération", Ready: "Prêt à donner une graine", ReadyIn: "Repos restant (s)", Parent: "Arbre parent",
+  Generation: "Génération de mutation", Ready: "Prêt à donner une graine", ReadyIn: "Repos restant (s)", Parent: "Arbre parent",
   ParentGeneration: "Génération du parent", Lineage: "Lignée", SownBy: "Semé par", LeafColor: "Couleur du feuillage",
   Height: "Hauteur", Branches: "Branches", Leaves: "Feuilles", TrunkLength: "Longueur du tronc", LengthRatio: "Rapport des branches",
-  BranchAngle: "Angle des branches (rad)", RollTurns: "Rotation des branches", Depth: "Profondeur", SplitChance: "Probabilité de ramification",
+  BranchAngle: "Angle des branches (rad)", RollTurns: "Rotation des branches", Depth: "Profondeur de ramification", SplitChance: "Probabilité de ramification",
   LeafSize: "Taille des feuilles", LeafHue: "Teinte des feuilles", HeldSeed: "Graine portée", HeldSeedColor: "Couleur de la graine",
   LeafHueSpread: "Variation de teinte", BranchThickness: "Épaisseur des branches",
-  HeldObject: "Objet porté", LastActionResult: "Dernier résultat", Members: "Oiseaux dans la volée", Spread: "Rayon de dispersion",
+  Presence: "Présence", HeldObject: "Objet porté", LastActionResult: "Dernier résultat", Members: "Oiseaux dans la volée", Spread: "Rayon de dispersion",
   MeanSpeed: "Vitesse moyenne", Startled: "Volée effrayée", IsCarryable: "Transportable", CarryKind: "Type d’objet", ItemColorName: "Couleur",
 };
 const GENES = new Set(["TrunkLength", "LengthRatio", "BranchAngle", "RollTurns", "Depth", "SplitChance", "LeafSize", "LeafHue", "LeafHueSpread", "BranchThickness"]);
@@ -71,7 +71,30 @@ function makeItem(def: Record<string, unknown> & { id: string }, meta: Inspectio
   const properties: ExplorerProperty[] = [];
   const prop = (label: string, value: unknown, group = "État") => { if (value !== undefined && value !== null) properties.push({ label, value: explorerValue(value), group }); };
   prop("Position (x · y · z)", position);
-  prop("Dimensions", meta?.size || rec(def.transform).scale, "Physique");
+  const scale = vec(rec(def.transform).scale);
+  const geometry = rec(def.geometry);
+  let size = vec(meta?.size);
+  let geometrySize = false;
+  if (type === "cylinder" && typeof geometry.height === "number") {
+    const radius = Number(geometry.radius ?? Math.max(Number(geometry.radiusTop || 0), Number(geometry.radiusBottom || 0)));
+    geometrySize = true;
+    size = [radius * 2, geometry.height, radius * 2].map((v, i) => v * Math.abs(scale?.[i] ?? 1)) as ClawVec3;
+  }
+  if (type === "box") {
+    const dimensions = [geometry.width, geometry.height, geometry.depth];
+    if (dimensions.every(v => typeof v === "number")) { geometrySize = true; size = dimensions.map((v, i) => Number(v) * Math.abs(scale?.[i] ?? 1)) as ClawVec3; }
+  }
+  if (type === "sphere" && typeof geometry.radius === "number") {
+    geometrySize = true; size = [0,1,2].map(i => Number(geometry.radius) * 2 * Math.abs(scale?.[i] ?? 1)) as ClawVec3;
+  }
+  if (type === "torus" && typeof geometry.radius === "number" && typeof geometry.tube === "number") {
+    geometrySize = true;
+    size = [(geometry.radius + geometry.tube) * 2, (geometry.radius + geometry.tube) * 2, geometry.tube * 2].map((v,i) => v * Math.abs(scale?.[i] ?? 1)) as ClawVec3;
+  }
+  prop("Origine de la taille", geometrySize ? "Géométrie déclarée · axes locaux" : size ? "Observation transmise par le serveur" : "Non renseigné", "Physique");
+  prop("Dimensions (unités du monde)", size || "Non renseigné", "Physique");
+  if (geometrySize && meta?.size && JSON.stringify(size) !== JSON.stringify(meta.size)) prop("Dimensions reçues (différentes de la géométrie)", meta.size, "Physique");
+  prop("Échelle de transformation", scale || "Non renseigné", "Physique");
   prop("Forme", meta?.shape || type, "Physique");
   prop("Matière", meta?.material, "Physique");
   prop("Masse", meta?.mass ?? physics.mass, "Physique");
@@ -79,11 +102,15 @@ function makeItem(def: Record<string, unknown> & { id: string }, meta: Inspectio
   prop("Visible dans la scène", visible, "Physique");
   for (const [key, value] of Object.entries(attrs)) if (!ignore.has(key)) {
     const none = value === "" && ["HeldSeed", "HeldObject", "Parent", "SownBy"].includes(key);
-    prop(LABELS[key] || key, none ? "Aucun" : value, GENES.has(key) ? "Gènes exprimés" : "État");
+    prop(LABELS[key] || key, key === "Presence" ? value === "active" ? "Active (requête récente)" : value === "idle" ? "Inactive (avatar conservé)" : value : none ? "Aucun" : value, GENES.has(key) ? "Gènes exprimés" : "État");
   }
+  prop("Couleur de matière", rec(def.material).color, "Apparence");
+  if (type.includes("light")) prop("Intensité lumineuse", def.intensity, "Lumière");
+  if (type === "water") prop("Étendue configurée", rec(def.water).size, "Surface d’eau");
   const dna = rec(def.dna);
   if (type === "dna-tree") {
-    if (attrs.Generation === undefined) prop("Génération", dna.generation, "Génétique");
+    for (const gene of GENES) if (attrs[gene] === undefined) prop(LABELS[gene] || gene, "Non renseigné", "Gènes exprimés");
+    if (attrs.Generation === undefined) prop("Génération de mutation", dna.generation, "Génétique");
     prop("Graine déterministe", dna.seed, "Génétique");
     prop("Taux de mutation", dna.mutationRate, "Génétique");
   }
@@ -158,13 +185,25 @@ export function buildIslandExplorer(input: ExplorerInput): ExplorerModel {
       if (typeof parent === "string" && byId.has(parent)) { item.parent = parent; relation(parent, "Appartient à"); }
     }
   }
+  for (const item of items.filter(i => i.kind === "dna-tree")) {
+    const visited = new Set([item.id]);
+    let cursor = item, depth = 0, known = Object.prototype.hasOwnProperty.call(item.attributes, "Parent");
+    while (cursor.attributes.Parent) {
+      const parent = cursor.relations.find(r => r.label === "Parent");
+      const next = parent && byId.get(parent.id);
+      if (!next || visited.has(next.id)) { known = false; break; }
+      visited.add(next.id); depth++; cursor = next;
+      if (!Object.prototype.hasOwnProperty.call(cursor.attributes, "Parent")) known = false;
+    }
+    item.properties.push({ label: "Profondeur de lignée", value: !world?.inspection || !known ? "Non renseigné (lignée incomplète)" : String(depth), group: "Génétique" });
+  }
   const counts = Object.fromEntries(EXPLORER_CATEGORIES.map(([id]) => [id, items.filter(item => item.category === id).length])) as ExplorerModel["counts"];
   const id = world?.inspection?.worldId || world?.worldId;
   const label = id === "living-island" ? "Île vivante" : id === "mesa-island" ? "Île Mesa" : world?.label || "Île Clawblox";
-  return { key: `${world ? "graphysx" : "clawblox"}:${id || input.claw?.instance_id || "island"}`, label,
+  return { journalGeneration: world?.journal?.generation, ageMs: input.ageMs, instanceId: world?.instanceId, recordingId: world?.recordingId, journalTruncated: world?.journal?.truncated, key: `${world ? "graphysx" : "clawblox"}:${world?.instanceId || input.claw?.instance_id || `${id || "island"}:${input.legacyConnection || 0}`}`, label,
     mode: input.mode === "replay" ? "Relecture" : input.mode === "fixture" ? "Démonstration" : "Direct",
     connected: input.connected, tick: world?.tick || input.claw?.tick || 0, tickHz: world?.tickHz || 60,
-    items, counts, actions: input.actions, metadata: world ? !!world.inspection : true };
+    items, counts, actions: input.actions, messages: input.messages, metadata: world ? !!world.inspection : true };
 }
 
 export function filterExplorerItems(model: ExplorerModel, categoryId: string | null, search = ""): ExplorerItem[] {

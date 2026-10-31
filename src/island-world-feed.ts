@@ -37,10 +37,10 @@ export type WorldDocument = {
 };
 
 /** `replay` is set by the replay server (world-service/replay.mjs), never by a live world. */
-export type WorldHello = { format: string; tickHz: number; tick: number; document: WorldDocument; ids: Record<string, string>; replay: boolean; inspection?: IslandInspection };
-export type WorldFrame = { tick: number; t: number; poses: number[][]; swarms?: number[][]; inspection?: IslandInspection };
-export type WorldEntitiesChange = { tick: number; added?: { entity: WorldEntityDefinition; numericId: number }[]; removed?: number[] };
-export type WorldAction = { tick: number; agent: string; input: { type: string; data?: Record<string, unknown> | null }; result: string };
+export type WorldHello = { format: string; tickHz: number; tick: number; document: WorldDocument; ids: Record<string, string>; replay: boolean; instanceId?: string; recordingId?: string; journal?: { generation?: string; reset?: boolean; oldest?: number; latest?: number; truncated?: boolean }; inspection?: IslandInspection };
+export type WorldFrame = { instanceId?: string; recordingId?: string; tick: number; t: number; poses: number[][]; swarms?: number[][]; inspection?: IslandInspection };
+export type WorldEntitiesChange = { instanceId?: string; tick: number; added?: { entity: WorldEntityDefinition; numericId: number }[]; removed?: number[] };
+export type WorldAction = { id?: string; instanceId?: string; sequence?: number; tick: number; agent: string; input: { type: string; data?: Record<string, unknown> | null }; result: string };
 
 export type WorldEventResult =
   | { kind: "hello"; hello: WorldHello }
@@ -79,6 +79,9 @@ export function parseWorldEvent(event: string, data: string): WorldEventResult {
           document: { ...(document as Omit<WorldDocument, "entities">), entities: (document.entities as unknown[]).filter(isEntity) },
           ids,
           replay: raw.replay === true,
+          instanceId: typeof raw.instanceId === "string" ? raw.instanceId : undefined,
+          recordingId: typeof raw.recordingId === "string" ? raw.recordingId : undefined,
+          journal: isRecord(raw.journal) ? { generation: typeof raw.journal.generation === "string" ? raw.journal.generation : undefined, reset: raw.journal.reset === true, oldest: finite(raw.journal.oldest) ? raw.journal.oldest : undefined, latest: finite(raw.journal.latest) ? raw.journal.latest : undefined, truncated: raw.journal.truncated === true } : undefined,
           inspection: parseIslandInspection(raw.inspection),
         },
       };
@@ -86,7 +89,7 @@ export function parseWorldEvent(event: string, data: string): WorldEventResult {
     case "frame": {
       if (!finite(raw.tick) || !Array.isArray(raw.poses)) return { kind: "error", message: "Malformed frame event" };
       const poses = (raw.poses as unknown[]).filter((pose): pose is number[] => Array.isArray(pose) && pose.length >= 8 && pose.slice(0, 8).every(finite));
-      const frame: WorldFrame = { tick: raw.tick, t: finite(raw.t) ? raw.t : 0, poses };
+      const frame: WorldFrame = { ...(typeof raw.instanceId === "string" ? { instanceId: raw.instanceId } : {}), ...(typeof raw.recordingId === "string" ? { recordingId: raw.recordingId } : {}), tick: raw.tick, t: finite(raw.t) ? raw.t : 0, poses };
       const inspection = parseIslandInspection(raw.inspection);
       if (inspection) frame.inspection = inspection;
       if (Array.isArray(raw.swarms)) {
@@ -101,13 +104,16 @@ export function parseWorldEvent(event: string, data: string): WorldEventResult {
         ? (raw.added as unknown[]).filter((entry): entry is { entity: WorldEntityDefinition; numericId: number } => isRecord(entry) && isEntity(entry.entity) && finite(entry.numericId))
         : [];
       const removed = Array.isArray(raw.removed) ? (raw.removed as unknown[]).filter(finite) : [];
-      return { kind: "entities", change: { tick: raw.tick, added, removed } };
+      return { kind: "entities", change: { ...(typeof raw.instanceId === "string" ? { instanceId: raw.instanceId } : {}), tick: raw.tick, added, removed } };
     }
     case "action": {
       if (!finite(raw.tick) || typeof raw.agent !== "string" || !isRecord(raw.input) || typeof raw.input.type !== "string") return { kind: "ignored" };
       return {
         kind: "action",
         action: {
+          id: typeof raw.id === "string" ? raw.id : undefined,
+          instanceId: typeof raw.instanceId === "string" ? raw.instanceId : undefined,
+          sequence: finite(raw.sequence) ? raw.sequence : undefined,
           tick: raw.tick, agent: raw.agent,
           input: { type: raw.input.type, data: isRecord(raw.input.data) ? raw.input.data : null },
           result: typeof raw.result === "string" ? raw.result : "",
@@ -122,6 +128,9 @@ export function parseWorldEvent(event: string, data: string): WorldEventResult {
 // ---- the scene ----------------------------------------------------------------------------
 
 export type WorldScene = {
+  instanceId?: string;
+  recordingId?: string;
+  journal?: WorldHello["journal"];
   worldId?: string;
   inspection?: IslandInspection;
   tick: number;
@@ -141,6 +150,7 @@ export function worldSceneFromHello(hello: WorldHello): WorldScene {
     if (Number.isInteger(numeric)) ids.set(numeric, value);
   }
   return {
+    instanceId: hello.instanceId, recordingId: hello.recordingId, journal: hello.journal,
     worldId: typeof hello.document.id === "string" ? hello.document.id : undefined,
     inspection: hello.inspection,
     tick: hello.tick,

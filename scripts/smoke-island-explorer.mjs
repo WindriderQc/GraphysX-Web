@@ -70,7 +70,8 @@ try {
   await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.camera.focusing === false);
   await page.locator('[data-ix-category="objects"]').click();
   assert.equal((await state(page)).explorer.selected, null);
-  await page.mouse.click(720, 450);
+  const explorerWidth = (await page.locator(".gx-island-explorer").boundingBox()).width;
+  await page.mouse.click(720 + explorerWidth / 2, 450);
   await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.explorer.selected === "rock_1");
   assert.equal(await page.evaluate(() => JSON.stringify(window.__GRAPHYSX__.export())), before, "exploration never changes the authored document");
 
