@@ -40,7 +40,7 @@ try {
   const page = applySmokeTimeout(await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 }));
   page.on("pageerror", e => errors.push(String(e)));
   await page.goto(`${server.url}/?app=island&source=${encodeURIComponent(world.url)}&agent=Eko&dashboard=${encodeURIComponent("https://dashboard.example/benchmark/island")}`, { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application?.explorer?.counts?.trees === 6);
+  await page.waitForFunction(() => typeof window.render_game_to_text === "function" && JSON.parse(window.render_game_to_text()).application?.explorer?.counts?.trees === 6);
   await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.camera.focusing === false);
   assert.equal((await state(page)).world.label, "Living island");
   assert.equal(await page.locator('[data-ix-world]').textContent(), "Île vivante");
@@ -88,7 +88,7 @@ try {
   const phone = applySmokeTimeout(await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 }));
   phone.on("pageerror", e => errors.push(String(e)));
   await phone.goto(`${server.url}/?app=island&source=${encodeURIComponent(world.url)}&embed=1`, { waitUntil: "domcontentloaded" });
-  await phone.waitForFunction(() => JSON.parse(window.render_game_to_text()).application?.explorer?.items > 0);
+  await phone.waitForFunction(() => typeof window.render_game_to_text === "function" && JSON.parse(window.render_game_to_text()).application?.explorer?.items > 0);
   await phone.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.camera.focusing === false);
   assert.equal((await state(phone)).explorer.open, false);
   await phone.getByRole("button", { name: "Explorer l’île" }).click();
