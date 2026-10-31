@@ -72,7 +72,7 @@ try {
   // Lean by default: no host display menu, no notice, one exit, and the camera on the agent.
   assert.equal(await page.locator(".gx-display-settings").isVisible().catch(() => false), false, "no host display menu over the island");
   assert.equal(await page.locator("[data-notice]").isVisible(), false, "the demonstration is said in the status line, not a banner");
-  assert.deepEqual(await page.locator(".gx-island-header button:visible").allTextContents(), ["Plein écran", "Quitter"], "only Plein écran and Quitter in the header");
+  assert.deepEqual(await page.locator(".gx-island-header button:visible").allTextContents(), ["Explorer l’île", "Plein écran", "Quitter"], "the header offers exploration, full screen and exit only");
   const follow = page.locator('[data-action="follow"]');
   assert.equal(await follow.getAttribute("aria-pressed"), "true", "the camera follows the agent by default");
   await page.waitForFunction(`(${app})()?.camera?.distanceToAgent < 60 && (${app})().camera.pivotToAgent < 3`);

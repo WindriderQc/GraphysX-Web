@@ -538,6 +538,7 @@ export class LivingIsland {
           Height: stats.height, Branches: stats.branches, Leaves: stats.leaves,
           TrunkLength: round(g.trunkLength, 3), LengthRatio: round(g.lengthRatio, 3), BranchAngle: round(g.branchAngle, 3),
           RollTurns: round(g.rollTurns, 3), Depth: g.depth, SplitChance: round(g.splitChance, 3), LeafSize: round(g.leafSize, 3),
+          LeafHueSpread: round(g.leafHueSpread, 3), BranchThickness: round(g.branchThickness, 3),
         },
       });
     }

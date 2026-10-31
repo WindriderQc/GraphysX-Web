@@ -56,6 +56,20 @@ function gatherAndSow(world, session) {
 }
 
 describe("living island", () => {
+  it("projects native tree and agent facts for spectators without exposing session credentials", () => {
+    const world = living();
+    const { session } = world.join("Eko");
+    gatherAndSow(world, session);
+    const inspection = world.poseFrame().inspection;
+    assert.equal(inspection.worldId, "living-island");
+    assert.equal(inspection.entities.find(e => e.name === "Tree_6").attributes.Parent, "Tree_2");
+    assert.equal(inspection.entities.find(e => e.name === "Tree_6").attributes.SownBy, "Eko");
+    assert.equal(inspection.agents[0].name, "Eko");
+    assert.ok(!JSON.stringify(inspection).includes(session), "session bearer is not spectator data");
+    assert.equal(inspection.entities.find(e => e.name === "Tree_2").attributes.LeafHueSpread,
+      tree(world.observe(session), "Tree_2").attributes.LeafHueSpread);
+    assert.deepEqual(world.sceneHello().inspection, inspection);
+  });
   it("adds a forest, a flock and a wind field to Mesa without changing Mesa", () => {
     // The island look is decor without physics: hidden physics slabs, grass and sea on top.
     const look = new m.IslandWorld().sceneHello().document.entities;

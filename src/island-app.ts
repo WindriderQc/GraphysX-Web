@@ -22,7 +22,7 @@
  * paused, and frames are applied with `applyHostPoses`, interpolated about 150 ms behind.
  * `capture=1` turns the page into the image sidecar's camera (`world-service/image-sidecar.mjs`).
  */
-import { DirectionalLight, MathUtils, Quaternion, Vector3 } from "three";
+import { Box3, DirectionalLight, MathUtils, Quaternion, Raycaster, Vector2, Vector3, type Object3D } from "three";
 import "./island.css";
 import {
   agentPossessive, applyClawMessage, composeIsland, describeAgent, formatClock, islandBounds, islandMessages, islandMessagesAt,
@@ -39,6 +39,8 @@ import { findFlockSystem } from "./agent-world-flock";
 import type { PlatformHost } from "./platform-host";
 import { foldPresentationPanel } from "./presentation-mobile";
 import { motionIsReduced } from "./platform-theme";
+import { buildIslandExplorer, islandDashboardLink, type ExplorerItem } from "./island-explorer-data";
+import { mountIslandExplorer } from "./island-explorer";
 
 export type IslandApplication = {
   dispose: () => void;
@@ -129,6 +131,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
         <p class="gx-island-sub"><span class="gx-island-dot" data-dot></span><span data-status>Connexion…</span></p>
       </div>
       <div class="gx-island-actions">
+        <button type="button" data-action="explore" aria-expanded="false">Explorer l’île</button>
         <button type="button" data-action="fullscreen" aria-pressed="false" title="L'île sur tout l'écran ; Échap pour revenir">Plein écran</button>
         <button type="button" data-action="exit">Quitter</button>
       </div>
@@ -223,6 +226,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   const worldPoses = new WorldPoseBuffer(capture || reduced ? 0 : 150);
   let captureAim: CaptureAim | null = null;
   const frameWaiters: { frame: number; resolve: () => void }[] = [];
+  const clawPlayer = () => state?.players.find(player => player.name === agentName) || state?.players[0];
   const tmpQuat = new Quaternion();
   const fixQuat = new Quaternion();
   const tmpOffset = new Vector3();
@@ -258,7 +262,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     }
   };
 
-  const agentPlacement = (): IslandPlacement | null => placements.find((p) => p.kind === "agent") ?? null;
+  const agentPlacement = (): IslandPlacement | null => placements.find(p => p.kind === "agent" && p.clawId === clawPlayer()?.root_part_id) || placements.find(p => p.kind === "agent") || null;
   const agentObjectPosition = (): Vector3 | null => {
     const entityId = feed === "graphysx" ? worldAgent?.entityId : agentPlacement()?.entityId;
     const object = entityId ? host.world.getEntityObject(entityId) : null;
@@ -320,7 +324,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   );
 
   const updateAgentCard = (): void => {
-    const player = feed === "graphysx" ? worldPlayer() : state?.players[0];
+    const player = feed === "graphysx" ? worldPlayer() : clawPlayer();
     if (player?.name) agentName = player.name;
     const agent = describeAgent(player);
     const shownName = player ? agent.name : agentName ?? agent.name;
@@ -457,7 +461,11 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       setStatus(`Reprise · ×${replay.speed}${replay.paused ? " · en pause" : ""}`, "ok");
       return;
     }
-    if (feed === "graphysx") { setStatus(mode === "live" ? "En direct · monde GraphysX" : "Connecté", "ok"); return; }
+    if (feed === "graphysx") {
+      const id = world?.inspection?.worldId || world?.worldId;
+      const label = id === "living-island" ? "Île vivante" : id === "mesa-island" ? "Île Mesa" : world?.label || "monde GraphysX";
+      setStatus(mode === "live" ? `En direct · ${label}` : "Connecté", "ok"); return;
+    }
     setStatus(mode === "live" ? `En direct · ${state?.game_status ?? "…"}` : "Connecté", "ok");
   };
 
@@ -603,6 +611,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       if (!world) return;
       if (worldPoses.push(result.frame, performance.now())) resets += 1;
       world.tick = result.frame.tick;
+      if (result.frame.inspection) world.inspection = result.frame.inspection;
       worldFrames += 1;
       snapshots += 1;
       if (worldFrames === 1) applyWorldPoses(performance.now());
@@ -746,15 +755,73 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   }
 
   // ---- the one frame loop -----------------------------------------------------------------
+  const explorer = capture ? null : mountIslandExplorer(surface, {
+    initialOpen: window.innerWidth > 1100 || params.get("explore") === "1",
+    dashboard: islandDashboardLink(params.get("dashboard"), params.get("run")),
+    select: item => { host.api.select(item ? [item.entityId] : []); },
+    focus: item => {
+      if (!item.position) return;
+      setFollow(false);
+      const object = host.world.getEntityObject(item.entityId);
+      const bounds = object && item.kind !== "bird" ? new Box3().setFromObject(object) : null;
+      const at = bounds && !bounds.isEmpty() ? bounds.getCenter(new Vector3()) : new Vector3(...item.position);
+      const radius = bounds && !bounds.isEmpty() ? Math.min(25, bounds.getSize(new Vector3()).length() / 2) : 1;
+      host.focusOn(at, Math.max(1, radius), reduced ? 0 : 0.7, 90);
+    },
+    follow: item => {
+      agentName = item.name;
+      if (world) worldAgent = pickWorldAgent(worldAgents(world), agentName);
+      setFollow(true);
+      updateAgentCard();
+    },
+    overview: () => { host.api.select([]); setFollow(false); frameOverview(reduced ? 0 : 0.9); },
+  });
+  let explorerAt = 0;
+  let explorerModel: ReturnType<typeof buildIslandExplorer> | null = null;
+  const canvas = host.renderer.domElement;
+  const raycaster = new Raycaster();
+  let press: { x: number; y: number } | null = null;
+  const pointerDown = (event: PointerEvent): void => { if (event.button === 0) press = { x: event.clientX, y: event.clientY }; };
+  const pointerUp = (event: PointerEvent): void => {
+    const start = press; press = null;
+    if (!explorer || !start || event.button !== 0 || Math.hypot(start.x - event.clientX, start.y - event.clientY) > 5 || !explorerModel) return;
+    const rect = canvas.getBoundingClientRect();
+    raycaster.setFromCamera(new Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), host.camera);
+    const objects = new Map<Object3D, ExplorerItem>();
+    for (const item of explorerModel.items) {
+      const object = item.kind !== "bird" && item.visible ? host.world.getEntityObject(item.entityId) : null;
+      if (object) objects.set(object, item);
+    }
+    for (const hit of raycaster.intersectObjects([...objects.keys()], true)) {
+      let object: Object3D | null = hit.object;
+      let item: ExplorerItem | undefined;
+      while (object && !item) { item = objects.get(object); object = object.parent; }
+      if (!item) continue;
+      const bird = item.kind === "flock" && hit.instanceId !== undefined ? `${item.id}:bird:${hit.instanceId}` : null;
+      explorer.select(bird && explorerModel.items.some(row => row.id === bird) ? bird : item.id);
+      break;
+    }
+  };
+  canvas.addEventListener("pointerdown", pointerDown);
+  canvas.addEventListener("pointerup", pointerUp);
   let editing = false;
   const frame = (): void => {
     if (disposed) return;
     frames += 1;
+    if (explorer && performance.now() >= explorerAt) {
+      explorerAt = performance.now() + 350;
+      explorerModel = buildIslandExplorer({ world: feed === "graphysx" ? world : null, claw: state, mode,
+        connected: mode === "fixture" || connected, actions: worldActions,
+        position: id => { const object = host.world.getEntityObject(id); return object ? object.getWorldPosition(new Vector3()).toArray() as [number, number, number] : null; },
+        swarms: world ? worldHostSwarms(worldPoses, world.ids, performance.now()) : [],
+      });
+      explorer.update(explorerModel);
+    }
     const nowEditing = host.mode === "editor";
     if (nowEditing !== editing) {
       editing = nowEditing;
       for (const node of surface.children) if (node instanceof HTMLElement) node.hidden = editing || (node.hasAttribute("data-transport") && mode !== "replay");
-      if (!editing) setNotice(notice);
+      if (!editing) { setNotice(notice); explorer?.restoreVisibility(); }
     }
     for (let i = frameWaiters.length - 1; i >= 0; i -= 1) {
       if (frames >= frameWaiters[i].frame) { frameWaiters[i].resolve(); frameWaiters.splice(i, 1); }
@@ -824,9 +891,10 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       } : null,
       reconcileError,
       autoStarted,
-      agent: { ...describeAgent(graphysx ? worldPlayer() : state?.players[0]), title: agentPossessive(agentName), position: agentAt ? [agentAt.x, agentAt.y, agentAt.z].map((n) => Math.round(n * 100) / 100) : null },
+      agent: { ...describeAgent(graphysx ? worldPlayer() : clawPlayer()), title: agentPossessive(agentName), position: agentAt ? [agentAt.x, agentAt.y, agentAt.z].map((n) => Math.round(n * 100) / 100) : null },
       follow,
       camera: {
+        focusing: host.focusing,
         azimuth: round2(Math.atan2(eye.x - pivot.x, eye.z - pivot.z)),
         distanceToAgent: agentAt ? round2(eye.distanceTo(agentAt)) : null,
         pivotToAgent: agentAt ? round2(Math.hypot(pivot.x - agentAt.x, pivot.z - agentAt.z)) : null,
@@ -834,6 +902,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       replay,
       messages: element("[data-messages]").children.length,
       messageLog: messages.length,
+      explorer: explorer?.state() || null,
     };
   };
 
@@ -843,6 +912,10 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     dispose: () => {
       disposed = true;
       unsubscribe();
+      explorer?.dispose();
+      host.api.select([]);
+      canvas.removeEventListener("pointerdown", pointerDown);
+      canvas.removeEventListener("pointerup", pointerUp);
       document.removeEventListener("fullscreenchange", showFullscreen);
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
       if (infoTimer !== null) window.clearInterval(infoTimer);

@@ -96,6 +96,7 @@ export function helloAt(recording, tick) {
     document: { ...base.document, entities },
     ids: Object.fromEntries(ids),
     replay: true,
+    ...(base.inspection ? { inspection: base.inspection } : {}),
   };
 }
 
