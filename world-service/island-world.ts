@@ -116,6 +116,7 @@ export interface EntityChange { added?: { entity: AgentWorldDefinition["entities
 /** Clawblox GET /snapshot body. Everything needed to continue bit for bit; no history. */
 export interface WorldSnapshot {
   format: typeof SNAPSHOT_FORMAT;
+  instanceId?: string;
   /** Simulation seconds (Clawblox records `format` and `time` in its run manifest). */
   time: number;
   tick: number;
@@ -231,6 +232,7 @@ export class IslandWorld {
   private readonly living: LivingIsland | null = null;
   tick = 0;
   readonly actions: ActionRecord[] = [];
+  readonly instanceId: string;
   private readonly meta: Map<string, MesaEntityMeta>;
   private readonly numericIds = new Map<string, number>();
   private nextNumericId = 8;
@@ -253,6 +255,7 @@ export class IslandWorld {
    */
   constructor(snapshot?: WorldSnapshot, options: { world?: string } = {}) {
     this.engine = new RapierPhysicsEngine({ gravity: { x: 0, y: -30, z: 0 }, allowSleep: true });
+    this.instanceId = snapshot?.instanceId ?? crypto.randomUUID();
     const worldId = snapshot?.world?.id ?? options.world ?? MESA_WORLD_ID;
     if (snapshot && options.world && options.world !== worldId) throw new Error(`This snapshot is of ${worldId}, not ${options.world}`);
     this.world = worldBase(worldId);
@@ -362,8 +365,23 @@ export class IslandWorld {
     return this.characters.size;
   }
 
+  sessionEntity(session: string): string | undefined { return this.characters.get(session)?.entityId; }
+
   hasSession(session: string | undefined): boolean {
     return !!session && this.characters.has(session);
+  }
+
+  /** Release one member only; other sessions and their avatars remain intact. */
+  leave(session: string): boolean {
+    const character = this.characters.get(session);
+    if (!character) return false;
+    if (character.held) this.throwHeld(character, { direction: [0, 1, 0], speed: 0 });
+    this.engine.removeCharacter(character.handle);
+    this.runtime.remove(character.entityId);
+    this.numericIds.delete(character.entityId);
+    this.characters.delete(session);
+    this.changes.push({ removed: [character.numericId] });
+    return true;
   }
 
   // ---- input ----------------------------------------------------------------------------
@@ -834,7 +852,7 @@ export class IslandWorld {
    * Compact pose frame: [numericId, x, y, z, qx, qy, qz, qw] for every moving thing. The living
    * island adds `swarms`: [numericId, x, y, z, …] per flock, its members in flock-local space.
    */
-  poseFrame(): { tick: number; t: number; poses: number[][]; swarms?: number[][]; inspection: ReturnType<IslandWorld["spectatorInspection"]> } {
+  poseFrame(includeInspection = true): { tick: number; t: number; poses: number[][]; swarms?: number[][]; inspection?: ReturnType<IslandWorld["spectatorInspection"]> } {
     const poses: number[][] = [];
     for (const [id, info] of this.meta) {
       if (info.decorative || info.static) continue;
@@ -848,7 +866,7 @@ export class IslandWorld {
       const yaw = Math.atan2(-character.forward[0], -character.forward[2]);
       poses.push([character.numericId, round(p[0], 3), round(p[1], 3), round(p[2], 3), 0, round(Math.sin(yaw / 2), 4), 0, round(Math.cos(yaw / 2), 4)]);
     }
-    const frame: ReturnType<IslandWorld["poseFrame"]> = { tick: this.tick, t: round(this.simSeconds, 3), poses, inspection: this.spectatorInspection() };
+    const frame: ReturnType<IslandWorld["poseFrame"]> = { tick: this.tick, t: round(this.simSeconds, 3), poses, ...(includeInspection ? { inspection: this.spectatorInspection() } : {}) };
     if (this.living) frame.swarms = this.living.swarms();
     return frame;
   }
@@ -857,6 +875,7 @@ export class IslandWorld {
   sceneHello(): Record<string, unknown> {
     return {
       format: "graphysx-world-stream/v1",
+      instanceId: this.instanceId,
       tickHz: TICK_HZ,
       tick: this.tick,
       document: this.runtime.exportDefinition(),
@@ -901,6 +920,7 @@ export class IslandWorld {
     }
     return {
       format: SNAPSHOT_FORMAT,
+      instanceId: this.instanceId,
       time: this.simSeconds,
       tick: this.tick,
       world: { id: this.worldId, contentHash: this.world.hash, rules: this.world.rules },

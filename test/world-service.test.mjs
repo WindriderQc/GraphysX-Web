@@ -530,7 +530,7 @@ describe("viewers and first-person images (phase 3)", () => {
     } finally {
       await running.close();
     }
-    const recording = parseRecording(readFileSync(join(recordDir, "graphysx-recording.ndjson"), "utf8"));
+    const recording = parseRecording(readFileSync(join(recordDir, "instances", running.world.instanceId, "graphysx-recording.ndjson"), "utf8"));
     rmSync(recordDir, { recursive: true, force: true });
     assert.equal(recording.actions.at(-1).result, "PickupFailed:OutOfRange");
     const hello = helloAt(recording, recording.lastTick);

@@ -89,6 +89,10 @@ export function helloAt(recording, tick) {
       ids.set(numericId, entity.id);
     }
   }
+  let inspection = base.inspection;
+  for (let i = lastAtOrBefore(recording.frames, tick); i >= 0 && recording.frames[i].tick >= base.tick; i -= 1) {
+    if (recording.frames[i].inspection) { inspection = recording.frames[i].inspection; break; }
+  }
   return {
     format: STREAM_FORMAT,
     tickHz: recording.tickHz,
@@ -96,7 +100,8 @@ export function helloAt(recording, tick) {
     document: { ...base.document, entities },
     ids: Object.fromEntries(ids),
     replay: true,
-    ...(base.inspection ? { inspection: base.inspection } : {}),
+    ...(base.instanceId ? { instanceId: base.instanceId, recordingId: base.recordingId, ...(base.identitySource ? { identitySource: base.identitySource } : {}) } : {}),
+    ...(inspection ? { inspection } : {}),
   };
 }
 
