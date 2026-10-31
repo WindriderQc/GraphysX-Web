@@ -9,7 +9,7 @@ const hello = { format: feed.WORLD_STREAM_FORMAT, tick: 60, tickHz: 60, replay: 
     { id: "agent-1", type: "agent", label: "Eko", transform: { position: [0, 2, 0] } },
     { id: "tree_1", type: "dna-tree", label: "Tree_1", dna: { generation: 2, seed: 11 } },
     { id: "tree_2", type: "dna-tree", label: "Tree_2", dna: { generation: 1, seed: 22 } },
-    { id: "tree_1-perch", type: "force-field", forceField: { kind: "attractor", affectsFlocks: true } },
+    { id: "tree_1-perch", type: "force-field", forceField: { kind: "attractor", affectsFlocks: true, visualize: false } },
     { id: "tree_1-trunk", type: "cylinder", tags: ["trunk"], visible: false },
     { id: "flock_1", type: "flock", transform: { position: [10, 15, 0] } },
     { id: "block_1", label: "Block_1", type: "box", tags: ["pickup"] },
@@ -47,6 +47,8 @@ test("accent-insensitive search covers attributes; removal cannot leave a stale 
   const model = make(); model.items[0].name = "Éko";
   assert.equal(data.filterExplorerItems(model, null, "eko")[0].name, "Éko");
   assert.equal(data.filterExplorerItems(model, "trees", "ReadyIn").length, 1);
+  assert.equal(data.filterExplorerItems(model, null, "arbre").length, 2);
+  assert.equal(data.filterExplorerItems(model, null, "graine portée")[0].name, "Éko");
   assert.equal(data.filterExplorerItems(model, "forces", "Tree_2").length, 0);
   const world = feed.applyWorldEntities(feed.worldSceneFromHello(hello), { tick: 120, removed: [1] });
   assert.equal(make({ world }).items.some(row => row.id === "tree_1"), false);
@@ -59,6 +61,7 @@ test("old recordings expose geometry without inventing missing lineage or readin
   assert.equal(tree.attributes.Ready, undefined);
   assert.equal(tree.relations.some(r => r.label === "Parent"), false);
   assert.equal(model.counts.trees, 2);
+  assert.equal(model.items.find(row => row.id === 'tree_1-perch').visible, false);
 });
 
 test("Clawblox shares navigation and retains its native player and entity identities", () => {

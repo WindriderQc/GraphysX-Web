@@ -66,7 +66,7 @@ function makeItem(def: Record<string, unknown> & { id: string }, meta: Inspectio
   const attrs = meta?.attributes || {};
   const physics = rec(def.physics);
   const name = meta?.name || String(def.label || def.id);
-  const visible = def.visible !== false;
+  const visible = def.visible !== false && !(type === "force-field" && rec(def.forceField).visualize === false);
   const position = input.position?.(def.id) || vec(meta?.position) || vec(rec(def.transform).position);
   const properties: ExplorerProperty[] = [];
   const prop = (label: string, value: unknown, group = "État") => { if (value !== undefined && value !== null) properties.push({ label, value: explorerValue(value), group }); };
@@ -170,7 +170,9 @@ export function buildIslandExplorer(input: ExplorerInput): ExplorerModel {
 export function filterExplorerItems(model: ExplorerModel, categoryId: string | null, search = ""): ExplorerItem[] {
   const normalize = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const query = normalize(search.trim());
-  return model.items.filter(item => (!categoryId || item.category === categoryId) && (!query || normalize(`${item.name} ${item.id} ${item.kind} ${explorerValue(item.attributes)}`).includes(query)));
+  return model.items.filter(item => (!categoryId || item.category === categoryId) && (!query || normalize(
+    `${item.name} ${item.id} ${item.kind} ${EXPLORER_CATEGORIES.find(row => row[0] === item.category)?.[1] || ""} ${item.properties.map(p => `${p.label} ${p.value}`).join(" ")} ${explorerValue(item.attributes)}`
+  ).includes(query)));
 }
 
 export function islandDashboardLink(value: string | null, run: string | null): string | null {
