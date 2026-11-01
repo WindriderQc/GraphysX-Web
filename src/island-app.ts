@@ -115,6 +115,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   let disposed = false;
   let mode: Mode = source ? "unknown" : "fixture";
   let feed: Feed = source ? null : "clawblox";
+  let recordingNotice = "";
   // Only a refused source is worth a banner; a missing one is the demonstration, said in the status line.
   let notice = sourceParam && sourceParam !== "fixture" && !source
     ? "Source refusée : il faut une adresse http(s), par exemple ?source=http://devx:18090. Capture de démonstration affichée."
@@ -548,10 +549,10 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       if (health.status === 409) return "mismatch";
       const status: unknown = await health.json().catch(() => null);
       if (!health.ok || !isWorldServiceHealth(status)) return "other";
-      if (status && typeof status === "object" && "recording" in status) {
-        const recording = status.recording as { error?: string | null } | null;
-        if (recording?.error) setNotice("Direct disponible · enregistrement suspendu. Les archives existantes sont conservées.");
-      }
+      const persistence = status as { recording?: { error?: string | null }; checkpoint?: { error?: string | null } };
+      recordingNotice = persistence.recording?.error
+        ? "Direct disponible · enregistrement suspendu. Les archives existantes sont conservées."
+        : persistence.checkpoint?.error ? "Direct disponible · sauvegarde du monde indisponible." : "";
       const stream = await fetch(sourcePath("/spectate"), { cache: "no-store", signal: controller.signal });
       return stream.ok && isEventStream(stream.headers.get("content-type")) ? "graphysx" : "other";
     } catch {
@@ -712,7 +713,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     renderTransport();
     surface.setAttribute("aria-label", "L'île GraphysX");
     element(".gx-island-eyebrow").textContent = "AgentX · Île · GraphysX";
-    setNotice("");
+    setNotice(recordingNotice);
     // The Clawblox island parts (none yet) give way to the world's own scene on its first hello.
     host.world.clearTransientEntities(ISLAND_SCOPE);
     placements = [];

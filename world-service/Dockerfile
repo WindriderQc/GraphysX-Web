@@ -25,7 +25,7 @@ ENV NODE_ENV=production \
     WORLD_IMAGES=0
 WORKDIR /app
 COPY --from=build /src/world-service/dist/world.js world-service/dist/world.js
-COPY world-service/main.mjs world-service/server.mjs world-service/image.mjs world-service/replay.mjs world-service/recording.mjs world-service/archive.mjs world-service/startup.mjs world-service/register-recording.mjs world-service/API.md world-service/
+COPY world-service/main.mjs world-service/server.mjs world-service/image.mjs world-service/replay.mjs world-service/recording.mjs world-service/archive.mjs world-service/segments.mjs world-service/startup.mjs world-service/register-recording.mjs world-service/API.md world-service/
 RUN mkdir -p /data/recordings && chown -R node:node /data
 USER node
 VOLUME /data
