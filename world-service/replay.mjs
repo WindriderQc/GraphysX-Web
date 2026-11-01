@@ -159,7 +159,10 @@ export async function startReplayServer(options) {
         flush();
         response.write(opening(emitted));
         spectators.add(response);
-        request.once("close", () => spectators.delete(response));
+        request.once("close", () => {
+          spectators.delete(response);
+          if (!spectators.size) clock.paused = true;
+        });
         return undefined;
       }
       default: return send(response, 404, { error: `No route ${route}` });

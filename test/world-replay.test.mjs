@@ -173,6 +173,11 @@ describe("replay server", () => {
 
       // Skip-idle jumps to just before the next action when nothing happens for a while.
       await get("/replay/skip-idle?enabled=true", { method: "POST" });
+      // readEvents disconnected its spectator; finish that lifecycle before resuming.
+      const deadline = Date.now() + 2000;
+      while (running.spectatorCount && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+      assert.equal(running.spectatorCount, 0);
+      await get("/replay/play", { method: "POST" });
       running.advance(0.05);
       assert.equal(running.info().current_tick, 340, "one second before the pickup at 400");
     } finally {

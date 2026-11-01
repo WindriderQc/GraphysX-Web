@@ -217,9 +217,10 @@ try {
   await page.close();
 
   // ---- 3. replay of the recording ------------------------------------------------------------
+  const recordingId = world.world.instanceId;
   await world.close();
   world = null;
-  const recording = loadRecording(path.join(scratch, "rec"));
+  const recording = loadRecording(path.join(scratch, "rec", "instances", recordingId));
   assert.ok(recording.actions.length >= 6 && recording.changes.length >= 2, "the recording holds the join, the burst and every action");
   const replay = await startReplayServer({ recording, port: 0 });
   try {

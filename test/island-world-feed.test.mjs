@@ -133,6 +133,8 @@ test("actions read as panel lines; a stale LastActionResult is not shown beside 
 
 test("source detection and the opening overview", () => {
   assert.equal(feed.isWorldServiceHealth({ ok: true, tick: 12 }), true);
+  assert.equal(feed.isWorldServiceHealth({ ok: false, tick: 12, live: { available: true }, recording: { error: "quota" } }), true);
+  assert.equal(feed.isWorldServiceHealth({ ok: false, tick: 12 }), false);
   assert.equal(feed.isWorldServiceHealth({ ok: true }), false);
   assert.equal(feed.isWorldServiceHealth(null), false);
   assert.equal(feed.isEventStream("text/event-stream; charset=utf-8"), true);

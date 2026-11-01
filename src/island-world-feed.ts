@@ -451,7 +451,7 @@ export function lastWorldAction(actions: readonly WorldAction[], agent: string |
 
 /** `GET /healthz` of a world service (or its replay server): `{ok: true, tick: number}`. */
 export function isWorldServiceHealth(body: unknown): boolean {
-  return isRecord(body) && body.ok === true && finite(body.tick);
+  return isRecord(body) && finite(body.tick) && (body.ok === true || (isRecord(body.live) && body.live.available === true));
 }
 
 export function isEventStream(contentType: string | null | undefined): boolean {

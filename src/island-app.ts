@@ -1,3 +1,4 @@
+import { mountArchiveParts } from "./island-archive";
 /**
  * L'île — the Clawblox island in GraphysX's look — `?app=island`.
  *
@@ -180,6 +181,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   });
   document.addEventListener("fullscreenchange", showFullscreen);
   root.append(surface);
+  const disposeArchiveParts = mountArchiveParts(element(".gx-island-actions"), source?.http ?? "");
   foldPresentationPanel(element(".gx-island-panel"), "Eko · Messages");
   // The sidecar's camera page draws the world only: no header, panel or transport.
   if (capture) surface.style.display = "none";
@@ -544,7 +546,12 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     try {
       const health = await fetch(sourcePath("/healthz"), { cache: "no-store", signal: controller.signal });
       if (health.status === 409) return "mismatch";
-      if (!health.ok || !isWorldServiceHealth(await health.json().catch(() => null))) return "other";
+      const status: unknown = await health.json().catch(() => null);
+      if (!health.ok || !isWorldServiceHealth(status)) return "other";
+      if (status && typeof status === "object" && "recording" in status) {
+        const recording = status.recording as { error?: string | null } | null;
+        if (recording?.error) setNotice("Direct disponible · enregistrement suspendu. Les archives existantes sont conservées.");
+      }
       const stream = await fetch(sourcePath("/spectate"), { cache: "no-store", signal: controller.signal });
       return stream.ok && isEventStream(stream.headers.get("content-type")) ? "graphysx" : "other";
     } catch {
@@ -1005,6 +1012,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       birdMarker.removeFromParent(); birdMarker.geometry.dispose(); birdMarker.material.dispose();
       canvas.removeEventListener("pointerdown", pointerDown);
       canvas.removeEventListener("pointerup", pointerUp);
+      disposeArchiveParts();
       document.removeEventListener("fullscreenchange", showFullscreen);
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
       if (infoTimer !== null) window.clearInterval(infoTimer);

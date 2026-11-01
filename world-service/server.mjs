@@ -21,7 +21,8 @@
 
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
-import { Archive, atomicSnapshot, replayArchives, UUID, sealCheckpoint, verifyCheckpoint } from "./archive.mjs";
+import { atomicSnapshot, replayArchives, UUID, sealCheckpoint, verifyCheckpoint } from "./archive.mjs";
+import { SegmentedArchive } from "./segments.mjs";
 import { parseImageSize } from "./image.mjs";
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -77,7 +78,7 @@ export async function startWorldServer(options) {
   const expectedSpectators = new Map();
   const spectateEvery = Math.max(1, Math.round(TICK_HZ / (options.spectateHz ?? 10)));
   const recordDir = options.recordDir ?? null;
-  const archive = new Archive(recordDir, options.recordingLimits);
+  const archive = new SegmentedArchive(recordDir, options.recordingLimits);
   const replays = replayArchives(recordDir, options.recordingLimits);
   const seen = new Map(); // Entity id -> last agent request wall-clock time; not spectator traffic.
   let journal = options.snapshot?.journal?.actions?.slice(-200) ?? [];
@@ -110,6 +111,7 @@ export async function startWorldServer(options) {
   const hello = () => ({ ...world.sceneHello(), ...identity(), inspection: inspection(),
     journal: { generation, oldest: journal[0]?.sequence ?? sequence + 1, latest: sequence, limit: 200 } });
   const frame = full => ({ ...world.poseFrame(false), ...identity(), ...(full ? { inspection: inspection() } : {}) });
+  archive.seed = () => [{ kind: "hello", ...hello() }, { kind: "frame", ...frame(true) }];
   const snapshot = () => ({ ...world.snapshot(), runId, journal: { sequence, actions: journal } });
   const checkpoint = () => {
     if (!options.snapshotPath) return checkpointTail;
@@ -123,7 +125,7 @@ export async function startWorldServer(options) {
   };
   await archive.start(world.instanceId);
   await checkpoint();
-  if (checkpointError) { await archive.close(); await replays.close(); throw new Error(`Initial checkpoint failed: ${checkpointError}`); }
+  // Persistence failure keeps strict health false; a valid loaded world remains watchable.
   record({ kind: "hello", ...hello(), resumedFromTick: options.snapshot ? world.tick : null });
 
   const write = (response, frame) => {
@@ -208,7 +210,7 @@ export async function startWorldServer(options) {
         return false;
       };
       switch (route) {
-        case "GET /healthz": return send(response, 200, { ok: !checkpointError && !archive.error, tick: world.tick, world: world.worldId, ...identity(), recording: archive.status(), checkpoint: { enabled: Boolean(options.snapshotPath), error: checkpointError, lastSaved: checkpointReceipt } }, READ_ONLY_CORS);
+        case "GET /healthz": return send(response, 200, { ok: !checkpointError && !archive.error, live: { available: !closing && !switching }, tick: world.tick, world: world.worldId, ...identity(), recording: archive.status(), replay: replays.status(), checkpoint: { enabled: Boolean(options.snapshotPath), error: checkpointError, lastSaved: checkpointReceipt } }, READ_ONLY_CORS);
         case "GET /api.md": return send(response, 200, apiMarkdown());
         case "POST /world": {
           if (!options.operatorToken || request.headers["x-operator-token"] !== options.operatorToken) return send(response, 403, { error: "Operator token required" });
