@@ -1,3 +1,4 @@
+import { mountArchiveParts } from "./island-archive";
 /**
  * L'île — the Clawblox island in GraphysX's look — `?app=island`.
  *
@@ -114,6 +115,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   let disposed = false;
   let mode: Mode = source ? "unknown" : "fixture";
   let feed: Feed = source ? null : "clawblox";
+  let recordingNotice = "";
   // Only a refused source is worth a banner; a missing one is the demonstration, said in the status line.
   let notice = sourceParam && sourceParam !== "fixture" && !source
     ? "Source refusée : il faut une adresse http(s), par exemple ?source=http://devx:18090. Capture de démonstration affichée."
@@ -180,6 +182,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   });
   document.addEventListener("fullscreenchange", showFullscreen);
   root.append(surface);
+  const disposeArchiveParts = mountArchiveParts(element(".gx-island-actions"), source?.http ?? "");
   foldPresentationPanel(element(".gx-island-panel"), "Eko · Messages");
   // The sidecar's camera page draws the world only: no header, panel or transport.
   if (capture) surface.style.display = "none";
@@ -544,7 +547,12 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     try {
       const health = await fetch(sourcePath("/healthz"), { cache: "no-store", signal: controller.signal });
       if (health.status === 409) return "mismatch";
-      if (!health.ok || !isWorldServiceHealth(await health.json().catch(() => null))) return "other";
+      const status: unknown = await health.json().catch(() => null);
+      if (!health.ok || !isWorldServiceHealth(status)) return "other";
+      const persistence = status as { recording?: { error?: string | null }; checkpoint?: { error?: string | null } };
+      recordingNotice = persistence.recording?.error
+        ? "Direct disponible · enregistrement suspendu. Les archives existantes sont conservées."
+        : persistence.checkpoint?.error ? "Direct disponible · sauvegarde du monde indisponible." : "";
       const stream = await fetch(sourcePath("/spectate"), { cache: "no-store", signal: controller.signal });
       return stream.ok && isEventStream(stream.headers.get("content-type")) ? "graphysx" : "other";
     } catch {
@@ -705,7 +713,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     renderTransport();
     surface.setAttribute("aria-label", "L'île GraphysX");
     element(".gx-island-eyebrow").textContent = "AgentX · Île · GraphysX";
-    setNotice("");
+    setNotice(recordingNotice);
     // The Clawblox island parts (none yet) give way to the world's own scene on its first hello.
     host.world.clearTransientEntities(ISLAND_SCOPE);
     placements = [];
@@ -1005,6 +1013,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       birdMarker.removeFromParent(); birdMarker.geometry.dispose(); birdMarker.material.dispose();
       canvas.removeEventListener("pointerdown", pointerDown);
       canvas.removeEventListener("pointerup", pointerUp);
+      disposeArchiveParts();
       document.removeEventListener("fullscreenchange", showFullscreen);
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
       if (infoTimer !== null) window.clearInterval(infoTimer);

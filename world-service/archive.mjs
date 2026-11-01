@@ -3,6 +3,7 @@ import { open, mkdir, rename, readFile, realpath } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { startReplayServer } from "./replay.mjs";
+import { recordingParts } from "./segments.mjs";
 import { parseRecording } from "./recording.mjs";
 
 export const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -102,7 +103,7 @@ async function readArchive(path, maxBytes, reserve) {
 }
 
 /** Read-only archive router: only opaque IDs under this configured root, never caller paths. */
-export function replayArchives(root, { maxBytes = ARCHIVE_LIMIT, maxOpen = 4 } = {}) {
+export function replayArchives(root, { maxBytes = ARCHIVE_LIMIT, maxOpen = 4, idleMs = 300_000, cleanupEveryMs = 30_000 } = {}) {
   const cache = new Map();
   let residentBytes = 0;
   const drop = (id, entry) => {
@@ -115,21 +116,35 @@ export function replayArchives(root, { maxBytes = ARCHIVE_LIMIT, maxOpen = 4 } =
     for (const [id, entry] of cache) if (id !== except && entry.running?.spectatorCount === 0) drop(id, entry);
   };
   const handle = async (request, response, url) => {
-    const match = /^\/recordings\/([^/]+)(\/.*)?$/.exec(url.pathname);
+    const match = /^\/recordings\/([^/]+)(?:\/parts\/(\d{1,6}))?(\/.*)?$/.exec(url.pathname);
     if (!match) return false;
     const fail = (status, error) => { response.writeHead(status, { "content-type": "application/json", "access-control-allow-origin": "*" }); response.end(JSON.stringify({ error })); return true; };
     if (!root || !UUID.test(match[1])) return fail(404, "Unknown recording");
     const id = match[1];
-    let replay = cache.get(id);
+    // Listing segments is metadata-only: it never opens an archive or starts a reader.
+    let parts, reference;
+    try {
+      parts = await recordingParts(root, id);
+      try { reference = JSON.parse(await readFile(join(root, "instances", id, "reference.json"), "utf8")); }
+      catch (error) { if (error.code !== "ENOENT") throw error; }
+      if (reference && !parts.length) parts = [{ id: 0, name: "graphysx-recording.ndjson", bytes: reference.bytes }];
+    } catch { return fail(404, "Unknown recording"); }
+    if (!match[2] && match[3] === "/parts" && request.method === "GET") {
+      response.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "no-store" });
+      response.end(JSON.stringify({ recordingId: id, maxReplayBytes: maxBytes, parts: parts.map(({ id, bytes }) => ({ id, bytes })) }));
+      return true;
+    }
+    const part = match[2] === undefined ? parts[0] : parts.find(part => part.id === Number(match[2]));
+    if (!part) return fail(404, "Unknown recording segment");
+    const key = `${id}:${part.id}`;
+    let replay = cache.get(key);
     if (!replay) {
-      if (cache.size >= maxOpen) retireIdle(id);
+      if (cache.size >= maxOpen) retireIdle(key);
       if (cache.size >= maxOpen) return fail(429, "Replay capacity reached; close a viewer and retry");
       // Reserve before I/O; simultaneous requests share the same bounded load.
       const promise = (async () => {
-        let path = join(root, "instances", id, "graphysx-recording.ndjson");
-        let reference;
-        try { reference = JSON.parse(await readFile(join(root, "instances", id, "reference.json"), "utf8")); }
-        catch (error) { if (error.code !== "ENOENT") throw error; }
+        let path = join(root, "instances", id, part.name);
+        if (part.id !== 0) reference = null;
         if (reference) {
           if (reference.format !== "graphysx-recording-reference/v1" || typeof reference.path !== "string") throw new Error("Invalid recording reference");
           path = await realpath(join(root, reference.path));
@@ -137,7 +152,7 @@ export function replayArchives(root, { maxBytes = ARCHIVE_LIMIT, maxOpen = 4 } =
           if (!path.startsWith(base + sep)) throw new Error("Recording escaped configured root");
         }
         const bytes = await readArchive(path, maxBytes, size => {
-          if (residentBytes + size > maxBytes) retireIdle(id);
+          if (residentBytes + size > maxBytes) retireIdle(key);
           if (residentBytes + size > maxBytes) throw Object.assign(new Error("Replay byte capacity reached"), { code: "REPLAY_CAPACITY" });
           residentBytes += size;
           replay.bytes = size;
@@ -151,24 +166,24 @@ export function replayArchives(root, { maxBytes = ARCHIVE_LIMIT, maxOpen = 4 } =
         return startReplayServer({ recording });
       })();
       replay = { promise, used: Date.now() };
-      cache.set(id, replay);
+      cache.set(key, replay);
     }
     try {
       const running = await replay.promise;
       replay.running = running;
       replay.used = Date.now();
-      request.url = `${match[2] || "/"}${url.search}`;
+      request.url = `${match[3] || "/"}${url.search}`;
       running.server.emit("request", request, response);
       return true;
     } catch (error) {
-      drop(id, replay);
+      drop(key, replay);
       if (error.code === "REPLAY_CAPACITY") return fail(429, "Replay byte capacity reached; close a viewer and retry");
       return fail(404, "Recording unavailable or invalid");
     }
   };
   const timer = setInterval(() => {
-    for (const [id, entry] of cache) if (Date.now() - entry.used > 300_000 && entry.running?.spectatorCount === 0) drop(id, entry);
-  }, 30_000);
+    for (const [id, entry] of cache) if (Date.now() - entry.used > idleMs && entry.running?.spectatorCount === 0) drop(id, entry);
+  }, cleanupEveryMs);
   timer.unref();
-  return { handle, close: async () => { clearInterval(timer); await Promise.all([...cache.values()].map(entry => entry.promise.then(replay => replay.close()).catch(() => {}))); } };
+  return { handle, status: () => ({ openReaders: cache.size, residentBytes, idleTimeoutMs: idleMs }), close: async () => { clearInterval(timer); await Promise.all([...cache.values()].map(entry => entry.promise.then(replay => replay.close()).catch(() => {}))); cache.clear(); residentBytes = 0; } };
 }

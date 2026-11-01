@@ -316,3 +316,32 @@ Le smoke accepte des serveurs réels pour produire des captures locales :
 - L'avatar est l'avatar GraphysX, pas le modèle `player.glb` de Clawblox ; il n'a pas
   d'animation de marche.
 - Pas de son, pas de bulles de dialogue au-dessus de l'agent.
+
+## Continuous live view and bounded archives
+
+The live simulation and recording health are separate. `/healthz` keeps its
+strict `ok` bit for agent admission and also reports `live.available` for
+spectators. A recording quota pauses new recording, preserves old bytes and
+shows a warning without changing the stream protocol or hiding the live world.
+
+New recordings use append-only segments: 32 MiB per segment by default, at
+most 1 GiB per instance and 4 GiB of NDJSON in the recording root. The existing
+`WORLD_RECORD_MAX_BYTES` (256 MiB by default) remains the replay resident-byte
+budget; segment, instance and root bounds scale down with a smaller configured
+budget. On quota or I/O failure recording pauses explicitly; it does not purge
+old data or promise unlimited retention. A restart resumes the checkpoint's
+identity in a new segment and never edits even a torn legacy file.
+
+`GET /recordings/<id>/parts` lists only bounded segment metadata and opens no
+reader. The viewer's segment selector loads `/recordings/<id>/parts/<number>`
+from the same recording identity. The old unsuffixed URL still opens the first
+segment, including registered legacy recordings. Segments can be reviewed
+independently; one segment does not claim to be the complete episode.
+
+Replays run inside the existing world service, on demand; the old standalone
+replay container is optional and is not needed by Benchmark's per-run button.
+Pause/seek remain shared among viewers of the same segment. The last spectator's
+disconnection pauses playback. Unwatched cached readers expire after five
+minutes, releasing their bounded memory; reopening loads the same archive again.
+Closing Benchmark's view disconnects its stream without stopping the live world.
+All these endpoints retain the instance's existing private network boundary.

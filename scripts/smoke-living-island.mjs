@@ -140,6 +140,7 @@ try {
   await phone.page.waitForTimeout(1200);
   await phone.page.screenshot({ path: `${artifacts}/living-island-phone.png` });
   // The operator's world selector swaps the island in place: the same page follows.
+  const livingRecordingId = world.world.instanceId;
   const switched = await fetch(`${world.url}/world`, { method: "POST", headers: { "content-type": "application/json", "x-operator-token": "smoke-operator" }, body: JSON.stringify({ world: "mesa-island", force: true }) });
   assert.equal(switched.status, 200);
   await phone.page.waitForFunction(`(${app})()?.world?.label === "Mesa island" && !(${app})().kinds["dna-tree"] && !(${app})().kinds.flock`, null, { timeout: 15000 });
@@ -151,7 +152,7 @@ try {
   // ---- 4. the recording keeps the birds ---------------------------------------------------------------
   await world.close();
   world = null;
-  const frames = readFileSync(path.join(scratch, "rec", "graphysx-recording.ndjson"), "utf8").trim().split("\n").map((line) => JSON.parse(line)).filter((line) => line.kind === "frame");
+  const frames = readFileSync(path.join(scratch, "rec", "instances", livingRecordingId, "graphysx-recording.ndjson"), "utf8").trim().split("\n").map((line) => JSON.parse(line)).filter((line) => line.kind === "frame");
   assert.ok(frames.length > 20 && frames.every((frame) => frame.swarms?.[0]?.length === 1 + 28 * 3), "every recorded frame carries all 28 birds");
   console.log(`living-island: forest, flock, gardener (${parent} → ${sapling}), overview, first-person view and phone OK`);
 } finally {

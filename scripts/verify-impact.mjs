@@ -23,7 +23,7 @@ const RULES = [
   // of the published site and its contract is test/world-service.test.mjs. The island viewer
   // reads its stream, replay and images, so the island-world and island-living journeys check
   // it locally. Changes to the shared runtime it bundles still select their own (full) rules.
-  { match: /^(?:world-service\/|vite\.world-service\.config\.ts$)/, checks: ["island-world", "island-living"], label: "headless world service (Node tests and the island journeys, not published)", deploy: false },
+  { match: /^(?:world-service\/|vite\.world-service\.config\.ts$)/, checks: ["island-world", "island-living", "island-recording-lifecycle"], label: "headless world service (Node tests and the island journeys, not published)", deploy: false },
   { match: /^\.github\/workflows\/(?:ci|staging)\.yml$/, checks: [], label: "CI configuration", deploy: false },
   // Cyber Race is a standalone page with its own renderer, outside the shared runtime but
   // published beside the product at /cyber-race.html. Its files select its own smoke and

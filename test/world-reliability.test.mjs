@@ -263,3 +263,31 @@ it("keeps a resume hello readable after a torn archival write and bounds catchup
     assert.equal(actions.at(-1).sequence, 10);
   } finally { await running.close(); }
 });
+
+it("keeps spectators and ticks available at the total archive quota while strict admission stays failed", async () => {
+  const root = join(temporary, "total-quota");
+  const running = await start({ recordDir: root, recordingLimits: { totalBytes: 1 } });
+  try {
+    running.tick();
+    const health = (await json(`${running.url}/healthz`)).body;
+    assert.equal(health.ok, false); assert.equal(health.live.available, true);
+    assert.match(health.recording.error, /quota/);
+    assert.equal(health.tick, 1);
+    const stream = await opening(`${running.url}/spectate`);
+    assert.equal(stream[0].data.instanceId, running.world.instanceId);
+    assert.ok(stream.some(entry => entry.event === "frame"));
+  } finally { await running.close(); }
+});
+
+it("serves a live world with failed strict health when persistence paths are unwritable", async () => {
+  const blocked = join(temporary, "not-a-directory");
+  writeFileSync(blocked, "fixture");
+  const running = await start({ recordDir: join(blocked, "recordings"), snapshotPath: join(blocked, "checkpoint.json") });
+  try {
+    running.tick();
+    const health = (await json(`${running.url}/healthz`)).body;
+    assert.equal(health.ok, false); assert.equal(health.live.available, true);
+    assert.ok(health.checkpoint.error); assert.match(health.recording.error, /unavailable/);
+    assert.equal((await opening(`${running.url}/spectate`))[0].data.instanceId, running.world.instanceId);
+  } finally { await running.close(); }
+});

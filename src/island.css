@@ -68,3 +68,9 @@ body:has(.gx-island) .gx-display-settings{display:none}
   .gx-island-panel:has(details[open]) ~ .gx-island-transport{bottom:calc(44dvh + 20px)}
 }
 @media (prefers-reduced-motion:reduce){.gx-island-dot[data-tone=wait]{animation:none}}
+
+.gx-island-archive{pointer-events:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font:12px var(--il-mono);color:var(--il-sand)}
+.gx-island-archive[hidden]{display:none}
+.gx-island-archive select{max-width:200px;min-height:44px;background:var(--il-panel);color:inherit;border:1px solid var(--il-line);border-radius:8px;padding:6px}
+
+@media(max-width:600px){.gx-island-transport{flex-wrap:wrap}.gx-island-transport input[type=range]{flex-basis:45%}.gx-island-clock{font-size:11px}.gx-island-actions{flex-wrap:wrap}}
