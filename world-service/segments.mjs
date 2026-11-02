@@ -139,7 +139,8 @@ export class SegmentedArchive {
         return;
       }
       if (path) {
-        await this.closeSegment();
+        // No extra await when nothing is open: callers expect the first file promptly.
+        if (this.file) await this.closeSegment();
         this.file = await this.openFile(path, "wx", 0o600);
         this.gzip = next;
       }
