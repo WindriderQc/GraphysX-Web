@@ -212,7 +212,7 @@ it("requires explicit fresh startup and refuses missing, corrupt or mismatched r
   assert.equal(new module.IslandWorld(legacy).instanceId, world.instanceId);
   writeFileSync(path, "{");
   assert.throws(() => loadStartupSnapshot({ resumePath: path }), SyntaxError);
-  assert.throws(() => loadStartupSnapshot({ startMode: "surprise", snapshotPath: path }), /fresh or resume/);
+  assert.throws(() => loadStartupSnapshot({ startMode: "surprise", snapshotPath: path }), /fresh, resume or fork/);
 });
 
 it("creates periodic durable checkpoints without a caller requesting a save", async () => {

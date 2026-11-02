@@ -112,7 +112,10 @@ const renderImage = images ? imageRenderer(loopback) : null;
 // A crash restart resumes only when explicitly configured. Experiments use fresh /world.
 const snapshotPath = env.WORLD_SNAPSHOT_PATH;
 const startMode = env.WORLD_START_MODE ?? "fresh";
-const { snapshot, path: restoredPath } = loadStartupSnapshot({ startMode, snapshotPath, resumePath });
+// WORLD_START_MODE=fork: a new game from WORLD_FORK_PATH (pinned by WORLD_FORK_SHA256), once;
+// later restarts find the fork in WORLD_SNAPSHOT_PATH and resume it.
+const { snapshot, path: restoredPath, fork } = loadStartupSnapshot({ startMode, snapshotPath, resumePath,
+  forkPath: env.WORLD_FORK_PATH || undefined, forkSha256: env.WORLD_FORK_SHA256 || undefined });
 const snapshotEveryMs = Number(env.WORLD_SNAPSHOT_EVERY_MS ?? 60000);
 if (!Number.isSafeInteger(snapshotEveryMs) || snapshotEveryMs < 1000) throw new Error("WORLD_SNAPSHOT_EVERY_MS needs an integer >= 1000");
 const mesaApi = readFileSync(join(here, "API.md"), "utf8");
@@ -121,6 +124,9 @@ running = await startWorldServer({
   // Per world, since POST /world (operator) can switch the island in place.
   apiMarkdown: (id) => (id === module.LIVING_WORLD_ID ? module.livingApiMarkdown(mesaApi) : mesaApi),
   snapshot,
+  fork,
+  // POST /world {"from", "sha256"} forks from a checkpoint file in this directory.
+  forkDir: env.WORLD_FORK_DIR || undefined,
   snapshotPath,
   snapshotEveryMs,
   world: worldId,
@@ -131,7 +137,10 @@ running = await startWorldServer({
   recordingLimits: { maxBytes: recordMaxBytes, compress: recordCompress },
   recordDir: record ? (values["record-dir"] ?? env.WORLD_RECORD_DIR ?? "recordings") : null,
 });
-console.log(`graphysx world service (${running.world.worldId}) on ${running.url}${restoredPath ? ` (resumed at tick ${running.world.tick})` : ""}${images ? "" : " (images off)"}`);
+const origin = running.world.forkedFrom;
+const started = fork ? ` (new game forked from ${origin.instanceId ?? "an unnamed island"} at tick ${origin.tick})`
+  : restoredPath ? ` (resumed at tick ${running.world.tick})` : "";
+console.log(`graphysx world service (${running.world.worldId}) on ${running.url}${started}${images ? "" : " (images off)"}`);
 
 const statsEvery = Number(values["stats-every"] ?? 0);
 if (statsEvery > 0) {

@@ -18,6 +18,15 @@ export function verifyCheckpoint(value) {
   return snapshot;
 }
 
+/**
+ * The SHA-256 that names one exact checkpoint: its sealed digest, or for a legacy unsealed
+ * snapshot the digest it would be sealed with. A fork records it as its provenance.
+ */
+export function checkpointDigest(value) {
+  const snapshot = verifyCheckpoint(value);
+  return value?.recovery ? value.recovery.sha256 : createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+}
+
 export function sealCheckpoint(snapshot) {
   return { ...snapshot, recovery: { format: "graphysx-checkpoint/v1", sha256: createHash("sha256").update(JSON.stringify(snapshot)).digest("hex") } };
 }
