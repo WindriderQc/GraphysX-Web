@@ -99,6 +99,8 @@ const host = values.host ?? env.WORLD_HOST ?? "127.0.0.1";
 const port = Number(values.port ?? env.WORLD_PORT ?? 18120);
 const recordMaxBytes = Number(env.WORLD_RECORD_MAX_BYTES ?? 256 * 1024 * 1024);
 if (!Number.isSafeInteger(recordMaxBytes) || recordMaxBytes < 1024) throw new Error("WORLD_RECORD_MAX_BYTES needs a positive byte limit >= 1024");
+// Segments after the first are gzip files unless WORLD_RECORD_COMPRESS=0.
+const recordCompress = !["0", "false"].includes(env.WORLD_RECORD_COMPRESS ?? "1");
 const images = !(values["no-images"] || env.WORLD_IMAGES === "0");
 // The sidecar reaches this world on loopback when it listens on every interface.
 let running = null;
@@ -126,7 +128,7 @@ running = await startWorldServer({
   port,
   renderImage: renderImage ?? undefined,
   operatorToken: env.WORLD_OPERATOR_TOKEN ?? null,
-  recordingLimits: { maxBytes: recordMaxBytes },
+  recordingLimits: { maxBytes: recordMaxBytes, compress: recordCompress },
   recordDir: record ? (values["record-dir"] ?? env.WORLD_RECORD_DIR ?? "recordings") : null,
 });
 console.log(`graphysx world service (${running.world.worldId}) on ${running.url}${restoredPath ? ` (resumed at tick ${running.world.tick})` : ""}${images ? "" : " (images off)"}`);

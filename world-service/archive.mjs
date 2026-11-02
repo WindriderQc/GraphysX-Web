@@ -2,6 +2,7 @@
 import { open, mkdir, rename, readFile, realpath } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 import { createHash } from "node:crypto";
+import { constants, gunzipSync } from "node:zlib";
 import { startReplayServer } from "./replay.mjs";
 import { recordingParts } from "./segments.mjs";
 import { parseRecording } from "./recording.mjs";
@@ -102,6 +103,22 @@ async function readArchive(path, maxBytes, reserve) {
   } finally { await file.close(); }
 }
 
+/**
+ * A gzip segment: the compressed bytes are transient, so only the decoded text is reserved. A
+ * segment still being written has no trailer yet; it decodes up to its last flushed line.
+ */
+async function readCompressedArchive(path, maxBytes, reserve) {
+  const packed = await readArchive(path, maxBytes, () => {});
+  let bytes;
+  try { bytes = gunzipSync(packed, { finishFlush: constants.Z_SYNC_FLUSH, maxOutputLength: maxBytes }); }
+  catch (error) {
+    if (error.code === "ERR_BUFFER_TOO_LARGE" || error instanceof RangeError) throw new Error("Recording exceeds replay memory limit");
+    throw error;
+  }
+  reserve(bytes.length);
+  return bytes;
+}
+
 /** Read-only archive router: only opaque IDs under this configured root, never caller paths. */
 export function replayArchives(root, { maxBytes = ARCHIVE_LIMIT, maxOpen = 4, idleMs = 300_000, cleanupEveryMs = 30_000 } = {}) {
   const cache = new Map();
@@ -151,7 +168,7 @@ export function replayArchives(root, { maxBytes = ARCHIVE_LIMIT, maxOpen = 4, id
           const base = await realpath(root);
           if (!path.startsWith(base + sep)) throw new Error("Recording escaped configured root");
         }
-        const bytes = await readArchive(path, maxBytes, size => {
+        const bytes = await (part.compressed ? readCompressedArchive : readArchive)(path, maxBytes, size => {
           if (residentBytes + size > maxBytes) retireIdle(key);
           if (residentBytes + size > maxBytes) throw Object.assign(new Error("Replay byte capacity reached"), { code: "REPLAY_CAPACITY" });
           residentBytes += size;
