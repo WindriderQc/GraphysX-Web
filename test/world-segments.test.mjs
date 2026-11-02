@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
+import { constants as zlibConstants, gunzipSync } from "node:zlib";
 import { SegmentedArchive, recordingParts } from "../world-service/segments.mjs";
 import { replayArchives } from "../world-service/archive.mjs";
 import { parseRecording } from "../world-service/recording.mjs";
@@ -63,6 +64,104 @@ it("lists metadata without loading a replay, serves the selected segment, and re
     assert.equal(router.status().openReaders, 0); assert.equal(router.status().residentBytes, 0);
     assert.equal((await (await fetch(`${base}/parts/1/healthz`)).json()).tick, 30, "idle eviction reloads the same selected archive");
   } finally { await router.close(); await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true, force: true }); }
+});
+
+const frame = tick => ({ kind: "frame", tick, poses: [[1, 0, 0, 0, 0, 0, 0, 1]], padding: "same pose ".repeat(20) });
+
+it("compresses segments after the first, counts disk bytes against the quota and resumes without touching old bytes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "world-gzip-segments-"));
+  const limits = { maxBytes: 4096, segmentBytes: 4096, instanceBytes: 30000, totalBytes: 1000000 };
+  const plain = new SegmentedArchive(join(root, "plain"), limits);
+  const packed = new SegmentedArchive(join(root, "packed"), { ...limits, compress: true });
+  try {
+    for (const archive of [plain, packed]) {
+      await archive.start(id);
+      let tick = 0;
+      archive.seed = () => [hello(tick)];
+      archive.write(hello(0));
+      for (tick = 1; tick < 400; tick++) archive.write(frame(tick));
+      await archive.close();
+    }
+    assert.match(plain.status().error, /quota/, "plain text reaches the same quota early");
+    assert.equal(packed.status().error, null);
+    assert.ok(packed.status().bytes <= limits.instanceBytes);
+    const parts = await recordingParts(join(root, "packed"), id);
+    assert.equal(parts[0].name, "graphysx-recording.ndjson");
+    assert.equal(parts[0].compressed, false);
+    assert.ok(parts.length >= 3 && parts.slice(1).every(part => part.compressed && part.name.endsWith(".ndjson.gz")));
+    const dir = join(root, "packed", "instances", id);
+    const originals = await Promise.all(parts.map(part => readFile(join(dir, part.name))));
+    assert.equal(packed.status().bytes, originals.reduce((n, bytes) => n + bytes.length, 0));
+    const frames = [];
+    for (let i = 0; i < parts.length; i++) {
+      const text = parts[i].compressed ? gunzipSync(originals[i]).toString() : originals[i].toString();
+      assert.ok(Buffer.byteLength(text) <= limits.segmentBytes, "segments rotate on uncompressed size");
+      const recording = parseRecording(text);
+      assert.equal(recording.hellos[0].instanceId, id, "every segment opens with its own hello");
+      frames.push(...recording.frames.map(entry => entry.tick));
+    }
+    assert.deepEqual([...new Set(frames)].sort((a, b) => a - b), Array.from({ length: 399 }, (_, i) => i + 1));
+    await packed.start(id);
+    packed.write(hello(400)); packed.write(frame(401));
+    await packed.close();
+    for (let i = 0; i < parts.length; i++) assert.deepEqual(await readFile(join(dir, parts[i].name)), originals[i]);
+    assert.equal((await recordingParts(join(root, "packed"), id)).length, parts.length + 1);
+  } finally { await plain.close(); await packed.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+it("pauses a compressed recording exactly at its disk quota and leaves every segment decodable", async () => {
+  const root = await mkdtemp(join(tmpdir(), "world-gzip-quota-"));
+  const archive = new SegmentedArchive(root, { maxBytes: 4096, segmentBytes: 4096, instanceBytes: 6000, totalBytes: 1000000, compress: true });
+  try {
+    await archive.start(id);
+    let tick = 0;
+    archive.seed = () => [hello(tick)];
+    archive.write(hello(0));
+    for (tick = 1; tick < 3000; tick++) archive.write({ ...frame(tick), noise: Math.random().toString(36).repeat(4) });
+    await archive.close();
+    assert.match(archive.status().error, /quota/);
+    const parts = await recordingParts(root, id);
+    const onDisk = parts.reduce((n, part) => n + part.bytes, 0);
+    assert.ok(onDisk <= 6000 + 32, `disk bytes ${onDisk} stay at the quota (trailer aside)`);
+    let last = 0;
+    for (const part of parts) {
+      const bytes = await readFile(join(root, "instances", id, part.name));
+      const text = part.compressed ? gunzipSync(bytes, { finishFlush: zlibConstants.Z_SYNC_FLUSH }).toString() : bytes.toString();
+      const recording = parseRecording(text);
+      assert.equal(recording.skipped, 0, "no torn line at the pause");
+      for (const entry of recording.frames) { assert.ok(entry.tick >= last); last = entry.tick; }
+    }
+    assert.ok(last > 1 && last < 2999);
+  } finally { await archive.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+it("replays a compressed segment, including one still being written and one torn by a crash", async () => {
+  const root = await mkdtemp(join(tmpdir(), "world-gzip-replay-"));
+  const archive = new SegmentedArchive(root, { compress: true });
+  const router = replayArchives(root, { idleMs: 40, cleanupEveryMs: 10 });
+  const server = createServer(async (req, res) => { if (!await router.handle(req, res, new URL(req.url, "http://fixture"))) { res.writeHead(404); res.end(); } });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${server.address().port}/recordings/${id}`;
+  try {
+    await archive.start(id); archive.write(hello(10)); archive.write(frame(20)); await archive.close();
+    await archive.start(id); archive.write(hello(30)); archive.write(frame(40)); await archive.flush();
+    const parts = await recordingParts(root, id);
+    assert.deepEqual(parts.map(part => part.compressed), [false, true]);
+    // Still open: no gzip trailer yet, but every accepted line decodes.
+    assert.equal((await (await fetch(`${base}/parts/1/replay/info`)).json()).total_ticks, 40);
+    await archive.close();
+    const file = join(root, "instances", id, parts[1].name);
+    const whole = await readFile(file);
+    await writeFile(file, whole.subarray(0, whole.length - 12));
+    await router.close();
+    const fresh = replayArchives(root);
+    const again = createServer(async (req, res) => { if (!await fresh.handle(req, res, new URL(req.url, "http://fixture"))) { res.writeHead(404); res.end(); } });
+    await new Promise(resolve => again.listen(0, "127.0.0.1", resolve));
+    try {
+      const health = await (await fetch(`http://127.0.0.1:${again.address().port}/recordings/${id}/parts/1/healthz`)).json();
+      assert.equal(health.instanceId, id, "a torn compressed tail still opens from its hello");
+    } finally { await fresh.close(); await new Promise(resolve => again.close(resolve)); }
+  } finally { await archive.close(); await router.close(); await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true, force: true }); }
 });
 
 it("never appends a resume to a full or torn legacy file", async () => {

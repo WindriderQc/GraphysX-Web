@@ -105,6 +105,12 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
   per archive by default (`WORLD_RECORD_MAX_BYTES` configures archive/replay size).
   Hitting either limit stops recording explicitly, retains existing data and reports
   `recording.error` plus `ok:false` in health; simulation continues. No archive is deleted.
+  Segments after the first are written as gzip (`part-NNNNNN.ndjson.gz`, one sync flush per
+  write, so a crash leaves a file that decodes up to its last accepted line). A segment still
+  rotates at 32 MiB of uncompressed text, so replay memory is unchanged; the per-instance and
+  total quotas count the compressed bytes on disk. Measured on a living-island segment:
+  33.6 MB of frames become 3.5 MB. `WORLD_RECORD_COMPRESS=0` keeps plain segments. Existing
+  plain segments stay readable and are never rewritten.
   Checkpoints flush the accepted recording bytes before becoming durable. Provision replay
   memory for parsed data (several times NDJSON size); the instance template uses 2 GiB.
   These are safety ceilings, not long-campaign capacity measurements. Qualify/tune capacity
