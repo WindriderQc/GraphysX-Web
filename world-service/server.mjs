@@ -11,6 +11,8 @@
 // named world (`mesa-island`, `living-island`) in the same process. It refuses while agents are
 // joined unless `force` is true (their sessions end), sends spectators a new hello and starts a
 // new recording directory beside the first, so each recording stays one monotonic timeline.
+// With `from` + `sha256` it forks instead: a new game from a checkpoint file in the operator's
+// fork directory (`options.forkDir`), with a new identity and the source named in `forkedFrom`.
 //
 // /spectate and /healthz are read only and answer any origin (the island viewer runs on
 // another one). First-person images come from a separate renderer (`options.renderImage`, the
@@ -21,7 +23,9 @@
 
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
-import { atomicSnapshot, replayArchives, UUID, sealCheckpoint, verifyCheckpoint } from "./archive.mjs";
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { atomicSnapshot, checkpointDigest, replayArchives, UUID, sealCheckpoint, verifyCheckpoint } from "./archive.mjs";
 import { SegmentedArchive } from "./segments.mjs";
 import { parseImageSize } from "./image.mjs";
 
@@ -30,6 +34,16 @@ const MAX_SPECTATORS = 32;
 const SPECTATOR_BUFFER_LIMIT = 1 << 20;
 const HEARTBEAT_MS = 25_000;
 const READ_ONLY_CORS = { "access-control-allow-origin": "*" };
+// A fork source is a plain file name in the fork directory, never a caller path.
+const FORK_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/;
+
+/** Read and verify one fork source; its digest is the checkpoint's own sealed SHA-256. */
+async function readForkSource(dir, name) {
+  const path = join(dir, name);
+  if ((await stat(path)).size > 64 * 1024 * 1024) throw new Error("Fork source exceeds 64 MiB");
+  const value = JSON.parse(await readFile(path, "utf8"));
+  return { snapshot: verifyCheckpoint(value), sha256: checkpointDigest(value) };
+}
 
 function send(response, status, body, headers = {}) {
   const text = typeof body === "string" ? body : JSON.stringify(body);
@@ -65,6 +79,8 @@ async function readJson(request, InputError) {
  * @param {object} options.module      the bundled world: { IslandWorld, InputError, validateInput, TICK_HZ }
  * @param {string | ((worldId: string) => string)} options.apiMarkdown agent-facing API.md, or one per world
  * @param {object} [options.snapshot]  resume from this GET /snapshot body
+ * @param {{sha256: string, runId?: string}} [options.fork] start a new game from `options.snapshot` (named by its digest)
+ * @param {string} [options.forkDir]   directory of checkpoints that POST /world may fork from, by file name
  * @param {string} [options.world]     `mesa-island` (default) or `living-island`; a snapshot names its own
  * @param {boolean} [options.realtime] false: the caller drives `world.step()` (tests)
  * @param {(request: {position: number[], forward: number[], fovDeg: number, entityId: string, tick: number, width: number, height: number}) => Promise<Buffer>} [options.renderImage]
@@ -73,7 +89,10 @@ async function readJson(request, InputError) {
 export async function startWorldServer(options) {
   const { IslandWorld, InputError, validateInput, TICK_HZ } = options.module;
   if (options.snapshot) verifyCheckpoint(options.snapshot);
-  let world = new IslandWorld(options.snapshot, { world: options.world });
+  const startFork = options.fork ? { sha256: options.fork.sha256 } : undefined;
+  let world = new IslandWorld(options.snapshot, { world: options.world, fork: startFork });
+  // A fork starts its own run and journal; only a continuation inherits them.
+  const inherited = startFork ? undefined : options.snapshot;
   const spectators = new Set();
   const expectedSpectators = new Map();
   const spectateEvery = Math.max(1, Math.round(TICK_HZ / (options.spectateHz ?? 10)));
@@ -81,10 +100,10 @@ export async function startWorldServer(options) {
   const archive = new SegmentedArchive(recordDir, options.recordingLimits);
   const replays = replayArchives(recordDir, options.recordingLimits);
   const seen = new Map(); // Entity id -> last agent request wall-clock time; not spectator traffic.
-  let journal = options.snapshot?.journal?.actions?.slice(-200) ?? [];
-  let sequence = options.snapshot?.journal?.sequence ?? 0;
+  let journal = inherited?.journal?.actions?.slice(-200) ?? [];
+  let sequence = inherited?.journal?.sequence ?? 0;
   let generation = randomUUID();
-  let runId = options.snapshot?.runId ?? null;
+  let runId = startFork ? options.fork.runId ?? null : inherited?.runId ?? null;
   let checkpointError = null;
   let checkpointReceipt = null;
   let checkpointTail = Promise.resolve();
@@ -126,7 +145,7 @@ export async function startWorldServer(options) {
   await archive.start(world.instanceId);
   await checkpoint();
   // Persistence failure keeps strict health false; a valid loaded world remains watchable.
-  record({ kind: "hello", ...hello(), resumedFromTick: options.snapshot ? world.tick : null });
+  record({ kind: "hello", ...hello(), resumedFromTick: inherited ? world.tick : null });
 
   const write = (response, frame) => {
     // A slow viewer is dropped rather than buffered without bound.
@@ -210,7 +229,7 @@ export async function startWorldServer(options) {
         return false;
       };
       switch (route) {
-        case "GET /healthz": return send(response, 200, { ok: !checkpointError && !archive.error, live: { available: !closing && !switching }, tick: world.tick, world: world.worldId, ...identity(), recording: archive.status(), replay: replays.status(), checkpoint: { enabled: Boolean(options.snapshotPath), error: checkpointError, lastSaved: checkpointReceipt } }, READ_ONLY_CORS);
+        case "GET /healthz": return send(response, 200, { ok: !checkpointError && !archive.error, live: { available: !closing && !switching }, tick: world.tick, world: world.worldId, ...identity(), forkedFrom: world.forkedFrom, recording: archive.status(), replay: replays.status(), checkpoint: { enabled: Boolean(options.snapshotPath), error: checkpointError, lastSaved: checkpointReceipt } }, READ_ONLY_CORS);
         case "GET /api.md": return send(response, 200, apiMarkdown());
         case "POST /world": {
           if (!options.operatorToken || request.headers["x-operator-token"] !== options.operatorToken) return send(response, 403, { error: "Operator token required" });
@@ -220,9 +239,33 @@ export async function startWorldServer(options) {
           if (!options.module.WORLD_IDS.includes(wanted)) throw new InputError(`Body must be {"world": one of ${options.module.WORLD_IDS.join(", ")}, "force"?: boolean}`);
           if (world.agentCount > 0 && body.force !== true) return send(response, 409, { error: `${world.agentCount} agent(s) on this island; pass "force": true to end their sessions` });
           if (body.runId !== undefined && !UUID.test(body.runId)) throw new InputError("runId needs a UUID");
+          const forking = body.from !== undefined || body.sha256 !== undefined;
+          if (forking && (typeof body.from !== "string" || !FORK_FILE.test(body.from) || typeof body.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(body.sha256))) {
+            throw new InputError("A fork needs \"from\": a .json file name in the fork directory, and \"sha256\": its lowercase SHA-256");
+          }
+          if (forking && !options.forkDir) return send(response, 409, { error: "Forking is not configured on this world service (WORLD_FORK_DIR)" });
           if (body.runId && body.runId === runId) {
             if (wanted !== world.worldId) return send(response, 409, { error: "Run already bound to another world" });
-            return send(response, 200, { world: world.worldId, previous: world.worldId, tick: world.tick, ...identity() });
+            if ((world.forkedFrom?.sha256 ?? null) !== (forking ? body.sha256 : null)) return send(response, 409, { error: "Run already bound to another starting state" });
+            return send(response, 200, { world: world.worldId, previous: world.worldId, tick: world.tick, ...identity(), forkedFrom: world.forkedFrom });
+          }
+          // Build a forked island before anything changes: a bad source leaves the running world as it was.
+          let next = null;
+          if (forking) {
+            let source;
+            try { source = await readForkSource(options.forkDir, body.from); } catch (error) {
+              if (error.code === "ENOENT") return send(response, 404, { error: "Unknown fork source" });
+              return send(response, 409, { error: `Fork source refused: ${String(error?.message ?? error).slice(0, 160)}` });
+            }
+            if (source.sha256 !== body.sha256) return send(response, 409, { error: "Fork source does not match sha256" });
+            if (source.snapshot.world?.id !== wanted) return send(response, 409, { error: `Fork source is ${String(source.snapshot.world?.id)}, not ${wanted}` });
+            try { next = new IslandWorld(source.snapshot, { world: wanted, fork: { sha256: source.sha256 } }); } catch (error) {
+              return send(response, 409, { error: `Fork source refused: ${String(error?.message ?? error).slice(0, 160)}` });
+            }
+            // The reads above yielded to the tick loop: check again before replacing anything.
+            if (closing || switching) return send(response, 503, { error: "World is switching or stopping" });
+            if (world.agentCount > 0 && body.force !== true) return send(response, 409, { error: `${world.agentCount} agent(s) on this island; pass "force": true to end their sessions` });
+            if (body.runId && body.runId === runId) return send(response, 409, { error: "Run is being prepared by another request" });
           }
           const previous = world.worldId;
           // Handlers run between ticks, so the swap is whole-tick.
@@ -234,7 +277,7 @@ export async function startWorldServer(options) {
           try {
             await checkpointTail;
             await archive.close();
-            world = new IslandWorld(undefined, { world: wanted });
+            world = next ?? new IslandWorld(undefined, { world: wanted });
             runId = body.runId ?? null;
             seen.clear(); journal = []; sequence = 0; generation = randomUUID(); recordedActions = 0;
             await archive.start(world.instanceId);
@@ -245,7 +288,7 @@ export async function startWorldServer(options) {
             }
             broadcast("hello", hello());
             broadcast("frame", frame(true));
-            return send(response, 200, { world: world.worldId, previous, tick: world.tick, ...identity(), runId: body.runId ?? null });
+            return send(response, 200, { world: world.worldId, previous, tick: world.tick, ...identity(), runId: body.runId ?? null, forkedFrom: world.forkedFrom });
           } finally { switching = false; releaseSwitch(); }
         }
         case "POST /join": {

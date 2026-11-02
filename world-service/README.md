@@ -59,6 +59,24 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
   with `fresh` (default) or an existing native snapshot.
   Explicit `--resume` / `WORLD_RESUME_PATH` must exist. Legacy snapshots remain readable.
   Experiment preparation stays a fresh `POST /world`, independently of crash recovery.
+- **A new game from an existing island (fork).** Same terrain, constructions, trees, flocks and
+  clock as a saved checkpoint, but a new `instanceId`, a new empty recording, no agents (an
+  object one was holding drops where they stood), no chat, a new journal and run. The fork
+  names its source as `forkedFrom: {instanceId, tick, sha256}` (the source checkpoint's sealed
+  SHA-256, see `checkpointDigest`) in `/healthz`, in the recording's first `hello` and in every
+  later checkpoint, so the lineage survives restarts. Two ways in:
+  - `POST /world` with `{"world", "from": "<file>.json", "sha256": "<digest>", "force"?, "runId"?}`
+    forks the running service from a file of `WORLD_FORK_DIR` (a plain file name, never a path;
+    the digest pin is required). The source is read and verified before anything changes, so a
+    missing (404), corrupt, mismatched or other-world (409) source leaves the island as it was.
+    Without `WORLD_FORK_DIR`, forking is refused (409). `runId` reconciles a lost reply as for
+    a fresh island, and refuses the same run with another starting state.
+  - `WORLD_START_MODE=fork` with `WORLD_FORK_PATH` (and preferably `WORLD_FORK_SHA256`) forks
+    once at startup. It needs `WORLD_SNAPSHOT_PATH`: when that file already holds a fork of the
+    same source, startup resumes it; when it holds any other island, startup refuses instead of
+    replacing it. After the first start, switching back to `resume` is equivalent.
+  A source of another rules version is refused like any snapshot. To fork the running island,
+  first save `GET /snapshot` into the fork directory under the maintenance owner.
 - `GET /spectate` (SSE, read only): `hello` (the current v2 document and numeric id → entity
   id), `frame` 10 times a second (`[id, x, y, z, qx, qy, qz, qw]` per moving thing; on the
   living island also `swarms`: `[id, x, y, z, …]` with every flock member in flock-local space),

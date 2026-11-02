@@ -113,10 +113,18 @@ interface ChatMessage { id: string; agent_id: string; agent_name: string; messag
 export interface ActionRecord { tick: number; agent: string; input: ActionInput; result: string }
 export interface EntityChange { added?: { entity: AgentWorldDefinition["entities"][number]; numericId: number }[]; removed?: number[] }
 
+/**
+ * Where a forked island started: the source island's identity and tick, and the SHA-256 of the
+ * exact checkpoint it was loaded from. Kept for the fork's whole life (checkpoints, resumes).
+ */
+export interface ForkOrigin { instanceId: string | null; tick: number; sha256: string }
+
 /** Clawblox GET /snapshot body. Everything needed to continue bit for bit; no history. */
 export interface WorldSnapshot {
   format: typeof SNAPSHOT_FORMAT;
   instanceId?: string;
+  /** Present on a forked island and on every later checkpoint of it. */
+  forkedFrom?: ForkOrigin;
   /** Simulation seconds (Clawblox records `format` and `time` in its run manifest). */
   time: number;
   tick: number;
@@ -233,6 +241,8 @@ export class IslandWorld {
   tick = 0;
   readonly actions: ActionRecord[] = [];
   readonly instanceId: string;
+  /** The island this one was forked from, or null (fresh, or a plain continuation). */
+  readonly forkedFrom: ForkOrigin | null;
   private readonly meta: Map<string, MesaEntityMeta>;
   private readonly numericIds = new Map<string, number>();
   private nextNumericId = 8;
@@ -252,10 +262,19 @@ export class IslandWorld {
   /**
    * A fresh island, or the exact continuation of a snapshot. `options.world` picks the world
    * (default Mesa); a snapshot carries its own and refuses to resume as another one.
+   *
+   * `options.fork` starts a new game from the snapshot instead: same terrain, constructions,
+   * trees and clock, but a new `instanceId`, no agents and no chat. `sha256` names the
+   * verified checkpoint it came from; the caller computes it (archive.mjs checkpointDigest).
    */
-  constructor(snapshot?: WorldSnapshot, options: { world?: string } = {}) {
+  constructor(snapshot?: WorldSnapshot, options: { world?: string; fork?: { sha256: string } } = {}) {
     this.engine = new RapierPhysicsEngine({ gravity: { x: 0, y: -30, z: 0 }, allowSleep: true });
-    this.instanceId = snapshot?.instanceId ?? crypto.randomUUID();
+    const fork = options.fork;
+    if (fork && (!snapshot || !/^[a-f0-9]{64}$/.test(fork.sha256))) throw new Error("A fork needs a source snapshot and its SHA-256");
+    this.instanceId = fork ? crypto.randomUUID() : snapshot?.instanceId ?? crypto.randomUUID();
+    this.forkedFrom = fork && snapshot
+      ? { instanceId: snapshot.instanceId ?? null, tick: snapshot.tick, sha256: fork.sha256 }
+      : snapshot?.forkedFrom ? { ...snapshot.forkedFrom } : null;
     const worldId = snapshot?.world?.id ?? options.world ?? MESA_WORLD_ID;
     if (snapshot && options.world && options.world !== worldId) throw new Error(`This snapshot is of ${worldId}, not ${options.world}`);
     this.world = worldBase(worldId);
@@ -299,6 +318,13 @@ export class IslandWorld {
     if (this.world.livingIds.length) {
       if (!snapshot.living) throw new Error("This living-island snapshot has no living state");
       this.living = new LivingIsland(this.livingHost(), this.meta, this.world.base as LivingIslandBase, snapshot.living);
+    }
+    if (fork) {
+      // The old game's players and conversation stay with the old island. A held object is
+      // dropped where its holder stood, exactly as when that agent leaves.
+      for (const session of [...this.characters.keys()]) this.leave(session);
+      this.chat = [];
+      this.changes = [];
     }
   }
 
@@ -876,6 +902,7 @@ export class IslandWorld {
     return {
       format: "graphysx-world-stream/v1",
       instanceId: this.instanceId,
+      ...(this.forkedFrom ? { forkedFrom: { ...this.forkedFrom } } : {}),
       tickHz: TICK_HZ,
       tick: this.tick,
       document: this.runtime.exportDefinition(),
@@ -921,6 +948,7 @@ export class IslandWorld {
     return {
       format: SNAPSHOT_FORMAT,
       instanceId: this.instanceId,
+      ...(this.forkedFrom ? { forkedFrom: { ...this.forkedFrom } } : {}),
       time: this.simSeconds,
       tick: this.tick,
       world: { id: this.worldId, contentHash: this.world.hash, rules: this.world.rules },
