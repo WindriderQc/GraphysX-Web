@@ -127,6 +127,14 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
   total quotas count the compressed bytes on disk. Measured on a living-island segment:
   33.6 MB of frames become 3.5 MB. `WORLD_RECORD_COMPRESS=0` keeps plain segments. Existing
   plain segments stay readable and are never rewritten.
+- Recording bounds derived from `WORLD_RECORD_MAX_BYTES` can be set apart, so a long-lived island
+  keeps more history without a bigger replay memory budget: `WORLD_RECORD_SEGMENT_BYTES`
+  (uncompressed, at most the replay budget; default min(budget, 32 MiB)),
+  `WORLD_RECORD_INSTANCE_MAX_BYTES` (on disk, default 4x the budget), `WORLD_RECORD_TOTAL_MAX_BYTES`
+  (whole recording root on disk, default 16x) and `WORLD_RECORD_MAX_SEGMENTS` (per instance,
+  default 1024, at most 8192). At 32 MiB per segment a light living island fills 1024 segments
+  of about 3 MB in about seven weeks, long before a large byte quota: raise the segment size
+  and count together with the byte quota.
 - Recording rates (live spectators always get 10 Hz frames and the inspection every second):
   `WORLD_RECORD_FRAME_HZ` (default 10) recorded pose frames per second; `WORLD_RECORD_SWARM_HZ`
   (default: every recorded frame) how many of them carry the flock; `WORLD_RECORD_INSPECTION_SECONDS`

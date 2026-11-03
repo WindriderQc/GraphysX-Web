@@ -328,7 +328,10 @@ New recordings use append-only segments: 32 MiB per segment by default, at
 most 1 GiB per instance and 4 GiB of NDJSON in the recording root. The existing
 `WORLD_RECORD_MAX_BYTES` (256 MiB by default) remains the replay resident-byte
 budget; segment, instance and root bounds scale down with a smaller configured
-budget. On quota or I/O failure recording pauses explicitly; it does not purge
+budget. Each bound, and the segment count, can also be set on its own
+(`WORLD_RECORD_SEGMENT_BYTES`, `WORLD_RECORD_INSTANCE_MAX_BYTES`,
+`WORLD_RECORD_TOTAL_MAX_BYTES`, `WORLD_RECORD_MAX_SEGMENTS`; world-service README),
+so a long-lived island can keep tens of GiB without a bigger replay budget. On quota or I/O failure recording pauses explicitly; it does not purge
 old data or promise unlimited retention. A restart resumes the checkpoint's
 identity in a new segment and never edits even a torn legacy file.
 
