@@ -111,10 +111,18 @@ Demande de Yanik : une île vivante sans les agents, dans l'esprit des forêts e
   sélection se voit : l'envie de rester groupé tombe de 1,1 à 0,46, la vitesse de 1,0 à 0,73,
   la taille de 1,0 à 0,88 (un petit oiseau lent dépense moins). Sans prédateur, se disperser
   paie : la belle volée serrée se défait. Des faucons à ADN seraient la suite logique.
-- **Coût** : 0,21 ms par pas avec la volée vivante (0,15 avant) ; l'enregistrement grossit
-  d'environ 40 % (estimé : 241 Mio par jour contre 174 sans oiseaux vivants), surtout parce
-  qu'il y a plus d'oiseaux dans chaque image. Les naissances et les morts sont regroupées une
-  fois par seconde.
+- **Coût** : 0,21 ms par pas avec la volée vivante (0,15 avant). Enregistrement mesuré avec
+  `scripts/measure-recording-rate.mjs` (30 minutes simulées, gzip sur disque) :
+
+  | Réglage | sans oiseaux vivants | avec |
+  |---|---|---|
+  | par défaut | 8,6 Mio/h | 11,5 Mio/h (+34 %) |
+  | allégé (`FRAME_HZ 5`, `SWARM_HZ 1`, `INSPECTION_SECONDS 30`) | 1,6 Mio/h | 2,6 Mio/h (+63 %) |
+
+  L'écart vient surtout des lignes `entities` : chaque changement de population renvoie la
+  volée avec les traits de tous ses oiseaux (428 lignes en 30 minutes). Le texte « Couleurs » de
+  l'inspection change aussi souvent, ce qui la fait enregistrer plus souvent en réglage allégé.
+  Les naissances et les morts sont regroupées une fois par seconde.
 - **Reprise** : une île `living-rules/1` (celles en service le 2026-11-03, empreinte
   `67987abe225d84d6`) reprend sous `living-rules/2` ; ses oiseaux deviennent des fondateurs là
   où ils volaient, le reste continue tel quel. Toute autre empreinte reste refusée.
