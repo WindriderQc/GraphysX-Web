@@ -1,7 +1,7 @@
 // A new game from an existing island: disposable CPU worlds, no browser, model or live service.
 import assert from "node:assert/strict";
 import { before, after, it } from "node:test";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -9,7 +9,6 @@ import { build } from "vite";
 import { startWorldServer } from "../world-service/server.mjs";
 import { atomicSnapshot, checkpointDigest, sealCheckpoint, verifyCheckpoint } from "../world-service/archive.mjs";
 import { loadStartupSnapshot } from "../world-service/startup.mjs";
-import { parseRecording } from "../world-service/recording.mjs";
 
 let module, temporary;
 before(async () => {
@@ -140,72 +139,21 @@ it("forks once at startup, resumes that fork afterwards and never replaces anoth
   assert.throws(() => loadStartupSnapshot({ startMode: "surprise", snapshotPath }), /fresh, resume or fork/);
 });
 
-it("POST /world forks from a pinned file of the fork directory into a new recording", async () => {
-  const root = join(temporary, "fork-records");
-  const forkDir = join(temporary, "forks");
-  mkdirSync(forkDir, { recursive: true });
-  const { world: old } = playedIsland();
-  const value = sealed(old);
-  await atomicSnapshot(join(forkDir, "mesa-before.json"), value);
-  writeFileSync(join(forkDir, "broken.json"), "{");
-  const sha256 = value.recovery.sha256;
-  const running = await start({ recordDir: root, forkDir, snapshotPath: join(temporary, "fork-current.json") });
-  try {
-    const first = running.world.instanceId;
-    const { session } = running.world.join("Fixture");
-    const post = body => json(`${running.url}/world`, "POST", body, operator);
-    assert.equal((await post({ world: "mesa-island", from: "../mesa-before.json", sha256, force: true })).status, 400);
-    assert.equal((await post({ world: "mesa-island", from: "mesa-before.json", force: true })).status, 400, "the digest pin is required");
-    assert.equal((await post({ world: "mesa-island", from: "nope.json", sha256, force: true })).status, 404);
-    assert.equal((await post({ world: "mesa-island", from: "broken.json", sha256, force: true })).status, 409);
-    assert.equal((await post({ world: "mesa-island", from: "mesa-before.json", sha256: "e".repeat(64), force: true })).status, 409);
-    assert.equal((await post({ world: "living-island", from: "mesa-before.json", sha256, force: true })).status, 409);
-    assert.equal((await post({ world: "mesa-island", from: "mesa-before.json", sha256 })).status, 409, "joined agents need force");
-    assert.equal(running.world.instanceId, first, "refusals leave the running island as it was");
-    assert.ok(running.world.hasSession(session));
-    assert.equal((await json(`${running.url}/world`, "POST", { world: "mesa-island", from: "mesa-before.json", sha256 })).status, 403);
-
-    const runId = "00000000-0000-4000-8000-0000000000f1";
-    const forked = await post({ world: "mesa-island", from: "mesa-before.json", sha256, force: true, runId });
-    assert.equal(forked.status, 200);
-    assert.notEqual(forked.body.instanceId, first);
-    assert.notEqual(forked.body.instanceId, old.instanceId);
-    assert.equal(forked.body.recordingId, forked.body.instanceId);
-    assert.equal(forked.body.tick, old.tick);
-    assert.deepEqual(forked.body.forkedFrom, { instanceId: old.instanceId, tick: old.tick, sha256 });
-    assert.equal(running.world.agentCount, 0);
-    const health = await json(`${running.url}/healthz`);
-    assert.deepEqual(health.body.forkedFrom, forked.body.forkedFrom);
-    assert.equal(health.body.runId, runId);
-
-    // A lost reply is reconciled by the same request, never answered with another fork.
-    const repeat = await post({ world: "mesa-island", from: "mesa-before.json", sha256, force: true, runId });
-    assert.equal(repeat.body.instanceId, forked.body.instanceId);
-    assert.equal((await post({ world: "mesa-island", force: true, runId })).status, 409, "the same run cannot become a fresh island");
-
-    for (let i = 0; i < 12; i++) running.tick();
-    await running.checkpoint();
-    const checkpoint = JSON.parse(readFileSync(join(temporary, "fork-current.json"), "utf8"));
-    assert.deepEqual(verifyCheckpoint(checkpoint).forkedFrom, forked.body.forkedFrom);
-
-    // The new game has its own, empty recording that opens under its own UUID.
-    await post({ world: "mesa-island", force: true }); // flushes and closes the fork's archive
-    const recording = parseRecording(readFileSync(join(root, "instances", forked.body.instanceId, "graphysx-recording.ndjson"), "utf8"));
-    assert.equal(recording.hellos.length, 1);
-    assert.equal(recording.hellos[0].instanceId, forked.body.instanceId);
-    assert.deepEqual(recording.hellos[0].forkedFrom, forked.body.forkedFrom);
-    assert.equal(recording.hellos[0].resumedFromTick, null);
-    const replay = await json(`${running.url}/recordings/${forked.body.instanceId}/healthz`);
-    assert.equal(replay.body.instanceId, forked.body.instanceId);
-  } finally { await running.close(); }
-});
-
-it("refuses a fork where no fork directory is configured", async () => {
+it("POST /world never forks: a fork request is refused and the island stays as it was", async () => {
   const running = await start();
   try {
-    const refused = await json(`${running.url}/world`, "POST", { world: "mesa-island", from: "mesa-before.json", sha256: "a".repeat(64) }, operator);
-    assert.equal(refused.status, 409);
-    assert.match(refused.body.error, /WORLD_FORK_DIR/);
+    const first = running.world.instanceId;
+    const post = body => json(`${running.url}/world`, "POST", body, operator);
+    for (const body of [
+      { world: "mesa-island", from: "mesa-before.json", sha256: "a".repeat(64), force: true },
+      { world: "mesa-island", from: "mesa-before.json", force: true },
+      { world: "mesa-island", sha256: "a".repeat(64), force: true },
+    ]) {
+      const refused = await post(body);
+      assert.equal(refused.status, 400);
+      assert.match(refused.body.error, /WORLD_START_MODE=fork/);
+    }
+    assert.equal(running.world.instanceId, first);
     assert.equal((await json(`${running.url}/healthz`)).body.forkedFrom, null);
   } finally { await running.close(); }
 });
