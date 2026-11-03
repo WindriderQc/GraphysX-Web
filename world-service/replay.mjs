@@ -20,7 +20,7 @@ import { createServer } from "node:http";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { frameAt, helloAt, lastAtOrBefore, nextActionAfter, parseRecording } from "./recording.mjs";
+import { frameAt, helloAt, lastAtOrBefore, lastFrameWith, nextActionAfter, parseRecording } from "./recording.mjs";
 
 const MAX_SPECTATORS = 32;
 const SPECTATOR_BUFFER_LIMIT = 1 << 20;
@@ -63,10 +63,22 @@ export async function startReplayServer(options) {
   };
   const event = (name, payload) => `event: ${name}\ndata: ${JSON.stringify(payload)}\n\n`;
   const broadcast = (text) => { for (const response of spectators) write(response, text); };
-  const opening = (tick) => {
+  /**
+   * Frames up to `tick` since `after`: the newest one, preceded by the newest one carrying the
+   * flock when the newest does not (a recording may keep it at a lower rate), and given the
+   * newest inspection of the interval, so neither is lost when playback skips frames.
+   */
+  const framesUpTo = (tick, after = -Infinity) => {
     const frame = frameAt(recording, tick);
-    return event("hello", helloAt(recording, tick)) + (frame ? event("frame", frame) : "");
+    if (!frame || frame.tick <= after) return "";
+    let text = "";
+    const flock = frame.swarms ? null : lastFrameWith(recording, tick, "swarms", after);
+    if (flock) text += event("frame", flock);
+    const inspected = frame.inspection ? null : lastFrameWith(recording, tick, "inspection", after);
+    const carried = inspected && inspected !== flock ? { ...frame, inspection: inspected.inspection } : frame;
+    return text + event("frame", carried);
   };
+  const opening = (tick) => event("hello", helloAt(recording, tick)) + framesUpTo(tick);
 
   /** Jump: everyone gets the document at the new tick. */
   const seek = (tick) => {
@@ -87,8 +99,7 @@ export async function startReplayServer(options) {
     if (resumed) text = opening(now);
     else for (let i = lastAtOrBefore(recording.changes, emitted) + 1; i < recording.changes.length && recording.changes[i].tick <= now; i += 1) text += event("entities", recording.changes[i]);
     for (let i = lastAtOrBefore(recording.actions, emitted) + 1; i < recording.actions.length && recording.actions[i].tick <= now; i += 1) text += event("action", recording.actions[i]);
-    const frame = frameAt(recording, now);
-    if (!resumed && frame && frame.tick > emitted) text += event("frame", frame);
+    if (!resumed) text += framesUpTo(now, emitted);
     emitted = now;
     if (text && spectators.size) broadcast(text);
   };

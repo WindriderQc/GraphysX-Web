@@ -3,7 +3,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { frameAt, helloAt, nextActionAfter, parseRecording } from "../world-service/recording.mjs";
+import { frameAt, helloAt, lastFrameWith, nextActionAfter, parseRecording } from "../world-service/recording.mjs";
+import { inspectionKey, recordingRates } from "../world-service/server.mjs";
 import { startReplayServer } from "../world-service/replay.mjs";
 import { IMAGE_DEFAULT, parseImageSize, pngSize, verticalFovDegrees } from "../world-service/image.mjs";
 import { createImageRenderer } from "../world-service/image-sidecar.mjs";
@@ -268,6 +269,76 @@ describe("image sidecar timeouts", () => {
       assert.equal(renderer.stats().failures, 1);
     } finally {
       await renderer.close();
+    }
+  });
+});
+
+describe("recording at reduced rates", () => {
+  it("defaults to the live rates; rounds to whole ticks and whole frames; refuses more than live", () => {
+    assert.deepEqual(recordingRates(60, 6), { frameEvery: 6, swarmEvery: 6, inspectionEvery: 60 }, "unchanged: every live frame, inspection every second");
+    assert.deepEqual(recordingRates(60, 6, { recordFrameHz: 5, recordSwarmHz: 1, recordInspectionSeconds: 30 }), { frameEvery: 12, swarmEvery: 60, inspectionEvery: 1800 });
+    assert.equal(recordingRates(60, 6, { recordFrameHz: 7 }).frameEvery, 9, "60 / 7 rounds to 9 ticks");
+    assert.equal(recordingRates(60, 6, { recordFrameHz: 4, recordSwarmHz: 1 }).swarmEvery, 60, "the flock rides every 4th frame of 15 ticks");
+    assert.equal(recordingRates(60, 6, { recordFrameHz: 4, recordSwarmHz: 1.5 }).swarmEvery, 45, "rounded to whole recorded frames");
+    assert.throws(() => recordingRates(60, 6, { recordFrameHz: 20 }), /cannot exceed the live/);
+    assert.throws(() => recordingRates(60, 6, { recordFrameHz: 5, recordSwarmHz: 10 }), /cannot exceed the recorded frame rate/);
+    assert.throws(() => recordingRates(60, 6, { recordSwarmHz: 11 }), /cannot exceed the recorded frame rate/);
+    assert.equal(recordingRates(60, 6, { recordFrameHz: 7, recordSwarmHz: 7 }).swarmEvery, 9, "the same rate: every recorded frame");
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, "5"]) {
+      assert.throws(() => recordingRates(60, 6, { recordFrameHz: bad }), /positive number/);
+      assert.throws(() => recordingRates(60, 6, { recordInspectionSeconds: bad }), /positive number/);
+    }
+  });
+
+  it("an inspection whose numbers moved keeps its key; a changed text or yes/no value does not", () => {
+    const value = (x, result, startled) => ({ worldId: "living-island", entities: [{ id: "flock_1", position: [x, 3, 1], size: [x, 2, 2], attributes: { Spread: x, Startled: startled } }], agents: [{ id: "a", name: "Eko", position: [x, 0, 0], attributes: { LastActionResult: result, ViewOriginX: x } }] });
+    assert.equal(inspectionKey(value(1, "Ready", false)), inspectionKey(value(2.5, "Ready", false)));
+    assert.notEqual(inspectionKey(value(1, "Ready", false)), inspectionKey(value(1, "InvalidAction", false)));
+    assert.notEqual(inspectionKey(value(1, "Ready", false)), inspectionKey(value(1, "Ready", true)));
+    assert.notEqual(inspectionKey(value(1, "Ready", false)), inspectionKey({ ...value(1, "Ready", false), agents: [] }), "an agent leaving");
+  });
+
+  /** Poses every 12 ticks, the flock every 60, the full inspection at a text change (732) and at 1800. */
+  function sparseRecording() {
+    const inspection = (x, result) => ({ worldId: "living-island", entities: [], agents: [{ id: "agent-43", name: "Eko", position: [x, 0, 0], attributes: { LastActionResult: result } }] });
+    const lines = [{ kind: "hello", format: FORMAT, tickHz: 60, tick: 0, document: doc([{ id: "flock_1", type: "flock" }, { id: "block_1", type: "box" }]), ids: { 29: "block_1", 70: "flock_1" }, inspection: inspection(0, "") }];
+    for (let tick = 12; tick <= 2400; tick += 12) {
+      const value = { kind: "frame", tick, t: tick / 60, poses: [[29, tick / 60, 0.4, 0, 0, 0, 0, 1]] };
+      if (tick % 60 === 0) value.swarms = [[70, tick, 0, 0]];
+      if (tick === 732 || tick === 1800) value.inspection = inspection(tick, "InvalidAction");
+      lines.push(value);
+    }
+    return lines.map(line).join("\n") + "\n";
+  }
+
+  it("rebuilds the inspection and finds the flock from earlier frames", () => {
+    const recording = parseRecording(sparseRecording());
+    assert.equal(frameAt(recording, 700).tick, 696);
+    assert.equal(frameAt(recording, 700).swarms, undefined);
+    assert.equal(lastFrameWith(recording, 700, "swarms").tick, 660);
+    assert.equal(lastFrameWith(recording, 700, "swarms", 660), null, "only after the given tick");
+    assert.equal(helloAt(recording, 700).inspection.agents[0].attributes.LastActionResult, "", "before the change: the hello's");
+    assert.deepEqual(helloAt(recording, 1000).inspection.agents[0].position, [732, 0, 0], "after it: the change's");
+  });
+
+  it("replays the flock and the inspection even when the newest frame has neither", async () => {
+    const running = await startReplayServer({ recording: parseRecording(sparseRecording()), port: 0, realtime: false });
+    try {
+      await fetch(`${running.url}/replay/seek?tick=700`, { method: "POST" });
+      const opening = await readEvents(`${running.url}/spectate`, (events) => events.length >= 3);
+      assert.deepEqual(opening.events.map((e) => [e.name, e.data.tick, Boolean(e.data.swarms)]), [["hello", 700, false], ["frame", 660, true], ["frame", 696, false]],
+        "a seek sends the last flock frame before the newest frame");
+
+      await fetch(`${running.url}/replay/speed?value=4`, { method: "POST" });
+      await fetch(`${running.url}/replay/play`, { method: "POST" });
+      const playing = readEvents(`${running.url}/spectate`, (events) => events.some((e) => e.name === "frame" && e.data.tick === 816));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      running.advance(0.5); // 30 ticks x4 = 120 ticks: from 700 to 820
+      const frames = (await playing).events.filter((e) => e.name === "frame" && e.data.tick > 700);
+      assert.deepEqual(frames.map((e) => [e.data.tick, Boolean(e.data.swarms)]), [[780, true], [816, false]], "the flock frame the clock skipped is sent first");
+      assert.equal(frames[1].data.inspection.agents[0].attributes.LastActionResult, "InvalidAction", "the skipped inspection rides the newest frame");
+    } finally {
+      await running.close();
     }
   });
 });

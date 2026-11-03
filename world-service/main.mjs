@@ -101,6 +101,18 @@ const recordMaxBytes = Number(env.WORLD_RECORD_MAX_BYTES ?? 256 * 1024 * 1024);
 if (!Number.isSafeInteger(recordMaxBytes) || recordMaxBytes < 1024) throw new Error("WORLD_RECORD_MAX_BYTES needs a positive byte limit >= 1024");
 // Segments after the first are gzip files unless WORLD_RECORD_COMPRESS=0.
 const recordCompress = !["0", "false"].includes(env.WORLD_RECORD_COMPRESS ?? "1");
+// The recording may keep fewer pose frames (WORLD_RECORD_FRAME_HZ, default: the live 10 Hz), carry
+// the flock in fewer of them (WORLD_RECORD_SWARM_HZ, default: all) and refresh the numbers of its
+// inspection less often (WORLD_RECORD_INSPECTION_SECONDS, default 1). See recordingRates.
+const optionalRate = name => {
+  if (env[name] === undefined || env[name] === "") return undefined;
+  const value = Number(env[name]);
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} needs a positive number`);
+  return value;
+};
+const recordFrameHz = optionalRate("WORLD_RECORD_FRAME_HZ");
+const recordSwarmHz = optionalRate("WORLD_RECORD_SWARM_HZ");
+const recordInspectionSeconds = optionalRate("WORLD_RECORD_INSPECTION_SECONDS");
 const images = !(values["no-images"] || env.WORLD_IMAGES === "0");
 // The sidecar reaches this world on loopback when it listens on every interface.
 let running = null;
@@ -133,6 +145,9 @@ running = await startWorldServer({
   renderImage: renderImage ?? undefined,
   operatorToken: env.WORLD_OPERATOR_TOKEN ?? null,
   recordingLimits: { maxBytes: recordMaxBytes, compress: recordCompress },
+  recordFrameHz,
+  recordSwarmHz,
+  recordInspectionSeconds,
   recordDir: record ? (values["record-dir"] ?? env.WORLD_RECORD_DIR ?? "recordings") : null,
 });
 const origin = running.world.forkedFrom;

@@ -89,10 +89,7 @@ export function helloAt(recording, tick) {
       ids.set(numericId, entity.id);
     }
   }
-  let inspection = base.inspection;
-  for (let i = lastAtOrBefore(recording.frames, tick); i >= 0 && recording.frames[i].tick >= base.tick; i -= 1) {
-    if (recording.frames[i].inspection) { inspection = recording.frames[i].inspection; break; }
-  }
+  const inspection = lastFrameWith(recording, tick, "inspection")?.inspection ?? base.inspection;
   return {
     format: STREAM_FORMAT,
     tickHz: recording.tickHz,
@@ -103,6 +100,18 @@ export function helloAt(recording, tick) {
     ...(base.instanceId ? { instanceId: base.instanceId, recordingId: base.recordingId, ...(base.identitySource ? { identitySource: base.identitySource } : {}) } : {}),
     ...(inspection ? { inspection } : {}),
   };
+}
+
+/**
+ * The last frame at or before `tick` (and after the current hello) carrying `field`. A recording
+ * may keep the flock (`swarms`) or the full `inspection` in fewer frames than the poses.
+ */
+export function lastFrameWith(recording, tick, field, after = -Infinity) {
+  const base = recording.hellos[Math.max(0, lastAtOrBefore(recording.hellos, tick))];
+  for (let i = lastAtOrBefore(recording.frames, tick); i >= 0 && recording.frames[i].tick >= base.tick && recording.frames[i].tick > after; i -= 1) {
+    if (recording.frames[i][field]) return recording.frames[i];
+  }
+  return null;
 }
 
 export function frameAt(recording, tick) {
