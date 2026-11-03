@@ -23,7 +23,8 @@ export function mountArchiveParts(root: HTMLElement, source: string): () => void
     if (!data || typeof data !== "object" || !("parts" in data) || !Array.isArray(data.parts)) return;
     const parts = data.parts.filter((part: unknown): part is { id: number; bytes: number } =>
       !!part && typeof part === "object" && "id" in part && Number.isSafeInteger(part.id) &&
-      "bytes" in part && typeof part.bytes === "number" && part.bytes >= 0).slice(0, 1024);
+      // The service allows up to 8192 segments per instance (WORLD_RECORD_MAX_SEGMENTS).
+      "bytes" in part && typeof part.bytes === "number" && part.bytes >= 0).slice(-8192);
     parts.forEach((part, index) => {
       const option = document.createElement("option"); option.value = String(part.id);
       option.textContent = `${index + 1} / ${parts.length} · ${(part.bytes / 1024 / 1024).toFixed(1)} Mio`;

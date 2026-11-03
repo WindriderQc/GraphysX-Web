@@ -41,6 +41,25 @@ it("rotates independently readable segments, resumes without touching old bytes 
   } finally { await archive.close(); await rm(root, { recursive: true, force: true }); }
 });
 
+it("stops at a configured segment count and rejects segments a replay could not open", async () => {
+  assert.throws(() => new SegmentedArchive(null, { maxBytes: 1024, segmentBytes: 2048 }), /replay budget/);
+  assert.throws(() => new SegmentedArchive(null, { maxSegments: 0 }), /segment count/);
+  assert.throws(() => new SegmentedArchive(null, { maxSegments: 8193 }), /segment count/);
+  const root = await mkdtemp(join(tmpdir(), "world-segment-count-"));
+  const archive = new SegmentedArchive(root, { maxBytes: 1024, segmentBytes: 1024, maxSegments: 3 });
+  try {
+    await archive.start(id);
+    let tick = 0;
+    archive.seed = () => [hello(tick)];
+    archive.write(hello(0));
+    for (tick = 1; tick < 40; tick++) archive.write({ kind: "frame", tick, poses: [], padding: "x".repeat(200) });
+    await archive.close();
+    assert.match(archive.status().error, /quota/);
+    assert.equal(archive.status().maxSegments, 3);
+    assert.deepEqual((await recordingParts(root, id)).map(part => part.id), [0, 1, 2]);
+  } finally { await archive.close(); await rm(root, { recursive: true, force: true }); }
+});
+
 it("lists metadata without loading a replay, serves the selected segment, and releases idle readers", async () => {
   const root = await mkdtemp(join(tmpdir(), "world-segment-replay-"));
   const archive = new SegmentedArchive(root);

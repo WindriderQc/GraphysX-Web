@@ -74,10 +74,18 @@ export class SegmentedArchive {
    * instance and total quotas count the bytes on disk. Segment zero keeps its plain name.
    */
   constructor(root, { maxBytes = ARCHIVE_LIMIT, segmentBytes = Math.min(maxBytes, 32 * 1024 * 1024),
-    instanceBytes = maxBytes * 4, totalBytes = maxBytes * 16, bufferBytes = 8 * 1024 * 1024, compress = false, openFile = open } = {}) {
+    instanceBytes = maxBytes * 4, totalBytes = maxBytes * 16, bufferBytes = 8 * 1024 * 1024, maxSegments = 1024,
+    compress = false, openFile = open } = {}) {
     for (const n of [maxBytes, segmentBytes, instanceBytes, totalBytes, bufferBytes]) {
       if (!Number.isSafeInteger(n) || n <= 0) throw new Error("Archive limits must be positive integer bytes");
     }
+    // A segment larger than the replay budget could be written but never opened again.
+    if (segmentBytes > maxBytes) throw new Error("Segment bytes must not exceed the replay budget (maxBytes)");
+    // Stay well under the metadata walk bound shared by every instance in the root.
+    if (!Number.isSafeInteger(maxSegments) || maxSegments < 1 || maxSegments > MAX_FILES / 2) {
+      throw new Error(`Archive segment count must be an integer from 1 to ${MAX_FILES / 2}`);
+    }
+    this.maxSegments = maxSegments;
     this.root = root; this.segmentBytes = segmentBytes; this.maxBytes = maxBytes; this.compress = Boolean(compress);
     this.instanceLimit = instanceBytes; this.totalLimit = totalBytes; this.bufferBytes = bufferBytes; this.openFile = openFile;
     this.tail = Promise.resolve(); this.file = null; this.gzip = null; this.pending = 0; this.bytes = 0;
@@ -113,7 +121,7 @@ export class SegmentedArchive {
     const chunk = prefix + line, bytes = Buffer.byteLength(chunk);
     // Compressed bytes are only known once compressed: the queue enforces the exact quota there.
     if (bytes > this.segmentBytes || this.pending + bytes > this.bufferBytes ||
-        this.bytes + bytes > this.instanceLimit || this.total + bytes > this.totalLimit || (this.part + (rotate && !this.rotate ? 1 : 0)) >= 1024) {
+        this.bytes + bytes > this.instanceLimit || this.total + bytes > this.totalLimit || (this.part + (rotate && !this.rotate ? 1 : 0)) >= this.maxSegments) {
       this.error = QUOTA;
       return;
     }
@@ -176,7 +184,7 @@ export class SegmentedArchive {
   }
   status() {
     return { enabled: Boolean(this.root), bytes: this.bytes, pendingBytes: this.pending, error: this.error,
-      maxBytes: this.maxBytes, segmentBytes: this.segmentBytes, segment: this.part,
+      maxBytes: this.maxBytes, segmentBytes: this.segmentBytes, segment: this.part, maxSegments: this.maxSegments,
       instanceMaxBytes: this.instanceLimit, totalMaxBytes: this.totalLimit, compressed: this.compress };
   }
 }

@@ -99,6 +99,20 @@ const host = values.host ?? env.WORLD_HOST ?? "127.0.0.1";
 const port = Number(values.port ?? env.WORLD_PORT ?? 18120);
 const recordMaxBytes = Number(env.WORLD_RECORD_MAX_BYTES ?? 256 * 1024 * 1024);
 if (!Number.isSafeInteger(recordMaxBytes) || recordMaxBytes < 1024) throw new Error("WORLD_RECORD_MAX_BYTES needs a positive byte limit >= 1024");
+// Optional overrides of bounds otherwise derived from WORLD_RECORD_MAX_BYTES (the replay budget):
+// segment size (uncompressed, at most the budget; default min(budget, 32 MiB)), bytes on disk per
+// instance (default 4x) and per recording root (default 16x), segments per instance (default 1024).
+// They let a long-lived island keep more history without a bigger replay memory budget.
+const optionalInteger = (name, min) => {
+  if (env[name] === undefined || env[name] === "") return undefined;
+  const value = Number(env[name]);
+  if (!Number.isSafeInteger(value) || value < min) throw new Error(`${name} needs an integer >= ${min}`);
+  return value;
+};
+const recordSegmentBytes = optionalInteger("WORLD_RECORD_SEGMENT_BYTES", 1024);
+const recordInstanceBytes = optionalInteger("WORLD_RECORD_INSTANCE_MAX_BYTES", 1024);
+const recordTotalBytes = optionalInteger("WORLD_RECORD_TOTAL_MAX_BYTES", 1024);
+const recordMaxSegments = optionalInteger("WORLD_RECORD_MAX_SEGMENTS", 1);
 // Segments after the first are gzip files unless WORLD_RECORD_COMPRESS=0.
 const recordCompress = !["0", "false"].includes(env.WORLD_RECORD_COMPRESS ?? "1");
 // The recording may keep fewer pose frames (WORLD_RECORD_FRAME_HZ, default: the live 10 Hz), carry
@@ -144,7 +158,9 @@ running = await startWorldServer({
   port,
   renderImage: renderImage ?? undefined,
   operatorToken: env.WORLD_OPERATOR_TOKEN ?? null,
-  recordingLimits: { maxBytes: recordMaxBytes, compress: recordCompress },
+  // Undefined entries keep the archive's derived defaults.
+  recordingLimits: { maxBytes: recordMaxBytes, compress: recordCompress, segmentBytes: recordSegmentBytes,
+    instanceBytes: recordInstanceBytes, totalBytes: recordTotalBytes, maxSegments: recordMaxSegments },
   recordFrameHz,
   recordSwarmHz,
   recordInspectionSeconds,
