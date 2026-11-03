@@ -63,6 +63,43 @@ async function readJson(request, InputError) {
 }
 
 /**
+ * How often the recording keeps poses and the full inspection. Live spectators are unaffected.
+ *
+ * - `recordFrameHz` (WORLD_RECORD_FRAME_HZ): pose frames per second in the recording.
+ *   Default: the live spectator rate (10 Hz). The replay viewer interpolates between frames.
+ * - `recordSwarmHz` (WORLD_RECORD_SWARM_HZ): how many of those frames also carry the flock
+ *   (`swarms`, every bird at 1 cm). Default: all of them. The flock is most of the recorded bytes
+ *   once compressed; resting objects repeat and compress to almost nothing.
+ * - `recordInspectionSeconds` (WORLD_RECORD_INSPECTION_SECONDS): the inspection is sampled once a
+ *   second; a sample whose text or yes/no values changed (holder, last action, presence, a new or
+ *   removed entity) is recorded at once, otherwise its numbers (positions, sizes, speeds) are
+ *   refreshed at most this often. Default 1: every sample, as before.
+ *
+ * Values are rounded to whole ticks; flock frames to whole recorded frames. A frame rate above
+ * the live rate, or a flock rate above the frame rate, is refused.
+ */
+export function recordingRates(tickHz, spectateEvery, { recordFrameHz, recordSwarmHz, recordInspectionSeconds } = {}) {
+  const positive = (value, name) => {
+    if (value === undefined) return undefined;
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive number`);
+    return value;
+  };
+  const hz = positive(recordFrameHz, "recordFrameHz");
+  const swarmHz = positive(recordSwarmHz, "recordSwarmHz");
+  const seconds = positive(recordInspectionSeconds, "recordInspectionSeconds");
+  const frameEvery = hz === undefined ? spectateEvery : Math.max(1, Math.round(tickHz / hz));
+  if (frameEvery < spectateEvery) throw new Error("recordFrameHz cannot exceed the live spectator rate");
+  if (swarmHz !== undefined && swarmHz > (hz ?? tickHz / spectateEvery)) throw new Error("recordSwarmHz cannot exceed the recorded frame rate");
+  const frames = swarmHz === undefined ? 1 : Math.max(1, Math.round(tickHz / swarmHz / frameEvery));
+  return { frameEvery, swarmEvery: frameEvery * frames, inspectionEvery: Math.max(1, Math.round((seconds ?? 1) * tickHz)) };
+}
+
+/** The inspection without its numbers: what must reach the recording as soon as it changes. */
+export function inspectionKey(value) {
+  return JSON.stringify(value, (_key, item) => (typeof item === "number" ? 0 : item));
+}
+
+/**
  * @param {object} options
  * @param {object} options.module      the bundled world: { IslandWorld, InputError, validateInput, TICK_HZ }
  * @param {string | ((worldId: string) => string)} options.apiMarkdown agent-facing API.md, or one per world
@@ -70,6 +107,9 @@ async function readJson(request, InputError) {
  * @param {{sha256: string, runId?: string}} [options.fork] start a new game from `options.snapshot` (named by its digest)
  * @param {string} [options.world]     `mesa-island` (default) or `living-island`; a snapshot names its own
  * @param {boolean} [options.realtime] false: the caller drives `world.step()` (tests)
+ * @param {number} [options.recordFrameHz] recorded pose frames per second (default: live rate)
+ * @param {number} [options.recordSwarmHz] recorded flock frames per second (default: every recorded frame)
+ * @param {number} [options.recordInspectionSeconds] refresh of recorded inspection numbers (default 1)
  * @param {(request: {position: number[], forward: number[], fovDeg: number, entityId: string, tick: number, width: number, height: number}) => Promise<Buffer>} [options.renderImage]
  *        renders one first-person PNG; without it GET /observe/image answers 503
  */
@@ -83,6 +123,9 @@ export async function startWorldServer(options) {
   const spectators = new Set();
   const expectedSpectators = new Map();
   const spectateEvery = Math.max(1, Math.round(TICK_HZ / (options.spectateHz ?? 10)));
+  // The recording may keep fewer frames than live spectators get (see recordingRates).
+  const { frameEvery: recordEvery, swarmEvery, inspectionEvery } = recordingRates(TICK_HZ, spectateEvery, options);
+  let recordedInspection = null; // {tick, key} of the last inspection written to the recording
   const recordDir = options.recordDir ?? null;
   const archive = new SegmentedArchive(recordDir, options.recordingLimits);
   const replays = replayArchives(recordDir, options.recordingLimits);
@@ -117,6 +160,13 @@ export async function startWorldServer(options) {
   const hello = () => ({ ...world.sceneHello(), ...identity(), inspection: inspection(),
     journal: { generation, oldest: journal[0]?.sequence ?? sequence + 1, latest: sequence, limit: 200 } });
   const frame = full => ({ ...world.poseFrame(false), ...identity(), ...(full ? { inspection: inspection() } : {}) });
+  /** Whether this inspection goes into the recording: its text changed, or its numbers are due. */
+  const recordInspection = value => {
+    const key = inspectionKey(value);
+    if (recordedInspection && key === recordedInspection.key && world.tick - recordedInspection.tick < inspectionEvery) return false;
+    recordedInspection = { tick: world.tick, key };
+    return true;
+  };
   archive.seed = () => [{ kind: "hello", ...hello() }, { kind: "frame", ...frame(true) }];
   const snapshot = () => ({ ...world.snapshot(), runId, journal: { sequence, actions: journal } });
   const checkpoint = () => {
@@ -157,10 +207,21 @@ export async function startWorldServer(options) {
       broadcast("entities", { tick: world.tick, ...change });
       record({ kind: "entities", tick: world.tick, ...change });
     }
-    if (world.tick % spectateEvery === 0) {
-      const poses = frame(world.tick % TICK_HZ === 0);
-      broadcast("frame", poses);
-      record({ kind: "frame", ...poses });
+    const live = world.tick % spectateEvery === 0;
+    const recorded = recordDir && world.tick % recordEvery === 0;
+    // The inspection is sampled at 1 Hz, as before; the recording may skip it.
+    const inspecting = world.tick % TICK_HZ === 0 && (live || recordDir);
+    if (live || recorded || inspecting) {
+      const poses = frame(false);
+      const sampled = inspecting ? inspection() : null;
+      if (live) broadcast("frame", sampled ? { ...poses, inspection: sampled } : poses);
+      const withInspection = sampled && recordDir ? recordInspection(sampled) : false;
+      if (recorded || withInspection) {
+        // Same fields in the same order as a live frame; the flock only on its own ticks.
+        const { swarms, ...withoutFlock } = poses;
+        const kept = swarms && world.tick % swarmEvery !== 0 ? withoutFlock : poses;
+        record({ kind: "frame", ...kept, ...(withInspection ? { inspection: sampled } : {}) });
+      }
     }
     if (world.actions.length > recordedActions) {
       for (const action of world.actions.slice(recordedActions)) {
@@ -246,7 +307,7 @@ export async function startWorldServer(options) {
             await archive.close();
             world = new IslandWorld(undefined, { world: wanted });
             runId = body.runId ?? null;
-            seen.clear(); journal = []; sequence = 0; generation = randomUUID(); recordedActions = 0;
+            seen.clear(); journal = []; sequence = 0; generation = randomUUID(); recordedActions = 0; recordedInspection = null;
             await archive.start(world.instanceId);
             record({ kind: "hello", ...hello(), runId: body.runId ?? null, resumedFromTick: null });
             await checkpoint();

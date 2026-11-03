@@ -127,6 +127,20 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
   total quotas count the compressed bytes on disk. Measured on a living-island segment:
   33.6 MB of frames become 3.5 MB. `WORLD_RECORD_COMPRESS=0` keeps plain segments. Existing
   plain segments stay readable and are never rewritten.
+- Recording rates (live spectators always get 10 Hz frames and the inspection every second):
+  `WORLD_RECORD_FRAME_HZ` (default 10) recorded pose frames per second; `WORLD_RECORD_SWARM_HZ`
+  (default: every recorded frame) how many of them carry the flock; `WORLD_RECORD_INSPECTION_SECONDS`
+  (default 1) how often the inspection's numbers (positions, sizes, speeds) are refreshed. The
+  inspection is still sampled every second and recorded at once when a text or yes/no value
+  changes (holder, last action, presence, a startled flock, an entity added or removed). Defaults
+  record exactly what they did before. Once compressed, the flock (every bird at 1 cm) is most of
+  the bytes; resting objects and the repeated inspection compress to almost nothing. Measured with
+  `node scripts/measure-recording-rate.mjs` (local living island, one walking agent, gzip):
+  defaults 8.6 MiB/h; `FRAME_HZ=5 SWARM_HZ=1 INSPECTION_SECONDS=30` 1.6 MiB/h (5.4x less).
+  The replay sends a skipped flock frame and the newest inspection along with the frame it plays,
+  and the viewer draws each timeline 1.25 median frame gaps behind (at least 150 ms, at most
+  2.5 s), so slower recordings still move smoothly: objects and agents interpolate over 200 ms,
+  birds over one second (straight lines between recorded points, about a second behind).
   Checkpoints flush the accepted recording bytes before becoming durable. Provision replay
   memory for parsed data (several times NDJSON size); the instance template uses 2 GiB.
   These are safety ceilings, not long-campaign capacity measurements. Qualify/tune capacity

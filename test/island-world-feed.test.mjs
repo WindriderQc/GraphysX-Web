@@ -172,6 +172,11 @@ test("living island: flock members ride the frames, interpolated, and re-sent tr
   const ids = new Map([[70, "flock_1"]]);
   assert.deepEqual(feed.worldHostSwarms(buffer, ids, 1300).map((swarm) => [swarm.id, swarm.positions[0]]), [["flock_1", 2]]);
 
+  // A recording may carry the flock in fewer frames than the poses: frames without it leave it.
+  buffer.push({ tick: 18, t: 0.3, poses: [] }, 1200);
+  assert.deepEqual(buffer.swarmIds(), [70], "a frame without swarms keeps the flock");
+  assert.deepEqual(buffer.sampleSwarm(70, 1300).positions, [2, 0, 0, 3, 1, 0]);
+
   const tree = { id: "tree_6", label: "Tree_6", type: "dna-tree", transform: { position: [-2, 0, 12], scale: [1.44, 1.44, 1.44] }, dna: { seed: 5, generation: 1 } };
   const before = feed.applyWorldEntities(feed.worldSceneFromHello(hello), { tick: 200, added: [{ entity: tree, numericId: 80 }] });
   const grown = feed.applyWorldEntities(before, { tick: 260, added: [{ entity: { ...tree, dna: { seed: 5, generation: 2 } }, numericId: 80 }] });
@@ -200,5 +205,29 @@ test("a flock's population changes are patched in place, and the world's clock i
   assert.equal(buffer.sampleSwarm(70, 1200).positions.length, 3, "the delayed sample still has the old count");
   assert.deepEqual(buffer.latestSwarm(70), { positions: [0, 0, 0, 1, 1, 1], velocities: null }, "the newest frame has the new one");
   assert.equal(buffer.latestSwarm(99), null);
+  buffer.push({ tick: 618, t: 10.3, poses: [] }, 1300);
+  assert.equal(buffer.latestSwarm(70).positions.length, 6, "a recorded frame without the flock keeps its newest members");
   assert.ok(feed.WORLD_LEAF_SEASON_SECONDS > 17, "a calmer autumn than the recovered 17 s");
+});
+
+test("recorded frames further apart than live ones are still drawn between frames", () => {
+  const frame = (tick, x, swarm) => ({ tick, t: tick / 60, poses: [[43, x, 0, 0, 0, 0, 0, 1]], ...(swarm === undefined ? {} : { swarms: [[70, swarm, 0, 0]] }) });
+  // Live, 10 Hz: the 150 ms delay is unchanged.
+  const live = new feed.WorldPoseBuffer(150);
+  for (let i = 0; i < 4; i += 1) live.push(frame(6 * i, i), 1000 + 100 * i);
+  assert.deepEqual(live.sample(43, 1300).p, [1.5, 0, 0], "150 ms behind the newest frame");
+  // A recording at 2 Hz, its flock at 1 Hz: drawn 1.25 gaps behind, so two frames bracket it.
+  const slow = new feed.WorldPoseBuffer(150);
+  for (let i = 0; i < 5; i += 1) slow.push(frame(30 * i, i, i % 2 === 0 ? i : undefined), 1000 + 500 * i);
+  assert.deepEqual(slow.sample(43, 3000).p, [2.75, 0, 0], "625 ms behind: between the frames, not stepping");
+  assert.deepEqual(slow.sampleSwarm(70, 3000).positions, [1.5, 0, 0], "the flock 1250 ms behind its own newest frame");
+  assert.deepEqual(slow.sampleSwarm(70, 3000).velocities, [2, 0, 0], "units per simulated second over its own frames");
+  // A paused replay leaves one long gap; the median ignores it.
+  slow.push(frame(150, 5), 30_000);
+  slow.push(frame(180, 6), 30_500);
+  assert.deepEqual(slow.sample(43, 30_750).p, [5.25, 0, 0], "still 625 ms behind");
+  // Capture and reduced motion (delay 0) always show the newest frame.
+  const capture = new feed.WorldPoseBuffer(0);
+  for (let i = 0; i < 4; i += 1) capture.push(frame(30 * i, i), 1000 + 500 * i);
+  assert.deepEqual(capture.sample(43, 2500).p, [3, 0, 0]);
 });

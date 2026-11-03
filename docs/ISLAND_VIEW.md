@@ -332,6 +332,12 @@ budget. On quota or I/O failure recording pauses explicitly; it does not purge
 old data or promise unlimited retention. A restart resumes the checkpoint's
 identity in a new segment and never edits even a torn legacy file.
 
+A persistent island can record less instead of filling its quota within days:
+`WORLD_RECORD_FRAME_HZ`, `WORLD_RECORD_SWARM_HZ` and `WORLD_RECORD_INSPECTION_SECONDS`
+(world-service README) lower what the recording keeps without changing the live
+stream. At 5 Hz poses, the flock at 1 Hz and inspection numbers every 30 s, a local
+living island records 1.6 MiB/h instead of 8.6 MiB/h on disk.
+
 `GET /recordings/<id>/parts` lists only bounded segment metadata and opens no
 reader. The viewer's segment selector loads `/recordings/<id>/parts/<number>`
 from the same recording identity. The old unsuffixed URL still opens the first
