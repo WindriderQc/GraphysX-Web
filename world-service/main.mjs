@@ -125,8 +125,6 @@ running = await startWorldServer({
   apiMarkdown: (id) => (id === module.LIVING_WORLD_ID ? module.livingApiMarkdown(mesaApi) : mesaApi),
   snapshot,
   fork,
-  // POST /world {"from", "sha256"} forks from a checkpoint file in this directory.
-  forkDir: env.WORLD_FORK_DIR || undefined,
   snapshotPath,
   snapshotEveryMs,
   world: worldId,
