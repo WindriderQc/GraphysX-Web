@@ -911,6 +911,23 @@ export class AgentWorldDnaSystem {
     this.apply();
   }
 
+  /**
+   * Host seam: show the seasonal leaf fall at `seconds` on a host's clock, `periodSeconds` per
+   * cycle, whatever this tree's own `seasonSeconds` says. A viewer of a headless world uses it:
+   * the server keeps its trees still (no per-step cost there) and every viewer shows the same
+   * season because it follows the world's clock. A period of 0 puts the leaves back.
+   */
+  showSeason(seconds: number, periodSeconds: number): void {
+    const season = periodSeconds > 0 && Number.isFinite(seconds)
+      ? (((seconds % periodSeconds) + periodSeconds) % periodSeconds) / periodSeconds
+      : 0;
+    const growth = this.growthProgress;
+    if (growth === this.lastGrowth && season === this.lastSeason) return;
+    this.lastGrowth = growth;
+    this.lastSeason = season;
+    this.writeLeaves(growth, season);
+  }
+
   private get growthProgress(): number {
     if (this.config.growSeconds <= 0) return 1;
     return smoothstep(0, 1, Math.min(1, this.elapsed / this.config.growSeconds));
@@ -981,7 +998,7 @@ export class AgentWorldDnaSystem {
       leafCount: this.form.leaves.length,
       truncated: this.form.truncated,
       growth: round(this.growthProgress),
-      season: round(this.seasonProgress),
+      season: round(Math.max(0, this.lastSeason)),
       expressedGenome: {
         trunkLength: round(this.expressed.trunkLength),
         lengthRatio: round(this.expressed.lengthRatio),

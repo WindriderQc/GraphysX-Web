@@ -20,6 +20,12 @@ const mesaApi = readFileSync(new URL("world-service/API.md", root), "utf8");
  * the living island never changes it.
  */
 const MESA_HASH = "3bdeced47efb7c86";
+/**
+ * The living island's hashes. `living-rules/1` is the one the islands running on 2026-11-03
+ * carry (read from the live checkpoint); `living-rules/2` gives the birds genes and resumes it.
+ */
+const LIVING_HASH_V1 = "67987abe225d84d6";
+const LIVING_HASH = "6698792ba140e711";
 let outDir;
 let m;
 
@@ -282,6 +288,94 @@ describe("living island", () => {
     assert.equal(resumed.observe(session).player.attributes.HeldSeed, "Tree_2@1");
     const mesa = new m.IslandWorld().snapshot();
     assert.throws(() => new m.IslandWorld({ ...mesa, world: { ...mesa.world, id: "living-island" } }), /another world/);
+  });
+
+  it("gives every bird genes, and the flock lives, breeds and dies on its own", () => {
+    const world = living();
+    assert.equal(world.snapshot().world.contentHash, LIVING_HASH, "the living island's hash is the pinned one");
+    const flockOf = () => world.snapshot().document.entities.find((entity) => entity.id === "flock_1").flock;
+    const start = world.snapshot().living.birds;
+    assert.equal(start.members.length, 28, "the 28 birds become founders");
+    assert.equal(flockOf().members.length, 28, "each with its own traits in the flock");
+    assert.ok(new Set(flockOf().members.map((member) => member.color)).size > 20, "of many colours");
+    // Instance colours multiply the material colour; a dark base would turn every bird black.
+    let body = null;
+    world.runtime.getEntityObject("flock_1").traverse((object) => { if (object.name === "GraphysXFlockMembers") body = object; });
+    assert.equal(body.material.color.getHexString(), "ffffff", "the birds show their own colours, untinted");
+    const first = body.material.color.clone();
+    body.getColorAt(0, first);
+    assert.equal(`#${first.getHexString()}`, flockOf().members[0].color, "bird 0 wears its gene colour");
+    for (const name of Object.keys(m.BIRD_GENES)) {
+      const values = start.members.map((bird) => bird.genes[name]);
+      assert.ok(Math.max(...values) > Math.min(...values), `founders differ in ${name}`);
+    }
+    world.drainChanges();
+    let lowest = Infinity;
+    let highest = 0;
+    let resent = 0;
+    for (let minute = 0; minute < 15; minute += 1) {
+      for (let step = 0; step < 4; step += 1) {
+        world.advance(15);
+        const count = flockOf().count;
+        assert.equal(world.snapshot().living.birds.members.length, count, "one member per bird");
+        assert.equal(world.poseFrame().swarms[0].length, 1 + count * 3, "spectators see every member");
+        lowest = Math.min(lowest, count);
+        highest = Math.max(highest, count);
+      }
+      resent += world.drainChanges().filter((change) => change.added?.some(({ entity }) => entity.id === "flock_1" && entity.flock.members)).length;
+    }
+    const birds = world.snapshot().living.birds;
+    const flock = world.observe(world.join("Watcher").session).world.entities.find((entity) => entity.name === "Flock_1");
+    assert.ok(birds.births > 0 && birds.deaths > 0, `births ${birds.births}, deaths ${birds.deaths}`);
+    assert.equal(flock.attributes.Births, birds.births);
+    assert.equal(flock.attributes.Deaths, birds.deaths);
+    assert.ok(flock.attributes.Generation >= 2, `chicks of chicks (generation ${flock.attributes.Generation})`);
+    assert.match(flock.attributes.Colors, /^[A-Z][a-z]+ \d+/);
+    assert.ok(lowest >= 1 && highest <= m.MAX_BIRDS, `population ${lowest} to ${highest}`);
+    assert.ok(resent > 0, "viewers are told when the flock changes");
+    assert.ok(birds.members.every((bird) => bird.energy > -2 && bird.energy <= 100 * bird.genes.size + 1e-9), "energy stays within each bird's means");
+    for (const bird of birds.members) {
+      for (const [name, [low, high]] of Object.entries(m.BIRD_GENES)) assert.ok(bird.genes[name] >= low && bird.genes[name] <= high, `${name} in range`);
+    }
+  });
+
+  it("resumes the birds exactly, eggs and deaths included", () => {
+    const world = living();
+    world.advance(150);
+    const snapshot = JSON.parse(JSON.stringify(world.snapshot()));
+    const resumed = new m.IslandWorld(snapshot);
+    const before = snapshot.living.birds;
+    // The birds only: a block resting at the wind's edge drifts after a resume on its own (rigid
+    // body restore, measured on main too), which is not what this checks.
+    for (let second = 0; second < 90; second += 1) {
+      world.advance(1);
+      resumed.advance(1);
+      assert.deepEqual(resumed.poseFrame().swarms, world.poseFrame().swarms, `same birds after ${second + 1} s`);
+    }
+    const after = world.snapshot().living.birds;
+    assert.ok(after.births + after.deaths > before.births + before.deaths, "the window saw births or deaths");
+    assert.deepEqual(resumed.snapshot().living, world.snapshot().living, "same lives, same fruit, same random stream");
+    const flockOf = (island) => island.snapshot().document.entities.find((entity) => entity.id === "flock_1");
+    assert.deepEqual(flockOf(resumed), flockOf(world), "same flock, member for member");
+  });
+
+  it("resumes an island saved before birds had genes, keeping every bird where it was", () => {
+    const world = living();
+    world.advance(5);
+    const saved = JSON.parse(JSON.stringify(world.snapshot()));
+    // What a living-rules/1 checkpoint holds: the same island, birds without genes.
+    delete saved.living.birds;
+    const flock = saved.document.entities.find((entity) => entity.id === "flock_1");
+    delete flock.flock.members;
+    saved.world = { id: "living-island", contentHash: LIVING_HASH_V1, rules: "mesa-rules/1+living-rules/1" };
+    const resumed = new m.IslandWorld(saved);
+    assert.equal(resumed.snapshot().world.contentHash, LIVING_HASH, "it continues under the new rules");
+    assert.equal(resumed.snapshot().living.birds.members.length, 28, "its 28 birds become founders");
+    assert.deepEqual(resumed.snapshot().living.flock.positions, saved.living.flock.positions, "each where it was");
+    assert.deepEqual(resumed.snapshot().living.trees, saved.living.trees, "the trees are untouched");
+    resumed.advance(30);
+    assert.ok(resumed.snapshot().living.birds.members.length >= 1);
+    assert.throws(() => new m.IslandWorld({ ...saved, world: { ...saved.world, contentHash: "0123456789abcdef" } }), /another world/);
   });
 
   it("streams the birds and tree changes to spectators and serves the living API", async () => {

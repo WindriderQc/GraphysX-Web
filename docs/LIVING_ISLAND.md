@@ -65,7 +65,7 @@ seule pression de sélection. C'est de l'**auto-télie**, un des signes de jeu d
 | `GatherSeed {position}` | racine d'un arbre prêt, à 6 unités | une graine dans la poche (`HeldSeed: "Tree_4@1"`) ; une nouvelle remplace l'ancienne |
 | `Sow {position}` | sol libre à 7 unités, à 4 unités des autres arbres, hors des mesas | nouvel arbre avec les gènes exprimés du parent, nouvelle graine, génération 1 |
 | `NextGeneration {position}` | arbre prêt à 6 unités | génération +1 (gènes qui dérivent), puis 30 s de repos |
-| Volée `Flock_1` | 28 oiseaux entre y = 12 et 18 | fuient un agent à moins de 14 unités et un bloc lancé (vitesse ≥ 5) à moins de 8 ; attirés par les arbres |
+| Volée `Flock_1` | 28 oiseaux au départ, de 1 à 64 ensuite, entre y = 12 et 18 | fuient un agent à moins de 14 unités et un bloc lancé (vitesse ≥ 5) à moins de 8 ; attirés par les arbres ; depuis le 2026-11-03, chaque oiseau a ses gènes, mange, pond et meurt seul (section « Les oiseaux vivants ») |
 | Vent | boîte au sud-est (x 2 à 42, z −42 à −2) | pousse les corps en vol et les oiseaux ; pas Eko, ni un bloc posé (mesuré : immobile 20 s) ; **absent** de l'observation et de `/api.md` |
 
 L'observation garde la forme Clawblox : chaque arbre est une entité `shape: "Tree"` avec ses
@@ -78,6 +78,60 @@ et chaque oiseau au bit près.
 
 Coût mesuré sur devX (Ryzen 7 3700X) : 0,20 ms par pas avec 1 agent (Mesa : 0,13), 0,27 ms
 avec 8 ; image spectateur 1,2 Ko (Mesa : 0,7) ; sauvegarde 101 Ko (Mesa : 84).
+
+## Les oiseaux vivants (2026-11-03, `living-rules/2`)
+
+Demande de Yanik : une île vivante sans les agents, dans l'esprit des forêts et des volées de
+*Nature of Code*. Les arbres restent sélectionnés par les agents ; les oiseaux, eux, vivent seuls.
+
+```
+     arbre adulte : des fruits, qui repoussent avec ses feuilles
+              │  un oiseau affamé y vole et mange
+              ▼
+   oiseau bien nourri et adulte (60 s) ──pond──► oisillon : gènes du parent, un peu changés
+              │
+   faim (énergie à 0) ou vieillesse (6 à 10 min) ──► mort
+              │
+   moins de 8 oiseaux ──► un nouveau venu arrive toutes les 20 s (gènes à lui)
+```
+
+- **Gènes** (`BIRD_GENES`) : vitesse, envie de garder ses distances, de suivre les autres, de
+  rester groupé, taille, appétit (la force avec laquelle la faim le tire vers un arbre), et la
+  couleur. Les quatre premiers et la taille passent dans la volée comme traits par oiseau
+  (`flock.members`, nouveau champ du vocabulaire : couleur, taille, vitesse et poids de Reynolds
+  par membre). Une volée sans `members` se comporte exactement comme avant. Avec `members`, la
+  couleur de base de la volée passe au blanc : Three.js multiplie la couleur de chaque oiseau par
+  celle du matériau, et le gris foncé de l'île rendait tous les oiseaux noirs.
+- **Le thermostat** : la nourriture d'un arbre est partagée. Trop d'oiseaux vident les arbres,
+  la faim tue, la volée diminue, les fruits repoussent. Personne ne choisit qui vit.
+- **Les agents comptent quand même** : un oiseau ne va pas manger près d'un agent (dans son
+  rayon de peur de 14 unités), et un arbre semé ailleurs devient une nouvelle source de fruits.
+- **Mesuré sur devX, une heure d'île sans agent** (`/tmp` jetable, aucun modèle) : la volée
+  monte vers 40 à 55 oiseaux et y reste, 745 naissances et 719 morts, 25 générations. La
+  sélection se voit : l'envie de rester groupé tombe de 1,1 à 0,46, la vitesse de 1,0 à 0,73,
+  la taille de 1,0 à 0,88 (un petit oiseau lent dépense moins). Sans prédateur, se disperser
+  paie : la belle volée serrée se défait. Des faucons à ADN seraient la suite logique.
+- **Coût** : 0,21 ms par pas avec la volée vivante (0,15 avant) ; l'enregistrement grossit
+  d'environ 40 % (estimé : 241 Mio par jour contre 174 sans oiseaux vivants), surtout parce
+  qu'il y a plus d'oiseaux dans chaque image. Les naissances et les morts sont regroupées une
+  fois par seconde.
+- **Reprise** : une île `living-rules/1` (celles en service le 2026-11-03, empreinte
+  `67987abe225d84d6`) reprend sous `living-rules/2` ; ses oiseaux deviennent des fondateurs là
+  où ils volaient, le reste continue tel quel. Toute autre empreinte reste refusée.
+- **Reprise exacte des volées** : le moteur additionne maintenant les champs de force dans
+  l'ordre de leur identifiant. Avant, une île reprise listait ses entités dans l'autre sens et
+  une volée sous trois champs ou plus divergeait de quelques bits (mesuré : dès 24 s sur `main`),
+  puis visiblement. Reste connu et hors de cette PR : un bloc posé au bord du vent dérive après
+  une reprise (aussi sur `main`, vers 120 s).
+
+## Les feuilles qui tombent
+
+La chute des feuilles de la Forêt vivante (`seasonSeconds`) était coupée sur l'île : le serveur
+garde ses arbres immobiles (aucun coût par pas) et la vue n'anime rien. Depuis le 2026-11-03, la
+vue fait tomber les feuilles elle-même, réglée sur l'horloge de l'île (`showSeason` du
+`dna-tree`, un cycle de 48 s, `WORLD_LEAF_SEASON_SECONDS`) : tous les spectateurs, en direct ou
+en relecture, voient le même automne. Les règles et l'observation ne changent pas ; seule l'image
+change, y compris la vue à la première personne d'Eko.
 
 ## Captures (2026-10-29, devX, Chromium sans écran)
 

@@ -90,7 +90,16 @@ try {
   assert.deepEqual([first.kinds["dna-tree"], first.kinds.flock, first.kinds["force-field"]], [5, 1, 6], "five founders, one flock, five perches and the wind");
   let scene = await living(page);
   assert.equal(scene.paused, true, "the viewer simulates nothing");
-  assert.equal(scene.birds, 28);
+  // Birds hatch and die on the server; the viewer must follow its flock, whatever the count.
+  const serverBirds = () => world.world.runtime.exportDefinition().entities.find((entity) => entity.id === "flock_1")?.flock?.count;
+  let birdsMatch = false;
+  for (let i = 0; i < 20 && !birdsMatch; i += 1) {
+    const expected = serverBirds();
+    scene = await living(page);
+    birdsMatch = expected >= 1 && scene.birds === expected && expected === serverBirds();
+    if (!birdsMatch) await sleep(150);
+  }
+  assert.ok(birdsMatch, `the viewer shows the server's ${serverBirds()} birds (it has ${scene.birds})`);
   assert.ok(scene.fields.includes("wind_1"), "the wind is in the scene (invisible)");
   const leads = new Set();
   for (let i = 0; i < 8; i += 1) {
@@ -152,9 +161,24 @@ try {
   // ---- 4. the recording keeps the birds ---------------------------------------------------------------
   await world.close();
   world = null;
-  const frames = readFileSync(path.join(scratch, "rec", "instances", livingRecordingId, "graphysx-recording.ndjson"), "utf8").trim().split("\n").map((line) => JSON.parse(line)).filter((line) => line.kind === "frame");
-  assert.ok(frames.length > 20 && frames.every((frame) => frame.swarms?.[0]?.length === 1 + 28 * 3), "every recorded frame carries all 28 birds");
-  console.log(`living-island: forest, flock, gardener (${parent} → ${sapling}), overview, first-person view and phone OK`);
+  // Birds hatch and die, so replay the recording: each frame must carry every bird of the flock as
+  // the hello document or the latest "entities" line left it.
+  const recorded = readFileSync(path.join(scratch, "rec", "instances", livingRecordingId, "graphysx-recording.ndjson"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+  const flockCount = (entities) => entities?.find((entity) => entity.id === "flock_1")?.flock?.count;
+  let birds = null;
+  let frames = 0;
+  const counts = new Set();
+  for (const line of recorded) {
+    if (line.kind === "hello") birds = flockCount(line.document?.entities) ?? birds;
+    if (line.kind === "entities") birds = flockCount(line.added?.map((added) => added.entity)) ?? birds;
+    if (line.kind !== "frame") continue;
+    frames += 1;
+    assert.ok(birds >= 1, `frame ${line.tick}: the recording names the flock size`);
+    assert.equal(line.swarms?.[0]?.length, 1 + birds * 3, `frame ${line.tick} carries all ${birds} birds`);
+    counts.add(birds);
+  }
+  assert.ok(frames > 20, "the recording keeps the frames");
+  console.log(`living-island: forest, flock (${[...counts].join("→")} birds), gardener (${parent} → ${sapling}), overview, first-person view and phone OK`);
 } finally {
   await world?.close();
   await sidecar.close();

@@ -77,8 +77,9 @@ export const FIELDS = Object.freeze({
   flock: Object.freeze([
     "preset", "count", "bounds", "radius", "size", "separation", "alignment", "cohesion", "separationDistance",
     "neighborDistance", "speed", "maxForce", "memberSize", "color", "emissive", "emissiveIntensity", "trails",
-    "trailLength", "trailColor", "seed",
+    "trailLength", "trailColor", "seed", "members",
   ]),
+  flockMember: Object.freeze(["color", "scale", "speed", "separation", "alignment", "cohesion"]),
   crowd: Object.freeze([
     "preset", "count", "pursuers", "size", "speed", "pursuitSpeedRatio", "turnRate", "separationDistance", "separation",
     "focus", "conversion", "memberSize", "wanderColor", "pursuerColor", "emissiveIntensity", "seed",
@@ -562,6 +563,16 @@ function validateFlock(value, label) {
   ]) if (value[key] !== undefined) requireFinite(value[key], `${label}.${key}`);
   for (const key of ["color", "emissive", "trailColor"]) if (value[key] !== undefined) requireResolvedColor(value[key], `${label}.${key}`);
   if (value.trails !== undefined) requireBoolean(value.trails, `${label}.trails`);
+  if (value.members !== undefined && value.members !== null) {
+    if (!Array.isArray(value.members) || value.members.length > 240) reject(`${label}.members must be an array of at most 240 entries or null`);
+    value.members.forEach((member, index) => {
+      const at = `${label}.members[${index}]`;
+      requireRecord(member, at);
+      allowedKeys(member, setOf(FIELDS.flockMember), at);
+      for (const key of ["scale", "speed", "separation", "alignment", "cohesion"]) if (member[key] !== undefined) requireFinite(member[key], `${at}.${key}`);
+      if (member.color !== undefined) requireResolvedColor(member.color, `${at}.color`);
+    });
+  }
 }
 
 function validateCrowd(value, label) {

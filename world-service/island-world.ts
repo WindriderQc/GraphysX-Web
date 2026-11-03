@@ -27,6 +27,7 @@ import {
   type Vec3,
 } from "./mesa-island";
 import {
+  LIVING_RULES_UPGRADES,
   LIVING_RULES_VERSION,
   LIVING_WORLD_ID,
   LivingIsland,
@@ -208,7 +209,8 @@ export const MESA_WORLD_ID = "mesa-island";
 /** The worlds this service can run (`--world` / WORLD_ID). */
 export const WORLD_IDS = [MESA_WORLD_ID, LIVING_WORLD_ID] as const;
 
-interface WorldBase { id: string; base: MesaIsland | LivingIslandBase; rules: string; hash: string; livingIds: string[] }
+/** `upgrades`: hashes of older rules a saved island may still resume from (see LIVING_RULES_UPGRADES). */
+interface WorldBase { id: string; base: MesaIsland | LivingIslandBase; rules: string; hash: string; upgrades: Set<string>; livingIds: string[] }
 const WORLD_BASES = new Map<string, WorldBase>();
 
 /** A world's authored start, built once. Mesa's hash is unchanged by the living island. */
@@ -218,11 +220,12 @@ function worldBase(id: string): WorldBase {
   let made: WorldBase;
   if (id === MESA_WORLD_ID) {
     const base = buildMesaIsland();
-    made = { id, base, rules: RULES_VERSION, hash: contentHash(JSON.stringify(base.document) + RULES_VERSION), livingIds: [] };
+    made = { id, base, rules: RULES_VERSION, hash: contentHash(JSON.stringify(base.document) + RULES_VERSION), upgrades: new Set(), livingIds: [] };
   } else if (id === LIVING_WORLD_ID) {
     const base = buildLivingIsland();
     const rules = `${RULES_VERSION}+${LIVING_RULES_VERSION}`;
-    made = { id, base, rules, hash: contentHash(JSON.stringify(base.document) + rules), livingIds: livingEntityIds(base) };
+    const upgrades = new Set(LIVING_RULES_UPGRADES.map((older) => contentHash(JSON.stringify(base.document) + `${RULES_VERSION}+${older}`)));
+    made = { id, base, rules, hash: contentHash(JSON.stringify(base.document) + rules), upgrades, livingIds: livingEntityIds(base) };
   } else {
     throw new Error(`Unknown world: ${id}. Use one of ${WORLD_IDS.join(", ")}`);
   }
@@ -289,7 +292,10 @@ export class IslandWorld {
       return;
     }
     if (snapshot.format !== SNAPSHOT_FORMAT) throw new Error(`Unsupported snapshot format: ${String(snapshot.format)}`);
-    if (snapshot.world?.contentHash !== this.world.hash) throw new Error("This snapshot belongs to another world or rules version");
+    const savedHash = snapshot.world?.contentHash;
+    if (savedHash !== this.world.hash && !(savedHash && this.world.upgrades.has(savedHash))) {
+      throw new Error("This snapshot belongs to another world or rules version");
+    }
     this.meta = new Map(snapshot.meta);
     this.runtime = new AgentWorldRuntime(snapshot.document, this.engine);
     this.runtime.hostRestoreClock(snapshot.time);

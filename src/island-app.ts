@@ -33,9 +33,10 @@ import {
 import {
   applyWorldEntities, isEventStream, isWorldServiceHealth, lastWorldAction, parseWorldEvent, pickWorldAgent, worldActionMessages,
   worldAgentPlayer, worldAgents, worldBounds, worldEntityKinds, worldHostPoses, worldHostSwarms, WorldPoseBuffer, worldSceneFromHello, worldShellDocument,
-  worldStructureKey, worldTransientDefinitions, WORLD_SCOPE,
+  worldFlockPopulations, worldStructureKey, worldTransientDefinitions, WORLD_LEAF_SEASON_SECONDS, WORLD_SCOPE,
   type WorldAction, type WorldAgent, type WorldScene,
 } from "./island-world-feed";
+import { findDnaSystem } from "./agent-world-dna";
 import { findFlockSystem } from "./agent-world-flock";
 import type { PlatformHost } from "./platform-host";
 import { foldPresentationPanel } from "./presentation-mobile";
@@ -222,6 +223,7 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
   // ---- GraphysX world-service state (feed === "graphysx") ----
   let world: WorldScene | null = null;
   let worldKey = "";
+  let worldFlocks = new Map<string, string>();
   let worldEnvironmentKey = "";
   let worldAgent: WorldAgent | null = null;
   let worldActions: WorldAction[] = [];
@@ -592,7 +594,20 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
     // A flock's members fly where the server says (living island); the local flock is paused.
     for (const swarm of worldHostSwarms(worldPoses, world.ids, now)) {
       const object = host.world.getEntityObject(swarm.id);
-      if (object) findFlockSystem(object)?.writeMembers(swarm);
+      const flock = object ? findFlockSystem(object) : null;
+      if (!flock || flock.writeMembers(swarm)) continue;
+      // The population just changed (a birth, a death): show the newest frame, which matches it.
+      const numeric = [...world.ids].find(([, id]) => id === swarm.id)?.[0];
+      const latest = numeric === undefined ? null : worldPoses.latestSwarm(numeric);
+      if (latest) flock.writeMembers(latest);
+    }
+    // The server keeps its trees still; the viewer lets their leaves fall on the world's clock.
+    const seconds = worldPoses.sampleTime(now);
+    if (seconds === null) return;
+    for (const entity of world.entities) {
+      if (entity.type !== "dna-tree") continue;
+      const object = host.world.getEntityObject(entity.id);
+      if (object) findDnaSystem(object)?.showSeason(seconds, WORLD_LEAF_SEASON_SECONDS);
     }
   };
 
@@ -612,8 +627,20 @@ export function mountIslandApp(root: HTMLElement, host: PlatformHost, onExit: ()
       force = true;
     }
     const key = worldStructureKey(world);
-    if (!force && key === worldKey) return;
+    const flocks = worldFlockPopulations(world);
+    if (!force && key === worldKey) {
+      // Only a flock's population changed (births, deaths): patch that flock in place.
+      for (const [id, population] of flocks) {
+        if (worldFlocks.get(id) === population) continue;
+        const entity = world.entities.find((item) => item.id === id);
+        const patched = entity ? host.world.updateTransientEntity(WORLD_SCOPE, id, { flock: entity.flock } as never) : null;
+        if (patched && !patched.ok) reconcileError = patched.error ?? "flock update failed";
+      }
+      worldFlocks = flocks;
+      return;
+    }
     worldKey = key;
+    worldFlocks = flocks;
     const result = host.world.reconcileTransientEntities(WORLD_SCOPE, worldTransientDefinitions(world) as never);
     reconcileError = result.ok ? null : result.error ?? "reconcile failed";
     for (const entity of world.entities) if (entity.type === "directional-light") widenShadows(entity.id);
