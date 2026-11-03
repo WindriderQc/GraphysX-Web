@@ -25,6 +25,12 @@ export const WORLD_STREAM_FORMAT = "graphysx-world-stream/v1";
 /** Transient scope holding every entity of a world-service island in the viewer. */
 export const WORLD_SCOPE = "graphysx-world";
 export const WORLD_TAG = "world-part";
+/**
+ * One leaf-fall cycle on a world service's trees, in simulated seconds. The recovered forest ran
+ * 17 s; an island watched for hours gets a calmer autumn. Presentation only: the server never
+ * animates leaves, so this changes nothing an agent's rules see.
+ */
+export const WORLD_LEAF_SEASON_SECONDS = 48;
 
 export type WorldEntityDefinition = Record<string, unknown> & { id: string; type?: string; label?: string };
 
@@ -193,9 +199,30 @@ export function applyWorldEntities(scene: WorldScene, change: WorldEntitiesChang
  * Changes here mean reconciling the transient scope again; poses alone never do. The whole
  * definition counts, so an entity re-sent with a new definition (a tree's next generation) is
  * rebuilt. Structure events are rare (joins, impact cubes, sowing), so the cost is small.
+ *
+ * A flock's population (`count` and `members`) is left out: on the living island birds are born
+ * and die every few seconds, and rebuilding the whole island each time would stall the view.
+ * {@link worldFlockPopulations} tracks those, and the viewer patches that one flock in place.
  */
 export function worldStructureKey(scene: WorldScene): string {
-  return scene.entities.map((entity) => JSON.stringify(entity)).join("|");
+  return scene.entities.map((entity) => JSON.stringify(entity.type === "flock" ? withoutPopulation(entity) : entity)).join("|");
+}
+
+/** Each flock's population (`count` and `members`) as text, by entity id. */
+export function worldFlockPopulations(scene: WorldScene): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const entity of scene.entities) {
+    if (entity.type !== "flock" || !isRecord(entity.flock)) continue;
+    out.set(entity.id, JSON.stringify({ count: entity.flock.count ?? null, members: entity.flock.members ?? null }));
+  }
+  return out;
+}
+
+function withoutPopulation(entity: WorldEntityDefinition): WorldEntityDefinition {
+  if (!isRecord(entity.flock)) return entity;
+  const { count: _count, members: _members, ...flock } = entity.flock;
+  void _count; void _members;
+  return { ...entity, flock };
 }
 
 /**
@@ -342,6 +369,34 @@ export class WorldPoseBuffer {
       p: [pa.p[0] + (pb.p[0] - pa.p[0]) * t, pa.p[1] + (pb.p[1] - pa.p[1]) * t, pa.p[2] + (pb.p[2] - pa.p[2]) * t],
       q: slerpQuat(pa.q, pb.q, t),
     };
+  }
+
+  /**
+   * The world's clock (simulated seconds) at `now - delay`, interpolated like poses, or null
+   * before any frame. Effects that follow the world's time (the leaf fall) read it, so every
+   * viewer of one island, live or replayed, shows the same moment.
+   */
+  sampleTime(now: number): number | null {
+    const list = this.snapshots;
+    if (!list.length) return null;
+    const at = now - this.delayFor(list);
+    let i = list.length - 1;
+    while (i > 0 && list[i - 1].at > at) i -= 1;
+    const b = list[i];
+    const a = i > 0 ? list[i - 1] : null;
+    if (!a || at >= b.at) return b.t;
+    const span = b.at - a.at;
+    const t = span > 0 ? Math.min(1, Math.max(0, (at - a.at) / span)) : 1;
+    return a.t + (b.t - a.t) * t;
+  }
+
+  /**
+   * A flock's members as the newest frame that carried the flock has them. When a birth or a death has just changed the
+   * population, the delayed sample still has the old count; the viewer shows this one instead.
+   */
+  latestSwarm(id: number): WorldSwarm | null {
+    const members = this.swarmSnapshots[this.swarmSnapshots.length - 1]?.swarms.get(id);
+    return members ? { positions: [...members], velocities: null } : null;
   }
 
   /** Flock numeric ids in the newest frame that carried the flock. */

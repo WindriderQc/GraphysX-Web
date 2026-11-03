@@ -26,7 +26,7 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
 |---|---|
 | `mesa-island.ts` | the Mesa island as an `agent-world/v2` document, with Clawblox names, attributes and physical properties |
 | `island-world.ts` | fixed tick, characters, MoveTo/Jump/Stop/Pickup/Place/Throw, carry, rock impacts, observation, pose frames, exact snapshot/resume; the world registry (`mesa-island`, `living-island`) |
-| `living-island.ts` | the living island: five founder `dna-tree`s, a `flock` shy of agents and thrown blocks, an invisible `force-field` wind, the GatherSeed/Sow/NextGeneration rules, their observation, `swarms` in pose frames and the living part of snapshots |
+| `living-island.ts` | the living island: five founder `dna-tree`s, a `flock` shy of agents and thrown blocks whose birds carry genes, eat the trees' fruit, lay eggs and die on their own (`living-rules/2`), an invisible `force-field` wind, the GatherSeed/Sow/NextGeneration rules, their observation, `swarms` in pose frames and the living part of snapshots |
 | `gardener.mjs` | a scripted, model-free agent that gathers a seed, sows it and advances a generation over HTTP |
 | `index.ts` | the bundled world (rules + simulation, no I/O) |
 | `server.mjs` | HTTP: `/join` `/observe` `/input` `/chat` `/chat/messages` `/api.md` `/snapshot` `/spectate` `/healthz` |
@@ -69,7 +69,9 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
   once at startup. It needs `WORLD_SNAPSHOT_PATH`: when that file already holds a fork of the
   same source, startup resumes it; when it holds any other island, startup refuses instead of
   replacing it. After the first start, switch back to `resume`.
-  A source of another rules version is refused like any snapshot. To fork the running island,
+  A source of another rules version is refused like any snapshot, with one planned exception:
+  a `living-rules/1` living island (birds without genes) resumes or forks under `living-rules/2`,
+  its birds becoming founders where they flew. To fork the running island,
   first save `GET /snapshot` under the maintenance owner.
   There is deliberately no per-game fork: a persistent island keeps what was built on it, and
   `POST /world` refuses `from`/`sha256` (400) instead of silently starting a fresh island.

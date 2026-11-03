@@ -3473,6 +3473,11 @@ export class AgentWorldRuntime {
     for (const runtime of this.entities.values()) {
       if (runtime.definition.type === "force-field" && runtime.definition.forceField?.enabled) fields.push(runtime);
     }
+    // Sum the fields in id order, not entity order: floating-point addition of three or more
+    // fields depends on the order, and a world reloaded from its export lists its entities in
+    // another order (the headless island service measured it), so a resumed flock would drift
+    // from the one that never stopped by a last bit, then visibly.
+    fields.sort((a, b) => (a.definition.id < b.definition.id ? -1 : a.definition.id > b.definition.id ? 1 : 0));
     // Drop cached readings and inverses for fields that stopped existing (or stopped being
     // enabled fields), and cached hooks for consumers that left the world — so state() never
     // reports a ghost field, and a scene reload does not leak last scene's closures.

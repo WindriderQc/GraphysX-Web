@@ -101,7 +101,30 @@ export type AgentWorldFlock = {
   trailColor?: string;
   /** Deterministic seed for the initial scatter and per-member colour jitter. */
   seed?: number;
+  /**
+   * Optional per-member traits, by member index: a host that breeds the flock (the living
+   * island's birds) gives each member its own colour, body scale and steering. Factors multiply
+   * the flock's own `speed`, `separation`, `alignment` and `cohesion`; a missing entry or field
+   * means 1 (and the flock's colour), so a flock without `members` behaves exactly as before.
+   * `null` clears them.
+   */
+  members?: AgentWorldFlockMember[] | null;
 };
+
+/** One member's own traits (see {@link AgentWorldFlock.members}). */
+export type AgentWorldFlockMember = {
+  color?: string;
+  /** Body scale factor, 0.3 to 3. */
+  scale?: number;
+  /** Cruise speed factor, 0.2 to 3. */
+  speed?: number;
+  /** Reynolds weight factors, 0 to 5. */
+  separation?: number;
+  alignment?: number;
+  cohesion?: number;
+};
+
+export type ResolvedAgentWorldFlockMember = Required<AgentWorldFlockMember>;
 
 export type ResolvedAgentWorldFlock = {
   preset: AgentWorldFlockPresetId | null;
@@ -124,6 +147,8 @@ export type ResolvedAgentWorldFlock = {
   trailLength: number;
   trailColor: string;
   seed: number;
+  /** Present only when set, so a flock without member traits exports exactly as before. */
+  members?: ResolvedAgentWorldFlockMember[];
 };
 
 /**
@@ -298,9 +323,11 @@ export function resolveAgentWorldFlock(
   if (!Array.isArray(size) || size.length !== 3 || size.some((value) => !Number.isFinite(value))) {
     throw new Error("flock.size must contain three finite numbers");
   }
+  const count = Math.round(clamp(input.count ?? start.count, 1, AGENT_WORLD_FLOCK_MAX_COUNT));
+  const members = input.members === undefined ? start.members : input.members === null ? undefined : resolveFlockMembers(input.members, start.color);
   return {
     preset: input.preset === undefined ? start.preset : input.preset,
-    count: Math.round(clamp(input.count ?? start.count, 1, AGENT_WORLD_FLOCK_MAX_COUNT)),
+    count,
     bounds: input.bounds ?? start.bounds,
     radius: clamp(input.radius ?? start.radius, 0.5, 400),
     size: size.map((value) => clamp(value, 0.5, 400)) as [number, number, number],
@@ -319,7 +346,27 @@ export function resolveAgentWorldFlock(
     trailLength: Math.round(clamp(input.trailLength ?? start.trailLength, 2, AGENT_WORLD_FLOCK_MAX_TRAIL_LENGTH)),
     trailColor: input.trailColor ?? start.trailColor,
     seed: Math.round(clamp(input.seed ?? start.seed, 0, 1_000_000)),
+    // Entries past `count` are dropped; missing ones mean "as the flock".
+    ...(members?.length ? { members: members.slice(0, count) } : {}),
   };
+}
+
+function resolveFlockMembers(list: unknown, fallbackColor: string): ResolvedAgentWorldFlockMember[] {
+  if (!Array.isArray(list)) throw new Error("flock.members must be an array or null");
+  if (list.length > AGENT_WORLD_FLOCK_MAX_COUNT) throw new Error(`flock.members holds at most ${AGENT_WORLD_FLOCK_MAX_COUNT} entries`);
+  return list.map((raw, index) => {
+    const entry = (raw ?? {}) as AgentWorldFlockMember;
+    if (typeof entry !== "object" || Array.isArray(entry)) throw new Error(`flock.members[${index}] must be an object`);
+    if (entry.color !== undefined && !isColor(entry.color)) throw new Error(`Invalid flock.members[${index}].color: ${String(entry.color)}`);
+    return {
+      color: entry.color ?? fallbackColor,
+      scale: clamp(entry.scale ?? 1, 0.3, 3),
+      speed: clamp(entry.speed ?? 1, 0.2, 3),
+      separation: clamp(entry.separation ?? 1, 0, 5),
+      alignment: clamp(entry.alignment ?? 1, 0, 5),
+      cohesion: clamp(entry.cohesion ?? 1, 0, 5),
+    };
+  });
 }
 
 /**
@@ -368,6 +415,11 @@ const UP = new Vector3(0, 1, 0);
  * both hanging off a {@link Group} that takes the entity transform. Member positions are
  * entity-local, so moving or parenting the flock entity carries the whole population.
  */
+/** Instance colours multiply the material colour: members with their own colour need white. */
+function baseColor(config: ResolvedAgentWorldFlock): string {
+  return config.members ? "#ffffff" : config.color;
+}
+
 export class AgentWorldFlockSystem {
   readonly object = new Group();
   /**
@@ -382,9 +434,10 @@ export class AgentWorldFlockSystem {
    * Host seam: one more steering term, owned by a host running rules on top of the scene (the
    * headless world service makes birds shy of agents and of thrown blocks). Same contract as
    * {@link externalAcceleration} — entity-local, added to the steering sum, under the same
-   * speed clamp — but the runtime never sets or clears it.
+   * speed clamp — but the runtime never sets or clears it. `index` is the member's index, for a
+   * host that keeps its own record per member.
    */
-  hostAcceleration: ((position: Vector3, velocity: Vector3, out: Vector3) => void) | null = null;
+  hostAcceleration: ((position: Vector3, velocity: Vector3, out: Vector3, index: number) => void) | null = null;
   private config: ResolvedAgentWorldFlock;
   private mesh!: InstancedMesh;
   private trails: LineSegments | null = null;
@@ -395,6 +448,7 @@ export class AgentWorldFlockSystem {
   private trailCursor = 0;
   private elapsed = 0;
   private readonly dummy = new Object3D();
+  private readonly color = new Color();
   // Scratch vectors, allocated once. The recovered code did the same — a boid loop that
   // allocates is a boid loop that stutters.
   private readonly scratch = {
@@ -486,7 +540,7 @@ export class AgentWorldFlockSystem {
       // A cone pointing +Y, oriented per instance from its velocity — the recovered body.
       new ConeGeometry(config.memberSize * 0.29, config.memberSize, 5),
       new MeshStandardMaterial({
-        color: new Color(config.color),
+        color: new Color(baseColor(config)),
         emissive: new Color(config.emissive),
         emissiveIntensity: config.emissiveIntensity,
         roughness: 0.28,
@@ -522,8 +576,9 @@ export class AgentWorldFlockSystem {
       }
       mesh.setColorAt(index, new Color(config.color).offsetHSL(0, 0, (random() - 0.5) * 0.18));
     }
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     this.mesh = mesh;
+    // Own colours replace the jitter (the scatter stream above is drawn the same either way).
+    this.writeMemberColors();
     this.object.add(mesh);
 
     if (config.trails) {
@@ -565,24 +620,47 @@ export class AgentWorldFlockSystem {
    * geometry, trails, seed — rebuilds; weights, speeds and colours are live.
    */
   configure(config: ResolvedAgentWorldFlock): void {
+    const previous = this.config;
     const rebuild =
-      config.count !== this.config.count ||
-      config.bounds !== this.config.bounds ||
-      config.trails !== this.config.trails ||
-      config.trailLength !== this.config.trailLength ||
-      config.memberSize !== this.config.memberSize ||
-      config.seed !== this.config.seed;
+      config.count !== previous.count ||
+      config.bounds !== previous.bounds ||
+      config.trails !== previous.trails ||
+      config.trailLength !== previous.trailLength ||
+      config.memberSize !== previous.memberSize ||
+      config.seed !== previous.seed;
     this.config = config;
     if (rebuild) {
+      // A population that only grew or shrank keeps its members where they are: a host breeding
+      // the flock appends newborns and moves the last member into a dead one's slot, so only the
+      // newcomers start from the seeded scatter. Anything else rescatters, as before.
+      const sameSpace = config.bounds === previous.bounds && config.seed === previous.seed && config.memberSize === previous.memberSize &&
+        config.trails === previous.trails && config.trailLength === previous.trailLength;
+      const kept = sameSpace && config.count !== previous.count ? this.readMembers() : null;
       this.disposeParts();
       this.build(config);
+      if (kept) {
+        const overlap = Math.min(kept.positions.length, this.positions.length * 3);
+        this.writeMembers({ positions: [...kept.positions.slice(0, overlap), ...this.readMembers().positions.slice(overlap)],
+          velocities: [...kept.velocities.slice(0, overlap), ...this.readMembers().velocities.slice(overlap)], elapsed: kept.elapsed });
+      }
       return;
     }
     const material = this.mesh.material as MeshStandardMaterial;
-    material.color.set(config.color);
+    material.color.set(baseColor(config));
     material.emissive.set(config.emissive);
     material.emissiveIntensity = config.emissiveIntensity;
     if (this.trails) (this.trails.material as LineBasicMaterial).color.set(config.trailColor);
+    if (previous.members !== config.members) {
+      this.writeMemberColors();
+      this.writeInstances();
+    }
+  }
+
+  /** Each member's own colour, when the flock gives members their own traits. */
+  private writeMemberColors(): void {
+    const members = this.config.members;
+    if (members) for (let index = 0; index < members.length; index += 1) this.mesh.setColorAt(index, this.color.set(members[index].color));
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
 
   /**
@@ -603,7 +681,7 @@ export class AgentWorldFlockSystem {
 
     const config = this.config;
     const { separation, alignment, cohesion, diff, normal, desired } = this.scratch;
-    const maxSpeed = config.speed;
+    const members = config.members;
     const maxForce = config.maxForce;
     const separationDistance = config.separationDistance;
     const neighborDistance = config.neighborDistance;
@@ -611,6 +689,9 @@ export class AgentWorldFlockSystem {
     const count = this.positions.length;
 
     for (let index = 0; index < count; index += 1) {
+      // A member's own factors (1 without `members`, which leaves every product unchanged).
+      const own = members?.[index];
+      const maxSpeed = config.speed * (own?.speed ?? 1);
       const acceleration = this.accelerations[index].set(0, 0, 0);
       separation.set(0, 0, 0);
       alignment.set(0, 0, 0);
@@ -638,19 +719,19 @@ export class AgentWorldFlockSystem {
       if (separationCount > 0) {
         separation.divideScalar(separationCount);
         if (onSphere) separation.projectOnPlane(normal);
-        if (separation.lengthSq() > 1e-8) acceleration.add(separation.setLength(maxForce * config.separation));
+        if (separation.lengthSq() > 1e-8) acceleration.add(separation.setLength(maxForce * config.separation * (own?.separation ?? 1)));
       }
       if (neighborCount > 0) {
         alignment.divideScalar(neighborCount);
         if (onSphere) alignment.projectOnPlane(normal);
         if (alignment.lengthSq() > 1e-8) {
-          acceleration.add(alignment.setLength(maxSpeed).sub(this.velocities[index]).clampLength(0, maxForce * config.alignment));
+          acceleration.add(alignment.setLength(maxSpeed).sub(this.velocities[index]).clampLength(0, maxForce * config.alignment * (own?.alignment ?? 1)));
         }
         cohesion.divideScalar(neighborCount);
         desired.subVectors(cohesion, position);
         if (onSphere) desired.projectOnPlane(normal);
         if (desired.lengthSq() > 1e-8) {
-          acceleration.add(desired.setLength(maxSpeed).sub(this.velocities[index]).clampLength(0, maxForce * config.cohesion));
+          acceleration.add(desired.setLength(maxSpeed).sub(this.velocities[index]).clampLength(0, maxForce * config.cohesion * (own?.cohesion ?? 1)));
         }
       }
       if (onSphere) {
@@ -689,7 +770,7 @@ export class AgentWorldFlockSystem {
       }
       if (this.hostAcceleration) {
         const external = this.scratch.external;
-        this.hostAcceleration(position, this.velocities[index], external);
+        this.hostAcceleration(position, this.velocities[index], external, index);
         if (onSphere) external.projectOnPlane(normal);
         acceleration.add(external);
       }
@@ -698,6 +779,7 @@ export class AgentWorldFlockSystem {
     for (let index = 0; index < count; index += 1) {
       const position = this.positions[index];
       const velocity = this.velocities[index];
+      const maxSpeed = config.speed * (members?.[index]?.speed ?? 1);
       velocity.addScaledVector(this.accelerations[index], delta).clampLength(maxSpeed * 0.38, maxSpeed);
       position.addScaledVector(velocity, delta);
       if (onSphere) {
@@ -733,7 +815,7 @@ export class AgentWorldFlockSystem {
         this.scratch.diff.copy(velocity).normalize();
         this.dummy.quaternion.setFromUnitVectors(UP, this.scratch.diff);
       }
-      this.dummy.scale.setScalar(0.82 + (index % 7) * 0.035);
+      this.dummy.scale.setScalar(this.config.members?.[index]?.scale ?? 0.82 + (index % 7) * 0.035);
       this.dummy.updateMatrix();
       this.mesh.setMatrixAt(index, this.dummy.matrix);
     }

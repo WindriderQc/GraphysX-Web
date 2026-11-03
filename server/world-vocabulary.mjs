@@ -144,6 +144,7 @@ const describe = {
     radius: "Shell radius for sphere bounds.", size: "Half-extents [x,y,z] for box bounds.", separation: "Reynolds weight.", alignment: "Reynolds weight.", cohesion: "Reynolds weight.",
     separationDistance: "Push-away distance.", neighborDistance: "Awareness distance.", speed: "Cruise m/s.", maxForce: "Turn tightness.", memberSize: "Body length in metres.",
     color: "#rrggbb.", emissive: "#rrggbb.", emissiveIntensity: "Glow.", trails: "Motion trails (costly).", trailLength: "Samples per member.", trailColor: "#rrggbb.", seed: "Deterministic scatter.",
+    members: "Optional per-member traits by index: { color, scale, speed, separation, alignment, cohesion } (factors of the flock's own; null clears).",
   },
   crowd: {
     preset: "Curated starting point from `crowdPresets`, or null.", count: "Members.", pursuers: "How many start pursuing.", size: "Ground half-extents [x,z].",

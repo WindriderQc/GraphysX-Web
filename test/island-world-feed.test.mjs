@@ -186,6 +186,30 @@ test("living island: flock members ride the frames, interpolated, and re-sent tr
   assert.equal(feed.worldStructureKey(feed.applyWorldEntities(grown, { tick: 300 })), feed.worldStructureKey(grown));
 });
 
+test("a flock's population changes are patched in place, and the world's clock is sampled for the leaf fall", () => {
+  const flock = (count, members) => ({ id: "flock_1", type: "flock", flock: { preset: "starlings", count, size: [36, 3, 36], ...(members ? { members } : {}) } });
+  const base = feed.worldSceneFromHello({ ...hello, document: { ...document, entities: [...document.entities, flock(28)] }, ids: { ...hello.ids, 70: "flock_1" } });
+  const born = feed.applyWorldEntities(base, { tick: 200, added: [{ entity: flock(29, [{ color: "#336699", scale: 1.1 }]), numericId: 70 }] });
+  assert.equal(feed.worldStructureKey(born), feed.worldStructureKey(base), "births and deaths never rebuild the island");
+  assert.notEqual(feed.worldFlockPopulations(born).get("flock_1"), feed.worldFlockPopulations(base).get("flock_1"), "but the flock's population is tracked");
+  const retuned = feed.applyWorldEntities(base, { tick: 200, added: [{ entity: { ...flock(28), flock: { ...flock(28).flock, speed: 9 } }, numericId: 70 }] });
+  assert.notEqual(feed.worldStructureKey(retuned), feed.worldStructureKey(base), "any other flock change still rebuilds");
+
+  const buffer = new feed.WorldPoseBuffer(150);
+  assert.equal(buffer.sampleTime(1000), null, "no clock before a frame");
+  buffer.push({ tick: 600, t: 10, poses: [], swarms: [[70, 0, 0, 0]] }, 1000);
+  assert.equal(buffer.sampleTime(1000), 10);
+  buffer.push({ tick: 606, t: 10.1, poses: [], swarms: [[70, 0, 0, 0]] }, 1100);
+  buffer.push({ tick: 612, t: 10.2, poses: [], swarms: [[70, 0, 0, 0, 1, 1, 1]] }, 1200);
+  assert.ok(Math.abs(buffer.sampleTime(1200) - 10.05) < 1e-9, "interpolated 150 ms behind the newest frame");
+  assert.equal(buffer.sampleSwarm(70, 1200).positions.length, 3, "the delayed sample still has the old count");
+  assert.deepEqual(buffer.latestSwarm(70), { positions: [0, 0, 0, 1, 1, 1], velocities: null }, "the newest frame has the new one");
+  assert.equal(buffer.latestSwarm(99), null);
+  buffer.push({ tick: 618, t: 10.3, poses: [] }, 1300);
+  assert.equal(buffer.latestSwarm(70).positions.length, 6, "a recorded frame without the flock keeps its newest members");
+  assert.ok(feed.WORLD_LEAF_SEASON_SECONDS > 17, "a calmer autumn than the recovered 17 s");
+});
+
 test("recorded frames further apart than live ones are still drawn between frames", () => {
   const frame = (tick, x, swarm) => ({ tick, t: tick / 60, poses: [[43, x, 0, 0, 0, 0, 0, 1]], ...(swarm === undefined ? {} : { swarms: [[70, swarm, 0, 0]] }) });
   // Live, 10 Hz: the 150 ms delay is unchanged.
