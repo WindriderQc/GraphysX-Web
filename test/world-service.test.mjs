@@ -538,3 +538,83 @@ describe("viewers and first-person images (phase 3)", () => {
     assert.equal(recording.lastTick, Math.max(recording.actions.at(-1).tick, recording.frames.at(-1)?.tick ?? 0, recording.changes.at(-1).tick));
   });
 });
+
+describe("recording rates (living island, stepped by hand)", () => {
+  /** A spectator stream: `until(done)` reads events until `done(events)` or the deadline. */
+  async function spectate(url) {
+    const controller = new AbortController();
+    const response = await fetch(`${url}/spectate`, { signal: controller.signal });
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const events = [];
+    let buffer = "";
+    const until = async (done, ms = 3000) => {
+      const deadline = Date.now() + ms;
+      while (!done(events) && Date.now() < deadline) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value);
+        let cut;
+        while ((cut = buffer.indexOf("\n\n")) >= 0) {
+          const block = buffer.slice(0, cut);
+          buffer = buffer.slice(cut + 2);
+          const name = /^event: (.+)$/m.exec(block)?.[1];
+          const data = /^data: (.+)$/m.exec(block)?.[1];
+          if (name && data) events.push({ name, data: JSON.parse(data) });
+        }
+      }
+      return events;
+    };
+    return { until, close: () => controller.abort() };
+  }
+
+  /** Runs a recorded living island for `ticks`, an invalid action at `actAt`; returns live frames and the recording. */
+  async function run(options, ticks, actAt) {
+    const recordDir = mkdtempSync(join(tmpdir(), "graphysx-record-rate-"));
+    const running = await startWorldServer({ module: m, apiMarkdown, port: 0, realtime: false, world: "living-island", recordDir, ...options });
+    let live;
+    const start = running.world.tick;
+    try {
+      const viewer = await spectate(running.url);
+      await viewer.until((events) => events.some((event) => event.name === "hello"));
+      const { session } = running.world.join("Recorder");
+      for (let tick = 1; tick <= ticks; tick += 1) {
+        running.tick();
+        if (tick === actAt) running.world.apply(session, { type: "Fly", data: {} });
+      }
+      live = (await viewer.until((events) => events.some((event) => event.name === "frame" && event.data.tick >= start + ticks)))
+        .filter((event) => event.name === "frame" && event.data.tick > start).map((event) => event.data);
+      viewer.close();
+    } finally {
+      await running.close();
+    }
+    const recording = parseRecording(readFileSync(join(recordDir, "instances", running.world.instanceId, "graphysx-recording.ndjson"), "utf8"));
+    rmSync(recordDir, { recursive: true, force: true });
+    return { start, live, recorded: recording.frames.filter((frame) => frame.tick > start), recording };
+  }
+
+  it("records every live frame by default, as before", async () => {
+    const { start, live, recorded } = await run({}, 240);
+    assert.equal(live.length, 40);
+    assert.deepEqual(recorded.map((frame) => frame.tick), live.map((frame) => frame.tick), "10 Hz, like spectators");
+    assert.ok(recorded.every((frame) => frame.swarms), "the flock in every frame");
+    assert.deepEqual(recorded.filter((frame) => frame.inspection).map((frame) => frame.tick), [60, 120, 180, 240].map((tick) => start + tick), "the inspection every second");
+  });
+
+  it("keeps fewer poses, flock frames and inspections; spectators still get 10 Hz", async () => {
+    const actAt = 610;
+    const { start, live, recorded, recording } = await run({ recordFrameHz: 5, recordSwarmHz: 1, recordInspectionSeconds: 30 }, 720, actAt);
+    assert.equal(live.length, 120, "live: 10 Hz");
+    assert.equal(live.filter((frame) => frame.inspection).length, 12, "live: the inspection every second");
+    assert.ok(live.every((frame) => frame.swarms), "live: the flock in every frame");
+    assert.equal(recorded.length, 60, "recorded: 5 Hz");
+    assert.ok(recorded.every((frame) => frame.tick % 12 === 0));
+    assert.deepEqual(recorded.filter((frame) => frame.swarms).map((frame) => frame.tick % 60), new Array(12).fill(0), "the flock once a second");
+    const inspected = recorded.filter((frame) => frame.inspection);
+    assert.ok(inspected.length <= 6, `inspections recorded on change only (${inspected.length} of 12 samples)`);
+    const changed = inspected.find((frame) => frame.tick > start + actAt);
+    assert.ok(changed && changed.tick <= start + actAt + 60, "a changed action result is recorded at the next sample");
+    assert.equal(changed.inspection.agents[0].attributes.LastActionResult, "InvalidAction");
+    assert.equal(helloAt(recording, start + 720).inspection.agents[0].attributes.LastActionResult, "InvalidAction", "a replay rebuilds it");
+  });
+});

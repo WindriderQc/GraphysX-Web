@@ -263,7 +263,11 @@ export function pickWorldAgent(agents: readonly WorldAgent[], name: string | nul
 // ---- motion between frames ----------------------------------------------------------------
 
 export type WorldPose = { p: ClawVec3; q: ClawQuat };
-type FrameSnapshot = { at: number; tick: number; t: number; poses: Map<number, WorldPose>; swarms: Map<number, number[]> };
+type FrameSnapshot = { at: number; tick: number; t: number; poses: Map<number, WorldPose> };
+type SwarmSnapshot = { at: number; t: number; swarms: Map<number, number[]> };
+
+/** Longest smoothing delay: enough to bracket recorded frames down to 0.5 Hz. */
+const MAX_DELAY_MS = 2500;
 
 /** One flock's members (flock-local, flat x, y, z), with velocities when two frames bracket them. */
 export type WorldSwarm = { positions: number[]; velocities: number[] | null };
@@ -272,25 +276,44 @@ export type WorldSwarm = { positions: number[]; velocities: number[] | null };
  * A short arrival-time buffer, drawn about `delayMs` behind the newest frame so two frames
  * usually bracket the instant shown (10 Hz frames, 150 ms by default). A backwards or very large
  * tick jump clears it; a replay seek also sends a fresh hello, which clears it too.
+ *
+ * A recording may keep fewer frames than the live world sends, and carry the flock (`swarms`) in
+ * fewer of them still. So the flock has its own timeline (a frame without `swarms` leaves it as
+ * is), and each timeline is drawn at least 1.25 median arrival gaps behind its newest frame, up to
+ * MAX_DELAY_MS. At the live 10 Hz that stays `delayMs`. A zero `delayMs` (capture, reduced
+ * motion) always shows the newest frame.
  */
 export class WorldPoseBuffer {
   private snapshots: FrameSnapshot[] = [];
+  private swarmSnapshots: SwarmSnapshot[] = [];
   constructor(private readonly delayMs = 150, private readonly maxSnapshots = 8) {}
+
+  /** The delay for one timeline: `delayMs`, or longer when its frames arrive further apart. */
+  private delayFor(list: { at: number }[]): number {
+    if (this.delayMs <= 0 || list.length < 3) return this.delayMs;
+    const gaps = list.slice(1).map((snapshot, index) => snapshot.at - list[index].at).sort((a, b) => a - b);
+    const median = gaps[gaps.length >> 1];
+    return Math.max(this.delayMs, Math.min(MAX_DELAY_MS, median * 1.25));
+  }
 
   push(frame: WorldFrame, at: number, jumpTicks = 600): boolean {
     const last = this.snapshots[this.snapshots.length - 1];
     let reset = false;
-    if (last && (frame.tick < last.tick || frame.tick - last.tick > jumpTicks)) { this.snapshots = []; reset = true; }
+    if (last && (frame.tick < last.tick || frame.tick - last.tick > jumpTicks)) { this.clear(); reset = true; }
     const poses = new Map<number, WorldPose>();
     for (const [id, x, y, z, qx, qy, qz, qw] of frame.poses) poses.set(id, { p: [x, y, z], q: [qx, qy, qz, qw] });
-    const swarms = new Map<number, number[]>();
-    for (const [id, ...members] of frame.swarms ?? []) swarms.set(id, members);
-    this.snapshots.push({ at, tick: frame.tick, t: frame.t, poses, swarms });
+    this.snapshots.push({ at, tick: frame.tick, t: frame.t, poses });
     if (this.snapshots.length > this.maxSnapshots) this.snapshots.shift();
+    if (frame.swarms) {
+      const swarms = new Map<number, number[]>();
+      for (const [id, ...members] of frame.swarms) swarms.set(id, members);
+      this.swarmSnapshots.push({ at, t: frame.t, swarms });
+      if (this.swarmSnapshots.length > this.maxSnapshots) this.swarmSnapshots.shift();
+    }
     return reset;
   }
 
-  clear(): void { this.snapshots = []; }
+  clear(): void { this.snapshots = []; this.swarmSnapshots = []; }
 
   get size(): number { return this.snapshots.length; }
 
@@ -303,7 +326,7 @@ export class WorldPoseBuffer {
   sample(id: number, now: number): WorldPose | null {
     const list = this.snapshots;
     if (!list.length) return null;
-    const at = now - this.delayMs;
+    const at = now - this.delayFor(list);
     let i = list.length - 1;
     while (i > 0 && list[i - 1].at > at) i -= 1;
     const b = list[i];
@@ -321,8 +344,8 @@ export class WorldPoseBuffer {
     };
   }
 
-  /** Flock numeric ids in the newest frame. */
-  swarmIds(): number[] { return [...(this.snapshots[this.snapshots.length - 1]?.swarms.keys() ?? [])]; }
+  /** Flock numeric ids in the newest frame that carried the flock. */
+  swarmIds(): number[] { return [...(this.swarmSnapshots[this.swarmSnapshots.length - 1]?.swarms.keys() ?? [])]; }
 
   /**
    * A flock's members at `now - delay`, interpolated like poses, with each member's velocity
@@ -330,9 +353,9 @@ export class WorldPoseBuffer {
    * shows the newest frame as is.
    */
   sampleSwarm(id: number, now: number): WorldSwarm | null {
-    const list = this.snapshots;
+    const list = this.swarmSnapshots;
     if (!list.length) return null;
-    const at = now - this.delayMs;
+    const at = now - this.delayFor(list);
     let i = list.length - 1;
     while (i > 0 && list[i - 1].at > at) i -= 1;
     const b = list[i];
