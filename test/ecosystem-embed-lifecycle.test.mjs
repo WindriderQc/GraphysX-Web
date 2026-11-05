@@ -32,6 +32,7 @@ function harness() {
       settings.onEvent("ready", {});
       const app = { disposed: 0, live: undefined, state: () => ({ tour: { script: "memory,garage" }, ...(app.live ? { live: app.live } : {}) }),
         setLiveState(value) { app.live = value; settings.onEvent("live-state-changed", {}); return true; },
+        setNarrator(value) { app.narrator = value; app.narratorSets = (app.narratorSets || 0) + 1; },
         dispose() { this.disposed++; }, tour: { setScript: (script, autoplay) => { app.lastScript = { script, autoplay }; } } };
       apps.push(app); return app;
     },
@@ -90,5 +91,20 @@ test("a live update is acknowledged by the same app but only the following rende
   assert.equal(h.element.state().presentation.live.read.id, "view_fixture");
   assert.equal(h.element.events.filter(event => event.type === "ecosystem-live-state-changed").length, 1);
   assert.equal(h.hosts.length, 1, "a refresh never allocates a replacement renderer");
+  h.element.disconnectedCallback();
+});
+
+test("a host narrator is retained before mounting and can replace the current transport", () => {
+  const h = harness();
+  const first = async () => {}, second = async () => {};
+  h.element.narrator = first; h.element.connectedCallback();
+  assert.equal(h.apps[0].narrator, first);
+  h.element.narrator = second;
+  assert.equal(h.apps[0].narrator, second);
+  h.element.setLiveState({ status: "available", read: { id: "view_fixture" } }); h.render();
+  assert.equal(h.apps[0].narrator, second);
+  assert.equal(h.apps[0].narratorSets, 2, "live refresh never replaces or restarts the voice transport");
+  h.element.disconnectedCallback(); h.element.connectedCallback();
+  assert.equal(h.apps[1].narrator, second);
   h.element.disconnectedCallback();
 });

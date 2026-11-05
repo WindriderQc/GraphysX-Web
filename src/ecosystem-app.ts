@@ -13,6 +13,7 @@
  */
 import { Box3, BoxGeometry, EdgesGeometry, Group, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, Raycaster, RingGeometry, SphereGeometry, TubeGeometry, Vector2, Vector3 } from "three";
 import "./ecosystem.css";
+import { createTourNarration, type EcosystemNarrator } from "./ecosystem-narration";
 import { foldPresentationPanel } from "./presentation-mobile";
 import { ecoIssues, ecoNode, ECOSYSTEM_SNAPSHOT_DATE, ECOSYSTEM_SOURCE, type EcoNode } from "./ecosystem-data";
 import { composeEcosystemWorld, ECO_COLOURS, ECO_HALF, ECO_NODE_TAG, ecoNodeIdOf, KIND_COLOUR, STATUS_COLOUR, type EcoModel } from "./ecosystem-scene";
@@ -24,6 +25,7 @@ import { mountEcosystemLiveLayer } from "./ecosystem-live-layer";
 import { ecosystemLiveScope } from "./ecosystem-live-state";
 
 export type EcosystemApplication = {
+  setNarrator: (narrator: EcosystemNarrator) => void;
   dispose: () => void;
   state: () => unknown;
   advanceTime: (milliseconds: number) => unknown;
@@ -78,6 +80,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
       <div class="gx-eco-controls">
         <button type="button" data-action="previous" aria-label="Étape précédente">⏮</button>
         <button type="button" data-action="toggle" aria-label="Lire">▶ Lire</button>
+        <button type="button" data-action="voice" aria-pressed="false">🔊 Activer la voix</button>
         <button type="button" data-action="next" aria-label="Étape suivante">⏭</button>
         <progress data-progress max="1" value="0" aria-label="Avancement de l'étape"></progress>
         <span class="gx-eco-count" data-count></span>
@@ -235,6 +238,23 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   let narrationShown = 0;
   const currentStep = (): TourStep | null => adhoc ?? player.state().step;
 
+  let voiceOn = false;
+  const narration = createTourNarration(() => {
+    renderSteps();
+    if (!voiceOn || disposed || !player.state().playing || adhoc) return;
+    if (player.next()) enter();
+    else { player.pause(); renderSteps(); }
+  }, () => {
+    player.pause();
+    notice = "La voix est indisponible. Réactivez-la pour réessayer ou poursuivez sans voix.";
+    voiceOn = false; renderSteps(); element("[data-notice]").textContent = notice;
+  });
+  function pause(): void { player.pause(); narration.stop(); renderSteps(); }
+  function togglePlayback(): void {
+    if (player.state().playing || narration.active()) { pause(); return; }
+    if (!adhoc) player.play();
+    enter();
+  }
   function renderSteps(): void {
     const list = element<HTMLOListElement>("[data-steps]");
     const state = player.state();
@@ -248,24 +268,29 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
       return li;
     }));
     const toggle = button("toggle");
-    toggle.textContent = state.playing ? "⏸ Pause" : "▶ Lire";
-    toggle.setAttribute("aria-label", state.playing ? "Pause" : "Lire");
-    toggle.title = "Faire défiler les étapes et le texte, sans voix";
+    const reading = state.playing || narration.active();
+    toggle.textContent = reading ? "⏸ Pause" : "▶ Lire";
+    toggle.setAttribute("aria-label", reading ? "Pause" : "Lire");
+    toggle.title = voiceOn ? "Écouter la visite ; Pause arrête la phrase" : "Faire défiler les étapes et le texte, sans voix";
+    button("voice").textContent = voiceOn ? "🔇 Couper la voix" : "🔊 Activer la voix";
+    button("voice").setAttribute("aria-pressed", String(voiceOn));
     element("[data-count]").textContent = `${state.index + 1} / ${state.count}`;
   }
   function enter(seconds = reduced ? 0 : 1.1): void {
+    narration.stop();
     const step = currentStep();
     if (!step) return;
     picture = tourPicture(step);
     drawPicture(picture);
     element("[data-title]").textContent = picture.title;
     narrationFull = picture.narration;
-    narrationShown = reduced ? narrationFull.length : 0;
-    element("[data-narration]").textContent = reduced ? narrationFull : "";
+    narrationShown = reduced || voiceOn ? narrationFull.length : 0;
+    element("[data-narration]").textContent = reduced || voiceOn ? narrationFull : "";
     if (picture.wide) overviewCamera(seconds); else frameNodes([...picture.focus, ...picture.amber], seconds);
-    renderSteps();
     element("[data-notice]").textContent = notice;
     const state = player.state();
+    if (voiceOn && (state.playing || adhoc)) narration.speak(narrationFull);
+    renderSteps();
     emit("scene-changed", { index: state.index, count: state.count, kind: step.kind, label: tourStepLabel(step), playing: state.playing, script: tourText(player.steps()), adhoc: adhoc !== null });
   }
   function openNode(id: string): void {
@@ -284,12 +309,15 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   }
   button("previous").addEventListener("click", () => { adhoc = null; if (player.previous()) enter(); else enter(0); });
   button("next").addEventListener("click", () => { adhoc = null; if (player.next()) enter(); else enter(0); });
-  button("toggle").addEventListener("click", () => {
-    if (player.state().playing) player.pause();
-    else { adhoc = null; const before = player.state().index; player.play(); if (player.state().index !== before) { enter(); return; } }
-    renderSteps();
+  button("toggle").addEventListener("click", togglePlayback);
+  button("voice").addEventListener("click", () => {
+    voiceOn = !voiceOn; notice = "";
+    if (voiceOn && !adhoc) player.play();
+    enter();
   });
-  button("exit").addEventListener("click", onExit);
+  const visibility = (): void => { if (document.hidden) pause(); };
+  document.addEventListener("visibilitychange", visibility);
+  button("exit").addEventListener("click", () => { pause(); onExit(); });
 
   // ---- hover and pick -----------------------------------------------------------------------
   const halo = new LineSegments(unitEdges, new LineBasicMaterial({ color: ECO_COLOURS.cyan, transparent: true, opacity: 0.95, depthTest: false }));
@@ -449,7 +477,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
       lastLiveView = live;
       emit("live-state-changed", { status: live?.status ?? null, readId: live?.read?.id ?? null });
     }
-    if (player.tick(delta)) { adhoc = null; enter(); }
+    if (!voiceOn && player.tick(delta)) { adhoc = null; enter(); }
     const state = player.state();
     element<HTMLProgressElement>("[data-progress]").value = state.seconds ? Math.min(1, state.elapsed / state.seconds) : 0;
     if (narrationShown < narrationFull.length) {
@@ -506,10 +534,11 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   return {
     state,
     setLiveState: (value: unknown) => liveLayer.set(value),
+    setNarrator: (value) => { narration.setNarrator(value); if (voiceOn) enter(); },
     advanceTime: (milliseconds: number) => { frame(Math.max(0, milliseconds) / 1000); return state(); },
     tour: {
       play: () => { adhoc = null; player.play(); enter(); },
-      pause: () => { player.pause(); renderSteps(); },
+      pause,
       next: () => { adhoc = null; if (player.next()) enter(); },
       previous: () => { adhoc = null; if (player.previous()) enter(); },
       goto: (index) => { adhoc = null; player.goto(index); enter(); },
@@ -517,6 +546,8 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     },
     dispose: () => {
       disposed = true;
+      narration.stop();
+      document.removeEventListener("visibilitychange", visibility);
       unsubscribe();
       liveLayer.dispose();
       clearPicture();

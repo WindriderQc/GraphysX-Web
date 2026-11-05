@@ -99,7 +99,11 @@ s'ouvre par-dessus l'étape courante, la visite se met en pause, `Échap` revien
 `watch` est la graine du futur tableau d'alertes : elle allume les points ouverts et les
 remontées de métriques.
 
-« Lire » fait défiler les étapes et leur texte ; aucune voix n'est synthétisée. Le bandeau
+« Lire » fait défiler les étapes et leur texte. La visite reste silencieuse tant que le
+visiteur n'active pas explicitement « Activer la voix » ; une fois activée, la voix guide
+la progression et Pause annule la phrase en cours. Le [contrat de narration](DISKX_EMBED.md#spoken-ecosystem-tour)
+décrit le transport Nestor fourni par l'hôte et la voix de l'appareil en mode autonome.
+L'actualisation des états n'active ni ne relance cette narration. Le bandeau
 précise que la carte est datée. Sur un écran étroit, le cadrage recule pour conserver le
 champ horizontal et les étiquettes restent entièrement dans les bords de l'écran.
 
