@@ -99,7 +99,7 @@ export function mountIslandExplorer(surface: HTMLElement, options: ExplorerOptio
     // on the rows they actually display: a new bird must not replace a tree's controls.
     const structureRows = view === "explore" ? [] : view === "lineage" || view === "compare"
       ? model.items.filter(row => row.category === "trees")
-      : view === "map" ? model.items : view === "timeline" ? model.items.filter(row => row.kind !== "bird")
+      : view === "map" || view === "timeline" ? model.items.filter(row => row.kind !== "bird")
         : view === "explore" && item ? children : results;
     const key = JSON.stringify([view, view === "timeline" ? [changes.length, model.messages?.length] : null, view === "timeline" ? model.actions.at(-1)?.id || model.actions.at(-1)?.tick : null, model.key, selected, item?.name, item?.kind, category, query, fields, relationships,
       structureRows.map(row => [row.id, row.name, row.visible, row.kind, row.attributes.Generation, row.attributes.Parent, row.attributes.Lineage])]);
@@ -149,7 +149,7 @@ export function mountIslandExplorer(surface: HTMLElement, options: ExplorerOptio
       if (counter && counter.textContent !== String(model.counts[id])) counter.textContent = String(model.counts[id]);
     }
     if (view === "timeline") workspace.refreshTimeline(get("[data-ix-content]"), model);
-    if (view === "map") workspace.refreshMap(get("[data-ix-content]"), model);
+    if (view === "map") workspace.refreshMap(get("[data-ix-content]"), model, selected);
     if (item) {
       const list = panel.querySelector<HTMLElement>("[data-ix-children]");
       if (list) {

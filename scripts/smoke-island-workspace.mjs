@@ -45,11 +45,17 @@ try {
   await page.screenshot({path:path.join(artifacts,'island-rich-compare.png')});
   console.log('browser: comparison passed');
   await view(page,'map');await select(page,'tree_1');assert.equal((await state(page)).explorer.view,'map');
+  const zoomButton=await page.locator('[data-map-zoom="2"]').elementHandle();
+  const birdsBefore=(await state(page)).explorer.counts.birds;
+  for(let tick=0;tick<1200;tick++)native.step();world.tick();
+  await page.waitForFunction(before=>JSON.parse(window.render_game_to_text()).application.explorer.counts.birds!==before,birdsBefore);
+  assert.equal(await zoomButton.evaluate(button=>button.isConnected),true,'a live population update preserves map controls');
   await page.locator('[data-map-zoom="2"]').click();await page.locator('[data-map-reset]').click();
   const marker=page.locator('.ix-map [data-ix-select="tree_2"]');await marker.focus();await page.keyboard.press('Enter');
   assert.equal((await state(page)).explorer.selected,'tree_2');
   await page.screenshot({path:path.join(artifacts,'island-rich-map.png')});
   await page.locator('[data-map-individual]').check();await page.locator('.ix-map [data-ix-select="flock_1:bird:0"]').focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.querySelectorAll('.ix-map [data-ix-select*=":bird:"]').length===JSON.parse(window.render_game_to_text()).application.explorer.counts.birds-1);
   await page.waitForFunction(()=>JSON.parse(window.render_game_to_text()).application.selectedIndividual==='flock_1:bird:0');
   await page.locator('[data-ix-focus]').click();
   await view(page,'explore');assert.match(await page.locator('[data-ix-content]').textContent(),/Numéro dans la volée/);
