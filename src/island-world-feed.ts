@@ -255,15 +255,25 @@ export function worldTransientDefinitions(scene: WorldScene): WorldEntityDefinit
 }
 
 /**
- * World services before `agent.origin` sent each avatar bare (no geometry, no profile) while
- * moving it as a 2 x 5 x 2 capsule posed at its centre. Recordings keep those avatars, so a bare
- * one gets that body here; an avatar that declares its own body is left alone.
+ * World services before `agent.origin` moved each avatar as a 2 x 5 x 2 capsule posed at its
+ * centre, but described it at the runtime's default size: bare when it joined, and with the
+ * default geometry (height 1, radius 0.5) filled in by the hello document. Recordings keep those
+ * avatars, so one with no origin and that default size gets the capsule body here; an avatar
+ * that declares its own body or origin is left alone.
  */
 export const LEGACY_WORLD_AVATAR_BODY = { geometry: { height: 5, radius: 1 }, agent: { origin: "center" } } as const;
 
 function withLegacyAvatarBody(definition: WorldEntityDefinition): WorldEntityDefinition {
-  if (definition.type !== "agent" || definition.geometry !== undefined || definition.agent !== undefined) return definition;
-  return { ...definition, geometry: { ...LEGACY_WORLD_AVATAR_BODY.geometry }, agent: { ...LEGACY_WORLD_AVATAR_BODY.agent } };
+  if (definition.type !== "agent") return definition;
+  const agent = isRecord(definition.agent) ? definition.agent : {};
+  const geometry = isRecord(definition.geometry) ? definition.geometry : {};
+  const defaultSize = (geometry.height ?? 1) === 1 && (geometry.radius ?? 0.5) === 0.5;
+  if (agent.origin !== undefined || !defaultSize) return definition;
+  return {
+    ...definition,
+    geometry: { ...geometry, ...LEGACY_WORLD_AVATAR_BODY.geometry },
+    agent: { ...agent, ...LEGACY_WORLD_AVATAR_BODY.agent },
+  };
 }
 
 export function worldEntityKinds(scene: WorldScene): Record<string, number> {
