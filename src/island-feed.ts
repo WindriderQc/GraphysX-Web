@@ -337,10 +337,11 @@ export function islandEntityPlan(
         type: "agent", label: look?.name ?? "Agent",
         geometry: { height: round(h), radius: round(Math.max(0.35, Math.min(w, d) * 0.32)), radialSegments: 24 },
         material: { color: hex(color, "#e6734d"), emissive: "#5a1d0c", emissiveIntensity: 0.35, roughness: 0.35, metalness: 0.2 },
-        agent: { role: "Clawblox agent", status: "live", perceptionRadius: 8, capabilities: ["observe", "move", "carry"] },
+        // The pose is the HumanoidRootPart's centre; the avatar stands on its base.
+        agent: { role: "Clawblox agent", status: "live", perceptionRadius: 8, capabilities: ["observe", "move", "carry"], origin: "center" },
         castShadow: true, receiveShadow: false,
       })],
-      placement: placement({ localOffset: [0, round(-h / 2), 0], moving: true }),
+      placement: placement({ moving: true }),
     };
   }
   // Pickup cubes and anything else: the part's own primitive, in its own colour.

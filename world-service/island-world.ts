@@ -56,6 +56,14 @@ const JUMP_COOLDOWN = 0.18;
 // The Clawblox HumanoidRootPart is a 2 x 5 x 2 part; a capsule of that size rests at the same
 // height (y = 2.55 on Mesa ground, measured on both worlds).
 const CHARACTER = { radius: 1, halfHeight: 1.5, autostepHeight: 1, autostepMinWidth: 0.01, maxSlopeClimbRadians: Math.PI / 4, snapToGround: 0.2, pushMass: 12 };
+/**
+ * The avatar's body is the character's capsule, and its pose is the capsule's centre: viewers
+ * draw it that size with its feet on the capsule's base (`agent.origin: "center"`).
+ */
+export const AVATAR_BODY = {
+  geometry: { height: 2 * (CHARACTER.halfHeight + CHARACTER.radius), radius: CHARACTER.radius },
+  agent: { origin: "center" as const },
+};
 const OUT_OF_BOUNDS_Y = -200;
 const PICKUP_RANGE = 6;
 const PICKUP_SEARCH = 1.5;
@@ -366,7 +374,8 @@ export class IslandWorld {
     const entityId = `agent-${numericId}`;
     const label = name.slice(0, 64) || "Agent";
     // The avatar is an ordinary `agent` entity: viewers render it from the same document.
-    const spawned = this.runtime.spawn({ id: entityId, label, type: "agent", transform: { position } });
+    const avatar = { id: entityId, label, type: "agent" as const, transform: { position }, ...structuredClone(AVATAR_BODY) };
+    const spawned = this.runtime.spawn(avatar);
     if (!spawned.ok) throw new Error(`Could not add the agent avatar: ${JSON.stringify(spawned)}`);
     const character: Character = {
       id: crypto.randomUUID(), name: label, session: crypto.randomUUID(), numericId, entityId,
@@ -376,7 +385,7 @@ export class IslandWorld {
     };
     this.characters.set(character.session, character);
     this.numericIds.set(entityId, numericId);
-    this.changes.push({ added: [{ entity: { id: entityId, label, type: "agent", transform: { position } }, numericId }] });
+    this.changes.push({ added: [{ entity: structuredClone(avatar), numericId }] });
     return { session: character.session, agent_id: character.id };
   }
 

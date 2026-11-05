@@ -166,7 +166,7 @@ const describe = {
   sound: { source: "Sound id or URL.", volume: "0..1.", loop: "Default true.", autoplay: "Default true.", positional: "Attenuate with distance.", refDistance: "Metres before falloff." },
   surface: { sketch: "waveform, grid-pulse or plasma.", resolution: "Canvas px, 64..1024.", fps: "Redraws per second, 1..60.", emissive: "Also drive the emissive map.", tint: "#rrggbb multiplier." },
   steering: { headingDegrees: "0 points -Z, 90 points +X.", force: "Newtons at full thrust.", speedCap: "m/s per direction.", turnRateDegrees: "Degrees per second.", kickImpulse: "Impulse at kick 1.", jumpImpulse: "Vertical impulse at jump 1.", arrowId: "Non-physics entity anchored to the body.", arrowLift: "Arrow height offset." },
-  agent: { role: "Short role text.", status: "Short status text.", perceptionRadius: "Metres.", capabilities: "Short labels." },
+  agent: { role: "Short role text.", status: "Short status text.", perceptionRadius: "Metres.", capabilities: "Short labels.", origin: "Where the position sits on the body (geometry.height tall): feet (default) or center." },
   environment: {
     background: "Flat background and fog colour.", sky: "Skybox id from `skyIds`, or null for the flat colour.",
     envelope: "`{ fogNear, fogFar, cameraFar }` in metres, or null for host defaults (34, 130, 260). Large worlds need one.",

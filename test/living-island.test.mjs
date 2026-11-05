@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
+import { Box3 } from "three";
 import { build } from "vite";
 import { startWorldServer } from "../world-service/server.mjs";
 import { runGardener } from "../world-service/gardener.mjs";
@@ -62,6 +63,20 @@ function gatherAndSow(world, session) {
 }
 
 describe("living island", () => {
+  it("draws each avatar as its character capsule, feet on the ground", () => {
+    const world = new m.IslandWorld();
+    world.join("Eko");
+    world.advance(0.5);
+    const avatar = world.sceneHello().document.entities.find((entity) => entity.type === "agent");
+    assert.deepEqual([avatar.geometry.height, avatar.geometry.radius, avatar.agent.origin], [5, 1, "center"]);
+    const object = world.runtime.getEntityObject(avatar.id);
+    object.updateMatrixWorld(true);
+    const bounds = new Box3().setFromObject(object);
+    const centre = object.position.y;
+    assert.ok(Math.abs(centre - 2.55) < 0.1, `the pose is the capsule's centre, got ${centre}`);
+    assert.ok(Math.abs(bounds.min.y - (centre - 2.5)) < 0.05, `the feet are on the capsule's base, got ${bounds.min.y}`);
+    assert.ok(bounds.max.y - bounds.min.y > 4.5, `the robot fills the 5 m body, got ${bounds.max.y - bounds.min.y}`);
+  });
   it("projects native tree and agent facts for spectators without exposing session credentials", () => {
     const world = living();
     const { session } = world.join("Eko");

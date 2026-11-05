@@ -312,7 +312,18 @@ export type AgentWorldAgentProfile = {
   status?: string;
   perceptionRadius?: number;
   capabilities?: string[];
+  /**
+   * Where the entity's position sits on the agent's body, a body `geometry.height` tall:
+   * `feet` (the default) or `center`, for a host that moves its agents as centred capsules.
+   * The avatar is drawn so its feet stay on the base of that body either way.
+   */
+  origin?: AgentWorldAgentOrigin;
 };
+
+export type AgentWorldAgentOrigin = "feet" | "center";
+
+/** A resolved profile. `origin` is kept only when it is `center`, so documents stay as they were. */
+export type ResolvedAgentWorldAgentProfile = Required<Omit<AgentWorldAgentProfile, "origin">> & { origin?: "center" };
 
 export type AgentWorldMaterial = {
   side?: "front" | "back" | "double";
@@ -978,7 +989,7 @@ export type AgentWorldEntityState = {
   path: { pointCount: number; closed: boolean } | null;
   asset: ({ status: "loading" | "ready" | "error"; error?: string } & ResolvedAgentWorldModelAsset) | null;
   appearance: Required<AgentAppearance> | null;
-  agent: Required<AgentWorldAgentProfile> | null;
+  agent: ResolvedAgentWorldAgentProfile | null;
   emitter: (ResolvedAgentWorldEmitter & { liveParticles: number }) | null;
   sound: ResolvedAgentWorldSound | null;
   /** Terrain configuration plus the derived collider facts an agent needs to place things. */
@@ -1271,7 +1282,7 @@ type ResolvedEntity = {
   mesh: AgentWorldInlineMesh | null;
   asset: ResolvedAgentWorldModelAsset | null;
   appearance: Required<AgentAppearance> | null;
-  agent: Required<AgentWorldAgentProfile> | null;
+  agent: ResolvedAgentWorldAgentProfile | null;
   emitter: ResolvedAgentWorldEmitter | null;
   sound: ResolvedAgentWorldSound | null;
   terrain: ResolvedAgentWorldTerrain | null;
@@ -4543,7 +4554,17 @@ function createAgentAvatar(definition: ResolvedEntity): Group {
 
 function applyAgentAppearance(object: Object3D, definition: ResolvedEntity): void {
   const key = JSON.stringify(definition.appearance);
-  if (object.userData.graphysxAgentAppearanceKey === key) return;
+  if (object.userData.graphysxAgentAppearanceKey !== key) replaceAgentVisual(object, definition, key);
+  const visual = object.userData.graphysxAgentVisual;
+  if (visual instanceof Object3D) visual.position.y = -agentOriginHeight(definition);
+}
+
+/** How far above the agent's feet its position sits (see `AgentWorldAgentProfile.origin`). */
+export function agentOriginHeight(definition: { agent: ResolvedAgentWorldAgentProfile | null; geometry: { height: number } }): number {
+  return definition.agent?.origin === "center" ? definition.geometry.height / 2 : 0;
+}
+
+function replaceAgentVisual(object: Object3D, definition: ResolvedEntity, key: string): void {
   const previous = object.userData.graphysxAgentVisual;
   if (previous instanceof Object3D) {
     object.remove(previous);
@@ -4804,16 +4825,19 @@ function loadAgentTexture(id: AgentWorldTextureId, pixels?: AgentWorldInlinePixe
   return pending;
 }
 
-function resolveAgentProfile(source: AgentWorldAgentProfile = {}, base?: Required<AgentWorldAgentProfile>): Required<AgentWorldAgentProfile> {
+function resolveAgentProfile(source: AgentWorldAgentProfile = {}, base?: ResolvedAgentWorldAgentProfile): ResolvedAgentWorldAgentProfile {
   const role = (source.role ?? base?.role ?? "world participant").trim();
   const status = (source.status ?? base?.status ?? "ready").trim();
   if (!role || role.length > 80) throw new Error("Agent role must contain 1 to 80 characters");
   if (!status || status.length > 80) throw new Error("Agent status must contain 1 to 80 characters");
+  const origin = source.origin ?? base?.origin ?? "feet";
+  if (origin !== "feet" && origin !== "center") throw new Error(`Unsupported agent.origin: ${String(origin)}`);
   return {
     role,
     status,
     perceptionRadius: clamp(source.perceptionRadius ?? base?.perceptionRadius ?? 6, 0, 10000),
-    capabilities: uniqueStrings(source.capabilities ?? base?.capabilities ?? [])
+    capabilities: uniqueStrings(source.capabilities ?? base?.capabilities ?? []),
+    ...(origin === "center" ? { origin } : {})
   };
 }
 

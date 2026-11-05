@@ -377,6 +377,13 @@ revision checks, transactions, undo, the async bridge, and document export/reloa
 
 An entity with `type: "agent"` is a visible participant with a serializable role, status, perception radius, and semantic capability list. This describes who or what is present in a shared spatial explanation; it does not run arbitrary scripts or create a second AI runtime.
 
+An agent's body is `geometry.height` tall and `geometry.radius` wide, and its avatar is drawn to fill that body. `agent.origin` says where the entity's position sits on the body: `"feet"` (the default) or `"center"`. A host that moves its agents as centred capsules, like the world service's islands, sets `"center"` so the avatar still stands on the ground. Only `"center"` is kept in an exported document.
+
+```js
+gx.spawn({ id: "eko", type: "agent", transform: { position: [0, 2.5, 0] },
+  geometry: { height: 5, radius: 1 }, agent: { origin: "center" } });
+```
+
 Splines are visible, queryable entities. A `follow-spline` behavior references one by stable ID; entities driven by both a path and physics use `kinematic` mode—the modern equivalent of the archived mesh-controlled flag. `gx.update(id, { path: { points, closed, tension } })` replaces an existing spline's control points and visible line while preserving its ID and followers. Export/load and native undo/redo retain the updated path.
 
 ```js
