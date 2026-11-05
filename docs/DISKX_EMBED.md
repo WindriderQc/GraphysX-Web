@@ -135,5 +135,6 @@ transport with a narration-only feminine voice; standalone GraphysX uses a Frenc
 device voice. `element.tour.conversation(true)` pauses synthesis and playback and
 blocks resume during a question/answer; `false` leaves the selected stop paused,
 with **Reprendre la visite** available. Neither call changes the tour script or
-selected component. No voice or model configuration is embedded here. A failed voice pauses the tour and leaves its
-text and silent controls available.
+selected component. No voice or model configuration is embedded here. A failed voice pauses the tour, retains its enabled preference and leaves the
+text and silent controls available. Script-validation warnings remain visible
+alongside playback notices.

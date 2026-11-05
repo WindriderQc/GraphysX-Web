@@ -115,6 +115,10 @@ try {
   // A `play` list from the host plays at once; an unknown stop is refused, not skipped.
   await page.goto(`${base}?app=ecosystem&play=watch,node-babypi`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(`(${app})()?.application === "ecosystem" && (${app})().tour.count === 2`);
+  // Keep validating the animation-list clock independently of device autoplay policy.
+  await page.locator('[data-action="voice"]').click();
+  if (await page.getByRole('button', { name: 'Lire', exact: true }).count()) await page.getByRole('button', { name: 'Lire', exact: true }).click();
+  await page.waitForFunction(`(${app})().tour.playing === true`);
   const played = await page.evaluate(`(${app})()`);
   assert.deepEqual([played.tour.playing, played.tour.kind, played.tour.script], [true, "watch", "watch,node-babypi"]);
   await page.goto(`${base}?app=ecosystem&play=overview,dance`, { waitUntil: "domcontentloaded" });

@@ -240,6 +240,8 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   let conversationBusy = false;
   let interrupted = false;
   let autoplayBlocked = false;
+  let playbackNotice = "";
+  const showNotice = (): void => { element("[data-notice]").textContent = [notice, playbackNotice].filter(Boolean).join(" · "); };
   const narration = createTourNarration(() => {
     renderSteps();
     if (!voiceOn || disposed || !player.state().playing || adhoc) return;
@@ -248,15 +250,15 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   }, (error) => {
     player.pause();
     autoplayBlocked = error instanceof Error && error.name === "NotAllowedError";
-    if (autoplayBlocked) { notice = "La voix est prête. Touchez la visite pour autoriser le son."; renderSteps(); element("[data-notice]").textContent = notice; return; }
-    notice = "La voix est indisponible. Appuyez sur Lire pour réessayer ou coupez la voix.";
-    renderSteps(); element("[data-notice]").textContent = notice;
+    if (autoplayBlocked) { playbackNotice = "La voix est prête. Touchez la visite pour autoriser le son."; renderSteps(); showNotice(); return; }
+    playbackNotice = "La voix est indisponible. Appuyez sur Lire pour réessayer ou coupez la voix.";
+    renderSteps(); showNotice();
   });
   function pause(): void { player.pause(); narration.stop(); renderSteps(); }
   function togglePlayback(): void {
     if (conversationBusy) return;
     if (player.state().playing || narration.active()) { pause(); return; }
-    interrupted = false; autoplayBlocked = false; notice = "";
+    interrupted = false; autoplayBlocked = false; playbackNotice = "";
     if (!adhoc) player.play();
     enter();
   }
@@ -295,9 +297,9 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     narrationShown = reduced || voiceOn ? narrationFull.length : 0;
     element("[data-narration]").textContent = reduced || voiceOn ? narrationFull : "";
     if (picture.wide) overviewCamera(seconds); else frameNodes([...picture.focus, ...picture.amber], seconds);
-    element("[data-notice]").textContent = notice;
+    showNotice();
     const state = player.state();
-    if (voiceOn && narratorReady && !conversationBusy && !document.hidden && (state.playing || adhoc)) narration.speak(narrationFull);
+    if (voiceOn && narratorReady && !conversationBusy && !document.hidden && (state.playing || adhoc)) { autoplayBlocked = false; narration.speak(narrationFull); }
     renderSteps();
     emit("scene-changed", { index: state.index, count: state.count, kind: step.kind, label: tourStepLabel(step), playing: state.playing, script: tourText(player.steps()), adhoc: adhoc !== null });
   }
@@ -319,7 +321,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   button("next").addEventListener("click", () => { adhoc = null; if (player.next()) enter(); else enter(0); });
   button("toggle").addEventListener("click", togglePlayback);
   button("voice").addEventListener("click", () => {
-    voiceOn = !voiceOn; notice = "";
+    voiceOn = !voiceOn; playbackNotice = "";
     if (voiceOn && !adhoc && !conversationBusy) player.play();
     enter();
   });
@@ -539,18 +541,18 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     setNarrator: (value) => { narration.setNarrator(value); narratorReady = true; if (voiceOn) enter(); },
     advanceTime: (milliseconds: number) => { frame(Math.max(0, milliseconds) / 1000); return state(); },
     tour: {
-      play: () => { if (conversationBusy) return; interrupted = false; autoplayBlocked = false; notice = ""; player.play(); enter(); },
+      play: () => { if (conversationBusy) return; interrupted = false; autoplayBlocked = false; playbackNotice = ""; player.play(); enter(); },
       pause,
       conversation: (busy) => {
         conversationBusy = busy;
-        if (busy) { interrupted = true; pause(); notice = "Visite en pause pendant la conversation avec Nestor."; }
-        else if (interrupted) notice = "Reprendre la visite quand vous le souhaitez.";
-        element("[data-notice]").textContent = notice; renderSteps();
+        if (busy) { interrupted = true; pause(); playbackNotice = "Visite en pause pendant la conversation avec Nestor."; }
+        else if (interrupted) playbackNotice = "Reprendre la visite quand vous le souhaitez.";
+        showNotice(); renderSteps();
       },
       next: () => { adhoc = null; if (player.next()) enter(); },
       previous: () => { adhoc = null; if (player.previous()) enter(); },
       goto: (index) => { adhoc = null; player.goto(index); enter(); },
-      setScript: (text, autoplay) => { player.replace(parseTour(text)); adhoc = null; notice = ""; if (autoplay) player.play(); else player.pause(); enter(); },
+      setScript: (text, autoplay) => { player.replace(parseTour(text)); adhoc = null; notice = ""; if (autoplay && !conversationBusy) player.play(); else player.pause(); enter(); },
     },
     dispose: () => {
       disposed = true;
