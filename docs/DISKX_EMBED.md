@@ -119,9 +119,11 @@ A mount failure immediately releases its host. Disconnect releases app and host 
 
 ## Spoken ecosystem tour
 
-The ecosystem player offers **Activer la voix**. Speech starts only on that click;
-opening a page or receiving a `play` list stays silent. The complete current
-narration is shown while it speaks, and the next stop waits for speech completion.
+The ecosystem player enables voice and starts the tour by default. The host
+supplies its narrator before an embedded tour speaks. **Couper la voix** keeps
+the silent controls available. Browsers may require a first gesture for sound;
+an autoplay refusal keeps voice enabled and offers the ordinary Play control.
+The complete current narration is shown while it speaks, and the next stop waits for speech completion.
 Pause cancels the phrase; Lire reads that stop again. Selecting another stop,
 closing the view or hiding the document cancels the old speech.
 
@@ -129,6 +131,9 @@ A host may set `element.narrator = (text, signal) => Promise<void>` before or af
 mounting `<agentx-ecosystem>`. Resolve after playback, reject on failure and stop
 both synthesis and playback when the signal aborts. Late settlements of replaced
 phrases never advance the tour. AgentX supplies its existing Nestor speech
-transport; standalone GraphysX uses a French device voice. No voice or model
-configuration is embedded here. A failed voice pauses the tour and leaves its
+transport with a narration-only feminine voice; standalone GraphysX uses a French
+device voice. `element.tour.conversation(true)` pauses synthesis and playback and
+blocks resume during a question/answer; `false` leaves the selected stop paused,
+with **Reprendre la visite** available. Neither call changes the tour script or
+selected component. No voice or model configuration is embedded here. A failed voice pauses the tour and leaves its
 text and silent controls available.

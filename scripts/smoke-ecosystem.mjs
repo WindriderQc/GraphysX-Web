@@ -26,6 +26,11 @@ try {
   await page.getByRole("heading", { level: 1, name: /La maison/ }).waitFor();
   await page.waitForFunction(`(${app})()?.application === "ecosystem" && (${app})().nodes.length > 20`);
 
+  // Voice is the default; this visual/clock regression explicitly chooses silent playback.
+  assert.equal(await page.locator('[data-action="voice"]').getAttribute('aria-pressed'), 'true');
+  await page.locator('[data-action="voice"]').click();
+  if (await page.getByRole('button', { name: 'Pause', exact: true }).count()) await page.getByRole('button', { name: 'Pause', exact: true }).click();
+
   const initial = await page.evaluate(() => {
     const text = JSON.parse(window.render_game_to_text());
     const api = window.__GRAPHYSX__;
