@@ -137,7 +137,7 @@ Demande de Yanik : une île vivante sans les agents, dans l'esprit des forêts e
 La chute des feuilles de la Forêt vivante (`seasonSeconds`) était coupée sur l'île : le serveur
 garde ses arbres immobiles (aucun coût par pas) et la vue n'anime rien. Depuis le 2026-11-03, la
 vue fait tomber les feuilles elle-même, réglée sur l'horloge de l'île (`showSeason` du
-`dna-tree`, initialement un cycle de 48 s, `WORLD_LEAF_SEASON_SECONDS`) : tous les spectateurs, en direct ou
+`dna-tree`, cycle de 180 s, `WORLD_LEAF_SEASON_SECONDS`) : tous les spectateurs, en direct ou
 en relecture, voient le même automne. Les règles et l'observation ne changent pas ; seule l'image
 change, y compris la vue à la première personne d'Eko.
 
@@ -149,7 +149,7 @@ les leçons de la Forêt vivante gardent leur animation d'archive dans `update()
 Au détachement, l'instance qui figurait un amas de feuillage se réduit progressivement à une
 petite feuille, pour éviter de faire passer tout l'amas devant les yeux d'un agent.
 
-La revue du réalisme ralentit maintenant ce renouvellement à **180 secondes simulées**.
+Le renouvellement dure **180 secondes simulées**.
 La pousse prend au plus 14 secondes. La durée de chute dépend de la hauteur et du `fallSpeed`
 propre à chaque feuille : allonger le cycle ne fait pas flotter une feuille pendant toute une
 saison. Au contact du sol, le mouvement cesse, la feuille s'aplatit parallèlement au terrain,
@@ -170,7 +170,7 @@ de sélection sont calculées une seule fois, assez larges pour toute la chute. 
 `test/dna-leaves.test.mjs` vérifient deux cycles complets, les sauts de relecture, les retours
 invisibles et les bornes réutilisées.
 
-Première mesure locale du 2026-11-04, avant la revue du réalisme (cycle de 48 s) :
+Mesure locale du 2026-11-04 sur `a28cead`, cycle de 180 s des deux côtés :
 cinq fondateurs, 569 feuilles, Chromium/SwiftShader à
 1024 × 640, trois séries, médianes ci-dessous. Le probe
 `scripts/probe-living-leaves.mjs <révision-avant-correction>` compare les mêmes génomes avec
@@ -179,17 +179,17 @@ seulement l'envoi des commandes graphiques sous-estime fortement ce rendu logici
 
 | Mesure isolée | Avant (`6a11c49`) | Après |
 |---|---:|---:|
-| Calcul des feuilles par image à 60 Hz | 0,140 ms | 0,053 ms |
+| Calcul des feuilles par image à 60 Hz | 0,121 ms | 0,054 ms |
 | Mises à jour des matrices sur les trois séries | 10 800 | 5 400 |
 | Recalculs des bornes sur les trois séries | 10 800 | 0 |
-| Rendu animé de la scène de mesure | 38,12 ms | 38,12 ms |
+| Rendu animé de la scène de mesure | 35,99 ms | 34,67 ms |
 | Appels de dessin, ombres déjà calculées | 11 | 11 |
 | Triangles de la scène de mesure | 21 222 | 21 222 |
 
-Sans dessiner les feuilles, cette scène prend 28,46 ms (6 appels, 9 842 triangles).
-Le coût observé est donc principalement graphique : environ 10 ms de plus pour le feuillage
+Sans dessiner les feuilles, cette scène prend 27,60 ms (6 appels, 9 842 triangles).
+Le coût observé est donc principalement graphique : environ 7 ms de plus pour le feuillage
 dans ce moteur **logiciel**, contre environ 0,05 ms pour son animation, et aucun corps physique.
-La correction réduit le calcul d'environ 62 %, sans gain graphique mesurable. Ces durées
+La correction réduit le calcul d'environ 55 %. L'écart de rendu est faible et varie selon la série. Ces durées
 concernent le petit décor du probe, avec ombres en cache et sans anticrénelage ; elles ne sont
 ni les FPS de l'île complète ni une mesure des GPU des appareils de la maison.
 
@@ -197,12 +197,15 @@ Exécuter le probe sous la file de travaux lourds de l'instance et le verrou du 
 `node scripts/with-verify-lock.mjs -- node scripts/probe-living-leaves.mjs 6a11c49`.
 Il produit les mesures JSON et quatre captures dans `output/living-leaves/`.
 
-Validation de la correction sur la base incluant l'avatar robot : 894 tests Node, vérification
-de types, construction et parcours `smoke-living-island` (bureau, téléphone, jardinier,
-relecture de l'enregistrement et vue d'Eko) réussis ; captures examinées. La tentative de suite
-générale a été interrompue après deux échecs, reproduits sur `6a11c49` sans cette correction :
-`smoke-island-explorer` attend une population d'oiseaux fixe et `smoke-island-workspace` perd
-son bouton pendant le clic. Elle ne constitue pas une validation complète du produit.
+L'explorateur actualise les compteurs, les listes et les marqueurs d'oiseaux en place : une
+naissance ou un décès ne remplace plus les boutons pendant un clic, ni les commandes de la
+carte. Les parcours vérifient une population reçue du monde plutôt qu'un nombre de fondateurs
+figé, et provoquent des naissances pour contrôler la stabilité des commandes.
+
+Validation ciblée sur la base incluant l'avatar robot : 897 tests Node, vérification de types,
+lint, construction, sondes physiques et parcours `island-explorer`, `island-workspace`,
+`island-living` et `dna` réussis ; captures bureau, téléphone, 4K et vue d'Eko examinées.
+Cela couvre aussi la relecture de l'enregistrement et ses chemins par instance.
 
 ## Captures (2026-10-29, devX, Chromium sans écran)
 
