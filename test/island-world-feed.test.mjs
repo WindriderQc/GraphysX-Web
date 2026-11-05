@@ -50,9 +50,13 @@ test("the scene becomes transient definitions without physics, and changes rebui
   const bare = definitions.find((d) => d.id === "agent-43");
   assert.deepEqual([bare.geometry, bare.agent], [{ height: 5, radius: 1 }, { origin: "center" }], "an older world's bare avatar gets its capsule body");
   assert.equal(document.entities[4].geometry, undefined, "the hello document is not given the body");
-  const declared = feed.worldTransientDefinitions({ ...scene, entities: [{ id: "nestor", type: "agent", geometry: { height: 1.8 } }] })[0];
+  // The hello document of an older world fills in the runtime defaults, as Mesa's does live.
+  const exported = { id: "agent-44", type: "agent", geometry: { width: 1, height: 1, depth: 1, radius: 0.5, tube: 0.12, radialSegments: 24 }, agent: { role: "world participant", status: "ready", perceptionRadius: 6, capabilities: [] } };
+  const [lifted, declared, placed] = feed.worldTransientDefinitions({ ...scene, entities: [exported, { id: "nestor", type: "agent", geometry: { height: 1.8 } }, { id: "new", type: "agent", geometry: { height: 5, radius: 1 }, agent: { origin: "center" } }] });
+  assert.deepEqual([lifted.geometry.height, lifted.geometry.radius, lifted.agent.origin, lifted.agent.role], [5, 1, "center", "world participant"], "a default-size exported avatar gets its capsule body, profile kept");
   assert.deepEqual(declared.geometry, { height: 1.8 }, "an avatar that declares its own body is left alone");
   assert.equal(declared.agent, undefined);
+  assert.deepEqual([placed.geometry, placed.agent], [{ height: 5, radius: 1 }, { origin: "center" }], "a current world's avatar passes through");
   assert.ok("physics" in document.entities[3], "the hello document is not mutated");
 
   const key = feed.worldStructureKey(scene);
