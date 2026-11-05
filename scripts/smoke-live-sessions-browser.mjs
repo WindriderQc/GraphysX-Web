@@ -787,6 +787,7 @@ try {
       let submitOnNextHello = null;
       let dropAfterNextMission = false;
       let missionCatchupDropCount = 0;
+      let missionCatchupDropProof = null;
       let resyncMarkerCount = 0;
       class TrackedEventSource extends NativeEventSource {
         constructor(url, init) {
@@ -799,15 +800,31 @@ try {
             lastOperationData = event.data;
           });
           super.addEventListener("resync", () => { resyncMarkerCount += 1; });
-          super.addEventListener("mission", () => {
-            if (!dropAfterNextMission) return;
-            dropAfterNextMission = false;
-            // This listener precedes the product listener. The microtask lets the retained
-            // mission event be cached first, then drops this catch-up stream before its
-            // terminal presence cut can prove continuity.
-            queueMicrotask(() => {
-              missionCatchupDropCount += 1;
+          // Register after the product's synchronous listeners. Capture in the same event
+          // turn, after the mission is cached and before a terminal presence frame or retry.
+          // A later Playwright read can otherwise observe the next, healthy connection.
+          queueMicrotask(() => {
+            this.addEventListener("mission", (event) => {
+              if (!dropAfterNextMission) return;
+              dropAfterNextMission = false;
+              const retained = JSON.parse(event.data);
+              const status = window.__GRAPHYSX_LIVE_SESSION__.status;
+              const connectionBeforeDrop = status.connection;
+              const cachedStage = status.missions.find((mission) => mission.missionId === retained.missionId)
+                ?.stages.find((stage) => stage.stageId === retained.stageId)?.status;
               this.dispatchEvent(new Event("error"));
+              const api = window.__GRAPHYSX__;
+              missionCatchupDropProof = {
+                eventId: retained.eventId,
+                connectionBeforeDrop,
+                cachedStage,
+                mission: structuredClone(window.__GRAPHYSX_LIVE_MISSION__.state()),
+                missionIds: api.query({ tag: "live-mission" }).map((entity) => entity.id).sort(),
+                boardIds: api.query({ tag: "mission-board" }).map((entity) => entity.id).sort(),
+                artifactIds: api.query({ tag: "mission-artifact" }).map((entity) => entity.id).sort(),
+                completionIds: api.query({ tag: "mission-completion" }).map((entity) => entity.id).sort(),
+              };
+              missionCatchupDropCount += 1;
             });
           });
           super.addEventListener("hello", () => {
@@ -872,10 +889,12 @@ try {
         return true;
       };
       window.__GRAPHYSX_TEST_DROP_NEXT_MISSION_CATCHUP__ = () => {
+        missionCatchupDropProof = null;
         dropAfterNextMission = true;
         return true;
       };
       window.__GRAPHYSX_TEST_MISSION_CATCHUP_DROP_COUNT__ = () => missionCatchupDropCount;
+      window.__GRAPHYSX_TEST_MISSION_CATCHUP_DROP_PROOF__ = () => missionCatchupDropProof;
       window.__GRAPHYSX_TEST_RESYNC_MARKER_COUNT__ = () => resyncMarkerCount;
     });
     // The invitation rides in the fragment, exactly as a shared join link would.
@@ -2018,25 +2037,41 @@ try {
       directors: { paused: pausedDirectors.map((state) => state.director),
         resumed: resumedDirectors.map((state) => state.director) } }));
 
-  const catchupDropArmed = await first.page.evaluate(() => window.__GRAPHYSX_TEST_DROP_NEXT_MISSION_CATCHUP__());
-  const initialStreamDropped = await first.page.evaluate(() => window.__GRAPHYSX_TEST_FORCE_STREAM_ERROR__());
-  await first.page.waitForFunction(() => window.__GRAPHYSX_LIVE_SESSION__.status.connection === "reconnecting");
-  const workingReceipt = await explorerActor.call("POST", "/sessions/" + sessionId + "/missions/" + missionId + "/events", {
-    eventId: "me-browser-analyze-working",
-    action: "progress",
-    stageId: "analyze",
-    state: "working",
-    progress: 0.25,
-  });
+  // Hold the retry ticket until the remote event is accepted: it must be retained catch-up,
+  // even if an overloaded browser takes longer than the normal reconnect backoff to respond.
+  const missionTicketPattern = `**/sessions/${sessionId}/stream-ticket`;
+  let releaseMissionTicket = () => undefined;
+  const missionTicketGate = new Promise((resolve) => { releaseMissionTicket = resolve; });
+  const holdMissionTicket = async (route) => { await missionTicketGate; await route.continue(); };
+  await first.page.route(missionTicketPattern, holdMissionTicket);
+  let catchupDropArmed, initialStreamDropped, workingReceipt;
+  try {
+    catchupDropArmed = await first.page.evaluate(() => window.__GRAPHYSX_TEST_DROP_NEXT_MISSION_CATCHUP__());
+    initialStreamDropped = await first.page.evaluate(() => window.__GRAPHYSX_TEST_FORCE_STREAM_ERROR__());
+    await first.page.waitForFunction(() => window.__GRAPHYSX_LIVE_SESSION__.status.connection === "reconnecting");
+    workingReceipt = await explorerActor.call("POST", "/sessions/" + sessionId + "/missions/" + missionId + "/events", {
+      eventId: "me-browser-analyze-working",
+      action: "progress",
+      stageId: "analyze",
+      state: "working",
+      progress: 0.25,
+    });
+  } finally {
+    releaseMissionTicket();
+    await first.page.unroute(missionTicketPattern, holdMissionTicket);
+  }
   await first.page.waitForFunction(() => window.__GRAPHYSX_TEST_MISSION_CATCHUP_DROP_COUNT__() === 1);
-  const catchupDropProof = await readMissionInvariant(first.page);
+  const catchupDropProof = await first.page.evaluate(() => window.__GRAPHYSX_TEST_MISSION_CATCHUP_DROP_PROOF__());
   check(results, "a second stream drop after a retained mission event projects nothing before the terminal live cut",
     catchupDropArmed && initialStreamDropped && acceptedMissionStatus(workingReceipt.status)
+      && catchupDropProof.eventId === "me-browser-analyze-working"
+      && catchupDropProof.connectionBeforeDrop === "reconnecting" && catchupDropProof.cachedStage === "working"
       && catchupDropProof.mission.connection === "reconnecting"
       && catchupDropProof.mission.director.mode === "neutral"
       && catchupDropProof.missionIds.length === 0 && catchupDropProof.boardIds.length === 0
       && catchupDropProof.artifactIds.length === 0 && catchupDropProof.completionIds.length === 0,
-    JSON.stringify({ receipt: workingReceipt.body, runtime: catchupDropProof.mission,
+    JSON.stringify({ receipt: workingReceipt.body, before: catchupDropProof.connectionBeforeDrop,
+      cachedStage: catchupDropProof.cachedStage, runtime: catchupDropProof.mission,
       ids: { mission: catchupDropProof.missionIds, board: catchupDropProof.boardIds } }));
   await waitForLive(first.page, "owner mission catch-up retry");
   await Promise.all([
