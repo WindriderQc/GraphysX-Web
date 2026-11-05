@@ -6,6 +6,15 @@ import type { PlatformHost } from "./platform-host";
 
 type LiveBlock = { id: string; center: Vector3; size: Vector3 };
 
+/** Browser-local display only; the canonical observations keep their UTC timestamps. */
+export function formatEcosystemLiveTime(value: string | null): string {
+  if (!value) return "inconnu";
+  return new Intl.DateTimeFormat("fr-CA", {
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hourCycle: "h23", timeZoneName: "short",
+  }).format(new Date(value));
+}
+
 export function mountEcosystemLiveLayer(surface: HTMLElement, host: PlatformHost, blocks: () => readonly LiveBlock[], select: (id: string) => void) {
   const controller = createEcosystemLiveState();
   const group = new Group();
@@ -24,7 +33,7 @@ export function mountEcosystemLiveLayer(surface: HTMLElement, host: PlatformHost
   const list = document.createElement("ul");
   const scope = document.createElement("p");
   scope.className = "gx-eco-live-scope";
-  scope.textContent = "Inférence : endpoints uniquement. Service : santé du processus. Les autres composants restent sans télémétrie.";
+  scope.textContent = "Inférence : disponibilité des moteurs uniquement. Service : santé du processus. Les autres composants restent sans télémétrie.";
   panel.append(title, summary, list, scope);
   surface.append(panel);
   let rendered: EcosystemLiveView | null = null;
@@ -41,7 +50,8 @@ export function mountEcosystemLiveLayer(surface: HTMLElement, host: PlatformHost
     panel.hidden = false;
     panel.dataset.status = view.status;
     const state = view.status === "available" ? "Source disponible" : view.status === "stale" ? "Source périmée" : "Source indisponible";
-    summary.textContent = `${state} · ${view.nodes.length} composants couverts${view.generatedAt ? ` · relevé ${view.generatedAt}` : ""}. Composition du ${ECOSYSTEM_SNAPSHOT_DATE}.`;
+    summary.textContent = `${state} · ${view.nodes.length} composants couverts${view.generatedAt ? ` · relevé ${formatEcosystemLiveTime(view.generatedAt)}` : ""}. Composition du ${ECOSYSTEM_SNAPSHOT_DATE}.`;
+    summary.title = view.generatedAt ? `Relevé UTC : ${view.generatedAt}` : "";
     const subtitle = surface.querySelector<HTMLElement>(".gx-eco-sub");
     if (subtitle) subtitle.textContent = `Composition du ${ECOSYSTEM_SNAPSHOT_DATE} · États observés de Core, couverture limitée`;
     const ids = new Set(view.nodes.map(node => node.id));
@@ -65,7 +75,8 @@ export function mountEcosystemLiveLayer(surface: HTMLElement, host: PlatformHost
       const name = ecoNode(node.id)?.name || node.id;
       row.button.textContent = `${name} · ${ecosystemLiveScope(node.source)} : ${node.label}`;
       row.button.setAttribute("aria-label", `Voir ${name}. ${ecosystemLiveScope(node.source)} : ${node.label}`);
-      row.detail.textContent = `Relevé : ${node.observedAt ?? "inconnu"} · Validité : ${node.expiresAt ?? "inconnue"}`;
+      row.detail.textContent = `Relevé : ${formatEcosystemLiveTime(node.observedAt)} · Validité : ${node.expiresAt ? formatEcosystemLiveTime(node.expiresAt) : "inconnue"}`;
+      row.detail.title = `Relevé UTC : ${node.observedAt ?? "inconnu"} · Validité UTC : ${node.expiresAt ?? "inconnue"}`;
       const block = blocks().find(block => block.id === node.id);
       if (!block) continue;
       let outline = outlines.get(node.id);

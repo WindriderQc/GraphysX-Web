@@ -4,7 +4,7 @@ import { Group, Vector3 } from "three";
 import { importBrowserModule } from "./support/import-browser-module.mjs";
 
 const { createEcosystemLiveState, parseEcosystemLivePayload } = await importBrowserModule(new URL("../src/ecosystem-live-state.ts", import.meta.url));
-const { mountEcosystemLiveLayer } = await importBrowserModule(new URL("../src/ecosystem-live-layer.ts", import.meta.url));
+const { mountEcosystemLiveLayer, formatEcosystemLiveTime } = await importBrowserModule(new URL("../src/ecosystem-live-layer.ts", import.meta.url));
 const { ecosystemObservation } = await importBrowserModule(new URL("../src/ecosystem-presentation.ts", import.meta.url));
 const at = Date.parse("2026-11-05T18:00:00.000Z");
 const iso = delta => new Date(at + delta).toISOString();
@@ -14,6 +14,20 @@ function payload(nodes = [node()], delta = 0, revision = sha) {
   return { contract: "agentx.ecosystem-live/v1", generatedAt: iso(delta), expiresAt: iso(delta + 20000), nodes,
     read: { contract: "agentx.presentation-read/v1", id: `view_${revision}`, revision, source: "core.ecosystem.live", observedAt: iso(delta), expiresAt: iso(delta + 20000) } };
 }
+
+test("visible times follow the browser timezone and include its zone without changing canonical ISO", () => {
+  const previous = process.env.TZ;
+  const utc = "2026-11-05T23:25:00.000Z";
+  try {
+    process.env.TZ = "America/Toronto";
+    assert.match(formatEcosystemLiveTime(utc), /18 h 25 min 00 s (?:HNE|UTC.?5)/);
+    process.env.TZ = "Asia/Tokyo";
+    assert.match(formatEcosystemLiveTime(utc), /2026-11-06.*08 h 25 min 00 s/);
+    assert.equal(formatEcosystemLiveTime(null), "inconnu");
+  } finally {
+    if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous;
+  }
+});
 
 test("live state is opt-in, detached from input, and has no invented static health", () => {
   const store = createEcosystemLiveState();
@@ -146,6 +160,8 @@ test("the status layer updates every covered node in place, expires by host fram
     const firstButton = list.children[0].children[0];
     assert.match(firstButton.textContent, /Inférence : Disponible/);
     assert.match(list.children[1].children[0].textContent, /Santé du service : Dégradé/);
+    assert.equal(list.children[0].children[1].title, `Relevé UTC : ${iso(-1000)} · Validité UTC : ${iso(10000)}`);
+    assert.equal(layer.state().nodes[0].observedAt, iso(-1000), "display formatting never rewrites canonical evidence");
     assert.deepEqual(selected, []);
     layer.set(payload([node("ugalien", "busy"), { ...node("core", "offline"), source: "product_service" }], 1000));
     layer.frame(at + 1000);

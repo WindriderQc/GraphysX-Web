@@ -146,6 +146,8 @@ aucun modèle. Core possède la projection, le transport et la cadence. Le rende
 un halo par composant couvert et une liste visible d'états, avec boutons clavier/tactiles,
 dernier relevé et expiration. Les rafraîchissements gardent scène, caméra, visite, sélection
 et focus clavier. Aucune sélection n'est nécessaire pour afficher les changements.
+Les heures affichées utilisent le fuseau local du navigateur et indiquent ce fuseau.
+Les dates ISO UTC restent inchangées dans l'état canonique et consultables dans les titres.
 
 Entrée bornée, sans adresses ni détails d'administration :
 
