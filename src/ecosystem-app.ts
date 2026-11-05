@@ -32,6 +32,7 @@ export type EcosystemApplication = {
 export type EcosystemEvent = "ready" | "scene-changed" | "node-selected" | "models" | "error";
 export type EcosystemMountOptions = {
   play?: string | null;
+  voice?: boolean;
   /** Self-contained LAN embed: geometry and tour are identical; no external sky/models/textures. */
   embedded?: boolean;
   onEvent?: (type: EcosystemEvent, detail: Record<string, unknown>) => void;
@@ -235,7 +236,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   let narrationShown = 0;
   const currentStep = (): TourStep | null => adhoc ?? player.state().step;
 
-  let voiceOn = true;
+  let voiceOn = options.voice !== false && params.get("voice") !== "off";
   let narratorReady = !options.embedded;
   let conversationBusy = false;
   let interrupted = false;

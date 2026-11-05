@@ -119,7 +119,8 @@ A mount failure immediately releases its host. Disconnect releases app and host 
 
 ## Spoken ecosystem tour
 
-The ecosystem player enables voice and starts the tour by default. The host
+The ecosystem player enables voice and starts the tour by default. An ambient
+host explicitly uses `voice="off"` to retain its silent standby animation. The host
 supplies its narrator before an embedded tour speaks. **Couper la voix** keeps
 the silent controls available. Browsers may require a first gesture for sound;
 an autoplay refusal keeps voice enabled and offers the ordinary Play control.

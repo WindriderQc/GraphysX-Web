@@ -35,7 +35,7 @@ export class AgentxEcosystemElement extends HTMLElement {
     try {
       this.host = new PlatformHost(stage, { interactive: false, editorVisible: false, autoOrbit: false, intro: false });
       this.app = mountEcosystemApp(stage, this.host, () => { this.emit("closed", {}); this.release(); }, {
-        play: this.getAttribute("play"), embedded: true,
+        play: this.getAttribute("play"), embedded: true, voice: this.getAttribute("voice") !== "off",
         onEvent: (type, detail) => this.pending.set(type, detail),
       });
       if (this.voice) this.app.setNarrator(this.voice);
