@@ -416,6 +416,12 @@ export const GRAPHYSX_AGENT_WORLD_DNA_RECORD: {
         "localFall, the y drop of fallSpeed*5.4 with a floor at 0.16, the sin/cos drift, the 1 - localFall*0.48 shrink and the (localFall*3.2, phase*2PI, localFall*2.1) tumble — verbatim from updateForest.",
     },
     {
+      code: "world-leaf-renewal",
+      fidelity: "inferred",
+      detail:
+        "Host-driven showSeason staggers seeded trees and individual leaves, adds gradual budding and litter fading, and reaches the ground before renewing at zero size. It samples world time at 30 Hz without physics. The recovered update() animation is retained.",
+    },
+    {
       code: "grove-layout",
       fidelity: "faithful",
       detail: "13 trees, 5 columns, 4.5 x 4.6 pitch, +/-0.6 jitter, centred on the entity origin.",

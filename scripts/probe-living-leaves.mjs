@@ -6,11 +6,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer } from "vite";
+import { transpileModule, ModuleKind, ScriptTarget } from "typescript";
 import { launchSmokeBrowser } from "./smoke-harness.mjs";
 
 const baseline = process.argv[2];
 if (!baseline) throw new Error("Pass an explicit baseline Git ref (before the foliage change)");
 const source = execFileSync("git", ["show", `${baseline}:src/agent-world-dna.ts`], { encoding: "utf8" });
+const baselineCode = transpileModule(source, { compilerOptions: { module: ModuleKind.ESNext, target: ScriptTarget.ES2022 } }).outputText;
 const artifacts = path.resolve(process.env.SMOKE_ARTIFACTS || "output/living-leaves");
 mkdirSync(artifacts, { recursive: true });
 const scratch = mkdtempSync(path.join(tmpdir(), "graphysx-leaf-probe-"));
@@ -19,7 +21,7 @@ const server = await createServer({
   plugins: [{
     name: "leaf-baseline",
     resolveId: (id) => id === "virtual:leaf-baseline.ts" ? "\0leaf-baseline.ts" : null,
-    load: (id) => id === "\0leaf-baseline.ts" ? source : null,
+    load: (id) => id === "\0leaf-baseline.ts" ? baselineCode : null,
     configureServer(vite) {
       vite.middlewares.use("/__leaf_probe", async (_request, response, next) => {
         try {
@@ -41,6 +43,7 @@ try {
   await server.listen();
   browser = await launchSmokeBrowser();
   const page = await browser.newPage({ viewport: { width: 1024, height: 640 } });
+  page.on("pageerror", (error) => console.error(error.stack));
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/__leaf_probe`);
   await page.waitForFunction(() => Boolean(window.leafProbe));
   const report = await page.evaluate(() => {
@@ -94,6 +97,10 @@ try {
     camera.position.set(11, 25, 47);
     camera.lookAt(-14, 7, 15);
     const gl = renderer.getContext();
+    const pixel = new Uint8Array(4);
+    // A readback also crosses Chromium's GPU-process boundary; finish() alone can return
+    // after command submission there and under-report software rasterisation time.
+    const complete = () => gl.readPixels(512, 320, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
     const debug = gl.getExtension("WEBGL_debug_renderer_info");
     const graphics = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
     const cases = ["before-moving", "after-moving", "after-static", "after-hidden"];
@@ -110,12 +117,12 @@ try {
         const systems = groups[label.startsWith("before") ? "before" : "after"];
         attach(systems, !label.endsWith("hidden"));
         systems.forEach((s) => s.showSeason(12, 48));
-        for (let warm = 0; warm < 3; warm++) { renderer.render(scene, camera); gl.finish(); }
+        for (let warm = 0; warm < 3; warm++) { renderer.render(scene, camera); complete(); }
         const start = performance.now();
         for (let frame = 0; frame < 24; frame++) {
           if (label.endsWith("moving")) systems.forEach((s) => s.showSeason(12 + frame / 60, 48));
           renderer.render(scene, camera);
-          gl.finish(); // Include completed rendering, not just asynchronous command submission.
+          complete();
         }
         rendering[label].msPerFrame.push((performance.now() - start) / 24);
         rendering[label].drawCalls = renderer.info.render.calls;
@@ -127,9 +134,9 @@ try {
       groups.after.forEach((s) => s.showSeason(seconds, 48));
       renderer.shadowMap.needsUpdate = true;
       renderer.render(scene, camera);
-      gl.finish();
+      complete();
     };
-    return { graphics, viewport: [1024, 640], trees: definitions.length, leaves: groups.after.reduce((n, s) => n + s.leafCount, 0), cpu, rendering };
+    return { graphics, synchronization: "1-pixel readback per frame", pixel: [...pixel], viewport: [1024, 640], trees: definitions.length, leaves: groups.after.reduce((n, s) => n + s.leafCount, 0), cpu, rendering };
   });
   for (const seconds of [0, 12, 24, 48]) {
     await page.evaluate((t) => window.captureLeafTime(t), seconds);
