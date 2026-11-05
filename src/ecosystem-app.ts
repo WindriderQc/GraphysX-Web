@@ -27,7 +27,7 @@ export type EcosystemApplication = {
   dispose: () => void;
   state: () => unknown;
   advanceTime: (milliseconds: number) => unknown;
-  tour: { play(): void; pause(): void; next(): void; previous(): void; goto(index: number): void; setScript(text: string, autoplay: boolean): void; conversation(busy: boolean): void };
+  tour: { play(): void; pause(): void; next(): void; previous(): void; goto(index: number): void; setScript(text: string, autoplay: boolean): void; conversation(busy: boolean): void; setVoice(enabled: boolean): void };
 };
 export type EcosystemEvent = "ready" | "scene-changed" | "node-selected" | "models" | "error";
 export type EcosystemMountOptions = {
@@ -321,11 +321,12 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   button("previous").addEventListener("click", () => { adhoc = null; if (player.previous()) enter(); else enter(0); });
   button("next").addEventListener("click", () => { adhoc = null; if (player.next()) enter(); else enter(0); });
   button("toggle").addEventListener("click", togglePlayback);
-  button("voice").addEventListener("click", () => {
-    voiceOn = !voiceOn; playbackNotice = "";
+  function setVoice(enabled: boolean): void {
+    voiceOn = enabled; playbackNotice = "";
     if (voiceOn && !adhoc && !conversationBusy) player.play();
     enter();
-  });
+  }
+  button("voice").addEventListener("click", () => setVoice(!voiceOn));
   const unlock = (event: Event): void => {
     if (!autoplayBlocked || conversationBusy || disposed) return;
     if (event.target instanceof Element && event.target.closest("button,input,select,textarea,a")) return;
@@ -544,6 +545,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     tour: {
       play: () => { if (conversationBusy) return; interrupted = false; autoplayBlocked = false; playbackNotice = ""; player.play(); enter(); },
       pause,
+      setVoice,
       conversation: (busy) => {
         conversationBusy = busy;
         if (busy) { interrupted = true; pause(); playbackNotice = "Visite en pause pendant la conversation avec Nestor."; }
