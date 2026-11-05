@@ -67,6 +67,8 @@ export class AgentxEcosystemElement extends HTMLElement {
   }
 
   state(): unknown { return this.displayed; }
+  /** Only the next shared render can turn an accepted update into an observation. */
+  setLiveState(value: unknown): boolean { return this.app?.setLiveState(value) ?? false; }
   get tour(): EcosystemApplication["tour"] | undefined { return this.app?.tour; }
 
   disconnectedCallback(): void { this.release(); }
