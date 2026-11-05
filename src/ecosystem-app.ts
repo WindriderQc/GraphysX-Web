@@ -237,6 +237,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
 
   let voiceOn = false;
   const narration = createTourNarration(() => {
+    renderSteps();
     if (!voiceOn || disposed || !player.state().playing || adhoc) return;
     if (player.next()) enter();
     else { player.pause(); renderSteps(); }
@@ -247,8 +248,9 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   });
   function pause(): void { player.pause(); narration.stop(); renderSteps(); }
   function togglePlayback(): void {
-    if (player.state().playing) { pause(); return; }
-    adhoc = null; player.play(); enter();
+    if (player.state().playing || narration.active()) { pause(); return; }
+    if (!adhoc) player.play();
+    enter();
   }
   function renderSteps(): void {
     const list = element<HTMLOListElement>("[data-steps]");
@@ -263,8 +265,9 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
       return li;
     }));
     const toggle = button("toggle");
-    toggle.textContent = state.playing ? "⏸ Pause" : "▶ Lire";
-    toggle.setAttribute("aria-label", state.playing ? "Pause" : "Lire");
+    const reading = state.playing || narration.active();
+    toggle.textContent = reading ? "⏸ Pause" : "▶ Lire";
+    toggle.setAttribute("aria-label", reading ? "Pause" : "Lire");
     toggle.title = voiceOn ? "Écouter la visite ; Pause arrête la phrase" : "Faire défiler les étapes et le texte, sans voix";
     button("voice").textContent = voiceOn ? "🔇 Couper la voix" : "🔊 Activer la voix";
     button("voice").setAttribute("aria-pressed", String(voiceOn));
@@ -281,10 +284,10 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     narrationShown = reduced || voiceOn ? narrationFull.length : 0;
     element("[data-narration]").textContent = reduced || voiceOn ? narrationFull : "";
     if (picture.wide) overviewCamera(seconds); else frameNodes([...picture.focus, ...picture.amber], seconds);
-    renderSteps();
     element("[data-notice]").textContent = notice;
     const state = player.state();
     if (voiceOn && (state.playing || adhoc)) narration.speak(narrationFull);
+    renderSteps();
     emit("scene-changed", { index: state.index, count: state.count, kind: step.kind, label: tourStepLabel(step), playing: state.playing, script: tourText(player.steps()), adhoc: adhoc !== null });
   }
   function openNode(id: string): void {

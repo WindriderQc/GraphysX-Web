@@ -25,6 +25,7 @@ export function createTourNarration(completed: () => void, failed: (error: unkno
   const stop = (): void => { const old = current; current = null; old?.abort(); };
   return {
     stop,
+    active: (): boolean => current !== null,
     setNarrator(value: EcosystemNarrator): void { stop(); narrator = value; },
     speak(text: string): void {
       stop();
