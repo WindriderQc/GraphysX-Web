@@ -20,14 +20,17 @@ import { createTourPlayer, DEFAULT_TOUR, parseTour, tourPicture, tourStepLabel, 
 import { relationArc } from "./presentation-links";
 import type { PlatformHost } from "./platform-host";
 import { motionIsReduced } from "./platform-theme";
+import { mountEcosystemLiveLayer } from "./ecosystem-live-layer";
+import { ecosystemLiveScope } from "./ecosystem-live-state";
 
 export type EcosystemApplication = {
   dispose: () => void;
   state: () => unknown;
   advanceTime: (milliseconds: number) => unknown;
+  setLiveState: (value: unknown) => boolean;
   tour: { play(): void; pause(): void; next(): void; previous(): void; goto(index: number): void; setScript(text: string, autoplay: boolean): void };
 };
-export type EcosystemEvent = "ready" | "scene-changed" | "node-selected" | "models" | "error";
+export type EcosystemEvent = "ready" | "scene-changed" | "node-selected" | "models" | "error" | "live-state-changed";
 export type EcosystemMountOptions = {
   play?: string | null;
   /** Self-contained LAN embed: geometry and tour are identical; no external sky/models/textures. */
@@ -352,6 +355,10 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   dom.addEventListener("pointerup", onPointerUp);
   window.addEventListener("keydown", onKey);
 
+  // A separate overlay preserves the existing document, tour, camera and selection.
+  const liveLayer = mountEcosystemLiveLayer(surface, host, () => blocks, openNode);
+  let lastLiveView: ReturnType<typeof liveLayer.state> = null;
+
   // ---- labels -------------------------------------------------------------------------------
   // Projected HTML, then decluttered: a lit label (the stop's focus, the hover) is stacked up
   // when it would cover another lit one; an unlit label that would cover anything is hidden.
@@ -380,13 +387,14 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
       const small = block.node.kind === "service" || block.node.kind === "client" || block.node.kind === "spare" || block.node.kind === "external";
       const fade = lit ? 1 : small ? Math.max(0, Math.min(0.85, 1.4 - far * 1.6)) : Math.max(0.4, Math.min(0.95, 1.5 - far));
       if (!visible || fade <= 0.05) { label.style.opacity = "0"; label.style.transform = "translate(-9999px,-9999px)"; return; }
-      label.style.setProperty("--c", block.node.status === "installed" ? KIND_COLOUR[block.node.kind] : STATUS_COLOUR[block.node.status]);
+      const live = liveLayer.state()?.nodes.find(node => node.id === block.id);
+      label.style.setProperty("--c", live?.colour ?? (block.node.status === "installed" ? KIND_COLOUR[block.node.kind] : STATUS_COLOUR[block.node.status]));
       label.dataset.lit = String(lit);
       label.dataset.status = block.node.status;
       label.style.opacity = String(fade);
       const nameNode = label.firstElementChild as HTMLElement, subNode = label.lastElementChild as HTMLElement;
       if (nameNode.textContent !== block.node.name) nameNode.textContent = block.node.name;
-      const sub = block.node.attention ? `⚠ ${block.node.attention}` : block.node.subtitle;
+      const sub = live ? `${ecosystemLiveScope(live.source)} : ${live.label}` : block.node.attention ? `⚠ ${block.node.attention}` : block.node.subtitle;
       if (subNode.textContent !== sub) subNode.textContent = sub;
       const width = label.offsetWidth;
       candidates.push({ element: label, x: (projected.x + 1) / 2 * rect.width, y: (1 - projected.y) / 2 * rect.height - 8 - 16, width, height: 34,
@@ -435,6 +443,12 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
       layer.visible = !editing;
       if (editing) setHovered(null);
     }
+    liveLayer.frame();
+    const live = liveLayer.state();
+    if (live !== lastLiveView) {
+      lastLiveView = live;
+      emit("live-state-changed", { status: live?.status ?? null, readId: live?.read?.id ?? null });
+    }
     if (player.tick(delta)) { adhoc = null; enter(); }
     const state = player.state();
     element<HTMLProgressElement>("[data-progress]").value = state.seconds ? Math.min(1, state.elapsed / state.seconds) : 0;
@@ -479,6 +493,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
       hovered: hovered?.id ?? null,
       notice,
       models: Object.keys(models),
+      ...(liveLayer.state() ? { live: liveLayer.state() } : {}),
       nodes: blocks.map((block) => {
         const point = block.top.clone().project(host.camera);
         const onScreen = point.z < 1 && Math.abs(point.x) <= 1 && Math.abs(point.y) <= 1;
@@ -490,6 +505,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
 
   return {
     state,
+    setLiveState: (value: unknown) => liveLayer.set(value),
     advanceTime: (milliseconds: number) => { frame(Math.max(0, milliseconds) / 1000); return state(); },
     tour: {
       play: () => { adhoc = null; player.play(); enter(); },
@@ -502,6 +518,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     dispose: () => {
       disposed = true;
       unsubscribe();
+      liveLayer.dispose();
       clearPicture();
       layer.removeFromParent();
       unitEdges.dispose(); ringGeometry.dispose(); beadGeometry.dispose();

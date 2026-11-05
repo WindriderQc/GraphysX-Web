@@ -30,7 +30,8 @@ function harness() {
       options = settings; onExit = exit;
       if (fail) throw new Error("synthetic mount failure");
       settings.onEvent("ready", {});
-      const app = { disposed: 0, state: () => ({ tour: { script: "memory,garage" } }),
+      const app = { disposed: 0, live: undefined, state: () => ({ tour: { script: "memory,garage" }, ...(app.live ? { live: app.live } : {}) }),
+        setLiveState(value) { app.live = value; settings.onEvent("live-state-changed", {}); return true; },
         dispose() { this.disposed++; }, tour: { setScript: (script, autoplay) => { app.lastScript = { script, autoplay }; } } };
       apps.push(app); return app;
     },
@@ -74,4 +75,20 @@ test("mount failure never produces a display receipt and disposes its allocated 
   assert.equal(h.element.state(), null); assert.equal(h.hosts[0].disposed, 1);
   assert.equal(h.element.events.at(-1).type, "ecosystem-error");
   h.element.disconnectedCallback(); assert.equal(h.hosts[0].disposed, 1);
+});
+
+test("a live update is acknowledged by the same app but only the following render reports it", () => {
+  const h = harness();
+  assert.equal(h.element.setLiveState({}), false, "an unmounted component cannot claim acceptance");
+  h.element.connectedCallback(); h.render();
+  const before = h.element.state();
+  const live = { status: "available", read: { id: "view_fixture" } };
+  assert.equal(h.element.setLiveState(live), true);
+  assert.equal(h.element.state(), before);
+  assert.equal(h.element.events.filter(event => event.type === "ecosystem-live-state-changed").length, 0);
+  h.render();
+  assert.equal(h.element.state().presentation.live.read.id, "view_fixture");
+  assert.equal(h.element.events.filter(event => event.type === "ecosystem-live-state-changed").length, 1);
+  assert.equal(h.hosts.length, 1, "a refresh never allocates a replacement renderer");
+  h.element.disconnectedCallback();
 });

@@ -48,6 +48,16 @@
 .gx-eco-card p{margin:0;font:11px/1.5 var(--eco-mono);color:#a9c3d8;white-space:pre-line;overflow-wrap:anywhere}
 .gx-eco-tip{margin-left:auto;font:11px var(--eco-mono);color:#8fa6c6;letter-spacing:.04em;white-space:nowrap}
 .gx-eco-tip kbd{padding:1px 5px;border:1px solid #3a4f76;border-bottom-width:2px;border-radius:4px;background:#0f1a2e;color:#d6e6f2;font:inherit}
+.gx-eco-live{position:absolute;z-index:3;top:112px;left:24px;width:min(310px,calc(100% - 48px));max-height:calc(100dvh - 315px);overflow:auto;padding:12px;border:1px solid var(--eco-line);border-radius:14px;background:var(--eco-panel);pointer-events:auto;scrollbar-width:thin}
+.gx-eco-live h2{margin:0 0 6px;font:500 14px var(--gx-font,sans-serif)}
+.gx-eco-live p{margin:0 0 8px;color:#a9c3d8;font:10px/1.4 var(--eco-mono);overflow-wrap:anywhere}
+.gx-eco-live[data-status=unavailable] h2,.gx-eco-live[data-status=stale] h2{color:var(--eco-amber)}
+.gx-eco-live ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.gx-eco-live li{border-left:3px solid var(--live-colour);padding-left:7px}
+.gx-eco-live li button{width:100%;text-align:left;min-height:40px;padding:6px 7px;font:11px/1.4 var(--eco-mono);color:var(--live-colour);overflow-wrap:anywhere}
+.gx-eco-live small{display:block;margin-top:3px;color:#a9c3d8;font:9px/1.4 var(--eco-mono);overflow-wrap:anywhere}
+.gx-eco-live .gx-eco-live-scope{margin:10px 0 0}
+@media(max-width:820px){.gx-eco-live{top:88px;left:12px;width:calc(100% - 24px);max-height:24dvh;padding:8px}.gx-eco-live ul{grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr))}}
 @media(max-width:1100px){.gx-eco-nestor{width:290px}.gx-eco-tour{right:338px}}
 @media(max-width:820px){.gx-eco-nestor{position:absolute;top:auto;bottom:118px;left:12px;right:12px;width:auto;max-height:30dvh;padding:12px}.gx-eco-tour{left:12px;right:12px;bottom:12px;padding:8px;gap:5px}.gx-eco-steps{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.gx-eco-steps button{white-space:nowrap}.gx-eco-card{display:none}.gx-eco-tip{display:none}.gx-eco-header{top:12px;left:12px;right:12px}.gx-eco h1{font-size:19px}.gx-eco-legend{display:none}}
 @media(prefers-reduced-motion:reduce){.gx-eco-eyebrow::before{animation:none}.gx-eco-label,.gx-eco-card,.gx-eco-flowtag{transition:none}}
