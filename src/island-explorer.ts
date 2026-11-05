@@ -64,6 +64,24 @@ export function mountIslandExplorer(surface: HTMLElement, options: ExplorerOptio
   };
   const listRow = (item: ExplorerItem): string => `<button type="button" class="ix-item" data-ix-select="${esc(item.id)}">
     <span><b>${esc(item.name)}</b><small>${esc(item.kind === "bird" ? "Individu de la volée" : categoryName(item.category))}${item.visible ? "" : " · invisible"}</small></span><span aria-hidden="true">↗</span></button>`;
+  const listKeys = new WeakMap<HTMLElement, string>();
+  const updateList = (root: HTMLElement, rows: ExplorerItem[]): void => {
+    const existing = new Map([...root.children].map(node => [(node as HTMLElement).dataset.ixSelect, node as HTMLElement]));
+    const wanted = new Set(rows.map(row => row.id));
+    for (const [index, row] of rows.entries()) {
+      let button = existing.get(row.id);
+      const key = JSON.stringify([row.name, row.kind, row.visible]);
+      if (!button || listKeys.get(button) !== key) {
+        const template = document.createElement("template"); template.innerHTML = listRow(row);
+        const next = template.content.firstElementChild as HTMLElement;
+        if (button) button.innerHTML = next.innerHTML;
+        else button = next;
+        listKeys.set(button, key);
+      }
+      if (root.children[index] !== button) root.insertBefore(button, root.children.item(index));
+    }
+    for (const [id, node] of existing) if (!id || !wanted.has(id)) node.remove();
+  };
 
   const render = (): void => {
     if (!model) return;
@@ -76,8 +94,15 @@ export function mountIslandExplorer(surface: HTMLElement, options: ExplorerOptio
     const relationships = item?.relations.map(r => `${r.label}:${r.id}`).join("|");
     const fields = item?.properties.map(p => `${p.group}:${p.label}`).join("|");
     const children = model.items.filter(row => row.parent === selected);
-    const key = JSON.stringify([view, view === "timeline" ? [changes.length, model.messages?.length] : null, view === "timeline" ? model.actions.at(-1)?.id || model.actions.at(-1)?.tick : null, model.key, selected, category, query, fields, relationships,
-      results.map(row => [row.id, row.name, row.visible, row.kind]), children.map(row => row.id), model.counts]);
+    const home = view === "explore" && !selected && !category && !query;
+    // Births update category counters, not the navigation buttons. Other views depend only
+    // on the rows they actually display: a new bird must not replace a tree's controls.
+    const structureRows = view === "explore" ? [] : view === "lineage" || view === "compare"
+      ? model.items.filter(row => row.category === "trees")
+      : view === "map" || view === "timeline" ? model.items.filter(row => row.kind !== "bird")
+        : view === "explore" && item ? children : results;
+    const key = JSON.stringify([view, view === "timeline" ? [changes.length, model.messages?.length] : null, view === "timeline" ? model.actions.at(-1)?.id || model.actions.at(-1)?.tick : null, model.key, selected, item?.name, item?.kind, category, query, fields, relationships,
+      structureRows.map(row => [row.id, row.name, row.visible, row.kind, row.attributes.Generation, row.attributes.Parent, row.attributes.Lineage])]);
     const navKey = JSON.stringify([model.key, selected, category, item?.name]);
     const navigationChanged = navKey !== renderedNav;
     if (navigationChanged) {
@@ -102,16 +127,16 @@ export function mountIslandExplorer(surface: HTMLElement, options: ExplorerOptio
           ${!model.metadata ? '<p class="ix-hint">Cet enregistrement ne transmet pas les données détaillées. Les formes et positions restent consultables.</p>' : ""}
           ${item.relations.length ? `<section><h4>Relations et lignée</h4><div class="ix-relations">${item.relations.map(r => `<button type="button" data-ix-select="${esc(r.id)}">${esc(r.label)} · ${esc(model!.items.find(row => row.id === r.id)?.name || r.id)} →</button>`).join("")}</div></section>` : ""}
           ${groups.map(group => `<section class="ix-properties"><h4>${esc(group)}</h4><dl>${item.properties.map((p, index) => p.group === group ? `<div><dt>${esc(p.label)}</dt><dd data-ix-value="${index}"></dd></div>` : "").join("")}</dl></section>`).join("")}
-          ${children.length ? `<section><h4>Éléments de ${esc(item.name)} (${children.length})</h4><div class="ix-list">${children.map(listRow).join("")}</div></section>` : ""}
+          <section data-ix-child-section${children.length ? "" : " hidden"}><h4>Éléments de ${esc(item.name)} (<span data-ix-child-count>${children.length}</span>)</h4><div class="ix-list" data-ix-children>${children.map(listRow).join("")}</div></section>
           <section><h4>${item.category === "agents" ? "Activité de cet agent" : "Activité du monde"}</h4><ol class="ix-log" data-ix-log></ol></section>
           <details class="ix-raw"><summary>Données source</summary><pre data-ix-raw></pre></details>`;
       } else if (!category && !query) {
         content.innerHTML = `<div class="ix-intro"><h3>Une île à explorer</h3><p>Choisis une catégorie ou clique sur un élément dans la scène pour ouvrir sa fiche.</p><button type="button" data-ix-overview>Vue d’ensemble en 3D</button></div>
-          <div class="ix-categories">${EXPLORER_CATEGORIES.map(([id, name, hint]) => `<button type="button" data-ix-category="${id}" class="ix-category"><span>${esc(name)}</span><b>${model!.counts[id]}</b><small>${esc(hint)}</small></button>`).join("")}</div>
+          <div class="ix-categories">${EXPLORER_CATEGORIES.map(([id, name, hint]) => `<button type="button" data-ix-category="${id}" class="ix-category"><span>${esc(name)}</span><b data-ix-count="${id}">${model!.counts[id]}</b><small>${esc(hint)}</small></button>`).join("")}</div>
           <section><h4>Activité du monde</h4><ol class="ix-log" data-ix-log></ol></section>`;
       } else {
-        content.innerHTML = `<div class="ix-list-head"><h3>${esc(category ? categoryName(category) : "Résultats")}</h3><span>${results.length} élément${results.length > 1 ? "s" : ""}</span></div>
-          ${results.length ? `<div class="ix-list">${results.map(listRow).join("")}</div>` : '<p class="ix-empty">Aucun élément dans cette catégorie ou pour cette recherche.</p>'}`;
+        content.innerHTML = `<div class="ix-list-head"><h3>${esc(category ? categoryName(category) : "Résultats")}</h3><span data-ix-result-count></span></div>
+          <div class="ix-list" data-ix-results></div><p class="ix-empty" data-ix-empty>Aucun élément dans cette catégorie ou pour cette recherche.</p>`;
       }
       content.scrollTop = navigationChanged && view === "explore" ? 0 : scrollTop;
       if (focusData.length) {
@@ -119,15 +144,29 @@ export function mountIslandExplorer(surface: HTMLElement, options: ExplorerOptio
         candidates.find(n => focusData.every(([key, value]) => n.dataset[key] === value))?.focus({ preventScroll: true });
       }
     }
+    if (home) for (const [id] of EXPLORER_CATEGORIES) {
+      const counter = panel.querySelector<HTMLElement>(`[data-ix-count="${id}"]`);
+      if (counter && counter.textContent !== String(model.counts[id])) counter.textContent = String(model.counts[id]);
+    }
     if (view === "timeline") workspace.refreshTimeline(get("[data-ix-content]"), model);
-    if (view === "map") workspace.refreshMap(get("[data-ix-content]"), model);
+    if (view === "map") workspace.refreshMap(get("[data-ix-content]"), model, selected);
     if (item) {
+      const list = panel.querySelector<HTMLElement>("[data-ix-children]");
+      if (list) {
+        get("[data-ix-child-section]").hidden = children.length === 0;
+        get("[data-ix-child-count]").textContent = String(children.length);
+        updateList(list, children);
+      }
       for (const [index, property] of item.properties.entries()) {
         const field = panel.querySelector<HTMLElement>(`[data-ix-value="${index}"]`);
         if (field && field.textContent !== property.value) field.textContent = property.value;
       }
       const raw = panel.querySelector<HTMLElement>("[data-ix-raw]");
       if (raw?.closest("details")?.open) raw.textContent = JSON.stringify(item.raw, null, 2);
+    } else if (view === "explore" && !home && !selected) {
+      get("[data-ix-result-count]").textContent = `${results.length} élément${results.length > 1 ? "s" : ""}`;
+      get("[data-ix-empty]").hidden = results.length > 0;
+      updateList(get("[data-ix-results]"), results);
     }
     const log = panel.querySelector<HTMLElement>("[data-ix-log]");
     if (log) {

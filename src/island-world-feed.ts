@@ -30,7 +30,7 @@ export const WORLD_TAG = "world-part";
  * 17 s; an island watched for hours gets a calmer autumn. Presentation only: the server never
  * animates leaves, so this changes nothing an agent's rules see.
  */
-export const WORLD_LEAF_SEASON_SECONDS = 48;
+export const WORLD_LEAF_SEASON_SECONDS = 180;
 
 export type WorldEntityDefinition = Record<string, unknown> & { id: string; type?: string; label?: string };
 

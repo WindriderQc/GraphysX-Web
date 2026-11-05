@@ -19,9 +19,20 @@ export function islandWorkspace(options: Options) {
   const trails = new Map<string, number[][]>();
   let trailTick = -1, instance = "";
   let projection = { x: 0, z: 0, span: 1 };
+  let mapPopulation = "";
   const button = (item: ExplorerItem) => `<button type="button" data-ix-select="${esc(item.id)}"${item.id ? "" : " disabled"}>${esc(item.name)}</button>`;
 
+  const mapMarker = (i: ExplorerItem, selected: string | null): string => {
+    const { x, z, span } = projection;
+    const px = (i.position![0] - x) / span * 400, py = (i.position![2] - z) / span * 400;
+    const raw = i.raw as { definition?: { forceField?: { radius?: number; size?: number[]; direction?: number[] } } };
+    const force = raw.definition?.forceField;
+        return `${i.category === "forces" && force?.radius ? `<circle cx="${px}" cy="${py}" r="${Math.min(1000, force.radius / span * 400)}" fill="#ceafff0c" stroke="#ceafff50"/>` : ""}${i.category === "forces" && force?.size ? `<rect x="${px - force.size[0] / span * 200}" y="${py - force.size[2] / span * 200}" width="${force.size[0] / span * 400}" height="${force.size[2] / span * 400}" fill="#ceafff0c" stroke="#ceafff50"/>` : ""}${i.category === "forces" && force?.direction ? `<path d="M${px} ${py}l${force.direction[0] * 12} ${force.direction[2] * 12}" stroke="#ceafff" stroke-width="3"/>` : ""}<g role="button" tabindex="0" data-ix-select="${esc(i.id)}" aria-label="${esc(mapLabel(i))}" aria-pressed="${selected === i.id}"><title>${esc(mapLabel(i))}</title><circle cx="${px}" cy="${py}" r="${selected === i.id ? 9 : i.kind === "bird" ? 3 : 6}" fill="${COLORS[i.category]}" stroke="${selected === i.id ? "#fff" : "#071d2b"}" stroke-width="2"/><circle cx="${px}" cy="${py}" r="12" fill="transparent"/></g>`;
+
+  };
+
   function map(model: ExplorerModel, selected: string | null) {
+    mapPopulation = "";
     let items = mapItems(model);
     if (mapIndividual) items = [...items.filter(i => i.kind !== "flock"), ...model.items.filter(i => i.kind === "bird")];
     const bounds = mapBounds(items), span = bounds.span / zoom, x = bounds.x + panX - span / 2, z = bounds.z + panZ - span / 2;
@@ -37,14 +48,9 @@ export function islandWorkspace(options: Options) {
       <svg class="ix-map" viewBox="0 0 400 400" role="group" aria-label="Carte interactive de l’île">
       <rect width="400" height="400" rx="12" fill="#102e40"/><path d="M0 200H400M200 0V400" stroke="#35505a" stroke-dasharray="3 8"/>
       ${layers.has("trails") ? visible.filter(i => i.category === "agents").map(i => `<polyline data-map-trail="${esc(i.id)}" points="${(trails.get(i.id) || []).map(p => `${toX(p[0])},${toZ(p[2])}`).join(" ")}" fill="none" stroke="${COLORS.agents}" stroke-width="1.5"/>`).join("") : ""}
-      ${visible.map(i => {
-        const px = toX(i.position![0]), py = toZ(i.position![2]);
-        const raw = i.raw as { definition?: { forceField?: { radius?: number; size?: number[]; direction?: number[] } } };
-        const force = raw.definition?.forceField;
-        return `${i.category === "forces" && force?.radius ? `<circle cx="${px}" cy="${py}" r="${Math.min(1000, force.radius / span * 400)}" fill="#ceafff0c" stroke="#ceafff50"/>` : ""}${i.category === "forces" && force?.size ? `<rect x="${px - force.size[0] / span * 200}" y="${py - force.size[2] / span * 200}" width="${force.size[0] / span * 400}" height="${force.size[2] / span * 400}" fill="#ceafff0c" stroke="#ceafff50"/>` : ""}${i.category === "forces" && force?.direction ? `<path d="M${px} ${py}l${force.direction[0] * 12} ${force.direction[2] * 12}" stroke="#ceafff" stroke-width="3"/>` : ""}<g role="button" tabindex="0" data-ix-select="${esc(i.id)}" aria-label="${esc(mapLabel(i))}" aria-pressed="${selected === i.id}"><title>${esc(mapLabel(i))}</title><circle cx="${px}" cy="${py}" r="${selected === i.id ? 9 : i.kind === "bird" ? 3 : 6}" fill="${COLORS[i.category]}" stroke="${selected === i.id ? "#fff" : "#071d2b"}" stroke-width="2"/><circle cx="${px}" cy="${py}" r="12" fill="transparent"/></g>`;
-      }).join("")}<text x="12" y="22" fill="#cce5eb">N ↑</text></svg>
+      ${visible.map(i => mapMarker(i, selected)).join("")}<text x="12" y="22" fill="#cce5eb">N ↑</text></svg>
       <p class="ix-hint">Déplacements : positions reçues dans cette vue, ${model.mode === "Relecture" ? "effacées à chaque déplacement dans le temps" : "historique récent"}. Altitude et dimensions ne sont pas représentées.</p>
-      <details><summary>Éléments de la carte (${visible.length})</summary><div class="ix-relations">${visible.map(button).join("")}</div></details>`;
+      <details><summary>Éléments de la carte (<span data-map-count>${visible.length}</span>)</summary><div class="ix-relations" data-map-list>${visible.map(button).join("")}</div></details>`;
   }
 
   function timeline(model: ExplorerModel, changes: ObservedChange[]) {
@@ -117,12 +123,41 @@ export function islandWorkspace(options: Options) {
       ${pinned && second ? `<label><input type="checkbox" data-compare-diff${changeOnly ? " checked" : ""}>Différences seulement</label><table class="ix-compare-table"><thead><tr><th>Propriété</th><th>A</th><th>B</th></tr></thead><tbody>${compareTreeProperties(pinned, second).filter(r => !changeOnly || r.changed).map(r => `<tr${r.changed ? ' class="ix-changed"' : ""}><th>${esc(r.label)}</th><td>${esc(r.a)}</td><td>${esc(r.b)}</td></tr>`).join("")}</tbody></table>` : '<p class="ix-empty">Deux états sont nécessaires pour afficher les différences.</p>'}`;
   }
   return {
-    refreshMap(root: HTMLElement, model: ExplorerModel): void {
+    refreshMap(root: HTMLElement, model: ExplorerModel, selected: string | null = null): void {
       if (instance !== model.key || model.tick < trailTick) { trails.clear(); instance = model.key; }
       if (model.tick !== trailTick) for (const item of model.items.filter(i => i.category === "agents" && i.position)) {
         const samples = trails.get(item.id) || []; samples.push([...item.position!]); trails.set(item.id, samples.slice(-120));
       }
       trailTick = model.tick;
+      // Population changes patch only bird markers/list rows. Replacing the map's toolbar
+      // here makes a live birth detach the zoom button or checkbox during a user's gesture.
+      const birds = mapIndividual && layers.has("birds") ? model.items.filter(i => i.kind === "bird") : [];
+      const key = JSON.stringify([model.key, mapIndividual, [...layers], birds.map(i => i.id)]);
+      if (key !== mapPopulation) {
+        mapPopulation = key;
+        const svg = root.querySelector<SVGSVGElement>(".ix-map");
+        const list = root.querySelector<HTMLElement>("[data-map-list]");
+        if (svg && list) {
+          const markers = new Map([...svg.querySelectorAll<SVGGElement>('[data-ix-select*=":bird:"]')].map(n => [n.dataset.ixSelect!, n]));
+          const rows = new Map([...list.querySelectorAll<HTMLElement>('[data-ix-select*=":bird:"]')].map(n => [n.dataset.ixSelect!, n]));
+          const wanted = new Set(birds.map(i => i.id));
+          for (const bird of birds) {
+            if (!markers.has(bird.id)) {
+              const fragment = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+              fragment.innerHTML = mapMarker(bird, selected);
+              svg.insertBefore(fragment.firstElementChild!, svg.querySelector("text"));
+            }
+            if (!rows.has(bird.id)) {
+              const fragment = document.createElement("template"); fragment.innerHTML = button(bird);
+              list.append(fragment.content);
+            }
+          }
+          for (const [id, marker] of markers) if (!wanted.has(id)) marker.remove();
+          for (const [id, row] of rows) if (!wanted.has(id)) row.remove();
+          const count = root.querySelector<HTMLElement>("[data-map-count]");
+          if (count) count.textContent = String(list.children.length);
+        }
+      }
       for (const marker of root.querySelectorAll<SVGGElement>(".ix-map [data-ix-select]")) {
         const item = model.items.find(i => i.id === marker.dataset.ixSelect);
         if (!item?.position) continue;
