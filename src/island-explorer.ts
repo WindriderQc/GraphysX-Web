@@ -76,8 +76,15 @@ export function mountIslandExplorer(surface: HTMLElement, options: ExplorerOptio
     const relationships = item?.relations.map(r => `${r.label}:${r.id}`).join("|");
     const fields = item?.properties.map(p => `${p.group}:${p.label}`).join("|");
     const children = model.items.filter(row => row.parent === selected);
+    const home = view === "explore" && !selected && !category && !query;
+    // Births update category counters, not the navigation buttons. Other views depend only
+    // on the rows they actually display: a new bird must not replace a tree's controls.
+    const structureRows = home ? [] : view === "lineage" || view === "compare"
+      ? model.items.filter(row => row.category === "trees")
+      : view === "map" ? model.items : view === "timeline" ? model.items.filter(row => row.kind !== "bird")
+        : view === "explore" && item ? children : results;
     const key = JSON.stringify([view, view === "timeline" ? [changes.length, model.messages?.length] : null, view === "timeline" ? model.actions.at(-1)?.id || model.actions.at(-1)?.tick : null, model.key, selected, category, query, fields, relationships,
-      results.map(row => [row.id, row.name, row.visible, row.kind]), children.map(row => row.id), model.counts]);
+      structureRows.map(row => [row.id, row.name, row.visible, row.kind, row.attributes.Generation, row.attributes.Parent, row.attributes.Lineage]), selected ? children.map(row => row.id) : []]);
     const navKey = JSON.stringify([model.key, selected, category, item?.name]);
     const navigationChanged = navKey !== renderedNav;
     if (navigationChanged) {
@@ -107,7 +114,7 @@ export function mountIslandExplorer(surface: HTMLElement, options: ExplorerOptio
           <details class="ix-raw"><summary>Données source</summary><pre data-ix-raw></pre></details>`;
       } else if (!category && !query) {
         content.innerHTML = `<div class="ix-intro"><h3>Une île à explorer</h3><p>Choisis une catégorie ou clique sur un élément dans la scène pour ouvrir sa fiche.</p><button type="button" data-ix-overview>Vue d’ensemble en 3D</button></div>
-          <div class="ix-categories">${EXPLORER_CATEGORIES.map(([id, name, hint]) => `<button type="button" data-ix-category="${id}" class="ix-category"><span>${esc(name)}</span><b>${model!.counts[id]}</b><small>${esc(hint)}</small></button>`).join("")}</div>
+          <div class="ix-categories">${EXPLORER_CATEGORIES.map(([id, name, hint]) => `<button type="button" data-ix-category="${id}" class="ix-category"><span>${esc(name)}</span><b data-ix-count="${id}">${model!.counts[id]}</b><small>${esc(hint)}</small></button>`).join("")}</div>
           <section><h4>Activité du monde</h4><ol class="ix-log" data-ix-log></ol></section>`;
       } else {
         content.innerHTML = `<div class="ix-list-head"><h3>${esc(category ? categoryName(category) : "Résultats")}</h3><span>${results.length} élément${results.length > 1 ? "s" : ""}</span></div>
@@ -118,6 +125,10 @@ export function mountIslandExplorer(surface: HTMLElement, options: ExplorerOptio
         const candidates = [...content.querySelectorAll<HTMLElement>("button,input,select,[tabindex]")];
         candidates.find(n => focusData.every(([key, value]) => n.dataset[key] === value))?.focus({ preventScroll: true });
       }
+    }
+    if (home) for (const [id] of EXPLORER_CATEGORIES) {
+      const counter = panel.querySelector<HTMLElement>(`[data-ix-count="${id}"]`);
+      if (counter && counter.textContent !== String(model.counts[id])) counter.textContent = String(model.counts[id]);
     }
     if (view === "timeline") workspace.refreshTimeline(get("[data-ix-content]"), model);
     if (view === "map") workspace.refreshMap(get("[data-ix-content]"), model);

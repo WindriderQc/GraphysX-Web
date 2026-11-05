@@ -419,7 +419,7 @@ export const GRAPHYSX_AGENT_WORLD_DNA_RECORD: {
       code: "world-leaf-renewal",
       fidelity: "inferred",
       detail:
-        "Host-driven showSeason staggers seeded trees and individual leaves, adds gradual budding and litter fading, and reaches the ground before renewing at zero size. It samples world time at 30 Hz without physics. The recovered update() animation is retained.",
+        "Host-driven showSeason staggers seeded trees and individual leaves, buds gradually, varies flight time with height/fallSpeed, settles litter flat on soil, and darkens/shrinks it before renewal at zero size. Growth and flight durations stay short during the slower host cycle. It samples world time at 30 Hz without physics. The recovered update() animation is retained.",
     },
     {
       code: "grove-layout",
@@ -797,6 +797,7 @@ export class AgentWorldDnaSystem {
   private lastGrowth = -1;
   private lastSeason = -1;
   private worldSeason = false;
+  private worldPeriodSeconds = 0;
   private leafOffsets: number[] = [];
   private readonly dummy = new Object3D();
   private readonly matrix = new Matrix4();
@@ -890,7 +891,7 @@ export class AgentWorldDnaSystem {
       const bounds = new Box3();
       for (const leaf of leaves) {
         bounds.expandByPoint(leaf.base);
-        bounds.expandByPoint(new Vector3(leaf.base.x - leaf.drift, 0.06, leaf.base.z - leaf.drift));
+        bounds.expandByPoint(new Vector3(leaf.base.x - leaf.drift, 0, leaf.base.z - leaf.drift));
         bounds.expandByPoint(new Vector3(leaf.base.x + leaf.drift, 0.16, leaf.base.z + leaf.drift));
       }
       bounds.expandByScalar(this.expressed.leafSize * 1.25);
@@ -904,6 +905,7 @@ export class AgentWorldDnaSystem {
     this.lastGrowth = -1;
     this.lastSeason = -1;
     this.worldSeason = false;
+    this.worldPeriodSeconds = 0;
     // Write frame zero immediately so a paused world still shows the tree it configured.
     this.apply();
   }
@@ -955,10 +957,12 @@ export class AgentWorldDnaSystem {
       ? (((sampled % periodSeconds) + periodSeconds) % periodSeconds) / periodSeconds
       : 0;
     const growth = this.growthProgress;
-    if (growth === this.lastGrowth && season === this.lastSeason && worldSeason === this.worldSeason) return;
+    if (growth === this.lastGrowth && season === this.lastSeason && worldSeason === this.worldSeason &&
+      (!worldSeason || periodSeconds === this.worldPeriodSeconds)) return;
     this.lastGrowth = growth;
     this.lastSeason = season;
     this.worldSeason = worldSeason;
+    this.worldPeriodSeconds = worldSeason ? periodSeconds : 0;
     this.writeLeaves(growth, season, worldSeason);
   }
 
@@ -982,6 +986,7 @@ export class AgentWorldDnaSystem {
     this.lastGrowth = growth;
     this.lastSeason = season;
     this.worldSeason = false;
+    this.worldPeriodSeconds = 0;
     // The instanced equivalent of the archive's `setDrawRange` reveal: shrinking `count`
     // costs nothing and, because segments are level-ordered, grows the forest outward.
     if (this.branches) this.branches.count = Math.max(1, Math.ceil(this.form.segments.length * growth));
@@ -996,31 +1001,48 @@ export class AgentWorldDnaSystem {
     for (let index = 0; index < this.form.leaves.length; index += 1) {
       const leaf = this.form.leaves[index];
       const life = (season + this.leafOffsets[index]) % 1;
+      const size = 0.82 + leaf.phase * 0.42;
+      const restHeight = 0.008 + this.expressed.leafSize * size * 0.52 * 0.4 * 0.35;
+      // Flight lasts seconds, independently of a much slower renewal/decomposition cycle.
+      // Height and inherited fallSpeed vary the landing time without rigid-body simulation.
+      const fallEnd = 0.64 + (worldSeason ? Math.min(0.18, Math.max(0.015,
+        Math.max(0, leaf.base.y - restHeight) / (0.25 + leaf.fallSpeed * 0.18) / this.worldPeriodSeconds)) : 0.18);
       // The archive path is verbatim from updateForest. The world's presentation gives each
       // leaf a complete, continuous life instead of resetting every tree at the same instant.
-      const localFall = worldSeason ? smoothstep(0.68, 0.82, life)
+      const flightFall = worldSeason ? smoothstep(0.64, fallEnd, life)
         : clamp01((season - leaf.phase * 0.28) / Math.max(0.15, 1 - leaf.phase * 0.28));
+      // Resolve the tiny remaining approach as soil contact. Otherwise the leaf is already
+      // visually flat while its eased trajectory still drifts by fractions of a millimetre.
+      const localFall = worldSeason && flightFall > 0.9995 ? 1 : flightFall;
+      const renewal = worldSeason ? smoothstep(0, Math.min(0.16, 14 / this.worldPeriodSeconds), life) * (1 - smoothstep(0.84, 0.98, life)) : 1;
+      const detachedSize = worldSeason ? 1 - 0.6 * smoothstep(0, 0.2, localFall) : 1;
+      const scale = visibility * renewal * detachedSize * (1 - localFall * 0.48) * size;
+      const landed = worldSeason ? smoothstep(0.9, 1, localFall) : 0;
       this.dummy.position.copy(leaf.base);
-      this.dummy.position.y = worldSeason ? leaf.base.y + (Math.min(0.06, leaf.base.y) - leaf.base.y) * localFall
+      // Keep the lower surface on the soil as litter flattens and decomposes; its centre
+      // must sink with its shrinking thickness rather than leave a floating speck.
+      const ground = Math.min(leaf.base.y, 0.008 + this.expressed.leafSize * scale * 0.35);
+      this.dummy.position.y = worldSeason ? leaf.base.y + (ground - leaf.base.y) * localFall
         : Math.max(0.16, leaf.base.y - localFall * leaf.fallSpeed * 5.4);
       this.dummy.position.x += Math.sin(localFall * 9 + leaf.phase * 12) * leaf.drift * localFall;
       this.dummy.position.z += Math.cos(localFall * 7 + leaf.phase * 9) * leaf.drift * localFall;
-      const renewal = worldSeason ? smoothstep(0, 0.16, life) * (1 - smoothstep(0.88, 0.97, life)) : 1;
       // A canopy instance represents a cluster. Once detached, reduce it smoothly to a
       // small falling leaf rather than letting a whole cluster fill an agent's eye view.
-      const detachedSize = worldSeason ? 1 - 0.6 * smoothstep(0, 0.2, localFall) : 1;
-      const scale = visibility * renewal * detachedSize * (1 - localFall * 0.48) * (0.82 + leaf.phase * 0.42);
       this.dummy.scale.setScalar(worldSeason ? scale : Math.max(0.001, scale));
-      if (worldSeason) this.dummy.scale.y *= 1 - localFall * 0.65;
-      this.dummy.rotation.set(localFall * 3.2, leaf.phase * Math.PI * 2, localFall * 2.1);
+      if (worldSeason) this.dummy.scale.y *= 1 - landed * 0.65;
+      this.dummy.rotation.set(localFall * 3.2 * (1 - landed), leaf.phase * Math.PI * 2, localFall * 2.1 * (1 - landed));
       this.dummy.updateMatrix();
       mesh.setMatrixAt(index, this.dummy.matrix);
       const baseHue = this.hues[leaf.treeIndex] ?? this.expressed.leafHue;
       const autumnHue = ARCHIVE_AUTUMN_HUE + leaf.phase * ARCHIVE_AUTUMN_HUE_SPREAD;
+      const autumn = worldSeason ? smoothstep(0.5, 0.64, life) : season;
+      const decay = worldSeason ? smoothstep(Math.max(0.78, fallEnd), 0.98, life) : 0;
+      const hue = baseHue + (autumnHue - baseHue) * autumn;
+      const lightness = ARCHIVE_LEAF_LIGHTNESS + leaf.phase * ARCHIVE_LEAF_LIGHTNESS_SPREAD;
       this.color.setHSL(
-        baseHue + (autumnHue - baseHue) * (worldSeason ? smoothstep(0.48, 0.68, life) : season),
-        ARCHIVE_LEAF_SATURATION,
-        ARCHIVE_LEAF_LIGHTNESS + leaf.phase * ARCHIVE_LEAF_LIGHTNESS_SPREAD,
+        hue + (0.075 - hue) * decay,
+        ARCHIVE_LEAF_SATURATION + (0.48 - ARCHIVE_LEAF_SATURATION) * decay,
+        lightness + (0.18 - lightness) * decay,
       );
       mesh.setColorAt(index, this.color);
     }

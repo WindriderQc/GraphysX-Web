@@ -31,7 +31,8 @@ const server = await createServer({
             import * as after from "/src/agent-world-dna.ts";
             import * as THREE from "three";
             import { buildLivingIsland } from "/world-service/living-island.ts";
-            window.leafProbe = { before, after, THREE, definitions: buildLivingIsland().document.entities.filter(e => e.type === "dna-tree") };
+            import { WORLD_LEAF_SEASON_SECONDS as period } from "/src/island-world-feed.ts";
+            window.leafProbe = { before, after, THREE, period, definitions: buildLivingIsland().document.entities.filter(e => e.type === "dna-tree") };
           </script></body></html>`));
         } catch (error) { next(error); }
       });
@@ -47,7 +48,7 @@ try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/__leaf_probe`);
   await page.waitForFunction(() => Boolean(window.leafProbe));
   const report = await page.evaluate(() => {
-    const { before, after, THREE, definitions } = window.leafProbe;
+    const { before, after, THREE, definitions, period } = window.leafProbe;
     const make = (module) => definitions.map((definition) => {
       const system = new module.AgentWorldDnaSystem(module.resolveAgentWorldDna(definition.dna));
       system.object.position.fromArray(definition.transform.position);
@@ -58,7 +59,7 @@ try {
     const leaves = (system) => system.object.getObjectByName("GraphysXDnaLeaves");
     const cpu = {};
     for (const [label, systems] of Object.entries(groups)) {
-      for (let frame = 0; frame < 120; frame++) systems.forEach((s) => s.showSeason(frame / 60, 48));
+      for (let frame = 0; frame < 120; frame++) systems.forEach((s) => s.showSeason(frame / 60, period));
       const versions = systems.map((s) => leaves(s).instanceMatrix.version);
       let boundsScans = 0;
       for (const system of systems) {
@@ -69,7 +70,7 @@ try {
       const samples = [];
       for (let round = 0; round < 3; round++) {
         const start = performance.now();
-        for (let frame = 0; frame < 720; frame++) systems.forEach((s) => s.showSeason((frame + round * 720) / 60, 48));
+        for (let frame = 0; frame < 720; frame++) systems.forEach((s) => s.showSeason((frame + round * 720) / 60, period));
         samples.push((performance.now() - start) / 720);
       }
       cpu[label] = { msPer60HzFrame: samples, matrixUploads: systems.reduce((n, s, i) => n + leaves(s).instanceMatrix.version - versions[i], 0), boundsScans };
@@ -116,11 +117,11 @@ try {
       for (const label of round % 2 ? [...cases].reverse() : cases) {
         const systems = groups[label.startsWith("before") ? "before" : "after"];
         attach(systems, !label.endsWith("hidden"));
-        systems.forEach((s) => s.showSeason(12, 48));
+        systems.forEach((s) => s.showSeason(period / 4, period));
         for (let warm = 0; warm < 3; warm++) { renderer.render(scene, camera); complete(); }
         const start = performance.now();
         for (let frame = 0; frame < 24; frame++) {
-          if (label.endsWith("moving")) systems.forEach((s) => s.showSeason(12 + frame / 60, 48));
+          if (label.endsWith("moving")) systems.forEach((s) => s.showSeason(period / 4 + frame / 60, period));
           renderer.render(scene, camera);
           complete();
         }
@@ -131,14 +132,14 @@ try {
     }
     attach(groups.after, true);
     window.captureLeafTime = (seconds) => {
-      groups.after.forEach((s) => s.showSeason(seconds, 48));
+      groups.after.forEach((s) => s.showSeason(seconds, period));
       renderer.shadowMap.needsUpdate = true;
       renderer.render(scene, camera);
       complete();
     };
-    return { graphics, synchronization: "1-pixel readback per frame", pixel: [...pixel], viewport: [1024, 640], trees: definitions.length, leaves: groups.after.reduce((n, s) => n + s.leafCount, 0), cpu, rendering };
+    return { graphics, periodSeconds: period, synchronization: "1-pixel readback per frame", pixel: [...pixel], viewport: [1024, 640], trees: definitions.length, leaves: groups.after.reduce((n, s) => n + s.leafCount, 0), cpu, rendering };
   });
-  for (const seconds of [0, 12, 24, 48]) {
+  for (const seconds of [0, report.periodSeconds / 4, report.periodSeconds / 2, report.periodSeconds * 3 / 4]) {
     await page.evaluate((t) => window.captureLeafTime(t), seconds);
     await page.screenshot({ path: path.join(artifacts, `foliage-${seconds}s.png`) });
   }

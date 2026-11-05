@@ -137,17 +137,31 @@ Demande de Yanik : une île vivante sans les agents, dans l'esprit des forêts e
 La chute des feuilles de la Forêt vivante (`seasonSeconds`) était coupée sur l'île : le serveur
 garde ses arbres immobiles (aucun coût par pas) et la vue n'anime rien. Depuis le 2026-11-03, la
 vue fait tomber les feuilles elle-même, réglée sur l'horloge de l'île (`showSeason` du
-`dna-tree`, un cycle de 48 s, `WORLD_LEAF_SEASON_SECONDS`) : tous les spectateurs, en direct ou
+`dna-tree`, initialement un cycle de 48 s, `WORLD_LEAF_SEASON_SECONDS`) : tous les spectateurs, en direct ou
 en relecture, voient le même automne. Les règles et l'observation ne changent pas ; seule l'image
 change, y compris la vue à la première personne d'Eko.
 
 Le cycle visuel décale maintenant les arbres selon leur graine et les feuilles selon leur
 phase : bourgeon, feuillage adulte, couleur d'automne, chute jusqu'au sol, repos puis disparition
 progressive. Une feuille revient sur sa branche seulement à taille nulle, puis repousse ; aucun
-retour visible en bloc à la fin des 48 secondes. Ce cycle est une adaptation de présentation ;
+retour visible en bloc à la fin du cycle. Ce cycle est une adaptation de présentation ;
 les leçons de la Forêt vivante gardent leur animation d'archive dans `update()`.
 Au détachement, l'instance qui figurait un amas de feuillage se réduit progressivement à une
 petite feuille, pour éviter de faire passer tout l'amas devant les yeux d'un agent.
+
+La revue du réalisme ralentit maintenant ce renouvellement à **180 secondes simulées**.
+La pousse prend au plus 14 secondes. La durée de chute dépend de la hauteur et du `fallSpeed`
+propre à chaque feuille : allonger le cycle ne fait pas flotter une feuille pendant toute une
+saison. Au contact du sol, le mouvement cesse, la feuille s'aplatit parallèlement au terrain,
+et sa hauteur suit son épaisseur. La litière reste visible plusieurs dizaines de secondes,
+brunit et s'assombrit, puis rapetisse progressivement avant son renouvellement invisible.
+
+Il s'agit d'un cycle visuel accéléré : les couleurs génétiques bleues ou roses restent un choix
+de l'île. Les saisons, la météo, les organismes décomposeurs et les nutriments ne sont pas
+simulés. La perte des pigments avant la chute suit le principe décrit par
+[Harvard Forest](https://harvardforest.fas.harvard.edu/education-opportunities/classic-outreach-resources/autumn-foliage-color/leaf-science/leaf-process/) ;
+la décomposition réelle dépend des organismes et des conditions du sol, et peut être bien plus
+longue que cette animation ([Penn State Extension](https://extension.psu.edu/leaves-are-treasure-not-trash)).
 
 Les feuilles restent dans le même maillage instancié (20 triangles par feuille), sans corps
 physique, collision ni nouvelle entité. Les matrices et couleurs sont actualisées au plus à
@@ -156,7 +170,8 @@ de sélection sont calculées une seule fois, assez larges pour toute la chute. 
 `test/dna-leaves.test.mjs` vérifient deux cycles complets, les sauts de relecture, les retours
 invisibles et les bornes réutilisées.
 
-Mesure locale du 2026-11-04 : cinq fondateurs, 569 feuilles, Chromium/SwiftShader à
+Première mesure locale du 2026-11-04, avant la revue du réalisme (cycle de 48 s) :
+cinq fondateurs, 569 feuilles, Chromium/SwiftShader à
 1024 × 640, trois séries, médianes ci-dessous. Le probe
 `scripts/probe-living-leaves.mjs <révision-avant-correction>` compare les mêmes génomes avec
 la révision passée en argument. Il attend une lecture de pixel après chaque dessin ; mesurer

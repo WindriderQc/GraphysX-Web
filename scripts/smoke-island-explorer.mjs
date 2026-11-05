@@ -44,7 +44,18 @@ try {
   await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.camera.focusing === false);
   assert.equal((await state(page)).world.label, "Living island");
   assert.equal(await page.locator('[data-ix-world]').textContent(), "Île vivante");
-  assert.equal((await state(page)).explorer.counts.birds, 29);
+  // Birds hatch and die while the UI is open. Compare with the rendered swarm rather than
+  // assuming the founder population survives for the duration of this journey.
+  await page.waitForFunction(() => {
+    const app = JSON.parse(window.render_game_to_text()).application;
+    return app.explorer.counts.birds === window.__GRAPHYSX__.query({ ids: ["flock_1"] })[0].flock.memberCount + 1;
+  });
+  const treesButton = await page.locator('[data-ix-category="trees"]').first().elementHandle();
+  const previousBirds = (await state(page)).explorer.counts.birds;
+  for (let tick = 0; tick < 1200; tick++) native.step();
+  world.tick();
+  await page.waitForFunction(before => JSON.parse(window.render_game_to_text()).application.explorer.counts.birds !== before, previousBirds);
+  assert.equal(await treesButton.evaluate(button => button.isConnected), true, "births update counters without detaching navigation controls");
   const before = await page.evaluate(() => JSON.stringify(window.__GRAPHYSX__.export()));
   await page.screenshot({ path: path.join(artifacts, "island-explorer-overview.png") });
 
@@ -59,7 +70,8 @@ try {
   await page.locator('[data-ix-home]').click();
   await page.locator('[data-ix-category="birds"]').click();
   await page.locator('[data-ix-select="flock_1"]').click();
-  assert.equal(await page.locator('[data-ix-select^="flock_1:bird:"]').count(), 28);
+  await page.waitForFunction(() => document.querySelectorAll('[data-ix-select^="flock_1:bird:"]').length ===
+    window.__GRAPHYSX__.query({ ids: ["flock_1"] })[0].flock.memberCount);
   await page.locator('[data-ix-select="flock_1:bird:0"]').click();
   assert.match(await page.locator('[data-ix-content]').textContent(), /Numéro dans la volée/);
 

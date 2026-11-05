@@ -69,8 +69,9 @@ try {
   await phone.screenshot({path:path.join(artifacts,'island-rich-phone.png')});await phone.getByRole('button',{name:'Fermer l’explorateur'}).click();
   assert.equal((await state(phone)).explorer.selected,'tree_1');await phone.close();
   console.log('browser: phone passed');
+  const recordingId=world.world.instanceId;
   await world.close();world=null;
-  replay=await startReplayServer({recording:loadRecording(path.join(scratch,'recording/graphysx-recording.ndjson')),port:0});
+  replay=await startReplayServer({recording:loadRecording(path.join(scratch,'recording','instances',recordingId,'graphysx-recording.ndjson')),port:0});
   const replayPage=applySmokeTimeout(await browser.newPage({viewport:{width:1440,height:1000},deviceScaleFactor:1}));replayPage.on('pageerror',e=>errors.push(String(e)));
   await replayPage.goto(url(replay.url),{waitUntil:'domcontentloaded'});
   await replayPage.waitForFunction(()=>typeof window.render_game_to_text==='function'&&JSON.parse(window.render_game_to_text()).application?.mode==='replay');
