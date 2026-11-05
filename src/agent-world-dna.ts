@@ -1,4 +1,5 @@
 import {
+  Box3,
   Color,
   CylinderGeometry,
   DynamicDrawUsage,
@@ -9,6 +10,7 @@ import {
   MeshStandardMaterial,
   Object3D,
   Quaternion,
+  Sphere,
   Vector3,
 } from "three";
 
@@ -646,6 +648,9 @@ export type AgentWorldDnaForm = {
 const UP = new Vector3(0, 1, 0);
 const AXIS_Z = new Vector3(0, 0, 1);
 
+/** Host-driven foliage writes at most 30 times per simulated second, independently of FPS. */
+export const AGENT_WORLD_DNA_LEAF_HZ = 30;
+
 /**
  * Grow the whole forest from a resolved config. A pure function: same config in, identical
  * form out, always — which is what makes export → load reproduce the tree exactly.
@@ -785,6 +790,8 @@ export class AgentWorldDnaSystem {
   /** Last written reveal / season, so a settled tree writes nothing per frame. */
   private lastGrowth = -1;
   private lastSeason = -1;
+  private worldSeason = false;
+  private leafOffsets: number[] = [];
   private readonly dummy = new Object3D();
   private readonly matrix = new Matrix4();
   private readonly quaternion = new Quaternion();
@@ -831,6 +838,10 @@ export class AgentWorldDnaSystem {
     for (let treeIndex = 0; treeIndex < this.config.trees; treeIndex += 1) {
       this.hues.push(agentWorldDnaLeafHue(this.expressed, this.config.mutationRate, this.config.generation, treeIndex));
     }
+    // A separate stream keeps the inherited form intact. Siblings share a tree's season,
+    // with enough per-leaf spread to avoid stripping the whole canopy at once.
+    const treeOffsets = this.hues.map((_, index) => seededRandom(this.config.seed + 0x51ed270b + index * 9973)());
+    this.leafOffsets = leaves.map((leaf) => (treeOffsets[leaf.treeIndex] + leaf.phase * 0.45) % 1);
 
     // One draw call for every branch in the forest. A unit cylinder along +Y, scaled to each
     // segment's length and tapered by level — the archive's LineSegments given a radius.
@@ -868,6 +879,17 @@ export class AgentWorldDnaSystem {
       leafMesh.receiveShadow = false;
       leafMesh.instanceMatrix.setUsage(DynamicDrawUsage);
       leafMesh.frustumCulled = false;
+      // Both seasonal paths only move downwards and drift by at most leaf.drift. Build
+      // conservative picking bounds once; re-scanning every matrix per frame is needless.
+      const bounds = new Box3();
+      for (const leaf of leaves) {
+        bounds.expandByPoint(leaf.base);
+        bounds.expandByPoint(new Vector3(leaf.base.x - leaf.drift, 0.06, leaf.base.z - leaf.drift));
+        bounds.expandByPoint(new Vector3(leaf.base.x + leaf.drift, 0.16, leaf.base.z + leaf.drift));
+      }
+      bounds.expandByScalar(this.expressed.leafSize * 1.25);
+      leafMesh.boundingBox = bounds;
+      leafMesh.boundingSphere = bounds.getBoundingSphere(new Sphere());
       this.leafMesh = leafMesh;
       this.object.add(leafMesh);
     }
@@ -875,6 +897,7 @@ export class AgentWorldDnaSystem {
     this.elapsed = 0;
     this.lastGrowth = -1;
     this.lastSeason = -1;
+    this.worldSeason = false;
     // Write frame zero immediately so a paused world still shows the tree it configured.
     this.apply();
   }
@@ -915,17 +938,22 @@ export class AgentWorldDnaSystem {
    * Host seam: show the seasonal leaf fall at `seconds` on a host's clock, `periodSeconds` per
    * cycle, whatever this tree's own `seasonSeconds` says. A viewer of a headless world uses it:
    * the server keeps its trees still (no per-step cost there) and every viewer shows the same
-   * season because it follows the world's clock. A period of 0 puts the leaves back.
+   * season because it follows the world's clock. Leaves bud, mature, fall, rest on the ground
+   * and fade independently. The return to a branch happens at zero size, before budding.
+   * A period of 0 puts the leaves back. The recovered archive animation stays in update().
    */
   showSeason(seconds: number, periodSeconds: number): void {
-    const season = periodSeconds > 0 && Number.isFinite(seconds)
-      ? (((seconds % periodSeconds) + periodSeconds) % periodSeconds) / periodSeconds
+    const worldSeason = periodSeconds > 0 && Number.isFinite(periodSeconds) && Number.isFinite(seconds);
+    const sampled = Math.floor(seconds * AGENT_WORLD_DNA_LEAF_HZ + 1e-7) / AGENT_WORLD_DNA_LEAF_HZ;
+    const season = worldSeason
+      ? (((sampled % periodSeconds) + periodSeconds) % periodSeconds) / periodSeconds
       : 0;
     const growth = this.growthProgress;
-    if (growth === this.lastGrowth && season === this.lastSeason) return;
+    if (growth === this.lastGrowth && season === this.lastSeason && worldSeason === this.worldSeason) return;
     this.lastGrowth = growth;
     this.lastSeason = season;
-    this.writeLeaves(growth, season);
+    this.worldSeason = worldSeason;
+    this.writeLeaves(growth, season, worldSeason);
   }
 
   private get growthProgress(): number {
@@ -944,37 +972,44 @@ export class AgentWorldDnaSystem {
   private apply(): void {
     const growth = this.growthProgress;
     const season = this.seasonProgress;
-    if (growth === this.lastGrowth && season === this.lastSeason) return;
+    if (growth === this.lastGrowth && season === this.lastSeason && !this.worldSeason) return;
     this.lastGrowth = growth;
     this.lastSeason = season;
+    this.worldSeason = false;
     // The instanced equivalent of the archive's `setDrawRange` reveal: shrinking `count`
     // costs nothing and, because segments are level-ordered, grows the forest outward.
     if (this.branches) this.branches.count = Math.max(1, Math.ceil(this.form.segments.length * growth));
     this.writeLeaves(growth, season);
   }
 
-  private writeLeaves(growth: number, season: number): void {
+  private writeLeaves(growth: number, season: number, worldSeason = false): void {
     const mesh = this.leafMesh;
     if (!mesh) return;
     // The archive revealed leaves over the second half of growth.
     const visibility = smoothstep(0.55, 1, growth);
     for (let index = 0; index < this.form.leaves.length; index += 1) {
       const leaf = this.form.leaves[index];
-      // Verbatim from `updateForest`.
-      const localFall = clamp01((season - leaf.phase * 0.28) / Math.max(0.15, 1 - leaf.phase * 0.28));
+      const life = (season + this.leafOffsets[index]) % 1;
+      // The archive path is verbatim from updateForest. The world's presentation gives each
+      // leaf a complete, continuous life instead of resetting every tree at the same instant.
+      const localFall = worldSeason ? smoothstep(0.68, 0.82, life)
+        : clamp01((season - leaf.phase * 0.28) / Math.max(0.15, 1 - leaf.phase * 0.28));
       this.dummy.position.copy(leaf.base);
-      this.dummy.position.y = Math.max(0.16, leaf.base.y - localFall * leaf.fallSpeed * 5.4);
+      this.dummy.position.y = worldSeason ? leaf.base.y + (Math.min(0.06, leaf.base.y) - leaf.base.y) * localFall
+        : Math.max(0.16, leaf.base.y - localFall * leaf.fallSpeed * 5.4);
       this.dummy.position.x += Math.sin(localFall * 9 + leaf.phase * 12) * leaf.drift * localFall;
       this.dummy.position.z += Math.cos(localFall * 7 + leaf.phase * 9) * leaf.drift * localFall;
-      const scale = visibility * (1 - localFall * 0.48) * (0.82 + leaf.phase * 0.42);
-      this.dummy.scale.setScalar(Math.max(0.001, scale));
+      const renewal = worldSeason ? smoothstep(0, 0.16, life) * (1 - smoothstep(0.88, 0.97, life)) : 1;
+      const scale = visibility * renewal * (1 - localFall * 0.48) * (0.82 + leaf.phase * 0.42);
+      this.dummy.scale.setScalar(worldSeason ? scale : Math.max(0.001, scale));
+      if (worldSeason) this.dummy.scale.y *= 1 - localFall * 0.65;
       this.dummy.rotation.set(localFall * 3.2, leaf.phase * Math.PI * 2, localFall * 2.1);
       this.dummy.updateMatrix();
       mesh.setMatrixAt(index, this.dummy.matrix);
       const baseHue = this.hues[leaf.treeIndex] ?? this.expressed.leafHue;
       const autumnHue = ARCHIVE_AUTUMN_HUE + leaf.phase * ARCHIVE_AUTUMN_HUE_SPREAD;
       this.color.setHSL(
-        baseHue + (autumnHue - baseHue) * season,
+        baseHue + (autumnHue - baseHue) * (worldSeason ? smoothstep(0.48, 0.68, life) : season),
         ARCHIVE_LEAF_SATURATION,
         ARCHIVE_LEAF_LIGHTNESS + leaf.phase * ARCHIVE_LEAF_LIGHTNESS_SPREAD,
       );
@@ -982,7 +1017,6 @@ export class AgentWorldDnaSystem {
     }
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    mesh.computeBoundingSphere();
   }
 
   /**

@@ -141,6 +141,19 @@ vue fait tomber les feuilles elle-même, réglée sur l'horloge de l'île (`show
 en relecture, voient le même automne. Les règles et l'observation ne changent pas ; seule l'image
 change, y compris la vue à la première personne d'Eko.
 
+Le cycle visuel décale maintenant les arbres selon leur graine et les feuilles selon leur
+phase : bourgeon, feuillage adulte, couleur d'automne, chute jusqu'au sol, repos puis disparition
+progressive. Une feuille revient sur sa branche seulement à taille nulle, puis repousse ; aucun
+retour visible en bloc à la fin des 48 secondes. Ce cycle est une adaptation de présentation ;
+les leçons de la Forêt vivante gardent leur animation d'archive dans `update()`.
+
+Les feuilles restent dans le même maillage instancié (20 triangles par feuille), sans corps
+physique, collision ni nouvelle entité. Les matrices et couleurs sont actualisées au plus à
+30 Hz simulés ; une horloge arrêtée n'écrit rien. Les branches restent immobiles et les bornes
+de sélection sont calculées une seule fois, assez larges pour toute la chute. Les tests CPU
+`test/dna-leaves.test.mjs` vérifient deux cycles complets, les sauts de relecture, les retours
+invisibles et les bornes réutilisées.
+
 ## Captures (2026-10-29, devX, Chromium sans écran)
 
 Le jardinier scripté vient de garder une graine de `Tree_4` (le plus touffu), de la semer
