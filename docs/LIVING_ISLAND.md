@@ -156,6 +156,39 @@ de sélection sont calculées une seule fois, assez larges pour toute la chute. 
 `test/dna-leaves.test.mjs` vérifient deux cycles complets, les sauts de relecture, les retours
 invisibles et les bornes réutilisées.
 
+Mesure locale du 2026-11-04 : cinq fondateurs, 569 feuilles, Chromium/SwiftShader à
+1024 × 640, trois séries, médianes ci-dessous. Le probe
+`scripts/probe-living-leaves.mjs <révision-avant-correction>` compare les mêmes génomes avec
+la révision passée en argument. Il attend une lecture de pixel après chaque dessin ; mesurer
+seulement l'envoi des commandes graphiques sous-estime fortement ce rendu logiciel.
+
+| Mesure isolée | Avant (`6a11c49`) | Après |
+|---|---:|---:|
+| Calcul des feuilles par image à 60 Hz | 0,140 ms | 0,053 ms |
+| Mises à jour des matrices sur les trois séries | 10 800 | 5 400 |
+| Recalculs des bornes sur les trois séries | 10 800 | 0 |
+| Rendu animé de la scène de mesure | 38,12 ms | 38,12 ms |
+| Appels de dessin, ombres déjà calculées | 11 | 11 |
+| Triangles de la scène de mesure | 21 222 | 21 222 |
+
+Sans dessiner les feuilles, cette scène prend 28,46 ms (6 appels, 9 842 triangles).
+Le coût observé est donc principalement graphique : environ 10 ms de plus pour le feuillage
+dans ce moteur **logiciel**, contre environ 0,05 ms pour son animation, et aucun corps physique.
+La correction réduit le calcul d'environ 62 %, sans gain graphique mesurable. Ces durées
+concernent le petit décor du probe, avec ombres en cache et sans anticrénelage ; elles ne sont
+ni les FPS de l'île complète ni une mesure des GPU des appareils de la maison.
+
+Exécuter le probe sous la file de travaux lourds de l'instance et le verrou du moteur :
+`node scripts/with-verify-lock.mjs -- node scripts/probe-living-leaves.mjs 6a11c49`.
+Il produit les mesures JSON et quatre captures dans `output/living-leaves/`.
+
+Validation de la correction sur la base incluant l'avatar robot : 894 tests Node, vérification
+de types, construction et parcours `smoke-living-island` (bureau, téléphone, jardinier,
+relecture de l'enregistrement et vue d'Eko) réussis ; captures examinées. La tentative de suite
+générale a été interrompue après deux échecs, reproduits sur `6a11c49` sans cette correction :
+`smoke-island-explorer` attend une population d'oiseaux fixe et `smoke-island-workspace` perd
+son bouton pendant le clic. Elle ne constitue pas une validation complète du produit.
+
 ## Captures (2026-10-29, devX, Chromium sans écran)
 
 Le jardinier scripté vient de garder une graine de `Tree_4` (le plus touffu), de la semer
