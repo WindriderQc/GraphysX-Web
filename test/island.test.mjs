@@ -45,8 +45,10 @@ test("the real capture composes every visible part once and skips the invisible 
   assert.equal(new Set(definitions.map((d) => d.id)).size, definitions.length, "stable unique ids");
   const agent = definitions.find((d) => d.type === "agent");
   assert.equal(agent.label, "Eko");
+  assert.equal(agent.geometry.height, 5, "the avatar is the 5-unit Clawblox character");
+  assert.equal(agent.agent.origin, "center", "posed at the root part's centre, it stands on the part's base");
   const agentPlacement = placements.find((p) => p.kind === "agent");
-  assert.equal(agentPlacement.localOffset[1], -2.5, "the avatar stands on the base of the 5-unit Clawblox character");
+  assert.deepEqual(agentPlacement.localOffset, [0, 0, 0], "no viewer-only offset: the runtime draws the feet");
   const water = definitions.find((d) => d.type === "water");
   assert.equal(water.water.size, 600 * feed.WATER_HORIZON);
   const grounds = placements.filter((p) => p.kind === "ground").map((p) => p.localOffset[1]).sort((x, y) => y - x);

@@ -47,6 +47,12 @@ test("the scene becomes transient definitions without physics, and changes rebui
   assert.ok(definitions.every((d) => d.ephemeral === true && !("physics" in d) && d.tags.includes(feed.WORLD_TAG)), "ephemeral, tagged, never simulated here");
   assert.equal(definitions.find((d) => d.id === "boundarynorth").visible, false, "the document's own visibility is kept");
   assert.deepEqual(definitions.find((d) => d.id === "block_1").tags, ["pickup", feed.WORLD_TAG]);
+  const bare = definitions.find((d) => d.id === "agent-43");
+  assert.deepEqual([bare.geometry, bare.agent], [{ height: 5, radius: 1 }, { origin: "center" }], "an older world's bare avatar gets its capsule body");
+  assert.equal(document.entities[4].geometry, undefined, "the hello document is not given the body");
+  const declared = feed.worldTransientDefinitions({ ...scene, entities: [{ id: "nestor", type: "agent", geometry: { height: 1.8 } }] })[0];
+  assert.deepEqual(declared.geometry, { height: 1.8 }, "an avatar that declares its own body is left alone");
+  assert.equal(declared.agent, undefined);
   assert.ok("physics" in document.entities[3], "the hello document is not mutated");
 
   const key = feed.worldStructureKey(scene);

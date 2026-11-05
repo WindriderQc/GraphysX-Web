@@ -61,7 +61,7 @@ export const FIELDS = Object.freeze({
   geometry: Object.freeze(["width", "height", "depth", "radius", "tube", "radialSegments"]),
   path: Object.freeze(["points", "closed", "tension"]),
   asset: Object.freeze(["id", "url", "format", "fitSize", "alphaTest", "colorKey", "colorKeyTolerance"]),
-  agent: Object.freeze(["role", "status", "perceptionRadius", "capabilities"]),
+  agent: Object.freeze(["role", "status", "perceptionRadius", "capabilities", "origin"]),
   sound: Object.freeze(["source", "volume", "loop", "autoplay", "positional", "refDistance"]),
   emitter: Object.freeze([
     "preset", "rate", "maxParticles", "lifetimeSeconds", "speed", "sizeScale", "volumeScale", "color", "gravity",
@@ -501,6 +501,9 @@ function validateAgent(value, label) {
   for (const key of ["role", "status"]) if (value[key] !== undefined) requireString(value[key], `${label}.${key}`, { maximum: LIMITS.strings.agentText });
   if (value.perceptionRadius !== undefined) requireFinite(value.perceptionRadius, `${label}.perceptionRadius`, ...LIMITS.agent.perceptionRadius);
   if (value.capabilities !== undefined) requireStringArray(value.capabilities, `${label}.capabilities`, LIMITS.arrays.tags);
+  if (value.origin !== undefined && value.origin !== "feet" && value.origin !== "center") {
+    reject(`${label}.origin must be "feet" or "center"`);
+  }
 }
 
 function validateSound(value, label, { requireSource = false } = {}) {
