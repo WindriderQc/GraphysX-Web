@@ -32,6 +32,7 @@ test("leaves renew gradually through two seasons, including the old broadcast re
           if (atBranch && scale > 0.05 && scale < 0.5) seen[tree][leaf] |= 1; // bud
           if (atBranch && scale > 0.8) seen[tree][leaf] |= 2; // mature
           if (array[i + 13] < 0.061 && scale > 0.05) seen[tree][leaf] |= 4; // litter
+          if (array[i + 13] < 0.061) assert.ok(scale < 0.3, "fallen leaves are smaller than the canopy clusters");
           if (scale === 0) seen[tree][leaf] |= 8; // invisible before renewal
           if (previous && (scale > 0.01 || scaleAt(previous[tree], i) > 0.01)) {
             const move = Math.hypot(...[12, 13, 14].map((axis) => array[i + axis] - previous[tree][i + axis]));

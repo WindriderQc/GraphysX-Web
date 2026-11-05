@@ -146,6 +146,8 @@ phase : bourgeon, feuillage adulte, couleur d'automne, chute jusqu'au sol, repos
 progressive. Une feuille revient sur sa branche seulement à taille nulle, puis repousse ; aucun
 retour visible en bloc à la fin des 48 secondes. Ce cycle est une adaptation de présentation ;
 les leçons de la Forêt vivante gardent leur animation d'archive dans `update()`.
+Au détachement, l'instance qui figurait un amas de feuillage se réduit progressivement à une
+petite feuille, pour éviter de faire passer tout l'amas devant les yeux d'un agent.
 
 Les feuilles restent dans le même maillage instancié (20 triangles par feuille), sans corps
 physique, collision ni nouvelle entité. Les matrices et couleurs sont actualisées au plus à

@@ -1006,7 +1006,10 @@ export class AgentWorldDnaSystem {
       this.dummy.position.x += Math.sin(localFall * 9 + leaf.phase * 12) * leaf.drift * localFall;
       this.dummy.position.z += Math.cos(localFall * 7 + leaf.phase * 9) * leaf.drift * localFall;
       const renewal = worldSeason ? smoothstep(0, 0.16, life) * (1 - smoothstep(0.88, 0.97, life)) : 1;
-      const scale = visibility * renewal * (1 - localFall * 0.48) * (0.82 + leaf.phase * 0.42);
+      // A canopy instance represents a cluster. Once detached, reduce it smoothly to a
+      // small falling leaf rather than letting a whole cluster fill an agent's eye view.
+      const detachedSize = worldSeason ? 1 - 0.6 * smoothstep(0, 0.2, localFall) : 1;
+      const scale = visibility * renewal * detachedSize * (1 - localFall * 0.48) * (0.82 + leaf.phase * 0.42);
       this.dummy.scale.setScalar(worldSeason ? scale : Math.max(0.001, scale));
       if (worldSeason) this.dummy.scale.y *= 1 - localFall * 0.65;
       this.dummy.rotation.set(localFall * 3.2, leaf.phase * Math.PI * 2, localFall * 2.1);
