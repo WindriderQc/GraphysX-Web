@@ -31,7 +31,7 @@ function harness() {
       if (fail) throw new Error("synthetic mount failure");
       settings.onEvent("ready", {});
       const app = { disposed: 0, state: () => ({ tour: { script: "memory,garage" } }),
-        dispose() { this.disposed++; }, tour: { setScript: (script, autoplay) => { app.lastScript = { script, autoplay }; } } };
+        setNarrator(value) { app.narrator = value; }, dispose() { this.disposed++; }, tour: { setScript: (script, autoplay) => { app.lastScript = { script, autoplay }; } } };
       apps.push(app); return app;
     },
   });
@@ -74,4 +74,16 @@ test("mount failure never produces a display receipt and disposes its allocated 
   assert.equal(h.element.state(), null); assert.equal(h.hosts[0].disposed, 1);
   assert.equal(h.element.events.at(-1).type, "ecosystem-error");
   h.element.disconnectedCallback(); assert.equal(h.hosts[0].disposed, 1);
+});
+
+test("a host narrator is retained before mounting and can replace the current transport", () => {
+  const h = harness();
+  const first = async () => {}, second = async () => {};
+  h.element.narrator = first; h.element.connectedCallback();
+  assert.equal(h.apps[0].narrator, first);
+  h.element.narrator = second;
+  assert.equal(h.apps[0].narrator, second);
+  h.element.disconnectedCallback(); h.element.connectedCallback();
+  assert.equal(h.apps[1].narrator, second);
+  h.element.disconnectedCallback();
 });

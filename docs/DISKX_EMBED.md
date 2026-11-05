@@ -116,3 +116,19 @@ The optional `report` attribute is the UTC generation date returned by Core. Sum
 `diskx-report-read` carries `reportGeneratedAt` and `reportId` after a coherent report read. `diskx-group-shown` carries those fields with the selected SHA-256 and coverage. `diskx-ready` only attests the inventory mount. These events are presentation observations, never file execution receipts.
 
 A mount failure immediately releases its host. Disconnect releases app and host even if app disposal fails, and reconnect removes the prior error state. Relation replacements validate all places and links before releasing the previous picture; one picture accepts at most 64 unique places and 256 links.
+
+## Spoken ecosystem tour
+
+The ecosystem player offers **Activer la voix**. Speech starts only on that click;
+opening a page or receiving a `play` list stays silent. The complete current
+narration is shown while it speaks, and the next stop waits for speech completion.
+Pause cancels the phrase; Lire reads that stop again. Selecting another stop,
+closing the view or hiding the document cancels the old speech.
+
+A host may set `element.narrator = (text, signal) => Promise<void>` before or after
+mounting `<agentx-ecosystem>`. Resolve after playback, reject on failure and stop
+both synthesis and playback when the signal aborts. Late settlements of replaced
+phrases never advance the tour. AgentX supplies its existing Nestor speech
+transport; standalone GraphysX uses a French device voice. No voice or model
+configuration is embedded here. A failed voice pauses the tour and leaves its
+text and silent controls available.
