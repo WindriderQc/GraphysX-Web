@@ -1,5 +1,6 @@
 import { resolveAgentAppearance, type AgentAppearance } from "../server/agent-appearance.mjs";
 import { AgentWorldVoxelFace, findVoxelFace, resolveAgentWorldFace } from "./agent-world-face";
+import { createAgentRobot, findAgentRobot } from "./agent-world-robot";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates } from "../server/inline-mesh.mjs";
 import { validateInlineMeshDefinition } from "../server/scene-commands.mjs";
 import { materializeMeshCommands, type MeshEdits, type PixelEdit } from "../server/mesh-authoring.mjs";
@@ -3320,6 +3321,7 @@ export class AgentWorldRuntime {
     for (const runtime of this.entities.values()) {
       const particles = findParticleSystem(runtime.object);
       findVoxelFace(runtime.object)?.update(deltaSeconds);
+      findAgentRobot(runtime.object)?.update(deltaSeconds);
       if (particles) particles.update(deltaSeconds);
       const water = findWaterSurface(runtime.object);
       if (water) water.update(deltaSeconds);
@@ -4564,20 +4566,7 @@ function applyAgentAppearance(object: Object3D, definition: ResolvedEntity): voi
 }
 
 function createDefaultAgentAvatar(definition: ResolvedEntity): Group {
-  const group = new Group();
-  const height = Math.max(0.8, definition.geometry.height);
-  const radius = Math.max(0.2, definition.geometry.radius);
-  const body = new Mesh(
-    new CylinderGeometry(radius * 0.72, radius, height * 0.58, Math.max(8, definition.geometry.radialSegments)),
-    new MeshStandardMaterial()
-  );
-  body.position.y = height * 0.32;
-  const head = new Mesh(new SphereGeometry(radius * 0.72, 24, 16), new MeshStandardMaterial());
-  head.position.y = height * 0.78;
-  const direction = new Mesh(new ConeGeometry(radius * 0.28, radius * 0.7, 10), new MeshStandardMaterial());
-  direction.rotation.x = Math.PI / 2;
-  direction.position.set(0, height * 0.78, -radius * 0.8);
-  direction.userData.graphysxAgentAccent = true;
+  const group = createAgentRobot({ height: definition.geometry.height, radius: definition.geometry.radius });
   const perception = new Mesh(
     new TorusGeometry(Math.min(3, Math.max(0.6, (definition.agent?.perceptionRadius ?? 6) * 0.12)), 0.025, 8, 48),
     new MeshStandardMaterial()
@@ -4585,7 +4574,7 @@ function createDefaultAgentAvatar(definition: ResolvedEntity): Group {
   perception.rotation.x = Math.PI / 2;
   perception.position.y = 0.04;
   perception.userData.graphysxAgentAccent = true;
-  group.add(body, head, direction, perception);
+  group.add(perception);
   return group;
 }
 
