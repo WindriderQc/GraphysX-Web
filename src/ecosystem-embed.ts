@@ -1,11 +1,15 @@
 /** The existing connected-house tour, carried by the already relayed DiskX bundle. */
 import { mountEcosystemApp, type EcosystemApplication, type EcosystemEvent } from "./ecosystem-app";
 import { ecosystemObservation, type EcosystemViewState } from "./ecosystem-presentation";
+import { type EcosystemNarrator } from "./ecosystem-narration";
 import { PlatformHost } from "./platform-host";
 
 declare const __GRAPHYSX_EMBED_VERSION__: string;
 
 export class AgentxEcosystemElement extends HTMLElement {
+  private voice: EcosystemNarrator | null = null;
+  set narrator(value: EcosystemNarrator) { this.voice = value; this.app?.setNarrator(value); }
+  get narrator(): EcosystemNarrator | null { return this.voice; }
   private host: PlatformHost | null = null;
   private app: EcosystemApplication | null = null;
   private unsubscribe: (() => void) | null = null;
@@ -34,6 +38,7 @@ export class AgentxEcosystemElement extends HTMLElement {
         play: this.getAttribute("play"), embedded: true,
         onEvent: (type, detail) => this.pending.set(type, detail),
       });
+      if (this.voice) this.app.setNarrator(this.voice);
       this.documentRevision = this.host.world.getState().revision;
       this.unsubscribeWorld = this.host.world.subscribeEvents(() => { this.revisionDirty = true; });
       // A constructor or an opening intention is not a display receipt. Capture only after
