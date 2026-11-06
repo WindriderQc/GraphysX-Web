@@ -4,6 +4,8 @@ export interface PilotInput {
   boost: boolean;
   /** Knife-edge: -1 roll left, +1 roll right, 0 level. */
   roll: number;
+  /** Pulse shot held (notre version). */
+  fire: boolean;
 }
 
 /** Menu-level actions shared by keyboard, Xbox pads and Quest controllers. */
@@ -21,7 +23,8 @@ const P1 = {
   down: ["KeyS"],
   boost: ["Space", "ShiftLeft", "KeyF"],
   rollLeft: ["KeyQ"],
-  rollRight: ["KeyE"]
+  rollRight: ["KeyE"],
+  fire: ["KeyR"]
 };
 
 const P2 = {
@@ -31,7 +34,8 @@ const P2 = {
   down: ["ArrowDown"],
   boost: ["ShiftRight", "Enter", "NumpadEnter", "Numpad0", "ControlRight", "Slash"],
   rollLeft: ["Comma", "Numpad1"],
-  rollRight: ["Period", "Numpad3"]
+  rollRight: ["Period", "Numpad3"],
+  fire: ["Numpad2", "KeyL"]
 };
 
 const KEY_ACTIONS: Record<string, UiAction> = {
@@ -55,7 +59,7 @@ const KEY_ACTIONS: Record<string, UiAction> = {
 const GAME_KEYS = new Set([...Object.values(P1).flat(), ...Object.values(P2).flat(), ...Object.keys(KEY_ACTIONS)]);
 
 /** Standard-mapping buttons of an Xbox pad. */
-const PAD = { a: 0, b: 1, lb: 4, rb: 5, rt: 7, view: 8, start: 9, up: 12, down: 13, left: 14, right: 15 };
+const PAD = { a: 0, b: 1, x: 2, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, start: 9, up: 12, down: 13, left: 14, right: 15 };
 const DEADZONE = 0.22;
 const REPEAT_DELAY = 0.38;
 const REPEAT_RATE = 0.14;
@@ -183,6 +187,7 @@ export class RaceInput {
     let y = Number(this.any(map.up)) - Number(this.any(map.down));
     let boost = this.any(map.boost);
     let roll = Number(this.any(map.rollRight)) - Number(this.any(map.rollLeft));
+    let fire = this.any(map.fire);
     const pad = this.pads()[index];
     if (pad) {
       const ax = pad.axes[0] ?? 0;
@@ -197,6 +202,7 @@ export class RaceInput {
       boost = boost || button(PAD.a) || button(PAD.rt);
       if (button(PAD.lb)) roll = -1;
       if (button(PAD.rb)) roll = 1;
+      fire = fire || button(PAD.x) || button(PAD.lt);
     }
     if (index === 0) {
       for (const xr of this.xrPads) {
@@ -207,8 +213,23 @@ export class RaceInput {
         boost = boost || Boolean(xr.buttons[0]?.pressed);
         // Grip: knife-edge, towards the stick (right by default).
         if (xr.buttons[1]?.pressed) roll = ax < -DEADZONE ? -1 : 1;
+        // A / X: pulse shot.
+        fire = fire || Boolean(xr.buttons[4]?.pressed);
       }
     }
-    return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), boost, roll };
+    return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), boost, roll, fire };
+  }
+
+  /**
+   * Vibration for a pilot: its Xbox pad (dual rumble) and, for Jobe, the Quest controllers.
+   * Strengths 0..1. Silently does nothing where the browser has no haptics.
+   */
+  rumble(index: 0 | 1, strong: number, weak: number, ms: number): void {
+    const pad = this.pads()[index] as (Gamepad & { vibrationActuator?: { playEffect?: (type: string, params: object) => Promise<unknown> } }) | undefined;
+    void pad?.vibrationActuator?.playEffect?.("dual-rumble", { duration: ms, strongMagnitude: strong, weakMagnitude: weak })?.catch(() => undefined);
+    if (index !== 0) return;
+    for (const xr of this.xrPads as Array<Gamepad & { hapticActuators?: Array<{ pulse?: (value: number, ms: number) => Promise<unknown> }> }>) {
+      void xr.hapticActuators?.[0]?.pulse?.(Math.max(strong, weak), ms)?.catch(() => undefined);
+    }
   }
 }

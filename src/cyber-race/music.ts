@@ -2,7 +2,7 @@
  * Procedural synth soundtrack in a 1992 style: one theme per board (tempo, key, layers),
  * scheduled ahead on the Web Audio clock so it never drifts with frame rate.
  */
-export type Theme = "menu" | "tunnel" | "mines" | "shards" | "thorns" | "kaleido" | "wave" | "vortex" | "network" | "furnace";
+export type Theme = "menu" | "tunnel" | "mines" | "shards" | "thorns" | "kaleido" | "wave" | "vortex" | "network" | "furnace" | "hypertube";
 
 interface ThemeSpec {
   bpm: number;
@@ -19,6 +19,8 @@ interface ThemeSpec {
 const THEMES: Record<Theme, ThemeSpec> = {
   menu: { bpm: 92, root: 57, progression: [0, 8, 3, 10], drums: false, drive: 0.15, lead: "arp" },
   tunnel: { bpm: 128, root: 57, progression: [0, 8, 3, 10], drums: true, drive: 0.6, lead: "arp" },
+  // Notre version: the tunnel's theme pushed harder.
+  hypertube: { bpm: 142, root: 57, progression: [0, 8, 5, 10], drums: true, drive: 0.8, lead: "arp" },
   mines: { bpm: 132, root: 52, progression: [0, 3, 8, 7], drums: true, drive: 0.7, lead: "arp" },
   shards: { bpm: 136, root: 50, progression: [0, 10, 8, 7], drums: true, drive: 0.75, lead: "arp" },
   thorns: { bpm: 118, root: 55, progression: [0, 0, 8, 10], drums: true, drive: 0.55, lead: "none" },
