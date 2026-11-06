@@ -1,5 +1,5 @@
 /** Bounded Core observations. This renderer neither collects nor owns operational state. */
-import { ecoNode } from "./ecosystem-data";
+import { DEFAULT_ECOSYSTEM_CATALOG, validCompositionRead, type EcosystemCatalog } from "./ecosystem-catalog";
 
 export type EcosystemLiveRead = {
   contract: "agentx.presentation-read/v1";
@@ -45,10 +45,15 @@ function timestamp(value: unknown): value is string {
   return Number.isFinite(ms) && new Date(ms).toISOString() === (value.includes(".") ? value : value.replace("Z", ".000Z"));
 }
 
-export function parseEcosystemLivePayload(value: unknown): EcosystemLivePayload | null {
-  if (!record(value) || !keys(value, ["contract", "generatedAt", "expiresAt", "nodes", "read"]) || value.contract !== "agentx.ecosystem-live/v1") return null;
+export function parseEcosystemLivePayload(value: unknown, catalog: EcosystemCatalog = DEFAULT_ECOSYSTEM_CATALOG): EcosystemLivePayload | null {
+  if (!record(value) || !keys(value, ["contract", "generatedAt", "expiresAt", "nodes", "read", "composition"]) || value.contract !== "agentx.ecosystem-live/v1") return null;
   if (!timestamp(value.generatedAt) || !timestamp(value.expiresAt) || Date.parse(value.expiresAt) <= Date.parse(value.generatedAt)) return null;
   if (!Array.isArray(value.nodes) || value.nodes.length > 32 || !record(value.read)) return null;
+  if (value.composition !== undefined) {
+    const claim = value.composition;
+    if (!record(claim) || !keys(claim, ["contentRevision", "read"]) || typeof claim.contentRevision !== "string"
+      || !/^[a-f0-9]{64}$/.test(claim.contentRevision) || !validCompositionRead(claim.read)) return null;
+  }
   const read = value.read;
   if (!keys(read, ["contract", "id", "revision", "source", "observedAt", "expiresAt"]) || read.contract !== "agentx.presentation-read/v1" || read.source !== "core.ecosystem.live") return null;
   if (typeof read.revision !== "string" || !/^[a-f0-9]{64}$/.test(read.revision) || read.id !== `view_${read.revision}`) return null;
@@ -57,7 +62,7 @@ export function parseEcosystemLivePayload(value: unknown): EcosystemLivePayload 
   const nodes: EcosystemLiveNode[] = [];
   for (const item of value.nodes) {
     if (!record(item) || !keys(item, ["id", "state", "source", "observedAt", "expiresAt", "freshness"])) return null;
-    if (typeof item.id !== "string" || !ecoNode(item.id) || seen.has(item.id)) return null;
+    if (typeof item.id !== "string" || !catalog.ecoNode(item.id) || seen.has(item.id)) return null;
     if (!STATES.has(String(item.state)) || !SOURCES.has(String(item.source)) || !FRESHNESS.has(String(item.freshness))) return null;
     if (item.observedAt !== null && !timestamp(item.observedAt) || item.expiresAt !== null && !timestamp(item.expiresAt)) return null;
     if (item.observedAt && Date.parse(String(item.observedAt)) > Date.parse(value.generatedAt)) return null;
@@ -76,14 +81,14 @@ export function ecosystemLiveScope(source: EcosystemLiveNode["source"]): string 
 }
 
 /** No timers or effects: the existing host frame derives expiration from wall-clock time. */
-export function createEcosystemLiveState() {
+export function createEcosystemLiveState(catalog: EcosystemCatalog = DEFAULT_ECOSYSTEM_CATALOG) {
   let last: EcosystemLivePayload | null = null;
   let enabled = false;
   let available = false;
   return {
     set(value: unknown): boolean {
       if (value === null) { enabled = true; available = false; return true; }
-      const next = parseEcosystemLivePayload(value);
+      const next = parseEcosystemLivePayload(value, catalog);
       if (!next) return false;
       if (last) {
         const delta = Date.parse(next.generatedAt) - Date.parse(last.generatedAt);

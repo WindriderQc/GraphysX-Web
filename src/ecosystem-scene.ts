@@ -80,7 +80,7 @@ export const ECO_PLACEMENTS: Readonly<Record<string, EcoPlacement>> = {
 };
 
 export type EcoModel = { url: string; size: readonly [number, number, number] };
-export type EcosystemSceneOptions = { motes?: boolean; sky?: boolean; label?: string; models?: Readonly<Record<string, EcoModel>>; plants?: boolean };
+export type EcosystemSceneOptions = { motes?: boolean; sky?: boolean; label?: string; models?: Readonly<Record<string, EcoModel>>; plants?: boolean; composition?: { nodes: readonly EcoNode[]; date: string; placements?: Readonly<Record<string, EcoPlacement>> } };
 
 type Material = AgentWorldEntityDefinition["material"];
 type Geometry = AgentWorldEntityDefinition["geometry"];
@@ -413,8 +413,10 @@ export function composeEcosystemWorld(options: EcosystemSceneOptions = {}): Agen
     { id: "eco-lamp-edge", label: "Edge amber", type: "point-light", intensity: 2.5, distance: 16, marker: false, transform: { position: [-4, 5, 17] }, material: { color: ECO_COLOURS.amber }, tags: [ECO_TAG, "lighting"] },
     // The house floor: one slate slab, wooden platforms where the infographic has them, low walls.
     scenery("eco-floor", "La maison · plancher", "box", { width: size + 2, height: 0.3, depth: size + 2 }, v3(0, -0.16, 0), M.slate, "floor"),
+    ...(options.composition?.placements ? [] : [
     scenery("eco-shelf-services", "Services sur UGFrank · étagère", "box", { width: 34.5, height: 0.22, depth: 4.6 }, v3(0, 0.11, -13), M.wood),
     scenery("eco-shelf-services-lip", "Services · liseré", "box", { width: 34.5, height: 0.06, depth: 0.06 }, v3(0, 0.25, -10.7), M.led(ECO_COLOURS.teal, 0.8)),
+    ]),
     scenery("eco-frank-plinth", "UGFrank · plateau", "box", { width: 10.6, height: 0.26, depth: 6.4 }, v3(2.3, 0.13, -3), M.wood),
     scenery("eco-alien-plinth", "UGAlien · plateau", "box", { width: 6.4, height: 0.26, depth: 7.6 }, v3(-13, 0.13, 4.6), M.wood),
     scenery("eco-brutal-plinth", "UGBrutal · plateau", "box", { width: 8.2, height: 0.26, depth: 6.6 }, v3(12.3, 0.13, 4), M.wood),
@@ -424,6 +426,19 @@ export function composeEcosystemWorld(options: EcosystemSceneOptions = {}): Agen
     scenery("eco-shelf-spare-cage", "Prévu / sans rôle (pointillé)", "box", { width: 4.8, height: 0.3, depth: 16.4 }, v3(20, 0.15, 2), { ...M.cage(ECO_COLOURS.lavender), emissiveIntensity: 0.35, opacity: 0.45 }),
     scenery("eco-deco-mat", "Réseau · tapis", "cylinder", { radius: 2.4, height: 0.14, radialSegments: 32 }, v3(-17, 0.07, -4), M.wood),
   ];
+  if (options.composition?.placements) {
+    const rows = new Map<number, EcoPlacement[]>();
+    for (const node of options.composition.nodes.filter(node => node.kind === "service")) {
+      const place = options.composition.placements[node.id];
+      if (place) rows.set(place.z, [...(rows.get(place.z) ?? []), place]);
+    }
+    let index = 0;
+    for (const [z, row] of rows) {
+      const min = Math.min(...row.map(p => p.x - p.width / 2)), max = Math.max(...row.map(p => p.x + p.width / 2));
+      entities.push(scenery(`eco-composition-rack-${index++}`, "Services et capacités · plateau", "box",
+        { width: max - min + 1.5, height: 0.22, depth: Math.max(...row.map(p => p.depth)) + 0.8 }, v3((min + max) / 2, 0.11, z), M.wood));
+    }
+  }
   // Low walls with openings, so the plateau reads as a room rather than a slab.
   const wall = (id: string, x: number, z: number, width: number, depth: number): AgentWorldEntityDefinition =>
     scenery(id, "La maison · mur", "box", { width, height: 0.6, depth }, v3(x, 0.3, z), { color: "#0c1119", roughness: 0.85, metalness: 0.05 }, "wall");
@@ -443,8 +458,8 @@ export function composeEcosystemWorld(options: EcosystemSceneOptions = {}): Agen
       );
     }
   }
-  for (const node of ECOSYSTEM_NODES) {
-    const place = ECO_PLACEMENTS[node.id];
+  for (const node of options.composition?.nodes ?? ECOSYSTEM_NODES) {
+    const place = options.composition?.placements?.[node.id] ?? ECO_PLACEMENTS[node.id];
     if (!place) throw new Error(`no placement for ${node.id}`);
     entities.push(...nodeEntities(node, place, options.models?.[node.id]));
   }
@@ -458,7 +473,7 @@ export function composeEcosystemWorld(options: EcosystemSceneOptions = {}): Agen
   return {
     schema: "graphysx.agent-world/v2",
     id: ECOSYSTEM_WORLD_ID,
-    label: options.label ?? `AgentX · La maison connectée · ${ECOSYSTEM_SNAPSHOT_DATE}`,
+    label: options.label ?? `AgentX · La maison connectée · ${options.composition?.date ?? ECOSYSTEM_SNAPSHOT_DATE}`,
     environment: {
       background: "#04060d",
       ...(options.sky === false ? {} : { sky: "clearnight" as const }),
