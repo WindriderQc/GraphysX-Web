@@ -18,7 +18,21 @@ PC : http://127.0.0.1:4199/ballsy.html. Les touches et le test des manettes rest
 
 En WebXR, une pelle de 55 cm est attachée à la pose de prise du contrôleur dominant. Maintenir la gâchette, enfoncer la lame dans la terre, tirer puis soulever. Ce sont les positions de la lame, et non un rayon ou un bouton de canal, qui sont transmises. A/X ramène la table. Les boutons VR ne servent plus qu'à recentrer et sortir. Perte du suivi, pause, sortie, déconnexion et relâchement annulent le geste.
 
-Le nouveau lien loopback n'est pas accessible directement depuis le Quest. L'ancienne adresse privée reste une autre prévisualisation tant qu'elle n'est pas explicitement basculée. Aucun nouveau certificat, pare-feu, droit USB ou contournement d'alerte n'est nécessaire au code ni effectué ici.
+Le lien loopback n'est pas accessible directement depuis le Quest. Le raccordement privé conserve maintenant les deux versions :
+
+1. PC/télé, nouvelle version : http://127.0.0.1:4199/ballsy.html.
+2. Cliquer **Inviter un géant** et garder cette page ouverte.
+3. Quest sur le même réseau local : https://192.168.2.12:4191/shovel/ballsy-giant.html.
+4. Saisir le code de cette page PC, rejoindre, puis **Devenir le géant en VR**.
+5. Gâchette maintenue, enfoncer la lame dans la terre ambrée, tirer et soulever. A/X recentre la table.
+
+La variante préfixée est construite séparément avec `npx vite build --config vite.ballsy.config.ts --base=/shovel/`, dans `output/quest-shovel/dist`. Les appels `/shovel/api/ballsy/` rejoignent le même relais 4199 que le PC. Les anciens liens PC 4198 et HTTPS 4191 sans `/shovel/` restent associés à l'ancienne version.
+
+Cette ouverture privée garde son échéance initiale : **7 novembre 2026 à 02:12:31 UTC**, avant l'expiration du certificat à 02:26:24 UTC. Le transport privé a été redémarré pour ajouter le chemin, sans redémarrer les moteurs de salles. Une page déjà ouverte peut devoir rejoindre de nouveau son code.
+
+**Limite de réception :** une ouverture normale du nouveau lien dans le navigateur PC est refusée par `net::ERR_CERT_AUTHORITY_INVALID`. Aucun avertissement n'a été franchi. Si le Quest affiche une alerte, s'arrêter à cette alerte. Aucun certificat, magasin de confiance, pare-feu ou droit USB n'a été modifié. Le fait que le routage soit raccordé ne prouve pas que ce casque accepte le certificat ni qu'il entre en VR.
+
+Reçus de raccordement : `output/quest-shovel/session.json` et `gateway-check.json`. Le contrôle de routage utilise le même handler sur un listener HTTP loopback éphémère : identités des deux HTML et de leurs assets, ancienne page intacte, même salle depuis chaque route, commande de pelle reçue, refus d'origine/hôte incorrects et de traversée de chemins. Il n'est pas présenté comme une validation TLS réussie.
 
 ## Ce qui change réellement
 

@@ -5220,3 +5220,10 @@ a collector request, an IoT join key) is listed in `docs/NETX_PROPOSAL.md` §3.3
 ## 2026-11-06 Ballsy physical shovel (local only)
 
 Recovered the three local Ballsy patches into isolated codex/ballsy-physical-shovel on UGBrutal because the devX source was inaccessible. Replaced the primary route/hold UI with controller-grip blade samples and direct pointer excavation. Persistent 609-vertex heightfield, matching trimesh, conserved elevation-driven lava, shared host authority, continuous shorelines, directional boost strips and revised circuit/HUD. Tests and known limits: docs/BALLSY_SHOVEL.md. No publication, merge, security changes or physical Quest acceptance.
+
+
+## 2026-11-06 : accès Quest privé Ballsy sous /shovel/
+
+Le build Ballsy sait monter ses sept appels relais sous BASE_URL. Une config Vite dédiée produit output/quest-shovel/dist sans toucher au dist principal. Deux tests racine/préfixe, les contrats rooms, typecheck et lint ciblé passent. Commit code a8d9fe2.
+
+Le proxy privé existant 192.168.2.12:4191 conserve les routes anciennes vers 4198 et ajoute /shovel/ avec le relais 4199. Même certificat, réseau et échéance du 7 novembre à 02:12:31 UTC. Le transport et son tunnel ont été redémarrés, les moteurs de salles ne l'ont pas été. Aucune modification sécurité, publication ou déploiement. Le navigateur normal refuse net::ERR_CERT_AUTHORITY_INVALID; aucun contournement. Contrôles de routage HTTP locaux réussis, pas de réception Quest physique. Voir docs/BALLSY_SHOVEL.md et output/quest-shovel.
