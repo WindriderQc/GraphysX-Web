@@ -50,11 +50,28 @@ try {
   await page.screenshot({ path: path.join(ART, "cyber-race-menu.png") });
 
   // Pad: Start launches a race from the menu. A short film run, computer on both sides.
+  // Cyberjobe's intro plays first: the curtain closes the line, then he opens it.
+  out.intro = await page.evaluate(() => {
+    const c = window.cyberRace;
+    Object.assign(c.settings, { plan: 0, course: 0, level: 1, mode: 0, sound: false, intro: true });
+    c.ui(["pause"]);
+    c.advance(1.5);
+    const shown = !!c.intro && c.intro.pending && c.countdown > 3.6;
+    c.advance(1.2);
+    c.freeze(true);
+    return { shown, opening: c.intro?.opened > 0 && c.intro?.opened < 1 };
+  });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(ART, "cyber-race-intro.png") });
   out.race = await page.evaluate(() => {
     const c = window.cyberRace;
-    Object.assign(c.settings, { plan: 0, course: 0, level: 1, mode: 0, sound: false });
-    c.ui(["pause"]);
+    c.freeze(false);
     const started = c.phase;
+    // A fresh press (Jobe's pulse key) skips the rest of the intro.
+    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyR", key: "r" }));
+    c.advance(0.1);
+    window.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyR", key: "r" }));
+    const skipped = c.countdown <= 3.6 && c.intro?.pending === false;
     // Up/down defaults to the flight-stick style: holding W (stick forward) makes Jobe dive.
     c.advance(4);
     const before = c.pilots[0].oy;
@@ -66,7 +83,7 @@ try {
     c.pilots[1].cpu = true;
     c.advance(10);
     const split = !document.getElementById("divider").classList.contains("hidden");
-    return { started, forwardDives, split, phase: c.phase, sectors: c.world.track.sectors.map((s) => s.kind), progressed: c.pilots[0].s > 300 };
+    return { started, skipped, introGone: c.intro === null, forwardDives, split, phase: c.phase, sectors: c.world.track.sectors.map((s) => s.kind), progressed: c.pilots[0].s > 300 };
   });
   await page.evaluate(() => { window.cyberRace.freeze(true); window.cyberRace.advance(0.01); });
   await page.waitForTimeout(500);
@@ -89,7 +106,7 @@ try {
   await page.waitForFunction(() => window.cyberRace.phase === "menu", null, { timeout: SMOKE_TIMEOUT });
   out.remaster = await page.evaluate(() => {
     const c = window.cyberRace;
-    Object.assign(c.settings, { plan: 3, course: 0, level: 1, mode: 1, sound: false });
+    Object.assign(c.settings, { plan: 3, course: 0, level: 1, mode: 1, sound: false, intro: false });
     c.start();
     c.pilots[0].autopilot = true;
     c.advance(14);
@@ -196,6 +213,10 @@ const ok =
   out.race?.forwardDives === true &&
   out.race?.split === true &&
   out.race?.started === "countdown" &&
+  out.intro?.shown === true &&
+  out.intro?.opening === true &&
+  out.race?.skipped === true &&
+  out.race?.introGone === true &&
   out.race?.phase === "race" &&
   out.race?.progressed === true &&
   out.race?.sectors?.join(",") === "tunnel,mines,shards" &&

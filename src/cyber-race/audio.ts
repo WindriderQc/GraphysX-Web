@@ -205,6 +205,12 @@ export class RaceAudio {
     this.tone(220, 1.5, "sawtooth", 0.2, 0, 30);
   }
 
+  /** Cyberjobe parting the curtain: a rising sweep. */
+  portal(): void {
+    this.tone(140, 1.3, "sawtooth", 0.08, 0, 880);
+    this.tone(70, 1.3, "square", 0.04, 0.05, 440);
+  }
+
   /** One mine of a chain going off: a short, deep crack. */
   blast(): void {
     if (!this.ctx || !this.master || !this.noise) return;

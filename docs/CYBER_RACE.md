@@ -20,6 +20,13 @@ boards of about 40 s each with announced phases and a rhythm, opening with the *
 showcase board and closing with a 90 s **VORTEX** finale. Remastered look built for the Quest,
 boost pads, light combat (pulse shots). The film run above stays untouched. Decisions and design: [CYBER_RACE_NOTRE_VERSION.md](CYBER_RACE_NOTRE_VERSION.md).
 
+**Intro.** Between the menu and "3, 2, 1", Cyberjobe opens the track (`intro.ts`, owner's idea,
+2026-11-06): an energy curtain of gold hexes closes the line, he appears behind it as a hologram
+sized to the board, raises his hands and parts the curtain like two doors ("The track is open."),
+then rises and fades into gold sparks while the countdown runs. About 3.8 s before the numbers;
+a fresh press of pulse or turbo skips it. Every run, film and notre version. `settings.intro`
+turns it off (tests do).
+
 ## Run
 
 ```bash
@@ -205,4 +212,5 @@ Checked at 8 frames per second.
 `window.cyberRace` exposes `advance(seconds)` (fixed 60 Hz steps, then one render), `freeze(true)`
 to stop the live loop for an exact capture, `ui([...])` to feed menu actions as a pad would,
 `start()`, `settings`, `pilots`, `world` and `finale`. Set `pilots[i].cpu = true` to let the
-computer fly either pilot.
+computer fly either pilot. `intro` (time, curtain opening, still pending), `countdown` and
+`skipIntro()` follow Cyberjobe's intro; `settings.intro = false` starts without it.
