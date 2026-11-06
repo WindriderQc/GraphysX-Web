@@ -3,6 +3,9 @@ interface Engine {
   sub: OscillatorNode;
   filter: BiquadFilterNode;
   gain: GainNode;
+  panner: StereoPannerNode;
+  /** Loudness from distance to the listener (1 = beside). */
+  near: number;
 }
 
 /** Synthesised sounds; nothing to download. Starts on the first user gesture. */
@@ -54,7 +57,7 @@ export class RaceAudio {
       filter.connect(gain).connect(panner).connect(this.master);
       osc.start();
       sub.start();
-      this.engines.push({ osc, sub, filter, gain });
+      this.engines.push({ osc, sub, filter, gain, panner, near: 1 });
     }
     const length = ctx.sampleRate * 0.5;
     this.noise = ctx.createBuffer(1, length, ctx.sampleRate);
@@ -71,6 +74,35 @@ export class RaceAudio {
     }
   }
 
+  /**
+   * Places an engine in the stereo field: pan -1 (left) to 1 (right), near 0 (far) to 1.
+   * Solo and in the headset the rival's engine follows where it is; split screen keeps the
+   * fixed left/right halves.
+   */
+  place(index: number, pan: number, near: number): void {
+    const e = this.engines[index];
+    if (!e || !this.ctx) return;
+    e.panner.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), this.ctx.currentTime, 0.05);
+    e.near = Math.max(0, Math.min(1, near));
+  }
+
+  /** Pulse shot leaving the flyer. */
+  pulse(): void {
+    this.tone(1400, 0.22, "sawtooth", 0.12, 0, 260);
+    this.tone(700, 0.3, "square", 0.06, 0.02, 120);
+  }
+
+  /** A pulse landing on the rival. */
+  zap(): void {
+    this.tone(220, 0.5, "sawtooth", 0.16, 0, 40);
+    this.tone(1800, 0.12, "square", 0.08);
+  }
+
+  /** Boost pad. */
+  boostPad(): void {
+    this.tone(330, 0.35, "sawtooth", 0.1, 0, 990);
+  }
+
   engine(index: number, speed: number, boosting: boolean, active: boolean): void {
     const e = this.engines[index];
     if (!e || !this.ctx) {
@@ -81,7 +113,7 @@ export class RaceAudio {
     e.osc.frequency.setTargetAtTime(f, now, 0.08);
     e.sub.frequency.setTargetAtTime(f * 0.5 + (index === 0 ? 0 : 3), now, 0.08);
     e.filter.frequency.setTargetAtTime(boosting ? 1800 : 500 + speed * 4, now, 0.1);
-    e.gain.gain.setTargetAtTime(active ? (boosting ? 0.11 : 0.07) : 0, now, 0.15);
+    e.gain.gain.setTargetAtTime(active ? (boosting ? 0.11 : 0.07) * (0.25 + 0.75 * e.near) : 0, now, 0.15);
   }
 
   private tone(freq: number, duration: number, type: OscillatorType, volume: number, delay = 0, slideTo?: number): void {

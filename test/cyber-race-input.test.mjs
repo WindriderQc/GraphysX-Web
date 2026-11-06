@@ -36,15 +36,17 @@ test("Quest triggers bank by handedness and pressure even with one controller or
   input.setXrSources([touch("left", { trigger: 1 }), touch("right", { trigger: 1 })]);
   assert.equal(input.pilot(0).roll, 0);
   assert.equal(input.pilot(0).boost, false);
+  assert.equal(input.pilot(0).fire, false);
   input.poll(1 / 60);
   assert.deepEqual(input.takeEvents(), []);
 });
 
-test("either Quest grip boosts and the face buttons still confirm and pause", (t) => {
+test("either Quest grip boosts and the face buttons fire, confirm and pause", (t) => {
   const input = raceInput(t);
   for (const handedness of ["left", "right"]) {
     input.setXrSources([touch(handedness, { grip: 1, primary: 1, secondary: 1 })]);
     assert.equal(input.pilot(0).boost, true);
+    assert.equal(input.pilot(0).fire, true);
     assert.equal(input.pilot(0).roll, 0);
     input.poll(1 / 60);
     assert.deepEqual(input.takeEvents(), [
@@ -53,5 +55,26 @@ test("either Quest grip boosts and the face buttons still confirm and pause", (t
     ]);
     input.setXrSources([]);
     assert.equal(input.pilot(0).boost, false);
+    assert.equal(input.pilot(0).fire, false);
   }
+});
+
+test("Quest haptics reach either connected hand alongside the flight controls", (t) => {
+  const input = raceInput(t);
+  const pulses = [];
+  const left = touch("left", { trigger: 0.6 });
+  const right = touch("right", { grip: 1 });
+  for (const { handedness, gamepad } of [left, right]) {
+    gamepad.hapticActuators = [{
+      pulse: async (strength, duration) => { pulses.push({ handedness, strength, duration }); },
+    }];
+  }
+  input.setXrSources([right, { handedness: "none", gamepad: null }, left]);
+  input.rumble(0, 0.3, 0.7, 90);
+  assert.deepEqual(pulses, [
+    { handedness: "right", strength: 0.7, duration: 90 },
+    { handedness: "left", strength: 0.7, duration: 90 },
+  ]);
+  assert.equal(input.pilot(0).roll, -0.6);
+  assert.equal(input.pilot(0).boost, true);
 });

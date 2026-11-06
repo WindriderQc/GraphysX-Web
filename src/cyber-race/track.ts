@@ -3,7 +3,7 @@ import type { Rng } from "./textures";
 
 export const OPEN_RADIUS = 14;
 
-export type SectorKind = "tunnel" | "mines" | "shards" | "thorns" | "kaleido" | "wave" | "network" | "furnace" | "vortex";
+export type SectorKind = "tunnel" | "mines" | "shards" | "thorns" | "kaleido" | "wave" | "network" | "furnace" | "vortex" | "hypertube";
 
 export interface SectorInfo {
   name: string;
@@ -20,6 +20,31 @@ export interface SectorInfo {
   flat: boolean;
   /** Board invented in the film's style rather than taken from a scene. */
   inspired?: boolean;
+  /** "Notre version" board: remastered look and light combat. */
+  remaster?: boolean;
+  /** Designed length in metres at the NORMAL course (scaled by the course setting). */
+  length?: number;
+  /** Tube radius multiplier along the board (u = 0 at its start, 1 at its end). */
+  profile?: (u: number) => number;
+  /** Phases announced on the HUD as a pilot reaches each share of the board. */
+  phases?: Array<{ u: number; name: string; alert?: boolean }>;
+}
+
+const smooth = (a: number, b: number, u: number): number => {
+  const x = Math.min(1, Math.max(0, (u - a) / (b - a)));
+  return x * x * (3 - 2 * x);
+};
+
+/**
+ * Hypertube radius (base 10 m): a wide launch bay narrowing into the tube, widening for the
+ * split, tightening through the collapse, then flaring at the exit.
+ */
+export function hypertubeProfile(u: number): number {
+  let r = 2.4 - 1.4 * smooth(0.02, 0.08, u);
+  r += 0.4 * smooth(0.4, 0.43, u);
+  r -= 0.6 * smooth(0.66, 0.8, u);
+  r += 1.0 * smooth(0.93, 1, u);
+  return r;
 }
 
 export const SECTOR_INFO: Record<SectorKind, SectorInfo> = {
@@ -35,15 +60,36 @@ export const SECTOR_INFO: Record<SectorKind, SectorInfo> = {
   network: { name: "RÉSEAU", tube: 9.8, amp: 12, weight: 1, fog: 0.007, fogColor: 0x02121c, sky: "none", flat: false, inspired: true },
   // Inspired by Jobe's fire (01:35:20): eruptions over a distant lava sea.
   furnace: { name: "FOURNAISE", tube: 0, amp: 22, weight: 1, fog: 0.004, fogColor: 0x5a1a04, sky: "furnace", flat: true, inspired: true },
-  vortex: { name: "VORTEX", tube: 11, amp: 14, weight: 1, fog: 0.0065, fogColor: 0x120626, sky: "circuit", flat: false }
+  vortex: { name: "VORTEX", tube: 11, amp: 14, weight: 1, fog: 0.0065, fogColor: 0x120626, sky: "circuit", flat: false },
+  // Notre version: the film's green tunnel reimagined (docs/CYBER_RACE_NOTRE_VERSION.md).
+  hypertube: {
+    name: "HYPERTUBE",
+    tube: 10,
+    amp: 12,
+    weight: 1,
+    fog: 0.0042,
+    fogColor: 0x02100c,
+    sky: "none",
+    flat: false,
+    remaster: true,
+    length: 3200,
+    profile: hypertubeProfile,
+    phases: [
+      { u: 0.4, name: "BIFURCATION" },
+      { u: 0.66, name: "EFFONDREMENT", alert: true },
+      { u: 0.92, name: "SORTIE" }
+    ]
+  }
 };
 
 /** The race the two boys play in the film, then the extended run. */
-export const PLANS: Record<"film" | "extended" | "ultimate", SectorKind[]> = {
+export const PLANS: Record<"film" | "extended" | "ultimate" | "remaster", SectorKind[]> = {
   film: ["tunnel", "mines", "shards"],
   extended: ["tunnel", "mines", "shards", "thorns", "kaleido", "wave", "vortex"],
   // The film's boards stay intact; inspired boards continue the theme before the finale.
-  ultimate: ["tunnel", "mines", "shards", "thorns", "kaleido", "wave", "network", "furnace", "vortex"]
+  ultimate: ["tunnel", "mines", "shards", "thorns", "kaleido", "wave", "network", "furnace", "vortex"],
+  // Notre version: the showcase board first; the other boards follow once its direction holds.
+  remaster: ["hypertube"]
 };
 
 export interface Sector {
@@ -73,13 +119,15 @@ export class Track {
   private readonly right: Float32Array;
   private readonly count: number;
 
-  constructor(plan: SectorKind[], raceLength: number, rng: Rng) {
+  /** `lengths`, when given, sets each board's length; otherwise boards share `raceLength` by weight. */
+  constructor(plan: SectorKind[], raceLength: number, rng: Rng, lengths?: number[]) {
     this.raceLength = raceLength;
     const totalWeight = plan.reduce((sum, kind) => sum + SECTOR_INFO[kind].weight, 0);
     let start = 0;
     this.sectors = plan.map((kind, index) => {
       const info = SECTOR_INFO[kind];
-      const end = index === plan.length - 1 ? raceLength : Math.round(start + (raceLength * info.weight) / totalWeight);
+      const share = lengths ? lengths[index] : (raceLength * info.weight) / totalWeight;
+      const end = index === plan.length - 1 ? raceLength : Math.round(start + share);
       const sector: Sector = { index, kind, info, start, end };
       start = end;
       return sector;
@@ -146,10 +194,16 @@ export class Track {
   tubeAt(s: number): number {
     const here = this.sectorAt(s);
     if (here.info.tube > 0) {
-      return here.info.tube;
+      return here.info.tube * this.profileAt(here, s);
     }
     const before = this.sectorAt(s - 2);
-    return before.info.tube;
+    return before.info.tube * this.profileAt(before, s);
+  }
+
+  /** Radius multiplier of a board's tube at s (1 for constant tubes). */
+  profileAt(sector: Sector, s: number): number {
+    if (!sector.info.profile) return 1;
+    return sector.info.profile(Math.min(1, Math.max(0, (s - sector.start) / Math.max(1, sector.end - sector.start))));
   }
 
   /** How far from the line a pilot may fly at s. */

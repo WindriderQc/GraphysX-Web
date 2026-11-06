@@ -84,6 +84,31 @@ try {
   await page.waitForTimeout(700);
   await page.screenshot({ path: path.join(ART, "cyber-race-gameover.png") });
 
+  // ---- Notre version: the Hypertube showcase with light combat, computer on both sides ----
+  await page.evaluate(() => window.cyberRace.ui(["back"]));
+  await page.waitForFunction(() => window.cyberRace.phase === "menu", null, { timeout: SMOKE_TIMEOUT });
+  out.remaster = await page.evaluate(() => {
+    const c = window.cyberRace;
+    Object.assign(c.settings, { plan: 3, course: 0, level: 1, mode: 1, sound: false });
+    c.start();
+    c.pilots[0].autopilot = true;
+    c.advance(14);
+    return {
+      sectors: c.world.track.sectors.map((s) => s.kind),
+      boosts: c.world.boosts.length,
+      progressed: c.pilots[0].s > 600,
+    };
+  });
+  await page.evaluate(() => { window.cyberRace.freeze(true); window.cyberRace.advance(0.01); });
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(ART, "cyber-race-hypertube.png") });
+  out.remasterEnd = await page.evaluate(() => {
+    const c = window.cyberRace;
+    c.freeze(false);
+    for (let i = 0; i < 12 && c.phase !== "over"; i += 1) c.advance(5);
+    return { phase: c.phase, finished: c.pilots.map((p) => p.finished) };
+  });
+
   // ---- Quit returns to the front door ----
   await page.evaluate(() => window.cyberRace.ui(["back"]));
   await page.waitForFunction(() => window.cyberRace.phase === "menu", null, { timeout: SMOKE_TIMEOUT });
@@ -164,6 +189,11 @@ const ok =
   out.end?.phase === "over" &&
   out.end?.resultsShown === true &&
   out.end?.finished?.every(Boolean) &&
+  out.remaster?.sectors?.join(",") === "hypertube" &&
+  out.remaster?.boosts > 0 &&
+  out.remaster?.progressed === true &&
+  out.remasterEnd?.phase === "over" &&
+  out.remasterEnd?.finished?.every(Boolean) &&
   out.returned === true &&
   out.quest?.visible === true &&
   out.quest?.splitOptionHidden === true &&

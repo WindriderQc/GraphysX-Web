@@ -15,6 +15,11 @@ deploy. **No film material is ever online:** the page only looks for clips from 
 `file://` install. Porting the game onto the shared runtime (`api.steer`, AgentX ghost) would be
 a separate piece of work.
 
+**Notre version.** The lightning button (fourth row) runs our own take on the game, starting
+with the **HYPERTUBE** showcase board: remastered look built for the Quest, boost pads, a lane
+split, a collapse with iris rings, and light combat (pulse shots). The film run above stays
+untouched. Decisions and design: [CYBER_RACE_NOTRE_VERSION.md](CYBER_RACE_NOTRE_VERSION.md).
+
 ## Run
 
 ```bash
@@ -159,8 +164,9 @@ Open the HTTPS game page directly in the Quest browser and choose **Jouer en VR*
 WebXR renders a stereo view from the seat behind Jobe. One human races against the computer.
 The in-headset panel shows score, turbo, timer, messages, pause and game over.
 Use either Touch thumbstick to fly. The left and right index triggers bank the pilot toward
-that hand in proportion to the pull. Squeeze either grip for turbo. Use A or X to confirm,
-and B or Y to pause or go back. An Xbox pad can also control the pilot.
+that hand in proportion to the pull. Squeeze either grip for turbo. Use A or X to confirm
+in menus or fire a pulse in Hypertube. Use B or Y to pause or go back. An Xbox pad can also
+control the pilot.
 
 For PC VR, activate the headset in a WebXR-capable PC browser and use the same button.
 Activate the button with a pointer click or keyboard Enter so the browser can grant the session.

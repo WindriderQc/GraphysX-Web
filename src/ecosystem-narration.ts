@@ -13,7 +13,7 @@ export const deviceNarrator: EcosystemNarrator = (text, signal) => new Promise((
   const done = (): void => { signal.removeEventListener("abort", stop); utterance.onend = null; utterance.onerror = null; resolve(); };
   const stop = (): void => { synth.cancel(); done(); };
   utterance.onend = done;
-  utterance.onerror = (): void => { signal.removeEventListener("abort", stop); utterance.onend = null; utterance.onerror = null; reject(new Error("La voix de l’appareil est indisponible.")); };
+  utterance.onerror = (event): void => { signal.removeEventListener("abort", stop); utterance.onend = null; utterance.onerror = null; reject(Object.assign(new Error("La voix de l’appareil est indisponible."), { name: event.error === "not-allowed" ? "NotAllowedError" : "Error" })); };
   signal.addEventListener("abort", stop, { once: true });
   synth.speak(utterance);
 });

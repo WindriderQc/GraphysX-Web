@@ -7,7 +7,9 @@ import { GhostRecorder, courseSeed, formatTime, ghostAt, loadRecord, recordKey, 
 import { RaceInput, type PilotInput, type UiEvent } from "./input";
 import { JOBE_LOOK, PETER_LOOK, createFlyer, type FlyerLook, type FlyerModel } from "./models";
 import { mulberry32 } from "./textures";
-import { PLANS, Track, type SectorKind } from "./track";
+import { PLANS, SECTOR_INFO, Track, type SectorKind } from "./track";
+import { Combat, MAX_CHARGES, type Fighter } from "./combat";
+import { SpeedStreaks, createNeonEnvironment } from "./remaster";
 import { CYBERJOBE_AHEAD, GATE_BONUS, RaceWorld, createSkies, type Difficulty, type Obstacle } from "./world";
 
 /*
@@ -32,7 +34,7 @@ const LEVELS: Array<{ label: string; diff: Difficulty }> = [
 ];
 
 const MODES = ["2 JOUEURS", "1 JOUEUR CONTRE L'ORDINATEUR"];
-const PLAN_KEYS = ["film", "extended", "ultimate"] as const;
+const PLAN_KEYS = ["film", "extended", "ultimate", "remaster"] as const;
 
 const CRUISE = 62;
 const BOOST = 50;
@@ -279,6 +281,7 @@ class Hud {
   private readonly lcd: HTMLDivElement;
   private readonly lock: HTMLDivElement;
   private readonly washEl: HTMLDivElement;
+  private readonly pulseEl: HTMLDivElement;
   private msgTimer = 0;
   private flashTimer = 0;
   private washTimer = 0;
@@ -305,6 +308,7 @@ class Hud {
       <div class="speed"></div>
       <div class="lcd hidden"></div>
       <div class="lock hidden"><i></i><i></i><i></i><i></i></div>
+      <div class="pulse hidden"><i></i><i></i><i></i></div>
       <div class="msg"></div>
       <div class="wash"></div>
       <div class="flash"></div>`;
@@ -320,6 +324,7 @@ class Hud {
     this.lcd = q(".lcd");
     this.lock = q(".lock");
     this.washEl = q(".wash");
+    this.pulseEl = q(".pulse");
     const chev = q<HTMLDivElement>(".chev");
     for (let i = 0; i < CHEVRONS; i += 1) {
       const c = document.createElement("i");
@@ -387,6 +392,18 @@ class Hud {
     const ss = String(s % 60).padStart(2, "0");
     this.lcd.innerHTML = `<b>${mm}</b><i>m</i><b>${ss}</b><i>s</i>`;
     this.lcd.classList.toggle("urgent", s <= 10);
+  }
+
+  /** Pulse charges (notre version), or null to hide the gauge. */
+  setCharges(n: number | null): void {
+    this.pulseEl.classList.toggle("hidden", n === null);
+    if (n === null) return;
+    this.pulseEl.querySelectorAll("i").forEach((pip, i) => pip.classList.toggle("on", i < n));
+  }
+
+  /** Lock marks turn white-hot when a pulse would home on the rival. */
+  setArmed(armed: boolean): void {
+    this.lock.classList.toggle("armed", armed);
   }
 
   /** Red lock-on marks around the rival (percent of this HUD), or null to hide. */
@@ -475,6 +492,14 @@ interface Pilot {
   active: boolean;
   /** Jobe's story growth: multipliers on cruise speed, turbo and lateral agility. */
   power: { cruise: number; boost: number; agility: number };
+  /** Board phase reached (notre version boards announce theirs). */
+  phaseIndex: number;
+  /** Seconds until the next collapse rumble pulse. */
+  rumbleTimer: number;
+  /** Fire held on the previous step (shots fire on press). */
+  firePrev: boolean;
+  /** Light streaks hanging around the pilot (notre version). */
+  streaks: SpeedStreaks;
 }
 
 const hudContainer = document.getElementById("huds") as HTMLDivElement;
@@ -525,7 +550,16 @@ function makePilot(index: 0 | 1, name: string, look: FlyerLook, color: string): 
     autopilot: false,
     recorder: new GhostRecorder(),
     active: true,
-    power: { cruise: 1, boost: 1, agility: 1 }
+    power: { cruise: 1, boost: 1, agility: 1 },
+    phaseIndex: 0,
+    rumbleTimer: 0,
+    firePrev: false,
+    streaks: (() => {
+      const streaks = new SpeedStreaks(index === 0 ? 0xd8b0ff : 0xa8d0ff);
+      streaks.mesh.visible = false;
+      scene.add(streaks.mesh);
+      return streaks;
+    })()
   };
 }
 
@@ -812,6 +846,21 @@ class VrHud {
     ctx.fillStyle = "#6ff0b4";
     ctx.textAlign = "right";
     ctx.fillText(`${Math.round(p.speed * 3.6)} KM/H`, 1000, 440);
+    if (combat.enabled) {
+      for (let i = 0; i < MAX_CHARGES; i += 1) {
+        ctx.beginPath();
+        ctx.arc(470 + i * 42, 372, 14, 0, Math.PI * 2);
+        ctx.fillStyle = i < combat.charges[0] ? "#d68cff" : "rgba(214,140,255,0.2)";
+        ctx.fill();
+      }
+      if (combat.locked(fighter(p), fighter(o)) && combat.charges[0] > 0) {
+        ctx.font = "900 30px Bahnschrift, Arial Black, sans-serif";
+        ctx.fillStyle = "#ff4058";
+        ctx.textAlign = "center";
+        ctx.fillText("VERROUILLÉ", 512, 335);
+        ctx.textAlign = "left";
+      }
+    }
     // Turbo bar.
     ctx.fillStyle = "#4a3b0c";
     ctx.fillRect(24, 468, 976, 22);
@@ -965,7 +1014,15 @@ function startRace(newSeed: boolean): void {
   const rng = mulberry32(seed);
   const plan: SectorKind[] = storyChapter ? storyChapter.plan : PLANS[PLAN_KEYS[settings.plan]];
   const perSector = storyChapter ? storyChapter.perSector : COURSES[settings.course].perSector;
-  track = new Track(plan, perSector * plan.length, rng);
+  // Notre version boards have their own designed length, scaled by the course setting.
+  const lengths = plan.map((kind) => {
+    const designed = SECTOR_INFO[kind].length;
+    return designed ? Math.round((designed * perSector) / 1000) : perSector;
+  });
+  track = new Track(plan, lengths.reduce((a, b) => a + b, 0), rng, lengths);
+  remasterRace = plan.some((kind) => SECTOR_INFO[kind].remaster);
+  applyLook(remasterRace);
+  combat.reset(remasterRace);
   world = new RaceWorld(track, LEVELS[storyChapter ? 1 : settings.level].diff, rng);
   storyVerdict = null;
   scene.add(world.group);
@@ -1002,6 +1059,11 @@ function startRace(newSeed: boolean): void {
     p.cpu = p.index === 1 && !twoPlayers();
     p.active = !(storyChapter && p.index === 1 && !storyChapter.rival);
     p.power = storyChapter && p.index === 0 ? evolution(storyProgress.completed) : { cruise: 1, boost: 1, agility: 1 };
+    p.phaseIndex = 0;
+    p.rumbleTimer = 0;
+    p.firePrev = false;
+    p.hud.setCharges(remasterRace ? combat.charges[p.index] : null);
+    p.hud.setArmed(false);
     if (!p.active) p.s = p.prevS = -10000;
     p.model.root.visible = p.active;
     p.light.visible = p.active;
@@ -1198,6 +1260,14 @@ function cpuInput(p: Pilot): PilotInput {
   for (let i = w.firstObstacleFrom(p.s); i < w.obstacles.length; i += 1) {
     const o: Obstacle = w.obstacles[i];
     if (o.s > p.s + look) break;
+    if (o.destroyed) continue;
+    if (o.kind === "iris") {
+      // Through the middle, where the blades meet last.
+      tx = 0;
+      ty = 0;
+      danger = true;
+      break;
+    }
     if (o.kind === "plate") {
       const eta = (o.s - p.s) / Math.max(p.speed, 10);
       const gap = w.plateGap(o, worldTime + eta);
@@ -1300,6 +1370,9 @@ function cpuInput(p: Pilot): PilotInput {
     ty = Math.max(ty, floor + 4);
     danger = true;
   }
+  // Never aim through a lane divider: stay on our side until a gap.
+  const wall = w.dividerAt(p.s + 15);
+  if (wall > 0 && Math.sign(tx || 1) !== Math.sign(p.ox || 1)) tx = Math.sign(p.ox || 1) * (wall + 2.5);
   const bound = (track as Track).boundAt(p.s + 20) - 0.5;
   const tr = Math.hypot(tx, ty);
   if (tr > bound) {
@@ -1316,7 +1389,9 @@ function cpuInput(p: Pilot): PilotInput {
     x: clamp(ex * 0.3 - p.vx * 0.1, -1, 1),
     y: clamp(ey * 0.3 - p.vy * 0.1, -1, 1),
     boost: !danger && p.energy > 30 && p.hitTimer <= 0,
-    roll
+    roll,
+    // Fires once the rival has sat in the lock cone a moment (quicker at higher levels).
+    fire: combat.lockTime[p.index] > 0.9 - settings.level * 0.18 && Math.random() < 0.08
   };
 }
 
@@ -1333,6 +1408,7 @@ function hit(p: Pilot, dx: number, dy: number): void {
   p.hud.flash();
   sparkColor.setHex(0xffd060);
   sparks.burst(p.model.root.position, sparkColor, 70, 14);
+  if (!p.cpu) input.rumble(p.index, 0.9, 0.6, 260);
 }
 
 function collide(p: Pilot): void {
@@ -1379,6 +1455,7 @@ function collectRings(p: Pilot): void {
       p.bonus += 1000;
       p.rings += 1;
       p.energy = Math.min(100, p.energy + 30);
+      if (combat.enabled) combat.addCharge(p.index);
       audio.ring();
       p.hud.message("+1000", 0.9);
       sparkColor.setHex(0x9ff8ff);
@@ -1437,6 +1514,26 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
     }
   }
 
+  // Lane divider (notre version): a glass wall at ox = 0, with gaps to switch lanes.
+  const wall = (world as RaceWorld).dividerAt(p.s);
+  if (wall > 0) {
+    const reach = wall + 0.5 + 0.9 * Math.abs(Math.cos(p.roll));
+    if (Math.abs(p.ox) < reach) {
+      const before = p.ox - p.vx * dt;
+      const side = before === 0 ? (p.index === 0 ? -1 : 1) : Math.sign(before);
+      p.ox = side * reach;
+      if (p.vx * side < 0) p.vx = -p.vx * 0.3;
+      if (racing) {
+        p.speed *= 1 - 0.8 * dt;
+        if (Math.random() < 0.5) {
+          sparkColor.setHex(0x9ff8ff);
+          sparks.burst(p.model.root.position, sparkColor, 3, 6);
+        }
+        if (!p.cpu && Math.random() < 0.2) input.rumble(p.index, 0.2, 0.5, 60);
+      }
+    }
+  }
+
   // The golden sheet is solid: crests that reach a pilot knock it back up (01:14).
   const floor = (world as RaceWorld).waveHeight(p.s, p.ox, worldTime);
   if (Number.isFinite(floor) && p.oy < floor + 1) {
@@ -1453,7 +1550,8 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
   p.energy = clamp(p.energy + (p.boosting ? -30 : 7) * dt, 0, 100);
   const ahead = other.s - p.s;
   p.drafting = racing && !p.finished && ahead > 3 && ahead < 22 && Math.hypot(p.ox - other.ox, p.oy - other.oy) < 3;
-  if (p.boosting && !wasBoosting && !p.cpu) p.hud.wash();
+  // The film flare on turbo (00:40:54) belongs to the film run; notre version keeps its view clear.
+  if (p.boosting && !wasBoosting && !p.cpu && !remasterRace) p.hud.wash();
   let target = racing ? CRUISE * p.power.cruise + (p.boosting ? BOOST * p.power.boost : 0) + (p.drafting ? DRAFT : 0) : 0;
   if (p.finished) {
     target = 30;
@@ -1469,11 +1567,50 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
   if (racing && !p.finished) {
     collide(p);
     collectRings(p);
+    collectBoosts(p);
+    if (combat.enabled) {
+      if (control.fire && !p.firePrev) {
+        const shot = combat.fire(fighter(p), fighter(other));
+        if (shot) {
+          audio.pulse();
+          if (!p.cpu) input.rumble(p.index, 0.3, 0.7, 90);
+        }
+      }
+      p.firePrev = control.fire;
+    }
   }
 
   const sector = t.sectorAt(p.s);
+  // Board phases (notre version): announce each, rumble through the alert ones.
+  const phases = sector.info.phases;
+  if (phases && racing && !p.finished) {
+    const u = (p.s - sector.start) / Math.max(1, sector.end - sector.start);
+    const reached = phases.filter((ph) => u >= ph.u).length;
+    if (reached > p.phaseIndex) {
+      p.phaseIndex = reached;
+      const ph = phases[reached - 1];
+      p.hud.message(ph.alert ? `${ph.name} !` : ph.name, 2, false, ph.alert ? "alert" : "normal");
+      if (!p.cpu) {
+        if (ph.alert) {
+          audio.warning();
+          voice.say("Warning. Structure collapse.", true);
+        } else {
+          audio.sector();
+        }
+      }
+    }
+    const current = phases[p.phaseIndex - 1];
+    if (current?.alert && !p.cpu) {
+      p.rumbleTimer -= dt;
+      if (p.rumbleTimer <= 0) {
+        p.rumbleTimer = 0.25;
+        input.rumble(p.index, 0.35, 0.15, 220);
+      }
+    }
+  }
   if (sector.index !== p.sectorIndex && p.s < t.raceLength) {
     p.sectorIndex = sector.index;
+    p.phaseIndex = 0;
     if (sector.kind === "wave") {
       // The film flashes a red WARNING as Jobe reaches into the network (01:14:35).
       p.hud.message("WARNING", 2.4, false, "warning");
@@ -1701,6 +1838,26 @@ function step(dt: number): void {
   updatePilot(pilots[0], pilots[1], dt);
   updatePilot(pilots[1], pilots[0], dt);
   if (phase === "race" && pilots[1].active) bump(pilots[0], pilots[1]);
+  if (combat.enabled) {
+    for (const event of combat.update(dt, track, world, [fighter(pilots[0]), fighter(pilots[1])])) applyCombat(event);
+    for (const p of pilots) p.hud.setCharges(combat.charges[p.index]);
+  }
+  for (const p of pilots) {
+    const show = remasterRace && p.active && !p.cpu && !p.destroyed;
+    p.streaks.mesh.visible = show;
+    if (show) p.streaks.update(track, p.s, p.ox, p.oy, p.speed, (s) => track!.boundAt(s));
+  }
+  // Solo and in the headset, the rival's engine sits where the rival is.
+  if (!twoPlayers()) {
+    const me = pilots[0];
+    const rival = pilots[1];
+    const ahead = rival.s - me.s;
+    audio.place(1, (rival.ox - me.ox) / Math.max(6, Math.abs(ahead) * 0.6 + 6), 1 / (1 + Math.abs(ahead) / 40));
+    audio.place(0, 0, 1);
+  } else {
+    audio.place(0, -0.6, 1);
+    audio.place(1, 0.6, 1);
+  }
   for (const p of pilots) {
     placePilot(p, worldTime);
     updateCamera(p, dt);
@@ -1725,6 +1882,79 @@ function step(dt: number): void {
   }
   if (phase === "race" && raceTime > endDeadline) {
     endRace();
+  }
+}
+
+// ---------------------------------------------------------------- notre version
+let remasterRace = false;
+let neonEnv: THREE.Texture | null = null;
+const combat = new Combat([0xc45cff, 0x4f9bff]);
+scene.add(combat.group);
+
+/** Tone mapping and reflections for notre version; the film run keeps its flat 1992 look. */
+function applyLook(remaster: boolean): void {
+  renderer.toneMapping = remaster ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+  renderer.toneMappingExposure = remaster ? 1.1 : 1;
+  if (remaster) neonEnv ??= createNeonEnvironment(renderer);
+  scene.environment = remaster ? neonEnv : null;
+}
+
+function fighter(p: Pilot): Fighter {
+  return { index: p.index, s: p.s, ox: p.ox, oy: p.oy, speed: p.speed, active: p.active, flying: p.active && !p.finished && !p.destroyed };
+}
+
+function applyCombat(event: ReturnType<Combat["update"]>[number]): void {
+  const owner = pilots[event.owner];
+  if (event.type === "hit") {
+    const target = pilots[event.target];
+    target.speed *= 0.55;
+    target.hitTimer = Math.max(target.hitTimer, 0.7);
+    target.shake = 0.5;
+    target.hud.flash();
+    target.hud.message(`TOUCHÉ PAR ${owner.name}`, 1.4, false, "alert");
+    sparkColor.setHex(owner.index === 0 ? 0xe0a0ff : 0x9fd0ff);
+    sparks.burst(target.model.root.position, sparkColor, 90, 16);
+    owner.bonus += 500;
+    owner.hud.message("TOUCHÉ ! +500", 1.2);
+    audio.zap();
+    if (!target.cpu) input.rumble(target.index, 1, 0.8, 380);
+    if (!owner.cpu) input.rumble(owner.index, 0.4, 0.3, 120);
+  } else if (event.type === "break") {
+    const o = event.obstacle;
+    const at = (track as Track).toWorld(o.s, o.ox, o.oy, new THREE.Vector3());
+    sparkColor.setHex(o.kind === "mine" ? 0xff7a40 : 0xff6ad8);
+    sparks.burst(at, sparkColor, 60, 12);
+    const bonus = o.kind === "plate" ? 300 : 150;
+    owner.bonus += bonus;
+    owner.hud.message(`+${bonus}`, 0.7);
+    if (!owner.cpu) {
+      audio.gate();
+      input.rumble(owner.index, 0.5, 0.4, 120);
+    }
+  }
+}
+
+/** Boost pads: fly over one for a burst of speed and turbo. */
+function collectBoosts(p: Pilot): void {
+  const w = world as RaceWorld;
+  for (const pad of w.boosts) {
+    if (pad.s > p.s) break;
+    if (pad.s <= p.prevS || pad.taken[p.index]) continue;
+    if (Math.hypot(p.ox - pad.ox, p.oy - pad.oy) < 3.4) {
+      pad.taken[p.index] = true;
+      pad.flash = 1;
+      p.speed += 28;
+      p.energy = Math.min(100, p.energy + 35);
+      p.bonus += 200;
+      p.hud.message("BOOST !", 0.8);
+      sparkColor.setHex(0xffd040);
+      sparks.burst(p.model.root.position, sparkColor, 40, 12);
+      if (!p.cpu) {
+        p.hud.wash();
+        audio.boostPad();
+        input.rumble(p.index, 0.6, 1, 200);
+      }
+    }
   }
 }
 
@@ -1785,6 +2015,7 @@ function updateLock(p: Pilot, other: Pilot): void {
     return;
   }
   p.hud.setLock((tmpV.x * 0.5 + 0.5) * 100, (0.5 - tmpV.y * 0.5) * 100, clamp(1800 / ahead, 18, 90));
+  p.hud.setArmed(combat.enabled && combat.locked(fighter(p), fighter(other)) && combat.charges[p.index] > 0);
 }
 
 function render(): void {
@@ -1839,7 +2070,8 @@ const LEVEL_TEXT = [
 const PLAN_TEXT = [
   ["LES 3 TABLEAUX DU FILM", "Tunnel, champ de mines, cristaux : la course exacte du film (00:40:17)."],
   ["7 TABLEAUX", "Le film, puis terres hostiles, kaléidoscope, vague d'or et le vortex final contre Cyberjobe."],
-  ["9 TABLEAUX", "Les 7 tableaux, plus le réseau et la fournaise, inspirés du film, avant la finale."]
+  ["9 TABLEAUX", "Les 7 tableaux, plus le réseau et la fournaise, inspirés du film, avant la finale."],
+  ["NOTRE VERSION", "HYPERTUBE, le tableau vitrine : hangar, tube lumineux, bifurcation, effondrement. Pads de boost et tir pulsé."]
 ];
 const MODE_TEXT = [
   ["2 JOUEURS", "Écran partagé : Jobe à gauche, Peter à droite. Deux manettes, ou un clavier à deux."],
@@ -1966,7 +2198,7 @@ function refreshMenu(): void {
   document.body.classList.toggle("crosshair", settings.crosshair);
   const best = loadRecord(recordKey(settings.plan, settings.course, settings.level));
   captionEl.innerHTML =
-    chip("plan", "TABLEAUX", ["3 · FILM", "7", "9 · INSPIRÉS"][settings.plan]) +
+    chip("plan", "TABLEAUX", ["3 · FILM", "7", "9 · INSPIRÉS", "NOTRE VERSION"][settings.plan]) +
     chip("course", "PARCOURS", COURSES[settings.course].label) +
     chip("level", "NIVEAU", LEVELS[settings.level].label) +
     chip("mode", "MODE", questBrowser ? "1 JOUEUR · VR" : ["2 JOUEURS", "1 JOUEUR"][settings.mode]) +
