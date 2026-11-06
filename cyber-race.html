@@ -469,7 +469,23 @@
         font: 800 16px system-ui, sans-serif;
         cursor: pointer;
       }
-      #vr-start:focus-visible { outline: 3px solid #ffe14a; outline-offset: 3px; }
+      #vr-wrist-bank {
+        min-height: 44px;
+        margin-top: 7px;
+        padding: 6px 10px;
+        border: 1px solid #547d8c;
+        border-radius: 6px;
+        background: #172a3b;
+        color: #eaf4fa;
+        font: 700 13px system-ui, sans-serif;
+        cursor: pointer;
+      }
+      #vr-wrist-bank[aria-pressed="true"] {
+        border-color: #8be6ce;
+        background: #203d43;
+        color: #b5ffed;
+      }
+      #vr-start:focus-visible, #vr-wrist-bank:focus-visible { outline: 3px solid #ffe14a; outline-offset: 3px; }
       #vr-start[aria-disabled="true"] { opacity: 0.65; cursor: wait; }
       .quest-browser .vr-launch { border-top: 3px solid #8be6ce; }
       .quest-browser #vr-start { min-height: 58px; font-size: 18px; }
@@ -916,6 +932,7 @@
         <div>
           <strong>CABINE VR · 1 PILOTE</strong>
           <p id="vr-status" role="status">Détection du casque…</p>
+          <button id="vr-wrist-bank" class="hidden" type="button" aria-pressed="false">Bank au poignet</button>
         </div>
         <button id="vr-start" type="button" aria-describedby="vr-status">Jouer en VR</button>
       </section>
