@@ -176,8 +176,55 @@ try {
   await page.locator("#stage").screenshot({ path: path.join(artifacts, "llmx-stage-embed-count.png") });
   const stageReleased = await page.evaluate(() => { const element = document.getElementById("stage"); element.remove(); return element.renderer === null; });
   assert.equal(stageReleased, true);
+
+  // agentx.math-scene.v2 (AgentX #1270): two functions compared in the Math Game style, a
+  // parameter moved live, and refusals that leave the picture as it was.
+  const compare = await page.evaluate(() => new Promise(resolve => {
+    const element = document.createElement("llmx-stage");
+    element.id = "functions";
+    element.style.cssText = "display:block;width:480px;height:320px";
+    const seen = [];
+    for (const name of ["llmx-scene-applied", "llmx-scene-rejected", "llmx-parameters-applied", "llmx-parameters-rejected"]) {
+      element.addEventListener(name, event => seen.push([name.slice(5), event.detail.reason ?? event.detail.functions]));
+    }
+    element.scene = { schema: "agentx.math-scene.v2", kind: "functions", x: [-3, 3], y: [-4, 6],
+      functions: [{ name: "f", expression: "x^2 - 2" }, { name: "g", expression: "a*sin(b*x)" }],
+      parameters: [{ name: "a", value: 2, min: -3, max: 3 }, { name: "b", value: 1, min: 0.5, max: 4 }] };
+    document.body.append(element);
+    element.addEventListener("llmx-stage-ready", () => {
+      element.parameters = { a: 3 };
+      element.parameters = { a: 9 };
+      element.scene = { schema: "agentx.math-scene.v2", kind: "functions", x: [-3, 3], functions: [{ name: "f", expression: "alert(x)" }] };
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve({ seen, scene: element.scene, parameters: element.parameters,
+        schemas: customElements.get("llmx-stage").schemas })));
+    }, { once: true });
+  }));
+  assert.deepEqual(compare.seen, [["scene-applied", 2], ["parameters-applied", 2], ["parameters-rejected", "out-of-range"], ["scene-rejected", "formula"]]);
+  assert.deepEqual(compare.parameters, { a: 3, b: 1 }, "a refused value leaves the current one");
+  assert.deepEqual(compare.scene.functions.map(fn => [fn.label, fn.expression]), [["f(x)", "x^2 - 2"], ["g(x)", "a*sin(b*x)"]]);
+  assert.deepEqual(compare.schemas, ["agentx.math-scene.v1", "agentx.math-scene.v2"]);
+  const functionsLit = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => {
+    const source = document.getElementById("functions").shadowRoot.querySelector("canvas");
+    const probe = document.createElement("canvas");
+    probe.width = 96; probe.height = 64;
+    const context = probe.getContext("2d");
+    context.drawImage(source, 0, 0, probe.width, probe.height);
+    const data = context.getImageData(0, 0, probe.width, probe.height).data;
+    let warm = 0, cool = 0;
+    // The two curves' own colours: yellow (#ffe86b) for f, cyan (#60d6e8) for g.
+    for (let index = 0; index < data.length; index += 4) {
+      const [r, g, b] = [data[index], data[index + 1], data[index + 2]];
+      if (r > 170 && g > 150 && b < 140) warm += 1;
+      if (r < 140 && g > 150 && b > 160) cool += 1;
+    }
+    resolve({ warm, cool });
+  })));
+  assert.ok(functionsLit.warm > 4 && functionsLit.cool > 4, `both functions are drawn (${JSON.stringify(functionsLit)})`);
+  await page.locator("#functions").screenshot({ path: path.join(artifacts, "llmx-stage-embed-functions.png") });
+  const functionsReleased = await page.evaluate(() => { const element = document.getElementById("functions"); element.remove(); return element.renderer === null; });
+  assert.equal(functionsReleased, true);
   assert.deepEqual(errors, []);
-  console.log(`llmx face embed smoke passed (mask coverage ${idle.toFixed(3)}, stage coverage ${stageLit.toFixed(3)})`);
+  console.log(`llmx face embed smoke passed (mask coverage ${idle.toFixed(3)}, stage coverage ${stageLit.toFixed(3)}, functions ${JSON.stringify(functionsLit)})`);
 } finally {
   await browser.close();
   await server?.close();

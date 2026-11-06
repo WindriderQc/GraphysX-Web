@@ -88,6 +88,39 @@ beside the mask (AgentX Household's Images zone):
   aspect (`src/llmx-stage-frame.ts`, pure, unit tested) and eases to a new picture's size; reduced
   motion shows the finished picture at once. Rendering pauses off screen.
 
+### `agentx.math-scene.v2`: functions (AgentX #1270, phase 2)
+
+`<llmx-stage>` also takes `agentx.math-scene.v2`: the v1 cube kinds unchanged, or one to four
+functions y = f(x) drawn in the recovered Math Game style (backdrop board, green grid, three axes,
+a molecule field riding every curve) and overlaid for comparison. `LlmXStageElement.schemas`
+lists the contracts the loaded element understands, so a host can keep its own fallback.
+
+```js
+stage.scene = {
+  schema: "agentx.math-scene.v2", kind: "functions",
+  functions: [{ name: "f", expression: "x^2" }, { name: "g", expression: "a*x + 1", label: "droite", color: "#60d6e8" }],
+  parameters: [{ name: "a", value: 2, min: -3, max: 3 }],
+  x: [-3, 3],            // y: [min, max] optional; otherwise fitted to all curves, as the host's 2D card does
+};
+stage.parameters = { a: -1.5 }; // the host's sliders: no rebuild
+```
+
+- Formulas follow the Math Lab grammar (`src/math-expression.ts`, a port of AgentX's
+  `core/public/js/math-expression.js`; both repositories run the same vector file,
+  `test/fixtures/math-expression-vectors.json`). Names are x and the declared one-letter
+  parameters (at most six). Function names are one letter other than x, t or e; labels at most
+  48 characters; colours `#rrggbb` (default palette `#ffe86b`, `#60d6e8`, `#ff7a6b`, `#9dff8a`).
+- Anything outside the contract is refused whole with `llmx-scene-rejected` and a reason
+  (`schema`, `functions`, `formula`, `parameters`, `window`, `out-of-bounds`); a parameter value
+  outside its range answers `llmx-parameters-rejected`. Nothing is clamped: a point outside the
+  window, or where the function is undefined, is not drawn, and curves break at asymptotes.
+- `llmx-scene-applied` and `llmx-parameters-applied` carry the shown scene with its current values,
+  the fitted y window and a one-line description.
+- Dragging turns the scene (touch: sideways only, so the page keeps scrolling); a double click
+  returns to the opening view. Layout, sampling and framing are pure and unit tested
+  (`src/llmx-math-functions.ts`); rendering is `src/llmx-math-function-stage.ts`.
+- The docked `<llmx-face>` keeps v1 cubes only.
+
 The mapping reuses `llmxFacePresentation`, so the docked mask and the Forge mask read the same;
 the embed adds listening level, token-rate thinking intensity and a compatibility pose for the
 older dock's `sleeping` signal. The gaze follows the pointer anywhere on the host page and

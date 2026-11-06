@@ -7,6 +7,7 @@ import {
   MeshStandardMaterial,
   type Object3D,
 } from "three";
+import { evaluateMath, formatMath, parseMathExpression, type MathNode } from "./math-expression";
 
 /**
  * `formula-field` — the recovered GraphysX **Math Game**, graduated into v2 vocabulary.
@@ -31,6 +32,15 @@ import {
  *   molecules; that is the maximum here and the default is smaller (see the budget note).
  * - **The A/B/C/M/X parameter set and its −5..5 range**, from the recovered `MATH_CONTROLS`.
  *
+ * ## Any formula (AgentX #1270, phase 2)
+ *
+ * `kind: "expression"` draws any formula the Math Lab grammar accepts (`math-expression.ts`,
+ * shared with AgentX): `{ kind: "expression", expression: "a*sin(b*x) + c" }`. Its names are
+ * x and the recovered A/B/C/M controls, so the same sliders reshape it. A formula outside the
+ * grammar is refused (the call throws), never guessed. Unlike the two recovered formulas, an
+ * expression is not pinned to the board: a molecule whose value is undefined or would leave the
+ * board is hidden, because a pinned molecule would show a value the formula does not have.
+ *
  * ## What is inferred
  *
  * Materials and lighting response. The archive records a molecule as a coloured box; roughness
@@ -45,11 +55,16 @@ import {
  * frame; §11's "a playground is not a game" is respected — this visualises, it does not score.
  */
 
-export type AgentWorldFormulaKind = "parabola" | "slope";
+export type AgentWorldFormulaKind = "parabola" | "slope" | "expression";
+
+/** Names an `expression` formula may use: the variable and the recovered A/B/C/M controls. */
+export const AGENT_WORLD_FORMULA_NAMES = Object.freeze(["x", "a", "b", "c", "m"]);
 
 export type AgentWorldFormula = {
   preset?: AgentWorldFormulaPresetId | null;
   kind?: AgentWorldFormulaKind;
+  /** Any Math Lab formula in x, a, b, c and m (`kind: "expression"`, implied when given alone). */
+  expression?: string | null;
   /** Quadratic coefficient (PARABOLA only). */
   a?: number;
   /** Linear coefficient, shared by both formulas. */
@@ -82,6 +97,8 @@ export type AgentWorldFormula = {
 export type ResolvedAgentWorldFormula = {
   preset: AgentWorldFormulaPresetId | null;
   kind: AgentWorldFormulaKind;
+  /** The canonical formula for `kind: "expression"`, null for the recovered formulas. */
+  expression: string | null;
   a: number;
   b: number;
   c: number;
@@ -115,6 +132,7 @@ export type AgentWorldFormulaDescriptor = {
 const BASE_FORMULA: ResolvedAgentWorldFormula = {
   preset: null,
   kind: "parabola",
+  expression: null,
   // The legacy default state of the Math Game screen, from `race-scene.ts`'s `mathParams`.
   a: 1.5,
   b: -1,
@@ -183,8 +201,18 @@ export function resolveAgentWorldFormula(input: AgentWorldFormula | undefined): 
   // A preset supplies the defaults and any explicit field overrides it — the same rule flocks
   // and force fields use, so `{ preset: "slope-ramp", m: 3 }` means what it reads like.
   const base = source.preset ? findAgentWorldFormulaPreset(source.preset).defaults : BASE_FORMULA;
-  if (source.kind !== undefined && source.kind !== "parabola" && source.kind !== "slope") {
-    throw new Error(`Invalid formula.kind: ${String(source.kind)}. Use parabola or slope`);
+  if (source.kind !== undefined && source.kind !== "parabola" && source.kind !== "slope" && source.kind !== "expression") {
+    throw new Error(`Invalid formula.kind: ${String(source.kind)}. Use parabola, slope or expression`);
+  }
+  const hasExpression = source.expression !== undefined && source.expression !== null;
+  const kind = source.kind ?? (hasExpression ? "expression" : base.kind);
+  let expression: string | null = null;
+  if (kind === "expression") {
+    const parsed = parseMathExpression(hasExpression ? source.expression : base.expression, AGENT_WORLD_FORMULA_NAMES);
+    if (!parsed.ok) throw new Error(`Invalid formula.expression: ${parsed.error.message}`);
+    expression = formatMath(parsed.tree);
+  } else if (hasExpression) {
+    throw new Error("formula.expression needs kind expression");
   }
   const lanes = clampInt(source.lanes ?? base.lanes, 1, 200, "formula.lanes");
   const perLane = clampInt(source.perLane ?? base.perLane, 1, 200, "formula.perLane");
@@ -195,7 +223,8 @@ export function resolveAgentWorldFormula(input: AgentWorldFormula | undefined): 
   }
   return {
     preset: source.preset ?? base.preset,
-    kind: source.kind ?? base.kind,
+    kind,
+    expression,
     // The recovered controls run −5..5; clamping here means a bad agent call is corrected
     // rather than throwing, matching how the other simulation configs behave.
     a: clampNumber(source.a ?? base.a, -5, 5),
@@ -218,8 +247,24 @@ export function resolveAgentWorldFormula(input: AgentWorldFormula | undefined): 
  */
 export function evaluateFormulaHeight(config: ResolvedAgentWorldFormula, x: number): number {
   const xv = x + config.xOffset;
+  if (config.kind === "expression") {
+    // Not clamped: NaN (the molecule is hidden) where undefined or off the board.
+    const value = evaluateMath(compiledExpression(config.expression), { x: xv, a: config.a, b: config.b, c: config.c, m: config.m });
+    const height = 2.2 + value * 0.34;
+    return Number.isFinite(height) && height >= 0.1 && height <= 7.4 ? height : Number.NaN;
+  }
   const value = config.kind === "slope" ? config.m * xv + config.b : config.a * xv * xv + config.b * xv + config.c;
   return clampNumber(2.2 + value * 0.34, 0.1, 7.4);
+}
+
+let compiled: { source: string; tree: MathNode } | null = null;
+function compiledExpression(source: string | null): MathNode {
+  if (compiled?.source !== source) {
+    const parsed = parseMathExpression(source, AGENT_WORLD_FORMULA_NAMES);
+    // A resolved config was validated; an unparsable one draws nothing rather than a guess.
+    compiled = { source: String(source), tree: parsed.ok ? parsed.tree : { op: "number", value: Number.NaN } };
+  }
+  return compiled.tree;
 }
 
 /**
@@ -285,7 +330,11 @@ export class AgentWorldFormulaField {
       const z = (lane - (lanes - 1) / 2) * spacing;
       for (let column = 0; column < perLane; column += 1) {
         const x = (column - (perLane - 1) / 2) * spacing;
-        this.matrix.setPosition(x, evaluateFormulaHeight(this.config, x), z);
+        const y = evaluateFormulaHeight(this.config, x);
+        // A hidden molecule (undefined value) collapses to nothing at the floor.
+        const scale = Number.isFinite(y) ? 1 : 0.0001;
+        this.matrix.makeScale(scale, scale, scale);
+        this.matrix.setPosition(x, Number.isFinite(y) ? y : 0.1, z);
         mesh.setMatrixAt(instance, this.matrix);
         mesh.setColorAt(instance, this.color);
         instance += 1;
@@ -297,21 +346,24 @@ export class AgentWorldFormulaField {
   }
 
   /** Live readout for `state()`, so an agent can see the field without re-deriving the maths. */
-  describe(): { kind: AgentWorldFormulaKind; moleculeCount: number; minHeight: number; maxHeight: number } {
+  describe(): { kind: AgentWorldFormulaKind; expression: string | null; moleculeCount: number; minHeight: number | null; maxHeight: number | null } {
     const { lanes, perLane, spacing } = this.config;
     let minHeight = Number.POSITIVE_INFINITY;
     let maxHeight = Number.NEGATIVE_INFINITY;
     for (let column = 0; column < perLane; column += 1) {
       const x = (column - (perLane - 1) / 2) * spacing;
       const y = evaluateFormulaHeight(this.config, x);
+      if (!Number.isFinite(y)) continue;
       if (y < minHeight) minHeight = y;
       if (y > maxHeight) maxHeight = y;
     }
     return {
       kind: this.config.kind,
+      expression: this.config.expression,
       moleculeCount: lanes * perLane,
-      minHeight: round(minHeight),
-      maxHeight: round(maxHeight),
+      // Null when no molecule is defined anywhere in the field.
+      minHeight: Number.isFinite(minHeight) ? round(minHeight) : null,
+      maxHeight: Number.isFinite(maxHeight) ? round(maxHeight) : null,
     };
   }
 
