@@ -207,6 +207,13 @@ Checked at 8 frames per second.
 | 00:41:23–00:41:25 | Checker line along the highway, white flash |
 | 00:41:25–00:41:26 | GAME OVER on brushed silver, then the room |
 
+**Pilot models** (`createFlyer` in `models.ts`, checked against 00:40:36–00:40:51). Each racer
+is a pilot lying prone in a winged harness, not a ship: a faceted shell over the back (white
+top, coloured flanks, a thin blue line) ending in a point over the hips, a glass bubble over the
+masked head, two swept wings from the shoulders with a slim jet pod near each tip and a blade
+beyond it, and the legs trailing behind. Jobe: red flanks, wings and pods, glossy purple legs.
+Peter: tan shell and wings, blue pods and shorts, bare legs, three red canards on each shoulder.
+
 ## Testing hooks
 
 `window.cyberRace` exposes `advance(seconds)` (fixed 60 Hz steps, then one render), `freeze(true)`
