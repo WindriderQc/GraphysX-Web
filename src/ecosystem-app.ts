@@ -79,6 +79,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     <aside class="gx-eco-nestor" aria-label="Nestor">
       <div class="gx-eco-nestor-head"><span class="gx-eco-nestor-mark" aria-hidden="true">N</span><div><span class="gx-eco-nestor-name">Nestor</span><h2 data-title></h2></div></div>
       <p class="gx-eco-narration" data-narration aria-live="polite"></p>
+      <details class="gx-eco-technical" data-technical open hidden><summary>Fiche technique</summary><p data-technical-copy></p></details>
       <ul class="gx-eco-legend"><li data-status="installed">Plein : installé / reçu</li><li data-status="planned">Pointillé : prévu / à confirmer</li><li data-status="attention">Ambre : point ouvert</li></ul>
     </aside>
     <section class="gx-eco-tour" aria-label="Visite guidée">
@@ -305,10 +306,13 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     narrationFull = picture.narration;
     narrationShown = reduced || voiceOn ? narrationFull.length : 0;
     element("[data-narration]").textContent = reduced || voiceOn ? narrationFull : "";
+    const selected = step.kind === "node" ? ecoNode(step.id) : null;
+    element<HTMLDetailsElement>("[data-technical]").hidden = !selected;
+    element("[data-technical-copy]").textContent = selected ? catalog.describeNode(selected) : "";
     if (picture.wide) overviewCamera(seconds); else frameNodes([...picture.focus, ...picture.amber], seconds);
     showNotice();
     const state = player.state();
-    if (voiceOn && narratorReady && !conversationBusy && !document.hidden && (state.playing || adhoc)) { autoplayBlocked = false; narration.speak(narrationFull); }
+    if (voiceOn && narratorReady && !conversationBusy && !document.hidden && (state.playing || adhoc)) { autoplayBlocked = false; narration.speak(picture.spokenNarration ?? narrationFull); }
     renderSteps();
     emit("scene-changed", { index: state.index, count: state.count, kind: step.kind, label: tourStepLabel(step, catalog), playing: state.playing, script: tourText(player.steps()), adhoc: adhoc !== null });
   }
@@ -544,6 +548,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
       ...(composition ? { composition: structuredClone(composition) } : {}),
       tour: { index: tour.index, count: tour.count, playing: tour.playing, kind: step?.kind ?? null, label: step ? tourStepLabel(step, catalog) : null, script: tourText(player.steps()), adhoc: adhoc ? tourText([adhoc]) : null, title: picture?.title ?? null },
       narration: element("[data-narration]").textContent ?? "",
+      spokenNarration: picture?.spokenNarration ?? narrationFull,
       narrationComplete: narrationShown >= narrationFull.length,
       focus: picture?.focus ?? [], amber: picture?.amber ?? [], arcs: arcs.length,
       hovered: hovered?.id ?? null,

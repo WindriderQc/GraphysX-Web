@@ -49,6 +49,53 @@ test("a supplied manifest must hash to its actual Core composition revision", as
   await verifyComposition(parseComposition(input)); input.data.nodes[0].subtitle = "Tampered role";
   await assert.rejects(verifyComposition(parseComposition(input)), /révision Core/);
 });
+test("short reviewed copy is spoken while canonical technical details and spelling stay available", () => {
+  const value = fixture("ComputeX");
+  value.data.nodes[0].specs = ["Synthetic hardware detail"];
+  value.data.nodes[0].narration = "The workshop concierge.";
+  value.data.narration = { overview: "Welcome to ComputeX, where ideas get a workbench." };
+  value.data.pronunciations = [{ name: "ComputeX", spoken: "compute ex" }];
+  const catalog = createEcosystemCatalog(parseComposition(value));
+  const detail = tourPicture({ kind: "node", id: "host-a" }, catalog);
+  assert.equal(detail.narration, "ComputeX. The workshop concierge.");
+  assert.equal(detail.spokenNarration, "compute ex. The workshop concierge.");
+  assert.doesNotMatch(detail.narration, /Synthetic hardware detail|Synthetic receipt/);
+  assert.match(catalog.describeNode(catalog.ecoNode("host-a")), /Synthetic hardware detail/);
+  assert.equal(catalog.ecoNode("host-a").name, "ComputeX");
+  const observation = ecosystemObservation({ application: "ecosystem", snapshot: catalog.date,
+    tour: { script: "node-host-a", index: 0, count: 1, adhoc: null }, focus: ["host-a"],
+    narration: detail.narration, spokenNarration: detail.spokenNarration }, catalog);
+  assert.equal(observation.spokenNarration, detail.spokenNarration);
+  assert.match(observation.selection.description, /Synthetic hardware detail/);
+  assert.equal(tourPicture({ kind: "overview" }, catalog).spokenNarration, "Welcome to compute ex, where ideas get a workbench.");
+});
+test("pronunciations are literal, longest-first, whole-name and never recursively expanded", () => {
+  const value = fixture(); value.data.pronunciations = [
+    { name: "A+B", spoken: "C" }, { name: "C", spoken: "cee" },
+    { name: "Host", spoken: "machine" }, { name: "Host A", spoken: "alpha" }, { name: "écranX", spoken: "écran ex" }
+  ];
+  const catalog = createEcosystemCatalog(parseComposition(value));
+  assert.equal(catalog.speak("A+B C Host A Host abcHost A+Bzzz écranX écranXsuite préécranX"),
+    "C cee alpha machine abcHost A+Bzzz écran ex écranXsuite préécranX");
+});
+test("workflow copy replaces technical stop notes only in narration, with legacy fallbacks preserved", () => {
+  const value = fixture(); value.data.workflows = [{ id: "voice", title: "Voice", narration: "A question meets the workshop.",
+    note: "Technical workflow note", stops: [{ node: "host-a", label: "Intake" }, { node: "service-a", label: "Result" }] }];
+  const catalog = createEcosystemCatalog(parseComposition(value));
+  const picture = tourPicture({ kind: "voice" }, catalog);
+  assert.equal(picture.narration, "A question meets the workshop."); assert.equal(picture.flow.length, 1);
+  assert.equal(catalog.ecoWorkflow("voice").note, "Technical workflow note");
+  assert.match(tourPicture({ kind: "node", id: "host-a" }, catalog).narration, /Synthetic receipt/);
+});
+test("malformed voice copy and pronunciation cannot enter the reviewed scene", () => {
+  for (const mutate of [v => v.data.nodes[0].narration = "x".repeat(501),
+    v => v.data.narration = { unknown: "copy" }, v => v.data.narration = { overview: "line\nbreak" },
+    v => v.data.pronunciations = [{ name: "A", spoken: "" }],
+    v => v.data.pronunciations = [{ name: "A", spoken: "a" }, { name: "a", spoken: "b" }],
+    v => v.data.pronunciations = [{ name: "A", spoken: "a", url: "https://invalid.test" }]]) {
+    const value = fixture(); mutate(value); assert.throws(() => parseComposition(value));
+  }
+});
 test("live updates validate custom IDs against the mounted catalogue and composition references separately", async () => {
   const { parseEcosystemLivePayload } = await importBrowserModule(new URL("../src/ecosystem-live-state.ts", import.meta.url));
   const catalog = createEcosystemCatalog(parseComposition(fixture()));

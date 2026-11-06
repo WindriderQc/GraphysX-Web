@@ -71,6 +71,8 @@ export function tourStepLabel(step: TourStep, catalog: EcosystemCatalog = DEFAUL
 export type TourPicture = {
   title: string;
   narration: string;
+  /** Exact speech text after reviewed pronunciation aliases, separate from displayed spelling. */
+  spokenNarration?: string;
   focus: readonly string[];
   amber: readonly string[];
   flow: readonly { from: string; to: string; label?: string }[];
