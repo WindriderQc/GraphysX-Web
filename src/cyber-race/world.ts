@@ -8,6 +8,7 @@ import {
 } from "./models";
 import { Cyberjobe } from "./cyberjobe";
 import { buildHypertube } from "./hypertube";
+import { buildMagneticField } from "./magnetic";
 import { OPEN_RADIUS, RHYTHM_MAX, Track, TrackSlice, type Sector } from "./track";
 import {
   bandTexture,
@@ -20,6 +21,7 @@ import {
   networkTexture,
   hexTexture,
   lightningTexture,
+  nebulaTexture,
   ornateTileTexture,
   rivetedMetalTexture,
   sunsetTexture,
@@ -110,6 +112,24 @@ export interface Obstacle {
   destroyed?: boolean;
   /** Hides the broken obstacle (instanced obstacles scale their instance to zero). */
   onDestroy?: () => void;
+  /** Linked mines: breaking this one sets these off a moment later, and so on down the chain. */
+  chain?: Obstacle[];
+  /** Set pieces flown through (a necklace's middle): the computer pilots head for this point. */
+  aim?: [number, number];
+}
+
+/** Where a pilot is, for boards whose set pieces react to the pilots. */
+export interface PilotPoint {
+  s: number;
+  ox: number;
+  oy: number;
+}
+
+/** One linked mine going off in a chain lit by `owner`; `count` mines of that chain so far. */
+export interface Blast {
+  o: Obstacle;
+  owner: 0 | 1;
+  count: number;
 }
 
 /** Boost pad on a tube wall (notre version): flying over it gives a burst of speed and turbo. */
@@ -146,6 +166,8 @@ export interface BoardKit {
   /** Glass wall splitting the tube into left and right lanes over [s0, s1]. */
   addDivider(s0: number, s1: number, halfThickness: number): void;
   onUpdate(fn: (time: number, dt: number, focus: number[]) => void): void;
+  /** The pilots' places at the last update. */
+  pilots(): readonly PilotPoint[];
 }
 
 export interface Ring {
@@ -228,6 +250,12 @@ export class RaceWorld {
   /** Boost pads of notre version boards, sorted by s. */
   readonly boosts: BoostPad[] = [];
   private readonly updaters: Array<(time: number, dt: number, focus: number[]) => void> = [];
+  private pilotPoints: PilotPoint[] = [];
+  /** Chain blasts since the last frame, for main to light, score and hurt with. */
+  readonly blasts: Blast[] = [];
+  private readonly fuses: Array<{ o: Obstacle; owner: 0 | 1; chain: number; t: number }> = [];
+  private readonly chainCounts = new Map<number, number>();
+  private chainSeq = 0;
   private readonly dividers: Array<{ s0: number; s1: number; half: number }> = [];
   private readonly disposables: Array<{ dispose(): void }> = [];
   private readonly tmpQ = new THREE.Quaternion();
@@ -246,7 +274,8 @@ export class RaceWorld {
           this.buildTunnel(sector);
           break;
         case "mines":
-          this.buildMines(sector);
+          if (sector.info.remaster) buildMagneticField(this.kit(), sector);
+          else this.buildMines(sector);
           break;
         case "shards":
           this.buildShards(sector);
@@ -329,7 +358,8 @@ export class RaceWorld {
       },
       onUpdate: (fn) => {
         this.updaters.push(fn);
-      }
+      },
+      pilots: () => this.pilotPoints
     };
   }
 
@@ -339,6 +369,35 @@ export class RaceWorld {
       if (s >= d.s0 && s <= d.s1) return d.half;
     }
     return 0;
+  }
+
+  /** A pulse broke a linked mine: its neighbours go off one after the other. */
+  startChain(o: Obstacle, owner: 0 | 1): void {
+    if (!o.chain?.length) return;
+    this.chainSeq += 1;
+    this.chainCounts.set(this.chainSeq, 1);
+    this.lightFuses(o, owner, this.chainSeq);
+  }
+
+  private lightFuses(o: Obstacle, owner: 0 | 1, chain: number): void {
+    for (const next of o.chain ?? []) {
+      if (!next.destroyed) this.fuses.push({ o: next, owner, chain, t: 0.11 });
+    }
+  }
+
+  private burnFuses(dt: number): void {
+    for (let i = this.fuses.length - 1; i >= 0; i -= 1) {
+      const fuse = this.fuses[i];
+      fuse.t -= dt;
+      if (fuse.t > 0) continue;
+      this.fuses.splice(i, 1);
+      if (fuse.o.destroyed) continue;
+      this.breakObstacle(fuse.o);
+      const count = (this.chainCounts.get(fuse.chain) ?? 1) + 1;
+      this.chainCounts.set(fuse.chain, count);
+      this.blasts.push({ o: fuse.o, owner: fuse.owner, count });
+      this.lightFuses(fuse.o, fuse.owner, fuse.chain);
+    }
   }
 
   /** Breaks an obstacle hit by a pulse shot. */
@@ -1805,8 +1864,10 @@ export class RaceWorld {
   }
 
   /** Animate the course; `focus` lists the pilots' distances so per-vertex work stays near them. */
-  update(time: number, dt: number, focus: number[] = []): void {
+  update(time: number, dt: number, focus: number[] = [], pilots: PilotPoint[] = []): void {
     this.time = time;
+    this.pilotPoints = pilots;
+    this.burnFuses(dt);
     for (const fn of this.updaters) fn(time, dt, focus);
     for (const pad of this.boosts) {
       if (pad.flash > 0) pad.flash = Math.max(0, pad.flash - dt * 2.5);
@@ -1886,6 +1947,7 @@ export interface Skies {
   sunset: THREE.Mesh;
   hexdots: THREE.Mesh;
   furnace: THREE.Mesh;
+  nebula: THREE.Mesh;
 }
 
 export function createSkies(): Skies {
@@ -1906,8 +1968,12 @@ export function createSkies(): Skies {
     new THREE.SphereGeometry(900, 32, 16),
     new THREE.MeshBasicMaterial({ map: furnaceSkyTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
   );
-  for (const sky of [circuit, sunset, hexdots, furnace]) {
+  const nebula = new THREE.Mesh(
+    new THREE.SphereGeometry(900, 48, 24),
+    new THREE.MeshBasicMaterial({ map: nebulaTexture(), color: new THREE.Color(1.5, 1.5, 1.6), side: THREE.BackSide, fog: false, depthWrite: false })
+  );
+  for (const sky of [circuit, sunset, hexdots, furnace, nebula]) {
     sky.renderOrder = -1;
   }
-  return { circuit, sunset, hexdots, furnace };
+  return { circuit, sunset, hexdots, furnace, nebula };
 }

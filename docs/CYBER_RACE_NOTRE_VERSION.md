@@ -61,7 +61,34 @@ with a breather, then a last sprint at almost 2×. An alert phase flashes red wi
 and one strong pulse on the controllers; only the Hypertube collapse rumbles throughout.
 
 **Next.** These boards have the length and the rhythm; their own remastered set pieces (the
-proposals in the board bible) come board by board.
+proposals in the board bible) come board by board. Done so far: the Hypertube and the
+Magnetic field (below).
+
+## Board 2: CHAMP MAGNÉTIQUE (B-02)
+
+The mine field rebuilt under a violet nebula (`magnetic.ts`). One colour code, readable at a
+glance:
+
+| Mine | Behaviour |
+| --- | --- |
+| Gold | Holds still, as in the film. |
+| Red, with a pulsing glow | Drifts towards the nearest pilot coming at it (wakes 95 m out, stops steering in the last 12 m, about 2.6 m/s at NORMAL). |
+| Cyan, linked by electric arcs | One pulse sets off the whole group: each linked mine goes off 0.11 s after its neighbour, +200 per mine, and its blast (4.5 m) throws off any pilot too close (+300 to whoever lit it). |
+
+Set pieces along the board (3 000 m, about 40 s at NORMAL):
+
+| Share | Phase | What happens |
+| --- | --- | --- |
+| 0–8 % | entry | Three violet and cyan gates mark the field; the magnet's core glows far off to the side, its field rings turning. |
+| 8–30 % | field | Gold and red mines, still cyan clusters, rings for pulse charges, a boost gate. |
+| 30–50 % | ESSAIM | Three **necklaces**: helices of linked mines turning around the line. Fly through the middle, or pulse one and the whole necklace goes up. |
+| 50–58 % | breather | Three gold boost gates in a row. |
+| 60–92 % | TEMPÊTE DE MINES (alert) | More than half the single mines drift, clusters crowd, two more necklaces (three at DIFFICILE and up), field lines turn red and pulse. |
+| 92–100 % | exit | Clear run, a last boost gate, a white exit gate. |
+
+Field lines (glowing loops rising off the corridor's sides) and dark distant mines dress the
+board; neither collides. The computer pilots aim for a necklace's middle. Measured with the
+autopilot on 2026-11-06: 39.6 s at NORMAL, no hit.
 
 ## Systems
 

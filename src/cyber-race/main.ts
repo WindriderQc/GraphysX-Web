@@ -10,7 +10,7 @@ import { mulberry32 } from "./textures";
 import { PLANS, Track, boardInfo, type SectorKind } from "./track";
 import { Combat, MAX_CHARGES, type Fighter } from "./combat";
 import { SpeedStreaks, createNeonEnvironment } from "./remaster";
-import { CYBERJOBE_AHEAD, GATE_BONUS, RaceWorld, createSkies, type Difficulty, type Obstacle } from "./world";
+import { CYBERJOBE_AHEAD, GATE_BONUS, RaceWorld, createSkies, type Blast, type Difficulty, type Obstacle } from "./world";
 
 /*
  * Cyber Race: the two-player virtual race Jobe and Peter play in
@@ -60,7 +60,7 @@ scene.fog = fog;
 const background = new THREE.Color(0x050b0d);
 scene.background = background;
 const skies = createSkies();
-scene.add(skies.circuit, skies.sunset, skies.hexdots, skies.furnace);
+scene.add(skies.circuit, skies.sunset, skies.hexdots, skies.furnace, skies.nebula);
 scene.add(new THREE.HemisphereLight(0xa8d4e0, 0x10181c, 1.1));
 const sun = new THREE.DirectionalLight(0xffffff, 1.6);
 sun.position.set(0.4, 1, 0.3);
@@ -1262,6 +1262,12 @@ function cpuInput(p: Pilot): PilotInput {
     const o: Obstacle = w.obstacles[i];
     if (o.s > p.s + look) break;
     if (o.destroyed) continue;
+    if (o.aim) {
+      tx = o.aim[0];
+      ty = o.aim[1];
+      danger = true;
+      break;
+    }
     if (o.kind === "iris") {
       // Through the middle, where the blades meet last.
       tx = 0;
@@ -1825,7 +1831,12 @@ function step(dt: number): void {
   if (phase === "race") raceTime += dt;
   worldTime += dt;
   const racers = pilots.filter((p) => p.active);
-  world.update(worldTime, dt, racers.map((p) => p.s));
+  world.update(
+    worldTime,
+    dt,
+    racers.map((p) => p.s),
+    racers.map((p) => ({ s: p.s, ox: p.ox, oy: p.oy }))
+  );
   if (phase === "race") {
     const flying = racers.filter((p) => !p.finished && !p.destroyed);
     world.updateBoss(
@@ -1844,6 +1855,8 @@ function step(dt: number): void {
     for (const event of combat.update(dt, track, world, [fighter(pilots[0]), fighter(pilots[1])])) applyCombat(event);
     for (const p of pilots) p.hud.setCharges(combat.charges[p.index]);
   }
+  for (const blast of world.blasts) applyBlast(blast);
+  world.blasts.length = 0;
   for (const p of pilots) {
     const show = remasterRace && p.active && !p.cpu && !p.destroyed;
     p.streaks.mesh.visible = show;
@@ -1933,6 +1946,35 @@ function applyCombat(event: ReturnType<Combat["update"]>[number]): void {
       audio.gate();
       input.rumble(owner.index, 0.5, 0.4, 120);
     }
+    if (o.chain?.length) (world as RaceWorld).startChain(o, event.owner);
+  }
+}
+
+/** Reach of a chained mine's blast: a pilot this close (metres) is thrown off. */
+const BLAST_RADIUS = 4.5;
+
+/** A linked mine going off in a chain: points for whoever lit it, and anyone too close is hit. */
+function applyBlast(blast: Blast): void {
+  const o = blast.o;
+  const owner = pilots[blast.owner];
+  const at = (track as Track).toWorld(o.s, o.ox, o.oy, new THREE.Vector3());
+  sparkColor.setHex(0x7af0ff);
+  sparks.burst(at, sparkColor, 70, 15);
+  owner.bonus += 200;
+  owner.hud.message(`CHAÎNE ×${blast.count} +200`, 0.8);
+  audio.blast();
+  if (!owner.cpu) input.rumble(owner.index, 0.5, 0.5, 100);
+  for (const p of pilots) {
+    if (!p.active || p.finished || p.destroyed || p.hitTimer > 0) continue;
+    const dx = p.ox - o.ox;
+    const dy = p.oy - o.oy;
+    const ds = p.s - o.s;
+    if (dx * dx + dy * dy + ds * ds > BLAST_RADIUS * BLAST_RADIUS) continue;
+    hit(p, dx, dy);
+    if (p !== owner) {
+      owner.bonus += 300;
+      owner.hud.message("PIÉGÉ ! +300", 1.1);
+    }
   }
 }
 
@@ -1981,6 +2023,8 @@ function applyAtmosphere(s: number, at: THREE.Vector3): void {
   skies.sunset.visible = info.sky === "sunset";
   skies.hexdots.visible = info.sky === "hexdots";
   skies.furnace.visible = info.sky === "furnace";
+  skies.nebula.visible = info.sky === "nebula";
+  skies.nebula.position.copy(at);
   skies.furnace.position.copy(at);
   skies.circuit.position.copy(at);
   skies.sunset.position.copy(at);
