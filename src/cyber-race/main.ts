@@ -648,10 +648,15 @@ interface Settings {
   invertY: [boolean, boolean];
   /** Cyberjobe opens the track before the countdown (a press skips it). */
   intro: boolean;
+  /** Quest option. Hold a grip to bank with the wrist. */
+  wristBank: boolean;
 }
 
 const SETTINGS_KEY = "graphysx.cyberRace.settings";
-const settings: Settings = { course: 1, level: 1, mode: 0, plan: 0, sound: true, crosshair: false, invertY: [true, true], intro: true };
+const settings: Settings = {
+  course: 1, level: 1, mode: 0, plan: 0, sound: true, crosshair: false, invertY: [true, true],
+  intro: true, wristBank: false,
+};
 const questBrowser = /OculusBrowser|Quest/i.test(navigator.userAgent);
 document.body.classList.toggle("quest-browser", questBrowser);
 try {
@@ -666,6 +671,7 @@ try {
     settings.sound = typeof saved.sound === "boolean" ? saved.sound : settings.sound;
     settings.crosshair = typeof saved.crosshair === "boolean" ? saved.crosshair : settings.crosshair;
     settings.intro = typeof saved.intro === "boolean" ? saved.intro : settings.intro;
+    settings.wristBank = saved.wristBank === true;
     const inv = saved.invertY;
     if (Array.isArray(inv)) {
       settings.invertY = [typeof inv[0] === "boolean" ? inv[0] : true, typeof inv[1] === "boolean" ? inv[1] : true];
@@ -693,6 +699,7 @@ const dividerEl = document.getElementById("divider") as HTMLDivElement;
 const captionEl = document.getElementById("menu-caption") as HTMLDivElement;
 const statusEl = document.getElementById("menu-status") as HTMLDivElement;
 const vrStart = document.getElementById("vr-start") as HTMLButtonElement;
+const vrWristBank = document.getElementById("vr-wrist-bank") as HTMLButtonElement;
 const vrStatus = document.getElementById("vr-status") as HTMLParagraphElement;
 const detailScreen = document.getElementById("d-screen") as HTMLDivElement;
 const detailKicker = document.getElementById("d-kicker") as HTMLSpanElement;
@@ -915,11 +922,14 @@ function vrUnavailable(): string {
 }
 
 function refreshVrLaunch(): void {
+  const bankHint = settings.wristBank ? "Serre une poignée puis tourne le poignet" : "Poignées pour incliner";
   const message = vrOpening ? "Ouverture de la session immersive…"
-    : vrFailure || (vrSupported ? "Poignées pour incliner · index gauche pour freiner · index droit pour le turbo · A tir · Y pause."
+    : vrFailure || (vrSupported ? `${bankHint} · index gauche pour freiner · index droit pour le turbo · A tir · Y pause.`
       : vrChecked ? vrUnavailable() : "Détection du casque…");
   if (vrStatus.textContent !== message) vrStatus.textContent = message;
   vrStart.setAttribute("aria-disabled", String(vrOpening));
+  vrWristBank.setAttribute("aria-pressed", String(settings.wristBank));
+  vrWristBank.classList.toggle("hidden", !questBrowser && !vrSupported);
 }
 
 async function checkVrSupport(): Promise<void> {
@@ -988,6 +998,11 @@ async function enterVr(chapter: Chapter | null = null): Promise<void> {
 }
 
 vrStart.addEventListener("click", () => { void enterVr(); });
+vrWristBank.addEventListener("click", () => {
+  settings.wristBank = !settings.wristBank;
+  saveSettings();
+  refreshVrLaunch();
+});
 
 // ---------------------------------------------------------------- story mode
 let storyChapter: Chapter | null = null;
@@ -2607,10 +2622,16 @@ const clock = new THREE.Clock();
 /** Test hook: stop the live loop's simulation so a check can pose an exact frame. */
 let frozen = false;
 
-function frame(): void {
+function frame(_time: number, xrFrame?: XRFrame): void {
   const dt = Math.min(clock.getDelta(), 1 / 20);
   const session = renderer.xr.getSession();
-  if (session) input.setXrSources(session.inputSources);
+  if (session) {
+    const tracking = phase === "race" && !paused && session.visibilityState === "visible";
+    input.setXrSources(session.inputSources, settings.wristBank ? {
+      frame: tracking ? xrFrame : undefined,
+      referenceSpace: renderer.xr.getReferenceSpace(),
+    } : undefined);
+  }
   input.poll(dt);
   handleEvents(input.takeEvents());
   if (phase !== "menu" && !paused && !frozen) {

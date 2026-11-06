@@ -173,6 +173,15 @@ try {
   const vr = quest.getByRole("button", { name: "Jouer en VR", exact: true });
   const vrStatus = quest.locator("#vr-status");
   await vrStatus.filter({ hasText: /indisponible ici/ }).waitFor();
+  const wrist = quest.getByRole("button", { name: "Bank au poignet", exact: true });
+  const wristStartsOff = await wrist.getAttribute("aria-pressed") === "false";
+  await wrist.press("Space");
+  const wristTurnsOn = await wrist.getAttribute("aria-pressed") === "true";
+  await quest.reload({ waitUntil: "domcontentloaded" });
+  await vrStatus.filter({ hasText: /indisponible ici/ }).waitFor();
+  const wristPersists = await wrist.getAttribute("aria-pressed") === "true";
+  await wrist.click();
+  const wristTurnsOff = await wrist.getAttribute("aria-pressed") === "false";
   out.quest = await vr.evaluate((button) => {
     const rect = button.getBoundingClientRect();
     const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
@@ -182,6 +191,7 @@ try {
       splitOptionHidden: document.querySelector('[data-group="mode"][data-value="0"]').getClientRects().length === 0,
     };
   });
+  Object.assign(out.quest, { wristStartsOff, wristTurnsOn, wristPersists, wristTurnsOff });
   await quest.screenshot({ path: path.join(ART, "cyber-race-quest-menu.png") });
   await vr.press("Enter");
   await vrStatus.filter({ hasText: /Accès VR refusé/ }).waitFor();
@@ -240,6 +250,10 @@ const ok =
   out.returned === true &&
   out.quest?.visible === true &&
   out.quest?.splitOptionHidden === true &&
+  out.quest?.wristStartsOff === true &&
+  out.quest?.wristTurnsOn === true &&
+  out.quest?.wristPersists === true &&
+  out.quest?.wristTurnsOff === true &&
   out.quest?.focusRetained === true &&
   out.quest?.phase === "menu" &&
   out.quest?.splitHidden === true &&

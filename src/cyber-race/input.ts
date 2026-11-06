@@ -1,3 +1,5 @@
+import { Quaternion } from "three";
+
 export interface PilotInput {
   x: number;
   y: number;
@@ -64,6 +66,8 @@ const PAD = { a: 0, b: 1, x: 2, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, start: 9, u
 const XR_PAD = { trigger: 0, grip: 1, primary: 4, secondary: 5 };
 const XR_LEFT_ID = -1;
 const DEADZONE = 0.22;
+const WRIST_DEAD_ZONE = 6 * Math.PI / 180;
+const WRIST_FULL_BANK = 42 * Math.PI / 180;
 const REPEAT_DELAY = 0.38;
 const REPEAT_RATE = 0.14;
 
@@ -74,6 +78,7 @@ interface PadMemory {
 }
 
 type XrSources = XRInputSourceArray | readonly XRInputSource[];
+type WristFrame = { frame: XRFrame | undefined; referenceSpace: XRReferenceSpace | null };
 
 /** Keyboard split in two halves, one Xbox pad per pilot, plus Quest controllers in VR. */
 export class RaceInput {
@@ -81,6 +86,10 @@ export class RaceInput {
   private readonly events: UiEvent[] = [];
   private readonly padMemory = new Map<number, PadMemory>();
   private xrSources: XrSources = [];
+  private wristSource: XRInputSource | null = null;
+  private readonly wristNeutralInverse = new Quaternion();
+  private readonly wristRotation = new Quaternion();
+  private wristRoll: number | null = null;
   /** Called on the first keyboard or pad input so audio can start. */
   onActivity: (() => void) | null = null;
 
@@ -110,11 +119,52 @@ export class RaceInput {
   }
 
   /** Keep handedness alongside each controller's live gamepad state. */
-  setXrSources(sources: XrSources): void {
+  setXrSources(sources: XrSources, wrist?: WristFrame): void {
     this.xrSources = sources;
+    this.wristRoll = wrist ? this.readWristBank(wrist) : null;
+    if (!wrist) this.wristSource = null;
     if (sources.length === 0) {
       for (const id of this.padMemory.keys()) if (id < 0) this.padMemory.delete(id);
     }
+  }
+
+  private readWristBank({ frame, referenceSpace }: WristFrame): number {
+    if (!frame || !referenceSpace) {
+      this.wristSource = null;
+      return 0;
+    }
+    // Keep the first held controller in charge until it releases the grip.
+    let held: XRInputSource | null = null;
+    for (const source of this.xrSources) {
+      if (source.targetRayMode !== "tracked-pointer" || !source.gamepad?.buttons[XR_PAD.grip]?.pressed) continue;
+      if (source === this.wristSource) {
+        held = source;
+        break;
+      }
+      held ??= source;
+    }
+    const pose = held ? frame.getPose(held.targetRaySpace, referenceSpace) : null;
+    if (!held || !pose) {
+      this.wristSource = null;
+      return 0;
+    }
+    const { x, y, z, w } = pose.transform.orientation;
+    this.wristRotation.set(x, y, z, w);
+    if (held !== this.wristSource) {
+      this.wristSource = held;
+      this.wristNeutralInverse.copy(this.wristRotation).invert();
+      return 0;
+    }
+
+    // Project the relative rotation onto the controller's pointing axis.
+    // Its +Z points back toward the pilot, opposite the ship's roll axis.
+    this.wristRotation.premultiply(this.wristNeutralInverse);
+    const { z: twistZ, w: twistW } = this.wristRotation;
+    if (Math.hypot(twistZ, twistW) < 1e-4) return 0;
+    const angle = -2 * Math.atan2(twistZ, twistW);
+    const roll = Math.atan2(Math.sin(angle), Math.cos(angle));
+    const scaled = (Math.abs(roll) - WRIST_DEAD_ZONE) / (WRIST_FULL_BANK - WRIST_DEAD_ZONE);
+    return scaled <= 0 ? 0 : Math.sign(roll) * Math.min(1, scaled);
   }
 
   private any(codes: string[]): boolean {
@@ -240,7 +290,8 @@ export class RaceInput {
         }
       }
       if (accelerate || brake) throttle = accelerate - brake;
-      if (leftBank || rightBank) roll = rightBank - leftBank;
+      if (this.wristRoll !== null) roll = this.wristRoll;
+      else if (leftBank || rightBank) roll = rightBank - leftBank;
     }
     return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), throttle, roll, fire };
   }

@@ -5238,3 +5238,12 @@ a collector request, an IoT join key) is listed in `docs/NETX_PROPOSAL.md` §3.3
   proportion to the pull. Right A fires. Left X confirms and left Y pauses or goes back.
 - A Quest 2 emulator verified speed changes, both banks, right A spending a pulse charge,
   right B leaving the race active, and the left pause and resume controls.
+
+## 2026-11-06 — Try wrist banking on Quest
+
+- **Bank au poignet** is an opt-in VR setting saved in the browser. Holding either grip
+  captures a comfortable neutral orientation. Twist that controller to bank, release to level,
+  and squeeze again to recenter. A 6° dead zone filters small motion.
+- The input tests cover signed roll, pitch and yaw, changing hands, and tracking loss.
+  The Cyber Race smoke verifies the menu toggle survives reload. Quest 2 emulation in
+  Hypertube verified banking both ways and recentering. Comfort remains a headset playtest.

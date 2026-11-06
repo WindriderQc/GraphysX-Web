@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Quaternion, Vector3 } from "three";
 import { RaceInput } from "../src/cyber-race/input.ts";
 
 function raceInput(t) {
@@ -95,4 +96,74 @@ test("Quest haptics reach either connected hand alongside the flight controls", 
   ]);
   assert.equal(input.pilot(0).roll, -0.6);
   assert.equal(input.pilot(0).throttle, 1);
+});
+
+const axisX = new Vector3(1, 0, 0);
+const axisY = new Vector3(0, 1, 0);
+const axisZ = new Vector3(0, 0, 1);
+const turn = (axis, degrees) => new Quaternion().setFromAxisAngle(axis, degrees * Math.PI / 180);
+
+function trackedTouch(handedness) {
+  return { ...touch(handedness, { grip: 1 }), targetRayMode: "tracked-pointer", targetRaySpace: {} };
+}
+
+function wristTracking(input) {
+  const poses = new Map();
+  const referenceSpace = {};
+  const frame = { getPose(space, reference) {
+    assert.equal(reference, referenceSpace);
+    const orientation = poses.get(space);
+    return orientation ? { transform: { orientation } } : null;
+  } };
+  return { poses, sample: (...sources) => input.setXrSources(sources, { frame, referenceSpace }) };
+}
+
+test("wrist bank tracks signed roll around the calibrated pointing axis", (t) => {
+  const input = raceInput(t);
+  const right = trackedTouch("right");
+  const { poses, sample } = wristTracking(input);
+  const rest = turn(axisY, 36).multiply(turn(axisX, -24));
+  const pose = (rotation) => {
+    poses.set(right.targetRaySpace, rest.clone().multiply(rotation));
+    sample(right);
+    return input.pilot(0).roll;
+  };
+
+  assert.equal(pose(new Quaternion()), 0, "holding a grip sets the neutral angle");
+  assert.equal(pose(turn(axisX, 50)), 0, "pitch is ignored");
+  assert.equal(pose(turn(axisY, 55)), 0, "yaw is ignored");
+  assert.equal(pose(turn(axisZ, 5)), 0, "small wrist motion is inside the dead zone");
+  assert.ok(Math.abs(pose(turn(axisX, 40).multiply(turn(axisZ, -24))) - 0.5) < 1e-6);
+  assert.equal(pose(turn(axisZ, 60)), -1, "left bank reaches knife-edge");
+});
+
+test("wrist bank releases to neutral and recalibrates after losing tracking or changing hands", (t) => {
+  const input = raceInput(t);
+  const right = trackedTouch("right");
+  const left = trackedTouch("left");
+  const { poses, sample } = wristTracking(input);
+  poses.set(right.targetRaySpace, new Quaternion());
+  poses.set(left.targetRaySpace, turn(axisZ, 20));
+  sample(right);
+  poses.set(right.targetRaySpace, turn(axisZ, -60));
+  sample(left, right);
+  assert.equal(input.pilot(0).roll, 1, "a second grip does not take over while the first is held");
+  right.gamepad.buttons[1].pressed = false;
+  sample(left, right);
+  assert.equal(input.pilot(0).roll, 0, "the new hand gets its own neutral angle");
+  poses.set(left.targetRaySpace, turn(axisZ, 80));
+  sample(left);
+  assert.equal(input.pilot(0).roll, -1);
+  poses.delete(left.targetRaySpace);
+  sample(left);
+  assert.equal(input.pilot(0).roll, 0, "tracking loss releases the bank");
+  poses.set(left.targetRaySpace, turn(axisZ, 80));
+  sample(left);
+  assert.equal(input.pilot(0).roll, 0, "tracking recovery sets a fresh neutral angle");
+  left.gamepad.buttons[1].pressed = false;
+  sample(left);
+  assert.equal(input.pilot(0).roll, 0);
+  left.gamepad.buttons[1].pressed = true;
+  input.setXrSources([left]);
+  assert.equal(input.pilot(0).roll, -1, "the regular grip mode still works");
 });
