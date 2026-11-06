@@ -6,6 +6,9 @@ type GuestCredentials = { roomId: string; guestToken: string };
 type QueuedCommand = { sequence: number; roundId: string; command: VolcanoCommand };
 export type BallsyLinkState = { available: boolean; code: string | null; connected: boolean; message: string };
 
+// Keep host and Quest traffic inside this build's mount (root by default).
+const relayBase = `${import.meta.env.BASE_URL}api/ballsy/`;
+
 async function json<T>(url: string, method = "GET", value?: unknown, token?: string, keepalive = false): Promise<T> {
   const response = await fetch(url, { method, headers: { ...(value === undefined ? {} : { "content-type": "application/json" }), ...(token ? { authorization: `Bearer ${token}` } : {}) },
     ...(value === undefined ? {} : { body: JSON.stringify(value) }), cache: "no-store", signal: AbortSignal.timeout(1400), keepalive });
@@ -30,7 +33,7 @@ export function createBallsyHostLink(options: { snapshot: () => BallsySnapshot; 
     if (!active || current !== generation || !credentials) return;
     const c = credentials;
     try {
-      const reply = await json<{ commands: QueuedCommand[]; guestConnected: boolean }>(`/api/ballsy/${c.roomId}/host`, "POST", { snapshot: options.snapshot(), ack }, c.hostToken);
+      const reply = await json<{ commands: QueuedCommand[]; guestConnected: boolean }>(`${relayBase}${c.roomId}/host`, "POST", { snapshot: options.snapshot(), ack }, c.hostToken);
       if (!active || current !== generation) return;
       lastReply = performance.now(); message = "";
       presence(reply.guestConnected);
@@ -50,7 +53,7 @@ export function createBallsyHostLink(options: { snapshot: () => BallsySnapshot; 
     async open(): Promise<void> {
       if (credentials) return;
       const current = ++generation;
-      credentials = await json<HostCredentials>("/api/ballsy/create", "POST", {});
+      credentials = await json<HostCredentials>(`${relayBase}create`, "POST", {});
       if (!active || current !== generation) return;
       ack = 0; lastReply = performance.now();
       await pump(current);
@@ -60,7 +63,7 @@ export function createBallsyHostLink(options: { snapshot: () => BallsySnapshot; 
     dispose(): void {
       active = false; generation++; window.clearTimeout(timer); presence(false); holding = false;
       const c = credentials; credentials = null;
-      if (c) void json(`/api/ballsy/${c.roomId}/close`, "POST", {}, c.hostToken, true).catch(() => undefined);
+      if (c) void json(`${relayBase}${c.roomId}/close`, "POST", {}, c.hostToken, true).catch(() => undefined);
     },
   };
 }
@@ -73,7 +76,7 @@ export function createBallsyGuestLink(onUpdate: () => void) {
     if (current !== generation || !credentials) return;
     const c = credentials;
     try {
-      const reply = await json<{ snapshot: unknown; hostLive: boolean }>(`/api/ballsy/${c.roomId}/view`, "GET", undefined, c.guestToken);
+      const reply = await json<{ snapshot: unknown; hostLive: boolean }>(`${relayBase}${c.roomId}/view`, "GET", undefined, c.guestToken);
       if (current !== generation) return;
       if (!isBallsySnapshot(reply.snapshot)) throw new Error("L'écran n'a pas encore partagé sa course.");
       snapshot = reply.snapshot; live = reply.hostLive; lastReply = performance.now();
@@ -87,7 +90,7 @@ export function createBallsyGuestLink(onUpdate: () => void) {
     generation++; window.clearTimeout(timer);
     const c = credentials; credentials = null; live = false; snapshot = null;
     message = "Pelle rendue à l'écran.";
-    if (c) void json(`/api/ballsy/${c.roomId}/leave`, "POST", {}, c.guestToken, true).catch(() => undefined);
+    if (c) void json(`${relayBase}${c.roomId}/leave`, "POST", {}, c.guestToken, true).catch(() => undefined);
     onUpdate();
   };
   return {
@@ -95,7 +98,7 @@ export function createBallsyGuestLink(onUpdate: () => void) {
       if (credentials) leave();
       const current = ++generation;
       message = "Connexion à la piste…"; onUpdate();
-      const next = await json<GuestCredentials>("/api/ballsy/join", "POST", { code });
+      const next = await json<GuestCredentials>(`${relayBase}join`, "POST", { code });
       if (current !== generation) return;
       credentials = next;
       await pump(current);
@@ -105,7 +108,7 @@ export function createBallsyGuestLink(onUpdate: () => void) {
       const c = credentials, roundId = snapshot.roundId, current = generation;
       chain = chain.then(async () => {
         if (current !== generation) return;
-        const reply = await json<{ accepted: boolean; reason?: string }>(`/api/ballsy/${c.roomId}/command`, "POST", { id: crypto.randomUUID(), roundId, command }, c.guestToken);
+        const reply = await json<{ accepted: boolean; reason?: string }>(`${relayBase}${c.roomId}/command`, "POST", { id: crypto.randomUUID(), roundId, command }, c.guestToken);
         if (!reply.accepted && reply.reason) message = reply.reason;
       }).catch((error) => { live = false; message = error instanceof Error ? error.message : "Connexion interrompue."; onUpdate(); });
     },
