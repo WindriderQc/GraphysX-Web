@@ -805,6 +805,8 @@ Every mutating method returns `{ ok, revision, value?, error? }`. Entity IDs are
 
 Entity types: `group`, `agent`, `box`, `sphere`, `icosahedron`, `cylinder`, `cone`, `torus`, `plane`, `spline`, `model`, `emitter`, `sound`, `terrain`, `water`, `flock`, `force-field`, `formula-field`, `ambient-light`, `directional-light`, and `point-light`.
 
+A `formula-field` takes `formula: { preset }`, the recovered `kind: "parabola"` or `"slope"` with A/B/C/M/X coefficients, or `kind: "expression"` with any Math Lab formula in x, a, b, c and m (`{ expression: "a*sin(b*x) + c" }`, shared grammar `src/math-expression.ts`). A formula outside the grammar is refused; an expression molecule that is undefined or would leave the board is hidden, not pinned.
+
 A `sound` entity is a placed audio source: `sound: { source, volume?, loop?, autoplay?, positional?, refDistance? }`, where `source` is a sound id (`sounds()`) or URL. The runtime keeps a selectable wireframe marker (`marker: false` hides it, like a point light's bulb) and the config in the document; the host plays it through the camera's audio listener — positionally attenuated by default, starting after the visitor's first click (browser autoplay policy). A hidden sound entity is muted, no rigid body is accepted, and imports from the media library are usable the moment `media.refresh()` lands.
 
 ```js
