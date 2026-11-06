@@ -12,6 +12,9 @@
  */
 import { describeNode, ecoCounts, ecoIssues, ecoLinksOf, ecoNode, ecoPlanned, ecoServicesOn, ecoWorkflow, ECOSYSTEM_LINKS, ECOSYSTEM_SNAPSHOT_DATE, type EcoLink, type EcoWorkflowStop } from "./ecosystem-data";
 
+import { DEFAULT_ECOSYSTEM_CATALOG, type EcosystemCatalog } from "./ecosystem-catalog";
+import { compositionTourPicture } from "./ecosystem-composition-tour";
+
 export type TourSceneKind = "overview" | "frank" | "services" | "alien" | "brutal" | "network" | "edge" | "spare" | "voice" | "image" | "memory" | "garage" | "watch" | "summary";
 export type TourStep = { kind: TourSceneKind } | { kind: "node"; id: string };
 const SCENES: readonly TourSceneKind[] = ["overview", "frank", "services", "alien", "brutal", "network", "edge", "spare", "voice", "image", "memory", "garage", "watch", "summary"];
@@ -30,7 +33,7 @@ export function tourStepSeconds(step: TourStep): number {
 }
 
 /** Parse a `play` list. Unknown words are refused, not skipped: the host asked for something. */
-export function parseTour(text: string): TourStep[] {
+export function parseTour(text: string, catalog: EcosystemCatalog = DEFAULT_ECOSYSTEM_CATALOG): TourStep[] {
   if (typeof text !== "string" || text.length > 2000) throw new Error("play must be a short list of stops");
   const words = text.split(",").map((word) => word.trim().toLowerCase()).filter(Boolean);
   if (!words.length) throw new Error("play must name at least one stop");
@@ -38,13 +41,13 @@ export function parseTour(text: string): TourStep[] {
   return words.map((word): TourStep => {
     if ((SCENES as readonly string[]).includes(word)) return { kind: word as TourSceneKind };
     const node = /^node-([a-z0-9-]{2,24})$/.exec(word);
-    if (node && ecoNode(node[1])) return { kind: "node", id: node[1] };
+    if (node && catalog.ecoNode(node[1])) return { kind: "node", id: node[1] };
     throw new Error(`unknown play stop: ${word.slice(0, 80)}`);
   });
 }
 export const tourText = (steps: readonly TourStep[]): string => steps.map((step) => (step.kind === "node" ? `node-${step.id}` : step.kind)).join(",");
 
-export function tourStepLabel(step: TourStep): string {
+export function tourStepLabel(step: TourStep, catalog: EcosystemCatalog = DEFAULT_ECOSYSTEM_CATALOG): string {
   switch (step.kind) {
     case "overview": return "Vue d'ensemble";
     case "frank": return "UGFrank";
@@ -60,7 +63,7 @@ export function tourStepLabel(step: TourStep): string {
     case "garage": return "Garage · BabyPi";
     case "watch": return "Surveillance & points ouverts";
     case "summary": return "Résumé";
-    case "node": return ecoNode(step.id)?.name ?? step.id;
+    case "node": return catalog.ecoNode(step.id)?.name ?? step.id;
   }
 }
 
@@ -94,7 +97,8 @@ const workflowPicture = (id: string, narration: string): TourPicture => {
 };
 const names = (ids: readonly string[]): string => ids.map((id) => ecoNode(id)?.name ?? id).join(", ");
 
-export function tourPicture(step: TourStep): TourPicture {
+export function tourPicture(step: TourStep, catalog: EcosystemCatalog = DEFAULT_ECOSYSTEM_CATALOG): TourPicture {
+  if (catalog.custom) return compositionTourPicture(step, catalog);
   const counts = ecoCounts();
   const issues = ecoIssues();
   switch (step.kind) {

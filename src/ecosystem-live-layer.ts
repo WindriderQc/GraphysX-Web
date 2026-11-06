@@ -1,6 +1,6 @@
 /** Render-only status overlay. Core remains the source; no polling or model calls here. */
 import { EdgesGeometry, BoxGeometry, Group, LineBasicMaterial, LineSegments, type Vector3 } from "three";
-import { ECOSYSTEM_SNAPSHOT_DATE, ecoNode } from "./ecosystem-data";
+import { DEFAULT_ECOSYSTEM_CATALOG, type EcosystemCatalog } from "./ecosystem-catalog";
 import { createEcosystemLiveState, ecosystemLiveScope, type EcosystemLiveView } from "./ecosystem-live-state";
 import type { PlatformHost } from "./platform-host";
 
@@ -15,8 +15,9 @@ export function formatEcosystemLiveTime(value: string | null): string {
   }).format(new Date(value));
 }
 
-export function mountEcosystemLiveLayer(surface: HTMLElement, host: PlatformHost, blocks: () => readonly LiveBlock[], select: (id: string) => void) {
-  const controller = createEcosystemLiveState();
+export function mountEcosystemLiveLayer(surface: HTMLElement, host: PlatformHost, blocks: () => readonly LiveBlock[], select: (id: string) => void, catalog: EcosystemCatalog = DEFAULT_ECOSYSTEM_CATALOG) {
+  const { date: ECOSYSTEM_SNAPSHOT_DATE, ecoNode } = catalog;
+  const controller = createEcosystemLiveState(catalog);
   const group = new Group();
   group.name = "ecosystem-live-observations";
   host.scene.add(group);

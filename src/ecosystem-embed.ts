@@ -2,6 +2,7 @@
 import { mountEcosystemApp, type EcosystemApplication, type EcosystemEvent } from "./ecosystem-app";
 import { ecosystemObservation, type EcosystemViewState } from "./ecosystem-presentation";
 import { type EcosystemNarrator } from "./ecosystem-narration";
+import { createEcosystemCatalog, parseComposition, verifyComposition, DEFAULT_ECOSYSTEM_CATALOG } from "./ecosystem-catalog";
 import { PlatformHost } from "./platform-host";
 
 declare const __GRAPHYSX_EMBED_VERSION__: string;
@@ -21,10 +22,16 @@ export class AgentxEcosystemElement extends HTMLElement {
   private sequence = 0;
   private instance = "";
   private mountedAt = "";
+  private mountGeneration = 0;
+  private mounting = false;
   static get observedAttributes(): string[] { return ["play"]; }
 
   connectedCallback(): void {
-    if (this.host) return;
+    if (this.host || this.mounting) return;
+    this.mounting = true;
+    void this.mount(++this.mountGeneration);
+  }
+  private async mount(generation: number): Promise<void> {
     this.instance = crypto.randomUUID();
     this.mountedAt = new Date().toISOString();
     this.sequence = 0;
@@ -33,9 +40,14 @@ export class AgentxEcosystemElement extends HTMLElement {
     stage.style.cssText = "position:absolute;inset:0;overflow:hidden";
     this.replaceChildren(stage);
     try {
+      const raw = this.getAttribute("composition");
+      const composition = raw === null ? undefined : parseComposition(JSON.parse(raw));
+      if (composition) await verifyComposition(composition);
+      if (generation !== this.mountGeneration || !this.isConnected) return;
+      const catalog = composition ? createEcosystemCatalog(composition) : DEFAULT_ECOSYSTEM_CATALOG;
       this.host = new PlatformHost(stage, { interactive: false, editorVisible: false, autoOrbit: false, intro: false });
       this.app = mountEcosystemApp(stage, this.host, () => { this.emit("closed", {}); this.release(); }, {
-        play: this.getAttribute("play"), embedded: true, voice: this.getAttribute("voice") !== "off",
+        composition, play: this.getAttribute("play"), embedded: true, voice: this.getAttribute("voice") !== "off",
         onEvent: (type, detail) => this.pending.set(type, detail),
       });
       if (this.voice) this.app.setNarrator(this.voice);
@@ -48,7 +60,7 @@ export class AgentxEcosystemElement extends HTMLElement {
         if (this.revisionDirty) { this.documentRevision = this.host.world.getState().revision; this.revisionDirty = false; }
         const firstFrame = !this.displayed;
         const state = this.app.state() as EcosystemViewState;
-        const observation = ecosystemObservation(state);
+        const observation = ecosystemObservation(state, catalog);
         this.displayed = { ...state, presentation: { ...observation,
           presentationId: this.getAttribute("presentation-id"), instance: this.instance,
           mountedAt: this.mountedAt, observedAt: new Date().toISOString(), sequence: ++this.sequence,
@@ -57,7 +69,8 @@ export class AgentxEcosystemElement extends HTMLElement {
         this.pending.clear();
         if (firstFrame) this.emit("first-frame", { at: performance.timeOrigin + performance.now() });
       });
-    } catch (error) { this.fail(error); }
+    } catch (error) { if (generation === this.mountGeneration) this.fail(error); }
+    finally { if (generation === this.mountGeneration) this.mounting = false; }
   }
 
   attributeChangedCallback(name: string, previous: string | null, value: string | null): void {
@@ -73,6 +86,7 @@ export class AgentxEcosystemElement extends HTMLElement {
 
   disconnectedCallback(): void { this.release(); }
   private release(): void {
+    this.mountGeneration += 1; this.mounting = false;
     this.unsubscribe?.(); this.unsubscribe = null;
     this.unsubscribeWorld?.(); this.unsubscribeWorld = null;
     const app = this.app, host = this.host;

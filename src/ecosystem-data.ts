@@ -33,6 +33,8 @@ export type EcoNode = {
   attention?: string;
   /** A role that is not installed yet, shown dashed. */
   planned?: string;
+  /** Dated composition evidence, separate from live health. */
+  evidence?: string;
 };
 export type EcoLinkKind = "lan" | "dns" | "storage" | "media" | "audio" | "compute" | "metrics";
 export type EcoLink = { from: string; to: string; kind: EcoLinkKind; label?: string };

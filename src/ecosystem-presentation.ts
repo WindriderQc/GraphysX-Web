@@ -1,5 +1,5 @@
 // The existing tour's displayed state, bounded for a companion conversation. No scene owner.
-import { describeNode, ecoNode, ECOSYSTEM_SNAPSHOT_DATE } from "./ecosystem-data";
+import { DEFAULT_ECOSYSTEM_CATALOG, type EcosystemCatalog, type CompositionRead } from "./ecosystem-catalog";
 import type { EcosystemLiveObservation } from "./ecosystem-live-state";
 
 export type EcosystemViewState = {
@@ -11,15 +11,18 @@ export type EcosystemViewState = {
   focus: string[];
   nodes: { id: string; name: string }[];
   live?: EcosystemLiveObservation | null;
+  composition?: { contentRevision: string; read: CompositionRead };
 };
 
-export function ecosystemObservation(state: EcosystemViewState) {
+export function ecosystemObservation(state: EcosystemViewState, catalog: EcosystemCatalog = DEFAULT_ECOSYSTEM_CATALOG) {
+  const { describeNode, ecoNode } = catalog;
   const step = state.tour.adhoc || state.tour.script.split(",")[state.tour.index] || "";
   const id = step.startsWith("node-") ? step.slice(5) : null;
   const selected = id ? ecoNode(id) : null;
   return {
     application: "ecosystem" as const,
-    snapshot: ECOSYSTEM_SNAPSHOT_DATE,
+    ...(state.composition ? { composition: structuredClone(state.composition) } : {}),
+    snapshot: state.snapshot,
     tour: { ...state.tour },
     focus: [...new Set(state.focus)].slice(0, 32).map(id => ({ id, label: ecoNode(id)?.name || id })),
     selection: selected ? { id: selected.id, label: selected.name, description: describeNode(selected) } : null,

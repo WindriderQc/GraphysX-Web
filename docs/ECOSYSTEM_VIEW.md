@@ -1,3 +1,19 @@
+# Composition de la carte
+
+Le bundle conserve une composition historique explicitement datée. L’élément
+`<agentx-ecosystem>` accepte aussi l’attribut `composition`, une projection JSON
+validée fournie par Core : `contentRevision`, `read` et `data` (version, date de
+revue, provenance, nœuds, liens, parcours et placements). Chaque instance monte
+son propre catalogue ; aucune donnée privée n’est ajoutée au bundle public.
+Une composition fournie invalide refuse le montage sans substitution historique.
+
+Le même catalogue alimente géométries, libellés, parcours, narration, compteurs,
+sélection et reçu après rendu. Les composants nouveaux utilisent les primitives
+et la boucle du moteur existant. Les états automatiques renouvellent seulement
+la référence Core de la composition déjà montée, sans reconstruire la scène.
+Un changement de composition est chargé à la prochaine ouverture de page.
+Le reçu distingue cette composition revue de la télémétrie courante.
+
 # La maison connectée — l'écosystème AgentX en 3D, visité par Nestor
 
 `?app=ecosystem` ouvre l'écosystème AgentX tel que le décrivent les trois infographies du
