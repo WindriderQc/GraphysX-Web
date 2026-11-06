@@ -38,6 +38,7 @@ const PLAN_KEYS = ["film", "extended", "ultimate", "remaster"] as const;
 
 const CRUISE = 62;
 const BOOST = 50;
+const BRAKE_SPEED_REDUCTION = 0.5;
 const DRAFT = 12;
 const LAT_ACC = 70;
 const LAT_MAX = 17;
@@ -905,7 +906,7 @@ function vrUnavailable(): string {
 
 function refreshVrLaunch(): void {
   const message = vrOpening ? "Ouverture de la session immersive…"
-    : vrFailure || (vrSupported ? "Joystick pour piloter · gâchettes pour incliner · poignée pour le turbo."
+    : vrFailure || (vrSupported ? "Poignées pour incliner · index gauche pour freiner · index droit pour le turbo · A tir · Y pause."
       : vrChecked ? vrUnavailable() : "Détection du casque…");
   if (vrStatus.textContent !== message) vrStatus.textContent = message;
   vrStart.setAttribute("aria-disabled", String(vrOpening));
@@ -1395,7 +1396,7 @@ function cpuInput(p: Pilot): PilotInput {
   return {
     x: clamp(ex * 0.3 - p.vx * 0.1, -1, 1),
     y: clamp(ey * 0.3 - p.vy * 0.1, -1, 1),
-    boost: !danger && p.energy > 30 && p.hitTimer <= 0,
+    throttle: Number(!danger && p.energy > 30 && p.hitTimer <= 0),
     roll,
     // Fires once the rival has sat in the lock cone a moment (quicker at higher levels).
     fire: combat.lockTime[p.index] > 0.9 - settings.level * 0.18 && Math.random() < 0.08
@@ -1549,23 +1550,27 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
     if (racing && !p.finished && p.hitTimer <= 0) hit(p, 0, 1);
   }
 
-  // Forward speed, turbo and slipstream.
+  // Forward speed, turbo, brake and slipstream.
   const wasBoosting = p.boosting;
   p.hitTimer = Math.max(0, p.hitTimer - dt);
   p.shake = Math.max(0, p.shake - dt);
-  p.boosting = racing && !p.finished && control.boost && p.energy > 2 && p.hitTimer <= 0;
-  p.energy = clamp(p.energy + (p.boosting ? -30 : 7) * dt, 0, 100);
+  const piloting = racing && !p.finished;
+  const turbo = piloting && p.energy > 2 && p.hitTimer <= 0 ? Math.max(0, control.throttle) : 0;
+  const brake = piloting ? Math.max(0, -control.throttle) : 0;
+  p.boosting = turbo > 0;
+  p.energy = clamp(p.energy + (p.boosting ? -30 * turbo : 7) * dt, 0, 100);
   const ahead = other.s - p.s;
   p.drafting = racing && !p.finished && ahead > 3 && ahead < 22 && Math.hypot(p.ox - other.ox, p.oy - other.oy) < 3;
   // The film flare on turbo (00:40:54) belongs to the film run; notre version keeps its view clear.
   if (p.boosting && !wasBoosting && !p.cpu && !remasterRace) p.hud.wash();
-  let target = racing ? CRUISE * p.power.cruise + (p.boosting ? BOOST * p.power.boost : 0) + (p.drafting ? DRAFT : 0) : 0;
+  const forward = CRUISE * p.power.cruise + BOOST * p.power.boost * turbo + (p.drafting ? DRAFT : 0);
+  let target = racing ? forward * (1 - BRAKE_SPEED_REDUCTION * brake) : 0;
   if (p.finished) {
     target = 30;
     // Coast to a halt in front of Cyberjobe rather than through him.
     if (world?.cyberjobe) target = 30 * clamp((t.raceLength + CYBERJOBE_AHEAD - 14 - p.s) / 18, 0, 1);
   }
-  const rate = p.speed < target ? 0.9 : p.finished ? 3 : 1.6;
+  const rate = p.speed < target ? 0.9 : p.finished ? 3 : 1.6 + 1.4 * brake;
   p.speed += (target - p.speed) * (1 - Math.exp(-rate * dt));
   p.prevS = p.s;
   p.s = Math.min(p.s + p.speed * dt, t.totalLength - 30);
@@ -2401,7 +2406,7 @@ function handleEvents(events: UiEvent[]): void {
       else if (action === "menu") showMenu();
       continue;
     }
-    // Xbox B stays free during the race; Escape, P, Start, View and Quest B pause.
+    // Xbox B stays free during the race. Escape, P, Start, View and Quest Y pause.
     const pauses = action === "pause" || action === "menu" || (action === "back" && source !== "pad");
     if (pauses) setPaused(true);
   }

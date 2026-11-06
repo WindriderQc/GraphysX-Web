@@ -5230,3 +5230,11 @@ a collector request, an IoT join key) is listed in `docs/NETX_PROPOSAL.md` §3.3
   in proportion to the pull, and either grip applies turbo.
 - The input regressions cover single-controller use, reordered sources, equal pulls
   and menu button separation. The owner confirmed both banks and grip turbo on Quest 2.
+
+## 2026-11-06 — Separate Quest steering, speed and menu actions
+
+- After flying Hypertube on Quest 2, the owner asked for bank on the grips and forward speed on
+  the index triggers. The left trigger brakes progressively and the right one adds turbo in
+  proportion to the pull. Right A fires. Left X confirms and left Y pauses or goes back.
+- A Quest 2 emulator verified speed changes, both banks, right A spending a pulse charge,
+  right B leaving the race active, and the left pause and resume controls.

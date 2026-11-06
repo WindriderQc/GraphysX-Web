@@ -108,4 +108,4 @@ autopilot on 2026-11-06: 39.6 s at NORMAL, no hit.
 | --- | --- | --- |
 | Pulse shot | R | Numpad 2 or L |
 | Xbox pad | X or LT | X or LT |
-| Quest | A / X | — |
+| Quest | A on the right controller | — |
