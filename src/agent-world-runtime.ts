@@ -2091,6 +2091,12 @@ export class AgentWorldRuntime {
     return this.commits.filter((commit) => commit.revision > minimumRevision).map((commit) => deepClone(commit));
   }
 
+  /** An authoritative snapshot or delta starts a new local editing base. */
+  resetUndoHistory(): void {
+    this.history.length = 0;
+    this.redoHistory.length = 0;
+  }
+
   undo(): AgentWorldResult<AgentWorldState> {
     const previous = this.history.pop();
     if (!previous) return this.failure("There is no transaction to undo");

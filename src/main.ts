@@ -1404,6 +1404,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           initialScene: liveSessionRequested ? null : storeScene,
           startCollapsed: !editorFirst && !storeScene,
           actor: "browser",
+          resetUndoHistory: () => host.world.resetUndoHistory(),
           onSceneOpened: () => {
             restoreShowroomOnEditorExit = true;
             // A stored scene replaces the showroom entirely: take down the host-mounted
