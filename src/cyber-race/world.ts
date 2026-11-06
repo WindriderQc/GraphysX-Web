@@ -7,6 +7,7 @@ import {
   createUrchinGeometry
 } from "./models";
 import { Cyberjobe } from "./cyberjobe";
+import { buildHypertube } from "./hypertube";
 import { OPEN_RADIUS, Track, TrackSlice, type Sector } from "./track";
 import {
   bandTexture,
@@ -41,7 +42,8 @@ export type ObstacleKind =
   | "slot"
   | "firewall"
   | "geyser"
-  | "rock";
+  | "rock"
+  | "iris";
 
 /** Half-size of a pilot measured across a direction at `angle`, given its roll (wings along roll). */
 export function pilotExtent(roll: number, angle: number): number {
@@ -102,6 +104,48 @@ export interface Obstacle {
   mesh?: THREE.Object3D;
   /** Blades: the two moving slabs. */
   parts?: THREE.Object3D[];
+  /** Notre version: a pulse shot can break it. */
+  breakable?: boolean;
+  /** Broken by a pulse: no longer collides. */
+  destroyed?: boolean;
+  /** Hides the broken obstacle (instanced obstacles scale their instance to zero). */
+  onDestroy?: () => void;
+}
+
+/** Boost pad on a tube wall (notre version): flying over it gives a burst of speed and turbo. */
+export interface BoostPad {
+  s: number;
+  ox: number;
+  oy: number;
+  mesh: THREE.Object3D;
+  taken: [boolean, boolean];
+  flash: number;
+}
+
+/**
+ * What a "notre version" board builder may use. Each board lives in its own module and builds
+ * through this kit, so world.ts keeps the shared mechanics only.
+ */
+export interface BoardKit {
+  readonly track: Track;
+  readonly rng: Rng;
+  readonly difficulty: Difficulty;
+  readonly group: THREE.Group;
+  keep<T extends { dispose(): void }>(item: T): T;
+  place(object: THREE.Object3D, s: number, ox: number, oy: number): void;
+  /** Group at s whose local x/y axes are the line's right/up (see lateralHolder). */
+  crossSection(s: number): THREE.Group;
+  addObstacle(o: Obstacle): void;
+  /** A rotating sector plate (rotated with its angle/spin like the film tunnel's). */
+  addPlate(o: Obstacle): void;
+  addRing(s: number, ox: number, oy: number): void;
+  addBoost(pad: BoostPad): void;
+  instanced(geometry: THREE.BufferGeometry, materials: THREE.Material | THREE.Material[], count: number): THREE.InstancedMesh;
+  /** Slowly tumbling instance; returns a handle to hide it (scale 0). */
+  spinner(mesh: THREE.InstancedMesh, index: number, s: number, ox: number, oy: number, scale: number, speed: number): { hide(): void };
+  /** Glass wall splitting the tube into left and right lanes over [s0, s1]. */
+  addDivider(s0: number, s1: number, halfThickness: number): void;
+  onUpdate(fn: (time: number, dt: number, focus: number[]) => void): void;
 }
 
 export interface Ring {
@@ -179,6 +223,12 @@ export class RaceWorld {
   private projectileMat: THREE.Material | null = null;
   private throwTimer = 0;
   private bossS = 0;
+  /** World clock of the last update (shots test rotating plates against it). */
+  time = 0;
+  /** Boost pads of notre version boards, sorted by s. */
+  readonly boosts: BoostPad[] = [];
+  private readonly updaters: Array<(time: number, dt: number, focus: number[]) => void> = [];
+  private readonly dividers: Array<{ s0: number; s1: number; half: number }> = [];
   private readonly disposables: Array<{ dispose(): void }> = [];
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpQ2 = new THREE.Quaternion();
@@ -219,12 +269,84 @@ export class RaceWorld {
         case "vortex":
           this.buildVortex(sector);
           break;
+        case "hypertube":
+          buildHypertube(this.kit(), sector);
+          break;
       }
     }
     this.buildRings();
     this.buildFinish();
     this.obstacles.sort((a, b) => a.s - b.s);
     this.rings.sort((a, b) => a.s - b.s);
+    this.boosts.sort((a, b) => a.s - b.s);
+  }
+
+  private ringGeometry: THREE.BufferGeometry | null = null;
+  private ringMaterial: THREE.MeshStandardMaterial | null = null;
+
+  private makeRing(s: number, ox: number, oy: number): void {
+    this.ringGeometry ??= this.keep(new THREE.TorusGeometry(3.1, 0.32, 12, 32));
+    this.ringMaterial ??= this.keep(
+      new THREE.MeshStandardMaterial({ color: 0xe8f2f6, metalness: 0.9, roughness: 0.15, emissive: 0x1a6a70, emissiveIntensity: 0.5 })
+    );
+    const mesh = new THREE.Mesh(this.ringGeometry, this.keep(this.ringMaterial.clone()));
+    this.placeOnTrack(mesh, s, ox, oy);
+    this.group.add(mesh);
+    this.rings.push({ s, ox, oy, r: 3.1, mesh, flash: 0, taken: [false, false] });
+  }
+
+  private kit(): BoardKit {
+    return {
+      track: this.track,
+      rng: this.rng,
+      difficulty: this.difficulty,
+      group: this.group,
+      keep: (item) => this.keep(item),
+      place: (object, s, ox, oy) => this.placeOnTrack(object, s, ox, oy),
+      crossSection: (s) => this.lateralHolder(s),
+      addObstacle: (o) => {
+        this.obstacles.push(o);
+      },
+      addPlate: (o) => {
+        this.obstacles.push(o);
+        this.plates.push(o);
+      },
+      addRing: (s, ox, oy) => this.makeRing(s, ox, oy),
+      addBoost: (pad) => {
+        this.boosts.push(pad);
+      },
+      instanced: (geometry, materials, count) => this.makeInstanced(geometry, materials, count),
+      spinner: (mesh, index, s, ox, oy, scale, speed) => {
+        const sp = this.addSpinner(mesh, index, s, ox, oy, scale, speed);
+        return {
+          hide: () => {
+            sp.scale = 0;
+          }
+        };
+      },
+      addDivider: (s0, s1, half) => {
+        this.dividers.push({ s0, s1, half });
+      },
+      onUpdate: (fn) => {
+        this.updaters.push(fn);
+      }
+    };
+  }
+
+  /** Half-thickness of a lane divider at s (0 where there is none). */
+  dividerAt(s: number): number {
+    for (const d of this.dividers) {
+      if (s >= d.s0 && s <= d.s1) return d.half;
+    }
+    return 0;
+  }
+
+  /** Breaks an obstacle hit by a pulse shot. */
+  breakObstacle(o: Obstacle): void {
+    if (o.destroyed) return;
+    o.destroyed = true;
+    if (o.onDestroy) o.onDestroy();
+    else if (o.mesh) o.mesh.visible = false;
   }
 
   // ------------------------------------------------------------ helpers
@@ -269,13 +391,14 @@ export class RaceWorld {
     oy: number,
     scale: number,
     speed: number
-  ): void {
+  ): Spinner {
     const position = this.track.toWorld(s, ox, oy, new THREE.Vector3());
     const base = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.rng() * TAU, this.rng() * TAU, this.rng() * TAU));
     const axis = new THREE.Vector3(this.rng() - 0.5, this.rng() - 0.5, this.rng() - 0.5).normalize();
     const spinner: Spinner = { mesh, index, position, base, axis, speed, scale };
     this.spinners.push(spinner);
     this.applySpinner(spinner, 0);
+    return spinner;
   }
 
   private applySpinner(sp: Spinner, time: number): void {
@@ -1406,6 +1529,11 @@ export class RaceWorld {
     );
     let s = 120;
     while (s < this.track.raceLength - 60) {
+      // Notre version boards place their own rings.
+      if (this.track.sectorAt(s).info.remaster) {
+        s += 85;
+        continue;
+      }
       const bound = Math.min(this.track.boundAt(s - 20), this.track.boundAt(s + 20));
       const [ox, oy] = this.randomLateral(Math.max(2, bound - 3.6), 0.7);
       const ringMat = this.keep(material.clone());
@@ -1419,6 +1547,8 @@ export class RaceWorld {
 
   private buildFinish(): void {
     const L = this.track.raceLength;
+    // Notre version boards build their own finish gate.
+    if (this.track.sectorAt(L - 1).info.remaster) return;
     const tube = this.track.tubeAt(L);
     if (tube > 0) {
       // Stay inside the tube's flat walls (a hexagon's inner radius is r·cos 30°).
@@ -1445,6 +1575,12 @@ export class RaceWorld {
   }
 
   // ------------------------------------------------------------ queries
+  /** Opening radius of an iris ring at time: r fully closed, gap fully open. */
+  irisGap(o: Obstacle, time: number): number {
+    const open = 0.5 + 0.5 * Math.sin(time * o.spin + (o.phase ?? 0));
+    return o.r + ((o.gap ?? 6) - o.r) * open;
+  }
+
   plateAngle(plate: Obstacle, time: number): number {
     return plate.angle + plate.spin * time;
   }
@@ -1471,7 +1607,15 @@ export class RaceWorld {
    * Returns the lateral push direction, or null.
    */
   collision(o: Obstacle, prevS: number, s: number, ox: number, oy: number, time: number, roll = 0): [number, number] | null {
+    if (o.destroyed) return null;
     const crossedPlane = prevS < o.s && s >= o.s;
+    if (o.kind === "iris") {
+      if (!crossedPlane) return null;
+      const d = Math.hypot(ox, oy);
+      const reach = 0.6 + 0.9 * Math.abs(Math.cos(roll - Math.atan2(oy, ox)));
+      if (d + reach > this.irisGap(o, time)) return d > 0.01 ? [-ox, -oy] : [0, 1];
+      return null;
+    }
     if (o.kind === "porthole") {
       if (!crossedPlane) return null;
       const dx = ox - o.ox;
@@ -1631,6 +1775,11 @@ export class RaceWorld {
 
   /** Animate the course; `focus` lists the pilots' distances so per-vertex work stays near them. */
   update(time: number, dt: number, focus: number[] = []): void {
+    this.time = time;
+    for (const fn of this.updaters) fn(time, dt, focus);
+    for (const pad of this.boosts) {
+      if (pad.flash > 0) pad.flash = Math.max(0, pad.flash - dt * 2.5);
+    }
     for (const plate of this.plates) {
       if (plate.mesh) {
         plate.mesh.rotation.z = this.plateAngle(plate, time);
