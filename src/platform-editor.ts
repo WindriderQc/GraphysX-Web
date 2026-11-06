@@ -13,6 +13,7 @@ import type {
   AgentWorldMaterial,
   AgentWorldModelMaterialOverride,
   AgentWorldModelMaterialSlot,
+  AgentWorldResult,
   AgentWorldColliderKind,
   AgentWorldPhysicsMode,
   GraphysXAgentWorldApi,
@@ -100,12 +101,24 @@ const SHORTCUTS: ReadonlyArray<[string, string]> = [
   ["Esc", "Close a panel, else deselect"],
 ];
 
-const EDITOR_DRAFT_KEY = "graphysx.editor.draft.v1";
+const LEGACY_EDITOR_DRAFT_KEY = "graphysx.editor.draft.v1";
+const EDITOR_DRAFT_PREFIX = "graphysx.editor.draft.v2.";
 const EDITOR_SLOT_INDEX_KEY = "graphysx.editor.slots.v1";
 
 interface EditorDraft {
   savedAt: string;
   definition: AgentWorldDefinition;
+}
+
+function newEditorDraftKey(): string {
+  return EDITOR_DRAFT_PREFIX + crypto.getRandomValues(new Uint32Array(4)).join("-");
+}
+
+function readEditorDraft(raw: string | null): EditorDraft | null {
+  try {
+    const draft = JSON.parse(raw ?? "null") as EditorDraft | null;
+    return draft?.definition?.id && Array.isArray(draft.definition.entities) && Number.isFinite(Date.parse(draft.savedAt)) ? draft : null;
+  } catch { return null; }
 }
 
 /** One glyph per entity type so a scene tree row is scannable without reading the id. */
@@ -243,15 +256,19 @@ export class PlatformEditor {
   private toolbarStatus!: HTMLElement;
   private pauseButton!: HTMLButtonElement;
   private recoveryButton!: HTMLButtonElement;
+  private recoverySelect!: HTMLSelectElement;
   private slotSelect!: HTMLSelectElement;
   private mobileNav!: HTMLElement;
   private mobilePanels!: { scene: HTMLElement; inspector: HTMLElement; library: HTMLElement };
   private readonly mobileButtons = new Map<"viewport" | "scene" | "inspector" | "library", HTMLButtonElement>();
-  private savedSignature = "";
+  private savedSignature: string | null = null;
   private dirty = false;
+  private replacingDocument = false;
+  private draftKey = newEditorDraftKey();
+  private recoveredDraft: { key: string; raw: string } | null = null;
   private draftTimer: number | null = null;
-  private pendingDraftWrite: (() => void) | null = null;
-  private readonly flushDraft = (): void => { this.pendingDraftWrite?.(); };
+  private pendingDraftWrite: (() => boolean) | null = null;
+  private readonly flushDraft = (): boolean => this.pendingDraftWrite?.() ?? true;
   private toolbarNoticeTimer: number | null = null;
   private toolbarNotice = "";
   /**
@@ -384,8 +401,8 @@ export class PlatformEditor {
     this.setMobilePanel("viewport");
     this.renderLibrary();
     this.setLevelTool(this.levelTool);
-    this.refresh();
     this.savedSignature = this.documentSignature();
+    this.refresh();
     this.syncDocumentStatus();
     this.refreshSlotOptions();
     this.offerDraftRecovery();
@@ -409,6 +426,7 @@ export class PlatformEditor {
     document.documentElement.dataset.gxEditor = visible ? "visible" : "hidden";
     const display = visible ? "" : "none";
     for (const root of this.roots) root.style.display = display;
+    if (visible) this.offerDraftRecovery();
     if (!visible) {
       this.gizmo.detach();
       this.selectedObject = null;
@@ -628,46 +646,45 @@ export class PlatformEditor {
 
   private loadStarter(id: string): void {
     if (!id) return;
-    this.deps.api.loadStarter(id as Parameters<GraphysXAgentWorldApi["loadStarter"]>[0]);
-    this.deps.onEnvironmentChanged?.();
-    this.select(null);
+    this.openEditorDocument(() => this.deps.api.loadStarter(id as Parameters<GraphysXAgentWorldApi["loadStarter"]>[0]), "starter opened");
   }
 
   private documentSignature(): string {
-    try {
-      return JSON.stringify(this.deps.api.exportDocument() ?? null);
-    } catch {
-      return "";
-    }
+    return JSON.stringify(this.deps.api.exportDocument() ?? null);
+  }
+
+  private cancelDraftWrite(): void {
+    if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
+    this.draftTimer = null;
+    this.pendingDraftWrite = null;
   }
 
   private syncDocumentStatus(scheduleDraft = true): void {
+    if (this.replacingDocument) return;
     const signature = this.documentSignature();
     const wasDirty = this.dirty;
-    this.dirty = !!this.savedSignature && signature !== this.savedSignature;
-    if (!scheduleDraft || !this.savedSignature || (!this.dirty && !wasDirty)) return;
-    if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
-    // Bind the deferred write to this document. The host may replace the world before
-    // the timeout fires; reading the live API then would save a showroom or played level.
-    const definition = this.dirty && signature ? JSON.parse(signature) as AgentWorldDefinition : null;
+    this.dirty = signature !== this.savedSignature;
+    if (!scheduleDraft || (!this.dirty && !wasDirty)) return;
+    this.cancelDraftWrite();
+    const definition = this.dirty ? JSON.parse(signature) as AgentWorldDefinition | null : null;
     const draft: EditorDraft | null = definition ? { savedAt: new Date().toISOString(), definition } : null;
+    // Bind the write to this workspace and document, even if the host changes worlds.
+    const key = this.draftKey;
     this.pendingDraftWrite = () => {
       if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
       this.draftTimer = null;
-      this.pendingDraftWrite = null;
-      if (!draft) {
-        try { window.localStorage.removeItem(EDITOR_DRAFT_KEY); } catch { /* storage is optional */ }
-        return;
-      }
       try {
-        window.localStorage.setItem(EDITOR_DRAFT_KEY, JSON.stringify(draft));
-        // Do not immediately erase a short-lived confirmation such as the legacy XML
-        // export receipt. The dirty marker still updates while that notice is held.
-        if (this.toolbarNoticeTimer === null) this.toolbarNotice = "draft autosaved";
-        this.refresh("skip");
+        if (draft) window.localStorage.setItem(key, JSON.stringify(draft));
+        else window.localStorage.removeItem(key);
       } catch {
         this.toolbarNotice = "draft storage unavailable";
+        this.refresh("skip");
+        return false;
       }
+      this.pendingDraftWrite = null;
+      if (draft && this.toolbarNoticeTimer === null) this.toolbarNotice = "draft autosaved";
+      this.refresh("skip");
+      return true;
     };
     this.draftTimer = window.setTimeout(this.flushDraft, 650);
   }
@@ -676,42 +693,87 @@ export class PlatformEditor {
     this.savedSignature = this.documentSignature();
     this.dirty = false;
     this.toolbarNotice = notice;
-    if (this.draftTimer !== null) window.clearTimeout(this.draftTimer);
-    this.draftTimer = null;
-    this.pendingDraftWrite = null;
-    try { window.localStorage.removeItem(EDITOR_DRAFT_KEY); } catch { /* storage is optional */ }
-    this.recoveryButton.hidden = true;
+    this.cancelDraftWrite();
+    try {
+      window.localStorage.removeItem(this.draftKey);
+      const recovered = this.recoveredDraft;
+      if (recovered && window.localStorage.getItem(recovered.key) === recovered.raw) {
+        window.localStorage.removeItem(recovered.key);
+      }
+    } catch { /* Storage is optional. */ }
+    this.recoveredDraft = null;
+    this.offerDraftRecovery();
     this.refresh("skip");
   }
 
   private offerDraftRecovery(): void {
+    const previous = this.recoverySelect.value;
+    const signatures = new Set([this.documentSignature()]);
+    const candidates: { key: string; draft: EditorDraft }[] = [];
     try {
-      const draft = JSON.parse(window.localStorage.getItem(EDITOR_DRAFT_KEY) ?? "null") as EditorDraft | null;
-      const valid = !!draft?.definition?.id && Array.isArray(draft.definition.entities);
-      this.recoveryButton.hidden = !valid || JSON.stringify(draft?.definition) === this.documentSignature();
-      if (!this.recoveryButton.hidden && draft?.savedAt) {
-        this.recoveryButton.title = `Recover autosaved draft from ${new Date(draft.savedAt).toLocaleString()}`;
+      for (let i = 0; i < window.localStorage.length; i += 1) {
+        const key = window.localStorage.key(i);
+        if (!key || key === this.draftKey || (key !== LEGACY_EDITOR_DRAFT_KEY && !key.startsWith(EDITOR_DRAFT_PREFIX))) continue;
+        const draft = readEditorDraft(window.localStorage.getItem(key));
+        if (draft) candidates.push({ key, draft });
       }
-    } catch {
-      this.recoveryButton.hidden = true;
+    } catch { /* Storage is optional. */ }
+    candidates.sort((left, right) => Date.parse(right.draft.savedAt) - Date.parse(left.draft.savedAt));
+    const choices: HTMLOptionElement[] = [];
+    for (const { key, draft } of candidates) {
+      const signature = JSON.stringify(draft.definition);
+      if (signatures.has(signature)) continue;
+      signatures.add(signature);
+      choices.push(new Option([draft.definition.label || draft.definition.id, new Date(draft.savedAt).toLocaleString()].join(" · "), key));
     }
+    this.recoverySelect.replaceChildren(...choices);
+    if (choices.some((choice) => choice.value === previous)) this.recoverySelect.value = previous;
+    this.recoverySelect.hidden = choices.length < 2;
+    this.recoveryButton.hidden = choices.length === 0;
   }
 
   private recoverDraft(): void {
+    const key = this.recoverySelect.value;
     try {
-      const draft = JSON.parse(window.localStorage.getItem(EDITOR_DRAFT_KEY) ?? "null") as EditorDraft | null;
-      if (!draft?.definition) return;
-      const result = this.deps.api.load(draft.definition);
-      if (!result.ok) throw new Error(result.error ?? "Draft recovery failed");
-      this.toolbarNotice = "draft recovered";
-      this.recoveryButton.hidden = true;
-      this.deps.onEnvironmentChanged?.();
-      this.select(null);
-      this.syncDocumentStatus();
+      const raw = window.localStorage.getItem(key);
+      const draft = readEditorDraft(raw);
+      if (!raw || !draft) throw new Error("This draft is no longer available.");
+      this.openEditorDocument(() => this.deps.api.load(draft.definition), "draft recovered", { key, raw });
     } catch (error) {
       this.toolbarNotice = error instanceof Error ? error.message : "Draft recovery failed";
+      this.offerDraftRecovery();
       this.refresh("skip");
     }
+  }
+
+  private openEditorDocument(
+    load: () => AgentWorldResult<unknown>,
+    notice: string,
+    draft?: "import" | { key: string; raw: string },
+  ): boolean {
+    if (!this.flushDraft() && !window.confirm("The browser could not keep your draft. Open another scene and discard these unsaved changes?")) return false;
+    this.replacingDocument = true;
+    try {
+      const result = load();
+      if (!result.ok) throw new Error(result.error ?? "Scene could not be opened");
+    } catch (error) {
+      this.toolbarNotice = error instanceof Error ? error.message : "Scene could not be opened";
+      this.refresh("skip");
+      return false;
+    } finally {
+      this.replacingDocument = false;
+    }
+    this.cancelDraftWrite();
+    this.draftKey = newEditorDraftKey();
+    this.recoveredDraft = typeof draft === "object" ? draft : null;
+    this.savedSignature = draft ? null : this.documentSignature();
+    this.dirty = false;
+    this.toolbarNotice = notice;
+    if (draft) this.syncDocumentStatus();
+    this.deps.onEnvironmentChanged?.();
+    this.select(null);
+    this.offerDraftRecovery();
+    return true;
   }
 
   private localSlotNames(): string[] {
@@ -1624,13 +1686,16 @@ export class PlatformEditor {
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
     this.toolbarStatus = status;
-    this.recoveryButton = this.toolButton("Recover draft", () => this.recoverDraft(), "Restore the newest crash-safe editor draft");
+    this.recoverySelect = document.createElement("select");
+    this.recoverySelect.setAttribute("aria-label", "Draft to recover");
+    this.recoverySelect.hidden = true;
+    this.recoveryButton = this.toolButton("Recover draft", () => this.recoverDraft(), "Restore an autosaved editor draft");
     this.recoveryButton.classList.add("gx-ed-recover");
     this.recoveryButton.hidden = true;
     const commands = this.toolButton("Commands", () => this.toggleCommandPalette(), "Command palette (Ctrl+K)");
     const help = this.toolButton("?", () => this.toggleHelp(), "Keyboard shortcuts");
     help.classList.add("gx-ed-help");
-    const tail = this.group([this.recoveryButton, status, commands, help]);
+    const tail = this.group([this.recoverySelect, this.recoveryButton, status, commands, help]);
     tail.classList.add("gx-ed-group--tail");
     toolbar.append(tail);
 
@@ -2436,41 +2501,28 @@ export class PlatformEditor {
   }
 
   private loadScene(slotName?: string): void {
-    const name = slotName ?? window.prompt("Load saved scene", "editor-scene");
+    const name = (slotName ?? window.prompt("Load saved scene", "editor-scene"))?.trim();
     if (!name) return;
-    const result = this.deps.api.load(name);
-    if (result.ok) {
-      this.deps.onEnvironmentChanged?.();
-      this.rememberSlot(name);
-      this.markSaved(`loaded ${name}`);
-      this.select(null);
-    } else {
-      this.toolbarNotice = result.error ?? `Could not load ${name}`;
-      this.refresh("skip");
-    }
+    if (this.openEditorDocument(() => this.deps.api.load(name), "loaded " + name)) this.rememberSlot(name);
   }
 
   private importSceneFile(): void {
+    const key = this.draftKey;
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".json,.xml,.graphysx.json,.scenenet.xml,application/json,application/xml,text/xml";
     input.setAttribute("aria-label", "Import scene file");
+    input.addEventListener("cancel", () => input.remove(), { once: true });
     input.addEventListener("change", async () => {
       const file = input.files?.[0];
-      if (!file) return;
       try {
+        if (!file) return;
         const source = await file.text();
+        if (!this.enabled || key !== this.draftKey) throw new Error("The editor changed while the file was opening. Choose it again.");
         const isXml = file.name.toLowerCase().endsWith(".xml") || source.trimStart().startsWith("<");
-        const result = isXml
+        this.openEditorDocument(() => isXml
           ? this.deps.api.importLegacyXml(source, { id: file.name.replace(/\.[^.]+(?:\.xml)?$/i, "") })
-          : this.deps.api.load(JSON.parse(source) as AgentWorldDefinition);
-        if (!result.ok) throw new Error(result.error ?? "Scene import failed");
-        this.deps.onEnvironmentChanged?.();
-        this.savedSignature = "";
-        this.toolbarNotice = `imported ${file.name}`;
-        this.select(null);
-        this.savedSignature = `${this.documentSignature()}#imported`;
-        this.syncDocumentStatus();
+          : this.deps.api.load(JSON.parse(source) as AgentWorldDefinition), "imported " + file.name, "import");
       } catch (error) {
         this.toolbarNotice = error instanceof Error ? error.message : "Scene import failed";
         this.refresh("skip");
