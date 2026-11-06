@@ -7,8 +7,9 @@ services sur UGFrank, les quatre Raspberry Pi en bordure du réseau, le réseau,
 et le matériel en réserve sans rôle. Nestor fait la visite : une liste d'étapes, chacune une
 image (machines soulignées, arcs avec un repère qui circule) et une narration.
 
-Premier parcours : une visite en lecture seule. Rien ici n'est vivant : pas d'alertes, pas de
-travaux, pas de goulots d'étranglement, pas d'état de santé. Les quatre points ouverts en ambre
+Le parcours autonome reste une visite en lecture seule sur cette composition datée. Les
+états observés par Core sont optionnels dans l'élément embarqué, suivant le contrat ci-dessous.
+Sans cette source, aucun état courant n'est inventé. Les quatre points ouverts en ambre
 (disque système d'UGBrutal, piUSB, PI-T, BabyPi) viennent de la carte datée, pas d'une sonde. C'est volontaire : la carte
 porte des identifiants stables (`eco-node:<id>`) sur lesquels les alertes et les files de
 travaux viendront s'accrocher sans changer la forme de l'image.
@@ -21,6 +22,7 @@ travaux viendront s'accrocher sans changer la forme de l'image.
 | La maison en document v2 (pur) : placements, rails, balises ambre, cages pointillées | `src/ecosystem-scene.ts` |
 | La visite (pur) : vocabulaire `play`, image et narration de chaque étape, lecteur | `src/ecosystem-tour.ts` |
 | Surface : HUD, panneau Nestor, barre de lecture, arcs, étiquettes, caméra, clic | `src/ecosystem-app.ts`, `src/ecosystem.css` |
+| Projection Core bornée et expiration sans réseau ; couche d'états sans modifier le monde | `src/ecosystem-live-state.ts`, `src/ecosystem-live-layer.ts` |
 | Tests Node et smoke navigateur | `test/ecosystem.test.mjs`, `scripts/smoke-ecosystem.mjs` |
 | Modèles externes : convertisseur GLB → mesh JSON et manifeste | `scripts/vendor-ecosystem-models.mjs`, `assets-src/ecosystem/README.md`, `public/assets/ecosystem/models.json` |
 
@@ -76,7 +78,8 @@ restent hors git.
   Nestor, au choix, pas en série), créer une image (imageX distinct de Hermes Nestor, action
   de l'utilisateur avant la file Core), mémoire et organisation (tâches dans Core, événements
   dans Google Calendar, pas de miroir), garage (clips 30 jours, musique lue sur le téléphone).
-- Aucun nom de modèle, aucune adresse, aucune capacité inventée, aucun badge de santé.
+- Aucun nom de modèle, aucune adresse ni capacité inventée. Les états courants, lorsqu'ils
+  sont fournis, précisent leur périmètre : endpoints d'inférence ou santé du service.
 
 ## La visite
 
@@ -96,7 +99,11 @@ s'ouvre par-dessus l'étape courante, la visite se met en pause, `Échap` revien
 `watch` est la graine du futur tableau d'alertes : elle allume les points ouverts et les
 remontées de métriques.
 
-« Lire » fait défiler les étapes et leur texte ; aucune voix n'est synthétisée. Le bandeau
+« Lire » fait défiler les étapes et leur texte. La visite reste silencieuse tant que le
+visiteur n'active pas explicitement « Activer la voix » ; une fois activée, la voix guide
+la progression et Pause annule la phrase en cours. Le [contrat de narration](DISKX_EMBED.md#spoken-ecosystem-tour)
+décrit le transport Nestor fourni par l'hôte et la voix de l'appareil en mode autonome.
+L'actualisation des états n'active ni ne relance cette narration. Le bandeau
 précise que la carte est datée. Sur un écran étroit, le cadrage recule pour conserver le
 champ horizontal et les étiquettes restent entièrement dans les bords de l'écran.
 
@@ -135,6 +142,69 @@ une interface locale composée ne constituent pas une réception du dialogue
 Nestor natif : après accord séparé, publier le module compatible avant le raccord
 Core, puis vérifier les versions effectivement servies et les deux tours réels.
 
+### États courants fournis par Core
+
+L'hôte peut appeler `element.setLiveState(value)` sur `<agentx-ecosystem>` monté. Il reçoit
+un booléen d'acceptation. L'élément ne collecte rien, n'interroge aucun service et n'appelle
+aucun modèle. Core possède la projection, le transport et la cadence. Le renderer ajoute
+un halo par composant couvert et une liste visible d'états, avec boutons clavier/tactiles,
+dernier relevé et expiration. Les rafraîchissements gardent scène, caméra, visite, sélection
+et focus clavier. Aucune sélection n'est nécessaire pour afficher les changements.
+Les heures affichées utilisent le fuseau local du navigateur et indiquent ce fuseau.
+Les dates ISO UTC restent inchangées dans l'état canonique et consultables dans les titres.
+
+Entrée bornée, sans adresses ni détails d'administration :
+
+```ts
+{
+  contract: "agentx.ecosystem-live/v1",
+  generatedAt: "2026-11-05T18:00:00.000Z",
+  expiresAt: "2026-11-05T18:00:30.000Z",
+  nodes: [{
+    id: "ugalien", // ID de la carte, sans le préfixe eco-node:
+    state: "online", // online | offline | degraded | busy | parked | unknown
+    source: "inference_endpoints", // ou product_service
+    observedAt: "2026-11-05T17:59:58.000Z", // ou null
+    expiresAt: "2026-11-05T18:00:28.000Z", // ou null
+    freshness: "current" // current | stale | unknown
+  }],
+  read: {
+    contract: "agentx.presentation-read/v1",
+    id: "view_<64 caractères hexadécimaux>",
+    revision: "<mêmes 64 caractères hexadécimaux>",
+    source: "core.ecosystem.live",
+    observedAt: "2026-11-05T18:00:00.000Z", // identique à generatedAt
+    expiresAt: "2026-11-05T18:00:30.000Z" // identique à expiresAt global
+  }
+}
+```
+
+Les dates sont UTC ISO, à la seconde ou milliseconde. Au plus 32 nœuds connus, sans
+doublon ; dates invalides, champs supplémentaires et références incohérentes sont refusés.
+Une réponse antérieure est refusée. À la même date, un contenu ou une révision différente
+est refusé ; rejouer le même contenu est sans effet supplémentaire. Les empreintes servent
+de références Core ; le renderer ne les présente pas comme une preuve cryptographique de
+la mesure. `online` qualifie seulement la source nommée, pas la machine physique entière.
+
+L'expiration de chaque relevé et de l'enveloppe est dérivée de l'horloge dans la boucle
+de rendu partagée, même sans nouvelle réponse. Un ancien état sain perd sa couleur saine
+et devient explicitement périmé. `setLiveState(null)` signale une source indisponible :
+le dernier relevé reste daté et sa référence est conservée, avec des halos neutres. Sans
+payload antérieur, aucune référence n'est inventée. Déconnexion et remontage repartent
+sans reçu ni état vivant hérité.
+
+Après le prochain rendu seulement, `state().presentation.live` contient
+`{ status: "available" | "stale" | "unavailable", read: référence | null }`.
+L'événement `ecosystem-live-state-changed` suit ce rendu lorsqu'une référence, la fraîcheur
+ou la disponibilité change. L'acceptation de `setLiveState` n'est jamais un reçu d'affichage.
+Sans activation de cette source, le champ `live` reste absent ; les anciens usages
+statiques et famille conservent la carte datée.
+
+Les tests Node `test/ecosystem-live-state.test.mjs` couvrent les six états, la péremption,
+la panne, le refus des réponses désordonnées, le contrat et les mises à jour de la couche
+visuelle sans remplacer ses objets ni boutons. Le cycle embarqué vérifie séparément
+l'émission après rendu. Ils ne remplacent pas la réception visuelle composée dans Core.
+
 ### Contrôles de la visite autonome
 
 - `node --test test/ecosystem.test.mjs` : carte cohérente (références, comptes des
@@ -153,8 +223,9 @@ Core, puis vérifier les versions effectivement servies et les deux tours réels
 
 ## Suite
 
-- Alertes, travaux et goulots vivants : une source (Prometheus / Core) qui pose des états sur
-  les `eco-node:<id>` ; l'étape `watch` les montre, une couleur par sévérité, sans rien exécuter.
+- Étendre les sources Core vérifiées et leur couverture ; conserver la distinction entre
+  disponibilité, activité observée et réservation. Les composants non couverts restent
+  sans télémétrie, et une couleur ne déclenche aucune action.
 - Le lien depuis Nestor (Core relaie le module, comme `<diskx-city>`), et un `<agentx-house>`
   embarquable sur une page Core.
 - Mettre à jour la carte quand `docs/ECOSYSTEM.md` change : c'est une transcription datée,

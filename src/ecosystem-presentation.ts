@@ -1,5 +1,6 @@
 // The existing tour's displayed state, bounded for a companion conversation. No scene owner.
 import { describeNode, ecoNode, ECOSYSTEM_SNAPSHOT_DATE } from "./ecosystem-data";
+import type { EcosystemLiveObservation } from "./ecosystem-live-state";
 
 export type EcosystemViewState = {
   application: string;
@@ -9,6 +10,7 @@ export type EcosystemViewState = {
   narrationComplete: boolean;
   focus: string[];
   nodes: { id: string; name: string }[];
+  live?: EcosystemLiveObservation | null;
 };
 
 export function ecosystemObservation(state: EcosystemViewState) {
@@ -23,5 +25,6 @@ export function ecosystemObservation(state: EcosystemViewState) {
     selection: selected ? { id: selected.id, label: selected.name, description: describeNode(selected) } : null,
     narration: state.narration.slice(0, 4000),
     narrationComplete: state.narrationComplete === true,
+    ...(state.live ? { live: { status: state.live.status, read: state.live.read ? { ...state.live.read } : null } } : {}),
   };
 }
