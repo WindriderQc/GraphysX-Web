@@ -84,7 +84,7 @@ try {
   await page.waitForTimeout(700);
   await page.screenshot({ path: path.join(ART, "cyber-race-gameover.png") });
 
-  // ---- Notre version: the Hypertube showcase with light combat, computer on both sides ----
+  // ---- Notre version: nine 40-second boards and the 90-second finale, light combat, computer on both sides ----
   await page.evaluate(() => window.cyberRace.ui(["back"]));
   await page.waitForFunction(() => window.cyberRace.phase === "menu", null, { timeout: SMOKE_TIMEOUT });
   out.remaster = await page.evaluate(() => {
@@ -95,6 +95,8 @@ try {
     c.advance(14);
     return {
       sectors: c.world.track.sectors.map((s) => s.kind),
+      lengths: c.world.track.sectors.map((s) => s.end - s.start),
+      phased: c.world.track.sectors.every((s) => (s.info.phases || []).length >= 2),
       boosts: c.world.boosts.length,
       progressed: c.pilots[0].s > 600,
     };
@@ -105,7 +107,7 @@ try {
   out.remasterEnd = await page.evaluate(() => {
     const c = window.cyberRace;
     c.freeze(false);
-    for (let i = 0; i < 12 && c.phase !== "over"; i += 1) c.advance(5);
+    for (let i = 0; i < 120 && c.phase !== "over"; i += 1) c.advance(5);
     return { phase: c.phase, finished: c.pilots.map((p) => p.finished) };
   });
 
@@ -189,7 +191,11 @@ const ok =
   out.end?.phase === "over" &&
   out.end?.resultsShown === true &&
   out.end?.finished?.every(Boolean) &&
-  out.remaster?.sectors?.join(",") === "hypertube" &&
+  out.remaster?.sectors?.join(",") === "hypertube,mines,shards,thorns,kaleido,wave,network,furnace,vortex" &&
+  // Course 0 (COURT) runs 0.6 x the NORMAL lengths: boards of 2300-3000 m, a 5500 m finale.
+  out.remaster?.lengths?.slice(0, -1).every((m) => m >= 1300 && m <= 2200) &&
+  out.remaster?.lengths?.at(-1) >= 3000 &&
+  out.remaster?.phased === true &&
   out.remaster?.boosts > 0 &&
   out.remaster?.progressed === true &&
   out.remasterEnd?.phase === "over" &&
