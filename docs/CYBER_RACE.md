@@ -153,18 +153,18 @@ with its own profile (so the launched process lives until the window closes and 
 track it). Point Playnite's play action at the `.cmd`, or at `msedge.exe` with the same arguments
 to avoid the console window. The **Quit** button closes the app window.
 
-## VR (Quest on Link)
+## Immersive VR
 
-The goggles button starts an `immersive-vr` WebXR session: one player against the computer,
-seat just behind Jobe with the horizon locked to the line, and an in-headset panel for score,
-turbo, timer, messages, pause and game over. Touch controllers: thumbstick to fly, trigger turbo,
-grip knife-edge, A confirm, B back/pause; an Xbox pad also works.
+Open the HTTPS game page directly in the Quest browser and choose **Jouer en VR**.
+WebXR renders a stereo view from the seat behind Jobe. One human races against the computer.
+The in-headset panel shows score, turbo, timer, messages, pause and game over.
+Use either Touch thumbstick to fly, the trigger for turbo, the grip to fly knife-edge,
+A or X to confirm, and B or Y to pause or go back. An Xbox pad can also control the pilot.
 
-Requirements: Meta Quest Link installed and Link active (it provides the OpenXR runtime Edge
-uses). Browsers only open a VR session from a click or key press, not a pad button. The
-in-tube camera follows the line, which can cause motion sickness.
-
-Status: written against WebXR and three.js `WebXRManager`, **not yet tried in a headset**.
+For PC VR, activate the headset in a WebXR-capable PC browser and use the same button.
+Activate the button with a pointer click or keyboard Enter so the browser can grant the session.
+On Quest the console's start button also requests VR. If the browser refuses, the console shows
+how to retry. Ending the headset session brings the player back to the console.
 
 ## Shot-by-shot reference (race, 00:40:17–00:41:26)
 

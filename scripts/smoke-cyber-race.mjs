@@ -5,7 +5,8 @@ import path from "node:path";
 // Cyber Race 1992 as a visitor meets it on the site: the Games & Playgrounds row opens the
 // standalone page, the film-style menu takes pad input, a short film run is flown to GAME OVER
 // (the computer pilots both sides through the page's test hook), the page never asks the site
-// for film clips, and Quit returns to the GraphysX front door.
+// for film clips, and Quit returns to the GraphysX front door. The Quest menu uses an explicit
+// immersive request and stays in the menu if the headset or browser refuses it.
 
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
 const ART = process.env.SMOKE_ARTIFACTS || path.resolve("output/smoke");
@@ -64,7 +65,8 @@ try {
     c.pilots[0].autopilot = true;
     c.pilots[1].cpu = true;
     c.advance(10);
-    return { started, forwardDives, phase: c.phase, sectors: c.world.track.sectors.map((s) => s.kind), progressed: c.pilots[0].s > 300 };
+    const split = !document.getElementById("divider").classList.contains("hidden");
+    return { started, forwardDives, split, phase: c.phase, sectors: c.world.track.sectors.map((s) => s.kind), progressed: c.pilots[0].s > 300 };
   });
   await page.evaluate(() => { window.cyberRace.freeze(true); window.cyberRace.advance(0.01); });
   await page.waitForTimeout(500);
@@ -91,6 +93,52 @@ try {
   ]);
   await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
   out.returned = true;
+
+  const quest = applySmokeTimeout(await browser.newPage({
+    viewport: { width: 390, height: 620 },
+    isMobile: true,
+    hasTouch: true,
+    userAgent: "Mozilla/5.0 (Linux; Android 12; Quest 2) OculusBrowser/34.0",
+  }));
+  quest.on("pageerror", (error) => pageErrors.push(String(error)));
+  quest.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
+  await quest.addInitScript(() => {
+    const calls = [];
+    window.__XR_REQUESTS__ = calls;
+    const xr = new EventTarget();
+    xr.isSessionSupported = async () => false;
+    xr.requestSession = async (mode) => {
+      calls.push({ mode, userGesture: navigator.userActivation.isActive });
+      throw new DOMException("Test refusal", calls.length === 1 ? "NotAllowedError" : "NotSupportedError");
+    };
+    Object.defineProperty(navigator, "xr", { value: xr });
+  });
+  await quest.goto(new URL("cyber-race.html", BASE).href, { waitUntil: "domcontentloaded" });
+  await quest.waitForFunction(() => Boolean(window.cyberRace));
+  const vr = quest.getByRole("button", { name: "Jouer en VR", exact: true });
+  const vrStatus = quest.locator("#vr-status");
+  await vrStatus.filter({ hasText: /indisponible ici/ }).waitFor();
+  out.quest = await vr.evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return {
+      visible: rect.height >= 48 && rect.left >= 0 && rect.right <= innerWidth && rect.y >= 0 &&
+        rect.bottom <= innerHeight && button.contains(hit),
+      splitOptionHidden: document.querySelector('[data-group="mode"][data-value="0"]').getClientRects().length === 0,
+    };
+  });
+  await quest.screenshot({ path: path.join(ART, "cyber-race-quest-menu.png") });
+  await vr.press("Enter");
+  await vrStatus.filter({ hasText: /Accès VR refusé/ }).waitFor();
+  out.quest.focusRetained = await vr.evaluate((button) => document.activeElement === button);
+  await quest.locator('[data-action="start"]').click();
+  await vrStatus.filter({ hasText: /indisponible ici/ }).waitFor();
+  Object.assign(out.quest, await quest.evaluate(() => ({
+    requests: window.__XR_REQUESTS__,
+    phase: window.cyberRace.phase,
+    splitHidden: document.getElementById("divider").classList.contains("hidden"),
+  })));
+  await quest.close();
 } catch (error) {
   out.fatal = String(error?.stack ?? error);
 } finally {
@@ -108,6 +156,7 @@ const ok =
   out.menu?.icons >= 20 &&
   out.menu?.detail === "LANCER LA COURSE" &&
   out.race?.forwardDives === true &&
+  out.race?.split === true &&
   out.race?.started === "countdown" &&
   out.race?.phase === "race" &&
   out.race?.progressed === true &&
@@ -116,6 +165,13 @@ const ok =
   out.end?.resultsShown === true &&
   out.end?.finished?.every(Boolean) &&
   out.returned === true &&
+  out.quest?.visible === true &&
+  out.quest?.splitOptionHidden === true &&
+  out.quest?.focusRetained === true &&
+  out.quest?.phase === "menu" &&
+  out.quest?.splitHidden === true &&
+  out.quest?.requests?.length === 2 &&
+  out.quest.requests.every(({ mode, userGesture }) => mode === "immersive-vr" && userGesture) &&
   filmRequests.length === 0;
 
 process.exit(out.fatal || pageErrors.length || consoleErrors.length || !ok ? 1 : 0);

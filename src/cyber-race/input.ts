@@ -77,6 +77,8 @@ export class RaceInput {
 
   constructor() {
     window.addEventListener("keydown", (event) => {
+      if (event.target instanceof HTMLButtonElement && event.target.tabIndex >= 0 &&
+          KEY_ACTIONS[event.code] === "ok") return;
       if (GAME_KEYS.has(event.code)) {
         event.preventDefault();
       }
@@ -101,6 +103,9 @@ export class RaceInput {
   /** Controllers of the current WebXR session (Quest Touch), refreshed each frame. */
   setXrPads(pads: Gamepad[]): void {
     this.xrPads = pads;
+    if (pads.length === 0) {
+      for (const id of this.padMemory.keys()) if (id >= 100) this.padMemory.delete(id);
+    }
   }
 
   private any(codes: string[]): boolean {
