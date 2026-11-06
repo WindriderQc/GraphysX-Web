@@ -15,7 +15,7 @@ export interface SectorInfo {
   weight: number;
   fog: number;
   fogColor: number;
-  sky: "circuit" | "sunset" | "hexdots" | "furnace" | "none";
+  sky: "circuit" | "sunset" | "hexdots" | "furnace" | "nebula" | "none";
   /** Keep the line nearly level (boards with a floor). */
   flat: boolean;
   /** Board invented in the film's style rather than taken from a scene. */
@@ -119,8 +119,13 @@ export function finaleRhythm(u: number): number {
  * Lengths are metres at the NORMAL course, measured against the autopilot's pace.
  */
 const NOTRE_VERSION: Partial<Record<SectorKind, Partial<SectorInfo>>> = {
+  // Magnetic field: the mine field under a nebula, mines drifting towards the pilots.
   mines: {
     length: 3000,
+    sky: "nebula",
+    // Violet fog matching the nebula, so far mines fade into it instead of standing out black.
+    fog: 0.0036,
+    fogColor: 0x24164a,
     phases: [
       { u: 0.3, name: "ESSAIM" },
       { u: 0.6, name: "TEMPÊTE DE MINES", alert: true, voice: "Warning. Mine storm." }

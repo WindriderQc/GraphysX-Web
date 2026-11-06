@@ -93,7 +93,16 @@ try {
     c.start();
     c.pilots[0].autopilot = true;
     c.advance(14);
+    // Magnetic field: break one linked mine ahead and let its chain run through the cluster.
+    const w = c.world;
+    const linked = w.obstacles.filter((o) => o.kind === "mine" && o.chain && w.track.sectorAt(o.s).kind === "mines");
+    const seed = linked.find((o) => o.chain.length >= 2 && !o.destroyed && o.s > c.pilots[0].s + 200);
+    const group = new Set(seed ? [seed] : []);
+    for (const stack = [...group]; stack.length; ) for (const n of stack.pop().chain) if (!group.has(n)) { group.add(n); stack.push(n); }
+    if (seed) { w.breakObstacle(seed); w.startChain(seed, 0); }
+    c.advance(2);
     return {
+      magnetic: { linked: linked.length, group: group.size, chained: [...group].every((o) => o.destroyed), drained: w.blasts.length === 0 },
       sectors: c.world.track.sectors.map((s) => s.kind),
       lengths: c.world.track.sectors.map((s) => s.end - s.start),
       phased: c.world.track.sectors.every((s) => (s.info.phases || []).length >= 2),
@@ -196,6 +205,10 @@ const ok =
   out.remaster?.lengths?.slice(0, -1).every((m) => m >= 1300 && m <= 2200) &&
   out.remaster?.lengths?.at(-1) >= 3000 &&
   out.remaster?.phased === true &&
+  out.remaster?.magnetic?.linked >= 20 &&
+  out.remaster?.magnetic?.group >= 3 &&
+  out.remaster?.magnetic?.chained === true &&
+  out.remaster?.magnetic?.drained === true &&
   out.remaster?.boosts > 0 &&
   out.remaster?.progressed === true &&
   out.remasterEnd?.phase === "over" &&

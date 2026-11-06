@@ -205,6 +205,25 @@ export class RaceAudio {
     this.tone(220, 1.5, "sawtooth", 0.2, 0, 30);
   }
 
+  /** One mine of a chain going off: a short, deep crack. */
+  blast(): void {
+    if (!this.ctx || !this.master || !this.noise) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noise;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(2600, t);
+    filter.frequency.exponentialRampToValueAtTime(80, t + 0.35);
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.45, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    src.connect(filter).connect(gain).connect(this.master);
+    src.start(t);
+    src.stop(t + 0.45);
+    this.tone(90, 0.3, "sawtooth", 0.12, 0, 35);
+  }
+
   /** Bright chime when a set piece is cleared. */
   gate(): void {
     [1568, 2093].forEach((f, i) => this.tone(f, 0.12, "triangle", 0.1, i * 0.05));
