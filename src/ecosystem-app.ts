@@ -30,11 +30,12 @@ export type EcosystemApplication = {
   state: () => unknown;
   advanceTime: (milliseconds: number) => unknown;
   setLiveState: (value: unknown) => boolean;
-  tour: { play(): void; pause(): void; next(): void; previous(): void; goto(index: number): void; setScript(text: string, autoplay: boolean): void };
+  tour: { play(): void; pause(): void; next(): void; previous(): void; goto(index: number): void; setScript(text: string, autoplay: boolean): void; conversation(busy: boolean): void; setVoice(enabled: boolean): void };
 };
 export type EcosystemEvent = "ready" | "scene-changed" | "node-selected" | "models" | "error" | "live-state-changed";
 export type EcosystemMountOptions = {
   play?: string | null;
+  voice?: boolean;
   /** Self-contained LAN embed: geometry and tour are identical; no external sky/models/textures. */
   embedded?: boolean;
   onEvent?: (type: EcosystemEvent, detail: Record<string, unknown>) => void;
@@ -238,20 +239,30 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   let narrationShown = 0;
   const currentStep = (): TourStep | null => adhoc ?? player.state().step;
 
-  let voiceOn = false;
+  let voiceOn = options.voice !== false && params.get("voice") !== "off";
+  let narratorReady = !options.embedded;
+  let conversationBusy = false;
+  let interrupted = false;
+  let autoplayBlocked = false;
+  let playbackNotice = "";
+  const showNotice = (): void => { element("[data-notice]").textContent = [notice, playbackNotice].filter(Boolean).join(" · "); };
   const narration = createTourNarration(() => {
     renderSteps();
     if (!voiceOn || disposed || !player.state().playing || adhoc) return;
     if (player.next()) enter();
     else { player.pause(); renderSteps(); }
-  }, () => {
+  }, (error) => {
     player.pause();
-    notice = "La voix est indisponible. Réactivez-la pour réessayer ou poursuivez sans voix.";
-    voiceOn = false; renderSteps(); element("[data-notice]").textContent = notice;
+    autoplayBlocked = error instanceof Error && error.name === "NotAllowedError";
+    if (autoplayBlocked) { playbackNotice = "La voix est prête. Touchez la visite pour autoriser le son."; renderSteps(); showNotice(); return; }
+    playbackNotice = "La voix est indisponible. Appuyez sur Lire pour réessayer ou coupez la voix.";
+    renderSteps(); showNotice();
   });
   function pause(): void { player.pause(); narration.stop(); renderSteps(); }
   function togglePlayback(): void {
+    if (conversationBusy) return;
     if (player.state().playing || narration.active()) { pause(); return; }
+    interrupted = false; autoplayBlocked = false; playbackNotice = "";
     if (!adhoc) player.play();
     enter();
   }
@@ -269,8 +280,11 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     }));
     const toggle = button("toggle");
     const reading = state.playing || narration.active();
-    toggle.textContent = reading ? "⏸ Pause" : "▶ Lire";
-    toggle.setAttribute("aria-label", reading ? "Pause" : "Lire");
+    const resumeLabel = interrupted ? "Reprendre la visite" : "Lire";
+    toggle.textContent = reading ? "⏸ Pause" : interrupted ? "▶ Reprendre" : "▶ Lire";
+    element<HTMLProgressElement>("[data-progress]").hidden = voiceOn;
+    toggle.setAttribute("aria-label", reading ? "Pause" : resumeLabel);
+    toggle.disabled = conversationBusy;
     toggle.title = voiceOn ? "Écouter la visite ; Pause arrête la phrase" : "Faire défiler les étapes et le texte, sans voix";
     button("voice").textContent = voiceOn ? "🔇 Couper la voix" : "🔊 Activer la voix";
     button("voice").setAttribute("aria-pressed", String(voiceOn));
@@ -287,9 +301,9 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
     narrationShown = reduced || voiceOn ? narrationFull.length : 0;
     element("[data-narration]").textContent = reduced || voiceOn ? narrationFull : "";
     if (picture.wide) overviewCamera(seconds); else frameNodes([...picture.focus, ...picture.amber], seconds);
-    element("[data-notice]").textContent = notice;
+    showNotice();
     const state = player.state();
-    if (voiceOn && (state.playing || adhoc)) narration.speak(narrationFull);
+    if (voiceOn && narratorReady && !conversationBusy && !document.hidden && (state.playing || adhoc)) { autoplayBlocked = false; narration.speak(narrationFull); }
     renderSteps();
     emit("scene-changed", { index: state.index, count: state.count, kind: step.kind, label: tourStepLabel(step), playing: state.playing, script: tourText(player.steps()), adhoc: adhoc !== null });
   }
@@ -310,11 +324,19 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   button("previous").addEventListener("click", () => { adhoc = null; if (player.previous()) enter(); else enter(0); });
   button("next").addEventListener("click", () => { adhoc = null; if (player.next()) enter(); else enter(0); });
   button("toggle").addEventListener("click", togglePlayback);
-  button("voice").addEventListener("click", () => {
-    voiceOn = !voiceOn; notice = "";
-    if (voiceOn && !adhoc) player.play();
+  function setVoice(enabled: boolean): void {
+    voiceOn = enabled; playbackNotice = "";
+    if (voiceOn && !adhoc && !conversationBusy) player.play();
     enter();
-  });
+  }
+  button("voice").addEventListener("click", () => setVoice(!voiceOn));
+  const unlock = (event: Event): void => {
+    if (!autoplayBlocked || conversationBusy || disposed) return;
+    if (event.target instanceof Element && event.target.closest("button,input,select,textarea,a")) return;
+    togglePlayback();
+  };
+  window.addEventListener("pointerup", unlock);
+  window.addEventListener("keydown", unlock);
   const visibility = (): void => { if (document.hidden) pause(); };
   document.addEventListener("visibilitychange", visibility);
   button("exit").addEventListener("click", () => { pause(); onExit(); });
@@ -496,7 +518,7 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   const unsubscribe = host.subscribeFrame(frame);
 
   overviewCamera(0);
-  if (requested) player.play();
+  if (requested || voiceOn) player.play();
   enter(0);
   const first = picture as TourPicture | null;
   if (!reduced && (!first || first.wide)) {
@@ -534,19 +556,28 @@ export function mountEcosystemApp(root: HTMLElement, host: PlatformHost, onExit:
   return {
     state,
     setLiveState: (value: unknown) => liveLayer.set(value),
-    setNarrator: (value) => { narration.setNarrator(value); if (voiceOn) enter(); },
+    setNarrator: (value) => { narration.setNarrator(value); narratorReady = true; if (voiceOn) enter(); },
     advanceTime: (milliseconds: number) => { frame(Math.max(0, milliseconds) / 1000); return state(); },
     tour: {
-      play: () => { adhoc = null; player.play(); enter(); },
+      play: () => { if (conversationBusy) return; interrupted = false; autoplayBlocked = false; playbackNotice = ""; player.play(); enter(); },
       pause,
+      setVoice,
+      conversation: (busy) => {
+        conversationBusy = busy;
+        if (busy) { interrupted = true; pause(); playbackNotice = "Visite en pause pendant la conversation avec Nestor."; }
+        else if (interrupted) playbackNotice = "Reprendre la visite quand vous le souhaitez.";
+        showNotice(); renderSteps();
+      },
       next: () => { adhoc = null; if (player.next()) enter(); },
       previous: () => { adhoc = null; if (player.previous()) enter(); },
       goto: (index) => { adhoc = null; player.goto(index); enter(); },
-      setScript: (text, autoplay) => { player.replace(parseTour(text)); adhoc = null; notice = ""; if (autoplay) player.play(); else player.pause(); enter(); },
+      setScript: (text, autoplay) => { player.replace(parseTour(text)); adhoc = null; notice = ""; if (autoplay && !conversationBusy) player.play(); else player.pause(); enter(); },
     },
     dispose: () => {
       disposed = true;
       narration.stop();
+      window.removeEventListener("pointerup", unlock);
+      window.removeEventListener("keydown", unlock);
       document.removeEventListener("visibilitychange", visibility);
       unsubscribe();
       liveLayer.dispose();

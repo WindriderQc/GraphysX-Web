@@ -108,3 +108,8 @@ test("a host narrator is retained before mounting and can replace the current tr
   assert.equal(h.apps[1].narrator, second);
   h.element.disconnectedCallback();
 });
+
+test("an ambient host can explicitly retain silent playback", () => {
+  const h = harness(); h.element.attributes.set('voice', 'off'); h.element.connectedCallback();
+  assert.equal(h.settings().voice, false); h.element.disconnectedCallback();
+});
