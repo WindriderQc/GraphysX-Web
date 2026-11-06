@@ -1,4 +1,5 @@
 import { resolveAgentAppearance, type AgentAppearance } from "../server/agent-appearance.mjs";
+import { LOCAL_SCENE_PREFIX } from "./local-scenes";
 import { AgentWorldVoxelFace, findVoxelFace, resolveAgentWorldFace } from "./agent-world-face";
 import { createAgentRobot, findAgentRobot } from "./agent-world-robot";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates } from "../server/inline-mesh.mjs";
@@ -2303,7 +2304,7 @@ export class AgentWorldRuntime {
     // Saving is an authoring act, so it stores the document rather than the live runtime.
     const definition = this.exportDocument();
     try {
-      window.localStorage.setItem(`graphysx.agent-world.v2.${safeName}`, JSON.stringify(definition));
+      window.localStorage.setItem(LOCAL_SCENE_PREFIX + safeName, JSON.stringify(definition));
     } catch {
       return this.failure("Save failed: browser storage is unavailable or full. Keep this tab open and export the scene.");
     }
@@ -2317,7 +2318,7 @@ export class AgentWorldRuntime {
     let definition = this.savedWorlds.get(nameOrDefinition) ?? null;
     if (!definition) {
       try {
-        const raw = window.localStorage.getItem(`graphysx.agent-world.v2.${nameOrDefinition}`);
+        const raw = window.localStorage.getItem(LOCAL_SCENE_PREFIX + nameOrDefinition);
         definition = raw ? JSON.parse(raw) as AgentWorldDefinition : null;
       } catch {
         definition = null;

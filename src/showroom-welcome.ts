@@ -1,5 +1,6 @@
 import type { NestorConsoleTopic, NestorPresentation } from "./showroom-nestor";
 import { summarizeProposal } from "./coauthor-proposal";
+import { readFirstCreationResume } from "./local-scenes";
 import { describeTourPosition } from "./nestor-tour";
 import type { NestorTourState } from "./nestor-tour";
 import type { CoauthorOutcome, CoauthorProposal } from "./coauthor-proposal";
@@ -51,6 +52,7 @@ export function mountWelcome(
   onNestorTopic?: (topic: NestorConsoleTopic) => void,
   variant: ShowroomWelcomeVariant = onNestorTopic ? "agentx" : "scene-resume",
   hooks?: {
+    creation?: boolean;
     onOpenKidX?: () => void;
     onOpenLlmX?: () => void;
     onOpenDiskX?: () => void;
@@ -84,6 +86,16 @@ export function mountWelcome(
     .gx-welcome .gx-online-dot{width:7px;height:7px;border-radius:50%;background:#76f0ae;box-shadow:0 0 0 4px rgba(118,240,174,.1),0 0 18px #76f0ae}
     .gx-welcome h1{margin:0;font-size:clamp(28px,4.2vw,46px);letter-spacing:.035em;font-weight:850;color:var(--gx-ink);line-height:.98;text-shadow:0 4px 38px rgba(70,220,235,.38)}
     .gx-welcome p{margin:0;color:var(--gx-ink-soft);font-size:14.5px;line-height:1.55;text-shadow:0 1px 12px rgba(3,12,20,.7)}
+    .gx-create-entry{display:flex;align-items:center;gap:7px;flex-wrap:wrap;width:100%;pointer-events:auto}
+    .gx-create-entry a{display:inline-flex;align-items:center;min-height:44px;padding:8px 12px;border-radius:9px;
+      font:700 13px var(--gx-font);text-decoration:none;letter-spacing:.01em}
+    .gx-create-entry a[hidden]{display:none}
+    .gx-create-entry a:focus-visible{outline:2px solid white;outline-offset:2px}
+    .gx-create-new{background:#7de8da;color:#0a2227;border:1px solid #96f2e6}
+    .gx-create-new:hover{background:#a4f4e7}
+    .gx-create-resume{color:#f4d8b4;border:1px solid #e4b88166;background:#422d1b85;min-width:0;max-width:100%;gap:6px}
+    .gx-create-resume span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .gx-welcome--touring .gx-create-entry,.gx-welcome--proposing .gx-create-entry{display:none}
     .gx-welcome .gx-nestor-topics{display:flex;gap:8px;flex-wrap:wrap;pointer-events:auto}
     .gx-welcome .gx-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%;pointer-events:none}
     .gx-welcome button{background:linear-gradient(180deg,var(--gx-accent-deep),#1d7f96);color:#fff;border:1px solid var(--gx-accent-edge);border-radius:12px;padding:12px 24px;font:600 15px var(--gx-font);cursor:pointer;box-shadow:0 8px 30px rgba(30,127,150,.42)}
@@ -407,7 +419,39 @@ export function mountWelcome(
     // subtree the line above removes. The guard caught that within one run of adding it.
     overlay.querySelector("[data-tour-start]")?.remove();
   }
-  const dispose = () => { overlay.remove(); style.remove(); };
+  let updateResume: (() => void) | undefined;
+  if (nestorEnabled && hooks?.creation) {
+    const entry = document.createElement("div");
+    entry.className = "gx-create-entry";
+    entry.lang = "fr";
+    const create = document.createElement("a");
+    create.className = "gx-create-new";
+    create.href = import.meta.env.BASE_URL + "?app=creation";
+    create.textContent = "✦ Créer une scène";
+    const resume = document.createElement("a");
+    resume.className = "gx-create-resume";
+    resume.href = import.meta.env.BASE_URL + "?app=creation&resume=1";
+    const name = document.createElement("span");
+    resume.append("Reprendre · ", name);
+    updateResume = () => {
+      const saved = readFirstCreationResume();
+      resume.hidden = !saved;
+      name.textContent = saved?.name ?? "";
+    };
+    updateResume();
+    window.addEventListener("pageshow", updateResume);
+    window.addEventListener("storage", updateResume);
+    entry.append(create, resume);
+    overlay.querySelector("[data-nestor-briefing]")?.after(entry);
+  }
+  const dispose = () => {
+    if (updateResume) {
+      window.removeEventListener("pageshow", updateResume);
+      window.removeEventListener("storage", updateResume);
+    }
+    overlay.remove();
+    style.remove();
+  };
   /** The topic button or request field that asked for the pending proposal, for focus restoration. */
   let proposalOrigin: HTMLElement | null = null;
   const askInput = overlay.querySelector<HTMLInputElement>("[data-nestor-request]");

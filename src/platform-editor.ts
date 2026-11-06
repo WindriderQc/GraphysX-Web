@@ -1,4 +1,5 @@
 import { Box3, MathUtils, Object3D, Raycaster, Vector2, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer } from "three";
+import { LOCAL_SCENE_PREFIX } from "./local-scenes";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls, type TransformControlsMode } from "three/examples/jsm/controls/TransformControls.js";
 import type { AgentWorldRuntime } from "./agent-world-runtime";
@@ -783,7 +784,7 @@ export class PlatformEditor {
       if (Array.isArray(indexed)) indexed.forEach((name) => { if (typeof name === "string" && name.trim()) names.add(name); });
       for (let index = 0; index < window.localStorage.length; index += 1) {
         const key = window.localStorage.key(index) ?? "";
-        const prefix = "graphysx.agent-world.v2.";
+        const prefix = LOCAL_SCENE_PREFIX;
         if (key.startsWith(prefix)) names.add(key.slice(prefix.length));
       }
     } catch { /* storage is optional */ }
