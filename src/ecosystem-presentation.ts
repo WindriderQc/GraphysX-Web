@@ -7,6 +7,7 @@ export type EcosystemViewState = {
   snapshot: string;
   tour: { index: number; count: number; playing: boolean; kind: string; label: string; script: string; adhoc: string | null; title: string };
   narration: string;
+  spokenNarration?: string;
   narrationComplete: boolean;
   focus: string[];
   nodes: { id: string; name: string }[];
@@ -27,6 +28,7 @@ export function ecosystemObservation(state: EcosystemViewState, catalog: Ecosyst
     focus: [...new Set(state.focus)].slice(0, 32).map(id => ({ id, label: ecoNode(id)?.name || id })),
     selection: selected ? { id: selected.id, label: selected.name, description: describeNode(selected) } : null,
     narration: state.narration.slice(0, 4000),
+    ...(state.spokenNarration !== undefined ? { spokenNarration: state.spokenNarration.slice(0, 4000) } : {}),
     narrationComplete: state.narrationComplete === true,
     ...(state.live ? { live: { status: state.live.status, read: state.live.read ? { ...state.live.read } : null } } : {}),
   };

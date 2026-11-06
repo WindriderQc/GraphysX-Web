@@ -21,6 +21,9 @@
 .gx-eco-nestor-name{display:block;font:700 10px var(--eco-mono);letter-spacing:.22em;text-transform:uppercase;color:var(--eco-cyan)}
 .gx-eco-nestor h2{margin:2px 0 0;font:500 16px/1.2 var(--gx-font,sans-serif);color:#f3f8ff}
 .gx-eco-narration{margin:0;font:13px/1.55 var(--gx-font,sans-serif);color:#dfe8f5;min-height:4.6em;white-space:pre-line}
+.gx-eco-technical{margin-top:12px;border-top:1px solid var(--eco-line);padding-top:10px}
+.gx-eco-technical summary{cursor:pointer;color:var(--eco-cyan);font-size:12px}
+.gx-eco-technical p{font:11px/1.6 var(--eco-mono);color:#a9c3d8;overflow-wrap:anywhere}
 .gx-eco-legend{list-style:none;margin:12px 0 0;padding:10px 0 0;border-top:1px solid var(--eco-line);display:grid;gap:5px;font:11px var(--eco-mono);color:#9fb3cf}
 .gx-eco-legend li{display:flex;align-items:center;gap:8px}
 .gx-eco-legend li::before{content:"";width:18px;height:0;border-top:2px solid var(--eco-cyan);box-shadow:0 0 8px var(--eco-cyan)}

@@ -14,6 +14,17 @@ la référence Core de la composition déjà montée, sans reconstruire la scèn
 Un changement de composition est chargé à la prochaine ouverture de page.
 Le reçu distingue cette composition revue de la télémétrie courante.
 
+La composition peut porter une courte `narration` par nœud et parcours, des
+introductions de scènes dans `narration`, et des `pronunciations` sous forme de
+paires `{ name, spoken }`. La voix lit les accroches ; la sélection conserve une
+fiche technique accessible aussi sur mobile, sans survol. Les alias sont des
+remplacements littéraux de noms entiers, appliqués une fois, du plus long au plus
+court. Ils ne changent ni les noms affichés ni les IDs. Le reçu après rendu
+sépare le texte affiché de `spokenNarration`, la copie préparée pour le lecteur ;
+cela n'atteste pas une écoute physique. Sans accroche, l'ancienne description
+reste disponible. Les textes privés restent dans la composition fournie par
+l'instance, jamais dans le bundle public.
+
 # La maison connectée — l'écosystème AgentX en 3D, visité par Nestor
 
 `?app=ecosystem` ouvre l'écosystème AgentX tel que le décrivent les trois infographies du
