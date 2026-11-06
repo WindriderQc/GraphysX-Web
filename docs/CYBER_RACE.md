@@ -15,10 +15,10 @@ deploy. **No film material is ever online:** the page only looks for clips from 
 `file://` install. Porting the game onto the shared runtime (`api.steer`, AgentX ghost) would be
 a separate piece of work.
 
-**Notre version.** The lightning button (fourth row) runs our own take on the game, starting
-with the **HYPERTUBE** showcase board: remastered look built for the Quest, boost pads, a lane
-split, a collapse with iris rings, and light combat (pulse shots). The film run above stays
-untouched. Decisions and design: [CYBER_RACE_NOTRE_VERSION.md](CYBER_RACE_NOTRE_VERSION.md).
+**Notre version.** The lightning button (fourth row) runs our own take on the game: nine
+boards of about 40 s each with announced phases and a rhythm, opening with the **HYPERTUBE**
+showcase board and closing with a 90 s **VORTEX** finale. Remastered look built for the Quest,
+boost pads, light combat (pulse shots). The film run above stays untouched. Decisions and design: [CYBER_RACE_NOTRE_VERSION.md](CYBER_RACE_NOTRE_VERSION.md).
 
 ## Run
 

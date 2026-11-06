@@ -7,7 +7,7 @@ import { GhostRecorder, courseSeed, formatTime, ghostAt, loadRecord, recordKey, 
 import { RaceInput, type PilotInput, type UiEvent } from "./input";
 import { JOBE_LOOK, PETER_LOOK, createFlyer, type FlyerLook, type FlyerModel } from "./models";
 import { mulberry32 } from "./textures";
-import { PLANS, SECTOR_INFO, Track, type SectorKind } from "./track";
+import { PLANS, Track, boardInfo, type SectorKind } from "./track";
 import { Combat, MAX_CHARGES, type Fighter } from "./combat";
 import { SpeedStreaks, createNeonEnvironment } from "./remaster";
 import { CYBERJOBE_AHEAD, GATE_BONUS, RaceWorld, createSkies, type Difficulty, type Obstacle } from "./world";
@@ -1015,12 +1015,13 @@ function startRace(newSeed: boolean): void {
   const plan: SectorKind[] = storyChapter ? storyChapter.plan : PLANS[PLAN_KEYS[settings.plan]];
   const perSector = storyChapter ? storyChapter.perSector : COURSES[settings.course].perSector;
   // Notre version boards have their own designed length, scaled by the course setting.
+  const notre = !storyChapter && PLAN_KEYS[settings.plan] === "remaster";
   const lengths = plan.map((kind) => {
-    const designed = SECTOR_INFO[kind].length;
+    const designed = boardInfo(kind, notre).length;
     return designed ? Math.round((designed * perSector) / 1000) : perSector;
   });
-  track = new Track(plan, lengths.reduce((a, b) => a + b, 0), rng, lengths);
-  remasterRace = plan.some((kind) => SECTOR_INFO[kind].remaster);
+  track = new Track(plan, lengths.reduce((a, b) => a + b, 0), rng, lengths, notre);
+  remasterRace = track.sectors.some((sector) => sector.info.remaster);
   applyLook(remasterRace);
   combat.reset(remasterRace);
   world = new RaceWorld(track, LEVELS[storyChapter ? 1 : settings.level].diff, rng);
@@ -1581,7 +1582,7 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
   }
 
   const sector = t.sectorAt(p.s);
-  // Board phases (notre version): announce each, rumble through the alert ones.
+  // Board phases (notre version): announce each; alerts warn once, the Hypertube collapse rumbles throughout.
   const phases = sector.info.phases;
   if (phases && racing && !p.finished) {
     const u = (p.s - sector.start) / Math.max(1, sector.end - sector.start);
@@ -1593,14 +1594,15 @@ function updatePilot(p: Pilot, other: Pilot, dt: number): void {
       if (!p.cpu) {
         if (ph.alert) {
           audio.warning();
-          voice.say("Warning. Structure collapse.", true);
+          voice.say(ph.voice ?? "Warning.", true);
+          input.rumble(p.index, 0.8, 0.5, 320);
         } else {
           audio.sector();
         }
       }
     }
     const current = phases[p.phaseIndex - 1];
-    if (current?.alert && !p.cpu) {
+    if (current?.rumble && !p.cpu) {
       p.rumbleTimer -= dt;
       if (p.rumbleTimer <= 0) {
         p.rumbleTimer = 0.25;
@@ -2071,7 +2073,7 @@ const PLAN_TEXT = [
   ["LES 3 TABLEAUX DU FILM", "Tunnel, champ de mines, cristaux : la course exacte du film (00:40:17)."],
   ["7 TABLEAUX", "Le film, puis terres hostiles, kaléidoscope, vague d'or et le vortex final contre Cyberjobe."],
   ["9 TABLEAUX", "Les 7 tableaux, plus le réseau et la fournaise, inspirés du film, avant la finale."],
-  ["NOTRE VERSION", "HYPERTUBE, le tableau vitrine : hangar, tube lumineux, bifurcation, effondrement. Pads de boost et tir pulsé."]
+  ["NOTRE VERSION", "9 tableaux de 40 s, HYPERTUBE en ouverture, VORTEX en finale de 90 s. Phases, pics, pads de boost et tir pulsé."]
 ];
 const MODE_TEXT = [
   ["2 JOUEURS", "Écran partagé : Jobe à gauche, Peter à droite. Deux manettes, ou un clavier à deux."],
