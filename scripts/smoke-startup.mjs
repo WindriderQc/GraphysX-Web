@@ -51,6 +51,7 @@ try {
   page.on("pageerror", (error) => errors.push(String(error)));
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
   await page.goto(base, { waitUntil: "domcontentloaded" });
+  await page.locator(".gx-center-apps > summary").click();
   const launch = page.getByRole("button", { name: "KidX · First Drive" });
   await launch.scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(artifacts, "kidx-launcher-390x844.png") });
@@ -70,6 +71,7 @@ try {
   await home.focus();
   await page.keyboard.press("Enter");
   await page.getByRole("heading", { name: "GraphysX", exact: true }).waitFor();
+  await page.locator(".gx-center-apps > summary").click();
   await page.getByRole("button", { name: "KidX · First Drive" }).waitFor();
   assert.deepEqual(errors, [], "the welcome → KidX → welcome journey must have no browser errors");
   await page.close();

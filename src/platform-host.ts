@@ -578,7 +578,7 @@ export class PlatformHost {
         container: this.container,
         onEnvironmentChanged: () => this.applyEnvironment(),
         // Only offer a way out when there is a showroom to go back to.
-        onExit: this.autoOrbit ? () => this.exitEditor() : undefined,
+        onExit: this.onExitEditor ? () => this.exitEditor() : undefined,
       });
       // The editor arrives via a dynamic import, so the mode can move on while it is in flight.
       // A level played before the chunk resolved would otherwise have the authoring chrome pop

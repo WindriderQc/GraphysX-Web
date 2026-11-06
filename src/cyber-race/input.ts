@@ -2,7 +2,7 @@ export interface PilotInput {
   x: number;
   y: number;
   boost: boolean;
-  /** Knife-edge: -1 roll left, +1 roll right, 0 level. */
+  /** Bank from -1 (full left) to +1 (full right). */
   roll: number;
   /** Pulse shot held (notre version). */
   fire: boolean;
@@ -60,6 +60,7 @@ const GAME_KEYS = new Set([...Object.values(P1).flat(), ...Object.values(P2).fla
 
 /** Standard-mapping buttons of an Xbox pad. */
 const PAD = { a: 0, b: 1, x: 2, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, start: 9, up: 12, down: 13, left: 14, right: 15 };
+const XR_PAD = { trigger: 0, grip: 1, primary: 4, secondary: 5 };
 const DEADZONE = 0.22;
 const REPEAT_DELAY = 0.38;
 const REPEAT_RATE = 0.14;
@@ -70,17 +71,21 @@ interface PadMemory {
   held: number;
 }
 
+type XrSources = XRInputSourceArray | readonly XRInputSource[];
+
 /** Keyboard split in two halves, one Xbox pad per pilot, plus Quest controllers in VR. */
 export class RaceInput {
   private readonly down = new Set<string>();
   private readonly events: UiEvent[] = [];
   private readonly padMemory = new Map<number, PadMemory>();
-  private xrPads: Gamepad[] = [];
+  private xrSources: XrSources = [];
   /** Called on the first keyboard or pad input so audio can start. */
   onActivity: (() => void) | null = null;
 
   constructor() {
     window.addEventListener("keydown", (event) => {
+      if (event.target instanceof HTMLButtonElement && event.target.tabIndex >= 0 &&
+          KEY_ACTIONS[event.code] === "ok") return;
       if (GAME_KEYS.has(event.code)) {
         event.preventDefault();
       }
@@ -102,9 +107,12 @@ export class RaceInput {
     window.addEventListener("blur", () => this.down.clear());
   }
 
-  /** Controllers of the current WebXR session (Quest Touch), refreshed each frame. */
-  setXrPads(pads: Gamepad[]): void {
-    this.xrPads = pads;
+  /** Keep handedness alongside each controller's live gamepad state. */
+  setXrSources(sources: XrSources): void {
+    this.xrSources = sources;
+    if (sources.length === 0) {
+      for (const id of this.padMemory.keys()) if (id < 0) this.padMemory.delete(id);
+    }
   }
 
   private any(codes: string[]): boolean {
@@ -125,7 +133,11 @@ export class RaceInput {
   poll(dt: number): void {
     const pads = this.pads();
     const all: Array<[number, Gamepad, "std" | "xr"]> = pads.map((p) => [p.index, p, "std"]);
-    this.xrPads.forEach((p, i) => all.push([100 + i, p, "xr"]));
+    this.xrSources.forEach(({ gamepad, handedness }, i) => {
+      if (!gamepad) return;
+      const id = handedness === "left" ? -1 : handedness === "right" ? -2 : -3 - i;
+      all.push([id, gamepad, "xr"]);
+    });
     for (const [id, pad, kind] of all) {
       let mem = this.padMemory.get(id);
       if (!mem) {
@@ -140,9 +152,8 @@ export class RaceInput {
         if (edge(PAD.start)) this.push("pause");
         if (edge(PAD.view)) this.push("menu");
       } else {
-        // xr-standard: 0 trigger, 4 A/X, 5 B/Y.
-        if (edge(0) || edge(4)) this.push("ok", "xr");
-        if (edge(5)) this.push("back", "xr");
+        if (edge(XR_PAD.primary)) this.push("ok", "xr");
+        if (edge(XR_PAD.secondary)) this.push("back", "xr");
       }
       const ax = kind === "std" ? pad.axes[0] ?? 0 : pad.axes[2] ?? 0;
       const ay = kind === "std" ? pad.axes[1] ?? 0 : pad.axes[3] ?? 0;
@@ -205,17 +216,21 @@ export class RaceInput {
       fire = fire || button(PAD.x) || button(PAD.lt);
     }
     if (index === 0) {
-      for (const xr of this.xrPads) {
-        const ax = xr.axes[2] ?? 0;
-        const ay = xr.axes[3] ?? 0;
+      let leftBank = 0;
+      let rightBank = 0;
+      for (const { gamepad, handedness } of this.xrSources) {
+        if (!gamepad) continue;
+        const ax = gamepad.axes[2] ?? 0;
+        const ay = gamepad.axes[3] ?? 0;
         if (Math.abs(ax) > DEADZONE) x = ax;
         if (Math.abs(ay) > DEADZONE) y = -ay;
-        boost = boost || Boolean(xr.buttons[0]?.pressed);
-        // Grip: knife-edge, towards the stick (right by default).
-        if (xr.buttons[1]?.pressed) roll = ax < -DEADZONE ? -1 : 1;
-        // A / X: pulse shot.
-        fire = fire || Boolean(xr.buttons[4]?.pressed);
+        boost = boost || Boolean(gamepad.buttons[XR_PAD.grip]?.pressed);
+        fire = fire || Boolean(gamepad.buttons[XR_PAD.primary]?.pressed);
+        const trigger = gamepad.buttons[XR_PAD.trigger]?.value ?? 0;
+        if (handedness === "left") leftBank = trigger;
+        if (handedness === "right") rightBank = trigger;
       }
+      if (leftBank || rightBank) roll = rightBank - leftBank;
     }
     return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), boost, roll, fire };
   }
@@ -228,8 +243,9 @@ export class RaceInput {
     const pad = this.pads()[index] as (Gamepad & { vibrationActuator?: { playEffect?: (type: string, params: object) => Promise<unknown> } }) | undefined;
     void pad?.vibrationActuator?.playEffect?.("dual-rumble", { duration: ms, strongMagnitude: strong, weakMagnitude: weak })?.catch(() => undefined);
     if (index !== 0) return;
-    for (const xr of this.xrPads as Array<Gamepad & { hapticActuators?: Array<{ pulse?: (value: number, ms: number) => Promise<unknown> }> }>) {
-      void xr.hapticActuators?.[0]?.pulse?.(Math.max(strong, weak), ms)?.catch(() => undefined);
+    for (const { gamepad } of this.xrSources) {
+      const xr = gamepad as (Gamepad & { hapticActuators?: Array<{ pulse?: (value: number, ms: number) => Promise<unknown> }> }) | undefined;
+      void xr?.hapticActuators?.[0]?.pulse?.(Math.max(strong, weak), ms)?.catch(() => undefined);
     }
   }
 }

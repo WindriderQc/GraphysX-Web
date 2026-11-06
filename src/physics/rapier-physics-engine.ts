@@ -130,43 +130,11 @@ export class RapierPhysicsEngine implements PhysicsEngine {
 
   createBody(definition: PhysicsBodyDefinition): PhysicsBodyHandle {
     this.assertLive();
-    if (definition.shapes.length === 0) throw new Error("A physics body requires at least one shape");
-    if (definition.shapes.some((shape) => shape.kind === "heightfield") && definition.mode !== "static") {
-      throw new Error("Heightfield bodies must be static");
-    }
-    if (definition.shapes.some((shape) => shape.kind === "trimesh") && definition.mode !== "static") {
-      throw new Error("Trimesh bodies must be static; use a convex collider for moving geometry");
-    }
-
     const material = definition.material
       ? this.ensureMaterial(definition.material)
       : this.defaultMaterial;
-    const transform = normalizeTransform(definition.transform);
-    const dynamic = definition.mode === "dynamic";
-    const trigger = definition.mode === "trigger";
-    const mass = dynamic ? positive(definition.mass ?? 1, "Body mass") : 0;
-    const preparedShapes = definition.shapes.map(prepareShape);
+    const { bodyDescriptor, dynamic, trigger, mass, preparedShapes } = prepareBody(definition, this.allowSleep);
     const massWeightTotal = preparedShapes.reduce((total, shape) => total + shape.massWeight, 0);
-
-    const bodyDescriptor = createBodyDescriptor(definition)
-      .setTranslation(transform.position.x, transform.position.y, transform.position.z)
-      .setRotation(transform.rotation)
-      .setLinearDamping(coefficient(definition.linearDamping ?? (dynamic ? 0.08 : 0), "Linear damping"))
-      .setAngularDamping(coefficient(definition.angularDamping ?? (dynamic ? 0.08 : 0), "Angular damping"))
-      .setCanSleep(trigger ? false : this.allowSleep && (definition.allowSleep ?? true));
-
-    if (definition.linearVelocity) {
-      assertVector(definition.linearVelocity, "Linear velocity");
-      bodyDescriptor.setLinvel(
-        definition.linearVelocity.x,
-        definition.linearVelocity.y,
-        definition.linearVelocity.z,
-      );
-    }
-    if (definition.angularVelocity) {
-      assertVector(definition.angularVelocity, "Angular velocity");
-      bodyDescriptor.setAngvel(toRapierVector(definition.angularVelocity));
-    }
 
     const body = this.world.createRigidBody(bodyDescriptor);
     const colliders: RapierColliderRecord[] = [];
@@ -667,6 +635,49 @@ function createJointData(definition: PhysicsJointDefinition) {
     toRapierVector(definition.anchorOnSecond),
     { x: definition.axis.x / axisLength, y: definition.axis.y / axisLength, z: definition.axis.z / axisLength },
   );
+}
+
+/** Run the same shape and body validation without touching the running solver. */
+export function validateRapierBody(definition: PhysicsBodyDefinition): void {
+  if (definition.material) normalizeMaterial(definition.material);
+  prepareBody(definition, true);
+}
+
+function prepareBody(definition: PhysicsBodyDefinition, allowSleep: boolean) {
+  if (definition.shapes.length === 0) throw new Error("A physics body requires at least one shape");
+  if (definition.shapes.some((shape) => shape.kind === "heightfield") && definition.mode !== "static") {
+    throw new Error("Heightfield bodies must be static");
+  }
+  if (definition.shapes.some((shape) => shape.kind === "trimesh") && definition.mode !== "static") {
+    throw new Error("Trimesh bodies must be static; use a convex collider for moving geometry");
+  }
+
+  const transform = normalizeTransform(definition.transform);
+  const dynamic = definition.mode === "dynamic";
+  const trigger = definition.mode === "trigger";
+  const mass = dynamic ? positive(definition.mass ?? 1, "Body mass") : 0;
+  const preparedShapes = definition.shapes.map(prepareShape);
+
+  const bodyDescriptor = createBodyDescriptor(definition)
+    .setTranslation(transform.position.x, transform.position.y, transform.position.z)
+    .setRotation(transform.rotation)
+    .setLinearDamping(coefficient(definition.linearDamping ?? (dynamic ? 0.08 : 0), "Linear damping"))
+    .setAngularDamping(coefficient(definition.angularDamping ?? (dynamic ? 0.08 : 0), "Angular damping"))
+    .setCanSleep(trigger ? false : allowSleep && (definition.allowSleep ?? true));
+
+  if (definition.linearVelocity) {
+    assertVector(definition.linearVelocity, "Linear velocity");
+    bodyDescriptor.setLinvel(
+      definition.linearVelocity.x,
+      definition.linearVelocity.y,
+      definition.linearVelocity.z,
+    );
+  }
+  if (definition.angularVelocity) {
+    assertVector(definition.angularVelocity, "Angular velocity");
+    bodyDescriptor.setAngvel(toRapierVector(definition.angularVelocity));
+  }
+  return { bodyDescriptor, dynamic, trigger, mass, preparedShapes };
 }
 
 function createBodyDescriptor(definition: PhysicsBodyDefinition): RigidBodyDesc {

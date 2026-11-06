@@ -2,12 +2,7 @@
 //
 // This is the seam that lets something outside this tab change what you are looking at.
 // The store holds whole `graphysx.agent-world/v2` documents with a revision; we pull one
-// in through `api.load(definition)` and poll a two-field endpoint to notice when an agent
-// has written a new one.
-//
-// Polling, not push, on purpose: milestone A has no relay and no socket, and the runtime's
-// own notify path is not wired on the product route anyway. A 2s poll of a ~60 byte
-// response is cheap and it means the whole feature is one server with no connection state.
+// in through the scene API. SSE delivers changes with a cheap revision poll as a fallback.
 
 import type { AgentWorldDefinition, GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { resolveSceneStoreToken } from "./scene-store-auth";
@@ -177,21 +172,15 @@ export type SceneStoreSessionOptions = {
   actor?: string;
   /** Poll interval for remote changes. 0 disables watching entirely. */
   pollMs?: number;
+  /** A just-saved copy can become the base without replacing the scene on screen. */
+  savedBase?: SceneStoreRecord;
+  onConflict?: (revision: number) => void;
   onPulled?: (record: SceneStoreRecord, remote: boolean) => void;
   onError?: (error: unknown) => void;
   /** Fired when the store's reachability changes, so UI can show it honestly. */
   onOnlineChange?: (online: boolean) => void;
 };
 
-/**
- * Binds one runtime to one stored scene: pull at start, then poll and re-pull whenever
- * someone else's revision lands.
- *
- * Reloading the whole document on every remote change is blunt — it drops physics state
- * and anything mid-flight. That is acceptable at milestone A precisely because the human
- * and the agent are not expected to be acting in the same second; the live channel is what
- * fixes it, and this is the thing that proves the loop is worth building.
- */
 /** A change broadcast by the relay: commands to apply, or a flag saying reload instead. */
 export type SceneStoreDelta = SceneStoreAttribution & {
   name: string;
@@ -202,16 +191,19 @@ export type SceneStoreDelta = SceneStoreAttribution & {
 };
 
 export function connectSceneStore(options: SceneStoreSessionOptions): SceneStoreSession {
-  const { api, client, name, actor = "browser", pollMs = 2000, onPulled, onError, onOnlineChange } = options;
-  let loadedRevision: number | null = null;
-  let loadedAttribution: SceneStoreAttribution = { actor: null, intent: null };
+  const { api, client, name, actor = "browser", pollMs = 2000, savedBase, onPulled, onConflict, onError, onOnlineChange } = options;
+  const documentSignature = (): string => JSON.stringify(api.exportDocument());
+  let loadedRevision = savedBase?.revision ?? null;
+  let baseSignature = savedBase ? JSON.stringify(savedBase.definition) : documentSignature();
+  let loadedAttribution: SceneStoreAttribution = { actor: savedBase?.actor ?? null, intent: savedBase?.intent ?? null };
+  let conflictRevision = 0;
+  let queuedRevision = 0;
   let timer: number | null = null;
   let source: EventSource | null = null;
   let stopped = false;
   let online: boolean | null = null;
-  // Guards against a poll landing on top of an in-flight pull or push and re-loading a
-  // document we are in the middle of replacing.
   let busy = false;
+  let checkingHead = false;
 
   const setOnline = (next: boolean): void => {
     if (online === next) return;
@@ -219,115 +211,144 @@ export function connectSceneStore(options: SceneStoreSessionOptions): SceneStore
     onOnlineChange?.(next);
   };
 
+  const adopt = (revision: number, signature: string, attribution: SceneStoreAttribution): void => {
+    loadedRevision = revision;
+    baseSignature = signature;
+    loadedAttribution = attribution;
+    conflictRevision = 0;
+  };
+
+  const canFollow = (revision: number): boolean => {
+    if (revision <= (loadedRevision ?? 0)) return false;
+    if (documentSignature() === baseSignature) return true;
+    if (revision > conflictRevision) {
+      conflictRevision = revision;
+      onConflict?.(revision);
+    }
+    return false;
+  };
+
+  const finish = (): void => {
+    busy = false;
+    const revision = queuedRevision;
+    queuedRevision = 0;
+    if (revision) follow(revision);
+  };
+
   const pull = async (remote = false): Promise<number | null> => {
-    const record = await client.get(name);
-    const result = api.load(record.definition);
-    if (!result.ok) throw new Error(result.error ?? `Failed to load scene ${name}`);
-    loadedRevision = record.revision;
-    loadedAttribution = { actor: record.actor ?? null, intent: record.intent ?? null };
-    setOnline(true);
-    onPulled?.(record, remote);
-    return loadedRevision;
+    if (stopped) return loadedRevision;
+    if (busy) throw new Error("Wait for the current scene load or save to finish.");
+    const before = remote ? null : documentSignature();
+    busy = true;
+    try {
+      const record = await client.get(name);
+      if (stopped) return loadedRevision;
+      setOnline(true);
+      // Check again after the request: the user can edit while the document is in flight.
+      if (remote && !canFollow(record.revision)) return loadedRevision;
+      if (!remote && documentSignature() !== before) {
+        throw new Error("The scene changed while loading. Your local changes are still on screen.");
+      }
+      const result = api.load(record.definition);
+      if (!result.ok) throw new Error(result.error ?? "Failed to load scene " + name);
+      adopt(record.revision, documentSignature(), { actor: record.actor ?? null, intent: record.intent ?? null });
+      onPulled?.(record, remote);
+      return loadedRevision;
+    } finally {
+      finish();
+    }
+  };
+
+  const follow = (revision: number): void => {
+    if (stopped || revision <= (loadedRevision ?? 0)) return;
+    if (busy) {
+      queuedRevision = Math.max(queuedRevision, revision);
+    } else if (canFollow(revision)) {
+      void pull(true).catch((error) => { if (!stopped) onError?.(error); });
+    }
   };
 
   const push = async (intent = "saved from the browser"): Promise<SceneStorePutResult> => {
-    // The document, not the runtime: pushing `export()` would persist every ball anyone
-    // threw while the scene was open.
+    if (stopped || loadedRevision === null) throw new Error("Open a stored revision before saving to it.");
+    if (conflictRevision > loadedRevision) throw new SceneStoreError("The stored scene has changed.", 409, conflictRevision);
+    if (busy) throw new Error("Wait for the current scene load or save to finish.");
     const definition = api.exportDocument();
     if (!definition) throw new Error("There is no world to push");
+    const signature = JSON.stringify(definition);
     busy = true;
     try {
-      const result = await client.put(name, definition, loadedRevision ?? undefined, { actor, intent });
-      // Adopt the revision we just created, so the next poll does not treat our own write
-      // as a remote change and reload the scene out from under the person who made it.
-      loadedRevision = result.revision;
-      loadedAttribution = { actor: result.actor ?? actor, intent: result.intent ?? intent };
-      setOnline(true);
+      const result = await client.put(name, definition, loadedRevision, { actor, intent });
+      if (!stopped) {
+        // Any edits made during the request remain dirty against the copy we actually sent.
+        adopt(result.revision, signature, { actor: result.actor ?? actor, intent: result.intent ?? intent });
+        setOnline(true);
+      }
       return result;
     } finally {
-      busy = false;
+      finish();
     }
   };
 
   const tick = async (): Promise<void> => {
-    if (stopped || busy) return;
-    busy = true;
+    if (stopped || busy || checkingHead) return;
+    checkingHead = true;
     try {
       const head = await client.head(name);
+      if (stopped) return;
       setOnline(true);
-      if (head !== null && head.revision !== loadedRevision) await pull(true);
+      if (head) follow(head.revision);
     } catch (error) {
+      if (stopped) return;
       if (error instanceof SceneStoreError && error.status === 0) setOnline(false);
       onError?.(error);
     } finally {
-      busy = false;
+      checkingHead = false;
     }
   };
 
-  /**
-   * Apply a relay delta to the live world.
-   *
-   * The reason milestone B exists: `api.transaction(commands)` changes only what the
-   * command names, so everything else survives — a ball mid-flight, physics state, the
-   * entity you were dragging. Reloading the document, which is what polling did, threw all
-   * of that away every time anyone else touched the scene.
-   */
   const applyDelta = (delta: SceneStoreDelta): void => {
-    // A whole-document write, or a delta that does not follow from what we have. Neither
-    // can be applied as commands, so fall back to the blunt path rather than guessing.
-    if (delta.replaced || !Array.isArray(delta.commands) || (loadedRevision !== null && delta.parentRevision !== loadedRevision)) {
-      void pull(true).catch((error) => onError?.(error));
+    // Incremental updates preserve the live physics. A gap or whole-document write
+    // needs a snapshot, and neither path may advance the base under local edits.
+    if (stopped) return;
+    if (busy || loadedRevision === null || delta.replaced || !Array.isArray(delta.commands) || delta.parentRevision !== loadedRevision) {
+      follow(delta.revision);
       return;
     }
+    if (!canFollow(delta.revision)) return;
     const result = api.transaction(delta.commands as Parameters<typeof api.transaction>[0]);
     if (!result.ok) {
-      // Our world disagrees with the store's. Resync rather than drift silently.
-      onError?.(new Error(`Could not apply delta ${delta.revision}: ${result.error ?? "rejected"}`));
-      void pull(true).catch((error) => onError?.(error));
+      onError?.(new Error("Could not apply delta " + delta.revision + ": " + (result.error ?? "rejected")));
+      follow(delta.revision);
       return;
     }
-    loadedRevision = delta.revision;
-    loadedAttribution = { actor: delta.actor ?? null, intent: delta.intent ?? null };
-    onPulled?.(
-      { schema: SCENE_STORE_SCHEMA, name, revision: delta.revision, updatedAt: new Date().toISOString(), actor: delta.actor ?? null, intent: delta.intent ?? null, definition: api.exportDocument()! },
-      true,
-    );
+    const definition = api.exportDocument()!;
+    adopt(delta.revision, JSON.stringify(definition), { actor: delta.actor ?? null, intent: delta.intent ?? null });
+    onPulled?.({
+      schema: SCENE_STORE_SCHEMA, name, revision: delta.revision, updatedAt: new Date().toISOString(),
+      ...loadedAttribution, definition,
+    }, true);
   };
 
-  const listen = (): void => {
-    if (typeof EventSource === "undefined") return;
-    // EventSource reconnects on its own and replays Last-Event-ID, so a dropped connection
-    // resumes from the last delta rather than reloading the world. Scene reads, including
-    // this stream, are deliberately public, so never put the write/datalake token in its URL.
-    const streamUrl = new URL(`${client.baseUrl}/scenes/${encodeURIComponent(name)}/stream`, window.location.href);
+  if (typeof EventSource !== "undefined") {
+    // Reads and the stream are public. Keep the write credential out of the URL.
+    const streamUrl = new URL(client.baseUrl + "/scenes/" + encodeURIComponent(name) + "/stream", window.location.href);
     source = new EventSource(streamUrl.toString());
     source.addEventListener("hello", (event) => {
-      const hello = JSON.parse((event as MessageEvent<string>).data) as { revision: number; mustReload?: boolean };
+      if (stopped) return;
+      const hello = JSON.parse((event as MessageEvent<string>).data) as { revision: number };
       setOnline(true);
-      // Behind by more than the relay can bridge, or joining fresh: take the document.
-      if (hello.mustReload || loadedRevision === null || hello.revision !== loadedRevision) {
-        void pull(true).catch((error) => onError?.(error));
-      }
+      follow(hello.revision);
     });
     source.onmessage = (event) => {
       try {
         applyDelta(JSON.parse(event.data) as SceneStoreDelta);
       } catch (error) {
-        onError?.(error);
+        if (!stopped) onError?.(error);
       }
     };
-    source.onerror = () => {
-      // EventSource retries by itself; the poll below is the safety net if it cannot.
-      setOnline(false);
-    };
-  };
-
-  listen();
-  if (pollMs > 0) {
-    // Kept as a backstop, not the primary path: if the stream is blocked by a proxy or the
-    // browser has no EventSource, the session still converges — just bluntly.
-    timer = window.setInterval(() => void tick(), pollMs);
+    source.onerror = () => { if (!stopped) setOnline(false); };
   }
+  if (pollMs > 0) timer = window.setInterval(() => void tick(), pollMs);
 
   return {
     name,

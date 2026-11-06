@@ -32,6 +32,7 @@ import type { DiskxApplication } from "./diskx-app";
 import type { EcosystemApplication } from "./ecosystem-app";
 import type { NetxApplication } from "./netx-app";
 import type { IslandApplication } from "./island-app";
+import type { FirstCreationApplication } from "./first-creation-app";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
 import { nestorTopicRequest, type NestorConsoleTopic } from "./showroom-nestor";
@@ -136,6 +137,7 @@ const hostOriginAllowList = parseHostOriginAllowList(import.meta.env.VITE_GRAPHY
 // person the lab was built for. This is the seam a second application would use, not a special
 // case for EV3 — hence a value, not a boolean.
 const appParam = (params.get("app") ?? "").trim();
+const localScene = params.get("localScene")?.trim() || null;
 
 const sessionParam = params.get("session");
 const liveSessionRequested = Boolean(
@@ -468,16 +470,28 @@ if (mode === "previews" && import.meta.env.DEV) {
      * Keyed by id rather than a boolean because this is the seam a second application uses, not
      * a special case for EV3.
      */
-    let appSurface: KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | IslandApplication | null = null;
+    let appSurface: KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | IslandApplication | FirstCreationApplication | null = null;
     // Application surfaces own the whole play viewport. Keep this separate from the lazy
     // surface module so later host chrome (notably the asynchronously mounted scene browser)
     // can respect the route before the application's import has finished.
     let applicationOpen = false;
     const openApplication = (id: string): boolean => {
-      if (id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island") return false;
+      if (id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island" && id !== "creation") return false;
       if (applicationOpen) return true;
       applicationOpen = true;
       requestShowroomInteraction(false);
+      if (id === "creation") {
+        showroomEnvironment?.();
+        showroomEnvironment = null;
+        void import("./first-creation-app").then(({ mountFirstCreation }) => {
+          appSurface = mountFirstCreation(root, host, () => {
+            appSurface?.dispose();
+            appSurface = null;
+            window.location.assign(import.meta.env.BASE_URL);
+          }, params.get("resume") === "1");
+        }).catch((error: unknown) => showStartupError(root, error));
+        return true;
+      }
       if (id === "netx") {
         showroomEnvironment?.();
         showroomEnvironment = null;
@@ -571,11 +585,13 @@ if (mode === "previews" && import.meta.env.DEV) {
         variant,
         agentxDoor
           ? {
+            creation: true,
             onOpenKidX: () => { window.location.search = "?app=ev3-lab"; },
             onOpenLlmX: () => { window.location.search = "?app=llmx"; },
             onOpenDiskX: () => { window.location.search = "?app=diskx"; },
             onOpenEcosystem: () => { window.location.search = "?app=ecosystem"; },
             onOpenNetX: () => { window.location.search = "?app=netx"; },
+            onOpenIsland: () => { window.location.search = "?app=island"; },
             coauthor: {
               onAccept: acceptNestorProposal,
               onDiscard: discardNestorProposal,
@@ -1060,16 +1076,15 @@ if (mode === "previews" && import.meta.env.DEV) {
         });
       });
     };
-    // KidX supplies its own scenes. Boot it without constructing and then discarding the
-    // showroom and its asynchronous cubemap/HDR lighting work. Stored/live/editor entries
-    // retain their existing boot path.
-    const directKidxEntry = appParam === "ev3-lab" && !editorFirst && !storeScene && !liveSessionRequested;
+    // These applications own their scene from the first frame. Avoid booting the showroom
+    // and its cubemap only to discard them when the app mounts.
+    const directSceneApp = (appParam === "ev3-lab" || appParam === "creation") && !editorFirst && !storeScene && !liveSessionRequested;
     const host = new PlatformHost(root, {
-      world: directKidxEntry ? {
-        schema: "graphysx.agent-world/v2", id: "kidx-startup", label: "KidX",
+      world: directSceneApp ? {
+        schema: "graphysx.agent-world/v2", id: appParam + "-startup", label: appParam === "creation" ? "GraphysX" : "KidX",
         environment: { background: "#142d38", sky: null }, entities: [],
       } : undefined,
-      autoOrbit: !motionIsReduced() && !editorFirst && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx",
+      autoOrbit: !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx",
       autoOrbitSpeed: 0.2,
       editorVisible: editorFirst,
       // CubX and its living shell are the focal point; the shore and physics stay below.
@@ -1078,7 +1093,7 @@ if (mode === "previews" && import.meta.env.DEV) {
       // screenshot harness should put you where you asked to be, immediately. `?intro=0`
       // opts out. The default welcome approaches slowly; application entry keeps its
       // existing short move. Both use the host's interruptible focus mechanism.
-      intro: !motionIsReduced() && !editorFirst && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx" && new URLSearchParams(window.location.search).get("intro") !== "0"
+      intro: !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx" && new URLSearchParams(window.location.search).get("intro") !== "0"
         ? appParam ? true : { durationSeconds: 10, distanceScale: 2.15, azimuthDegrees: 18 }
         : false,
       // `?post=bloom` turns the demo post stack on for any route (bloom + SMAA through the
@@ -1088,7 +1103,7 @@ if (mode === "previews" && import.meta.env.DEV) {
       // Leaving the editor restores the welcome overlay and hands the pointer back to the
       // showroom, so it is a place you can come back to rather than a one-way door.
       onExitEditor: editorFirst
-        ? undefined
+        ? (localScene ? () => window.location.assign(import.meta.env.BASE_URL) : undefined)
         : () => {
             if (restoreShowroomOnEditorExit) {
               restoreShowroom();
@@ -1330,8 +1345,13 @@ if (mode === "previews" && import.meta.env.DEV) {
         seed: seedArchiveBallzLevels,
       },
     });
-    if (directKidxEntry) {
-      openApplication("ev3-lab");
+    if (editorFirst && localScene && !liveSessionRequested && !storeScene) {
+      const opened = host.api.load(localScene);
+      if (!opened.ok) throw new Error(opened.error ?? "Local scene could not be opened");
+      document.title = localScene + " · GraphysX";
+      host.frameView([9, 6.8, 15], [0, 1.4, 0], 0);
+    } else if (directSceneApp) {
+      openApplication(appParam);
     } else if (!editorFirst) {
       composeShowroom(host.api);
       host.applyEnvironment();
@@ -1404,6 +1424,7 @@ if (mode === "previews" && import.meta.env.DEV) {
           initialScene: liveSessionRequested ? null : storeScene,
           startCollapsed: !editorFirst && !storeScene,
           actor: "browser",
+          resetUndoHistory: () => host.world.resetUndoHistory(),
           onSceneOpened: () => {
             restoreShowroomOnEditorExit = true;
             // A stored scene replaces the showroom entirely: take down the host-mounted

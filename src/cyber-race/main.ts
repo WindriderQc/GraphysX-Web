@@ -648,6 +648,8 @@ interface Settings {
 
 const SETTINGS_KEY = "graphysx.cyberRace.settings";
 const settings: Settings = { course: 1, level: 1, mode: 0, plan: 0, sound: true, crosshair: false, invertY: [true, true] };
+const questBrowser = /OculusBrowser|Quest/i.test(navigator.userAgent);
+document.body.classList.toggle("quest-browser", questBrowser);
 try {
   const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null") as Partial<Settings> | null;
   if (saved && typeof saved === "object") {
@@ -685,6 +687,8 @@ const resultsEl = document.getElementById("results") as HTMLDivElement;
 const dividerEl = document.getElementById("divider") as HTMLDivElement;
 const captionEl = document.getElementById("menu-caption") as HTMLDivElement;
 const statusEl = document.getElementById("menu-status") as HTMLDivElement;
+const vrStart = document.getElementById("vr-start") as HTMLButtonElement;
+const vrStatus = document.getElementById("vr-status") as HTMLParagraphElement;
 const detailScreen = document.getElementById("d-screen") as HTMLDivElement;
 const detailKicker = document.getElementById("d-kicker") as HTMLSpanElement;
 const detailState = document.getElementById("d-state") as HTMLSpanElement;
@@ -781,9 +785,12 @@ let seed = 1992;
 const finale = { started: false, exploded: false, left: 0, total: 0, lastTick: 0 };
 const FINALE_SLACK = [1.35, 1.2, 1.08, 0.98];
 
-// ---------------------------------------------------------------- VR (Quest through Link)
+// ---------------------------------------------------------------- immersive WebXR
 let vrSession: XRSession | null = null;
 let vrSupported = false;
+let vrChecked = false;
+let vrOpening = false;
+let vrFailure = "";
 const rig = new THREE.Group();
 const xrCamera = new THREE.PerspectiveCamera(70, 1, 0.05, 2000);
 rig.add(xrCamera);
@@ -889,45 +896,87 @@ class VrHud {
 
 const vrHud = new VrHud();
 
+function vrUnavailable(): string {
+  if (!window.isSecureContext) return "Ouvre cette page en HTTPS dans le navigateur du casque.";
+  return questBrowser
+    ? "La VR est indisponible ici. Rouvre cette page dans le navigateur du Quest et vérifie le certificat HTTPS."
+    : "Ouvre le jeu dans le navigateur du Quest ou active ton casque dans un navigateur PC compatible WebXR.";
+}
+
+function refreshVrLaunch(): void {
+  const message = vrOpening ? "Ouverture de la session immersive…"
+    : vrFailure || (vrSupported ? "Joystick pour piloter · gâchettes pour incliner · poignée pour le turbo."
+      : vrChecked ? vrUnavailable() : "Détection du casque…");
+  if (vrStatus.textContent !== message) vrStatus.textContent = message;
+  vrStart.setAttribute("aria-disabled", String(vrOpening));
+}
+
 async function checkVrSupport(): Promise<void> {
   try {
     vrSupported = Boolean(navigator.xr && (await navigator.xr.isSessionSupported("immersive-vr")));
   } catch {
     vrSupported = false;
   }
+  vrChecked = true;
   refreshMenu();
 }
 
-async function enterVr(): Promise<void> {
-  if (vrSession) return;
-  if (!navigator.xr) {
-    toast("Ce navigateur n'a pas WebXR : utilisez Edge ou Chrome sur le PC.", 5);
+function finishVrSession(session: XRSession): void {
+  if (vrSession !== session) return;
+  vrSession = null;
+  vrHud.mesh.visible = false;
+  input.setXrSources([]);
+  renderer.setScissorTest(true);
+  if (phase !== "menu") showMenu();
+  else refreshMenu();
+  if (!menuEl.classList.contains("hidden")) vrStart.focus({ preventScroll: true });
+}
+
+async function enterVr(chapter: Chapter | null = null): Promise<void> {
+  if (vrSession || vrOpening) return;
+  if (!window.isSecureContext || !navigator.xr) {
+    vrFailure = vrUnavailable();
+    refreshVrLaunch();
+    if (menuEl.classList.contains("hidden")) toast(vrFailure, 6);
     return;
   }
+  vrOpening = true;
+  vrFailure = "";
+  refreshVrLaunch();
+  let session: XRSession | null = null;
   try {
-    // Must start from a click or a key press (a gamepad button is not enough for the browser).
-    const session = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local-floor"] });
-    vrSession = session;
-    session.addEventListener("end", () => {
-      vrSession = null;
-      vrHud.mesh.visible = false;
-      input.setXrPads([]);
-      renderer.setScissorTest(true);
-      if (phase !== "menu") layoutHuds();
-      refreshMenu();
-    });
-    await renderer.xr.setSession(session);
+    // WebXR consumes the browser's user activation. Start the request before yielding.
+    const request = navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local-floor"] });
+    if (settings.sound) audio.ensure();
+    const granted = await request;
+    session = granted;
+    vrSession = granted;
+    granted.addEventListener("end", () => queueMicrotask(() => finishVrSession(granted)), { once: true });
+    await renderer.xr.setSession(granted);
+    if (vrSession !== granted) return;
+    vrSupported = true;
+    storyChapter = chapter;
+    chapterEl.classList.add("hidden");
     vrHud.mesh.visible = true;
     startRace(true);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    toast(`Casque VR indisponible (${reason}). Branchez le Quest avec Link, puis cliquez ou appuyez sur Entrée.`, 6);
+    if (session && vrSession === session) {
+      await session.end().catch(() => undefined);
+      finishVrSession(session);
+    }
+    const name = error instanceof Error ? error.name : "";
+    vrFailure = name === "NotSupportedError" ? vrUnavailable()
+      : name === "SecurityError" || name === "NotAllowedError"
+        ? "Accès VR refusé. Clique de nouveau sur « Jouer en VR » et accepte la demande du casque."
+        : "La session VR n’a pas démarré. Réessaie avec « Jouer en VR ».";
+    if (menuEl.classList.contains("hidden")) toast(vrFailure, 6);
+  } finally {
+    vrOpening = false;
+    refreshMenu();
   }
 }
 
-function exitVr(): void {
-  void vrSession?.end();
-}
+vrStart.addEventListener("click", () => { void enterVr(); });
 
 // ---------------------------------------------------------------- story mode
 let storyChapter: Chapter | null = null;
@@ -935,7 +984,7 @@ let storyProgress = loadProgress();
 let storyVerdict: { met: boolean; newlyDone: boolean } | null = null;
 
 function twoPlayers(): boolean {
-  return settings.mode === 0 && !vrSession && !storyChapter;
+  return settings.mode === 0 && !questBrowser && !vrSession && !storyChapter;
 }
 
 // ---------------------------------------------------------------- flow
@@ -1046,7 +1095,7 @@ function startRace(newSeed: boolean): void {
 }
 
 function showMenu(): void {
-  if (vrSession) exitVr();
+  void vrSession?.end().catch(() => undefined);
   storyChapter = null;
   for (const p of pilots) {
     p.active = true;
@@ -2059,21 +2108,15 @@ function describe(b: HTMLButtonElement): ButtonDetail {
   }
   switch (b.dataset.action) {
     case "start":
-      return { kicker: "DÉPART", title: "LANCER LA COURSE", text: "La boule noire du film. A ou START pour partir avec ces réglages." };
+      return questBrowser
+        ? { kicker: "DÉPART · CASQUE", title: "LANCER EN VR", text: "Clique pour partir en vue stéréo, seul contre Peter." }
+        : { kicker: "DÉPART", title: "LANCER LA COURSE", text: "La boule noire du film. A ou START pour partir avec ces réglages." };
     case "help":
       return { kicker: "AIDE", title: "COMMANDES", text: "Les touches du clavier, la manette Xbox et le casque VR." };
     case "sound":
       return { kicker: "OPTION", title: "SON", text: "Musique synthé par tableau, effets et voix.", state: settings.sound ? "ACTIVÉ" : "COUPÉ", on: settings.sound };
     case "fullscreen":
       return { kicker: "OPTION", title: "PLEIN ÉCRAN", text: "Le jeu occupe tout l'écran. F11 marche aussi.", state: document.fullscreenElement ? "ACTIVÉ" : "DÉSACTIVÉ", on: Boolean(document.fullscreenElement) };
-    case "vr":
-      return {
-        kicker: "CASQUE VR",
-        title: "QUEST PAR LINK",
-        text: vrSupported ? "Un joueur contre l'ordinateur, assis derrière Jobe. A pour mettre le casque." : "Branchez le Quest, lancez Meta Quest Link et activez Link.",
-        state: vrSupported ? "PRÊT" : "NON DÉTECTÉ",
-        on: vrSupported
-      };
     case "quit":
       return {
         kicker: "QUITTER",
@@ -2130,6 +2173,7 @@ function chip(group: string, label: string, value: string): string {
 }
 
 function refreshMenu(): void {
+  refreshVrLaunch();
   for (const b of menuButtons) {
     const group = b.dataset.group as MenuGroup | undefined;
     if (group) {
@@ -2139,10 +2183,6 @@ function refreshMenu(): void {
       b.classList.toggle("selected", settings.sound);
       const wave = b.querySelector<SVGPathElement>(".wave");
       if (wave) wave.style.opacity = settings.sound ? "1" : "0.15";
-    }
-    if (b.dataset.action === "vr") {
-      b.classList.toggle("disabled", !vrSupported);
-      b.classList.toggle("selected", Boolean(vrSession));
     }
     if (b.dataset.action === "crosshair") {
       b.classList.toggle("selected", settings.crosshair);
@@ -2161,7 +2201,7 @@ function refreshMenu(): void {
     chip("plan", "TABLEAUX", ["3 · FILM", "7", "9 · INSPIRÉS", "NOTRE VERSION"][settings.plan]) +
     chip("course", "PARCOURS", COURSES[settings.course].label) +
     chip("level", "NIVEAU", LEVELS[settings.level].label) +
-    chip("mode", "MODE", ["2 JOUEURS", "1 JOUEUR"][settings.mode]) +
+    chip("mode", "MODE", questBrowser ? "1 JOUEUR · VR" : ["2 JOUEURS", "1 JOUEUR"][settings.mode]) +
     chip("record", "RECORD", best ? `${formatTime(best.time)} · ${best.name}` : "—");
   const pads = input.padCount();
   statusEl.innerHTML =
@@ -2191,6 +2231,12 @@ function quitGame(): void {
   window.setTimeout(() => toast("Fermez la fenêtre avec Alt+F4 (le navigateur bloque la fermeture).", 4), 300);
 }
 
+function launchRace(): void {
+  saveSettings();
+  if (questBrowser) void enterVr();
+  else startRace(true);
+}
+
 function activate(b: HTMLButtonElement): void {
   audio.click();
   const group = b.dataset.group as MenuGroup | undefined;
@@ -2216,14 +2262,10 @@ function activate(b: HTMLButtonElement): void {
     helpEl.classList.remove("hidden");
   } else if (action === "fullscreen") {
     toggleFullscreen();
-  } else if (action === "vr") {
-    if (vrSupported) void enterVr();
-    else toast("Aucun casque : installez Meta Quest Link, branchez le Quest et activez Link.", 5);
   } else if (action === "quit") {
     quitGame();
   } else if (action === "start") {
-    saveSettings();
-    startRace(true);
+    launchRace();
     return;
   }
   saveSettings();
@@ -2252,7 +2294,7 @@ function moveFocus(dx: number, dy: number): void {
   let best = -1;
   let bestScore = Infinity;
   for (const [i, b] of menuButtons.entries()) {
-    if (i === focusIndex) continue;
+    if (i === focusIndex || b.getClientRects().length === 0) continue;
     const r = b.getBoundingClientRect();
     const vx = r.left - from.left;
     const vy = r.top - from.top;
@@ -2292,8 +2334,7 @@ function handleEvents(events: UiEvent[]): void {
       } else if (action === "ok") {
         activate(menuButtons[focusIndex]);
       } else if (action === "pause" && source !== "key") {
-        saveSettings();
-        startRace(true);
+        launchRace();
       }
       continue;
     }
@@ -2325,6 +2366,11 @@ window.addEventListener("blur", () => {
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && !vrSession && !paused && (phase === "race" || phase === "countdown")) setPaused(true);
+  if (!document.hidden && !vrSession) void checkVrSupport();
+});
+navigator.xr?.addEventListener("devicechange", () => {
+  vrFailure = "";
+  void checkVrSupport();
 });
 document.addEventListener("fullscreenchange", refreshMenu);
 window.addEventListener("gamepadconnected", (e) => {
@@ -2397,6 +2443,10 @@ function openChapter(ch: Chapter): void {
 function startChapter(): void {
   const ch = chapterCard;
   if (!ch) return;
+  if (questBrowser) {
+    void enterVr(ch);
+    return;
+  }
   chapterEl.classList.add("hidden");
   storyChoices = null;
   chapterCard = null;
@@ -2439,13 +2489,7 @@ let frozen = false;
 function frame(): void {
   const dt = Math.min(clock.getDelta(), 1 / 20);
   const session = renderer.xr.getSession();
-  if (session) {
-    input.setXrPads(
-      Array.from(session.inputSources)
-        .map((source) => source.gamepad)
-        .filter((g): g is Gamepad => Boolean(g))
-    );
-  }
+  if (session) input.setXrSources(session.inputSources);
   input.poll(dt);
   handleEvents(input.takeEvents());
   if (phase !== "menu" && !paused && !frozen) {
@@ -2480,6 +2524,34 @@ void (filmAllowed ? film.probe(["intro", "attract", "outro", ...CHAPTERS.map((c)
 });
 renderer.setAnimationLoop(frame);
 
+/** Advance the simulation by fixed 60 Hz steps, then draw one frame. */
+function advanceRace(seconds: number): string {
+  for (let i = 0; i < Math.round(seconds * 60); i += 1) {
+    if (phase === "menu" || phase === "over" || paused) break;
+    step(1 / 60);
+  }
+  render();
+  return phase;
+}
+
+Object.assign(window, {
+  render_game_to_text: () => {
+    const pilot = pilots[0];
+    const xrView = renderer.xr.isPresenting ? renderer.xr.getCamera() : null;
+    const eyes = xrView?.cameras ?? [];
+    return JSON.stringify({
+      phase, paused, questBrowser,
+      view: xrView ? "immersive-vr" : twoPlayers() ? "split-screen" : "solo-screen",
+      eyeViews: eyes.length,
+      eyeGap: eyes.length === 2 ? eyes[0].position.distanceTo(eyes[1].position) : 0,
+      course: track?.sectors.map((sector) => sector.kind),
+      pilot: { distance: pilot.s, x: pilot.ox, y: pilot.oy, speed: pilot.speed, boost: pilot.boosting, energy: pilot.energy, roll: pilot.roll },
+      rivalIsComputer: pilots[1].cpu,
+    });
+  },
+  advanceTime: (milliseconds: number) => advanceRace(milliseconds / 1000),
+});
+
 // Exposed for automated checks in the browser.
 (window as unknown as { cyberRace: unknown }).cyberRace = {
   get phase() {
@@ -2491,15 +2563,7 @@ renderer.setAnimationLoop(frame);
   pilots,
   settings,
   start: () => startRace(true),
-  /** Advance the simulation by fixed 60 Hz steps, then draw one frame. */
-  advance: (seconds: number) => {
-    for (let i = 0; i < Math.round(seconds * 60); i += 1) {
-      if (phase === "menu" || phase === "over" || paused) break;
-      step(1 / 60);
-    }
-    render();
-    return phase;
-  },
+  advance: advanceRace,
   /** Freeze the live loop (rendering continues) for exact captures. */
   freeze: (value: boolean) => {
     frozen = value;

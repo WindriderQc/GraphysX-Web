@@ -5215,3 +5215,18 @@ overview, list frames `imprimante-wifi` and the 3D pick agrees); captures
 overview was too far and the notice only appeared after a filter click; both fixed before
 the final run. What waits on AgentX (the alert's guess on the device record, enrichment as
 a collector request, an IoT join key) is listed in `docs/NETX_PROPOSAL.md` §3.3.
+
+## 2026-11-05 — Give Cyber Race an explicit Quest VR launch
+
+- The owner reached split-screen first and found the former goggles icon on a second try.
+  The text button and the film's start ball now both request immersive WebXR on Quest.
+- Chromium verified trusted gestures and recovery after refusal. The Quest 2 emulator
+  rendered two eye views and exercised steering, pause, system exit and another launch.
+  The owner confirmed the new button, solo stereo and joystick on the physical Quest 2.
+
+## 2026-11-05 — Bank Cyber Race with the Quest index triggers
+
+- Keep the input source's handedness. Each index trigger banks toward its own hand
+  in proportion to the pull, and either grip applies turbo.
+- The input regressions cover single-controller use, reordered sources, equal pulls
+  and menu button separation. The owner confirmed both banks and grip turbo on Quest 2.
