@@ -34,7 +34,7 @@ export function mountEcosystemLiveLayer(surface: HTMLElement, host: PlatformHost
   const list = document.createElement("ul");
   const scope = document.createElement("p");
   scope.className = "gx-eco-live-scope";
-  scope.textContent = "Inférence : disponibilité des moteurs uniquement. Service : santé du processus. Les autres composants restent sans télémétrie.";
+  scope.textContent = "Chaque état indique sa source : processus, interface, collecteur, stockage ou présence réseau. Un collecteur inaccessible ne prouve pas une machine arrêtée. Sans sonde : non observé. Aucune validation de tâche utilisateur.";
   panel.append(title, summary, list, scope);
   surface.append(panel);
   let rendered: EcosystemLiveView | null = null;
@@ -51,10 +51,10 @@ export function mountEcosystemLiveLayer(surface: HTMLElement, host: PlatformHost
     panel.hidden = false;
     panel.dataset.status = view.status;
     const state = view.status === "available" ? "Source disponible" : view.status === "stale" ? "Source périmée" : "Source indisponible";
-    summary.textContent = `${state} · ${view.nodes.length} composants couverts${view.generatedAt ? ` · relevé ${formatEcosystemLiveTime(view.generatedAt)}` : ""}. Composition du ${ECOSYSTEM_SNAPSHOT_DATE}.`;
+    summary.textContent = `${state} · ${view.nodes.length} composants · ${view.nodes.filter(node => node.source !== "unobserved").length} raccordés · ${view.nodes.filter(node => node.source === "unobserved").length} sans sonde${view.generatedAt ? ` · relevé ${formatEcosystemLiveTime(view.generatedAt)}` : ""}. Composition du ${ECOSYSTEM_SNAPSHOT_DATE}.`;
     summary.title = view.generatedAt ? `Relevé UTC : ${view.generatedAt}` : "";
     const subtitle = surface.querySelector<HTMLElement>(".gx-eco-sub");
-    if (subtitle) subtitle.textContent = `Composition du ${ECOSYSTEM_SNAPSHOT_DATE} · États observés de Core, couverture limitée`;
+    if (subtitle) subtitle.textContent = `Composition du ${ECOSYSTEM_SNAPSHOT_DATE} · États observés de Core · portée indiquée par composant`;
     const ids = new Set(view.nodes.map(node => node.id));
     for (const [id, row] of rows) if (!ids.has(id)) { row.item.remove(); rows.delete(id); }
     for (const id of outlines.keys()) if (!ids.has(id)) clearOutline(id);
