@@ -106,7 +106,7 @@ import {
   Vector3
 } from "three";
 import { DDSLoader } from "three/examples/jsm/loaders/DDSLoader.js";
-import { RapierPhysicsEngine } from "./physics/rapier-physics-engine";
+import { RapierPhysicsEngine, validateRapierBody } from "./physics/rapier-physics-engine";
 import type {
   PhysicsAabb,
   PhysicsBodyDefinition,
@@ -1307,6 +1307,8 @@ type ResolvedEntity = {
   interactions: Array<AgentWorldInteraction & { id: string; label: string }>;
 };
 
+const VALIDATED_BODY = Object.freeze({}) as PhysicsBodyHandle;
+
 type RuntimeEntity = {
   definition: ResolvedEntity;
   object: Object3D;
@@ -1536,7 +1538,7 @@ export class AgentWorldRuntime {
   private readonly worldRoot = new Group();
   private readonly environmentRoot = new Group();
   private readonly physicsWorld: PhysicsEngine;
-  private readonly entities = new Map<string, RuntimeEntity>();
+  private entities = new Map<string, RuntimeEntity>();
   /**
    * Host-owned, non-authoring entity sets such as live-session presence avatars.
    *
@@ -1545,8 +1547,8 @@ export class AgentWorldRuntime {
    * snapshots. `ephemeral` alone is intentionally not enough for that distinction: a ball
    * thrown during a visit is ephemeral too, and ordinary undo must preserve that live state.
    */
-  private readonly transientEntityScopes = new Map<string, Set<string>>();
-  private readonly joints = new Map<string, RuntimeJoint>();
+  private transientEntityScopes = new Map<string, Set<string>>();
+  private joints = new Map<string, RuntimeJoint>();
   private readonly savedWorlds = new Map<string, AgentWorldDefinition>();
   private readonly history: AgentWorldDefinition[] = [];
   private readonly redoHistory: AgentWorldDefinition[] = [];
@@ -1561,6 +1563,9 @@ export class AgentWorldRuntime {
   private readonly stream: AgentWorldStreamEvent[] = [];
   private readonly streamListeners = new Set<(event: AgentWorldStreamEvent) => void>();
   private streamSequence = 0;
+  /** Working graph for validation. Existing entity definitions are copied on first write. */
+  private validatingCommands: Set<RuntimeEntity> | null = null;
+  private pendingCommandEvents: Omit<AgentWorldStreamEvent, "sequence">[] | null = null;
   /**
    * The rules layer's own state. `rules` is scene data (it round-trips); `run` is *session*
    * state and deliberately does not — a saved course carries its win condition, never a
@@ -1995,6 +2000,7 @@ export class AgentWorldRuntime {
     if (!Array.isArray(commands) || commands.length === 0) {
       return this.failure("A transaction requires at least one command");
     }
+    if (this.pendingCommandEvents) return this.failure("A world transaction is already being applied");
     try {
       commands = materializeMeshCommands(commands, [...this.entities.values()].map(entry => entry.definition));
       // Reject host-transient targets before taking a rollback snapshot. Besides being
@@ -2021,26 +2027,63 @@ export class AgentWorldRuntime {
         if (command.op === "update" && command.patch?.appearance !== undefined) resolveAgentAppearance(command.patch.appearance);
         if (command.op === "spawn" && command.entity?.appearance !== undefined) resolveAgentAppearance(command.entity.appearance, command.entity.type);
       }
+      this.validateCommands(commands);
     } catch (error) {
       this.recordEvent("transaction.rejected", error instanceof Error ? error.message : String(error));
       return this.failure(error);
     }
     const before = this.exportHistoryDefinition();
     const beforeSelection = [...this.selectedIds];
+    const beforeElapsedSeconds = this.elapsedSeconds;
     const outputs: unknown[] = [];
+    const events: NonNullable<AgentWorldRuntime["pendingCommandEvents"]> = [];
+    this.pendingCommandEvents = events;
     try {
       for (const command of commands) outputs.push(this.applyCommand(command));
-      this.history.push(before);
-      if (this.history.length > 40) this.history.shift();
-      this.redoHistory.length = 0;
-      this.revision += 1;
-      this.recordEvent("transaction.committed", `${commands.length} command${commands.length === 1 ? "" : "s"}`);
-      return this.success(outputs);
     } catch (error) {
+      // Validation already refused bad inputs without touching the live world. This is
+      // a defensive rollback for an unexpected failure while installing a prepared edit.
       this.loadDefinition(before);
       this.selectedIds = beforeSelection;
+      this.elapsedSeconds = beforeElapsedSeconds;
       this.recordEvent("transaction.rejected", error instanceof Error ? error.message : String(error));
       return this.failure(error);
+    } finally {
+      this.pendingCommandEvents = null;
+    }
+    this.history.push(before);
+    if (this.history.length > 40) this.history.shift();
+    this.redoHistory.length = 0;
+    this.revision += 1;
+    this.recordEvent("transaction.committed", String(commands.length) + (commands.length === 1 ? " command" : " commands"));
+    const receipt = this.success(outputs);
+    for (const event of events) this.publishEvent(event);
+    return receipt;
+  }
+
+  private validateCommands(commands: AgentWorldCommand[]): void {
+    // Run the same resolvers in command order against a disposable graph. Visual and
+    // physics effects wait until this pass succeeds, even when a later command uses an
+    // id created, removed, or retuned earlier in the batch.
+    const { entities, joints, transientEntityScopes, environment, selectedIds } = this;
+    const { entitySequence, behaviorSequence, interactionSequence, prefabSequence } = this;
+    this.entities = new Map(entities);
+    this.joints = new Map([...joints].map(([id, joint]) => [id, { ...joint }]));
+    this.transientEntityScopes = new Map([...transientEntityScopes].map(([scope, ids]) => [scope, new Set(ids)]));
+    this.validatingCommands = new Set();
+    try {
+      for (const command of commands) this.applyCommand(command);
+    } finally {
+      this.validatingCommands = null;
+      this.entities = entities;
+      this.joints = joints;
+      this.transientEntityScopes = transientEntityScopes;
+      this.environment = environment;
+      this.selectedIds = selectedIds;
+      this.entitySequence = entitySequence;
+      this.behaviorSequence = behaviorSequence;
+      this.interactionSequence = interactionSequence;
+      this.prefabSequence = prefabSequence;
     }
   }
 
@@ -2408,6 +2451,7 @@ export class AgentWorldRuntime {
       case "select":
         this.selectedIds = command.ids.filter((id) => this.entities.has(id) && !this.isScopedTransientEntity(id));
         return [...this.selectedIds];
+      default: throw new Error("Unknown world command");
     }
   }
 
@@ -2539,7 +2583,7 @@ export class AgentWorldRuntime {
 
   private releaseJointHandle(runtime: RuntimeJoint): void {
     if (!runtime.handle) return;
-    this.physicsWorld.removeJoint(runtime.handle);
+    if (!this.validatingCommands) this.physicsWorld.removeJoint(runtime.handle);
     runtime.handle = null;
   }
 
@@ -2551,7 +2595,7 @@ export class AgentWorldRuntime {
       if (allowPendingBody && first?.definition.physics && second?.definition.physics) return;
       throw new Error(`Joint ${runtime.definition.id} requires active physics bodies: ${runtime.definition.bodyA}, ${runtime.definition.bodyB}`);
     }
-    runtime.handle = this.physicsWorld.createJoint(first.body, second.body, physicsJointDefinition(runtime.definition));
+    if (!this.validatingCommands) runtime.handle = this.physicsWorld.createJoint(first.body, second.body, physicsJointDefinition(runtime.definition));
   }
 
   private detachJointsForEntity(id: string): RuntimeJoint[] {
@@ -2568,9 +2612,11 @@ export class AgentWorldRuntime {
     const definition = this.resolveEntity(source, allowUnresolvedLookAt);
     if (this.entities.has(definition.id)) throw new Error(`Entity id already exists: ${definition.id}`);
     if (definition.parentId && !this.entities.has(definition.parentId)) throw new Error(`Unknown parent entity: ${definition.parentId}`);
-    const object = createEntityObject(definition);
-    object.name = definition.id;
-    object.userData.graphysxEntityId = definition.id;
+    const object = this.validatingCommands ? this.worldRoot : createEntityObject(definition);
+    if (!this.validatingCommands) {
+      object.name = definition.id;
+      object.userData.graphysxEntityId = definition.id;
+    }
     const runtime: RuntimeEntity = {
       definition,
       object,
@@ -2583,11 +2629,15 @@ export class AgentWorldRuntime {
       colliderLoadVersion: 0,
     };
     this.entities.set(definition.id, runtime);
-    const parent = definition.parentId ? this.entities.get(definition.parentId)?.object : this.worldRoot;
-    parent?.add(object);
+    if (this.validatingCommands) {
+      this.validatingCommands.add(runtime);
+    } else {
+      const parent = definition.parentId ? this.entities.get(definition.parentId)?.object : this.worldRoot;
+      parent?.add(object);
+    }
     this.applyResolvedEntity(runtime);
     this.rebuildPhysicsBody(runtime);
-    if (definition.asset) this.startModelLoad(runtime);
+    if (definition.asset && !this.validatingCommands) this.startModelLoad(runtime);
     // Carries the type so a relay can decide whether it needs the whole definition, and an
     // ephemeral flag so a consumer knows this one is session state and not worth persisting.
     this.emit("entity.spawned", [definition.id], { type: definition.type, ephemeral: definition.ephemeral });
@@ -2610,7 +2660,7 @@ export class AgentWorldRuntime {
       assertInlineMesh(patch.mesh);
       assertMeshSceneBudget([...this.entities.values()].map(entry => entry === runtime ? { type: "mesh", mesh: patch.mesh } : entry.definition));
       definition.mesh = deepClone(patch.mesh);
-      if (runtime.object instanceof Mesh) {
+      if (!this.validatingCommands && runtime.object instanceof Mesh) {
         const replacement = createInlineMeshObject(definition);
         disposeObjectTree(runtime.object);
         runtime.object.geometry = replacement.geometry;
@@ -2619,7 +2669,7 @@ export class AgentWorldRuntime {
     }
     if (patch.path !== undefined) {
       definition.path = resolveSplinePath(definition.type, patch.path);
-      if (definition.path && runtime.object instanceof Line) {
+      if (!this.validatingCommands && definition.path && runtime.object instanceof Line) {
         const geometry = new BufferGeometry().setFromPoints(createSplineCurve(definition.path).getPoints(Math.max(24, definition.path.points.length * 16)));
         runtime.object.geometry.dispose();
         runtime.object.geometry = geometry;
@@ -2632,8 +2682,10 @@ export class AgentWorldRuntime {
       if (nextParent && this.descendantIds(id).includes(nextParent)) throw new Error("Parenting would create a cycle");
       if (nextParent && definition.physics) throw new Error("Physics entities must remain at the world root");
       definition.parentId = nextParent;
-      const parent = nextParent ? this.entities.get(nextParent)?.object : this.worldRoot;
-      parent?.add(runtime.object);
+      if (!this.validatingCommands) {
+        const parent = nextParent ? this.entities.get(nextParent)?.object : this.worldRoot;
+        parent?.add(runtime.object);
+      }
     }
     if (patch.label !== undefined) definition.label = patch.label;
     if (patch.transform) definition.transform = mergeTransform(definition.transform, patch.transform);
@@ -2690,29 +2742,29 @@ export class AgentWorldRuntime {
     if (patch.formula !== undefined) {
       if (definition.type !== "formula-field") throw new Error("Only formula-field entities accept a formula configuration");
       definition.formula = resolveAgentWorldFormula(patch.formula);
-      findFormulaField(runtime.object)?.configure(definition.formula);
+      if (!this.validatingCommands) findFormulaField(runtime.object)?.configure(definition.formula);
     }
     if (patch.dna !== undefined) {
       if (definition.type !== "dna-tree") throw new Error("Only dna-tree entities accept a dna configuration");
       // Merged over the current configuration: `{ dna: { generation: 4 } }` keeps the genome
       // it was already expressing — advancing the generation IS the evolution mechanism.
       definition.dna = resolveAgentWorldDna(patch.dna, definition.dna ?? undefined);
-      findDnaSystem(runtime.object)?.configure(definition.dna);
+      if (!this.validatingCommands) findDnaSystem(runtime.object)?.configure(definition.dna);
     }
     if (patch.terrain !== undefined) {
       if (definition.type !== "terrain") throw new Error("Only terrain entities accept a terrain configuration");
       definition.terrain = resolveAgentWorldTerrain(patch.terrain, definition.terrain ?? undefined);
-      rebuildTerrainMesh(runtime);
+      if (!this.validatingCommands) rebuildTerrainMesh(runtime);
     }
     if (patch.water !== undefined) {
       if (definition.type !== "water") throw new Error("Only water entities accept a water configuration");
       definition.water = resolveAgentWorldWater(patch.water, definition.water ?? undefined);
-      findWaterSurface(runtime.object)?.configure(definition.water);
+      if (!this.validatingCommands) findWaterSurface(runtime.object)?.configure(definition.water);
     }
     if (patch.flock !== undefined) {
       if (definition.type !== "flock") throw new Error("Only flock entities accept a flock configuration");
       definition.flock = resolveAgentWorldFlock(patch.flock, definition.flock ?? undefined);
-      findFlockSystem(runtime.object)?.configure(definition.flock);
+      if (!this.validatingCommands) findFlockSystem(runtime.object)?.configure(definition.flock);
     }
     if (patch.crowd !== undefined) {
       if (definition.type !== "crowd") throw new Error("Only crowd entities accept a crowd configuration");
@@ -2720,16 +2772,16 @@ export class AgentWorldRuntime {
       // size and seed it was already walking — the same trap `formula-field` and `dna-tree`
       // hit, where a replace-form patch silently reset the whole population.
       definition.crowd = resolveAgentWorldCrowd(patch.crowd, definition.crowd ?? undefined);
-      findCrowdSystem(runtime.object)?.configure(definition.crowd);
+      if (!this.validatingCommands) findCrowdSystem(runtime.object)?.configure(definition.crowd);
     }
     if (patch.forceField !== undefined) {
       if (definition.type !== "force-field") throw new Error("Only force-field entities accept a force field configuration");
       definition.forceField = resolveAgentWorldForceField(patch.forceField, definition.forceField ?? undefined);
-      findForceFieldVisual(runtime.object)?.configure(definition.forceField);
+      if (!this.validatingCommands) findForceFieldVisual(runtime.object)?.configure(definition.forceField);
     }
     if (patch.surface !== undefined) {
       definition.surface = resolveAgentWorldSurface(patch.surface, definition.type);
-      remountEntitySurface(runtime.object, definition.surface, definition.material);
+      if (!this.validatingCommands) remountEntitySurface(runtime.object, definition.surface, definition.material);
     }
     if (patch.steering !== undefined) {
       if (patch.steering !== null && definition.physics?.mode !== "dynamic") throw new Error("Steering requires dynamic physics");
@@ -2746,7 +2798,7 @@ export class AgentWorldRuntime {
     }
     // Visual-only models do not retain duplicate collision arrays. If the human/agent later
     // promotes one from `auto` to an exact collider, fetch just the geometry on demand.
-    if (patch.physics !== undefined && runtime.definition.type === "model" && runtime.definition.physics?.collider !== "auto" && !runtime.collisionMesh) {
+    if (!this.validatingCommands && patch.physics !== undefined && runtime.definition.type === "model" && runtime.definition.physics?.collider !== "auto" && !runtime.collisionMesh) {
       this.startModelCollisionLoad(runtime);
     }
     // The changed field names, not the values: a relay reads them to decide what to send,
@@ -2766,14 +2818,18 @@ export class AgentWorldRuntime {
     for (const descendantId of ids) {
       const descendant = this.entities.get(descendantId);
       if (!descendant) continue;
-      if (descendant.body) this.physicsWorld.removeBody(descendant.body);
-      descendant.object.removeFromParent();
-      disposeObjectTree(descendant.object);
+      if (!this.validatingCommands) {
+        if (descendant.body) this.physicsWorld.removeBody(descendant.body);
+        descendant.object.removeFromParent();
+        disposeObjectTree(descendant.object);
+      }
       this.entities.delete(descendantId);
     }
-    if (runtime.body) this.physicsWorld.removeBody(runtime.body);
-    runtime.object.removeFromParent();
-    disposeObjectTree(runtime.object);
+    if (!this.validatingCommands) {
+      if (runtime.body) this.physicsWorld.removeBody(runtime.body);
+      runtime.object.removeFromParent();
+      disposeObjectTree(runtime.object);
+    }
     this.entities.delete(id);
     this.selectedIds = this.selectedIds.filter((selectedId) => selectedId !== id && !ids.includes(selectedId));
     for (const [scope, scopedIds] of this.transientEntityScopes) {
@@ -2859,6 +2915,7 @@ export class AgentWorldRuntime {
         return { id: targetId, visible: target.definition.visible };
       }
       if (!target.body || target.definition.physics?.mode !== "dynamic") throw new Error(`apply-impulse target must be dynamic: ${targetId}`);
+      if (this.validatingCommands) return { id: targetId, visible: target.definition.visible };
       const impulse = vectorFromTuple(interaction.impulse);
       let worldPoint: Vector3 | undefined;
       if (interaction.relativePoint) {
@@ -2898,30 +2955,25 @@ export class AgentWorldRuntime {
     }
     if (input.thrust !== undefined) steering.thrust = clamp(input.thrust, -1, 1);
     if (input.turn !== undefined) steering.turn = clamp(input.turn, -1, 1);
-    let kicked = 0;
-    if (input.kick !== undefined && runtime.body && runtime.definition.physics?.mode === "dynamic") {
-      kicked = clamp(input.kick, 0, 1);
-      if (kicked > 0) {
-        const radians = steering.headingDegrees * (Math.PI / 180);
-        const magnitude = kicked * steering.kickImpulse;
-        this.steeringScratch.set(Math.sin(radians) * magnitude, 0, -Math.cos(radians) * magnitude);
-        this.physicsWorld.applyImpulse(runtime.body, this.steeringScratch);
-        this.physicsWorld.wakeBody(runtime.body);
-      }
+    const body = runtime.definition.physics?.mode === "dynamic" ? runtime.body : null;
+    const kicked = body ? clamp(input.kick ?? 0, 0, 1) : 0;
+    const jumped = body ? clamp(input.jump ?? 0, 0, 1) : 0;
+    if (!this.validatingCommands && body && kicked > 0) {
+      const radians = steering.headingDegrees * (Math.PI / 180);
+      const magnitude = kicked * steering.kickImpulse;
+      this.steeringScratch.set(Math.sin(radians) * magnitude, 0, -Math.cos(radians) * magnitude);
+      this.physicsWorld.applyImpulse(body, this.steeringScratch);
+      this.physicsWorld.wakeBody(body);
     }
-    let jumped = 0;
-    if (input.jump !== undefined && runtime.body && runtime.definition.physics?.mode === "dynamic") {
-      jumped = clamp(input.jump, 0, 1);
-      if (jumped > 0) {
-        this.steeringScratch.set(0, jumped * steering.jumpImpulse, 0);
-        this.physicsWorld.applyImpulse(runtime.body, this.steeringScratch);
-        this.physicsWorld.wakeBody(runtime.body);
-      }
+    if (!this.validatingCommands && body && jumped > 0) {
+      this.steeringScratch.set(0, jumped * steering.jumpImpulse, 0);
+      this.physicsWorld.applyImpulse(body, this.steeringScratch);
+      this.physicsWorld.wakeBody(body);
     }
     // Absolute aim is an immediate write, even when simulation is paused. Reuse the
     // same visual projection as a physics tick without advancing the world clock.
-    if (input.headingDegrees !== undefined) this.placeSteeringArrows();
-    if (runtime.body) this.physicsWorld.readLinearVelocity(runtime.body, this.physicsScratch.linearVelocity);
+    if (!this.validatingCommands && input.headingDegrees !== undefined) this.placeSteeringArrows();
+    if (!this.validatingCommands && runtime.body) this.physicsWorld.readLinearVelocity(runtime.body, this.physicsScratch.linearVelocity);
     else this.physicsScratch.linearVelocity.set(0, 0, 0);
     return {
       entityId: id,
@@ -2940,6 +2992,7 @@ export class AgentWorldRuntime {
     // top-level field to a default and made an optimistic live runtime disagree with the
     // authoritative document until its next snapshot.
     this.environment = resolveEnvironment({ ...this.environment, ...environment });
+    if (this.validatingCommands) return;
     this.buildEnvironment();
     // The runtime owns the ground mesh and gravity — `buildEnvironment` just updated both.
     // But `background`, `fog` and `sky` are applied by the *host*, off the runtime's scene
@@ -3751,13 +3804,14 @@ export class AgentWorldRuntime {
   }
 
   private emit(type: AgentWorldStreamEventType, entityIds: string[], data: Record<string, unknown> = {}): void {
-    const event: AgentWorldStreamEvent = {
-      sequence: ++this.streamSequence,
-      type,
-      atSeconds: Number(this.elapsedSeconds.toFixed(3)),
-      entityIds,
-      data,
-    };
+    if (this.validatingCommands) return;
+    const pending = { type, atSeconds: Number(this.elapsedSeconds.toFixed(3)), entityIds, data };
+    if (this.pendingCommandEvents) this.pendingCommandEvents.push(pending);
+    else this.publishEvent(pending);
+  }
+
+  private publishEvent(pending: Omit<AgentWorldStreamEvent, "sequence">): void {
+    const event: AgentWorldStreamEvent = { sequence: ++this.streamSequence, ...pending };
     this.stream.push(event);
     if (this.stream.length > 512) this.stream.shift();
     for (const listener of this.streamListeners) {
@@ -3801,16 +3855,21 @@ export class AgentWorldRuntime {
       const { positions, indices } = runtime.definition.mesh;
       runtime.collisionMesh = { vertices: positions, indices, vertexCount: positions.length / 3, triangleCount: indices.length / 3 };
     }
-    const affectedJoints = this.detachJointsForEntity(runtime.definition.id);
-    if (runtime.body) this.physicsWorld.removeBody(runtime.body);
     // Terrain is the one type whose collider is implied by the entity rather than requested
     // through `physics` — a terrain you can fall through is not terrain.
     const prepared = runtime.definition.type === "terrain"
-      ? createTerrainBody(runtime.definition, runtime.object)
+      ? createTerrainBody(runtime.definition, this.validatingCommands ? undefined : runtime.object)
       : runtime.definition.physics
         ? createPhysicsBody(runtime.definition, runtime.collisionMesh)
         : null;
-    runtime.body = prepared ? this.physicsWorld.createBody(prepared.definition) : null;
+    const affectedJoints = this.detachJointsForEntity(runtime.definition.id);
+    if (this.validatingCommands) {
+      if (prepared) validateRapierBody(prepared.definition);
+      runtime.body = prepared ? VALIDATED_BODY : null;
+    } else {
+      if (runtime.body) this.physicsWorld.removeBody(runtime.body);
+      runtime.body = prepared ? this.physicsWorld.createBody(prepared.definition) : null;
+    }
     runtime.colliderStats = prepared?.stats ?? null;
     if (runtime.body || runtime.definition.type === "terrain" || !runtime.definition.physics || runtime.definition.physics.collider === "auto") {
       runtime.colliderError = null;
@@ -3901,6 +3960,7 @@ export class AgentWorldRuntime {
   }
 
   private applyResolvedEntity(runtime: RuntimeEntity): void {
+    if (this.validatingCommands) return;
     const { definition, object } = runtime;
     if (definition.type === "agent") applyAgentAppearance(object, definition);
     object.visible = definition.visible;
@@ -4282,8 +4342,12 @@ export class AgentWorldRuntime {
 
   private requireEntity(id: string): RuntimeEntity {
     const runtime = this.entities.get(id);
-    if (!runtime) throw new Error(`Unknown entity: ${id}`);
-    return runtime;
+    if (!runtime) throw new Error("Unknown entity: " + id);
+    if (!this.validatingCommands || this.validatingCommands.has(runtime)) return runtime;
+    const copy = { ...runtime, definition: deepClone(runtime.definition) };
+    this.validatingCommands.add(copy);
+    this.entities.set(id, copy);
+    return copy;
   }
 
   private descendantIds(id: string): string[] {
@@ -5236,10 +5300,10 @@ function createPhysicsBody(
  * the surface that was drawn. Terrain is always static and always uses the `ground` friction
  * preset — a rolling ball should slow on soil, not skate.
  */
-function createTerrainBody(definition: ResolvedEntity, object: Object3D): PreparedAgentPhysicsBody | null {
+function createTerrainBody(definition: ResolvedEntity, object?: Object3D): PreparedAgentPhysicsBody | null {
   const terrain = definition.terrain;
   if (!terrain) return null;
-  const cached = object.userData.graphysxTerrainHeights;
+  const cached = object?.userData.graphysxTerrainHeights;
   const heights = cached instanceof Float32Array ? cached : sampleTerrainHeights(terrain);
   return {
     definition: {

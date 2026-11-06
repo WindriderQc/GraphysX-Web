@@ -10,7 +10,7 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "vite";
 import { startWorldServer } from "../world-service/server.mjs";
 import { helloAt, parseRecording } from "../world-service/recording.mjs";
@@ -23,7 +23,7 @@ let m;
 
 before(async () => {
   outDir = mkdtempSync(join(tmpdir(), "graphysx-world-service-"));
-  await build({ configFile: new URL("vite.world-service.config.ts", root).pathname, root: root.pathname, build: { outDir, emptyOutDir: true }, logLevel: "silent" });
+  await build({ configFile: fileURLToPath(new URL("vite.world-service.config.ts", root)), root: fileURLToPath(root), build: { outDir, emptyOutDir: true }, logLevel: "silent" });
   m = await import(pathToFileURL(join(outDir, "world.js")).href);
 });
 after(() => { if (outDir) rmSync(outDir, { recursive: true, force: true }); });
@@ -49,6 +49,63 @@ describe("headless scene runtime", () => {
       assert.equal(loaded.ok, true, `${starter.id}: ${JSON.stringify(loaded.error ?? "")}`);
       runtime.step(1);
       assert.ok(runtime.query({}).length > 0, starter.id);
+    }
+  });
+
+  it("refuses a late command without rewinding the live world or publishing intermediate events", () => {
+    const engine = new m.RapierPhysicsEngine();
+    const runtime = new m.AgentWorldRuntime({
+      schema: "graphysx.agent-world/v2", id: "atomic-edit", label: "Atomic edit",
+      entities: [
+        { id: "ball", type: "sphere", transform: { position: [0, 10, 0] }, physics: { mode: "dynamic" }, steering: { kickImpulse: 8 } },
+        { id: "bell", type: "box", interactions: [{ id: "chime", type: "play-sound", sound: "test-chime" }] },
+      ],
+    }, engine);
+    try {
+      runtime.step(0.5);
+      runtime.select(["ball"]);
+      const before = runtime.getState();
+      const clock = runtime.getElapsedSeconds();
+      const document = runtime.exportDocument();
+      const physics = engine.saveState();
+      const body = runtime.hostBody("ball");
+      const object = runtime.group.getObjectByName("ball");
+      const cursor = runtime.readEvents().sequence;
+      const observed = [];
+      runtime.subscribeEvents((event) => observed.push({ event, finalLabel: runtime.query({ ids: ["accepted"] })[0]?.label }));
+
+      const rejected = [
+        runtime.transaction([
+          { op: "steer", id: "ball", input: { headingDegrees: 90, kick: 1 } },
+          { op: "interact", id: "bell", interactionId: "chime" },
+          { op: "spawn", entity: { id: "partial-box", type: "box" } },
+          { op: "update", id: "missing", patch: { label: "Never applied" } },
+        ]),
+        runtime.transaction([{ op: "update", id: "ball", patch: { label: "Temporary label", sound: {} } }]),
+        runtime.transaction([{ op: "spawn", entity: { id: "bad-shape", type: "sphere", geometry: { radius: NaN }, physics: { mode: "dynamic" } } }]),
+      ];
+      assert.ok(rejected.every((receipt) => !receipt.ok && receipt.revision === before.revision));
+      assert.deepEqual(runtime.exportDocument(), document);
+      assert.equal(runtime.getElapsedSeconds(), clock);
+      assert.deepEqual(runtime.getState().selectedIds, ["ball"]);
+      assert.equal(runtime.hostBody("ball"), body);
+      assert.equal(runtime.group.getObjectByName("ball"), object);
+      assert.deepEqual(engine.saveState(), physics);
+      assert.deepEqual(runtime.readEvents(cursor).events, []);
+      assert.deepEqual(observed, []);
+
+      const accepted = runtime.transaction([
+        { op: "spawn", entity: { id: "accepted", type: "box" } },
+        { op: "update", id: "accepted", patch: { label: "Ready" } },
+      ]);
+      assert.equal(accepted.ok, true, accepted.error);
+      assert.deepEqual(observed.map(({ event, finalLabel }) => [event.type, finalLabel]), [
+        ["entity.spawned", "Ready"], ["entity.updated", "Ready"],
+      ]);
+      assert.equal(runtime.undo().ok, true);
+      assert.equal(runtime.query({ ids: ["accepted"] }).length, 0);
+    } finally {
+      runtime.dispose();
     }
   });
 
