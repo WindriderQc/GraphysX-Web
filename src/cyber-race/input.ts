@@ -1,7 +1,8 @@
 export interface PilotInput {
   x: number;
   y: number;
-  boost: boolean;
+  /** Forward control from -1 (full brake) to +1 (full turbo). */
+  throttle: number;
   /** Bank from -1 (full left) to +1 (full right). */
   roll: number;
   /** Pulse shot held (notre version). */
@@ -61,6 +62,7 @@ const GAME_KEYS = new Set([...Object.values(P1).flat(), ...Object.values(P2).fla
 /** Standard-mapping buttons of an Xbox pad. */
 const PAD = { a: 0, b: 1, x: 2, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, start: 9, up: 12, down: 13, left: 14, right: 15 };
 const XR_PAD = { trigger: 0, grip: 1, primary: 4, secondary: 5 };
+const XR_LEFT_ID = -1;
 const DEADZONE = 0.22;
 const REPEAT_DELAY = 0.38;
 const REPEAT_RATE = 0.14;
@@ -135,7 +137,7 @@ export class RaceInput {
     const all: Array<[number, Gamepad, "std" | "xr"]> = pads.map((p) => [p.index, p, "std"]);
     this.xrSources.forEach(({ gamepad, handedness }, i) => {
       if (!gamepad) return;
-      const id = handedness === "left" ? -1 : handedness === "right" ? -2 : -3 - i;
+      const id = handedness === "left" ? XR_LEFT_ID : handedness === "right" ? -2 : -3 - i;
       all.push([id, gamepad, "xr"]);
     });
     for (const [id, pad, kind] of all) {
@@ -151,7 +153,7 @@ export class RaceInput {
         if (edge(PAD.b)) this.push("back");
         if (edge(PAD.start)) this.push("pause");
         if (edge(PAD.view)) this.push("menu");
-      } else {
+      } else if (id === XR_LEFT_ID) {
         if (edge(XR_PAD.primary)) this.push("ok", "xr");
         if (edge(XR_PAD.secondary)) this.push("back", "xr");
       }
@@ -196,7 +198,7 @@ export class RaceInput {
     const map = index === 0 ? P1 : P2;
     let x = Number(this.any(map.right)) - Number(this.any(map.left));
     let y = Number(this.any(map.up)) - Number(this.any(map.down));
-    let boost = this.any(map.boost);
+    let throttle = Number(this.any(map.boost));
     let roll = Number(this.any(map.rollRight)) - Number(this.any(map.rollLeft));
     let fire = this.any(map.fire);
     const pad = this.pads()[index];
@@ -210,12 +212,14 @@ export class RaceInput {
       if (button(PAD.right)) x = 1;
       if (button(PAD.up)) y = 1;
       if (button(PAD.down)) y = -1;
-      boost = boost || button(PAD.a) || button(PAD.rt);
+      if (button(PAD.a) || button(PAD.rt)) throttle = 1;
       if (button(PAD.lb)) roll = -1;
       if (button(PAD.rb)) roll = 1;
       fire = fire || button(PAD.x) || button(PAD.lt);
     }
     if (index === 0) {
+      let brake = 0;
+      let accelerate = 0;
       let leftBank = 0;
       let rightBank = 0;
       for (const { gamepad, handedness } of this.xrSources) {
@@ -224,15 +228,21 @@ export class RaceInput {
         const ay = gamepad.axes[3] ?? 0;
         if (Math.abs(ax) > DEADZONE) x = ax;
         if (Math.abs(ay) > DEADZONE) y = -ay;
-        boost = boost || Boolean(gamepad.buttons[XR_PAD.grip]?.pressed);
-        fire = fire || Boolean(gamepad.buttons[XR_PAD.primary]?.pressed);
         const trigger = gamepad.buttons[XR_PAD.trigger]?.value ?? 0;
-        if (handedness === "left") leftBank = trigger;
-        if (handedness === "right") rightBank = trigger;
+        const grip = gamepad.buttons[XR_PAD.grip]?.value ?? 0;
+        if (handedness === "left") {
+          brake = trigger;
+          leftBank = grip;
+        } else if (handedness === "right") {
+          accelerate = trigger;
+          rightBank = grip;
+          fire = fire || Boolean(gamepad.buttons[XR_PAD.primary]?.pressed);
+        }
       }
+      if (accelerate || brake) throttle = accelerate - brake;
       if (leftBank || rightBank) roll = rightBank - leftBank;
     }
-    return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), boost, roll, fire };
+    return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), throttle, roll, fire };
   }
 
   /**
