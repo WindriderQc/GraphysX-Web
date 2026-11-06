@@ -856,7 +856,7 @@ function vrUnavailable(): string {
 
 function refreshVrLaunch(): void {
   const message = vrOpening ? "Ouverture de la session immersive…"
-    : vrFailure || (vrSupported ? "Vue stéréo · joystick pour piloter · gâchette pour le turbo."
+    : vrFailure || (vrSupported ? "Joystick pour piloter · gâchettes pour incliner · poignée pour le turbo."
       : vrChecked ? vrUnavailable() : "Détection du casque…");
   if (vrStatus.textContent !== message) vrStatus.textContent = message;
   vrStart.setAttribute("aria-disabled", String(vrOpening));
@@ -876,7 +876,7 @@ function finishVrSession(session: XRSession): void {
   if (vrSession !== session) return;
   vrSession = null;
   vrHud.mesh.visible = false;
-  input.setXrPads([]);
+  input.setXrSources([]);
   renderer.setScissorTest(true);
   if (phase !== "menu") showMenu();
   else refreshMenu();
@@ -2257,13 +2257,7 @@ let frozen = false;
 function frame(): void {
   const dt = Math.min(clock.getDelta(), 1 / 20);
   const session = renderer.xr.getSession();
-  if (session) {
-    input.setXrPads(
-      Array.from(session.inputSources)
-        .map((source) => source.gamepad)
-        .filter((g): g is Gamepad => Boolean(g))
-    );
-  }
+  if (session) input.setXrSources(session.inputSources);
   input.poll(dt);
   handleEvents(input.takeEvents());
   if (phase !== "menu" && !paused && !frozen) {

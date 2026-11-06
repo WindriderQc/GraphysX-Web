@@ -5223,3 +5223,10 @@ a collector request, an IoT join key) is listed in `docs/NETX_PROPOSAL.md` §3.3
 - Chromium verified trusted gestures and recovery after refusal. The Quest 2 emulator
   rendered two eye views and exercised steering, pause, system exit and another launch.
   The owner confirmed the new button, solo stereo and joystick on the physical Quest 2.
+
+## 2026-11-05 — Bank Cyber Race with the Quest index triggers
+
+- Keep the input source's handedness. Each index trigger banks toward its own hand
+  in proportion to the pull, and either grip applies turbo.
+- The input regressions cover single-controller use, reordered sources, equal pulls
+  and menu button separation. The owner confirmed both banks and grip turbo on Quest 2.
