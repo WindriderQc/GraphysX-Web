@@ -114,6 +114,8 @@ export default defineConfig(({ command, mode }) => {
         input: {
           main: path.resolve("index.html"),
           "cyber-race": path.resolve("cyber-race.html"),
+          ballsy: path.resolve("ballsy.html"),
+          "ballsy-giant": path.resolve("ballsy-giant.html"),
         },
       },
     },

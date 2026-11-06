@@ -29,6 +29,7 @@ const RULES = [
   // published beside the product at /cyber-race.html. Its files select its own smoke and
   // deploy; its local packaging tools (Playnite/GamX, film clips) never reach the site.
   { match: /^(?:cyber-race\.html|src\/cyber-race\/[\w-]+\.ts)$/, checks: ["cyber-race"], label: "Cyber Race page (published at /cyber-race.html)", deploy: true },
+  { match: /^(?:ballsy(?:-giant)?\.html|src\/ballsy-[\w-]+\.(?:ts|css)|src\/ballsy\.css)$/, checks: ["ballsy", "ballsy-volcano", "ballsy-giant", "ballsy-setup"], label: "Ballsy local two-player course", deploy: true },
   { match: /^scripts\/(?:(?:package-cyber-race|extract-cyber-race-film|install-cyber-race-gamx)\.mjs|gamx\/[\w-]+\.ps1)$/, checks: [], label: "Cyber Race local packaging tools", deploy: false },
   { match: /^(?:\.github\/workflows\/deploy\.yml|scripts\/(?:write-release-metadata|smoke-live-release)\.mjs|ops\/)/, checks: BASELINE, label: "deployment configuration", deploy: true },
   // Conversation changes affect opening/replay, corrected scene speech and profile
@@ -44,6 +45,8 @@ const RULES = [
   { match: /^src\/island[-.]/, checks: family("island"), label: "Clawblox island viewer", deploy: true },
   { match: /^src\/(?:ballz-|archive-ballz-levels\.ts)/, checks: GAMES, label: "BallZ games", deploy: true },
   { match: /^(?:src\/results-client\.ts|server\/results-store\.mjs)$/, checks: ["results", "results-browser"], label: "results", deploy: true },
+  { match: /^server\/ballsy-protocol\.mjs$/, checks: ["ballsy", "ballsy-volcano", "ballsy-giant", "ballsy-setup"], label: "Ballsy snapshot and giant command vocabulary", deploy: true },
+  { match: /^(?:server\/ballsy-(?:rooms\.mjs|protocol\.d\.mts)|scripts\/serve-ballsy\.mjs)$/, checks: ["ballsy-giant"], label: "private Ballsy preview relay (manual only)", deploy: false },
   { match: /^(?:server\/|src\/(?:live-|scene-store-))/, checks: [...STORE, "scene-command-validation", "media"], label: "store and collaboration", deploy: true },
 ];
 

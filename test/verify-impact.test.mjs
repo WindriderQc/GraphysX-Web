@@ -11,6 +11,20 @@ import { findDeploymentBase } from "../scripts/plan-verification.mjs";
 const names = (plan) => plan.smokes.map((smoke) => smoke.name);
 
 describe("verification by changed area", () => {
+  it("checks Ballsy's isolated page and keeps shared rendering and build configuration conservative", () => {
+    const page = selectVerification(["ballsy.html", "src/ballsy-main.ts", "src/ballsy-input.ts", "src/ballsy-scene.ts", "src/ballsy.css"]);
+    assert.equal(page.mode, "targeted");
+    assert.equal(page.deploy, true);
+    assert.deepEqual(names(page), ["ballsy-setup", "ballsy-giant", "ballsy-volcano", "ballsy", "standalone", "product-assets", "asset-guard"]);
+    for (const file of ["ballsy-giant.html", "src/ballsy-giant.css", "server/ballsy-protocol.mjs"]) assert.deepEqual(names(selectVerification([file])), names(page));
+    const relay = selectVerification(["scripts/serve-ballsy.mjs", "server/ballsy-rooms.mjs"]);
+    assert.equal(relay.deploy, false);
+    assert.deepEqual(names(relay), ["ballsy-giant"]);
+    assert.equal(selectVerification(["src/platform-host.ts"]).mode, "full");
+    assert.equal(selectVerification(["vite.config.ts"]).mode, "full");
+    assert.equal(selectVerification(["docs/BALLSY_ROADMAP.md"]).deploy, false);
+  });
+
   it("ships the Cyber Race page with its own smoke and keeps its local tools off the site", () => {
     const page = selectVerification(["cyber-race.html", "src/cyber-race/main.ts", "src/cyber-race/world.ts", "src/cyber-race/story.ts"]);
     assert.equal(page.mode, "targeted");

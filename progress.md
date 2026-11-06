@@ -5215,3 +5215,8 @@ overview, list frames `imprimante-wifi` and the 3D pick agrees); captures
 overview was too far and the notice only appeared after a filter click; both fixed before
 the final run. What waits on AgentX (the alert's guess on the device record, enrichment as
 a collector request, an IoT join key) is listed in `docs/NETX_PROPOSAL.md` §3.3.
+
+
+## 2026-11-06 Ballsy physical shovel (local only)
+
+Recovered the three local Ballsy patches into isolated codex/ballsy-physical-shovel on UGBrutal because the devX source was inaccessible. Replaced the primary route/hold UI with controller-grip blade samples and direct pointer excavation. Persistent 609-vertex heightfield, matching trimesh, conserved elevation-driven lava, shared host authority, continuous shorelines, directional boost strips and revised circuit/HUD. Tests and known limits: docs/BALLSY_SHOVEL.md. No publication, merge, security changes or physical Quest acceptance.
