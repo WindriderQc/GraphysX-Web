@@ -99,7 +99,7 @@ export interface Obstacle {
   span: number;
   /** Plates: angular speed. */
   spin: number;
-  /** Portholes: hole radius. Blades: widest half-gap. Slots: half-gap. */
+  /** Portholes: hole radius. Blades: widest half-gap. Slots: half-gap. Necklace mines: clear middle. */
   gap?: number;
   /** Blades: phase of the closing cycle. */
   phase?: number;
@@ -247,6 +247,8 @@ export class RaceWorld {
   private bossS = 0;
   /** World clock of the last update (shots test rotating plates against it). */
   time = 0;
+  /** Rings whose first place could not be taken and were drawn again (read by the checks). */
+  ringRedraws = 0;
   /** Boost pads of notre version boards, sorted by s. */
   readonly boosts: BoostPad[] = [];
   private readonly updaters: Array<(time: number, dt: number, focus: number[]) => void> = [];
@@ -303,6 +305,8 @@ export class RaceWorld {
           break;
       }
     }
+    // Rings are placed against the finished obstacle list (see ringReachable).
+    this.obstacles.sort((a, b) => a.s - b.s);
     this.buildRings();
     this.buildFinish();
     this.obstacles.sort((a, b) => a.s - b.s);
@@ -1625,7 +1629,12 @@ export class RaceWorld {
         continue;
       }
       const bound = Math.min(this.track.boundAt(s - 20), this.track.boundAt(s + 20));
-      const [ox, oy] = this.randomLateral(Math.max(2, bound - 3.6), 0.7);
+      let [ox, oy] = this.randomLateral(Math.max(2, bound - 3.6), 0.7);
+      if (!this.ringReachable(s, ox, oy)) this.ringRedraws += 1;
+      // Draw again while the ring could not be taken (inside an obstacle, out of reach of a gate).
+      for (let tries = 0; tries < 16 && !this.ringReachable(s, ox, oy); tries += 1) {
+        [ox, oy] = this.randomLateral(Math.max(2, bound - 3.6), 0.7);
+      }
       const ringMat = this.keep(material.clone());
       const mesh = new THREE.Mesh(geometry, ringMat);
       this.placeOnTrack(mesh, s, ox, oy);
@@ -1788,6 +1797,86 @@ export class RaceWorld {
   }
 
   /** Index of the first obstacle at or after s. */
+  /**
+   * True when a ring at (s, ox, oy) can be taken: nothing sits in it, the golden sheet leaves it
+   * clear, and every gate close before or after it (firewall, porthole, slot, blades, iris, a
+   * necklace's middle) leaves time to swing between its opening and the ring.
+   */
+  ringReachable(s: number, ox: number, oy: number): boolean {
+    const pickup = 2.8;
+    const cruise = 75;
+    // Lateral metres a pilot can cover over a distance ds, with margin for the turn.
+    const swing = (ds: number): number => (17 * 0.6 * Math.abs(ds)) / cruise;
+    for (let i = this.firstObstacleFrom(s - 50); i < this.obstacles.length; i += 1) {
+      const o = this.obstacles[i];
+      if (o.s > s + 50) break;
+      const ds = o.s - s;
+      const near = Math.abs(ds);
+      let outside = 0;
+      switch (o.kind) {
+        case "mine":
+        case "shard":
+        case "urchin":
+        case "orb":
+        case "rock":
+        case "hex": {
+          const d = Math.hypot(o.ox - ox, o.oy - oy);
+          if (o.aim && o.gap !== undefined) {
+            // A turning necklace sweeps its whole circle: the ring must sit well inside it.
+            if (near < 3 && Math.hypot(ox - o.aim[0], oy - o.aim[1]) + pickup > o.gap - 0.8) return false;
+            continue;
+          }
+          if (near < o.r + 1.5 && d < o.r + 1.2) return false;
+          continue;
+        }
+        case "log":
+          if (near < 2.5 && Math.abs(this.logDistance(o, ox, oy)) < 1.8) return false;
+          continue;
+        case "geyser":
+          if (near < 3 && Math.abs(ox - o.ox) < o.r) return false;
+          continue;
+        case "firewall": {
+          const half = RaceWorld.NET_HALF;
+          const cell = (half * 2) / 3;
+          const inner = cell / 2 - 1;
+          let best = Infinity;
+          for (let k = 0; k < 9; k += 1) {
+            if ((o.span & (1 << k)) === 0) continue;
+            const cx = -half + cell * (k % 3) + cell / 2;
+            const cy = -half + cell * Math.floor(k / 3) + cell / 2;
+            const dx = Math.max(0, Math.abs(ox - cx) - inner);
+            const dy = Math.max(0, Math.abs(oy - cy) - inner);
+            best = Math.min(best, Math.hypot(dx, dy));
+          }
+          outside = best - pickup;
+          break;
+        }
+        case "porthole":
+          outside = Math.hypot(ox - o.ox, oy - o.oy) - pickup - ((o.gap ?? 3.6) - 1.2);
+          break;
+        case "slot":
+        case "blades": {
+          const across = (ox - o.ox) * -Math.sin(o.angle) + (oy - o.oy) * Math.cos(o.angle);
+          outside = Math.abs(across) - pickup - (o.gap ?? 1.3);
+          break;
+        }
+        case "iris":
+          outside = Math.hypot(ox, oy) - pickup - ((o.gap ?? 6) - 1);
+          break;
+        default:
+          continue;
+      }
+      if (outside > 0 && outside > swing(ds)) return false;
+    }
+    // The golden sheet must leave the ring clear most of the time.
+    let under = 0;
+    for (let k = 0; k < 16; k += 1) {
+      const floor = this.waveHeight(s, ox, k * 1.3);
+      if (Number.isFinite(floor) && oy + pickup < floor + 1) under += 1;
+    }
+    return under <= 6;
+  }
+
   firstObstacleFrom(s: number): number {
     let lo = 0;
     let hi = this.obstacles.length;

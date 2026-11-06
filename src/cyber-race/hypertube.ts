@@ -270,6 +270,7 @@ export function buildHypertube(kit: BoardKit, sector: Sector): void {
     );
     const mineCount = Math.max(6, Math.round(((a1 - a0) / 100) * density * 1.6));
     const mines = kit.instanced(kit.keep(createMineGeometry()), [metal, spikes], mineCount);
+    const placed: Array<[number, number, number, number]> = [];
     for (let i = 0; i < mineCount; i += 1) {
       const s = a0 + 30 + rng() * (a1 - a0 - 40);
       const r = radius(s) - 2.2;
@@ -278,13 +279,25 @@ export function buildHypertube(kit: BoardKit, sector: Sector): void {
       const ox = Math.min(-1.9, Math.cos(a) * rr);
       const oy = Math.sin(a) * rr;
       const size = 0.9 + rng() * 0.7;
+      placed.push([s, ox, oy, size]);
       const handle = kit.spinner(mines, i, s, ox, oy, size, 0.5 + rng());
       kit.addObstacle({ kind: "mine", s, ox, oy, r: size, angle: 0, span: 0, spin: 0, breakable: true, onDestroy: () => handle.hide() });
     }
     mines.instanceMatrix.needsUpdate = true;
     for (let k = 0; k < 4; k += 1) {
       const s = a0 + ((k + 0.5) / 4) * (a1 - a0);
-      kit.addRing(s, -(radius(s) * 0.5), (rng() * 2 - 1) * 3);
+      // Keep each lane ring clear of the lane's mines, so it can always be taken.
+      const ox = -(radius(s) * 0.5);
+      let oy = (rng() * 2 - 1) * 3;
+      const blocked = (y: number): boolean =>
+        placed.some(([ms, mx, my, mr]) => Math.abs(ms - s) < mr + 1.5 && Math.hypot(mx - ox, my - y) < mr + 1.2);
+      for (const y of [oy, 0, 3, -3, 5, -5]) {
+        if (!blocked(y)) {
+          oy = y;
+          break;
+        }
+      }
+      kit.addRing(s, ox, oy);
       addPad(s + 40, Math.PI + (rng() * 2 - 1) * 0.6);
     }
     // Right lane: clear, one boost.

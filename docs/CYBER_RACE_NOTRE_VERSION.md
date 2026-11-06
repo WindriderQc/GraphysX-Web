@@ -93,8 +93,16 @@ autopilot on 2026-11-06: 39.6 s at NORMAL, no hit.
 ## Systems
 
 - **Look (remaster pipeline).** ACES tone mapping and a neon environment map (chrome flyers,
-  glossy panels) for our boards only; additive halos on light sources; speed streaks around
-  the pilots; light pulses computed in the tube's shader.
+  glossy panels) for our boards only; additive halos on light sources; light pulses computed
+  in the tube's shader. **Sand-storm streaks** around the pilot only in the golden worlds
+  (VAGUE D'OR, TERRES HOSTILES), tinted with each world's sand; the owner found them too busy
+  everywhere else (2026-11-06).
+- **Rings you can always take.** Each ring is checked against the finished course
+  (`ringReachable` in `world.ts`): nothing sits in it, the golden sheet leaves it clear, and
+  every gate within 50 m before or after it (firewall, porthole, slot, blades, iris, a
+  necklace's middle) leaves time to swing between its opening and the ring. A ring that fails
+  is drawn again. Before this, 1 to 10 % of the rings could not be taken, the most at BRUTAL.
+  Applies to the film run too.
 - **Light combat.** Rings fill up to 3 **pulse charges**. Fire sends a pulse forward; when the
   rival is in the lock cone (the film's red marks), the pulse homes on it and slows it down.
   Pulses also break plates and mines. The computer fires too. Our version only.

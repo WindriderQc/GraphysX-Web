@@ -597,13 +597,13 @@ export function nebulaTexture(): THREE.CanvasTexture {
     blob(x, y, 14 + rng() * 40, colors[(i + 1) % colors.length], 0.08 + rng() * 0.12);
   }
   ctx.globalCompositeOperation = "source-over";
-  for (let i = 0; i < 2600; i += 1) {
+  // Fine, sparse stars: a few bright ones, the rest faint, so the sky never reads as dust.
+  for (let i = 0; i < 1100; i += 1) {
     const x = rng() * W;
     const y = rng() * H;
     const b = rng();
-    ctx.fillStyle = `rgba(${200 + Math.round(b * 55)},${210 + Math.round(b * 45)},255,${0.35 + b * 0.65})`;
-    const size = b > 0.985 ? 3 : b > 0.9 ? 2 : 1;
-    ctx.fillRect(x, y, size, size);
+    ctx.fillStyle = `rgba(${200 + Math.round(b * 55)},${210 + Math.round(b * 45)},255,${0.15 + b * 0.5})`;
+    ctx.fillRect(x, y, b > 0.97 ? 2 : 1, b > 0.97 ? 2 : 1);
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;

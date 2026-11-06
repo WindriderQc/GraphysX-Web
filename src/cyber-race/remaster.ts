@@ -338,6 +338,15 @@ export class SpeedStreaks {
     for (let i = 0; i < count; i += 1) this.items.push({ s: -1e9, ox: 0, oy: 0 });
   }
 
+  private color = -1;
+
+  /** Tints the streaks (each golden world has its own sand). */
+  setColor(color: number): void {
+    if (color === this.color) return;
+    this.color = color;
+    (this.mesh.material as THREE.MeshBasicMaterial).color.setHex(color).multiplyScalar(1.6);
+  }
+
   update(track: Track, s: number, ox: number, oy: number, speed: number, bound: (s: number) => number): void {
     const stretch = Math.max(0.6, speed * 0.07);
     for (let i = 0; i < this.count; i += 1) {
