@@ -591,6 +591,7 @@ if (mode === "previews" && import.meta.env.DEV) {
             onOpenDiskX: () => { window.location.search = "?app=diskx"; },
             onOpenEcosystem: () => { window.location.search = "?app=ecosystem"; },
             onOpenNetX: () => { window.location.search = "?app=netx"; },
+            onOpenIsland: () => { window.location.search = "?app=island"; },
             coauthor: {
               onAccept: acceptNestorProposal,
               onDiscard: discardNestorProposal,

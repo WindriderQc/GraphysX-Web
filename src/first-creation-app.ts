@@ -75,7 +75,7 @@ export function mountFirstCreation(root: HTMLElement, host: PlatformHost, onExit
   const saveButton = find<HTMLButtonElement>("[data-creation-save]");
   nameInput.value = slot?.name ?? "Mon jardin des lucioles";
   const frame = () => {
-    if (compact.matches) host.frameView([9.5, 6.1, 13.1], [0, -0.26, 0], 0);
+    if (compact.matches) host.frameView([10.3, 6.6, 14.2], [0, -0.26, 0], 0);
     else host.frameView([8.2, 6.1, 13.7], [-2.8, 1.44, 1.85], 0);
   };
   const refresh = (): void => {
@@ -90,7 +90,7 @@ export function mountFirstCreation(root: HTMLElement, host: PlatformHost, onExit
     motionButton.textContent = api.state()?.paused ? "Animer" : "Pause";
   };
   const setTone = (tone: FirstCreationTone): void => {
-    const result = api.transaction(firstCreationToneCommands(tone));
+    const result = api.transaction(firstCreationToneCommands(tone, api.exportDocument()));
     dirty = JSON.stringify(api.exportDocument()) !== baseline;
     notice = result.ok ? (dirty ? "Ambiance " + tone.name + " · à enregistrer." : "Ambiance " + tone.name + ".") :
       (result.error ?? "Cette ambiance est indisponible.");

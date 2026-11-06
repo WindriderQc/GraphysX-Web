@@ -25,6 +25,23 @@ try {
       return box.y >= 0 && box.bottom <= innerHeight && element.contains(hit);
     });
     assert.equal(firstAction, true, name + " creation is reachable on arrival");
+    const dock = page.locator(".gx-welcome--center .gx-actions");
+    assert.equal(await dock.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return Math.abs(box.x + box.width / 2 - innerWidth / 2) <= 1;
+    }), true, name + " dock is centered");
+    assert.deepEqual(await dock.evaluate((element) => [...element.querySelectorAll(":scope > button, :scope > details > summary")].map((item) => {
+      const box = item.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return box.height >= 44 && box.left >= 0 && box.right <= innerWidth && box.bottom <= innerHeight && item.contains(hit);
+    })), [true, true, true, true], "all four destinations are visible without horizontal scrolling");
+    const apps = dock.locator("summary");
+    await apps.click();
+    const island = dock.getByRole("button", { name: /L’île d’Eko/ });
+    await island.waitFor();
+    await island.press("Escape");
+    assert.equal(await apps.evaluate((element) => document.activeElement === element && !element.parentElement.open), true);
+    await page.screenshot({ path: path.join(artifacts, "center-" + name + ".jpg"), type: "jpeg", quality: 83 });
     await start.click();
     const atelier = page.locator(".gx-creation");
     await atelier.getByRole("heading", { name: "Jardin des lucioles" }).waitFor();
@@ -39,10 +56,11 @@ try {
         light: byId["garden-lantern-light"].material.color,
         lantern: byId["garden-lantern"].material.emissive,
         sparks: byId["garden-sparks"].emitter.color,
+        firefly: byId["garden-firefly-0"].material.emissive,
       };
     });
     const authored = await readScene();
-    assert.deepEqual(authored, { id: "lantern-garden", light: "#b69cff", lantern: "#b39afa", sparks: "#b39afa" });
+    assert.deepEqual(authored, { id: "lantern-garden", light: "#b69cff", lantern: "#b39afa", sparks: "#b39afa", firefly: "#b39afa" });
     const sceneName = name === "desktop" ? "Jardin d’Iris" : "Jardin tactile";
     await atelier.getByLabel(/Donne un nom/).fill(sceneName);
     await atelier.getByRole("button", { name: "Enregistrer", exact: true }).click();

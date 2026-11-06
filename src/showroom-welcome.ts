@@ -1,6 +1,7 @@
 import type { NestorConsoleTopic, NestorPresentation } from "./showroom-nestor";
 import { summarizeProposal } from "./coauthor-proposal";
 import { readFirstCreationResume } from "./local-scenes";
+import "./showroom-center.css";
 import { describeTourPosition } from "./nestor-tour";
 import type { NestorTourState } from "./nestor-tour";
 import type { CoauthorOutcome, CoauthorProposal } from "./coauthor-proposal";
@@ -58,6 +59,7 @@ export function mountWelcome(
     onOpenDiskX?: () => void;
     onOpenEcosystem?: () => void;
     onOpenNetX?: () => void;
+    onOpenIsland?: () => void;
     coauthor?: {
       onAccept?: () => void;
       onDiscard?: () => void;
@@ -71,6 +73,12 @@ export function mountWelcome(
   },
 ): ShowroomWelcomeHandle {
   const nestorEnabled = variant === "agentx" && typeof onNestorTopic === "function";
+  const center = nestorEnabled && Boolean(hooks?.creation);
+  const welcomeLanguage = center ? "fr" : "en";
+  const welcomeEyebrow = center ? "Centre · guide Nestor" : "GraphysX · Nestor online";
+  const welcomeBriefing = center ? "Crée ta première scène ou essaie une démo." : "Pick a demo or ask; nothing changes until you accept.";
+  const welcomeStatus = center ? "Guide interactif · prêt" : "Scene-native guide · ready";
+  const requestLabel = center ? "Demander" : "Ask";
   const style = document.createElement("style");
   style.textContent = `
     .gx-welcome{position:fixed;inset:0;z-index:30;box-sizing:border-box;pointer-events:none;font-family:var(--gx-font);display:flex;align-items:flex-end;justify-content:flex-start;padding:clamp(20px,4vw,54px)}
@@ -331,18 +339,18 @@ export function mountWelcome(
   overlay.className = "gx-welcome";
   overlay.innerHTML = `
     <div class="gx-welcome-card">
-      <div class="gx-eyebrow"><span class="gx-online-dot"></span><span data-nestor-eyebrow>GraphysX · Nestor online</span><button type="button" class="gx-tour-start" data-tour-start>Show me around</button></div>
+      <div class="gx-eyebrow"><span class="gx-online-dot"></span><span data-nestor-eyebrow lang="${welcomeLanguage}">${welcomeEyebrow}</span><button type="button" class="gx-tour-start" data-tour-start lang="${welcomeLanguage}">${center ? "Visite guidée" : "Show me around"}</button></div>
       <h1 data-nestor-title>GraphysX</h1>
-      <p class="gx-nestor-briefing" data-nestor-briefing aria-live="polite">Pick a demo or ask; nothing changes until you accept.</p>
-      <div class="gx-nestor-topics" aria-label="Ask Nestor to show a capability">
-        <button type="button" data-nestor-topic="build" aria-pressed="false">Build something</button>
-        <button type="button" data-nestor-topic="play" aria-pressed="false">Wake the physics</button>
-        <button type="button" data-nestor-topic="explore" aria-pressed="false">Reveal living systems</button>
+      <p class="gx-nestor-briefing" data-nestor-briefing aria-live="polite" lang="${welcomeLanguage}">${welcomeBriefing}</p>
+      <div class="gx-nestor-topics" lang="${welcomeLanguage}" aria-label="${center ? "Démonstrations de Nestor" : "Ask Nestor to show a capability"}">
+        <button type="button" data-nestor-topic="build" aria-pressed="false">${center ? "Construire" : "Build something"}</button>
+        <button type="button" data-nestor-topic="play" aria-pressed="false">${center ? "Tester la physique" : "Wake the physics"}</button>
+        <button type="button" data-nestor-topic="explore" aria-pressed="false">${center ? "Animer le monde" : "Reveal living systems"}</button>
       </div>
       <label class="gx-request-focus" data-request-focus hidden><input type="checkbox" data-request-focus-check><span data-request-focus-label></span></label>
-      <form class="gx-nestor-ask" data-nestor-ask autocomplete="off">
-        <input type="text" name="request" data-nestor-request maxlength="2000" aria-label="Ask Nestor for a change in your own words" placeholder="Or ask in your own words: add a lake with a flock of birds at sunset">
-        <button type="submit" data-nestor-request-send>Ask</button>
+      <form class="gx-nestor-ask" data-nestor-ask autocomplete="off" lang="${welcomeLanguage}">
+        <input type="text" name="request" data-nestor-request maxlength="2000" aria-label="${center ? "Demander une modification à Nestor" : "Ask Nestor for a change in your own words"}" placeholder="${center ? "Ex. : ajoute un lac au coucher du soleil" : "Or ask in your own words: add a lake with a flock of birds at sunset"}">
+        <button type="submit" data-nestor-request-send>${requestLabel}</button>
       </form>
       <div class="gx-tour" data-nestor-tour role="group" aria-labelledby="gx-tour-position">
         <div class="gx-tour-head">
@@ -373,9 +381,9 @@ export function mountWelcome(
         </div>
       </div>
       <p class="gx-proposal-outcome" data-proposal-outcome aria-live="polite"></p>
-      <div class="gx-commit" data-nestor-commit>Scene-native guide · ready</div>
+      <div class="gx-commit" data-nestor-commit lang="${welcomeLanguage}">${welcomeStatus}</div>
       <div class="gx-actions"><button type="button" class="gx-go-editor">Enter Scene Editor</button></div>
-      <div class="gx-hint">click Nestor or a glowing console in 3D · click the ground to drop a ball · drag to look around</div>
+      <div class="gx-hint" lang="${welcomeLanguage}">${center ? "Glisse pour regarder autour de toi. Clique au sol pour lâcher une balle." : "click Nestor or a glowing console in 3D · click the ground to drop a ball · drag to look around"}</div>
     </div>
   `;
   if (!nestorEnabled) {
@@ -420,7 +428,8 @@ export function mountWelcome(
     overlay.querySelector("[data-tour-start]")?.remove();
   }
   let updateResume: (() => void) | undefined;
-  if (nestorEnabled && hooks?.creation) {
+  if (center) {
+    overlay.classList.add("gx-welcome--center");
     const entry = document.createElement("div");
     entry.className = "gx-create-entry";
     entry.lang = "fr";
@@ -471,16 +480,16 @@ export function mountWelcome(
   // say hello; `setRequestEnabled` flips it once one does.
   let requestEnabled = false;
   const askPlaceholder = askInput?.placeholder ?? "";
-  const NO_PROVIDER = "No model provider is configured, so Nestor composes the three demonstrations locally.";
+  const noProvider = center ? "Demande libre · aucun modèle connecté" : "No model provider is configured, so Nestor composes the three demonstrations locally.";
   /** The disabled field says why, in the place the person would have typed; the enabled one invites. */
   const applyRequestEnabled = (): void => {
     if (!askInput || !askSend) return;
     askInput.disabled = !requestEnabled;
     askSend.disabled = !requestEnabled;
     focusCheck.disabled = !requestEnabled;
-    askInput.placeholder = requestEnabled ? askPlaceholder : NO_PROVIDER;
+    askInput.placeholder = requestEnabled ? askPlaceholder : noProvider;
     if (requestEnabled) askInput.removeAttribute("title");
-    else askInput.title = NO_PROVIDER;
+    else askInput.title = noProvider;
   };
   let liveMissionState: LiveMissionRuntimeState | null = null;
   let liveActivityState: LiveAgentActivity | null = null;
@@ -572,11 +581,10 @@ export function mountWelcome(
     const title = overlay.querySelector<HTMLElement>("[data-nestor-title]");
     const briefing = overlay.querySelector<HTMLElement>("[data-nestor-briefing]");
     const commit = overlay.querySelector<HTMLElement>("[data-nestor-commit]");
-    if (eyebrow) eyebrow.textContent = "GraphysX · Nestor online";
+    if (eyebrow) { eyebrow.lang = welcomeLanguage; eyebrow.textContent = welcomeEyebrow; }
     if (title) title.textContent = "GraphysX";
-    // One line, on purpose: the request row below took the second line's height (see .gx-nestor-ask).
-    if (briefing) briefing.textContent = "Pick a demo or ask; nothing changes until you accept.";
-    if (commit) commit.textContent = "Scene-native guide · ready";
+    if (briefing) { briefing.lang = welcomeLanguage; briefing.textContent = welcomeBriefing; }
+    if (commit) { commit.lang = welcomeLanguage; commit.textContent = welcomeStatus; }
     overlay.querySelectorAll<HTMLButtonElement>("[data-nestor-topic]").forEach((button) => button.setAttribute("aria-pressed", "false"));
   };
   const present = (presentation: NestorPresentation): void => {
@@ -586,6 +594,7 @@ export function mountWelcome(
     const title = overlay.querySelector<HTMLElement>("[data-nestor-title]");
     const briefing = overlay.querySelector<HTMLElement>("[data-nestor-briefing]");
     const commit = overlay.querySelector<HTMLElement>("[data-nestor-commit]");
+    for (const line of [eyebrow, briefing, commit]) if (line) line.lang = "en";
     if (eyebrow) eyebrow.textContent = presentation.eyebrow;
     if (title) title.textContent = presentation.title;
     if (briefing) briefing.textContent = presentation.message;
@@ -639,6 +648,7 @@ export function mountWelcome(
         : `Show all ${proposal.commandCount} commands`;
     }
     if (lines) {
+      const focused = lines.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.proposalCommand : undefined;
       // A real checkbox per command, not a styled div: it is a genuine choice, and the
       // keyboard, the screen reader and the label-click target all come free from the element
       // that already means this. The list carries the checked state, so nothing here needs to
@@ -657,6 +667,7 @@ export function mountWelcome(
         item.classList.toggle("is-excluded", !box.checked);
         return item;
       }));
+      if (focused !== undefined) lines.querySelectorAll<HTMLInputElement>("input")[Number(focused)]?.focus({ preventScroll: true });
     }
     const accept = overlay.querySelector<HTMLButtonElement>("[data-proposal-accept]");
     if (accept) {
@@ -702,7 +713,7 @@ export function mountWelcome(
     overlay.classList.toggle("gx-welcome--asking", busy);
     askInput.disabled = busy || !requestEnabled;
     askSend.disabled = busy || !requestEnabled;
-    askSend.textContent = busy ? "Composing…" : "Ask";
+    askSend.textContent = busy ? (center ? "Préparation…" : "Composing…") : requestLabel;
     askInput.setAttribute("aria-busy", String(busy));
   };
 
@@ -745,6 +756,10 @@ export function mountWelcome(
   const showTour = (state: NestorTourState): void => {
     if (!nestorEnabled) return;
     const running = state.status === "running" && state.stop !== null;
+    const tour = overlay.querySelector<HTMLElement>("[data-nestor-tour]");
+    const start = overlay.querySelector<HTMLButtonElement>("[data-tour-start]");
+    const wasInTour = tour?.contains(document.activeElement);
+    const fromStart = running && start === document.activeElement;
     overlay.classList.toggle("gx-welcome--touring", running);
     const position = overlay.querySelector<HTMLElement>("[data-tour-position]");
     const line = overlay.querySelector<HTMLElement>("[data-tour-line]");
@@ -757,7 +772,7 @@ export function mountWelcome(
       // makes `[data-tour-stop]` resolve to two unrelated elements.
       delete overlay.dataset.tourStopId;
       // The button that started it takes the keyboard back, exactly as the proposal card does.
-      if (tourWasFocused()) overlay.querySelector<HTMLButtonElement>("[data-tour-start]")?.focus();
+      if (wasInTour) start?.focus();
       return;
     }
     overlay.dataset.tourStopId = state.stop!.id;
@@ -765,7 +780,10 @@ export function mountWelcome(
     if (line) line.textContent = state.stop!.line;
     if (previous) previous.disabled = state.index === 0;
     // The last stop ends the tour rather than pretending there is somewhere else to go.
-    if (next) next.textContent = state.atLast ? "Finish" : "Next";
+    if (next) {
+      next.textContent = state.atLast ? "Finish" : "Next";
+      if (fromStart) next.focus({ preventScroll: true });
+    }
     if (dots) {
       dots.replaceChildren(...Array.from({ length: state.total }, (_, index) => {
         const dot = document.createElement("i");
@@ -774,10 +792,6 @@ export function mountWelcome(
         return dot;
       }));
     }
-  };
-  const tourWasFocused = (): boolean => {
-    const card = overlay.querySelector<HTMLElement>("[data-nestor-tour]");
-    return card !== null && card.contains(document.activeElement);
   };
 
   overlay.querySelector<HTMLButtonElement>("[data-tour-start]")?.addEventListener("click", () => hooks?.tour?.onStart?.());
@@ -909,7 +923,43 @@ export function mountWelcome(
     netx.addEventListener("click", hooks.onOpenNetX);
     overlay.querySelector(".gx-actions")?.append(netx);
   }
-  if (!overlay.querySelector(".gx-actions")?.children.length) overlay.querySelector(".gx-actions")?.remove();
+  const dock = overlay.querySelector<HTMLElement>(".gx-actions");
+  if (dock && center) {
+    dock.lang = "fr";
+    const label = (selector: string, title: string, subtitle: string): void => {
+      const button = dock.querySelector(selector);
+      const hint = document.createElement("small");
+      hint.textContent = subtitle;
+      button?.replaceChildren(title, hint);
+    };
+    label(".gx-go-editor", "Studio", "Éditeur complet");
+    label(".gx-go-browse", "Explorer", "Scènes 3D");
+    label(".gx-go-games", "Jouer", "Jeux et défis");
+    const browse = dock.querySelector(".gx-go-browse");
+    if (browse) dock.querySelector(".gx-go-editor")?.after(browse);
+    const apps = document.createElement("details");
+    apps.className = "gx-center-apps";
+    apps.innerHTML = '<summary>Ateliers <small>Robots, mondes, données</small></summary><div class="gx-center-apps-list"><span>À découvrir</span></div>';
+    const list = apps.querySelector(".gx-center-apps-list")!;
+    if (hooks?.onOpenIsland) {
+      const island = document.createElement("button");
+      island.type = "button";
+      island.className = "gx-go-island";
+      island.textContent = "L’île d’Eko · monde vivant";
+      island.addEventListener("click", hooks.onOpenIsland);
+      list.append(island);
+    }
+    for (const button of dock.querySelectorAll(".gx-go-kidx,.gx-go-llmx,.gx-go-diskx,.gx-go-ecosystem,.gx-go-netx")) list.append(button);
+    apps.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !apps.open) return;
+      event.stopPropagation();
+      apps.open = false;
+      apps.querySelector("summary")?.focus();
+    });
+    dock.append(apps);
+    overlay.append(dock);
+  }
+  if (!dock?.children.length) dock?.remove();
   container.append(style, overlay);
   return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showNotice, setRequestBusy, setRequestEnabled, setRequestFocus, showTour, reset, dispose };
 }

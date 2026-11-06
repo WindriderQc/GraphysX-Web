@@ -8,10 +8,10 @@ const CLUSTER = "showroom-cubx";
 export function composeShowroom(api: GraphysXAgentWorldApi): void {
   const cubes = instantiateAgentWorldPrefab("cubx-assembly", {
     idPrefix: "showroom-cubx-frame",
-    palette: { primary: "#4c8799", secondary: "#8a5a34", emissive: "#123b48" },
+    palette: { primary: "#69a6b8", secondary: "#ba8154", emissive: "#143c54" },
     tags: ["showroom", "cubx"],
   }).map((part, index) => ({ ...part, ...(index === 0 ? { parentId: CLUSTER } : {}),
-    ...(part.material ? { material: { ...part.material, emissiveIntensity: 0.3, roughness: 0.32, metalness: 0.78 } } : {}),
+    ...(part.material ? { material: { ...part.material, emissiveIntensity: 0.42, roughness: 0.26, metalness: 0.64 } } : {}),
     ...(part.type === "cylinder" ? { geometry: { ...part.geometry, radialSegments: 32 } } : {}) }));
 
   const stack: AgentWorldEntityDefinition[] = [
@@ -37,7 +37,11 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     tags: ["showroom", "kinetic"],
   }));
   const entities: AgentWorldEntityDefinition[] = [
-    { id: "fill-light", type: "ambient-light", intensity: 0.3, material: { color: "#a8c7df" } },
+    { id: "fill-light", type: "ambient-light", intensity: 0.38, material: { color: "#a8c7df" } },
+    {
+      id: "showroom-cubx-rim-light", type: "point-light", marker: false, intensity: 24, distance: 15,
+      transform: { position: [3.8, 7.4, -7.5] }, material: { color: "#7bd9ff" }, tags: ["showroom"],
+    },
     {
       id: "showroom-terrain", type: "terrain", label: "Twilight Shore",
       terrain: { heightmap: "highlands", size: 150, segments: 96, heightScale: 8, heightOffset: -7.5,
@@ -110,8 +114,8 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
       transform: { rotationDegrees: [24, 0, 18] }, material: { color: place.color, emissive: "#3d788b", emissiveIntensity: 0.75, metalness: 0.6 }, tags: ["showroom", "waypoint"] },
   );
   const result = api.create({ schema: GRAPHYSX_AGENT_WORLD_SCHEMA, id: "showroom", label: "GraphysX Nocturnal Shore",
-    environment: { background: "#2b4154", sky: "clearblue",
-      lighting: { source: "hdri", hdri: "lilienstein", intensity: 0.35, yawDegrees: 24, backgroundIntensity: 0.5, backgroundBlur: 0.06 },
+    environment: { background: "#3b5367", sky: "clearblue",
+      lighting: { source: "hdri", hdri: "lilienstein", intensity: 0.45, yawDegrees: 24, backgroundIntensity: 0.43, backgroundBlur: 0.05 },
       envelope: { fogNear: 45, fogFar: 145, cameraFar: 240 }, post: { bloom: { strength: 0.28, radius: 0.3, threshold: 0.92 } },
       ground: { visible: false, size: 60, color: "#17242e", grid: false, gridColor: "#243b48" } }, entities });
   if (!result.ok) throw new Error(`Showroom composition failed: ${result.error}`);

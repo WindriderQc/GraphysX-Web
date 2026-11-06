@@ -2,9 +2,9 @@ import type { AgentWorldCommand, AgentWorldDefinition, AgentWorldEntityDefinitio
 
 export const FIRST_CREATION_ID = "lantern-garden";
 export const FIRST_CREATION_TONES = [
-  { id: "aurora", name: "Aurore", color: "#59ead5", core: "#baffeb", light: "#6cf3df" },
-  { id: "ember", name: "Braise", color: "#ffa25c", core: "#ffdfa0", light: "#ffab66" },
-  { id: "iris", name: "Iris", color: "#b39afa", core: "#e8d8ff", light: "#b69cff" },
+  { id: "aurora", name: "Aurore", color: "#59ead5", core: "#73bfb4", light: "#6cf3df" },
+  { id: "ember", name: "Braise", color: "#ffa25c", core: "#d79267", light: "#ffab66" },
+  { id: "iris", name: "Iris", color: "#b39afa", core: "#a292e2", light: "#b69cff" },
 ] as const;
 export type FirstCreationTone = typeof FIRST_CREATION_TONES[number];
 
@@ -25,12 +25,14 @@ export function firstCreationCanTune(definition: AgentWorldDefinition | null): b
     types.get(SPARKS) === "emitter" && TRIM.every((id) => types.get(id) === "torus");
 }
 
-export function firstCreationToneCommands(tone: FirstCreationTone): AgentWorldCommand[] {
+export function firstCreationToneCommands(tone: FirstCreationTone, definition: AgentWorldDefinition | null): AgentWorldCommand[] {
+  const fireflies = definition?.entities.flatMap(({ id }) => id?.startsWith("garden-firefly-") ? [id] : []) ?? [];
   return [
     { op: "update", id: CORE, patch: { material: { color: tone.core, emissive: tone.color } } },
     { op: "update", id: LIGHT, patch: { material: { color: tone.light } } },
     { op: "update", id: SPARKS, patch: { emitter: { preset: "energy-orb", color: tone.color } } },
     ...TRIM.map((id): AgentWorldCommand => ({ op: "update", id, patch: { material: { emissive: tone.color } } })),
+    ...fireflies.map((id): AgentWorldCommand => ({ op: "update", id, patch: { material: { color: tone.color, emissive: tone.color } } })),
   ];
 }
 
@@ -50,17 +52,31 @@ export function composeFirstCreation(): AgentWorldDefinition {
     [-11, -12, 2.7], [-15, -17, 4.2], [-20, -27, 6.6], [-28, -31, 7],
     [-8, -23, 4.6], [-2, -30, 5.8], [6, -34, 7.4], [14, -30, 6], [19, -28, 4.7],
   ];
-  const trees: AgentWorldEntityDefinition[] = stoneClusters.map(([x, z, height], index) => ({
+  const trees: AgentWorldEntityDefinition[] = stoneClusters.flatMap(([x, z, height], index) => [{
     id: "garden-pine-" + index, type: "cone", geometry: { radius: height * 0.23, height, radialSegments: 7 },
     transform: { position: [x, height / 2 - 0.35, z], rotationDegrees: [0, 29 * index, 0] },
     material: { color: index % 2 ? "#152638" : "#1b3146", roughness: 0.94 },
-  }));
+  }, {
+    id: "garden-pine-lower-" + index, type: "cone", geometry: { radius: height * 0.28, height: height * 0.65, radialSegments: 7 },
+    transform: { position: [x, height * 0.29 - 0.35, z], rotationDegrees: [0, 29 * index, 0] },
+    material: { color: index % 2 ? "#172b38" : "#233e50", roughness: 0.96 },
+  }]);
   const markers: AgentWorldEntityDefinition[] = Array.from({ length: 7 }, (_, index) => {
     const angle = (index + 0.5) * Math.PI * 2 / 7;
     return {
       id: "garden-marker-" + index, type: "sphere", geometry: { radius: 0.077, radialSegments: 12 },
       transform: { position: [Math.cos(angle) * 3.65, 0.43, Math.sin(angle) * 3.65] },
       material: { color: "#ffc188", emissive: "#ff995c", emissiveIntensity: 1.35, roughness: 0.28 },
+    };
+  });
+  const fireflies: AgentWorldEntityDefinition[] = Array.from({ length: 15 }, (_, index) => {
+    const angle = index * 2.399963;
+    const radius = 1.44 + (index % 5) * 0.39;
+    return {
+      id: "garden-firefly-" + index, type: "icosahedron", geometry: { radius: 0.026 + (index % 4) * 0.009 },
+      transform: { position: [Math.cos(angle) * radius, 0.98 + (index % 6) * 0.34, Math.sin(angle) * radius] },
+      material: { color: tone.color, emissive: tone.color, emissiveIntensity: 1.1, roughness: 0.31 },
+      behaviors: [{ id: "float", type: "bob", axis: "y", amplitude: 0.17, frequencyHz: 0.45, phaseDegrees: index * 42 }],
     };
   });
   return {
@@ -88,6 +104,16 @@ export function composeFirstCreation(): AgentWorldDefinition {
           tintStrength: 0.73, tintDistance: 56, reflection: true, reflectionResolution: 256,
         },
       },
+      {
+        id: "garden-moon", type: "sphere", label: "Lune basse", geometry: { radius: 2.3, radialSegments: 48 },
+        transform: { position: [-22, 10, -42] },
+        material: { color: "#e4ad87", emissive: "#e6aa8e", emissiveIntensity: 0.67, roughness: 0.81 },
+      },
+      ...[[-17, -22, 13, 7], [10, -32, 14, 6]].map(([x, z, width, depth], index): AgentWorldEntityDefinition => ({
+        id: "garden-far-shore-" + index, type: "icosahedron", geometry: { radius: 1 },
+        transform: { position: [x, -0.66, z], scale: [width, 1.23, depth] },
+        material: { color: index === 0 ? "#243349" : "#1e3046", roughness: 0.97 },
+      })),
       disk("garden-island", -0.11, 4.55, 0.82, "#27354a"),
       disk("garden-terrace", 0.28, 4.23, 0.2, "#263e50"),
       disk("garden-pedestal", 0.55, 1.3, 0.5, "#314555"),
@@ -103,7 +129,7 @@ export function composeFirstCreation(): AgentWorldDefinition {
       {
         id: CORE, type: "icosahedron", label: "Cœur lumineux", geometry: { radius: 0.57 },
         transform: { position: [0, 2.32, 0], rotationDegrees: [9, 24, 13] },
-        material: { color: tone.core, emissive: tone.color, emissiveIntensity: 1.6, roughness: 0.24, metalness: 0.22 },
+        material: { color: tone.core, emissive: tone.color, emissiveIntensity: 0.86, roughness: 0.24, metalness: 0.22 },
         behaviors: [{ id: "garden-core-turn", type: "spin", axis: "y", speedDegrees: -17 }],
       },
       {
@@ -115,6 +141,7 @@ export function composeFirstCreation(): AgentWorldDefinition {
         emitter: { preset: "energy-orb", sizeScale: 1.25, speed: 0.76, spread: 2.9, color: tone.color, rate: 15, maxParticles: 48 },
       },
       ...markers,
+      ...fireflies,
       ...trees,
     ],
   };

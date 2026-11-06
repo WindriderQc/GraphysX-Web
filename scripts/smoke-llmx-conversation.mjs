@@ -387,6 +387,7 @@ try {
     await h.page.waitForFunction(() => window.__LLMX_SMOKE__.played.length === 2);
     await h.page.screenshot({ path: path.join(artifacts, 'llmx-conversation-replay.png') });
     await h.page.getByRole('button', { name: 'Quitter LLMx', exact: true }).click();
+    await h.page.locator('.gx-center-apps > summary').click();
     await h.page.getByRole('button', { name: 'LLMx · Forge nocturne', exact: true }).waitFor();
     await checkpoint(() => h.matching('/interrupt').length === 4);
     // Exit deliberately loads the Center document. Keep the synchronous audio-stop
