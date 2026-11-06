@@ -10,6 +10,7 @@ import { mulberry32 } from "./textures";
 import { PLANS, Track, boardInfo, type SectorKind } from "./track";
 import { Combat, MAX_CHARGES, type Fighter } from "./combat";
 import { SpeedStreaks, createNeonEnvironment } from "./remaster";
+import { INTRO_LENGTH, RaceIntro } from "./intro";
 import { CYBERJOBE_AHEAD, GATE_BONUS, RaceWorld, createSkies, type Blast, type Difficulty, type Obstacle } from "./world";
 
 /*
@@ -645,10 +646,12 @@ interface Settings {
    * arcade style, stick up to climb. Applies to keyboard, pads and Quest, never to menus.
    */
   invertY: [boolean, boolean];
+  /** Cyberjobe opens the track before the countdown (a press skips it). */
+  intro: boolean;
 }
 
 const SETTINGS_KEY = "graphysx.cyberRace.settings";
-const settings: Settings = { course: 1, level: 1, mode: 0, plan: 0, sound: true, crosshair: false, invertY: [true, true] };
+const settings: Settings = { course: 1, level: 1, mode: 0, plan: 0, sound: true, crosshair: false, invertY: [true, true], intro: true };
 const questBrowser = /OculusBrowser|Quest/i.test(navigator.userAgent);
 document.body.classList.toggle("quest-browser", questBrowser);
 try {
@@ -662,6 +665,7 @@ try {
     settings.plan = pick(saved.plan, PLAN_KEYS.length - 1, settings.plan);
     settings.sound = typeof saved.sound === "boolean" ? saved.sound : settings.sound;
     settings.crosshair = typeof saved.crosshair === "boolean" ? saved.crosshair : settings.crosshair;
+    settings.intro = typeof saved.intro === "boolean" ? saved.intro : settings.intro;
     const inv = saved.invertY;
     if (Array.isArray(inv)) {
       settings.invertY = [typeof inv[0] === "boolean" ? inv[0] : true, typeof inv[1] === "boolean" ? inv[1] : true];
@@ -776,6 +780,12 @@ let track: Track | null = null;
 let world: RaceWorld | null = null;
 let raceTime = 0;
 let countdown = 0;
+/** Cyberjobe's intro, alive from the start of a race until he has faded. */
+let intro: RaceIntro | null = null;
+/** The board's name waits for the end of the intro. */
+let introPending = false;
+/** A skip needs a fresh press, not the one that started the race. */
+let introArmed = false;
 let lastCount = 0;
 let finishers = 0;
 let endDeadline = Infinity;
@@ -1084,20 +1094,74 @@ function startRace(newSeed: boolean): void {
   raceTime = 0;
   Object.assign(finale, { started: false, exploded: false, left: 0, total: 0, lastTick: 0 });
   world.rage = 0;
-  countdown = 3.6;
+  intro?.dispose();
+  intro = settings.intro ? new RaceIntro(track) : null;
+  if (intro) scene.add(intro.group);
+  introPending = intro !== null;
+  introArmed = false;
+  countdown = 3.6 + (intro ? INTRO_LENGTH : 0);
   lastCount = 4;
   phase = "countdown";
   menuEl.classList.add("hidden");
   overEl.classList.add("hidden");
   helpEl.classList.add("hidden");
   setPaused(false);
-  for (const p of pilots) {
-    p.hud.message(`TABLEAU 1 · ${track.sectors[0].info.name}`, 2.2);
+  if (!intro) announceFirstBoard();
+}
+
+function announceFirstBoard(): void {
+  if (!track) return;
+  for (const p of pilots) p.hud.message(`TABLEAU 1 · ${track.sectors[0].info.name}`, 2.2);
+}
+
+/** Skips Cyberjobe's intro: the curtain opens and the countdown starts. */
+function skipIntro(): void {
+  if (!intro || !introPending) return;
+  intro.skip();
+  countdown = Math.min(countdown, 3.6);
+}
+
+/** Plays the intro's cues and drops it once he has faded. */
+function updateIntro(dt: number): void {
+  if (!intro) return;
+  if (introPending) {
+    const pressing = pilots.some((p) => {
+      if (!p.active || p.cpu) return false;
+      const control = input.pilot(p.index);
+      return control.fire || control.throttle > 0.6;
+    });
+    if (introArmed && pressing) skipIntro();
+    if (!pressing) introArmed = true;
+  }
+  for (const cue of intro.update(dt, worldTime)) {
+    if (cue === "appear") {
+      sparkColor.setHex(0xffd27a);
+      sparks.burst(intro.centre, sparkColor, 140, 16);
+      voice.say("Welcome to cyberspace.", true);
+    } else if (cue === "open") {
+      audio.portal();
+      voice.say("The track is open.", true);
+      for (const p of pilots) if (!p.cpu && p.active) input.rumble(p.index, 0.4, 0.6, 500);
+    } else {
+      sparkColor.setHex(0xfff0c0);
+      sparks.burst(intro.centre, sparkColor, 160, 20);
+    }
+  }
+  if (introPending && countdown <= 3.6) {
+    introPending = false;
+    announceFirstBoard();
+  }
+  if (intro.finished) {
+    intro.dispose();
+    intro = null;
   }
 }
 
 function showMenu(): void {
   void vrSession?.end().catch(() => undefined);
+  intro?.dispose();
+  intro = null;
+  introPending = false;
   storyChapter = null;
   for (const p of pilots) {
     p.active = true;
@@ -1814,6 +1878,7 @@ function updateFinale(dt: number): void {
 
 function step(dt: number): void {
   if (!track || !world) return;
+  updateIntro(dt);
   if (phase === "countdown") {
     countdown -= dt;
     const n = Math.ceil(countdown);
@@ -2629,6 +2694,14 @@ Object.assign(window, {
     handleEvents(actions.map((action) => ({ action, source })));
     return { phase, paused };
   },
+  /** Cyberjobe's intro while it plays (null once he has faded or when it is off). */
+  get intro() {
+    return intro ? { time: intro.time, opened: intro.opened, pending: introPending } : null;
+  },
+  get countdown() {
+    return countdown;
+  },
+  skipIntro: () => skipIntro(),
   get world() {
     return world;
   },

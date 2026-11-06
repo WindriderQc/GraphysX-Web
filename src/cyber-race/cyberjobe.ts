@@ -106,6 +106,18 @@ export class Cyberjobe {
     });
   }
 
+  /**
+   * Arms for the race intro, after update(): `raise` lifts them from hanging to level, `open`
+   * sweeps them from crossed in front of him to spread wide, one hand leading.
+   */
+  pose(raise: number, open: number): void {
+    this.arms.forEach((arm, i) => {
+      const side = i === 0 ? -1 : 1;
+      const lead = side > 0 ? open : Math.max(0, (open - 0.15) / 0.85);
+      arm.rotation.set(0, side * (-1.25 + 1.4 * lead), side * (-1.2 + 1.2 * raise));
+    });
+  }
+
   dispose(): void {
     for (const item of this.disposables) item.dispose();
   }
