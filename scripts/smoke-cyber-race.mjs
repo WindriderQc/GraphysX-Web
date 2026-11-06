@@ -103,6 +103,8 @@ try {
     c.advance(2);
     return {
       magnetic: { linked: linked.length, group: group.size, chained: [...group].every((o) => o.destroyed), drained: w.blasts.length === 0 },
+      // Every ring can be taken (none inside an obstacle or out of reach of a gate).
+      unreachableRings: w.rings.filter((r) => !w.ringReachable(r.s, r.ox, r.oy)).length,
       sectors: c.world.track.sectors.map((s) => s.kind),
       lengths: c.world.track.sectors.map((s) => s.end - s.start),
       phased: c.world.track.sectors.every((s) => (s.info.phases || []).length >= 2),
@@ -209,6 +211,7 @@ const ok =
   out.remaster?.magnetic?.group >= 3 &&
   out.remaster?.magnetic?.chained === true &&
   out.remaster?.magnetic?.drained === true &&
+  out.remaster?.unreachableRings === 0 &&
   out.remaster?.boosts > 0 &&
   out.remaster?.progressed === true &&
   out.remasterEnd?.phase === "over" &&

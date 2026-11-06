@@ -177,7 +177,11 @@ export function buildMagneticField(kit: BoardKit, sector: Sector): void {
     const index = counters[spec.kind];
     counters[spec.kind] += 1;
     const o: Obstacle = { kind: "mine", s: spec.s, ox: spec.ox, oy: spec.oy, r: spec.size, angle: 0, span: 0, spin: 0, breakable: true };
-    if (spec.orbit) o.aim = [spec.orbit.cx, spec.orbit.cy];
+    if (spec.orbit) {
+      o.aim = [spec.orbit.cx, spec.orbit.cy];
+      // The necklace's clear middle, for rings placed through it.
+      o.gap = spec.orbit.r - spec.size;
+    }
     const mine: Mine = {
       ...spec,
       o,

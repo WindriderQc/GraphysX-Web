@@ -1862,10 +1862,15 @@ function step(dt: number): void {
   }
   for (const blast of world.blasts) applyBlast(blast);
   world.blasts.length = 0;
+  // Sand-storm streaks: only in the golden worlds that ask for them.
   for (const p of pilots) {
-    const show = remasterRace && p.active && !p.cpu && !p.destroyed;
+    const sand = track.sectorAt(p.s).info.streaks;
+    const show = remasterRace && p.active && !p.cpu && !p.destroyed && sand !== undefined;
     p.streaks.mesh.visible = show;
-    if (show) p.streaks.update(track, p.s, p.ox, p.oy, p.speed, (s) => track!.boundAt(s));
+    if (show) {
+      p.streaks.setColor(sand);
+      p.streaks.update(track, p.s, p.ox, p.oy, p.speed, (s) => track!.boundAt(s));
+    }
   }
   // Solo and in the headset, the rival's engine sits where the rival is.
   if (!twoPlayers()) {

@@ -30,6 +30,8 @@ export interface SectorInfo {
   length?: number;
   /** Tube radius multiplier along the board (u = 0 at its start, 1 at its end). */
   profile?: (u: number) => number;
+  /** Sand-storm streaks around the pilot in this colour (notre version, golden worlds only). */
+  streaks?: number;
   /** Phases announced on the HUD as a pilot reaches each share of the board. */
   phases?: Array<{ u: number; name: string; alert?: boolean; voice?: string; rumble?: boolean }>;
 }
@@ -132,9 +134,9 @@ const NOTRE_VERSION: Partial<Record<SectorKind, Partial<SectorInfo>>> = {
     ]
   },
   shards: { length: 2600, phases: [{ u: 0.3, name: "AVERSE" }, { u: 0.6, name: "TEMPÊTE DE CRISTAUX" }] },
-  thorns: { length: 2900, phases: [{ u: 0.3, name: "CANYON" }, { u: 0.6, name: "FORÊT D'ÉPINES" }] },
+  thorns: { length: 2900, streaks: 0xffb070, phases: [{ u: 0.3, name: "CANYON" }, { u: 0.6, name: "FORÊT D'ÉPINES" }] },
   kaleido: { length: 2650, phases: [{ u: 0.3, name: "ACCÉLÉRATION" }, { u: 0.6, name: "HYPNOSE" }] },
-  wave: { length: 2300, phases: [{ u: 0.3, name: "HOULE" }, { u: 0.6, name: "DÉFERLANTE" }] },
+  wave: { length: 2300, streaks: 0xffd27a, phases: [{ u: 0.3, name: "HOULE" }, { u: 0.6, name: "DÉFERLANTE" }] },
   network: {
     length: 2500,
     phases: [
