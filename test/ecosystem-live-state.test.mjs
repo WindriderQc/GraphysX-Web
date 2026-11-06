@@ -180,3 +180,35 @@ test("the status layer updates every covered node in place, expires by host fram
     assert.equal(scene.children.length, 0); assert.equal(surface.children.length, 0);
   } finally { globalThis.document = original; }
 });
+
+test("v2 distinguishes collector, process, interface, network, storage and unobserved scopes", () => {
+  const sources = ["native_process", "http_interface", "host_collector", "monitoring_collector", "storage_health", "network_presence", "unobserved", "observation"];
+  for (const source of sources) {
+    const input = payload([{ ...node(), source, state: source === "unobserved" ? "unknown" : "offline",
+      ...(source === "unobserved" && { observedAt: null, expiresAt: null, freshness: "unknown" }) }]);
+    input.contract = "agentx.ecosystem-live/v2";
+    const store = createEcosystemLiveState();
+    assert.equal(store.set(input), true, source);
+    const label = store.view(at).nodes[0].label;
+    if (source === "unobserved") assert.equal(label, "Non observé");
+    if (source === "network_presence") assert.equal(label, "Non vu");
+    if (source.endsWith("collector")) assert.equal(label, "Collecteur inaccessible");
+    input.contract = "agentx.ecosystem-live/v1";
+    assert.equal(parseEcosystemLivePayload(input), null, "v1 cannot silently acquire new scopes");
+  }
+  const invalid = payload([{...node(),source:"unobserved"}]); invalid.contract = "agentx.ecosystem-live/v2";
+  assert.equal(parseEcosystemLivePayload(invalid),null,"an unobserved node cannot claim healthy evidence");
+});
+
+test("v2 covers up to 64 private components without turning cached network presence into a recent sighting", () => {
+  const ids = Array.from({length:64},(_,i) => `component-${i}`);
+  const catalog = {ecoNode: id => ids.includes(id) ? {id} : null};
+  const input = payload(ids.map(id => ({...node(id),source:"network_presence",observedAt:iso(-600000)})));
+  input.contract = "agentx.ecosystem-live/v2";
+  assert.equal(parseEcosystemLivePayload(input,catalog).nodes.length,64);
+  const store = createEcosystemLiveState(catalog); assert.equal(store.set(input),true);
+  assert.equal(store.view(at).nodes[0].observedAt,iso(-600000));
+  assert.equal(store.view(at+10000).nodes[0].displayState,"unknown");
+  input.nodes.push({...node("extra"),source:"native_process"});
+  assert.equal(parseEcosystemLivePayload(input,catalog),null);
+});
