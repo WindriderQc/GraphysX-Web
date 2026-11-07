@@ -109,6 +109,7 @@ Preserve `.graphysx-store/`: it is user content, not disposable build output.
 | --- | --- |
 | Routes and application composition | `src/main.ts` |
 | Renderer and shared frame loop | `src/platform-host.ts` |
+| Opt-in VR workshop and reusable hands/controllers | `?app=vr-lab`, `src/vr-lab-app.ts`, `src/xr/`; see [VR foundation](docs/VR_FOUNDATION.md) |
 | Scene vocabulary, simulation and agent API | `src/agent-world-runtime.ts`, `src/agent-world-api.ts` |
 | Human editor and shared styling | `src/platform-editor.ts`, `src/platform-theme.ts` |
 | KidX programs and controls | `src/ev3-first-program.ts`, `src/ev3-program-library.ts`, `src/ev3-mission-strip.ts` |

@@ -63,6 +63,11 @@ export class AgentWorldAudioLayer {
     window.addEventListener("keydown", this.resumeContext, { capture: true });
   }
 
+  /** Keep spatial audio at the active viewing camera, including the tracked XR head. */
+  setCamera(camera: Camera): void {
+    camera.add(this.listener);
+  }
+
   /** How many sound entities currently have an audio node. Smokes read this. */
   get trackedCount(): number {
     return this.tracked.size;

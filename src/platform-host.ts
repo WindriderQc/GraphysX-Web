@@ -269,6 +269,8 @@ export class PlatformHost {
   private frame = 0;
   private disposed = false;
   private framesSuspended = false;
+  private immersiveCamera: PerspectiveCamera | null = null;
+  private desktopControlsEnabled = true;
   private readonly unsubscribeEvents: () => void;
   /**
    * The audio half of `sound` entities: the runtime keeps a placed marker + config, this
@@ -336,6 +338,7 @@ export class PlatformHost {
     installPlatformTheme();
     this.renderProfile = chooseRenderProfile(this.container.clientWidth || window.innerWidth, this.lightRender);
     this.renderer = new WebGLRenderer({ antialias: !this.lightRender, powerPreference: "high-performance" });
+    this.renderer.xr.addEventListener("sessionend", this.onResize);
     if (this.lightRender) document.documentElement.dataset.gxLightRender = "true";
     // `setSize(..., false)` deliberately leaves CSS sizing alone. The clean-host route does
     // not load the legacy `.viewport canvas` stylesheet, so without an explicit client size a
@@ -515,6 +518,17 @@ export class PlatformHost {
   /** True while {@link setFramesSuspended} holds the frame loop. */
   get framesAreSuspended(): boolean {
     return this.framesSuspended;
+  }
+
+  /** XR adapters lend a tracked camera to the same renderer and frame loop. */
+  setImmersiveCamera(camera: PerspectiveCamera | null): void {
+    if (camera === this.immersiveCamera) return;
+    if (camera && !this.immersiveCamera) this.desktopControlsEnabled = this.controls.enabled;
+    this.immersiveCamera = camera;
+    this.controls.enabled = camera ? false : this.desktopControlsEnabled;
+    this.audio.setCamera(camera ?? this.camera);
+    // Our end listener may run before WebXRManager restores its desktop framebuffer.
+    if (!camera) queueMicrotask(() => { if (!this.disposed) this.resize(); });
   }
 
   /** Frames rendered since construction (used by smoke tests to prove the loop runs). */
@@ -1409,32 +1423,36 @@ export class PlatformHost {
     }
     this.updateDayNight();
     this.audio.sync();
-    this.advanceFocus(delta);
+    if (!this.immersiveCamera) this.advanceFocus(delta);
     // After advanceFocus, so an intro whose camera move landed (or was grabbed away) this
     // frame settles the exposure in the same frame rather than a frame late.
-    this.updateIntro(delta);
+    if (!this.immersiveCamera) this.updateIntro(delta);
     // The chase camera replaces the orbit update for the frame while play has a steerable
     // subject; every other surface keeps OrbitControls exactly as before.
-    if (this.currentMode === "play" && this.chaseTargetId) this.updateChase(delta);
-    else this.controls.update();
+    if (!this.immersiveCamera) {
+      if (this.currentMode === "play" && this.chaseTargetId) this.updateChase(delta);
+      else this.controls.update();
+    }
     const auxiliaryPasses = this.scheduleAuxiliaryPasses(delta);
     // Shadow maps and planar water both re-render scene geometry. Their independent budgets
     // are arbitrated here so they never land on the same main frame and create a long spike.
     this.renderer.shadowMap.needsUpdate = auxiliaryPasses.shadow;
     for (const surface of this.waterSurfaces) {
-      surface.setReflectionRefreshEnabled(auxiliaryPasses.reflection);
+      surface.setReflectionRefreshEnabled(!this.immersiveCamera && auxiliaryPasses.reflection);
     }
     // One render call either way — the composer's RenderPass is the same scene/camera
     // draw, followed by the passes the scene opted into.
-    if (this.composer) this.composer.render();
-    else this.renderer.render(this.scene, this.camera);
-    for (const listener of this.afterRenderListeners) {
+    if (this.composer && !this.immersiveCamera) this.composer.render();
+    else this.renderer.render(this.scene, this.immersiveCamera ?? this.camera);
+    // Desktop insets can change scissor/viewport and render extra cameras. Never send them
+    // into the headset framebuffer. They resume unchanged when the XR adapter exits.
+    for (const listener of this.immersiveCamera ? [] : this.afterRenderListeners) {
       try { listener(delta); }
       catch (error) { console.error("Post-render subscriber failed", error); }
     }
     // The 2D layer draws in THIS frame, right after the 3D render — one shared loop, never a
     // second rAF. It is the last thing composited, so it sits over the scene.
-    if (this.overlaySketch && this.overlayCtx && this.overlayWidth > 0) {
+    if (!this.immersiveCamera && this.overlaySketch && this.overlayCtx && this.overlayWidth > 0) {
       this.overlayElapsed += delta;
       this.overlaySketch.draw(this.overlayCtx, delta, this.overlayElapsed, this.overlayWidth, this.overlayHeight);
       this.overlayFrame += 1;
@@ -1539,6 +1557,7 @@ export class PlatformHost {
   }
 
   private resize(): void {
+    if (this.renderer.xr.isPresenting) return;
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
     this.applyRenderProfile(chooseRenderProfile(width, this.lightRender));
@@ -1582,6 +1601,7 @@ export class PlatformHost {
     this.playLayer?.();
     this.overlayCanvas.remove();
     window.removeEventListener("resize", this.onResize);
+    this.renderer.xr.removeEventListener("sessionend", this.onResize);
     this.resizeObserver?.disconnect();
     this.editor?.dispose();
     this.bridge.dispose();

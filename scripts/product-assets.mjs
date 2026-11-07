@@ -79,6 +79,8 @@ const LEGACY_BOOT_ASSETS = [
 
 export async function productAssetManifest() {
   const wanted = new Set();
+  // The XR adapter uses same-origin generic input profiles, never a required model CDN.
+  for (const url of await anyAssetLiterals("src/xr/vr-input.ts")) wanted.add(url);
 
   // Skies: every set in the vocabulary, all six cube faces. Whole directory rather than
   // guessing face names off `extension`, so a set with an odd file still ships complete.

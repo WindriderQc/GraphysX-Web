@@ -166,11 +166,14 @@ async function waitForExactCollider(
   throw new Error(`Timed out waiting for ${entityId}'s exact collider`);
 }
 
-// `?host=previews` — the workshop preview index. Development only, and guarded by
-// `import.meta.env.DEV` rather than a runtime flag so the whole subtree is dead code in a
-// production build: these are restoration harnesses, not product, and shipping them would
-// also drag archive assets into the release manifest the product deliberately prunes.
-if (mode === "previews" && import.meta.env.DEV) {
+// Opt-in VR entry. Keep the XR factories out of ordinary routes until requested.
+if (appParam === "vr-lab") {
+  root.style.position = "fixed";
+  root.style.inset = "0";
+  void import("./vr-lab-app").then(({ mountVrLab }) => mountVrLab(root))
+    .catch((error: unknown) => showStartupError(root, error));
+} else if (mode === "previews" && import.meta.env.DEV) {
+  // Restoration-only preview index. The DEV guard removes its archive subtree from builds.
   root.style.position = "fixed";
   root.style.inset = "0";
   void Promise.all([import("./styles.css"), import("./preview-host")]).then(([, { mountPreviewHost }]) => {
