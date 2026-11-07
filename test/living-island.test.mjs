@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { Box3 } from "three";
 import { build } from "vite";
 import { startWorldServer } from "../world-service/server.mjs";
@@ -32,7 +32,7 @@ let m;
 
 before(async () => {
   outDir = mkdtempSync(join(tmpdir(), "graphysx-living-island-"));
-  await build({ configFile: new URL("vite.world-service.config.ts", root).pathname, root: root.pathname, build: { outDir, emptyOutDir: true }, logLevel: "silent" });
+  await build({ configFile: fileURLToPath(new URL("vite.world-service.config.ts", root)), root: fileURLToPath(root), build: { outDir, emptyOutDir: true }, logLevel: "silent" });
   m = await import(pathToFileURL(join(outDir, "world.js")).href);
 });
 after(() => { if (outDir) rmSync(outDir, { recursive: true, force: true }); });
