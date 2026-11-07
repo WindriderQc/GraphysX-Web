@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { Group } from "three";
 import { importBrowserModule } from "./support/import-browser-module.mjs";
 
-const { readGiantXrPose, giantXrWorldPoint, freshGiantXrRelease, GIANT_XR_FRESH_MS } = await importBrowserModule(new URL("../src/ballsy-giant-xr.ts", import.meta.url));
+const { readGiantXrPose, giantXrWorldPoint, freshGiantXrRelease, observeGiantXrSelect, GIANT_XR_FRESH_MS } = await importBrowserModule(new URL("../src/ballsy-giant-xr.ts", import.meta.url));
 const { BallsyThrowGesture } = await importBrowserModule(new URL("../src/ballsy-throw.ts", import.meta.url));
 const reference = {};
 const pose = (position = [0, 1, 0], emulatedPosition = false) => ({ emulatedPosition,
@@ -20,6 +20,26 @@ function fixture(hand = false) {
   return { source, poses, frame };
 }
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
+
+test("native select diagnostics count both edges once, exclude squeeze, and detach across sessions", () => {
+  const sessions = [new EventTarget(), new EventTarget()], events = [];
+  const emit = (session, ...types) => types.forEach(type => session.dispatchEvent(new Event(type)));
+  const detach = observeGiantXrSelect(sessions[0], phase => events.push(phase));
+  emit(sessions[0], "selectstart", "squeezestart", "squeezeend", "selectend");
+  assert.deepEqual(events, ["start", "end"]);
+  detach(); detach();
+  const detachNext = observeGiantXrSelect(sessions[1], phase => events.push(phase));
+  emit(sessions[0], "selectstart", "selectend");
+  emit(sessions[1], "selectstart", "selectend");
+  assert.deepEqual(events, ["start", "end", "start", "end"]);
+  detachNext();
+  const detachReentry = observeGiantXrSelect(sessions[0], phase => events.push(phase));
+  emit(sessions[0], "selectstart", "selectend");
+  assert.deepEqual(events, ["start", "end", "start", "end", "start", "end"]);
+  detachReentry();
+  for (const session of sessions) emit(session, "selectstart", "selectend");
+  assert.equal(events.length, 6, "disposed observers retain no listeners");
+});
 
 test("giant uses the real grip and requires its native ray pose for controllers", () => {
   const { source, poses, frame } = fixture();

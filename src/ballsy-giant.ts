@@ -12,7 +12,7 @@ import { BALLOON_GRIP_OFFSET, makeGiantBalloon, disposeGiantProp } from "./balls
 import { fitBallsyTableShadows } from "./ballsy-lighting";
 import { VrInputRig, type VrInputAction } from "./xr/vr-input";
 import { VrSessionController } from "./xr/vr-session";
-import { GIANT_XR_FRESH_MS, readGiantXrPose, giantXrWorldPoint, freshGiantXrRelease, type GiantXrRelease } from "./ballsy-giant-xr";
+import { GIANT_XR_FRESH_MS, readGiantXrPose, giantXrWorldPoint, freshGiantXrRelease, observeGiantXrSelect, type GiantXrRelease } from "./ballsy-giant-xr";
 import { ballsySlimeEntities, projectBallsySlime } from "./ballsy-slime-scene";
 import { BALLSY_SLIME_LIMITS, parseGiantCommand } from "../server/ballsy-protocol.mjs";
 import { showStartupError } from "./startup-error";
@@ -93,6 +93,7 @@ for (let i = 0; i < 3; i++) {
 }
 let disposed = false, frameCount = 0, projectedKey = "", activeOwner: object | string | null = null;
 let lastHold = 0, lastMessage = "";
+// Native select event counts, independent of accepted/cancelled gameplay actions.
 let selectStarts = 0, selectEnds = 0;
 let placementPending = false, placements = 0;
 const headRotation = new Quaternion(), headForward = new Vector3();
@@ -145,12 +146,14 @@ const xrSession = new VrSessionController({
     renderer.xr.setReferenceSpaceType(referenceSpaceType);
     await renderer.xr.setSession(session);
     if (xrSession.session !== session) return;
+    detachXrSession?.();
+    const detachSelect = observeGiantXrSelect(session, (phase) => { if (phase === "start") selectStarts++; else selectEnds++; });
     const space = renderer.xr.getReferenceSpace();
     const changed = () => cancelXr("source-change");
     const reset = () => { cancelXr("reference-reset"); placementPending = true; };
     session.addEventListener("inputsourceschange", changed);
     space?.addEventListener("reset", reset);
-    detachXrSession = () => { session.removeEventListener("inputsourceschange", changed); space?.removeEventListener("reset", reset); };
+    detachXrSession = () => { detachSelect(); session.removeEventListener("inputsourceschange", changed); space?.removeEventListener("reset", reset); };
   },
   onStarted: (session) => { placementPending = true; xrInput.setActive(session.visibilityState === "visible"); },
   onInterrupted: () => { cancelXr("session-interrupted"); xrInput.setActive(false); },
@@ -279,7 +282,6 @@ function beginHand(index: number, event: VrInputAction): void {
     || now < handPoseAt[index] || now - handPoseAt[index] > GIANT_XR_FRESH_MS || inputHeld[index][input]) return;
   inputHeld[index][input] = true;
   if (input === "select" || event.source.hand) {
-    selectStarts++;
     const hit = rayTracked[index] ? target(controller) : null;
     if (hit !== null) { activate(hit); return; }
   }
@@ -294,7 +296,6 @@ function beginHand(index: number, event: VrInputAction): void {
   }
 }
 function endHand(index: number, event: VrInputAction): void {
-  if (event.action === "select" || event.source.hand) selectEnds++;
   inputHeld[index][event.action] = false;
   if (inputHeld[index].select || inputHeld[index].grab) return;
   if (mode === "shovel") release(controllers[index]);

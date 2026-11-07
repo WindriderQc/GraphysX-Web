@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Group, Matrix4, Vector3 } from 'three';
 import { VrInputRig } from '../src/xr/vr-input.ts';
+import { observeGiantXrSelect } from '../src/ballsy-giant-xr.ts';
 
 function fixture(t) {
   const spaces = Array.from({ length: 2 }, () => {
@@ -60,6 +61,25 @@ test('controller select and squeeze begin/end are independent and deduplicated',
     ['select', 'start', false], ['grab', 'start', false],
     ['select', 'end', false], ['grab', 'end', false],
   ]);
+});
+
+test('native release remains observable after tool cancellation without another gameplay end', t => {
+  const f = fixture(t); f.rig.setActive(true); f.connect(0, 'right');
+  const session = new EventTarget(), native = [];
+  const detach = observeGiantXrSelect(session, phase => native.push(phase));
+  t.after(detach);
+  const emit = type => { session.dispatchEvent(new Event(type)); f.emit(0, type); };
+  emit('selectstart'); f.rig.cancel(); f.rig.cancel();
+  assert.deepEqual(native, ['start'], 'cancellation is not a native release');
+  assert.deepEqual(f.events.map(event => [event.phase, event.cancelled]), [['start', false], ['end', true]]);
+  emit('selectend');
+  assert.deepEqual(native, ['start', 'end']);
+  assert.equal(f.events.length, 2, 'physical release cannot cause a second end or launch after cancellation');
+  emit('selectstart'); emit('selectend');
+  assert.deepEqual(native, ['start', 'end', 'start', 'end']);
+  assert.deepEqual(f.events.slice(2).map(event => [event.phase, event.cancelled]), [['start', false], ['end', false]]);
+  detach(); emit('selectstart'); emit('selectend');
+  assert.equal(native.length, 4, 'cleanup does not retain the diagnostic observer');
 });
 
 test('profile fetch failure retains the procedural controller without external requests', async t => {

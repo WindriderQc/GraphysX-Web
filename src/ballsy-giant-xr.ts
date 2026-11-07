@@ -1,6 +1,18 @@
 import { Quaternion, Vector3, type Object3D } from "three";
 
 export const GIANT_XR_FRESH_MS = 50;
+
+/** Diagnostics count native select edges (including pinch), never squeeze or synthetic cancellations. */
+export function observeGiantXrSelect(session: XRSession, record: (phase: "start" | "end") => void): () => void {
+  const start = (): void => record("start"), end = (): void => record("end");
+  session.addEventListener("selectstart", start);
+  session.addEventListener("selectend", end);
+  return () => {
+    session.removeEventListener("selectstart", start);
+    session.removeEventListener("selectend", end);
+  };
+}
+
 export type GiantXrPose = {
   kind: "controller" | "hand";
   position: [number, number, number];

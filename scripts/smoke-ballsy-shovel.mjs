@@ -16,7 +16,11 @@ if (!desktopOnly) {
 const app = await startBallsyServer({ port: 0, ...(process.env.SMOKE_DIST_ROOT ? { root: path.resolve(process.env.SMOKE_DIST_ROOT) } : {}) });
 const guestBase = new URL(app.url); guestBase.hostname = "localhost";
 const browser = await launchSmokeBrowser();
-const errors = [], report = {};
+const errors = [], report = {
+  profile: desktopOnly ? "Desktop only; no XR validation"
+    : "IWER Quest 2 stereo with synthetic host-input tracking; not physical hardware or Quest pose calibration",
+  physicalHeadset: false,
+};
 const host = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const giant = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 for (const page of [host, giant]) {
@@ -41,6 +45,27 @@ try {
     device.installRuntime({ forceInstall: true }); device.stereoEnabled = true; device.ipd = 0.064;
     device.position.set(0, 1.6, 0); device.quaternion.set(Math.sin(-0.45 / 2), 0, 0, Math.cos(-0.45 / 2));
     window.testHeadset = device;
+    // IWER's ordinary controller spaces correctly report emulatedPosition=true.
+    // Use its public host-input API for explicit synthetic 6DoF tracking, rather
+    // than changing that flag or weakening the product's lost/emulated-pose guard.
+    // Grip and ray share this fixture's pose; this is not Quest calibration evidence.
+    window.testTracking = device.enableHostInput();
+    window.testControllerPose = (hand, position, orientation) => {
+      const state = window.testTracking.get(hand);
+      state.targetRay.set([...position, ...orientation]); state.grip.set(state.targetRay);
+    };
+    window.testTrigger = (hand, value) => {
+      const state = window.testTracking.get(hand);
+      state.buttonValues[0] = value; state.buttonPressed[0] = value > .5 ? 1 : 0;
+      state.buttonTouched[0] = value > 0 ? 1 : 0;
+    };
+    for (const hand of ["left", "right"]) {
+      const state = window.testTracking.get(hand), controller = device.controllers[hand];
+      state.mode = runtime.XRHostInputMode.Controller;
+      state.targetRayValid = state.gripValid = true;
+      window.testControllerPose(hand, [controller.position.x, controller.position.y, controller.position.z],
+        [controller.quaternion.x, controller.quaternion.y, controller.quaternion.z, controller.quaternion.w]);
+    }
   };
   // One init script: Playwright does not guarantee the ordering of separate init scripts.
   if (!desktopOnly) await giant.addInitScript({ content: `${readFileSync(iwer, "utf8")}\n;(${installHeadset.toString()})();` });
@@ -72,32 +97,44 @@ try {
   await giant.waitForFunction(() => window.__BALLSY_GIANT__.state().view === "vr" && window.__BALLSY_GIANT__.state().eyes === 2);
   report.stereo = await guestState();
   assert.equal(report.stereo.placements, 1, "first tracked pose places the tabletop in front of the viewer");
+  report.tracking = await giant.evaluate(async () => {
+    const session = window.testHeadset.activeSession, reference = await session.requestReferenceSpace("local-floor");
+    return new Promise(resolve => session.requestAnimationFrame((_time, frame) => resolve(Array.from(session.inputSources, source => ({
+      hand: source.handedness,
+      poses: [source.targetRaySpace, source.gripSpace].map(space => {
+        const pose = frame.getPose(space, reference);
+        return { present: !!pose, emulatedPosition: pose?.emulatedPosition };
+      }),
+    })))));
+  });
+  assert.equal(report.tracking.length, 2, "the fixture supplies both controller sources");
+  assert.ok(report.tracking.every(source => source.poses.every(pose => pose.present && pose.emulatedPosition === false)),
+    "IWER host-input validity reaches native poses without changing the product tracking guard");
   await giant.screenshot({ path: path.join(art, "giant-stereo.png") });
 
   assert.equal(report.stereo.targets.length, 3, "VR has Exit, recenter and a secondary tool switch");
   const controllerPose = await giant.evaluate(() => {
-    const controller = window.testHeadset.controllers.right, head = window.testHeadset.position;
+    const controller = window.testTracking.right, head = window.testHeadset.position;
     const original = {
-      position: [controller.position.x, controller.position.y, controller.position.z],
-      quaternion: [controller.quaternion.x, controller.quaternion.y, controller.quaternion.z, controller.quaternion.w],
+      position: Array.from(controller.targetRay.slice(0, 3)),
+      quaternion: Array.from(controller.targetRay.slice(3, 7)),
     };
     const origin = [head.x + .25, head.y - .3, head.z - .25], target = window.__BALLSY_GIANT__.state().targets[2];
     const delta = target.map((value,axis) => value-origin[axis]), length = Math.hypot(...delta);
     const direction = delta.map(value => value/length), q = [direction[1], -direction[0], 0, 1-direction[2]], qLength = Math.hypot(...q);
-    controller.position.set(...origin); controller.quaternion.set(...q.map(value => value/qLength));
+    window.testControllerPose("right", origin, q.map(value => value/qLength));
     return original;
   });
   await giant.waitForFunction(() => window.__BALLSY_GIANT__.state().hoverTargets.includes(2));
   for (const mode of ["balloon", "shovel"]) {
-    await giant.evaluate(() => window.testHeadset.controllers.right.updateButtonValue("trigger", 1));
+    await giant.evaluate(() => window.testTrigger("right", 1));
     await giant.waitForFunction(mode => window.__BALLSY_GIANT__.state().balloon.mode === mode, mode);
     const ends = (await guestState()).selectEnds;
-    await giant.evaluate(() => window.testHeadset.controllers.right.updateButtonValue("trigger", 0));
+    await giant.evaluate(() => window.testTrigger("right", 0));
     await giant.waitForFunction(ends => window.__BALLSY_GIANT__.state().selectEnds > ends, ends);
   }
   await giant.evaluate(pose => {
-    const controller = window.testHeadset.controllers.right;
-    controller.position.set(...pose.position); controller.quaternion.set(...pose.quaternion);
+    window.testControllerPose("right", pose.position, pose.quaternion);
   }, controllerPose);
   report.xrToolSwitch = "Third 3D button switches shovel to balloon and back through trigger input";
   await giant.waitForFunction(() => window.__BALLSY_GIANT__.state().shovel.visible.some(Boolean));
@@ -106,13 +143,13 @@ try {
       const api = window.__BALLSY_GIANT__, state = api.state();
       const desired = api.terrainPoint(x,z,penetration).world;
       const actual = state.shovel.tipWorld[state.shovel.dominant];
-      const c = window.testHeadset.controllers.right;
-      c.position.set(c.position.x + desired[0] - actual[0], c.position.y + desired[1] - actual[1], c.position.z + desired[2] - actual[2]);
+      const c = window.testTracking.right.targetRay;
+      window.testControllerPose("right", desired.map((value, axis) => c[axis] + value - actual[axis]), Array.from(c.slice(3, 7)));
     }, {x,z,penetration});
     await giant.waitForTimeout(120);
   }
   await moveBlade(7, 1, -0.3);
-  await giant.evaluate(() => window.testHeadset.controllers.right.updateButtonValue("trigger", 1));
+  await giant.evaluate(() => window.testTrigger("right", 1));
   await giant.waitForFunction(() => window.__BALLSY_GIANT__.state().shovel.held);
   await moveBlade(7, 1, 0.18);
   const before = (await hostState()).volcano.earth.excavated;
@@ -127,7 +164,7 @@ try {
   await giant.evaluate(() => window.dispatchEvent(new Event("blur")));
   await host.waitForFunction(() => window.__BALLSY__.state().volcano.earth.stroke === null);
   assert.equal((await guestState()).shovel.held, false);
-  await giant.evaluate(() => window.testHeadset.controllers.right.updateButtonValue("trigger",0));
+  await giant.evaluate(() => window.testTrigger("right",0));
   await giant.evaluate(() => window.__BALLSY_GIANT__.endVR());
   await giant.waitForFunction(() => window.__BALLSY_GIANT__.state().view === "screen");
   // Session exit releases ownership; rejoin for the explicit mouse fallback.
@@ -160,7 +197,7 @@ try {
   await giant.screenshot({path:path.join(art,"desktop-direct-cut.png")});
   assert.deepEqual(errors, []);
   writeFileSync(path.join(art,"shovel-report.json"),JSON.stringify(report,null,2));
-  console.log(JSON.stringify({ok:true, profile:desktopOnly ? "Desktop only; no XR validation" : "IWER Quest 2 emulation, not physical hardware",cut:report.cut,desktopCut:report.desktopCut}));
+  console.log(JSON.stringify({ok:true, profile:report.profile,cut:report.cut,desktopCut:report.desktopCut}));
 } catch(error) {
   report.failure=String(error); report.errors=errors;
   try { report.guest=await guestState(); report.host=await hostState(); await giant.screenshot({path:path.join(art,"failure.png")}); } catch { /* retain initial error */ }
