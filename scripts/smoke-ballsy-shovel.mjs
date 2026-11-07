@@ -77,7 +77,10 @@ try {
   assert.equal(report.stereo.targets.length, 3, "VR has Exit, recenter and a secondary tool switch");
   const controllerPose = await giant.evaluate(() => {
     const controller = window.testHeadset.controllers.right, head = window.testHeadset.position;
-    const original = { position: controller.position.toArray(), quaternion: controller.quaternion.toArray() };
+    const original = {
+      position: [controller.position.x, controller.position.y, controller.position.z],
+      quaternion: [controller.quaternion.x, controller.quaternion.y, controller.quaternion.z, controller.quaternion.w],
+    };
     const origin = [head.x + .25, head.y - .3, head.z - .25], target = window.__BALLSY_GIANT__.state().targets[2];
     const delta = target.map((value,axis) => value-origin[axis]), length = Math.hypot(...delta);
     const direction = delta.map(value => value/length), q = [direction[1], -direction[0], 0, 1-direction[2]], qLength = Math.hypot(...q);

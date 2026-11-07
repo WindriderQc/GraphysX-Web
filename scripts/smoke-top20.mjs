@@ -19,6 +19,30 @@ const watch = (page, prefix = "") => {
   page.on("pageerror", (error) => pageErrors.push(`${prefix}${String(error)}`));
 };
 
+// v2 retains independent working copies. Identify the exact document and probe,
+// reject ambiguity, then keep its key through the recovery/quota assertions.
+const waitForDraftKey = async (page, worldId, entityId) => {
+  const handle = await page.waitForFunction(({ worldId, entityId }) => {
+    const keys = Object.keys(localStorage).filter((key) => {
+      if (!key.startsWith("graphysx.editor.draft.v2.")) return false;
+      const draft = JSON.parse(localStorage.getItem(key) ?? "null");
+      return draft?.definition?.id === worldId && draft.definition.entities.some((entity) => entity.id === entityId);
+    });
+    if (keys.length > 1) throw new Error(`Ambiguous draft for ${worldId}/${entityId}: ${keys.length}`);
+    const [key] = keys;
+    return keys.length === 1 ? key : false;
+  }, { worldId, entityId }, { timeout: SMOKE_TIMEOUT });
+  return handle.jsonValue();
+};
+const selectDraftForRecovery = async (page, key) => {
+  const choice = page.locator('select[aria-label="Draft to recover"]');
+  // The select is hidden for one candidate, but that candidate must still be
+  // our exact retained working copy, never whichever draft happens to be first.
+  if (await choice.isVisible()) await choice.selectOption(key);
+  const selected = await choice.inputValue();
+  if (selected !== key) throw new Error(`Recovery selected ${selected}, expected ${key}`);
+};
+
 const definition = {
   schema: "graphysx.agent-world/v2",
   id: "top20-editor",
@@ -43,22 +67,22 @@ try {
   await editor.waitForFunction(() => !!window.__GRAPHYSX__ && !!document.querySelector(".gx-ed-toolbar"), null, { timeout: SMOKE_TIMEOUT });
   await editor.evaluate((doc) => window.__GRAPHYSX__.load(doc), definition);
   await editor.evaluate(() => window.__GRAPHYSX__.spawn({ id: "draft-probe", type: "sphere" }));
-  await editor.waitForFunction(() => !!window.localStorage.getItem("graphysx.editor.draft.v1"), null, { timeout: SMOKE_TIMEOUT });
-  out.draft = await editor.evaluate(() => ({
+  const draftKey = await waitForDraftKey(editor, "top20-editor", "draft-probe");
+  out.draft = await editor.evaluate((key) => ({
     dirtyText: document.querySelector(".gx-ed-status")?.textContent ?? "",
-    draftWorld: JSON.parse(window.localStorage.getItem("graphysx.editor.draft.v1") ?? "null")?.definition?.id ?? null,
-  }));
+    draftWorld: JSON.parse(window.localStorage.getItem(key) ?? "null")?.definition?.id ?? null,
+  }), draftKey);
 
   await editor.reload({ waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await editor.waitForSelector(".gx-ed-recover:not([hidden])", { timeout: SMOKE_TIMEOUT });
+  await selectDraftForRecovery(editor, draftKey);
   await editor.click(".gx-ed-recover");
   await editor.waitForFunction(() => window.__GRAPHYSX__?.state()?.world?.id === "top20-editor", null, { timeout: SMOKE_TIMEOUT });
   out.draft.recovered = await editor.evaluate(() => window.__GRAPHYSX__.query({ ids: ["draft-probe"] }).length === 1);
 
   // A session-only cache must never turn a rejected durable write into a Save receipt.
   await editor.evaluate(() => window.__GRAPHYSX__.spawn({ id: "quota-probe", type: "box" }));
-  await editor.waitForFunction(() => JSON.parse(localStorage.getItem("graphysx.editor.draft.v1") ?? "null")
-    ?.definition?.entities.some((entity) => entity.id === "quota-probe"));
+  const quotaDraftKey = await waitForDraftKey(editor, "top20-editor", "quota-probe");
   await editor.evaluate(() => {
     window.__restoreStorage = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key, value) {
@@ -69,18 +93,19 @@ try {
   try {
     editor.once("dialog", (dialog) => dialog.accept("quota-slot"));
     await editor.locator(".gx-ed-toolbar").getByRole("button", { name: "Save", exact: true }).click();
-    out.quota = await editor.evaluate(() => ({
+    out.quota = await editor.evaluate((key) => ({
       status: document.querySelector(".gx-ed-status")?.textContent ?? "",
       stored: localStorage.getItem("graphysx.agent-world.v2.quota-slot"),
-      draftRetained: JSON.parse(localStorage.getItem("graphysx.editor.draft.v1") ?? "null")
+      draftRetained: JSON.parse(localStorage.getItem(key) ?? "null")
         ?.definition?.entities.some((entity) => entity.id === "quota-probe"),
       cacheRejected: !window.__GRAPHYSX__.load("quota-slot").ok,
-    }));
+    }), quotaDraftKey);
   } finally {
     await editor.evaluate(() => { Storage.prototype.setItem = window.__restoreStorage; delete window.__restoreStorage; });
   }
   await editor.reload({ waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await editor.waitForSelector(".gx-ed-recover:not([hidden])");
+  await selectDraftForRecovery(editor, quotaDraftKey);
   await editor.click(".gx-ed-recover");
   out.quota.recoveredAfterReload = await editor.evaluate(() => window.__GRAPHYSX__.query({ ids: ["quota-probe"] }).length === 1);
 
@@ -279,8 +304,19 @@ try {
   });
   await play.waitForTimeout(850);
   out.quickExit = await play.evaluate(() => {
-    const draft = JSON.parse(localStorage.getItem("graphysx.editor.draft.v1") ?? "null");
+    // Keep the original 850 ms observation point: do not wait again for a draft
+    // that should already have been flushed by the same-task Exit click.
+    const keys = Object.keys(localStorage).filter((key) => {
+      if (!key.startsWith("graphysx.editor.draft.v2.")) return false;
+      const draft = JSON.parse(localStorage.getItem(key) ?? "null");
+      return draft?.definition?.id === "graphysx-physics-sketchbook"
+        && draft.definition.entities.some((entity) => entity.id === "quick-exit-probe");
+    });
+    if (keys.length !== 1) throw new Error(`Expected one quick-exit draft, found ${keys.length}`);
+    const [key] = keys;
+    const draft = JSON.parse(localStorage.getItem(key));
     return {
+      key,
       currentWorld: window.__GRAPHYSX__.state().world.id,
       draftWorld: draft?.definition?.id,
       retained: draft?.definition?.entities.some((entity) => entity.id === "quick-exit-probe"),
@@ -289,6 +325,7 @@ try {
   await play.reload({ waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await play.click('.gx-welcome .gx-go-editor');
   await play.waitForSelector('.gx-ed-recover:not([hidden])');
+  await selectDraftForRecovery(play, out.quickExit.key);
   await play.click('.gx-ed-recover');
   out.quickExit.recoveredAfterReload = await play.evaluate(() => window.__GRAPHYSX__.query({ ids: ["quick-exit-probe"] }).length === 1);
   await context.close();
