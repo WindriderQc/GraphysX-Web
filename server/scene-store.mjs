@@ -24,6 +24,7 @@ import { decodeStoreName, encodeStoreName, legacyStoreNameCandidates } from "./s
 import { createAssetStore, handleAssetRequest } from "./asset-store.mjs";
 import { CORS_ALLOW_HEADERS, CORS_ALLOW_METHODS, readJsonBody, sendJson as send } from "./http-util.mjs";
 import { createLiveSessions } from "./live-sessions.mjs";
+import { createBallsyRoute } from "./ballsy-http.mjs";
 import { createResultsStore, handleResultsRequest } from "./results-store.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -496,7 +497,12 @@ export function createSceneStoreServer({
   // to it.
   const results = createResultsStore({ dir: resultsDir ?? join(store.dir, ".results") });
 
+  // Anonymous game rooms use their own short-lived capabilities, never the store token.
+  // nginx already strips /store/ and overwrites the forwarding headers on the loopback hop.
+  // Mount before generic CORS/OPTIONS so this same-origin-only API cannot inherit `*`.
+  const ballsy = createBallsyRoute({ trustedLoopbackProxy: true });
   const server = createServer((request, response) => {
+    if (ballsy(request, response)) return;
     void (async () => {
       const cors = guard.corsHeaders(request);
       const unauthorized = () =>

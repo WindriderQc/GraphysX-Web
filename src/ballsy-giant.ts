@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, Box3, BoxGeometry, CanvasTexture, Color, Group, Matrix4, Mesh, MeshStandardMaterial, PerspectiveCamera, Plane, Quaternion, Raycaster, Scene, SphereGeometry, CylinderGeometry, TorusGeometry, Vector2, Sprite, SpriteMaterial, SRGBColorSpace, Vector3, WebGLRenderer } from "three";
+import { ACESFilmicToneMapping, Box3, BoxGeometry, CanvasTexture, Color, Group, Matrix4, Mesh, MeshStandardMaterial, PCFSoftShadowMap, PerspectiveCamera, Plane, Quaternion, Raycaster, Scene, SphereGeometry, CylinderGeometry, TorusGeometry, Vector2, Sprite, SpriteMaterial, SRGBColorSpace, Vector3, WebGLRenderer } from "three";
 import { AgentWorldRuntime } from "./agent-world-runtime";
 import { createAgentWorldApi } from "./agent-world-api";
 import { composeBallsyCourse } from "./ballsy-scene";
@@ -9,6 +9,7 @@ import { bridgeOcclusionDistance } from "./ballsy-picking";
 import { EARTH_BOUNDS, surfaceHeightAt } from "./ballsy-earth";
 import { BallsyThrowGesture, canGrabBallsyBalloon, ballsyThrowInSpace, type BallsyThrow, type ThrowPoint } from "./ballsy-throw";
 import { BALLOON_GRIP_OFFSET, makeGiantBalloon, disposeGiantProp } from "./ballsy-giant-balloon";
+import { fitBallsyTableShadows } from "./ballsy-lighting";
 import { VrInputRig, type VrInputAction } from "./xr/vr-input";
 import { VrSessionController } from "./xr/vr-session";
 import { GIANT_XR_FRESH_MS, readGiantXrPose, giantXrWorldPoint, freshGiantXrRelease, type GiantXrRelease } from "./ballsy-giant-xr";
@@ -32,6 +33,7 @@ scene.background = new Color("#dce3d4");
 const renderer = new WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 renderer.outputColorSpace = SRGBColorSpace; renderer.toneMapping = ACESFilmicToneMapping;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = PCFSoftShadowMap;
 renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local-floor");
 root.prepend(renderer.domElement);
 const camera = new PerspectiveCamera(65, 1, 0.02, 30);
@@ -55,6 +57,9 @@ const api = createAgentWorldApi(world);
 api.pause(true);
 world.group.scale.setScalar(0.045); world.group.position.set(0, 0.82, -1.05);
 tableRig.add(world.group);
+fitBallsyTableShadows(world.group, world.getEntityObject("ballsy-sun"));
+// This lean renderer has no studio IBL. Reuse its existing native ambient fill.
+api.update("ballsy-fill", { intensity: .8 });
 for (const id of ["ballsy-p1", "ballsy-p2"]) api.update(id, { visible: false });
 projectVolcano(api, createVolcano(), (id) => world.getEntityObject(id));
 
@@ -443,7 +448,7 @@ for (const name of ["pointercancel", "lostpointercapture"] as const) renderer.do
 renderer.domElement.addEventListener("pointerleave", () => { desktopCursor.visible = false; });
 const visibility = (): void => { if (document.hidden) { cancelXr("hidden"); xrInput.setActive(false); } };
 document.addEventListener("visibilitychange", visibility);
-const resize = (): void => { renderer.setSize(root.clientWidth, root.clientHeight); camera.aspect = root.clientWidth / root.clientHeight; camera.updateProjectionMatrix(); frameDesktop(); };
+const resize = (): void => { renderer.setSize(root.clientWidth, root.clientHeight); camera.aspect = root.clientWidth / root.clientHeight; camera.updateProjectionMatrix(); frameDesktop(); fitBallsyTableShadows(world.group, world.getEntityObject("ballsy-sun")); };
 const blur = (): void => { cancelXr("blur"); xrInput.setActive(false); };
 window.addEventListener("resize", resize); window.addEventListener("blur", blur);
 resize();

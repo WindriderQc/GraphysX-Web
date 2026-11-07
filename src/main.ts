@@ -718,6 +718,15 @@ if (appParam === "vr-lab") {
           return;
         }
         const composed = [
+          {
+            id: "ballsy-slime",
+            label: "Ballsy : la course du volcan",
+            meta: "2 joueurs · 2 tours · un géant lance des ballons de slime · clavier, manettes et VR",
+            play: () => {
+              window.location.assign(`${import.meta.env.BASE_URL}ballsy.html`);
+              return new Promise<void>(() => {});
+            },
+          },
           // Cyber Race 1992 is a separate page with its own renderer, so its row is a link,
           // not a world: it leaves the platform and the page keeps the row busy meanwhile.
           {

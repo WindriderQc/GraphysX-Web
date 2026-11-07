@@ -4,7 +4,11 @@ import { parseGiantCommand } from "../server/ballsy-protocol.mjs";
 import { Raycaster, Vector2, Vector3 } from "three";
 import { createBallsyBoost } from "./ballsy-boost";
 import { createVolcanoRun, advanceVolcanoRun, volcanoStandings, VOLCANO_RACE_STEP, VOLCANO_RACE_GATES } from "./ballsy-race";
-import { COURSE_MAIN, COURSE_SHORTCUT, COURSE_FORK, COURSE_LENGTH, COURSE_SECTIONS } from "./ballsy-course";
+import { COURSE_MAIN, COURSE_SHORTCUT, COURSE_FORK, COURSE_LENGTH, COURSE_SECTIONS, coursePoint, courseEdge, nearestCourse } from "./ballsy-course";
+import { frameBallsyCamera, ballsyCameraEnvelope, type BallsyCameraFrame, type BallsyCameraPoint } from "./ballsy-camera";
+import { advanceBallsyFinishes, ballsyFinishPlace, ballsyFinishTime, BALLSY_SPARKLE_SECONDS, type BallsyFinish } from "./ballsy-finish";
+import { ballsyVelocityBrake } from "./ballsy-brake";
+import { ballsyFinishEntities, projectBallsyFinishes } from "./ballsy-finish-scene";
 import { bridgeOcclusionDistance } from "./ballsy-picking";
 import { EARTH_BOUNDS, surfaceHeightAt } from "./ballsy-earth";
 import { PlatformHost } from "./platform-host";
@@ -14,7 +18,7 @@ import { createBallsyPadCheck, updateBallsyPadCheck, ballsyPadReady, ballsyPadIn
 import { BALLSY_PLAYERS, BALLSY_PRACTICE_PLAYERS, composeBallsyCourse } from "./ballsy-scene";
 import { createVolcano, commandVolcano, advanceVolcano, volcanoSlowAt, volcanoWave, type VolcanoMode } from "./ballsy-volcano";
 import { projectVolcano } from "./ballsy-volcano-scene";
-import { ballsyRelayAvailable, createBallsyHostLink } from "./ballsy-link";
+import { createBallsyHostLink } from "./ballsy-link";
 import type { BallsySnapshot } from "../server/ballsy-protocol.mjs";
 import "./ballsy.css";
 
@@ -32,6 +36,7 @@ try {
     framing: { position: isVolcano ? [0, 63, 47] : [0, 31, 24], target: [0, 0, -2] } });
   const api = host.api;
   if (isVolcano) for (const entity of ballsySlimeEntities()) api.spawn(entity);
+  for (const entity of ballsyFinishEntities()) api.spawn(entity);
   api.pause(true);
   const surface = document.createElement("section");
   surface.className = "ballsy-ui";
@@ -43,6 +48,8 @@ try {
       <div class="ballsy-score" data-slot="1"><b><i>2</i> Corail</b><span data-progress="1">Prêt à rouler</span><small data-speed="1"></small></div>
     </div>
     <div class="ballsy-ball-label" data-label="0">1</div><div class="ballsy-ball-label" data-label="1">2</div>
+    ${[0, 1].map(i => `<div class="ballsy-finish-sparkle" data-finish-sparkle="${i}" hidden aria-hidden="true"><span class="ballsy-finish-ring"></span>${Array.from({ length: 8 }, (_, n) => `<i style="--spark-x:${Math.cos(n * Math.PI / 4)};--spark-y:${Math.sin(n * Math.PI / 4)}">✦</i>`).join("")}</div>`).join("")}
+    <p class="ballsy-finish-announcement" data-finish-announcement role="status" aria-live="polite" aria-atomic="true" hidden></p>
     <div class="ballsy-card" data-card>
       <p class="ballsy-eyebrow">BALLSY · ${isVolcano ? "LA BOUCLE DU VOLCAN" : "PREMIÈRE PISTE"}</p><h1>On fait la course ?</h1>
       <p data-description>Deux balles, deux tours. Faites le tour de l'île dans le sens des flèches !</p>
@@ -54,6 +61,7 @@ try {
       </div>
       <p class="ballsy-pad-help" data-pad-help>Manettes : appuyez sur un bouton pour les détecter.<br>Stick gauche pour rouler · bouton du bas pour freiner.</p>
       <p class="ballsy-notice" data-notice role="status"></p>
+      <ol class="ballsy-results" data-results hidden aria-label="Classement final"></ol>
       <button class="ballsy-primary" data-action="start">C'est parti ! <span>↗</span></button>
       <button class="ballsy-secondary" data-action="reassign">Réassocier les manettes</button>
       <button class="ballsy-secondary" data-action="pad-check">Tester les manettes</button>
@@ -77,7 +85,7 @@ try {
       <p class="ballsy-shovel-help">${legacyShovel ? "Clique et glisse dans la terre ambrée pour creuser." : "Dans la vue du géant, prends un ballon, balance la main et relâche."}</p>
       <small data-giant-feedback>Les coureurs peuvent passer au sec à l'extérieur.</small>
     </aside>
-    <aside class="ballsy-room" data-room hidden aria-label="Connexion du géant"><b data-room-code></b><p data-room-status></p><a href="./ballsy-giant.html" target="_blank" rel="noopener">Ouvrir la vue du géant ↗</a><small>Quest : accès privé HTTPS ou USB local requis.</small></aside>
+    <aside class="ballsy-room" data-room hidden aria-label="Connexion du géant"><b data-room-code></b><p data-room-status></p><a href="./ballsy-giant.html" target="_blank" rel="noopener">Ouvrir la vue du géant ↗</a><small>Quest : ouvre cette vue sur le même site en HTTPS reconnu, puis saisis le code.</small></aside>
     <p class="ballsy-race-tip" data-race-tip hidden>2 tours · P pour mettre en pause · F pour le plein écran</p>`;
   root.append(surface);
   const element = <T extends HTMLElement>(selector: string): T => surface.querySelector<T>(selector)!;
@@ -102,6 +110,8 @@ try {
   let slime = createBallsySlime();
   let visualTime = -1;
   let finishArchFaded = false;
+  let finishes: BallsyFinish[] = [];
+  let cameraFrame: BallsyCameraFrame | null = null;
   let giantFeedback = "";
   const speedCaps = [8, 8];
   let boosts = [createBallsyBoost(), createBallsyBoost()];
@@ -115,10 +125,34 @@ try {
   const currentPad = (slot: number): BallsyPad | null => pads.find((pad) => pad?.index === slots[slot]) ?? null;
   const neutral = (): void => { for (const player of PLAYERS) api.steer(player.id, { thrust: 0, turn: 0 }); };
   const syncPause = (): void => { api.pause(isVolcano || manual || phase !== "racing"); };
-  const fit = (): void => {
-    const scale = Math.max(1, 1.4 / Math.max(0.3, window.innerWidth / window.innerHeight));
-    host.frameView(isVolcano ? [0, 63 * scale, 47 * scale] : [0, 31 * scale, 24 * scale], isVolcano ? [0, 0, -2] : [0, 0, 0], 0);
+  const overview: BallsyCameraPoint[] = isVolcano
+    ? COURSE_MAIN.filter((_, i) => i % 8 === 0).flatMap(p => [courseEdge(p, -p.width / 2 - 1), courseEdge(p, p.width / 2 + 1)])
+    : [[-18, 0, -14], [18, 0, -14], [-18, 0, 14], [18, 0, 14]];
+  const updateCamera = (seconds = 0, reset = false): void => {
+    const overviewMode = phase === "lobby" || legacyShovel;
+    const poses = PLAYERS.map(player => api.query({ ids: [player.id] })[0]?.position ?? player.spawn);
+    const safety = poses.flatMap(position => ballsyCameraEnvelope(position));
+    const points = overviewMode ? overview : poses.flatMap((position, slot) => {
+      const context = ballsyCameraEnvelope(position, 5.5);
+      const nearest = isVolcano ? nearestCourse(position) : null;
+      if (isVolcano && runs[slot].phase !== "complete") for (const offset of [-.012, .035]) {
+        const p = coursePoint(nearest!.t + offset, nearest!.branch);
+        context.push(courseEdge(p, -p.width / 2 - 1.2, .7), courseEdge(p, p.width / 2 + 1.2, .7));
+      }
+      return context;
+    });
+    const width = root.clientWidth, height = root.clientHeight;
+    const top = Math.min(155, height * .24);
+    const resultHeight = phase === "results" ? card.offsetHeight + 24 : 0;
+    const giantHeight = element("[data-giant]").hidden ? 0 : element("[data-giant]").offsetHeight + 64;
+    const roomHeight = element("[data-room]").hidden ? 0 : element("[data-room]").offsetHeight + 64;
+    const inset = { top, right: 28, bottom: Math.max(76, resultHeight, giantHeight, roomHeight), left: 28 };
+    cameraFrame = frameBallsyCamera(points, overviewMode ? overview : safety,
+      { width, height, fov: host.camera.fov, inset }, reset ? null : cameraFrame, seconds);
+    host.frameView(cameraFrame.position, cameraFrame.target, 0);
+    host.camera.updateMatrixWorld();
   };
+  const fit = (): void => { updateCamera(0, true); };
   fit();
   const courseSelect = element<HTMLSelectElement>("[data-course]");
   const modeSelect = element<HTMLSelectElement>("[data-mode]");
@@ -148,15 +182,18 @@ try {
       players: PLAYERS.map((player) => ({ id: player.id, position: [...(api.query({ ids: [player.id] })[0]?.position ?? player.spawn)] as [number, number, number],
         lap: standings.find((entry) => entry.subjectId === player.id)?.run.lap ?? 0, finished: standings.find((entry) => entry.subjectId === player.id)?.run.phase === "complete" })) };
   }
-  if (isVolcano) void ballsyRelayAvailable().then((available) => {
-    if (!available || disposed) return;
+  // Always leave the invitation action reachable. A slow first probe must not permanently
+  // remove the only retry control; discovery happens when the user chooses to invite.
+  if (isVolcano) {
     room = createBallsyHostLink({ snapshot: networkSnapshot, command: (command) => { commandGiant(command, true); },
       presence: () => { commandVolcano(volcano, { type: "release" }); cancelBallsySlimeFlight(slime); roundId = crypto.randomUUID(); paint(); } });
     button("invite").hidden = false;
-  });
+  }
   button("invite").addEventListener("click", () => {
+    if (!room || disposed || button("invite").disabled) return;
     button("invite").disabled = true;
-    void room?.open().catch((error: unknown) => { notice.textContent = error instanceof Error ? error.message : "Connexion indisponible."; })
+    // Invitation errors belong to the room panel, never to the race's pause notice.
+    void room.open().catch(() => undefined)
       .finally(() => { button("invite").disabled = false; paint(); });
   });
   const pointerRay = new Raycaster(), pointer = new Vector2(), digPoint = new Vector3();
@@ -220,6 +257,8 @@ try {
     neutral();
     api.rules.reset();
     runs = PLAYERS.map((player) => createVolcanoRun(player.spawn));
+    finishes = [];
+    element("[data-finish-announcement]").textContent = "";
     for (const player of PLAYERS) {
       if (isVolcano) api.update(player.id, { transform: { position: [...player.spawn] }, physics: { mode: "dynamic", linearVelocity: [0, 0, 0], angularVelocity: [0, 0, 0] } });
       api.steer(player.id, { headingDegrees: isVolcano ? 270 : 90 });
@@ -270,6 +309,7 @@ try {
   function togglePause(): void { if (phase === "paused") resume(); else pause(); }
   function tick(seconds: number, explicitStep = false): void {
     pollPads();
+    const settlingResults = phase === "results";
     if (phase === "countdown") {
       countdown = Math.max(0, countdown - seconds);
       if (countdown === 0) { phase = "racing"; if (!isVolcano) api.rules.reset(); syncPause(); }
@@ -284,9 +324,12 @@ try {
       const previousPositions = isVolcano ? PLAYERS.map(player => api.query({ ids: [player.id] })[0]?.position ?? player.spawn) : [];
       PLAYERS.forEach((player, slot) => {
         const run = standings.find((entry) => entry.subjectId === player.id)?.run;
-        const drive = run?.phase === "complete" ? { thrust: 0, turn: 0 } : readBallsyDrive(slot, keys, currentPad(slot));
-        api.steerLive(player.id, drive);
         const entity = api.query({ ids: [player.id] })[0];
+        const requestedDrive = readBallsyDrive(slot, keys, currentPad(slot));
+        const drive = run?.phase === "complete" || requestedDrive.thrust < 0
+          ? ballsyVelocityBrake(entity?.physics?.linearVelocity ?? [0, 0, 0], entity?.steering?.force ?? 0, entity?.physics?.mass ?? 0)
+          : requestedDrive;
+        api.steerLive(player.id, drive);
         const position = entity?.position;
         const slow = isVolcano && position ? volcanoSlowAt(volcano, position) : { intensity: 0, speedCap: 8 };
         const velocity = entity?.physics?.linearVelocity;
@@ -343,15 +386,70 @@ try {
         syncPause();
       }
     }
+    // Finish clocks are already final. Let the same paused native world consume the
+    // last braking inputs before resting instead of freezing a moving ball at the line.
+    // This is inside the existing tick, never a parallel physics or animation loop.
+    if (settlingResults && phase === "results" && seconds > 0) {
+      let coasting = false;
+      for (const player of PLAYERS) {
+        const entity = api.query({ ids: [player.id] })[0];
+        const velocity = entity?.physics?.linearVelocity ?? [0, 0, 0];
+        if (Math.hypot(velocity[0], velocity[2]) > .04 || Math.abs(velocity[1]) > .08) coasting = true;
+        api.steerLive(player.id, ballsyVelocityBrake(velocity, entity?.steering?.force ?? 0, entity?.physics?.mass ?? 0));
+      }
+      if (coasting) api.step(seconds);
+      else for (const player of PLAYERS) api.steerLive(player.id, { thrust: 0, turn: 0 });
+    }
+    const previousFinishes = finishes;
+    finishes = advanceBallsyFinishes(finishes, standingsNow(), seconds, phase === "paused");
+    const newlyFinished = finishes.filter(finish => !previousFinishes.some(previous => previous.subjectId === finish.subjectId));
+    if (newlyFinished.length) {
+      const name = (id: string): string => id === PLAYERS[0].id ? "Lagon" : "Corail";
+      element("[data-finish-announcement]").textContent = finishes.length === PLAYERS.length
+        ? "Course terminée · Les 2 billes sont arrivées !"
+        : `${name(newlyFinished[0].subjectId)} a terminé ses 2 tours ! ${name(PLAYERS.find(player => player.id !== newlyFinished[0].subjectId)!.id)} continue sa course.`;
+    }
     paint();
+    if (phase !== "paused") updateCamera(seconds);
+    paintRacerOverlays();
+    if (newlyFinished.length && phase === "results") button("start").focus({ preventScroll: true });
   }
   const scratch = new Vector3();
+  function paintRacerOverlays(): void {
+    const visible = phase !== "lobby" && !checkingPads;
+    projectBallsyFinishes(finishes, PLAYERS.map(player => ({ id: player.id, position: api.query({ ids: [player.id] })[0]?.position ?? player.spawn })), id => host.world.getEntityObject(id));
+    PLAYERS.forEach((player, i) => {
+      const position = api.query({ ids: [player.id] })[0]?.position;
+      const finish = finishes.find(entry => entry.subjectId === player.id);
+      const label = element(`[data-label="${i}"]`);
+      const sparkle = element(`[data-finish-sparkle="${i}"]`);
+      label.hidden = !visible || !position;
+      label.dataset.finished = String(!!finish);
+      label.textContent = finish ? `✓ ${ballsyFinishPlace(finishes.indexOf(finish))} · Arrivée` : String(i + 1);
+      sparkle.hidden = !visible || !position || !finish || finish.sparkleSeconds >= BALLSY_SPARKLE_SECONDS;
+      if (!position) return;
+      scratch.set(position[0], position[1], position[2]).project(host.camera);
+      sparkle.style.left = `${(scratch.x + 1) * root.clientWidth / 2}px`;
+      sparkle.style.top = `${(1 - scratch.y) * root.clientHeight / 2}px`;
+      const progress = (finish?.sparkleSeconds ?? 0) / BALLSY_SPARKLE_SECONDS;
+      sparkle.style.setProperty("--burst", `${16 + 26 * Math.sin(progress * Math.PI / 2)}px`);
+      sparkle.style.setProperty("--spark-opacity", String(Math.min(1, (1 - progress) * 3)));
+      sparkle.style.setProperty("--ring-size", `${24 + progress * 52}px`);
+      scratch.set(position[0], position[1] + 1.3, position[2]).project(host.camera);
+      // Labels remain readable at the viewport edge and close finishes are staggered.
+      const x = (scratch.x + 1) * root.clientWidth / 2;
+      const y = (1 - scratch.y) * root.clientHeight / 2 - (finish ? 42 + i * 26 : 0);
+      label.style.left = `${Math.max(finish ? 75 : 26, Math.min(root.clientWidth - (finish ? 75 : 26), x))}px`;
+      label.style.top = `${Math.max(38, Math.min(root.clientHeight - 32, y))}px`;
+    });
+  }
   function paint(): void {
     if (isVolcano) {
       const fade = PLAYERS.some(player => { const p = api.query({ids:[player.id]})[0]?.position; return !!p && Math.abs(p[0]) < 2.4 && Math.abs(p[2]-19) < 7; });
       if (fade !== finishArchFaded) { api.update("ballsy-finish-banner", {material:{opacity:fade ? 0.15 : 1}}); finishArchFaded = fade; }
     }
     surface.dataset.phase = phase;
+    surface.dataset.tool = legacyShovel ? "shovel" : "slime";
     const racing = phase === "racing" || phase === "countdown";
     card.hidden = racing || checkingPads;
     element("[data-pad-test]").hidden = !checkingPads;
@@ -386,6 +484,14 @@ try {
     countdownLabel.hidden = phase !== "countdown";
     countdownLabel.textContent = String(Math.ceil(countdown));
     const standings = standingsNow();
+    element("[data-results]").hidden = phase !== "results";
+    const announcement = element("[data-finish-announcement]");
+    // The final live status belongs to the result sheet, not the billes' play area.
+    // Reuse the same accessible node so a completed racer never loses its status.
+    if (phase === "results") {
+      if (announcement.parentElement !== card) card.insertBefore(announcement, heading);
+    } else if (announcement.parentElement !== surface) surface.insertBefore(announcement, card);
+    announcement.hidden = finishes.length === 0 || checkingPads;
     if (phase === "lobby") {
       heading.textContent = isVolcano ? "La Boucle du Volcan" : "On fait la course ?";
       description.textContent = isVolcano ? "Deux tours autour du volcan. La voie large est s\u00fbre ; le raccourci de la fourche est plus \u00e9troit. Le g\u00e9ant lance des ballons de slime pour ralentir doucement les billes." : "Deux balles, deux tours. Faites le tour de l'\u00eele dans le sens des fl\u00e8ches !";
@@ -398,10 +504,13 @@ try {
     }
     if (phase === "results") {
       heading.textContent = `${standings[0]?.subjectId === PLAYERS[0].id ? "Lagon" : "Corail"} remporte la course !`;
-      description.textContent = standings.map((entry, i) => `${i + 1}. ${entry.label} · ${entry.run.elapsedSeconds.toFixed(1)} s`).join("   ");
+      const gap = standings.length > 1 ? standings[1].run.elapsedSeconds - standings[0].run.elapsedSeconds : 0;
+      description.textContent = gap < .25 ? `Arrivée serrée : ${gap.toFixed(3)} s d'écart !` : "Deux tours bouclés. Bien joué à vous deux !";
+      const rows = standings.map((entry, i) => `<li data-result="${entry.subjectId}"><b>${ballsyFinishPlace(i)} · ${entry.subjectId === PLAYERS[0].id ? "Lagon" : "Corail"}</b><span>${ballsyFinishTime(entry.run.elapsedSeconds)}</span></li>`).join("");
+      if (element("[data-results]").innerHTML !== rows) element("[data-results]").innerHTML = rows;
       button("start").textContent = "La revanche ! ↗";
     }
-    element("[data-giant]").hidden = !isVolcano || (phase !== "racing" && phase !== "paused");
+    element("[data-giant]").hidden = !isVolcano || (phase !== "racing" && phase !== "paused") || (!legacyShovel && !room?.state().connected);
     const signal = element("[data-volcano-signal]");
     signal.hidden = !isVolcano || !racing;
     if (isVolcano) {
@@ -415,32 +524,32 @@ try {
 
     }
     const roomState = room?.state();
-    element("[data-room]").hidden = checkingPads || !roomState?.code;
-    element("[data-room-code]").textContent = roomState?.code ? `Code géant ${roomState.code.slice(0, 4)}-${roomState.code.slice(4)}` : "";
+    button("invite").textContent = roomState?.status === "expired" ? "Nouvelle invitation"
+      : roomState?.status === "interrupted" ? "Réessayer la connexion"
+      : roomState?.status === "opening" ? "Connexion…" : roomState?.code ? "Code du géant" : "Inviter un géant";
+    element("[data-room]").hidden = checkingPads || (!roomState?.code && !roomState?.message);
+    element("[data-room-code]").textContent = roomState?.code ? `Code géant ${roomState.code.slice(0, 4)}-${roomState.code.slice(4)}`
+      : roomState?.status === "expired" ? "Invitation terminée" : "Connexion du géant";
     element("[data-room-status]").textContent = roomState?.message || (roomState?.connected ? "Géant connecté · la course reste sur la télé." : "Le géant peut rejoindre cette partie.");
     PLAYERS.forEach((player, i) => {
       const run = standings.find((entry) => entry.subjectId === player.id)?.run;
       element(`[data-progress="${i}"]`).textContent = phase === "lobby" ? "Prêt à rouler"
-        : run?.phase === "complete" ? `Arrivée · ${run.elapsedSeconds.toFixed(1)} s`
+        : run?.phase === "complete" ? `✓ Arrivée · ${ballsyFinishTime(run.elapsedSeconds)}`
         : `Tour ${Math.min(2, (run?.lap ?? 0) + 1)}/2 · ${isVolcano ? `${Math.max(0, Math.round((runs[i].progress - Math.floor(Math.max(0, runs[i].progress))) * 100))} %${runs[i].offTrackSeconds > 0 ? " · Retour piste…" : runs[i].wrongWay ? " · Sens inverse" : runs[i].branch === "shortcut" ? " · Raccourci" : " · Voie large"}` : `${run?.checkpointIndex ?? 0}/3 portes`}`;
-      const position = api.query({ ids: [player.id] })[0]?.position;
       const velocity = api.query({ ids: [player.id] })[0]?.physics?.linearVelocity;
       element(`[data-speed="${i}"]`).textContent = !racing ? "" : `${Math.hypot(velocity?.[0]??0,velocity?.[2]??0).toFixed(1)} m/s${isVolcano && ballsySlimeSpeedFactor(slime, i) < 1 ? " · Slime !" : ""}`;
       element(`[data-slot="${i}"]`).dataset.boost = "false";
-      const label = element(`[data-label="${i}"]`);
-      label.hidden = !racing || !position;
-      if (position) {
-        scratch.set(position[0], position[1] + 1.3, position[2]).project(host.camera);
-        label.style.left = `${(scratch.x + 1) * root.clientWidth / 2}px`;
-        label.style.top = `${(1 - scratch.y) * root.clientHeight / 2}px`;
-      }
+      element(`[data-slot="${i}"]`).dataset.finished = String(run?.phase === "complete");
+
     });
+    paintRacerOverlays();
   }
   const state = (): unknown => ({ coordinateSystem: "right-handed; +x screen right, +y up, -z screen up", phase,
     countdown: phase === "countdown" ? Math.ceil(countdown) : null, laps: 2, slots, connected, rescues, boosts: structuredClone(boosts),
     course: isVolcano ? "volcano" : "practice", volcano: isVolcano ? structuredClone(volcano) : null, ally: volcanoMode === "help" ? ally : null,
     slime: isVolcano ? snapshotBallsySlime(slime) : null,
-    roundId, room: room?.state() ?? null, checkingPads,
+    roundId, room: room?.state() ?? null, checkingPads, finishes: structuredClone(finishes),
+    camera: cameraFrame ? { mode: phase === "lobby" || legacyShovel ? "course" : "group", ...structuredClone(cameraFrame) } : null,
     race: isVolcano ? { stepSeconds: VOLCANO_RACE_STEP, gatesPerLap: VOLCANO_RACE_GATES, standings: structuredClone(standingsNow()) } : null,
     padChecks: padChecks.map((check) => ({ ...check, ready: ballsyPadReady(check) })),
     players: PLAYERS.map((player) => ({ id: player.id, position: api.query({ ids: [player.id] })[0]?.position,
@@ -449,7 +558,7 @@ try {
     if (!Number.isFinite(milliseconds) || milliseconds < 0 || milliseconds > 60_000) throw new RangeError("advanceTime expects 0..60000 milliseconds");
     manual = true;
     syncPause();
-    if (milliseconds === 0) { pollPads(); paint(); return state(); }
+    if (milliseconds === 0) { pollPads(); paint(); if (phase !== "paused") updateCamera(0, true); paintRacerOverlays(); return state(); }
     if (isVolcano) advanceFixed(milliseconds / 1000);
     else {
       const steps = Math.ceil(milliseconds / (1000 / 60));

@@ -1,5 +1,22 @@
 # Ballsy : socle VR commun
 
+## Intégration durable, 7 novembre 2026
+
+Le travail courant est dans `codex/permanent-vr-ballsy`. Le merge local `f00c01c`
+réunit le prototype `4f55d3d` et le main distant `6d478d3` (Math Lab v4 inclus),
+sans modifier les autres worktrees. La publication et la réception restent à
+vérifier : les liens publics ne prouvent pas qu'un nouveau bundle est installé.
+
+La course dispose d'une entrée dans Jeux; l'atelier VR conserve son entrée dans
+Ateliers et sa route `?app=vr-lab`. Le relais utilise le service existant, voir
+[hébergement durable](BALLSY_PUBLIC_RELAY.md). Le nouveau cadrage, les arrivées et
+leur réception visuelle sont décrits dans [la QA dédiée](BALLSY_CAMERA_FINISH_QA.md).
+Les anciens lanceurs restent des previews locales temporaires; les heures et les
+SHA ci-dessous sont des reçus historiques, pas des promesses de disponibilité.
+Les poses WebXR synthétiques ne remplacent toujours pas un essai physique Quest.
+
+## Historique du prototype local
+
 Prototype local dans `codex/ballsy-shared-vr`. Le merge `6c9461f` conserve les deux
 histoires : Ballsy slime `3c87859778b996b0da091a2de2b585de0d1a273e` et le socle VR
 `f10b7e4d0a560c3f2e09ab46424c8bfc3a42a43a`. Aucun push ni déploiement.

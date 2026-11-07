@@ -5,12 +5,15 @@ export const BALLOON_GRIP_OFFSET = [0, 0, -0.085] as const;
 
 export function makeGiantBalloon(): Group {
   const balloon = new Group();
-  const latex = new MeshStandardMaterial({ color: "#adf245", roughness: 0.26, metalness: 0.08, emissive: "#3a6207", emissiveIntensity: 0.14 });
+  const latex = new MeshStandardMaterial({ color: "#a8e92f", roughness: 0.18, metalness: 0.04, emissive: "#426508", emissiveIntensity: 0.13 });
   const body = new Mesh(new SphereGeometry(0.0315, 20, 14), latex);
   body.scale.y = 1.13;
   const knot = new Mesh(new CylinderGeometry(0.004, 0.009, 0.018, 8), latex);
   knot.position.y = -0.042;
   balloon.add(body, knot);
+  const neck = new Mesh(new TorusGeometry(0.005, 0.0018, 5, 10), new MeshStandardMaterial({ color: "#5c861d", roughness: .5 }));
+  neck.rotation.x = Math.PI / 2; neck.position.y = -.035;
+  balloon.add(neck);
   balloon.traverse((object) => { if (object instanceof Mesh) object.castShadow = true; });
   return balloon;
 }

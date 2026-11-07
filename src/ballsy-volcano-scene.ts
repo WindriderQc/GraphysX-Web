@@ -4,19 +4,36 @@ import { VOLCANO_CROSSINGS, type VolcanoState } from "./ballsy-volcano";
 import type { Object3D } from "three";
 import { projectLiveLava } from "./ballsy-live-mesh";
 
-const LAVA = { color: "#f58124", emissive: "#ee4b09", emissiveIntensity: 0.35, roughness: 0.6 };
+const LAVA = { color: "#f89932", emissive: "#f45810", emissiveIntensity: 0.55, roughness: 0.48 };
 export function volcanoEntities(): AgentWorldEntityDefinition[] {
   const entities: AgentWorldEntityDefinition[] = [];
   const positions: number[] = [], indices: number[] = [];
-  for (let i = 0; i < 32; i++) {
-    const angle = i / 32 * Math.PI * 2;
-    positions.push(Math.cos(angle) * 4.6, 0.4, Math.sin(angle) * 4.6, Math.cos(angle) * 1.15, 4, Math.sin(angle) * 1.15);
-    const a = i * 2, b = ((i + 1) % 32) * 2;
-    indices.push(a, b + 1, b, a, a + 1, b + 1);
+  const levels = [[.4,4.6],[1.1,3.8],[2.25,2.6],[3.15,1.85],[4,1.15]];
+  const point = (i:number, level:number):[number,number,number] => {
+    const a=i/24*Math.PI*2,[y,r]=levels[level],ridge=1+.10*Math.sin(i*2.7)+.055*Math.cos(i*5.1);
+    return [Math.cos(a)*r*ridge,y+(level===0?0:.1*Math.sin(i*1.7)),Math.sin(a)*r*ridge];
+  };
+  const groups:{start:number;count:number;materialIndex:number}[]=[];
+  // Independent faces retain the basalt's sculpted facets instead of smoothing a cone.
+  for(let level=1;level<levels.length;level++){
+    const start=indices.length;
+    for(let i=0;i<24;i++){
+      const a=point(i,level-1),b=point((i+1)%24,level-1),c=point((i+1)%24,level),d=point(i,level),n=positions.length/3;
+      positions.push(...a,...c,...b,...a,...d,...c);indices.push(n,n+1,n+2,n+3,n+4,n+5);
+    }
+    groups.push({start,count:indices.length-start,materialIndex:(level-1)%3});
   }
-  entities.push({ id: "volcano-mountain", type: "mesh", mesh: { positions, indices }, material: { color: "#333238", roughness: 0.98 }, tags: ["ballsy", "volcano"] },
-    { id: "volcano-crater", type: "torus", geometry: { radius: 1.15, tube: 0.25 }, transform: { position: [0, 4.02, 0], rotationDegrees: [90, 0, 0] }, material: { color: "#4d4856", roughness: 1 }, tags: ["volcano"] },
-    { id: "volcano-heart", type: "sphere", geometry: { radius: 1 }, transform: { position: [0, 3.93, 0], scale: [1.1, 0.12, 1.1] }, material: LAVA, tags: ["volcano"] });
+  entities.push({ id: "volcano-mountain", type: "mesh", mesh: { positions, indices,groups,materials:[{color:"#353f46",roughness:1},{color:"#4b4c4c",roughness:.95},{color:"#686254",roughness:.94}] }, material: { color: "#353f46", roughness: 0.98 }, tags: ["ballsy", "volcano","volcano-landmark"] },
+    { id: "volcano-crater", type: "torus", geometry: { radius: 1.15, tube: 0.2,radialSegments:12 }, transform: { position: [0, 4.02, 0], rotationDegrees: [90, 0, 0] }, material: { color: "#432f2d", roughness: 1 }, tags: ["volcano","volcano-landmark"] },
+    { id: "volcano-heart", type: "sphere", geometry: { radius: 1,radialSegments:20 }, transform: { position: [0, 3.93, 0], scale: [1.1, 0.12, 1.1] }, material: {...LAVA,emissiveIntensity:1.25}, tags: ["volcano","volcano-landmark"] });
+  const veins={positions:[] as number[],indices:[] as number[]};
+  for(const column of [3,9,17])for(let level=1;level<levels.length;level++){
+    const a=point(column,level-1),b=point(column,level),angle=column/24*Math.PI*2,width=level===1?.18:.085;
+    const n=veins.positions.length/3;
+    for(const [p,side]of [[a,-1],[b,-1],[b,1],[a,1]] as const)veins.positions.push(p[0]+Math.cos(angle)*.025-Math.sin(angle)*width*side,p[1]+.025,p[2]+Math.sin(angle)*.025+Math.cos(angle)*width*side);
+    veins.indices.push(n,n+1,n+2,n,n+2,n+3);
+  }
+  entities.push({id:"volcano-glowing-veins",type:"mesh",mesh:veins,material:{...LAVA,emissiveIntensity:.85},castShadow:false,tags:["volcano","volcano-landmark"]});
   const segment = (id: string, a: [number, number, number], b: [number, number, number]): void => {
     const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
     entities.push({ id, type: "box", geometry: { width: Math.hypot(dx, dy, dz), height: 0.09, depth: 1 },

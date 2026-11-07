@@ -32,8 +32,11 @@ fails `Typecheck, build and Node checks`; it does not claim visual acceptance.
 Documentation and verification tooling still do not deploy the site.
 
 After activation, `scripts/smoke-live-release.mjs` checks the expected release SHA
-and compares the actual public HTML, module entry, module preloads and CSS against
-the freshly built files byte for byte, with browser-compatible content types. This
+and compares the actual public index and both Ballsy HTML pages, module entries,
+module preloads and CSS against the freshly built files byte for byte, with
+browser-compatible content types. It also compares the VR workshop's dynamic
+entry and three local controller assets, then requires JSON status from the
+same-origin Ballsy relay. This
 catches an old index, missing bundles, changed bytes and SPA fallback pages without
 rendering a scene. Request deadlines and the bounded manifest retry remain. Failure
 still rolls back the existing deployment transaction. `release-http.json` records
@@ -53,8 +56,8 @@ npm run verify -- --wait
 ```
 
 The existing local lock, assertions, timeouts and optional `--shard=i/n` remain.
-No journey is deleted or weakened. The 84 checks comprise 10 Node contracts and
-74 visual journeys; do not turn the local list into an unconditional extra gate
+No journey is deleted or weakened. The current 118 checks comprise 10 Node contracts and
+108 visual journeys; do not turn the local list into an unconditional extra gate
 for a documentation or Node-only change. GitHub configuration and the HTTP checker
 can be validated with Node tests, including explicit bad-publication fixtures.
 
