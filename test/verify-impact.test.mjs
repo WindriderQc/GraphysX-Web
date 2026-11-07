@@ -15,11 +15,15 @@ describe("verification by changed area", () => {
     const page = selectVerification(["ballsy.html", "src/ballsy-main.ts", "src/ballsy-input.ts", "src/ballsy-scene.ts", "src/ballsy.css"]);
     assert.equal(page.mode, "targeted");
     assert.equal(page.deploy, true);
-    assert.deepEqual(names(page), ["ballsy-setup", "ballsy-giant", "ballsy-volcano", "ballsy", "standalone", "product-assets", "asset-guard"]);
+    assert.deepEqual(names(page), ["ballsy-setup", "ballsy-shared-vr", "ballsy-giant", "ballsy-volcano", "ballsy", "standalone", "product-assets", "asset-guard"]);
+    const sharedVr = page.smokes.find(smoke => smoke.name === "ballsy-shared-vr");
+    assert.equal(sharedVr.localOnly, true);
+    assert.equal(sharedVr.script, "scripts/smoke-ballsy-shared-vr-product.mjs");
+    assert.ok(verificationExecution(page.smokes).local.includes(sharedVr));
     for (const file of ["ballsy-giant.html", "src/ballsy-giant.css", "server/ballsy-protocol.mjs"]) assert.deepEqual(names(selectVerification([file])), names(page));
     const relay = selectVerification(["scripts/serve-ballsy.mjs", "server/ballsy-rooms.mjs"]);
     assert.equal(relay.deploy, false);
-    assert.deepEqual(names(relay), ["ballsy-giant"]);
+    assert.deepEqual(names(relay), ["ballsy-shared-vr", "ballsy-giant"]);
     assert.equal(selectVerification(["src/platform-host.ts"]).mode, "full");
     assert.equal(selectVerification(["vite.config.ts"]).mode, "full");
     assert.equal(selectVerification(["docs/BALLSY_ROADMAP.md"]).deploy, false);

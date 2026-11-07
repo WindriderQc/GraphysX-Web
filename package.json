@@ -104,7 +104,10 @@
     "smoke:ballsy-loop": "node scripts/smoke-ballsy-loop.mjs",
     "build:ballsy-slime": "vite build --config vite.ballsy.config.ts --outDir output/ballsy-slime/dist",
     "serve:ballsy-slime": "node scripts/serve-ballsy-slime.mjs",
-    "smoke:ballsy-slime": "node scripts/smoke-ballsy-slime.mjs"
+    "smoke:ballsy-slime": "node scripts/smoke-ballsy-slime.mjs",
+    "build:ballsy-shared-vr": "vite build --config vite.ballsy.config.ts --outDir output/ballsy-shared-vr/dist",
+    "serve:ballsy-shared-vr": "node scripts/serve-ballsy-shared-vr.mjs",
+    "smoke:ballsy-shared-vr": "node scripts/smoke-ballsy-shared-vr.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",

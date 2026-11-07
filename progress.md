@@ -5270,3 +5270,19 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
 - The input tests cover signed roll, pitch and yaw, changing hands, and tracking loss.
   The Cyber Race smoke verifies the menu toggle survives reload. Quest 2 emulation in
   Hypertube verified banking both ways and recentering. Comfort remains a headset playtest.
+
+## 2026-11-07 - Integrate Ballsy with the shared VR foundation
+
+- User request: "keep going" after requesting VR hands/controllers and physical slime balloons.
+- Isolated worktree `GraphysX-Web-ballsy-vr`, branch `codex/ballsy-shared-vr`; local merge `6c9461f` preserves Ballsy `3c87859` and VR `f10b7e4` as parents. Both original worktrees remain unchanged.
+- Current remote main read through GitHub is `2e91d30`, six commits newer than the locally cached `61f67b7`; those later math/LLMx/Cyber Race changes are not imported into this prototype.
+- Shared asset registry now packages the three local XR input files into the isolated Ballsy build. A bounded loopback-only launcher on 4215 is prepared, separate from the existing VR lab on 4317 and former Quest gateway.
+- Shared-controller integration and real-relay synthetic XR QA are in progress. A physical Quest session and a trusted route to this exact build remain unverified; no certificate, firewall or publication change is authorized or performed.
+
+### Shared VR integration acceptance
+
+- Typecheck, global lint, isolated Ballsy build and 122 focused Ballsy/VR tests passed. The final shared scenario passed 50/50 with the real host/guest HTTP relay and synthetic native XR poses; historical slime passed 28/28. Loop, desktop shovel, controller setup, practice and the original develop-web-game client passed; captures inspected.
+- The same shared scenario passed on the fresh product build, followed by VR lab, Cyber Race and showroom. Added a local-only product-build wrapper and registered it in the full/affected verification plans; all 62 verification-system tests pass. No historical assertions were removed or weakened.
+- Full gate was attempted: 1063 Node tests, 1058 pass, 4 fail, 1 skipped, 0 cancelled. All four are the previously recorded Windows directory-fsync/checkpoint failures in world-fork/world-reliability; TypeScript, lint and main build pass. A final full Node rerun retains the same four failures. Both Rapier heightfield and six-preset material probes pass. This is NOT a globally green release.
+- Local preview started at 2026-11-07T05:07:20Z on 127.0.0.1:4215, expires 17:07:20Z, PID 45536. Race and giant HTTP 200, delivered race HTML hash matches tested build, existing VR lab 4317 still HTTP 200. No public deploy, external gateway, certificate or firewall change.
+- Remaining acceptance: select and verify an authorized trusted route for the physical Quest, then test permission/stereo/tracking/comfort/performance. The old 4191 gateway is stopped/expired and must not be bypassed. Later remote main 2e91d30 remains outside this isolated prototype. Details in docs/BALLSY_SHARED_VR.md; receipts under output/ballsy-shared-vr.

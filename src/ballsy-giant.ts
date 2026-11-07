@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, Box3, BoxGeometry, BufferGeometry, CanvasTexture, Color, Group, Line, LineBasicMaterial, Matrix4, Mesh, MeshStandardMaterial, PerspectiveCamera, Plane, Quaternion, Raycaster, Scene, SphereGeometry, CylinderGeometry, TorusGeometry, Vector2, Sprite, SpriteMaterial, SRGBColorSpace, Vector3, WebGLRenderer } from "three";
+import { ACESFilmicToneMapping, Box3, BoxGeometry, CanvasTexture, Color, Group, Matrix4, Mesh, MeshStandardMaterial, PerspectiveCamera, Plane, Quaternion, Raycaster, Scene, SphereGeometry, CylinderGeometry, TorusGeometry, Vector2, Sprite, SpriteMaterial, SRGBColorSpace, Vector3, WebGLRenderer } from "three";
 import { AgentWorldRuntime } from "./agent-world-runtime";
 import { createAgentWorldApi } from "./agent-world-api";
 import { composeBallsyCourse } from "./ballsy-scene";
@@ -8,7 +8,10 @@ import { createVolcano, volcanoWave } from "./ballsy-volcano";
 import { bridgeOcclusionDistance } from "./ballsy-picking";
 import { EARTH_BOUNDS, surfaceHeightAt } from "./ballsy-earth";
 import { BallsyThrowGesture, canGrabBallsyBalloon, ballsyThrowInSpace, type BallsyThrow, type ThrowPoint } from "./ballsy-throw";
-import { BALLOON_GRIP_OFFSET, makeGiantBalloon, makeGiantGlove, disposeGiantProp } from "./ballsy-giant-balloon";
+import { BALLOON_GRIP_OFFSET, makeGiantBalloon, disposeGiantProp } from "./ballsy-giant-balloon";
+import { VrInputRig, type VrInputAction } from "./xr/vr-input";
+import { VrSessionController } from "./xr/vr-session";
+import { GIANT_XR_FRESH_MS, readGiantXrPose, giantXrWorldPoint, freshGiantXrRelease, type GiantXrRelease } from "./ballsy-giant-xr";
 import { ballsySlimeEntities, projectBallsySlime } from "./ballsy-slime-scene";
 import { BALLSY_SLIME_LIMITS, parseGiantCommand } from "../server/ballsy-protocol.mjs";
 import { showStartupError } from "./startup-error";
@@ -32,6 +35,8 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); renderer.sh
 renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local-floor");
 root.prepend(renderer.domElement);
 const camera = new PerspectiveCamera(65, 1, 0.02, 30);
+const xrCamera = new PerspectiveCamera(65, 1, 0.02, 30);
+const xrRig = new Group(); xrRig.name = "Ballsy XR origin"; xrRig.add(xrCamera); scene.add(xrRig);
 function frameDesktop(): void {
   if (renderer.xr.isPresenting) return;
   const target = new Vector3(0.15, 0.9, -1.05);
@@ -81,8 +86,8 @@ for (let i = 0; i < 3; i++) {
   text.draw(i === 0 ? "Sortir VR" : i === 1 ? "Ramener la table" : "Pelle / ballons");
   buttons.push(button); buttonLabels.push(text); tableRig.add(button, text.sprite);
 }
-let supported = false, disposed = false, frameCount = 0, projectedKey = "", activeOwner: object | string | null = null;
-let lastHold = 0, lastMessage = "", startingVR = false;
+let disposed = false, frameCount = 0, projectedKey = "", activeOwner: object | string | null = null;
+let lastHold = 0, lastMessage = "";
 let selectStarts = 0, selectEnds = 0;
 let placementPending = false, placements = 0;
 const headRotation = new Quaternion(), headForward = new Vector3();
@@ -93,19 +98,20 @@ let poseStarted = 0, projectedRound = "";
 let slimeProjectedTime = -1, slimeReceivedAt = 0;
 const link = createBallsyGuestLink(() => paint());
 const raycaster = new Raycaster(), rotation = new Matrix4(), point = new Vector3();
-const controllers: Group[] = [];
-const beams: Line[] = [];
+const xrInput = new VrInputRig(renderer, handleXrAction);
+xrRig.add(xrInput.group);
+const controllers = xrInput.slots.map((slot) => slot.ray);
+const beams = xrInput.slots.map((slot) => slot.beam);
 const cursors: Mesh[] = [];
 
-const grips: Group[] = [], shovels: Group[] = [];
-const sources: (XRInputSource | null)[] = [null, null];
+const grips = xrInput.slots.map((slot) => slot.grip), shovels: Group[] = [];
 const triggerHeld = [false, false];
 const bladeTip = new Vector3(0, -0.055, -0.55);
 const modelTip = new Vector3();
 type GiantMode = "balloon" | "shovel";
 let mode: GiantMode = "balloon";
 const throwGesture = new BallsyThrowGesture();
-const gloves: Group[] = [], heldBalloons: Group[] = [];
+const heldBalloons: Group[] = [];
 const stock = [-0.26, 0.26].map((x) => {
   const balloon = makeGiantBalloon(); balloon.position.set(x, 1.08, -0.48); tableRig.add(balloon); return balloon;
 });
@@ -118,9 +124,38 @@ const desktopPlane = new Plane(new Vector3(0, 1, 0), -1.08);
 const desktopGrabOffset = new Vector3();
 const handPoints: (Vector3 | null)[] = [null, null];
 const handPoseAt = [0, 0];
-const gripRotation = new Quaternion();
-const inputHeld = [{ select: false, squeeze: false }, { select: false, squeeze: false }];
-let pendingRelease: number | null = null, desktopPointer: number | null = null;
+const handSources: (XRInputSource | null)[] = [null, null];
+const rayTracked = [false, false];
+const inputHeld = [{ select: false, grab: false }, { select: false, grab: false }];
+let pendingRelease: GiantXrRelease | null = null, desktopPointer: number | null = null;
+let referenceSpaceType: "local-floor" | "local" = "local-floor";
+let detachXrSession: (() => void) | null = null;
+const xrSession = new VrSessionController({
+  xr: navigator.xr, secureContext: window.isSecureContext,
+  bindSession: async (session) => {
+    try { await session.requestReferenceSpace("local-floor"); referenceSpaceType = "local-floor"; }
+    catch { referenceSpaceType = "local"; }
+    if (xrSession.session !== session) return;
+    xrRig.position.set(0, referenceSpaceType === "local" ? 1.6 : 0, 0); xrRig.updateMatrixWorld(true);
+    renderer.xr.setReferenceSpaceType(referenceSpaceType);
+    await renderer.xr.setSession(session);
+    if (xrSession.session !== session) return;
+    const space = renderer.xr.getReferenceSpace();
+    const changed = () => cancelXr("source-change");
+    const reset = () => { cancelXr("reference-reset"); placementPending = true; };
+    session.addEventListener("inputsourceschange", changed);
+    space?.addEventListener("reset", reset);
+    detachXrSession = () => { session.removeEventListener("inputsourceschange", changed); space?.removeEventListener("reset", reset); };
+  },
+  onStarted: (session) => { placementPending = true; xrInput.setActive(session.visibilityState === "visible"); },
+  onInterrupted: () => { cancelXr("session-interrupted"); xrInput.setActive(false); },
+  onEnded: () => {
+    detachXrSession?.(); detachXrSession = null;
+    cancelXr("session-end"); xrInput.setActive(false); placementPending = false;
+    link.leave(); resetScreenView();
+  },
+});
+const inVR = (): boolean => !!xrSession.session && ["active", "stopping", "error"].includes(xrSession.snapshot.phase);
 let launches = 0, localCooldownUntil = 0, lastLaunch: { origin: ThrowPoint; velocity: ThrowPoint; source: string } | null = null;
 let balloonMessage = "", balloonMessageUntil = 0, observedHits = 0;
 let shovelSamples = 0, lastTip: number[] | null = null, desktopDown = false;
@@ -130,10 +165,20 @@ function release(owner?: object | string, reason = "cancelled"): void {
   if (owner === undefined) { departure = null; departureBalloon.visible = false; }
   pendingRelease = null; desktopPointer = null;
   desktopBalloon.visible = false; heldBalloons.forEach((balloon) => { balloon.visible = false; });
-  inputHeld.forEach((input) => { input.select = false; input.squeeze = false; });
+  inputHeld.forEach((input) => { input.select = false; input.grab = false; });
   if (activeOwner !== null) link.send({ type: "release" });
   activeOwner = null; desktopDown = false;
   triggerHeld.fill(false);
+}
+function cancelXr(reason: string): void {
+  release(undefined, reason);
+  handPoints.fill(null); handPoseAt.fill(0); handSources.fill(null); rayTracked.fill(false);
+  xrInput.cancel();
+}
+function resetScreenView(): void {
+  xrRig.position.set(0, 0, 0);
+  tableRig.position.set(0, 0, 0); tableRig.rotation.set(0, 0, 0);
+  frameDesktop(); paint();
 }
 function canDig(): boolean {
   const s = link.state();
@@ -147,14 +192,14 @@ function sampleTip(tip: Vector3, owner: object | string): void {
   lastHold = performance.now();
 }
 function activate(index: number): void {
-  release();
+  cancelXr("table-action");
   if (index === 0) void endVR();
   else if (index === 1) placementPending = true;
   else setMode(mode === "balloon" ? "shovel" : "balloon");
 }
 function dominantIndex(): number {
-  const right = sources.findIndex((source) => source?.handedness === "right");
-  return right >= 0 ? right : sources.findIndex((source) => !!source?.gripSpace);
+  const right = xrInput.slots.findIndex((slot) => slot.source?.handedness === "right");
+  return right >= 0 ? right : xrInput.slots.findIndex((slot) => !!slot.source);
 }
 function makeShovel(): Group {
   const tool = new Group();
@@ -170,7 +215,7 @@ function makeShovel(): Group {
   tool.traverse((object) => { if (object instanceof Mesh) object.castShadow = true; });
   return tool;
 }
-function target(controller: Group): number | null {
+function target(controller: typeof controllers[number]): number | null {
   controller.updateWorldMatrix(true, false);
   rotation.extractRotation(controller.matrixWorld);
   raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
@@ -178,8 +223,8 @@ function target(controller: Group): number | null {
   const hit = raycaster.intersectObjects(buttons, false)[0];
   const index = controllers.indexOf(controller);
   beams[index].visible = !!hit;
-  beams[index].scale.z = hit ? hit.distance / 3 : 1;
-  cursors[index].visible = !!hit && renderer.xr.isPresenting;
+  beams[index].scale.z = hit ? hit.distance : 1;
+  cursors[index].visible = !!hit && inVR();
   if (hit) cursors[index].position.copy(hit.point);
   return hit ? buttons.indexOf(hit.object as typeof buttons[number]) : null;
 }
@@ -190,7 +235,7 @@ function cooldownSeconds(): number {
 function canGrab(): boolean { return mode === "balloon" && canDig() && cooldownSeconds() <= 0 && !throwGesture.state().held; }
 function feedback(message: string, duration = 1300): void { balloonMessage = message; balloonMessageUntil = performance.now() + duration; paint(); }
 function setMode(next: GiantMode): void {
-  release(); mode = next; balloonMessage = "";
+  cancelXr("tool-change"); mode = next; balloonMessage = "";
   for (const button of root.querySelectorAll<HTMLButtonElement>("[data-mode]")) button.setAttribute("aria-pressed", String(button.dataset.mode === next));
   paint();
 }
@@ -211,65 +256,63 @@ function launch(thrown: BallsyThrow | null, source: string): void {
   link.send(command); launches++; lastLaunch = { origin: command.origin, velocity: command.velocity, source };
   departure = { id: command.throwId, at: performance.now(), thrown }; lastHandoffMs = null;
   departureBalloon.position.set(...thrown.position); departureBalloon.visible = true;
-  departureBalloon.scale.setScalar(renderer.xr.isPresenting ? 1 : 1.4);
+  departureBalloon.scale.setScalar(inVR() ? 1 : 1.4);
   localCooldownUntil = performance.now() + 1000;
   feedback("Lancé !", 350);
 }
-function beginHand(index: number, input: "select" | "squeeze"): void {
-  const controller = controllers[index];
-  if (inputHeld[index][input]) return;
+function handleXrAction(event: VrInputAction): void {
+  const index = xrInput.slots.findIndex((slot) => slot.source === event.source && slot.ray === event.ray);
+  if (index < 0) return;
+  if (event.cancelled) { release(controllers[index], "input-cancelled"); return; }
+  if (event.phase === "start") beginHand(index, event);
+  else endHand(index, event);
+}
+function beginHand(index: number, event: VrInputAction): void {
+  const controller = controllers[index], now = performance.now(), input = event.action;
+  const hand = handPoints[index];
+  if (!inVR() || placementPending || !hand || handSources[index] !== event.source
+    || now < handPoseAt[index] || now - handPoseAt[index] > GIANT_XR_FRESH_MS || inputHeld[index][input]) return;
   inputHeld[index][input] = true;
-  if (input === "select") {
+  if (input === "select" || event.source.hand) {
     selectStarts++;
-    const hit = target(controller);
+    const hit = rayTracked[index] ? target(controller) : null;
     if (hit !== null) { activate(hit); return; }
   }
   if (mode === "shovel") {
     if (index === dominantIndex() && canDig()) { triggerHeld[index] = true; activeOwner = controller; }
     return;
   }
-  const hand = handPoints[index];
-  if (!hand || performance.now() - handPoseAt[index] > 50 || !canGrab()) return;
+  if (!canGrab()) return;
   const nearby = stock.some((balloon) => balloon.visible && canGrabBallsyBalloon(hand.toArray() as ThrowPoint, balloon.getWorldPosition(new Vector3()).toArray() as ThrowPoint));
-  if (nearby && throwGesture.start(controller, hand.toArray() as ThrowPoint, performance.now())) {
+  if (nearby && throwGesture.start(controller, hand.toArray() as ThrowPoint, now)) {
     heldBalloons[index].visible = true; feedback("Bouge le bras, puis relâche.");
   }
 }
-function endHand(index: number, input: "select" | "squeeze"): void {
-  if (input === "select") selectEnds++;
-  inputHeld[index][input] = false;
-  if (inputHeld[index].select || inputHeld[index].squeeze) return;
+function endHand(index: number, event: VrInputAction): void {
+  if (event.action === "select" || event.source.hand) selectEnds++;
+  inputHeld[index][event.action] = false;
+  if (inputHeld[index].select || inputHeld[index].grab) return;
   if (mode === "shovel") release(controllers[index]);
-  // The next XR frame supplies the actual final pose. Never launch from a stale cached pose.
-  else if (throwGesture.isHeldBy(controllers[index])) pendingRelease = index;
+  // Even a non-cancelled native event still needs a fresh, non-emulated next frame.
+  else if (throwGesture.isHeldBy(controllers[index])) pendingRelease = { index, source: event.source, at: performance.now(), frame: frameCount };
 }
-for (let i = 0; i < 2; i++) {
-  const controller = renderer.xr.getController(i);
-  const beam = new Line(new BufferGeometry().setFromPoints([new Vector3(), new Vector3(0, 0, -3)]), new LineBasicMaterial({ color: "#f5c26b" }));
-  controller.add(beam); scene.add(controller); controllers.push(controller); beams.push(beam);
+for (const slot of xrInput.slots) {
   const cursor = new Mesh(new SphereGeometry(0.008, 8, 6), new MeshStandardMaterial({ color: "#f5c26b", emissive: "#805a25", emissiveIntensity: 0.5 }));
   cursor.visible = false; scene.add(cursor); cursors.push(cursor);
-  const grip = renderer.xr.getControllerGrip(i), shovel = makeShovel(), glove = makeGiantGlove(), balloon = makeGiantBalloon();
+  const shovel = makeShovel(), balloon = makeGiantBalloon();
   balloon.position.set(...BALLOON_GRIP_OFFSET); balloon.visible = false;
-  grip.add(shovel, glove, balloon); scene.add(grip); grips.push(grip); shovels.push(shovel); gloves.push(glove); heldBalloons.push(balloon);
-  controller.addEventListener("connected", (event) => { sources[i] = event.data as XRInputSource; });
-  controller.addEventListener("selectstart", () => beginHand(i, "select"));
-  controller.addEventListener("selectend", () => endHand(i, "select"));
-  controller.addEventListener("squeezestart", () => beginHand(i, "squeeze"));
-  controller.addEventListener("squeezeend", () => endHand(i, "squeeze"));
-  controller.addEventListener("disconnected", () => { release(controller, "disconnected"); sources[i] = null; handPoints[i] = null; shovels[i].visible = gloves[i].visible = false; });
+  slot.anchor.add(shovel, balloon); shovels.push(shovel); heldBalloons.push(balloon);
 }
-
 function task(): string {
   const s = link.state(), v = s.snapshot?.volcano;
   if (!s.live || !v) return s.message;
   if (s.snapshot?.phase !== "racing") return s.snapshot?.phase === "paused" ? "La course est en pause." : "Attends le départ sur la télé.";
-  if (mode === "shovel") return "Gâchette maintenue : enfonce, tire et soulève la pelle.";
+  if (mode === "shovel") return "Maintiens la gâchette, le grip ou la pince : enfonce, tire et soulève la pelle.";
   if (balloonMessage && performance.now() < balloonMessageUntil) return balloonMessage;
   if (throwGesture.state().held) return "Bouge le bras, puis relâche.";
   const cooldown = cooldownSeconds();
   if (cooldown > 0) return `Nouveau ballon dans ${cooldown.toFixed(1)} s`;
-  return renderer.xr.isPresenting ? "Prends un ballon devant toi, lance-le et relâche." : "Saisis un ballon, glisse vers la piste, puis relâche.";
+  return inVR() ? "Prends un ballon devant toi, lance-le et relâche." : "Saisis un ballon, glisse vers la piste, puis relâche.";
 }
 function paint(): void {
   if (disposed) return;
@@ -281,57 +324,45 @@ function paint(): void {
   element("[data-task]").textContent = task();
   element(".giant-desktop h2").textContent = mode === "balloon" ? "À toi les ballons !" : "La pelle";
   element("[data-gesture-help]").textContent = mode === "balloon"
-    ? renderer.xr.isPresenting ? "Approche la main d'un ballon, serre le grip ou la gâchette, lance puis relâche."
-      : "Le slime ralentit un peu les billes. En VR, prends un ballon avec le grip ou la gâchette."
-    : "VR : la pelle suit ta main droite. Garde la gâchette pressée, enfonce puis tire la lame. Écran : clique et glisse sur la terre.";
+    ? inVR() ? "Approche la main d'un ballon. Serre le grip ou la gâchette, ou pince pouce et index. Lance puis relâche."
+      : "Le slime ralentit un peu les billes. En VR : grip, gâchette ou pince pouce-index pour saisir."
+    : "VR : la pelle suit ta main droite. Maintiens le grip, la gâchette ou la pince pouce-index, enfonce puis tire. Écran : clique et glisse sur la terre.";
   element("[data-leave]").hidden = !s.joined;
-  element("[data-recenter]").hidden = !renderer.xr.isPresenting;
-  vrButton.disabled = !supported || !s.joined || !s.live || startingVR;
-  vrButton.textContent = renderer.xr.isPresenting ? "Sortir de VR" : supported ? "Devenir le géant en VR" : "VR indisponible ici";
+  element("[data-recenter]").hidden = !inVR();
+  const phase = xrSession.snapshot.phase;
+  vrButton.disabled = ["checking", "unsupported", "starting", "stopping", "disposed"].includes(phase)
+    || (!xrSession.session && (!s.joined || !s.live));
+  vrButton.textContent = xrSession.session ? "Sortir de VR" : phase === "unsupported" ? "VR indisponible ici"
+    : phase === "starting" ? "Entrée VR…" : "Devenir le géant en VR";
   const wave = v ? volcanoWave(v) : null;
   const title = mode === "balloon" ? "Ballons de slime" : v ? `${v.mode === "help" ? `Aide ${s.snapshot?.ally === 1 ? "Corail" : "Lagon"}` : "La pelle"} · ${v.earth.excavated.toFixed(1)} m³ creusés${v.mode === "help" ? wave?.active ? " · CRUE !" : ` · crue ${Math.ceil(wave?.inSeconds ?? 0)} s` : ""}` : "Ballsy · Le géant";
   statusLabel.draw(title, task());
-  statusLabel.sprite.visible = renderer.xr.isPresenting;
+  statusLabel.sprite.visible = inVR();
   for (let i = 0; i < buttons.length; i++) {
-    buttons[i].visible = buttonLabels[i].sprite.visible = renderer.xr.isPresenting;
+    buttons[i].visible = buttonLabels[i].sprite.visible = inVR();
   }
 }
-async function endVR(): Promise<void> { release(undefined, "session-end"); await renderer.xr.getSession()?.end(); }
+async function endVR(): Promise<void> { cancelXr("session-end"); await xrSession.exit(); }
 async function enterVR(): Promise<void> {
-  if (renderer.xr.isPresenting) { await endVR(); return; }
-  if (!window.isSecureContext || !navigator.xr || !supported) { lastMessage = "Le Quest a besoin d'une adresse HTTPS reconnue."; paint(); return; }
-  startingVR = true; lastMessage = ""; paint();
-  let session: XRSession | null = null;
-  try {
-    session = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local-floor"] });
-    session.addEventListener("end", () => { release(undefined, "session-end"); link.leave(); placementPending = false; startingVR = false; paint(); }, { once: true });
-    session.addEventListener("visibilitychange", () => { if (session?.visibilityState !== "visible") { release(undefined, "hidden"); void endVR(); } });
-    session.addEventListener("inputsourceschange", () => release(undefined, "source-change"));
-    placementPending = true;
-    await renderer.xr.setSession(session);
-  } catch (error) {
-    if (session) await session.end().catch(() => undefined);
-    lastMessage = error instanceof Error ? `Entrée VR refusée : ${error.message}` : "Entrée VR indisponible. La vue écran reste utilisable.";
-  } finally { startingVR = false; paint(); }
+  if (xrSession.session || xrSession.snapshot.phase === "starting") { await endVR(); return; }
+  if (!link.state().joined || !link.state().live) return;
+  lastMessage = "";
+  await xrSession.enter();
 }
 vrButton.addEventListener("click", () => { void enterVR(); });
-renderer.xr.addEventListener("sessionend", () => {
-  tableRig.position.set(0, 0, 0); tableRig.rotation.set(0, 0, 0);
-  frameDesktop();
-  paint();
-});
-element("[data-recenter]").addEventListener("click", () => { release(undefined, "recenter"); placementPending = true; });
+renderer.xr.addEventListener("sessionend", resetScreenView);
+element("[data-recenter]").addEventListener("click", () => { cancelXr("recenter"); placementPending = true; });
 element("form").addEventListener("submit", (event) => {
   event.preventDefault(); lastMessage = "";
   void link.join(roomInput.value).catch((error: unknown) => { lastMessage = error instanceof Error ? error.message : "Connexion refusée."; paint(); });
 });
-element("[data-leave]").addEventListener("click", () => { release(); link.leave(); });
+element("[data-leave]").addEventListener("click", () => { cancelXr("leave-role"); link.leave(); if (xrSession.session) void xrSession.exit(); });
 const pointer = new Vector2();
 const desktopCursor = new Mesh(new SphereGeometry(0.012, 12, 8), new MeshStandardMaterial({ color: "#f5c26b", emissive: "#6a4110" }));
 desktopCursor.visible = false; scene.add(desktopCursor);
 function desktopTip(event: PointerEvent): Vector3 | null {
   const earth = link.state().snapshot?.volcano.earth;
-  if (!earth || renderer.xr.isPresenting) return null;
+  if (!earth || inVR()) return null;
   const rect = renderer.domElement.getBoundingClientRect();
   pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2);
   scene.updateMatrixWorld(true); raycaster.setFromCamera(pointer, camera);
@@ -374,7 +405,7 @@ function movePointer(event: PointerEvent): void {
 }
 renderer.domElement.style.touchAction = "none";
 renderer.domElement.addEventListener("pointerdown", (event) => {
-  if (event.button !== 0 || !canDig() || renderer.xr.isPresenting) return;
+  if (event.button !== 0 || !canDig() || inVR()) return;
   if (mode === "balloon") {
     if (!canGrab()) return;
     pointerRay(event);
@@ -410,47 +441,61 @@ renderer.domElement.addEventListener("pointerup", (event) => {
 });
 for (const name of ["pointercancel", "lostpointercapture"] as const) renderer.domElement.addEventListener(name, () => release("mouse", name));
 renderer.domElement.addEventListener("pointerleave", () => { desktopCursor.visible = false; });
-const visibility = (): void => { if (document.hidden) release(undefined, "hidden"); };
+const visibility = (): void => { if (document.hidden) { cancelXr("hidden"); xrInput.setActive(false); } };
 document.addEventListener("visibilitychange", visibility);
 const resize = (): void => { renderer.setSize(root.clientWidth, root.clientHeight); camera.aspect = root.clientWidth / root.clientHeight; camera.updateProjectionMatrix(); frameDesktop(); };
-const blur = (): void => release(undefined, "blur");
+const blur = (): void => { cancelXr("blur"); xrInput.setActive(false); };
 window.addEventListener("resize", resize); window.addEventListener("blur", blur);
 resize();
 void ballsyRelayAvailable().then((available) => { if (!available) { lastMessage = "Le relais du géant n'est pas lancé pour cette prévisualisation."; paint(); } });
-void (async () => {
-  try { supported = !!(window.isSecureContext && navigator.xr && await navigator.xr.isSessionSupported("immersive-vr")); } catch { supported = false; }
-  element("[data-vr-help]").textContent = supported ? "La table se place devant toi. Bouton A/X du Quest : la ramener si tu changes de place."
-    : !window.isSecureContext ? "Cette adresse HTTP ne permet pas la VR. Utilise l'accès privé HTTPS ou USB local préparé pour le Quest. La souris reste disponible."
-    : "Ce navigateur n'annonce pas de casque VR disponible. Sur Quest, ouvre la même partie via HTTPS privé ou USB local. La souris reste disponible.";
+const unsubscribeXr = xrSession.subscribe((state) => {
+  element("[data-vr-help]").textContent = state.phase === "unsupported"
+    ? "Ce navigateur n'annonce pas de casque VR disponible. HTTPS reconnu ou localhost est nécessaire. La souris reste disponible."
+    : referenceSpaceType === "local" && inVR() ? "Origine locale sans sol : hauteur de confort de 1,6 m. Ramène la table si nécessaire."
+      : "Manettes ou pince pouce-index : prends un ballon puis relâche. Bouton A/X : ramener la table.";
+  if (state.phase === "error") lastMessage = xrSession.session
+    ? "Sortie VR interrompue. Réessaie de sortir."
+    : "Entrée VR indisponible. Tu peux réessayer ou continuer à la souris.";
   paint();
-})();
-
+});
+void xrSession.checkSupport();
 renderer.setAnimationLoop((_time, frame) => {
   if (disposed) return;
-  for (const source of renderer.xr.getSession()?.inputSources ?? []) {
+  frameCount++;
+  const now = performance.now(), session = xrSession.session;
+  const reference = renderer.xr.getReferenceSpace();
+  const suppliedFrame = frame ?? renderer.xr.getFrame();
+  const xrFrame = xrSession.snapshot.phase === "active" && session?.visibilityState === "visible"
+    && !document.hidden && suppliedFrame?.session === session ? suppliedFrame : null;
+  xrInput.setActive(!!xrFrame); xrInput.update();
+  for (const source of session?.inputSources ?? []) {
     const pad = source.gamepad;
     const quest = source.profiles.some((profile) => /^(?:oculus-touch|meta-quest-touch)/.test(profile));
-    const down = quest && pad?.mapping === "xr-standard" && !!(pad.buttons[4]?.pressed || (pad.buttons[4]?.value ?? 0) > 0.5);
-    if (down && !recenterHeld.get(source)) { release(undefined, "recenter"); placementPending = true; }
+    const down = !!xrFrame && quest && pad?.mapping === "xr-standard" && !!(pad.buttons[4]?.pressed || (pad.buttons[4]?.value ?? 0) > 0.5);
+    if (down && !recenterHeld.get(source)) { cancelXr("recenter"); placementPending = true; }
     recenterHeld.set(source, down);
   }
-  if (placementPending && frame && renderer.xr.isPresenting) {
-    const reference = renderer.xr.getReferenceSpace();
-    const pose = reference ? frame.getViewerPose(reference) : null;
-    if (pose) {
+  if (placementPending && xrFrame && reference) {
+    let pose: XRViewerPose | null = null;
+    try { pose = xrFrame.getViewerPose(reference) ?? null; } catch { /* Wait for an active native frame. */ }
+    if (pose && !pose.emulatedPosition) {
       const { position, orientation } = pose.transform;
-      headRotation.set(orientation.x, orientation.y, orientation.z, orientation.w);
-      headForward.set(0, 0, -1).applyQuaternion(headRotation); headForward.y = 0;
-      const yaw = headForward.lengthSq() > 0.01 ? Math.atan2(-headForward.x, -headForward.z) : tableRig.rotation.y;
-      // Move the tabletop once, never the viewer or race. Looking around does not drag it.
-      tableRig.position.set(position.x, position.y - 1.6, position.z); tableRig.rotation.set(0, yaw, 0);
-      placementPending = false; placements++;
+      if ([position.x, position.y, position.z, orientation.x, orientation.y, orientation.z, orientation.w].every(Number.isFinite)) {
+        cancelXr("table-placement");
+        const head = xrRig.localToWorld(new Vector3(position.x, position.y, position.z));
+        headRotation.set(orientation.x, orientation.y, orientation.z, orientation.w).premultiply(xrRig.getWorldQuaternion(new Quaternion()));
+        headForward.set(0, 0, -1).applyQuaternion(headRotation); headForward.y = 0;
+        const yaw = headForward.lengthSq() > 0.01 ? Math.atan2(-headForward.x, -headForward.z) : tableRig.rotation.y;
+        // Move only the tabletop. local-only reference spaces use the rig's 1.6 m offset.
+        tableRig.position.set(head.x, head.y - 1.6, head.z); tableRig.rotation.set(0, yaw, 0);
+        placementPending = false; placements++;
+      }
     }
   }
-  frameCount++; link.maintain();
+  link.maintain();
   const s = link.state(), snapshot = s.snapshot;
   if (snapshot) {
-    if (projectedRound && projectedRound !== snapshot.roundId) { release(undefined, "round-change"); localCooldownUntil = 0; observedHits = 0; }
+    if (projectedRound && projectedRound !== snapshot.roundId) { cancelXr("round-change"); localCooldownUntil = 0; observedHits = 0; }
     if (snapshot.slime) {
       if (slimeProjectedTime !== snapshot.slime.time || projectedRound !== snapshot.roundId) {
         slimeProjectedTime = snapshot.slime.time; slimeReceivedAt = performance.now();
@@ -481,10 +526,9 @@ renderer.setAnimationLoop((_time, frame) => {
       if (poses[i].active && object) object.position.lerpVectors(poses[i].from, poses[i].to, fraction);
     });
   }
-  if (!canDig()) release(undefined, snapshot?.phase === "paused" ? "paused" : "not-live");
+  if (!canDig()) cancelXr(snapshot?.phase === "paused" ? "paused" : "not-live");
   scene.updateMatrixWorld(true);
-  const dominant = dominantIndex(), reference = renderer.xr.getReferenceSpace();
-  const now = performance.now();
+  const dominant = dominantIndex();
   if (departure) {
     const age = (now - departure.at) / 1000;
     const acknowledged = snapshot?.slime?.projectiles.some((p) => p.id === departure?.id)
@@ -495,34 +539,34 @@ renderer.setAnimationLoop((_time, frame) => {
     } else {
       departureBalloon.position.set(...departure.thrown.position).addScaledVector(new Vector3(...departure.thrown.velocity), age);
       departureBalloon.position.y -= BALLSY_SLIME_LIMITS.gravity * 0.045 * age * age / 2;
-      departureBalloon.scale.setScalar(renderer.xr.isPresenting ? 1 : 1 + 0.4 * Math.max(0, 1 - age / 0.1));
+      departureBalloon.scale.setScalar(inVR() ? 1 : 1 + 0.4 * Math.max(0, 1 - age / 0.1));
     }
   }
   for (const [index, controller] of controllers.entries()) {
-    const source = sources[index];
-    const pose = frame && reference && source?.gripSpace ? frame.getPose(source.gripSpace, reference) : null;
-    const gripPose = pose && !pose.emulatedPosition ? pose : null;
-    const tracked = !!gripPose;
-    shovels[index].visible = mode === "shovel" && renderer.xr.isPresenting && index === dominant && tracked;
-    gloves[index].visible = mode === "balloon" && renderer.xr.isPresenting && tracked;
-    if (!renderer.xr.isPresenting) { handPoints[index] = null; beams[index].visible = false; cursors[index].visible = false; continue; }
-    hoverTargets[index] = throwGesture.state().held ? null : target(controller);
-    if (throwGesture.state().held) { beams[index].visible = false; cursors[index].visible = false; }
-    if (!gripPose) {
-      handPoints[index] = null;
+    const slot = xrInput.slots[index], source = slot.source;
+    const pose = xrFrame && reference && source ? readGiantXrPose(xrFrame, reference, source) : null;
+    shovels[index].visible = mode === "shovel" && inVR() && index === dominant && !!pose;
+    if (!pose || !source || placementPending) {
+      handPoints[index] = null; handSources[index] = null; rayTracked[index] = false;
+      hoverTargets[index] = null; beams[index].visible = false; cursors[index].visible = false;
       if (activeOwner === controller || throwGesture.isHeldBy(controller)) { release(controller, "tracking-lost"); feedback("Main perdue : reprends un ballon."); }
       continue;
     }
-    const { position, orientation } = gripPose.transform;
-    gripRotation.set(orientation.x, orientation.y, orientation.z, orientation.w);
-    const hand = new Vector3(...BALLOON_GRIP_OFFSET).applyQuaternion(gripRotation).add(new Vector3(position.x, position.y, position.z));
-    handPoints[index] = hand; handPoseAt[index] = now;
+    const hand = giantXrWorldPoint(pose, xrRig, BALLOON_GRIP_OFFSET);
+    handPoints[index] = hand; handPoseAt[index] = now; handSources[index] = source; rayTracked[index] = pose.rayTracked;
+    heldBalloons[index].position.fromArray(pose.kind === "hand" ? [0, 0, 0] : BALLOON_GRIP_OFFSET);
+    hoverTargets[index] = !throwGesture.state().held && pose.rayTracked ? target(controller) : null;
+    if (throwGesture.state().held || !pose.rayTracked) { beams[index].visible = false; cursors[index].visible = false; }
     if (throwGesture.isHeldBy(controller)) {
-      if (pendingRelease === index) launch(throwGesture.release(controller, hand.toArray() as ThrowPoint, now), source?.handedness ?? "none");
-      else if (!throwGesture.sample(controller, hand.toArray() as ThrowPoint, now)) { release(controller); heldBalloons[index].visible = false; feedback("Geste interrompu : reprends un ballon."); }
+      if (pendingRelease?.index === index) {
+        if (freshGiantXrRelease(pendingRelease, source, now, frameCount)) launch(throwGesture.release(controller, hand.toArray() as ThrowPoint, now), source.handedness);
+        else release(controller, "stale-release");
+      } else if (!throwGesture.sample(controller, hand.toArray() as ThrowPoint, now)) {
+        release(controller); feedback("Geste interrompu : reprends un ballon.");
+      }
     }
     if (mode === "shovel" && triggerHeld[index] && index === dominant && now - lastHold >= 50) {
-      modelTip.copy(bladeTip); grips[index].localToWorld(modelTip); world.group.worldToLocal(modelTip);
+      modelTip.copy(bladeTip); slot.anchor.localToWorld(modelTip); world.group.worldToLocal(modelTip);
       sampleTip(modelTip, controller);
     }
   }
@@ -531,28 +575,34 @@ renderer.setAnimationLoop((_time, frame) => {
     if (!throwGesture.sample("mouse", desktopBalloon.position.toArray() as ThrowPoint, now)) release("mouse");
   }
   const available = canGrab();
-  stock.forEach((balloon) => { balloon.visible = available; balloon.scale.setScalar(renderer.xr.isPresenting ? 1 : 1.4); });
-  if (renderer.xr.isPresenting) desktopCursor.visible = false;
-  renderer.render(scene, camera);
+  stock.forEach((balloon) => { balloon.visible = available; balloon.scale.setScalar(inVR() ? 1 : 1.4); });
+  if (inVR()) desktopCursor.visible = false;
+  renderer.render(scene, renderer.xr.isPresenting || inVR() ? xrCamera : camera);
 });
-function dispose(): void {
+async function dispose(): Promise<void> {
   if (disposed) return;
-  release(); link.leave(); disposed = true; renderer.setAnimationLoop(null);
+  cancelXr("dispose"); link.leave();
+  await xrSession.dispose();
+  // A failed native end remains owned and retryable. Do not destroy its renderer.
+  if (xrSession.session || disposed) return;
+  disposed = true; renderer.setAnimationLoop(null); unsubscribeXr();
   window.removeEventListener("resize", resize); window.removeEventListener("blur", blur);
-  void renderer.xr.getSession()?.end();
+  renderer.xr.removeEventListener("sessionend", resetScreenView);
   document.removeEventListener("visibilitychange", visibility);
+  xrInput.dispose();
   world.dispose();
   for (const shovel of shovels) shovel.traverse((object) => { if (object instanceof Mesh) { object.geometry.dispose(); (object.material as MeshStandardMaterial).dispose(); } });
-  for (const prop of [...stock, ...heldBalloons, ...gloves, desktopBalloon, departureBalloon]) disposeGiantProp(prop);
+  for (const prop of [...stock, ...heldBalloons, desktopBalloon, departureBalloon]) disposeGiantProp(prop);
   desktopCursor.geometry.dispose(); desktopCursor.material.dispose();
   for (const mesh of [...buttons, ...cursors]) { mesh.geometry.dispose(); (mesh.material as MeshStandardMaterial).dispose(); }
-  for (const line of beams) { line.geometry.dispose(); (line.material as LineBasicMaterial).dispose(); }
   for (const texture of ownedTextures) texture.dispose(); for (const material of ownedMaterials) material.dispose();
   renderer.dispose();
 }
-window.addEventListener("pagehide", dispose, { once: true });
+window.addEventListener("pagehide", () => { void dispose(); }, { once: true });
 Object.assign(window, { __BALLSY_GIANT__: {
   endVR, dispose,
+  xr: { session: xrSession, input: xrInput, renderer, camera: xrCamera, rig: xrRig,
+    get referenceSpaceType() { return referenceSpaceType; } },
   modelPoint: (x: number, y: number, z: number) => {
     const model = new Vector3(x, y, z), physical = world.group.localToWorld(model.clone()), screen = physical.clone().project(camera);
     return { model: model.toArray(), world: physical.toArray(), screen: [(screen.x + 1) * root.clientWidth / 2, (1 - screen.y) * root.clientHeight / 2] };
@@ -566,8 +616,12 @@ Object.assign(window, { __BALLSY_GIANT__: {
   },
   state: () => {
     const bounds = new Box3().setFromObject(world.group);
-    return { ...link.state(), view: renderer.xr.isPresenting ? "vr" : "screen", frameCount,
+    return { ...link.state(), view: inVR() ? "vr" : "screen", frameCount,
       eyes: renderer.xr.isPresenting ? renderer.xr.getCamera().cameras.length : 1,
+      xr: { phase: xrSession.snapshot.phase, referenceSpaceType, origin: xrRig.position.toArray(),
+        slots: xrInput.slots.map((slot, index) => ({ hand: slot.source?.handedness ?? null,
+          kind: slot.source ? slot.source.hand ? "hand" : "controller" : null, modelReady: slot.modelReady,
+          tracked: !!handPoints[index], rayTracked: rayTracked[index], anchorWorld: slot.anchor.getWorldPosition(new Vector3()).toArray() })) },
       balloon: { ...throwGesture.state(), cancelReason: throwGesture.state().reason, launches, lastLaunch, mode, cooldownSeconds: cooldownSeconds(),
         departureVisible: departureBalloon.visible, lastHandoffMs,
         stock: stock.map((balloon) => { const position = balloon.getWorldPosition(new Vector3()), screen = position.clone().project(camera);
@@ -576,7 +630,7 @@ Object.assign(window, { __BALLSY_GIANT__: {
       shovel: { samples: shovelSamples, lastTip, held: activeOwner !== null, dominant: dominantIndex(),
         tipOffset: bladeTip.toArray(), visible: shovels.map((tool) => tool.visible),
         gripWorld: grips.map((grip) => grip.getWorldPosition(new Vector3()).toArray()),
-        tipWorld: grips.map((grip) => grip.localToWorld(bladeTip.clone()).toArray()) },
+        tipWorld: xrInput.slots.map((slot) => slot.anchor.localToWorld(bladeTip.clone()).toArray()) },
       earthTargets: [ [7, 0], [9, 0], [11, 0] ].map(([x,z]) => {
         const earth = link.state().snapshot?.volcano.earth;
         const position = new Vector3(x, earth ? surfaceHeightAt(earth,x,z) : 0.8, z);
@@ -587,7 +641,7 @@ Object.assign(window, { __BALLSY_GIANT__: {
       selectStarts, selectEnds, hoverTargets: [...hoverTargets], placements,
       table: { position: tableRig.position.toArray(), yaw: tableRig.rotation.y, centre: world.group.getWorldPosition(new Vector3()).toArray() },
       screenCamera: { position: camera.position.toArray(), direction: camera.getWorldDirection(new Vector3()).toArray() },
-      controllers: Array.from(renderer.xr.getSession()?.inputSources ?? []).map((source) => ({ hand: source.handedness, profiles: source.profiles, mapping: source.gamepad?.mapping,
+      controllers: Array.from(xrSession.session?.inputSources ?? []).map((source) => ({ hand: source.handedness, profiles: source.profiles, mapping: source.gamepad?.mapping,
         primaryDown: !!(source.gamepad?.buttons[4]?.pressed || (source.gamepad?.buttons[4]?.value ?? 0) > 0.5) })),
       boardSize: bounds.getSize(new Vector3()).toArray(),
       targets: buttons.map((b) => b.getWorldPosition(new Vector3()).toArray()),

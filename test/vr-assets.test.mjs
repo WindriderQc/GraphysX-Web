@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { productAssetManifest } from '../scripts/product-assets.mjs';
+import { productAssetManifest, xrAssetManifest } from '../scripts/product-assets.mjs';
 const read = name => readFile(new URL(`../public/assets/xr/profiles/${name}`,import.meta.url),'utf8').then(JSON.parse);
 test('local generic controller has all animated component nodes and stays in the product manifest',async()=>{
  const profiles=await read('profilesList.json');
@@ -19,7 +19,10 @@ test('local generic controller has all animated component nodes and stays in the
  }
  assert.ok(model.buffers.every(buffer=>buffer.uri.startsWith('data:')));
  const manifest=await productAssetManifest();
+ const xr=await xrAssetManifest();
+ assert.equal(xr.length,3);
  for(const file of ['profilesList.json','generic-trigger/profile.json','generic-trigger/controller.gltf']){
   assert.ok(manifest.files.includes(`/assets/xr/profiles/${file}`));
+  assert.ok(xr.includes(`/assets/xr/profiles/${file}`));
  }
 });

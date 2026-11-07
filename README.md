@@ -120,6 +120,7 @@ Preserve `.graphysx-store/`: it is user content, not disposable build output.
 | Persistence, media and collaboration | `server/scene-store.mjs` and its imported `server/` modules |
 | Verification coverage | `scripts/verify-manifest.mjs`; `scripts/verify.mjs` executes it |
 | Ballsy (local family race, volcano and optional giant) | `ballsy.html`, `ballsy-giant.html`; [roadmap](docs/BALLSY_ROADMAP.md) and [controls, private relay and test limits](docs/BALLSY_VOLCANO.md); [prepare the TV/controllers and Quest playtest](docs/BALLSY_PLAYTEST.md) |
+| Ballsy shared VR prototype (local only) | [Hands, controller balloons, isolated launcher and Quest access limits](docs/BALLSY_SHARED_VR.md); `Jouer-Ballsy-VR.cmd` |
 | Cyber Race 1992 (standalone page at /cyber-race.html, listed on the Games shelf) | `cyber-race.html`, `src/cyber-race/`; see [docs/CYBER_RACE.md](docs/CYBER_RACE.md) |
 
 Read [PRODUCT_SPEC.md](PRODUCT_SPEC.md) for the product contract and
