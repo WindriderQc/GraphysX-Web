@@ -20,13 +20,24 @@
         <p class="ml-lede">Écris tes formules, ligne par ligne, et regarde-les en 3D. Les curseurs changent les paramètres en direct.</p>
       </header>
       <section class="ml-examples" aria-label="Exemples">
-        <div class="ml-chips" id="ml-examples"></div>
+        <div class="ml-level">
+          <h2 class="ml-level-title">Pour commencer</h2>
+          <div class="ml-chips" id="ml-examples-simple"></div>
+        </div>
+        <div class="ml-level">
+          <h2 class="ml-level-title">Pour aller plus loin</h2>
+          <div class="ml-chips" id="ml-examples-advanced"></div>
+        </div>
+        <p class="ml-about" id="ml-about"></p>
       </section>
       <section class="ml-editor" aria-label="Formules">
         <label class="ml-label" for="ml-body">Tes formules</label>
         <textarea id="ml-body" class="ml-body" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
           rows="7" aria-describedby="ml-status"></textarea>
-        <p id="ml-status" class="ml-status" role="status" aria-live="polite"></p>
+        <div id="ml-status" class="ml-status" role="status" aria-live="polite">
+          <p class="ml-status-say" id="ml-status-say"></p>
+          <p class="ml-status-detail" id="ml-status-detail"></p>
+        </div>
         <div class="ml-tools">
           <button type="button" id="ml-copy" class="ml-button">Copier le bloc</button>
           <span id="ml-copied" class="ml-copied" hidden>Copié</span>
@@ -52,6 +63,7 @@
           <llmx-stage id="ml-stage" class="ml-stage" role="img" aria-label="Dessin des formules"></llmx-stage>
           <p class="ml-stage-note" id="ml-stage-note" hidden></p>
         </div>
+        <p class="ml-orbit">Glisse sur le dessin pour le tourner · double-clic pour revenir</p>
         <ul class="ml-legend" id="ml-legend" aria-label="Légende"></ul>
         <div class="ml-sliders" id="ml-sliders"></div>
         <ul class="ml-readouts" id="ml-readouts" aria-live="polite"></ul>

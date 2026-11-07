@@ -25,6 +25,7 @@ import {
 } from "./math-block";
 import { evaluateMath, formatMath, formatMathNumber, integrateMath } from "./math-expression";
 import { MATH_LAB_EXAMPLES } from "./math-lab-examples";
+import { mathLabRefusal, prettyMath } from "./math-lab-messages";
 
 /** Milliseconds of quiet typing before the block is read again. */
 const READ_DELAY_MS = 250;
@@ -33,14 +34,17 @@ const HASH_KEY = "bloc";
 const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const root = document.querySelector<HTMLElement>("main.ml")!;
 const body = byId<HTMLTextAreaElement>("ml-body");
-const status = byId<HTMLParagraphElement>("ml-status");
+const status = byId<HTMLDivElement>("ml-status");
+const statusSay = byId<HTMLParagraphElement>("ml-status-say");
+const statusDetail = byId<HTMLParagraphElement>("ml-status-detail");
+const about = byId<HTMLParagraphElement>("ml-about");
 const stage = byId<LlmXStageElement & HTMLElement>("ml-stage");
 const stageNote = byId<HTMLParagraphElement>("ml-stage-note");
 const legend = byId<HTMLUListElement>("ml-legend");
 const sliders = byId<HTMLDivElement>("ml-sliders");
 const readouts = byId<HTMLUListElement>("ml-readouts");
 const hint = byId<HTMLParagraphElement>("ml-hint");
-const examples = byId<HTMLDivElement>("ml-examples");
+const shelves = { simple: byId<HTMLDivElement>("ml-examples-simple"), advanced: byId<HTMLDivElement>("ml-examples-advanced") };
 const copy = byId<HTMLButtonElement>("ml-copy");
 const copied = byId<HTMLSpanElement>("ml-copied");
 
@@ -76,11 +80,23 @@ function sceneShape(scene: Record<string, unknown>): string {
   return JSON.stringify({ ...scene, parameters });
 }
 
+/** A refusal in two lines: plain French first, then the reader's exact words (AgentX's message) as the detail. */
+function refuse(say: string, detail: string): void {
+  statusSay.textContent = say;
+  statusDetail.textContent = detail;
+  status.dataset.kind = "refused";
+}
+
+function clearRefusal(): void {
+  statusSay.textContent = "";
+  statusDetail.textContent = "";
+  delete status.dataset.kind;
+}
+
 function read(text: string): void {
   const block = parseMathBlock(text);
   if (!block.ok) {
-    status.textContent = `Formule non tracée : ${block.error.message}`;
-    status.dataset.kind = "refused";
+    refuse(`Pas encore de dessin : ${mathLabRefusal(block.error)}`, `Formule non tracée : ${block.error.message}`);
     root.classList.toggle("ml-stale", Boolean(shown));
     stageNote.hidden = !shown;
     stageNote.textContent = shown ? "Dernier dessin valide" : "";
@@ -97,8 +113,7 @@ function read(text: string): void {
   }
   shown = block;
   values = next;
-  status.textContent = "";
-  delete status.dataset.kind;
+  clearRefusal();
   root.classList.remove("ml-stale");
   stageNote.hidden = true;
   remember(text);
@@ -129,7 +144,9 @@ function renderLegend(): void {
     const swatch = el("span", "ml-swatch");
     if (color) swatch.style.background = color;
     else swatch.classList.add("ml-swatch-ghost");
-    row.append(swatch, el("span", "ml-legend-name", `${name} = `), el("code", "ml-legend-formula", expression));
+    const formula = el("code", "ml-legend-formula", prettyMath(expression));
+    formula.dataset.expression = expression;
+    row.append(swatch, el("span", "ml-legend-name", `${name} = `), formula);
     legend.append(row);
   };
   if (plot.kind === "surfaces") {
@@ -228,8 +245,11 @@ function load(text: string): void {
   read(text);
 }
 
+/** Marks the chosen example and says, in a sentence, what to try with it. */
 function selectExample(id: string | null): void {
-  for (const chip of examples.querySelectorAll<HTMLButtonElement>("button")) chip.setAttribute("aria-pressed", String(chip.dataset.id === id));
+  for (const chip of document.querySelectorAll<HTMLButtonElement>(".ml-chip")) chip.setAttribute("aria-pressed", String(chip.dataset.id === id));
+  const example = MATH_LAB_EXAMPLES.find(row => row.id === id);
+  about.textContent = example ? example.hint : "Ton propre dessin. Choisis un exemple pour repartir d'un modèle.";
 }
 
 for (const example of MATH_LAB_EXAMPLES) {
@@ -242,7 +262,7 @@ for (const example of MATH_LAB_EXAMPLES) {
     selectExample(example.id);
     load(example.body);
   });
-  examples.append(chip);
+  shelves[example.level].append(chip);
 }
 
 body.maxLength = MATH_BLOCK_LIMITS.body;
@@ -273,8 +293,7 @@ stage.addEventListener("llmx-parameters-applied", () => { if (root.dataset.state
 stage.addEventListener("llmx-scene-rejected", event => {
   const detail = (event as CustomEvent<{ reason?: string; message?: string }>).detail;
   shape = "";
-  status.textContent = `GraphysX n'a pas pu dessiner ce bloc : ${detail?.message ?? detail?.reason ?? "raison inconnue"}`;
-  status.dataset.kind = "refused";
+  refuse("GraphysX n'a pas pu dessiner ce bloc.", `Scène refusée : ${detail?.message ?? detail?.reason ?? "raison inconnue"}`);
   setState("rejected", root.dataset.schema);
 });
 stage.addEventListener("llmx-stage-error", () => {

@@ -6,12 +6,19 @@ lines Nestor writes inside `<show kind="math">` in AgentX's Super Dad and Famill
 page calls no model and makes no request outside the site. The Browse shelf lists it as
 "Math Lab".
 
+It is the only Math Lab in GraphysX-Web. The recovered Math Game screen
+(`archive-math-lab`, its Browse row and thumbnail) was retired on 2026-11-07. The
+`formula-field` entity, `api.formulas()`, its editor chips and its place in the world
+vocabulary stay: agents still place formula fields in worlds, and saved scenes holding
+them keep loading. Only the screen built from it went away.
+
 ## What it is made of
 
 | Part | File | Role |
 | --- | --- | --- |
 | Block reader | `src/math-block.ts` | Port of AgentX's `parsePlot`/`plotText` (`core/public/js/math-expression.js`), built on the grammar in `src/math-expression.ts`. It also builds the stage scene the way AgentX's card does (`sceneOf`). |
-| Starter blocks | `src/math-lab-examples.ts` | Line, parabola, two curves, wave, tangent, area, circle `c(t)`, hill and saddle surfaces, from simple to advanced. |
+| Starter blocks | `src/math-lab-examples.ts` | Two levels. "Pour commencer": line, parabola, two curves, wave. "Pour aller plus loin": tangent, area, circle `c(t)`, hill and saddle surfaces. Each says in one sentence what to try. |
+| Plain words | `src/math-lab-messages.ts` | Each refusal said in plain French (with an example of what to write), and formulas shown with superscripts (`x²`, `3 · x`). |
 | Page | `math-lab.html`, `src/math-lab-page.ts`, `src/math-lab.css` | Text box, examples, stage, legend, sliders, tangent and area readouts. |
 | Parity vectors | `test/fixtures/math-block-vectors.json` | AgentX's answer for each of 94 blocks (accepted and refused), checked by `test/math-block.test.mjs`. |
 | Journey | `scripts/smoke-math-lab.mjs` (`math-lab` in the verify manifest) | Browse row, typed v2 block, slider, refusal, v3 and v4 examples, address round trip, phone layout. |
@@ -21,8 +28,8 @@ page calls no model and makes no request outside the site. The Browse shelf list
 - **One grammar.** The formula grammar is `math-expression.ts`, already shared with
   AgentX by `test/fixtures/math-expression-vectors.json`. The block reader only adds the
   line syntax around it.
-- **Refused whole, never clamped.** A block AgentX refuses is refused here with the same
-  message, prefixed "Formule non tracée". The last valid picture stays, dimmed and marked
+- **Refused whole, never clamped.** A block AgentX refuses is refused here: a plain French
+  sentence first, then AgentX's exact message, prefixed "Formule non tracée". The last valid picture stays, dimmed and marked
   "Dernier dessin valide", until the text is valid again. Slider values always lie inside
   their declared range.
 - **Same picture as AgentX.** The scene uses the oldest contract that draws the block:

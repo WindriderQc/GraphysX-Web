@@ -4,7 +4,7 @@ import path from "node:path";
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 
 // The Math Lab page as a visitor meets it (docs/MATH_LAB_PAGE.md): the Browse shelf row opens
-// it, a typed block is drawn by <llmx-stage> with live sliders, an invalid block is refused whole
+// it (the retired Math Game row is gone), a typed block is drawn by <llmx-stage> with live sliders, an invalid block is refused whole
 // while the last picture stays, the starter examples draw v2, v3 and v4 scenes, the block survives
 // a reload through the address, and the page fits a phone. No model and no outside request.
 
@@ -30,7 +30,9 @@ const state = (page) => page.evaluate(() => {
   const stage = document.getElementById("ml-stage");
   return {
     state: main.dataset.state, schema: main.dataset.schema ?? null, stale: main.classList.contains("ml-stale"),
-    status: document.getElementById("ml-status").textContent, scene: stage.scene, parameters: stage.parameters,
+    say: document.getElementById("ml-status-say").textContent, detail: document.getElementById("ml-status-detail").textContent,
+    about: document.getElementById("ml-about").textContent, scene: stage.scene, parameters: stage.parameters,
+    legend: [...document.querySelectorAll(".ml-legend-formula")].map((row) => row.textContent),
     sliders: [...document.querySelectorAll(".ml-slider input")].map((input) => input.dataset.name),
     readouts: [...document.querySelectorAll(".ml-readout")].map((row) => row.textContent),
   };
@@ -69,6 +71,7 @@ try {
   await page.click(".gx-welcome .gx-go-browse");
   const row = '.gx-browse-row[data-scene-id="math-lab"]';
   await page.waitForSelector(row);
+  assert.equal(await page.$('.gx-browse-row[data-scene-id="archive-math-lab"]'), null, "one Math Lab: the old Math Game row is gone");
   out.row = await page.$eval(row, (element) => element.querySelector(".gx-browse-name")?.textContent);
   await Promise.all([page.waitForURL(/\/math-lab\.html/), page.click(row)]);
 
@@ -105,7 +108,8 @@ try {
   await type(page, "y = a*x\na = 9 in [0, 5]");
   const refused = await state(page);
   assert.equal(refused.state, "refused");
-  assert.match(refused.status, /^Formule non tracée : Parameter a must lie inside its range/);
+  assert.equal(refused.say, "Pas encore de dessin : La valeur de a sort de son intervalle. Choisis une valeur entre le minimum et le maximum.");
+  assert.equal(refused.detail, "Formule non tracée : Parameter a must lie inside its range", "the reader's exact words stay visible");
   assert.ok(refused.stale, "the previous picture is marked as the last valid one");
   assert.deepEqual(refused.scene.functions.map((fn) => fn.expression), ["x^2", "a * x + 1"], "nothing was clamped and drawn");
   await page.screenshot({ path: path.join(ART, "math-lab-refused.png") });
@@ -117,7 +121,9 @@ try {
   assert.deepEqual(tangent.scene.tangents, [{ of: "f", at: "p" }]);
   assert.deepEqual(tangent.scene.derivatives, ["f"]);
   assert.equal(tangent.readouts[0], "Tangente à f en x = 1 : pente 0", "the slope of x^3 - 3x at 1, from the formula");
-  assert.ok(!tangent.stale && !tangent.status, "a valid block clears the refusal");
+  assert.ok(!tangent.stale && !tangent.say && !tangent.detail, "a valid block clears the refusal");
+  assert.deepEqual(tangent.legend, ["x³ − 3 · x", "3 · x² − 3"], "formulas read with superscripts");
+  assert.match(tangent.about, /^f'\(x\) est la pente de f/, "the chosen example says what to try");
   await page.screenshot({ path: path.join(ART, "math-lab-tangent.png") });
 
   await page.click('.ml-chip[data-id="area"]');

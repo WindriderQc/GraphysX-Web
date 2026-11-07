@@ -7,7 +7,6 @@ import type { AgentLevelState } from "./agent-level-library";
  */
 export const SHELF_SCENE_THUMBNAIL_IDS: ReadonlySet<string> = new Set([
   "archive-maison",
-  "archive-math-lab",
   "archive-voie-lactee",
   "archive-flock-planet",
   "archive-forces-garden",
@@ -25,6 +24,7 @@ export const SHELF_SCENE_THUMBNAIL_IDS: ReadonlySet<string> = new Set([
   "archive-skybox-spiral",
   "archive-world1",
   "cyber-race-1992",
+  "math-lab",
 ] as const);
 
 export function createSceneThumbnail(id: string, label: string): HTMLImageElement {

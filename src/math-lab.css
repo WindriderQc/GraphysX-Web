@@ -58,6 +58,12 @@ code { font-family: var(--ml-mono); font-size: 0.92em; }
 .ml-chip:focus-visible, .ml-button:focus-visible, .ml-body:focus-visible { outline: 2px solid var(--ml-cyan); outline-offset: 2px; }
 .ml-chip[aria-pressed="true"] { border-color: var(--ml-accent); color: var(--ml-accent); }
 
+.ml-examples { display: grid; gap: 10px; }
+.ml-level { display: grid; gap: 6px; min-width: 0; }
+.ml-level-title { margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ml-dim); }
+.ml-about { margin: 0; min-height: 1.4em; color: var(--ml-cyan); line-height: 1.4; }
+.ml-orbit { margin: -4px 0 0; color: var(--ml-dim); font-size: 0.82rem; text-align: center; }
+
 .ml-label { font-weight: 700; }
 .ml-body {
   width: 100%;
@@ -71,14 +77,19 @@ code { font-family: var(--ml-mono); font-size: 0.92em; }
   font: 16px/1.5 var(--ml-mono); /* 16px: phones do not zoom into the box */
   tab-size: 2;
 }
-.ml-status { margin: 0; min-height: 1.4em; line-height: 1.4; }
+.ml-status { min-height: 1.4em; line-height: 1.4; }
+.ml-status p { margin: 0; }
 .ml-status[data-kind="refused"] {
-  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
   border-left: 3px solid var(--ml-refuse);
-  border-radius: 4px;
-  background: #2a1414;
-  color: var(--ml-refuse);
+  border-radius: 6px;
+  background: #2a1616;
 }
+.ml-status-say { color: #ffd2c8; font-size: 1.02rem; }
+.ml-status-detail { color: var(--ml-refuse); font: 0.82rem/1.4 var(--ml-mono); opacity: 0.85; }
+.ml-status-detail:empty, .ml-status-say:empty { display: none; }
 .ml-tools { display: flex; align-items: center; gap: 10px; }
 .ml-copied { color: var(--ml-dim); font-size: 0.9rem; }
 

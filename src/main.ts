@@ -6,12 +6,6 @@ import {
   composeArchiveBuilding,
 } from "./archive-buildings";
 import {
-  ARCHIVE_MATH_SCENES,
-  archiveMathBrowseRows,
-  buildArchiveMathLab,
-  composeArchiveMathLab,
-} from "./archive-math-lab";
-import {
   ARCHIVE_MILKYWAY_SCENES,
   archiveMilkyWayBrowseRows,
   buildArchiveMilkyWay,
@@ -1000,7 +994,6 @@ if (appParam === "vr-lab") {
             // scene, so their simulation vocabulary is selectable and editable.
             // The recovered Voie Lactee vignette. Same shape as the playgrounds: it opens in the
             // editor like any browsed scene.
-            // The recovered Math Game screen, built on the `formula-field` entity type.
             // The recovered Maison massing model.
             ...archiveBuildingBrowseRows(host.api, () => {
               showroomEnvironment?.();
@@ -1009,7 +1002,9 @@ if (appParam === "vr-lab") {
               enterBrowsedEditor();
             }),
             // The Math Lab page: a person types the blocks Nestor writes in AgentX and sees the same
-            // Math Game picture, with no assistant. A separate page, so its row is a link.
+            // Math Game picture, with no assistant. It replaced the recovered Math Game screen
+            // (archive-math-lab) on 2026-11-07; `formula-field` stays world vocabulary.
+            // A separate page, so its row is a link.
             {
               id: "math-lab",
               label: "Math Lab",
@@ -1020,12 +1015,6 @@ if (appParam === "vr-lab") {
                 return new Promise<void>(() => {});
               },
             },
-            ...archiveMathBrowseRows(host.api, () => {
-              showroomEnvironment?.();
-              showroomEnvironment = null;
-              host.applyEnvironment();
-              enterBrowsedEditor();
-            }),
             ...archiveMilkyWayBrowseRows(host.api, () => {
               showroomEnvironment?.();
               showroomEnvironment = null;
@@ -1293,9 +1282,6 @@ if (appParam === "vr-lab") {
         buildings: ARCHIVE_BUILDINGS,
         buildBuilding: buildArchiveBuilding,
         composeBuilding: composeArchiveBuilding,
-        math: ARCHIVE_MATH_SCENES,
-        buildMathLab: buildArchiveMathLab,
-        composeMathLab: composeArchiveMathLab,
         milkyway: ARCHIVE_MILKYWAY_SCENES,
         buildMilkyWay: buildArchiveMilkyWay,
         composeMilkyWay: composeArchiveMilkyWay,
