@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, Box3, BoxGeometry, BufferGeometry, CanvasTexture, Color, Group, Line, LineBasicMaterial, Matrix4, Mesh, MeshStandardMaterial, PerspectiveCamera, Quaternion, Raycaster, Scene, SphereGeometry, CylinderGeometry, TorusGeometry, Vector2, Sprite, SpriteMaterial, SRGBColorSpace, Vector3, WebGLRenderer } from "three";
+import { ACESFilmicToneMapping, Box3, BoxGeometry, BufferGeometry, CanvasTexture, Color, Group, Line, LineBasicMaterial, Matrix4, Mesh, MeshStandardMaterial, PerspectiveCamera, Plane, Quaternion, Raycaster, Scene, SphereGeometry, CylinderGeometry, TorusGeometry, Vector2, Sprite, SpriteMaterial, SRGBColorSpace, Vector3, WebGLRenderer } from "three";
 import { AgentWorldRuntime } from "./agent-world-runtime";
 import { createAgentWorldApi } from "./agent-world-api";
 import { composeBallsyCourse } from "./ballsy-scene";
@@ -7,6 +7,10 @@ import { createBallsyGuestLink, ballsyRelayAvailable } from "./ballsy-link";
 import { createVolcano, volcanoWave } from "./ballsy-volcano";
 import { bridgeOcclusionDistance } from "./ballsy-picking";
 import { EARTH_BOUNDS, surfaceHeightAt } from "./ballsy-earth";
+import { BallsyThrowGesture, canGrabBallsyBalloon, ballsyThrowInSpace, type BallsyThrow, type ThrowPoint } from "./ballsy-throw";
+import { BALLOON_GRIP_OFFSET, makeGiantBalloon, makeGiantGlove, disposeGiantProp } from "./ballsy-giant-balloon";
+import { ballsySlimeEntities, projectBallsySlime } from "./ballsy-slime-scene";
+import { BALLSY_SLIME_LIMITS, parseGiantCommand } from "../server/ballsy-protocol.mjs";
 import { showStartupError } from "./startup-error";
 import "./ballsy-giant.css";
 
@@ -14,8 +18,8 @@ const root = document.querySelector<HTMLElement>("#giant")!;
 try {
 root.innerHTML = `<section class="giant-overlay"><header><a href="./ballsy.html">Ballsy · Le géant</a><span>La course reste sur la télé</span></header>
   <div class="giant-connect"><form><label for="room-code">Code affiché sur la télé</label><div><input id="room-code" maxlength="12" autocomplete="off" spellcheck="false" placeholder="ABCD-EFGH" required><button type="submit">Rejoindre</button></div></form>
-  <p data-status role="status">Saisis le code de la partie.</p><div class="giant-actions"><button data-vr disabled>Vérification du Quest…</button><button data-recenter hidden>Ramener la table</button><button data-leave hidden>Rendre la pelle</button></div><small data-vr-help></small></div>
-  <aside class="giant-desktop" data-controls hidden><h2>Une vraie pelle</h2><p data-task></p><small>En VR : la pelle suit ta main droite. Garde la gâchette pressée, enfonce la lame dans la terre puis tire et soulève. Une main immobile ne creuse pas.<br>À l’écran : clique et glisse directement sur la terre.</small></aside></section>`;
+  <p data-status role="status">Saisis le code de la partie.</p><div class="giant-actions"><button data-vr disabled>Vérification du Quest.</button><button data-recenter hidden>Ramener la table</button><button data-leave hidden>Quitter le rôle</button></div><small data-vr-help></small></div>
+  <aside class="giant-desktop" data-controls hidden><h2>À toi les ballons !</h2><div class="giant-modes"><button data-mode="balloon" aria-pressed="true">Ballons slime</button><button data-mode="shovel" aria-pressed="false">Pelle</button></div><p data-task role="status"></p><small data-gesture-help></small></aside></section>`;
 const element = <T extends HTMLElement>(selector: string): T => root.querySelector<T>(selector)!;
 const vrButton = element<HTMLButtonElement>("[data-vr]");
 const roomInput = element<HTMLInputElement>("#room-code");
@@ -28,9 +32,17 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); renderer.sh
 renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local-floor");
 root.prepend(renderer.domElement);
 const camera = new PerspectiveCamera(65, 1, 0.02, 30);
-camera.position.set(0, 1.6, 0.1); camera.lookAt(0.15, 0.87, -1.05);
+function frameDesktop(): void {
+  if (renderer.xr.isPresenting) return;
+  const target = new Vector3(0.15, 0.9, -1.05);
+  const fit = Math.max(1, (16 / 9) / camera.aspect);
+  camera.position.copy(target).add(new Vector3(0, 1.25, 2).multiplyScalar(fit));
+  camera.lookAt(target); camera.updateMatrixWorld(true);
+}
+frameDesktop();
 const definition = composeBallsyCourse({ volcano: true });
 definition.rules = undefined;
+definition.entities.push(...ballsySlimeEntities());
 // This view never simulates the race: only the PC's snapshots place the two balls.
 for (const entity of definition.entities) { delete entity.physics; delete entity.steering; }
 const world = new AgentWorldRuntime(definition);
@@ -61,12 +73,12 @@ function label(width: number, height: number): { sprite: Sprite; draw: (text: st
 const statusLabel = label(1.05, 0.26); statusLabel.sprite.position.set(0, 1.5, -1.32); tableRig.add(statusLabel.sprite);
 const buttons: Mesh<BoxGeometry, MeshStandardMaterial>[] = [];
 const buttonLabels: ReturnType<typeof label>[] = [];
-for (let i = 0; i < 2; i++) {
+for (let i = 0; i < 3; i++) {
   const button = new Mesh(new BoxGeometry(0.24, 0.10, 0.06), new MeshStandardMaterial({ color: "#d9ae70", roughness: 0.7 }));
-  button.position.set(i ? -0.69 : 0.69, 1.48, -1.32);
+  button.position.set(i === 0 ? 0.69 : i === 1 ? -0.69 : 0, i === 2 ? 1.29 : 1.48, -1.32);
   const text = label(0.23, 0.08);
   text.sprite.position.copy(button.position).add(new Vector3(0, 0.02, 0.04));
-  text.draw(i ? "Ramener la table" : "Sortir VR");
+  text.draw(i === 0 ? "Sortir VR" : i === 1 ? "Ramener la table" : "Pelle / ballons");
   buttons.push(button); buttonLabels.push(text); tableRig.add(button, text.sprite);
 }
 let supported = false, disposed = false, frameCount = 0, projectedKey = "", activeOwner: object | string | null = null;
@@ -78,6 +90,7 @@ const recenterHeld = new WeakMap<XRInputSource, boolean>();
 const hoverTargets: (number | null)[] = [null, null];
 const poses = [0, 1].map(() => ({ from: new Vector3(), to: new Vector3(), active: false }));
 let poseStarted = 0, projectedRound = "";
+let slimeProjectedTime = -1, slimeReceivedAt = 0;
 const link = createBallsyGuestLink(() => paint());
 const raycaster = new Raycaster(), rotation = new Matrix4(), point = new Vector3();
 const controllers: Group[] = [];
@@ -89,9 +102,35 @@ const sources: (XRInputSource | null)[] = [null, null];
 const triggerHeld = [false, false];
 const bladeTip = new Vector3(0, -0.055, -0.55);
 const modelTip = new Vector3();
+type GiantMode = "balloon" | "shovel";
+let mode: GiantMode = "balloon";
+const throwGesture = new BallsyThrowGesture();
+const gloves: Group[] = [], heldBalloons: Group[] = [];
+const stock = [-0.26, 0.26].map((x) => {
+  const balloon = makeGiantBalloon(); balloon.position.set(x, 1.08, -0.48); tableRig.add(balloon); return balloon;
+});
+const desktopBalloon = makeGiantBalloon(); desktopBalloon.visible = false; scene.add(desktopBalloon);
+// Only the immediate departure is drawn locally, until the same ID reaches a host snapshot.
+// This visual has no collision, splat, slowdown, or second copy of the game state.
+const departureBalloon = makeGiantBalloon(); departureBalloon.visible = false; scene.add(departureBalloon);
+let departure: { id: string; at: number; thrown: BallsyThrow } | null = null, lastHandoffMs: number | null = null;
+const desktopPlane = new Plane(new Vector3(0, 1, 0), -1.08);
+const desktopGrabOffset = new Vector3();
+const handPoints: (Vector3 | null)[] = [null, null];
+const handPoseAt = [0, 0];
+const gripRotation = new Quaternion();
+const inputHeld = [{ select: false, squeeze: false }, { select: false, squeeze: false }];
+let pendingRelease: number | null = null, desktopPointer: number | null = null;
+let launches = 0, localCooldownUntil = 0, lastLaunch: { origin: ThrowPoint; velocity: ThrowPoint; source: string } | null = null;
+let balloonMessage = "", balloonMessageUntil = 0, observedHits = 0;
 let shovelSamples = 0, lastTip: number[] | null = null, desktopDown = false;
-function release(owner?: object | string): void {
-  if (owner !== undefined && activeOwner !== owner) return;
+function release(owner?: object | string, reason = "cancelled"): void {
+  if (owner !== undefined && activeOwner !== owner && !throwGesture.isHeldBy(owner) && throwGesture.state().held) return;
+  if (throwGesture.state().held) throwGesture.cancel(reason);
+  if (owner === undefined) { departure = null; departureBalloon.visible = false; }
+  pendingRelease = null; desktopPointer = null;
+  desktopBalloon.visible = false; heldBalloons.forEach((balloon) => { balloon.visible = false; });
+  inputHeld.forEach((input) => { input.select = false; input.squeeze = false; });
   if (activeOwner !== null) link.send({ type: "release" });
   activeOwner = null; desktopDown = false;
   triggerHeld.fill(false);
@@ -110,7 +149,8 @@ function sampleTip(tip: Vector3, owner: object | string): void {
 function activate(index: number): void {
   release();
   if (index === 0) void endVR();
-  else placementPending = true;
+  else if (index === 1) placementPending = true;
+  else setMode(mode === "balloon" ? "shovel" : "balloon");
 }
 function dominantIndex(): number {
   const right = sources.findIndex((source) => source?.handedness === "right");
@@ -143,49 +183,120 @@ function target(controller: Group): number | null {
   if (hit) cursors[index].position.copy(hit.point);
   return hit ? buttons.indexOf(hit.object as typeof buttons[number]) : null;
 }
+function cooldownSeconds(): number {
+  const slime = link.state().snapshot?.slime;
+  return Math.max(0, (localCooldownUntil - performance.now()) / 1000, slime ? slime.cooldownUntil - slime.time : 0);
+}
+function canGrab(): boolean { return mode === "balloon" && canDig() && cooldownSeconds() <= 0 && !throwGesture.state().held; }
+function feedback(message: string, duration = 1300): void { balloonMessage = message; balloonMessageUntil = performance.now() + duration; paint(); }
+function setMode(next: GiantMode): void {
+  release(); mode = next; balloonMessage = "";
+  for (const button of root.querySelectorAll<HTMLButtonElement>("[data-mode]")) button.setAttribute("aria-pressed", String(button.dataset.mode === next));
+  paint();
+}
+for (const button of root.querySelectorAll<HTMLButtonElement>("[data-mode]")) button.addEventListener("click", () => setMode(button.dataset.mode as GiantMode));
+function launch(thrown: BallsyThrow | null, source: string): void {
+  pendingRelease = null; desktopPointer = null; desktopBalloon.visible = false;
+  heldBalloons.forEach((balloon) => { balloon.visible = false; });
+  if (!thrown || !canDig() || mode !== "balloon") return;
+  scene.updateMatrixWorld(true);
+  // Transform two physical points: inverse tabletop rotation AND its 0.045 scale.
+  // transformDirection would normalize and silently lose the speed / scale.
+  const transformed = ballsyThrowInSpace(thrown, (point) => world.group.worldToLocal(new Vector3(...point)).toArray() as ThrowPoint);
+  const velocity = new Vector3(...transformed.velocity);
+  // Stay inside the wire limit even after floating-point rotation and inverse scaling.
+  if (velocity.length() >= BALLSY_SLIME_LIMITS.maximumSpeed) velocity.setLength(BALLSY_SLIME_LIMITS.maximumSpeed - 1e-8);
+  const command = { type: "slime" as const, throwId: crypto.randomUUID(), origin: transformed.position, velocity: velocity.toArray() as ThrowPoint };
+  if (!parseGiantCommand(command)) { feedback("Rapproche-toi de la table pour lancer."); return; }
+  link.send(command); launches++; lastLaunch = { origin: command.origin, velocity: command.velocity, source };
+  departure = { id: command.throwId, at: performance.now(), thrown }; lastHandoffMs = null;
+  departureBalloon.position.set(...thrown.position); departureBalloon.visible = true;
+  departureBalloon.scale.setScalar(renderer.xr.isPresenting ? 1 : 1.4);
+  localCooldownUntil = performance.now() + 1000;
+  feedback("Lancé !", 350);
+}
+function beginHand(index: number, input: "select" | "squeeze"): void {
+  const controller = controllers[index];
+  if (inputHeld[index][input]) return;
+  inputHeld[index][input] = true;
+  if (input === "select") {
+    selectStarts++;
+    const hit = target(controller);
+    if (hit !== null) { activate(hit); return; }
+  }
+  if (mode === "shovel") {
+    if (index === dominantIndex() && canDig()) { triggerHeld[index] = true; activeOwner = controller; }
+    return;
+  }
+  const hand = handPoints[index];
+  if (!hand || performance.now() - handPoseAt[index] > 50 || !canGrab()) return;
+  const nearby = stock.some((balloon) => balloon.visible && canGrabBallsyBalloon(hand.toArray() as ThrowPoint, balloon.getWorldPosition(new Vector3()).toArray() as ThrowPoint));
+  if (nearby && throwGesture.start(controller, hand.toArray() as ThrowPoint, performance.now())) {
+    heldBalloons[index].visible = true; feedback("Bouge le bras, puis relâche.");
+  }
+}
+function endHand(index: number, input: "select" | "squeeze"): void {
+  if (input === "select") selectEnds++;
+  inputHeld[index][input] = false;
+  if (inputHeld[index].select || inputHeld[index].squeeze) return;
+  if (mode === "shovel") release(controllers[index]);
+  // The next XR frame supplies the actual final pose. Never launch from a stale cached pose.
+  else if (throwGesture.isHeldBy(controllers[index])) pendingRelease = index;
+}
 for (let i = 0; i < 2; i++) {
   const controller = renderer.xr.getController(i);
   const beam = new Line(new BufferGeometry().setFromPoints([new Vector3(), new Vector3(0, 0, -3)]), new LineBasicMaterial({ color: "#f5c26b" }));
   controller.add(beam); scene.add(controller); controllers.push(controller); beams.push(beam);
   const cursor = new Mesh(new SphereGeometry(0.008, 8, 6), new MeshStandardMaterial({ color: "#f5c26b", emissive: "#805a25", emissiveIntensity: 0.5 }));
   cursor.visible = false; scene.add(cursor); cursors.push(cursor);
-  const grip = renderer.xr.getControllerGrip(i), shovel = makeShovel();
-  grip.add(shovel); scene.add(grip); grips.push(grip); shovels.push(shovel);
+  const grip = renderer.xr.getControllerGrip(i), shovel = makeShovel(), glove = makeGiantGlove(), balloon = makeGiantBalloon();
+  balloon.position.set(...BALLOON_GRIP_OFFSET); balloon.visible = false;
+  grip.add(shovel, glove, balloon); scene.add(grip); grips.push(grip); shovels.push(shovel); gloves.push(glove); heldBalloons.push(balloon);
   controller.addEventListener("connected", (event) => { sources[i] = event.data as XRInputSource; });
-  controller.addEventListener("selectstart", () => {
-    selectStarts++;
-    const hit = target(controller);
-    if (hit !== null) { activate(hit); return; }
-    if (i === dominantIndex() && canDig()) { triggerHeld[i] = true; activeOwner = controller; }
-  });
-  controller.addEventListener("selectend", () => { selectEnds++; release(controller); });
-  controller.addEventListener("disconnected", () => { release(controller); sources[i] = null; shovels[i].visible = false; });
+  controller.addEventListener("selectstart", () => beginHand(i, "select"));
+  controller.addEventListener("selectend", () => endHand(i, "select"));
+  controller.addEventListener("squeezestart", () => beginHand(i, "squeeze"));
+  controller.addEventListener("squeezeend", () => endHand(i, "squeeze"));
+  controller.addEventListener("disconnected", () => { release(controller, "disconnected"); sources[i] = null; handPoints[i] = null; shovels[i].visible = gloves[i].visible = false; });
 }
 
 function task(): string {
   const s = link.state(), v = s.snapshot?.volcano;
   if (!s.live || !v) return s.message;
   if (s.snapshot?.phase !== "racing") return s.snapshot?.phase === "paused" ? "La course est en pause." : "Attends le départ sur la télé.";
-  return "Gâchette + mouvement : enfonce, tire et soulève la pelle pour ouvrir ton canal.";
+  if (mode === "shovel") return "Gâchette maintenue : enfonce, tire et soulève la pelle.";
+  if (balloonMessage && performance.now() < balloonMessageUntil) return balloonMessage;
+  if (throwGesture.state().held) return "Bouge le bras, puis relâche.";
+  const cooldown = cooldownSeconds();
+  if (cooldown > 0) return `Nouveau ballon dans ${cooldown.toFixed(1)} s`;
+  return renderer.xr.isPresenting ? "Prends un ballon devant toi, lance-le et relâche." : "Saisis un ballon, glisse vers la piste, puis relâche.";
 }
 function paint(): void {
   if (disposed) return;
   const s = link.state(), v = s.snapshot?.volcano;
+  root.classList.toggle("is-joined", s.joined);
+  element("form").hidden = s.joined;
   element("[data-status]").textContent = lastMessage || s.message;
   element("[data-controls]").hidden = !s.joined;
   element("[data-task]").textContent = task();
+  element(".giant-desktop h2").textContent = mode === "balloon" ? "À toi les ballons !" : "La pelle";
+  element("[data-gesture-help]").textContent = mode === "balloon"
+    ? renderer.xr.isPresenting ? "Approche la main d'un ballon, serre le grip ou la gâchette, lance puis relâche."
+      : "Le slime ralentit un peu les billes. En VR, prends un ballon avec le grip ou la gâchette."
+    : "VR : la pelle suit ta main droite. Garde la gâchette pressée, enfonce puis tire la lame. Écran : clique et glisse sur la terre.";
   element("[data-leave]").hidden = !s.joined;
   element("[data-recenter]").hidden = !renderer.xr.isPresenting;
   vrButton.disabled = !supported || !s.joined || !s.live || startingVR;
   vrButton.textContent = renderer.xr.isPresenting ? "Sortir de VR" : supported ? "Devenir le géant en VR" : "VR indisponible ici";
   const wave = v ? volcanoWave(v) : null;
-  const title = v ? `${v.mode === "help" ? `Aide ${s.snapshot?.ally === 1 ? "Corail" : "Lagon"}` : "Le géant"} · ${v.earth.excavated.toFixed(1)} m³ creusés${v.mode === "help" ? wave?.active ? " · CRUE !" : ` · crue ${Math.ceil(wave?.inSeconds ?? 0)} s` : ""}` : "Ballsy · Le géant";
+  const title = mode === "balloon" ? "Ballons de slime" : v ? `${v.mode === "help" ? `Aide ${s.snapshot?.ally === 1 ? "Corail" : "Lagon"}` : "La pelle"} · ${v.earth.excavated.toFixed(1)} m³ creusés${v.mode === "help" ? wave?.active ? " · CRUE !" : ` · crue ${Math.ceil(wave?.inSeconds ?? 0)} s` : ""}` : "Ballsy · Le géant";
   statusLabel.draw(title, task());
-  for (let i = 0; i < 2; i++) {
+  statusLabel.sprite.visible = renderer.xr.isPresenting;
+  for (let i = 0; i < buttons.length; i++) {
     buttons[i].visible = buttonLabels[i].sprite.visible = renderer.xr.isPresenting;
   }
 }
-async function endVR(): Promise<void> { release(); await renderer.xr.getSession()?.end(); }
+async function endVR(): Promise<void> { release(undefined, "session-end"); await renderer.xr.getSession()?.end(); }
 async function enterVR(): Promise<void> {
   if (renderer.xr.isPresenting) { await endVR(); return; }
   if (!window.isSecureContext || !navigator.xr || !supported) { lastMessage = "Le Quest a besoin d'une adresse HTTPS reconnue."; paint(); return; }
@@ -193,9 +304,9 @@ async function enterVR(): Promise<void> {
   let session: XRSession | null = null;
   try {
     session = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local-floor"] });
-    session.addEventListener("end", () => { release(); link.leave(); placementPending = false; startingVR = false; paint(); }, { once: true });
-    session.addEventListener("visibilitychange", () => { if (session?.visibilityState === "hidden") { release(); void endVR(); } });
-    session.addEventListener("inputsourceschange", () => release());
+    session.addEventListener("end", () => { release(undefined, "session-end"); link.leave(); placementPending = false; startingVR = false; paint(); }, { once: true });
+    session.addEventListener("visibilitychange", () => { if (session?.visibilityState !== "visible") { release(undefined, "hidden"); void endVR(); } });
+    session.addEventListener("inputsourceschange", () => release(undefined, "source-change"));
     placementPending = true;
     await renderer.xr.setSession(session);
   } catch (error) {
@@ -206,10 +317,10 @@ async function enterVR(): Promise<void> {
 vrButton.addEventListener("click", () => { void enterVR(); });
 renderer.xr.addEventListener("sessionend", () => {
   tableRig.position.set(0, 0, 0); tableRig.rotation.set(0, 0, 0);
-  camera.position.set(0, 1.6, 0.1); camera.lookAt(0.15, 0.87, -1.05); camera.updateMatrixWorld(true);
+  frameDesktop();
   paint();
 });
-element("[data-recenter]").addEventListener("click", () => { release(); placementPending = true; });
+element("[data-recenter]").addEventListener("click", () => { release(undefined, "recenter"); placementPending = true; });
 element("form").addEventListener("submit", (event) => {
   event.preventDefault(); lastMessage = "";
   void link.join(roomInput.value).catch((error: unknown) => { lastMessage = error instanceof Error ? error.message : "Connexion refusée."; paint(); });
@@ -237,7 +348,23 @@ function desktopTip(event: PointerEvent): Vector3 | null {
   }
   return null;
 }
+function pointerRay(event: PointerEvent): void {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2);
+  scene.updateMatrixWorld(true); raycaster.setFromCamera(pointer, camera);
+}
+function desktopHand(event: PointerEvent): Vector3 | null {
+  pointerRay(event);
+  return raycaster.ray.intersectPlane(desktopPlane, new Vector3())?.add(desktopGrabOffset) ?? null;
+}
 function movePointer(event: PointerEvent): void {
+  if (mode === "balloon") {
+    desktopCursor.visible = false;
+    if (event.pointerId !== desktopPointer || !throwGesture.isHeldBy("mouse")) return;
+    const hand = desktopHand(event);
+    if (!hand || !throwGesture.sample("mouse", hand.toArray() as ThrowPoint, performance.now())) { release(); return; }
+    desktopBalloon.position.copy(hand); return;
+  }
   const tip = desktopTip(event);
   desktopCursor.visible = !!tip;
   if (tip) {
@@ -248,16 +375,45 @@ function movePointer(event: PointerEvent): void {
 renderer.domElement.style.touchAction = "none";
 renderer.domElement.addEventListener("pointerdown", (event) => {
   if (event.button !== 0 || !canDig() || renderer.xr.isPresenting) return;
+  if (mode === "balloon") {
+    if (!canGrab()) return;
+    pointerRay(event);
+    const hit = raycaster.intersectObjects(stock.filter((balloon) => balloon.visible), true)[0];
+    const rect = renderer.domElement.getBoundingClientRect();
+    // A 44 px pickup target around an existing visible stock, never around the road or a racer.
+    const nearest = stock.filter((balloon) => balloon.visible).map((balloon) => {
+      const screen = balloon.getWorldPosition(new Vector3()).project(camera);
+      return { balloon, distance: Math.hypot((screen.x + 1) * rect.width / 2 - (event.clientX - rect.left), (1 - screen.y) * rect.height / 2 - (event.clientY - rect.top)) };
+    }).sort((a, b) => a.distance - b.distance)[0];
+    const supply = stock.find((balloon) => balloon === hit?.object.parent) ?? (nearest?.distance <= 22 ? nearest.balloon : null);
+    if (!supply) return;
+    const position = supply.getWorldPosition(new Vector3());
+    desktopPlane.constant = -position.y;
+    desktopGrabOffset.set(0, 0, 0);
+    const hand = desktopHand(event); if (!hand) return;
+    // Keep the balloon at its centre even when the pointer uses the larger pickup target.
+    desktopGrabOffset.copy(position).sub(hand);
+    if (!throwGesture.start("mouse", position.toArray() as ThrowPoint, performance.now())) return;
+    desktopPointer = event.pointerId; desktopBalloon.position.copy(position); desktopBalloon.visible = true; desktopBalloon.scale.setScalar(1.4);
+    renderer.domElement.setPointerCapture(event.pointerId); feedback("Glisse, puis relâche."); return;
+  }
   const tip = desktopTip(event); if (!tip) return;
   renderer.domElement.setPointerCapture(event.pointerId); desktopDown = true; sampleTip(tip, "mouse");
 });
 renderer.domElement.addEventListener("pointermove", movePointer);
-for (const name of ["pointerup", "pointercancel", "lostpointercapture"] as const) renderer.domElement.addEventListener(name, () => release("mouse"));
+renderer.domElement.addEventListener("pointerup", (event) => {
+  if (mode === "balloon" && event.pointerId === desktopPointer) {
+    const hand = desktopHand(event);
+    launch(hand && canDig() ? throwGesture.release("mouse", hand.toArray() as ThrowPoint, performance.now()) : null, "desktop-drag");
+    if (throwGesture.state().held) release("mouse", "release-without-pose");
+  } else release("mouse");
+});
+for (const name of ["pointercancel", "lostpointercapture"] as const) renderer.domElement.addEventListener(name, () => release("mouse", name));
 renderer.domElement.addEventListener("pointerleave", () => { desktopCursor.visible = false; });
-const visibility = (): void => { if (document.hidden) release(); };
+const visibility = (): void => { if (document.hidden) release(undefined, "hidden"); };
 document.addEventListener("visibilitychange", visibility);
-const resize = (): void => { renderer.setSize(root.clientWidth, root.clientHeight); camera.aspect = root.clientWidth / root.clientHeight; camera.updateProjectionMatrix(); };
-const blur = (): void => release();
+const resize = (): void => { renderer.setSize(root.clientWidth, root.clientHeight); camera.aspect = root.clientWidth / root.clientHeight; camera.updateProjectionMatrix(); frameDesktop(); };
+const blur = (): void => release(undefined, "blur");
 window.addEventListener("resize", resize); window.addEventListener("blur", blur);
 resize();
 void ballsyRelayAvailable().then((available) => { if (!available) { lastMessage = "Le relais du géant n'est pas lancé pour cette prévisualisation."; paint(); } });
@@ -275,7 +431,7 @@ renderer.setAnimationLoop((_time, frame) => {
     const pad = source.gamepad;
     const quest = source.profiles.some((profile) => /^(?:oculus-touch|meta-quest-touch)/.test(profile));
     const down = quest && pad?.mapping === "xr-standard" && !!(pad.buttons[4]?.pressed || (pad.buttons[4]?.value ?? 0) > 0.5);
-    if (down && !recenterHeld.get(source)) { release(); placementPending = true; }
+    if (down && !recenterHeld.get(source)) { release(undefined, "recenter"); placementPending = true; }
     recenterHeld.set(source, down);
   }
   if (placementPending && frame && renderer.xr.isPresenting) {
@@ -294,6 +450,17 @@ renderer.setAnimationLoop((_time, frame) => {
   frameCount++; link.maintain();
   const s = link.state(), snapshot = s.snapshot;
   if (snapshot) {
+    if (projectedRound && projectedRound !== snapshot.roundId) { release(undefined, "round-change"); localCooldownUntil = 0; observedHits = 0; }
+    if (snapshot.slime) {
+      if (slimeProjectedTime !== snapshot.slime.time || projectedRound !== snapshot.roundId) {
+        slimeProjectedTime = snapshot.slime.time; slimeReceivedAt = performance.now();
+      }
+      // Bounded presentation between the PC's ~10 Hz snapshots. The host alone supplies hits.
+      const visualSeconds = s.live && snapshot.phase === "racing" ? Math.min(0.12, (performance.now() - slimeReceivedAt) / 1000) : 0;
+      projectBallsySlime(snapshot.slime, (id) => world.getEntityObject(id), visualSeconds);
+      if (projectedRound === snapshot.roundId && snapshot.slime.hits > observedHits) feedback("Splash ! Une bille ralentit un peu.");
+      observedHits = snapshot.slime.hits;
+    }
     const key = `${snapshot.roundId}|${snapshot.phase}|${snapshot.volcano.time}`;
     if (key !== projectedKey) {
       projectedKey = key; projectVolcano(api, snapshot.volcano, (id) => world.getEntityObject(id));
@@ -314,21 +481,57 @@ renderer.setAnimationLoop((_time, frame) => {
       if (poses[i].active && object) object.position.lerpVectors(poses[i].from, poses[i].to, fraction);
     });
   }
-  if (!canDig()) release();
+  if (!canDig()) release(undefined, snapshot?.phase === "paused" ? "paused" : "not-live");
   scene.updateMatrixWorld(true);
   const dominant = dominantIndex(), reference = renderer.xr.getReferenceSpace();
+  const now = performance.now();
+  if (departure) {
+    const age = (now - departure.at) / 1000;
+    const acknowledged = snapshot?.slime?.projectiles.some((p) => p.id === departure?.id)
+      || snapshot?.slime?.splats.some((p) => p.id === departure?.id);
+    if (acknowledged || age > 0.3) {
+      if (acknowledged) lastHandoffMs = now - departure.at;
+      departure = null; departureBalloon.visible = false;
+    } else {
+      departureBalloon.position.set(...departure.thrown.position).addScaledVector(new Vector3(...departure.thrown.velocity), age);
+      departureBalloon.position.y -= BALLSY_SLIME_LIMITS.gravity * 0.045 * age * age / 2;
+      departureBalloon.scale.setScalar(renderer.xr.isPresenting ? 1 : 1 + 0.4 * Math.max(0, 1 - age / 0.1));
+    }
+  }
   for (const [index, controller] of controllers.entries()) {
     const source = sources[index];
-    const tracked = !!(frame && reference && source?.gripSpace && frame.getPose(source.gripSpace, reference));
-    shovels[index].visible = renderer.xr.isPresenting && index === dominant && tracked;
-    if (!renderer.xr.isPresenting) { beams[index].visible = false; cursors[index].visible = false; continue; }
-    hoverTargets[index] = target(controller);
-    if (!tracked && activeOwner === controller) release(controller);
-    if (tracked && triggerHeld[index] && index === dominant && performance.now() - lastHold >= 50) {
+    const pose = frame && reference && source?.gripSpace ? frame.getPose(source.gripSpace, reference) : null;
+    const gripPose = pose && !pose.emulatedPosition ? pose : null;
+    const tracked = !!gripPose;
+    shovels[index].visible = mode === "shovel" && renderer.xr.isPresenting && index === dominant && tracked;
+    gloves[index].visible = mode === "balloon" && renderer.xr.isPresenting && tracked;
+    if (!renderer.xr.isPresenting) { handPoints[index] = null; beams[index].visible = false; cursors[index].visible = false; continue; }
+    hoverTargets[index] = throwGesture.state().held ? null : target(controller);
+    if (throwGesture.state().held) { beams[index].visible = false; cursors[index].visible = false; }
+    if (!gripPose) {
+      handPoints[index] = null;
+      if (activeOwner === controller || throwGesture.isHeldBy(controller)) { release(controller, "tracking-lost"); feedback("Main perdue : reprends un ballon."); }
+      continue;
+    }
+    const { position, orientation } = gripPose.transform;
+    gripRotation.set(orientation.x, orientation.y, orientation.z, orientation.w);
+    const hand = new Vector3(...BALLOON_GRIP_OFFSET).applyQuaternion(gripRotation).add(new Vector3(position.x, position.y, position.z));
+    handPoints[index] = hand; handPoseAt[index] = now;
+    if (throwGesture.isHeldBy(controller)) {
+      if (pendingRelease === index) launch(throwGesture.release(controller, hand.toArray() as ThrowPoint, now), source?.handedness ?? "none");
+      else if (!throwGesture.sample(controller, hand.toArray() as ThrowPoint, now)) { release(controller); heldBalloons[index].visible = false; feedback("Geste interrompu : reprends un ballon."); }
+    }
+    if (mode === "shovel" && triggerHeld[index] && index === dominant && now - lastHold >= 50) {
       modelTip.copy(bladeTip); grips[index].localToWorld(modelTip); world.group.worldToLocal(modelTip);
       sampleTip(modelTip, controller);
     }
   }
+  // A stationary desktop hand is sampled as stationary. Pointer event frequency is not tracking loss.
+  if (throwGesture.isHeldBy("mouse") && desktopBalloon.visible) {
+    if (!throwGesture.sample("mouse", desktopBalloon.position.toArray() as ThrowPoint, now)) release("mouse");
+  }
+  const available = canGrab();
+  stock.forEach((balloon) => { balloon.visible = available; balloon.scale.setScalar(renderer.xr.isPresenting ? 1 : 1.4); });
   if (renderer.xr.isPresenting) desktopCursor.visible = false;
   renderer.render(scene, camera);
 });
@@ -340,6 +543,7 @@ function dispose(): void {
   document.removeEventListener("visibilitychange", visibility);
   world.dispose();
   for (const shovel of shovels) shovel.traverse((object) => { if (object instanceof Mesh) { object.geometry.dispose(); (object.material as MeshStandardMaterial).dispose(); } });
+  for (const prop of [...stock, ...heldBalloons, ...gloves, desktopBalloon, departureBalloon]) disposeGiantProp(prop);
   desktopCursor.geometry.dispose(); desktopCursor.material.dispose();
   for (const mesh of [...buttons, ...cursors]) { mesh.geometry.dispose(); (mesh.material as MeshStandardMaterial).dispose(); }
   for (const line of beams) { line.geometry.dispose(); (line.material as LineBasicMaterial).dispose(); }
@@ -349,6 +553,10 @@ function dispose(): void {
 window.addEventListener("pagehide", dispose, { once: true });
 Object.assign(window, { __BALLSY_GIANT__: {
   endVR, dispose,
+  modelPoint: (x: number, y: number, z: number) => {
+    const model = new Vector3(x, y, z), physical = world.group.localToWorld(model.clone()), screen = physical.clone().project(camera);
+    return { model: model.toArray(), world: physical.toArray(), screen: [(screen.x + 1) * root.clientWidth / 2, (1 - screen.y) * root.clientHeight / 2] };
+  },
   terrainPoint: (x: number, z: number, penetration = 0) => {
     const earth = link.state().snapshot?.volcano.earth;
     if (!earth) return null;
@@ -360,6 +568,11 @@ Object.assign(window, { __BALLSY_GIANT__: {
     const bounds = new Box3().setFromObject(world.group);
     return { ...link.state(), view: renderer.xr.isPresenting ? "vr" : "screen", frameCount,
       eyes: renderer.xr.isPresenting ? renderer.xr.getCamera().cameras.length : 1,
+      balloon: { ...throwGesture.state(), cancelReason: throwGesture.state().reason, launches, lastLaunch, mode, cooldownSeconds: cooldownSeconds(),
+        departureVisible: departureBalloon.visible, lastHandoffMs,
+        stock: stock.map((balloon) => { const position = balloon.getWorldPosition(new Vector3()), screen = position.clone().project(camera);
+          return { world: position.toArray(), visible: balloon.visible, screen: [(screen.x + 1) * root.clientWidth / 2, (1 - screen.y) * root.clientHeight / 2] }; }),
+        handWorld: handPoints.map((hand) => hand?.toArray() ?? null), heldVisible: heldBalloons.map((balloon) => balloon.visible), desktopVisible: desktopBalloon.visible },
       shovel: { samples: shovelSamples, lastTip, held: activeOwner !== null, dominant: dominantIndex(),
         tipOffset: bladeTip.toArray(), visible: shovels.map((tool) => tool.visible),
         gripWorld: grips.map((grip) => grip.getWorldPosition(new Vector3()).toArray()),

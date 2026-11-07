@@ -32,7 +32,7 @@ export function createBallsyRooms({ now = Date.now } = {}) {
       const wanted = input.replace(/[\s-]/g, "").toUpperCase();
       const r = [...rooms.values()].find((candidate) => candidate.code === wanted);
       if (!r || !online(r)) fail(404, "Code absent ou écran déconnecté.");
-      if (r.guestToken && now() - r.guestSeen <= 2500) fail(409, "Un géant tient déjà la pelle.");
+      if (r.guestToken && now() - r.guestSeen <= 2500) fail(409, "Un géant est déjà connecté.");
       r.guestToken = token(); r.guestSeen = now(); r.commands = []; r.ids.clear(); r.commandTimes = [];
       return { roomId: r.id, guestToken: r.guestToken };
     },
@@ -41,7 +41,7 @@ export function createBallsyRooms({ now = Date.now } = {}) {
       if (!packet || !isBallsySnapshot(packet.snapshot) || !Number.isSafeInteger(packet.ack) || packet.ack < 0 || packet.ack > r.sequence) fail(400, "État de course invalide.");
       if (r.snapshot?.roundId !== packet.snapshot.roundId) { r.commands = []; r.ids.clear(); }
       r.snapshot = structuredClone(packet.snapshot); r.hostSeen = now();
-      r.commands = r.commands.filter((c) => c.sequence > packet.ack && now() - c.at < 1000 && c.roundId === r.snapshot.roundId);
+      r.commands = r.commands.filter((c) => r.snapshot.phase === "racing" && !!r.guestToken && now() - r.guestSeen <= 2500 && c.sequence > packet.ack && now() - c.at < 1000 && c.roundId === r.snapshot.roundId);
       return { commands: r.commands.map(({ at: _at, ...c }) => c), guestConnected: !!r.guestToken && now() - r.guestSeen <= 2500 };
     },
     read(id, auth) {
@@ -55,7 +55,7 @@ export function createBallsyRooms({ now = Date.now } = {}) {
       if (r.ids.has(packet.id)) return { accepted: true, sequence: r.ids.get(packet.id) };
       if (!online(r) || r.snapshot.phase !== "racing" || packet.roundId !== r.snapshot.roundId) return { accepted: false, reason: "Attendez la course en cours." };
       r.commandTimes = r.commandTimes.filter((at) => now() - at < 1000);
-      if (r.commandTimes.length >= 25 || r.commands.length >= 32) return { accepted: false, reason: "Attendez le retour de la pelle." };
+      if (r.commandTimes.length >= 25 || r.commands.length >= 32) return { accepted: false, reason: "Attendez le prochain geste." };
       r.commandTimes.push(now());
       const sequence = ++r.sequence;
       r.commands.push({ sequence, id: packet.id, roundId: packet.roundId, command: parsed, at: now() });

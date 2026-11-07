@@ -1230,6 +1230,8 @@ export type GraphysXAgentWorldApi = {
   steer(id: string, input: AgentWorldSteerInput): AgentWorldResult<AgentWorldSteerReceipt>;
   /** Non-documentary continuous controls; no impulses or configuration edits. */
   steerLive(id: string, input: Pick<AgentWorldSteerInput, "headingDegrees" | "thrust" | "turn">): AgentWorldResult<AgentWorldSteerReceipt>;
+  /** Transient 0.75..1 steering slowdown, without authored edits or body rebuilds. */
+  setSlowdownLive(id: string, speedFactor: number): AgentWorldResult<{ subjectId: string; speedFactor: number }>;
   prefabs(): readonly AgentWorldPrefabDescriptor[];
   spawnPrefab(prefabId: AgentWorldPrefabId, options?: AgentWorldPrefabOptions): AgentWorldResult<AgentWorldPrefabInstance>;
   starters(): readonly AgentWorldStarterDescriptor[];
@@ -1310,6 +1312,8 @@ type ResolvedEntity = {
 };
 
 type RuntimeEntity = {
+  /** Game effect, deliberately absent from authored/exported definitions. */
+  slowdownFactor: number;
   definition: ResolvedEntity;
   object: Object3D;
   body: PhysicsBodyHandle | null;
@@ -1970,6 +1974,21 @@ export class AgentWorldRuntime {
     }
   }
 
+  /** Bounded transient game effect. It cannot aim, teleport, stun or add momentum.
+   * The physics step owns damping, so pause and fixed stepping remain authoritative. */
+  setSlowdownLive(id: string, speedFactor: number): AgentWorldResult<{ subjectId: string; speedFactor: number }> {
+    try {
+      if (typeof id !== "string" || !id.trim()) throw new Error("setSlowdownLive.id must be nonempty");
+      if (typeof speedFactor !== "number" || !Number.isFinite(speedFactor) || speedFactor < 0.75 || speedFactor > 1) throw new Error("Slowdown factor must be 0.75..1");
+      assertAuthoredSceneCommandNamespaces({ op: "steer", id, input: {} });
+      this.assertNotScopedTransient(id, "setSlowdownLive");
+      const runtime = this.requireEntity(id);
+      if (!runtime.body || runtime.definition.physics?.mode !== "dynamic" || !runtime.definition.steering) throw new Error("Slowdown target must be dynamic with steering");
+      runtime.slowdownFactor = speedFactor;
+      return this.success({ subjectId: id, speedFactor });
+    } catch (error) { return this.failure(error); }
+  }
+
   /**
    * The steering subject's live aim heading, with
    * no state clone. Null when the entity does not exist or carries no steering block.
@@ -2590,6 +2609,7 @@ export class AgentWorldRuntime {
     object.name = definition.id;
     object.userData.graphysxEntityId = definition.id;
     const runtime: RuntimeEntity = {
+      slowdownFactor: 1,
       definition,
       object,
       body: null,
@@ -3205,6 +3225,7 @@ export class AgentWorldRuntime {
     const returnToSpawn = (entityId: string, position?: AgentWorldVector3): void => {
       const subject = this.entities.get(entityId);
       if (!subject) return;
+      subject.slowdownFactor = 1;
       const target = position ?? subject.definition.transform.position;
       subject.object.position.set(...target);
       if (subject.body) {
@@ -3415,7 +3436,19 @@ export class AgentWorldRuntime {
       if (steering.turn !== 0) {
         steering.headingDegrees = normalizeHeadingDegrees(steering.headingDegrees + steering.turn * steering.turnRateDegrees * deltaSeconds);
       }
-      if (steering.thrust === 0 || !runtime.body || runtime.definition.physics?.mode !== "dynamic") continue;
+      if (!runtime.body || runtime.definition.physics?.mode !== "dynamic") continue;
+      const speedCap = steering.speedCap * runtime.slowdownFactor;
+      if (runtime.slowdownFactor < 1) {
+        const velocity = this.physicsScratch.linearVelocity;
+        this.physicsWorld.readLinearVelocity(runtime.body, velocity);
+        const speed = Math.hypot(velocity.x, velocity.z);
+        if (speed > speedCap) {
+          const factor = Math.max(speedCap, speed * Math.exp(-2.5 * deltaSeconds)) / speed;
+          velocity.x *= factor; velocity.z *= factor;
+          this.physicsWorld.writeLinearVelocity(runtime.body, velocity, true);
+        }
+      }
+      if (steering.thrust === 0) continue;
       const radians = steering.headingDegrees * (Math.PI / 180);
       const sign = steering.thrust < 0 ? -1 : 1;
       // The push's own direction (heading, or its reverse for the brake).
@@ -3423,7 +3456,7 @@ export class AgentWorldRuntime {
       const pushZ = -Math.cos(radians) * sign;
       this.physicsWorld.readLinearVelocity(runtime.body, this.physicsScratch.linearVelocity);
       const along = this.physicsScratch.linearVelocity.x * pushX + this.physicsScratch.linearVelocity.z * pushZ;
-      if (along >= steering.speedCap) continue;
+      if (along >= speedCap) continue;
       const magnitude = Math.abs(steering.thrust) * steering.force * deltaSeconds;
       this.steeringScratch.set(pushX * magnitude, 0, pushZ * magnitude);
       this.physicsWorld.applyImpulse(runtime.body, this.steeringScratch);

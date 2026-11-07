@@ -5227,3 +5227,15 @@ Recovered the three local Ballsy patches into isolated codex/ballsy-physical-sho
 Le build Ballsy sait monter ses sept appels relais sous BASE_URL. Une config Vite dédiée produit output/quest-shovel/dist sans toucher au dist principal. Deux tests racine/préfixe, les contrats rooms, typecheck et lint ciblé passent. Commit code a8d9fe2.
 
 Le proxy privé existant 192.168.2.12:4191 conserve les routes anciennes vers 4198 et ajoute /shovel/ avec le relais 4199. Même certificat, réseau et échéance du 7 novembre à 02:12:31 UTC. Le transport et son tunnel ont été redémarrés, les moteurs de salles ne l'ont pas été. Aucune modification sécurité, publication ou déploiement. Le navigateur normal refuse net::ERR_CERT_AUTHORITY_INVALID; aucun contournement. Contrôles de routage HTTP locaux réussis, pas de réception Quest physique. Voir docs/BALLSY_SHOVEL.md et output/quest-shovel.
+
+## 2026-11-07 : Ballsy, premier usage du géant par ballons de slime
+
+Demande utilisateur : « ensuite, pour une inteaction facile entre géant et la course, le géant va juste lancer des balounes de peintures/slime...   qui ralenti un peu les auto.. »
+
+Reprise locale de la Boucle du Volcan au commit 10bede8 sur codex/ballsy-physical-shovel. Le géant saisit un ballon visible, bouge sa main et relâche. La vitesse est mesurée sur les poses récentes, sans visée automatique ni impulsion minimale. Le PC de course décide du vol, du contact et de l'effet : plafond de vitesse réduit de 25 % pendant 2 secondes, puis une seconde d'immunité, sans cumul. La pelle physique reste un mode secondaire. Les coureurs et le circuit existants sont préservés.
+
+Ajout d'un modèle et de pools visuels bornés, d'un malus transitoire sans écriture documentaire ni reconstruction du corps Rapier, et d'annulations sur perte de suivi, pause, déconnexion, changement d'outil ou de manche. Le cadrage et les stocks sont adaptés à la souris sans déplacer la caméra XR. Le nouveau socle VR général reste une intégration future explicite.
+
+Réception finale : 85 tests Ballsy, 4 tests Rapier, 28 contrôles souris et relais HTTP, puis course complète, pelle desktop, préparation des manettes, entraînement et client de test clavier réussis. Le coureur touché passe à 6,153 m/s contre 8,113 m/s pour le témoin, puis retrouve 8,144 contre 8,030 après expiration. Deux vues actives : 73,25 FPS sans effets et 74,57 avec effets, p95 13,5 ms; cette différence ne constitue pas un gain de performance. Les captures ont conduit à corriger le cadrage géant et à dégager le contact des badges. Une vidéo de 8 secondes montre le vrai glisser-relâcher souris.
+
+Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur le port local 4202. Le palier Node global reste en échec sur les chemins Windows historiques; ce résultat n'est pas une qualification globale du produit. Les reçus détaillés et les limites sont dans docs/BALLSY_SLIME_TESTS.md. Aucun déploiement, fusion, changement de sécurité ou essai Quest physique.

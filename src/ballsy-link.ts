@@ -1,9 +1,8 @@
-import { isBallsySnapshot, parseGiantCommand, type BallsySnapshot } from "../server/ballsy-protocol.mjs";
-import type { VolcanoCommand } from "./ballsy-volcano";
+import { isBallsySnapshot, parseGiantCommand, type BallsySnapshot, type GiantCommand } from "../server/ballsy-protocol.mjs";
 
 type HostCredentials = { roomId: string; hostToken: string; code: string };
 type GuestCredentials = { roomId: string; guestToken: string };
-type QueuedCommand = { sequence: number; roundId: string; command: VolcanoCommand };
+type QueuedCommand = { sequence: number; roundId: string; command: GiantCommand };
 export type BallsyLinkState = { available: boolean; code: string | null; connected: boolean; message: string };
 
 // Keep host and Quest traffic inside this build's mount (root by default).
@@ -21,7 +20,7 @@ export async function ballsyRelayAvailable(): Promise<boolean> {
   catch { return false; }
 }
 
-export function createBallsyHostLink(options: { snapshot: () => BallsySnapshot; command: (c: VolcanoCommand) => void; presence: (connected: boolean) => void }) {
+export function createBallsyHostLink(options: { snapshot: () => BallsySnapshot; command: (c: GiantCommand) => void; presence: (connected: boolean) => void }) {
   let credentials: HostCredentials | null = null, timer = 0, ack = 0, active = true, generation = 0;
   let connected = false, lastReply = 0, heldAt = 0, holding = false, message = "";
   const presence = (next: boolean): void => { if (next !== connected) { connected = next; options.presence(next); } };
@@ -37,7 +36,7 @@ export function createBallsyHostLink(options: { snapshot: () => BallsySnapshot; 
       if (!active || current !== generation) return;
       lastReply = performance.now(); message = "";
       presence(reply.guestConnected);
-      const commands = reply.commands.filter((entry, index, all) => !(entry.command.type === "shovel" && entry.command.held && all[index + 1]?.command.type === "shovel" && (all[index + 1].command as { held?: boolean }).held));
+      const commands = (reply.guestConnected ? reply.commands : []).filter((entry, index, all) => !(entry.command.type === "shovel" && entry.command.held && all[index + 1]?.command.type === "shovel" && (all[index + 1].command as { held?: boolean }).held));
       for (const command of commands) {
         if (command.sequence <= ack) continue;
         ack = command.sequence;
@@ -80,7 +79,7 @@ export function createBallsyGuestLink(onUpdate: () => void) {
       if (current !== generation) return;
       if (!isBallsySnapshot(reply.snapshot)) throw new Error("L'écran n'a pas encore partagé sa course.");
       snapshot = reply.snapshot; live = reply.hostLive; lastReply = performance.now();
-      message = live ? snapshot.phase === "racing" ? "La pelle est à toi." : "En attente de la course sur la télé." : "L'écran ne répond plus. La maquette est figée.";
+      message = live ? snapshot.phase === "racing" ? "Les ballons sont à toi." : "En attente de la course sur la télé." : "L'écran ne répond plus. La maquette est figée.";
     } catch (error) { live = false; message = error instanceof Error ? error.message : "Connexion interrompue."; }
     onUpdate();
     if (current === generation && credentials) timer = window.setTimeout(() => { void pump(current); }, 90);
@@ -89,7 +88,7 @@ export function createBallsyGuestLink(onUpdate: () => void) {
   const leave = (): void => {
     generation++; window.clearTimeout(timer);
     const c = credentials; credentials = null; live = false; snapshot = null;
-    message = "Pelle rendue à l'écran.";
+    message = "Géant déconnecté.";
     if (c) void json(`${relayBase}${c.roomId}/leave`, "POST", {}, c.guestToken, true).catch(() => undefined);
     onUpdate();
   };
@@ -103,11 +102,11 @@ export function createBallsyGuestLink(onUpdate: () => void) {
       credentials = next;
       await pump(current);
     },
-    send(command: VolcanoCommand): void {
+    send(command: GiantCommand): void {
       if (!credentials || !live || !snapshot || snapshot.phase !== "racing" || !parseGiantCommand(command)) return;
-      const c = credentials, roundId = snapshot.roundId, current = generation;
+      const c = credentials, roundId = snapshot.roundId, current = generation, queuedAt = performance.now();
       chain = chain.then(async () => {
-        if (current !== generation) return;
+        if (current !== generation || !live || snapshot?.roundId !== roundId || snapshot.phase !== "racing" || performance.now() - queuedAt > 500) return;
         const reply = await json<{ accepted: boolean; reason?: string }>(`${relayBase}${c.roomId}/command`, "POST", { id: crypto.randomUUID(), roundId, command }, c.guestToken);
         if (!reply.accepted && reply.reason) message = reply.reason;
       }).catch((error) => { live = false; message = error instanceof Error ? error.message : "Connexion interrompue."; onUpdate(); });

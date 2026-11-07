@@ -1,3 +1,6 @@
+import { createBallsySlime, snapshotBallsySlime, launchBallsySlime, advanceBallsySlime, cancelBallsySlimeFlight, ballsySlimeSpeedFactor } from "./ballsy-slime";
+import { ballsySlimeEntities, projectBallsySlime } from "./ballsy-slime-scene";
+import { parseGiantCommand } from "../server/ballsy-protocol.mjs";
 import { Raycaster, Vector2, Vector3 } from "three";
 import { createBallsyBoost } from "./ballsy-boost";
 import { createVolcanoRun, advanceVolcanoRun, volcanoStandings, VOLCANO_RACE_STEP, VOLCANO_RACE_GATES } from "./ballsy-race";
@@ -18,6 +21,7 @@ import "./ballsy.css";
 type Phase = "lobby" | "countdown" | "racing" | "paused" | "results";
 const root = document.querySelector<HTMLDivElement>("#ballsy")!;
 const params = new URLSearchParams(window.location.search);
+const legacyShovel = params.get("tool") === "shovel";
 const isVolcano = params.get("course") !== "practice";
 const PLAYERS = isVolcano ? BALLSY_PLAYERS : BALLSY_PRACTICE_PLAYERS;
 let volcanoMode: VolcanoMode = params.get("mode") === "help" ? "help" : "challenge";
@@ -27,6 +31,7 @@ try {
   const host = new PlatformHost(root, { world: composeBallsyCourse({ volcano: isVolcano, greybox: params.get("greybox") === "1" }), autoOrbit: false, intro: false, editorVisible: false,
     framing: { position: isVolcano ? [0, 63, 47] : [0, 31, 24], target: [0, 0, -2] } });
   const api = host.api;
+  if (isVolcano) for (const entity of ballsySlimeEntities()) api.spawn(entity);
   api.pause(true);
   const surface = document.createElement("section");
   surface.className = "ballsy-ui";
@@ -42,7 +47,7 @@ try {
       <p class="ballsy-eyebrow">BALLSY · ${isVolcano ? "LA BOUCLE DU VOLCAN" : "PREMIÈRE PISTE"}</p><h1>On fait la course ?</h1>
       <p data-description>Deux balles, deux tours. Faites le tour de l'île dans le sens des flèches !</p>
       <div class="ballsy-settings" data-settings><label>Tableau <select data-course><option value="volcano">La Boucle du Volcan</option><option value="practice">Piste découverte</option></select></label>
-      <label data-mode-label>Géant <select data-mode><option value="challenge">Défie la course</option><option value="help-0">Aide Lagon</option><option value="help-1">Aide Corail</option></select></label></div>
+      <label data-mode-label>Lave (pelle) <select data-mode><option value="challenge">Défie la course</option><option value="help-0">Aide Lagon</option><option value="help-1">Aide Corail</option></select></label></div>
       <div class="ballsy-controls" data-controls>
         <div><b><i>1</i> Lagon</b><p>Flèches pour rouler<br>Espace pour freiner</p><small data-pad="0">Clavier disponible</small></div>
         <div><b><i>2</i> Corail</b><p>WASD / ZQSD pour rouler<br>Majuscule pour freiner</p><small data-pad="1">Clavier disponible</small></div>
@@ -67,9 +72,9 @@ try {
     <div class="ballsy-countdown" data-countdown aria-live="polite" hidden></div>
     <p class="ballsy-volcano-signal" data-volcano-signal hidden></p>
     <aside class="ballsy-giant" data-giant hidden aria-label="Le géant du volcan">
-      <div class="ballsy-giant-title"><b>La pelle du géant</b><span data-charges></span></div>
-      <p data-giant-status>Choisis où canaliser la lave.</p>
-      <p class="ballsy-shovel-help">Clique et glisse dans la terre ambrée pour creuser. Au Quest, enfonce la pelle et tire avec la main.</p>
+      <div class="ballsy-giant-title"><b>${legacyShovel ? "La pelle du géant" : "Les ballons du géant"}</b><span data-charges></span></div>
+      <p data-giant-status></p>
+      <p class="ballsy-shovel-help">${legacyShovel ? "Clique et glisse dans la terre ambrée pour creuser." : "Dans la vue du géant, prends un ballon, balance la main et relâche."}</p>
       <small data-giant-feedback>Les coureurs peuvent passer au sec à l'extérieur.</small>
     </aside>
     <aside class="ballsy-room" data-room hidden aria-label="Connexion du géant"><b data-room-code></b><p data-room-status></p><a href="./ballsy-giant.html" target="_blank" rel="noopener">Ouvrir la vue du géant ↗</a><small>Quest : accès privé HTTPS ou USB local requis.</small></aside>
@@ -94,6 +99,7 @@ try {
   let manual = false;
   let disposed = false;
   let volcano = createVolcano(volcanoMode);
+  let slime = createBallsySlime();
   let visualTime = -1;
   let finishArchFaded = false;
   let giantFeedback = "";
@@ -118,7 +124,7 @@ try {
   const modeSelect = element<HTMLSelectElement>("[data-mode]");
   courseSelect.value = isVolcano ? "volcano" : "practice";
   modeSelect.value = volcanoMode === "help" ? `help-${ally}` : "challenge";
-  element("[data-mode-label]").hidden = !isVolcano;
+  element("[data-mode-label]").hidden = !isVolcano || !legacyShovel;
   courseSelect.addEventListener("change", () => { const next = new URL(window.location.href); next.searchParams.set("course", courseSelect.value); window.location.assign(next.href); });
   modeSelect.addEventListener("change", () => {
     if (phase !== "lobby") return;
@@ -129,22 +135,23 @@ try {
   });
   const commandGiant = (command: unknown, remote = false): { ok: boolean; reason?: string } => {
     if (!isVolcano || phase !== "racing") return { ok: false, reason: "Le géant attend le départ ou la reprise." };
-    if (!remote && room?.state().connected) return { ok: false, reason: "Le géant tient la pelle depuis sa maquette." };
-    const result = commandVolcano(volcano, command);
+    if (!remote && room?.state().connected) return { ok: false, reason: "Le géant joue depuis sa maquette." };
+    const parsed = parseGiantCommand(command);
+    const result = parsed?.type === "slime" ? launchBallsySlime(slime, parsed) : commandVolcano(volcano, command);
     giantFeedback = result.ok ? "" : result.reason ?? "";
     paint();
     return result;
   };
   function networkSnapshot(): BallsySnapshot {
     const standings = standingsNow();
-    return { roundId, phase, volcano: structuredClone(volcano), ally: volcanoMode === "help" ? ally : null,
+    return { roundId, phase, volcano: structuredClone(volcano), slime: snapshotBallsySlime(slime), ally: volcanoMode === "help" ? ally : null,
       players: PLAYERS.map((player) => ({ id: player.id, position: [...(api.query({ ids: [player.id] })[0]?.position ?? player.spawn)] as [number, number, number],
         lap: standings.find((entry) => entry.subjectId === player.id)?.run.lap ?? 0, finished: standings.find((entry) => entry.subjectId === player.id)?.run.phase === "complete" })) };
   }
   if (isVolcano) void ballsyRelayAvailable().then((available) => {
     if (!available || disposed) return;
     room = createBallsyHostLink({ snapshot: networkSnapshot, command: (command) => { commandGiant(command, true); },
-      presence: () => { commandVolcano(volcano, { type: "release" }); paint(); } });
+      presence: () => { commandVolcano(volcano, { type: "release" }); cancelBallsySlimeFlight(slime); roundId = crypto.randomUUID(); paint(); } });
     button("invite").hidden = false;
   });
   button("invite").addEventListener("click", () => {
@@ -172,7 +179,7 @@ try {
   };
   host.renderer.domElement.addEventListener("pointerdown",(event)=>{
     event.stopImmediatePropagation();
-    if (!isVolcano || phase!=="racing" || room?.state().connected || event.button!==0) return;
+    if (!isVolcano || !legacyShovel || phase!=="racing" || room?.state().connected || event.button!==0) return;
     localTip=pickEarth(event); if (!localTip) return;
     event.preventDefault(); localDig=true; host.renderer.domElement.setPointerCapture(event.pointerId);
     commandGiant({type:"shovel",tip:localTip,held:true});
@@ -216,10 +223,13 @@ try {
     for (const player of PLAYERS) {
       if (isVolcano) api.update(player.id, { transform: { position: [...player.spawn] }, physics: { mode: "dynamic", linearVelocity: [0, 0, 0], angularVelocity: [0, 0, 0] } });
       api.steer(player.id, { headingDegrees: isVolcano ? 270 : 90 });
+      if (isVolcano) api.setSlowdownLive(player.id, 1);
     }
     countdown = 3;
     rescues.fill(0);
     volcano = createVolcano(volcanoMode);
+    slime = createBallsySlime();
+    projectBallsySlime(slime, (id) => host.world.getEntityObject(id));
     roundId = crypto.randomUUID();
     visualTime = -1;
     giantFeedback = "";
@@ -237,6 +247,10 @@ try {
     if (phase !== "racing" && phase !== "countdown") return;
     resumePhase = phase;
     phase = "paused";
+    // Invalidate commands queued before this interruption, even if resume is immediate.
+    roundId = crypto.randomUUID();
+    cancelBallsySlimeFlight(slime);
+    projectBallsySlime(slime, (id) => host.world.getEntityObject(id));
     keys.clear();
     neutral();
     cancelLocalDig();
@@ -267,6 +281,7 @@ try {
         if (volcano.time - visualTime >= 0.1 || visualTime < 0) { projectVolcano(api, volcano, (id) => host.world.getEntityObject(id)); visualTime = volcano.time; }
       }
       const standings = standingsNow();
+      const previousPositions = isVolcano ? PLAYERS.map(player => api.query({ ids: [player.id] })[0]?.position ?? player.spawn) : [];
       PLAYERS.forEach((player, slot) => {
         const run = standings.find((entry) => entry.subjectId === player.id)?.run;
         const drive = run?.phase === "complete" ? { thrust: 0, turn: 0 } : readBallsyDrive(slot, keys, currentPad(slot));
@@ -276,7 +291,10 @@ try {
         const slow = isVolcano && position ? volcanoSlowAt(volcano, position) : { intensity: 0, speedCap: 8 };
         const velocity = entity?.physics?.linearVelocity;
         // No invisible boost strips: speed comes from steering, gravity and surface contact.
+        const slimeFactor = isVolcano ? ballsySlimeSpeedFactor(slime, slot) : 1;
+        // Take the strongest cap, never multiply lava and slime into a stun.
         const cap = slow.intensity > 0 ? slow.speedCap : 8;
+        if (isVolcano) api.setSlowdownLive(player.id, Math.min(1, 8 * slimeFactor / cap));
         const capChanged = Math.abs(cap - speedCaps[slot]) > 0.01;
         if (position && velocity && entity.physics) {
           const nextVelocity: [number, number, number] = [velocity[0], velocity[1], velocity[2]];
@@ -304,6 +322,8 @@ try {
       });
       if (explicitStep && seconds > 0) api.step(seconds);
       if (isVolcano) {
+        advanceBallsySlime(slime, seconds, PLAYERS.map((player, slot) => ({ position: api.query({ ids: [player.id] })[0]?.position ?? player.spawn, previous: previousPositions[slot], finished: runs[slot].phase === "complete" })));
+        projectBallsySlime(slime, (id) => host.world.getEntityObject(id));
         PLAYERS.forEach((player, slot) => {
           const position = api.query({ ids: [player.id] })[0]?.position;
           if (!position) return;
@@ -317,6 +337,8 @@ try {
       }
       if (standingsNow().length === PLAYERS.length && standingsNow().every((entry) => entry.run.phase === "complete")) {
         phase = "results";
+        cancelBallsySlimeFlight(slime);
+        projectBallsySlime(slime, (id) => host.world.getEntityObject(id));
         neutral();
         syncPause();
       }
@@ -366,7 +388,7 @@ try {
     const standings = standingsNow();
     if (phase === "lobby") {
       heading.textContent = isVolcano ? "La Boucle du Volcan" : "On fait la course ?";
-      description.textContent = isVolcano ? "Deux tours autour du volcan. La voie large est s\u00fbre ; le raccourci de la fourche est plus \u00e9troit. Le g\u00e9ant creuse la terre et d\u00e9vie la lave." : "Deux balles, deux tours. Faites le tour de l'\u00eele dans le sens des fl\u00e8ches !";
+      description.textContent = isVolcano ? "Deux tours autour du volcan. La voie large est s\u00fbre ; le raccourci de la fourche est plus \u00e9troit. Le g\u00e9ant lance des ballons de slime pour ralentir doucement les billes." : "Deux balles, deux tours. Faites le tour de l'\u00eele dans le sens des fl\u00e8ches !";
       button("start").textContent = "C'est parti ! ↗";
     }
     if (phase === "paused") {
@@ -386,10 +408,10 @@ try {
       const wave = volcanoWave(volcano);
       signal.textContent = volcanoMode === "help" ? `Aide ${ally === 0 ? "Lagon" : "Corail"} \u00b7 ${wave.active ? "CRUE !" : `Crue dans ${Math.ceil(wave.inSeconds)} s`}` : "Voie large ou raccourci risqu\u00e9 \u00b7 suis les fl\u00e8ches";
       signal.dataset.flood = String(wave.active);
-      element("[data-charges]").textContent = `${volcano.earth.revision} coups`;
-      element("[data-giant-status]").textContent = "Creuse des tranchées : la lave suit le relief.";
+      element("[data-charges]").textContent = legacyShovel ? `${volcano.earth.revision} coups` : `${slime.hits} touche${slime.hits === 1 ? "" : "s"}`;
+      element("[data-giant-status]").textContent = legacyShovel ? "Creuse des tranchées : la lave suit le relief." : "Une touche : 25 % moins vite, pendant 2 secondes.";
       const remote = room?.state().connected ?? false;
-      element("[data-giant-feedback]").textContent = remote ? "Le géant tient la pelle dans sa maquette." : giantFeedback || "La terre reste creusée jusqu'à la revanche.";
+      element("[data-giant-feedback]").textContent = giantFeedback || (remote ? "Le géant joue dans sa maquette." : legacyShovel ? "La terre reste creusée jusqu'à la revanche." : "Invite un géant pour lancer les ballons.");
 
     }
     const roomState = room?.state();
@@ -403,7 +425,7 @@ try {
         : `Tour ${Math.min(2, (run?.lap ?? 0) + 1)}/2 · ${isVolcano ? `${Math.max(0, Math.round((runs[i].progress - Math.floor(Math.max(0, runs[i].progress))) * 100))} %${runs[i].offTrackSeconds > 0 ? " · Retour piste…" : runs[i].wrongWay ? " · Sens inverse" : runs[i].branch === "shortcut" ? " · Raccourci" : " · Voie large"}` : `${run?.checkpointIndex ?? 0}/3 portes`}`;
       const position = api.query({ ids: [player.id] })[0]?.position;
       const velocity = api.query({ ids: [player.id] })[0]?.physics?.linearVelocity;
-      element(`[data-speed="${i}"]`).textContent = !racing ? "" : `${Math.hypot(velocity?.[0]??0,velocity?.[2]??0).toFixed(1)} m/s`;
+      element(`[data-speed="${i}"]`).textContent = !racing ? "" : `${Math.hypot(velocity?.[0]??0,velocity?.[2]??0).toFixed(1)} m/s${isVolcano && ballsySlimeSpeedFactor(slime, i) < 1 ? " · Slime !" : ""}`;
       element(`[data-slot="${i}"]`).dataset.boost = "false";
       const label = element(`[data-label="${i}"]`);
       label.hidden = !racing || !position;
@@ -417,6 +439,7 @@ try {
   const state = (): unknown => ({ coordinateSystem: "right-handed; +x screen right, +y up, -z screen up", phase,
     countdown: phase === "countdown" ? Math.ceil(countdown) : null, laps: 2, slots, connected, rescues, boosts: structuredClone(boosts),
     course: isVolcano ? "volcano" : "practice", volcano: isVolcano ? structuredClone(volcano) : null, ally: volcanoMode === "help" ? ally : null,
+    slime: isVolcano ? snapshotBallsySlime(slime) : null,
     roundId, room: room?.state() ?? null, checkingPads,
     race: isVolcano ? { stepSeconds: VOLCANO_RACE_STEP, gatesPerLap: VOLCANO_RACE_GATES, standings: structuredClone(standingsNow()) } : null,
     padChecks: padChecks.map((check) => ({ ...check, ready: ballsyPadReady(check) })),

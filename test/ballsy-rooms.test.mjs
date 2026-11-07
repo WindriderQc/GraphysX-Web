@@ -76,3 +76,20 @@ test("snapshot shape, conservation and resource bounds are checked; rooms and co
   for (let i = 0; i < 7; i++) rooms.create();
   assert.throws(() => rooms.create(), { status: 429 });
 });
+
+test("slime uses the ordinary deduplicated round-bound queue; paused and disconnected queues are discarded", () => {
+  const { rooms, host, guest, state } = setup();
+  const command={type:"slime",throwId:"throw-relay111",origin:[0,15,0],velocity:[10,0,0]};
+  const packet={id:"packet-slime111",roundId:state.roundId,command};
+  const first=rooms.command(host.roomId,guest.guestToken,packet);
+  assert.equal(first.accepted,true);assert.deepEqual(rooms.command(host.roomId,guest.guestToken,packet),first);
+  const paused={...state,phase:"paused"};
+  assert.deepEqual(rooms.publish(host.roomId,host.hostToken,{snapshot:paused,ack:0}).commands,[]);
+  assert.deepEqual(rooms.publish(host.roomId,host.hostToken,{snapshot:state,ack:0}).commands,[]);
+  const next={...state,roundId:"round-cccccccccccccccc"};
+  rooms.publish(host.roomId,host.hostToken,{snapshot:next,ack:0});
+  assert.equal(rooms.command(host.roomId,guest.guestToken,{...packet,id:"packet-slime222"}).accepted,false);
+  rooms.command(host.roomId,guest.guestToken,{...packet,id:"packet-slime333",roundId:next.roundId});
+  rooms.leave(host.roomId,guest.guestToken);
+  assert.deepEqual(rooms.publish(host.roomId,host.hostToken,{snapshot:next,ack:0}).commands,[]);
+});

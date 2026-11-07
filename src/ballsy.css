@@ -91,7 +91,7 @@ h1 { font-size: clamp(27px, 3vw, 38px); line-height: 1.08; letter-spacing: -.06e
 .ballsy-score span { font-variant-numeric: tabular-nums; font-size: 12px; }
 .ballsy-score i, .ballsy-ball-label { background: #087d91; }
 .ballsy-score[data-slot="1"] i, .ballsy-ball-label[data-label="1"] { background: #bd452c; }
-.ballsy-ball-label { width: 27px; height: 27px; font-size: 13px; border-width: 2px; box-shadow: 0 3px 8px #001b35aa; }
+.ballsy-ball-label { width: 27px; height: 27px; font-size: 13px; border-width: 2px; box-shadow: 0 3px 8px #001b35aa; transform: translate(calc(-100% - 10px), -100%); }
 .ballsy-card, .ballsy-pad-test { color: #234c4e; border: 1px solid #ffffed; background: #fff9eaf7; box-shadow: 0 24px 90px #071e3966; }
 .ballsy-primary { background: #087e7f; box-shadow: 0 4px 0 #075b60; }
 .ballsy-primary:hover { background: #096a70; }

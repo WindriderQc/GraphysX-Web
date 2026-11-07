@@ -25,13 +25,20 @@ try {
     window.setupPads = [1, 3].map((index) => ({ index, id: `Synthetic standard controller ${index}`, connected: true, mapping: "standard", axes: [0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })) }));
     Object.defineProperty(navigator, "getGamepads", { value: () => [null, window.setupPads[0], null, window.setupPads[1]] });
   });
-  await page.goto(new URL("ballsy.html", base).href, { waitUntil: "load" });
+  await page.goto(new URL("ballsy.html?tool=shovel", base).href, { waitUntil: "load" });
   await page.waitForFunction(() => !!window.__BALLSY__);
   await step();
   // Native select keyboard behavior must work instead of being swallowed by racing keys.
   const mode = page.locator("[data-mode]");
   await mode.focus(); await page.keyboard.press("ArrowDown"); await page.keyboard.press("Enter");
   assert.equal((await state()).volcano.mode, "help");
+  report.legacyKeyboardMode = "Native select keyboard changes the explicit shovel route to help";
+  // The slime entry intentionally hides legacy lava choices. All controller preparation
+  // and keyboard fallback assertions below exercise the current default entry.
+  await page.goto(new URL("ballsy.html", base).href, { waitUntil: "load" });
+  await page.waitForFunction(() => !!window.__BALLSY__); await step();
+  assert.equal(await page.locator("[data-mode]").isHidden(), true);
+  assert.equal((await state()).volcano.mode, "challenge");
   await page.getByRole("button", { name: "Tester les manettes", exact: true }).click();
   assert.equal((await state()).checkingPads, true);
   assert.deepEqual((await state()).slots, [1, 3]);

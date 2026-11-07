@@ -50,6 +50,7 @@ try {
   await giant.getByRole("button", { name: "Rejoindre", exact: true }).click();
   await giant.waitForFunction(() => window.__BALLSY_GIANT__.state().live);
   await host.waitForFunction(() => window.__BALLSY__.state().room?.connected);
+  await giant.locator('[data-mode="shovel"]').click();
   report.joined = { host: (await hostState()).room, guest: await guestState() };
   const terrainScale = await giant.evaluate(() => {
     const a = window.__BALLSY_GIANT__.terrainPoint(7,0).world;
@@ -73,7 +74,29 @@ try {
   assert.equal(report.stereo.placements, 1, "first tracked pose places the tabletop in front of the viewer");
   await giant.screenshot({ path: path.join(art, "giant-stereo.png") });
 
-  assert.equal(report.stereo.targets.length, 2, "VR has only Exit and recenter controls");
+  assert.equal(report.stereo.targets.length, 3, "VR has Exit, recenter and a secondary tool switch");
+  const controllerPose = await giant.evaluate(() => {
+    const controller = window.testHeadset.controllers.right, head = window.testHeadset.position;
+    const original = { position: controller.position.toArray(), quaternion: controller.quaternion.toArray() };
+    const origin = [head.x + .25, head.y - .3, head.z - .25], target = window.__BALLSY_GIANT__.state().targets[2];
+    const delta = target.map((value,axis) => value-origin[axis]), length = Math.hypot(...delta);
+    const direction = delta.map(value => value/length), q = [direction[1], -direction[0], 0, 1-direction[2]], qLength = Math.hypot(...q);
+    controller.position.set(...origin); controller.quaternion.set(...q.map(value => value/qLength));
+    return original;
+  });
+  await giant.waitForFunction(() => window.__BALLSY_GIANT__.state().hoverTargets.includes(2));
+  for (const mode of ["balloon", "shovel"]) {
+    await giant.evaluate(() => window.testHeadset.controllers.right.updateButtonValue("trigger", 1));
+    await giant.waitForFunction(mode => window.__BALLSY_GIANT__.state().balloon.mode === mode, mode);
+    const ends = (await guestState()).selectEnds;
+    await giant.evaluate(() => window.testHeadset.controllers.right.updateButtonValue("trigger", 0));
+    await giant.waitForFunction(ends => window.__BALLSY_GIANT__.state().selectEnds > ends, ends);
+  }
+  await giant.evaluate(pose => {
+    const controller = window.testHeadset.controllers.right;
+    controller.position.set(...pose.position); controller.quaternion.set(...pose.quaternion);
+  }, controllerPose);
+  report.xrToolSwitch = "Third 3D button switches shovel to balloon and back through trigger input";
   await giant.waitForFunction(() => window.__BALLSY_GIANT__.state().shovel.visible.some(Boolean));
   async function moveBlade(x, z, penetration) {
     await giant.evaluate(({x,z,penetration}) => {
