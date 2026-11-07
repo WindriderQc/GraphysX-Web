@@ -98,8 +98,14 @@ again after releasing the brake. These probes do not replace the race journey.
 
 ## Companion regressions and limits
 
-Run the existing loop, setup, practice, shovel, slime and shared-VR smokes unchanged,
-plus the VR lab on the main product build. The installed develop-web-game action
+Run the existing setup, practice, shovel, slime and shared-VR smokes unchanged,
+plus the loop, VR lab, Cyber Race and showroom on the main product build. The loop's
+assertions remain unchanged. Its overtaking preparation now holds Corail's real
+brake for 0.75 seconds before releasing the same geometric pilot: the corrected
+native brake no longer produces the old spontaneous leader swap. The report states
+this unequal start explicitly and captures the actual progress-based overtake.
+No positions, velocities, forces, speed limits, standings or gates are injected.
+The installed develop-web-game action
 client is run through `scripts/smoke-ballsy-slime-client.mjs`, which imports the
 original client unchanged and only resolves the repository's Playwright package.
 That original client chooses its own Chromium/SwiftShader launch and is not the
@@ -125,5 +131,30 @@ The 120-frame held-pose samples measured approximately 75 FPS and 13.4 ms p95 in
 display-limited and does not establish a performance gain or headset budget.
 Receipts are under `output/permanent-ballsy-qa/baseline/` (ignored local evidence).
 
-Execution against the final camera, finish and visual build is pending. No new
-product performance or gameplay pass is claimed by the baseline run.
+Build3 was tested from the complete isolated production output, including verified
+public assets, on 2026-11-07. Close-start racers measure 34.60-34.66 px at 1280x720
+(about 2.51 times the baseline), 51.90-51.99 px at 1920x1080 and 26.92-26.95 px at
+390x844. The banked-turn improvement is about 3.1 times. All camera containment,
+HUD and opaque-occlusion checks pass. Held-pose rendering remains display-limited
+near 75 FPS / 13.4 ms p95, with 61 draw calls and 42,739 triangles in the measured
+1280/1920 close-start views. This is not a proven performance gain or Quest budget.
+
+The contact/impact journey passes with native road gaps around one millimetre,
+allocated shadow maps, no visible giant shadow acne, a brief direct-hit burst and
+a persistent slime coat. The host uses 66-69 draw calls / 43,508-44,788 triangles in
+that journey; the giant uses 80-85 / 46,322-46,744. Full product screenshots were
+inspected at rest and 100/600 ms after the real pointer impact.
+
+Build3's public entrypoints pass 12 checks with loaded thumbnails and no browser
+errors. Historical setup, practice, desktop shovel, slime (28 checks), shared VR
+(50 checks), VR lab, Cyber Race and showroom pass. The loop passes all original
+assertions with the explicit input-only preparation: a real overtake at frame
+2504, contact separation 1.276 m, maximum separation 21.772 m, and two laps without
+recovery or teleport. The installed original develop-web-game client passes;
+its latest shot and text state were inspected. Evidence is retained in
+`output/permanent-ballsy-qa/build3-*` and `final-contact` / `final-entrypoints`.
+
+The complete camera/finish smoke still awaits the final badge-layout rebuild:
+its close-arrival fixture exposed overlapping individual arrival badges at a
+0.531-second finish gap. The assertion remains strict. Physical headset and
+human controller acceptance are still separate tasks, not claimed by these runs.

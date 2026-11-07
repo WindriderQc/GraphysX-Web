@@ -79,7 +79,7 @@ async function visualMetrics() {
         if (materials.every(material => material?.transparent && material.opacity < .9)) return false;
         return hit.distance < distance - .7;
       });
-      const label = document.querySelector(`[data-label="${i}"]`), sparkle = document.querySelector(`[data-finish-sparkle="${i}"]`);
+      const label = document.querySelector(`[data-label="${i}"]`), sparkle = document.querySelector(`[data-finish-sparkle="${i}"]`), leader = document.querySelector(`[data-label-leader="${i}"]`);
       const bodyMeshes = []; body.traverse(object => { if (object.isMesh) bodyMeshes.push({ name: object.name, castShadow: object.castShadow, receiveShadow: object.receiveShadow }); });
       const roads = ["ballsy-road-main", "ballsy-road-bridge"].map(id => host.world.getEntityObject(id)).filter(Boolean);
       ray.set(center.clone().add(camera.position.clone().set(0, 3, 0)), camera.position.clone().set(0, -1, 0));
@@ -92,6 +92,7 @@ async function visualMetrics() {
         opaqueBlocker: hit ? { name: hit.object.name, distance: hit.distance } : null,
         label: { visible: visible(label), text: label.textContent, box: rectOf(label), finished: label.dataset.finished,
           hudOverlaps: hud.filter(item => intersects(rectOf(label), item.box)).map(item => item.selector) },
+        leader: leader ? { visible: visible(leader), width: leader.offsetWidth, color: getComputedStyle(leader).backgroundColor, transform: leader.style.transform } : null,
         sparkle: sparkle ? { visible: visible(sparkle), box: rectOf(sparkle) } : null };
     });
     const gl = host.renderer.getContext(), ext = gl.getExtension("WEBGL_debug_renderer_info");
@@ -134,6 +135,9 @@ async function checkFinishUi(label, expectedCount) {
     check(`${label}: racer ${i + 1} remains in frame`, metrics.players[i].wholeBallInFrame);
     check(`${label}: racer ${i + 1} has no opaque blocker`, !metrics.players[i].opaqueBlocker, metrics.players[i].opaqueBlocker);
     check(`${label}: racer ${i + 1} arrival badge does not cover the HUD`, metrics.players[i].label.hudOverlaps.length === 0, metrics.players[i].label.hudOverlaps);
+    const badge = metrics.players[i].label.box;
+    check(`${label}: racer ${i + 1} arrival badge stays inside the viewport`, badge.left >= 0 && badge.top >= 0 && badge.right <= metrics.viewport[0] && badge.bottom <= metrics.viewport[1]);
+    check(`${label}: racer ${i + 1} arrival badge retains its ball connector`, metrics.players[i].leader?.visible && metrics.players[i].leader.width > 0);
   }
   if (completed.length === 2) {
     const [a, b] = completed.map(i => metrics.players[i].label.box);
@@ -305,6 +309,11 @@ try {
     check("Close arrival actually finishes within two seconds", Math.abs(times[0] - times[1]) <= 2, times);
     report.closeResults = await checkFinishUi("close-arrival", 2);
     check("Close arrival displays both sparkles together", report.closeResults.metrics.players.every(p => p.sparkle.visible));
+    report.closeResponsiveResults = [];
+    for (const viewport of [{ width: 960, height: 540 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport); await step(0);
+      report.closeResponsiveResults.push(await checkFinishUi(`close-arrival-${viewport.width}x${viewport.height}`, 2));
+    }
   }
   check("No page or console errors", report.errors.length === 0, report.errors);
   report.ok = true;

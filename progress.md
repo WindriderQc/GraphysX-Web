@@ -5303,3 +5303,11 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
 - Found a pre-existing isolated-build defect: asset/embed/vocabulary plugins ignored `--outDir`. Fixed resolved output routing with three regression contracts. The complete third build contains all 1101 public assets byte-for-byte plus four embed modules and world vocabulary.
 - Latest full Node run: 1222 tests, 1217 pass, 4 known Windows directory-fsync/checkpoint failures, 1 skip. No Ballsy test fails. Typecheck, global lint and complete product build pass. This is not an all-green local gate; Linux CI and final browser reception remain pending.
 - Stronger production HTTP acceptance compares both game pages, immediate bundles, the VR dynamic entry and local XR profiles; it requires same-origin relay status and foreign-origin refusal. A 200 SPA fallback cannot count as delivery. Production, physical Quest comfort and headset performance have not yet been accepted.
+
+
+### Ballsy art final reception, 2026-11-07
+
+- Final art sources pass 27 focused tests, including physical-entity hash parity, worst-case lava/slime budget and direct-hit burst/model immutability. Source changes are frozen.
+- Actual build-3 host/giant contact captures were opened: miniature self-shadow arcs are gone; the compact direct-hit burst is visible at 100 ms and absent at 600 ms while the two-second coat remains. The pointer/relay contact run passes without errors.
+- Installed unmodified develop-web-game client passed; its shot-0.png was opened and inspected against the text state (P1 moving at 8.03 m/s). Asphalt, ball identity and contact shadows are readable during real input. Receipts and inspected paths are recorded in docs/BALLSY_ART.md.
+- Art acceptance does not cover the separate close-finish UI fix, deployment, physical Quest comfort or headset performance. No new physics model, shadow map, loop, publication or push was introduced by the art work.

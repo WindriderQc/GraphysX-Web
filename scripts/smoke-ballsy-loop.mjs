@@ -10,7 +10,7 @@ const server=process.env.SMOKE_BASE?null:await startBallsyServer({port:0,...(pro
 const url=new URL(`ballsy.html?course=volcano${greybox?'&greybox=1':''}`,process.env.SMOKE_BASE||server.url).href;
 const report={label:'pilotage automatisé via vraies entrées; aucun playtest humain',baseline,errors:[],captures:[]};
 report.browserVersion=browser.version();
-report.pilot={samePolicyForBothPlayers:true,targetSpeedCap:3.5,brakeAboveDesiredBy:1,note:'Actual game speed cap is unchanged; controller slows near its geometric look-ahead target'};
+report.pilot={samePolicyForBothPlayers:false,targetSpeedCap:3.5,brakeAboveDesiredBy:1,startDelaySeconds:[0,.75],note:'The clean race holds Corail on the actual brake for 0.75 seconds before releasing the same geometric controller. This explicitly prepares a real catch-up/overtake through the shortcut after the native brake fix. No body, velocity, force, speed-cap, standings or rule mutation.'};
 const performanceSample=page=>page.evaluate(async()=>{
  const canvas=document.querySelector('canvas'),gl=canvas.getContext('webgl2')||canvas.getContext('webgl');
  const ext=gl?.getExtension('WEBGL_debug_renderer_info');
@@ -20,8 +20,8 @@ const performanceSample=page=>page.evaluate(async()=>{
  return {method:'120 real requestAnimationFrame intervals; unpaused, idle racers, headless Edge',viewport:[innerWidth,innerHeight],drawingBuffer:[canvas.width,canvas.height],devicePixelRatio,renderer:ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):gl?.getParameter(gl.RENDERER),fps:1000/(times.reduce((a,b)=>a+b,0)/times.length),p95FrameMs:sorted[Math.floor(sorted.length*.95)]};
 });
 // Input-only controller. No body transforms, velocity writes or rule commands.
-async function driveRace(page, paths, maxFrames=18000,stopAtProgress=null) {
- return page.evaluate(async({paths,maxFrames,stopAtProgress})=>{
+async function driveRace(page, paths, maxFrames=18000,stopAtProgress=null,startDelayFrames=[0,0]) {
+ return page.evaluate(async({paths,maxFrames,stopAtProgress,startDelayFrames})=>{
   const next=[0,0],trace=[],jumps=[];let state=window.__BALLSY__.state(),firstFinish=null;
   let minimumSeparation=Infinity,maximumSeparation=0,frames=0,lastLeader=0;
   const closeApproaches=[],passes=[];
@@ -29,6 +29,9 @@ async function driveRace(page, paths, maxFrames=18000,stopAtProgress=null) {
   const captures=new Set();
   for(;frames<maxFrames;frames++){
    state.players.forEach((p,i)=>{
+    // Explicit input-only preparation: hold the real brake, then release into the
+    // unchanged pilot. Only the clean race opts into a delayed second start.
+    if(frames<startDelayFrames[i]){window.ballsyTestPads[i].axes=[0,0];window.ballsyTestPads[i].buttons=[{pressed:true,value:1}];return;}
     // Geometric look-ahead, not chasing a missed waypoint backwards after a boost.
     let nearest=0,nearestDistance=Infinity;
     paths[i].forEach((q,index)=>{const d=Math.hypot(q[0]-p.position[0],q[1]-p.position[2]);if(d<nearestDistance){nearestDistance=d;nearest=index;}});
@@ -78,7 +81,7 @@ async function driveRace(page, paths, maxFrames=18000,stopAtProgress=null) {
    if(separation<1.34&&closeApproaches.length<20)closeApproaches.push({frames,separation,players:state.players.map(p=>({position:p.position,velocity:p.velocity}))});
    const difference=state.players[0].run.progress-state.players[1].run.progress;
    const leader=Math.abs(difference)>.005?Math.sign(difference):0;
-   if(leader&&lastLeader&&leader!==lastLeader)passes.push({frames,leader:leader>0?1:2,difference});
+   if(leader&&lastLeader&&leader!==lastLeader){passes.push({frames,leader:leader>0?1:2,difference});if(window.ballsyCapture)await window.ballsyCapture(`${captureLabel}-overtake-${passes.length}`);}
    if(leader)lastLeader=leader;
    if(frames%1200===0)console.info('[ballsy-loop] frame '+frames+' progress '+state.players.map(p=>p.run.progress.toFixed(3)+'/'+p.run.rescues).join(', '));
    if(frames%60===0)trace.push({frames,next:[...next],players:state.players.map(p=>({position:p.position,velocity:p.velocity,run:p.run}))});
@@ -87,7 +90,7 @@ async function driveRace(page, paths, maxFrames=18000,stopAtProgress=null) {
    if(stopAtProgress!==null&&state.players[1].run.progress>=stopAtProgress)break;
   }
   return {frames,next,trace,jumps,minimumSeparation,maximumSeparation,closeApproaches,passes,visibility,separationCapture,firstFinish,state};
- },{paths,maxFrames,stopAtProgress});
+ },{paths,maxFrames,stopAtProgress,startDelayFrames});
 }
 let page;
 try{
@@ -201,7 +204,7 @@ try{
    }));
   });
   if(!process.argv.includes('--scenario-only')){
-  report.driven=await driveRace(page,paths);
+  report.driven=await driveRace(page,paths,18000,null,[0,45]);
   if(report.driven.separationCapture){writeFileSync(path.join(dir,'loop-full-separation.png'),Buffer.from(report.driven.separationCapture.data,'base64'));delete report.driven.separationCapture.data;}
   await page.screenshot({path:path.join(dir,'loop-driven-result.png')});
   assert.equal(report.driven.state.phase,'results','Both racers must finish through real controls');
