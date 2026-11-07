@@ -7,7 +7,9 @@ import {
   createUrchinGeometry
 } from "./models";
 import { Cyberjobe } from "./cyberjobe";
-import { OPEN_RADIUS, Track, TrackSlice, type Sector } from "./track";
+import { buildHypertube } from "./hypertube";
+import { buildMagneticField } from "./magnetic";
+import { OPEN_RADIUS, RHYTHM_MAX, Track, TrackSlice, type Sector } from "./track";
 import {
   bandTexture,
   checkerTexture,
@@ -19,6 +21,7 @@ import {
   networkTexture,
   hexTexture,
   lightningTexture,
+  nebulaTexture,
   ornateTileTexture,
   rivetedMetalTexture,
   sunsetTexture,
@@ -41,7 +44,8 @@ export type ObstacleKind =
   | "slot"
   | "firewall"
   | "geyser"
-  | "rock";
+  | "rock"
+  | "iris";
 
 /** Half-size of a pilot measured across a direction at `angle`, given its roll (wings along roll). */
 export function pilotExtent(roll: number, angle: number): number {
@@ -95,13 +99,75 @@ export interface Obstacle {
   span: number;
   /** Plates: angular speed. */
   spin: number;
-  /** Portholes: hole radius. Blades: widest half-gap. Slots: half-gap. */
+  /** Portholes: hole radius. Blades: widest half-gap. Slots: half-gap. Necklace mines: clear middle. */
   gap?: number;
   /** Blades: phase of the closing cycle. */
   phase?: number;
   mesh?: THREE.Object3D;
   /** Blades: the two moving slabs. */
   parts?: THREE.Object3D[];
+  /** Notre version: a pulse shot can break it. */
+  breakable?: boolean;
+  /** Broken by a pulse: no longer collides. */
+  destroyed?: boolean;
+  /** Hides the broken obstacle (instanced obstacles scale their instance to zero). */
+  onDestroy?: () => void;
+  /** Linked mines: breaking this one sets these off a moment later, and so on down the chain. */
+  chain?: Obstacle[];
+  /** Set pieces flown through (a necklace's middle): the computer pilots head for this point. */
+  aim?: [number, number];
+}
+
+/** Where a pilot is, for boards whose set pieces react to the pilots. */
+export interface PilotPoint {
+  s: number;
+  ox: number;
+  oy: number;
+}
+
+/** One linked mine going off in a chain lit by `owner`; `count` mines of that chain so far. */
+export interface Blast {
+  o: Obstacle;
+  owner: 0 | 1;
+  count: number;
+}
+
+/** Boost pad on a tube wall (notre version): flying over it gives a burst of speed and turbo. */
+export interface BoostPad {
+  s: number;
+  ox: number;
+  oy: number;
+  mesh: THREE.Object3D;
+  taken: [boolean, boolean];
+  flash: number;
+}
+
+/**
+ * What a "notre version" board builder may use. Each board lives in its own module and builds
+ * through this kit, so world.ts keeps the shared mechanics only.
+ */
+export interface BoardKit {
+  readonly track: Track;
+  readonly rng: Rng;
+  readonly difficulty: Difficulty;
+  readonly group: THREE.Group;
+  keep<T extends { dispose(): void }>(item: T): T;
+  place(object: THREE.Object3D, s: number, ox: number, oy: number): void;
+  /** Group at s whose local x/y axes are the line's right/up (see lateralHolder). */
+  crossSection(s: number): THREE.Group;
+  addObstacle(o: Obstacle): void;
+  /** A rotating sector plate (rotated with its angle/spin like the film tunnel's). */
+  addPlate(o: Obstacle): void;
+  addRing(s: number, ox: number, oy: number): void;
+  addBoost(pad: BoostPad): void;
+  instanced(geometry: THREE.BufferGeometry, materials: THREE.Material | THREE.Material[], count: number): THREE.InstancedMesh;
+  /** Slowly tumbling instance; returns a handle to hide it (scale 0). */
+  spinner(mesh: THREE.InstancedMesh, index: number, s: number, ox: number, oy: number, scale: number, speed: number): { hide(): void };
+  /** Glass wall splitting the tube into left and right lanes over [s0, s1]. */
+  addDivider(s0: number, s1: number, halfThickness: number): void;
+  onUpdate(fn: (time: number, dt: number, focus: number[]) => void): void;
+  /** The pilots' places at the last update. */
+  pilots(): readonly PilotPoint[];
 }
 
 export interface Ring {
@@ -179,6 +245,20 @@ export class RaceWorld {
   private projectileMat: THREE.Material | null = null;
   private throwTimer = 0;
   private bossS = 0;
+  /** World clock of the last update (shots test rotating plates against it). */
+  time = 0;
+  /** Rings whose first place could not be taken and were drawn again (read by the checks). */
+  ringRedraws = 0;
+  /** Boost pads of notre version boards, sorted by s. */
+  readonly boosts: BoostPad[] = [];
+  private readonly updaters: Array<(time: number, dt: number, focus: number[]) => void> = [];
+  private pilotPoints: PilotPoint[] = [];
+  /** Chain blasts since the last frame, for main to light, score and hurt with. */
+  readonly blasts: Blast[] = [];
+  private readonly fuses: Array<{ o: Obstacle; owner: 0 | 1; chain: number; t: number }> = [];
+  private readonly chainCounts = new Map<number, number>();
+  private chainSeq = 0;
+  private readonly dividers: Array<{ s0: number; s1: number; half: number }> = [];
   private readonly disposables: Array<{ dispose(): void }> = [];
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpQ2 = new THREE.Quaternion();
@@ -196,7 +276,8 @@ export class RaceWorld {
           this.buildTunnel(sector);
           break;
         case "mines":
-          this.buildMines(sector);
+          if (sector.info.remaster) buildMagneticField(this.kit(), sector);
+          else this.buildMines(sector);
           break;
         case "shards":
           this.buildShards(sector);
@@ -219,12 +300,116 @@ export class RaceWorld {
         case "vortex":
           this.buildVortex(sector);
           break;
+        case "hypertube":
+          buildHypertube(this.kit(), sector);
+          break;
       }
     }
+    // Rings are placed against the finished obstacle list (see ringReachable).
+    this.obstacles.sort((a, b) => a.s - b.s);
     this.buildRings();
     this.buildFinish();
     this.obstacles.sort((a, b) => a.s - b.s);
     this.rings.sort((a, b) => a.s - b.s);
+    this.boosts.sort((a, b) => a.s - b.s);
+  }
+
+  private ringGeometry: THREE.BufferGeometry | null = null;
+  private ringMaterial: THREE.MeshStandardMaterial | null = null;
+
+  private makeRing(s: number, ox: number, oy: number): void {
+    this.ringGeometry ??= this.keep(new THREE.TorusGeometry(3.1, 0.32, 12, 32));
+    this.ringMaterial ??= this.keep(
+      new THREE.MeshStandardMaterial({ color: 0xe8f2f6, metalness: 0.9, roughness: 0.15, emissive: 0x1a6a70, emissiveIntensity: 0.5 })
+    );
+    const mesh = new THREE.Mesh(this.ringGeometry, this.keep(this.ringMaterial.clone()));
+    this.placeOnTrack(mesh, s, ox, oy);
+    this.group.add(mesh);
+    this.rings.push({ s, ox, oy, r: 3.1, mesh, flash: 0, taken: [false, false] });
+  }
+
+  private kit(): BoardKit {
+    return {
+      track: this.track,
+      rng: this.rng,
+      difficulty: this.difficulty,
+      group: this.group,
+      keep: (item) => this.keep(item),
+      place: (object, s, ox, oy) => this.placeOnTrack(object, s, ox, oy),
+      crossSection: (s) => this.lateralHolder(s),
+      addObstacle: (o) => {
+        this.obstacles.push(o);
+      },
+      addPlate: (o) => {
+        this.obstacles.push(o);
+        this.plates.push(o);
+      },
+      addRing: (s, ox, oy) => this.makeRing(s, ox, oy),
+      addBoost: (pad) => {
+        this.boosts.push(pad);
+      },
+      instanced: (geometry, materials, count) => this.makeInstanced(geometry, materials, count),
+      spinner: (mesh, index, s, ox, oy, scale, speed) => {
+        const sp = this.addSpinner(mesh, index, s, ox, oy, scale, speed);
+        return {
+          hide: () => {
+            sp.scale = 0;
+          }
+        };
+      },
+      addDivider: (s0, s1, half) => {
+        this.dividers.push({ s0, s1, half });
+      },
+      onUpdate: (fn) => {
+        this.updaters.push(fn);
+      },
+      pilots: () => this.pilotPoints
+    };
+  }
+
+  /** Half-thickness of a lane divider at s (0 where there is none). */
+  dividerAt(s: number): number {
+    for (const d of this.dividers) {
+      if (s >= d.s0 && s <= d.s1) return d.half;
+    }
+    return 0;
+  }
+
+  /** A pulse broke a linked mine: its neighbours go off one after the other. */
+  startChain(o: Obstacle, owner: 0 | 1): void {
+    if (!o.chain?.length) return;
+    this.chainSeq += 1;
+    this.chainCounts.set(this.chainSeq, 1);
+    this.lightFuses(o, owner, this.chainSeq);
+  }
+
+  private lightFuses(o: Obstacle, owner: 0 | 1, chain: number): void {
+    for (const next of o.chain ?? []) {
+      if (!next.destroyed) this.fuses.push({ o: next, owner, chain, t: 0.11 });
+    }
+  }
+
+  private burnFuses(dt: number): void {
+    for (let i = this.fuses.length - 1; i >= 0; i -= 1) {
+      const fuse = this.fuses[i];
+      fuse.t -= dt;
+      if (fuse.t > 0) continue;
+      this.fuses.splice(i, 1);
+      if (fuse.o.destroyed) continue;
+      this.breakObstacle(fuse.o);
+      const count = (this.chainCounts.get(fuse.chain) ?? 1) + 1;
+      this.chainCounts.set(fuse.chain, count);
+      this.blasts.push({ o: fuse.o, owner: fuse.owner, count });
+      this.lightFuses(fuse.o, fuse.owner, fuse.chain);
+    }
+  }
+
+  /** Breaks an obstacle hit by a pulse shot. */
+  breakObstacle(o: Obstacle): void {
+    if (o.destroyed) return;
+    o.destroyed = true;
+    if (o.onDestroy) o.onDestroy();
+    else if (o.mesh) o.mesh.visible = false;
   }
 
   // ------------------------------------------------------------ helpers
@@ -236,6 +421,35 @@ export class RaceWorld {
   private placeOnTrack(object: THREE.Object3D, s: number, ox: number, oy: number): void {
     this.track.toWorld(s, ox, oy, object.position);
     this.track.basis(s, object.quaternion);
+  }
+
+  /**
+   * A live obstacle's place in [a, b]: even on film boards (one draw, as before), drawn along
+   * the board's rhythm on notre version boards so calm stretches and peaks alternate.
+   */
+  private spread(sector: Sector, a: number, b: number): number {
+    const rhythm = sector.info.rhythm;
+    if (!rhythm || b <= a) return a + this.rng() * (b - a);
+    const span = Math.max(1, sector.end - sector.start);
+    let s = a;
+    for (let k = 0; k < 24; k += 1) {
+      s = a + this.rng() * (b - a);
+      if (this.rng() * RHYTHM_MAX <= rhythm((s - sector.start) / span)) break;
+    }
+    return s;
+  }
+
+  /** Spacing divisor for evenly stepped set pieces: 1 on film boards, the rhythm on ours. */
+  private pace(sector: Sector, s: number): number {
+    const rhythm = sector.info.rhythm;
+    if (!rhythm) return 1;
+    return Math.max(0.15, rhythm((s - sector.start) / Math.max(1, sector.end - sector.start)));
+  }
+
+  /** Scenery count: film boards keep theirs; lengthened boards keep the same density. */
+  private decor(sector: Sector, count: number): number {
+    if (!sector.info.rhythm) return count;
+    return Math.round(count * Math.max(1, (sector.end - sector.start) / 1000));
   }
 
   /** Live obstacle count for a stretch, scaled by difficulty. */
@@ -269,13 +483,14 @@ export class RaceWorld {
     oy: number,
     scale: number,
     speed: number
-  ): void {
+  ): Spinner {
     const position = this.track.toWorld(s, ox, oy, new THREE.Vector3());
     const base = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.rng() * TAU, this.rng() * TAU, this.rng() * TAU));
     const axis = new THREE.Vector3(this.rng() - 0.5, this.rng() - 0.5, this.rng() - 0.5).normalize();
     const spinner: Spinner = { mesh, index, position, base, axis, speed, scale };
     this.spinners.push(spinner);
     this.applySpinner(spinner, 0);
+    return spinner;
   }
 
   private applySpinner(sp: Spinner, time: number): void {
@@ -411,14 +626,14 @@ export class RaceWorld {
     );
     const geometry = this.keep(createMineGeometry());
     const live = this.liveCount(s1 - s0);
-    const decor = 260;
+    const decor = this.decor(sector, 260);
     const mesh = this.makeInstanced(geometry, [body, spikes], live + decor + 1);
     // A big mine waits just outside the tunnel mouth (00:40:58).
     this.obstacles.push({ kind: "mine", s: sector.start + 26, ox: 6.5, oy: 2.5, r: 3.6, angle: 0, span: 0, spin: 0 });
     this.addSpinner(mesh, live + decor, sector.start + 26, 6.5, 2.5, 3.6, 0.35);
     let index = 0;
     for (let i = 0; i < live; i += 1) {
-      const s = s0 + this.rng() * (s1 - s0);
+      const s = this.spread(sector, s0, s1);
       const [ox, oy] = this.randomLateral(OPEN_RADIUS - 1, 0.8);
       const r = 1.3 + this.rng() * 1.6;
       this.obstacles.push({ kind: "mine", s, ox, oy, r, angle: 0, span: 0, spin: 0 });
@@ -447,11 +662,11 @@ export class RaceWorld {
     );
     const geometry = this.keep(createShardGeometry());
     const live = this.liveCount(liveEnd - s0);
-    const decor = 520;
+    const decor = this.decor(sector, 520);
     const mesh = this.makeInstanced(geometry, mat, live + decor);
     let index = 0;
     for (let i = 0; i < live; i += 1) {
-      const s = s0 + this.rng() * (liveEnd - s0);
+      const s = this.spread(sector, s0, liveEnd);
       const [ox, oy] = this.randomLateral(OPEN_RADIUS - 1, 0.8);
       const r = 1.2 + this.rng() * 1.4;
       this.obstacles.push({ kind: "shard", s, ox, oy, r, angle: 0, span: 0, spin: 0 });
@@ -471,7 +686,7 @@ export class RaceWorld {
     const bands = this.keep(bandTexture());
     const stripMat = this.keep(new THREE.MeshStandardMaterial({ map: bands, roughness: 0.5, metalness: 0.2, side: THREE.DoubleSide }));
     const stripGeo = this.keep(new THREE.BoxGeometry(7, 0.5, 90));
-    for (let i = 0; i < 26; i += 1) {
+    for (let i = 0, n = this.decor(sector, 26); i < n; i += 1) {
       const s = s0 + this.rng() * (decorEnd - s0);
       const side = this.rng() < 0.5 ? -1 : 1;
       const strip = new THREE.Mesh(stripGeo, stripMat);
@@ -608,11 +823,11 @@ export class RaceWorld {
     const thorn = this.keep(new THREE.MeshStandardMaterial({ color: 0xc8963c, emissive: 0x3a2008, roughness: 0.5, flatShading: true }));
     const urchinGeo = this.keep(createUrchinGeometry());
     const live = this.liveCount(liveEnd - sector.start - 30, 1.6);
-    const decor = 160;
+    const decor = this.decor(sector, 160);
     const urchins = this.makeInstanced(urchinGeo, [core, thorn], live + decor);
     let index = 0;
     for (let i = 0; i < live; i += 1) {
-      const s = sector.start + 30 + this.rng() * (liveEnd - sector.start - 30);
+      const s = this.spread(sector, sector.start + 30, liveEnd);
       const [ox, oy] = this.randomLateral(OPEN_RADIUS - 1, 0.8);
       const r = 1.4 + this.rng() * 1.4;
       this.obstacles.push({ kind: "urchin", s, ox, oy, r, angle: 0, span: 0, spin: 0 });
@@ -633,7 +848,7 @@ export class RaceWorld {
     const bark = this.keep(new THREE.MeshStandardMaterial({ color: 0x1f6a5a, emissive: 0x06221c, roughness: 0.5, flatShading: true }));
     const bandMat = this.keep(new THREE.MeshStandardMaterial({ color: 0x8a3ac8, emissive: 0x2a0a40, roughness: 0.4, flatShading: true }));
     const step = 260 / this.difficulty.density;
-    for (let s = sector.start + 120; s < liveEnd - 40; s += step * (0.7 + this.rng() * 0.6)) {
+    for (let s = sector.start + 120; s < liveEnd - 40; s += (step * (0.7 + this.rng() * 0.6)) / this.pace(sector, s)) {
       const angle = (this.rng() * 2 - 1) * 0.7;
       const offset = (this.rng() * 2 - 1) * 6;
       const nx = -Math.sin(angle);
@@ -680,7 +895,7 @@ export class RaceWorld {
     const hexes = this.makeInstanced(hexGeo, hexMat, live);
     const tints = [0x5a62ff, 0x7a5cff, 0x3a40e0, 0xff4a9a, 0x9aa4ff].map((c) => new THREE.Color(c));
     for (let i = 0; i < live; i += 1) {
-      const s = sector.start + 40 + this.rng() * (liveEnd - sector.start - 40);
+      const s = this.spread(sector, sector.start + 40, liveEnd);
       const [ox, oy] = this.randomLateral(radius - 2.4, 0.7);
       const r = 1.1 + this.rng() * 1.3;
       this.obstacles.push({ kind: "hex", s, ox, oy, r, angle: 0, span: 0, spin: 0 });
@@ -719,7 +934,9 @@ export class RaceWorld {
       const edgeMat = this.keep(new THREE.MeshBasicMaterial({ color: 0xfff0c0 }));
       const edgeGeo = this.keep(new THREE.BoxGeometry(size, 0.3, 0.7));
       const span = sector.end - sector.start;
-      for (const k of [0.3, 0.55, 0.8]) {
+      // The 90-second finale closes more doors, each where its wave peaks.
+      const doors = sector.info.rhythm ? [0.3, 0.45, 0.62, 0.8, 0.88, 0.94] : [0.3, 0.55, 0.8];
+      for (const k of doors) {
         const s = sector.start + span * k;
         const holder = this.lateralHolder(s);
         const spinner = new THREE.Group();
@@ -982,7 +1199,7 @@ export class RaceWorld {
     const haloGeo = this.keep(new THREE.CylinderGeometry(0.75, 0.75, 24, 10, 1, true));
     haloGeo.rotateZ(Math.PI / 2);
     const liveEnd = Math.min(sector.end, this.track.raceLength) - 40;
-    for (let s = s0 + 90; s < liveEnd; s += (150 / this.difficulty.density) * (0.7 + this.rng() * 0.6)) {
+    for (let s = s0 + 90; s < liveEnd; s += ((150 / this.difficulty.density) * (0.7 + this.rng() * 0.6)) / this.pace(sector, s)) {
       const holder = this.lateralHolder(s);
       const spinner = new THREE.Group();
       spinner.add(new THREE.Mesh(coreGeo, beamMat), new THREE.Mesh(haloGeo, glowMat));
@@ -1144,7 +1361,7 @@ export class RaceWorld {
     const panelGeo = this.keep(new THREE.PlaneGeometry(12, 8));
     const edgeGeo = this.keep(new THREE.EdgesGeometry(panelGeo));
     const neon = this.keep(new THREE.LineBasicMaterial({ color: 0xff5ae0 }));
-    for (let i = 0; i < 16; i += 1) {
+    for (let i = 0, n = this.decor(sector, 16); i < n; i += 1) {
       const s = sector.start + this.rng() * (sector.end - sector.start);
       const side = this.rng() < 0.5 ? -1 : 1;
       const panel = new THREE.Mesh(panelGeo, panelMat);
@@ -1156,9 +1373,9 @@ export class RaceWorld {
     // Red wire icosahedra hovering high above, as the one over Jobe's desk.
     const icoGeo = this.keep(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(3, 0)));
     const icoMat = this.keep(new THREE.LineBasicMaterial({ color: 0xff3a3a }));
-    for (let i = 0; i < 6; i += 1) {
+    for (let i = 0, n = this.decor(sector, 6); i < n; i += 1) {
       const ico = new THREE.LineSegments(icoGeo, icoMat);
-      this.track.toWorld(sector.start + ((i + 0.5) / 6) * (sector.end - sector.start), (this.rng() * 2 - 1) * 10, 22, ico.position);
+      this.track.toWorld(sector.start + ((i + 0.5) / n) * (sector.end - sector.start), (this.rng() * 2 - 1) * 10, 22, ico.position);
       this.group.add(ico);
       this.sigils.push(ico);
     }
@@ -1263,7 +1480,7 @@ export class RaceWorld {
     const blockGeo = this.keep(new THREE.BoxGeometry(cell - 0.15, cell - 0.15, 0.4));
     const frameGeo = this.keep(new THREE.EdgesGeometry(new THREE.BoxGeometry(cell - 0.3, cell - 0.3, 0.2)));
     const liveEnd = Math.min(sector.end, this.track.raceLength) - 40;
-    for (let s = sector.start + 70; s < liveEnd; s += (120 / this.difficulty.density) * (0.8 + this.rng() * 0.4)) {
+    for (let s = sector.start + 70; s < liveEnd; s += ((120 / this.difficulty.density) * (0.8 + this.rng() * 0.4)) / this.pace(sector, s)) {
       const opens = Math.max(1, 4 - Math.round(this.difficulty.density));
       let mask = 0;
       while (countBits(mask) < opens) mask |= 1 << Math.floor(this.rng() * 9);
@@ -1289,7 +1506,7 @@ export class RaceWorld {
     coreGeo.rotateZ(Math.PI / 2);
     const haloGeo = this.keep(new THREE.CylinderGeometry(0.7, 0.7, half * 3, 10, 1, true));
     haloGeo.rotateZ(Math.PI / 2);
-    for (let s = sector.start + 130; s < liveEnd; s += (220 / this.difficulty.density) * (0.8 + this.rng() * 0.4)) {
+    for (let s = sector.start + 130; s < liveEnd; s += ((220 / this.difficulty.density) * (0.8 + this.rng() * 0.4)) / this.pace(sector, s)) {
       const holder = this.lateralHolder(s);
       const spinner = new THREE.Group();
       spinner.add(new THREE.Mesh(coreGeo, beamMat), new THREE.Mesh(haloGeo, glowMat));
@@ -1340,7 +1557,7 @@ export class RaceWorld {
     const coreGeo = this.keep(new THREE.CylinderGeometry(1.1, 1.8, 70, 10, 1, true));
     coreGeo.translate(0, 35, 0);
     const liveEnd = Math.min(sector.end, this.track.raceLength) - 40;
-    for (let s = sector.start + 60; s < liveEnd; s += (90 / this.difficulty.density) * (0.7 + this.rng() * 0.6)) {
+    for (let s = sector.start + 60; s < liveEnd; s += ((90 / this.difficulty.density) * (0.7 + this.rng() * 0.6)) / this.pace(sector, s)) {
       const x = (this.rng() * 2 - 1) * (OPEN_RADIUS - 3);
       const holder = this.lateralHolder(s);
       const column = new THREE.Group();
@@ -1377,11 +1594,11 @@ export class RaceWorld {
     );
     const rockGeo = this.keep(new THREE.IcosahedronGeometry(1, 0));
     const live = this.liveCount(liveEnd - sector.start - 40, 1.4);
-    const decor = 140;
+    const decor = this.decor(sector, 140);
     const rocks = this.makeInstanced(rockGeo, rockMat, live + decor);
     let index = 0;
     for (let i = 0; i < live; i += 1) {
-      const s = sector.start + 40 + this.rng() * (liveEnd - sector.start - 40);
+      const s = this.spread(sector, sector.start + 40, liveEnd);
       const [ox, oy] = this.randomLateral(OPEN_RADIUS - 1, 0.8);
       const r = 1.4 + this.rng() * 1.6;
       this.obstacles.push({ kind: "rock", s, ox, oy, r, angle: 0, span: 0, spin: 0 });
@@ -1406,8 +1623,18 @@ export class RaceWorld {
     );
     let s = 120;
     while (s < this.track.raceLength - 60) {
+      // The Hypertube places its own rings.
+      if (this.track.sectorAt(s).info.ownRings) {
+        s += 85;
+        continue;
+      }
       const bound = Math.min(this.track.boundAt(s - 20), this.track.boundAt(s + 20));
-      const [ox, oy] = this.randomLateral(Math.max(2, bound - 3.6), 0.7);
+      let [ox, oy] = this.randomLateral(Math.max(2, bound - 3.6), 0.7);
+      if (!this.ringReachable(s, ox, oy)) this.ringRedraws += 1;
+      // Draw again while the ring could not be taken (inside an obstacle, out of reach of a gate).
+      for (let tries = 0; tries < 16 && !this.ringReachable(s, ox, oy); tries += 1) {
+        [ox, oy] = this.randomLateral(Math.max(2, bound - 3.6), 0.7);
+      }
       const ringMat = this.keep(material.clone());
       const mesh = new THREE.Mesh(geometry, ringMat);
       this.placeOnTrack(mesh, s, ox, oy);
@@ -1419,6 +1646,8 @@ export class RaceWorld {
 
   private buildFinish(): void {
     const L = this.track.raceLength;
+    // The Hypertube builds its own finish gate.
+    if (this.track.sectorAt(L - 1).info.ownRings) return;
     const tube = this.track.tubeAt(L);
     if (tube > 0) {
       // Stay inside the tube's flat walls (a hexagon's inner radius is r·cos 30°).
@@ -1445,6 +1674,12 @@ export class RaceWorld {
   }
 
   // ------------------------------------------------------------ queries
+  /** Opening radius of an iris ring at time: r fully closed, gap fully open. */
+  irisGap(o: Obstacle, time: number): number {
+    const open = 0.5 + 0.5 * Math.sin(time * o.spin + (o.phase ?? 0));
+    return o.r + ((o.gap ?? 6) - o.r) * open;
+  }
+
   plateAngle(plate: Obstacle, time: number): number {
     return plate.angle + plate.spin * time;
   }
@@ -1471,7 +1706,15 @@ export class RaceWorld {
    * Returns the lateral push direction, or null.
    */
   collision(o: Obstacle, prevS: number, s: number, ox: number, oy: number, time: number, roll = 0): [number, number] | null {
+    if (o.destroyed) return null;
     const crossedPlane = prevS < o.s && s >= o.s;
+    if (o.kind === "iris") {
+      if (!crossedPlane) return null;
+      const d = Math.hypot(ox, oy);
+      const reach = 0.6 + 0.9 * Math.abs(Math.cos(roll - Math.atan2(oy, ox)));
+      if (d + reach > this.irisGap(o, time)) return d > 0.01 ? [-ox, -oy] : [0, 1];
+      return null;
+    }
     if (o.kind === "porthole") {
       if (!crossedPlane) return null;
       const dx = ox - o.ox;
@@ -1554,6 +1797,86 @@ export class RaceWorld {
   }
 
   /** Index of the first obstacle at or after s. */
+  /**
+   * True when a ring at (s, ox, oy) can be taken: nothing sits in it, the golden sheet leaves it
+   * clear, and every gate close before or after it (firewall, porthole, slot, blades, iris, a
+   * necklace's middle) leaves time to swing between its opening and the ring.
+   */
+  ringReachable(s: number, ox: number, oy: number): boolean {
+    const pickup = 2.8;
+    const cruise = 75;
+    // Lateral metres a pilot can cover over a distance ds, with margin for the turn.
+    const swing = (ds: number): number => (17 * 0.6 * Math.abs(ds)) / cruise;
+    for (let i = this.firstObstacleFrom(s - 50); i < this.obstacles.length; i += 1) {
+      const o = this.obstacles[i];
+      if (o.s > s + 50) break;
+      const ds = o.s - s;
+      const near = Math.abs(ds);
+      let outside = 0;
+      switch (o.kind) {
+        case "mine":
+        case "shard":
+        case "urchin":
+        case "orb":
+        case "rock":
+        case "hex": {
+          const d = Math.hypot(o.ox - ox, o.oy - oy);
+          if (o.aim && o.gap !== undefined) {
+            // A turning necklace sweeps its whole circle: the ring must sit well inside it.
+            if (near < 3 && Math.hypot(ox - o.aim[0], oy - o.aim[1]) + pickup > o.gap - 0.8) return false;
+            continue;
+          }
+          if (near < o.r + 1.5 && d < o.r + 1.2) return false;
+          continue;
+        }
+        case "log":
+          if (near < 2.5 && Math.abs(this.logDistance(o, ox, oy)) < 1.8) return false;
+          continue;
+        case "geyser":
+          if (near < 3 && Math.abs(ox - o.ox) < o.r) return false;
+          continue;
+        case "firewall": {
+          const half = RaceWorld.NET_HALF;
+          const cell = (half * 2) / 3;
+          const inner = cell / 2 - 1;
+          let best = Infinity;
+          for (let k = 0; k < 9; k += 1) {
+            if ((o.span & (1 << k)) === 0) continue;
+            const cx = -half + cell * (k % 3) + cell / 2;
+            const cy = -half + cell * Math.floor(k / 3) + cell / 2;
+            const dx = Math.max(0, Math.abs(ox - cx) - inner);
+            const dy = Math.max(0, Math.abs(oy - cy) - inner);
+            best = Math.min(best, Math.hypot(dx, dy));
+          }
+          outside = best - pickup;
+          break;
+        }
+        case "porthole":
+          outside = Math.hypot(ox - o.ox, oy - o.oy) - pickup - ((o.gap ?? 3.6) - 1.2);
+          break;
+        case "slot":
+        case "blades": {
+          const across = (ox - o.ox) * -Math.sin(o.angle) + (oy - o.oy) * Math.cos(o.angle);
+          outside = Math.abs(across) - pickup - (o.gap ?? 1.3);
+          break;
+        }
+        case "iris":
+          outside = Math.hypot(ox, oy) - pickup - ((o.gap ?? 6) - 1);
+          break;
+        default:
+          continue;
+      }
+      if (outside > 0 && outside > swing(ds)) return false;
+    }
+    // The golden sheet must leave the ring clear most of the time.
+    let under = 0;
+    for (let k = 0; k < 16; k += 1) {
+      const floor = this.waveHeight(s, ox, k * 1.3);
+      if (Number.isFinite(floor) && oy + pickup < floor + 1) under += 1;
+    }
+    return under <= 6;
+  }
+
   firstObstacleFrom(s: number): number {
     let lo = 0;
     let hi = this.obstacles.length;
@@ -1630,7 +1953,14 @@ export class RaceWorld {
   }
 
   /** Animate the course; `focus` lists the pilots' distances so per-vertex work stays near them. */
-  update(time: number, dt: number, focus: number[] = []): void {
+  update(time: number, dt: number, focus: number[] = [], pilots: PilotPoint[] = []): void {
+    this.time = time;
+    this.pilotPoints = pilots;
+    this.burnFuses(dt);
+    for (const fn of this.updaters) fn(time, dt, focus);
+    for (const pad of this.boosts) {
+      if (pad.flash > 0) pad.flash = Math.max(0, pad.flash - dt * 2.5);
+    }
     for (const plate of this.plates) {
       if (plate.mesh) {
         plate.mesh.rotation.z = this.plateAngle(plate, time);
@@ -1706,6 +2036,7 @@ export interface Skies {
   sunset: THREE.Mesh;
   hexdots: THREE.Mesh;
   furnace: THREE.Mesh;
+  nebula: THREE.Mesh;
 }
 
 export function createSkies(): Skies {
@@ -1726,8 +2057,12 @@ export function createSkies(): Skies {
     new THREE.SphereGeometry(900, 32, 16),
     new THREE.MeshBasicMaterial({ map: furnaceSkyTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
   );
-  for (const sky of [circuit, sunset, hexdots, furnace]) {
+  const nebula = new THREE.Mesh(
+    new THREE.SphereGeometry(900, 48, 24),
+    new THREE.MeshBasicMaterial({ map: nebulaTexture(), color: new THREE.Color(1.5, 1.5, 1.6), side: THREE.BackSide, fog: false, depthWrite: false })
+  );
+  for (const sky of [circuit, sunset, hexdots, furnace, nebula]) {
     sky.renderOrder = -1;
   }
-  return { circuit, sunset, hexdots, furnace };
+  return { circuit, sunset, hexdots, furnace, nebula };
 }

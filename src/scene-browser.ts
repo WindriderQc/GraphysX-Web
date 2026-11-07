@@ -18,6 +18,7 @@ import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import {
   connectSceneStore,
   SceneStoreError,
+  SCENE_STORE_SCHEMA,
   type SceneStoreClient,
   type SceneStoreRecord,
   type SceneStoreSession,
@@ -33,6 +34,8 @@ export type SceneBrowserOptions = {
   startCollapsed?: boolean;
   /** Identifies this tab's writes. */
   actor?: string;
+  /** An authoritative load starts a fresh local undo/redo stack. */
+  resetUndoHistory: () => void;
   /** Called when a scene is opened, so the host can hand the pointer back to the scene. */
   onSceneOpened?: (record: SceneStoreRecord) => void;
   /** Called after Close detaches from a scene, so the host can bring the front door back. */
@@ -75,7 +78,7 @@ function escapeHtml(value: string): string {
 }
 
 export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserOptions): SceneBrowser {
-  const { api, client, actor = "browser", onSceneOpened, onSceneClosed } = options;
+  const { api, client, actor = "browser", resetUndoHistory, onSceneOpened, onSceneClosed } = options;
 
   const style = document.createElement("style");
   style.textContent = BROWSER_CSS;
@@ -172,7 +175,7 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
   /** Save/Revert only make sense with a scene open; say why instead of erroring later. */
   const syncFooter = (): void => {
     const openName = session?.name ?? null;
-    saveButton.disabled = openName === null;
+    saveButton.disabled = session?.revision() == null;
     saveButton.title = openName === null
       ? "No stored scene open — Save as… stores what is on screen under a new name"
       : `Save what is on screen to “${openName}”`;
@@ -261,7 +264,7 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     return refreshInFlight;
   };
 
-  const open = async (name: string): Promise<void> => {
+  const open = async (name: string, savedBase?: SceneStoreRecord): Promise<void> => {
     if (!enabled || disposed) return;
     if (session?.name === name) return;
     const previousSession = session;
@@ -274,8 +277,15 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
       client,
       name,
       actor,
+      savedBase,
+      onConflict: () => {
+        if (!hasSessionAuthority(authority)) return;
+        setStatus(conflictMessage, "error");
+        void refresh();
+      },
       onPulled: (record, remote) => {
         if (!hasSessionAuthority(authority)) return;
+        resetUndoHistory();
         if (remote) {
           announce(record);
           // A remote write changes the list too — entity counts and attribution move.
@@ -283,6 +293,7 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
         }
         setStatus(`${record.name} · rev ${record.revision}`);
         onSceneOpened?.(record);
+        syncFooter();
       },
       onOnlineChange: (online) => {
         if (!hasSessionAuthority(authority)) return;
@@ -293,7 +304,8 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     });
     session = openedSession;
     try {
-      await openedSession.pull();
+      if (savedBase) onSceneOpened?.(savedBase);
+      else await openedSession.pull();
       if (!hasSessionAuthority(authority) || session !== openedSession) return;
       render();
     } catch (error) {
@@ -302,6 +314,8 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     }
     if (hasSessionAuthority(authority) && session === openedSession) syncFooter();
   };
+
+  const conflictMessage = "Someone else changed this scene. Your edits are still here. Use Save as… to keep a copy, or Revert to load the shared scene.";
 
   const save = async (): Promise<void> => {
     if (!enabled || disposed) return;
@@ -327,7 +341,7 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
       const conflict = error instanceof SceneStoreError && error.isConflict;
       setStatus(
         conflict
-          ? "Someone else changed this scene — Revert, then redo your edit"
+          ? conflictMessage
           : error instanceof Error ? error.message : String(error),
         "error",
       );
@@ -376,13 +390,13 @@ export function mountSceneBrowser(container: HTMLElement, options: SceneBrowserO
     try {
       // expectedRevision 0 makes this create-only: a name that already exists comes back
       // as a 409 instead of being overwritten by a scene that merely shares its name.
-      await client.put(name, definition, 0, { actor, intent: "created from the browser" });
+      const saved = await client.put(name, definition, 0, { actor, intent: "created from the browser" });
       if (!hasSessionAuthority(authority)) return;
       hideSaveAs();
       await refresh();
       if (!hasSessionAuthority(authority)) return;
       // Bind the session to what we just stored, so Save and the live stream now target it.
-      await open(name);
+      await open(name, { ...saved, schema: SCENE_STORE_SCHEMA, definition });
       if (!enabled || disposed || session?.name !== name) return;
       setStatus(`Stored as ${name} · rev 1`);
     } catch (error) {

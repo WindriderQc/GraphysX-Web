@@ -77,6 +77,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: path.join(artifacts, "llmx-forge-mobile.png") });
   await page.getByRole("button", { name: "Quitter LLMx", exact: true }).click();
+  await page.locator(".gx-center-apps > summary").click();
   await page.getByRole("button", { name: "LLMx · Forge nocturne", exact: true }).waitFor();
   await page.getByRole("button", { name: "LLMx · Forge nocturne", exact: true }).click();
   await page.getByRole("heading", { name: "Forge nocturne", exact: true }).waitFor();

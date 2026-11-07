@@ -15,6 +15,18 @@ deploy. **No film material is ever online:** the page only looks for clips from 
 `file://` install. Porting the game onto the shared runtime (`api.steer`, AgentX ghost) would be
 a separate piece of work.
 
+**Notre version.** The lightning button (fourth row) runs our own take on the game: nine
+boards of about 40 s each with announced phases and a rhythm, opening with the **HYPERTUBE**
+showcase board and closing with a 90 s **VORTEX** finale. Remastered look built for the Quest,
+boost pads, light combat (pulse shots). The film run above stays untouched. Decisions and design: [CYBER_RACE_NOTRE_VERSION.md](CYBER_RACE_NOTRE_VERSION.md).
+
+**Intro.** Between the menu and "3, 2, 1", Cyberjobe opens the track (`intro.ts`, owner's idea,
+2026-11-06): an energy curtain of gold hexes closes the line, he appears behind it as a hologram
+sized to the board, raises his hands and parts the curtain like two doors ("The track is open."),
+then rises and fades into gold sparks while the countdown runs. About 3.8 s before the numbers;
+a fresh press of pulse or turbo skips it. Every run, film and notre version. `settings.intro`
+turns it off (tests do).
+
 ## Run
 
 ```bash
@@ -153,18 +165,24 @@ with its own profile (so the launched process lives until the window closes and 
 track it). Point Playnite's play action at the `.cmd`, or at `msedge.exe` with the same arguments
 to avoid the console window. The **Quit** button closes the app window.
 
-## VR (Quest on Link)
+## Immersive VR
 
-The goggles button starts an `immersive-vr` WebXR session: one player against the computer,
-seat just behind Jobe with the horizon locked to the line, and an in-headset panel for score,
-turbo, timer, messages, pause and game over. Touch controllers: thumbstick to fly, trigger turbo,
-grip knife-edge, A confirm, B back/pause; an Xbox pad also works.
+Open the HTTPS game page directly in the Quest browser and choose **Jouer en VR**.
+WebXR renders a stereo view from the seat behind Jobe. One human races against the computer.
+The in-headset panel shows score, turbo, timer, messages, pause and game over.
+Use either Touch thumbstick to fly. Each grip banks toward that hand in proportion to the
+pull. The left index trigger slows the pilot and the right one accelerates into turbo.
+Press A on the right controller to fire a pulse in *Notre version*. Use X on the left to
+confirm in menus and Y on the left to pause or go back. An Xbox pad can also control the pilot.
 
-Requirements: Meta Quest Link installed and Link active (it provides the OpenXR runtime Edge
-uses). Browsers only open a VR session from a click or key press, not a pad button. The
-in-tube camera follows the line, which can cause motion sickness.
+Enable **Bank au poignet** in the VR launch panel to try wrist steering. Hold either grip in a
+comfortable position to set the neutral angle, then roll that controller around its pointing axis.
+Release the grip to level the pilot. Each press sets a new neutral angle.
 
-Status: written against WebXR and three.js `WebXRManager`, **not yet tried in a headset**.
+For PC VR, activate the headset in a WebXR-capable PC browser and use the same button.
+Activate the button with a pointer click or keyboard Enter so the browser can grant the session.
+On Quest the console's start button also requests VR. If the browser refuses, the console shows
+how to retry. Ending the headset session brings the player back to the console.
 
 ## Shot-by-shot reference (race, 00:40:17–00:41:26)
 
@@ -198,4 +216,5 @@ Checked at 8 frames per second.
 `window.cyberRace` exposes `advance(seconds)` (fixed 60 Hz steps, then one render), `freeze(true)`
 to stop the live loop for an exact capture, `ui([...])` to feed menu actions as a pad would,
 `start()`, `settings`, `pilots`, `world` and `finale`. Set `pilots[i].cpu = true` to let the
-computer fly either pilot.
+computer fly either pilot. `intro` (time, curtain opening, still pending), `countdown` and
+`skipIntro()` follow Cyberjobe's intro; `settings.intro = false` starts without it.

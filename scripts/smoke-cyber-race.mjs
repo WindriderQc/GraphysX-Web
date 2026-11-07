@@ -5,7 +5,8 @@ import path from "node:path";
 // Cyber Race 1992 as a visitor meets it on the site: the Games & Playgrounds row opens the
 // standalone page, the film-style menu takes pad input, a short film run is flown to GAME OVER
 // (the computer pilots both sides through the page's test hook), the page never asks the site
-// for film clips, and Quit returns to the GraphysX front door.
+// for film clips, and Quit returns to the GraphysX front door. The Quest menu uses an explicit
+// immersive request and stays in the menu if the headset or browser refuses it.
 
 const BASE = process.env.SMOKE_BASE || "http://127.0.0.1:4188/";
 const ART = process.env.SMOKE_ARTIFACTS || path.resolve("output/smoke");
@@ -49,11 +50,28 @@ try {
   await page.screenshot({ path: path.join(ART, "cyber-race-menu.png") });
 
   // Pad: Start launches a race from the menu. A short film run, computer on both sides.
+  // Cyberjobe's intro plays first: the curtain closes the line, then he opens it.
+  out.intro = await page.evaluate(() => {
+    const c = window.cyberRace;
+    Object.assign(c.settings, { plan: 0, course: 0, level: 1, mode: 0, sound: false, intro: true });
+    c.ui(["pause"]);
+    c.advance(1.5);
+    const shown = !!c.intro && c.intro.pending && c.countdown > 3.6;
+    c.advance(1.2);
+    c.freeze(true);
+    return { shown, opening: c.intro?.opened > 0 && c.intro?.opened < 1 };
+  });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(ART, "cyber-race-intro.png") });
   out.race = await page.evaluate(() => {
     const c = window.cyberRace;
-    Object.assign(c.settings, { plan: 0, course: 0, level: 1, mode: 0, sound: false });
-    c.ui(["pause"]);
+    c.freeze(false);
     const started = c.phase;
+    // A fresh press (Jobe's pulse key) skips the rest of the intro.
+    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyR", key: "r" }));
+    c.advance(0.1);
+    window.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyR", key: "r" }));
+    const skipped = c.countdown <= 3.6 && c.intro?.pending === false;
     // Up/down defaults to the flight-stick style: holding W (stick forward) makes Jobe dive.
     c.advance(4);
     const before = c.pilots[0].oy;
@@ -64,7 +82,8 @@ try {
     c.pilots[0].autopilot = true;
     c.pilots[1].cpu = true;
     c.advance(10);
-    return { started, forwardDives, phase: c.phase, sectors: c.world.track.sectors.map((s) => s.kind), progressed: c.pilots[0].s > 300 };
+    const split = !document.getElementById("divider").classList.contains("hidden");
+    return { started, skipped, introGone: c.intro === null, forwardDives, split, phase: c.phase, sectors: c.world.track.sectors.map((s) => s.kind), progressed: c.pilots[0].s > 300 };
   });
   await page.evaluate(() => { window.cyberRace.freeze(true); window.cyberRace.advance(0.01); });
   await page.waitForTimeout(500);
@@ -82,6 +101,44 @@ try {
   await page.waitForTimeout(700);
   await page.screenshot({ path: path.join(ART, "cyber-race-gameover.png") });
 
+  // ---- Notre version: nine 40-second boards and the 90-second finale, light combat, computer on both sides ----
+  await page.evaluate(() => window.cyberRace.ui(["back"]));
+  await page.waitForFunction(() => window.cyberRace.phase === "menu", null, { timeout: SMOKE_TIMEOUT });
+  out.remaster = await page.evaluate(() => {
+    const c = window.cyberRace;
+    Object.assign(c.settings, { plan: 3, course: 0, level: 1, mode: 1, sound: false, intro: false });
+    c.start();
+    c.pilots[0].autopilot = true;
+    c.advance(14);
+    // Magnetic field: break one linked mine ahead and let its chain run through the cluster.
+    const w = c.world;
+    const linked = w.obstacles.filter((o) => o.kind === "mine" && o.chain && w.track.sectorAt(o.s).kind === "mines");
+    const seed = linked.find((o) => o.chain.length >= 2 && !o.destroyed && o.s > c.pilots[0].s + 200);
+    const group = new Set(seed ? [seed] : []);
+    for (const stack = [...group]; stack.length; ) for (const n of stack.pop().chain) if (!group.has(n)) { group.add(n); stack.push(n); }
+    if (seed) { w.breakObstacle(seed); w.startChain(seed, 0); }
+    c.advance(2);
+    return {
+      magnetic: { linked: linked.length, group: group.size, chained: [...group].every((o) => o.destroyed), drained: w.blasts.length === 0 },
+      // Every ring can be taken (none inside an obstacle or out of reach of a gate).
+      unreachableRings: w.rings.filter((r) => !w.ringReachable(r.s, r.ox, r.oy)).length,
+      sectors: c.world.track.sectors.map((s) => s.kind),
+      lengths: c.world.track.sectors.map((s) => s.end - s.start),
+      phased: c.world.track.sectors.every((s) => (s.info.phases || []).length >= 2),
+      boosts: c.world.boosts.length,
+      progressed: c.pilots[0].s > 600,
+    };
+  });
+  await page.evaluate(() => { window.cyberRace.freeze(true); window.cyberRace.advance(0.01); });
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(ART, "cyber-race-hypertube.png") });
+  out.remasterEnd = await page.evaluate(() => {
+    const c = window.cyberRace;
+    c.freeze(false);
+    for (let i = 0; i < 120 && c.phase !== "over"; i += 1) c.advance(5);
+    return { phase: c.phase, finished: c.pilots.map((p) => p.finished) };
+  });
+
   // ---- Quit returns to the front door ----
   await page.evaluate(() => window.cyberRace.ui(["back"]));
   await page.waitForFunction(() => window.cyberRace.phase === "menu", null, { timeout: SMOKE_TIMEOUT });
@@ -91,6 +148,62 @@ try {
   ]);
   await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
   out.returned = true;
+
+  const quest = applySmokeTimeout(await browser.newPage({
+    viewport: { width: 390, height: 620 },
+    isMobile: true,
+    hasTouch: true,
+    userAgent: "Mozilla/5.0 (Linux; Android 12; Quest 2) OculusBrowser/34.0",
+  }));
+  quest.on("pageerror", (error) => pageErrors.push(String(error)));
+  quest.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
+  await quest.addInitScript(() => {
+    const calls = [];
+    window.__XR_REQUESTS__ = calls;
+    const xr = new EventTarget();
+    xr.isSessionSupported = async () => false;
+    xr.requestSession = async (mode) => {
+      calls.push({ mode, userGesture: navigator.userActivation.isActive });
+      throw new DOMException("Test refusal", calls.length === 1 ? "NotAllowedError" : "NotSupportedError");
+    };
+    Object.defineProperty(navigator, "xr", { value: xr });
+  });
+  await quest.goto(new URL("cyber-race.html", BASE).href, { waitUntil: "domcontentloaded" });
+  await quest.waitForFunction(() => Boolean(window.cyberRace));
+  const vr = quest.getByRole("button", { name: "Jouer en VR", exact: true });
+  const vrStatus = quest.locator("#vr-status");
+  await vrStatus.filter({ hasText: /indisponible ici/ }).waitFor();
+  const wrist = quest.getByRole("button", { name: "Bank au poignet", exact: true });
+  const wristStartsOff = await wrist.getAttribute("aria-pressed") === "false";
+  await wrist.press("Space");
+  const wristTurnsOn = await wrist.getAttribute("aria-pressed") === "true";
+  await quest.reload({ waitUntil: "domcontentloaded" });
+  await vrStatus.filter({ hasText: /indisponible ici/ }).waitFor();
+  const wristPersists = await wrist.getAttribute("aria-pressed") === "true";
+  await wrist.click();
+  const wristTurnsOff = await wrist.getAttribute("aria-pressed") === "false";
+  out.quest = await vr.evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return {
+      visible: rect.height >= 48 && rect.left >= 0 && rect.right <= innerWidth && rect.y >= 0 &&
+        rect.bottom <= innerHeight && button.contains(hit),
+      splitOptionHidden: document.querySelector('[data-group="mode"][data-value="0"]').getClientRects().length === 0,
+    };
+  });
+  Object.assign(out.quest, { wristStartsOff, wristTurnsOn, wristPersists, wristTurnsOff });
+  await quest.screenshot({ path: path.join(ART, "cyber-race-quest-menu.png") });
+  await vr.press("Enter");
+  await vrStatus.filter({ hasText: /Accès VR refusé/ }).waitFor();
+  out.quest.focusRetained = await vr.evaluate((button) => document.activeElement === button);
+  await quest.locator('[data-action="start"]').click();
+  await vrStatus.filter({ hasText: /indisponible ici/ }).waitFor();
+  Object.assign(out.quest, await quest.evaluate(() => ({
+    requests: window.__XR_REQUESTS__,
+    phase: window.cyberRace.phase,
+    splitHidden: document.getElementById("divider").classList.contains("hidden"),
+  })));
+  await quest.close();
 } catch (error) {
   out.fatal = String(error?.stack ?? error);
 } finally {
@@ -108,14 +221,44 @@ const ok =
   out.menu?.icons >= 20 &&
   out.menu?.detail === "LANCER LA COURSE" &&
   out.race?.forwardDives === true &&
+  out.race?.split === true &&
   out.race?.started === "countdown" &&
+  out.intro?.shown === true &&
+  out.intro?.opening === true &&
+  out.race?.skipped === true &&
+  out.race?.introGone === true &&
   out.race?.phase === "race" &&
   out.race?.progressed === true &&
   out.race?.sectors?.join(",") === "tunnel,mines,shards" &&
   out.end?.phase === "over" &&
   out.end?.resultsShown === true &&
   out.end?.finished?.every(Boolean) &&
+  out.remaster?.sectors?.join(",") === "hypertube,mines,shards,thorns,kaleido,wave,network,furnace,vortex" &&
+  // Course 0 (COURT) runs 0.6 x the NORMAL lengths: boards of 2300-3000 m, a 5500 m finale.
+  out.remaster?.lengths?.slice(0, -1).every((m) => m >= 1300 && m <= 2200) &&
+  out.remaster?.lengths?.at(-1) >= 3000 &&
+  out.remaster?.phased === true &&
+  out.remaster?.magnetic?.linked >= 20 &&
+  out.remaster?.magnetic?.group >= 3 &&
+  out.remaster?.magnetic?.chained === true &&
+  out.remaster?.magnetic?.drained === true &&
+  out.remaster?.unreachableRings === 0 &&
+  out.remaster?.boosts > 0 &&
+  out.remaster?.progressed === true &&
+  out.remasterEnd?.phase === "over" &&
+  out.remasterEnd?.finished?.every(Boolean) &&
   out.returned === true &&
+  out.quest?.visible === true &&
+  out.quest?.splitOptionHidden === true &&
+  out.quest?.wristStartsOff === true &&
+  out.quest?.wristTurnsOn === true &&
+  out.quest?.wristPersists === true &&
+  out.quest?.wristTurnsOff === true &&
+  out.quest?.focusRetained === true &&
+  out.quest?.phase === "menu" &&
+  out.quest?.splitHidden === true &&
+  out.quest?.requests?.length === 2 &&
+  out.quest.requests.every(({ mode, userGesture }) => mode === "immersive-vr" && userGesture) &&
   filmRequests.length === 0;
 
 process.exit(out.fatal || pageErrors.length || consoleErrors.length || !ok ? 1 : 0);

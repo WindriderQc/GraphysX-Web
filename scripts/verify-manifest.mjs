@@ -12,6 +12,7 @@ export const VERIFY_STATIC_CHECKS = {
 };
 
 export const VERIFY_SMOKES = [
+  { name: "vr-lab", tier: "core", script: "scripts/smoke-vr-lab.mjs", covers: "VR lab: desktop fallback and synthetic XR lifecycle/input, local controller models/button animation, hands, cancelled grabs, host post/inset restoration; not headset acceptance" },
   { name: "llmx-core-embed", tier: "apps", script: "scripts/smoke-llmx-core-embed.mjs", covers: "Core-hosted Forge module: native scoped routes, Family cookie, one text turn, graphical assets and mobile" },
   { name: "llmx-world", tier: "apps", script: "scripts/smoke-llmx-world.mjs", covers: "Full world proposals: authored scenery, textures, lights, paths, physics/impulse/joints, undo and saved reload" },
   { name: "agent-mcp", tier: "core", script: "scripts/smoke-agent-mcp.mjs", covers: "Two MCP clients share a visible native world: edits, revision conflict, save/reload, camera and real PNG capture" },
@@ -47,6 +48,8 @@ export const VERIFY_SMOKES = [
   { name: "nestor-request", tier: "core", script: "scripts/smoke-nestor-request.mjs", covers: "free-text Nestor request against a loopback provider: disabled field and zero requests without one, card from a provider reply, apply = one attributed commit, undo, explicit refusal shown, forged namespace refused, kinetic blocks stay clickable" },
   { name: "nestor-push", tier: "core", script: "scripts/smoke-nestor-push.mjs", covers: "the Center framed by a host page with the built <graphysx-center>: host handshake enables the field, typed request asked by the host only, Core push lands as an attributed inert card, apply = one commit by that actor and an accepted outcome receipt with its revision and commit, discard = a discarded outcome receipt, stale and while-waiting and forged pushes refused with receipts, no outcome for a typed request, refusal shown" },
   { name: "editor", tier: "core", script: "scripts/smoke-editor.mjs", covers: "editor: library palette, model + texture + behaviour, bloom authoring, exit path" },
+  { name: "editor-drafts", tier: "core", script: "scripts/smoke-editor-drafts.mjs", covers: "independent autosave recovery after opening another scene, reload, named save and legacy drafts" },
+  { name: "first-creation", tier: "core", script: "scripts/smoke-first-creation.mjs", covers: "Center entry, native creation, named save, resume, editor handoff and mobile layout" },
   { name: "top20", tier: "deep", script: "scripts/smoke-top20.mjs", covers: "top-20 release: redo, draft recovery, import/copy/slots/palette, shelf personalization, accessible display, touch/gamepad/pause/fullscreen" },
   { name: "standalone", tier: "core", script: "scripts/smoke-standalone.mjs", covers: "?host=standalone: agent API, tool bridge, human editor" },
   { name: "levels", tier: "core", script: "scripts/smoke-levels.mjs", covers: "levels workbench: paint, fill, ASCII round trip, undo, create" },

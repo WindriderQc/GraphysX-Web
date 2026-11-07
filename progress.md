@@ -5239,3 +5239,34 @@ Ajout d'un modèle et de pools visuels bornés, d'un malus transitoire sans écr
 Réception finale : 85 tests Ballsy, 4 tests Rapier, 28 contrôles souris et relais HTTP, puis course complète, pelle desktop, préparation des manettes, entraînement et client de test clavier réussis. Le coureur touché passe à 6,153 m/s contre 8,113 m/s pour le témoin, puis retrouve 8,144 contre 8,030 après expiration. Deux vues actives : 73,25 FPS sans effets et 74,57 avec effets, p95 13,5 ms; cette différence ne constitue pas un gain de performance. Les captures ont conduit à corriger le cadrage géant et à dégager le contact des badges. Une vidéo de 8 secondes montre le vrai glisser-relâcher souris.
 
 Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur le port local 4202. Le palier Node global reste en échec sur les chemins Windows historiques; ce résultat n'est pas une qualification globale du produit. Les reçus détaillés et les limites sont dans docs/BALLSY_SLIME_TESTS.md. Aucun déploiement, fusion, changement de sécurité ou essai Quest physique.
+## 2026-11-05 — Give Cyber Race an explicit Quest VR launch
+
+- The owner reached split-screen first and found the former goggles icon on a second try.
+  The text button and the film's start ball now both request immersive WebXR on Quest.
+- Chromium verified trusted gestures and recovery after refusal. The Quest 2 emulator
+  rendered two eye views and exercised steering, pause, system exit and another launch.
+  The owner confirmed the new button, solo stereo and joystick on the physical Quest 2.
+
+## 2026-11-05 — Bank Cyber Race with the Quest index triggers
+
+- Keep the input source's handedness. Each index trigger banks toward its own hand
+  in proportion to the pull, and either grip applies turbo.
+- The input regressions cover single-controller use, reordered sources, equal pulls
+  and menu button separation. The owner confirmed both banks and grip turbo on Quest 2.
+
+## 2026-11-06 — Separate Quest steering, speed and menu actions
+
+- After flying Hypertube on Quest 2, the owner asked for bank on the grips and forward speed on
+  the index triggers. The left trigger brakes progressively and the right one adds turbo in
+  proportion to the pull. Right A fires. Left X confirms and left Y pauses or goes back.
+- A Quest 2 emulator verified speed changes, both banks, right A spending a pulse charge,
+  right B leaving the race active, and the left pause and resume controls.
+
+## 2026-11-06 — Try wrist banking on Quest
+
+- **Bank au poignet** is an opt-in VR setting saved in the browser. Holding either grip
+  captures a comfortable neutral orientation. Twist that controller to bank, release to level,
+  and squeeze again to recenter. A 6° dead zone filters small motion.
+- The input tests cover signed roll, pitch and yaw, changing hands, and tracking loss.
+  The Cyber Race smoke verifies the menu toggle survives reload. Quest 2 emulation in
+  Hypertube verified banking both ways and recentering. Comfort remains a headset playtest.

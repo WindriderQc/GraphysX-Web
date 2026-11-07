@@ -243,6 +243,45 @@
           color: #8a1020;
         }
       }
+      /* Notre version: pulse charges, mirroring the turbo chevrons. */
+      .hud .pulse {
+        position: absolute;
+        right: 5%;
+        top: 30%;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+      }
+      .hud .pulse::before {
+        content: "PULSE";
+        font-size: clamp(9px, 0.9vw, 12px);
+        letter-spacing: 0.2em;
+        color: var(--pilot);
+        text-shadow: 0 0 6px var(--pilot);
+      }
+      .hud .pulse i {
+        width: clamp(14px, 1.6vw, 22px);
+        height: clamp(14px, 1.6vw, 22px);
+        border-radius: 50%;
+        border: 2px solid var(--pilot);
+        opacity: 0.35;
+      }
+      .hud .pulse i.on {
+        background: var(--pilot);
+        box-shadow: 0 0 12px var(--pilot);
+        opacity: 1;
+      }
+      .hud .lock.armed i {
+        border-top-color: #fff;
+        filter: drop-shadow(0 0 6px #ff2a3a) drop-shadow(0 0 2px #fff);
+        animation: armed 0.35s ease-in-out infinite alternate;
+      }
+      @keyframes armed {
+        to {
+          opacity: 0.55;
+        }
+      }
       /* Red lock-on marks around the rival (00:41:13-00:41:24). */
       .hud .lock {
         position: absolute;
@@ -282,8 +321,10 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        justify-content: safe center;
         gap: 22px;
+        padding: 14px 10px;
+        overflow-y: auto;
       }
       .panel {
         display: flex;
@@ -391,6 +432,71 @@
       .console {
         display: grid;
         gap: 12px;
+      }
+      .vr-launch {
+        width: 0;
+        min-width: 100%;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 13px 15px;
+        border: 1px solid #6eb8c8;
+        background: linear-gradient(120deg, #142937, #0b1729);
+        color: #eaf4fa;
+      }
+      .vr-launch strong {
+        display: block;
+        font-size: 12px;
+        letter-spacing: 0.17em;
+        color: #8fe5da;
+      }
+      #vr-status {
+        margin: 5px 0 0;
+        color: #bcd1e3;
+        font-size: 13px;
+        line-height: 1.35;
+      }
+      #vr-start {
+        flex: none;
+        min-height: 48px;
+        padding: 8px 14px;
+        border: 1px solid #b5ffed;
+        border-radius: 6px;
+        background: #8be6ce;
+        color: #102931;
+        font: 800 16px system-ui, sans-serif;
+        cursor: pointer;
+      }
+      #vr-wrist-bank {
+        min-height: 44px;
+        margin-top: 7px;
+        padding: 6px 10px;
+        border: 1px solid #547d8c;
+        border-radius: 6px;
+        background: #172a3b;
+        color: #eaf4fa;
+        font: 700 13px system-ui, sans-serif;
+        cursor: pointer;
+      }
+      #vr-wrist-bank[aria-pressed="true"] {
+        border-color: #8be6ce;
+        background: #203d43;
+        color: #b5ffed;
+      }
+      #vr-start:focus-visible, #vr-wrist-bank:focus-visible { outline: 3px solid #ffe14a; outline-offset: 3px; }
+      #vr-start[aria-disabled="true"] { opacity: 0.65; cursor: wait; }
+      .quest-browser .vr-launch { border-top: 3px solid #8be6ce; }
+      .quest-browser #vr-start { min-height: 58px; font-size: 18px; }
+      .quest-browser .ico[data-group="mode"],
+      .quest-browser .ico[data-player="1"] { display: none; }
+      @media (max-width: 520px) {
+        .grid { gap: 6px; }
+        .panel { padding: 8px; }
+        .panel .scroll { display: none; }
+        .ico { width: clamp(33px, 12vw, 62px); height: clamp(33px, 12vw, 62px); }
+        .vr-launch { flex-direction: column; align-items: stretch; }
       }
       .detail {
         /* As wide as the icon panel above, never wider. */
@@ -766,9 +872,6 @@
         outline: 3px solid #ffe14a;
         outline-offset: 2px;
       }
-      .ico.disabled {
-        opacity: 0.35;
-      }
       body.racing,
       body.racing * {
         cursor: none !important;
@@ -819,12 +922,20 @@
     </style>
   </head>
   <body>
-    <canvas id="race-canvas" aria-label="Course virtuelle à deux joueurs inspirée du film The Lawnmower Man (1992)"></canvas>
+    <canvas id="race-canvas" aria-label="Course virtuelle inspirée du film The Lawnmower Man (1992)"></canvas>
     <div id="huds"></div>
     <div id="divider" class="hidden"></div>
 
     <div id="menu">
       <div class="console">
+      <section class="vr-launch" aria-label="Cabine VR">
+        <div>
+          <strong>CABINE VR · 1 PILOTE</strong>
+          <p id="vr-status" role="status">Détection du casque…</p>
+          <button id="vr-wrist-bank" class="hidden" type="button" aria-pressed="false">Bank au poignet</button>
+        </div>
+        <button id="vr-start" type="button" aria-describedby="vr-status">Jouer en VR</button>
+      </section>
       <div class="panel">
         <div class="grid" id="menu-grid">
           <button class="ico" data-group="course" data-value="0" title="Parcours court">
@@ -873,9 +984,6 @@
           <button class="ico" data-action="fullscreen" title="Plein écran">
             <svg viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg>
           </button>
-          <button class="ico" data-action="vr" title="Casque VR (Quest via Link)">
-            <svg viewBox="0 0 24 24"><path d="M3 8h18v8h-6l-3-3-3 3H3z" /><circle cx="7.5" cy="12" r="1.5" /><circle cx="16.5" cy="12" r="1.5" /></svg>
-          </button>
           <button class="ico" data-action="quit" title="Quitter le jeu">
             <svg viewBox="0 0 24 24"><path d="M12 3v8" /><path d="M7 6.5a7 7 0 1 0 10 0" /></svg>
           </button>
@@ -895,7 +1003,9 @@
           <button class="ico" data-action="invert" data-player="1" title="Haut / bas de Peter (joueur 2)">
             <svg viewBox="0 0 24 24"><path d="M3 21h10M8 21v-9" /><circle cx="8" cy="8" r="3.5" /><path d="M19 4v10M16.5 6.5L19 4l2.5 2.5M16.5 11.5L19 14l2.5-2.5" style="stroke-width: 2" /><text x="16.5" y="23.5" font-size="8.5" font-weight="700" font-family="Bahnschrift, Arial, sans-serif" fill="currentColor" stroke="none">2</text></svg>
           </button>
-          <span></span>
+          <button class="ico" data-group="plan" data-value="3" title="Notre version : 9 tableaux de 40 s, finale de 90 s">
+            <svg viewBox="0 0 24 24"><path d="M13 2L5 13h6l-1 9 8-12h-6z" fill="currentColor" /></svg>
+          </button>
         </div>
         <div class="scroll" aria-hidden="true"><div class="box"></div><div class="tri"></div><div class="tri down"></div></div>
       </div>
@@ -927,8 +1037,9 @@
         <tr><td>Turbo</td><td>Espace ou Maj gauche</td><td>Maj droite, Entrée ou 0</td></tr>
         <tr><td>Sur la tranche</td><td>Q / E</td><td>virgule / point (ou 1 / 3)</td></tr>
         <tr><td>Manette Xbox</td><td>Manette 1 : stick ou croix · turbo A / RT · tranche LB / RB</td><td>Manette 2 : pareil</td></tr>
+        <tr><td>Tir pulsé<br /><small>(notre version)</small></td><td>R · manette X ou LT · A à droite sur Quest</td><td>Pavé 2 ou L · manette X ou LT</td></tr>
         <tr><td>Pause</td><td colspan="2">Échap, P ou START</td></tr>
-        <tr><td>Casque VR</td><td colspan="2">Joystick pour voler · gâchette = turbo · poignée = tranche · A = valider · B = retour</td></tr>
+        <tr><td>Casque VR</td><td colspan="2">Joystick pour voler · poignées pour incliner · index gauche pour freiner · index droit pour accélérer jusqu’au turbo · X et Y à gauche pour valider et mettre en pause</td></tr>
       </table>
       <div class="caption small">
         Film : tunnel, champ de mines, cristaux (hublots, lames qui se ferment, fentes à passer sur la tranche).<br />

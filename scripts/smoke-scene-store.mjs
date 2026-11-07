@@ -235,13 +235,56 @@ applySmokeTimeout(page);
     entities: [...seedDefinition.entities, { id: "junk", type: "sphere", ephemeral: true }],
   }).then(() => false, (error) => error.status === 400);
 
-  // The lived spawn does not survive the reload that a remote change triggers.
-  await editScene(store.url, SCENE, [{ op: "spawn", entity: { id: "later-cube", type: "box" } }]);
-  await page
-    .waitForFunction(() => window.__GRAPHYSX__.state().entities.some((e) => e.id === "later-cube"), null, { timeout: SMOKE_TIMEOUT })
-    .catch(() => {});
-  out.thrownBallGoneAfterReload = await page.evaluate(() =>
-    !window.__GRAPHYSX__.state().entities.some((e) => e.id === "thrown-ball"));
+  // A command delta preserves an in-flight ball; a whole-document replacement removes it.
+  const delta = await editScene(store.url, SCENE, [{ op: "spawn", entity: { id: "later-cube", type: "box" } }]);
+  await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["later-cube"] }).length === 1);
+  assert.equal(await page.evaluate(() => window.__GRAPHYSX__.query({ ids: ["thrown-ball"] }).length), 1);
+  const afterDelta = await openScene(store.url, SCENE);
+  await putScene(store.url, SCENE, {
+    ...afterDelta.definition,
+    entities: [...afterDelta.definition.entities, { id: "replacement-cube", type: "box" }],
+  }, delta.revision);
+  await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["replacement-cube"] }).length === 1);
+  out.thrownBallGoneAfterReload = await page.evaluate(() => window.__GRAPHYSX__.query({ ids: ["thrown-ball"] }).length === 0);
+
+  // An open document with local changes must keep its original base. A remote write
+  // cannot replace it, and Save must not publish over the unseen remote changes.
+  const base = await openScene(store.url, SCENE);
+  const added = await page.evaluate(() => window.__GRAPHYSX__.spawn({ id: "local-draft-box", type: "box" }));
+  assert.equal(added.ok, true);
+  const shared = await putScene(store.url, SCENE, {
+    ...base.definition,
+    entities: [...base.definition.entities, { id: "remote-box", type: "box" }],
+  }, base.revision);
+  await page.waitForFunction(() => document.querySelector(".gx-sb-status")?.textContent.includes("Your edits are still here"));
+  const conflict = await page.evaluate(() => ({
+    revision: window.__GRAPHYSX_SCENE_BROWSER__.session().revision(),
+    local: window.__GRAPHYSX__.query({ ids: ["local-draft-box"] }).length,
+    remote: window.__GRAPHYSX__.query({ ids: ["remote-box"] }).length,
+  }));
+  assert.deepEqual(conflict, { revision: base.revision, local: 1, remote: 0 });
+  await page.evaluate(() => window.__GRAPHYSX_SCENE_BROWSER__.save());
+  const untouched = await openScene(store.url, SCENE);
+  assert.equal(untouched.revision, shared.revision);
+  assert.equal(untouched.definition.entities.some(entity => entity.id === "remote-box"), true);
+  assert.equal(untouched.definition.entities.some(entity => entity.id === "local-draft-box"), false);
+
+  await page.evaluate(() => window.__GRAPHYSX_SCENE_BROWSER__.saveAs("local-draft-copy"));
+  const copy = await openScene(store.url, "local-draft-copy");
+  assert.equal(copy.definition.entities.some(entity => entity.id === "local-draft-box"), true);
+  await page.evaluate((name) => window.__GRAPHYSX_SCENE_BROWSER__.open(name), SCENE);
+  const afterOpen = await page.evaluate(() => ({
+    canUndo: window.__GRAPHYSX__.undo().ok,
+    remote: window.__GRAPHYSX__.query({ ids: ["remote-box"] }).length,
+  }));
+  assert.deepEqual(afterOpen, { canUndo: false, remote: 1 }, "a shared baseline cannot be undone locally");
+
+  // A clean tab still follows remote changes. Accepting a new baseline clears old
+  // undo entries, including the entry that the shared replacement itself would add.
+  await editScene(store.url, SCENE, [{ op: "spawn", entity: { id: "shared-next", type: "box" } }]);
+  await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["shared-next"] }).length === 1);
+  assert.equal(await page.evaluate(() => window.__GRAPHYSX__.undo().ok), false);
+  out.dirtySceneConflict = true;
 
   // Switching scenes from the panel is the other half of what it is for.
   await putScene(store.url, "second-scene", { ...seedDefinition, id: "second-scene", label: "Second scene" }, undefined, {
@@ -326,6 +369,7 @@ const ok =
   out.agentChangeVisible &&
   out.sessionRevision === out.agentRevision &&
   out.agentRemovalVisible &&
+  out.dirtySceneConflict &&
   out.livedSpawn?.ok &&
   out.livedSpawn?.inRuntime &&
   out.livedSpawn?.inFullExport &&

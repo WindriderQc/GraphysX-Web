@@ -33,11 +33,15 @@ export type EcoNode = {
   attention?: string;
   /** A role that is not installed yet, shown dashed. */
   planned?: string;
+  /** Dated composition evidence, separate from live health. */
+  evidence?: string;
+  /** Short reviewed voice introduction; technical details stay in specs/roles. */
+  narration?: string;
 };
 export type EcoLinkKind = "lan" | "dns" | "storage" | "media" | "audio" | "compute" | "metrics";
 export type EcoLink = { from: string; to: string; kind: EcoLinkKind; label?: string };
 export type EcoWorkflowStop = { node: string; label: string; note?: string };
-export type EcoWorkflow = { id: string; title: string; stops: readonly EcoWorkflowStop[]; branches?: readonly (readonly EcoWorkflowStop[])[]; note?: string };
+export type EcoWorkflow = { id: string; title: string; stops: readonly EcoWorkflowStop[]; branches?: readonly (readonly EcoWorkflowStop[])[]; note?: string; narration?: string };
 
 export const ECOSYSTEM_NODES: readonly EcoNode[] = [
   // ---- the three hosts and the VM ----------------------------------------------------------

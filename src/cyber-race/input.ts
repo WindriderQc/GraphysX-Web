@@ -1,9 +1,14 @@
+import { Quaternion } from "three";
+
 export interface PilotInput {
   x: number;
   y: number;
-  boost: boolean;
-  /** Knife-edge: -1 roll left, +1 roll right, 0 level. */
+  /** Forward control from -1 (full brake) to +1 (full turbo). */
+  throttle: number;
+  /** Bank from -1 (full left) to +1 (full right). */
   roll: number;
+  /** Pulse shot held (notre version). */
+  fire: boolean;
 }
 
 /** Menu-level actions shared by keyboard, Xbox pads and Quest controllers. */
@@ -21,7 +26,8 @@ const P1 = {
   down: ["KeyS"],
   boost: ["Space", "ShiftLeft", "KeyF"],
   rollLeft: ["KeyQ"],
-  rollRight: ["KeyE"]
+  rollRight: ["KeyE"],
+  fire: ["KeyR"]
 };
 
 const P2 = {
@@ -31,7 +37,8 @@ const P2 = {
   down: ["ArrowDown"],
   boost: ["ShiftRight", "Enter", "NumpadEnter", "Numpad0", "ControlRight", "Slash"],
   rollLeft: ["Comma", "Numpad1"],
-  rollRight: ["Period", "Numpad3"]
+  rollRight: ["Period", "Numpad3"],
+  fire: ["Numpad2", "KeyL"]
 };
 
 const KEY_ACTIONS: Record<string, UiAction> = {
@@ -55,8 +62,12 @@ const KEY_ACTIONS: Record<string, UiAction> = {
 const GAME_KEYS = new Set([...Object.values(P1).flat(), ...Object.values(P2).flat(), ...Object.keys(KEY_ACTIONS)]);
 
 /** Standard-mapping buttons of an Xbox pad. */
-const PAD = { a: 0, b: 1, lb: 4, rb: 5, rt: 7, view: 8, start: 9, up: 12, down: 13, left: 14, right: 15 };
+const PAD = { a: 0, b: 1, x: 2, lb: 4, rb: 5, lt: 6, rt: 7, view: 8, start: 9, up: 12, down: 13, left: 14, right: 15 };
+const XR_PAD = { trigger: 0, grip: 1, primary: 4, secondary: 5 };
+const XR_LEFT_ID = -1;
 const DEADZONE = 0.22;
+const WRIST_DEAD_ZONE = 6 * Math.PI / 180;
+const WRIST_FULL_BANK = 42 * Math.PI / 180;
 const REPEAT_DELAY = 0.38;
 const REPEAT_RATE = 0.14;
 
@@ -66,17 +77,26 @@ interface PadMemory {
   held: number;
 }
 
+type XrSources = XRInputSourceArray | readonly XRInputSource[];
+type WristFrame = { frame: XRFrame | undefined; referenceSpace: XRReferenceSpace | null };
+
 /** Keyboard split in two halves, one Xbox pad per pilot, plus Quest controllers in VR. */
 export class RaceInput {
   private readonly down = new Set<string>();
   private readonly events: UiEvent[] = [];
   private readonly padMemory = new Map<number, PadMemory>();
-  private xrPads: Gamepad[] = [];
+  private xrSources: XrSources = [];
+  private wristSource: XRInputSource | null = null;
+  private readonly wristNeutralInverse = new Quaternion();
+  private readonly wristRotation = new Quaternion();
+  private wristRoll: number | null = null;
   /** Called on the first keyboard or pad input so audio can start. */
   onActivity: (() => void) | null = null;
 
   constructor() {
     window.addEventListener("keydown", (event) => {
+      if (event.target instanceof HTMLButtonElement && event.target.tabIndex >= 0 &&
+          KEY_ACTIONS[event.code] === "ok") return;
       if (GAME_KEYS.has(event.code)) {
         event.preventDefault();
       }
@@ -98,9 +118,53 @@ export class RaceInput {
     window.addEventListener("blur", () => this.down.clear());
   }
 
-  /** Controllers of the current WebXR session (Quest Touch), refreshed each frame. */
-  setXrPads(pads: Gamepad[]): void {
-    this.xrPads = pads;
+  /** Keep handedness alongside each controller's live gamepad state. */
+  setXrSources(sources: XrSources, wrist?: WristFrame): void {
+    this.xrSources = sources;
+    this.wristRoll = wrist ? this.readWristBank(wrist) : null;
+    if (!wrist) this.wristSource = null;
+    if (sources.length === 0) {
+      for (const id of this.padMemory.keys()) if (id < 0) this.padMemory.delete(id);
+    }
+  }
+
+  private readWristBank({ frame, referenceSpace }: WristFrame): number {
+    if (!frame || !referenceSpace) {
+      this.wristSource = null;
+      return 0;
+    }
+    // Keep the first held controller in charge until it releases the grip.
+    let held: XRInputSource | null = null;
+    for (const source of this.xrSources) {
+      if (source.targetRayMode !== "tracked-pointer" || !source.gamepad?.buttons[XR_PAD.grip]?.pressed) continue;
+      if (source === this.wristSource) {
+        held = source;
+        break;
+      }
+      held ??= source;
+    }
+    const pose = held ? frame.getPose(held.targetRaySpace, referenceSpace) : null;
+    if (!held || !pose) {
+      this.wristSource = null;
+      return 0;
+    }
+    const { x, y, z, w } = pose.transform.orientation;
+    this.wristRotation.set(x, y, z, w);
+    if (held !== this.wristSource) {
+      this.wristSource = held;
+      this.wristNeutralInverse.copy(this.wristRotation).invert();
+      return 0;
+    }
+
+    // Project the relative rotation onto the controller's pointing axis.
+    // Its +Z points back toward the pilot, opposite the ship's roll axis.
+    this.wristRotation.premultiply(this.wristNeutralInverse);
+    const { z: twistZ, w: twistW } = this.wristRotation;
+    if (Math.hypot(twistZ, twistW) < 1e-4) return 0;
+    const angle = -2 * Math.atan2(twistZ, twistW);
+    const roll = Math.atan2(Math.sin(angle), Math.cos(angle));
+    const scaled = (Math.abs(roll) - WRIST_DEAD_ZONE) / (WRIST_FULL_BANK - WRIST_DEAD_ZONE);
+    return scaled <= 0 ? 0 : Math.sign(roll) * Math.min(1, scaled);
   }
 
   private any(codes: string[]): boolean {
@@ -121,7 +185,11 @@ export class RaceInput {
   poll(dt: number): void {
     const pads = this.pads();
     const all: Array<[number, Gamepad, "std" | "xr"]> = pads.map((p) => [p.index, p, "std"]);
-    this.xrPads.forEach((p, i) => all.push([100 + i, p, "xr"]));
+    this.xrSources.forEach(({ gamepad, handedness }, i) => {
+      if (!gamepad) return;
+      const id = handedness === "left" ? XR_LEFT_ID : handedness === "right" ? -2 : -3 - i;
+      all.push([id, gamepad, "xr"]);
+    });
     for (const [id, pad, kind] of all) {
       let mem = this.padMemory.get(id);
       if (!mem) {
@@ -135,10 +203,9 @@ export class RaceInput {
         if (edge(PAD.b)) this.push("back");
         if (edge(PAD.start)) this.push("pause");
         if (edge(PAD.view)) this.push("menu");
-      } else {
-        // xr-standard: 0 trigger, 4 A/X, 5 B/Y.
-        if (edge(0) || edge(4)) this.push("ok", "xr");
-        if (edge(5)) this.push("back", "xr");
+      } else if (id === XR_LEFT_ID) {
+        if (edge(XR_PAD.primary)) this.push("ok", "xr");
+        if (edge(XR_PAD.secondary)) this.push("back", "xr");
       }
       const ax = kind === "std" ? pad.axes[0] ?? 0 : pad.axes[2] ?? 0;
       const ay = kind === "std" ? pad.axes[1] ?? 0 : pad.axes[3] ?? 0;
@@ -181,8 +248,9 @@ export class RaceInput {
     const map = index === 0 ? P1 : P2;
     let x = Number(this.any(map.right)) - Number(this.any(map.left));
     let y = Number(this.any(map.up)) - Number(this.any(map.down));
-    let boost = this.any(map.boost);
+    let throttle = Number(this.any(map.boost));
     let roll = Number(this.any(map.rollRight)) - Number(this.any(map.rollLeft));
+    let fire = this.any(map.fire);
     const pad = this.pads()[index];
     if (pad) {
       const ax = pad.axes[0] ?? 0;
@@ -194,21 +262,51 @@ export class RaceInput {
       if (button(PAD.right)) x = 1;
       if (button(PAD.up)) y = 1;
       if (button(PAD.down)) y = -1;
-      boost = boost || button(PAD.a) || button(PAD.rt);
+      if (button(PAD.a) || button(PAD.rt)) throttle = 1;
       if (button(PAD.lb)) roll = -1;
       if (button(PAD.rb)) roll = 1;
+      fire = fire || button(PAD.x) || button(PAD.lt);
     }
     if (index === 0) {
-      for (const xr of this.xrPads) {
-        const ax = xr.axes[2] ?? 0;
-        const ay = xr.axes[3] ?? 0;
+      let brake = 0;
+      let accelerate = 0;
+      let leftBank = 0;
+      let rightBank = 0;
+      for (const { gamepad, handedness } of this.xrSources) {
+        if (!gamepad) continue;
+        const ax = gamepad.axes[2] ?? 0;
+        const ay = gamepad.axes[3] ?? 0;
         if (Math.abs(ax) > DEADZONE) x = ax;
         if (Math.abs(ay) > DEADZONE) y = -ay;
-        boost = boost || Boolean(xr.buttons[0]?.pressed);
-        // Grip: knife-edge, towards the stick (right by default).
-        if (xr.buttons[1]?.pressed) roll = ax < -DEADZONE ? -1 : 1;
+        const trigger = gamepad.buttons[XR_PAD.trigger]?.value ?? 0;
+        const grip = gamepad.buttons[XR_PAD.grip]?.value ?? 0;
+        if (handedness === "left") {
+          brake = trigger;
+          leftBank = grip;
+        } else if (handedness === "right") {
+          accelerate = trigger;
+          rightBank = grip;
+          fire = fire || Boolean(gamepad.buttons[XR_PAD.primary]?.pressed);
+        }
       }
+      if (accelerate || brake) throttle = accelerate - brake;
+      if (this.wristRoll !== null) roll = this.wristRoll;
+      else if (leftBank || rightBank) roll = rightBank - leftBank;
     }
-    return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), boost, roll };
+    return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), throttle, roll, fire };
+  }
+
+  /**
+   * Vibration for a pilot: its Xbox pad (dual rumble) and, for Jobe, the Quest controllers.
+   * Strengths 0..1. Silently does nothing where the browser has no haptics.
+   */
+  rumble(index: 0 | 1, strong: number, weak: number, ms: number): void {
+    const pad = this.pads()[index] as (Gamepad & { vibrationActuator?: { playEffect?: (type: string, params: object) => Promise<unknown> } }) | undefined;
+    void pad?.vibrationActuator?.playEffect?.("dual-rumble", { duration: ms, strongMagnitude: strong, weakMagnitude: weak })?.catch(() => undefined);
+    if (index !== 0) return;
+    for (const { gamepad } of this.xrSources) {
+      const xr = gamepad as (Gamepad & { hapticActuators?: Array<{ pulse?: (value: number, ms: number) => Promise<unknown> }> }) | undefined;
+      void xr?.hapticActuators?.[0]?.pulse?.(Math.max(strong, weak), ms)?.catch(() => undefined);
+    }
   }
 }

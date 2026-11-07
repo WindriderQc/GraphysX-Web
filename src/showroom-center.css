@@ -1,0 +1,67 @@
+/* The Centre owns a shallow dock. Its overlays never reserve width for off-screen tiles. */
+.gx-welcome.gx-welcome--center .gx-welcome-card{
+  border-color:#8fc2cb4d;border-top-color:#a5e4d696;border-radius:18px;
+  background:linear-gradient(146deg,#132736f2 0%,#0a1825eb 76%);
+  box-shadow:0 22px 56px #050d1d8c;
+}
+.gx-welcome.gx-welcome--center h1{font-weight:750;letter-spacing:-.045em;text-shadow:none}
+.gx-welcome.gx-welcome--center .gx-eyebrow{letter-spacing:.115em;color:#b8dcd8}
+.gx-welcome.gx-welcome--center .gx-create-entry{margin:2px 0 3px}
+.gx-welcome.gx-welcome--center .gx-create-new{
+  background:linear-gradient(135deg,#a2f1de,#72d9cc);border-color:#b1f6e4;
+  box-shadow:0 5px 22px #52bfaa26;color:#0b2a2e;
+}
+.gx-welcome.gx-welcome--center .gx-create-new:hover{background:#b4f6e5}
+.gx-welcome.gx-welcome--center .gx-tour-start{min-height:36px;padding-inline:10px}
+.gx-welcome.gx-welcome--center .gx-actions{
+  position:fixed;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom));
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;
+  box-sizing:border-box;width:min(610px,calc(100% - 150px));margin-inline:auto;padding:6px;
+  border:1px solid #a9d8e346;border-radius:15px;background:#0b1727ed;
+  box-shadow:0 14px 34px #040c1a8c;overflow:visible;pointer-events:auto;
+}
+.gx-welcome.gx-welcome--center .gx-actions > button,.gx-welcome--center .gx-center-apps > summary{
+  box-sizing:border-box;display:grid;place-content:center;gap:2px;text-align:center;min-height:52px;
+  border:1px solid #a2cad438;border-radius:9px;background:#172638;color:#edf4f6;
+  padding:6px 5px;font:700 13px/1.18 var(--gx-font);cursor:pointer;
+}
+.gx-welcome.gx-welcome--center .gx-actions > .gx-go-editor{grid-column:auto}
+.gx-welcome--center .gx-actions > button small,.gx-center-apps > summary small{
+  color:#abc1ca;font:500 10px/1.1 var(--gx-font);
+}
+.gx-welcome.gx-welcome--center .gx-actions > button:hover,.gx-center-apps > summary:hover,.gx-center-apps[open] > summary{
+  background:#253e4a;border-color:#8edbce;color:#f4fffb;
+}
+.gx-center-apps > summary{list-style:none}
+.gx-center-apps > summary::-webkit-details-marker{display:none}
+.gx-center-apps > summary:focus-visible{outline:2px solid white;outline-offset:2px}
+.gx-center-apps-list{
+  position:absolute;right:0;bottom:calc(100% + 10px);width:min(355px,100%);max-height:min(68dvh,380px);
+  padding:10px;overflow:auto;overscroll-behavior:contain;display:grid;gap:5px;
+  border:1px solid #91bac36b;border-radius:14px;background:#0d1b2af7;box-shadow:0 14px 40px #02070be0;
+}
+.gx-center-apps-list > span{padding:5px 8px;color:#b5d8d5;font:700 11px var(--gx-font);letter-spacing:.13em;text-transform:uppercase}
+.gx-welcome.gx-welcome--center .gx-center-apps-list button{
+  min-height:44px;display:flex;align-items:center;justify-content:flex-start;text-align:left;padding:7px 10px;
+  border-radius:7px;font-size:13px;color:#dbe8eb;background:#122436;box-shadow:none;
+}
+.gx-welcome.gx-welcome--center .gx-center-apps-list .gx-go-island{background:#1a393e;border-color:#73c4b882;color:#e4faf2}
+@media(max-width:899px){
+  .gx-welcome.gx-welcome--center:not(.gx-welcome--touring){padding-bottom:calc(81px + env(safe-area-inset-bottom))}
+  .gx-welcome.gx-welcome--center:not(.gx-welcome--touring):not(.gx-welcome--presenting) .gx-welcome-card{
+    max-height:min(39dvh,296px);align-items:flex-start;text-align:left;gap:7px;padding:11px 13px;
+  }
+  .gx-welcome.gx-welcome--center:not(.gx-welcome--touring) .gx-welcome-card .gx-eyebrow{gap:6px;font-size:9px}
+  .gx-welcome.gx-welcome--center .gx-create-entry{gap:5px}
+  .gx-welcome.gx-welcome--center .gx-create-entry a{font-size:12px;min-height:41px;padding:7px 9px}
+  .gx-welcome.gx-welcome--center .gx-actions{
+    left:10px;right:10px;bottom:calc(9px + env(safe-area-inset-bottom));width:auto;
+  }
+  .gx-welcome.gx-welcome--center.gx-welcome--touring .gx-actions{display:none}
+  .gx-welcome.gx-welcome--center .gx-actions > button,.gx-welcome.gx-welcome--center .gx-center-apps > summary{
+    min-height:46px;font-size:12px;
+  }
+  .gx-welcome--center .gx-actions > button small,.gx-center-apps > summary small{display:none}
+  body:has(.gx-welcome--center) .gx-display-settings{top:10px;bottom:auto;right:10px}
+  body:has(.gx-welcome--center) .gx-display-panel{top:100%;bottom:auto}
+}

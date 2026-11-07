@@ -3,7 +3,7 @@ import type { Rng } from "./textures";
 
 export const OPEN_RADIUS = 14;
 
-export type SectorKind = "tunnel" | "mines" | "shards" | "thorns" | "kaleido" | "wave" | "network" | "furnace" | "vortex";
+export type SectorKind = "tunnel" | "mines" | "shards" | "thorns" | "kaleido" | "wave" | "network" | "furnace" | "vortex" | "hypertube";
 
 export interface SectorInfo {
   name: string;
@@ -15,11 +15,42 @@ export interface SectorInfo {
   weight: number;
   fog: number;
   fogColor: number;
-  sky: "circuit" | "sunset" | "hexdots" | "furnace" | "none";
+  sky: "circuit" | "sunset" | "hexdots" | "furnace" | "nebula" | "none";
   /** Keep the line nearly level (boards with a floor). */
   flat: boolean;
   /** Board invented in the film's style rather than taken from a scene. */
   inspired?: boolean;
+  /** "Notre version" board: remastered look and light combat. */
+  remaster?: boolean;
+  /** The board places its own rings and finish gate (the Hypertube). */
+  ownRings?: boolean;
+  /** Live obstacle density along the board (u = 0..1), around 1 on average. Unset: even. */
+  rhythm?: (u: number) => number;
+  /** Designed length in metres at the NORMAL course (scaled by the course setting). */
+  length?: number;
+  /** Tube radius multiplier along the board (u = 0 at its start, 1 at its end). */
+  profile?: (u: number) => number;
+  /** Sand-storm streaks around the pilot in this colour (notre version, golden worlds only). */
+  streaks?: number;
+  /** Phases announced on the HUD as a pilot reaches each share of the board. */
+  phases?: Array<{ u: number; name: string; alert?: boolean; voice?: string; rumble?: boolean }>;
+}
+
+const smooth = (a: number, b: number, u: number): number => {
+  const x = Math.min(1, Math.max(0, (u - a) / (b - a)));
+  return x * x * (3 - 2 * x);
+};
+
+/**
+ * Hypertube radius (base 10 m): a wide launch bay narrowing into the tube, widening for the
+ * split, tightening through the collapse, then flaring at the exit.
+ */
+export function hypertubeProfile(u: number): number {
+  let r = 2.4 - 1.4 * smooth(0.02, 0.08, u);
+  r += 0.4 * smooth(0.4, 0.43, u);
+  r -= 0.6 * smooth(0.66, 0.8, u);
+  r += 1.0 * smooth(0.93, 1, u);
+  return r;
 }
 
 export const SECTOR_INFO: Record<SectorKind, SectorInfo> = {
@@ -35,15 +66,119 @@ export const SECTOR_INFO: Record<SectorKind, SectorInfo> = {
   network: { name: "RÉSEAU", tube: 9.8, amp: 12, weight: 1, fog: 0.007, fogColor: 0x02121c, sky: "none", flat: false, inspired: true },
   // Inspired by Jobe's fire (01:35:20): eruptions over a distant lava sea.
   furnace: { name: "FOURNAISE", tube: 0, amp: 22, weight: 1, fog: 0.004, fogColor: 0x5a1a04, sky: "furnace", flat: true, inspired: true },
-  vortex: { name: "VORTEX", tube: 11, amp: 14, weight: 1, fog: 0.0065, fogColor: 0x120626, sky: "circuit", flat: false }
+  vortex: { name: "VORTEX", tube: 11, amp: 14, weight: 1, fog: 0.0065, fogColor: 0x120626, sky: "circuit", flat: false },
+  // Notre version: the film's green tunnel reimagined (docs/CYBER_RACE_NOTRE_VERSION.md).
+  hypertube: {
+    name: "HYPERTUBE",
+    tube: 10,
+    amp: 12,
+    weight: 1,
+    fog: 0.0042,
+    fogColor: 0x02100c,
+    sky: "none",
+    flat: false,
+    remaster: true,
+    ownRings: true,
+    length: 2800,
+    profile: hypertubeProfile,
+    phases: [
+      { u: 0.4, name: "BIFURCATION" },
+      { u: 0.66, name: "EFFONDREMENT", alert: true, voice: "Warning. Structure collapse.", rumble: true },
+      { u: 0.92, name: "SORTIE" }
+    ]
+  }
 };
 
+/** Highest value a rhythm curve reaches (placement samples against it). */
+export const RHYTHM_MAX = 2;
+
+/**
+ * Density along a lengthened notre version board: a calm entry, a build, a short breather,
+ * the peak, then a clear exit into the next board.
+ */
+export function boardRhythm(u: number): number {
+  let d = 0.35 + 0.65 * smooth(0.1, 0.3, u);
+  d -= 0.55 * (smooth(0.5, 0.53, u) - smooth(0.57, 0.6, u));
+  d += 0.6 * smooth(0.58, 0.66, u);
+  d -= 1.4 * smooth(0.9, 0.97, u);
+  return Math.max(0.15, d);
+}
+
+/** The 90-second finale: two waves, each ending in a breather, then the last sprint. */
+export function finaleRhythm(u: number): number {
+  let d = 0.35 + 0.65 * smooth(0.05, 0.2, u);
+  d -= 0.5 * (smooth(0.4, 0.43, u) - smooth(0.47, 0.5, u));
+  d += 0.4 * smooth(0.5, 0.6, u);
+  d -= 0.6 * (smooth(0.68, 0.7, u) - smooth(0.72, 0.74, u));
+  d += 0.5 * smooth(0.74, 0.85, u);
+  d -= 1.6 * smooth(0.95, 0.99, u);
+  return Math.max(0.15, d);
+}
+
+/**
+ * Notre version of the film's boards: 30-45 s each at NORMAL (90 s for the finale), with
+ * announced phases and a rhythm. The film plans keep the boards exactly as they were.
+ * Lengths are metres at the NORMAL course, measured against the autopilot's pace.
+ */
+const NOTRE_VERSION: Partial<Record<SectorKind, Partial<SectorInfo>>> = {
+  // Magnetic field: the mine field under a nebula, mines drifting towards the pilots.
+  mines: {
+    length: 3000,
+    sky: "nebula",
+    // Violet fog matching the nebula, so far mines fade into it instead of standing out black.
+    fog: 0.0036,
+    fogColor: 0x24164a,
+    phases: [
+      { u: 0.3, name: "ESSAIM" },
+      { u: 0.6, name: "TEMPÊTE DE MINES", alert: true, voice: "Warning. Mine storm." }
+    ]
+  },
+  shards: { length: 2600, phases: [{ u: 0.3, name: "AVERSE" }, { u: 0.6, name: "TEMPÊTE DE CRISTAUX" }] },
+  thorns: { length: 2900, streaks: 0xffb070, phases: [{ u: 0.3, name: "CANYON" }, { u: 0.6, name: "FORÊT D'ÉPINES" }] },
+  kaleido: { length: 2650, phases: [{ u: 0.3, name: "ACCÉLÉRATION" }, { u: 0.6, name: "HYPNOSE" }] },
+  wave: { length: 2300, streaks: 0xffd27a, phases: [{ u: 0.3, name: "HOULE" }, { u: 0.6, name: "DÉFERLANTE" }] },
+  network: {
+    length: 2500,
+    phases: [
+      { u: 0.3, name: "INTRUSION" },
+      { u: 0.6, name: "PARE-FEU", alert: true, voice: "Warning. Firewall." }
+    ]
+  },
+  furnace: {
+    length: 3000,
+    phases: [
+      { u: 0.3, name: "ÉRUPTION" },
+      { u: 0.6, name: "MER DE FEU", alert: true, voice: "Warning. Heat critical." }
+    ]
+  },
+  vortex: {
+    length: 5500,
+    rhythm: finaleRhythm,
+    phases: [
+      { u: 0.2, name: "TOURBILLON" },
+      { u: 0.5, name: "ŒIL DU VORTEX" },
+      { u: 0.74, name: "EFFONDREMENT", alert: true, voice: "Warning. Vortex collapse." },
+      { u: 0.92, name: "DERNIER SPRINT" }
+    ]
+  }
+};
+
+/** A board as raced: the film's version, or notre version when `notre` is set. */
+export function boardInfo(kind: SectorKind, notre: boolean): SectorInfo {
+  const base = SECTOR_INFO[kind];
+  const ours = NOTRE_VERSION[kind];
+  if (!notre || !ours) return base;
+  return { ...base, remaster: true, rhythm: boardRhythm, ...ours };
+}
+
 /** The race the two boys play in the film, then the extended run. */
-export const PLANS: Record<"film" | "extended" | "ultimate", SectorKind[]> = {
+export const PLANS: Record<"film" | "extended" | "ultimate" | "remaster", SectorKind[]> = {
   film: ["tunnel", "mines", "shards"],
   extended: ["tunnel", "mines", "shards", "thorns", "kaleido", "wave", "vortex"],
   // The film's boards stay intact; inspired boards continue the theme before the finale.
-  ultimate: ["tunnel", "mines", "shards", "thorns", "kaleido", "wave", "network", "furnace", "vortex"]
+  ultimate: ["tunnel", "mines", "shards", "thorns", "kaleido", "wave", "network", "furnace", "vortex"],
+  // Notre version: the Hypertube opens, every board runs 30-45 s, the vortex closes in 90 s.
+  remaster: ["hypertube", "mines", "shards", "thorns", "kaleido", "wave", "network", "furnace", "vortex"]
 };
 
 export interface Sector {
@@ -73,13 +208,18 @@ export class Track {
   private readonly right: Float32Array;
   private readonly count: number;
 
-  constructor(plan: SectorKind[], raceLength: number, rng: Rng) {
+  /**
+   * `lengths`, when given, sets each board's length; otherwise boards share `raceLength` by weight.
+   * `notre` races notre version of each board (see boardInfo).
+   */
+  constructor(plan: SectorKind[], raceLength: number, rng: Rng, lengths?: number[], notre = false) {
     this.raceLength = raceLength;
     const totalWeight = plan.reduce((sum, kind) => sum + SECTOR_INFO[kind].weight, 0);
     let start = 0;
     this.sectors = plan.map((kind, index) => {
-      const info = SECTOR_INFO[kind];
-      const end = index === plan.length - 1 ? raceLength : Math.round(start + (raceLength * info.weight) / totalWeight);
+      const info = boardInfo(kind, notre);
+      const share = lengths ? lengths[index] : (raceLength * info.weight) / totalWeight;
+      const end = index === plan.length - 1 ? raceLength : Math.round(start + share);
       const sector: Sector = { index, kind, info, start, end };
       start = end;
       return sector;
@@ -146,10 +286,16 @@ export class Track {
   tubeAt(s: number): number {
     const here = this.sectorAt(s);
     if (here.info.tube > 0) {
-      return here.info.tube;
+      return here.info.tube * this.profileAt(here, s);
     }
     const before = this.sectorAt(s - 2);
-    return before.info.tube;
+    return before.info.tube * this.profileAt(before, s);
+  }
+
+  /** Radius multiplier of a board's tube at s (1 for constant tubes). */
+  profileAt(sector: Sector, s: number): number {
+    if (!sector.info.profile) return 1;
+    return sector.info.profile(Math.min(1, Math.max(0, (s - sector.start) / Math.max(1, sector.end - sector.start))));
   }
 
   /** How far from the line a pilot may fly at s. */

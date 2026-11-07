@@ -554,3 +554,60 @@ export function furnaceSkyTexture(): THREE.CanvasTexture {
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
+
+/**
+ * Nebula sky for the magnetic field (notre version): violet and teal clouds over a dark field,
+ * a hot band where the field's core sits, and stars. Equirectangular, seamless left to right.
+ */
+export function nebulaTexture(): THREE.CanvasTexture {
+  const W = 2048;
+  const H = 1024;
+  const [canvas, ctx] = makeCanvas(W, H);
+  const rng = mulberry32(1992);
+  const base = ctx.createLinearGradient(0, 0, 0, H);
+  base.addColorStop(0, "#03020a");
+  base.addColorStop(0.5, "#0a0820");
+  base.addColorStop(1, "#020208");
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, W, H);
+  // Clouds: soft blobs added on top of each other, drawn twice across the seam.
+  const blob = (x: number, y: number, r: number, color: string, alpha: number): void => {
+    for (const dx of [-W, 0, W]) {
+      const g = ctx.createRadialGradient(x + dx, y, 0, x + dx, y, r);
+      g.addColorStop(0, color.replace("A", String(alpha)));
+      g.addColorStop(1, color.replace("A", "0"));
+      ctx.fillStyle = g;
+      ctx.fillRect(x + dx - r, y - r, r * 2, r * 2);
+    }
+  };
+  ctx.globalCompositeOperation = "lighter";
+  const colors = ["rgba(150,40,220,A)", "rgba(30,170,200,A)", "rgba(230,50,150,A)", "rgba(60,80,230,A)"];
+  for (let i = 0; i < 70; i += 1) {
+    // Clouds gather along a wavy band around the horizon.
+    const x = rng() * W;
+    const y = H * (0.5 + 0.16 * Math.sin((x / W) * Math.PI * 4 + 1.3) + (rng() - 0.5) * 0.3);
+    blob(x, y, 90 + rng() * 260, colors[i % colors.length], 0.05 + rng() * 0.1);
+  }
+  // The core's glow (towards the board's side) and fine filaments.
+  blob(W * 0.25, H * 0.46, 240, "rgba(255,170,240,A)", 0.22);
+  blob(W * 0.25, H * 0.46, 70, "rgba(255,240,255,A)", 0.5);
+  for (let i = 0; i < 160; i += 1) {
+    const x = rng() * W;
+    const y = H * (0.5 + 0.2 * Math.sin((x / W) * Math.PI * 6) + (rng() - 0.5) * 0.18);
+    blob(x, y, 14 + rng() * 40, colors[(i + 1) % colors.length], 0.08 + rng() * 0.12);
+  }
+  ctx.globalCompositeOperation = "source-over";
+  // Fine, sparse stars: a few bright ones, the rest faint, so the sky never reads as dust.
+  for (let i = 0; i < 1100; i += 1) {
+    const x = rng() * W;
+    const y = rng() * H;
+    const b = rng();
+    ctx.fillStyle = `rgba(${200 + Math.round(b * 55)},${210 + Math.round(b * 45)},255,${0.15 + b * 0.5})`;
+    ctx.fillRect(x, y, b > 0.97 ? 2 : 1, b > 0.97 ? 2 : 1);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}

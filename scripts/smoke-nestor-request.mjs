@@ -236,7 +236,7 @@ if (pageErrors.length) console.log("page errors:", pageErrors);
 
 const ok = !out.fatal
   && out.noProvider?.disabled === true
-  && /no model provider is configured/i.test(out.noProvider?.placeholder ?? "")
+  && /aucun modèle connecté/i.test(out.noProvider?.placeholder ?? "")
   && out.noProvider?.requests === 0
   && out.noProvider?.proposal === true
   && out.layout?.fieldEnabled === true
@@ -250,7 +250,7 @@ const ok = !out.fatal
   && out.asked?.types?.includes("water") && out.asked?.types?.includes("flock") && out.asked?.ops?.includes("set-environment")
   && out.asked?.revisionUnchanged && out.asked?.documentUnchanged
   && out.asked?.sentVerbatim && out.asked?.sentSummaryOnly
-  && out.asked?.fieldCleared && out.asked?.sendLabel === "Ask"
+  && out.asked?.fieldCleared && out.asked?.sendLabel === "Demander"
   && out.applied?.commits === 1
   && out.applied?.actor === "nestor"
   && out.applied?.intent === LAKE_REPLY.intent
