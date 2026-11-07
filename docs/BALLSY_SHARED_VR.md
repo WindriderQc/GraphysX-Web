@@ -63,10 +63,12 @@ Le géant garde son renderer et son unique boucle d'animation. Il consomme
 `VrSessionController` et `VrInputRig`, les mêmes modules que le lab, sans imposer
 `PlatformHost`. Une caméra de tête distincte préserve le cadrage desktop.
 
-Les modèles utilisent les factories officielles Three.js : joints de main réellement
-fournis par WebXR et modèle local générique à boutons animés. Les modèles de manette
-n'impliquent pas que les doigts autour du plastique soient suivis. Les trois fichiers
-de profil et de modèle sont inclus dans le build Ballsy; aucun CDN n'est nécessaire.
+Les modèles utilisent les factories officielles Three.js : mains translucides pilotées
+par les articulations WebXR, Touch blanches à anneaux pour le profil Quest 2 et modèle
+générique pour les autres appareils. Les articulations restent visibles si la surface
+ne charge pas ou si le suivi est incomplet. Les modèles de manette n'impliquent pas que
+les doigts autour du plastique soient suivis. Modèles, profils et licence sont inclus
+dans le build Ballsy; aucun CDN n'est nécessaire. Voir [le contrat du socle](VR_FOUNDATION.md).
 
 Une manette saisit avec la gâchette ou le grip. Une main suivie saisit avec le
 pinch natif. Le ballon doit être proche; le lancer dépend d'un historique de poses

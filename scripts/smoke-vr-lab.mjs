@@ -181,6 +181,78 @@ try{
   assert.equal(await xrPage.evaluate(()=>window.__GRAPHYSX_VR__.holding),false);
   receipts.handsAndInterruption=true;receipts.handRayLoss=true;
   console.log('VR smoke: hands, reference reset and interruption passed.');
+
+  // Exact Touch models, including the real left/right controls. Unknown devices above
+  // still exercise the generic profile; never disguise another device as Quest 2.
+  await xrPage.evaluate(()=>{
+    const {vr}=window.__GRAPHYSX_VR__;
+    vr.input.slots.forEach((slot,index)=>{
+      const source={handedness:index?'right':'left',targetRayMode:'tracked-pointer',profiles:['oculus-touch-v3'],
+        gamepad:{mapping:'xr-standard',buttons:Array.from({length:8},()=>({value:0,pressed:false,touched:false})),axes:[0,0,0,0]}};
+      slot.ray.visible=true;slot.grip.visible=true;slot.grip.matrixAutoUpdate=true;
+      slot.grip.position.set(index?.14:-.14,1.4,-.55);
+      slot.grip.rotation.set(1.05,index?-.15:.15,0);
+      slot.ray.dispatchEvent({type:'connected',data:source});
+    });
+  });
+  await xrPage.waitForFunction(()=>window.__GRAPHYSX_VR__.vr.input.slots.every(slot=>slot.modelReady));
+  await xrPage.evaluate(()=>{
+    const slots=window.__GRAPHYSX_VR__.vr.input.slots;
+    window.__touchBefore=slots.map(slot=>slot.modelRoot.getObjectByName('xr_standard_trigger_pressed_value').quaternion.clone());
+    slots.forEach(slot=>{slot.source.gamepad.buttons[0]={value:1,pressed:true,touched:true};});
+  });
+  await xrPage.waitForFunction(()=>window.__GRAPHYSX_VR__.vr.input.slots.every((slot,index)=>
+    slot.modelRoot.getObjectByName('xr_standard_trigger_pressed_value').quaternion.angleTo(window.__touchBefore[index])>.01));
+  await xrPage.evaluate(()=>window.__GRAPHYSX_VR__.vr.input.slots.forEach(slot=>{
+    slot.source.gamepad.buttons[0]={value:0,pressed:false,touched:false};slot.ray.visible=false;
+  }));
+  await captureInputModels(xrPage,'vr-lab-touch-controllers.png');
+  receipts.touchControllers=true;
+
+  await xrPage.evaluate(()=>{
+    const {vr}=window.__GRAPHYSX_VR__;
+    vr.input.slots.forEach((slot,index)=>{
+      // Copy the actual asset's bind-pose joints, then transform the synthetic palm.
+      // This avoids inventing a set of incompatible skeleton rotations for the picture.
+      for(const name of Object.keys(vr.input.slots[0].hand.joints)){
+        if(slot.hand.joints[name])continue;
+        const joint=new slot.anchor.constructor();joint.visible=true;joint.jointRadius=.008;
+        slot.hand.joints[name]=joint;slot.hand.add(joint);
+      }
+      slot.hand.visible=true;
+      slot.ray.dispatchEvent({type:'connected',data:{handedness:index?'right':'left',hand:new Map(),targetRayMode:'tracked-pointer',profiles:[]}});
+    });
+  });
+  await xrPage.waitForFunction(()=>window.__GRAPHYSX_VR__.vr.input.slots.every(slot=>
+    slot.modelRoot.getObjectByName('Translucent tracked hand')));
+  await xrPage.evaluate(()=>{
+    const {vr}=window.__GRAPHYSX_VR__;
+    vr.input.slots.forEach((slot,index)=>{
+      const skin=slot.modelRoot.getObjectByProperty('type','SkinnedMesh');
+      const transform=slot.hand.matrix.clone().makeRotationX(1.05);
+      transform.setPosition(index?.13:-.13,1.28,-.55);
+      const wrist=skin.skeleton.bones.findIndex(bone=>bone.name==='wrist');
+      transform.multiply(skin.skeleton.boneInverses[wrist]);
+      skin.skeleton.bones.forEach((bone,boneIndex)=>{
+        const joint=slot.hand.joints[bone.name]??new slot.anchor.constructor();
+        slot.hand.joints[bone.name]=joint;slot.hand.add(joint);joint.visible=true;joint.jointRadius=.008;
+        skin.skeleton.boneInverses[boneIndex].clone().invert().premultiply(transform).decompose(joint.position,joint.quaternion,joint.scale);
+      });
+    });
+  });
+  await xrPage.waitForFunction(()=>window.__GRAPHYSX_VR__.vr.input.slots.every(slot=>
+    slot.modelRoot.getObjectByName('Translucent tracked hand').visible && !slot.modelRoot.children[0].visible));
+  await captureInputModels(xrPage,'vr-lab-translucent-hands.png');
+  await xrPage.evaluate(()=>window.__GRAPHYSX_VR__.vr.input.slots[0].hand.joints['ring-finger-tip'].visible=false);
+  await xrPage.waitForFunction(()=>{
+    const slot=window.__GRAPHYSX_VR__.vr.input.slots[0];
+    return !slot.modelRoot.getObjectByName('Translucent tracked hand').visible &&
+      slot.modelRoot.children[0].visible && slot.modelRoot.children[0].motionController.handMesh.count===24;
+  });
+  await xrPage.evaluate(()=>window.__GRAPHYSX_VR__.vr.input.slots[0].hand.joints['ring-finger-tip'].visible=true);
+  await xrPage.waitForFunction(()=>window.__GRAPHYSX_VR__.vr.input.slots[0].modelRoot.getObjectByName('Translucent tracked hand').visible);
+  receipts.handSurfacesAndFallback=true;
+  console.log('VR smoke: Touch pair animation and translucent hand surfaces passed.');
   await xrPage.click('.gx-vr-enter');
   console.log('VR smoke: exit snapshot',await xrPage.evaluate(()=>({phase:window.__GRAPHYSX_VR__.vr.session.snapshot.phase,post:window.__postFrames,insets:window.__insets,frame:window.__GRAPHYSX_VR__.host.frameCount})));
   await xrPage.waitForFunction(previous=>window.__GRAPHYSX_VR__.vr.session.snapshot.phase==='ready' && window.__postFrames>previous.post && window.__insets>previous.insets,counts);

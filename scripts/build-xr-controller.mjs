@@ -31,5 +31,8 @@ const exported = await new GLTFExporter().parseAsync(root, {binary:false});
 await writeFile(new URL('controller.gltf',directory), JSON.stringify(exported));
 const layout = {selectComponentId:'xr-standard-trigger', components, assetPath:'controller.gltf'};
 await writeFile(new URL('profile.json',directory),JSON.stringify({profileId:'generic-trigger', fallbackProfileIds:[], layouts:{left:layout,right:layout,none:layout}},null,2)+'\n');
-await writeFile(new URL('../profilesList.json',directory), JSON.stringify({'generic-trigger':{path:'generic-trigger/profile.json'}},null,2)+'\n');
+await writeFile(new URL('../profilesList.json',directory), JSON.stringify({
+  'generic-trigger':{path:'generic-trigger/profile.json'},
+  'oculus-touch-v3':{path:'oculus-touch-v3/profile.json'},
+},null,2)+'\n');
 console.log('Generated local generic controller and WebXR input profile.');

@@ -1,17 +1,23 @@
 import {
   BoxGeometry, BufferGeometry, Group, Line, LineBasicMaterial, Mesh, MeshStandardMaterial,
-  Matrix4, Vector3, type InstancedMesh, type Material, type Object3D, type WebGLRenderer,
+  Matrix4, Vector3, type InstancedMesh, type Material, type Object3D, type SkinnedMesh, type Texture, type WebGLRenderer,
 } from "three";
 import { XRControllerModelFactory } from "three/examples/jsm/webxr/XRControllerModelFactory.js";
 import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.js";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { XRHandSpace, WebXRSpaceEventMap } from "three";
 
-/** Local assets, authored by scripts/build-xr-controller.mjs. Kept in the product manifest. */
+/** Same-origin assets. See scripts/vendor-xr-models.mjs and the bundled MIT notice. */
 export const XR_ASSETS = [
   "/assets/xr/profiles/profilesList.json",
   "/assets/xr/profiles/generic-trigger/profile.json",
   "/assets/xr/profiles/generic-trigger/controller.gltf",
+  "/assets/xr/profiles/generic-hand/left.glb",
+  "/assets/xr/profiles/generic-hand/right.glb",
+  "/assets/xr/profiles/oculus-touch-v3/profile.json",
+  "/assets/xr/profiles/oculus-touch-v3/left.glb",
+  "/assets/xr/profiles/oculus-touch-v3/right.glb",
+  "/assets/xr/profiles/LICENSE.md",
 ];
 export interface VrInputAction {
   action: "select" | "grab";
@@ -45,17 +51,25 @@ export function disposeVrObject(root: Object3D): void {
     if (mesh.geometry) resources.add(mesh.geometry);
     const instances = object as InstancedMesh;
     if (instances.isInstancedMesh) resources.add(instances); // Releases instance buffers as well.
+    const skinned = object as SkinnedMesh;
+    if (skinned.isSkinnedMesh) resources.add(skinned.skeleton);
     const materials: Material[] = mesh.material ? (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) : [];
-    for (const material of materials) resources.add(material);
+    for (const material of materials) {
+      resources.add(material);
+      for (const value of Object.values(material)) {
+        if ((value as Texture | null)?.isTexture) resources.add(value);
+      }
+    }
   });
   for (const resource of resources) resource.dispose();
   root.removeFromParent();
 }
 
 /** The upstream factory throws from its loader error callback. Retain our visible fallback instead. */
-class FallbackControllerLoader extends GLTFLoader {
+class FallbackModelLoader extends GLTFLoader {
   override load(url: string, onLoad: (gltf: GLTF) => void, onProgress?: (event: ProgressEvent) => void): void {
-    super.load(url, onLoad, onProgress, () => { /* Generic grip and ray remain usable. */ });
+    try { super.load(url, onLoad, onProgress, () => { /* Tracked primitives remain usable. */ }); }
+    catch { /* A missing local origin (e.g. Node input tests) also retains the fallback. */ }
   }
 }
 
@@ -145,31 +159,83 @@ export class VrInputRig {
       const model = new XRHandModelFactory().createHandModel(proxy,"spheres");
       proxy.add(model); slot.hand.add(proxy);
       proxy.dispatchEvent({type:"connected",data:source});
-      // Three r179 writes at original joint indices but lowers count for missing poses.
-      // Compact the factory's instances so only currently tracked joints are rendered.
+      // Three r179 writes at original indices and assumes all joint spaces exist.
+      // Compact native poses directly so missing spaces cannot throw or draw stale joints.
       const primitive = model.motionController as unknown as { handMesh: InstancedMesh; joints: (keyof XRHandSpace["joints"])[]; updateMesh(): void };
-      const updateMesh = primitive.updateMesh.bind(primitive);
       const matrix = new Matrix4();
+      const scale = new Vector3();
       primitive.updateMesh = () => {
-        updateMesh();
         let count = 0;
-        primitive.joints.forEach((name,index) => {
-          if (!slot.hand.joints[name]?.visible) return;
-          primitive.handMesh.getMatrixAt(index,matrix);
+        primitive.joints.forEach(name => {
+          const joint = slot.hand.joints[name];
+          if (!joint?.visible) return;
+          matrix.compose(joint.position,joint.quaternion,scale.setScalar(joint.jointRadius || .008));
           primitive.handMesh.setMatrixAt(count++,matrix);
         });
         primitive.handMesh.count = count;
         primitive.handMesh.instanceMatrix.needsUpdate = true;
       };
+      model.name = "Tracked joint fallback";
+      if (source.handedness === "left" || source.handedness === "right") {
+        this.addHandSurface(slot, source, proxy, model, primitive.joints);
+      }
       slot.modelReady = true;
     } else if (source.gamepad?.mapping === "xr-standard" && source.targetRayMode === "tracked-pointer") {
-      const factory = new XRControllerModelFactory(new FallbackControllerLoader(),() => {
+      const factory = new XRControllerModelFactory(new FallbackModelLoader(),() => {
         if (this.disposed || slot.modelRoot !== proxy) { disposeVrObject(proxy); return; }
         slot.modelReady = true; slot.fallback.visible = false;
       }).setPath(this.profilesPath);
       proxy.add(factory.createControllerModel(proxy)); slot.grip.add(proxy);
       proxy.dispatchEvent({type:"connected",data:source});
     }
+  }
+
+  private addHandSurface(slot: VrInputSlot, source: XRInputSource, proxy: Group<WebXRSpaceEventMap>,
+    fallback: Object3D, joints: (keyof XRHandSpace["joints"])[]): void {
+    let surface: Object3D | null = null;
+    // Supplying a loader bypasses Three's CDN default; its path must be set explicitly.
+    const loader = new FallbackModelLoader().setPath(`${this.profilesPath}/generic-hand/`);
+    const model = new XRHandModelFactory(loader, object => {
+      if (this.disposed || slot.modelRoot !== proxy) { disposeVrObject(object); return; }
+      surface = object;
+      surface.visible = false;
+      surface.name = "Translucent tracked hand";
+      surface.traverse(child => {
+        const mesh = child as Mesh;
+        if (!mesh.isMesh) return;
+        mesh.castShadow = false; mesh.receiveShadow = false;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const material of materials) {
+          if (!(material instanceof MeshStandardMaterial)) continue;
+          material.color.set("#4b8bbf"); material.emissive.set("#1c527c");
+          material.emissiveIntensity = .35; material.roughness = .3; material.metalness = .05;
+          material.transparent = true; material.opacity = .76; material.depthWrite = false;
+          material.onBeforeCompile = shader => {
+            shader.fragmentShader = shader.fragmentShader.replace("#include <opaque_fragment>", `
+              float handRim = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);
+              outgoingLight += vec3(0.22, 0.64, 1.0) * handRim * 0.85;
+              diffuseColor.a = min(1.0, opacity + 0.20 * handRim);
+              #include <opaque_fragment>
+            `);
+          };
+          material.customProgramCacheKey = () => "graphysx-tracked-hand-v1";
+        }
+      });
+    }).createHandModel(proxy,"mesh");
+    model.name = "Tracked hand surface";
+    proxy.add(model);
+    // The primitive already received this event before the surface factory was added.
+    // Its factory ignores repeated connections once its motion controller exists.
+    proxy.dispatchEvent({type:"connected",data:source});
+    const controller = model.motionController;
+    const updateMesh = controller.updateMesh.bind(controller);
+    controller.updateMesh = () => {
+      // Upstream retains invisible bones' last pose. Never draw that stale finger as tracked.
+      const complete = !!surface && slot.hand.visible && joints.every(name => slot.hand.joints[name]?.visible);
+      if (surface) surface.visible = complete;
+      fallback.visible = !complete;
+      if (complete) updateMesh();
+    };
   }
 
   private disconnect(slot: VrInputSlot): void {
