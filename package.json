@@ -49,6 +49,10 @@
     "smoke:kidx-guidance": "node scripts/smoke-kidx-guidance.mjs",
     "serve:kidx": "node scripts/serve-kidx.mjs",
     "serve:llmx": "node scripts/serve-llmx.mjs",
+    "smoke:ballsy": "node scripts/smoke-ballsy.mjs",
+    "smoke:ballsy-volcano": "node scripts/smoke-ballsy-loop.mjs",
+    "serve:ballsy": "node scripts/serve-ballsy.mjs",
+    "smoke:ballsy-giant": "node scripts/smoke-ballsy-shovel.mjs",
     "smoke:ballz18-sky": "node scripts/smoke-ballz18-sky.mjs",
     "smoke:scenenet-xml": "node scripts/smoke-scenenet-xml.mjs",
     "smoke:mesh-colliders": "node scripts/smoke-mesh-colliders.mjs",
@@ -92,7 +96,18 @@
     "counts": "node scripts/counts.mjs",
     "check": "npm run typecheck && npm test",
     "verify:core": "node scripts/verify.mjs --tier=core",
-    "verify:apps": "node scripts/verify.mjs --tier=apps"
+    "verify:apps": "node scripts/verify.mjs --tier=apps",
+    "smoke:ballsy-setup": "node scripts/smoke-ballsy-setup.mjs",
+    "smoke:ballsy-shovel": "node scripts/smoke-ballsy-shovel.mjs",
+    "build:ballsy-loop": "vite build --config vite.ballsy.config.ts --outDir output/volcano-loop/dist",
+    "serve:ballsy-loop": "node scripts/serve-ballsy-loop.mjs",
+    "smoke:ballsy-loop": "node scripts/smoke-ballsy-loop.mjs",
+    "build:ballsy-slime": "vite build --config vite.ballsy.config.ts --outDir output/ballsy-slime/dist",
+    "serve:ballsy-slime": "node scripts/serve-ballsy-slime.mjs",
+    "smoke:ballsy-slime": "node scripts/smoke-ballsy-slime.mjs",
+    "build:ballsy-shared-vr": "vite build --config vite.ballsy.config.ts --outDir output/ballsy-shared-vr/dist",
+    "serve:ballsy-shared-vr": "node scripts/serve-ballsy-shared-vr.mjs",
+    "smoke:ballsy-shared-vr": "node scripts/smoke-ballsy-shared-vr.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",
@@ -106,6 +121,7 @@
   "devDependencies": {
     "@types/three": "^0.179.0",
     "eslint": "^9.39.5",
+    "iwer": "2.8.0",
     "playwright": "^1.60.0",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.66.0",

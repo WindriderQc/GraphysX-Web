@@ -1,0 +1,155 @@
+@import "@fontsource/space-grotesk/latin-500.css";
+@import "@fontsource/space-grotesk/latin-700.css";
+
+:root { font-family: "Space Grotesk", "Segoe UI", sans-serif; color: #234c4e; background: #d6e7dc; font-synthesis: none; }
+* { box-sizing: border-box; }
+html, body, #ballsy { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+#ballsy { position: fixed; inset: 0; }
+#ballsy canvas { pointer-events: auto; touch-action: none; }
+[hidden] { display: none !important; }
+.ballsy-ui { position: absolute; inset: 0; pointer-events: none; }
+.ballsy-card { max-height: calc(100dvh - 104px); overflow-y: auto; }
+.ballsy-pad-test { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, calc(100% - 36px)); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 26px 32px; border-radius: 28px; background: #fffdf2fa; box-shadow: 0 24px 80px #31524924; pointer-events: auto; text-align: center; }
+.ballsy-pad-test h2 { font-size: clamp(25px, 3vw, 34px); margin: 0 0 10px; letter-spacing: -.04em; }
+.ballsy-pad-test > p { font-size: 14px; line-height: 1.5; }
+.ballsy-pad-test-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 20px 0; }
+.ballsy-pad-test article { padding: 20px 16px; border-radius: 18px; background: #edf2e8; border: 2px solid transparent; }
+.ballsy-pad-test article[data-ready="true"] { border-color: #428561; }
+.ballsy-pad-test article > b { display: flex; align-items: center; gap: 9px; justify-content: center; font-size: 18px; color: #007d91; }
+.ballsy-pad-test article:nth-child(2) > b { color: #d45638; }.ballsy-pad-test article:nth-child(2) i { background: #d45638; }
+.ballsy-pad-test article > small { display: block; min-height: 32px; margin-top: 10px; font-size: 10px; overflow-wrap: anywhere; }
+.ballsy-pad-test article > p { min-height: 42px; margin: 13px 0 10px; font-size: 13px; line-height: 1.5; }
+.ballsy-stick { position: relative; width: 80px; height: 80px; border: 1px solid #b9ccb7; background: #fbf9eb; border-radius: 50%; margin: 14px auto; display: grid; place-items: center; }
+.ballsy-stick::before, .ballsy-stick::after { content: ""; position: absolute; background: #b9ccb7; width: 1px; height: 100%; }.ballsy-stick::after { transform: rotate(90deg); }
+.ballsy-stick span { z-index: 1; width: 23px; height: 23px; background: #007d91; border: 3px solid #fffdf2; border-radius: 50%; }.ballsy-pad-test article:nth-child(2) .ballsy-stick span { background: #d45638; }
+.ballsy-brake { display: inline-block; padding: 7px 18px; border-radius: 20px; background: #e6e4d6; color: #627467; font-size: 12px; }.ballsy-brake[data-pressed="true"] { color: #fff; background: #236d60; }
+@media (max-width: 550px) { .ballsy-pad-test { padding: 20px 15px; }.ballsy-pad-test-grid { gap: 10px; }.ballsy-pad-test article { padding: 14px 8px; } }
+.ballsy-header { display: flex; justify-content: space-between; align-items: center; padding: 24px 32px; }
+.ballsy-header a { color: #345c5a; font-weight: 700; font-size: 21px; text-decoration: none; pointer-events: auto; }
+.ballsy-header a span { display: block; font-size: 11px; font-weight: 500; letter-spacing: .13em; text-transform: uppercase; margin-top: 3px; }
+.ballsy-tools { display: flex; gap: 10px; }
+button { font: inherit; cursor: pointer; border: 0; pointer-events: auto; }
+button:focus-visible, a:focus-visible { outline: 3px solid #075b68; outline-offset: 4px; }
+.ballsy-tools button { background: #fcfff3d9; border: 1px solid #b0c9ba; border-radius: 40px; padding: 10px 18px; color: #315e59; }
+.ballsy-scores { position: absolute; top: 100px; left: 32px; right: 32px; display: flex; justify-content: space-between; }
+.ballsy-score { background: #fffdf0ed; padding: 13px 20px; border-radius: 18px; box-shadow: 0 4px 20px #4966600b; min-width: 190px; }
+.ballsy-score b, .ballsy-controls b { display: flex; align-items: center; gap: 9px; font-size: 18px; color: #007d91; }
+.ballsy-score[data-slot="1"] b, .ballsy-controls > div:nth-child(2) b { color: #d45638; }
+.ballsy-score span { display: block; margin-top: 7px; font-size: 13px; }
+i { font-style: normal; width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; background: #007d91; color: #fff; }
+.ballsy-score[data-slot="1"] i, .ballsy-controls > div:nth-child(2) i { background: #d45638; }
+.ballsy-card { position: absolute; width: min(510px, calc(100% - 36px)); left: 50%; top: 50%; transform: translate(-50%, -44%); padding: 32px 38px 23px; border: 1px solid #fff9e5; border-radius: 28px; background: #fffdf2f5; box-shadow: 0 24px 80px #31524924; pointer-events: auto; text-align: center; }
+.ballsy-eyebrow { color: #b07b42; font-size: 10px; font-weight: 700; letter-spacing: .23em; margin: 0 0 12px; }
+h1 { font-size: clamp(27px, 3vw, 38px); line-height: 1.08; letter-spacing: -.06em; margin: 0 0 13px; }
+[data-description] { font-size: 14px; line-height: 1.6; margin: 0 0 20px; }
+.ballsy-controls { display: grid; grid-template-columns: 1fr 1fr; text-align: left; gap: 14px; margin: 18px 0; }
+.ballsy-controls > div { border-radius: 14px; background: #edf2e8; padding: 16px 14px; }
+.ballsy-controls p { font-size: 12px; line-height: 1.65; margin: 10px 0 8px; }
+.ballsy-controls small { font-size: 10px; opacity: .8; }
+.ballsy-pad-help { font-size: 11px; line-height: 1.6; margin: 16px 0; }
+.ballsy-notice { font-size: 13px; font-weight: 700; line-height: 1.5; }
+.ballsy-notice:empty { display: none; }
+.ballsy-primary { display: block; width: 100%; padding: 15px 22px; background: #236d60; color: #fffdf2; border-radius: 15px; font-size: 17px; font-weight: 700; text-align: center; }
+.ballsy-primary:hover { background: #165749; }
+.ballsy-secondary { background: transparent; color: #436d61; font-size: 11px; text-decoration: underline; margin: 12px 0 0; }
+.ballsy-footnote { font-size: 10px; line-height: 1.65; color: #7a8d7c; margin: 15px 0 0; }
+.ballsy-countdown { position: absolute; inset: 0; display: grid; place-items: center; font-size: 130px; font-weight: 700; color: #fffdf2; text-shadow: 0 8px 36px #1d54446b; }
+.ballsy-race-tip { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 13px; color: #3c6058; }
+.ballsy-ball-label { position: absolute; transform: translate(-50%, -100%); font-size: 12px; font-weight: 700; color: #fff; background: #007d91; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; border: 2px solid #fffcf0; box-shadow: 0 3px 10px #21494030; }
+.ballsy-ball-label[data-label="1"] { background: #d45638; }
+.ballsy-settings { display: flex; gap: 12px; justify-content: center; margin: 12px 0; text-align: left; }
+.ballsy-settings label { font-size: 10px; color: #68796e; }
+.ballsy-settings select { display: block; font: inherit; font-size: 12px; border-radius: 8px; padding: 7px; color: #315e59; border: 1px solid #b7c6ae; background: #f5f5e8; margin-top: 4px; }
+.ballsy-giant { position: absolute; left: 24px; bottom: 64px; width: 208px; padding: 16px; border-radius: 20px; background: #fff9eaf5; pointer-events: auto; box-shadow: 0 8px 25px #4c383314; }
+.ballsy-giant-title { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+.ballsy-giant-title b { font-size: 13px; }.ballsy-giant-title span { font-size: 12px; color: #ac5a34; }
+.ballsy-giant p { font-size: 11px; line-height: 1.5; margin: 10px 0; }.ballsy-giant small { display: block; font-size: 9px; line-height: 1.5; color: #8c7660; margin-top: 12px; }
+.ballsy-routes { display: grid; gap: 5px; }.ballsy-routes button { background: #f0dfbe; padding: 9px; border-radius: 8px; color: #6e4834; font-size: 11px; }
+.ballsy-routes button:hover { background: #ebcc9b; }.ballsy-routes button:disabled { opacity: .45; cursor: default; }
+.ballsy-dig > div { display: flex; gap: 10px; justify-content: center; }.ballsy-dig button { --dig: 0%; border-radius: 50%; width: 42px; height: 42px; color: #784025; font-weight: 700; background: conic-gradient(#eea545 var(--dig), #f1dfc6 0); touch-action: none; user-select: none; }.ballsy-dig button:disabled { opacity: .4; }
+.ballsy-volcano-signal { position: absolute; left: 50%; top: 104px; transform: translateX(-50%); max-width: 42%; font-size: 12px; text-align: center; padding: 9px 15px; background: #fff4dcde; color: #7f4b2b; border-radius: 30px; }.ballsy-volcano-signal[data-flood="true"] { background: #ffc78b; font-weight: 700; }
+.ballsy-room { position: absolute; right: 24px; bottom: 64px; width: 208px; padding: 15px; border-radius: 18px; background: #fff9eaf5; pointer-events: auto; font-size: 11px; line-height: 1.6; }.ballsy-room b { font-size: 12px; }.ballsy-room p { margin: 7px 0; }.ballsy-room a { color: #236d60; }.ballsy-room small { display: block; font-size: 9px; color: #8c7660; margin-top: 8px; }
+@media (min-width: 1800px) { .ballsy-giant { width: 260px; left: 48px; bottom: 85px; padding: 20px; }.ballsy-giant-title b { font-size: 16px; }.ballsy-giant p, .ballsy-routes button { font-size: 14px; }.ballsy-giant small { font-size: 11px; } }
+@media (max-height: 760px) { .ballsy-card { padding-top: 22px; padding-bottom: 16px; }.ballsy-controls { margin: 10px 0; }.ballsy-controls > div { padding: 10px; }.ballsy-settings { margin: 8px 0; }.ballsy-card h1 { font-size: 30px; }.ballsy-footnote { margin-top: 8px; } }
+@media (max-width: 850px) { .ballsy-giant { left: 12px; bottom: 44px; width: 175px; padding: 12px; }.ballsy-volcano-signal { top: 140px; max-width: 70%; }.ballsy-settings { flex-wrap: wrap; } }
+@media (min-width: 1800px) { .ballsy-header { padding: 30px 48px; } .ballsy-scores { left: 48px; right: 48px; } .ballsy-score { min-width: 230px; } .ballsy-score b { font-size: 22px; } .ballsy-score span { font-size: 16px; } }
+@media (max-height: 680px) { .ballsy-card { padding: 22px 30px 16px; transform: translate(-50%, -44%); } .ballsy-controls { margin: 12px 0; } .ballsy-pad-help { margin: 10px 0; } .ballsy-footnote { margin: 8px 0 0; } .ballsy-header { padding: 15px 22px; } .ballsy-scores { top: 77px; } }
+@media (max-width: 650px) { .ballsy-header { padding: 15px; } .ballsy-header a { font-size: 16px; } .ballsy-header a span { font-size: 8px; } .ballsy-tools button { padding: 9px 12px; font-size: 11px; } .ballsy-scores { left: 15px; right: 15px; top: 78px; gap: 12px; } .ballsy-score { min-width: 0; padding: 10px 14px; } .ballsy-score b { font-size: 15px; } .ballsy-score span { font-size: 10px; } .ballsy-card { padding: 24px; max-height: calc(100% - 155px); overflow: auto; top: 57%; transform: translate(-50%, -50%); } }
+
+/* Basalt circuit HUD: keep the playfield open and reserve bright colour for the racers. */
+:root { color: #e7f2ed; background: #153c49; }
+.ballsy-header { padding: 18px 24px; background: linear-gradient(#102c38c9, transparent); }
+.ballsy-header a { color: #e5f1e9; }
+.ballsy-header a span { color: #9fbfbf; }
+.ballsy-tools button { color: #e1efea; background: #173b48e8; border-color: #63898c; }
+.ballsy-tools button:hover { background: #2b5460; }
+.ballsy-scores { top: 80px; left: 24px; right: 24px; }
+.ballsy-score { color: #dbe6e2; min-width: 170px; padding: 12px 16px; border: 1px solid #547783; border-top: 3px solid #30d3d9; border-radius: 12px; background: #16333eea; box-shadow: 0 7px 24px #051c3029; }
+.ballsy-score[data-slot="1"] { border-top-color: #ff926c; }
+.ballsy-score b { color: #61e8ed; }
+.ballsy-score[data-slot="1"] b { color: #ffad8b; }
+.ballsy-score span { font-variant-numeric: tabular-nums; font-size: 12px; }
+.ballsy-score i, .ballsy-ball-label { background: #087d91; }
+.ballsy-score[data-slot="1"] i, .ballsy-ball-label[data-label="1"] { background: #bd452c; }
+.ballsy-ball-label { width: 27px; height: 27px; font-size: 13px; border-width: 2px; box-shadow: 0 3px 8px #001b35aa; transform: translate(calc(-100% - 10px), -100%); }
+.ballsy-card, .ballsy-pad-test { color: #234c4e; border: 1px solid #ffffed; background: #fff9eaf7; box-shadow: 0 24px 90px #071e3966; }
+.ballsy-primary { background: #087e7f; box-shadow: 0 4px 0 #075b60; }
+.ballsy-primary:hover { background: #096a70; }
+.ballsy-race-tip { left: 50%; right: auto; bottom: 8px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); padding: 7px 16px; border-radius: 20px; color: #d9e8e2; background: #112e3ad9; font-size: 11px; }
+.ballsy-volcano-signal { top: 74px; max-width: 42%; color: #ffddaa; background: #243b43ed; border: 1px solid #9a7953; border-radius: 10px; font-size: 11px; }
+.ballsy-volcano-signal[data-flood="true"] { background: #823f2a; color: #fff2dc; }
+.ballsy-giant { left: 18px; bottom: 52px; width: 190px; padding: 12px; border: 1px solid #547783; border-radius: 12px; color: #e0e7df; background: #15333fed; box-shadow: 0 8px 25px #071d3429; }
+.ballsy-giant-title b { font-size: 12px; }.ballsy-giant-title span { color: #ffd7a2; }
+.ballsy-giant p { font-size: 10px; margin: 7px 0; }.ballsy-giant small { color: #a9c1bd; font-size: 9px; margin-top: 7px; }
+.ballsy-routes { grid-template-columns: repeat(3, 1fr); gap: 4px; }.ballsy-routes button { background: #36535a; color: #ffdda7; padding: 8px 3px; font-size: 9px; }.ballsy-routes button:hover { background: #46676b; }
+.ballsy-room { right: 18px; bottom: 52px; padding: 12px; border: 1px solid #547783; border-radius: 12px; color: #e0e7df; background: #15333fed; }
+.ballsy-room a { color: #7de0dd; }.ballsy-room small { color: #a9c1bd; }
+.ballsy-countdown { color: #fff2cf; text-shadow: 0 8px 0 #13323b, 0 12px 40px #071e39; }
+@media (max-width: 850px) {
+  .ballsy-scores { top: 74px; left: 12px; right: 12px; }.ballsy-score { min-width: 0; padding: 9px 12px; }
+  .ballsy-volcano-signal { top: 140px; max-width: 80%; }
+  .ballsy-giant { width: 170px; left: 12px; bottom: 44px; }.ballsy-room { width: 170px; right: 12px; bottom: 44px; }
+}
+@media (max-width: 550px) {
+  .ballsy-header { padding: 12px; }.ballsy-header a { font-size: 15px; }.ballsy-tools { gap: 5px; }.ballsy-tools button { padding: 8px; font-size: 10px; }
+  .ballsy-score b { font-size: 13px; }.ballsy-score span { font-size: 10px; }
+  .ballsy-giant, .ballsy-room { max-height: 155px; overflow-y: auto; width: 150px; }
+  .ballsy-volcano-signal { font-size: 10px; }.ballsy-race-tip { font-size: 9px; }
+}
+
+/* The landmark occupies the far horizon: keep route advice out of its silhouette. */
+.ballsy-volcano-signal { top: 15px; margin: 0; max-width: 40%; padding: 9px 15px; }
+@media (max-width: 1100px) { .ballsy-volcano-signal { top: auto; bottom: 43px; max-width: 80%; padding: 6px 10px; } }
+
+/* Finish feedback follows the real ball and the shared simulation clock, including pause. */
+.ballsy-ball-label { transform: translate(-50%, -100%); z-index: 2; }
+.ballsy-ball-label[data-finished="true"] { width: max-content; height: 25px; padding: 0 9px; border-radius: 20px; color: #123744; background: #c9f8e4; border-color: #faffeb; font-size: 11px; }
+.ballsy-ball-label[data-label="1"][data-finished="true"] { background: #ffdbb8; }
+.ballsy-label-leader { position: absolute; height: 1px; background: #b9f7e6c9; transform-origin: left center; z-index: 1; }
+.ballsy-label-leader[data-label-leader="1"] { background: #ffdbb8c9; }
+.ballsy-label-leader::after { content: ""; position: absolute; right: 0; top: -1px; width: 3px; height: 3px; border-radius: 50%; background: inherit; }
+.ballsy-finish-sparkle { position: absolute; width: 0; height: 0; color: #ffe9ad; opacity: var(--spark-opacity, 1); filter: drop-shadow(0 1px 4px #102d3b); z-index: 1; }
+.ballsy-finish-sparkle[data-finish-sparkle="1"] { color: #ffe2a6; }
+.ballsy-finish-sparkle i { position: absolute; left: calc(var(--spark-x) * var(--burst)); top: calc(var(--spark-y) * var(--burst)); transform: translate(-50%, -50%); width: auto; height: auto; color: inherit; background: none; font-size: 18px; }
+.ballsy-finish-ring { position: absolute; width: var(--ring-size, 34px); height: var(--ring-size, 34px); border: 2px solid currentColor; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 12px #fff8; }
+.ballsy-finish-announcement { position: absolute; top: 140px; left: 50%; transform: translateX(-50%); max-width: min(580px, calc(100% - 24px)); width: max-content; margin: 0; padding: 9px 16px; border: 1px solid #a8ead0; border-radius: 12px; background: #143a40f2; color: #e1ffdf; text-align: center; font-size: 12px; }
+.ballsy-score[data-finished="true"] { border-color: #b5e9b6; background: #1c4344ee; }
+.ballsy-results { padding: 0; margin: 10px 0 16px; list-style: none; display: grid; gap: 6px; }
+.ballsy-results li { display: flex; justify-content: space-between; gap: 18px; padding: 8px 12px; border-radius: 8px; background: #e5eee1; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ballsy-results li[data-result="ballsy-p2"] { background: #f4e6d6; }
+.ballsy-ui[data-phase="results"] .ballsy-card { top: auto; bottom: 12px; transform: translateX(-50%); padding: 18px 24px 14px; width: min(480px, calc(100% - 24px)); max-height: 45%; }
+.ballsy-ui[data-phase="results"] .ballsy-card h1 { font-size: 25px; margin-bottom: 6px; }
+.ballsy-ui[data-phase="results"] .ballsy-eyebrow { display: none; }
+.ballsy-ui[data-phase="results"] .ballsy-finish-announcement { position: static; transform: none; width: auto; max-width: none; margin: 0 0 8px; padding: 0; border: 0; border-radius: 0; color: #35685d; background: none; font-size: 11px; line-height: 1.4; }
+.ballsy-ui[data-phase="results"] [data-description] { font-size: 12px; margin-bottom: 6px; }
+.ballsy-ui[data-phase="results"] .ballsy-primary { padding: 11px 16px; font-size: 15px; }
+.ballsy-ui[data-phase="results"] .ballsy-secondary { font-size: 10px; margin-top: 9px; }
+@media (max-height: 600px) {
+  .ballsy-scores { top: 58px; }.ballsy-score { padding: 6px 10px; }.ballsy-score span { margin-top: 3px; }
+  .ballsy-finish-announcement { top: 115px; padding: 5px 10px; font-size: 10px; }
+  .ballsy-ui[data-phase="results"] .ballsy-card { max-height: 48%; padding: 10px 16px; }
+  .ballsy-ui[data-phase="results"] .ballsy-eyebrow { display: none; }
+  .ballsy-ui[data-phase="results"] .ballsy-card h1 { font-size: 19px; }
+  .ballsy-results { margin: 6px 0 8px; gap: 4px; }.ballsy-results li { padding: 5px 9px; font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) { .ballsy-finish-sparkle i { font-size: 20px; } }

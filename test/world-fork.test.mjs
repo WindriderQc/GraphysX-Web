@@ -4,7 +4,7 @@ import { before, after, it } from "node:test";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "vite";
 import { startWorldServer } from "../world-service/server.mjs";
 import { atomicSnapshot, checkpointDigest, sealCheckpoint, verifyCheckpoint } from "../world-service/archive.mjs";
@@ -14,7 +14,7 @@ let module, temporary;
 before(async () => {
   temporary = mkdtempSync(join(tmpdir(), "island-fork-"));
   const outDir = join(temporary, "bundle");
-  await build({ configFile: new URL("../vite.world-service.config.ts", import.meta.url).pathname,
+  await build({ configFile: fileURLToPath(new URL("../vite.world-service.config.ts", import.meta.url)),
     build: { outDir, emptyOutDir: true }, logLevel: "silent" });
   module = await import(pathToFileURL(join(outDir, "world.js")).href);
 });

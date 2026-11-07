@@ -77,8 +77,15 @@ const LEGACY_BOOT_ASSETS = [
   "/assets/textures/classic/Alien01_B_normal.bmp",
 ];
 
+/** Same small input-model package for the main product and isolated XR applications. */
+export async function xrAssetManifest() {
+  return anyAssetLiterals("src/xr/vr-input.ts");
+}
+
 export async function productAssetManifest() {
   const wanted = new Set();
+  // The XR adapter uses same-origin generic input profiles, never a required model CDN.
+  for (const url of await xrAssetManifest()) wanted.add(url);
 
   // Skies: every set in the vocabulary, all six cube faces. Whole directory rather than
   // guessing face names off `extension`, so a set with an odd file still ships complete.

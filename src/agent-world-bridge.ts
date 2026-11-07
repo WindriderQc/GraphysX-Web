@@ -9,7 +9,7 @@ const TOOL_PATHS = [
   "schema", "worldSchema", "levelSchema", "version", "capabilities",
   "open", "demo", "state", "assets", "textures", "skies", "hdris", "emitters", "heightmaps", "importLegacyXml", "exportLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select",
   "sounds", "flocks", "crowds", "forceFields", "formulas", "dna", "surfaces",
-  "attachBehavior", "detachBehavior", "interact", "steer", "prefabs", "spawnPrefab", "starters", "loadStarter",
+  "attachBehavior", "detachBehavior", "interact", "steer", "steerLive", "setSlowdownLive", "prefabs", "spawnPrefab", "starters", "loadStarter",
   "transaction", "commit", "history", "events", "undo", "redo", "query", "observe", "pause", "step", "export", "exportDocument", "save", "load",
   "rules.get", "rules.set", "rules.status", "rules.standings", "rules.reset",
   "media.schema", "media.status", "media.list", "media.refresh", "media.browse", "media.import", "media.importSky", "media.register", "media.remove", "media.terrainHeights",
@@ -21,7 +21,7 @@ const TOOL_PATHS = [
 
 const MUTATING_TOOLS = new Set<string>([
   "open", "demo", "importLegacyXml", "create", "clear", "spawn", "update", "remove", "addJoint", "updateJoint", "removeJoint", "select", "attachBehavior", "detachBehavior",
-  "interact", "steer", "spawnPrefab", "loadStarter", "transaction", "commit", "undo", "redo", "pause", "step", "save", "load",
+  "interact", "steer", "steerLive", "setSlowdownLive", "spawnPrefab", "loadStarter", "transaction", "commit", "undo", "redo", "pause", "step", "save", "load",
   "rules.set", "rules.reset",
   "media.refresh", "media.import", "media.importSky", "media.register", "media.remove",
   "levels.create", "levels.remove", "levels.open", "levels.patch", "levels.fill", "levels.resize", "levels.configureRace", "levels.transaction",
@@ -29,6 +29,8 @@ const MUTATING_TOOLS = new Set<string>([
 ]);
 
 const TOOL_SUMMARIES: Record<string, string> = {
+  steerLive: "Set continuous steering with [id, { headingDegrees?, thrust?, turn? }]: finite numbers only, heading normalized and thrust/turn clamped to -1..1. Rejects other fields, reserved IDs and host-owned transients. Uses native pause/step without adding revision, history or events; use steer for impulses and authored edits.",
+  setSlowdownLive: "Set transient slowdown with [id, speedFactor] for a dynamic steerable entity: a finite number in 0.75..1, where 1 clears the effect. Rejects reserved IDs and host-owned transients. Damping runs only in simulation steps, preserves vertical/spin velocity, and adds no revision, history or events.",
   steer: "Drive a steerable subject: set its aim heading, live thrust/turn inputs (-1..1), or fire a one-shot kick (0..1) along the heading. The same call a human's arrow keys and mouse make — read the subject's `steering` block via query() first.",
   state: "Read the complete serializable 3D world state.",
   export: "Export the full runtime snapshot, including session-only entities.",

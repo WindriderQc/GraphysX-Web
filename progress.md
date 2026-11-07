@@ -5216,6 +5216,29 @@ overview was too far and the notice only appeared after a filter click; both fix
 the final run. What waits on AgentX (the alert's guess on the device record, enrichment as
 a collector request, an IoT join key) is listed in `docs/NETX_PROPOSAL.md` §3.3.
 
+
+## 2026-11-06 Ballsy physical shovel (local only)
+
+Recovered the three local Ballsy patches into isolated codex/ballsy-physical-shovel on UGBrutal because the devX source was inaccessible. Replaced the primary route/hold UI with controller-grip blade samples and direct pointer excavation. Persistent 609-vertex heightfield, matching trimesh, conserved elevation-driven lava, shared host authority, continuous shorelines, directional boost strips and revised circuit/HUD. Tests and known limits: docs/BALLSY_SHOVEL.md. No publication, merge, security changes or physical Quest acceptance.
+
+
+## 2026-11-06 : accès Quest privé Ballsy sous /shovel/
+
+Le build Ballsy sait monter ses sept appels relais sous BASE_URL. Une config Vite dédiée produit output/quest-shovel/dist sans toucher au dist principal. Deux tests racine/préfixe, les contrats rooms, typecheck et lint ciblé passent. Commit code a8d9fe2.
+
+Le proxy privé existant 192.168.2.12:4191 conserve les routes anciennes vers 4198 et ajoute /shovel/ avec le relais 4199. Même certificat, réseau et échéance du 7 novembre à 02:12:31 UTC. Le transport et son tunnel ont été redémarrés, les moteurs de salles ne l'ont pas été. Aucune modification sécurité, publication ou déploiement. Le navigateur normal refuse net::ERR_CERT_AUTHORITY_INVALID; aucun contournement. Contrôles de routage HTTP locaux réussis, pas de réception Quest physique. Voir docs/BALLSY_SHOVEL.md et output/quest-shovel.
+
+## 2026-11-07 : Ballsy, premier usage du géant par ballons de slime
+
+Demande utilisateur : « ensuite, pour une inteaction facile entre géant et la course, le géant va juste lancer des balounes de peintures/slime...   qui ralenti un peu les auto.. »
+
+Reprise locale de la Boucle du Volcan au commit 10bede8 sur codex/ballsy-physical-shovel. Le géant saisit un ballon visible, bouge sa main et relâche. La vitesse est mesurée sur les poses récentes, sans visée automatique ni impulsion minimale. Le PC de course décide du vol, du contact et de l'effet : plafond de vitesse réduit de 25 % pendant 2 secondes, puis une seconde d'immunité, sans cumul. La pelle physique reste un mode secondaire. Les coureurs et le circuit existants sont préservés.
+
+Ajout d'un modèle et de pools visuels bornés, d'un malus transitoire sans écriture documentaire ni reconstruction du corps Rapier, et d'annulations sur perte de suivi, pause, déconnexion, changement d'outil ou de manche. Le cadrage et les stocks sont adaptés à la souris sans déplacer la caméra XR. Le nouveau socle VR général reste une intégration future explicite.
+
+Réception finale : 85 tests Ballsy, 4 tests Rapier, 28 contrôles souris et relais HTTP, puis course complète, pelle desktop, préparation des manettes, entraînement et client de test clavier réussis. Le coureur touché passe à 6,153 m/s contre 8,113 m/s pour le témoin, puis retrouve 8,144 contre 8,030 après expiration. Deux vues actives : 73,25 FPS sans effets et 74,57 avec effets, p95 13,5 ms; cette différence ne constitue pas un gain de performance. Les captures ont conduit à corriger le cadrage géant et à dégager le contact des badges. Une vidéo de 8 secondes montre le vrai glisser-relâcher souris.
+
+Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur le port local 4202. Le palier Node global reste en échec sur les chemins Windows historiques; ce résultat n'est pas une qualification globale du produit. Les reçus détaillés et les limites sont dans docs/BALLSY_SLIME_TESTS.md. Aucun déploiement, fusion, changement de sécurité ou essai Quest physique.
 ## 2026-11-05 — Give Cyber Race an explicit Quest VR launch
 
 - The owner reached split-screen first and found the former goggles icon on a second try.
@@ -5247,3 +5270,59 @@ a collector request, an IoT join key) is listed in `docs/NETX_PROPOSAL.md` §3.3
 - The input tests cover signed roll, pitch and yaw, changing hands, and tracking loss.
   The Cyber Race smoke verifies the menu toggle survives reload. Quest 2 emulation in
   Hypertube verified banking both ways and recentering. Comfort remains a headset playtest.
+
+## 2026-11-07 - Integrate Ballsy with the shared VR foundation
+
+- User request: "keep going" after requesting VR hands/controllers and physical slime balloons.
+- Isolated worktree `GraphysX-Web-ballsy-vr`, branch `codex/ballsy-shared-vr`; local merge `6c9461f` preserves Ballsy `3c87859` and VR `f10b7e4` as parents. Both original worktrees remain unchanged.
+- Current remote main read through GitHub is `2e91d30`, six commits newer than the locally cached `61f67b7`; those later math/LLMx/Cyber Race changes are not imported into this prototype.
+- Shared asset registry now packages the three local XR input files into the isolated Ballsy build. A bounded loopback-only launcher on 4215 is prepared, separate from the existing VR lab on 4317 and former Quest gateway.
+- Shared-controller integration and real-relay synthetic XR QA are in progress. A physical Quest session and a trusted route to this exact build remain unverified; no certificate, firewall or publication change is authorized or performed.
+
+### Shared VR integration acceptance
+
+- Typecheck, global lint, isolated Ballsy build and 122 focused Ballsy/VR tests passed. The final shared scenario passed 50/50 with the real host/guest HTTP relay and synthetic native XR poses; historical slime passed 28/28. Loop, desktop shovel, controller setup, practice and the original develop-web-game client passed; captures inspected.
+- The same shared scenario passed on the fresh product build, followed by VR lab, Cyber Race and showroom. Added a local-only product-build wrapper and registered it in the full/affected verification plans; all 62 verification-system tests pass. No historical assertions were removed or weakened.
+- Full gate was attempted: 1063 Node tests, 1058 pass, 4 fail, 1 skipped, 0 cancelled. All four are the previously recorded Windows directory-fsync/checkpoint failures in world-fork/world-reliability; TypeScript, lint and main build pass. A final full Node rerun retains the same four failures. Both Rapier heightfield and six-preset material probes pass. This is NOT a globally green release.
+- Local preview started at 2026-11-07T05:07:20Z on 127.0.0.1:4215, expires 17:07:20Z, PID 45536. Race and giant HTTP 200, delivered race HTML hash matches tested build, existing VR lab 4317 still HTTP 200. No public deploy, external gateway, certificate or firewall change.
+- Remaining acceptance: select and verify an authorized trusted route for the physical Quest, then test permission/stereo/tracking/comfort/performance. The old 4191 gateway is stopped/expired and must not be bypassed. Later remote main 2e91d30 remains outside this isolated prototype. Details in docs/BALLSY_SHARED_VR.md; receipts under output/ballsy-shared-vr.
+
+## 2026-11-07 - Give Ballsy a tactile volcanic diorama
+
+- User priority: "mais surtout surtout le visuel!!!! graphysX-web power!!!". Scene-only work on `codex/permanent-vr-ballsy`, preserving the nine original physical entities byte-for-byte (hash regression against f00c01c).
+- Added native asphalt micro-materials, bank-following coral/ivory kerbs, reflectors, pitched roofs, folded two-tone foliage, layered faceted basalt and a sculpted volcano. Fixed-size slime visuals now have tied latex silhouettes and raised, settling splashes, without changing authority or slowdown.
+- Actual first renders exposed oversized asphalt texels and washed-out studio lighting. Second pass uses finer low-contrast grain, native studio intensity 0.3, directional warm sun and solid non-emissive balls. Departure/turn/bridge/mobile renders now show clear contact shadows and stronger volumes.
+- Giant-only sun correction attaches its target to the transformed tabletop and scales the existing shadow frustum/normal bias once, avoiding the former room-origin target and 76-metre shadow footprint on a miniature. No new light, shadow map, physics model or frame loop.
+- Typecheck and scoped lint pass; 26 focused tests pass. Full slime pool plus maximum legal lava reserves 32,612 inline vertices / 51,037 triangles, below native limits. Details and evolving integrated visual evidence: `docs/BALLSY_ART.md`. Final giant/slime visual acceptance and physical Quest performance remain explicitly separate.
+## 2026-11-07 - Prepare permanent VR and the dressed Ballsy course
+
+- Integrated prototype `4f55d3d` with remote main `6d478d3` in local merge `f00c01c`, preserving Math Lab v4 and the original Ballsy/VR histories. Other worktrees and services remain unchanged.
+- Added Ballsy to Games; the VR workshop remains in Workshops. Durable game rooms reuse the existing same-origin store service, with separate capabilities, bounded transient resources and explicit recovery from connection failures or expired invitations. No new listener, certificate, firewall rule or credential is required.
+- Added adaptive close framing, persistent individual finish feedback, bounded native celebration effects and real velocity-aware braking. Original physical road/colliders, mass, force and speed limits are preserved. Before/after native-pose captures measure about 2.5x larger balls at the start and 3.1x in the banked turn at 1280x720.
+- The first visual pass was rejected for coarse asphalt and washed-out light; the second adds fine native PBR grain, directional contact shadows and clearer diorama relief. A subsequent miniature-only shadow correction and compact direct-hit burst still require the third-build browser receipt.
+- Found a pre-existing isolated-build defect: asset/embed/vocabulary plugins ignored `--outDir`. Fixed resolved output routing with three regression contracts. The complete third build contains all 1101 public assets byte-for-byte plus four embed modules and world vocabulary.
+- Latest full Node run: 1222 tests, 1217 pass, 4 known Windows directory-fsync/checkpoint failures, 1 skip. No Ballsy test fails. Typecheck, global lint and complete product build pass. This is not an all-green local gate; Linux CI and final browser reception remain pending.
+- Stronger production HTTP acceptance compares both game pages, immediate bundles, the VR dynamic entry and local XR profiles; it requires same-origin relay status and foreign-origin refusal. A 200 SPA fallback cannot count as delivery. Production, physical Quest comfort and headset performance have not yet been accepted.
+
+
+### Ballsy art final reception, 2026-11-07
+
+- Final art sources pass 27 focused tests, including physical-entity hash parity, worst-case lava/slime budget and direct-hit burst/model immutability. Source changes are frozen.
+- Actual build-3 host/giant contact captures were opened: miniature self-shadow arcs are gone; the compact direct-hit burst is visible at 100 ms and absent at 600 ms while the two-second coat remains. The pointer/relay contact run passes without errors.
+- Installed unmodified develop-web-game client passed; its shot-0.png was opened and inspected against the text state (P1 moving at 8.03 m/s). Asphalt, ball identity and contact shadows are readable during real input. Receipts and inspected paths are recorded in docs/BALLSY_ART.md.
+- Art acceptance does not cover the separate close-finish UI fix, deployment, physical Quest comfort or headset performance. No new physics model, shadow map, loop, publication or push was introduced by the art work.
+
+## 2026-11-07 - Diagnose IWER shovel tracking and retain native input observability
+
+- Traced the strict shovel smoke failure on d90fad3 to IWER 2.8.0's ordinary controller spaces: finite grip/ray poses intentionally carry `emulatedPosition=true`. The native-frame guard correctly rejects them. No tracking, pose freshness, cancellation, or throw protection was removed.
+- The smoke now supplies explicit synthetic 6DoF poses through IWER's public `enableHostInput()` API, with valid grip/ray flags and button states. Grip and ray share the fixture pose; this is stereo/runtime integration evidence, not physical Quest tracking or pose calibration. Existing assertions and 45-second waits remain unchanged.
+- That valid fixture revealed a separate diagnostic regression: changing tools cancels the logical select, so the deduplicated input rig correctly suppresses its subsequent gameplay end. Count native session `selectstart`/`selectend` edges symmetrically instead, excluding squeeze and synthetic cancellations, with cleanup on session end/replacement/disposal. No synthetic gameplay release is added.
+- Validation: 38 focused contracts, typecheck, scoped lint, isolated Ballsy build, complete IWER shovel journey, and 50 shared-VR browser checks pass. An additional actual IWER lifecycle probe verifies source replacement, session exit/reentry and disposal with exact counts and no stale listeners. All ten shovel/shared-VR captures were opened and inspected; no browser errors.
+- Receipts: `output/iwer-shovel-validation/REPORT.md`; baseline pose trace: `output/iwer-shovel-diagnostic/pose-trace.json`. Product `dist/` was not rebuilt, no commit/push/deployment was made, and physical-headset comfort/performance remains untested. The full product gate is separate from these focused results.
+
+## 2026-11-07 - Complete the final Ballsy/VR manifest reception
+
+- Frozen source `48dec7d6f312ab9c73182d205cb7313a2644fd95`, complete canonical build: 116/118 scenarios pass (106/108 visual, 10/10 manifest Node), zero retries or omitted scenarios, 27m15s. The six priority repairs pass; live-browser passes 131/131 checks.
+- Only `island:153` fullscreen aria state and `island-workspace:52` retained map-control continuity fail, exactly as on independently built main `6d478d3eb64e26f1352fc9339762f3a1179000c3`. Assertions remain intact; their later steps are not claimed.
+- Official Windows gate remains red: 1237 unit tests, 1232 pass, four known fsync/checkpoint failures, one skip; typecheck/lint/build pass. Separate verified Linux CI `42400131610` on 48dec7d is green, 1239/1239 tests and 16/16 verification checks. The independent manifest diagnostic is not a green Windows gate.
+- All 1240 dist fingerprints, HEAD and tracked sources stayed unchanged through the run; lock released. Retained 351 PNGs with hashes, and actually inspected the key Ballsy/VR, phone, shared-platform and live-session captures listed in `output/final-regression-48dec7d/visual-review.md`. Final receipt: `output/final-regression-48dec7d/REPORT.md`; scope and baseline details: `docs/BALLSY_CAMERA_FINISH_QA.md`. No production or physical-headset acceptance claimed.

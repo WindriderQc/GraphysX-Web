@@ -50,12 +50,16 @@ function kidxDocuments(diskx?: { dataUrl?: string }, proposeUrl?: string): Plugi
  * untouched (see `publicDir` below) — `?host=legacy` still has the whole archive locally.
  */
 function productAssets(): Plugin {
+  let outDir: string;
+  let publicDir: string;
   return {
     name: "graphysx-product-assets",
     apply: "build",
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir);
+      publicDir = path.resolve(config.root, "public");
+    },
     async closeBundle() {
-      const outDir = path.resolve("dist");
-      const publicDir = path.resolve("public");
       const { files, bytes } = await productAssetManifest();
       for (const file of files) {
         const rel = file.replace(/^\//, "");
@@ -73,17 +77,23 @@ function productAssets(): Plugin {
  * every release build, so the gate, CI and deploy all ship `dist/embed/llmx-face.js` and `diskx.js` — they run `vite build`, not the npm script.
  */
 function faceEmbed(): Plugin {
+  let root: string;
+  let outDir: string;
   return {
     name: "graphysx-llmx-face-embed",
     apply: "build",
+    configResolved(config) {
+      root = config.root;
+      outDir = path.resolve(root, config.build.outDir, "embed");
+    },
     async closeBundle() {
-      await build({ configFile: path.resolve("vite.face.config.ts"), logLevel: "warn" });
+      await build({ root, configFile: path.resolve(root, "vite.face.config.ts"), build: { outDir }, logLevel: "warn" });
       // `<diskx-city>` for an AgentX Core page (vite.diskx.config.ts), shipped the same way.
-      await build({ configFile: path.resolve("vite.diskx.config.ts"), logLevel: "warn" });
-      await build({ configFile: path.resolve("vite.llmx.config.ts"), logLevel: "warn" });
+      await build({ root, configFile: path.resolve(root, "vite.diskx.config.ts"), build: { outDir }, logLevel: "warn" });
+      await build({ root, configFile: path.resolve(root, "vite.llmx.config.ts"), build: { outDir }, logLevel: "warn" });
       // `<graphysx-center>` (vite.center-host.config.ts): the host end of the Center bridge, for
       // the Core page that frames the Center (docs/NESTOR_PROPOSALS.md).
-      await build({ configFile: path.resolve("vite.center-host.config.ts"), logLevel: "warn" });
+      await build({ root, configFile: path.resolve(root, "vite.center-host.config.ts"), build: { outDir }, logLevel: "warn" });
     },
   };
 }
@@ -114,6 +124,8 @@ export default defineConfig(({ command, mode }) => {
         input: {
           main: path.resolve("index.html"),
           "cyber-race": path.resolve("cyber-race.html"),
+          ballsy: path.resolve("ballsy.html"),
+          "ballsy-giant": path.resolve("ballsy-giant.html"),
         },
       },
     },

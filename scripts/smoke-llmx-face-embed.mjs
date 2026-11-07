@@ -202,7 +202,7 @@ try {
   assert.deepEqual(compare.seen, [["scene-applied", 2], ["parameters-applied", 2], ["parameters-rejected", "out-of-range"], ["scene-rejected", "formula"]]);
   assert.deepEqual(compare.parameters, { a: 3, b: 1 }, "a refused value leaves the current one");
   assert.deepEqual(compare.scene.functions.map(fn => [fn.label, fn.expression]), [["f(x)", "x^2 - 2"], ["g(x)", "a*sin(b*x)"]]);
-  assert.deepEqual(compare.schemas, ["agentx.math-scene.v1", "agentx.math-scene.v2"]);
+  assert.deepEqual(compare.schemas, ["agentx.math-scene.v1", "agentx.math-scene.v2", "agentx.math-scene.v3", "agentx.math-scene.v4"]);
   const functionsLit = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => {
     const source = document.getElementById("functions").shadowRoot.querySelector("canvas");
     const probe = document.createElement("canvas");

@@ -11,6 +11,33 @@ import { findDeploymentBase } from "../scripts/plan-verification.mjs";
 const names = (plan) => plan.smokes.map((smoke) => smoke.name);
 
 describe("verification by changed area", () => {
+  it("checks Ballsy's isolated page and keeps shared rendering and build configuration conservative", () => {
+    const page = selectVerification(["ballsy.html", "src/ballsy-main.ts", "src/ballsy-input.ts", "src/ballsy-scene.ts", "src/ballsy.css"]);
+    assert.equal(page.mode, "targeted");
+    assert.equal(page.deploy, true);
+    assert.deepEqual(names(page), ["ballsy-setup", "ballsy-entrypoints", "ballsy-camera-finish", "ballsy-contact-visual", "ballsy-shared-vr", "ballsy-giant", "ballsy-volcano", "ballsy", "standalone", "product-assets", "asset-guard"]);
+    const cameraFinish = page.smokes.find(smoke => smoke.name === "ballsy-camera-finish");
+    assert.equal(cameraFinish.localOnly, true);
+    assert.ok(verificationExecution(page.smokes).local.includes(cameraFinish));
+    assert.deepEqual(names(selectVerification(["scripts/fixtures/ballsy-race-pilot.mjs"])), ["ballsy-camera-finish"]);
+    const sharedVr = page.smokes.find(smoke => smoke.name === "ballsy-shared-vr");
+    assert.equal(sharedVr.localOnly, true);
+    assert.equal(sharedVr.script, "scripts/smoke-ballsy-shared-vr-product.mjs");
+    assert.ok(verificationExecution(page.smokes).local.includes(sharedVr));
+    for (const file of ["ballsy-giant.html", "src/ballsy-giant.css"]) assert.deepEqual(names(selectVerification([file])), names(page));
+    const relay = selectVerification(["scripts/serve-ballsy.mjs"]);
+    assert.equal(relay.deploy, false);
+    assert.deepEqual(names(relay), ["ballsy-shared-vr", "ballsy-giant"]);
+    for (const file of ["server/ballsy-rooms.mjs", "server/ballsy-protocol.mjs", "server/ballsy-route.mjs", "server/ballsy-protocol.d.mts"]) {
+      const shippedRelay = selectVerification([file]);
+      assert.equal(shippedRelay.deploy, true);
+      assert.deepEqual(new Set(names(shippedRelay)), new Set([...names(page), "store-auth", "live-sessions-security"]));
+    }
+    assert.equal(selectVerification(["src/platform-host.ts"]).mode, "full");
+    assert.equal(selectVerification(["vite.config.ts"]).mode, "full");
+    assert.equal(selectVerification(["docs/BALLSY_ROADMAP.md"]).deploy, false);
+  });
+
   it("ships the Cyber Race page with its own smoke and keeps its local tools off the site", () => {
     const page = selectVerification(["cyber-race.html", "src/cyber-race/main.ts", "src/cyber-race/world.ts", "src/cyber-race/story.ts"]);
     assert.equal(page.mode, "targeted");

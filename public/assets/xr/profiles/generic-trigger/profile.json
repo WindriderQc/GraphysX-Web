@@ -1,0 +1,339 @@
+{
+  "profileId": "generic-trigger",
+  "fallbackProfileIds": [],
+  "layouts": {
+    "left": {
+      "selectComponentId": "xr-standard-trigger",
+      "components": {
+        "xr-standard-trigger": {
+          "type": "trigger",
+          "gamepadIndices": {
+            "button": 0
+          },
+          "rootNodeName": "xr-standard-trigger-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "xr-standard-trigger-value",
+              "minNodeName": "xr-standard-trigger-min",
+              "maxNodeName": "xr-standard-trigger-max"
+            }
+          }
+        },
+        "xr-standard-squeeze": {
+          "type": "squeeze",
+          "gamepadIndices": {
+            "button": 1
+          },
+          "rootNodeName": "xr-standard-squeeze-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "xr-standard-squeeze-value",
+              "minNodeName": "xr-standard-squeeze-min",
+              "maxNodeName": "xr-standard-squeeze-max"
+            }
+          }
+        },
+        "xr-standard-thumbstick": {
+          "type": "thumbstick",
+          "gamepadIndices": {
+            "button": 3
+          },
+          "rootNodeName": "xr-standard-thumbstick-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "xr-standard-thumbstick-value",
+              "minNodeName": "xr-standard-thumbstick-min",
+              "maxNodeName": "xr-standard-thumbstick-max"
+            }
+          }
+        },
+        "a-button": {
+          "type": "button",
+          "gamepadIndices": {
+            "button": 4
+          },
+          "rootNodeName": "a-button-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "a-button-value",
+              "minNodeName": "a-button-min",
+              "maxNodeName": "a-button-max"
+            }
+          }
+        },
+        "b-button": {
+          "type": "button",
+          "gamepadIndices": {
+            "button": 5
+          },
+          "rootNodeName": "b-button-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "b-button-value",
+              "minNodeName": "b-button-min",
+              "maxNodeName": "b-button-max"
+            }
+          }
+        }
+      },
+      "assetPath": "controller.gltf"
+    },
+    "right": {
+      "selectComponentId": "xr-standard-trigger",
+      "components": {
+        "xr-standard-trigger": {
+          "type": "trigger",
+          "gamepadIndices": {
+            "button": 0
+          },
+          "rootNodeName": "xr-standard-trigger-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "xr-standard-trigger-value",
+              "minNodeName": "xr-standard-trigger-min",
+              "maxNodeName": "xr-standard-trigger-max"
+            }
+          }
+        },
+        "xr-standard-squeeze": {
+          "type": "squeeze",
+          "gamepadIndices": {
+            "button": 1
+          },
+          "rootNodeName": "xr-standard-squeeze-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "xr-standard-squeeze-value",
+              "minNodeName": "xr-standard-squeeze-min",
+              "maxNodeName": "xr-standard-squeeze-max"
+            }
+          }
+        },
+        "xr-standard-thumbstick": {
+          "type": "thumbstick",
+          "gamepadIndices": {
+            "button": 3
+          },
+          "rootNodeName": "xr-standard-thumbstick-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "xr-standard-thumbstick-value",
+              "minNodeName": "xr-standard-thumbstick-min",
+              "maxNodeName": "xr-standard-thumbstick-max"
+            }
+          }
+        },
+        "a-button": {
+          "type": "button",
+          "gamepadIndices": {
+            "button": 4
+          },
+          "rootNodeName": "a-button-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "a-button-value",
+              "minNodeName": "a-button-min",
+              "maxNodeName": "a-button-max"
+            }
+          }
+        },
+        "b-button": {
+          "type": "button",
+          "gamepadIndices": {
+            "button": 5
+          },
+          "rootNodeName": "b-button-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "b-button-value",
+              "minNodeName": "b-button-min",
+              "maxNodeName": "b-button-max"
+            }
+          }
+        }
+      },
+      "assetPath": "controller.gltf"
+    },
+    "none": {
+      "selectComponentId": "xr-standard-trigger",
+      "components": {
+        "xr-standard-trigger": {
+          "type": "trigger",
+          "gamepadIndices": {
+            "button": 0
+          },
+          "rootNodeName": "xr-standard-trigger-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "xr-standard-trigger-value",
+              "minNodeName": "xr-standard-trigger-min",
+              "maxNodeName": "xr-standard-trigger-max"
+            }
+          }
+        },
+        "xr-standard-squeeze": {
+          "type": "squeeze",
+          "gamepadIndices": {
+            "button": 1
+          },
+          "rootNodeName": "xr-standard-squeeze-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "xr-standard-squeeze-value",
+              "minNodeName": "xr-standard-squeeze-min",
+              "maxNodeName": "xr-standard-squeeze-max"
+            }
+          }
+        },
+        "xr-standard-thumbstick": {
+          "type": "thumbstick",
+          "gamepadIndices": {
+            "button": 3
+          },
+          "rootNodeName": "xr-standard-thumbstick-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "xr-standard-thumbstick-value",
+              "minNodeName": "xr-standard-thumbstick-min",
+              "maxNodeName": "xr-standard-thumbstick-max"
+            }
+          }
+        },
+        "a-button": {
+          "type": "button",
+          "gamepadIndices": {
+            "button": 4
+          },
+          "rootNodeName": "a-button-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "a-button-value",
+              "minNodeName": "a-button-min",
+              "maxNodeName": "a-button-max"
+            }
+          }
+        },
+        "b-button": {
+          "type": "button",
+          "gamepadIndices": {
+            "button": 5
+          },
+          "rootNodeName": "b-button-value",
+          "visualResponses": {
+            "press": {
+              "componentProperty": "button",
+              "states": [
+                "default",
+                "touched",
+                "pressed"
+              ],
+              "valueNodeProperty": "transform",
+              "valueNodeName": "b-button-value",
+              "minNodeName": "b-button-min",
+              "maxNodeName": "b-button-max"
+            }
+          }
+        }
+      },
+      "assetPath": "controller.gltf"
+    }
+  }
+}
