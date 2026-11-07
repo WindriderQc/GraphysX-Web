@@ -1015,7 +1015,7 @@ export type AgentWorldEntityState = {
    * Formula field configuration plus the derived surface, so an agent can read the curve it
    * produced without re-implementing the archive maths.
    */
-  formula: (ResolvedAgentWorldFormula & { moleculeCount: number; minHeight: number; maxHeight: number }) | null;
+  formula: (ResolvedAgentWorldFormula & { moleculeCount: number; minHeight: number | null; maxHeight: number | null }) | null;
   /**
    * DNA configuration plus the live readout — expressed genome, per-tree hues, growth and
    * season phase — so an agent can read what evolution produced without replaying it.

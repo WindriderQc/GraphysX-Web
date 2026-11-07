@@ -1,6 +1,7 @@
 import {
   ACESFilmicToneMapping,
   AmbientLight,
+  Color,
   DirectionalLight,
   PerspectiveCamera,
   PointLight,
@@ -8,32 +9,91 @@ import {
   SRGBColorSpace,
   WebGLRenderer,
 } from "three";
-import { mathTimeline, readMathScene, type MathScene } from "./llmx-math-scene";
+import { mathTimeline, type MathScene } from "./llmx-math-scene";
 import { MathStage } from "./llmx-math-stage";
+import {
+  MATH_ORBIT_DEFAULT,
+  MATH_SCENE_V1,
+  MATH_SCENE_V2,
+  MATH_SCENE_V3,
+  MATH_SCENE_V4,
+  MATH_SURFACE_ORBIT,
+  clampOrbit,
+  describeMathScene,
+  mathFitDistance,
+  mathSurfaceFrame,
+  orbitPosition,
+  readParameterValues,
+  readStageScene,
+  type MathFunctionsScene,
+  type MathOrbit,
+  type MathPlotScene,
+  type MathPoint,
+  type MathSurfacesScene,
+} from "./llmx-math-functions";
+import { MathFunctionStage } from "./llmx-math-function-stage";
 import { stageView, type StageView } from "./llmx-stage-frame";
 
 /**
  * `<llmx-stage>`: the math picture on its own, for a host that shows it in its own pictures zone
- * rather than beside the docked mask. Same `agentx.math-scene.v1` contract and receipts as
- * `<llmx-face>`; no mask, no presence, no pointer gaze.
+ * rather than beside the docked mask. No mask, no presence.
  *
- * `scene` (`agentx.math-scene.v1`, or null) builds a counting or addition picture cube by cube.
- * Look-only: nothing in the picture is interactive.
+ * `scene` takes `agentx.math-scene.v1` (cubes: counting, additions), `agentx.math-scene.v2`
+ * (the same cube kinds, or `functions`: one to four functions y = f(x) drawn in the Math Game
+ * style and overlaid for comparison), `agentx.math-scene.v3` (v2 plus derivatives, tangents, areas and
+ * functions that use one another), `agentx.math-scene.v4` (v3 plus parametric curves, or `surfaces`:
+ * one or two z = f(x, y) in a box), or null to clear. `parameters` takes new values for the
+ * shown functions' parameters, so the host's sliders drive the picture without rebuilding it.
+ * Both are refused whole, never clamped. A functions picture can be turned by dragging (touch:
+ * sideways only, so the page still scrolls); a double click returns to the opening view.
  * Events: `llmx-stage-ready` (first frame drawn), `llmx-stage-error` (WebGL unavailable: the host
  * shows its own fallback), `llmx-scene-applied` / `llmx-scene-rejected` (the receipt for each
- * `scene` the host pushes), `llmx-scene-complete` once the picture has finished building.
+ * `scene`), `llmx-parameters-applied` / `llmx-parameters-rejected` (each `parameters`),
+ * `llmx-scene-complete` once the picture has finished building.
  */
 const FOV = 35;
 /** Seconds for the camera to settle when a new picture has a different size. */
 const VIEW_EASE = 0.35;
+/** Radians of orbit per pixel dragged. */
+const DRAG_RATE = 0.008;
 
 const reducedMotion = (): boolean => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
+export type PublicFunctionsScene = {
+  schema: typeof MATH_SCENE_V2 | typeof MATH_SCENE_V3 | typeof MATH_SCENE_V4;
+  kind: "functions";
+  functions: { name: string; label: string; expression: string; color: string }[];
+  parameters: { name: string; value: number; min: number; max: number }[];
+  /** null only for v4 curves alone, framed around themselves. */
+  x: [number, number] | null;
+  y: [number, number] | null;
+  /** v3 and v4. */
+  derivatives?: string[];
+  tangents?: { of: string; at: MathPoint }[];
+  areas?: { of: string; from: MathPoint; to: MathPoint }[];
+  /** v4 only. */
+  curves?: { name: string; label: string; x: string; y: string; color: string }[];
+  t?: [number, number];
+};
+export type PublicSurfacesScene = {
+  schema: typeof MATH_SCENE_V4;
+  kind: "surfaces";
+  surfaces: { name: string; label: string; expression: string; color: string }[];
+  parameters: { name: string; value: number; min: number; max: number }[];
+  x: [number, number];
+  y: [number, number];
+  z: [number, number] | null;
+};
+
 export class LlmXStageElement extends HTMLElement {
+  /** The contracts this element understands, so a host can pick a version or keep its own fallback. */
+  static readonly schemas: readonly string[] = Object.freeze([MATH_SCENE_V1, MATH_SCENE_V2, MATH_SCENE_V3, MATH_SCENE_V4]);
+
   private renderer: WebGLRenderer | null = null;
   private world: Scene | null = null;
   private camera: PerspectiveCamera | null = null;
   private stage: MathStage | null = null;
+  private functions: MathFunctionStage | null = null;
   private pending: unknown = undefined;
   private frame = 0;
   private last = 0;
@@ -41,39 +101,107 @@ export class LlmXStageElement extends HTMLElement {
   private visibleOnScreen = true;
   private view: StageView | null = null;
   private viewGoal: StageView = stageView(null, 1, FOV);
+  private orbit: MathOrbit = MATH_ORBIT_DEFAULT;
+  private distance = 0;
+  private distanceGoal = 0;
+  private drag: { id: number; x: number; y: number; touch: boolean } | null = null;
   private resize: ResizeObserver | null = null;
   private intersection: IntersectionObserver | null = null;
 
-  /** The math picture being shown, or null. */
-  get scene(): MathScene | null { return this.stage?.current?.scene ?? null; }
+  /** The picture being shown (cubes, or the functions with their current values), or null. */
+  get scene(): MathScene | PublicFunctionsScene | PublicSurfacesScene | null {
+    const shown = this.functions?.current;
+    if (shown) return shown.kind === "surfaces" ? publicSurfaces(shown, this.functions!.currentValues) : publicScene(shown, this.functions!.currentValues);
+    return this.stage?.current?.scene ?? null;
+  }
 
-  /** Show `agentx.math-scene.v1`, or clear it with null. Out-of-bounds pictures are refused whole
-   * (never clamped) and answered with `llmx-scene-rejected`. Set before connection, it applies on
-   * connection. */
+  /** Show a v1 or v2 picture, or clear it with null. Set before connection, it applies on connection. */
   set scene(value: unknown) {
-    if (!this.stage) {
+    if (!this.stage || !this.functions) {
       this.pending = value;
       return;
     }
     if (value === null || value === undefined) {
       this.stage.clear();
+      this.functions.clear();
       this.fit();
       return;
     }
-    const scene = readMathScene(value);
-    if (!scene) {
-      this.dispatchEvent(new CustomEvent("llmx-scene-rejected", { detail: { reason: "out-of-bounds" } }));
+    const read = readStageScene(value);
+    if (!read.ok) {
+      this.dispatchEvent(new CustomEvent("llmx-scene-rejected", { detail: { reason: read.reason, message: read.message } }));
       return;
     }
-    this.stage.show(mathTimeline(scene));
+    if (read.type === "cubes") {
+      this.functions.clear();
+      this.stage.show(mathTimeline(read.scene));
+      this.renderer?.setClearColor(0x000000, 0);
+      this.fit();
+      this.dispatchEvent(new CustomEvent("llmx-scene-applied", { detail: { scene: read.scene, cubes: this.stage.current?.cubes.length ?? 0 } }));
+      return;
+    }
+    this.stage.clear();
+    this.functions.show(read.scene, !reducedMotion());
+    this.renderer?.setClearColor(new Color(MathFunctionStage.background), 1);
+    this.orbit = this.opening();
     this.fit();
-    this.dispatchEvent(new CustomEvent("llmx-scene-applied", { detail: { scene, cubes: this.stage.current?.cubes.length ?? 0 } }));
+    this.dispatchEvent(new CustomEvent("llmx-scene-applied", { detail: this.functionsReceipt() }));
+  }
+
+  /** Current parameter values of the functions picture ({} when none is shown). */
+  get parameters(): Record<string, number> { return { ...(this.functions?.currentValues ?? {}) }; }
+
+  /** New values for some or all declared parameters, each inside its range, or nothing changes. */
+  set parameters(value: unknown) {
+    const shown = this.functions?.current;
+    const values = shown ? readParameterValues(shown, value) : null;
+    if (!shown || !values) {
+      this.dispatchEvent(new CustomEvent("llmx-parameters-rejected", { detail: { reason: shown ? "out-of-range" : "no-functions" } }));
+      return;
+    }
+    this.functions!.setValues(values);
+    this.dispatchEvent(new CustomEvent("llmx-parameters-applied", { detail: this.functionsReceipt() }));
+  }
+
+  /** The opening view: surfaces from higher up, the functions board nearly face on. */
+  private opening(): MathOrbit {
+    return this.functions?.current?.kind === "surfaces" ? MATH_SURFACE_ORBIT : MATH_ORBIT_DEFAULT;
+  }
+
+  private functionsReceipt() {
+    const shown = this.functions!.current!, values = this.functions!.currentValues;
+    if (shown.kind === "surfaces") {
+      const layout = this.functions!.currentSurfaceLayout!;
+      return {
+        scene: publicSurfaces(shown, values),
+        kind: "surfaces" as const,
+        surfaces: shown.surfaces.length,
+        molecules: layout.molecules.filter(molecule => molecule.position).length,
+        // The drawn windows: z is fitted to the heights unless the host fixed it.
+        z: [...layout.z],
+        text: describeMathScene(shown, values),
+      };
+    }
+    const layout = this.functions!.currentLayout!;
+    return {
+      scene: publicScene(shown, values),
+      kind: "functions" as const,
+      functions: shown.functions.length,
+      curves: shown.curves.length,
+      molecules: layout.molecules.filter(molecule => molecule.position).length,
+      x: [...layout.x],
+      y: [...layout.y],
+      // v3: what Core also computes, from the same formulas, for the host to compare.
+      tangents: layout.tangents.map(row => ({ of: shown.functions[row.fn].name, x: row.x, y: row.y, slope: row.slope })),
+      areas: layout.areas.map(row => ({ of: shown.functions[row.fn].name, from: row.from, to: row.to, value: row.value })),
+      text: describeMathScene(shown, values),
+    };
   }
 
   connectedCallback(): void {
     if (this.renderer) return;
     const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.innerHTML = "<style>:host{display:block;position:relative;contain:strict;min-width:48px;min-height:48px}canvas{position:absolute;inset:0;width:100%;height:100%;display:block}</style><canvas></canvas>";
+    root.innerHTML = "<style>:host{display:block;position:relative;contain:strict;min-width:48px;min-height:48px;touch-action:pan-y}canvas{position:absolute;inset:0;width:100%;height:100%;display:block}</style><canvas></canvas>";
     const canvas = root.querySelector("canvas")!;
     try {
       this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "low-power" });
@@ -86,7 +214,7 @@ export class LlmXStageElement extends HTMLElement {
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.setClearColor(0x000000, 0);
     this.world = new Scene();
-    this.camera = new PerspectiveCamera(FOV, 1, 0.1, 30);
+    this.camera = new PerspectiveCamera(FOV, 1, 0.1, 40);
     // The docked mask's light plan (llmx-face-element.ts), without its tinted rim and aura.
     this.world.add(new AmbientLight("#243040", 0.45));
     const key = new DirectionalLight("#c6d6f2", 2.8);
@@ -96,11 +224,17 @@ export class LlmXStageElement extends HTMLElement {
     fill.position.set(3.5, 3.7, 8.5);
     this.world.add(fill);
     this.stage = new MathStage();
-    this.world.add(this.stage.group);
+    this.functions = new MathFunctionStage();
+    this.world.add(this.stage.group, this.functions.group);
     this.resize = new ResizeObserver(() => this.fit());
     this.resize.observe(this);
     this.intersection = new IntersectionObserver(entries => { this.visibleOnScreen = entries.some(entry => entry.isIntersecting); });
     this.intersection.observe(this);
+    this.addEventListener("pointerdown", this.onPointerDown);
+    this.addEventListener("pointermove", this.onPointerMove);
+    this.addEventListener("pointerup", this.onPointerUp);
+    this.addEventListener("pointercancel", this.onPointerUp);
+    this.addEventListener("dblclick", this.onDoubleClick);
     this.fit();
     if (this.pending !== undefined) {
       const value = this.pending;
@@ -115,11 +249,44 @@ export class LlmXStageElement extends HTMLElement {
     cancelAnimationFrame(this.frame);
     this.resize?.disconnect();
     this.intersection?.disconnect();
+    this.removeEventListener("pointerdown", this.onPointerDown);
+    this.removeEventListener("pointermove", this.onPointerMove);
+    this.removeEventListener("pointerup", this.onPointerUp);
+    this.removeEventListener("pointercancel", this.onPointerUp);
+    this.removeEventListener("dblclick", this.onDoubleClick);
     this.stage?.dispose();
+    this.functions?.dispose();
     this.renderer?.dispose();
-    this.renderer = this.world = this.camera = this.stage = this.view = null;
+    this.renderer = this.world = this.camera = this.stage = this.functions = this.view = null;
     this.readyEmitted = false;
   }
+
+  private readonly onPointerDown = (event: PointerEvent): void => {
+    if (!this.functions?.active || event.button > 0) return;
+    this.drag = { id: event.pointerId, x: event.clientX, y: event.clientY, touch: event.pointerType === "touch" };
+    this.setPointerCapture?.(event.pointerId);
+  };
+
+  private readonly onPointerMove = (event: PointerEvent): void => {
+    const drag = this.drag;
+    if (!drag || drag.id !== event.pointerId) return;
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    // Touch turns sideways only: an upward swipe belongs to the page scroll.
+    this.orbit = clampOrbit({ yaw: this.orbit.yaw - dx * DRAG_RATE, pitch: this.orbit.pitch + (drag.touch ? 0 : dy * DRAG_RATE) });
+    this.fit();
+  };
+
+  private readonly onPointerUp = (event: PointerEvent): void => {
+    if (this.drag?.id === event.pointerId) this.drag = null;
+  };
+
+  private readonly onDoubleClick = (): void => {
+    if (!this.functions?.active) return;
+    this.orbit = this.opening();
+    this.fit();
+  };
 
   private fit(): void {
     if (!this.renderer || !this.camera) return;
@@ -127,16 +294,29 @@ export class LlmXStageElement extends HTMLElement {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, width * height > 400_000 ? 1.5 : 2));
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
-    this.viewGoal = stageView(this.stage?.current?.bounds ?? null, this.camera.aspect, FOV);
-    if (!this.view) this.view = this.viewGoal;
+    if (this.functions?.active) {
+      // The board's framing is fixed in stage units (a surface box's follows its windows); the orbit and aspect move the camera.
+      const box = this.functions.currentSurfaceLayout?.box;
+      this.distanceGoal = mathFitDistance(this.orbit, this.camera.aspect, FOV, 1.06, box ? mathSurfaceFrame(box) : undefined);
+      if (!this.distance) this.distance = this.distanceGoal;
+    } else {
+      this.distance = 0;
+      this.viewGoal = stageView(this.stage?.current?.bounds ?? null, this.camera.aspect, FOV);
+      if (!this.view) this.view = this.viewGoal;
+    }
     this.applyView();
   }
 
   private applyView(): void {
-    const camera = this.camera, view = this.view;
-    if (!camera || !view) return;
-    camera.position.set(view.x, view.y + 0.03, view.distance);
-    camera.lookAt(view.x, view.y, 0);
+    const camera = this.camera;
+    if (!camera) return;
+    if (this.functions?.active) {
+      camera.position.set(...orbitPosition(this.orbit, this.distance || this.distanceGoal));
+      camera.lookAt(0, 0, 0);
+    } else if (this.view) {
+      camera.position.set(this.view.x, this.view.y + 0.03, this.view.distance);
+      camera.lookAt(this.view.x, this.view.y, 0);
+    }
     camera.updateProjectionMatrix();
   }
 
@@ -144,14 +324,22 @@ export class LlmXStageElement extends HTMLElement {
     this.frame = requestAnimationFrame(this.tick);
     const delta = Math.min(0.1, Math.max(0, (now - this.last) / 1000));
     this.last = now;
-    if (document.hidden || !this.visibleOnScreen || !this.renderer || !this.world || !this.camera || !this.stage) return;
+    if (document.hidden || !this.visibleOnScreen || !this.renderer || !this.world || !this.camera || !this.stage || !this.functions) return;
     const reduced = reducedMotion();
-    // Reduced motion shows the finished picture at once instead of building it cube by cube.
-    const { completed } = this.stage.update(reduced ? 3600 : delta);
-    if (this.view) {
-      const k = reduced ? 1 : 1 - Math.exp(-delta / VIEW_EASE), goal = this.viewGoal, view = this.view;
-      this.view = { x: view.x + (goal.x - view.x) * k, y: view.y + (goal.y - view.y) * k, distance: view.distance + (goal.distance - view.distance) * k };
+    const k = reduced ? 1 : 1 - Math.exp(-delta / VIEW_EASE);
+    let completed: boolean;
+    if (this.functions.active) {
+      completed = this.functions.update(reduced ? 3600 : delta);
+      this.distance += (this.distanceGoal - this.distance) * k;
       this.applyView();
+    } else {
+      // Reduced motion shows the finished picture at once instead of building it cube by cube.
+      completed = this.stage.update(reduced ? 3600 : delta).completed;
+      if (this.view) {
+        const goal = this.viewGoal, view = this.view;
+        this.view = { x: view.x + (goal.x - view.x) * k, y: view.y + (goal.y - view.y) * k, distance: view.distance + (goal.distance - view.distance) * k };
+        this.applyView();
+      }
     }
     this.renderer.render(this.world, this.camera);
     if (completed) this.dispatchEvent(new CustomEvent("llmx-scene-complete", { detail: { scene: this.scene } }));
@@ -161,5 +349,42 @@ export class LlmXStageElement extends HTMLElement {
     }
   };
 }
+
+function publicScene(scene: MathFunctionsScene, values: Readonly<Record<string, number>>): PublicFunctionsScene {
+  const extras = scene.schema !== MATH_SCENE_V2 ? {
+    derivatives: scene.derivatives.map(row => row.of),
+    tangents: scene.tangents.map(({ of, at }) => ({ of, at })),
+    areas: scene.areas.map(({ of, from, to }) => ({ of, from, to })),
+  } : {};
+  const curves = scene.schema === MATH_SCENE_V4 && scene.curves.length ? {
+    curves: scene.curves.map(({ name, label, x, y, color }) => ({ name, label, x, y, color })),
+    t: [scene.t![0], scene.t![1]] as [number, number],
+  } : {};
+  return {
+    ...extras,
+    ...curves,
+    schema: scene.schema,
+    kind: "functions",
+    functions: scene.functions.map(({ name, label, expression, color }) => ({ name, label, expression, color })),
+    parameters: parametersOf(scene, values),
+    x: scene.x ? [scene.x[0], scene.x[1]] : null,
+    y: scene.y ? [scene.y[0], scene.y[1]] : null,
+  };
+}
+
+function publicSurfaces(scene: MathSurfacesScene, values: Readonly<Record<string, number>>): PublicSurfacesScene {
+  return {
+    schema: scene.schema,
+    kind: "surfaces",
+    surfaces: scene.surfaces.map(({ name, label, expression, color }) => ({ name, label, expression, color })),
+    parameters: parametersOf(scene, values),
+    x: [scene.x[0], scene.x[1]],
+    y: [scene.y[0], scene.y[1]],
+    z: scene.z ? [scene.z[0], scene.z[1]] : null,
+  };
+}
+
+const parametersOf = (scene: MathPlotScene, values: Readonly<Record<string, number>>) =>
+  scene.parameters.map(row => ({ ...row, value: values[row.name] ?? row.value }));
 
 if (!customElements.get("llmx-stage")) customElements.define("llmx-stage", LlmXStageElement);
