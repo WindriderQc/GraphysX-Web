@@ -46,11 +46,15 @@ export function worldVocabularyJson(): string {
  * and build its proposal prompt from the API as published rather than from a copy.
  */
 export function worldVocabulary(): Plugin {
+  let outDir: string;
   return {
     name: "graphysx-world-vocabulary",
     apply: "build",
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir);
+    },
     async closeBundle() {
-      const file = path.resolve(`dist${WORLD_VOCABULARY_PATH}`);
+      const file = path.join(outDir, WORLD_VOCABULARY_PATH);
       await mkdir(path.dirname(file), { recursive: true });
       const json = worldVocabularyJson();
       await writeFile(file, json);
