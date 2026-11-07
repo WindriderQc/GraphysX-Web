@@ -151,6 +151,43 @@ stage.scene = {
   `tangents: [{ of, x, y, slope }]` and `areas: [{ of, from, to, value }]`, for the host to compare
   with its own computation.
 
+### `agentx.math-scene.v4`: parametric curves and surfaces (AgentX #1270, phase 3)
+
+v4 is v3 plus parametric curves beside the functions, and a second kind, `surfaces`.
+
+```js
+stage.scene = {
+  schema: "agentx.math-scene.v4", kind: "functions",
+  functions: [],                                       // curves may also sit beside functions
+  curves: [{ name: "c", x: "r*cos(t)", y: "r*sin(t)" }],
+  parameters: [{ name: "r", value: 2, min: 0.5, max: 3 }],
+  x: null,                                             // curves alone: framed around themselves
+  t: [0, 6.283185307],
+};
+stage.scene = {
+  schema: "agentx.math-scene.v4", kind: "surfaces",
+  surfaces: [{ name: "z", expression: "a*(x^2 - y^2)" }],   // one or two
+  parameters: [{ name: "a", value: 0.5, min: -1, max: 1 }],
+  x: [-2, 2], y: [-2, 2],                              // z: [min, max] optional, else fitted
+};
+```
+
+- A curve is written in `t` and the parameters, and may use the scene's functions (`f(t)`,
+  `f'(t)`). Names are one letter other than x, y, t or e; functions and curves together are one to
+  four, and curves continue the palette after the functions. `t` is required with curves.
+- `x` is required with functions. With curves alone the host sends `x: null` explicitly; the stage
+  then fits both windows around the curves (all their points, unless a few run far away) and
+  widens one so a unit is as long across as up on the board: a circle stays round.
+- A surface is `z` or `f(x, y)` in x, y and the parameters, and uses no other formula. `x` and `y`
+  are required, `z` is optional (fitted to the heights otherwise), and a parameter cannot be named z.
+  The box keeps equal ground units: a window twice as wide as deep gives a floor twice as wide.
+- The surface is computed on a 40 × 40 grid from the formula, shaded with its wire lines, with a
+  20 × 20 molecule field on it. A height outside the z window, or where the formula is undefined,
+  leaves a hole: never a flattened plateau. The opening view is higher (`MATH_SURFACE_ORBIT`).
+- Refusal reasons add `curves` and `surfaces`. The functions receipts add `curves` (the count) and
+  the drawn `x` window; surface receipts carry `kind: "surfaces"`, `surfaces`, `molecules` and the
+  drawn `z` window. AgentX's grammar fits the same windows (`fitMathRange`, in the shared vectors).
+
 The mapping reuses `llmxFacePresentation`, so the docked mask and the Forge mask read the same;
 the embed adds listening level, token-rate thinking intensity and a compatibility pose for the
 older dock's `sleeping` signal. The gaze follows the pointer anywhere on the host page and

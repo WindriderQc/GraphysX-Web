@@ -6,7 +6,7 @@ import { importBrowserModule } from "./support/import-browser-module.mjs";
 // Grammar parity with AgentX (#1270): the vector file is a copy of AgentX's
 // core/public/js/math-expression.vectors.json, whose answers come from AgentX's own grammar.
 const vectors = JSON.parse(readFileSync(new URL("./fixtures/math-expression-vectors.json", import.meta.url), "utf8"));
-const { deriveMath, evaluateMath, fitMathY, formatMath, integrateMath, parseMathExpression, parseMathFunctions, sampleMath } =
+const { deriveMath, evaluateMath, expandMathCalls, fitMathRange, fitMathY, formatMath, integrateMath, parseMathExpression, parseMathFunctions, sampleMath } =
   await importBrowserModule(new URL("../src/math-expression.ts", import.meta.url));
 
 const close = (actual, expected, label) => {
@@ -84,6 +84,37 @@ test("the vertical window is fitted exactly as the 2D card fits it", () => {
     const scope = Object.fromEntries(row.parameters.map(p => [p.name, p.value]));
     const fitted = fitMathY(sampleMath(parsed.tree, row.x, scope, row.samples), row.declared);
     fitted.forEach((value, index) => close(value, row.fitted[index], `${row.expression} y[${index}]`));
+  }
+});
+
+test("parametric coordinates use the scene's functions, or are refused, exactly as AgentX does", () => {
+  assert.ok(vectors.curves.some(row => row.error) && vectors.curves.some(row => row.formats));
+  for (const row of vectors.curves) {
+    const label = `(${row.x}, ${row.y})`;
+    const read = parseMathFunctions(row.functions, ["x", "a"]);
+    assert.equal(read.ok, true, label);
+    const callable = row.functions.filter(fn => fn.name !== "y").map(fn => fn.name);
+    const trees = [row.x, row.y].map(source => {
+      const parsed = parseMathExpression(source, row.names, callable);
+      if (!parsed.ok) return parsed;
+      const expanded = expandMathCalls(parsed.tree, read.functions);
+      return expanded.ok ? { ok: true, tree: parsed.tree, expanded: expanded.tree } : expanded;
+    });
+    const refused = trees.find(item => !item.ok);
+    if (row.error) {
+      assert.equal(refused?.error.code, row.error, `${label} must be refused`);
+      continue;
+    }
+    assert.equal(refused, undefined, label);
+    assert.deepEqual(trees.map(item => formatMath(item.tree)), row.formats, `${label} canonical text`);
+    for (const { scope, values } of row.evaluations) trees.forEach((item, i) => close(evaluateMath(item.expanded, scope), values[i], `${label} at ${scope.t}`));
+  }
+});
+
+test("windows around curves and surfaces are fitted exactly as AgentX fits them", () => {
+  for (const row of vectors.ranges) {
+    const fitted = fitMathRange(row.values);
+    fitted.forEach((value, index) => close(value, row.fitted[index], `${JSON.stringify(row.values).slice(0, 30)}[${index}]`));
   }
 });
 

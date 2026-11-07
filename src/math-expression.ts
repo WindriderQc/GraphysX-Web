@@ -10,7 +10,7 @@
 
 export const MATH_EXPRESSION_LIMITS = Object.freeze({
   expression: 240, tokens: 160, nodes: 200, depth: 24, parameters: 6, magnitude: 1e6, samples: 480,
-  tangents: 4, areas: 4, expanded: 4000, derivative: 20000, integral: 1000,
+  tangents: 4, areas: 4, expanded: 4000, derivative: 20000, integral: 1000, surfaces: 2, grid: 40,
 });
 
 const FUNCTIONS: Readonly<Record<string, (value: number) => number>> = Object.freeze({
@@ -257,6 +257,25 @@ export function fitMathY(points: readonly (readonly [number, number | null])[], 
   return [low - pad, high + pad];
 }
 
+/**
+ * A window around every value (parametric coordinates, surface heights), so a narrow peak is never
+ * cut off; only when a few values run far away (an asymptote) does it keep the middle 96% instead.
+ * A little room is added on both sides. The same rule as AgentX's `fitRange`.
+ */
+export function fitMathRange(values: readonly (number | null)[]): [number, number] {
+  const sorted = values.filter((value): value is number => value !== null && Number.isFinite(value)).sort((a, b) => a - b);
+  if (!sorted.length) return [-10, 10];
+  let low = sorted[0], high = sorted[sorted.length - 1];
+  if (sorted.length >= 20) {
+    const at = (q: number): number => sorted[Math.round(q * (sorted.length - 1))];
+    const middle = at(0.98) - at(0.02);
+    if (middle > 1e-9 && high - low > middle * 10) { low = at(0.02); high = at(0.98); }
+  }
+  if (high - low < 1e-9) { low -= 1; high += 1; }
+  const pad = (high - low) * 0.08;
+  return [low - pad, high + pad];
+}
+
 // ---------------------------------------------------------------------------------------------
 // Derivatives (phase 3): d/dx of a validated tree by the usual rules, simplified enough to read.
 // The same rules, in the same order, as AgentX's `derive`, so both write the same derivative.
@@ -458,6 +477,44 @@ export function parseMathFunctions(rows: readonly MathFunctionSource[], names: r
     return { ...failure(error.code, error.message), name: error.fn };
   }
   return { ok: true, functions: rows.map(row => ({ name: row.name, tree: parsed.get(row.name)!, expanded: expanded.get(row.name)! })) };
+}
+
+/**
+ * `tree` with its references to the scene's functions replaced by their formulas, as
+ * {@link parseMathFunctions} does for a function: a parametric curve's coordinates may use f(t)
+ * or f'(t). `functions` are that function's rows. The same rule as AgentX's `expandCalls`.
+ */
+export function expandMathCalls(tree: MathNode, functions: readonly MathFunctionTrees[]): { ok: true; tree: MathNode } | MathFailure {
+  const bodies = new Map(functions.map(row => [row.name, row.expanded])), slopes = new Map<string, MathNode>();
+  const memo = new WeakMap<MathNode, number>();
+  const inline = (node: MathNode): MathNode => {
+    let result: MathNode;
+    if (node.op === "apply") {
+      let body = bodies.get(node.name);
+      if (!body) throw new MathStop("unknown_name", `Unknown function ${node.name}`, node.name);
+      if (node.prime) {
+        if (!slopes.has(node.name)) {
+          const slope = deriveMath(body);
+          if (mathWeight(slope, memo) > MATH_EXPRESSION_LIMITS.derivative) {
+            throw new MathStop("too_complex", `The derivative of ${node.name}(x) is too large to use`, node.name);
+          }
+          slopes.set(node.name, slope);
+        }
+        body = slopes.get(node.name)!;
+      }
+      result = substitute(body, inline(node.args[0]));
+    } else result = "args" in node ? { ...node, args: (node.args as MathNode[]).map(inline) } as MathNode : node;
+    if (mathWeight(result, memo) > MATH_EXPRESSION_LIMITS.expanded) {
+      throw new MathStop("too_complex", "Using the other functions makes this formula too large to draw", "");
+    }
+    return result;
+  };
+  try {
+    return { ok: true, tree: inline(tree) };
+  } catch (error) {
+    if (!(error instanceof MathStop)) throw error;
+    return failure(error.code, error.message);
+  }
 }
 
 /**

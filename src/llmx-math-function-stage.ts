@@ -28,18 +28,24 @@ import {
   MATH_FIELD,
   mathLayout,
   mathScope,
-  type MathFunctionsScene,
+  mathSurfaceLayout,
   type MathLayout,
+  type MathMolecule,
+  type MathPlotScene,
   type MathPolyline,
+  type MathSurfaceLayout,
+  type MathSurfacesScene,
 } from "./llmx-math-functions";
 
 /**
- * The Math Game look for `agentx.math-scene.v2`/`v3` functions inside `<llmx-stage>`: the recovered
+ * The Math Game look for `agentx.math-scene.v2`/`v3`/`v4` inside `<llmx-stage>`: the recovered
  * screen's backdrop board, green grid and three axes (x #f95f4c, y #ffe86b, z #78f0d0, from
  * `archive-math-lab.ts`), a molecule field riding every function, and one bright curve per
  * function on the front plane for precise reading. v3 adds, on the same plane, each derivative as a
  * dashed curve in its function's colour, light blue areas down to the x axis, and white tangents with
- * their point of contact. Driven by the element's frame loop.
+ * their point of contact. v4 adds parametric curves on the same plane, and surfaces z = f(x, y): a
+ * lit surface in a box with its grid, axes and a molecule field riding it. Driven by the element's
+ * frame loop.
  */
 const K = Object.freeze({
   background: "#060817",
@@ -67,9 +73,13 @@ export class MathFunctionStage {
   private readonly fixed = new Group();
   private readonly dynamic = new Group();
   private readonly molecules: InstancedMesh;
-  private scene: MathFunctionsScene | null = null;
+  private scene: MathPlotScene | null = null;
   private values: Record<string, number> = {};
   private layout: MathLayout | null = null;
+  private surfaceLayout: MathSurfaceLayout | null = null;
+  /** The molecules shown and the height they rise from. */
+  private field: readonly MathMolecule[] = [];
+  private floor = -MATH_BOARD.height / 2;
   private clock = 0;
   private finished = false;
   private readonly matrix = new Matrix4();
@@ -79,7 +89,7 @@ export class MathFunctionStage {
   private readonly color = new Color();
   private readonly far = new Color(K.far);
   /** Materials that fade in with the build, each with its final opacity. */
-  private fades: [MeshBasicMaterial, number][] = [];
+  private fades: [Material, number][] = [];
 
   constructor() {
     this.group.name = "LlmXMathFunctions";
@@ -104,12 +114,15 @@ export class MathFunctionStage {
   }
 
   get active(): boolean { return this.scene !== null; }
-  get current(): MathFunctionsScene | null { return this.scene; }
+  get current(): MathPlotScene | null { return this.scene; }
   get currentValues(): Readonly<Record<string, number>> { return this.values; }
+  /** The functions board's layout, or null while surfaces are shown. */
   get currentLayout(): MathLayout | null { return this.layout; }
+  /** The surfaces' layout, or null while the functions board is shown. */
+  get currentSurfaceLayout(): MathSurfaceLayout | null { return this.surfaceLayout; }
   static get background(): string { return K.background; }
 
-  show(scene: MathFunctionsScene, animate: boolean): void {
+  show(scene: MathPlotScene, animate: boolean): void {
     this.scene = scene;
     this.values = mathScope(scene);
     this.clock = animate ? 0 : BUILD_SECONDS + RISE_SECONDS;
@@ -130,6 +143,8 @@ export class MathFunctionStage {
   clear(): void {
     this.scene = null;
     this.layout = null;
+    this.surfaceLayout = null;
+    this.field = [];
     this.group.visible = false;
     disposeChildren(this.dynamic);
   }
@@ -149,10 +164,15 @@ export class MathFunctionStage {
   private rebuild(): void {
     const scene = this.scene;
     if (!scene) return;
-    const layout = mathLayout(scene, this.values);
-    this.layout = layout;
     disposeChildren(this.dynamic);
     this.fades = [];
+    if (scene.kind === "surfaces") { this.rebuildSurfaces(scene); return; }
+    const layout = mathLayout(scene, this.values);
+    this.layout = layout;
+    this.surfaceLayout = null;
+    this.fixed.visible = true;
+    this.field = layout.molecules;
+    this.floor = -MATH_BOARD.height / 2;
     const { width: W, height: H, depth: D } = MATH_BOARD;
     const front = D / 2 + 0.005, back = -D / 2 - 0.17;
 
@@ -207,6 +227,18 @@ export class MathFunctionStage {
       }
     });
 
+    // v4 parametric curves, on the same plane as the functions, in the colours that follow theirs.
+    scene.curves.forEach((curve, index) => {
+      const material = this.fading(curve.color, 0.96);
+      for (const line of layout.curveLines[index]) this.dynamic.add(new Mesh(ribbon(line, CURVE_WIDTH, front + 0.006 + 0.002 * index), material));
+      const at = layout.curveLabelAt[index];
+      if (at) {
+        const label = textSprite(curve.label, curve.color, LABEL_HEIGHT * 1.1);
+        label.position.set(Math.min(W / 2 + 0.05, at[0] + 0.06) + label.scale.x / 2, at[1] + 0.07, front + 0.02);
+        this.dynamic.add(label);
+      }
+    });
+
     // Tangents over everything: the line, then a ringed dot where it touches the curve.
     for (const tangent of layout.tangents) {
       if (tangent.segment) {
@@ -238,22 +270,134 @@ export class MathFunctionStage {
     yLetter.position.set(layout.axisX + 0.1, H / 2 + 0.08, front);
     this.dynamic.add(xLetter, yLetter);
 
-    const lanes = MATH_FIELD.lanes;
-    layout.molecules.forEach((molecule, index) => {
-      this.color.set(scene.functions[molecule.fn].color).lerp(this.far, 0.55 * (1 - molecule.lane / Math.max(1, lanes - 1)));
-      this.molecules.setColorAt(index, this.color);
+    const lanes = MATH_FIELD.lanes, colors = [...scene.functions, ...scene.curves].map(row => row.color);
+    this.paintField(molecule => this.color.set(colors[molecule.fn]).lerp(this.far, 0.55 * (1 - molecule.lane / Math.max(1, lanes - 1))));
+  }
+
+  /** Surfaces in their box: grid on the floor and the two far walls, axes, the lit surfaces with a wire mesh, ticks and names. */
+  private rebuildSurfaces(scene: MathSurfacesScene): void {
+    const layout = mathSurfaceLayout(scene, this.values);
+    this.surfaceLayout = layout;
+    this.layout = null;
+    this.fixed.visible = false;
+    this.field = layout.molecules;
+    const { width: W, height: H, depth: D } = layout.box, floor = -H / 2;
+    this.floor = floor;
+
+    const grid: number[] = [];
+    for (const tick of layout.xTicks) grid.push(tick.at, floor, -D / 2, tick.at, floor, D / 2, tick.at, floor, -D / 2, tick.at, H / 2, -D / 2);
+    for (const tick of layout.yTicks) grid.push(-W / 2, floor, tick.at, W / 2, floor, tick.at, -W / 2, floor, tick.at, -W / 2, H / 2, tick.at);
+    for (const tick of layout.zTicks) grid.push(-W / 2, tick.at, -D / 2, W / 2, tick.at, -D / 2, -W / 2, tick.at, -D / 2, -W / 2, tick.at, D / 2);
+    this.dynamic.add(segments(grid, K.grid, 0.26));
+    const edges = [
+      -W / 2, floor, -D / 2, W / 2, floor, -D / 2, W / 2, floor, -D / 2, W / 2, floor, D / 2, W / 2, floor, D / 2, -W / 2, floor, D / 2,
+      -W / 2, floor, D / 2, -W / 2, floor, -D / 2, -W / 2, floor, -D / 2, -W / 2, H / 2, -D / 2, W / 2, floor, -D / 2, W / 2, H / 2, -D / 2,
+      -W / 2, floor, D / 2, -W / 2, H / 2, D / 2,
+    ];
+    this.dynamic.add(segments(edges, K.boardEdge, 0.4));
+
+    // The axes through zero when it is in view: x across, y going away, z up.
+    const [ox, oy, oz] = layout.origin;
+    this.dynamic.add(bar([W, AXIS, AXIS], [0, oy, oz], K.axisX));
+    this.dynamic.add(bar([AXIS, AXIS, D], [ox, oy, 0], K.axisY));
+    this.dynamic.add(bar([AXIS, H, AXIS], [ox, 0, oz], K.axisZ));
+
+    const n = layout.grid, row = n + 1, low = new Color(K.far), high = new Color(), shade = new Color();
+    scene.surfaces.forEach((surface, fn) => {
+      const points = layout.grids[fn];
+      const positions = new Float32Array(row * row * 3), colors = new Float32Array(row * row * 3), indices: number[] = [];
+      high.set(surface.color);
+      points.forEach((point, k) => {
+        if (!point) return;
+        positions.set(point, k * 3);
+        // Lower is darker, so the shape reads even before the surface is turned.
+        shade.copy(low).lerp(high, 0.35 + 0.65 * ((point[1] - floor) / H));
+        colors.set([shade.r, shade.g, shade.b], k * 3);
+      });
+      for (let j = 0; j < n; j += 1) for (let i = 0; i < n; i += 1) {
+        const a = j * row + i, b = a + 1, c = a + row, d = c + 1;
+        if (points[a] && points[b] && points[c]) indices.push(a, b, c);
+        if (points[b] && points[d] && points[c]) indices.push(b, d, c);
+      }
+      const geometry = new BufferGeometry();
+      geometry.setAttribute("position", new BufferAttribute(positions, 3));
+      geometry.setAttribute("color", new BufferAttribute(colors, 3));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      const material = new MeshStandardMaterial({ vertexColors: true, side: DoubleSide, transparent: true, opacity: 0, roughness: 0.55,
+        metalness: 0.08, emissive: surface.color, emissiveIntensity: 0.12, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+      this.fades.push([material, 0.88]);
+      this.dynamic.add(new Mesh(geometry, material));
+
+      // A wire mesh every few grid lines, in the surface's colour, for reading the shape.
+      const wire: number[] = [];
+      for (let j = 0; j <= n; j += 4) for (let i = 0; i < n; i += 1) {
+        const a = points[j * row + i], b = points[j * row + i + 1];
+        if (a && b) wire.push(...a, ...b);
+      }
+      for (let i = 0; i <= n; i += 4) for (let j = 0; j < n; j += 1) {
+        const a = points[j * row + i], b = points[(j + 1) * row + i];
+        if (a && b) wire.push(...a, ...b);
+      }
+      const lines = segments(wire, surface.color, 0);
+      this.fades.push([lines.material as Material, 0.7]);
+      this.dynamic.add(lines);
+
+      // The name beside the highest point of the far edge, where it is not hidden by the surface.
+      let best: readonly [number, number, number] | null = null;
+      for (let i = 0; i <= n; i += 1) {
+        const point = points[n * row + i];
+        if (point && (!best || point[1] > best[1])) best = point;
+      }
+      best ??= points.find(point => point) ?? null;
+      if (best) {
+        const label = textSprite(surface.label, surface.color, LABEL_HEIGHT * 1.15);
+        label.position.set(best[0], Math.min(H / 2 + 0.12, best[1] + 0.16 + 0.18 * fn), best[2]);
+        this.dynamic.add(label);
+      }
     });
+
+    for (const tick of layout.xTicks) {
+      const label = textSprite(tick.text, K.text, LABEL_HEIGHT);
+      label.position.set(tick.at, floor - 0.06, D / 2 + 0.16);
+      this.dynamic.add(label);
+    }
+    for (const tick of layout.yTicks) {
+      const label = textSprite(tick.text, K.text, LABEL_HEIGHT);
+      label.position.set(W / 2 + 0.1 + label.scale.x / 2, floor - 0.06, tick.at);
+      this.dynamic.add(label);
+    }
+    for (const tick of layout.zTicks) {
+      const label = textSprite(tick.text, K.text, LABEL_HEIGHT);
+      label.position.set(-W / 2 - 0.08 - label.scale.x / 2, tick.at, -D / 2);
+      this.dynamic.add(label);
+    }
+    const letters: [string, string, [number, number, number]][] = [
+      ["x", K.axisX, [W / 2 + 0.22, oy, oz]], ["y", K.axisY, [ox, oy, -D / 2 - 0.22]], ["z", K.axisZ, [ox, H / 2 + 0.16, oz]],
+    ];
+    for (const [text, color, at] of letters) {
+      const letter = textSprite(text, color, LABEL_HEIGHT * 1.2);
+      letter.position.set(...at);
+      this.dynamic.add(letter);
+    }
+
+    const colors = scene.surfaces.map(row => row.color);
+    this.paintField(molecule => this.color.set(colors[molecule.fn]).lerp(this.far, 0.2));
+  }
+
+  private paintField(paint: (molecule: MathMolecule) => Color): void {
+    this.molecules.count = this.field.length;
+    this.field.forEach((molecule, index) => this.molecules.setColorAt(index, paint(molecule)));
     if (this.molecules.instanceColor) this.molecules.instanceColor.needsUpdate = true;
   }
 
   /** Molecules rise from the floor column by column while building, then sit on their curve. */
   private writeMolecules(): void {
-    const layout = this.layout;
-    if (!layout) return;
-    const floor = -MATH_BOARD.height / 2, columns = MATH_FIELD.columns + 1;
-    layout.molecules.forEach((molecule, index) => {
+    if (!this.scene) return;
+    const floor = this.floor, columns = MATH_FIELD.columns + 1;
+    this.field.forEach((molecule, index) => {
       const column = index % columns;
-      const start = (column / columns) * BUILD_SECONDS;
+      const start = (molecule.start ?? column / columns) * BUILD_SECONDS;
       const k = Math.max(0, Math.min(1, (this.clock - start) / RISE_SECONDS));
       const e = 1 - Math.pow(1 - k, 3);
       if (!molecule.position || k <= 0) {
