@@ -3,6 +3,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
+  CircleGeometry,
   Color,
   DoubleSide,
   Group,
@@ -33,10 +34,12 @@ import {
 } from "./llmx-math-functions";
 
 /**
- * The Math Game look for `agentx.math-scene.v2` functions inside `<llmx-stage>`: the recovered
+ * The Math Game look for `agentx.math-scene.v2`/`v3` functions inside `<llmx-stage>`: the recovered
  * screen's backdrop board, green grid and three axes (x #f95f4c, y #ffe86b, z #78f0d0, from
  * `archive-math-lab.ts`), a molecule field riding every function, and one bright curve per
- * function on the front plane for precise reading. Driven by the element's frame loop.
+ * function on the front plane for precise reading. v3 adds, on the same plane, each derivative as a
+ * dashed curve in its function's colour, light blue areas down to the x axis, and white tangents with
+ * their point of contact. Driven by the element's frame loop.
  */
 const K = Object.freeze({
   background: "#060817",
@@ -47,6 +50,9 @@ const K = Object.freeze({
   axisY: "#ffe86b",
   axisZ: "#78f0d0",
   text: "#dceaf5",
+  tangent: "#f4f7fb",
+  /** Areas: the board edge's light blue, so a shaded area stands out from its own function's molecules. */
+  area: "#9fd7ff",
   /** Back lanes fade toward this, so the field reads as depth. */
   far: "#101a33",
 });
@@ -72,7 +78,8 @@ export class MathFunctionStage {
   private readonly rotation = new Quaternion();
   private readonly color = new Color();
   private readonly far = new Color(K.far);
-  private curveMaterials: MeshBasicMaterial[] = [];
+  /** Materials that fade in with the build, each with its final opacity. */
+  private fades: [MeshBasicMaterial, number][] = [];
 
   constructor() {
     this.group.name = "LlmXMathFunctions";
@@ -133,7 +140,7 @@ export class MathFunctionStage {
     this.clock += delta;
     if (this.clock <= BUILD_SECONDS + RISE_SECONDS + delta) this.writeMolecules();
     const fade = Math.max(0, Math.min(1, (this.clock - BUILD_SECONDS * 0.5) / 0.4));
-    for (const material of this.curveMaterials) material.opacity = 0.96 * fade;
+    for (const [material, opacity] of this.fades) material.opacity = opacity * fade;
     const completed = !this.finished && this.clock >= BUILD_SECONDS + RISE_SECONDS;
     if (completed) this.finished = true;
     return completed;
@@ -145,7 +152,7 @@ export class MathFunctionStage {
     const layout = mathLayout(scene, this.values);
     this.layout = layout;
     disposeChildren(this.dynamic);
-    this.curveMaterials = [];
+    this.fades = [];
     const { width: W, height: H, depth: D } = MATH_BOARD;
     const front = D / 2 + 0.005, back = -D / 2 - 0.17;
 
@@ -164,9 +171,20 @@ export class MathFunctionStage {
     this.dynamic.add(bar([AXIS, H, AXIS], [layout.axisX, 0, front], K.axisY));
     this.dynamic.add(bar([AXIS, AXIS, D + 0.35], [layout.axisX, layout.axisY, 0], K.axisZ));
 
+    // Areas first, behind the curves: from each curve down (or up) to the x axis between the bounds.
+    // The molecules behind carry the function's colour, so the fill has its own; the ends keep the function's.
+    layout.areas.forEach(area => {
+      const color = scene.functions[area.fn].color, material = this.fading(K.area, 0.42), edge = this.fading(color, 0.96);
+      for (const band of area.bands) {
+        this.dynamic.add(new Mesh(strip(band, front - 0.004), material));
+        for (const [x, top, bottom] of [band[0], band[band.length - 1]]) {
+          if (Math.abs(top - bottom) > 1e-6) this.dynamic.add(new Mesh(ribbon([[x, bottom], [x, top]], CURVE_WIDTH * 0.5, front - 0.002), edge));
+        }
+      }
+    });
+
     scene.functions.forEach((fn, index) => {
-      const material = new MeshBasicMaterial({ color: fn.color, transparent: true, opacity: 0, side: DoubleSide, depthWrite: false });
-      this.curveMaterials.push(material);
+      const material = this.fading(fn.color, 0.96);
       for (const line of layout.curves[index]) this.dynamic.add(new Mesh(ribbon(line, CURVE_WIDTH, front + 0.002 * index), material));
       const at = layout.labelAt[index];
       if (at) {
@@ -175,6 +193,33 @@ export class MathFunctionStage {
         this.dynamic.add(label);
       }
     });
+
+    scene.derivatives.forEach((row, index) => {
+      const color = scene.functions[row.fn].color, material = this.fading(color, 0.96);
+      for (const line of layout.derivativeCurves[index]) {
+        for (const dash of dashes(line)) this.dynamic.add(new Mesh(ribbon(dash, CURVE_WIDTH * 0.8, front + 0.01 + 0.002 * index), material));
+      }
+      const at = layout.derivativeLabelAt[index];
+      if (at) {
+        const label = textSprite(row.label, color, LABEL_HEIGHT * 1.1);
+        label.position.set(Math.min(W / 2 + 0.05, at[0] + 0.06) + label.scale.x / 2, at[1] + 0.07, front + 0.02);
+        this.dynamic.add(label);
+      }
+    });
+
+    // Tangents over everything: the line, then a ringed dot where it touches the curve.
+    for (const tangent of layout.tangents) {
+      if (tangent.segment) {
+        this.dynamic.add(new Mesh(ribbon([tangent.segment[0], tangent.segment[1]], CURVE_WIDTH * 0.7, front + 0.018), this.fading(K.tangent, 0.95)));
+      }
+      if (tangent.point) {
+        const ring = new Mesh(new CircleGeometry(0.052, 24), this.fading(K.tangent, 1));
+        const dot = new Mesh(new CircleGeometry(0.034, 24), this.fading(scene.functions[tangent.fn].color, 1));
+        ring.position.set(tangent.point[0], tangent.point[1], front + 0.022);
+        dot.position.set(tangent.point[0], tangent.point[1], front + 0.024);
+        this.dynamic.add(ring, dot);
+      }
+    }
 
     // Tick numbers along the front edges, and the axis letters.
     for (const tick of layout.xTicks) {
@@ -225,6 +270,12 @@ export class MathFunctionStage {
     this.molecules.instanceMatrix.needsUpdate = true;
   }
 
+  private fading(color: string, opacity: number): MeshBasicMaterial {
+    const material = new MeshBasicMaterial({ color, transparent: true, opacity: 0, side: DoubleSide, depthWrite: false });
+    this.fades.push([material, opacity]);
+    return material;
+  }
+
   dispose(): void {
     disposeChildren(this.dynamic);
     disposeChildren(this.fixed);
@@ -269,6 +320,43 @@ function ribbon(line: MathPolyline, width: number, z: number): BufferGeometry {
       indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     }
   }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new BufferAttribute(new Float32Array(positions), 3));
+  geometry.setIndex(indices);
+  return geometry;
+}
+
+/** The polyline cut into dashes of `dash` units with `gap` units between them. */
+function dashes(line: MathPolyline, dash = 0.075, gap = 0.05): [number, number][][] {
+  const result: [number, number][][] = [];
+  let current: [number, number][] | null = [[line[0][0], line[0][1]]], on = true, left = dash;
+  for (let i = 1; i < line.length; i += 1) {
+    let [ax, ay] = line[i - 1];
+    const [bx, by] = line[i];
+    let length = Math.hypot(bx - ax, by - ay);
+    while (length > left) {
+      const k = left / length, cx = ax + (bx - ax) * k, cy = ay + (by - ay) * k;
+      if (on) { current!.push([cx, cy]); result.push(current!); current = null; } else current = [[cx, cy]];
+      on = !on;
+      ax = cx; ay = cy; length -= left; left = on ? dash : gap;
+    }
+    left -= length;
+    if (on) current!.push([bx, by]);
+  }
+  if (on && current && current.length > 1) result.push(current);
+  return result;
+}
+
+/** A filled band between two heights per column: [x, top, bottom] → triangles. */
+function strip(columns: readonly (readonly [number, number, number])[], z: number): BufferGeometry {
+  const positions: number[] = [], indices: number[] = [];
+  columns.forEach(([x, top, bottom], i) => {
+    positions.push(x, top, z, x, bottom, z);
+    if (i > 0) {
+      const a = (i - 1) * 2;
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  });
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new BufferAttribute(new Float32Array(positions), 3));
   geometry.setIndex(indices);

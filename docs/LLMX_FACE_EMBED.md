@@ -121,6 +121,36 @@ stage.parameters = { a: -1.5 }; // the host's sliders: no rebuild
   (`src/llmx-math-functions.ts`); rendering is `src/llmx-math-function-stage.ts`.
 - The docked `<llmx-face>` keeps v1 cubes only.
 
+### `agentx.math-scene.v3`: calculus and functions using functions (AgentX #1270, phase 3)
+
+v3 is v2 plus three optional lists, and functions may use one another. `LlmXStageElement.schemas`
+includes it when the loaded element draws them; a host that needs v3 keeps its 2D fallback otherwise.
+
+```js
+stage.scene = {
+  schema: "agentx.math-scene.v3", kind: "functions",
+  functions: [{ name: "f", expression: "x^3 - 3*x" }, { name: "g", expression: "f(x - 1) + 1" }],
+  parameters: [{ name: "p", value: 1, min: -2, max: 2 }, { name: "b", value: 1.5, min: 0, max: 2 }],
+  x: [-2.5, 2.5],
+  derivatives: ["f"],                      // f'(x), a dashed curve in f's colour
+  tangents: [{ of: "f", at: "p" }],        // white tangent at x = p, moving with the slider
+  areas: [{ of: "f", from: 0, to: "b" }],  // light blue area down to the x axis
+};
+```
+
+- A formula may name another function of the scene, `f(…)` or its derivative `f'(…)`. The stage
+  substitutes them (`parseMathFunctions` in `src/math-expression.ts`); a circle, an unknown name or
+  a formula that grows too large is refused with reason `formula`. v2 keeps functions standalone.
+- Derivatives are symbolic (`deriveMath`), slopes come from them, and areas use Simpson's rule
+  (`integrateMath`), all from the validated formulas: nothing is taken from the host. AgentX's
+  grammar does the same; the shared vector file now also covers derivatives and function systems.
+- A tangent point or area bound is a declared parameter's name or a number. It must lie inside the
+  x window, and a parameter's whole range must too. A tangent where the function or its derivative
+  is undefined, and an area across an undefined stretch, are not drawn as numbers (`null`).
+- Refusal reasons add `derivatives`, `tangents` and `areas`. The applied and parameter receipts add
+  `tangents: [{ of, x, y, slope }]` and `areas: [{ of, from, to, value }]`, for the host to compare
+  with its own computation.
+
 The mapping reuses `llmxFacePresentation`, so the docked mask and the Forge mask read the same;
 the embed adds listening level, token-rate thinking intensity and a compatibility pose for the
 older dock's `sleeping` signal. The gaze follows the pointer anywhere on the host page and
