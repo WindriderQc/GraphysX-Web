@@ -150,16 +150,20 @@ try {
   }));
 
   const importedJson = { ...definition, id: "top20-json-import", label: "Top 20 JSON Import" };
+  // The temporary input is removed on native chooser cancellation. Listen before
+  // the real button click, then provide the file through that exact chooser.
+  const jsonChooser = editor.waitForEvent("filechooser", { timeout: SMOKE_TIMEOUT });
   await editor.click('[data-gx-import="scene"]');
-  await editor.setInputFiles('input[type="file"]', {
+  await (await jsonChooser).setFiles({
     name: "top20.graphysx.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(importedJson)),
   });
   await editor.waitForFunction(() => window.__GRAPHYSX__.state()?.world?.id === "top20-json-import", null, { timeout: SMOKE_TIMEOUT });
   const xml = await editor.evaluate(() => window.__GRAPHYSX__.exportLegacyXml().value?.xml ?? "");
+  const xmlChooser = editor.waitForEvent("filechooser", { timeout: SMOKE_TIMEOUT });
   await editor.click('[data-gx-import="scene"]');
-  await editor.setInputFiles('input[type="file"]', {
+  await (await xmlChooser).setFiles({
     name: "top20-import.scenenet.xml",
     mimeType: "application/xml",
     buffer: Buffer.from(xml),
