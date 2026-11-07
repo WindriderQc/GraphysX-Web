@@ -113,6 +113,12 @@ Reference implementations inspected locally:
 
 ## Running and validation
 
+For a simple Windows preview of the existing build, double-click `Start-VR-Lab.cmd`
+or run `node scripts/serve-vr-lab.mjs`. It binds only `127.0.0.1:4317`, exposes no
+agent/API relay, refuses to replace an occupied port, and stops after 12 hours or Ctrl+C.
+Use `VR_LAB_PORT` for another local port and `VR_LAB_HOURS` for a duration up to 24 hours.
+This preview does not rebuild source changes. Its launcher smoke is
+`node --test scripts/smoke-vr-preview.mjs` and requires an existing production build.
 Use the repository's Node version and installed dependencies. Run normal `npm run dev`, then
 open the printed localhost URL with `?app=vr-lab`. Browser-local localhost can test desktop
 fallback; a Quest visiting a computer's plain LAN HTTP address cannot use immersive WebXR.
