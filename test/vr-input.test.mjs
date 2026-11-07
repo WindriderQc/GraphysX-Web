@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Group, Vector3 } from 'three';
+import { Group, Matrix4, Vector3 } from 'three';
 import { VrInputRig } from '../src/xr/vr-input.ts';
 
 function fixture(t) {
@@ -154,4 +154,25 @@ test('native release arriving before the next frame is cancelled when pose is al
   f.emit(0, 'squeezestart'); f.spaces[0].grip.visible = false; f.emit(0, 'squeezeend');
   assert.equal(f.events.at(-1).phase, 'end'); assert.equal(f.events.at(-1).cancelled, true);
   assert.equal(f.rig.slots[0].grabbing, false);
+});
+
+test('partial hand visibility compacts factory instances without stale or omitted joints', t => {
+  const f = fixture(t); f.rig.setActive(true); f.connect(0, 'right', true);
+  const hand=f.spaces[0].hand;
+  const primitive=f.rig.slots[0].modelRoot.children[0].motionController;
+  const matrix=new Matrix4();
+  primitive.joints.forEach((name,index)=>hand.joints[name].position.set(index,index*.1,-.7));
+  f.rig.group.updateMatrixWorld(true); assert.equal(primitive.handMesh.count,25);
+  hand.joints.wrist.visible=false;hand.joints['middle-finger-metacarpal'].visible=false;
+  f.rig.group.updateMatrixWorld(true);
+  const visible=primitive.joints.filter(name=>hand.joints[name].visible);
+  assert.equal(primitive.handMesh.count,23);
+  visible.forEach((name,index)=>{
+    primitive.handMesh.getMatrixAt(index,matrix);
+    assert.equal(matrix.elements[12],hand.joints[name].position.x);
+  });
+  hand.joints.wrist.visible=true;hand.joints['middle-finger-metacarpal'].visible=true;
+  f.rig.group.updateMatrixWorld(true); assert.equal(primitive.handMesh.count,25);
+  let disposed=0;primitive.handMesh.addEventListener('dispose',()=>disposed++);
+  f.rig.dispose();f.rig.dispose();assert.equal(disposed,1);
 });

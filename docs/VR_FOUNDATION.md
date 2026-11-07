@@ -34,6 +34,9 @@ without a browser. Call `checkSupport()` explicitly after construction.
 Slot index is never used as handedness. A fresh factory surrogate per connection isolates
 late asset callbacks from a replacement source, including Three r179's asynchronous
 connect/disconnect model-loading edge case. Factory GLTF failures leave the fallback usable.
+The r179 primitive hand updater is wrapped to compact visible instances after its update:
+missing joint poses cannot leave stale spheres drawn or truncate other tracked fingers.
+Disposal releases both shared primitive geometry/materials and the owned instance buffers.
 
 `src/xr/platform-vr.ts` adapts those pieces to `PlatformHost`. Construct one adapter on a
 **scene-mode** host. A second adapter or an editor/play host is rejected; switching surfaces
@@ -152,3 +155,34 @@ redirected; do not install another browser or change machine settings unnecessar
 
 No physical headset, hand-tracking permission prompt, optical tracking, mixed-input behavior,
 comfort, real audio or performance acceptance was performed by the automated checks.
+
+## Local validation receipt (2026-11-07 UTC)
+
+Source: local branch `codex/shared-vr-foundation`, initial implementation commit `e7bc05b` plus the final partial-joint visibility fix,
+based on the locally available `origin/main` commit `61f67b7`. No remote freshness,
+publish, merge or deployment is claimed.
+
+- Production Vite build, TypeScript and whole-repository ESLint: passed.
+- Focused XR tests: 27 passed, 0 failed.
+- Complete Node test run: 958 tests, 953 passed, 4 failed, 1 skipped, none cancelled.
+  Three failures are `EPERM` from directory `fsync` at `world-service/archive.mjs:41`.
+  The fourth reads a missing checkpoint's `sha256` in `world-reliability.test.mjs`.
+  These persistence paths are outside the VR changes. Durability checks were not weakened.
+- Windows test-config URLs were corrected with `fileURLToPath` in a separate local commit
+  (`cf4735f`), exposing those persistence failures instead of failing to resolve config files.
+- Built-app VR smoke: passed with no JavaScript errors. Includes permission rejection,
+  retry, entry/exit/re-entry, controller animation, grip and native pinch, target-ray loss,
+  reference-space reset, visibility interruption, local-only reference fallback, malformed
+  model fallback, and desktop camera/composer/inset restoration.
+- Seven unchanged browser regressions passed: showroom, showroom camera, editor,
+  standalone, games, Cyber Race and overlay. They ran serially against build `e7bc05b`.
+  The later input-only partial-joint fix was rechecked by the focused tests and VR smoke.
+  The separate Ballsy development branch was not merged into or migrated to this adapter.
+- Browser images of input models use synthetic poses with the cube and desktop panel hidden
+  for that capture only, so the geometry is not occluded. They are not headset screenshots.
+
+Local reproducible evidence is under `output/vr/`: `final-patch-receipt.json`, `static-receipt.json`,
+`all-unit-final.log`, `build-final.log`, `vr-lab-receipt.json`, `browser-final.log`,
+`regression-receipt.json`, `regressions-final.log` and the corresponding screenshots.
+These ignored artifacts are not published.
+The full repository gate is not green; the physical-headset checklist above remains open.

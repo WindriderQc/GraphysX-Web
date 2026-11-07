@@ -7,6 +7,19 @@ import { launchSmokeBrowser, applySmokeTimeout } from './smoke-harness.mjs';
 const BASE=process.env.SMOKE_BASE || 'http://127.0.0.1:4188/';
 const ART=process.env.SMOKE_ARTIFACTS || path.resolve('output/smoke');
 mkdirSync(ART,{recursive:true});
+// Capture the input geometry unobstructed. This is a synthetic pose fixture, not a headset view.
+async function captureInputModels(page,name){
+  await page.evaluate(()=>{
+    document.querySelector('.gx-vr-ui').style.visibility='hidden';
+    window.__GRAPHYSX_VR__.host.api.update('vr-cube',{visible:false});
+  });
+  await page.waitForTimeout(120);
+  try{await page.screenshot({path:path.join(ART,name)});}
+  finally{await page.evaluate(()=>{
+    document.querySelector('.gx-vr-ui').style.visibility='';
+    window.__GRAPHYSX_VR__.host.api.update('vr-cube',{visible:true});
+  });}
+}
 const browser=await launchSmokeBrowser();
 const errors=[];const receipts={scope:'Built browser UI + synthetic XR binding/input. No physical headset.'};
 try{
@@ -106,7 +119,7 @@ try{
   // Tilt only the synthetic viewer so tracked input falls inside its screenshot frustum.
   // Native headset views are not supplied or validated by this fixture.
   await xrPage.evaluate(()=>{window.__GRAPHYSX_VR__.vr.camera.rotation.x=-.28;});
-  await xrPage.screenshot({path:path.join(ART,'vr-lab-synthetic-view.png')});
+  await captureInputModels(xrPage,'vr-lab-synthetic-view.png');
   await xrPage.evaluate(()=>{const slot=window.__GRAPHYSX_VR__.vr.input.slots[0];slot.grip.visible=false;});
   await xrPage.waitForFunction(()=>!window.__GRAPHYSX_VR__.holding && window.__GRAPHYSX_VR__.cancelled);
   receipts.modelsAndButtons=true;receipts.grabAndLoss=true;receipts.postAndInsetsSuppressed=true;
@@ -117,7 +130,11 @@ try{
     for(const finger of ['index','middle','ring','pinky'])for(const joint of ['metacarpal','phalanx-proximal','phalanx-intermediate','phalanx-distal','tip'])names.push(`${finger}-finger-${joint}`);
     names.forEach((name,index)=>{
       const joint=new vr.rig.constructor();joint.visible=true;joint.jointRadius=.009;
-      joint.position.set(.25+index*.004,1.12,-.75);slot.hand.joints[name]=joint;slot.hand.add(joint);
+      const finger=Math.floor((index-5)/5),segment=(index-5)%5;
+      if(index===0)joint.position.set(.3,1.12,-.56);
+      else if(index<5)joint.position.set(.21+index*.01,1.12,-.61-index*.025);
+      else joint.position.set(.26+finger*.03,1.12,-.61-segment*.035);
+      slot.hand.joints[name]=joint;slot.hand.add(joint);
     });
     slot.hand.visible=true;slot.ray.visible=false; // Near pinch must not use a stale target ray.
     slot.hand.joints['index-finger-tip'].position.set(.25,1.12,-.75);
@@ -126,7 +143,18 @@ try{
     slot.ray.dispatchEvent({type:'selectstart',data:slot.source});
   });
   assert.equal(await xrPage.evaluate(()=>window.__GRAPHYSX_VR__.holding),true);
-  await xrPage.screenshot({path:path.join(ART,'vr-lab-synthetic-hand.png')});
+  await xrPage.waitForFunction(()=>{
+    const model=window.__GRAPHYSX_VR__.vr.input.slots[0].modelRoot.children[0];
+    return model.motionController.handMesh.count===25;
+  });
+  console.log('VR hand render probe',await xrPage.evaluate(()=>{
+    const {vr}=window.__GRAPHYSX_VR__;const slot=vr.input.slots[0];
+    const mesh=slot.modelRoot.children[0].motionController.handMesh;
+    const instance=Array.from(mesh.instanceMatrix.array.slice(0,16));
+    const point=slot.hand.joints['wrist'].position.clone().project(vr.camera).toArray();
+    return {count:mesh.count,instance,point,visibility:[slot.hand.visible,slot.modelRoot.visible,mesh.parent.visible,mesh.visible],matrix:Array.from(mesh.matrixWorld.elements)};
+  }));
+  await captureInputModels(xrPage,'vr-lab-synthetic-hand.png');
   await xrPage.evaluate(()=>window.__xrReference.dispatchEvent(new Event('reset')));
   assert.equal(await xrPage.evaluate(()=>window.__GRAPHYSX_VR__.holding),false);
   await xrPage.waitForTimeout(100);

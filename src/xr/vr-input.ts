@@ -1,6 +1,6 @@
 import {
   BoxGeometry, BufferGeometry, Group, Line, LineBasicMaterial, Mesh, MeshStandardMaterial,
-  Vector3, type Material, type Object3D, type WebGLRenderer,
+  Matrix4, Vector3, type InstancedMesh, type Material, type Object3D, type WebGLRenderer,
 } from "three";
 import { XRControllerModelFactory } from "three/examples/jsm/webxr/XRControllerModelFactory.js";
 import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.js";
@@ -43,6 +43,8 @@ export function disposeVrObject(root: Object3D): void {
   root.traverse((object) => {
     const mesh = object as Mesh;
     if (mesh.geometry) resources.add(mesh.geometry);
+    const instances = object as InstancedMesh;
+    if (instances.isInstancedMesh) resources.add(instances); // Releases instance buffers as well.
     const materials: Material[] = mesh.material ? (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) : [];
     for (const material of materials) resources.add(material);
   });
@@ -143,6 +145,22 @@ export class VrInputRig {
       const model = new XRHandModelFactory().createHandModel(proxy,"spheres");
       proxy.add(model); slot.hand.add(proxy);
       proxy.dispatchEvent({type:"connected",data:source});
+      // Three r179 writes at original joint indices but lowers count for missing poses.
+      // Compact the factory's instances so only currently tracked joints are rendered.
+      const primitive = model.motionController as unknown as { handMesh: InstancedMesh; joints: (keyof XRHandSpace["joints"])[]; updateMesh(): void };
+      const updateMesh = primitive.updateMesh.bind(primitive);
+      const matrix = new Matrix4();
+      primitive.updateMesh = () => {
+        updateMesh();
+        let count = 0;
+        primitive.joints.forEach((name,index) => {
+          if (!slot.hand.joints[name]?.visible) return;
+          primitive.handMesh.getMatrixAt(index,matrix);
+          primitive.handMesh.setMatrixAt(count++,matrix);
+        });
+        primitive.handMesh.count = count;
+        primitive.handMesh.instanceMatrix.needsUpdate = true;
+      };
       slot.modelReady = true;
     } else if (source.gamepad?.mapping === "xr-standard" && source.targetRayMode === "tracked-pointer") {
       const factory = new XRControllerModelFactory(new FallbackControllerLoader(),() => {
