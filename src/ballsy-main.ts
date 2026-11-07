@@ -8,6 +8,7 @@ import { COURSE_MAIN, COURSE_SHORTCUT, COURSE_FORK, COURSE_LENGTH, COURSE_SECTIO
 import { frameBallsyCamera, ballsyCameraEnvelope, type BallsyCameraFrame, type BallsyCameraPoint } from "./ballsy-camera";
 import { advanceBallsyFinishes, ballsyFinishPlace, ballsyFinishTime, BALLSY_SPARKLE_SECONDS, type BallsyFinish } from "./ballsy-finish";
 import { ballsyVelocityBrake } from "./ballsy-brake";
+import { layoutBallsyArrivalLabels, type BallsyLabelAnchor } from "./ballsy-label-layout";
 import { ballsyFinishEntities, projectBallsyFinishes } from "./ballsy-finish-scene";
 import { bridgeOcclusionDistance } from "./ballsy-picking";
 import { EARTH_BOUNDS, surfaceHeightAt } from "./ballsy-earth";
@@ -48,6 +49,7 @@ try {
       <div class="ballsy-score" data-slot="1"><b><i>2</i> Corail</b><span data-progress="1">Prêt à rouler</span><small data-speed="1"></small></div>
     </div>
     <div class="ballsy-ball-label" data-label="0">1</div><div class="ballsy-ball-label" data-label="1">2</div>
+    <div class="ballsy-label-leader" data-label-leader="0" hidden aria-hidden="true"></div><div class="ballsy-label-leader" data-label-leader="1" hidden aria-hidden="true"></div>
     ${[0, 1].map(i => `<div class="ballsy-finish-sparkle" data-finish-sparkle="${i}" hidden aria-hidden="true"><span class="ballsy-finish-ring"></span>${Array.from({ length: 8 }, (_, n) => `<i style="--spark-x:${Math.cos(n * Math.PI / 4)};--spark-y:${Math.sin(n * Math.PI / 4)}">✦</i>`).join("")}</div>`).join("")}
     <p class="ballsy-finish-announcement" data-finish-announcement role="status" aria-live="polite" aria-atomic="true" hidden></p>
     <div class="ballsy-card" data-card>
@@ -417,31 +419,58 @@ try {
   const scratch = new Vector3();
   function paintRacerOverlays(): void {
     const visible = phase !== "lobby" && !checkingPads;
+    const arrivals: { label: HTMLElement; leader: HTMLElement; anchor: BallsyLabelAnchor; ballX: number; ballY: number }[] = [];
     projectBallsyFinishes(finishes, PLAYERS.map(player => ({ id: player.id, position: api.query({ ids: [player.id] })[0]?.position ?? player.spawn })), id => host.world.getEntityObject(id));
     PLAYERS.forEach((player, i) => {
       const position = api.query({ ids: [player.id] })[0]?.position;
       const finish = finishes.find(entry => entry.subjectId === player.id);
       const label = element(`[data-label="${i}"]`);
+      const leader = element(`[data-label-leader="${i}"]`);
       const sparkle = element(`[data-finish-sparkle="${i}"]`);
       label.hidden = !visible || !position;
+      leader.hidden = !visible || !position || !finish;
       label.dataset.finished = String(!!finish);
       label.textContent = finish ? `✓ ${ballsyFinishPlace(finishes.indexOf(finish))} · Arrivée` : String(i + 1);
       sparkle.hidden = !visible || !position || !finish || finish.sparkleSeconds >= BALLSY_SPARKLE_SECONDS;
       if (!position) return;
       scratch.set(position[0], position[1], position[2]).project(host.camera);
-      sparkle.style.left = `${(scratch.x + 1) * root.clientWidth / 2}px`;
-      sparkle.style.top = `${(1 - scratch.y) * root.clientHeight / 2}px`;
+      const ballX = (scratch.x + 1) * root.clientWidth / 2, ballY = (1 - scratch.y) * root.clientHeight / 2;
+      sparkle.style.left = `${ballX}px`;
+      sparkle.style.top = `${ballY}px`;
       const progress = (finish?.sparkleSeconds ?? 0) / BALLSY_SPARKLE_SECONDS;
       sparkle.style.setProperty("--burst", `${16 + 26 * Math.sin(progress * Math.PI / 2)}px`);
       sparkle.style.setProperty("--spark-opacity", String(Math.min(1, (1 - progress) * 3)));
       sparkle.style.setProperty("--ring-size", `${24 + progress * 52}px`);
       scratch.set(position[0], position[1] + 1.3, position[2]).project(host.camera);
-      // Labels remain readable at the viewport edge and close finishes are staggered.
+      // Actual measured rectangles resolve close finishes after both labels exist.
       const x = (scratch.x + 1) * root.clientWidth / 2;
-      const y = (1 - scratch.y) * root.clientHeight / 2 - (finish ? 42 + i * 26 : 0);
+      const y = (1 - scratch.y) * root.clientHeight / 2 - (finish ? 42 : 0);
       label.style.left = `${Math.max(finish ? 75 : 26, Math.min(root.clientWidth - (finish ? 75 : 26), x))}px`;
       label.style.top = `${Math.max(38, Math.min(root.clientHeight - 32, y))}px`;
+      if (visible && finish) arrivals.push({ label, leader, ballX, ballY,
+        anchor: { x, bottom: y, width: label.offsetWidth, height: label.offsetHeight } });
     });
+    if (arrivals.length) {
+      const blockers = Array.from(surface.querySelectorAll<HTMLElement>(".ballsy-header,.ballsy-score,[data-card],[data-pad-test],[data-race-tip],[data-volcano-signal],[data-giant],[data-room],[data-finish-announcement],.ballsy-ball-label[data-finished='false']"))
+        .filter(node => node.getClientRects().length > 0 && node.offsetWidth > 0 && node.offsetHeight > 0)
+        .map(node => { const box = node.getBoundingClientRect(); return { left: box.left, right: box.right, top: box.top, bottom: box.bottom }; });
+      // Reserve the small celebration footprint too, so moving one badge does not
+      // solve a text collision by covering its neighbour's ball or stars.
+      blockers.push(...arrivals.map(arrival => ({ left: arrival.ballX - 50, right: arrival.ballX + 50, top: arrival.ballY - 50, bottom: arrival.ballY + 50 })));
+      const positions = layoutBallsyArrivalLabels(arrivals.map(arrival => arrival.anchor), { width: root.clientWidth, height: root.clientHeight }, blockers);
+      arrivals.forEach((arrival, i) => {
+        const position = positions[i];
+        arrival.label.style.left = `${position.x}px`;
+        arrival.label.style.top = `${position.bottom}px`;
+        const fromX = Math.max(position.box.left + 8, Math.min(position.box.right - 8, arrival.ballX));
+        const fromY = arrival.ballY >= position.bottom ? position.bottom : position.box.top;
+        const dx = arrival.ballX - fromX, dy = arrival.ballY - fromY;
+        arrival.leader.style.left = `${fromX}px`;
+        arrival.leader.style.top = `${fromY}px`;
+        arrival.leader.style.width = `${Math.max(0, Math.hypot(dx, dy) - 15)}px`;
+        arrival.leader.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+      });
+    }
   }
   function paint(): void {
     if (isVolcano) {
