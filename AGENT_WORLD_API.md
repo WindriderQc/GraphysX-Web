@@ -514,6 +514,30 @@ Entities can expose a labeled `toggle-visibility`, `apply-impulse` or `play-soun
 
 A dynamic entity can carry a `steering` block — the two-body player model rebuilt from the original BallZ: a fire-arrow aim heading plus continuous thrust integrated inside the deterministic simulation step. `steer(id, { headingDegrees?, thrust?, turn?, kick? })` sets the absolute aim, the live inputs (-1..1; `turn` rotates the heading at `turnRateDegrees`/s, `thrust` applies `force` newtons along it), and/or fires a one-shot `kick` (0..1 of `kickImpulse`) along the heading — the golf-style launch. The speed limit is enforced per direction, so negative thrust always brakes and a turned heading always steers, even at the cap. `steering.arrowId` names an ordinary entity the runtime anchors at the subject and yaws to the heading, so what an agent aims is literally what a human sees. Read the live pose and tuning back from `query()`/`state()` (`entity.steering`); the document serialises pose and tuning but never the transient inputs. A human's arrow keys and mouse go through this same call — `pause(true)` + `step(dt)` + `steer()` is a complete, deterministic way for an agent to play BallZ.
 
+### Continuous controls (`steerLive()` and `setSlowdownLive()`)
+
+The public API and agent bridge also expose non-transactional live controls:
+
+- `steerLive(id, { headingDegrees?, thrust?, turn? })` accepts only finite numeric
+  fields from this set. Heading is normalized; thrust/turn are clamped to -1..1.
+  Extra fields, including `kick`, `jump` and configuration, are rejected atomically.
+  Use the existing transactional `steer()` for impulses and authored changes.
+- `setSlowdownLive(id, speedFactor)` accepts a finite factor from 0.75 through 1
+  on a dynamic steerable body. A factor of 1 clears the effect without adding
+  momentum. The physics step owns the damping; vertical velocity and spin are not
+  damped by this effect. Loading a world or resetting the race clears it.
+
+Both reject reserved live namespaces and host-owned transient entities. They do
+not advance revision, append history/events, clear redo, or rebuild the body.
+They can set inputs while paused: absolute aim updates immediately, while thrust,
+turn and damping wait for simulation updates or explicit `step()` calls. Live
+heading/pose may appear in an export; no new authored transaction is created.
+The bridge lists both as mutations, so the external relay requires `edit` and the
+current expected revision, even though the live input itself leaves that revision
+unchanged. Positional arguments and success/failure receipts are identical to the
+native API; a successful transport response can contain a rejected native receipt.
+
+
 ```js
 gx.spawn({
   id: "ring-3", type: "torus", physics: { mode: "trigger" },
@@ -783,6 +807,8 @@ Accepted commit summaries record commit ID, world ID, actor, intent, revision, c
 | `attachBehavior(id, behavior)`, `detachBehavior(id, behaviorId)` | Change simulation behavior without replacing an entity. |
 | `interact(id, interactionId?)` | Trigger the same atomic labeled action used by 3D clicks and accessible Studio controls. |
 | `steer(id, input)` | Drive a steerable subject: absolute aim heading, live thrust/turn inputs, or a one-shot kick — the same call the BallZ keyboard and mouse make. |
+| `steerLive(id, input)` | Continuous-only steering with finite heading/thrust/turn; no authored transaction, impulses or history. |
+| `setSlowdownLive(id, speedFactor)` | Transient 0.75..1 horizontal slowdown for a dynamic steerable body; simulation-step owned and cleared with 1. |
 | `rules.standings()` | Ranked per-racer runs of a multi-subject course (`rules.subjects`), or null for a solo course. Each racer gets its own laps/gates/clock from the same trigger stream; rings are shared (a taken ring hides for everyone). |
 | `starters()`, `loadStarter(id, options?)` | Discover or load complete, lit, editable starter worlds in one call. |
 | `prefabs()`, `spawnPrefab(id, options?)` | Discover or place reusable multi-entity 3D recipes. |
