@@ -168,3 +168,67 @@ receipts described above. No assertion or timeout was weakened.
 
 Physical headset and human controller acceptance remain separate tasks, not
 claimed by these browser and synthetic-XR runs.
+
+## Final complete manifest reception, 2026-11-07
+
+The canonical production `dist/` built from
+`48dec7d6f312ab9c73182d205cb7313a2644fd95` was tested from 18:14:34 to
+18:41:49 UTC: **116/118 scenarios passed, with 106/108 visual journeys and
+10/10 manifest Node contracts passing**. Every entry ran once; none was omitted,
+and there were zero retries. The six formerly blocked priority scenarios
+(standalone, levels, joints, full IWER shovel, Face embed and Top20) passed before
+the remaining manifest entries. All assertions and timeouts stayed unchanged
+during this reception. Live-browser completed all 131 checks in 367.7 seconds.
+
+This was an independent complete manifest diagnostic, **not a green official
+Windows gate**. The preceding official run on the same revision reported 1237
+unit tests: 1232 passed, four existing directory-fsync/checkpoint failures and one
+skip. Typecheck, global lint and the canonical build passed; the official gate
+therefore skipped its browser phase. Its log is
+`output/permanent-ballsy-build/full-gate-48dec7d.log`. Separately, the verified
+Linux CI run `42400131610` for this exact revision is green: 1239/1239 tests and
+all 16 verification checks passed. Neither result changes the observed Windows failures.
+
+The two retained visual failures are:
+
+- `island`, `scripts/smoke-island.mjs:153`: after native fullscreen exit,
+  `aria-pressed` is still `true` where the assertion requires `false`.
+- `island-workspace`, `scripts/smoke-island-workspace.mjs:52`: the retained zoom
+  button is disconnected during the live population update, violating the
+  map-control continuity assertion.
+
+Both reproduce with the identical original scenario files on the separately
+built exact-main baseline `6d478d3eb64e26f1352fc9339762f3a1179000c3`. The A/B receipt
+is `GraphysX-Web-ab-main-6d478d3/output/ab-main6d478d3/README.md` in the sibling
+worktree; its evidence hashes and script equality are recorded in the final
+receipt's `baseline-reference.json`. They remain failures, not waived checks.
+Their later assertions were not reached. The A/B proves pre-existence, not a
+complete root-cause diagnosis.
+
+The machine-wide verification lock covered the whole reception, with pinned
+`LOCALAPPDATA`, explicit Edge and a fresh ephemeral server per scenario using
+the normal Kidx route and cleanup. All Ballsy frontends used the complete
+canonical `dist/`, not a prototype build. The Island scripts retained their
+normal isolated auxiliary world-service builds. IWER 2.8.0 archive integrity
+and bundle hash were reverified; the complete shovel scenario uses its public
+host-input synthetic tracked poses, without weakening the product tracking
+guard or reducing the journey to desktop-only.
+
+All 1240 build files had identical before/after SHA-256 inventories; HEAD and
+tracked sources stayed unchanged. The diagnostic exited 1 for the two retained
+failures, and the machine lock was absent after completion. Evidence lives in
+`output/final-regression-48dec7d/`: `REPORT.md`, `results.json`, original logs,
+build inventories, `iwer-integrity.json` and 351 PNGs indexed with SHA-256 in
+`captures.json`.
+
+Actual final-build images were opened and inspected for the stereo shovel and
+desktop cut, shared controller/hand fixtures, VR workshop/mobile fallback,
+phone arrival/results, 100/600 ms slime impact, Face functions, Top20 play,
+showroom/editor, Cyber Race, EV3/KidX, shader labs and live-session desktop/phone
+states. `visual-review.md` names the exact inspected files and limitations;
+351 retained images does not mean 351 manual reviews. The Island captures
+precede their failing assertions. The results-browser harness appends its panel
+over the welcome card, so that capture is not a clean leaderboard-layout receipt.
+
+This record does not claim production delivery, a physical Quest session,
+controller calibration, comfort or headset performance.
