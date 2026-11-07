@@ -7,21 +7,26 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>" />
     <title>Math Lab · GraphysX</title>
     <!--
-      The Math Lab without an assistant: a person types the same block lines Nestor writes in
-      AgentX (<show kind="math">) and <llmx-stage> draws the Math Game picture. Nothing here
-      calls a model or the network. See docs/MATH_LAB_PAGE.md.
+      The Math Lab without an assistant. Young children count and add with cubes (buttons only,
+      agentx.math-scene.v1); older ones type the same block lines Nestor writes in AgentX
+      (<show kind="math">) and <llmx-stage> draws the Math Game picture. Nothing here calls a
+      model or the network. See docs/MATH_LAB_PAGE.md.
     -->
   </head>
   <body>
-    <main class="ml" data-state="loading">
+    <main class="ml" data-state="loading" data-mode="kids">
       <header class="ml-head">
         <a class="ml-home" href="./">GraphysX</a>
         <h1>Math Lab</h1>
-        <p class="ml-lede">Écris tes formules, ligne par ligne, et regarde-les en 3D. Les curseurs changent les paramètres en direct.</p>
+        <p class="ml-lede">Compte et additionne avec des cubes, puis écris tes propres formules et regarde-les en 3D.</p>
       </header>
-      <section class="ml-examples" aria-label="Exemples">
+      <section class="ml-examples" aria-label="Niveaux">
+        <div class="ml-level ml-level-kids">
+          <h2 class="ml-level-title">Avec des cubes · pour les petits</h2>
+          <div class="ml-chips" id="ml-examples-kids"></div>
+        </div>
         <div class="ml-level">
-          <h2 class="ml-level-title">Pour commencer</h2>
+          <h2 class="ml-level-title">Pour commencer · des formules</h2>
           <div class="ml-chips" id="ml-examples-simple"></div>
         </div>
         <div class="ml-level">
@@ -29,6 +34,47 @@
           <div class="ml-chips" id="ml-examples-advanced"></div>
         </div>
         <p class="ml-about" id="ml-about"></p>
+      </section>
+      <section class="ml-kids" id="ml-kids" aria-label="Les cubes">
+        <div class="ml-kids-count" id="ml-kids-count">
+          <p class="ml-kids-ask">Combien de cubes ?</p>
+          <div class="ml-stepper" role="group" aria-label="Nombre de cubes">
+            <button type="button" class="ml-step" data-part="to" data-delta="-10" aria-label="Enlever dix cubes">−10</button>
+            <button type="button" class="ml-step" data-part="to" data-delta="-1" aria-label="Enlever un cube">−1</button>
+            <output class="ml-kids-number" id="ml-kids-to" data-group="a" aria-live="polite"></output>
+            <button type="button" class="ml-step" data-part="to" data-delta="1" aria-label="Ajouter un cube">+1</button>
+            <button type="button" class="ml-step" data-part="to" data-delta="10" aria-label="Ajouter dix cubes">+10</button>
+          </div>
+          <div class="ml-picks" id="ml-kids-count-picks" role="group" aria-label="Nombres tout prêts"></div>
+        </div>
+        <div class="ml-kids-add" id="ml-kids-add">
+          <p class="ml-kids-ask">Combien ça fait ?</p>
+          <div class="ml-sum">
+            <div class="ml-counter" role="group" aria-label="Premier nombre">
+              <button type="button" class="ml-step" data-part="a" data-delta="1" aria-label="Premier nombre plus un">+</button>
+              <output class="ml-kids-number" id="ml-kids-a" data-group="a"></output>
+              <button type="button" class="ml-step" data-part="a" data-delta="-1" aria-label="Premier nombre moins un">−</button>
+            </div>
+            <span class="ml-sum-sign" aria-hidden="true">+</span>
+            <div class="ml-counter" role="group" aria-label="Deuxième nombre">
+              <button type="button" class="ml-step" data-part="b" data-delta="1" aria-label="Deuxième nombre plus un">+</button>
+              <output class="ml-kids-number" id="ml-kids-b" data-group="b"></output>
+              <button type="button" class="ml-step" data-part="b" data-delta="-1" aria-label="Deuxième nombre moins un">−</button>
+            </div>
+            <span class="ml-sum-sign" aria-hidden="true">=</span>
+            <output class="ml-kids-number ml-kids-answer" id="ml-kids-answer" aria-live="polite" aria-label="Réponse"></output>
+          </div>
+          <div class="ml-picks" id="ml-kids-add-picks" role="group" aria-label="Additions toutes prêtes"></div>
+        </div>
+        <p class="ml-kids-note" id="ml-kids-note"></p>
+        <div id="ml-kids-status" class="ml-status" role="status" aria-live="polite">
+          <p class="ml-status-say" id="ml-kids-say"></p>
+        </div>
+        <div class="ml-tools">
+          <button type="button" id="ml-kids-replay" class="ml-button">Rejouer</button>
+        </div>
+        <p class="ml-kids-next">Tu sais compter et additionner ?
+          <button type="button" id="ml-kids-next" class="ml-button ml-button-next">Essaie une formule →</button></p>
       </section>
       <section class="ml-editor" aria-label="Formules">
         <label class="ml-label" for="ml-body">Tes formules</label>
@@ -60,14 +106,14 @@
       </section>
       <section class="ml-view" aria-label="Dessin">
         <div class="ml-stage-box" id="ml-stage-box">
-          <llmx-stage id="ml-stage" class="ml-stage" role="img" aria-label="Dessin des formules"></llmx-stage>
+          <llmx-stage id="ml-stage" class="ml-stage" role="img" aria-label="Dessin"></llmx-stage>
           <p class="ml-stage-note" id="ml-stage-note" hidden></p>
         </div>
-        <p class="ml-orbit">Glisse sur le dessin pour le tourner · double-clic pour revenir</p>
-        <ul class="ml-legend" id="ml-legend" aria-label="Légende"></ul>
-        <div class="ml-sliders" id="ml-sliders"></div>
-        <ul class="ml-readouts" id="ml-readouts" aria-live="polite"></ul>
-        <p class="ml-hint" id="ml-hint"></p>
+        <p class="ml-orbit ml-formulas-only">Glisse sur le dessin pour le tourner · double-clic pour revenir</p>
+        <ul class="ml-legend ml-formulas-only" id="ml-legend" aria-label="Légende"></ul>
+        <div class="ml-sliders ml-formulas-only" id="ml-sliders"></div>
+        <ul class="ml-readouts ml-formulas-only" id="ml-readouts" aria-live="polite"></ul>
+        <p class="ml-hint ml-formulas-only" id="ml-hint"></p>
       </section>
     </main>
     <script type="module" src="/src/math-lab-page.ts"></script>

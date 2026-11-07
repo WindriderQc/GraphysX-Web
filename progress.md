@@ -5333,3 +5333,9 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
 - `src/math-block.ts` ports AgentX `parsePlot`/`plotText`/`sceneOf` on the shared grammar; `test/fixtures/math-block-vectors.json` (94 blocks) comes from AgentX's own parser via `scripts/math-block-vectors.mjs`. Refusals are whole, in plain French with AgentX's message beneath; nothing is clamped.
 - Owner direction the same day: keep exactly one Math Lab. Removed `src/archive-math-lab.ts`, its Browse row, `__GRAPHYSX_CONTENT__.math*` and its thumbnail; the Math Lab row has a captured thumbnail. Kept `formula-field`, `api.formulas()`, editor chips and world vocabulary (agents and saved scenes use them).
 - Validation: unit tests, typecheck, lint, `smoke-math-lab` (desktop and phone captures inspected), full gate. See docs/MATH_LAB_PAGE.md.
+
+## 2026-11-07 - Math Lab: a cube level for young children
+
+- Owner feedback after the deploy: the single Math Lab had no easy math for kids. The page now opens on "Avec des cubes · pour les petits": counting 1 to 100 and additions to 20 with regrouping, drawn as `agentx.math-scene.v1` (the Famille cube pictures), with big buttons, quick picks, a replay and the answer shown once the cubes have completed the ten. No typing.
+- `src/math-lab-kids.ts` holds the choices, each step and its refusals, using `readMathScene` for the bounds. A press past a limit is disabled (never clamped) and explained; `#compter=150` is refused and nothing is drawn. No new scene schema; subtraction is not offered because v1 does not draw it.
+- "Essaie une formule" leads to the formula levels. Validation: `test/math-lab-kids.test.mjs`, `smoke-math-lab` extended (cubes lit, exact steps, limits, refused address, answer reveal, phone fit), screenshots inspected.

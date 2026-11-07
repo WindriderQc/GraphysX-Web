@@ -162,3 +162,95 @@ code { font-family: var(--ml-mono); font-size: 0.92em; }
   .ml-chips { flex-wrap: wrap; overflow: visible; }
   .ml-stage-box { aspect-ratio: auto; height: min(62vh, 620px); }
 }
+
+/* Two modes on one stage: the cubes (buttons only) or the formulas (text box, legend, sliders). */
+.ml[data-mode="kids"] .ml-editor, .ml[data-mode="kids"] .ml-formulas-only { display: none; }
+.ml[data-mode="formulas"] .ml-kids { display: none; }
+
+/* The cubes: big buttons a small child can press, numbers in the cubes' own colours. */
+.ml-level-kids .ml-level-title { color: var(--ml-accent); }
+.ml-chip-kid { display: inline-flex; align-items: center; gap: 10px; min-height: 46px; padding: 8px 18px 8px 14px; font-size: 1.05rem; font-weight: 700; }
+.ml-chip-kid::before {
+  content: "";
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-right: 4px;
+  border-radius: 3px;
+  background: var(--ml-cyan);
+  box-shadow: 6px -5px 0 -1px var(--ml-kids-orange);
+}
+.ml-kids { --ml-kids-orange: #f0b35a; grid-area: editor; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.ml-chips { --ml-kids-orange: #f0b35a; }
+.ml-kids-count, .ml-kids-add {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  padding: 14px 10px 16px;
+  border: 1px solid var(--ml-line);
+  border-radius: 16px;
+  background: radial-gradient(120% 90% at 50% 0%, #17263a 0%, var(--ml-panel) 70%);
+}
+.ml-kids-count[hidden], .ml-kids-add[hidden] { display: none; }
+.ml-kids-ask { margin: 0; font-size: 1.25rem; font-weight: 700; }
+.ml-stepper { display: flex; align-items: center; gap: 8px; }
+.ml-step {
+  width: 48px;
+  height: 52px;
+  border: 1px solid var(--ml-line);
+  border-radius: 14px;
+  background: #0e151e;
+  color: var(--ml-text);
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #05080c;
+  transition: transform 0.08s, box-shadow 0.08s;
+  touch-action: manipulation;
+}
+.ml-step:hover:not(:disabled) { border-color: var(--ml-cyan); }
+.ml-step:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 #05080c; }
+.ml-step:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; }
+.ml-kids-number {
+  min-width: 2.4ch;
+  text-align: center;
+  font-size: 2.8rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ml-cyan);
+  font-variant-numeric: tabular-nums;
+}
+.ml-kids-number[data-group="b"] { color: var(--ml-kids-orange); }
+.ml-kids-answer { color: var(--ml-accent); }
+.ml-kids-answer[data-revealed="true"] { animation: ml-pop 0.35s ease-out; }
+@keyframes ml-pop { 0% { transform: scale(0.6); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
+.ml-sum { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.ml-counter { display: grid; justify-items: center; gap: 6px; }
+.ml-counter .ml-step { width: 56px; height: 46px; font-size: 1.4rem; }
+.ml-sum-sign { font-size: 2.2rem; font-weight: 700; color: var(--ml-dim); }
+.ml-picks { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.ml-pick {
+  min-width: 48px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1px solid var(--ml-line);
+  border-radius: 12px;
+  background: #0e151e;
+  color: var(--ml-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.ml-pick:hover { border-color: var(--ml-cyan); }
+.ml-pick[aria-pressed="true"] { border-color: var(--ml-accent); color: var(--ml-accent); }
+.ml-step:focus-visible, .ml-pick:focus-visible { outline: 2px solid var(--ml-cyan); outline-offset: 2px; }
+.ml-kids-note { margin: 0; color: var(--ml-dim); text-align: center; line-height: 1.4; }
+.ml-kids-note:empty, .ml-kids .ml-status:not([data-kind]) { display: none; }
+.ml-kids-next { margin: 4px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; color: var(--ml-dim); }
+.ml-button-next { border-color: var(--ml-accent); color: var(--ml-accent); }
+@media (prefers-reduced-motion: reduce) {
+  .ml-kids-answer[data-revealed="true"] { animation: none; }
+  .ml-step { transition: none; }
+}

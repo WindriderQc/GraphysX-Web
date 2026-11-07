@@ -1008,8 +1008,8 @@ if (appParam === "vr-lab") {
             {
               id: "math-lab",
               label: "Math Lab",
-              summary: "Écris tes formules, de la droite à la surface, et vois-les en 3D avec des curseurs. Sans IA.",
-              meta: "lines, tangents, areas, curves c(t), surfaces z = f(x, y)  ·  opens its own page",
+              summary: "Compte et additionne avec des cubes, puis écris tes formules, de la droite à la surface, et vois-les en 3D. Sans IA.",
+              meta: "cubes for young children, then lines, tangents, areas, curves c(t), surfaces z = f(x, y)  ·  opens its own page",
               open: () => {
                 window.location.assign(`${import.meta.env.BASE_URL}math-lab.html`);
                 return new Promise<void>(() => {});

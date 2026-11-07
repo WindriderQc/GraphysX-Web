@@ -1,17 +1,22 @@
 /**
- * The Math Lab page (math-lab.html): a person types a block in AgentX's math-block language and
- * `<llmx-stage>` draws it in the Math Game style, with live sliders. No model, no network: the
- * block is read by `math-block.ts` (AgentX's parser, ported with parity vectors) and the stage
- * computes every point itself. An invalid block is refused whole and the last valid picture stays,
- * dimmed, until the text is valid again. Nothing is clamped.
+ * The Math Lab page (math-lab.html), in two modes on one stage:
  *
- * The page state is mirrored on `main.ml[data-state]` (`loading`, `drawn`, `refused`, `rejected`,
- * `no-webgl`) and `[data-schema]` for tests; the block is kept in the address (`#bloc=`) so a
- * drawing can be shared as a link.
+ * - `kids`: young children count cubes and add to 20 with buttons, no typing. `<llmx-stage>` draws
+ *   the `agentx.math-scene.v1` cube picture Famille shows; `math-lab-kids.ts` holds the bounds.
+ * - `formulas`: a person types a block in AgentX's math-block language and the stage draws it in
+ *   the Math Game style, with live sliders. The block is read by `math-block.ts` (AgentX's parser,
+ *   ported with parity vectors). An invalid block is refused whole and the last valid picture
+ *   stays, dimmed, until the text is valid again.
+ *
+ * Nothing is clamped in either mode, and nothing calls a model or the network. The page state is
+ * mirrored on `main.ml[data-mode]`, `[data-state]` (`loading`, `drawn`, `refused`, `rejected`,
+ * `no-webgl`) and `[data-schema]` for tests; the picture is kept in the address (`#compter=13`,
+ * `#additionner=8+5` or `#bloc=…`) so it can be shared as a link.
  */
 import "./math-lab.css";
 import "./llmx-stage-element";
 import type { LlmXStageElement } from "./llmx-stage-element";
+import type { MathScene } from "./llmx-math-scene";
 import {
   MATH_BLOCK_COLORS,
   MATH_BLOCK_LIMITS,
@@ -25,6 +30,23 @@ import {
 } from "./math-block";
 import { evaluateMath, formatMath, formatMathNumber, integrateMath } from "./math-expression";
 import { MATH_LAB_EXAMPLES } from "./math-lab-examples";
+import {
+  KIDS_ABOUT,
+  KIDS_ADD_PICKS,
+  KIDS_COUNT_PICKS,
+  KIDS_FIRST,
+  KIDS_SCHEMA,
+  KIDS_START,
+  kidsAnswer,
+  kidsDuration,
+  kidsFromHash,
+  kidsHash,
+  kidsLimitNote,
+  kidsSceneValue,
+  kidsStep,
+  type KidsKind,
+  type KidsPart,
+} from "./math-lab-kids";
 import { mathLabRefusal, prettyMath } from "./math-lab-messages";
 
 /** Milliseconds of quiet typing before the block is read again. */
@@ -47,6 +69,22 @@ const hint = byId<HTMLParagraphElement>("ml-hint");
 const shelves = { simple: byId<HTMLDivElement>("ml-examples-simple"), advanced: byId<HTMLDivElement>("ml-examples-advanced") };
 const copy = byId<HTMLButtonElement>("ml-copy");
 const copied = byId<HTMLSpanElement>("ml-copied");
+const kidsPanel = {
+  shelf: byId<HTMLDivElement>("ml-examples-kids"),
+  count: byId<HTMLDivElement>("ml-kids-count"),
+  add: byId<HTMLDivElement>("ml-kids-add"),
+  to: byId<HTMLOutputElement>("ml-kids-to"),
+  a: byId<HTMLOutputElement>("ml-kids-a"),
+  b: byId<HTMLOutputElement>("ml-kids-b"),
+  answer: byId<HTMLOutputElement>("ml-kids-answer"),
+  countPicks: byId<HTMLDivElement>("ml-kids-count-picks"),
+  addPicks: byId<HTMLDivElement>("ml-kids-add-picks"),
+  note: byId<HTMLParagraphElement>("ml-kids-note"),
+  status: byId<HTMLDivElement>("ml-kids-status"),
+  say: byId<HTMLParagraphElement>("ml-kids-say"),
+  replay: byId<HTMLButtonElement>("ml-kids-replay"),
+  next: byId<HTMLButtonElement>("ml-kids-next"),
+};
 
 /** The block drawn now (the last valid one), its slider values, and the scene shape sent to the stage. */
 let shown: MathBlock | null = null;
@@ -54,6 +92,9 @@ let values: Record<string, number> = {};
 let shape = "";
 let webgl = true;
 let timer = 0;
+/** The cube picture on the panel (kept while the formulas are open, so coming back finds it). */
+let kids: MathScene = KIDS_FIRST;
+let revealTimer = 0;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] => {
   const node = document.createElement(tag);
@@ -72,6 +113,16 @@ function setState(state: string, schema?: string): void {
   root.dataset.state = state;
   if (schema) root.dataset.schema = schema;
   else if (state !== "refused") delete root.dataset.schema;
+}
+
+function setMode(mode: "kids" | "formulas"): void {
+  if (root.dataset.mode === mode) return;
+  root.dataset.mode = mode;
+  // The other mode's picture is gone from the stage: the next draw sends its scene whole.
+  shape = "";
+  root.classList.remove("ml-stale");
+  if (webgl) stageNote.hidden = true;
+  window.clearTimeout(revealTimer);
 }
 
 /** The scene without its parameter values: when only values change, the stage keeps its picture and view. */
@@ -116,7 +167,7 @@ function read(text: string): void {
   clearRefusal();
   root.classList.remove("ml-stale");
   stageNote.hidden = true;
-  remember(text);
+  remember(`#${HASH_KEY}=${encodeURIComponent(text)}`);
   draw();
 }
 
@@ -221,10 +272,10 @@ function renderReadouts(): void {
   }
 }
 
-/** Keep the block in the address so the drawing can be shared; never throws. */
-function remember(text: string): void {
+/** Keep the picture in the address so it can be shared; never throws. */
+function remember(hash: string): void {
   try {
-    history.replaceState(null, "", `#${HASH_KEY}=${encodeURIComponent(text)}`);
+    history.replaceState(null, "", hash);
   } catch { /* a sandboxed frame may refuse; the page works without it */ }
 }
 
@@ -241,6 +292,7 @@ function fromAddress(): string | null {
 
 function load(text: string): void {
   window.clearTimeout(timer);
+  setMode("formulas");
   body.value = text;
   read(text);
 }
@@ -249,8 +301,108 @@ function load(text: string): void {
 function selectExample(id: string | null): void {
   for (const chip of document.querySelectorAll<HTMLButtonElement>(".ml-chip")) chip.setAttribute("aria-pressed", String(chip.dataset.id === id));
   const example = MATH_LAB_EXAMPLES.find(row => row.id === id);
-  about.textContent = example ? example.hint : "Ton propre dessin. Choisis un exemple pour repartir d'un modèle.";
+  if (example) about.textContent = example.hint;
+  else if (id === "count" || id === "add") about.textContent = KIDS_ABOUT[id];
+  else about.textContent = "Ton propre dessin. Choisis un exemple pour repartir d'un modèle.";
 }
+
+// ---- the cubes ----
+
+/** Draw a cube picture (again, when replayed: the stage restarts its animation). */
+function showKids(scene: MathScene): void {
+  setMode("kids");
+  kids = scene;
+  kidsPanel.say.textContent = "";
+  delete kidsPanel.status.dataset.kind;
+  selectExample(scene.kind);
+  renderKids();
+  remember(kidsHash(scene));
+  window.clearTimeout(revealTimer);
+  if (!webgl) {
+    revealAnswer();
+    setState("no-webgl", KIDS_SCHEMA);
+    return;
+  }
+  setState("loading", KIDS_SCHEMA);
+  stage.scene = kidsSceneValue(scene);
+  // The answer appears when the cubes have finished regrouping, so a child can guess first.
+  if (scene.kind === "add") revealTimer = window.setTimeout(revealAnswer, kidsDuration(scene) * 1000);
+}
+
+function revealAnswer(): void {
+  kidsPanel.answer.textContent = String(kidsAnswer(kids));
+  kidsPanel.answer.dataset.revealed = "true";
+}
+
+/** A cube picture the address asked for but cannot be drawn: say why, draw nothing. */
+function refuseKids(say: string): void {
+  setMode("kids");
+  kids = KIDS_FIRST;
+  selectExample(kids.kind);
+  renderKids();
+  kidsPanel.say.textContent = `Pas de dessin : ${say}`;
+  kidsPanel.status.dataset.kind = "refused";
+  setState("refused", KIDS_SCHEMA);
+}
+
+function renderKids(): void {
+  const scene = kids;
+  kidsPanel.count.hidden = scene.kind !== "count";
+  kidsPanel.add.hidden = scene.kind !== "add";
+  if (scene.kind === "count") kidsPanel.to.textContent = String(scene.to);
+  else {
+    kidsPanel.a.textContent = String(scene.a);
+    kidsPanel.b.textContent = String(scene.b);
+    kidsPanel.answer.textContent = "?";
+    kidsPanel.answer.dataset.revealed = "false";
+  }
+  // A press that would leave the bounds is not offered (never clamped to the nearest allowed value).
+  for (const button of document.querySelectorAll<HTMLButtonElement>(".ml-kids .ml-step")) {
+    button.disabled = !kidsStep(scene, button.dataset.part as KidsPart, Number(button.dataset.delta)).ok;
+  }
+  for (const pick of document.querySelectorAll<HTMLButtonElement>(".ml-pick")) {
+    pick.setAttribute("aria-pressed", String(pick.dataset.hash === kidsHash(scene)));
+  }
+  kidsPanel.note.textContent = kidsLimitNote(scene);
+}
+
+function kidsChip(kind: KidsKind, label: string): void {
+  const chip = el("button", "ml-chip ml-chip-kid", label);
+  chip.type = "button";
+  chip.dataset.id = kind;
+  chip.title = KIDS_ABOUT[kind];
+  chip.setAttribute("aria-pressed", "false");
+  chip.addEventListener("click", () => showKids(kids.kind === kind ? kids : KIDS_START[kind]));
+  kidsPanel.shelf.append(chip);
+}
+kidsChip("count", "Compter");
+kidsChip("add", "Additionner");
+
+function pick(shelf: HTMLElement, scene: MathScene, label: string): void {
+  const button = el("button", "ml-pick", label);
+  button.type = "button";
+  button.dataset.hash = kidsHash(scene);
+  button.setAttribute("aria-pressed", "false");
+  button.addEventListener("click", () => showKids(scene));
+  shelf.append(button);
+}
+for (const to of KIDS_COUNT_PICKS) pick(kidsPanel.countPicks, { kind: "count", to }, String(to));
+for (const [a, b] of KIDS_ADD_PICKS) pick(kidsPanel.addPicks, { kind: "add", a, b }, `${a} + ${b}`);
+
+for (const button of document.querySelectorAll<HTMLButtonElement>(".ml-kids .ml-step")) {
+  button.addEventListener("click", () => {
+    const next = kidsStep(kids, button.dataset.part as KidsPart, Number(button.dataset.delta));
+    if (next.ok) showKids(next.scene);
+  });
+}
+kidsPanel.replay.addEventListener("click", () => showKids(kids));
+kidsPanel.next.addEventListener("click", () => {
+  selectExample(MATH_LAB_EXAMPLES[0].id);
+  load(MATH_LAB_EXAMPLES[0].body);
+  body.scrollIntoView({ block: "nearest", behavior: "smooth" });
+});
+
+// ---- the formulas ----
 
 for (const example of MATH_LAB_EXAMPLES) {
   const chip = el("button", "ml-chip", example.label);
@@ -293,18 +445,28 @@ stage.addEventListener("llmx-parameters-applied", () => { if (root.dataset.state
 stage.addEventListener("llmx-scene-rejected", event => {
   const detail = (event as CustomEvent<{ reason?: string; message?: string }>).detail;
   shape = "";
-  refuse("GraphysX n'a pas pu dessiner ce bloc.", `Scène refusée : ${detail?.message ?? detail?.reason ?? "raison inconnue"}`);
+  const reason = detail?.message ?? detail?.reason ?? "raison inconnue";
+  if (root.dataset.mode === "kids") {
+    window.clearTimeout(revealTimer);
+    kidsPanel.say.textContent = `GraphysX n'a pas pu dessiner ces cubes (${reason}).`;
+    kidsPanel.status.dataset.kind = "refused";
+  } else refuse("GraphysX n'a pas pu dessiner ce bloc.", `Scène refusée : ${reason}`);
   setState("rejected", root.dataset.schema);
 });
 stage.addEventListener("llmx-stage-error", () => {
   webgl = false;
   stageNote.hidden = false;
-  stageNote.textContent = "Ce navigateur ne peut pas afficher la 3D (WebGL). Les formules sont quand même vérifiées.";
+  stageNote.textContent = "Ce navigateur ne peut pas afficher la 3D (WebGL). Les nombres et les formules sont quand même vérifiés.";
   root.classList.add("ml-no-webgl");
+  if (root.dataset.mode === "kids") revealAnswer();
   setState("no-webgl", root.dataset.schema);
 });
 
-const initial = fromAddress();
-const first = initial ?? MATH_LAB_EXAMPLES[0].body;
-selectExample(MATH_LAB_EXAMPLES.find(example => example.body === first)?.id ?? null);
-load(first);
+// A first visit opens on the cubes; a shared link opens on its own picture.
+const initialBlock = fromAddress();
+const initialKids = kidsFromHash(location.hash);
+if (initialBlock !== null) {
+  selectExample(MATH_LAB_EXAMPLES.find(example => example.body === initialBlock)?.id ?? null);
+  load(initialBlock);
+} else if (initialKids && !initialKids.ok) refuseKids(initialKids.say);
+else showKids(initialKids?.ok ? initialKids.scene : KIDS_FIRST);

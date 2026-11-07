@@ -4,9 +4,11 @@ import path from "node:path";
 import { SMOKE_TIMEOUT, applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
 
 // The Math Lab page as a visitor meets it (docs/MATH_LAB_PAGE.md): the Browse shelf row opens
-// it (the retired Math Game row is gone), a typed block is drawn by <llmx-stage> with live sliders, an invalid block is refused whole
-// while the last picture stays, the starter examples draw v2, v3 and v4 scenes, the block survives
-// a reload through the address, and the page fits a phone. No model and no outside request.
+// it (the retired Math Game row is gone) on the cubes for young children (v1: counting, additions
+// to 20, buttons only, limits refused rather than clamped), with a path up to the formulas. A typed
+// block is drawn by <llmx-stage> with live sliders, an invalid block is refused whole while the
+// last picture stays, the starter examples draw v2, v3 and v4 scenes, the block survives a reload
+// through the address, and both levels fit a phone. No model and no outside request.
 
 const BASE = (process.env.SMOKE_BASE || "http://127.0.0.1:4173/").replace(/\/?$/, "/");
 const ART = process.env.SMOKE_ARTIFACTS || path.resolve("output/smoke");
@@ -29,7 +31,7 @@ const state = (page) => page.evaluate(() => {
   const main = document.querySelector("main.ml");
   const stage = document.getElementById("ml-stage");
   return {
-    state: main.dataset.state, schema: main.dataset.schema ?? null, stale: main.classList.contains("ml-stale"),
+    mode: main.dataset.mode, state: main.dataset.state, schema: main.dataset.schema ?? null, stale: main.classList.contains("ml-stale"),
     say: document.getElementById("ml-status-say").textContent, detail: document.getElementById("ml-status-detail").textContent,
     about: document.getElementById("ml-about").textContent, scene: stage.scene, parameters: stage.parameters,
     legend: [...document.querySelectorAll(".ml-legend-formula")].map((row) => row.textContent),
@@ -53,6 +55,22 @@ const lit = (page) => page.evaluate(() => new Promise((resolve) => requestAnimat
   for (let index = 0; index < data.length; index += 4) if (data[index] + data[index + 1] + data[index + 2] > 240) bright += 1;
   resolve(bright / (probe.width * probe.height));
 })));
+// The cube panel as a child sees it: the numbers, the answer, which buttons can be pressed, the note.
+const cubes = (page) => page.evaluate(() => {
+  const text = (id) => document.getElementById(id).textContent;
+  const enabled = (part, delta) => !document.querySelector(`.ml-kids .ml-step[data-part="${part}"][data-delta="${delta}"]`).disabled;
+  return {
+    to: text("ml-kids-to"), a: text("ml-kids-a"), b: text("ml-kids-b"), answer: text("ml-kids-answer"),
+    note: text("ml-kids-note"), say: text("ml-kids-say"), hash: decodeURIComponent(location.hash),
+    pressed: [...document.querySelectorAll(".ml-chip-kid[aria-pressed=true]")].map((chip) => chip.dataset.id),
+    can: { toUp: enabled("to", "1"), toUp10: enabled("to", "10"), toDown: enabled("to", "-1"), aUp: enabled("a", "1"), bUp: enabled("b", "1"), bDown: enabled("b", "-1") },
+  };
+});
+const cubesDrawn = (page, scene) => page.waitForFunction((wanted) => {
+  const main = document.querySelector("main.ml");
+  return main?.dataset.state === "drawn" && main.dataset.schema === "agentx.math-scene.v1"
+    && JSON.stringify(document.getElementById("ml-stage").scene) === wanted;
+}, JSON.stringify(scene), { timeout: SMOKE_TIMEOUT });
 const type = async (page, text) => {
   await page.fill("#ml-body", text);
   // The page reads the block after a short quiet moment; wait for that read, not a fixed time.
@@ -75,8 +93,64 @@ try {
   out.row = await page.$eval(row, (element) => element.querySelector(".gx-browse-name")?.textContent);
   await Promise.all([page.waitForURL(/\/math-lab\.html/), page.click(row)]);
 
-  // ---- the opening example: a line, v2, drawn ----
+  // ---- a first visit opens on the cubes: count to 13 in a rod of ten and three ----
+  await cubesDrawn(page, { kind: "count", to: 13 });
+  const opening = await state(page);
+  assert.equal(opening.mode, "kids");
+  assert.deepEqual((await cubes(page)).pressed, ["count"]);
+  assert.match(opening.about, /se rangent par dix/);
+  out.countLit = await lit(page);
+  assert.ok(out.countLit > 0.004, `the cubes are drawn on the stage (${out.countLit.toFixed(4)} bright)`);
+  await page.waitForTimeout(3500); // let the count finish before the picture is kept
+  await page.screenshot({ path: path.join(ART, "math-lab-kids-count.png") });
+
+  // ---- the buttons apply exactly their step; a step past a limit is not offered ----
+  await page.click('.ml-kids .ml-step[data-part="to"][data-delta="10"]');
+  await cubesDrawn(page, { kind: "count", to: 23 });
+  assert.equal((await cubes(page)).to, "23");
+  assert.equal((await cubes(page)).hash, "#compter=23");
+  await page.click('.ml-pick[data-hash="#compter=100"]');
+  await cubesDrawn(page, { kind: "count", to: 100 });
+  const hundred = await cubes(page);
+  assert.ok(!hundred.can.toUp && !hundred.can.toUp10 && hundred.can.toDown, "at 100 only going down is offered");
+  assert.equal(hundred.note, "100, c'est le plus grand nombre ici.");
+
+  // ---- an addition with regrouping: the answer appears when the cubes have completed the ten ----
+  await page.click('.ml-chip-kid[data-id="add"]');
+  await cubesDrawn(page, { kind: "add", a: 8, b: 5 });
+  const adding = await cubes(page);
+  assert.deepEqual([adding.a, adding.b, adding.answer], ["8", "5", "?"], "the child can guess first");
+  assert.deepEqual(adding.pressed, ["add"]);
+  await page.waitForFunction(() => document.getElementById("ml-kids-answer").textContent === "13", null, { timeout: SMOKE_TIMEOUT });
+  await page.waitForTimeout(400);
+  out.addLit = await lit(page);
+  assert.ok(out.addLit > 0.004, `the addition is drawn (${out.addLit.toFixed(4)} bright)`);
+  await page.screenshot({ path: path.join(ART, "math-lab-kids-add.png") });
+  await page.click('.ml-pick[data-hash="#additionner=10+10"]');
+  await cubesDrawn(page, { kind: "add", a: 10, b: 10 });
+  const twenty = await cubes(page);
+  assert.ok(!twenty.can.aUp && !twenty.can.bUp && twenty.can.bDown, "at 20 in all, no number can grow");
+  assert.match(twenty.note, /^20 en tout, c'est le maximum/);
+  await page.click('.ml-kids .ml-step[data-part="b"][data-delta="-1"]');
+  await cubesDrawn(page, { kind: "add", a: 10, b: 9 });
+  assert.ok((await cubes(page)).can.aUp, "one cube fewer lets the other number grow");
+
+  // ---- an address out of v1's bounds is refused, not drawn and not clamped ----
+  await page.goto(new URL("math-lab.html#compter=150", BASE).href, { waitUntil: "domcontentloaded" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => document.querySelector("main.ml")?.dataset.state === "refused", null, { timeout: SMOKE_TIMEOUT });
+  const outOfBounds = await state(page);
+  assert.equal(outOfBounds.mode, "kids");
+  assert.equal(outOfBounds.scene, null, "nothing was drawn, not 100 cubes");
+  assert.equal((await cubes(page)).say, "Pas de dessin : On compte de 1 à 100. Choisis un nombre dans cet intervalle.");
+  await page.click('.ml-kids .ml-step[data-part="to"][data-delta="1"]');
+  await cubesDrawn(page, { kind: "count", to: 14 });
+  assert.equal((await cubes(page)).say, "", "a valid press clears the refusal");
+
+  // ---- the path up: from the cubes to the first formula, a line, v2 ----
+  await page.click("#ml-kids-next");
   await drawn(page, "agentx.math-scene.v2");
+  assert.equal((await state(page)).mode, "formulas");
   const line = await state(page);
   assert.equal(line.scene.kind, "functions");
   assert.equal(line.scene.functions[0].expression, "m * x + b");
@@ -160,7 +234,32 @@ try {
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
   watch(phone);
   await phone.goto(new URL("math-lab.html", BASE).href, { waitUntil: "domcontentloaded" });
-  await drawn(phone, "agentx.math-scene.v2");
+  await cubesDrawn(phone, { kind: "count", to: 13 });
+  const kidsLayout = (selector) => phone.evaluate((rowSelector) => {
+    const row = document.querySelector(rowSelector).getBoundingClientRect();
+    const steps = [...document.querySelectorAll(".ml-kids .ml-step")].filter((button) => button.offsetParent).map((button) => button.getBoundingClientRect());
+    return {
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      row: [Math.round(row.left), Math.round(row.right)],
+      smallestStep: Math.round(Math.min(...steps.map((box) => Math.min(box.width, box.height)))),
+      number: getComputedStyle(document.querySelector(".ml-kids-number")).fontSize,
+    };
+  }, selector);
+  out.phoneCount = await kidsLayout(".ml-kids-count .ml-stepper");
+  assert.ok(out.phoneCount.overflow <= 0 && out.phoneCount.row[0] >= 12 && out.phoneCount.row[1] <= 378, `the counter fits the phone ${JSON.stringify(out.phoneCount)}`);
+  assert.ok(out.phoneCount.smallestStep >= 44, "every cube button is big enough for a small finger");
+  assert.ok(parseFloat(out.phoneCount.number) >= 40, "the number reads from across the table");
+  out.phoneCountLit = await lit(phone);
+  assert.ok(out.phoneCountLit > 0.004, `the cubes are drawn on the phone (${out.phoneCountLit.toFixed(4)} bright)`);
+  await phone.waitForTimeout(3500);
+  await phone.screenshot({ path: path.join(ART, "math-lab-phone-kids.png"), fullPage: true });
+  await phone.click('.ml-chip-kid[data-id="add"]');
+  await cubesDrawn(phone, { kind: "add", a: 8, b: 5 });
+  out.phoneAdd = await kidsLayout(".ml-sum");
+  assert.ok(out.phoneAdd.overflow <= 0 && out.phoneAdd.row[0] >= 12 && out.phoneAdd.row[1] <= 378, `the addition fits the phone ${JSON.stringify(out.phoneAdd)}`);
+  assert.ok(out.phoneAdd.smallestStep >= 44, "the + and − buttons are big enough");
+  await phone.waitForFunction(() => document.getElementById("ml-kids-answer").textContent === "13", null, { timeout: SMOKE_TIMEOUT });
+  await phone.screenshot({ path: path.join(ART, "math-lab-phone-add.png"), fullPage: true });
   await phone.click('.ml-chip[data-id="parabola"]');
   await drawn(phone, "agentx.math-scene.v2");
   out.phone = await phone.evaluate(() => {
