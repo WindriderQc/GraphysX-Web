@@ -37,7 +37,7 @@ test("a comparison of two functions is accepted with labels, colours and paramet
 test("anything outside the contract is refused whole, never clamped", () => {
   const bad = {
     "v1 schema for functions": { ...compare, schema: "agentx.math-scene.v1" },
-    "unknown schema": { ...compare, schema: "agentx.math-scene.v3" },
+    "unknown schema": { ...compare, schema: "agentx.math-scene.v4" },
     "no functions": { ...compare, functions: [] },
     "five functions": { ...compare, functions: "fghkp".split("").map(name => ({ name, expression: "x" })) },
     "formula outside the grammar": { ...compare, functions: [{ name: "f", expression: "window.alert(x)" }] },
@@ -145,4 +145,118 @@ test("the camera fits the whole board at any aspect and orbit, and the orbit is 
     }
   }
   assert.deepEqual(clampOrbit({ yaw: 5, pitch: -5 }), { yaw: 1.2, pitch: -0.15 });
+});
+
+// Phase 3 (agentx.math-scene.v3): derivatives, tangents, areas and functions using functions.
+const V3 = "agentx.math-scene.v3";
+const calculus = {
+  schema: V3, kind: "functions",
+  functions: [{ name: "f", expression: "x^2" }, { name: "g", expression: "f(x - 1) + 1" }],
+  parameters: [{ name: "p", value: 1, min: -2, max: 2 }, { name: "b", value: 2, min: 0, max: 3 }],
+  x: [-3, 3], y: [-4, 10],
+  derivatives: ["f"],
+  tangents: [{ of: "f", at: "p" }],
+  areas: [{ of: "f", from: 0, to: "b" }],
+};
+const near = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} vs ${expected}`);
+
+test("v3 draws derivatives, tangents and areas computed from the formulas; v2 keeps refusing them", () => {
+  const read = readStageScene(calculus);
+  assert.equal(read.ok, true, read.message);
+  const { scene } = read;
+  assert.equal(scene.schema, V3);
+  assert.deepEqual(scene.derivatives.map(row => [row.of, row.label, row.expression]), [["f", "f'(x)", "2 * x"]]);
+  assert.deepEqual(scene.tangents.map(row => [row.of, row.at]), [["f", "p"]]);
+  assert.deepEqual(scene.areas.map(row => [row.of, row.from, row.to]), [["f", 0, "b"]]);
+  assert.equal(scene.functions[1].expression, "f(x - 1) + 1", "the host's text is kept for display");
+  for (const extra of [{ derivatives: ["f"] }, { tangents: [{ of: "f", at: 1 }] }, { areas: [{ of: "f", from: 0, to: 1 }] }]) {
+    assert.equal(readStageScene({ ...compare, ...extra }).reason, "schema", JSON.stringify(extra));
+  }
+  assert.equal(readStageScene({ ...compare, functions: [{ name: "f", expression: "x" }, { name: "g", expression: "f(x) + 1" }] }).reason, "formula",
+    "v2 functions stand alone");
+  assert.equal(readStageScene({ ...compare, schema: V2 }).scene.schema, V2);
+});
+
+test("v3 refuses whole what it cannot draw exactly", () => {
+  const plain = { derivatives: [], tangents: [], areas: [] };
+  const bad = {
+    "derivative of an unknown function": [{ derivatives: ["h"] }, "derivatives"],
+    "derivative asked twice": [{ derivatives: ["f", "f"] }, "derivatives"],
+    "derivatives not a list": [{ derivatives: "f" }, "derivatives"],
+    "tangent outside the window": [{ tangents: [{ of: "f", at: 4 }] }, "tangents"],
+    "tangent slider wider than the window": [{ parameters: [{ name: "p", value: 0, min: -5, max: 5 }, calculus.parameters[1]] }, "tangents"],
+    "tangent at an undeclared name": [{ tangents: [{ of: "f", at: "q" }] }, "tangents"],
+    "tangent at a text number": [{ tangents: [{ of: "f", at: "1" }] }, "tangents"],
+    "tangent asked twice": [{ tangents: [{ of: "f", at: "p" }, { of: "f", at: "p" }] }, "tangents"],
+    "five tangents": [{ tangents: [-2, -1, 0, 1, 2].map(at => ({ of: "f", at })) }, "tangents"],
+    "area of an unknown function": [{ areas: [{ of: "h", from: 0, to: 1 }] }, "areas"],
+    "area bound outside the window": [{ areas: [{ of: "f", from: 0, to: 7 }] }, "areas"],
+    "area bound missing": [{ areas: [{ of: "f", from: 0 }] }, "areas"],
+    "functions in a circle": [{ functions: [{ name: "f", expression: "g(x)" }, { name: "g", expression: "f(x) + 1" }] }, "formula"],
+    "a function using itself": [{ ...plain, functions: [{ name: "f", expression: "f(x - 1)" }] }, "formula"],
+    "y cannot be called": [{ ...plain, functions: [{ name: "y", expression: "x" }, { name: "g", expression: "y(x)" }] }, "formula"],
+  };
+  for (const [label, [change, reason]] of Object.entries(bad)) assert.equal(readStageScene({ ...calculus, ...change }).reason, reason, label);
+});
+
+test("the tangent touches the curve at the slider's point with the derivative's slope, and follows the slider", () => {
+  const { scene } = readStageScene(calculus);
+  const { width: W, height: H } = MATH_BOARD;
+  const px = x => (x + 3) / 6 * W - W / 2, py = y => (y + 4) / 14 * H - H / 2;
+  const layout = mathLayout(scene);
+  const [tangent] = layout.tangents;
+  assert.deepEqual([tangent.x, tangent.y, tangent.slope], [1, 1, 2]);
+  near(tangent.point[0], px(1), "point x");
+  near(tangent.point[1], py(1), "point y");
+  // y = 2x - 1 across the window, clipped to [-4, 10]: from (-1.5, -4) to (3, 5).
+  near(tangent.segment[0][0], px(-1.5), "segment start x");
+  near(tangent.segment[0][1], py(-4), "segment start y");
+  near(tangent.segment[1][0], px(3), "segment end x");
+  near(tangent.segment[1][1], py(5), "segment end y");
+  const moved = mathLayout(scene, { p: -2, b: 2 }).tangents[0];
+  assert.deepEqual([moved.x, moved.y, moved.slope], [-2, 4, -4]);
+  // The derivative curve is 2x: below the window until x = -2, where it enters at the bottom edge.
+  const first = layout.derivativeCurves[0][0][0];
+  near(first[0], px(-2), "f' enters the window at x = -2");
+  near(first[1], py(-4), "f' enters at the bottom edge");
+  assert.ok(layout.derivativeLabelAt[0], "f'(x) is labelled");
+  assert.match(describeMathScene(scene), /f'\(x\) = 2 \* x; tangent f at p; area f from 0 to b/);
+});
+
+test("the area is the signed integral of the formula between the bounds, shaded down to the axis", () => {
+  const { scene } = readStageScene(calculus);
+  const { height: H } = MATH_BOARD;
+  const py = y => (y + 4) / 14 * H - H / 2;
+  const [area] = mathLayout(scene).areas;
+  assert.deepEqual([area.from, area.to], [0, 2]);
+  near(area.value, 8 / 3, "x^2 from 0 to 2");
+  assert.equal(area.bands.length, 1);
+  for (const [, top, bottom] of area.bands[0]) { near(bottom, py(0), "down to the axis"); assert.ok(top >= bottom - 1e-12); }
+  near(mathLayout(scene, { p: 1, b: 0 }).areas[0].value, 0, "empty when the bounds meet");
+  const plain = { derivatives: [], tangents: [] };
+  const signed = readStageScene({ ...calculus, ...plain, functions: [{ name: "f", expression: "-x" }], areas: [{ of: "f", from: 0, to: 2 }] });
+  near(mathLayout(signed.scene).areas[0].value, -2, "negative under the axis");
+  const hole = readStageScene({ ...calculus, derivatives: [], functions: [{ name: "f", expression: "1/x" }], tangents: [{ of: "f", at: 0 }],
+    areas: [{ of: "f", from: -1, to: 1 }] });
+  const holed = mathLayout(hole.scene);
+  assert.equal(holed.areas[0].value, null, "undefined across x = 0: no number");
+  assert.equal(holed.areas[0].bands.length, 2, "shaded on each side of the hole");
+  assert.deepEqual([holed.tangents[0].y, holed.tangents[0].slope, holed.tangents[0].segment], [null, null, null], "no tangent where undefined");
+});
+
+test("a function using another is drawn from the substituted formula", () => {
+  const { scene } = readStageScene(calculus);
+  const layout = mathLayout(scene);
+  // g(x) = (x - 1)^2 + 1 is lowest at x = 1, where it is 1.
+  const g = layout.molecules.filter(m => m.fn === 1 && m.lane === 1 && m.position);
+  const lowest = g.reduce((best, m) => (m.position[1] < best.position[1] ? m : best));
+  const { width: W, height: H } = MATH_BOARD;
+  near(lowest.position[0], (1 + 3) / 6 * W - W / 2, "vertex x");
+  near(lowest.position[1], (1 + 4) / 14 * H - H / 2, "vertex y");
+  const derived = readStageScene({ ...calculus, functions: [{ name: "f", expression: "x^3" }, { name: "g", expression: "f'(x)" }],
+    derivatives: [], tangents: [], areas: [] });
+  assert.equal(derived.ok, true, derived.message);
+  // g = f' = 3x^2: at x = 1 it is 3.
+  assert.equal(mathLayout(derived.scene).areas.length, 0);
+  assert.equal(mathLayout({ ...derived.scene, tangents: [{ of: "g", fn: 1, at: 1, slope: derived.scene.functions[1].tree }] }).tangents[0].y, 3);
 });

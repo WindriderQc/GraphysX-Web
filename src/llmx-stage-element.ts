@@ -15,6 +15,7 @@ import {
   MATH_ORBIT_DEFAULT,
   MATH_SCENE_V1,
   MATH_SCENE_V2,
+  MATH_SCENE_V3,
   clampOrbit,
   describeMathScene,
   mathFitDistance,
@@ -23,6 +24,7 @@ import {
   readStageScene,
   type MathFunctionsScene,
   type MathOrbit,
+  type MathPoint,
 } from "./llmx-math-functions";
 import { MathFunctionStage } from "./llmx-math-function-stage";
 import { stageView, type StageView } from "./llmx-stage-frame";
@@ -31,9 +33,10 @@ import { stageView, type StageView } from "./llmx-stage-frame";
  * `<llmx-stage>`: the math picture on its own, for a host that shows it in its own pictures zone
  * rather than beside the docked mask. No mask, no presence.
  *
- * `scene` takes `agentx.math-scene.v1` (cubes: counting, additions) or `agentx.math-scene.v2`
+ * `scene` takes `agentx.math-scene.v1` (cubes: counting, additions), `agentx.math-scene.v2`
  * (the same cube kinds, or `functions`: one to four functions y = f(x) drawn in the Math Game
- * style and overlaid for comparison), or null to clear. `parameters` takes new values for the
+ * style and overlaid for comparison), `agentx.math-scene.v3` (v2 plus derivatives, tangents, areas and
+ * functions that use one another), or null to clear. `parameters` takes new values for the
  * shown functions' parameters, so the host's sliders drive the picture without rebuilding it.
  * Both are refused whole, never clamped. A functions picture can be turned by dragging (touch:
  * sideways only, so the page still scrolls); a double click returns to the opening view.
@@ -51,17 +54,21 @@ const DRAG_RATE = 0.008;
 const reducedMotion = (): boolean => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
 export type PublicFunctionsScene = {
-  schema: typeof MATH_SCENE_V2;
+  schema: typeof MATH_SCENE_V2 | typeof MATH_SCENE_V3;
   kind: "functions";
   functions: { name: string; label: string; expression: string; color: string }[];
   parameters: { name: string; value: number; min: number; max: number }[];
   x: [number, number];
   y: [number, number] | null;
+  /** v3 only. */
+  derivatives?: string[];
+  tangents?: { of: string; at: MathPoint }[];
+  areas?: { of: string; from: MathPoint; to: MathPoint }[];
 };
 
 export class LlmXStageElement extends HTMLElement {
   /** The contracts this element understands, so a host can pick v2 or keep its own fallback. */
-  static readonly schemas: readonly string[] = Object.freeze([MATH_SCENE_V1, MATH_SCENE_V2]);
+  static readonly schemas: readonly string[] = Object.freeze([MATH_SCENE_V1, MATH_SCENE_V2, MATH_SCENE_V3]);
 
   private renderer: WebGLRenderer | null = null;
   private world: Scene | null = null;
@@ -145,6 +152,9 @@ export class LlmXStageElement extends HTMLElement {
       functions: shown.functions.length,
       molecules: layout.molecules.filter(molecule => molecule.position).length,
       y: [...layout.y],
+      // v3: what Core also computes, from the same formulas, for the host to compare.
+      tangents: layout.tangents.map(row => ({ of: shown.functions[row.fn].name, x: row.x, y: row.y, slope: row.slope })),
+      areas: layout.areas.map(row => ({ of: shown.functions[row.fn].name, from: row.from, to: row.to, value: row.value })),
       text: describeMathScene(shown, values),
     };
   }
@@ -301,8 +311,14 @@ export class LlmXStageElement extends HTMLElement {
 }
 
 function publicScene(scene: MathFunctionsScene, values: Readonly<Record<string, number>>): PublicFunctionsScene {
+  const extras = scene.schema === MATH_SCENE_V3 ? {
+    derivatives: scene.derivatives.map(row => row.of),
+    tangents: scene.tangents.map(({ of, at }) => ({ of, at })),
+    areas: scene.areas.map(({ of, from, to }) => ({ of, from, to })),
+  } : {};
   return {
-    schema: MATH_SCENE_V2,
+    ...extras,
+    schema: scene.schema,
     kind: "functions",
     functions: scene.functions.map(({ name, label, expression, color }) => ({ name, label, expression, color })),
     parameters: scene.parameters.map(row => ({ ...row, value: values[row.name] ?? row.value })),
