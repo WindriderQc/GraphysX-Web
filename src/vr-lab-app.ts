@@ -34,10 +34,9 @@ function label(text: string, width: number, height: number, color = "#e7f8f5"): 
 export function mountVrLab(root: HTMLElement): { dispose(): Promise<void> } {
   const host = new PlatformHost(root,{world:WORLD,interactive:false,editorVisible:false,framing:{position:[2.3,2.25,3.4],target:[0,1.15,-1]}});
   const decor = new Group(); host.scene.add(decor);
-  const textures: CanvasTexture[] = [];
   const addLabel = (text:string,x:number,y:number,z:number,width:number,height:number,color?:string) => {
     const mesh=label(text,width,height,color); mesh.position.set(x,y,z); decor.add(mesh);
-    textures.push(mesh.material.map as CanvasTexture); return mesh;
+    return mesh;
   };
   addLabel("GRAPHYSX / VR",0,2.18,-2.35,2.6,.28,"#76f4d0");
   addLabel("Vos mains. Le même monde.",0,1.84,-2.35,2.3,.21);
@@ -120,7 +119,7 @@ export function mountVrLab(root: HTMLElement): { dispose(): Promise<void> } {
   ui.innerHTML=`<div class="gx-vr-top"><strong>GRAPHYSX / LAB VR</strong><a href="${import.meta.env.BASE_URL}">Retour à GraphysX</a></div>
     <div class="gx-vr-panel"><h1>Entrez dans votre monde.</h1><p>Un premier atelier pour voir vos mains, essayer les boutons et déplacer un objet. Sans déplacement automatique.</p>
     <p class="gx-vr-status" role="status"></p><div class="gx-vr-actions"><button class="gx-vr-enter" disabled>Vérification VR…</button><button class="gx-vr-preview">Essayer le bouton</button><button class="gx-vr-reset">Replacer le cube</button></div>
-    <div class="gx-vr-live" aria-live="polite"></div><p class="gx-vr-detail">Mains : articulations suivies si le casque les fournit. Manettes : modèle générique et boutons animés, pas de doigts suivis autour de la poignée. Quittez aussi avec le menu du casque.</p></div>`;
+    <div class="gx-vr-live" aria-live="polite"></div><p class="gx-vr-detail">Mains translucides articulées avec le suivi du casque. Manettes Touch blanches à anneaux sur Quest 2, modèle générique pour les autres profils. Pincez pour saisir, relâchez pour déposer.</p></div>`;
   root.append(style,ui);
   const enter=ui.querySelector<HTMLButtonElement>(".gx-vr-enter")!;
   const status=ui.querySelector<HTMLElement>(".gx-vr-status")!;
@@ -178,7 +177,7 @@ export function mountVrLab(root: HTMLElement): { dispose(): Promise<void> } {
     if(globals.__GRAPHYSX_VR__===diagnostics)delete globals.__GRAPHYSX_VR__;
     host.renderer.domElement.removeEventListener("pointerdown",pointer);
     window.removeEventListener("resize",framePreview);
-    for(const texture of textures)texture.dispose();disposeVrObject(decor);host.dispose();style.remove();ui.remove();
+    disposeVrObject(decor);host.dispose();style.remove();ui.remove();
     window.removeEventListener("pagehide",pageHide);
   }
   const pageHide=()=>{void dispose();};window.addEventListener("pagehide",pageHide);

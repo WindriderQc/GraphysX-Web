@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Group, Matrix4, Vector3 } from 'three';
+import { Group, Matrix4, Texture, Vector3 } from 'three';
+import { readFile } from 'node:fs/promises';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VrInputRig } from '../src/xr/vr-input.ts';
 import { observeGiantXrSelect } from '../src/ballsy-giant-xr.ts';
 
@@ -157,12 +159,15 @@ test('visibility/session deactivation cancels and reactivation does not revive h
 test('dispose cancels, releases owned graphics once, and detaches native listeners/spaces', t => {
   const f = fixture(t); const parent = new Group(); parent.add(f.rig.group);
   f.rig.setActive(true); f.connect(0, 'right'); f.emit(0, 'selectstart');
-  const slot = f.rig.slots[0]; let geometryDisposals = 0, materialDisposals = 0;
+  const slot = f.rig.slots[0]; let geometryDisposals = 0, materialDisposals = 0, textureDisposals = 0;
+  const texture = new Texture();texture.addEventListener('dispose',()=>textureDisposals++);
+  slot.fallback.material.map = texture;slot.fallback.material.normalMap = texture;
   slot.fallback.geometry.addEventListener('dispose', () => geometryDisposals++);
   slot.fallback.material.addEventListener('dispose', () => materialDisposals++);
   f.rig.dispose(); f.rig.dispose();
   assert.equal(f.events.length, 2); assert.equal(f.events[1].cancelled, true);
   assert.equal(geometryDisposals, 1); assert.equal(materialDisposals, 1);
+  assert.equal(textureDisposals, 1);
   assert.equal(f.rig.group.parent, null);
   for (const spaces of f.spaces) for (const space of Object.values(spaces)) assert.equal(space.parent, null);
   f.connect(0, 'left'); f.emit(0, 'selectstart'); f.rig.update();
@@ -195,4 +200,57 @@ test('partial hand visibility compacts factory instances without stale or omitte
   f.rig.group.updateMatrixWorld(true); assert.equal(primitive.handMesh.count,25);
   let disposed=0;primitive.handMesh.addEventListener('dispose',()=>disposed++);
   f.rig.dispose();f.rig.dispose();assert.equal(disposed,1);
+});
+
+for(const side of ['left','right']){
+ test(`${side} hand surface follows all native joints and falls back on incomplete tracking`,async t=>{
+  const loads=[];
+  t.mock.method(GLTFLoader.prototype,'load',function(url,onLoad){loads.push({url,path:this.path,onLoad});});
+  const f=fixture(t);f.rig.setActive(true);f.connect(1,side,true);
+  const slot=f.rig.slots[1];
+  assert.equal(loads.length,1);assert.equal(loads[0].url,`${side}.glb`);
+  assert.equal(loads[0].path,'/assets/xr/profiles/generic-hand/');
+  const buffer=await readFile(new URL(`../public/assets/xr/profiles/generic-hand/${side}.glb`,import.meta.url));
+  const gltf=await new GLTFLoader().parseAsync(buffer.buffer.slice(buffer.byteOffset,buffer.byteOffset+buffer.byteLength),'');
+  loads[0].onLoad(gltf);
+  const surface=slot.modelRoot.getObjectByName('Translucent tracked hand');
+  const fallback=slot.modelRoot.getObjectByName('Tracked joint fallback');
+  const skin=surface.getObjectByProperty('type','SkinnedMesh');
+  assert.equal(skin.skeleton.bones.length,25);
+  for(const [index,joint] of Object.values(slot.hand.joints).entries())joint.position.set(index*.01,1.1,-.5);
+  f.rig.group.updateMatrixWorld(true);
+  assert.equal(surface.visible,true);assert.equal(fallback.visible,false);
+  for(const bone of skin.skeleton.bones)assert.deepEqual(bone.position.toArray(),slot.hand.joints[bone.name].position.toArray());
+  assert.equal(skin.material.transparent,true);assert.ok(skin.material.opacity<1);
+  assert.equal(skin.material.depthWrite,false);
+  const missing=slot.hand.joints['ring-finger-phalanx-intermediate'];missing.visible=false;
+  f.rig.group.updateMatrixWorld(true);
+  assert.equal(surface.visible,false);assert.equal(fallback.visible,true);
+  assert.equal(fallback.motionController.handMesh.count,24);
+  delete slot.hand.joints['ring-finger-phalanx-intermediate'];
+  assert.doesNotThrow(()=>f.rig.group.updateMatrixWorld(true));
+  assert.equal(surface.visible,false);assert.equal(fallback.motionController.handMesh.count,24);
+  slot.hand.joints['ring-finger-phalanx-intermediate']=missing;
+  missing.visible=true;missing.position.x=.8;f.rig.group.updateMatrixWorld(true);
+  assert.equal(surface.visible,true);assert.equal(fallback.visible,false);
+  assert.equal(surface.getObjectByName('ring-finger-phalanx-intermediate').position.x,.8);
+  let released=0;const dispose=skin.skeleton.dispose.bind(skin.skeleton);
+  t.mock.method(skin.skeleton,'dispose',()=>{released++;dispose();});
+  f.rig.dispose();f.rig.dispose();assert.equal(released,1);
+ });
+}
+
+test('late hand mesh load is disposed and cannot replace a reconnected source',async t=>{
+ let deliver;
+ t.mock.method(GLTFLoader.prototype,'load',function(_url,onLoad){deliver=onLoad;});
+ const f=fixture(t);f.rig.setActive(true);f.connect(0,'left',true);
+ const stale=f.rig.slots[0].modelRoot;f.connect(0,'right');
+ const buffer=await readFile(new URL('../public/assets/xr/profiles/generic-hand/left.glb',import.meta.url));
+ const gltf=await new GLTFLoader().parseAsync(buffer.buffer.slice(buffer.byteOffset,buffer.byteOffset+buffer.byteLength),'');
+ const mesh=gltf.scene.getObjectByProperty('type','SkinnedMesh');let disposed=0;
+ mesh.geometry.addEventListener('dispose',()=>disposed++);deliver(gltf);
+ assert.equal(disposed,1);assert.equal(stale.parent,null);
+ assert.equal(f.rig.slots[0].source.handedness,'right');
+ assert.equal(f.rig.slots[0].fallback.visible,true);
+ assert.equal(f.rig.slots[0].modelRoot.getObjectByProperty('type','SkinnedMesh'),undefined);
 });

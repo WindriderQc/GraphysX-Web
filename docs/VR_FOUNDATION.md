@@ -11,12 +11,15 @@ or the separate Ballsy prototype. The ordinary desktop routes do not load the XR
 - A stationary, meter-scale workshop with headset instructions and three 3D buttons.
   Trigger/pinch activates a button. Grip/pinch picks up a cube; releasing puts it down.
   The cube's color and transform are changed through the ordinary `host.api.update`.
-- Official Three.js `XRHandModelFactory` with its network-free `spheres` profile. These
-  are the joints actually supplied by WebXR, not a fabricated full hand mesh.
-- Official `XRControllerModelFactory`, using a GraphysX-authored **generic** controller
-  and same-origin input profile. Trigger, squeeze and available face-button presses animate.
-  The profile assumes `xr-standard`; unknown mappings keep a generic grip and ray instead.
-  This is not an exact Quest hardware replica. No fingers are claimed to be tracked around it.
+- Official Three.js `XRHandModelFactory` with locally bundled, skinned left/right hands.
+  Their translucent ice-blue surface and bright rim follow the 25 native WebXR joints.
+  Its compacted `spheres` profile remains visible while loading, on failure, or when a
+  joint is missing. A surface never keeps drawing an untracked finger's last pose.
+- Official `XRControllerModelFactory` with locally bundled white Touch controllers and
+  tracking rings for the `oculus-touch-v3` (Quest 2) input profile. Left/right meshes,
+  triggers, grip buttons, face buttons and thumbsticks use the profile's native animation.
+  Other devices retain the GraphysX **generic** model; unknown mappings keep a grip and ray.
+  No fingers are claimed to be tracked around a controller.
 - Immediate procedural grip/ray fallback while a model loads or if an asset fails.
 - Source/pose loss, visibility interruption and session end cancel held actions.
   A canceled release is distinguishable from an intentional release. It never implies a throw.
@@ -37,6 +40,9 @@ connect/disconnect model-loading edge case. Factory GLTF failures leave the fall
 The r179 primitive hand updater is wrapped to compact visible instances after its update:
 missing joint poses cannot leave stale spheres drawn or truncate other tracked fingers.
 Disposal releases both shared primitive geometry/materials and the owned instance buffers.
+Surface loads use the same connection isolation. A late hand asset is disposed rather
+than attached to a replacement source. Skinned skeletons and embedded controller textures
+are also disposed with their models. Surface loading is cosmetic and never blocks pinch.
 
 `src/xr/platform-vr.ts` adapts those pieces to `PlatformHost`. Construct one adapter on a
 **scene-mode** host. A second adapter or an editor/play host is rejected; switching surfaces
@@ -87,9 +93,18 @@ The lab's cube is placed, not thrown, collision-solved or manipulated with two h
 
 There is no new package dependency. Source baseline uses Three `^0.179.1`; factories were
 inspected in the installed r179 implementation. `scripts/build-xr-controller.mjs` regenerates
-`public/assets/xr/profiles/` entirely from GraphysX-authored primitive geometry. The GLTF has
-an embedded buffer and no texture/network references. The manifest includes these files,
-and `test/vr-assets.test.mjs` validates profile nodes and packaging.
+the GraphysX generic fallback. `scripts/vendor-xr-models.mjs` restores the hands, Touch
+controllers and their MIT notice from pinned `@webxr-input-profiles/assets@1.0.20`, checking
+SHA-256 before writing. These five model/profile files add about 1.5 MB; GLB geometry and
+textures are embedded. The manifest ships every file, including the license, and
+`test/vr-assets.test.mjs` validates hashes, all 25 hand bones, animation nodes and packaging.
+
+Upstream source: [WebXR Input Profiles assets](https://github.com/immersive-web/webxr-input-profiles/tree/512311614a8557f0ef8bd3929889008bbf37381c/packages/assets).
+The four meshes are unchanged. The packaged Touch JSON corrects upstream root/component
+names to nodes present in its GLBs and removes the left menu's nonexistent visual animation;
+the menu's button mapping is retained. The vendor script reproduces these edits and checks
+both upstream and adapted hashes. Trademarks in the unmodified hardware meshes identify the
+physical device; see the upstream asset README and bundled `profiles/LICENSE.md`.
 
 No model-CDN request is needed. Real tracked input is not sent to a remote service.
 A custom consumer must not silently replace the local profile path with a remote model source.
@@ -151,7 +166,8 @@ redirected; do not install another browser or change machine settings unnecessar
 2. Confirm the scene floor/scale and a comfortable stationary spawn, with an unobstructed area.
 3. Enter using the visible button; inspect both-eye stereo, frame pacing and text readability.
 4. Try each controller independently, reversed connection order, and trigger/grip/button travel.
-5. Put controllers down and enable hand tracking. Inspect all supplied joints and pinch/release.
+5. Put controllers down and enable hand tracking. Inspect the translucent surface and pinch/release,
+   including the joint fallback on incomplete tracking and recovery to the complete surface.
 6. Lose a hand/controller behind the head, remove a source, open the system menu, and return.
    The cube must release safely and never re-grab until a fresh gesture.
 7. Use the in-world exit and the headset's exit separately, then re-enter. Desktop framing,
@@ -192,3 +208,40 @@ Local reproducible evidence is under `output/vr/`: `final-patch-receipt.json`, `
 `regression-receipt.json`, `regressions-final.log` and the corresponding screenshots.
 These ignored artifacts are not published.
 The full repository gate is not green; the physical-headset checklist above remains open.
+
+## Reference-style input update (2026-11-07)
+
+Branch `codex/vr-hands-touch`, based on `origin/main` at `5952c94`. The owner's target is
+Quest 2 in its own browser. The native `oculus-touch-v3` profile now selects the matching
+white controllers instead of generic boxes. Complete hand tracking selects the local
+skinned surface; hand tracking must be enabled on the headset to supply that input source.
+
+![Built-app models with synthetic poses](images/vr-input-reference.png)
+
+The picture combines two cropped screenshots of the real built lab. Only input poses and
+headset binding are synthetic; the desktop panel and cube are hidden for model visibility.
+The hand screenshot uses the asset's bind pose normalized at the wrist, without changing
+the production mapping of native joints.
+
+Validation:
+
+- 32 focused XR tests pass, including both real hand GLBs, incomplete/missing joint spaces,
+  recovered poses, stale asynchronous loads, skeleton disposal and shared texture disposal.
+- TypeScript, repository ESLint and the production build pass. Re-running the vendor script
+  reproduces the committed asset hashes and the adapted profile.
+- Built-app browser checks pass under the existing Windows Edge: VR lab, Ballsy shared VR
+  (50 checks), showroom and Cyber Race, with no browser errors. A final lab disposal cleanup
+  was rechecked with the focused tests and lab journey.
+- The complete Node run reports 1,241 tests: 1,236 passed, 4 failed, 1 skipped. The same four
+  failures were reproduced in the unmodified `0938675` checkout: three Windows directory
+  `fsync` errors at `world-service/archive.mjs:41` and one missing checkpoint's `sha256`.
+  The normal verifier stops at that unit step; the four browser checks therefore ran
+  separately under the machine-global verify lock. No full release gate is claimed.
+- The first Playwright Chromium Ballsy attempt timed out discovering its relay before XR
+  entry. The existing Edge run passes without altering product timeouts or assertions.
+
+Detailed local evidence is in `output/vr-visuals/`: `xr-final.log`, `typecheck-final.log`,
+`lint-final.log`, `build-final.log`, `unit.log`, both `baseline-world-*.log` files,
+`browser-final.log`, `browser-summary.json`, `vr-lab-final.log` and per-journey receipts
+under `browser/`. These logs remain ignored. No headset, stereo, optical tracking, comfort,
+audio or Quest frame-rate acceptance is claimed; publication is separate from this change.

@@ -1,5 +1,8 @@
 {
   "generic-trigger": {
     "path": "generic-trigger/profile.json"
+  },
+  "oculus-touch-v3": {
+    "path": "oculus-touch-v3/profile.json"
   }
 }
