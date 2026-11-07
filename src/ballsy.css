@@ -116,3 +116,7 @@ h1 { font-size: clamp(27px, 3vw, 38px); line-height: 1.08; letter-spacing: -.06e
   .ballsy-giant, .ballsy-room { max-height: 155px; overflow-y: auto; width: 150px; }
   .ballsy-volcano-signal { font-size: 10px; }.ballsy-race-tip { font-size: 9px; }
 }
+
+/* The landmark occupies the far horizon: keep route advice out of its silhouette. */
+.ballsy-volcano-signal { top: 15px; margin: 0; max-width: 40%; padding: 9px 15px; }
+@media (max-width: 950px) { .ballsy-volcano-signal { top: auto; bottom: 43px; max-width: 80%; padding: 6px 10px; } }

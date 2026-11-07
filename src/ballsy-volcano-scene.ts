@@ -1,6 +1,8 @@
 import { createEarth, earthMesh } from "./ballsy-earth";
 import type { AgentWorldEntityDefinition, GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { VOLCANO_CROSSINGS, type VolcanoState } from "./ballsy-volcano";
+import type { Object3D } from "three";
+import { projectLiveLava } from "./ballsy-live-mesh";
 
 const LAVA = { color: "#f58124", emissive: "#ee4b09", emissiveIntensity: 0.35, roughness: 0.6 };
 export function volcanoEntities(): AgentWorldEntityDefinition[] {
@@ -53,11 +55,12 @@ export function volcanoEntities(): AgentWorldEntityDefinition[] {
 }
 
 const projected = new WeakMap<GraphysXAgentWorldApi, number>();
-export function projectVolcano(api: GraphysXAgentWorldApi, state: VolcanoState): void {
+export function projectVolcano(api: GraphysXAgentWorldApi, state: VolcanoState, visualObject?: (id: string) => Object3D | null | undefined): void {
   if (projected.get(api) !== state.earth.revision) api.update("volcano-earth", { mesh: earthMesh(state.earth) });
-  api.update("volcano-earth-lava", { mesh: earthMesh(state.earth, true) });
+  const lava = earthMesh(state.earth, true);
+  if (!visualObject || !projectLiveLava(visualObject("volcano-earth-lava"), lava)) api.update("volcano-earth-lava", { mesh: lava });
   // Historical decorative channel geometry is never the source of truth for the physical game.
   if (!projected.has(api)) for (const id of ["volcano-trunk", "volcano-shovel", "volcano-diversion", "volcano-diversion-fall", "volcano-basin-lava",
-    ...[0, 1].flatMap(i => [`volcano-stream-${i}-in`, `volcano-stream-${i}-fall`, `volcano-stream-${i}-cross`, `volcano-lake-${i}`])]) api.update(id, { visible: false });
+    ...[0, 1].flatMap(i => [`volcano-stream-${i}-in`, `volcano-stream-${i}-fall`, `volcano-stream-${i}-cross`, `volcano-lake-${i}`])]) if (api.query({ids:[id]}).length) api.update(id, { visible: false });
   projected.set(api, state.earth.revision);
 }

@@ -5,6 +5,7 @@ import { composeBallsyCourse } from "./ballsy-scene";
 import { projectVolcano } from "./ballsy-volcano-scene";
 import { createBallsyGuestLink, ballsyRelayAvailable } from "./ballsy-link";
 import { createVolcano, volcanoWave } from "./ballsy-volcano";
+import { bridgeOcclusionDistance } from "./ballsy-picking";
 import { EARTH_BOUNDS, surfaceHeightAt } from "./ballsy-earth";
 import { showStartupError } from "./startup-error";
 import "./ballsy-giant.css";
@@ -38,7 +39,7 @@ api.pause(true);
 world.group.scale.setScalar(0.045); world.group.position.set(0, 0.82, -1.05);
 tableRig.add(world.group);
 for (const id of ["ballsy-p1", "ballsy-p2"]) api.update(id, { visible: false });
-projectVolcano(api, createVolcano());
+projectVolcano(api, createVolcano(), (id) => world.getEntityObject(id));
 
 const ownedTextures: CanvasTexture[] = [], ownedMaterials: SpriteMaterial[] = [];
 function label(width: number, height: number): { sprite: Sprite; draw: (text: string, sub?: string) => void } {
@@ -223,10 +224,12 @@ function desktopTip(event: PointerEvent): Vector3 | null {
   const rect = renderer.domElement.getBoundingClientRect();
   pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2);
   scene.updateMatrixWorld(true); raycaster.setFromCamera(pointer, camera);
-  // March through the model surface, not through decorative lava or the track.
+  // Transform the pointer ray only; hand/shovel poses and the VR scale are unchanged.
   const localRay = raycaster.ray.clone().applyMatrix4(new Matrix4().copy(world.group.matrixWorld).invert());
   const p = new Vector3();
-  for (let t = 0; t < 140; t += 0.12) {
+  const modelScale = world.group.getWorldScale(new Vector3()).x;
+  const maximumDistance = Math.min(camera.far / modelScale, bridgeOcclusionDistance(localRay));
+  for (let t = 0; t < maximumDistance; t += 0.12) {
     localRay.at(t, p);
     if (p.x < EARTH_BOUNDS.minX || p.x > EARTH_BOUNDS.maxX || p.z < EARTH_BOUNDS.minZ || p.z > EARTH_BOUNDS.maxZ) continue;
     const y = surfaceHeightAt(earth, p.x, p.z);
@@ -293,20 +296,23 @@ renderer.setAnimationLoop((_time, frame) => {
   if (snapshot) {
     const key = `${snapshot.roundId}|${snapshot.phase}|${snapshot.volcano.time}`;
     if (key !== projectedKey) {
-      projectedKey = key; projectVolcano(api, snapshot.volcano);
+      projectedKey = key; projectVolcano(api, snapshot.volcano, (id) => world.getEntityObject(id));
       snapshot.players.forEach((player, i) => {
         const pose = poses[i], object = world.getEntityObject(player.id);
         pose.from.copy(object?.position ?? new Vector3(...player.position)); pose.to.set(...player.position);
         if (projectedRound !== snapshot.roundId || pose.from.distanceTo(pose.to) > 6) pose.from.copy(pose.to);
         pose.active = true;
-        api.update(player.id, { visible: true });
+        if (object) object.visible = true;
       });
       projectedRound = snapshot.roundId; poseStarted = performance.now();
       paint();
     }
     // Presentation interpolation only. No race physics or rules run on the headset.
     const fraction = Math.min(1, (performance.now() - poseStarted) / 90);
-    snapshot.players.forEach((player, i) => { if (poses[i].active) api.update(player.id, { transform: { position: point.lerpVectors(poses[i].from, poses[i].to, fraction).toArray() as [number, number, number] } }); });
+    snapshot.players.forEach((player, i) => {
+      const object = world.getEntityObject(player.id);
+      if (poses[i].active && object) object.position.lerpVectors(poses[i].from, poses[i].to, fraction);
+    });
   }
   if (!canDig()) release();
   scene.updateMatrixWorld(true);

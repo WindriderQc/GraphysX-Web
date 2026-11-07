@@ -50,7 +50,7 @@
     "serve:kidx": "node scripts/serve-kidx.mjs",
     "serve:llmx": "node scripts/serve-llmx.mjs",
     "smoke:ballsy": "node scripts/smoke-ballsy.mjs",
-    "smoke:ballsy-volcano": "node scripts/smoke-ballsy-earth-race.mjs",
+    "smoke:ballsy-volcano": "node scripts/smoke-ballsy-loop.mjs",
     "serve:ballsy": "node scripts/serve-ballsy.mjs",
     "smoke:ballsy-giant": "node scripts/smoke-ballsy-shovel.mjs",
     "smoke:ballz18-sky": "node scripts/smoke-ballz18-sky.mjs",
@@ -98,7 +98,10 @@
     "verify:core": "node scripts/verify.mjs --tier=core",
     "verify:apps": "node scripts/verify.mjs --tier=apps",
     "smoke:ballsy-setup": "node scripts/smoke-ballsy-setup.mjs",
-    "smoke:ballsy-shovel": "node scripts/smoke-ballsy-shovel.mjs"
+    "smoke:ballsy-shovel": "node scripts/smoke-ballsy-shovel.mjs",
+    "build:ballsy-loop": "vite build --config vite.ballsy.config.ts --outDir output/volcano-loop/dist",
+    "serve:ballsy-loop": "node scripts/serve-ballsy-loop.mjs",
+    "smoke:ballsy-loop": "node scripts/smoke-ballsy-loop.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.19.3",

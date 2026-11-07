@@ -13,7 +13,7 @@ if (!desktopOnly) {
   iwer = process.env.SMOKE_IWER ? path.resolve(process.env.SMOKE_IWER) : fileURLToPath(new URL("../build/iwer.min.js", import.meta.resolve("iwer")));
   if (!existsSync(iwer)) throw new Error("IWER missing. Use SMOKE_DESKTOP_ONLY=1 for desktop-only coverage.");
 }
-const app = await startBallsyServer({ port: 0 });
+const app = await startBallsyServer({ port: 0, ...(process.env.SMOKE_DIST_ROOT ? { root: path.resolve(process.env.SMOKE_DIST_ROOT) } : {}) });
 const guestBase = new URL(app.url); guestBase.hostname = "localhost";
 const browser = await launchSmokeBrowser();
 const errors = [], report = {};

@@ -1,14 +1,20 @@
 import type { AgentWorldDefinition, AgentWorldEntityDefinition } from "./agent-world-runtime";
 import { volcanoEntities } from "./ballsy-volcano-scene";
+import { composeVolcanoLoop } from "./ballsy-loop-scene";
 
-export const BALLSY_PLAYERS = [
+export const BALLSY_PRACTICE_PLAYERS = [
   { id: "ballsy-p1", name: "J1", colour: "#22d9e5", spawn: [-4, 0.7, 8] as [number, number, number] },
   { id: "ballsy-p2", name: "J2", colour: "#ff7955", spawn: [-4, 0.7, 10] as [number, number, number] },
+] as const;
+export const BALLSY_PLAYERS = [
+  { id: "ballsy-p1", name: "Lagon", colour: "#22d9e5", spawn: [3, 2.02, 17.6] as [number, number, number] },
+  { id: "ballsy-p2", name: "Corail", colour: "#ff7955", spawn: [3, 2.02, 20.4] as [number, number, number] },
 ] as const;
 export const BALLSY_CHECKPOINTS = ["ballsy-east", "ballsy-north", "ballsy-west"];
 
 /** A miniature island circuit. All scenery uses the ordinary, editable v2 vocabulary. */
-export function composeBallsyCourse(options: { volcano?: boolean } = {}): AgentWorldDefinition {
+export function composeBallsyCourse(options: { volcano?: boolean; greybox?: boolean } = {}): AgentWorldDefinition {
+  if (options.volcano) return composeVolcanoLoop(BALLSY_PLAYERS, options.greybox);
   const entities: AgentWorldEntityDefinition[] = [];
   const box = (id: string, position: [number, number, number], size: [number, number, number], color: string, solid = false): void => {
     entities.push({ id, type: "box", transform: { position }, geometry: { width: size[0], height: size[1], depth: size[2] },
@@ -104,7 +110,7 @@ export function composeBallsyCourse(options: { volcano?: boolean } = {}): AgentW
       mesh: { positions: [-0.28, 0, -0.8, -0.06, 0, -0.8, 0.38, 0, 0, -0.06, 0, 0.8, -0.28, 0, 0.8, 0.12, 0, 0], indices: [0, 5, 1, 1, 5, 2, 5, 3, 2, 5, 4, 3] },
       material: { color: "#8df7e3", emissive: "#46c4ba", emissiveIntensity: 0.3, roughness: 1 }, castShadow: false, tags: ["ballsy", "boost"] });
   }
-  for (const player of BALLSY_PLAYERS) {
+  for (const player of BALLSY_PRACTICE_PLAYERS) {
     entities.push({ id: player.id, type: "sphere", label: player.name, transform: { position: [...player.spawn] }, geometry: { radius: 0.65, radialSegments: 32 },
       material: { color: player.colour, emissive: player.colour, emissiveIntensity: 0.13, roughness: 0.22, metalness: 0.2 }, physics: { mode: "dynamic", material: "ball", mass: 1.7 },
       steering: { headingDegrees: 90, force: 28, speedCap: 8, turnRateDegrees: 240 }, tags: ["ballsy", "player"] });
@@ -119,9 +125,9 @@ export function composeBallsyCourse(options: { volcano?: boolean } = {}): AgentW
     environment: { background: "#153c49", sky: null, ground: { visible: false, size: 60, color: "#153c49", grid: false, gridColor: "#345b60" }, physics: { gravity: [0, -9.81, 0] },
       envelope: { fogNear: 100, fogFar: 200, cameraFar: 250 } },
     entities,
-    rules: { schema: "graphysx.agent-rules/v1", subjectId: BALLSY_PLAYERS[0].id,
-      spawn: { entityId: BALLSY_PLAYERS[0].id, position: [...BALLSY_PLAYERS[0].spawn] },
-      subjects: BALLSY_PLAYERS.map((player) => ({ id: player.id, label: player.name, spawn: { position: [...player.spawn] } })),
+    rules: { schema: "graphysx.agent-rules/v1", subjectId: BALLSY_PRACTICE_PLAYERS[0].id,
+      spawn: { entityId: BALLSY_PRACTICE_PLAYERS[0].id, position: [...BALLSY_PRACTICE_PLAYERS[0].spawn] },
+      subjects: BALLSY_PRACTICE_PLAYERS.map((player) => ({ id: player.id, label: player.name, spawn: { position: [...player.spawn] } })),
       checkpoints: BALLSY_CHECKPOINTS.map((triggerId) => ({ triggerId })), finish: { triggerId: "ballsy-finish" }, laps: 2 },
   };
 }

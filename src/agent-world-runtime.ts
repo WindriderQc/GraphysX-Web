@@ -1228,6 +1228,8 @@ export type GraphysXAgentWorldApi = {
   detachBehavior(id: string, behaviorId: string): AgentWorldResult<string>;
   interact(id: string, interactionId?: string): AgentWorldResult<AgentWorldInteractionReceipt>;
   steer(id: string, input: AgentWorldSteerInput): AgentWorldResult<AgentWorldSteerReceipt>;
+  /** Non-documentary continuous controls; no impulses or configuration edits. */
+  steerLive(id: string, input: Pick<AgentWorldSteerInput, "headingDegrees" | "thrust" | "turn">): AgentWorldResult<AgentWorldSteerReceipt>;
   prefabs(): readonly AgentWorldPrefabDescriptor[];
   spawnPrefab(prefabId: AgentWorldPrefabId, options?: AgentWorldPrefabOptions): AgentWorldResult<AgentWorldPrefabInstance>;
   starters(): readonly AgentWorldStarterDescriptor[];
@@ -1944,6 +1946,28 @@ export class AgentWorldRuntime {
     const receipt = result.value?.[0] as AgentWorldSteerReceipt | undefined;
     if (!receipt) return this.failure(`Steer failed: ${id}`);
     return this.success(receipt);
+  }
+
+  /** Continuous host input, not an authored edit. Uses the same steering and
+   * physics integration as steer(), without cloning the world or changing history.
+   * Discrete impulses and configuration changes remain on the transactional API. */
+  steerLive(id: string, input: Pick<AgentWorldSteerInput, "headingDegrees" | "thrust" | "turn">): AgentWorldResult<AgentWorldSteerReceipt> {
+    try {
+      if (typeof id !== "string" || !id.trim()) throw new Error("steerLive.id must be a nonempty string");
+      if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("steerLive.input must be an object");
+      const validated: Pick<AgentWorldSteerInput, "headingDegrees" | "thrust" | "turn"> = {};
+      // Validate the ENTIRE input before steerInternal can mutate even one field.
+      for (const [key, value] of Object.entries(input)) {
+        if (key !== "headingDegrees" && key !== "thrust" && key !== "turn") throw new Error(`Unsupported live steering field: ${key}`);
+        if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`steerLive.${key} must be a finite number`);
+        validated[key] = value;
+      }
+      assertAuthoredSceneCommandNamespaces({ op: "steer", id, input: validated });
+      this.assertNotScopedTransient(id, "steer");
+      return this.success(this.steerInternal(id, validated));
+    } catch (error) {
+      return this.failure(error);
+    }
   }
 
   /**
