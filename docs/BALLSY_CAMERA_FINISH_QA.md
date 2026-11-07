@@ -154,7 +154,17 @@ recovery or teleport. The installed original develop-web-game client passes;
 its latest shot and text state were inspected. Evidence is retained in
 `output/permanent-ballsy-qa/build3-*` and `final-contact` / `final-entrypoints`.
 
-The complete camera/finish smoke still awaits the final badge-layout rebuild:
-its close-arrival fixture exposed overlapping individual arrival badges at a
-0.531-second finish gap. The assertion remains strict. Physical headset and
-human controller acceptance are still separate tasks, not claimed by these runs.
+The final canonical `dist/` built from commit `662c104` passes the complete
+camera/finish smoke: 254 checks in 64.0 seconds. The close-arrival gap is 0.531
+seconds; both badges are disjoint, on screen and connected to their own balls at
+1280x720, 960x540 and 390x844. The actual captures were inspected. Individual stops,
+held keyboard/gamepad brakes, pause/resume, sparkle expiry and rematch all pass.
+Canonical entrypoints pass 12 checks in 9.4 seconds, and the product shared-VR
+wrapper passes 50 checks in 24.6 seconds against that exact `dist/`. All three
+reports contain zero browser errors. Their receipts and full-UI captures are in
+`output/permanent-ballsy-qa/canonical-camera-finish`, `canonical-entrypoints` and
+`canonical-shared-vr`. The unchanged scopes retain the separate build3 regression
+receipts described above. No assertion or timeout was weakened.
+
+Physical headset and human controller acceptance remain separate tasks, not
+claimed by these browser and synthetic-XR runs.
