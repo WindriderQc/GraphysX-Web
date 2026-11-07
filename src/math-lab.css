@@ -1,0 +1,153 @@
+@import "@fontsource/space-grotesk/latin-500.css";
+@import "@fontsource/space-grotesk/latin-700.css";
+
+/* The Math Lab page: the Math Game's night board, a text box and the stage. Phone first. */
+:root {
+  --ml-bg: #0b1016;
+  --ml-panel: #121a24;
+  --ml-line: #26354a;
+  --ml-text: #e6edf5;
+  --ml-dim: #93a4b8;
+  --ml-accent: #ffe86b;
+  --ml-cyan: #60d6e8;
+  --ml-refuse: #ff8a7a;
+  --ml-mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+  color-scheme: dark;
+  font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  color: var(--ml-text);
+  background: var(--ml-bg);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--ml-bg); }
+code { font-family: var(--ml-mono); font-size: 0.92em; }
+
+.ml {
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px 28px;
+  max-width: 1280px;
+  margin: 0 auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "head" "examples" "view" "editor";
+}
+.ml-head { grid-area: head; }
+.ml-examples { grid-area: examples; min-width: 0; }
+.ml-editor { grid-area: editor; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.ml-view { grid-area: view; display: grid; gap: 10px; align-content: start; min-width: 0; }
+
+.ml-home { color: var(--ml-dim); text-decoration: none; font-size: 0.85rem; letter-spacing: 0.04em; }
+.ml-home:hover, .ml-home:focus-visible { color: var(--ml-cyan); }
+.ml h1 { margin: 2px 0 4px; font-size: 1.7rem; font-weight: 700; color: var(--ml-accent); }
+.ml-lede { margin: 0; color: var(--ml-dim); max-width: 60ch; line-height: 1.4; }
+
+/* Examples: one scrolling row on a phone, wrapped on wider screens. */
+.ml-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.ml-chip, .ml-button {
+  flex: none;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--ml-line);
+  border-radius: 999px;
+  background: var(--ml-panel);
+  color: var(--ml-text);
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.ml-chip:hover, .ml-button:hover { border-color: var(--ml-cyan); }
+.ml-chip:focus-visible, .ml-button:focus-visible, .ml-body:focus-visible { outline: 2px solid var(--ml-cyan); outline-offset: 2px; }
+.ml-chip[aria-pressed="true"] { border-color: var(--ml-accent); color: var(--ml-accent); }
+
+.ml-label { font-weight: 700; }
+.ml-body {
+  width: 100%;
+  min-height: 9.5em;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--ml-line);
+  border-radius: 10px;
+  background: #0e151e;
+  color: var(--ml-text);
+  font: 16px/1.5 var(--ml-mono); /* 16px: phones do not zoom into the box */
+  tab-size: 2;
+}
+.ml-status { margin: 0; min-height: 1.4em; line-height: 1.4; }
+.ml-status[data-kind="refused"] {
+  padding: 8px 10px;
+  border-left: 3px solid var(--ml-refuse);
+  border-radius: 4px;
+  background: #2a1414;
+  color: var(--ml-refuse);
+}
+.ml-tools { display: flex; align-items: center; gap: 10px; }
+.ml-copied { color: var(--ml-dim); font-size: 0.9rem; }
+
+.ml-help { border: 1px solid var(--ml-line); border-radius: 10px; padding: 8px 12px; background: var(--ml-panel); }
+.ml-help summary { cursor: pointer; font-weight: 700; min-height: 32px; display: flex; align-items: center; }
+.ml-help dl { margin: 6px 0; display: grid; gap: 2px; }
+.ml-help dt { margin-top: 6px; color: var(--ml-accent); }
+.ml-help dd { margin: 0 0 0 12px; color: var(--ml-dim); }
+.ml-help p { color: var(--ml-dim); line-height: 1.4; }
+
+/* The stage: a fixed shape on a phone, the full column on a desk. */
+.ml-stage-box {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--ml-line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #070b10;
+}
+.ml-stage { position: absolute; inset: 0; width: 100%; height: 100%; transition: opacity 0.2s; }
+.ml-stale .ml-stage { opacity: 0.35; }
+.ml-stage-note {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #000a;
+  color: var(--ml-dim);
+  font-size: 0.85rem;
+}
+.ml-no-webgl .ml-stage-note { right: 10px; border-radius: 8px; color: var(--ml-text); }
+
+.ml-legend, .ml-readouts { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ml-legend-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ml-legend-row[data-kind="derivative"] { color: var(--ml-dim); }
+.ml-swatch { flex: none; width: 12px; height: 12px; border-radius: 3px; transform: translateY(1px); }
+.ml-swatch-ghost { border: 1px dashed var(--ml-dim); }
+.ml-legend-name { flex: none; }
+.ml-legend-formula { overflow-wrap: anywhere; }
+.ml-readout { color: var(--ml-cyan); }
+.ml-hint { margin: 0; color: var(--ml-dim); font-size: 0.9rem; }
+.ml-hint:empty { display: none; }
+
+.ml-sliders { display: grid; gap: 6px; }
+.ml-sliders:empty { display: none; }
+.ml-slider {
+  display: grid;
+  grid-template-columns: 1.6em minmax(0, 1fr) 4.5em;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--ml-line);
+  border-radius: 10px;
+  background: var(--ml-panel);
+}
+.ml-slider-name { font: 700 1.05rem var(--ml-mono); color: var(--ml-accent); }
+.ml-slider input { width: 100%; min-height: 36px; accent-color: var(--ml-accent); }
+.ml-slider-value { font-family: var(--ml-mono); text-align: right; }
+
+@media (min-width: 900px) {
+  .ml {
+    gap: 16px 24px;
+    padding: 20px 24px 32px;
+    grid-template-columns: minmax(320px, 5fr) minmax(0, 7fr);
+    grid-template-areas: "head view" "examples view" "editor view";
+    grid-template-rows: auto auto 1fr;
+  }
+  .ml-chips { flex-wrap: wrap; overflow: visible; }
+  .ml-stage-box { aspect-ratio: auto; height: min(62vh, 620px); }
+}

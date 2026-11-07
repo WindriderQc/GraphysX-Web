@@ -1008,6 +1008,18 @@ if (appParam === "vr-lab") {
               host.applyEnvironment();
               enterBrowsedEditor();
             }),
+            // The Math Lab page: a person types the blocks Nestor writes in AgentX and sees the same
+            // Math Game picture, with no assistant. A separate page, so its row is a link.
+            {
+              id: "math-lab",
+              label: "Math Lab",
+              summary: "Écris tes formules, de la droite à la surface, et vois-les en 3D avec des curseurs. Sans IA.",
+              meta: "lines, tangents, areas, curves c(t), surfaces z = f(x, y)  ·  opens its own page",
+              open: () => {
+                window.location.assign(`${import.meta.env.BASE_URL}math-lab.html`);
+                return new Promise<void>(() => {});
+              },
+            },
             ...archiveMathBrowseRows(host.api, () => {
               showroomEnvironment?.();
               showroomEnvironment = null;

@@ -1,0 +1,1748 @@
+{
+ "schema": "agentx.math-block-vectors.v1",
+ "note": "Generated from AgentX core/public/js/math-expression.js (parsePlot) by scripts/math-block-vectors.mjs. GraphysX-Web's src/math-block.ts must answer every body the same way.",
+ "blocks": [
+  {
+   "body": "y = m x + b\nm = 1 in [-3, 3]\nb = 0 in [-5, 5]\nx in [-5, 5]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "m * x + b"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "m",
+      "value": 1,
+      "min": -3,
+      "max": 3
+     },
+     {
+      "name": "b",
+      "value": 0,
+      "min": -5,
+      "max": 5
+     }
+    ],
+    "x": [
+     -5,
+     5
+    ]
+   },
+   "text": "y = m * x + b\nm = 1 in [-3, 3]\nb = 0 in [-5, 5]\nx in [-5, 5]",
+   "references": false,
+   "trees": [
+    "m * x + b"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "y = a x^2 + b x + c\na = 1 in [-2, 2]\nb = 0 in [-4, 4]\nc = -2 in [-5, 5]\nx in [-4, 4]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "a * x^2 + b * x + c"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "a",
+      "value": 1,
+      "min": -2,
+      "max": 2
+     },
+     {
+      "name": "b",
+      "value": 0,
+      "min": -4,
+      "max": 4
+     },
+     {
+      "name": "c",
+      "value": -2,
+      "min": -5,
+      "max": 5
+     }
+    ],
+    "x": [
+     -4,
+     4
+    ]
+   },
+   "text": "y = a * x^2 + b * x + c\na = 1 in [-2, 2]\nb = 0 in [-4, 4]\nc = -2 in [-5, 5]\nx in [-4, 4]",
+   "references": false,
+   "trees": [
+    "a * x^2 + b * x + c"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "f(x) = x^2\ng(x) = a x + 1\na = 2 in [-3, 3]\nx in [-3, 3]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "f",
+      "label": "f(x)",
+      "expression": "x^2"
+     },
+     {
+      "name": "g",
+      "label": "g(x)",
+      "expression": "a * x + 1"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "a",
+      "value": 2,
+      "min": -3,
+      "max": 3
+     }
+    ],
+    "x": [
+     -3,
+     3
+    ]
+   },
+   "text": "f(x) = x^2\ng(x) = a * x + 1\na = 2 in [-3, 3]\nx in [-3, 3]",
+   "references": false,
+   "trees": [
+    "x^2",
+    "a * x + 1"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "y = a sin(b x)\na = 1 in [-3, 3]\nb = 2 in [0.5, 4]\nx in [-2pi, 2pi]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "a * sin(b * x)"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "a",
+      "value": 1,
+      "min": -3,
+      "max": 3
+     },
+     {
+      "name": "b",
+      "value": 2,
+      "min": 0.5,
+      "max": 4
+     }
+    ],
+    "x": [
+     -6.283185307179586,
+     6.283185307179586
+    ]
+   },
+   "text": "y = a * sin(b * x)\na = 1 in [-3, 3]\nb = 2 in [0.5, 4]\nx in [-6.283185307, 6.283185307]",
+   "references": false,
+   "trees": [
+    "a * sin(b * x)"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "f(x) = x^3 - 3x\nf'(x)\ntangent f at p\np = 1 in [-2, 2]\nx in [-2.5, 2.5]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "f",
+      "label": "f(x)",
+      "expression": "x^3 - 3 * x"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "p",
+      "value": 1,
+      "min": -2,
+      "max": 2
+     }
+    ],
+    "x": [
+     -2.5,
+     2.5
+    ],
+    "derivatives": [
+     "f"
+    ],
+    "tangents": [
+     {
+      "of": "f",
+      "at": "p"
+     }
+    ]
+   },
+   "text": "f(x) = x^3 - 3 * x\nf'(x)\ntangent f at p\np = 1 in [-2, 2]\nx in [-2.5, 2.5]",
+   "references": false,
+   "trees": [
+    "x^3 - 3 * x"
+   ],
+   "slopes": {
+    "f": "3 * x^2 - 3"
+   },
+   "curveTrees": []
+  },
+  {
+   "body": "f(x) = sin(x)\narea f from 0 to b\nb = 2 in [0, 6]\nx in [-1, 7]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "f",
+      "label": "f(x)",
+      "expression": "sin(x)"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "b",
+      "value": 2,
+      "min": 0,
+      "max": 6
+     }
+    ],
+    "x": [
+     -1,
+     7
+    ],
+    "areas": [
+     {
+      "of": "f",
+      "from": 0,
+      "to": "b"
+     }
+    ]
+   },
+   "text": "f(x) = sin(x)\narea f from 0 to b\nb = 2 in [0, 6]\nx in [-1, 7]",
+   "references": false,
+   "trees": [
+    "sin(x)"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "c(t) = (r cos(t), r sin(t))\nr = 2 in [0.5, 3]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [],
+    "parameters": [
+     {
+      "name": "r",
+      "value": 2,
+      "min": 0.5,
+      "max": 3
+     }
+    ],
+    "curves": [
+     {
+      "name": "c",
+      "label": "c(t)",
+      "x": "r * cos(t)",
+      "y": "r * sin(t)"
+     }
+    ],
+    "t": [
+     0,
+     6.283185307179586
+    ]
+   },
+   "text": "c(t) = (r * cos(t), r * sin(t))\nr = 2 in [0.5, 3]\nt in [0, 6.283185307]",
+   "references": false,
+   "trees": [],
+   "slopes": {},
+   "curveTrees": [
+    [
+     "r * cos(t)",
+     "r * sin(t)"
+    ]
+   ]
+  },
+  {
+   "body": "z = h exp(-(x^2 + y^2) / s)\nh = 3 in [0.5, 5]\ns = 4 in [1, 10]\nx in [-5, 5]\ny in [-5, 5]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "surfaces",
+    "surfaces": [
+     {
+      "name": "z",
+      "label": "z",
+      "expression": "h * exp(-(x^2 + y^2) / s)"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "h",
+      "value": 3,
+      "min": 0.5,
+      "max": 5
+     },
+     {
+      "name": "s",
+      "value": 4,
+      "min": 1,
+      "max": 10
+     }
+    ],
+    "x": [
+     -5,
+     5
+    ],
+    "y": [
+     -5,
+     5
+    ]
+   },
+   "text": "z = h * exp(-(x^2 + y^2) / s)\nh = 3 in [0.5, 5]\ns = 4 in [1, 10]\nx in [-5, 5]\ny in [-5, 5]",
+   "references": false,
+   "trees": [
+    "h * exp(-(x^2 + y^2) / s)"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "f(x, y) = x^2 - y^2\ng(x, y) = k\nk = 0 in [-3, 3]\nx in [-2, 2]\ny in [-2, 2]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "surfaces",
+    "surfaces": [
+     {
+      "name": "f",
+      "label": "f(x, y)",
+      "expression": "x^2 - y^2"
+     },
+     {
+      "name": "g",
+      "label": "g(x, y)",
+      "expression": "k"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "k",
+      "value": 0,
+      "min": -3,
+      "max": 3
+     }
+    ],
+    "x": [
+     -2,
+     2
+    ],
+    "y": [
+     -2,
+     2
+    ]
+   },
+   "text": "f(x, y) = x^2 - y^2\ng(x, y) = k\nk = 0 in [-3, 3]\nx in [-2, 2]\ny in [-2, 2]",
+   "references": false,
+   "trees": [
+    "x^2 - y^2",
+    "k"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "y = a*sin(b*x)\na = 1 in [-3, 3]\nb = 2 in [0.5, 4]\nx in [-2*pi, 2*pi]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "a * sin(b * x)"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "a",
+      "value": 1,
+      "min": -3,
+      "max": 3
+     },
+     {
+      "name": "b",
+      "value": 2,
+      "min": 0.5,
+      "max": 4
+     }
+    ],
+    "x": [
+     -6.283185307179586,
+     6.283185307179586
+    ]
+   },
+   "text": "y = a * sin(b * x)\na = 1 in [-3, 3]\nb = 2 in [0.5, 4]\nx in [-6.283185307, 6.283185307]",
+   "references": false,
+   "trees": [
+    "a * sin(b * x)"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "f(x) = x^2\ng(x) = a x + 1\na = 2 in [-3, 3]\nx in [-3, 3]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "f",
+      "label": "f(x)",
+      "expression": "x^2"
+     },
+     {
+      "name": "g",
+      "label": "g(x)",
+      "expression": "a * x + 1"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "a",
+      "value": 2,
+      "min": -3,
+      "max": 3
+     }
+    ],
+    "x": [
+     -3,
+     3
+    ]
+   },
+   "text": "f(x) = x^2\ng(x) = a * x + 1\na = 2 in [-3, 3]\nx in [-3, 3]",
+   "references": false,
+   "trees": [
+    "x^2",
+    "a * x + 1"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "f(x) = x^3 - 3x\nf'(x)\ntangent f at p\narea f from 0 to b\np = 1 in [-2, 2]\nb = 1.5 in [0, 2]\nx in [-2.5, 2.5]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "f",
+      "label": "f(x)",
+      "expression": "x^3 - 3 * x"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "p",
+      "value": 1,
+      "min": -2,
+      "max": 2
+     },
+     {
+      "name": "b",
+      "value": 1.5,
+      "min": 0,
+      "max": 2
+     }
+    ],
+    "x": [
+     -2.5,
+     2.5
+    ],
+    "derivatives": [
+     "f"
+    ],
+    "tangents": [
+     {
+      "of": "f",
+      "at": "p"
+     }
+    ],
+    "areas": [
+     {
+      "of": "f",
+      "from": 0,
+      "to": "b"
+     }
+    ]
+   },
+   "text": "f(x) = x^3 - 3 * x\nf'(x)\ntangent f at p\narea f from 0 to b\np = 1 in [-2, 2]\nb = 1.5 in [0, 2]\nx in [-2.5, 2.5]",
+   "references": false,
+   "trees": [
+    "x^3 - 3 * x"
+   ],
+   "slopes": {
+    "f": "3 * x^2 - 3"
+   },
+   "curveTrees": []
+  },
+  {
+   "body": "c(t) = (r cos(t), r sin(t))\nr = 2 in [0.5, 3]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [],
+    "parameters": [
+     {
+      "name": "r",
+      "value": 2,
+      "min": 0.5,
+      "max": 3
+     }
+    ],
+    "curves": [
+     {
+      "name": "c",
+      "label": "c(t)",
+      "x": "r * cos(t)",
+      "y": "r * sin(t)"
+     }
+    ],
+    "t": [
+     0,
+     6.283185307179586
+    ]
+   },
+   "text": "c(t) = (r * cos(t), r * sin(t))\nr = 2 in [0.5, 3]\nt in [0, 6.283185307]",
+   "references": false,
+   "trees": [],
+   "slopes": {},
+   "curveTrees": [
+    [
+     "r * cos(t)",
+     "r * sin(t)"
+    ]
+   ]
+  },
+  {
+   "body": "z = x^2 - y^2\nx in [-2, 2]\ny in [-2, 2]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "surfaces",
+    "surfaces": [
+     {
+      "name": "z",
+      "label": "z",
+      "expression": "x^2 - y^2"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -2,
+     2
+    ],
+    "y": [
+     -2,
+     2
+    ]
+   },
+   "text": "z = x^2 - y^2\nx in [-2, 2]\ny in [-2, 2]",
+   "references": false,
+   "trees": [
+    "x^2 - y^2"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "z = x^2 - y^2\nx in [-2, 2]\ny in [-2, 2]\nz in [-1, 1]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "surfaces",
+    "surfaces": [
+     {
+      "name": "z",
+      "label": "z",
+      "expression": "x^2 - y^2"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -2,
+     2
+    ],
+    "y": [
+     -2,
+     2
+    ],
+    "z": [
+     -1,
+     1
+    ]
+   },
+   "text": "z = x^2 - y^2\nx in [-2, 2]\ny in [-2, 2]\nz in [-1, 1]",
+   "references": false,
+   "trees": [
+    "x^2 - y^2"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "```\nf(x) = x^2 - 4\n- y in [-5, 5].\n```",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "f",
+      "label": "f(x)",
+      "expression": "x^2 - 4"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -10,
+     10
+    ],
+    "y": [
+     -5,
+     5
+    ]
+   },
+   "text": "f(x) = x^2 - 4\nx in [-10, 10]\ny in [-5, 5]",
+   "references": false,
+   "trees": [
+    "x^2 - 4"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "y = sin(x)\ny'\ntangente en pi/2\naire sous y de 0 à pi\nx in [-4, 4]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "sin(x)"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -4,
+     4
+    ],
+    "derivatives": [
+     "y"
+    ],
+    "tangents": [
+     {
+      "of": "y",
+      "at": 1.5707963267948966
+     }
+    ],
+    "areas": [
+     {
+      "of": "y",
+      "from": 0,
+      "to": 3.141592653589793
+     }
+    ]
+   },
+   "text": "y = sin(x)\ny'\ntangent y at 1.570796327\narea y from 0 to 3.141592654\nx in [-4, 4]",
+   "references": false,
+   "trees": [
+    "sin(x)"
+   ],
+   "slopes": {
+    "y": "cos(x)"
+   },
+   "curveTrees": []
+  },
+  {
+   "body": "y = 1/x\ntangent at 0\narea from -1 to 1\nx in [-2, 2]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "1 / x"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -2,
+     2
+    ],
+    "tangents": [
+     {
+      "of": "y",
+      "at": 0
+     }
+    ],
+    "areas": [
+     {
+      "of": "y",
+      "from": -1,
+      "to": 1
+     }
+    ]
+   },
+   "text": "y = 1 / x\ntangent y at 0\narea y from -1 to 1\nx in [-2, 2]",
+   "references": false,
+   "trees": [
+    "1 / x"
+   ],
+   "slopes": {
+    "y": "-1 / x^2"
+   },
+   "curveTrees": []
+  },
+  {
+   "body": "f(x) = x^2\ng(x) = f(x - 1) + 1\nh(x) = f'(2x)\nx in [-3, 3]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "f",
+      "label": "f(x)",
+      "expression": "x^2"
+     },
+     {
+      "name": "g",
+      "label": "g(x)",
+      "expression": "f(x - 1) + 1"
+     },
+     {
+      "name": "h",
+      "label": "h(x)",
+      "expression": "f'(2 * x)"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -3,
+     3
+    ]
+   },
+   "text": "f(x) = x^2\ng(x) = f(x - 1) + 1\nh(x) = f'(2 * x)\nx in [-3, 3]",
+   "references": true,
+   "trees": [
+    "x^2",
+    "(x - 1)^2 + 1",
+    "2 * (2 * x)"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "y = sqrt(x)\nx in [-4, 4]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "sqrt(x)"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -4,
+     4
+    ]
+   },
+   "text": "y = sqrt(x)\nx in [-4, 4]",
+   "references": false,
+   "trees": [
+    "sqrt(x)"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "y = tan(x)\nx in [-3, 3]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "tan(x)"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -3,
+     3
+    ]
+   },
+   "text": "y = tan(x)\nx in [-3, 3]",
+   "references": false,
+   "trees": [
+    "tan(x)"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "f(x) = x^2\nc(t) = (t, f(t) + 1)\nt in [-2, 2]\nx in [-3, 3]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "f",
+      "label": "f(x)",
+      "expression": "x^2"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -3,
+     3
+    ],
+    "curves": [
+     {
+      "name": "c",
+      "label": "c(t)",
+      "x": "t",
+      "y": "f(t) + 1"
+     }
+    ],
+    "t": [
+     -2,
+     2
+    ]
+   },
+   "text": "f(x) = x^2\nc(t) = (t, f(t) + 1)\nt in [-2, 2]\nx in [-3, 3]",
+   "references": false,
+   "trees": [
+    "x^2"
+   ],
+   "slopes": {},
+   "curveTrees": [
+    [
+     "t",
+     "t^2 + 1"
+    ]
+   ]
+  },
+  {
+   "body": "f(x, y) = a*sin(x)*cos(y)\ng(x, y) = 0\na = 1 in [0, 2]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "surfaces",
+    "surfaces": [
+     {
+      "name": "f",
+      "label": "f(x, y)",
+      "expression": "a * sin(x) * cos(y)"
+     },
+     {
+      "name": "g",
+      "label": "g(x, y)",
+      "expression": "0"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "a",
+      "value": 1,
+      "min": 0,
+      "max": 2
+     }
+    ],
+    "x": [
+     -5,
+     5
+    ],
+    "y": [
+     -5,
+     5
+    ]
+   },
+   "text": "f(x, y) = a * sin(x) * cos(y)\ng(x, y) = 0\na = 1 in [0, 2]\nx in [-5, 5]\ny in [-5, 5]",
+   "references": false,
+   "trees": [
+    "a * sin(x) * cos(y)",
+    "0"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "z = sqrt(x)",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "surfaces",
+    "surfaces": [
+     {
+      "name": "z",
+      "label": "z",
+      "expression": "sqrt(x)"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -5,
+     5
+    ],
+    "y": [
+     -5,
+     5
+    ]
+   },
+   "text": "z = sqrt(x)\nx in [-5, 5]\ny in [-5, 5]",
+   "references": false,
+   "trees": [
+    "sqrt(x)"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "y = a*x",
+   "error": {
+    "code": "unknown_name",
+    "message": "Unknown name \"a\". Declare a parameter on its own line, for example: a = 1 in [-5, 5]"
+   }
+  },
+  {
+   "body": "a = 1 in [0, 2]",
+   "error": {
+    "code": "no_function",
+    "message": "Write the function as y = …"
+   }
+  },
+  {
+   "body": "y = x\ny = 2x",
+   "error": {
+    "code": "duplicate",
+    "message": "Function y is declared twice"
+   }
+  },
+  {
+   "body": "y = x*e\ne = 1 in [0, 3]",
+   "error": {
+    "code": "reserved",
+    "message": "\"e\" is reserved and cannot be a parameter"
+   }
+  },
+  {
+   "body": "y = a*x\na = 1 in [0, 2]\na = 2 in [0, 3]",
+   "error": {
+    "code": "duplicate",
+    "message": "Parameter \"a\" is declared twice"
+   }
+  },
+  {
+   "body": "y = a*x\na = 9 in [0, 5]",
+   "error": {
+    "code": "range",
+    "message": "Parameter a must lie inside its range"
+   }
+  },
+  {
+   "body": "y = a*x\na = 1",
+   "error": {
+    "code": "range",
+    "message": "Parameter a needs a slider range, for example: a = 1 in [-5, 5]"
+   }
+  },
+  {
+   "body": "y = x\nx in [3, 1]",
+   "error": {
+    "code": "range",
+    "message": "x window: the minimum must be below the maximum"
+   }
+  },
+  {
+   "body": "y = x\nLa parabole est jolie",
+   "error": {
+    "code": "line",
+    "message": "Unrecognised line \"La parabole est jolie\". Use y = …, a = 1 in [-5, 5], x in [-10, 10]"
+   }
+  },
+  {
+   "body": "y = x\nx in [0, 1e9]",
+   "error": {
+    "code": "number",
+    "message": "x window must be a finite number"
+   }
+  },
+  {
+   "body": "f(x) = x\nf = 1 in [0, 2]",
+   "error": {
+    "code": "duplicate",
+    "message": "\"f\" names both a function and a parameter"
+   }
+  },
+  {
+   "body": "e(x) = x",
+   "error": {
+    "code": "reserved",
+    "message": "\"e\" cannot name a function; use f(x), g(x)…"
+   }
+  },
+  {
+   "body": "t(x) = x",
+   "error": {
+    "code": "reserved",
+    "message": "\"t\" cannot name a function; use f(x), g(x)…"
+   }
+  },
+  {
+   "body": "f(x) = x\nf(x) = 2x",
+   "error": {
+    "code": "duplicate",
+    "message": "Function f is declared twice"
+   }
+  },
+  {
+   "body": "f(x) = x\ng(x) = q",
+   "error": {
+    "code": "unknown_name",
+    "message": "g(x): Unknown name \"q\". Declare a parameter on its own line, for example: q = 1 in [-5, 5]"
+   }
+  },
+  {
+   "body": "f(x) = x\ng(x) = x\nh(x) = x\nk(x) = x\nm(x) = x",
+   "error": {
+    "code": "functions",
+    "message": "At most 4 functions per block"
+   }
+  },
+  {
+   "body": "f(x) = x^2\nf'(x) = 2x",
+   "error": {
+    "code": "derivative",
+    "message": "Write f'(x) alone: Core computes the derivative from f(x)"
+   }
+  },
+  {
+   "body": "f(x) = x^2\ng'(x)",
+   "error": {
+    "code": "unknown_name",
+    "message": "Derivative: no function named g in this block"
+   }
+  },
+  {
+   "body": "f(x) = x^2\nf'(x)\nf'(x)",
+   "error": {
+    "code": "duplicate",
+    "message": "The derivative of f(x) is asked twice"
+   }
+  },
+  {
+   "body": "f(x) = x\ng(x) = x\ntangent at 1",
+   "error": {
+    "code": "line",
+    "message": "Tangent: name the function, for example: tangent f …"
+   }
+  },
+  {
+   "body": "f(x) = x\ntangent f at 12",
+   "error": {
+    "code": "range",
+    "message": "Tangent point must lie inside the x window [-10, 10]"
+   }
+  },
+  {
+   "body": "f(x) = x\ntangent f at p\np = 0 in [-20, 20]",
+   "error": {
+    "code": "range",
+    "message": "Tangent point: p must stay inside the x window [-10, 10]; give it a range inside it"
+   }
+  },
+  {
+   "body": "f(x) = x\ntangent f at q",
+   "error": {
+    "code": "number",
+    "message": "Tangent point: Unknown name \"q\". Declare a parameter on its own line, for example: q = 1 in [-5, 5]"
+   }
+  },
+  {
+   "body": "f(x) = x\ntangent f at 1\ntangent f at 1",
+   "error": {
+    "code": "duplicate",
+    "message": "The same tangent is asked twice"
+   }
+  },
+  {
+   "body": "f(x) = x\narea f from 0 to 11",
+   "error": {
+    "code": "range",
+    "message": "Area end must lie inside the x window [-10, 10]"
+   }
+  },
+  {
+   "body": "f(x) = x\narea h from 0 to 1",
+   "error": {
+    "code": "unknown_name",
+    "message": "Area: no function named h in this block"
+   }
+  },
+  {
+   "body": "f(x) = x\ntangent f at -2\ntangent f at -1\ntangent f at 0\ntangent f at 1\ntangent f at 2",
+   "error": {
+    "code": "tangents",
+    "message": "At most 4 tangents per block"
+   }
+  },
+  {
+   "body": "f(x) = x\narea f from 0 to 1\narea f from 0 to 2\narea f from 0 to 3\narea f from 0 to 4\narea f from 0 to 5",
+   "error": {
+    "code": "areas",
+    "message": "At most 4 areas per block"
+   }
+  },
+  {
+   "body": "f(x) = g(x)\ng(x) = f(x)",
+   "error": {
+    "code": "cycle",
+    "message": "g(x): Functions cannot use each other in a circle: f(x) → g(x) → f(x)"
+   }
+  },
+  {
+   "body": "f(x) = f(x - 1)",
+   "error": {
+    "code": "cycle",
+    "message": "Functions cannot use each other in a circle: f(x) → f(x)"
+   }
+  },
+  {
+   "body": "y = x\ng(x) = y + 1",
+   "error": {
+    "code": "unknown_name",
+    "message": "To use a function in another one, name it f(x), g(x)…; y cannot be called"
+   }
+  },
+  {
+   "body": "f(x) = x\ng(x) = f * 2",
+   "error": {
+    "code": "syntax",
+    "message": "g(x): Write f(…) with parentheses"
+   }
+  },
+  {
+   "body": "f(x) = x*x*x*x*x*x*x*x\ng(x) = f(f(x))\nh(x) = g(g(x))\nk(x) = h(h(x))",
+   "error": {
+    "code": "too_complex",
+    "message": "h(x): Using the other functions makes this formula too large to draw"
+   }
+  },
+  {
+   "body": "f(x) = x\ng(x) = h(x)",
+   "error": {
+    "code": "unknown_name",
+    "message": "g(x): Unknown name \"h\". Declare a function h(x) = … or a parameter h = 1 in [-5, 5] on its own line"
+   }
+  },
+  {
+   "body": "c(t) = (cos(x), sin(t))",
+   "error": {
+    "code": "unknown_name",
+    "message": "c(t), x: A curve is written in t: c(t) = (cos(t), sin(t))"
+   }
+  },
+  {
+   "body": "c(t) = (cos(t))",
+   "error": {
+    "code": "curve",
+    "message": "Write the curve as c(t) = (x(t), y(t)): two formulas in t, separated by a comma, between parentheses"
+   }
+  },
+  {
+   "body": "f(x) = x\nc(t) = (t, t)\ntangent c at 1",
+   "error": {
+    "code": "line",
+    "message": "Tangent: works on functions of x, not on the curve c(t)"
+   }
+  },
+  {
+   "body": "y = x\nt in [0, 1]",
+   "error": {
+    "code": "line",
+    "message": "A \"t in […]\" range goes with a curve c(t) = (x(t), y(t))"
+   }
+  },
+  {
+   "body": "f(x) = x\ng(x) = x\nh(x) = x\nc(t) = (t, t)\nd(t) = (t, t)",
+   "error": {
+    "code": "functions",
+    "message": "At most 4 functions and curves per block"
+   }
+  },
+  {
+   "body": "c(t) = (t, g(t))",
+   "error": {
+    "code": "unknown_name",
+    "message": "c(t), y: Unknown name \"g\". Declare a function g(x) = … or a parameter g = 1 in [-5, 5] on its own line"
+   }
+  },
+  {
+   "body": "t(t) = (t, t)",
+   "error": {
+    "code": "reserved",
+    "message": "\"t\" cannot name a curve; use c(t), d(t)…"
+   }
+  },
+  {
+   "body": "z = x + y\nf(x) = x",
+   "error": {
+    "code": "surface",
+    "message": "A surface block holds only surfaces z = f(x, y), parameters and the x, y, z windows; draw curves in another block"
+   }
+  },
+  {
+   "body": "z = x + y\nc(t) = (t, t)",
+   "error": {
+    "code": "surface",
+    "message": "A surface block holds only surfaces z = f(x, y), parameters and the x, y, z windows; draw curves in another block"
+   }
+  },
+  {
+   "body": "f(x, y) = x\ng(x, y) = y\nh(x, y) = x*y",
+   "error": {
+    "code": "surfaces",
+    "message": "At most 2 surfaces per block"
+   }
+  },
+  {
+   "body": "z = t*x",
+   "error": {
+    "code": "unknown_name",
+    "message": "Unknown name \"t\". Declare a parameter on its own line, for example: t = 1 in [-5, 5]"
+   }
+  },
+  {
+   "body": "f(x, y) = x\ng(x, y) = f(x, y)",
+   "error": {
+    "code": "unknown_name",
+    "message": "g(x, y): Unknown name \"f\". Declare a function f(x) = … or a parameter f = 1 in [-5, 5] on its own line"
+   }
+  },
+  {
+   "body": "z = a*x\nz = 1 in [0, 2]",
+   "error": {
+    "code": "duplicate",
+    "message": "\"z\" names both a surface and a parameter"
+   }
+  },
+  {
+   "body": "f(x, y) = z*x\nz = 1 in [0, 2]",
+   "error": {
+    "code": "reserved",
+    "message": "\"z\" is the height in a surface block and cannot be a parameter"
+   }
+  },
+  {
+   "body": "y = x\nz in [0, 1]",
+   "error": {
+    "code": "line",
+    "message": "A \"z in […]\" window goes with a surface z = f(x, y)"
+   }
+  },
+  {
+   "body": "z = x\nt in [0, 1]",
+   "error": {
+    "code": "line",
+    "message": "A \"t in […]\" range goes with a curve c(t) = (x(t), y(t))"
+   }
+  },
+  {
+   "body": "y = 2x² − 1\nx ∈ [-3, 3]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "2 * x^2 - 1"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -3,
+     3
+    ]
+   },
+   "text": "y = 2 * x^2 - 1\nx in [-3, 3]",
+   "references": false,
+   "trees": [
+    "2 * x^2 - 1"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "y = a x\na = 1 in -2..2",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "a * x"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "a",
+      "value": 1,
+      "min": -2,
+      "max": 2
+     }
+    ],
+    "x": [
+     -10,
+     10
+    ]
+   },
+   "text": "y = a * x\na = 1 in [-2, 2]\nx in [-10, 10]",
+   "references": false,
+   "trees": [
+    "a * x"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "y = a x\na = 0.5 ∈ [0, 1]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "a * x"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "a",
+      "value": 0.5,
+      "min": 0,
+      "max": 1
+     }
+    ],
+    "x": [
+     -10,
+     10
+    ]
+   },
+   "text": "y = a * x\na = 0.5 in [0, 1]\nx in [-10, 10]",
+   "references": false,
+   "trees": [
+    "a * x"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "y = x\nx in [-pi, pi]\ny in [-2, 2]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "x"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -3.141592653589793,
+     3.141592653589793
+    ],
+    "y": [
+     -2,
+     2
+    ]
+   },
+   "text": "y = x\nx in [-3.141592654, 3.141592654]\ny in [-2, 2]",
+   "references": false,
+   "trees": [
+    "x"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "y = x\ny in [2, 2]",
+   "error": {
+    "code": "range",
+    "message": "y window: the minimum must be below the maximum"
+   }
+  },
+  {
+   "body": "y = x\nx in [0, 0.0000001]",
+   "error": {
+    "code": "range",
+    "message": "The window is too narrow"
+   }
+  },
+  {
+   "body": "y = alert(x)",
+   "error": {
+    "code": "unknown_name",
+    "message": "Unknown name \"a\". Declare a parameter on its own line, for example: a = 1 in [-5, 5]"
+   }
+  },
+  {
+   "body": "y = x;\n* a = 1 in [0, 2]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "x"
+     }
+    ],
+    "parameters": [
+     {
+      "name": "a",
+      "value": 1,
+      "min": 0,
+      "max": 2
+     }
+    ],
+    "x": [
+     -10,
+     10
+    ]
+   },
+   "text": "y = x\na = 1 in [0, 2]\nx in [-10, 10]",
+   "references": false,
+   "trees": [
+    "x"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "",
+   "error": {
+    "code": "no_function",
+    "message": "Write the function as y = …"
+   }
+  },
+  {
+   "body": "   \n\n",
+   "error": {
+    "code": "no_function",
+    "message": "Write the function as y = …"
+   }
+  },
+  {
+   "body": "y = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\ny = x\n",
+   "error": {
+    "code": "duplicate",
+    "message": "Function y is declared twice"
+   }
+  },
+  {
+   "body": "y = a + b + c + d + f + g + h\na = 1 in [0, 2]\nb = 1 in [0, 2]\nc = 1 in [0, 2]\nd = 1 in [0, 2]\nf = 1 in [0, 2]\ng = 1 in [0, 2]\nh = 1 in [0, 2]",
+   "error": {
+    "code": "parameters",
+    "message": "At most 6 parameters"
+   }
+  },
+  {
+   "body": "c(t) = (t, t)\nx in [-1, 1]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [],
+    "parameters": [],
+    "x": [
+     -1,
+     1
+    ],
+    "curves": [
+     {
+      "name": "c",
+      "label": "c(t)",
+      "x": "t",
+      "y": "t"
+     }
+    ],
+    "t": [
+     0,
+     6.283185307179586
+    ]
+   },
+   "text": "c(t) = (t, t)\nt in [0, 6.283185307]\nx in [-1, 1]",
+   "references": false,
+   "trees": [],
+   "slopes": {},
+   "curveTrees": [
+    [
+     "t",
+     "t"
+    ]
+   ]
+  },
+  {
+   "body": "c(t) = (cos(t), sin(2t))\nd(t) = (2cos(t), 2sin(t))\nt in [0, 2pi]\ny in [-3, 3]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [],
+    "parameters": [],
+    "y": [
+     -3,
+     3
+    ],
+    "curves": [
+     {
+      "name": "c",
+      "label": "c(t)",
+      "x": "cos(t)",
+      "y": "sin(2 * t)"
+     },
+     {
+      "name": "d",
+      "label": "d(t)",
+      "x": "2 * cos(t)",
+      "y": "2 * sin(t)"
+     }
+    ],
+    "t": [
+     0,
+     6.283185307179586
+    ]
+   },
+   "text": "c(t) = (cos(t), sin(2 * t))\nd(t) = (2 * cos(t), 2 * sin(t))\nt in [0, 6.283185307]\ny in [-3, 3]",
+   "references": false,
+   "trees": [],
+   "slopes": {},
+   "curveTrees": [
+    [
+     "cos(t)",
+     "sin(2 * t)"
+    ],
+    [
+     "2 * cos(t)",
+     "2 * sin(t)"
+    ]
+   ]
+  },
+  {
+   "body": "f(x) = x^2\nf'\ntangent at 1",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "f",
+      "label": "f(x)",
+      "expression": "x^2"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -10,
+     10
+    ],
+    "derivatives": [
+     "f"
+    ],
+    "tangents": [
+     {
+      "of": "f",
+      "at": 1
+     }
+    ]
+   },
+   "text": "f(x) = x^2\nf'(x)\ntangent f at 1\nx in [-10, 10]",
+   "references": false,
+   "trees": [
+    "x^2"
+   ],
+   "slopes": {
+    "f": "2 * x"
+   },
+   "curveTrees": []
+  },
+  {
+   "body": "y = x^2\ntangent to y at x = 1",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "y",
+      "label": "y",
+      "expression": "x^2"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -10,
+     10
+    ],
+    "tangents": [
+     {
+      "of": "y",
+      "at": 1
+     }
+    ]
+   },
+   "text": "y = x^2\ntangent y at 1\nx in [-10, 10]",
+   "references": false,
+   "trees": [
+    "x^2"
+   ],
+   "slopes": {
+    "y": "2 * x"
+   },
+   "curveTrees": []
+  },
+  {
+   "body": "f(x) = x^2\naire de f de -1 à 1",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "functions",
+    "variable": "x",
+    "functions": [
+     {
+      "name": "f",
+      "label": "f(x)",
+      "expression": "x^2"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -10,
+     10
+    ],
+    "areas": [
+     {
+      "of": "f",
+      "from": -1,
+      "to": 1
+     }
+    ]
+   },
+   "text": "f(x) = x^2\narea f from -1 to 1\nx in [-10, 10]",
+   "references": false,
+   "trees": [
+    "x^2"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "f(x) = x^2\nx in [-2, 2]\ntangent f at a\na = 1 in [-3, 3]",
+   "error": {
+    "code": "range",
+    "message": "Tangent point: a must stay inside the x window [-2, 2]; give it a range inside it"
+   }
+  },
+  {
+   "body": "z = sin(x) cos(y)\nz in [-2, 2]\nx in [-pi, pi]\ny in [-pi, pi]",
+   "plot": {
+    "schema": "agentx.math-plot.v4",
+    "kind": "surfaces",
+    "surfaces": [
+     {
+      "name": "z",
+      "label": "z",
+      "expression": "sin(x) * cos(y)"
+     }
+    ],
+    "parameters": [],
+    "x": [
+     -3.141592653589793,
+     3.141592653589793
+    ],
+    "y": [
+     -3.141592653589793,
+     3.141592653589793
+    ],
+    "z": [
+     -2,
+     2
+    ]
+   },
+   "text": "z = sin(x) * cos(y)\nx in [-3.141592654, 3.141592654]\ny in [-3.141592654, 3.141592654]\nz in [-2, 2]",
+   "references": false,
+   "trees": [
+    "sin(x) * cos(y)"
+   ],
+   "slopes": {},
+   "curveTrees": []
+  },
+  {
+   "body": "f(x, y) = x y\nz in [3, 1]",
+   "error": {
+    "code": "range",
+    "message": "z window: the minimum must be below the maximum"
+   }
+  }
+ ]
+}
