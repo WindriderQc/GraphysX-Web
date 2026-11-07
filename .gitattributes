@@ -3,3 +3,6 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.shade text eol=lf
+# Preserve the vendored metadata hashes on Windows and Linux.
+public/assets/xr/profiles/LICENSE.md text eol=lf
+public/assets/xr/profiles/oculus-touch-v3/profile.json text eol=lf
