@@ -40,7 +40,7 @@ import {
 /**
  * The Math Game look for `agentx.math-scene.v2`/`v3`/`v4` inside `<llmx-stage>`: the recovered
  * screen's backdrop board, green grid and three axes (x #f95f4c, y #ffe86b, z #78f0d0, from
- * `archive-math-lab.ts`), a molecule field riding every function, and one bright curve per
+ * the archive Math Game screen, retired 2026-11-07 for the Math Lab page), a molecule field riding every function, and one bright curve per
  * function on the front plane for precise reading. v3 adds, on the same plane, each derivative as a
  * dashed curve in its function's colour, light blue areas down to the x axis, and white tangents with
  * their point of contact. v4 adds parametric curves on the same plane, and surfaces z = f(x, y): a

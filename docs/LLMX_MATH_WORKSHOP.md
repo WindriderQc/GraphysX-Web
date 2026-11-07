@@ -2,6 +2,8 @@
 
 > **Document historique — plan LLMx de septembre 2026.** Fusionné tel quel depuis `codex/llmx-experience-plan` le 2026-10-25; non mis à jour depuis le 2026-09-13. L'état courant de LLMx est décrit dans [LLMX_CURRENT_HANDOFF.md](LLMX_CURRENT_HANDOFF.md) et [LLMX_CREATION.md](LLMX_CREATION.md). Les worktrees et branches cités ci-dessous n'existent plus.
 
+> **2026-11-07 :** l'écran **Math Game** (`archive-math-lab`) et sa vignette ont été retirés. La seule Math Lab est maintenant la page `/math-lab.html` ([MATH_LAB_PAGE.md](MATH_LAB_PAGE.md)), qui dessine avec `<llmx-stage>` comme les cartes de Nestor dans AgentX. L'entité `formula-field` et `api.formulas()` restent dans le vocabulaire des mondes.
+
 Date : 2026-09-13. Ajout demandé par Yanik au plan LLMx. Statut : réutilisation analysée et planifiée; aucun tuteur LLMx implémenté ici.
 
 ## Ce que nous avons encore
@@ -12,13 +14,13 @@ Le **Math Game** est toujours présent dans le code GraphysX inspecté, à la r�
 | --- | --- | --- |
 | Entité `formula-field` | Champ de petits cubes groupés; changement de coefficients sans reconstruire le mesh | [agent-world-formula.ts](../src/agent-world-formula.ts) |
 | Deux familles : `y = ax² + bx + c`, `y = mx + b` | Premières leçons sur pente, translation et parabole | Même module, avec `xOffset` appliqué avant évaluation |
-| Scène `archive-math-lab` | Tableau, grille, axes, courbes et décor nocturne | [archive-math-lab.ts](../src/archive-math-lab.ts) |
+| Scène `archive-math-lab` (retirée le 2026-11-07) | Tableau, grille, axes, courbes et décor nocturne | `src/archive-math-lab.ts`, dans l'historique Git |
 | `api.formulas()`, `api.spawn()`, `api.update()`, `api.state()` | Découverte, manipulation et lecture du résultat par l'agent et l'humain | [agent-world-api.ts](../src/agent-world-api.ts), [agent-world-runtime.ts](../src/agent-world-runtime.ts) |
 | Configuration sérialisée dans l'entité | Retrouver une expérience mathématique après sauvegarde | `serializeEntity()` dans le runtime |
 
 Le champ par défaut contient 48 × 48 cubes, avec un maximum existant de 10 000. Ce plafond ne devient pas notre budget par défaut pour un atelier ajouté au visage et aux effets de la Forge. Commencer avec une coupe lisible, puis rendre l'épaisseur et les autres coupes optionnelles.
 
-La vignette conservée est un aperçu historique de cette scène, pas une capture d'un futur cours LLMx : [Math Game](../public/assets/shelf-thumbnails/archive-math-lab.jpg).
+La vignette de cette scène a été retirée avec elle le 2026-11-07.
 
 ## Expérience proposée
 

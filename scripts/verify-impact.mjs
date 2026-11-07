@@ -29,6 +29,9 @@ const RULES = [
   // published beside the product at /cyber-race.html. Its files select its own smoke and
   // deploy; its local packaging tools (Playnite/GamX, film clips) never reach the site.
   { match: /^(?:cyber-race\.html|src\/cyber-race\/[\w-]+\.ts)$/, checks: ["cyber-race"], label: "Cyber Race page (published at /cyber-race.html)", deploy: true },
+  // The Math Lab page (math-lab.html) and its block reader, a port of AgentX's parser. The stage
+  // it draws with keeps the broad LLMx rule; the grammar (math-expression.ts) stays a shared file.
+  { match: /^(?:math-lab\.html|src\/math-(?:block|lab-[\w-]+)\.(?:ts|css)|src\/math-lab\.css)$/, checks: ["math-lab"], label: "Math Lab page (published at /math-lab.html)", deploy: true },
   { match: /^(?:ballsy(?:-giant)?\.html|src\/ballsy-[\w-]+\.(?:ts|css)|src\/ballsy\.css)$/, checks: ["ballsy", "ballsy-volcano", "ballsy-giant", "ballsy-setup", "ballsy-entrypoints", "ballsy-camera-finish", "ballsy-contact-visual", "ballsy-shared-vr"], label: "Ballsy local two-player course", deploy: true },
   { match: /^scripts\/fixtures\/ballsy-race-pilot\.mjs$/, checks: ["ballsy-camera-finish"], label: "Ballsy physical race QA driver", deploy: false },
   { match: /^scripts\/(?:(?:package-cyber-race|extract-cyber-race-film|install-cyber-race-gamx)\.mjs|gamx\/[\w-]+\.ps1)$/, checks: [], label: "Cyber Race local packaging tools", deploy: false },

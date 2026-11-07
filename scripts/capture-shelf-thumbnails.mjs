@@ -9,7 +9,6 @@ const BASE = `http://127.0.0.1:${PORT}/?intro=0`;
 const BROWSE_IDS = [
   "ev3-robotics-lab",
   "archive-maison",
-  "archive-math-lab",
   "archive-voie-lactee",
   "archive-flock-planet",
   "archive-forces-garden",
@@ -103,8 +102,28 @@ async function captureCyberRace() {
   await page.close();
 }
 
+/**
+ * The Math Lab page draws with `<llmx-stage>`, not the platform canvas: its preview is the
+ * tangent example's stage alone, filling the frame, page chrome hidden.
+ */
+async function captureMathLab() {
+  const id = "math-lab";
+  const page = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1, reducedMotion: "reduce" });
+  await page.goto(`http://127.0.0.1:${PORT}/math-lab.html`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.addStyleTag({ content: ".ml{display:block;padding:0;max-width:none}.ml>:not(.ml-view),.ml-view>:not(.ml-stage-box){display:none!important}"
+    + ".ml-stage-box{position:fixed;inset:0;aspect-ratio:auto;height:auto;border:0;border-radius:0}" });
+  // The chips are hidden for the shot; choose the example through the DOM.
+  await page.$eval('.ml-chip[data-id="tangent"]', (chip) => chip.click());
+  await page.waitForFunction(() => document.querySelector("main.ml")?.dataset.state === "drawn", null, { timeout: 60_000 });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: path.join(OUTPUT, `${id}.jpg`), type: "jpeg", quality: 84 });
+  console.log(`captured ${id}`);
+  await page.close();
+}
+
 try {
   if (shouldCapture("cyber-race-1992")) await captureCyberRace();
+  if (shouldCapture("math-lab")) await captureMathLab();
   for (const id of BROWSE_IDS) {
     if (!shouldCapture(id)) continue;
     const selector = id.startsWith("archive-") && id !== "archive-great-slide"

@@ -43,7 +43,7 @@ type Token =
 const failure = (code: string, message: string): MathFailure => ({ ok: false, error: { code, message } });
 
 /** Spellings models and people write for the same operators. */
-function normalize(source: string): string {
+export function normalizeMath(source: string): string {
   return String(source).replace(/\*\*/g, "^").replace(/[×·⋅∙]/g, "*").replace(/÷/g, "/").replace(/[−–—]/g, "-")
     .replace(/π/g, "pi").replace(/²/g, "^2").replace(/³/g, "^3").replace(/[′’]/g, "'");
 }
@@ -51,7 +51,7 @@ function normalize(source: string): string {
 /** `callables` are the block's functions: f(…) and f'(…) use them, never a product. */
 function tokenize(source: string, names: ReadonlySet<string>, callables: ReadonlySet<string> = new Set()):
   { ok: true; tokens: Token[] } | MathFailure {
-  const text = normalize(source), tokens: Token[] = [];
+  const text = normalizeMath(source), tokens: Token[] = [];
   let i = 0;
   while (i < text.length) {
     const char = text[i];

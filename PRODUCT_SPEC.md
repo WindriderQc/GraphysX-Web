@@ -285,7 +285,7 @@ three.js scene graph directly and were read only as evidence.
 | Impreza · Cobra · Piste Ovale | `model` entities in Archive Garage; Piste Ovale–Impreza player route | The Garage stays a faithful static v2 display because no garage driving binding survives. Separately, the player-visible race uses the recovered drive/camera/control evidence through the real Rapier raycast vehicle and suspension. That specialized controller is not misrepresented as generic v2 wheel-joint vocabulary. |
 | Flock Planet · Forces & Flow Garden | composed scenes | Their constants had already graduated — the scenes address them by preset id, so the smoke re-derives fidelity from the shipped registry. |
 | Voie Lactée | composed scene | No sun, no heliocentric orbits, no scale compression — the record supports none of them, and the agent refused to invent them. |
-| Math Game | `formula-field` + a composed screen | The A/B/C/M/X slider panel is deliberately absent: the coefficients are already editable in the inspector and via `api.update`, which *is* the platform's answer to it. |
+| Math Game | `formula-field` + the Math Lab page | The composed screen (`archive-math-lab`) was retired on 2026-11-07 for `/math-lab.html` ([docs/MATH_LAB_PAGE.md](docs/MATH_LAB_PAGE.md)), where a person types any formula, with sliders, derivatives, tangents, areas, curves and surfaces. `formula-field` stays a world entity: its coefficients are editable in the inspector and via `api.update`. |
 | Maison | composed massing model | A prior verdict overturned on evidence — the record is 24 meshes / 216 vertices, 20 of them 8-vertex boxes, so a v2 `box` is what those objects already were. |
 
 Every one carries `faithful` / `inferred` / `deliberatelyAbsent` lists and a machine-readable

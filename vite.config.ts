@@ -126,6 +126,8 @@ export default defineConfig(({ command, mode }) => {
           "cyber-race": path.resolve("cyber-race.html"),
           ballsy: path.resolve("ballsy.html"),
           "ballsy-giant": path.resolve("ballsy-giant.html"),
+          // The Math Lab without an assistant: type a block, see the Math Game picture (docs/MATH_LAB_PAGE.md).
+          "math-lab": path.resolve("math-lab.html"),
         },
       },
     },

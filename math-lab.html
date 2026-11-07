@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1016" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>" />
+    <title>Math Lab · GraphysX</title>
+    <!--
+      The Math Lab without an assistant: a person types the same block lines Nestor writes in
+      AgentX (<show kind="math">) and <llmx-stage> draws the Math Game picture. Nothing here
+      calls a model or the network. See docs/MATH_LAB_PAGE.md.
+    -->
+  </head>
+  <body>
+    <main class="ml" data-state="loading">
+      <header class="ml-head">
+        <a class="ml-home" href="./">GraphysX</a>
+        <h1>Math Lab</h1>
+        <p class="ml-lede">Écris tes formules, ligne par ligne, et regarde-les en 3D. Les curseurs changent les paramètres en direct.</p>
+      </header>
+      <section class="ml-examples" aria-label="Exemples">
+        <div class="ml-level">
+          <h2 class="ml-level-title">Pour commencer</h2>
+          <div class="ml-chips" id="ml-examples-simple"></div>
+        </div>
+        <div class="ml-level">
+          <h2 class="ml-level-title">Pour aller plus loin</h2>
+          <div class="ml-chips" id="ml-examples-advanced"></div>
+        </div>
+        <p class="ml-about" id="ml-about"></p>
+      </section>
+      <section class="ml-editor" aria-label="Formules">
+        <label class="ml-label" for="ml-body">Tes formules</label>
+        <textarea id="ml-body" class="ml-body" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
+          rows="7" aria-describedby="ml-status"></textarea>
+        <div id="ml-status" class="ml-status" role="status" aria-live="polite">
+          <p class="ml-status-say" id="ml-status-say"></p>
+          <p class="ml-status-detail" id="ml-status-detail"></p>
+        </div>
+        <div class="ml-tools">
+          <button type="button" id="ml-copy" class="ml-button">Copier le bloc</button>
+          <span id="ml-copied" class="ml-copied" hidden>Copié</span>
+        </div>
+        <details class="ml-help">
+          <summary>Ce que tu peux écrire</summary>
+          <dl>
+            <dt><code>y = 2x + 1</code> ou <code>f(x) = …</code>, <code>g(x) = …</code></dt><dd>Une à quatre fonctions, sur les mêmes axes. <code>g(x) = f(x - 1)</code> réutilise f.</dd>
+            <dt><code>a = 1 in [-3, 3]</code></dt><dd>Un paramètre d'une lettre : sa valeur et l'étendue de son curseur.</dd>
+            <dt><code>x in [-5, 5]</code>, <code>y in [-2, 2]</code></dt><dd>La fenêtre (x vaut [-10, 10] par défaut, y s'ajuste à la courbe).</dd>
+            <dt><code>f'(x)</code></dt><dd>La dérivée de f, calculée à partir de sa formule.</dd>
+            <dt><code>tangent f at p</code> ou <code>tangente en 1</code></dt><dd>La tangente à f en x = p.</dd>
+            <dt><code>area f from 0 to b</code> ou <code>aire sous f de 0 à 2</code></dt><dd>L'aire sous f entre deux bornes.</dd>
+            <dt><code>c(t) = (cos(t), sin(t))</code></dt><dd>Une courbe paramétrée ; <code>t in [0, 2pi]</code> par défaut.</dd>
+            <dt><code>z = x^2 - y^2</code> ou <code>f(x, y) = …</code></dt><dd>Une ou deux surfaces, seules dans leur bloc.</dd>
+          </dl>
+          <p>Fonctions : sin, cos, tan, exp, log (ou ln), sqrt, abs, |x|. Constantes : pi, e. <code>2x</code> veut dire 2 × x et <code>ax</code> veut dire a × x.
+            Une formule hors limites est refusée en entier, jamais corrigée en silence.</p>
+        </details>
+      </section>
+      <section class="ml-view" aria-label="Dessin">
+        <div class="ml-stage-box" id="ml-stage-box">
+          <llmx-stage id="ml-stage" class="ml-stage" role="img" aria-label="Dessin des formules"></llmx-stage>
+          <p class="ml-stage-note" id="ml-stage-note" hidden></p>
+        </div>
+        <p class="ml-orbit">Glisse sur le dessin pour le tourner · double-clic pour revenir</p>
+        <ul class="ml-legend" id="ml-legend" aria-label="Légende"></ul>
+        <div class="ml-sliders" id="ml-sliders"></div>
+        <ul class="ml-readouts" id="ml-readouts" aria-live="polite"></ul>
+        <p class="ml-hint" id="ml-hint"></p>
+      </section>
+    </main>
+    <script type="module" src="/src/math-lab-page.ts"></script>
+  </body>
+</html>
