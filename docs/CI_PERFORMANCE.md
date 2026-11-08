@@ -57,7 +57,8 @@ npm run verify -- --wait
 
 The existing local lock, assertions, timeouts and optional `--shard=i/n` remain.
 No journey is deleted or weakened. The current 118 checks comprise 10 Node contracts and
-108 visual journeys; do not turn the local list into an unconditional extra gate
+108 visual journeys. Three of those journeys are GPU receptions (below): the devX gate
+names them as not run instead of running them. Do not turn the local list into an unconditional extra gate
 for a documentation or Node-only change. GitHub configuration and the HTTP checker
 can be validated with Node tests, including explicit bad-publication fixtures.
 
@@ -242,8 +243,49 @@ any width, no MSAA and no post-processing stack. Scene state, controls and viewp
 size remain unchanged. The document carries `data-gx-light-render="true"` so a
 behaviour capture can be distinguished from evidence of the full desktop look.
 
-Only the LLMx core-embed, conversation, creation and world behaviour families opt
-in. Visual journeys and ordinary product sessions retain their normal renderer.
-Screenshots retain their requested resolution; this option does not downscale
-them. A shared runtime change still requires the complete local gate, including
+Only the LLMx core-embed, conversation, creation and world behaviour families and the
+Ballsy volcano loop (`ballsy-volcano`) opt in. Visual journeys and ordinary product
+sessions retain their normal renderer. Screenshots retain their requested viewport size.
+`useLightRender(page, { resolution })` (0.25..1) also scales the host's drawing buffer;
+only `ballsy-volcano` uses it (0.5), so its captures are softer and are behaviour
+evidence only. A shared runtime change still requires the complete local gate, including
 the visual journeys with their normal renderer, before integration.
+
+## GPU receptions (since 2026-11-07)
+
+Three live Ballsy journeys need hardware WebGL and are **no longer covered by devX's
+`npm run verify`**:
+
+- `ballsy-contact-visual`
+- `ballsy-shared-vr`
+- `ballsy-giant`
+
+They stay in the manifest with `gpuReception: true`. Without `--gpu-receptions` the
+runner skips them and prints them as `SKIP ... GPU reception, not run by this gate`,
+plus a closing note, so a green devX run is never read as covering them. Run them on a
+machine with a hardware GPU (Brutal), only when asked, through the heavy-work queue
+(it is shared GPU work):
+
+```bash
+npm run verify -- --wait --gpu-receptions --checks=ballsy-contact-visual,ballsy-shared-vr,ballsy-giant
+```
+
+Why: devX renders with SwiftShader (software WebGL, no GPU). Measured on 2026-11-07 at
+1280x720, one frame of the Ballsy race costs ~1 s and one frame of the giant page
+~200 ms. Each frame blocks the page's main thread, so the TV relay (1.4 s request
+timeout) misses its presence window and a real 120 ms mouse drag is sampled as a single
+frame instead of a throw. A lighter test render (resolution 0.35, no MSAA) on both pages
+restored the relay but not the live XR throw and release timings, and the throw
+assertions are not loosened to fit a slow renderer. `ballsy-contact-visual` checks the
+look itself, so a lighter render would defeat it.
+
+What devX still covers:
+
+- the full Ballsy look (normal renderer): `ballsy-camera-finish`, whose hand-driven clock
+  now draws frames only when it advances (`setRenderOnDemand` in `src/platform-host.ts`);
+- volcano behaviour: `ballsy-volcano`, with the light test render (resolution 0.5) and one
+  120-frame live sample per resolution. Its report carries `render` and states that its
+  fps figures are not comparable with earlier full-render receipts.
+
+Full-look volcano captures, like the three journeys above, are a GPU reception to run
+on Brutal when asked; that is not a new gate.

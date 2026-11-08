@@ -149,15 +149,27 @@ const RENDER_PROFILES: Record<PlatformRenderProfileName, PlatformRenderProfile> 
 
 /**
  * Opt-in renderer for browser journeys that check behaviour rather than looks. Such a journey
- * sets `window.__GRAPHYSX_LIGHT_RENDER__ = true` from an init script before the page loads
+ * sets `window.__GRAPHYSX_LIGHT_RENDER__` from an init script before the page loads
  * (`useLightRender` in scripts/smoke-harness.mjs); the product never sets it. It keeps the
  * mobile tier at any width, which lightens the face and the shadow map, and it drops MSAA and
  * the post stack. Scene state, layout and the API are unchanged. The page is marked
  * `data-gx-light-render` so a capture taken this way is never read as the desktop look.
+ *
+ * `true` keeps full resolution; `{ resolution }` (0.25..1) also scales the drawing buffer, for a
+ * journey that samples many live frames under the smokes' software WebGL (measured 2026-11-07:
+ * one full-screen 1920x1080 frame of the Ballsy race costs ~2 s there).
  */
+function lightRenderRequest(): { resolution: number } | null {
+  if (typeof window === "undefined") return null;
+  const value = (window as Window & { __GRAPHYSX_LIGHT_RENDER__?: unknown }).__GRAPHYSX_LIGHT_RENDER__;
+  if (value === true) return { resolution: 1 };
+  if (!value || typeof value !== "object") return null;
+  const resolution = (value as { resolution?: unknown }).resolution;
+  return { resolution: typeof resolution === "number" && Number.isFinite(resolution) ? Math.min(1, Math.max(0.25, resolution)) : 1 };
+}
+
 function lightRenderRequested(): boolean {
-  return typeof window !== "undefined"
-    && (window as Window & { __GRAPHYSX_LIGHT_RENDER__?: unknown }).__GRAPHYSX_LIGHT_RENDER__ === true;
+  return lightRenderRequest() !== null;
 }
 
 /**
@@ -254,6 +266,7 @@ export class PlatformHost {
   private renderProfile: PlatformRenderProfile;
   /** See {@link lightRenderRequested}. Read once: a page never switches renderer mid-life. */
   private readonly lightRender = lightRenderRequested();
+  private readonly lightResolution = lightRenderRequest()?.resolution ?? 1;
   private shadowRefreshElapsed = Number.POSITIVE_INFINITY;
   private reflectionRefreshElapsed = Number.POSITIVE_INFINITY;
   private auxiliaryPassTurn: "shadow" | "reflection" = "shadow";
@@ -1558,7 +1571,7 @@ export class PlatformHost {
   private applyRenderProfile(profile: PlatformRenderProfile): void {
     const profileChanged = profile.name !== this.renderProfile.name;
     this.renderProfile = profile;
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, profile.maxDpr);
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, profile.maxDpr) * this.lightResolution;
     if (this.renderer.getPixelRatio() !== pixelRatio) {
       this.renderer.setPixelRatio(pixelRatio);
       this.composer?.setPixelRatio(pixelRatio);
