@@ -66,8 +66,10 @@ Le géant garde son renderer et son unique boucle d'animation. Il consomme
 Les modèles utilisent les factories officielles Three.js : mains translucides pilotées
 par les articulations WebXR, Touch blanches à anneaux pour le profil Quest 2 et modèle
 générique pour les autres appareils. Les articulations restent visibles si la surface
-ne charge pas ou si le suivi est incomplet. Les modèles de manette n'impliquent pas que
-les doigts autour du plastique soient suivis. Modèles, profils et licence sont inclus
+ne charge pas ou si le suivi est incomplet. Sur les Touch Quest 2, une main d’avatar tient
+chaque manette : index, prise et pouce réagissent aux commandes et contacts disponibles.
+Ces poses sont animées par la manette. Les mains libres utilisent leurs articulations
+optiques WebXR. Modèles, profils et licence sont inclus
 dans le build Ballsy; aucun CDN n'est nécessaire. Voir [le contrat du socle](VR_FOUNDATION.md).
 
 Une manette saisit avec la gâchette ou le grip. Une main suivie saisit avec le

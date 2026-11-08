@@ -468,6 +468,7 @@ const unsubscribeXr = xrSession.subscribe((state) => {
   paint();
 });
 void xrSession.checkSupport();
+let inputFrameAt = performance.now();
 renderer.setAnimationLoop((_time, frame) => {
   if (disposed) return;
   frameCount++;
@@ -476,7 +477,7 @@ renderer.setAnimationLoop((_time, frame) => {
   const suppliedFrame = frame ?? renderer.xr.getFrame();
   const xrFrame = xrSession.snapshot.phase === "active" && session?.visibilityState === "visible"
     && !document.hidden && suppliedFrame?.session === session ? suppliedFrame : null;
-  xrInput.setActive(!!xrFrame); xrInput.update();
+  xrInput.setActive(!!xrFrame); xrInput.update((now - inputFrameAt) / 1000); inputFrameAt = now;
   for (const source of session?.inputSources ?? []) {
     const pad = source.gamepad;
     const quest = source.profiles.some((profile) => /^(?:oculus-touch|meta-quest-touch)/.test(profile));

@@ -124,14 +124,14 @@ export function bindBallsySyntheticXr() {
     }
     slot.grip.updateMatrixWorld(true); slot.hand.updateMatrixWorld(true);
   };
-  fixture.connect = (index, handedness, kind = "controller") => {
+  fixture.connect = (index, handedness, kind = "controller", profile = "unknown-xr-standard") => {
     const slot = xr.input.slots[index];
     if (slot.source) fixture.action(index, "disconnected");
     slot.grip.matrixAutoUpdate = slot.ray.matrixAutoUpdate = slot.hand.matrixAutoUpdate = true;
     slot.grip.visible = slot.ray.visible = slot.hand.visible = true;
     slot.ray.position.set(index ? -.4 : .4, 1.25, 0); slot.ray.quaternion.identity();
     slot.grip.quaternion.identity();
-    const source = { handedness, targetRayMode: "tracked-pointer", profiles: ["unknown-xr-standard"],
+    const source = { handedness, targetRayMode: "tracked-pointer", profiles: [profile],
       targetRaySpace: { kind: "ray", slot: index }, gripSpace: { kind: "grip", slot: index },
       gamepad: { mapping: "xr-standard", axes: [0, 0, 0, 0], buttons: Array.from({ length: 6 }, () => ({ value: 0, pressed: false, touched: false })) } };
     if (kind === "hand") {

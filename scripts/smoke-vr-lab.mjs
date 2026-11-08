@@ -11,13 +11,21 @@ mkdirSync(ART,{recursive:true});
 async function captureInputModels(page,name){
   await page.evaluate(()=>{
     document.querySelector('.gx-vr-ui').style.visibility='hidden';
-    window.__GRAPHYSX_VR__.host.api.update('vr-cube',{visible:false});
+    const {host}=window.__GRAPHYSX_VR__;host.api.update('vr-cube',{visible:false});
+    const groups=new Set();host.scene.traverse(object=>{
+      const materials=Array.isArray(object.material)?object.material:[object.material];
+      if(materials.some(material=>material?.map?.isCanvasTexture) && object.parent?.type==='Group')groups.add(object.parent);
+    });
+    window.__vrCaptureGroups=[...groups].map(group=>[group,group.visible]);
+    groups.forEach(group=>{group.visible=false;});
   });
   await page.waitForTimeout(120);
   try{await page.screenshot({path:path.join(ART,name)});}
   finally{await page.evaluate(()=>{
     document.querySelector('.gx-vr-ui').style.visibility='';
     window.__GRAPHYSX_VR__.host.api.update('vr-cube',{visible:true});
+    window.__vrCaptureGroups.forEach(([group,visible])=>{group.visible=visible;});
+    delete window.__vrCaptureGroups;
   });}
 }
 const browser=await launchSmokeBrowser();
@@ -196,6 +204,23 @@ try{
     });
   });
   await xrPage.waitForFunction(()=>window.__GRAPHYSX_VR__.vr.input.slots.every(slot=>slot.modelReady));
+  await xrPage.waitForFunction(()=>window.__GRAPHYSX_VR__.vr.input.slots.every(slot=>slot.controllerHand));
+  assert.deepEqual(await xrPage.evaluate(()=>window.__GRAPHYSX_VR__.vr.input.slots.map(slot=>({
+    side:slot.controllerHand.object.userData.handedness,poseSource:slot.controllerHand.object.userData.poseSource,nativeHand:!!slot.source.hand,
+  }))),[{side:'left',poseSource:'controller-gamepad',nativeHand:false},{side:'right',poseSource:'controller-gamepad',nativeHand:false}]);
+  await xrPage.evaluate(()=>{
+    const slots=window.__GRAPHYSX_VR__.vr.input.slots;
+    window.__avatarRest=slots.map(slot=>({index:slot.controllerHand.joints.get('index-finger-tip').bone.position.clone(),middle:slot.controllerHand.joints.get('middle-finger-tip').bone.position.clone()}));
+    slots.forEach(slot=>{slot.source.gamepad.buttons[0].touched=true;});
+  });
+  await xrPage.waitForFunction(()=>window.__GRAPHYSX_VR__.vr.input.slots.every((slot,i)=>
+    slot.controllerHand.joints.get('index-finger-tip').bone.position.distanceTo(window.__avatarRest[i].index)>.01));
+  assert.equal(await xrPage.evaluate(()=>window.__GRAPHYSX_VR__.vr.input.slots.every((slot,i)=>
+    slot.controllerHand.joints.get('middle-finger-tip').bone.position.distanceTo(window.__avatarRest[i].middle)<.00001)),true);
+  await xrPage.evaluate(()=>window.__GRAPHYSX_VR__.vr.input.slots.forEach(slot=>{slot.source.gamepad.buttons[6].touched=true;slot.ray.visible=false;}));
+  await xrPage.waitForFunction(()=>window.__GRAPHYSX_VR__.vr.input.slots.every(slot=>
+    slot.controllerHand.joints.get('thumb-tip').bone.position.distanceTo(slot.controllerHand.targets.rest)<.015));
+  await captureInputModels(xrPage,'vr-lab-controller-hands-rest.png');
   await xrPage.evaluate(()=>{
     const slots=window.__GRAPHYSX_VR__.vr.input.slots;
     window.__touchBefore=slots.map(slot=>slot.modelRoot.getObjectByName('xr_standard_trigger_pressed_value').quaternion.clone());
@@ -203,6 +228,32 @@ try{
   });
   await xrPage.waitForFunction(()=>window.__GRAPHYSX_VR__.vr.input.slots.every((slot,index)=>
     slot.modelRoot.getObjectByName('xr_standard_trigger_pressed_value').quaternion.angleTo(window.__touchBefore[index])>.01));
+  await xrPage.evaluate(()=>window.__GRAPHYSX_VR__.vr.input.slots.forEach(slot=>{
+    slot.source.gamepad.buttons[1].value=1;slot.source.gamepad.buttons[6].touched=false;
+    slot.source.gamepad.buttons[4]={value:1,pressed:true,touched:true};
+  }));
+  await xrPage.waitForFunction(()=>window.__GRAPHYSX_VR__.vr.input.slots.every((slot,i)=>
+    slot.controllerHand.joints.get('middle-finger-tip').bone.position.distanceTo(window.__avatarRest[i].middle)>.01 &&
+    slot.controllerHand.joints.get('thumb-tip').bone.position.distanceTo(slot.controllerHand.targets.primary)<.015));
+  await captureInputModels(xrPage,'vr-lab-controller-hands-pressed.png');
+  await xrPage.evaluate(()=>{
+    const {vr}=window.__GRAPHYSX_VR__;vr.input.slots[1].grip.visible=false;
+    vr.camera.position.set(.35,1.45,-.25);vr.camera.lookAt(-.14,1.4,-.55);
+  });
+  await captureInputModels(xrPage,'vr-lab-controller-hands-side.png');
+  await xrPage.evaluate(()=>{
+    const {vr}=window.__GRAPHYSX_VR__;vr.input.slots[1].grip.visible=true;
+    vr.camera.position.set(0,1.6,0);vr.camera.rotation.set(-.28,0,0);
+  });
+  for(const [button,target] of [[3,'stick'],[5,'secondary']]){
+    await xrPage.evaluate(button=>window.__GRAPHYSX_VR__.vr.input.slots.forEach(slot=>{
+      slot.source.gamepad.buttons.forEach((state,index)=>{if(index>=3){state.value=0;state.pressed=false;state.touched=false;}});
+      slot.source.gamepad.buttons[button].touched=true;
+    }),button);
+    await xrPage.waitForFunction(target=>window.__GRAPHYSX_VR__.vr.input.slots.every(slot=>
+      slot.controllerHand.joints.get('thumb-tip').bone.position.distanceTo(slot.controllerHand.targets[target])<.015),target);
+  }
+  receipts.controllerAvatar=true;
   await xrPage.evaluate(()=>window.__GRAPHYSX_VR__.vr.input.slots.forEach(slot=>{
     slot.source.gamepad.buttons[0]={value:0,pressed:false,touched:false};slot.ray.visible=false;
   }));
