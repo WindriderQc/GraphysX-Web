@@ -10,6 +10,7 @@
  * drawing can be shared as a link.
  */
 import "./math-lab.css";
+import { mountMathLabLevels } from "./math-lab-navigation";
 import "./llmx-stage-element";
 import type { LlmXStageElement } from "./llmx-stage-element";
 import {
@@ -50,6 +51,7 @@ const copied = byId<HTMLSpanElement>("ml-copied");
 
 /** The block drawn now (the last valid one), its slider values, and the scene shape sent to the stage. */
 let shown: MathBlock | null = null;
+let lastReadText = "";
 let values: Record<string, number> = {};
 let shape = "";
 let webgl = true;
@@ -93,7 +95,7 @@ function clearRefusal(): void {
   delete status.dataset.kind;
 }
 
-function read(text: string): void {
+function read(text: string, preserveSliders = true): void {
   const block = parseMathBlock(text);
   if (!block.ok) {
     refuse(`Pas encore de dessin : ${mathLabRefusal(block.error)}`, `Formule non tracée : ${block.error.message}`);
@@ -104,7 +106,7 @@ function read(text: string): void {
     return;
   }
   // A parameter kept with the same range keeps its slider position; any other starts at its declared value.
-  const previous = shown ? shown.plot.parameters : [];
+  const previous = preserveSliders && shown ? shown.plot.parameters : [];
   const next: Record<string, number> = {};
   for (const row of block.plot.parameters) {
     const before = previous.find(other => other.name === row.name && other.min === row.min && other.max === row.max);
@@ -116,6 +118,7 @@ function read(text: string): void {
   clearRefusal();
   root.classList.remove("ml-stale");
   stageNote.hidden = true;
+  lastReadText = text;
   remember(text);
   draw();
 }
@@ -239,10 +242,10 @@ function fromAddress(): string | null {
   }
 }
 
-function load(text: string): void {
+function load(text: string, preserveSliders = true): void {
   window.clearTimeout(timer);
   body.value = text;
-  read(text);
+  read(text, preserveSliders);
 }
 
 /** Marks the chosen example and says, in a sentence, what to try with it. */
@@ -308,3 +311,18 @@ const initial = fromAddress();
 const first = initial ?? MATH_LAB_EXAMPLES[0].body;
 selectExample(MATH_LAB_EXAMPLES.find(example => example.body === first)?.id ?? null);
 load(first);
+
+// Snapshot raw pending/invalid input before leaving; valid plots keep live slider values.
+mountMathLabLevels(document.querySelector<HTMLElement>(".ml-head")!, "functions", () => {
+  const snapshot = body.value !== lastReadText || !shown ? body.value : mathBlockText(shown.plot, values);
+  return `#bloc=${encodeURIComponent(snapshot)}`;
+});
+
+// Shared formula addresses also respond to same-document history navigation.
+window.addEventListener('hashchange', () => {
+  const text=fromAddress();
+  if(text!==null) {
+    selectExample(MATH_LAB_EXAMPLES.find(example=>example.body===text)?.id ?? null);
+    load(text, false);
+  }
+});

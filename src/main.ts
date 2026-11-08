@@ -21,6 +21,7 @@ import { composeSkyboxSpiral, frameSkyboxSpiral, SKYBOX_SPIRAL_PROVENANCE } from
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { showStartupError } from "./startup-error";
 import type { KidxApplication } from "./kidx-app";
+import type { TenWorkshopApplication } from "./ten-workshop-app";
 import type { LlmXApplication } from "./llmx-contracts";
 import type { DiskxApplication } from "./diskx-app";
 import type { EcosystemApplication } from "./ecosystem-app";
@@ -130,7 +131,7 @@ const hostOriginAllowList = parseHostOriginAllowList(import.meta.env.VITE_GRAPHY
 // the EV3 lab, whose child-facing strip exists because the editor is unusable at 800x480 by the
 // person the lab was built for. This is the seam a second application would use, not a special
 // case for EV3 — hence a value, not a boolean.
-const appParam = (params.get("app") ?? "").trim();
+const appParam = document.documentElement.dataset.mathLabLevel === "numbers" ? "make-ten" : (params.get("app") ?? "").trim();
 const localScene = params.get("localScene")?.trim() || null;
 
 const sessionParam = params.get("session");
@@ -467,16 +468,29 @@ if (appParam === "vr-lab") {
      * Keyed by id rather than a boolean because this is the seam a second application uses, not
      * a special case for EV3.
      */
-    let appSurface: KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | IslandApplication | FirstCreationApplication | null = null;
+    let appSurface: TenWorkshopApplication | KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | IslandApplication | FirstCreationApplication | null = null;
     // Application surfaces own the whole play viewport. Keep this separate from the lazy
     // surface module so later host chrome (notably the asynchronously mounted scene browser)
     // can respect the route before the application's import has finished.
     let applicationOpen = false;
     const openApplication = (id: string): boolean => {
-      if (id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island" && id !== "creation") return false;
+      if (id !== "make-ten" && id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island" && id !== "creation") return false;
       if (applicationOpen) return true;
       applicationOpen = true;
       requestShowroomInteraction(false);
+      if (id === "make-ten") {
+        showroomEnvironment?.();
+        showroomEnvironment = null;
+        void import("./ten-workshop-app").then(({ mountTenWorkshop }) => {
+          appSurface = mountTenWorkshop(root, host, () => {
+            appSurface?.dispose();
+            appSurface = null;
+            applicationOpen = false;
+            window.location.href = import.meta.env.BASE_URL;
+          });
+        }).catch((error: unknown) => showStartupError(root, error));
+        return true;
+      }
       if (id === "creation") {
         showroomEnvironment?.();
         showroomEnvironment = null;
@@ -1091,13 +1105,13 @@ if (appParam === "vr-lab") {
     };
     // These applications own their scene from the first frame. Avoid booting the showroom
     // and its cubemap only to discard them when the app mounts.
-    const directSceneApp = (appParam === "ev3-lab" || appParam === "creation") && !editorFirst && !storeScene && !liveSessionRequested;
+    const directSceneApp = (appParam === "make-ten" || appParam === "ev3-lab" || appParam === "creation") && !editorFirst && !storeScene && !liveSessionRequested;
     const host = new PlatformHost(root, {
       world: directSceneApp ? {
         schema: "graphysx.agent-world/v2", id: appParam + "-startup", label: appParam === "creation" ? "GraphysX" : "KidX",
         environment: { background: "#142d38", sky: null }, entities: [],
       } : undefined,
-      autoOrbit: !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx",
+      autoOrbit: appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx",
       autoOrbitSpeed: 0.2,
       editorVisible: editorFirst,
       // CubX and its living shell are the focal point; the shore and physics stay below.
@@ -1106,7 +1120,7 @@ if (appParam === "vr-lab") {
       // screenshot harness should put you where you asked to be, immediately. `?intro=0`
       // opts out. The default welcome approaches slowly; application entry keeps its
       // existing short move. Both use the host's interruptible focus mechanism.
-      intro: !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx" && new URLSearchParams(window.location.search).get("intro") !== "0"
+      intro: appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx" && new URLSearchParams(window.location.search).get("intro") !== "0"
         ? appParam ? true : { durationSeconds: 10, distanceScale: 2.15, azimuthDegrees: 18 }
         : false,
       // `?post=bloom` turns the demo post stack on for any route (bloom + SMAA through the
