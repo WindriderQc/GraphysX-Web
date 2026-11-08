@@ -586,6 +586,9 @@ try {
   const advanceTime = (milliseconds: number): unknown => {
     if (!Number.isFinite(milliseconds) || milliseconds < 0 || milliseconds > 60_000) throw new RangeError("advanceTime expects 0..60000 milliseconds");
     manual = true;
+    // A hand-driven clock changes the picture only here; idle frames would redraw it unchanged.
+    host.setRenderOnDemand(true);
+    host.requestRender();
     syncPause();
     if (milliseconds === 0) { pollPads(); paint(); if (phase !== "paused") updateCamera(0, true); paintRacerOverlays(); return state(); }
     if (isVolcano) advanceFixed(milliseconds / 1000);

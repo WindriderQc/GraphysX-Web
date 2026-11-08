@@ -269,6 +269,8 @@ export class PlatformHost {
   private frame = 0;
   private disposed = false;
   private framesSuspended = false;
+  private rendersOnDemand = false;
+  private renderRequested = false;
   private immersiveCamera: PerspectiveCamera | null = null;
   private desktopControlsEnabled = true;
   private readonly unsubscribeEvents: () => void;
@@ -513,6 +515,26 @@ export class PlatformHost {
     }
     this.clock.getDelta();
     this.renderer.setAnimationLoop(() => this.tick());
+  }
+
+  /**
+   * Draw only the frames that were asked for. Unlike {@link setFramesSuspended}, the loop keeps
+   * running: the world steps and frame listeners still run every frame, and the scene is drawn
+   * once after each {@link requestRender}. For a page whose clock a QA driver advances by hand
+   * (`advanceTime`), where nothing visible changes between two advances. Measured 2026-11-07
+   * under the smokes' software renderer: one 1280x720 frame of the volcano race costs ~1 s and
+   * holds the page's main thread, so timers and relay fetches waited behind every redraw of the
+   * same picture. An immersive session always draws every frame.
+   */
+  setRenderOnDemand(onDemand: boolean): void {
+    if (this.disposed || onDemand === this.rendersOnDemand) return;
+    this.rendersOnDemand = onDemand;
+    this.renderRequested = true;
+  }
+
+  /** Ask for one drawn frame while {@link setRenderOnDemand} is on; every frame draws otherwise. */
+  requestRender(): void {
+    this.renderRequested = true;
   }
 
   /** True while {@link setFramesSuspended} holds the frame loop. */
@@ -1433,12 +1455,16 @@ export class PlatformHost {
       if (this.currentMode === "play" && this.chaseTargetId) this.updateChase(delta);
       else this.controls.update();
     }
+    const onDemand = this.rendersOnDemand && !this.immersiveCamera && !this.renderer.xr.isPresenting;
+    if (onDemand && !this.renderRequested) return;
+    this.renderRequested = false;
     const auxiliaryPasses = this.scheduleAuxiliaryPasses(delta);
     // Shadow maps and planar water both re-render scene geometry. Their independent budgets
     // are arbitrated here so they never land on the same main frame and create a long spike.
-    this.renderer.shadowMap.needsUpdate = auxiliaryPasses.shadow;
+    // A requested frame may follow any amount of advanced time, so it refreshes both.
+    this.renderer.shadowMap.needsUpdate = onDemand || auxiliaryPasses.shadow;
     for (const surface of this.waterSurfaces) {
-      surface.setReflectionRefreshEnabled(!this.immersiveCamera && auxiliaryPasses.reflection);
+      surface.setReflectionRefreshEnabled(!this.immersiveCamera && (onDemand || auxiliaryPasses.reflection));
     }
     // One render call either way — the composer's RenderPass is the same scene/camera
     // draw, followed by the passes the scene opted into.
@@ -1562,6 +1588,8 @@ export class PlatformHost {
     const height = this.container.clientHeight || window.innerHeight;
     this.applyRenderProfile(chooseRenderProfile(width, this.lightRender));
     this.renderer.setSize(width, height, false);
+    // Resizing clears the drawing buffer; an on-demand page must not keep a blank canvas.
+    this.renderRequested = true;
     this.composer?.setSize(width, height);
     this.camera.aspect = width / height || 1;
     this.camera.updateProjectionMatrix();

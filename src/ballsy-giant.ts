@@ -9,7 +9,7 @@ import { bridgeOcclusionDistance } from "./ballsy-picking";
 import { EARTH_BOUNDS, surfaceHeightAt } from "./ballsy-earth";
 import { BallsyThrowGesture, canGrabBallsyBalloon, ballsyThrowInSpace, type BallsyThrow, type ThrowPoint } from "./ballsy-throw";
 import { BALLOON_GRIP_OFFSET, makeGiantBalloon, disposeGiantProp } from "./ballsy-giant-balloon";
-import { fitBallsyTableShadows } from "./ballsy-lighting";
+import { createBallsyShadowRefresh, fitBallsyTableShadows } from "./ballsy-lighting";
 import { VrInputRig, type VrInputAction } from "./xr/vr-input";
 import { VrSessionController } from "./xr/vr-session";
 import { GIANT_XR_FRESH_MS, readGiantXrPose, giantXrWorldPoint, freshGiantXrRelease, observeGiantXrSelect, type GiantXrRelease } from "./ballsy-giant-xr";
@@ -34,6 +34,8 @@ const renderer = new WebGLRenderer({ antialias: true, powerPreference: "high-per
 renderer.outputColorSpace = SRGBColorSpace; renderer.toneMapping = ACESFilmicToneMapping;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = PCFSoftShadowMap;
+// The table is mostly still: redraw its shadow map only when a caster or the sun moved.
+renderer.shadowMap.autoUpdate = false;
 renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local-floor");
 root.prepend(renderer.domElement);
 const camera = new PerspectiveCamera(65, 1, 0.02, 30);
@@ -58,6 +60,7 @@ api.pause(true);
 world.group.scale.setScalar(0.045); world.group.position.set(0, 0.82, -1.05);
 tableRig.add(world.group);
 fitBallsyTableShadows(world.group, world.getEntityObject("ballsy-sun"));
+const shadowsChanged = createBallsyShadowRefresh(scene);
 // This lean renderer has no studio IBL. Reuse its existing native ambient fill.
 api.update("ballsy-fill", { intensity: .8 });
 for (const id of ["ballsy-p1", "ballsy-p2"]) api.update(id, { visible: false });
@@ -583,6 +586,7 @@ renderer.setAnimationLoop((_time, frame) => {
   const available = canGrab();
   stock.forEach((balloon) => { balloon.visible = available; balloon.scale.setScalar(inVR() ? 1 : 1.4); });
   if (inVR()) desktopCursor.visible = false;
+  renderer.shadowMap.needsUpdate = shadowsChanged();
   renderer.render(scene, renderer.xr.isPresenting || inVR() ? xrCamera : camera);
 });
 async function dispose(): Promise<void> {
