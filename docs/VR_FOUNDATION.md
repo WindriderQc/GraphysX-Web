@@ -19,7 +19,10 @@ or the separate Ballsy prototype. The ordinary desktop routes do not load the XR
   tracking rings for the `oculus-touch-v3` (Quest 2) input profile. Left/right meshes,
   triggers, grip buttons, face buttons and thumbsticks use the profile's native animation.
   Other devices retain the GraphysX **generic** model; unknown mappings keep a grip and ray.
-  No fingers are claimed to be tracked around a controller.
+  On Quest 2, an additional translucent hand avatar wraps each controller. Its index reacts
+  to trigger contact/pressure, the other fingers to squeeze, and the thumb to stick, face
+  buttons and thumbrest contact when those states are exposed. These are controller-driven
+  authored poses; optical joints remain exclusive to a real hand input source.
 - Immediate procedural grip/ray fallback while a model loads or if an asset fails.
 - Source/pose loss, visibility interruption and session end cancel held actions.
   A canceled release is distinguishable from an intentional release. It never implies a throw.
@@ -37,12 +40,29 @@ without a browser. Call `checkSupport()` explicitly after construction.
 Slot index is never used as handedness. A fresh factory surrogate per connection isolates
 late asset callbacks from a replacement source, including Three r179's asynchronous
 connect/disconnect model-loading edge case. Factory GLTF failures leave the fallback usable.
-The r179 primitive hand updater is wrapped to compact visible instances after its update:
+The r179 primitive hand updater compacts the currently visible joint poses:
 missing joint poses cannot leave stale spheres drawn or truncate other tracked fingers.
 Disposal releases both shared primitive geometry/materials and the owned instance buffers.
 Surface loads use the same connection isolation. A late hand asset is disposed rather
 than attached to a replacement source. Skinned skeletons and embedded controller textures
 are also disposed with their models. Surface loading is cosmetic and never blocks pinch.
+
+`src/xr/controller-hand.ts` is a separate cosmetic controller-avatar driver. It reuses the
+local skinned hands, normalizes their bind pose at the wrist, and wraps authored finger
+chains around the selected Quest 2 controller. Thumb contact targets are derived from its
+real button meshes, with an authored thumbrest target. Segment lengths are preserved while
+the thumb reaches a touched control. Trigger touch/analog pressure and squeeze bend the
+other chains independently. Pose transitions use elapsed frame time in the existing host
+and Ballsy loops. No synthetic XR joint source, select/grab event or gameplay action is
+created by the avatar. Unknown controller models retain their existing visual fallback.
+
+This uses the input source's own `gamepad`, following the
+[WebXR Gamepads mapping](https://github.com/immersive-web/webxr-gamepads-module/blob/main/gamepads-module-explainer.md).
+Capacitive contact is used where the browser exposes `touched`; button/axis values provide
+the available fallback. Hand/controller fit and pose interpolation are GraphysX-authored
+visual approximations, inspired by the experience described in Meta's
+[First Steps hand-input article](https://developers.meta.com/vr/blog/adding-hand-tracking-to-first-steps/).
+They are not Meta's native Capsense skeleton or proof of actual finger locations.
 
 `src/xr/platform-vr.ts` adapts those pieces to `PlatformHost`. Construct one adapter on a
 **scene-mode** host. A second adapter or an editor/play host is rejected; switching surfaces
@@ -166,6 +186,9 @@ redirected; do not install another browser or change machine settings unnecessar
 2. Confirm the scene floor/scale and a comfortable stationary spawn, with an unobstructed area.
 3. Enter using the visible button; inspect both-eye stereo, frame pacing and text readability.
 4. Try each controller independently, reversed connection order, and trigger/grip/button travel.
+   On Quest 2, confirm that both avatars grip the handles comfortably. Rest and lift the
+   index on the trigger, press progressively, squeeze, then move the thumb between stick,
+   A/B or X/Y and thumbrest. Verify the real browser's capacitive contact availability.
 5. Put controllers down and enable hand tracking. Inspect the translucent surface and pinch/release,
    including the joint fallback on incomplete tracking and recovery to the complete surface.
 6. Lose a hand/controller behind the head, remove a source, open the system menu, and return.
@@ -245,3 +268,33 @@ Detailed local evidence is in `output/vr-visuals/`: `xr-final.log`, `typecheck-f
 `browser-final.log`, `browser-summary.json`, `vr-lab-final.log` and per-journey receipts
 under `browser/`. These logs remain ignored. No headset, stereo, optical tracking, comfort,
 audio or Quest frame-rate acceptance is claimed; publication is separate from this change.
+
+## Controller avatar update (2026-11-08)
+
+Branch `codex/controller-avatar-hands`, based on `origin/main` at `fb31a61`. The requested
+First Steps-like view includes hands holding and operating the controllers. The previous
+release rendered free tracked hands and controllers separately; this update adds the
+controller-driven avatar without requiring an optical hand source at the same time.
+
+![Avatar hands operating the Touch controllers](images/controller-avatar-hands.png)
+
+The picture shows the actual built lab with synthetic controller poses and gamepad states.
+The cube, DOM panel and in-world instructions are hidden for these model close-ups. Wrist
+orientation and resting grasp were fitted against the packaged Touch handle and inspected
+from the user view and the side. The authored medium hand is an approximation; ergonomic
+fit for the owner's real hands remains a Quest acceptance item.
+
+No package, mesh, remote model URL, action binding or animation loop was added. All
+44 focused XR/fixture tests pass, including the new cases for contact versus pressure,
+independent finger chains, thumb targets, bone-length preservation, elapsed-time blending,
+late avatar loads and the avatar's proximity to the real handle geometry. TypeScript,
+repository lint and the production build pass. The built-browser checks pass for the VR
+lab, Ballsy shared VR (52 checks including the controller avatars), showroom and Cyber Race.
+
+The full Windows Node run reports 1,293 tests: 1,288 passed, 4 failed, 1 skipped. The same
+world persistence failures documented above remain; no complete local release gate is
+claimed. Browser checks run separately under the machine-global verify lock. Receipts,
+logs and captures are under `output/controller-hands/`, including `unit-final.log`,
+`unit-focused.log`, `typecheck-final.log`, `lint-final.log`, `build-final.log`,
+`browser-final.log`, `browser-summary.json` and per-journey receipts under `browser/`.
+No physical Quest, finger-contact, stereo, comfort or performance acceptance is claimed.

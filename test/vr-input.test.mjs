@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Group, Matrix4, Texture, Vector3 } from 'three';
+import { BoxGeometry, Group, Matrix4, Mesh, Texture, Vector3 } from 'three';
 import { readFile } from 'node:fs/promises';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { VrInputRig } from '../src/xr/vr-input.ts';
+import { importBrowserModule } from './support/import-browser-module.mjs';
 import { observeGiantXrSelect } from '../src/ballsy-giant-xr.ts';
+const { VrInputRig } = await importBrowserModule(new URL('../src/xr/vr-input.ts',import.meta.url));
 
 function fixture(t) {
   const spaces = Array.from({ length: 2 }, () => {
@@ -253,4 +254,23 @@ test('late hand mesh load is disposed and cannot replace a reconnected source',a
  assert.equal(f.rig.slots[0].source.handedness,'right');
  assert.equal(f.rig.slots[0].fallback.visible,true);
  assert.equal(f.rig.slots[0].modelRoot.getObjectByProperty('type','SkinnedMesh'),undefined);
+});
+
+for(const interruption of ['replacement','disposal'])test(`late controller avatar load is disposed after ${interruption} and cannot revive its source`,async t=>{
+ let deliver;
+ t.mock.method(GLTFLoader.prototype,'load',function(_url,onLoad){deliver=onLoad;});
+ const f=fixture(t);f.rig.setActive(true);f.connect(0,'right');
+ const slot=f.rig.slots[0],proxy=slot.modelRoot,controller=new Group(),geometry=new BoxGeometry(.01,.01,.01);
+ for(const name of ['thumbstick','a_button','b_button']){const mesh=new Mesh(geometry);mesh.name=name;controller.add(mesh);}
+ proxy.add(controller);slot.modelReady=true;slot.fallback.visible=false;
+ f.rig.addControllerHand(slot,'right',proxy,controller);
+ f.emit(0,'selectstart');assert.equal(f.events.at(-1).phase,'start','cosmetic load cannot block trigger actions');
+ if(interruption==='replacement')f.connect(0,'left');else f.rig.dispose();
+ const buffer=await readFile(new URL('../public/assets/xr/profiles/generic-hand/right.glb',import.meta.url));
+ const gltf=await new GLTFLoader().parseAsync(buffer.buffer.slice(buffer.byteOffset,buffer.byteOffset+buffer.byteLength),'');
+ const skin=gltf.scene.getObjectByProperty('type','SkinnedMesh');let disposed=0;
+ skin.geometry.addEventListener('dispose',()=>disposed++);deliver(gltf);
+ assert.equal(disposed,1);assert.equal(proxy.parent,null);assert.equal(slot.controllerHand,null);
+ assert.equal(f.events.at(-1).cancelled,true);
+ assert.equal(slot.source?.handedness,interruption==='replacement'?'left':undefined);
 });

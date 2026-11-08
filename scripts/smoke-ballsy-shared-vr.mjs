@@ -280,6 +280,21 @@ try {
   await settledFrames();
   await giant.evaluate(() => { const fixture = window.__ballsyXR; fixture.action(1, "selectstart"); fixture.action(1, "selectend"); });
   await giant.waitForFunction(() => window.__BALLSY_GIANT__.state().balloon.mode === "balloon");
+  await giant.evaluate(()=>{
+    const fixture=window.__ballsyXR;fixture.connect(0,'left','controller','oculus-touch-v3');fixture.connect(1,'right','controller','oculus-touch-v3');
+  });
+  await giant.waitForFunction(()=>window.__BALLSY_GIANT__.xr.input.slots.every(slot=>slot.controllerHand));
+  check("Both Quest 2 controller avatars load in Ballsy",await giant.evaluate(()=>
+    window.__BALLSY_GIANT__.xr.input.slots.every((slot,index)=>slot.controllerHand.object.userData.poseSource==='controller-gamepad' && slot.controllerHand.object.userData.handedness===(index?'right':'left'))));
+  await giant.evaluate(()=>{
+    const slots=window.__BALLSY_GIANT__.xr.input.slots;
+    window.__ballsyAvatarBefore=slots.map(slot=>slot.controllerHand.joints.get('index-finger-tip').bone.position.clone());
+    slots.forEach(slot=>{slot.source.gamepad.buttons[0]={value:1,touched:true,pressed:true};slot.source.gamepad.buttons[3].touched=true;});
+  });
+  await giant.waitForFunction(()=>window.__BALLSY_GIANT__.xr.input.slots.every((slot,index)=>
+    slot.controllerHand.joints.get('index-finger-tip').bone.position.distanceTo(window.__ballsyAvatarBefore[index])>.01));
+  check("Ballsy avatars animate from gamepad state without synthetic game actions",!(await giantState()).balloon.held);
+  await giant.evaluate(()=>window.__BALLSY_GIANT__.xr.input.slots.forEach(slot=>{slot.source.gamepad.buttons[0]={value:0,touched:false,pressed:false};slot.source.gamepad.buttons[3].touched=false;}));
   const desktopCamera = (await giantState()).screenCamera;
   await grab(0); const exitLaunches = (await giantState()).balloon.launches;
   await giant.locator("[data-vr]").click();

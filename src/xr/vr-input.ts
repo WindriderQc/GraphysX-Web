@@ -6,6 +6,8 @@ import { XRControllerModelFactory } from "three/examples/jsm/webxr/XRControllerM
 import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.js";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { XRHandSpace, WebXRSpaceEventMap } from "three";
+import { ControllerHandModel, controllerThumbTargets } from "./controller-hand";
+import { styleHandSurface } from "./hand-surface";
 
 /** Same-origin assets. See scripts/vendor-xr-models.mjs and the bundled MIT notice. */
 export const XR_ASSETS = [
@@ -42,6 +44,7 @@ export interface VrInputSlot {
   selecting: boolean;
   grabbing: boolean;
   modelReady: boolean;
+  controllerHand: ControllerHandModel | null;
 }
 
 export function disposeVrObject(root: Object3D): void {
@@ -100,7 +103,7 @@ export class VrInputRig {
       const fallback = new Mesh(new BoxGeometry(.045,.10,.05),new MeshStandardMaterial({color:"#6df3ce",roughness:.5}));
       fallback.position.y = -.025; grip.add(fallback);
       this.group.add(ray,grip,hand,anchor);
-      const slot: VrInputSlot = { source:null,ray,grip,hand,anchor,beam,modelRoot:null,fallback,selecting:false,grabbing:false,modelReady:false };
+      const slot: VrInputSlot = { source:null,ray,grip,hand,anchor,beam,modelRoot:null,fallback,selecting:false,grabbing:false,modelReady:false,controllerHand:null };
       this.slots.push(slot);
       const connect = (event: {data:XRInputSource}) => this.connect(slot,event.data);
       const disconnect = () => this.disconnect(slot);
@@ -181,13 +184,28 @@ export class VrInputRig {
       }
       slot.modelReady = true;
     } else if (source.gamepad?.mapping === "xr-standard" && source.targetRayMode === "tracked-pointer") {
-      const factory = new XRControllerModelFactory(new FallbackModelLoader(),() => {
+      const factory = new XRControllerModelFactory(new FallbackModelLoader(),controller => {
         if (this.disposed || slot.modelRoot !== proxy) { disposeVrObject(proxy); return; }
         slot.modelReady = true; slot.fallback.visible = false;
+        if ((model.motionController as { id?: string } | null)?.id === "oculus-touch-v3" && (source.handedness === "left" || source.handedness === "right")) {
+          this.addControllerHand(slot, source.handedness, proxy, controller);
+        }
       }).setPath(this.profilesPath);
-      proxy.add(factory.createControllerModel(proxy)); slot.grip.add(proxy);
+      const model = factory.createControllerModel(proxy);
+      proxy.add(model); slot.grip.add(proxy);
       proxy.dispatchEvent({type:"connected",data:source});
     }
+  }
+
+  private addControllerHand(slot: VrInputSlot, side: "left" | "right", proxy: Group, controller: Object3D): void {
+    const targets = controllerThumbTargets(controller, slot.grip, side);
+    new FallbackModelLoader().setPath(`${this.profilesPath}/generic-hand/`).load(`${side}.glb`, gltf => {
+      if (this.disposed || slot.modelRoot !== proxy) { disposeVrObject(gltf.scene); return; }
+      const object = gltf.scene.children[0];
+      styleHandSurface(object);
+      slot.controllerHand = new ControllerHandModel(object, side, targets);
+      proxy.add(object);
+    });
   }
 
   private addHandSurface(slot: VrInputSlot, source: XRInputSource, proxy: Group<WebXRSpaceEventMap>,
@@ -200,27 +218,7 @@ export class VrInputRig {
       surface = object;
       surface.visible = false;
       surface.name = "Translucent tracked hand";
-      surface.traverse(child => {
-        const mesh = child as Mesh;
-        if (!mesh.isMesh) return;
-        mesh.castShadow = false; mesh.receiveShadow = false;
-        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        for (const material of materials) {
-          if (!(material instanceof MeshStandardMaterial)) continue;
-          material.color.set("#4b8bbf"); material.emissive.set("#1c527c");
-          material.emissiveIntensity = .35; material.roughness = .3; material.metalness = .05;
-          material.transparent = true; material.opacity = .76; material.depthWrite = false;
-          material.onBeforeCompile = shader => {
-            shader.fragmentShader = shader.fragmentShader.replace("#include <opaque_fragment>", `
-              float handRim = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);
-              outgoingLight += vec3(0.22, 0.64, 1.0) * handRim * 0.85;
-              diffuseColor.a = min(1.0, opacity + 0.20 * handRim);
-              #include <opaque_fragment>
-            `);
-          };
-          material.customProgramCacheKey = () => "graphysx-tracked-hand-v1";
-        }
-      });
+      styleHandSurface(surface);
     }).createHandModel(proxy,"mesh");
     model.name = "Tracked hand surface";
     proxy.add(model);
@@ -241,7 +239,7 @@ export class VrInputRig {
   private disconnect(slot: VrInputSlot): void {
     this.action(slot,"select",false,true); this.action(slot,"grab",false,true);
     if (slot.modelRoot) disposeVrObject(slot.modelRoot);
-    slot.modelRoot = null; slot.source = null; slot.modelReady = false;
+    slot.modelRoot = null; slot.source = null; slot.modelReady = false; slot.controllerHand = null;
     slot.beam.visible = false; slot.fallback.visible = false;
   }
 
@@ -266,13 +264,14 @@ export class VrInputRig {
     slot.anchor.updateMatrixWorld(true);
   }
 
-  update(): void {
+  update(seconds = 1 / 60): void {
     for (const slot of this.slots) {
       const tracked = !!slot.source && this.active && this.tracked(slot);
       slot.beam.visible = tracked && slot.ray.visible;
       if (!tracked) {
         this.action(slot,"select",false,true); this.action(slot,"grab",false,true);
       } else this.updateAnchor(slot);
+      if (this.active && slot.source?.gamepad) slot.controllerHand?.update(slot.source.gamepad, seconds);
     }
   }
 

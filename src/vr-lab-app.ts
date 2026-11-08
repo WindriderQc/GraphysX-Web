@@ -119,7 +119,7 @@ export function mountVrLab(root: HTMLElement): { dispose(): Promise<void> } {
   ui.innerHTML=`<div class="gx-vr-top"><strong>GRAPHYSX / LAB VR</strong><a href="${import.meta.env.BASE_URL}">Retour à GraphysX</a></div>
     <div class="gx-vr-panel"><h1>Entrez dans votre monde.</h1><p>Un premier atelier pour voir vos mains, essayer les boutons et déplacer un objet. Sans déplacement automatique.</p>
     <p class="gx-vr-status" role="status"></p><div class="gx-vr-actions"><button class="gx-vr-enter" disabled>Vérification VR…</button><button class="gx-vr-preview">Essayer le bouton</button><button class="gx-vr-reset">Replacer le cube</button></div>
-    <div class="gx-vr-live" aria-live="polite"></div><p class="gx-vr-detail">Mains translucides articulées avec le suivi du casque. Manettes Touch blanches à anneaux sur Quest 2, modèle générique pour les autres profils. Pincez pour saisir, relâchez pour déposer.</p></div>`;
+    <div class="gx-vr-live" aria-live="polite"></div><p class="gx-vr-detail">Avec les Touch Quest 2, vos mains d’avatar tiennent les manettes et réagissent aux commandes. Le suivi des mains libres reste disponible : pincez pour saisir, relâchez pour déposer.</p></div>`;
   root.append(style,ui);
   const enter=ui.querySelector<HTMLButtonElement>(".gx-vr-enter")!;
   const status=ui.querySelector<HTMLElement>(".gx-vr-status")!;

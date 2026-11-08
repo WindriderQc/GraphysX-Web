@@ -65,12 +65,12 @@ export class PlatformVr {
       },
       onInterrupted: () => this.input.setActive(false),
     });
-    this.unsubscribe = host.subscribeFrame(() => {
+    this.unsubscribe = host.subscribeFrame(seconds => {
       const session = this.session.session;
       if (session && host.mode !== "scene") { void this.session.exit(); return; }
       // Hidden/blurred frames cannot create fresh actions; cancellation also prevents stale grabs.
       this.input.setActive(this.session.snapshot.phase === "active" && session?.visibilityState === "visible");
-      this.input.update();
+      this.input.update(seconds);
     });
     void this.session.checkSupport();
   }
