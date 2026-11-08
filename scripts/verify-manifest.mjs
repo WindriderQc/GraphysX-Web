@@ -11,6 +11,10 @@ export const VERIFY_STATIC_CHECKS = {
   "rapier-materials": { command: "node", args: ["scripts/probe-rapier-material-parity.mjs"] },
 };
 
+// `gpuReception`: a live journey that needs hardware WebGL. Software rendering (devX's
+// SwiftShader) cannot keep its two live pages and real-time gestures faithful, so the gate
+// reports it as not run unless `--gpu-receptions` is given on a machine with a GPU.
+// See "GPU receptions" in docs/CI_PERFORMANCE.md.
 export const VERIFY_SMOKES = [
   { name: "ten-workshop", tier: "apps", script: "scripts/smoke-ten-workshop.mjs", covers: "Unified Math Lab: make-ten and subtraction practice, count/add exploration, shared links and history, local recovery and editor handoff" },
   { name: "vr-lab", tier: "core", script: "scripts/smoke-vr-lab.mjs", covers: "VR lab: desktop fallback and synthetic XR lifecycle/input, local controller models/button animation, hands, cancelled grabs, host post/inset restoration; not headset acceptance" },
@@ -33,9 +37,9 @@ export const VERIFY_SMOKES = [
   { name: "ballsy-setup", tier: "apps", script: "scripts/smoke-ballsy-setup.mjs", covers: "Guided two-pad stick/brake check, native keyboard select, isolated receipts without room credentials, replacement/unplug invalidation, compact layouts and keyboard fallback" },
   { name: "ballsy-entrypoints", tier: "apps", script: "scripts/smoke-ballsy-entrypoints.mjs", covers: "Real front-door clicks to Games/Ballsy and Workshops/VR, close and reopen shelves, desktop workshop controls and return navigation" },
   { name: "ballsy-camera-finish", tier: "apps", localOnly: true, script: "scripts/smoke-ballsy-camera-finish.mjs", covers: "Real rendered adaptive camera at four viewports, close/separated/turn/bridge poses, physical two-lap individual and close finishes, visible celebrations, pause and rematch; optional explicit A/B baseline" },
-  { name: "ballsy-contact-visual", tier: "apps", localOnly: true, script: "scripts/smoke-ballsy-contact-visual.mjs", covers: "Physical ball contact and native shadow diagnostics; real mouse drag/release via the host/giant relay, impact and bounded splat captures in both views" },
-  { name: "ballsy-shared-vr", tier: "apps", localOnly: true, script: "scripts/smoke-ballsy-shared-vr-product.mjs", covers: "Real host/giant relay with shared VR session/input: controller and hand throws, local models, loss cancellation, lifecycle and desktop return; synthetic native XR, not headset acceptance" },
-  { name: "ballsy-giant", tier: "apps", script: "scripts/smoke-ballsy-shovel.mjs", covers: "Physical controller-grip shovel, motion vs stationary hold, actual terrain excavation, live host/giant relay, tracking/exit cancellation and desktop direct digging; XR via pinned IWER" },
+  { name: "ballsy-contact-visual", tier: "apps", gpuReception: true, localOnly: true, script: "scripts/smoke-ballsy-contact-visual.mjs", covers: "Physical ball contact and native shadow diagnostics; real mouse drag/release via the host/giant relay, impact and bounded splat captures in both views" },
+  { name: "ballsy-shared-vr", tier: "apps", gpuReception: true, localOnly: true, script: "scripts/smoke-ballsy-shared-vr-product.mjs", covers: "Real host/giant relay with shared VR session/input: controller and hand throws, local models, loss cancellation, lifecycle and desktop return; synthetic native XR, not headset acceptance" },
+  { name: "ballsy-giant", tier: "apps", gpuReception: true, script: "scripts/smoke-ballsy-shovel.mjs", covers: "Physical controller-grip shovel, motion vs stationary hold, actual terrain excavation, live host/giant relay, tracking/exit cancellation and desktop direct digging; XR via pinned IWER" },
   { name: "ballsy-volcano", tier: "apps", script: "scripts/smoke-ballsy-loop.mjs", covers: "Volcano loop: ordered branch progress, two input-driven laps, continuous banked road and bridge, recovery, shared camera, pause and restart; physical excavation also covered by ballsy-giant" },
   { name: "ballsy", tier: "apps", script: "scripts/smoke-ballsy.mjs", covers: "Two concurrent balls: independent keyboard and standard gamepad slots, ordered native checkpoints, two physically driven laps, pause and disconnect, rematch, shared TV frame, fullscreen and rescue" },
   { name: "netx", tier: "apps", script: "scripts/smoke-netx.mjs", covers: "NetX neighbourhood from the synthetic capture: 55 tagged devices on their rings, 3 collectors with one beam, HUD freshness and counts, filters and search hide devices without editing the document, real 3D click and list selection, Escape, mobile HUD, config-only relay call, Center return" },
@@ -149,6 +153,7 @@ export function resolveVerifyOptions(args, env = process.env) {
       "no-build": { type: "boolean", default: false },
       wait: { type: "boolean", default: false },
       "force-lock": { type: "boolean", default: false },
+      "gpu-receptions": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
     strict: true,
@@ -191,6 +196,7 @@ export function resolveVerifyOptions(args, env = process.env) {
     noBuild: values["no-build"],
     wait: values.wait,
     forceLock: values["force-lock"],
+    gpuReceptions: values["gpu-receptions"],
     help: values.help,
     fullRelease: !shard && !externalBase && !values["no-build"] && smokes.length === VERIFY_SMOKES.length,
   };

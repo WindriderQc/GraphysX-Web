@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DirectionalLight, Group, Vector3 } from "three";
+import { BoxGeometry, DirectionalLight, Group, Mesh, MeshStandardMaterial, Scene, Vector3 } from "three";
 import { importBrowserModule } from "./support/import-browser-module.mjs";
-const { fitBallsyTableShadows } = await importBrowserModule(new URL("../src/ballsy-lighting.ts", import.meta.url));
+const { createBallsyShadowRefresh, fitBallsyTableShadows } = await importBrowserModule(new URL("../src/ballsy-lighting.ts", import.meta.url));
 
 test("miniature sun targets the translated rotated board and retains the native light direction", () => {
   const room = new Group(), table = new Group(), world = new Group(), sun = new DirectionalLight();
@@ -36,4 +36,31 @@ test("shadow frustum and normal bias scale once with the tabletop, retaining con
   assert.equal(camera.right, 38 * .08); assert.equal(camera.far, 110 * .08);
   assert.equal(world.children.filter(child => child === sun.target).length, 1);
   assert.equal(fitBallsyTableShadows(world, null), false);
+});
+
+test("the giant shadow map is redrawn only when a shadow caster or the sun changes", () => {
+  const scene = new Scene(), sun = new DirectionalLight(), ball = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+  const decal = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+  sun.castShadow = true; ball.castShadow = true; decal.castShadow = false;
+  scene.add(sun, ball, decal);
+  const changed = createBallsyShadowRefresh(scene);
+  assert.equal(changed(), true, "the first frame draws the map");
+  assert.equal(changed(), false, "a still table reuses it");
+  decal.position.x = 2;
+  assert.equal(changed(), false, "a mesh that casts no shadow does not matter");
+  ball.position.x = .01;
+  assert.equal(changed(), true, "a caster that moved");
+  assert.equal(changed(), false);
+  ball.geometry.attributes.position.needsUpdate = true;
+  assert.equal(changed(), true, "a caster whose shape changed in place");
+  ball.geometry = new BoxGeometry(2, 1, 1);
+  assert.equal(changed(), true, "a caster whose geometry was replaced");
+  ball.visible = false;
+  assert.equal(changed(), true, "a caster that disappeared");
+  ball.visible = true; changed();
+  sun.position.y = 10;
+  assert.equal(changed(), true, "the sun moved");
+  sun.shadow.camera.left = -7;
+  assert.equal(changed(), true, "the shadow bounds were refitted");
+  assert.equal(changed(), false);
 });

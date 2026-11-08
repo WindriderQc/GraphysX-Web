@@ -83,10 +83,12 @@ function hookOnce() {
  * that assert behaviour, state and layout, never for journeys that judge how a scene looks.
  * On a software renderer every Playwright action waits on several frames, so frame cost is
  * most of a journey's wall time. Registered as an init script, it survives reloads and
- * navigations of that page or context.
+ * navigations of that page or context. `{ resolution }` (0.25..1) also scales the drawing
+ * buffer of a GraphysX host (`lightRenderRequest` in src/platform-host.ts).
  */
-export async function useLightRender(target) {
-  await target.addInitScript(() => { window.__GRAPHYSX_LIGHT_RENDER__ = true; });
+export async function useLightRender(target, { resolution } = {}) {
+  const value = resolution === undefined ? true : { resolution };
+  await target.addInitScript((value) => { window.__GRAPHYSX_LIGHT_RENDER__ = value; }, value);
   return target;
 }
 

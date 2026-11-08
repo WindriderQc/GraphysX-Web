@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {applySmokeTimeout,launchSmokeBrowser} from './smoke-harness.mjs';
+import {applySmokeTimeout,launchSmokeBrowser,useLightRender} from './smoke-harness.mjs';
 import {startBallsyServer} from './serve-ballsy.mjs';
 const baseline=process.argv.includes('--baseline');
 const greybox=process.argv.includes('--greybox');
@@ -10,6 +10,13 @@ const server=process.env.SMOKE_BASE?null:await startBallsyServer({port:0,...(pro
 const url=new URL(`ballsy.html?course=volcano${greybox?'&greybox=1':''}`,process.env.SMOKE_BASE||server.url).href;
 const report={label:'pilotage automatisé via vraies entrées; aucun playtest humain',baseline,errors:[],captures:[]};
 report.browserVersion=browser.version();
+// Behaviour journey since 2026-11-07: the light test render (no MSAA, half resolution) and one
+// live-fps sample per resolution. Under devX's software WebGL a full-look 1920x1080 race frame
+// costs ~2 s, so three full samples alone took ~690 s of the 10 min gate. The full look is
+// covered by ballsy-camera-finish; full-look volcano captures are a GPU reception.
+const LIGHT_RESOLUTION=.5;
+report.render={mode:'light test render',resolution:LIGHT_RESOLUTION,msaa:false,since:'2026-11-07',
+ sampling:'One 120-frame live sample per resolution, light test render. Not comparable with earlier full-render fps receipts (full MSAA render, a second 1920x1080 sample).'};
 report.pilot={samePolicyForBothPlayers:false,targetSpeedCap:3.5,brakeAboveDesiredBy:1,startDelaySeconds:[0,.75],note:'The clean race holds Corail on the actual brake for 0.75 seconds before releasing the same geometric controller. This explicitly prepares a real catch-up/overtake through the shortcut after the native brake fix. No body, velocity, force, speed-cap, standings or rule mutation.'};
 const performanceSample=page=>page.evaluate(async()=>{
  const canvas=document.querySelector('canvas'),gl=canvas.getContext('webgl2')||canvas.getContext('webgl');
@@ -17,7 +24,7 @@ const performanceSample=page=>page.evaluate(async()=>{
  const times=[];let last=performance.now();
  await new Promise(resolve=>{const tick=now=>{times.push(now-last);last=now;if(times.length<120)requestAnimationFrame(tick);else resolve();};requestAnimationFrame(tick);});
  const sorted=[...times].sort((a,b)=>a-b);
- return {method:'120 real requestAnimationFrame intervals; unpaused, idle racers, headless Edge',viewport:[innerWidth,innerHeight],drawingBuffer:[canvas.width,canvas.height],devicePixelRatio,renderer:ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):gl?.getParameter(gl.RENDERER),fps:1000/(times.reduce((a,b)=>a+b,0)/times.length),p95FrameMs:sorted[Math.floor(sorted.length*.95)]};
+ return {method:'120 real requestAnimationFrame intervals; unpaused, idle racers',lightRender:document.documentElement.dataset.gxLightRender==='true',viewport:[innerWidth,innerHeight],drawingBuffer:[canvas.width,canvas.height],devicePixelRatio,renderer:ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):gl?.getParameter(gl.RENDERER),fps:1000/(times.reduce((a,b)=>a+b,0)/times.length),p95FrameMs:sorted[Math.floor(sorted.length*.95)]};
 });
 // Input-only controller. No body transforms, velocity writes or rule commands.
 async function driveRace(page, paths, maxFrames=18000,stopAtProgress=null,startDelayFrames=[0,0]) {
@@ -95,6 +102,7 @@ async function driveRace(page, paths, maxFrames=18000,stopAtProgress=null,startD
 let page;
 try{
  page=applySmokeTimeout(await browser.newPage({viewport:{width:1280,height:720}}));
+ await useLightRender(page,{resolution:LIGHT_RESOLUTION});
  if(process.argv.includes('--video'))await page.addInitScript(()=>{
   window.visualPads=[0,1].map(index=>({index,connected:true,mapping:'standard',id:`Recorded automated input ${index}`,axes:[0,0],buttons:[]}));
   Object.defineProperty(navigator,'getGamepads',{value:()=>window.visualPads});
@@ -116,13 +124,8 @@ try{
   await page.screenshot({path:path.join(dir,name)});report.captures.push({name,phase:state.phase});
   (report.performanceByResolution??=[]).push(await performanceSample(page));
  }
- report.performance=await page.evaluate(async()=>{
-  const canvas=document.querySelector('canvas'),gl=canvas.getContext('webgl2')||canvas.getContext('webgl');
-  const ext=gl?.getExtension('WEBGL_debug_renderer_info');
-  const times=[];let last=performance.now();await new Promise(resolve=>{const tick=now=>{times.push(now-last);last=now;if(times.length<120)requestAnimationFrame(tick);else resolve();};requestAnimationFrame(tick);});
-  const sorted=[...times].sort((a,b)=>a-b);
-  return {method:'120 real requestAnimationFrame intervals; unpaused, idle racers, headless Edge',viewport:[innerWidth,innerHeight],drawingBuffer:[canvas.width,canvas.height],devicePixelRatio,renderer:ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):gl?.getParameter(gl.RENDERER),fps:1000/(times.reduce((a,b)=>a+b,0)/times.length),p95FrameMs:sorted[Math.floor(sorted.length*.95)]};
- });
+ // The last per-resolution sample (1920x1080), rather than a second identical one.
+ report.performance=report.performanceByResolution.at(-1);
  report.state=await page.evaluate(()=>window.__BALLSY__.state());
  await page.keyboard.down('ArrowRight');await page.waitForTimeout(1000);await page.keyboard.up('ArrowRight');
  report.keyboardAfter=await page.evaluate(()=>window.__BALLSY__.state());
@@ -183,6 +186,7 @@ try{
   await page.close();
   if(!process.argv.includes('--visual-only')){
   page=applySmokeTimeout(await browser.newPage({viewport:{width:1280,height:720}}));
+  await useLightRender(page,{resolution:LIGHT_RESOLUTION});
   await page.exposeFunction('ballsyCapture',async name=>{await page.screenshot({path:path.join(dir,`loop-${name}.png`)});});
   page.on('pageerror',e=>report.errors.push(String(e))); page.on('console',m=>{if(m.type()==='error')report.errors.push(m.text());else if(m.text().startsWith('[ballsy-loop]'))console.log(m.text());});
   await page.addInitScript(()=>{

@@ -149,15 +149,27 @@ const RENDER_PROFILES: Record<PlatformRenderProfileName, PlatformRenderProfile> 
 
 /**
  * Opt-in renderer for browser journeys that check behaviour rather than looks. Such a journey
- * sets `window.__GRAPHYSX_LIGHT_RENDER__ = true` from an init script before the page loads
+ * sets `window.__GRAPHYSX_LIGHT_RENDER__` from an init script before the page loads
  * (`useLightRender` in scripts/smoke-harness.mjs); the product never sets it. It keeps the
  * mobile tier at any width, which lightens the face and the shadow map, and it drops MSAA and
  * the post stack. Scene state, layout and the API are unchanged. The page is marked
  * `data-gx-light-render` so a capture taken this way is never read as the desktop look.
+ *
+ * `true` keeps full resolution; `{ resolution }` (0.25..1) also scales the drawing buffer, for a
+ * journey that samples many live frames under the smokes' software WebGL (measured 2026-11-07:
+ * one full-screen 1920x1080 frame of the Ballsy race costs ~2 s there).
  */
+function lightRenderRequest(): { resolution: number } | null {
+  if (typeof window === "undefined") return null;
+  const value = (window as Window & { __GRAPHYSX_LIGHT_RENDER__?: unknown }).__GRAPHYSX_LIGHT_RENDER__;
+  if (value === true) return { resolution: 1 };
+  if (!value || typeof value !== "object") return null;
+  const resolution = (value as { resolution?: unknown }).resolution;
+  return { resolution: typeof resolution === "number" && Number.isFinite(resolution) ? Math.min(1, Math.max(0.25, resolution)) : 1 };
+}
+
 function lightRenderRequested(): boolean {
-  return typeof window !== "undefined"
-    && (window as Window & { __GRAPHYSX_LIGHT_RENDER__?: unknown }).__GRAPHYSX_LIGHT_RENDER__ === true;
+  return lightRenderRequest() !== null;
 }
 
 /**
@@ -254,6 +266,7 @@ export class PlatformHost {
   private renderProfile: PlatformRenderProfile;
   /** See {@link lightRenderRequested}. Read once: a page never switches renderer mid-life. */
   private readonly lightRender = lightRenderRequested();
+  private readonly lightResolution = lightRenderRequest()?.resolution ?? 1;
   private shadowRefreshElapsed = Number.POSITIVE_INFINITY;
   private reflectionRefreshElapsed = Number.POSITIVE_INFINITY;
   private auxiliaryPassTurn: "shadow" | "reflection" = "shadow";
@@ -269,6 +282,8 @@ export class PlatformHost {
   private frame = 0;
   private disposed = false;
   private framesSuspended = false;
+  private rendersOnDemand = false;
+  private renderRequested = false;
   private immersiveCamera: PerspectiveCamera | null = null;
   private desktopControlsEnabled = true;
   private readonly unsubscribeEvents: () => void;
@@ -513,6 +528,26 @@ export class PlatformHost {
     }
     this.clock.getDelta();
     this.renderer.setAnimationLoop(() => this.tick());
+  }
+
+  /**
+   * Draw only the frames that were asked for. Unlike {@link setFramesSuspended}, the loop keeps
+   * running: the world steps and frame listeners still run every frame, and the scene is drawn
+   * once after each {@link requestRender}. For a page whose clock a QA driver advances by hand
+   * (`advanceTime`), where nothing visible changes between two advances. Measured 2026-11-07
+   * under the smokes' software renderer: one 1280x720 frame of the volcano race costs ~1 s and
+   * holds the page's main thread, so timers and relay fetches waited behind every redraw of the
+   * same picture. An immersive session always draws every frame.
+   */
+  setRenderOnDemand(onDemand: boolean): void {
+    if (this.disposed || onDemand === this.rendersOnDemand) return;
+    this.rendersOnDemand = onDemand;
+    this.renderRequested = true;
+  }
+
+  /** Ask for one drawn frame while {@link setRenderOnDemand} is on; every frame draws otherwise. */
+  requestRender(): void {
+    this.renderRequested = true;
   }
 
   /** True while {@link setFramesSuspended} holds the frame loop. */
@@ -1433,12 +1468,16 @@ export class PlatformHost {
       if (this.currentMode === "play" && this.chaseTargetId) this.updateChase(delta);
       else this.controls.update();
     }
+    const onDemand = this.rendersOnDemand && !this.immersiveCamera && !this.renderer.xr.isPresenting;
+    if (onDemand && !this.renderRequested) return;
+    this.renderRequested = false;
     const auxiliaryPasses = this.scheduleAuxiliaryPasses(delta);
     // Shadow maps and planar water both re-render scene geometry. Their independent budgets
     // are arbitrated here so they never land on the same main frame and create a long spike.
-    this.renderer.shadowMap.needsUpdate = auxiliaryPasses.shadow;
+    // A requested frame may follow any amount of advanced time, so it refreshes both.
+    this.renderer.shadowMap.needsUpdate = onDemand || auxiliaryPasses.shadow;
     for (const surface of this.waterSurfaces) {
-      surface.setReflectionRefreshEnabled(!this.immersiveCamera && auxiliaryPasses.reflection);
+      surface.setReflectionRefreshEnabled(!this.immersiveCamera && (onDemand || auxiliaryPasses.reflection));
     }
     // One render call either way — the composer's RenderPass is the same scene/camera
     // draw, followed by the passes the scene opted into.
@@ -1532,7 +1571,7 @@ export class PlatformHost {
   private applyRenderProfile(profile: PlatformRenderProfile): void {
     const profileChanged = profile.name !== this.renderProfile.name;
     this.renderProfile = profile;
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, profile.maxDpr);
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, profile.maxDpr) * this.lightResolution;
     if (this.renderer.getPixelRatio() !== pixelRatio) {
       this.renderer.setPixelRatio(pixelRatio);
       this.composer?.setPixelRatio(pixelRatio);
@@ -1562,6 +1601,8 @@ export class PlatformHost {
     const height = this.container.clientHeight || window.innerHeight;
     this.applyRenderProfile(chooseRenderProfile(width, this.lightRender));
     this.renderer.setSize(width, height, false);
+    // Resizing clears the drawing buffer; an on-demand page must not keep a blank canvas.
+    this.renderRequested = true;
     this.composer?.setSize(width, height);
     this.camera.aspect = width / height || 1;
     this.camera.updateProjectionMatrix();

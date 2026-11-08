@@ -70,6 +70,7 @@ if (options.help) {
   --base <url>     Check an external HTTP(S) page; skip build and local-only checks
   --wait          Wait for another local gate to release the machine lock
   --force-lock    Recover a lock only after verifying its owner is dead
+  --gpu-receptions Also run the GPU receptions (hardware WebGL only; see docs/CI_PERFORMANCE.md)
   --help, -h      Show usage without starting checks or changing artifacts
 
 No options: run the full release gate. SMOKE_BASE also selects an external page.
@@ -179,6 +180,7 @@ const MAX_RETRIES = resolveVerifyRetryBudget(process.env.VERIFY_MAX_RETRIES, {
 });
 
 const results = [];
+const notRun = [];
 let server = null;
 
 // Refuse to run alongside another verify. Held for the whole run and released in `finally`,
@@ -246,6 +248,11 @@ try {
   } else {
     console.log(`\n=== smokes against ${externalBase ?? "isolated local servers"} ===`);
     for (const smoke of SMOKES) {
+      if (smoke.gpuReception && !options.gpuReceptions) {
+        console.log(`\n--- ${smoke.name}: not run, GPU reception (needs hardware WebGL; --gpu-receptions on a GPU machine) ---`);
+        notRun.push(smoke.name);
+        continue;
+      }
       if (externalBase && smoke.localOnly) {
         console.log(`\n--- ${smoke.name}: skipped against an external page (requires its isolated loopback store) ---`);
         continue;
@@ -295,9 +302,11 @@ try {
 }
 
 const failed = results.filter((r) => r.code !== 0);
+// Named on their own lines so a green devX run is never read as covering them.
+const notRunNote = notRun.length ? `\nNot run here (GPU receptions): ${notRun.join(", ")}. Run them on a GPU machine with --gpu-receptions.` : "";
 const retried = results.filter((r) => r.retried);
 const usage = new Map(results.map((r) => [r, describeDeadlineUsage(r.elapsedMs, r.deadlineMs)]));
-const widest = Math.max(...results.map((r) => r.label.length));
+const widest = Math.max(...results.map((r) => r.label.length), ...notRun.map((name) => name.length));
 console.log("\n=== verify summary ===");
 console.log(`Scope: ${scope}.`);
 for (const r of results) {
@@ -321,7 +330,9 @@ if (tight.length) {
     "  deadline deliberately with the measurement in hand — not after it has blocked a deploy.",
   );
 }
+for (const name of notRun) console.log(`SKIP  ${name.padEnd(widest)}  GPU reception, not run by this gate`);
 if (failed.length) {
+  if (notRunNote) console.error(notRunNote);
   console.error(`\n${failed.length} check(s) failed: ${failed.map((f) => f.label).join(", ")}`);
   process.exit(1);
 }
@@ -339,4 +350,5 @@ if (retried.length) {
   console.log(`\nNote: ${retried.length} check(s) passed only after a transport retry: ${retried.map((r) => r.label).join(", ")}`);
 }
 console.log(`\nAll ${results.length} checks passed. Screenshots: ${ARTIFACTS}`);
+if (notRunNote) console.log(notRunNote.trim());
 if (!options.fullRelease) console.log("This partial verification does not establish a full release gate.");
