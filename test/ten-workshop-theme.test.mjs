@@ -134,3 +134,17 @@ test('subtraction marks the removed units without revealing remainder before hin
     assert.equal(units(hint).filter(e=>e.tags.includes('math:group:B')).length,10-a);
   }
 });
+
+
+test('0–20 visual hints conserve exact quantities, fit table, and mark every removed unit', () => {
+  for (const operation of ['add20', 'subtract20']) for (let total=0;total<=20;total++) for (let a=0;a<=total;a++) {
+    const scene=composeMathLab(MATH_THEMES[0], picture({practice:true,operation,total,a,hint:true}));
+    const objects=units(scene);
+    assert.equal(objects.length,total);
+    assert.equal(objects.filter(e=>e.tags.includes('math:group:A')).length,a);
+    assert.equal(objects.filter(e=>e.tags.includes('math:group:B')).length,total-a);
+    assert.equal(scene.entities.filter(e=>e.tags?.includes('math:removed')).length,operation==='subtract20'?a:0);
+    assert.equal(new Set(objects.map(e=>e.id)).size,total);
+    assert.ok(objects.every(e=>Math.abs(e.transform.position[0])<3 && e.transform.position[2]>=-1 && e.transform.position[2]<1));
+  }
+});

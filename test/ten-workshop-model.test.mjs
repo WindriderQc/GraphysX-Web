@@ -93,7 +93,7 @@ test('strict JSON recovery rejects damaged, impossible and presentation-contamin
   assert.deepEqual(restoreMathLabState(serializeMathLabState(base)), base);
   for (const input of ['', '{', 'null', '[]', '{}']) assert.equal(restoreMathLabState(input), null);
   const corruptions = [
-    state => { state.version = 3; }, state => { state.theme = 'forest'; },
+    state => { state.version = 4; }, state => { state.theme = 'forest'; },
     state => { state.tokens.pop(); }, state => { state.tokens[1].id = 0; },
     state => { state.tokens[0].group = 'C'; }, state => { state.tokens[0].shape = 'box'; },
     state => { state.tokens[0].group = 'A'; }, state => { state.discovered = [0, 0]; },
@@ -139,7 +139,7 @@ test('operations have independent immutable progress and restore the selected se
   const complement = state.practice.complement;
   const previous = freeze(state);
   state = setPracticeOperation(state, 'subtract');
-  assert.equal(state.version, 2);
+  assert.equal(state.version, 3);
   assert.deepEqual(getPracticeQuestion(state), { id: 0, operation: 'subtract', a: 4, expected: 6, total: 10 });
   assert.equal(state.practice.complement, complement);
   assert.equal(state.tokens, previous.tokens);
@@ -208,7 +208,7 @@ test('strict v1 migration preserves every complement stage and discovery without
     const legacy = { ...current, version: 1, practice: current.practice.complement };
     const restored = restoreMathLabState(JSON.stringify(legacy));
     assert.ok(restored);
-    assert.equal(restored.version, 2);
+    assert.equal(restored.version, 3);
     assert.equal(restored.practice.operation, 'complement');
     assert.deepEqual(restored.practice.complement, legacy.practice);
     assert.deepEqual(restored.practice.subtract, createMathLabState().practice.subtract);
@@ -250,4 +250,74 @@ test('recovery rejects malformed inactive sessions, hybrid versions, oversized s
   assert.equal(restoreMathLabState(JSON.stringify(legacy)), null);
   assert.equal(restoreMathLabState(' '.repeat(100001)), null);
   assert.equal(restoreMathLabState(null), null);
+});
+
+
+test('0–20 curriculum covers every bounded pair once with independent short selectable series', () => {
+  for (const operation of ['add20', 'subtract20']) {
+    let state = model.setPracticeOperation(createMathLabState(), operation);
+    const pairs = new Set();
+    for (let family = 0; family <= 20; family++) {
+      state = model.setPracticeFamily(state, family);
+      const length = operation === 'add20' ? 21 - family : family + 1;
+      assert.equal(model.getPracticeLength(state), length);
+      for (let index = 0; index < length; index++) {
+        const q = getPracticeQuestion(state);
+        const first = operation === 'add20' ? q.a : q.total;
+        const second = operation === 'add20' ? q.total - q.a : q.a;
+        assert.equal(first, family);
+        assert.equal(second, index);
+        assert.equal(q.expected, operation === 'add20' ? first + second : first - second);
+        assert.ok(q.expected >= 0 && q.expected <= 20);
+        pairs.add(`${first},${second}`);
+        assert.equal(nextPracticeQuestion(state), state);
+        for (const raw of ['', '-1', '21', '1e1', '01', '1.0', null]) {
+          assert.equal(model.getPracticeProgress(submitPracticeAnswer(state, raw)).status, 'invalid');
+        }
+        const wrong = submitPracticeAnswer(state, String((q.expected + 1) % 21));
+        assert.equal(model.getPracticeProgress(wrong).status, 'incorrect');
+        const before = JSON.stringify(state);
+        freeze(state);
+        const hinted = revealPracticeHint(state);
+        const solved = submitPracticeAnswer(hinted, String(q.expected));
+        assert.equal(JSON.stringify(state), before);
+        assert.equal(model.getPracticeProgress(solved).status, 'correct');
+        assert.equal(submitPracticeAnswer(solved, String(q.expected)), solved);
+        assert.deepEqual(restoreMathLabState(serializeMathLabState(solved)), solved);
+        state = nextPracticeQuestion(solved);
+      }
+      assert.equal(getPracticeQuestion(state), null);
+      assert.equal(submitPracticeAnswer(state, '0'), state);
+      assert.equal(model.getPracticeProgress(state).solved.length, length);
+    }
+    assert.equal(pairs.size, 231);
+    assert.equal(state.practice[operation].reduce((n, p) => n + p.solved.length, 0), 231);
+    assert.equal(state.practice.complement.solved.length, 0);
+    assert.equal(state.practice.subtract.solved.length, 0);
+    const other = operation === 'add20' ? 'subtract20' : 'add20';
+    assert.equal(state.practice[other].reduce((n, p) => n + p.solved.length, 0), 0);
+    const replay = model.resetPractice(model.setPracticeFamily(state, 7));
+    assert.equal(replay.practice[operation][7].solved.length, 0);
+    assert.deepEqual(replay.practice[operation][6], state.practice[operation][6]);
+    assert.deepEqual(restoreMathLabState(serializeMathLabState(replay)), replay);
+  }
+});
+
+test('v2 migrates without losing prior answers and v3 rejects corrupt inactive family progress', () => {
+  let state = nextPracticeQuestion(submitPracticeAnswer(createMathLabState(), '6'));
+  state = model.setPracticeOperation(state, 'subtract');
+  state = submitPracticeAnswer(state, '6');
+  const v2 = { ...state, version: 2, practice: { operation: 'subtract', complement: state.practice.complement, subtract: state.practice.subtract } };
+  assert.deepEqual(restoreMathLabState(JSON.stringify(v2)), state);
+  for (const corrupt of [
+    s => { s.practice.family = 21; }, s => { s.practice.family = 0.5; },
+    s => { s.practice.add20.pop(); }, s => { s.practice.subtract20 = null; },
+    s => { s.practice.add20[20].index = 2; },
+    s => { s.practice.subtract20[0].solved = [0]; },
+    s => { s.practice.add20[4].extra = true; }
+  ]) {
+    const bad = structuredClone(state); corrupt(bad);
+    assert.equal(restoreMathLabState(JSON.stringify(bad)), null);
+  }
+  for (const family of [-1, 21, 1.2, NaN, '10']) assert.equal(model.setPracticeFamily(state, family), state);
 });
