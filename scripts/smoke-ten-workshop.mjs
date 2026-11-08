@@ -126,7 +126,6 @@ try {
     await page.locator('[data-math-level="numbers"]').click();await page.locator('.gx-ten').waitFor();await page.locator('[data-math-level="functions"]').click();await page.waitForFunction(()=>document.querySelector('#ml-sliders input')?.value==='3');
     check(true,name+" live advanced parameter survives the shared level switch");
     await page.locator('[data-math-level="numbers"]').click();await page.locator('.gx-ten').waitFor();
-    const retainedMath=JSON.stringify((await state()).math);
     // Full 0–20 lessons share the garden, calculator and independent short-series progress.
     await page.locator('[data-mode="practice"]').click();
     const legacyPractice=(await state()).math.practice;
@@ -154,6 +153,7 @@ try {
     await page.locator('#tw-family').selectOption('20');
     check((await state()).math.practice.subtract20[20].index===1,name+' switching families preserves independent progress');
     check(JSON.stringify((await state()).math.practice.complement)===JSON.stringify(legacyPractice.complement)&&JSON.stringify((await state()).math.practice.subtract)===JSON.stringify(legacyPractice.subtract),name+' curriculum never overwrites original lessons');
+    const retainedMath=JSON.stringify((await state()).math);
     await page.locator('[data-mode="explore"]').click();
     const setPicture=async hash=>{await page.evaluate(hash=>{location.hash=hash;},hash);await page.waitForFunction(()=>JSON.parse(window.render_game_to_text()).application?.mode==='explore');};
     await setPicture('#compter=100');await page.waitForFunction(()=>JSON.parse(window.render_game_to_text()).application?.explorer.scene.to===100);
