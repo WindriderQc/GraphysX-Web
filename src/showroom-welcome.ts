@@ -941,6 +941,12 @@ export function mountWelcome(
     apps.className = "gx-center-apps";
     apps.innerHTML = '<summary>Ateliers <small>Robots, mondes, données</small></summary><div class="gx-center-apps-list"><span>À découvrir</span></div>';
     const list = apps.querySelector(".gx-center-apps-list")!;
+    const math = document.createElement("a");
+    math.className = "gx-go-ten-workshop";
+    math.href = import.meta.env.BASE_URL + "math-lab.html?level=numbers";
+    math.textContent = "Math Lab · Nombres et calculs";
+    Object.assign(math.style, { color: "#98f1d6", padding: "12px", textDecoration: "none" });
+    list.append(math);
     const vr = document.createElement("a");
     vr.className = "gx-go-vr";
     vr.href = import.meta.env.BASE_URL + "?app=vr-lab";

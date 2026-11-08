@@ -12,6 +12,7 @@ export const VERIFY_STATIC_CHECKS = {
 };
 
 export const VERIFY_SMOKES = [
+  { name: "ten-workshop", tier: "apps", script: "scripts/smoke-ten-workshop.mjs", covers: "Unified Math Lab: make-ten and subtraction practice, count/add exploration, shared links and history, local recovery and editor handoff" },
   { name: "vr-lab", tier: "core", script: "scripts/smoke-vr-lab.mjs", covers: "VR lab: desktop fallback and synthetic XR lifecycle/input, local controller models/button animation, hands, cancelled grabs, host post/inset restoration; not headset acceptance" },
   { name: "llmx-core-embed", tier: "apps", script: "scripts/smoke-llmx-core-embed.mjs", covers: "Core-hosted Forge module: native scoped routes, Family cookie, one text turn, graphical assets and mobile" },
   { name: "llmx-world", tier: "apps", script: "scripts/smoke-llmx-world.mjs", covers: "Full world proposals: authored scenery, textures, lights, paths, physics/impulse/joints, undo and saved reload" },
