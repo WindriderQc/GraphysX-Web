@@ -221,6 +221,8 @@ export class AgentWorldVoxelFace {
   private scale = new Float32Array(0);
   /** Per-cube forge jitter as a quaternion, precomputed: xyzw per cube. */
   private jitter = new Float32Array(0);
+  // Constant rotation bases retain double precision until the final GPU upload.
+  private jitterBasis = new Float64Array(0);
 
   private readonly current: FaceDrivers = { ...NEUTRAL_DRIVERS, build: 0, attention: 0 };
   private readonly target: FaceDrivers = { ...NEUTRAL_DRIVERS, build: 0, attention: 0 };
@@ -471,6 +473,7 @@ export class AgentWorldVoxelFace {
     this.position = new Float32Array(count * 3);
     this.scale = new Float32Array(count);
     this.jitter = new Float32Array(count * 4);
+    this.jitterBasis = new Float64Array(count * 9);
 
     // A small deterministic rotation per cube. Perfectly aligned cubes read as CAD output; a
     // couple of degrees of scatter reads as something forged and stacked by hand. Derived from
@@ -489,6 +492,11 @@ export class AgentWorldVoxelFace {
       this.jitter[i * 4 + 1] = spin.y;
       this.jitter[i * 4 + 2] = spin.z;
       this.jitter[i * 4 + 3] = spin.w;
+      // Use the stored Float32 quaternion, exactly as the per-frame composition did.
+      this.quaternion.fromArray(this.jitter, i * 4);
+      this.matrix.makeRotationFromQuaternion(this.quaternion);
+      const e = this.matrix.elements;
+      this.jitterBasis.set([e[0], e[1], e[2], e[4], e[5], e[6], e[8], e[9], e[10]], i * 9);
     }
 
     const metalAnimated: number[] = [];
@@ -942,14 +950,31 @@ export class AgentWorldVoxelFace {
 
   private writeMesh(mesh: InstancedMesh | null, list: Uint32Array): void {
     if (!mesh) return;
+    const matrices = mesh.instanceMatrix.array;
+    const basis = this.jitterBasis;
     for (let j = 0; j < list.length; j += 1) {
       const i = list[j];
-      this.vector.set(this.position[i * 3], this.position[i * 3 + 1], this.position[i * 3 + 2]);
-      this.quaternion.set(this.jitter[i * 4], this.jitter[i * 4 + 1], this.jitter[i * 4 + 2], this.jitter[i * 4 + 3]);
       const s = this.scale[i];
-      this.scaleVector.set(s, s, s);
-      this.matrix.compose(this.vector, this.quaternion, this.scaleVector);
-      mesh.setMatrixAt(j, this.matrix);
+      const m = j * 16;
+      const r = i * 9;
+      // Rotation never changes for these cubes. Only scale and translation animate.
+      // Eyes/lids still use their full pivot rotation in writeRotatedAbout.
+      matrices[m] = basis[r] * s;
+      matrices[m + 1] = basis[r + 1] * s;
+      matrices[m + 2] = basis[r + 2] * s;
+      matrices[m + 3] = 0;
+      matrices[m + 4] = basis[r + 3] * s;
+      matrices[m + 5] = basis[r + 4] * s;
+      matrices[m + 6] = basis[r + 5] * s;
+      matrices[m + 7] = 0;
+      matrices[m + 8] = basis[r + 6] * s;
+      matrices[m + 9] = basis[r + 7] * s;
+      matrices[m + 10] = basis[r + 8] * s;
+      matrices[m + 11] = 0;
+      matrices[m + 12] = this.position[i * 3];
+      matrices[m + 13] = this.position[i * 3 + 1];
+      matrices[m + 14] = this.position[i * 3 + 2];
+      matrices[m + 15] = 1;
     }
     mesh.instanceMatrix.needsUpdate = true;
   }
