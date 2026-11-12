@@ -43,4 +43,3 @@
 .gx-dna-peaks>span+span{flex-direction:row-reverse;transform:translate(calc(-100% + 7px),-50%)}
 body:has(.gx-dna) .gx-display-settings{top:64px;bottom:auto;right:12px}
 body:has(.gx-dna) .gx-display-panel{top:100%;bottom:auto}
-

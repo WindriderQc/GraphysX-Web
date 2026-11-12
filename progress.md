@@ -5465,3 +5465,11 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
 - Unmodified standard game-client SHA256 1210f58b47aadd9cb4b141fb4b2dc9e17a929aa1a813cdd26b5306a0d08b6808 passes both mutation and baseline physical-comparison scenarios. Inspected desktop/phone/320 captures, welcome, saved Studio action and both standard-client captures/state.
 - Receipts: output/dna-focused.log, output/dna-final-focused.log, output/playwright/dna-final/dna-receipt.json and output/playwright/dna-standard-{mutation,physics}. A final label-only pause-text adjustment is included in the upcoming fresh full gate.
 - Full default gate and production qualification follow; the native archive still has only its two pre-existing prompt edits.
+
+### DNA observation-gap regression — 2026-11-12
+
+- Paused our own full run at the first browser journey after 1303 Node passes /1 conditional skip, typecheck/lint/build and both Rapier probes passed. Preserve output/dna-pre-gap-partial.log; this interrupted run is not a completed release gate.
+- Review identified external api.step() skipping telemetry samples. The real browser reproducer on 9188198 stays running after a two-second unobserved step (output/dna-gap-before.log). A later rebound must not be reported as the first.
+- The observer now rejects a simulation-time gap over 100ms, pauses and reports an incomplete observation. Normal host frames are capped at 50ms; deterministic workshop stepping samples every 1/60 second.
+- Added independent browser assertions for the rejected gap and a complete real-time host bounce without advanceTime. A fresh full gate will qualify the corrected revision. Removed an extra CSS EOF blank line found by git diff --check.
+- Corrected focused qualification passes all three viewports, keyboard/reduced-motion controls, rejected observation gap and the independent real-time host bounce. Both standard-client scenarios pass again with zero browser/shader/HTTP errors. Before/after reproducer: output/dna-gap-{before,after}.log; current focused log/captures were refreshed against the correction.

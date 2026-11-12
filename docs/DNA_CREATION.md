@@ -29,6 +29,8 @@ the highest sampled point of the first bounce. It subtracts the sphere radius an
 platform top from center height. Values are observed scene units, not analytical
 or device-precision measurements. If the first bounce is missed or interrupted,
 the app reports an incomplete observation. It never fabricates a result.
+An external API step that skips the observation interval also pauses with an
+incomplete result instead of labelling a later bounce as the first.
 
 Pause/reset and the bounded deterministic test clock use canonical `api.*`
 operations. Only `PlatformHost.subscribeFrame` reads telemetry; there is no

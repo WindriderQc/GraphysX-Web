@@ -91,6 +91,17 @@ try {
     assert.equal((await read(page)).phase, "ready");
     assert.equal((await read(page)).drops.reference.peak, null);
     assert.deepEqual(await documentOf(page), mutated, "reset preserves the chosen genome");
+    if (device === "desktop") {
+      await page.evaluate(() => { document.querySelector("[data-dna-drop]").click(); window.__GRAPHYSX__.step(2); });
+      await draw(page);
+      assert.equal((await read(page)).phase, "incomplete", "external steps cannot hide a bounce and relabel a later one");
+      assert.equal((await read(page)).paused, true);
+      await app.locator("[data-dna-drop]").click();
+      await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application.phase === "complete");
+      const realtime = await read(page);
+      assert.ok(realtime.drops.variant.peak > realtime.drops.reference.peak * 1.45, "the shared real-time host observes the physical effect without advanceTime");
+      await app.getByRole("button", { name: "Replacer les graines", exact: true }).click();
+    }
     await app.getByRole("button", { name: "3 · Garder", exact: true }).click();
     const name = "ADN " + device;
     await app.getByLabel("3 Garde ta variante").fill(name);

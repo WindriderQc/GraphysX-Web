@@ -211,6 +211,12 @@ export function mountDnaCreation(root: HTMLElement, host: PlatformHost, onExit: 
       refresh();
     }
     if (phase !== "running" || state.paused || state.elapsedSeconds <= observedAt) return;
+    // The shared host advances at most 50ms per frame, and our test clock samples
+    // every 1/60s. A larger external API step can hide an entire bounce. Refuse
+    // to label a later bounce as the first instead of inventing its missing apex.
+    if (state.elapsedSeconds - observedAt > 0.1) {
+      phase = "incomplete"; api.pause(true); refresh(); return;
+    }
     observedAt = state.elapsedSeconds;
     for (const side of DNA_SIDES) {
       const seed = api.query({ ids: ["dna-seed-" + side] })[0];
