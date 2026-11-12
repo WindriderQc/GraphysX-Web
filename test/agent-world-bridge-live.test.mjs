@@ -383,7 +383,7 @@ test("all recovered worlds and TVA ranges cross the actual storage validator; ma
     assert.deepEqual(w.api.exportDocument(), before.document);
     assert.equal(w.api.state().revision, before.revision);
     assert.deepEqual(w.runtime.history, before.history);
-    assert.throws(() => applyCommands(w.api.exportDocument(), [{ op: "attach-behavior", id: "plain", behavior: { id: "bad", ...behavior } }]));
+    assert.throws(() => applyCommands(w.api.exportDocument(), [{ op: "attach-behavior", id: "plain", behavior: { id: "bad", ...behavior } }]), { name: "SceneCommandError", status: 400 });
   }
   assert.equal(w.api.attachBehavior("ball", { id: "wrong-mode", type: "flight" }).ok, false);
 });

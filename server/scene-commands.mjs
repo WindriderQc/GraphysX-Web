@@ -727,7 +727,8 @@ function validateBehaviors(value, label) {
       for (const key of ["loop", "orientToPath"]) if (behavior[key] !== undefined) requireBoolean(behavior[key], `${itemLabel}.${key}`);
     } else if (behavior.type === "keyframes" || behavior.type === "flight") {
       allowedKeys(behavior, setOf(FIELDS.behaviors[behavior.type]), itemLabel);
-      validateMotionBehavior(behavior);
+      try { validateMotionBehavior(behavior); }
+      catch (error) { reject(error instanceof Error ? error.message : String(error)); }
     } else {
       reject(`Unsupported behavior: ${String(behavior.type)}`);
     }
