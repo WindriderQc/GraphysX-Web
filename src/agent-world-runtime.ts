@@ -6,6 +6,7 @@ import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMesh
 import { validateInlineMeshDefinition } from "../server/scene-commands.mjs";
 import { materializeMeshCommands, type MeshEdits, type PixelEdit } from "../server/mesh-authoring.mjs";
 import type { MeshConstruction } from "../server/mesh-construction.mjs";
+import { sampleKeyframeTrack, stepFlight, validateMotionBehavior, validatedFlightInput, type KeyframeTrackBehavior, type FlightBehavior, type FlightInput, type FlightPose } from "./agent-world-motion";
 import {
   AgentWorldFormulaField,
   GRAPHYSX_AGENT_WORLD_FORMULAS,
@@ -464,6 +465,8 @@ export type AgentWorldFollowSplineBehavior = {
 };
 
 export type AgentWorldBehavior =
+  | KeyframeTrackBehavior
+  | FlightBehavior
   | AgentWorldSpinBehavior
   | AgentWorldBobBehavior
   | AgentWorldOrbitBehavior
@@ -1231,6 +1234,8 @@ export type GraphysXAgentWorldApi = {
   steer(id: string, input: AgentWorldSteerInput): AgentWorldResult<AgentWorldSteerReceipt>;
   /** Non-documentary continuous controls; no impulses or configuration edits. */
   steerLive(id: string, input: Pick<AgentWorldSteerInput, "headingDegrees" | "thrust" | "turn">): AgentWorldResult<AgentWorldSteerReceipt>;
+  /** Transient local-axis FlightX controls. No authored revisions or phantom saved keys. */
+  pilotLive(id: string, input: FlightInput): AgentWorldResult<{ subjectId: string; input: Required<Omit<FlightInput, "reset">> }>;
   /** Transient 0.75..1 steering slowdown, without authored edits or body rebuilds. */
   setSlowdownLive(id: string, speedFactor: number): AgentWorldResult<{ subjectId: string; speedFactor: number }>;
   prefabs(): readonly AgentWorldPrefabDescriptor[];
@@ -1315,6 +1320,7 @@ type ResolvedEntity = {
 const VALIDATED_BODY = Object.freeze({}) as PhysicsBodyHandle;
 
 type RuntimeEntity = {
+  flightPose?: FlightPose;
   /** Game effect, deliberately absent from authored/exported definitions. */
   slowdownFactor: number;
   definition: ResolvedEntity;
@@ -1458,12 +1464,15 @@ export const GRAPHYSX_AGENT_CAPABILITIES = [
   "physics.collider.trimesh",
   "spline.path",
   "behavior.follow-spline",
+  "behavior.keyframes",
+  "behavior.flight",
   "behavior.attach",
   "behavior.detach",
   "interaction.trigger",
   "interaction.impulse",
   "interaction.sound",
   "control.steer",
+  "control.pilot-live",
   "prefab.list",
   "prefab.spawn",
   "starter.list",
@@ -1978,6 +1987,34 @@ export class AgentWorldRuntime {
     } catch (error) {
       return this.failure(error);
     }
+  }
+
+  pilotLive(id: string, input: FlightInput): AgentWorldResult<{ subjectId: string; input: Required<Omit<FlightInput, "reset">> }> {
+    try {
+      const validated = validatedFlightInput(input);
+      assertAuthoredSceneCommandNamespaces({ op: "update", id, patch: {} });
+      this.assertNotScopedTransient(id, "pilot");
+      const runtime = this.requireEntity(id);
+      if (!runtime.definition.behaviors.some((behavior) => behavior.type === "flight")) throw new Error("Flight control requires a flight behavior");
+      const pose = this.ensureFlightPose(runtime);
+      for (const field of ["roll", "pitch", "thrust", "airbrake"] as const) {
+        const value = validated[field];
+        if (value !== undefined) Object.assign(pose.input, { [field]: value });
+      }
+      if (validated.reset) {
+        pose.rotation.setFromEuler(new Euler(...runtime.definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3));
+        runtime.object.quaternion.copy(pose.rotation);
+      }
+      return this.success({ subjectId: id, input: { ...pose.input } });
+    } catch (error) { return this.failure(error); }
+  }
+
+  private ensureFlightPose(runtime: RuntimeEntity): FlightPose {
+    return runtime.flightPose ??= {
+      position: new Vector3(...runtime.definition.transform.position),
+      rotation: new Quaternion().setFromEuler(new Euler(...runtime.definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3)),
+      input: { roll: 0, pitch: 0, thrust: 0, airbrake: false },
+    };
   }
 
   /** Bounded transient game effect. It cannot aim, teleport, stun or add momentum.
@@ -2733,7 +2770,7 @@ export class AgentWorldRuntime {
       }
     }
     if (patch.label !== undefined) definition.label = patch.label;
-    if (patch.transform) definition.transform = mergeTransform(definition.transform, patch.transform);
+    if (patch.transform) { definition.transform = mergeTransform(definition.transform, patch.transform); runtime.flightPose = undefined; }
     if (patch.material) {
       if (definition.type === "model") throw new Error("Model source materials use modelMaterialOverrides, not the generic material patch");
       definition.material = resolveMaterial(patch.material, definition.material);
@@ -2907,6 +2944,7 @@ export class AgentWorldRuntime {
     const index = runtime.definition.behaviors.findIndex((behavior) => behavior.id === behaviorId);
     if (index < 0) throw new Error(`Unknown behavior on ${id}: ${behaviorId}`);
     runtime.definition.behaviors.splice(index, 1);
+    if (!runtime.definition.behaviors.some((behavior) => behavior.type === "flight")) runtime.flightPose = undefined;
   }
 
   private interactInternal(id: string, interactionId?: string): AgentWorldInteractionReceipt {
@@ -3369,6 +3407,7 @@ export class AgentWorldRuntime {
     for (const runtime of this.entities.values()) {
       const { definition, object } = runtime;
       if (definition.physics?.mode === "dynamic") continue;
+      if (!definition.behaviors.some((behavior) => behavior.type === "flight")) runtime.flightPose = undefined;
       const basePosition = definition.transform.position;
       const baseRotation = definition.transform.rotationDegrees;
       const baseScale = definition.transform.scale;
@@ -3405,6 +3444,12 @@ export class AgentWorldRuntime {
           object.scale.set(baseScale[0] * scale, baseScale[1] * scale, baseScale[2] * scale);
         } else if (behavior.type === "follow-spline") {
           this.applyFollowSpline(runtime, behavior);
+        } else if (behavior.type === "keyframes") {
+          sampleKeyframeTrack(behavior, this.elapsedSeconds, object.position, object.quaternion);
+        } else if (behavior.type === "flight") {
+          const pose = this.ensureFlightPose(runtime);
+          stepFlight(pose, behavior, deltaSeconds);
+          object.position.copy(pose.position); object.quaternion.copy(pose.rotation);
         }
       }
     }
@@ -4042,6 +4087,9 @@ export class AgentWorldRuntime {
     object.position.set(...definition.transform.position);
     object.rotation.set(...definition.transform.rotationDegrees.map((value) => value * Math.PI / 180) as AgentWorldVector3);
     object.scale.set(...definition.transform.scale);
+    if (runtime.flightPose) {
+      object.position.copy(runtime.flightPose.position); object.quaternion.copy(runtime.flightPose.rotation);
+    }
     object.traverse((child) => {
       // A scene entity can parent other scene entities. `traverse` still walks through those
       // roots, but their meshes belong to their own definitions and must keep their own look.
@@ -5258,7 +5306,7 @@ function resolvePhysics(
 }
 
 function isMotionBehavior(behavior: AgentWorldBehavior): boolean {
-  return ["spin", "bob", "orbit", "pulse", "look-at", "follow-spline"].includes(behavior.type);
+  return ["spin", "bob", "orbit", "pulse", "look-at", "follow-spline", "keyframes", "flight"].includes(behavior.type);
 }
 
 type PreparedAgentPhysicsBody = {
@@ -5541,7 +5589,8 @@ function validateStableId(id: string, label: string): void {
 }
 
 function validateBehavior(behavior: AgentWorldBehavior, entities: Map<string, RuntimeEntity>, allowUnresolvedLookAt = false): void {
-  if (!behavior || !["spin", "bob", "orbit", "pulse", "look-at", "follow-spline"].includes(behavior.type)) throw new Error(`Unsupported behavior: ${String(behavior?.type)}`);
+  if (!behavior || !["spin", "bob", "orbit", "pulse", "look-at", "follow-spline", "keyframes", "flight"].includes(behavior.type)) throw new Error(`Unsupported behavior: ${String(behavior?.type)}`);
+  if (behavior.type === "flight" || behavior.type === "keyframes") validateMotionBehavior(behavior);
   if (behavior.type === "look-at" && !allowUnresolvedLookAt && !entities.has(behavior.targetId)) throw new Error(`Unknown look-at target: ${behavior.targetId}`);
   if (behavior.type === "follow-spline") {
     validateStableId(behavior.splineId, "spline id");

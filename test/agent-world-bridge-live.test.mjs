@@ -6,8 +6,9 @@ import { join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { after, before, test } from "node:test";
 import { build } from "vite";
+import { applyCommands, validateStoredSceneDefinition } from "../server/scene-commands.mjs";
 
-let temporary, AgentWorldRuntime, createAgentWorldApi, createBridge, invoke, requestSchema;
+let temporary, AgentWorldRuntime, createAgentWorldApi, createBridge, invoke, requestSchema, archiveWorlds, motionWorlds;
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 
 before(async () => {
@@ -25,6 +26,8 @@ before(async () => {
           api: join(root, "src/agent-world-api.ts"),
           bridge: join(root, "src/agent-world-bridge.ts"),
           connection: join(root, "src/graphysx-agent-connection.ts"),
+          archive: join(root, "src/archive-worlds.ts"),
+          motion: join(root, "src/archive-world-motion.ts"),
         },
         output: { format: "es", entryFileNames: "[name].mjs", chunkFileNames: "chunks/[name]-[hash].mjs" },
       },
@@ -36,6 +39,7 @@ before(async () => {
   ({ createAgentWorldApi } = await load("api"));
   ({ createGraphysXAgentToolBridge: createBridge, GRAPHYSX_AGENT_TOOL_REQUEST_SCHEMA: requestSchema } = await load("bridge"));
   ({ invokeGraphysXAgentTool: invoke } = await load("connection"));
+  archiveWorlds = await load("archive"); motionWorlds = await load("motion");
   // Only the window transport is substituted. The scene, validators, API factory,
   // tool manifest, dispatch and simulation are the production implementations.
   const window = Object.assign(new EventTarget(), {
@@ -90,7 +94,7 @@ test("the real public API has exact bridge parity and live mutations are discove
   assert.deepEqual(bridge.audit(), { missing: [], extra: [] });
   const tools = bridge.manifest().tools;
   assert.equal(new Set(tools.map(tool => tool.path)).size, tools.length);
-  for (const path of ["steerLive", "setSlowdownLive"]) {
+  for (const path of ["steerLive", "setSlowdownLive", "pilotLive"]) {
     const tool = tools.find(candidate => candidate.path === path);
     assert.ok(tool, path);
     assert.equal(tool.name, path);
@@ -197,7 +201,7 @@ test("bridge live inputs cannot cross reserved namespaces or host-owned transien
     physics: { mode: "dynamic" }, steering: { force: 28 },
   }))));
   for (const id of [...ids, "live-agent:missing", "live-mission:missing", "live-nestor:missing"]) {
-    for (const [method, input] of [["steerLive", { headingDegrees: 45, thrust: 1 }], ["setSlowdownLive", .75]]) {
+    for (const [method, input] of [["steerLive", { headingDegrees: 45, thrust: 1 }], ["setSlowdownLive", .75], ["pilotLive", { thrust: 1 }]]) {
       const before = snapshot(w), result = await w.bridge.call(method, id, input);
       assert.equal(result.ok, false, `${method}(${id})`);
       assert.match(result.error, /host-only entity namespace|host-owned transient/i);
@@ -287,4 +291,99 @@ test("the bridge validates request envelopes and keeps internal/prototype paths 
     assert.equal(missing.value.ok, false);
   }
   assert.deepEqual(snapshot(w), before);
+});
+
+test("source keyframes interpolate on the shared clock, hold, reverse and survive document validation", t => {
+  const w = world(t);
+  accepted(w.api.spawn({ id: "track", type: "box", behaviors: [{ id: "clip", type: "keyframes", durationSeconds: 2,
+    positions: [[0, 0, 0, 0], [2, 8, 4, -2]], rotations: [[0, 0, 0, 0, 1], [2, 0, 1, 0, 0]] }] }));
+  accepted(w.api.pause(true));
+  const initial = w.api.query({ ids: ["track"] })[0].position;
+  w.runtime.update(1);
+  assert.deepEqual(w.api.query({ ids: ["track"] })[0].position, initial);
+  accepted(w.api.step(1));
+  const middle = w.api.query({ ids: ["track"] })[0];
+  assert.ok(Math.abs(middle.position[0] - 4) < 1e-5);
+  const quaternion = w.runtime.getEntityObject("track").quaternion;
+  assert.ok(Math.abs(quaternion.y - Math.SQRT1_2) < 1e-5);
+  accepted(w.api.step(5));
+  assert.deepEqual(w.api.query({ ids: ["track"] })[0].position, [8, 4, -2]);
+  const exported = w.api.exportDocument();
+  assert.doesNotThrow(() => validateStoredSceneDefinition(exported));
+  const fresh = new AgentWorldRuntime(exported); t.after(() => fresh.dispose());
+  const sortedEntities = document => ({ ...document, entities: [...document.entities].sort((a, b) => a.id.localeCompare(b.id)) });
+  assert.deepEqual(sortedEntities(fresh.exportDocument()), sortedEntities(exported));
+  accepted(w.api.create(motionWorlds.buildCubzTracks()));
+  motionWorlds.playCubzTrack(w.api, "open", 1);
+  accepted(w.api.step(2));
+  const opened = w.runtime.getEntityObject("cubz-Right08").quaternion.clone();
+  assert.ok(Math.abs(opened.y) > .7);
+  motionWorlds.playCubzTrack(w.api, "open", 1, true);
+  accepted(w.api.step(2));
+  assert.ok(w.runtime.getEntityObject("cubz-Right08").quaternion.angleTo(opened) > 1);
+  assert.ok(Math.abs(w.runtime.getEntityObject("cubz-Right08").quaternion.w - 1) < 1e-5);
+});
+
+test("FlightX bridge input moves real scene objects without document revisions or saved held keys", async t => {
+  const w = world(t);
+  accepted(w.api.spawn({ id: "plane", type: "group", transform: { position: [0, 10, 0] }, behaviors: [{ id: "pilot", type: "flight", speed: 10 }] }));
+  accepted(w.api.pause(true));
+  const before = records(w), exported = w.api.exportDocument();
+  const receipt = accepted(await w.bridge.call("pilotLive", "plane", { thrust: 3 }));
+  assert.equal(receipt.input.thrust, 1);
+  w.runtime.update(1);
+  assert.deepEqual(w.api.query({ ids: ["plane"] })[0].position, [0, 10, 0]);
+  accepted(w.api.step(1));
+  const flying = w.api.query({ ids: ["plane"] })[0];
+  assert.ok(Math.abs(flying.position[0] - 10) < 1e-5);
+  assert.deepEqual(records(w), before);
+  assert.deepEqual(w.api.exportDocument(), exported);
+  accepted(await w.bridge.call("pilotLive", "plane", { roll: .5, pitch: -.3, airbrake: true }));
+  accepted(w.api.step(.5));
+  const moved = w.api.query({ ids: ["plane"] })[0].position;
+  accepted(await w.bridge.call("pilotLive", "plane", { reset: true, thrust: 0, roll: 0, pitch: 0 }));
+  assert.deepEqual(w.api.query({ ids: ["plane"] })[0].position, moved, "R restores orientation without teleportation");
+  assert.ok(w.runtime.getEntityObject("plane").quaternion.w > .99999);
+  for (const input of [{ thrust: NaN }, { pitch: Infinity }, { roll: "1" }, { airbrake: 1 }, { reset: true, unknown: 1 }]) {
+    const checkpoint = snapshot(w);
+    assert.equal((await w.bridge.call("pilotLive", "plane", input)).ok, false);
+    assert.deepEqual(snapshot(w), checkpoint);
+  }
+  const reloaded = new AgentWorldRuntime(exported); t.after(() => reloaded.dispose());
+  reloaded.step(1);
+  assert.deepEqual(reloaded.query({ ids: ["plane"] })[0].position, [0, 10, 0]);
+  accepted(w.api.update("plane", { transform: { position: [25, 30, 0] } }));
+  accepted(w.api.step(.1));
+  assert.deepEqual(w.api.query({ ids: ["plane"] })[0].position, [25, 30, 0], "authored repositioning resets live pose and controls");
+});
+
+test("all recovered worlds and TVA ranges cross the actual storage validator; malformed motion is atomic", t => {
+  for (const id of ["maison", "arena", "common-room", "notes", "cubz", "flightx"]) {
+    const definition = archiveWorlds.buildArchiveWorld(id);
+    assert.doesNotThrow(() => validateStoredSceneDefinition(definition), id);
+  }
+  for (let selection = 1; selection <= 7; selection++) for (const reverse of [false, true]) {
+    const track = motionWorlds.cubzTrack("rotation", selection, "GlobalCube", 0, reverse);
+    const definition = { schema: "graphysx.agent-world/v2", id: "keys", label: "Keys", entities: [{ id: "track", type: "box", behaviors: [track] }] };
+    assert.doesNotThrow(() => validateStoredSceneDefinition(definition));
+  }
+  const w = world(t);
+  for (const behavior of [
+    { type: "flight", speed: -1 }, { type: "flight", speed: Infinity },
+    { type: "flight", acceleration: 1 },
+    { id: "bad behavior id", type: "flight" },
+    { type: "keyframes", durationSeconds: 2, rotations: [[0, 0, 0, 0, 1]], mystery: true },
+    { type: "keyframes", durationSeconds: 0, positions: [[0, 0, 0, 0]] },
+    { type: "keyframes", durationSeconds: 2, positions: [[1, 0, 0, 0], [1, 2, 0, 0]] },
+    { type: "keyframes", durationSeconds: 2, rotations: [[0, 0, 0, 0, 0]] },
+    { type: "keyframes", durationSeconds: 2, positions: [[0, 10001, 0, 0]] },
+  ]) {
+    const before = snapshot(w);
+    assert.equal(w.api.attachBehavior("plain", { id: "bad", ...behavior }).ok, false);
+    assert.deepEqual(w.api.exportDocument(), before.document);
+    assert.equal(w.api.state().revision, before.revision);
+    assert.deepEqual(w.runtime.history, before.history);
+    assert.throws(() => applyCommands(w.api.exportDocument(), [{ op: "attach-behavior", id: "plain", behavior: { id: "bad", ...behavior } }]), { name: "SceneCommandError", status: 400 });
+  }
+  assert.equal(w.api.attachBehavior("ball", { id: "wrong-mode", type: "flight" }).ok, false);
 });

@@ -37,8 +37,14 @@ export async function atomicSnapshot(path, value) {
   const file = await open(temporary, "w", 0o600);
   try { await file.writeFile(JSON.stringify(value)); await file.sync(); } finally { await file.close(); }
   await rename(temporary, path);
-  const parent = await open(dirname(path), "r");
-  try { await parent.sync(); } finally { await parent.close(); }
+  // Node exposes no supported writable directory handle for FlushFileBuffers on Windows.
+  // Keep the file flush and atomic replacement there; only POSIX can additionally flush
+  // the parent namespace through this API. Never swallow file/rename or POSIX sync errors.
+  // https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers
+  if (process.platform !== "win32") {
+    const parent = await open(dirname(path), "r");
+    try { await parent.sync(); } finally { await parent.close(); }
+  }
 }
 
 export class Archive {

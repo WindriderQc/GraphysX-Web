@@ -35,9 +35,10 @@ try {
   await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__, { timeout: SMOKE_TIMEOUT });
   await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
 
-  // Reachable from the front door, listed above the starter scenes.
+  // Reachable from the front door in the dedicated historical collection.
   await page.click(".gx-welcome .gx-go-browse");
   await page.waitForSelector(".gx-browse", { timeout: SMOKE_TIMEOUT });
+  await page.click('[data-collection="archive"]');
   out.listed = await page.evaluate(() => {
     const row = document.querySelector('.gx-browse-row[data-scene-id="archive-garage"]');
     return { present: !!row, meta: row?.querySelector(".gx-browse-meta")?.textContent ?? "" };

@@ -23,6 +23,7 @@ try {
     localStorage.removeItem("graphysx-level-ghosts-v1");
   });
   await page.click(".gx-welcome .gx-go-games");
+  await page.click('.gx-shelf [data-collection="archive"]');
   await page.waitForSelector('.gx-shelf-cup[data-game-id="archive-cup"]', { timeout: SMOKE_TIMEOUT });
   await page.click('.gx-shelf-cup[data-game-id="archive-cup"]');
   await page.waitForSelector(".gx-cup", { timeout: SMOKE_TIMEOUT });
@@ -54,6 +55,7 @@ try {
   await page.reload({ waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await page.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
   await page.click(".gx-welcome .gx-go-games");
+  await page.click('.gx-shelf [data-collection="archive"]');
   await page.click('.gx-shelf-cup[data-game-id="archive-cup"]');
   await page.waitForSelector(".gx-cup", { timeout: SMOKE_TIMEOUT });
 

@@ -27,7 +27,11 @@ function writePreferences(preferences: ShelfPreferences): void {
 export function mountShelfPersonalization(
   card: HTMLElement,
   list: HTMLElement,
-  options: { label: string; placeholder: string },
+  options: {
+    label: string; placeholder: string;
+    collections?: readonly { id: string; label: string; description: string }[];
+    initialCollection?: string;
+  },
 ): () => void {
   let preferences = readPreferences();
   const actions = Array.from(list.querySelectorAll<HTMLElement>("[data-shelf-key]"));
@@ -61,6 +65,22 @@ export function mountShelfPersonalization(
   reset.textContent = "Reset preferences";
   reset.title = "Clear favorites and recent ordering";
   controls.append(search, count, reset);
+
+  let collection = options.initialCollection ?? "all";
+  const collections = document.createElement("nav");
+  collections.className = "gx-shelf-collections";
+  collections.setAttribute("aria-label", "Collections du catalogue");
+  const description = document.createElement("p");
+  description.className = "gx-shelf-collection-description";
+  for (const entry of options.collections ?? []) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.collection = entry.id;
+    const total = items.filter((item) => entry.id === "all" || actionByItem.get(item)?.dataset.shelfCollection === entry.id).length;
+    button.textContent = `${entry.label} · ${total}`;
+    button.addEventListener("click", () => { collection = entry.id; applyFilter(); });
+    collections.append(button);
+  }
 
   const empty = document.createElement("div");
   empty.className = "gx-shelf-empty";
@@ -107,11 +127,16 @@ export function mountShelfPersonalization(
     for (const item of items) {
       const action = actionByItem.get(item)!;
       const searchable = action.dataset.shelfSearch ?? action.textContent ?? "";
-      item.hidden = !!query && !searchable.toLocaleLowerCase().includes(query);
+      item.hidden = (collection !== "all" && action.dataset.shelfCollection !== collection)
+        || (!!query && !searchable.toLocaleLowerCase().includes(query));
       if (!item.hidden) visible += 1;
     }
     count.textContent = `${visible} of ${items.length} ${options.label}`;
     empty.hidden = visible > 0;
+    for (const button of collections.querySelectorAll<HTMLButtonElement>("button")) {
+      button.setAttribute("aria-pressed", String(button.dataset.collection === collection));
+    }
+    description.textContent = options.collections?.find((entry) => entry.id === collection)?.description ?? "";
   };
 
   for (const item of items) {
@@ -151,12 +176,22 @@ export function mountShelfPersonalization(
     search.focus();
   });
   card.insertBefore(controls, list);
+  if (options.collections?.length) {
+    card.insertBefore(collections, controls);
+    card.insertBefore(description, controls);
+  }
   update();
 
-  return () => controls.remove();
+  return () => { controls.remove(); collections.remove(); description.remove(); };
 }
 
 export const SHELF_PERSONALIZATION_CSS = `
+.gx-shelf-collections{display:flex;flex-wrap:wrap;gap:6px}
+.gx-shelf-collections button{min-height:42px;padding:9px 13px;border:1px solid #88b7c440;border-radius:999px;background:#102837;color:#b6cbd4;font:600 12px var(--gx-font);cursor:pointer}
+.gx-shelf-collections button[aria-pressed=true]{background:#b5eedf;color:#102e35;border-color:#b5eedf}
+.gx-shelf-collections button:focus-visible{outline:2px solid white;outline-offset:2px}
+.gx-shelf-collection-description{margin:0;color:var(--gx-ink-soft);font:13px/1.5 var(--gx-font)}
+.gx-collection-badge{display:block;align-self:flex-start;margin-top:6px;color:#b7d9dc;font:600 10px/1.5 var(--gx-font);letter-spacing:.04em}
 .gx-shelf-tools{display:flex;align-items:center;gap:8px}
 .gx-shelf-search{flex:1;min-width:0;padding:8px 10px;border:1px solid rgba(79,208,230,.3);border-radius:8px;background:rgba(5,18,26,.9);color:var(--gx-ink);font:12px/1.2 var(--gx-font);outline:none}
 .gx-shelf-search:focus{border-color:var(--gx-accent);box-shadow:0 0 0 3px var(--gx-accent-ring)}

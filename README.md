@@ -63,6 +63,20 @@ only; this one is the deployable product.
 
 ## Run it
 
+The front door separates **Créations**, **Jouer**, **Studio**, **Ateliers** and
+**Archives & labo**. The galleries keep current creations, archive revivals and prototypes
+in separate collections, with scoped search and favorites. The optional discovery ride
+visits the real DNA, physics and flocking systems; manual camera input interrupts it.
+
+The [revival and UX audit](docs/REVIVAL_AND_UX.md) compares the original C++/C# projects,
+the first web revival and the current product, and records remaining recovery work.
+It is **not a deletion clearance** for the historical repository.
+
+Archives now opens the complete Maison/Cuisine explorer, Unity Arena, Common Room,
+CubX notes, CubZ TVA animation studies, controllable FlightX and the native physics intro.
+Their panels distinguish source geometry/behavior from adapted presentation and missing
+features. These worlds use the same Studio, world API and pause/step clock as current work.
+
 Use Node.js 22 (the CI version). The browser product needs no database, model provider,
 hardware or scene-store service to start:
 

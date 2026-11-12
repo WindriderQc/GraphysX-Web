@@ -198,7 +198,7 @@ try {
   }, null, { timeout: SMOKE_TIMEOUT });
   out.browse = await page.evaluate(() => {
     const rows = [...document.querySelectorAll(".gx-browse-row")];
-    const featuredRows = rows.filter((row) => row.dataset.starterId === "archive-great-slide");
+    const featuredRows = rows.filter((row) => row.dataset.starterId === "glow-garden");
     const featured = featuredRows[0];
     const cardRect = document.querySelector(".gx-browse-card")?.getBoundingClientRect();
     const featuredRect = featured?.getBoundingClientRect();
@@ -214,7 +214,7 @@ try {
         const image = row.querySelector("img.gx-shelf-thumb");
         return image?.complete && image.naturalWidth > 0;
       }).length,
-      greatSlideCount: featuredRows.length,
+      featuredCount: featuredRows.length,
       featuredAboveFold: Boolean(cardRect && featuredRect
         && featuredRect.top >= cardRect.top && featuredRect.bottom <= cardRect.bottom),
       featuredBadges: [...(featured?.querySelectorAll(".gx-browse-badge") ?? [])].map((badge) => badge.textContent),
@@ -224,6 +224,13 @@ try {
   });
   await page.screenshot({ path: path.join(ART, "browse-scenes.png"), fullPage: false });
 
+  await page.click('.gx-browse [data-collection="archive"]');
+  out.archiveDisclosure = await page.locator('[data-starter-id="archive-great-slide"]').evaluate((row) => ({
+    summary: row.querySelector(".gx-browse-summary")?.textContent ?? "",
+    label: row.querySelector(".gx-collection-badge")?.textContent ?? "",
+    visible: row.getBoundingClientRect().height > 0,
+  }));
+  await page.click('.gx-browse [data-collection="lab"]');
   await page.click('.gx-browse-row[data-starter-id="physics-sketchbook"]');
   await page.waitForTimeout(700);
   out.opened = await page.evaluate(() => {
@@ -243,9 +250,8 @@ try {
   });
   await page.screenshot({ path: path.join(ART, "browse-opened.png"), fullPage: false });
 
-  // The featured recovery must remain useful on the phone-sized front door: its fidelity
-  // disclosure used to disappear below the fold, which made the most important caveat
-  // effectively desktop-only.
+  // The current featured creation stays above the fold on a phone. Archive disclosures
+  // have their own collection and are checked separately above.
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
   applySmokeTimeout(mobile);
   mobile.on("console", (m) => { if (m.type() === "error") consoleErrors.push(`mobile: ${m.text()}`); });
@@ -253,9 +259,9 @@ try {
   await mobile.goto(BASE, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await mobile.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
   await mobile.click(".gx-welcome .gx-go-browse");
-  await mobile.waitForSelector('.gx-browse-row[data-starter-id="archive-great-slide"]', { timeout: SMOKE_TIMEOUT });
+  await mobile.waitForSelector('.gx-browse-row[data-starter-id="glow-garden"]', { timeout: SMOKE_TIMEOUT });
   out.mobileBrowse = await mobile.evaluate(() => {
-    const featured = document.querySelector('.gx-browse-row[data-starter-id="archive-great-slide"]');
+    const featured = document.querySelector('.gx-browse-row[data-starter-id="glow-garden"]');
     const summary = featured?.querySelector(".gx-browse-summary");
     const card = document.querySelector(".gx-browse-card");
     const featuredRect = featured?.getBoundingClientRect();
@@ -322,10 +328,13 @@ const ok =
   /entities/.test(out.browse?.firstMeta ?? "") &&
   out.browse?.previewCount === out.browse?.rowCount &&
   out.browse?.previewLoaded === out.browse?.rowCount &&
-  out.browse?.greatSlideCount === 1 &&
+  out.browse?.featuredCount === 1 &&
   out.browse?.featuredAboveFold === true &&
   out.browse?.featuredBadges?.length === 3 &&
-  /mesh is faithful/.test(out.browse?.featuredSummary ?? "") &&
+  /luminous trees/.test(out.browse?.featuredSummary ?? "") &&
+  /mesh is faithful/.test(out.archiveDisclosure?.summary ?? "") &&
+  /ARCHIVE/.test(out.archiveDisclosure?.label ?? "") &&
+  out.archiveDisclosure?.visible === true &&
   out.browse?.welcomeGone === true &&
   out.mobileBrowse?.noHorizontalOverflow === true &&
   out.mobileBrowse?.summaryVisible === true &&

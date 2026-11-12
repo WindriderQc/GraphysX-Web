@@ -7,6 +7,12 @@ const OUTPUT = path.resolve("public/assets/shelf-thumbnails");
 const PORT = Number(process.env.SHELF_THUMBNAIL_PORT || 4197);
 const BASE = `http://127.0.0.1:${PORT}/?intro=0`;
 const BROWSE_IDS = [
+  "archive-cubz-tracks",
+  "archive-flightx",
+  "archive-unity-arena",
+  "archive-common-room",
+  "archive-notes",
+  "archive-native-intro",
   "ev3-robotics-lab",
   "archive-maison",
   "archive-voie-lactee",
@@ -44,6 +50,7 @@ async function capture(id, shelf, selector) {
   await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForFunction(() => Boolean(window.__GRAPHYSX_HOST__), null, { timeout: 60_000 });
   await page.click(`.gx-welcome .gx-go-${shelf}`);
+  await page.click('[data-collection="all"]');
   await page.waitForSelector(selector, { timeout: 60_000 });
   // Dispatch the click on the element rather than through pointer hit-testing: the shelves
   // have grown past the 360-pixel capture viewport, and a row inside the shelf's own scroll
@@ -51,6 +58,13 @@ async function capture(id, shelf, selector) {
   // Genuine clickability is the games/browse smokes' assertion, not this snapshot harness's.
   await page.$eval(selector, (element) => element.click());
   await page.waitForFunction(() => window.__GRAPHYSX__.query({}).length > 0, null, { timeout: 60_000 });
+  // Show reproducible interaction states, rather than an empty notepad or closed hinges.
+  if (id === "archive-notes" || id === "archive-cubz-tracks") await page.click(".gx-archive-workbench summary");
+  if (id === "archive-notes") {
+    await page.waitForSelector('[data-archive-action="add-note"]');
+    for (let index = 0; index < 12; index++) await page.$eval('[data-archive-action="add-note"]', element => element.click());
+  }
+  if (id === "archive-cubz-tracks") { await page.waitForSelector('[data-archive-action="open-panels"]'); await page.$eval('[data-archive-action="open-panels"]', element => element.click()); }
   // The Quarantine's whole subject is the infection spreading, and it does not begin until
   // the crowd's 3s conversion grace elapses — a 2.5s shot would be an all-pale crowd. Give it
   // long enough that several pursuers have converted and the green is visible.

@@ -291,6 +291,7 @@ try {
   await play.waitForSelector(".gx-welcome", { timeout: SMOKE_TIMEOUT });
   await play.click(".gx-welcome .gx-go-browse");
   await play.waitForSelector(".gx-browse .gx-shelf-search", { timeout: SMOKE_TIMEOUT });
+  await play.click('.gx-browse [data-collection="lab"]');
   const totalScenes = await play.locator(".gx-browse [data-shelf-key]").count();
   await play.fill(".gx-browse .gx-shelf-search", "physics sketchbook");
   const physicsMatches = await play.locator(".gx-browse [data-shelf-key]:visible").count();

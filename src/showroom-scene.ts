@@ -93,6 +93,14 @@ export function composeShowroom(api: GraphysXAgentWorldApi): void {
     },
     ...stack, ...orbs,
     {
+      id: "showroom-dna-grove", type: "dna-tree", label: "Evolution Grove · generation 1",
+      transform: { position: [8, 0, -5] },
+      dna: { preset: "single-specimen", trees: 3, columns: 3, spacing: [2.6, 2.6], layoutJitter: 0.18,
+        seed: 27, generation: 1, mutationRate: 0.12, growSeconds: 4, seasonSeconds: 24,
+        genome: { trunkLength: 1.35, depth: 5, leafHue: 0.34, leafSize: 0.13 } },
+      tags: ["showroom", "life", "dna"],
+    },
+    {
       id: "showroom-chime-ring", type: "torus", label: "Chime Ring", geometry: { radius: 1.05, tube: 0.045 },
       transform: { position: [-6.2, 1.45, 0.3] }, material: { color: "#d6b484", emissive: "#6b4a10", emissiveIntensity: 0.65, roughness: 0.3, metalness: 0.6 },
       physics: { mode: "trigger" }, interactions: [{ id: "ring-chime", type: "play-sound", sound: "coin", volume: 0.55 }],

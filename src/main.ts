@@ -1,7 +1,9 @@
 import { connectLocalGraphysXAgent } from './graphysx-agent-connection';
+import { GRAPHYSX_DISCOVERY_TOUR } from "./showroom-journey";
+import { AGENT_WORLD_DNA_MAX_GENERATION } from "./agent-world-dna";
+import type { ContentCollection } from "./content-collections";
 import {
   ARCHIVE_BUILDINGS,
-  archiveBuildingBrowseRows,
   buildArchiveBuilding,
   composeArchiveBuilding,
 } from "./archive-buildings";
@@ -433,17 +435,22 @@ if (appParam === "vr-lab") {
       discardNestorProposal();
       tourController ??= createNestorTourController({
         entityExists: (id) => host.api.query({ ids: [id] }).length === 1,
-        focusEntity: (id) => { interaction?.focusEntity(id, true); },
+        focusEntity: (id, stop) => {
+          if (!stop.camera) { interaction?.focusEntity(id, true); return; }
+          const { position, target, via = [] } = stop.camera;
+          host.framePath([...via.map((point) => ({ position: point, target })), { position, target }], motionIsReduced() ? 0 : 2.8);
+        },
         // `api.select` sets selectedIds and nothing else — no revision, no history, no export.
         // A tour that authored anything would be a tour that changed the room it is describing.
         highlight: (ids) => { host.api.select(ids); },
         reducedMotion: motionIsReduced,
         onChange: (state) => welcome?.showTour(state),
       });
-      welcome?.showTour(tourController.start());
+      welcome?.showTour(tourController.start(GRAPHYSX_DISCOVERY_TOUR));
     };
     const stopNestorTour = (): void => {
-      if (!tourController) return;
+      if (!tourController || tourController.state().status !== "running") return;
+      host.cancelCameraMove();
       welcome?.showTour(tourController.cancel());
     };
     const discardNestorProposal = (): void => {
@@ -603,6 +610,22 @@ if (appParam === "vr-lab") {
             onOpenEcosystem: () => { window.location.search = "?app=ecosystem"; },
             onOpenNetX: () => { window.location.search = "?app=netx"; },
             onOpenIsland: () => { window.location.search = "?app=island"; },
+            onOpenArchive: () => openBrowse("archive"),
+            onNextGeneration: () => {
+              if (nestorBlockedByLiveSession()) return;
+              const grove = host.api.query({ ids: ["showroom-dna-grove"] })[0];
+              if (!grove) {
+                welcome?.showDnaStatus("Le bosquet ADN a été retiré. Tu peux en ajouter un dans le Studio.");
+                return;
+              }
+              const generation = (grove.dna?.generation ?? 1) + 1;
+              if (generation > AGENT_WORLD_DNA_MAX_GENERATION) {
+                welcome?.showDnaStatus("Cette lignée est arrivée à sa dernière génération. Le Studio permet de changer sa graine ou ses paramètres.", grove.dna?.generation);
+                return;
+              }
+              const result = host.api.update(grove.id, { dna: { generation }, label: `Evolution Grove · generation ${generation}` });
+              if (result.ok) welcome?.showDnaStatus(`ADN · génération ${generation}. Les mutations sont visibles et modifiables dans le Studio.`, generation);
+            },
             coauthor: {
               onAccept: acceptNestorProposal,
               onDiscard: discardNestorProposal,
@@ -714,6 +737,7 @@ if (appParam === "vr-lab") {
       focusFrontDoor();
     };
     const openGamesShelf = (showArchiveCup = false): void => {
+      stopNestorTour();
       if (nestorBlockedByLiveSession()) {
         mountFrontDoor();
         return;
@@ -929,7 +953,8 @@ if (appParam === "vr-lab") {
       });
     };
     const openGames = (): void => openGamesShelf(false);
-    const openBrowse = (): void => {
+    const openBrowse = (initialCollection: ContentCollection = "creations"): void => {
+      stopNestorTour();
       if (nestorBlockedByLiveSession()) {
         mountFrontDoor();
         return;
@@ -943,16 +968,32 @@ if (appParam === "vr-lab") {
         }
         activeShelf = mountBrowseShelf(root, {
           api: host.api,
+          initialCollection,
           canNavigate: () => !nestorBlockedByLiveSession(),
           featuredStarter: {
-            id: "archive-great-slide",
-            eyebrow: "SCENE-NATIVE PHYSICS",
-            badges: ["Exact mesh", "Static trimesh", "Modern gravity run"],
+            id: "glow-garden",
+            eyebrow: "COMMENCER ICI",
+            badges: ["Monde lumineux", "Tout est modifiable", "Sans connexion"],
           },
           // The recovered vehicle garage is composed, not a starter definition, so it comes in
           // as a composed row. main.ts supplies it because framing needs the host, which the
           // shelf deliberately does not have.
           composed: [
+            ...(["native-intro"] as const).map((scene) => ({
+              id: `archive-${scene}`,
+              label: "Intro Physics · ArduinoGUI C#",
+              summary: "La composition C# retrouvée : deux familles de dix cylindres et le sol Alien. Géométrie et masses sources ; physique Rapier adaptée.",
+              meta: "Reprise partielle · 20 corps · clic pour pousser",
+              open: async () => {
+                const { composeArchiveRevival } = await import("./archive-revival-scenes");
+                if (nestorBlockedByLiveSession()) return;
+                composeArchiveRevival(host.api, scene);
+                showroomEnvironment?.(); showroomEnvironment = null;
+                host.applyEnvironment();
+                host.frameView([0, 10, -10], [10, 5, 10], motionIsReduced() ? 0 : 1);
+                enterBrowsedEditor();
+              },
+            })),
             {
               id: "archive-day-night-rig",
               label: "Archive Day / Night Observatory",
@@ -1009,12 +1050,25 @@ if (appParam === "vr-lab") {
             // The recovered Voie Lactee vignette. Same shape as the playgrounds: it opens in the
             // editor like any browsed scene.
             // The recovered Maison massing model.
-            ...archiveBuildingBrowseRows(host.api, () => {
-              showroomEnvironment?.();
-              showroomEnvironment = null;
-              host.applyEnvironment();
-              enterBrowsedEditor();
-            }),
+            ...([
+              { world: "maison", id: "archive-maison", label: "Maison & Cuisine", summary: "Les deux compositions Blender complètes, leurs caméras sources et l’ancienne étude de volumes réunies dans un seul explorateur.", meta: "24 + 76 maillages sources · photo de cuisine absente · éclairage adapté" },
+              { world: "arena", id: "archive-unity-arena", label: "Unity Arena", summary: "L’arène octogonale et son atlas peint à la main. La scène d’origine ne contenait aucun jeu ni script.", meta: "OBJ + atlas d’origine · caméra source · aucun gameplay inventé" },
+              { world: "common-room", id: "archive-common-room", label: "Common Room", summary: "La coque détaillée de room.tvm et ses textures DDS diffuse et normale. Une visite adaptée au moteur actuel.", meta: "180 sommets · 250 triangles · textures sources · caméra de visite adaptée" },
+              { world: "notes", id: "archive-notes", label: "Notes 3D · CubX", summary: "Le bloc spatial de 50 plaques et son ajout séquentiel. Le gestionnaire de texte n’a jamais été retrouvé.", meta: "Composition native · 50 emplacements · ajout, annulation et reprise dans le Studio" },
+              { world: "cubz", id: "archive-cubz-tracks", label: "CubZ · animations TVA", summary: "Sept rotations de l’ensemble et trois faces qui s’ouvrent en 3D, pilotées par les pistes retrouvées.", meta: "Clés TVA sources · retour inversé corrigé · géométrie et pivots adaptés" },
+              { world: "flightx", id: "archive-flightx", label: "FlightX · vol libre", summary: "Reprendre les commandes de FlightX : déplacement relatif, rotations et caméra de poursuite. Clavier et commandes tactiles.", meta: "Commandes C++ adaptées · avion et pipe sources · repères de visite modernes" },
+            ] as const).map((entry) => ({
+              ...entry,
+              open: async () => {
+                const [{ buildArchiveWorld }, { mountArchiveWorkbench }] = await Promise.all([import("./archive-worlds"), import("./archive-workbench")]);
+                if (nestorBlockedByLiveSession()) return;
+                const result = host.api.create(buildArchiveWorld(entry.world));
+                if (!result.ok) throw new Error(result.error ?? "Could not open archive world");
+                showroomEnvironment?.(); showroomEnvironment = null;
+                host.applyEnvironment(); enterBrowsedEditor();
+                mountArchiveWorkbench(root, host, entry.world);
+              },
+            })),
             // The Math Lab page: a person types the blocks Nestor writes in AgentX and sees the same
             // Math Game picture, with no assistant. It replaced the recovered Math Game screen
             // (archive-math-lab) on 2026-11-07; `formula-field` stays world vocabulary.
@@ -1156,6 +1210,8 @@ if (appParam === "vr-lab") {
       playExitLabel: () => resumeArchiveCup ? "← Archive Cup" : "← GraphysX",
     });
     connectLocalGraphysXAgent(host);
+    host.renderer.domElement.addEventListener("pointerdown", stopNestorTour);
+    host.renderer.domElement.addEventListener("wheel", stopNestorTour, { passive: true });
     if (framedByHost) {
       hostBridge = createHostBridge({
         selfOrigin: window.location.origin,
@@ -1253,7 +1309,11 @@ if (appParam === "vr-lab") {
         joints: host.api.state()?.joints ?? [],
         run: host.api.rules.status(),
         archiveCup: getArchiveCupRuntimeState(),
+        archiveMotion: host.api.query({ tag: "archive-motion" }).map(entity => ({ id: entity.id, position: entity.position, rotationDegrees: entity.rotationDegrees, behaviors: entity.behaviors })),
         personalGhost: getPersonalGhostState(),
+        discovery: { tour: tourController?.state() ?? IDLE_TOUR_STATE,
+          dnaGeneration: host.api.query({ ids: ["showroom-dna-grove"] })[0]?.dna?.generation ?? null,
+          cameraMoving: host.focusing },
         proposalSource: describeProposalSource(),
         nestor: host.api.query({ ids: ["showroom-nestor"] }).length > 0
           ? nestor?.state() ?? null : null,

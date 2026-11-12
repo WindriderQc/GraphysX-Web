@@ -26,6 +26,7 @@ try {
   await page.waitForFunction(() => Boolean(window.__GRAPHYSX_HOST__), null, { timeout: SMOKE_TIMEOUT });
   await page.waitForSelector(".gx-welcome .gx-go-games", { timeout: SMOKE_TIMEOUT });
   await page.click(".gx-welcome .gx-go-games");
+  await page.click('.gx-shelf [data-collection="archive"]');
   await page.waitForSelector('.gx-shelf-row[data-course-id="archive-great-slide"]', { timeout: SMOKE_TIMEOUT });
 
   out.shelf = await page.evaluate(() => {
@@ -171,6 +172,7 @@ try {
   await failurePage.goto(BASE, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await failurePage.waitForSelector(".gx-welcome .gx-go-games", { timeout: SMOKE_TIMEOUT });
   await failurePage.click(".gx-welcome .gx-go-games");
+  await failurePage.click('.gx-shelf [data-collection="archive"]');
   // The intentional asset abort can make Chromium report a pending navigation on a remote
   // origin even though the button does not navigate. We assert the resulting app state below;
   // do not let Playwright's unrelated post-click navigation wait mask that evidence.

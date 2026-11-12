@@ -25,6 +25,7 @@ try {
   await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
   await page.waitForFunction(() => Boolean(window.__GRAPHYSX_HOST__), null, { timeout: SMOKE_TIMEOUT });
   await page.click(".gx-welcome .gx-go-games");
+  await page.click('.gx-shelf [data-collection="archive"]');
   await page.waitForSelector('.gx-shelf-row[data-course-id="archive-suzanne-machinery"]', { timeout: SMOKE_TIMEOUT });
   out.shelf = await page.evaluate(() => {
     const row = document.querySelector('.gx-shelf-row[data-course-id="archive-suzanne-machinery"]');
