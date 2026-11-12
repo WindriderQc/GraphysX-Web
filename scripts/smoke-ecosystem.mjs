@@ -30,6 +30,10 @@ try {
   assert.equal(await page.locator('[data-action="voice"]').getAttribute('aria-pressed'), 'true');
   await page.locator('[data-action="voice"]').click();
   if (await page.getByRole('button', { name: 'Pause', exact: true }).count()) await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  // Silent autoplay can already have advanced while browser round trips wait on GL.
+  // Select the overview through the real UI before asserting its paused state. The
+  // independent clock test below still proves overview -> frank at exactly 7.5 s.
+  await page.locator(".gx-eco-steps button", { hasText: "Vue d'ensemble" }).first().click();
 
   const initial = await page.evaluate(() => {
     const text = JSON.parse(window.render_game_to_text());

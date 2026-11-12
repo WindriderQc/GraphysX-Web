@@ -14,11 +14,16 @@ mkdirSync(ART, { recursive: true });
 const origin = new URL(BASE).origin;
 
 const errors = [];
+const errorLocations = [];
 const outside = [];
 const browser = await launchSmokeBrowser();
 const watch = (page) => {
   applySmokeTimeout(page);
-  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  page.on("console", (message) => {
+    if (message.type() !== "error") return;
+    errors.push(message.text());
+    errorLocations.push({ page: page.url(), location: message.location(), text: message.text() });
+  });
   page.on("pageerror", (error) => errors.push(String(error)));
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -187,7 +192,7 @@ try {
   assert.deepEqual(errors, [], "no browser errors");
   console.log(JSON.stringify({ ok: true, ...out }));
 } catch (error) {
-  console.error(JSON.stringify({ ok: false, ...out, errors, outside }));
+  console.error(JSON.stringify({ ok: false, ...out, errors, errorLocations, outside }));
   throw error;
 } finally {
   await browser.close();

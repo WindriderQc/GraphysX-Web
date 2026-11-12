@@ -34,7 +34,7 @@ try {
       const box = item.getBoundingClientRect();
       const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
       return box.height >= 44 && box.left >= 0 && box.right <= innerWidth && box.bottom <= innerHeight && item.contains(hit);
-    })), [true, true, true, true], "all four destinations are visible without horizontal scrolling");
+    })), [true, true, true, true, true], "all five destinations are visible without horizontal scrolling");
     const apps = dock.locator("summary");
     await apps.click();
     const island = dock.getByRole("button", { name: /L’île d’Eko/ });
