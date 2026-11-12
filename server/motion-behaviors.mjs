@@ -1,5 +1,14 @@
 /** Shared document/runtime validation for source animation and kinematic flight. */
+export const MOTION_FIELDS = Object.freeze({
+  keyframes: Object.freeze(["id", "type", "durationSeconds", "startSeconds", "loop", "positions", "rotations"]),
+  flight: Object.freeze(["id", "type", "speed", "rollRateDegrees", "pitchUpDegrees", "pitchDownDegrees"]),
+});
+
 export function validateMotionBehavior(behavior) {
+  if (!behavior || typeof behavior !== "object" || Array.isArray(behavior) || !["flight", "keyframes"].includes(behavior.type)) throw new Error("Unsupported motion behavior");
+  const fields = MOTION_FIELDS[behavior.type];
+  for (const key of Object.keys(behavior)) if (!fields.includes(key)) throw new Error(`Unsupported ${behavior.type} field: ${key}`);
+  if (behavior.id !== undefined && (typeof behavior.id !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,79}$/.test(behavior.id))) throw new Error("Invalid motion behavior id");
   if (behavior.type === "flight") {
     for (const field of ["speed", "rollRateDegrees", "pitchUpDegrees", "pitchDownDegrees"]) {
       const value = behavior[field];

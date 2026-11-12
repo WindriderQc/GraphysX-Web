@@ -7,7 +7,7 @@
 
 import { resolveAgentAppearance } from "./agent-appearance.mjs";
 import { materializeMeshCommand } from "./mesh-authoring.mjs";
-import { validateMotionBehavior } from "./motion-behaviors.mjs";
+import { MOTION_FIELDS, validateMotionBehavior } from "./motion-behaviors.mjs";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates, MESH_FIELDS, MESH_GROUP_FIELDS, MESH_LIMITS, PIXEL_FIELDS, PIXEL_LIMITS } from "./inline-mesh.mjs";
 import {
   assertAuthoredSceneCommandNamespaces,
@@ -116,8 +116,8 @@ export const FIELDS = Object.freeze({
     pulse: Object.freeze(["id", "type", "minimumScale", "maximumScale", "frequencyHz", "phaseDegrees"]),
     "look-at": Object.freeze(["id", "type", "targetId"]),
     "follow-spline": Object.freeze(["id", "type", "splineId", "speed", "phase", "loop", "orientToPath"]),
-    keyframes: Object.freeze(["id", "type", "durationSeconds", "startSeconds", "loop", "positions", "rotations"]),
-    flight: Object.freeze(["id", "type", "speed", "rollRateDegrees", "pitchUpDegrees", "pitchDownDegrees"]),
+    keyframes: MOTION_FIELDS.keyframes,
+    flight: MOTION_FIELDS.flight,
   }),
   interactions: Object.freeze({
     "toggle-visibility": Object.freeze(["id", "label", "type", "targetIds"]),

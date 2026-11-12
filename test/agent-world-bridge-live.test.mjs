@@ -370,6 +370,9 @@ test("all recovered worlds and TVA ranges cross the actual storage validator; ma
   const w = world(t);
   for (const behavior of [
     { type: "flight", speed: -1 }, { type: "flight", speed: Infinity },
+    { type: "flight", acceleration: 1 },
+    { id: "bad behavior id", type: "flight" },
+    { type: "keyframes", durationSeconds: 2, rotations: [[0, 0, 0, 0, 1]], mystery: true },
     { type: "keyframes", durationSeconds: 0, positions: [[0, 0, 0, 0]] },
     { type: "keyframes", durationSeconds: 2, positions: [[1, 0, 0, 0], [1, 2, 0, 0]] },
     { type: "keyframes", durationSeconds: 2, rotations: [[0, 0, 0, 0, 0]] },
