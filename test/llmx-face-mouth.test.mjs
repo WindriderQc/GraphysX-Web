@@ -41,13 +41,14 @@ test("the walls darken from the lips to the back", () => {
 });
 
 test("the two lower mouth corners stay walls instead of flashing with the teeth", () => {
-  const { interior, positions } = interiorOf("high");
+  const { w, interior, positions } = interiorOf("high");
   for (const side of [-1, 1]) {
-    const corner = [...interior.role.keys()].find(k =>
-      Math.abs(positions[k * 3] - side * 0.216) < 1e-5
-      && Math.abs(positions[k * 3 + 1] + 0.576) < 1e-5
-      && Math.abs(positions[k * 3 + 2] - 0.436) < 1e-5);
-    assert.notEqual(corner, undefined, "sample the actual corner cube in the shipped sculpt");
+    // The re-sculpt can replace a boundary cell. Sample the nearest real corner surface,
+    // retaining the original regression's anatomical location rather than its old grid cell.
+    const target = [side * w.anchors.mouth.halfWidth * 0.8, w.anchors.mouth.y - 0.056, MOUTH_LOOK.frontZ - 0.004];
+    const distance = k => Math.hypot(...target.map((value, axis) => positions[k * 3 + axis] - value));
+    const corner = [...interior.role.keys()].reduce((best, k) => distance(k) < distance(best) ? k : best, 0);
+    assert.ok(distance(corner) < w.level.cube * 1.6, "sample the actual corner surface in the shipped sculpt");
     assert.equal(interior.role[corner], MOUTH_ROLE.wall, `corner ${side} must not follow tooth reveal`);
   }
 });
@@ -99,9 +100,11 @@ test("teeth stay steady through quiet syllables and short pauses, then fade afte
   assert.equal(state.value, 0, "sustained silence leaves no pale line");
 });
 
-test("a closed, idle mouth has no light; speech and thought light it", () => {
+test("a closed, idle mouth has no light; speech and thought retain a restrained ember", () => {
   assert.equal(emberLevel(0, 0, 3), 0);
-  assert.ok(emberLevel(0.66, 0, 3) > 0.3 && emberLevel(1, 0, 3) > emberLevel(0.4, 0, 3) * 2, "speaking: the ember follows the opening");
+  assert.ok(emberLevel(0.66, 0, 3) > 0.08 && emberLevel(1, 0, 3) <= 0.2
+    && emberLevel(1, 0, 3) > emberLevel(0.4, 0, 3) * 2, "speech keeps a trace of warmth without a bright interior bar");
   const breaths = [0, 1, 2, 3, 4].map((t) => emberLevel(0, 1, t));
-  assert.ok(Math.min(...breaths) > 0 && Math.max(...breaths) - Math.min(...breaths) > 0.15, "thinking: a slow breath, never out");
+  assert.ok(Math.min(...breaths) > 0 && Math.max(...breaths) <= 0.14
+    && Math.max(...breaths) - Math.min(...breaths) > 0.04, "thinking: a dim slow breath, never out");
 });

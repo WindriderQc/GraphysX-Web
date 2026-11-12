@@ -62,6 +62,8 @@ const EXPRESSIONS = [
   ["think", { think: 1 }],
   ["attention", { attention: 1 }],
   ["warmth", { warmth: 1 }],
+  ["curiosity", { curiosity: 1, attention: 0.55 }],
+  ["surprise", { surprise: 1, attention: 1 }],
   ["think mid-breath", { think: 1, breath: 1.3 }],
 ];
 

@@ -26,7 +26,7 @@ test("the lid's edge follows the lid: raised by attention, lowered by a blink", 
   const alert = lidEdgeY(R, -0.33);
   const closing = lidEdgeY(R, 0.8);
   assert.ok(alert > rest && rest > closing, `${alert.toFixed(3)} > ${rest.toFixed(3)} > ${closing.toFixed(3)}`);
-  assert.ok(Math.abs(lidEdgeY(R, 0) - R * 0.38) < 1e-9, "at rest angle the edge is the sculpt's lid line");
+  assert.ok(Math.abs(lidEdgeY(R, 0) - R * 0.66) < 1e-9, "at rest angle the edge is the sculpt's lid line");
 });
 
 test("the lid shadows the top of the iris and leaves its lower half alone", () => {
