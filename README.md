@@ -72,6 +72,11 @@ The [revival and UX audit](docs/REVIVAL_AND_UX.md) compares the original C++/C# 
 the first web revival and the current product, and records remaining recovery work.
 It is **not a deletion clearance** for the historical repository.
 
+Archives now opens the complete Maison/Cuisine explorer, Unity Arena, Common Room,
+CubX notes, CubZ TVA animation studies, controllable FlightX and the native physics intro.
+Their panels distinguish source geometry/behavior from adapted presentation and missing
+features. These worlds use the same Studio, world API and pause/step clock as current work.
+
 Use Node.js 22 (the CI version). The browser product needs no database, model provider,
 hardware or scene-store service to start:
 

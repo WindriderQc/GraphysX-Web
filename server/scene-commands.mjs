@@ -7,6 +7,7 @@
 
 import { resolveAgentAppearance } from "./agent-appearance.mjs";
 import { materializeMeshCommand } from "./mesh-authoring.mjs";
+import { validateMotionBehavior } from "./motion-behaviors.mjs";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates, MESH_FIELDS, MESH_GROUP_FIELDS, MESH_LIMITS, PIXEL_FIELDS, PIXEL_LIMITS } from "./inline-mesh.mjs";
 import {
   assertAuthoredSceneCommandNamespaces,
@@ -24,7 +25,7 @@ const PHYSICS_FORBIDDEN_TYPES = new Set([
   "group", "spline", "emitter", "sound", "terrain", "water", "flock", "crowd", "force-field",
   "formula-field", "dna-tree", "ambient-light", "directional-light", "point-light",
 ]);
-const MOTION_BEHAVIORS = new Set(["spin", "bob", "orbit", "pulse", "look-at", "follow-spline"]);
+const MOTION_BEHAVIORS = new Set(["spin", "bob", "orbit", "pulse", "look-at", "follow-spline", "keyframes", "flight"]);
 
 /**
  * The field names each block accepts. One table, read by the validators below and by
@@ -115,6 +116,8 @@ export const FIELDS = Object.freeze({
     pulse: Object.freeze(["id", "type", "minimumScale", "maximumScale", "frequencyHz", "phaseDegrees"]),
     "look-at": Object.freeze(["id", "type", "targetId"]),
     "follow-spline": Object.freeze(["id", "type", "splineId", "speed", "phase", "loop", "orientToPath"]),
+    keyframes: Object.freeze(["id", "type", "durationSeconds", "startSeconds", "loop", "positions", "rotations"]),
+    flight: Object.freeze(["id", "type", "speed", "rollRateDegrees", "pitchUpDegrees", "pitchDownDegrees"]),
   }),
   interactions: Object.freeze({
     "toggle-visibility": Object.freeze(["id", "label", "type", "targetIds"]),
@@ -193,7 +196,7 @@ const SKY_IDS = new Set(["clearblue", "ballz18-clear-sky", "lostvalley", "skyx",
 const OVERLAY_IDS = new Set(["vignette", "starfield", "scanlines"]);
 const HDRI_IDS = new Set(["studio-small-08", "studio-garden", "overcast-soil", "lilienstein", "vignaioli-night"]);
 const TEXTURE_IDS = new Set([
-  "checker", "green-grid", "abstract-cubes", "two-way", "eroded-metal", "rusted-metal", "marble",
+  "checker", "green-grid", "abstract-cubes", "two-way", "eroded-metal", "rusted-metal", "marble", "notes-marble10",
   "wood-floor", "classic-alien01", "classic-alien01-normal", "classic-checkerboard", "classic-alien02",
   "classic-alien02-normal", "classic-wood03", "worn-wood", "earth", "moon", "mars", "venus",
   "earth-clouds", "earth-surface", "electronic-board", "concrete", "objet39", "podium", "grass-sample",
@@ -203,6 +206,7 @@ const TEXTURE_IDS = new Set([
 // remain authorable when they carry their HTTPS URL; an id alone is only safe when every
 // released client is guaranteed to know it.
 const MODEL_ASSET_IDS = new Set([
+  "archive-cuisine", "archive-maison", "archive-unity-arena",
   "bush-01", "bush-02", "bush-03", "bush-04", "camp1-post", "camp1-tent1", "camp1-tent2", "camp1-tent3",
   "doman-m", "grass-flower01", "grass-flower02", "grass-reed01", "grass-reed02", "grass-reed03", "ishad-f",
   "port-const1", "port-const2", "port-cottage", "port-cottage2", "port-cottage4", "port-cottage5", "port-fishhouse",
@@ -721,6 +725,9 @@ function validateBehaviors(value, label) {
       if (behavior.speed !== undefined) requireFinite(behavior.speed, `${itemLabel}.speed`);
       if (behavior.phase !== undefined) requireFinite(behavior.phase, `${itemLabel}.phase`);
       for (const key of ["loop", "orientToPath"]) if (behavior[key] !== undefined) requireBoolean(behavior[key], `${itemLabel}.${key}`);
+    } else if (behavior.type === "keyframes" || behavior.type === "flight") {
+      allowedKeys(behavior, setOf(FIELDS.behaviors[behavior.type]), itemLabel);
+      validateMotionBehavior(behavior);
     } else {
       reject(`Unsupported behavior: ${String(behavior.type)}`);
     }

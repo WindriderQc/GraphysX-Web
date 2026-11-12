@@ -15,6 +15,7 @@ import { EXAMPLES, buildWorldVocabulary, renderWorldVocabulary } from "../server
 import { PROPOSABLE_OPS, PROVIDER_LIMITS, validateProviderCommands } from "../src/coauthor-provider.ts";
 
 const runtimeSource = readFileSync(new URL("../src/agent-world-runtime.ts", import.meta.url), "utf8");
+const motionSource = readFileSync(new URL("../src/agent-world-motion.ts", import.meta.url), "utf8");
 const prefabSource = readFileSync(new URL("../src/agent-world-prefabs.ts", import.meta.url), "utf8");
 
 /** The string literals of one exported union type, e.g. `export type X = | "a" | "b";`. */
@@ -34,7 +35,8 @@ function commandOps() {
 
 /** Every behavior `type: "…"` literal declared on an `AgentWorld…Behavior` type. */
 function behaviorTypes() {
-  return [...runtimeSource.matchAll(/export type AgentWorld\w+Behavior = \{[^}]*?type: "([a-z-]+)"/g)].map((hit) => hit[1]);
+  const runtime = [...runtimeSource.matchAll(/export type AgentWorld\w+Behavior = \{[^}]*?type: "([a-z-]+)"/g)].map((hit) => hit[1]);
+  return [...runtime, ...[...motionSource.matchAll(/export type \w+Behavior = \{[^}]*?type: "([a-z-]+)"/g)].map(hit => hit[1])];
 }
 function interactionTypes() {
   return [...runtimeSource.matchAll(/export type AgentWorld\w+Interaction = \{[^}]*?type: "([a-z-]+)"/g)].map((hit) => hit[1]);

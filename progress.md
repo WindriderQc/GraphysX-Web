@@ -5393,3 +5393,29 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
   All file flush/rename failures still propagate; POSIX directory fsync remains mandatory.
   Windows' narrower namespace durability is documented, not silently overstated.
   The unchanged world-reliability suite now passes 12/12 on Windows.
+
+### Extended source recovery and runtime qualification
+
+- Added the complete 24-part Maison model beside the complete 76-part Cuisine in one
+  explorer. Switching source/massing views preserves user edits through ordinary visibility
+  commands. Added Unity Arena OBJ/atlas, Common Room's 180-vertex/250-triangle shell with
+  source DDS diffuse/normal maps, and 50 source-positioned notes plates using marble10.
+- Added canonical bounded keyframes and kinematic flight behaviors, shared runtime/storage
+  validation and public pilotLive bridge parity. Inputs are transient, respect pause/step
+  and reserved scopes, and cannot save held keys or churn authored revision/history.
+- CubZ now plays seven source TVA rotation ranges and three face tracks on actual 3D
+  hierarchy, including same-range reverse. Procedural geometry/pivots remain disclosed
+  adapters; this is not a claim that the complete original actor/menu is restored.
+- FlightX is controllable in Archives by keyboard and hold controls with optional chase
+  camera. W/S local-X, Z/X rotation channels, R attitude reset and Space's extra downward
+  pitch are source-backed. Speed/timestep, scene placement and StockRoom airplane substitute
+  remain adapters; no aerodynamic simulation or source race layout is invented.
+- Focused runtime/vocabulary contracts pass 22/22; metadata/impact contracts pass 23/23.
+  The six-world production-build browser journey passes with zero asset/browser errors,
+  including 100 loaded Maison/Cuisine mesh parts, DDS maps, notes undo, CubZ opening/reverse,
+  FlightX movement/release/blur/mobile hold and control teardown. Captures inspected.
+  Mobile chase framing was improved after that capture; the full gate will requalify it.
+- The unchanged standard web-game Playwright client also passes, with screenshot and
+  render_game_to_text inspected at output/playwright/revival-standard-client. Recovery
+  scene evidence is in output/playwright/revival-final-worlds. Updated archive thumbnails
+  show actual reproducible note/opening interaction states. Full release gate is next.

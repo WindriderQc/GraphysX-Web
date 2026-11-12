@@ -179,6 +179,8 @@ const describe = {
     spin: "Rotate about `axis` at `speedDegrees` per second.", bob: "Oscillate along `axis` by `amplitude` metres at `frequencyHz`.",
     orbit: "Circle `center` at `radius` and `speedDegrees` per second.", pulse: "Scale between `minimumScale` and `maximumScale` at `frequencyHz`.",
     "look-at": "Face `targetId` every frame.", "follow-spline": "Travel along `splineId` at `speed` m/s; `loop`, `orientToPath`.",
+    keyframes: "Local positions [seconds,x,y,z] and/or rotations [seconds,qx,qy,qz,qw], 1..512 strictly ordered keys per track. durationSeconds >0..3600, optional startSeconds and loop. Position +/-10000, normalized quaternion interpolation; final pose holds without loop.",
+    flight: "Kinematic local-X flight, local-Z roll and reflected local-X pitch. speed and rollRateDegrees/pitchUpDegrees/pitchDownDegrees 0..1000. Transient pilotLive input; authored initial transform and behavior round-trip without held keys.",
   },
   interactions: {
     "toggle-visibility": "Flip `visible` on `targetIds`.", "apply-impulse": "Push dynamic `targetIds` by `impulse` [x,y,z] newton-seconds.",

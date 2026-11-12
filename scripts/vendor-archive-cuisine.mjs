@@ -10,10 +10,14 @@ import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const archive = path.resolve(process.argv[2] || path.join(root, "..", "GraphysX"));
-const source = "web-prototype/public/assets/maison-explorer/cuisine-best.fbx";
+const variant = process.argv[3] || "cuisine";
+if (variant !== "cuisine" && variant !== "maison") throw new Error("Expected cuisine or maison");
+const house = variant === "maison";
+const source = `web-prototype/public/assets/maison-explorer/${house ? "maison" : "cuisine"}-best.fbx`;
 const bytes = await readFile(path.join(archive, source));
 const sha256 = createHash("sha256").update(bytes).digest("hex");
-if (sha256 !== "24846d8ec083477f87e91f46ed31da952a575b7f7cd3b234b6d11a4603b5b14e") throw new Error("Cuisine source hash changed");
+const expectedHash = house ? "43cb7e5206f56d71ed6bf7986662b3eb504634616fdda1ed7bfa8875427f8db7" : "24846d8ec083477f87e91f46ed31da952a575b7f7cd3b234b6d11a4603b5b14e";
+if (sha256 !== expectedHash) throw new Error(`${variant} source hash changed`);
 const manager = new LoadingManager();
 // The one external photograph was already absent in the original revival. Preserve that
 // boundary instead of fetching an arbitrary file or inventing a replacement texture.
@@ -55,15 +59,15 @@ scene.traverse((object) => {
     groups: geometry.groups.map((group) => ({ start: group.start, count: group.count, materialIndex: group.materialIndex ?? 0 })), materials });
   geometry.dispose();
 });
-if (meshes.length !== 76) throw new Error(`Expected 76 kitchen meshes, got ${meshes.length}`);
+if (meshes.length !== (house ? 24 : 76)) throw new Error(`Unexpected ${variant} mesh count: ${meshes.length}`);
 const payload = {
-  catalog: { label: "Cuisine · complete Blender archive", category: "archive-prop" },
+  catalog: { label: `${house ? "Maison" : "Cuisine"} · complete Blender archive`, category: "archive-prop" },
   bounds: { min, max, size: min.map((value, axis) => max[axis] - value) }, meshes,
-  provenance: { archiveSource: "blenderModel/Maison/Cuisine.blend → cuisine-best.fbx", source, sha256,
-    faithful: ["All 76 meshes with world transforms, normals, UVs, material groups and source colours"],
+  provenance: { archiveSource: house ? "blenderModel/Maison/maison.blend → maison-best.fbx" : "blenderModel/Maison/Cuisine.blend → cuisine-best.fbx", source, sha256,
+    faithful: [`All ${house ? 24 : 76} meshes with world transforms, normals, UVs, material groups and source colours`],
     adapted: ["Hierarchy baked into named model meshes", "Blender lighting translated by the scene composer"],
-    absent: ["Unpacked Desktop JPG already missing in the recovered Blender file"] },
+    absent: house ? [] : ["Unpacked Desktop JPG already missing in the recovered Blender file"] },
 };
-await writeFile(path.join(root, "public/assets/ports/archive-cuisine.json"), JSON.stringify(payload,
+await writeFile(path.join(root, `public/assets/ports/archive-${variant}.json`), JSON.stringify(payload,
   (_key, value) => typeof value === "number" ? Number(value.toFixed(7)) : value));
 console.log(JSON.stringify({ meshes: meshes.length, vertices: meshes.reduce((n, mesh) => n + mesh.positions.length / 3, 0), bounds: payload.bounds }));

@@ -89,7 +89,8 @@ try {
   await page.waitForSelector('.gx-browse [data-collection="archive"][aria-pressed="true"]');
   check("archive entry opens its own collection", (await visible()).every((collection) => collection === "archive") && (await visible()).length > 0);
   await page.screenshot({ path: path.join(artifacts, "archives-desktop.png") });
-  await page.click('[data-scene-id="archive-cuisine"]');
+  await page.click('[data-scene-id="archive-maison"]');
+  await page.click('[data-archive-action="kitchen"]');
   await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["cuisine-model"] })[0]?.asset?.status === "ready");
   const kitchenMeshes = await page.evaluate(() => {
     let meshes = 0;
@@ -97,7 +98,7 @@ try {
     return meshes;
   });
   check("all 76 kitchen meshes load through the normal model runtime", kitchenMeshes === 76);
-  check("archive opens in the real editor", (await page.locator(".gx-ed-toolbar").isVisible()) && (await state()).world.id === "archive-cuisine");
+  check("archive opens in the real editor", (await page.locator(".gx-ed-toolbar").isVisible()) && (await state()).world.id === "archive-maison-explorer");
   await page.waitForFunction(() => !window.__GRAPHYSX_HOST__.focusing);
   await page.screenshot({ path: path.join(artifacts, "cuisine-source-camera.png") });
   await captureScenePreview("cuisine-preview.jpg");

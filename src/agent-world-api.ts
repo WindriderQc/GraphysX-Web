@@ -167,6 +167,7 @@ export function createAgentWorldApi(runtime: AgentWorldRuntime): GraphysXAgentWo
     interact: (id, interactionId) => runtime.interact(id, interactionId),
     steer: (id, input) => runtime.steer(id, input),
     steerLive: (id, input) => runtime.steerLive(id, input),
+    pilotLive: (id, input) => runtime.pilotLive(id, input),
     setSlowdownLive: (id, factor) => runtime.setSlowdownLive(id, factor),
     prefabs: () => runtime.listPrefabs(),
     spawnPrefab: (prefabId, options) => runtime.spawnPrefab(prefabId, options),

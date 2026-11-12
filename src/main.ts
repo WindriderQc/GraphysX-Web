@@ -4,7 +4,6 @@ import { AGENT_WORLD_DNA_MAX_GENERATION } from "./agent-world-dna";
 import type { ContentCollection } from "./content-collections";
 import {
   ARCHIVE_BUILDINGS,
-  archiveBuildingBrowseRows,
   buildArchiveBuilding,
   composeArchiveBuilding,
 } from "./archive-buildings";
@@ -980,21 +979,18 @@ if (appParam === "vr-lab") {
           // as a composed row. main.ts supplies it because framing needs the host, which the
           // shelf deliberately does not have.
           composed: [
-            ...(["cuisine", "native-intro"] as const).map((scene) => ({
+            ...(["native-intro"] as const).map((scene) => ({
               id: `archive-${scene}`,
-              label: scene === "cuisine" ? "Cuisine · Blender" : "Intro Physics · ArduinoGUI C#",
-              summary: scene === "cuisine"
-                ? "La cuisine complète : 76 maillages, meubles, poignées et détails récupérés. Photo externe absente ; éclairage adapté."
-                : "La composition C# retrouvée : deux familles de dix cylindres et le sol Alien. Géométrie et masses sources ; physique Rapier adaptée.",
-              meta: scene === "cuisine" ? "Reprise partielle · géométrie complète · caméra source" : "Reprise partielle · 20 corps · clic pour pousser",
+              label: "Intro Physics · ArduinoGUI C#",
+              summary: "La composition C# retrouvée : deux familles de dix cylindres et le sol Alien. Géométrie et masses sources ; physique Rapier adaptée.",
+              meta: "Reprise partielle · 20 corps · clic pour pousser",
               open: async () => {
                 const { composeArchiveRevival } = await import("./archive-revival-scenes");
                 if (nestorBlockedByLiveSession()) return;
                 composeArchiveRevival(host.api, scene);
                 showroomEnvironment?.(); showroomEnvironment = null;
                 host.applyEnvironment();
-                if (scene === "cuisine") host.frameView([-3.002289, 1.140502, -2.731321], [1.935196, 0.965262, -1.962851], motionIsReduced() ? 0 : 1);
-                else host.frameView([0, 10, -10], [10, 5, 10], motionIsReduced() ? 0 : 1);
+                host.frameView([0, 10, -10], [10, 5, 10], motionIsReduced() ? 0 : 1);
                 enterBrowsedEditor();
               },
             })),
@@ -1054,12 +1050,25 @@ if (appParam === "vr-lab") {
             // The recovered Voie Lactee vignette. Same shape as the playgrounds: it opens in the
             // editor like any browsed scene.
             // The recovered Maison massing model.
-            ...archiveBuildingBrowseRows(host.api, () => {
-              showroomEnvironment?.();
-              showroomEnvironment = null;
-              host.applyEnvironment();
-              enterBrowsedEditor();
-            }),
+            ...([
+              { world: "maison", id: "archive-maison", label: "Maison & Cuisine", summary: "Les deux compositions Blender complètes, leurs caméras sources et l’ancienne étude de volumes réunies dans un seul explorateur.", meta: "24 + 76 maillages sources · photo de cuisine absente · éclairage adapté" },
+              { world: "arena", id: "archive-unity-arena", label: "Unity Arena", summary: "L’arène octogonale et son atlas peint à la main. La scène d’origine ne contenait aucun jeu ni script.", meta: "OBJ + atlas d’origine · caméra source · aucun gameplay inventé" },
+              { world: "common-room", id: "archive-common-room", label: "Common Room", summary: "La coque détaillée de room.tvm et ses textures DDS diffuse et normale. Une visite adaptée au moteur actuel.", meta: "180 sommets · 250 triangles · textures sources · caméra de visite adaptée" },
+              { world: "notes", id: "archive-notes", label: "Notes 3D · CubX", summary: "Le bloc spatial de 50 plaques et son ajout séquentiel. Le gestionnaire de texte n’a jamais été retrouvé.", meta: "Composition native · 50 emplacements · ajout, annulation et reprise dans le Studio" },
+              { world: "cubz", id: "archive-cubz-tracks", label: "CubZ · animations TVA", summary: "Sept rotations de l’ensemble et trois faces qui s’ouvrent en 3D, pilotées par les pistes retrouvées.", meta: "Clés TVA sources · retour inversé corrigé · géométrie et pivots adaptés" },
+              { world: "flightx", id: "archive-flightx", label: "FlightX · vol libre", summary: "Reprendre les commandes de FlightX : déplacement relatif, rotations et caméra de poursuite. Clavier et commandes tactiles.", meta: "Commandes C++ adaptées · avion et pipe sources · repères de visite modernes" },
+            ] as const).map((entry) => ({
+              ...entry,
+              open: async () => {
+                const [{ buildArchiveWorld }, { mountArchiveWorkbench }] = await Promise.all([import("./archive-worlds"), import("./archive-workbench")]);
+                if (nestorBlockedByLiveSession()) return;
+                const result = host.api.create(buildArchiveWorld(entry.world));
+                if (!result.ok) throw new Error(result.error ?? "Could not open archive world");
+                showroomEnvironment?.(); showroomEnvironment = null;
+                host.applyEnvironment(); enterBrowsedEditor();
+                mountArchiveWorkbench(root, host, entry.world);
+              },
+            })),
             // The Math Lab page: a person types the blocks Nestor writes in AgentX and sees the same
             // Math Game picture, with no assistant. It replaced the recovered Math Game screen
             // (archive-math-lab) on 2026-11-07; `formula-field` stays world vocabulary.
@@ -1300,6 +1309,7 @@ if (appParam === "vr-lab") {
         joints: host.api.state()?.joints ?? [],
         run: host.api.rules.status(),
         archiveCup: getArchiveCupRuntimeState(),
+        archiveMotion: host.api.query({ tag: "archive-motion" }).map(entity => ({ id: entity.id, position: entity.position, rotationDegrees: entity.rotationDegrees, behaviors: entity.behaviors })),
         personalGhost: getPersonalGhostState(),
         discovery: { tour: tourController?.state() ?? IDLE_TOUR_STATE,
           dnaGeneration: host.api.query({ ids: ["showroom-dna-grove"] })[0]?.dna?.generation ?? null,

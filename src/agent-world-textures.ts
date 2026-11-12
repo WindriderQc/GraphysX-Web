@@ -89,6 +89,11 @@ export const GRAPHYSX_AGENT_WORLD_TEXTURES = [
     source: "GraphysX archive"
   },
   {
+    id: "notes-marble10", label: "Notes Marble 10", category: "surface",
+    url: "/assets/archives/notes-manager/marble10.jpg", defaultRepeat: [1, 1],
+    description: "Original marble10 texture referenced by the native CubX notes manager.", source: "GraphysX BlocNote.cpp"
+  },
+  {
     id: "wood-floor",
     label: "Wood Floor",
     url: "/assets/textures/ballz18/WoodFloor05_col.jpg",
