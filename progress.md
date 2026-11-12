@@ -5365,3 +5365,21 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
 - Remaining recovery work is source-linked in the audit: full CubX choreography, FlightX,
   exact Maison consolidation, Unity/Common Room, vehicle worlds and device/notes fidelity.
   No LAN/hardware transport, live model or headset acceptance was exercised.
+
+### Final local reception
+
+- Implementation commit: 22ccd9a. Final typecheck, lint and production build pass. Final
+  unit run repeats 1,294 passes / four unchanged directory-fsync EPERM failures / one skip.
+  Both Rapier heightfield and material-parity probes pass independently.
+- Eleven distinct browser journeys qualified: revival, showroom, showroom-camera,
+  nestor-request, games, archive-cup, great-slide, map1, level1-2011, suzanne-machinery, top20.
+  Final DNA feedback/lineage limits and the provider/no-provider request contract were
+  checked again on the final built bundle; no browser exceptions or asset failures.
+- Provider qualification uses a loopback fixture, never the live homelab/model. Inspected
+  desktop/mobile and recovered-scene captures are in output/playwright/revival-regressions.
+  Logs: output/revival-final-static.log, revival-regressions-built.log,
+  revival-final-journeys.log. The old Nestor test's visibility expectation was updated to
+  assert the intentional hidden/disabled no-provider form and the visible connected form.
+- Delivered locally on codex/revival-front-door. Original archive tracked changes remain
+  exactly its two pre-existing handoff-prompt edits. No archive deletion, publishing,
+  hardware transport or MCP expansion was performed. Remaining archaeology is in the audit.

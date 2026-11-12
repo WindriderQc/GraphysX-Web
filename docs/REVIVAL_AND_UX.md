@@ -135,3 +135,22 @@ step; the tests fail on syncing the parent directory after rename. This pass doe
 the assertions or change the persistence service. A full release gate must not be reported
 green while these failures remain. Physical headset/controller and live Nestor/homelab
 acceptance are outside this local browser qualification.
+
+### Local reception
+
+Implementation commit: `22ccd9a`. Typecheck, lint and production build pass. The final
+static run reports 1,294 passing tests, four parent-directory `fsync` failures and one skip;
+the complete release gate is therefore not green. Both standalone Rapier heightfield and
+material-parity probes pass.
+
+Eleven distinct browser journeys were qualified: revival, showroom, showroom-camera,
+nestor-request, games, archive-cup, great-slide, map1, level1-2011, suzanne-machinery and
+top20. The final discovery/DNA status and lineage boundary changes were checked again
+against the final production build, together with the updated Nestor request contract.
+The Nestor provider is a loopback fixture; no live model or household service was used.
+
+Local receipts are retained in `output/revival-final-static.log`,
+`output/revival-regressions-built.log`, `output/revival-final-journeys.log` and
+`output/playwright/revival-regressions/`. Inspected captures include desktop/mobile welcome,
+archive collections, the source-camera kitchen, native physics intro and the existing games.
+These are local artifacts, not a production deployment or headset acceptance.
