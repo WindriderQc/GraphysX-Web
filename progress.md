@@ -5419,3 +5419,32 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
   render_game_to_text inspected at output/playwright/revival-standard-client. Recovery
   scene evidence is in output/playwright/revival-final-worlds. Updated archive thumbnails
   show actual reproducible note/opening interaction states. Full release gate is next.
+
+### Final continuation reception — 2026-11-12
+
+- Final implementation qualified at 4c14d61. Additional contracts reject unknown motion
+  fields/invalid IDs identically in browser and storage, with ordinary status-400 authoring
+  refusals. Red/green evidence is retained in output/revival-motion-unknown-fields-before.log,
+  revival-motion-rejection-before.log and revival-motion-final-contracts.log (22/22 pass).
+  FlightX's functional pilot controls remain in its explorer; removed an idle generic chip.
+- Full plan ran all 119 default executable smokes, with 116 initial passes and three
+  initial failures: ecosystem autoplay setup, old four-destination first-creation tuple,
+  and intermittent PMREM link diagnostics during the Math Lab journey. Three dedicated
+  GPU receptions were explicitly not run. The original full-run exit1 is retained.
+- Final fresh-source qualification passes full Node (1301 pass /1 conditional skip /0 fail),
+  typecheck, lint, build, ecosystem, first-creation (desktop/phone), Math Lab, editor and all
+  six archive worlds. All original assertions remain; first-creation now requires all five
+  targets. Ecosystem setup chooses the paused overview before its independent clock test.
+  Every default registered check now has a passing receipt across the full run/rechecks.
+- The exact PMREM diagnostic pair already appears in the repository's 2026-10-26 entry.
+  No Math Lab product code or shader checks were weakened. Final Math Lab plus six repeated
+  immediate/sky-ready navigations draw correctly with zero errors. This does not establish
+  a permanent fix for the historical intermittent renderer issue; error locations are now
+  recorded for any recurrence.
+- Inspected final standard-client screenshot/text (DNA generation3), source-world captures
+  and mobile FlightX framing. Source FBX inspection confirms correct winding/normal alignment
+  on the two mirrored Kitchen parts. Source archive status is unchanged (two prior prompts).
+- Logs: output/revival-full-release.log, output/revival-postgate.log. Final captures/state:
+  output/playwright/revival-postgate, revival-standard-final, output/verify. Detailed scope
+  and source limitations are in docs/REVIVAL_AND_UX.md. PR142 CI is green; integrate/deploy
+  next, with public revision/asset checks separate from local visual qualification.

@@ -204,3 +204,43 @@ Local receipts are retained in `output/revival-final-static.log`,
 `output/playwright/revival-regressions/`. Inspected captures include desktop/mobile welcome,
 archive collections, the source-camera kitchen, native physics intro and the existing games.
 These are local artifacts, not a production deployment or headset acceptance.
+
+### Continuation qualification — 2026-11-12
+
+Final tested implementation: `4c14d61b94d70fd1f56e0a2aa041403a4be7b051`.
+The full registered plan executed all **119 default checks**, with the three hardware-GPU
+receptions explicitly excluded. It initially passed 116 checks and failed three:
+
+- `ecosystem`: autoplay advanced before the paused-overview assertion. Setup now selects
+  the overview through the real UI; the original assertions and independent 7.5-second
+  clock-advance test remain. The full targeted journey passes.
+- `first-creation`: its old expected tuple contained four destinations. It now requires
+  all five destinations to be visible, clickable and at least 44 pixels tall. Desktop and
+  phone creation, named save, resume and editor handoff pass.
+- `math-lab`: all geometry/parameter/layout checks passed, but one run logged empty-info
+  PMREM shader validation errors. The project already records this intermittent pair on
+  older `367e957` (see the 2026-10-26 progress entry). The unchanged Math Lab journey passes
+  on recheck, and three immediate plus three sky-ready welcome-to-Math-Lab navigations
+  all draw correctly with zero errors. No shader error is filtered and no timeout was
+  extended. This is a non-reproduced renderer incident, not a claim of a permanent driver fix.
+
+Final follow-ups make motion fields/IDs and numeric buffers share strict runtime/storage
+validation, preserve status-400 authoring refusals, and keep FlightX pilot controls in its
+usable explorer rather than an idle generic inspector chip. The final source was then
+qualified with a fresh build: **1,301 Node tests pass, one conditional skip, zero failures**;
+typecheck and lint pass. Ecosystem, first creation, Math Lab, the editor and all six archive
+worlds pass on that final build. Both Rapier probes passed in the full run; no physics
+implementation changed afterward. All 119 default checks now have passing receipts across
+the full run and targeted rechecks; the initial full run itself remains recorded as exit 1.
+
+The unmodified standard web-game Playwright client also passes against the final build;
+its screenshot and text state were inspected. Final FlightX mobile framing keeps the whole
+plane visible. Six-world diagnostics contain no page errors, failed requests or asset errors.
+Source-transform inspection also confirms the two reflected Kitchen parts retain consistent
+triangle winding and normals (12/12 and 10/10 triangles).
+
+Receipts: `output/revival-full-release.log`, `output/revival-postgate.log`,
+`output/revival-motion-final-contracts.log`, `output/playwright/revival-postgate/`,
+`output/playwright/revival-standard-final/` and `output/verify/`. The three GPU receptions,
+physical hardware/headset comfort and live homelab/model acceptance are not qualified here.
+The original native repository still has only its two pre-existing handoff-prompt edits.
