@@ -31,6 +31,8 @@ export interface ShowroomWelcomeHandle {
   showOutcome: (outcome: CoauthorOutcome | null) => void;
   /** A sentence about a request that produced no proposal — a provider's refusal — or null to clear it. */
   showNotice: (text: string | null) => void;
+  /** A direct human DNA action has its own status, separate from Nestor's proposals. */
+  showDnaStatus: (message: string, generation?: number) => void;
   /** While a provider is composing a request: the field waits and says so. */
   setRequestBusy: (busy: boolean) => void;
   /**
@@ -60,6 +62,8 @@ export function mountWelcome(
     onOpenEcosystem?: () => void;
     onOpenNetX?: () => void;
     onOpenIsland?: () => void;
+    onOpenArchive?: () => void;
+    onNextGeneration?: () => void;
     coauthor?: {
       onAccept?: () => void;
       onDiscard?: () => void;
@@ -75,8 +79,8 @@ export function mountWelcome(
   const nestorEnabled = variant === "agentx" && typeof onNestorTopic === "function";
   const center = nestorEnabled && Boolean(hooks?.creation);
   const welcomeLanguage = center ? "fr" : "en";
-  const welcomeEyebrow = center ? "Centre · guide Nestor" : "GraphysX · Nestor online";
-  const welcomeBriefing = center ? "Crée ta première scène ou essaie une démo." : "Pick a demo or ask; nothing changes until you accept.";
+  const welcomeEyebrow = center ? "Un terrain de jeu vivant" : "GraphysX · Nestor online";
+  const welcomeBriefing = center ? "Explore un monde, joue, ou construis le tien." : "Pick a demo or ask; nothing changes until you accept.";
   const welcomeStatus = center ? "Guide interactif · prêt" : "Scene-native guide · ready";
   const requestLabel = center ? "Demander" : "Ask";
   const style = document.createElement("style");
@@ -464,6 +468,7 @@ export function mountWelcome(
   /** The topic button or request field that asked for the pending proposal, for focus restoration. */
   let proposalOrigin: HTMLElement | null = null;
   const askInput = overlay.querySelector<HTMLInputElement>("[data-nestor-request]");
+  if (center && !hooks?.coauthor?.onRequest) overlay.querySelector<HTMLElement>("[data-nestor-ask]")?.setAttribute("hidden", "");
   const askSend = overlay.querySelector<HTMLButtonElement>("[data-nestor-request-send]");
   const focusRow = overlay.querySelector<HTMLElement>("[data-request-focus]")!;
   const focusCheck = overlay.querySelector<HTMLInputElement>("[data-request-focus-check]")!;
@@ -707,6 +712,18 @@ export function mountWelcome(
     outcome.dataset.outcome = "declined";
   };
 
+  const showDnaStatus = (message: string, generation?: number): void => {
+    const briefing = overlay.querySelector<HTMLElement>("[data-nestor-briefing]");
+    if (briefing) briefing.textContent = message;
+    const button = overlay.querySelector<HTMLButtonElement>(".gx-dna-next");
+    if (!button) return;
+    button.title = message;
+    if (generation !== undefined) {
+      button.textContent = `ADN · génération ${generation} ↗`;
+      button.setAttribute("aria-label", `Faire évoluer le bosquet ADN · génération actuelle ${generation}`);
+    }
+  };
+
   /** While a provider composes: the field reads as waiting and cannot send twice. */
   const setRequestBusy = (busy: boolean): void => {
     if (!nestorEnabled || !askInput || !askSend) return;
@@ -933,7 +950,7 @@ export function mountWelcome(
       button?.replaceChildren(title, hint);
     };
     label(".gx-go-editor", "Studio", "Éditeur complet");
-    label(".gx-go-browse", "Explorer", "Scènes 3D");
+    label(".gx-go-browse", "Créations", "Mondes à explorer");
     label(".gx-go-games", "Jouer", "Jeux et défis");
     const browse = dock.querySelector(".gx-go-browse");
     if (browse) dock.querySelector(".gx-go-editor")?.after(browse);
@@ -969,9 +986,29 @@ export function mountWelcome(
       apps.querySelector("summary")?.focus();
     });
     dock.append(apps);
+    if (hooks?.onOpenArchive) {
+      const archive = document.createElement("button");
+      archive.type = "button";
+      archive.className = "gx-go-archive";
+      archive.append("Archives & labo");
+      const hint = document.createElement("small");
+      hint.textContent = "Reprises et prototypes";
+      archive.append(hint);
+      archive.addEventListener("click", () => { hooks.onOpenArchive?.(); dispose(); });
+      dock.append(archive);
+    }
     overlay.append(dock);
+  }
+  if (center && hooks?.onNextGeneration) {
+    const life = document.createElement("button");
+    life.type = "button";
+    life.className = "gx-dna-next";
+    life.textContent = "ADN · génération suivante";
+    life.title = "Faire évoluer le bosquet visible, puis l’examiner dans le Studio";
+    life.addEventListener("click", hooks.onNextGeneration);
+    overlay.querySelector(".gx-nestor-topics")?.append(life);
   }
   if (!dock?.children.length) dock?.remove();
   container.append(style, overlay);
-  return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showNotice, setRequestBusy, setRequestEnabled, setRequestFocus, showTour, reset, dispose };
+  return { present, observeLiveActivity, observeMission, showProposal, showOutcome, showNotice, showDnaStatus, setRequestBusy, setRequestEnabled, setRequestFocus, showTour, reset, dispose };
 }

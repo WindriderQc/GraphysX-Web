@@ -7,6 +7,8 @@ const OUTPUT = path.resolve("public/assets/shelf-thumbnails");
 const PORT = Number(process.env.SHELF_THUMBNAIL_PORT || 4197);
 const BASE = `http://127.0.0.1:${PORT}/?intro=0`;
 const BROWSE_IDS = [
+  "archive-cuisine",
+  "archive-native-intro",
   "ev3-robotics-lab",
   "archive-maison",
   "archive-voie-lactee",
@@ -44,6 +46,7 @@ async function capture(id, shelf, selector) {
   await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForFunction(() => Boolean(window.__GRAPHYSX_HOST__), null, { timeout: 60_000 });
   await page.click(`.gx-welcome .gx-go-${shelf}`);
+  await page.click('[data-collection="all"]');
   await page.waitForSelector(selector, { timeout: 60_000 });
   // Dispatch the click on the element rather than through pointer hit-testing: the shelves
   // have grown past the 360-pixel capture viewport, and a row inside the shelf's own scroll

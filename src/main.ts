@@ -1,4 +1,7 @@
 import { connectLocalGraphysXAgent } from './graphysx-agent-connection';
+import { GRAPHYSX_DISCOVERY_TOUR } from "./showroom-journey";
+import { AGENT_WORLD_DNA_MAX_GENERATION } from "./agent-world-dna";
+import type { ContentCollection } from "./content-collections";
 import {
   ARCHIVE_BUILDINGS,
   archiveBuildingBrowseRows,
@@ -433,17 +436,22 @@ if (appParam === "vr-lab") {
       discardNestorProposal();
       tourController ??= createNestorTourController({
         entityExists: (id) => host.api.query({ ids: [id] }).length === 1,
-        focusEntity: (id) => { interaction?.focusEntity(id, true); },
+        focusEntity: (id, stop) => {
+          if (!stop.camera) { interaction?.focusEntity(id, true); return; }
+          const { position, target, via = [] } = stop.camera;
+          host.framePath([...via.map((point) => ({ position: point, target })), { position, target }], motionIsReduced() ? 0 : 2.8);
+        },
         // `api.select` sets selectedIds and nothing else — no revision, no history, no export.
         // A tour that authored anything would be a tour that changed the room it is describing.
         highlight: (ids) => { host.api.select(ids); },
         reducedMotion: motionIsReduced,
         onChange: (state) => welcome?.showTour(state),
       });
-      welcome?.showTour(tourController.start());
+      welcome?.showTour(tourController.start(GRAPHYSX_DISCOVERY_TOUR));
     };
     const stopNestorTour = (): void => {
-      if (!tourController) return;
+      if (!tourController || tourController.state().status !== "running") return;
+      host.cancelCameraMove();
       welcome?.showTour(tourController.cancel());
     };
     const discardNestorProposal = (): void => {
@@ -603,6 +611,22 @@ if (appParam === "vr-lab") {
             onOpenEcosystem: () => { window.location.search = "?app=ecosystem"; },
             onOpenNetX: () => { window.location.search = "?app=netx"; },
             onOpenIsland: () => { window.location.search = "?app=island"; },
+            onOpenArchive: () => openBrowse("archive"),
+            onNextGeneration: () => {
+              if (nestorBlockedByLiveSession()) return;
+              const grove = host.api.query({ ids: ["showroom-dna-grove"] })[0];
+              if (!grove) {
+                welcome?.showDnaStatus("Le bosquet ADN a été retiré. Tu peux en ajouter un dans le Studio.");
+                return;
+              }
+              const generation = (grove.dna?.generation ?? 1) + 1;
+              if (generation > AGENT_WORLD_DNA_MAX_GENERATION) {
+                welcome?.showDnaStatus("Cette lignée est arrivée à sa dernière génération. Le Studio permet de changer sa graine ou ses paramètres.", grove.dna?.generation);
+                return;
+              }
+              const result = host.api.update(grove.id, { dna: { generation }, label: `Evolution Grove · generation ${generation}` });
+              if (result.ok) welcome?.showDnaStatus(`ADN · génération ${generation}. Les mutations sont visibles et modifiables dans le Studio.`, generation);
+            },
             coauthor: {
               onAccept: acceptNestorProposal,
               onDiscard: discardNestorProposal,
@@ -714,6 +738,7 @@ if (appParam === "vr-lab") {
       focusFrontDoor();
     };
     const openGamesShelf = (showArchiveCup = false): void => {
+      stopNestorTour();
       if (nestorBlockedByLiveSession()) {
         mountFrontDoor();
         return;
@@ -929,7 +954,8 @@ if (appParam === "vr-lab") {
       });
     };
     const openGames = (): void => openGamesShelf(false);
-    const openBrowse = (): void => {
+    const openBrowse = (initialCollection: ContentCollection = "creations"): void => {
+      stopNestorTour();
       if (nestorBlockedByLiveSession()) {
         mountFrontDoor();
         return;
@@ -943,16 +969,35 @@ if (appParam === "vr-lab") {
         }
         activeShelf = mountBrowseShelf(root, {
           api: host.api,
+          initialCollection,
           canNavigate: () => !nestorBlockedByLiveSession(),
           featuredStarter: {
-            id: "archive-great-slide",
-            eyebrow: "SCENE-NATIVE PHYSICS",
-            badges: ["Exact mesh", "Static trimesh", "Modern gravity run"],
+            id: "glow-garden",
+            eyebrow: "COMMENCER ICI",
+            badges: ["Monde lumineux", "Tout est modifiable", "Sans connexion"],
           },
           // The recovered vehicle garage is composed, not a starter definition, so it comes in
           // as a composed row. main.ts supplies it because framing needs the host, which the
           // shelf deliberately does not have.
           composed: [
+            ...(["cuisine", "native-intro"] as const).map((scene) => ({
+              id: `archive-${scene}`,
+              label: scene === "cuisine" ? "Cuisine · Blender" : "Intro Physics · ArduinoGUI C#",
+              summary: scene === "cuisine"
+                ? "La cuisine complète : 76 maillages, meubles, poignées et détails récupérés. Photo externe absente ; éclairage adapté."
+                : "La composition C# retrouvée : deux familles de dix cylindres et le sol Alien. Géométrie et masses sources ; physique Rapier adaptée.",
+              meta: scene === "cuisine" ? "Reprise partielle · géométrie complète · caméra source" : "Reprise partielle · 20 corps · clic pour pousser",
+              open: async () => {
+                const { composeArchiveRevival } = await import("./archive-revival-scenes");
+                if (nestorBlockedByLiveSession()) return;
+                composeArchiveRevival(host.api, scene);
+                showroomEnvironment?.(); showroomEnvironment = null;
+                host.applyEnvironment();
+                if (scene === "cuisine") host.frameView([-3.002289, 1.140502, -2.731321], [1.935196, 0.965262, -1.962851], motionIsReduced() ? 0 : 1);
+                else host.frameView([0, 10, -10], [10, 5, 10], motionIsReduced() ? 0 : 1);
+                enterBrowsedEditor();
+              },
+            })),
             {
               id: "archive-day-night-rig",
               label: "Archive Day / Night Observatory",
@@ -1156,6 +1201,8 @@ if (appParam === "vr-lab") {
       playExitLabel: () => resumeArchiveCup ? "← Archive Cup" : "← GraphysX",
     });
     connectLocalGraphysXAgent(host);
+    host.renderer.domElement.addEventListener("pointerdown", stopNestorTour);
+    host.renderer.domElement.addEventListener("wheel", stopNestorTour, { passive: true });
     if (framedByHost) {
       hostBridge = createHostBridge({
         selfOrigin: window.location.origin,
@@ -1254,6 +1301,9 @@ if (appParam === "vr-lab") {
         run: host.api.rules.status(),
         archiveCup: getArchiveCupRuntimeState(),
         personalGhost: getPersonalGhostState(),
+        discovery: { tour: tourController?.state() ?? IDLE_TOUR_STATE,
+          dnaGeneration: host.api.query({ ids: ["showroom-dna-grove"] })[0]?.dna?.generation ?? null,
+          cameraMoving: host.focusing },
         proposalSource: describeProposalSource(),
         nestor: host.api.query({ ids: ["showroom-nestor"] }).length > 0
           ? nestor?.state() ?? null : null,

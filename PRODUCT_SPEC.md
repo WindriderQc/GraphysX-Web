@@ -107,17 +107,24 @@ in the 2D layer — so top menus and 2D effects use the same model.
 
 - **Welcome showroom scene loads first** — an open lakeside scene with the Forge's copper
   and cyan finishes. The eight-cube CubX assembly and its flocks are the focal point; water,
-  light, particles and the small kinetic stage demonstrate the engine without a crowd of
-  humanoid towers, trees and large gates. A wide arrival approaches slowly, then an idle
+  light, particles, a small evolving DNA grove and the kinetic stage demonstrate the engine
+  without a crowd of humanoid towers or large gates. A wide arrival approaches slowly, then an idle
   orbit circles CubX. Manual input interrupts it and reduced-motion preferences suppress it.
   Nestor stays in the interface, with small physical topic orbs. Clicking scenery focuses
   the camera (the recovered CubX behavior).
-- **CubX assembly / side menu is the spatial navigator** → **Scene Editor** · **Browse
-  Scenes** (load an existing 3D scene) · **Games & Apps** (a small, *expandable* category;
-  seeded with a few of the strongest recovered experiences) · *(later: multiplayer rooms,
-  more apps)*.
-- The menu is expandable by design — "Games & Apps" grows over time without changing the
-  front door.
+- **Five explicit front-door destinations:** **Studio** (the complete editor), **Créations**
+  (curated worlds), **Jouer** (current games), **Ateliers** (named applications, including
+  LLMx and KidX), and **Archives & labo** (historical revivals and experiments).
+- Both catalogues separate **Créations**, **Archives**, **Laboratoire**, and **Tout**.
+  Search, favorites and recent ordering stay within the selected collection. Unknown new
+  experiments default to the laboratory until deliberately promoted. One destination has
+  one catalogue entry; source revisions remain evidence, not duplicate experiences.
+- The opt-in discovery tour follows authored curved camera rails through CubX, DNA, physics
+  and flocking. Pointer input cancels the ride and its timers; reduced motion uses immediate
+  camera cuts. The tour changes no authored scene data. The DNA generation control does:
+  it uses the same `api.update` operation as the editor and agents.
+- No-provider welcome cards omit the disabled request field; the local demonstrations remain
+  available. Connected host/provider routes keep their existing request and proposal review.
 
 ## 6. Vocabulary from the archives (minimums, not limits)
 

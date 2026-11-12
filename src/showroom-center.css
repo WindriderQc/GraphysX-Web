@@ -15,8 +15,8 @@
 .gx-welcome.gx-welcome--center .gx-tour-start{min-height:36px;padding-inline:10px}
 .gx-welcome.gx-welcome--center .gx-actions{
   position:fixed;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom));
-  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;
-  box-sizing:border-box;width:min(610px,calc(100% - 150px));margin-inline:auto;padding:6px;
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;
+  box-sizing:border-box;width:min(790px,calc(100% - 150px));margin-inline:auto;padding:6px;
   border:1px solid #a9d8e346;border-radius:15px;background:#0b1727ed;
   box-shadow:0 14px 34px #040c1a8c;overflow:visible;pointer-events:auto;
 }
@@ -64,4 +64,21 @@
   .gx-welcome--center .gx-actions > button small,.gx-center-apps > summary small{display:none}
   body:has(.gx-welcome--center) .gx-display-settings{top:10px;bottom:auto;right:10px}
   body:has(.gx-welcome--center) .gx-display-panel{top:100%;bottom:auto}
+}
+/* A calm front door: the landscape remains visible above a small, readable briefing. */
+.gx-welcome.gx-welcome--center .gx-welcome-card{width:min(430px,calc(100vw - 40px));gap:8px;padding:18px 20px}
+.gx-welcome.gx-welcome--center .gx-dna-next{color:#e9ddb8;border-color:#bda56970;background:#3c3525}
+.gx-welcome.gx-welcome--center .gx-go-archive{background:#282533;border-color:#aaa0c657}
+.gx-welcome.gx-welcome--center .gx-nestor-ask[hidden]{display:none}
+.gx-welcome.gx-welcome--center:not(.gx-welcome--presenting):not(.gx-welcome--touring):not(.gx-welcome--proposing) .gx-commit{display:none}
+.gx-welcome.gx-welcome--center .gx-create-entry a{box-sizing:border-box}
+@media(min-width:900px){
+  .gx-welcome.gx-welcome--center{padding-bottom:112px}
+}
+@media(max-width:540px){
+  .gx-welcome.gx-welcome--center .gx-nestor-topics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;width:100%}
+  .gx-welcome.gx-welcome--center .gx-nestor-topics button{padding:7px 5px;font-size:10.5px;min-height:34px}
+  .gx-welcome.gx-welcome--center .gx-hint{display:none}
+  .gx-welcome.gx-welcome--center .gx-actions{gap:4px;padding:5px}
+  .gx-welcome.gx-welcome--center .gx-actions > button,.gx-welcome.gx-welcome--center .gx-center-apps > summary{font-size:10.5px;padding-inline:2px}
 }

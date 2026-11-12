@@ -1,6 +1,7 @@
 import type { GraphysXAgentWorldApi } from "./agent-world-runtime";
 import { createSceneThumbnail, SHELF_THUMBNAIL_CSS } from "./shelf-thumbnails";
 import { mountShelfPersonalization, SHELF_PERSONALIZATION_CSS } from "./shelf-personalization";
+import { CONTENT_COLLECTIONS, sceneCollection, type ContentCollection } from "./content-collections";
 
 /**
  * "Browse Scenes" — §5's third front-door destination, beside Scene Editor and Games.
@@ -42,6 +43,7 @@ export type BrowseShelfOptions = {
   onOpen?: (starterId: string) => void;
   /** Composed archive scenes, listed above the starters because they are the recovered ones. */
   composed?: readonly ComposedSceneEntry[];
+  initialCollection?: ContentCollection;
   /** Called when the ✕ dismisses the shelf without opening, so the caller can restore the front door. */
   onClose?: () => void;
 };
@@ -63,7 +65,7 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
   head.className = "gx-browse-head";
   const title = document.createElement("h2");
   title.id = "gx-browse-shelf-title";
-  title.textContent = "Browse Scenes";
+  title.textContent = "Mondes & créations";
   const close = document.createElement("button");
   close.type = "button";
   close.className = "gx-browse-close";
@@ -74,7 +76,7 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
 
   const blurb = document.createElement("p");
   blurb.className = "gx-browse-blurb";
-  blurb.textContent = "Curated scenes on the platform runtime. Open one to explore and edit it.";
+  blurb.textContent = "Des mondes à explorer, des scènes à modifier. Archives et prototypes sont rangés à part.";
 
   const list = document.createElement("div");
   list.className = "gx-browse-list";
@@ -177,8 +179,17 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
     row.append(visual, copy);
     row.addEventListener("click", () => {
       if (!mayNavigate(summary, row)) return;
-      dispose();
-      void scene.open();
+      row.disabled = true;
+      summary.textContent = "Ouverture…";
+      void Promise.resolve().then(() => {
+        if (!mayNavigate(summary, row)) return;
+        return scene.open();
+      }).then(() => {
+        if (canNavigate()) dispose();
+      }).catch((error: unknown) => {
+        summary.textContent = error instanceof Error ? error.message : "Impossible d’ouvrir cette scène.";
+        row.classList.add("gx-browse-row--error");
+      }).finally(() => { row.disabled = false; });
     });
     list.append(row);
   }
@@ -232,8 +243,18 @@ export function mountBrowseShelf(container: HTMLElement, options: BrowseShelfOpt
   }
 
   if (featuredRow) list.prepend(featuredRow);
+  for (const row of list.querySelectorAll<HTMLElement>("[data-shelf-key]")) {
+    const collection = sceneCollection(row.dataset.sceneId ?? row.dataset.starterId ?? "");
+    row.dataset.shelfCollection = collection;
+    const badge = document.createElement("span");
+    badge.className = "gx-collection-badge";
+    badge.textContent = collection === "archive" ? "ARCHIVE · fidélité et adaptations documentées"
+      : collection === "lab" ? "LABORATOIRE · étude / prototype" : "CRÉATION · explorer et modifier";
+    row.querySelector(".gx-shelf-copy")?.append(badge);
+  }
   card.append(head, blurb, list);
-  mountShelfPersonalization(card, list, { label: "scenes", placeholder: "Search scenes and archives…" });
+  mountShelfPersonalization(card, list, { label: "scènes", placeholder: "Rechercher dans cette collection…",
+    collections: CONTENT_COLLECTIONS, initialCollection: options.initialCollection ?? "creations" });
   overlay.append(card);
   container.append(overlay);
 

@@ -32,6 +32,7 @@ try {
   await page.waitForFunction(() => Boolean(window.__GRAPHYSX_HOST__), null, { timeout: SMOKE_TIMEOUT });
   await page.waitForSelector(".gx-welcome .gx-go-games", { timeout: SMOKE_TIMEOUT });
   await page.click(".gx-welcome .gx-go-games");
+  await page.click('.gx-shelf [data-collection="archive"]');
   await page.waitForSelector('.gx-shelf-row[data-course-id="archive-level1-2011"]', { timeout: SMOKE_TIMEOUT });
 
   out.shelf = await page.evaluate(() => {

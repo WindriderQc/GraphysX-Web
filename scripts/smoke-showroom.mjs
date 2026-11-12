@@ -923,7 +923,7 @@ const tour = out.nestorTour;
 const tourGuidesWithoutAuthoring =
   !!tour &&
   tour.touring === true &&
-  tour.stopId === "host" &&
+  tour.stopId === "cubx" &&
   tour.position.startsWith("Stop 1 of ") &&
   tour.line > 20 &&
   tour.dots >= 4 &&

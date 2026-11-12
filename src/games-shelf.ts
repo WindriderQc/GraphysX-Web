@@ -3,6 +3,7 @@ import { createLevelThumbnail, createSceneThumbnail, SHELF_THUMBNAIL_CSS } from 
 import { BALLZ_MENU_LEVEL_IDS, mountBallzMenu } from "./ballz-menu";
 import { mountArchiveCup, type ArchiveCupCourse } from "./archive-cup";
 import { mountShelfPersonalization, SHELF_PERSONALIZATION_CSS } from "./shelf-personalization";
+import { CONTENT_COLLECTIONS, gameCollection } from "./content-collections";
 
 /**
  * The "Games & Playgrounds" front-door shelf.
@@ -338,7 +339,11 @@ export function mountGamesShelf(container: HTMLElement, options: GamesShelfOptio
   }
 
   card.append(head, blurb, list);
-  mountShelfPersonalization(card, list, { label: "games", placeholder: "Search games, courses, and levels…" });
+  for (const row of list.querySelectorAll<HTMLElement>("[data-shelf-key]")) {
+    row.dataset.shelfCollection = gameCollection(row.dataset.gameId ?? row.dataset.levelId ?? row.dataset.shelfKey?.replace(/^game:/, "") ?? "");
+  }
+  mountShelfPersonalization(card, list, { label: "jeux", placeholder: "Rechercher dans cette collection…",
+    collections: CONTENT_COLLECTIONS, initialCollection: openArchiveCup ? "archive" : "creations" });
   overlay.append(card);
   container.append(overlay);
 

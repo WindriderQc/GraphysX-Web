@@ -22,12 +22,15 @@ export type NestorTourStop = {
   title: string;
   /** One sentence. If it needs two, it is two stops. */
   line: string;
+  camera?: { position: [number, number, number]; target: [number, number, number]; via?: [number, number, number][] };
 };
 
 export type NestorTour = {
   id: string;
   label: string;
   stops: NestorTourStop[];
+  /** Travel-heavy tours reserve time to read after the camera arrives. */
+  dwellMs?: number;
 };
 
 export type NestorTourStatus = "idle" | "running" | "finished" | "cancelled";
@@ -190,7 +193,7 @@ export interface NestorTourController {
  */
 export function createNestorTourController(options: {
   entityExists: (entityId: string) => boolean;
-  focusEntity: (entityId: string) => void;
+  focusEntity: (entityId: string, stop: NestorTourStop) => void;
   /** Runtime selection only. Never a command, never a commit. */
   highlight: (entityIds: string[]) => void;
   reducedMotion: () => boolean;
@@ -238,12 +241,12 @@ export function createNestorTourController(options: {
     if (index === null) return finish("finished");
     const next = tourStateAt(tour, index);
     if (!next.stop) return finish("finished");
-    focusEntity(next.stop.entityId);
+    focusEntity(next.stop.entityId, next.stop);
     highlight([next.stop.entityId]);
     timer = schedule(() => {
       timer = null;
       advance();
-    }, tourDwellMs(reducedMotion()));
+    }, Math.max(tour.dwellMs ?? 0, tourDwellMs(reducedMotion())));
     return settle(next);
   };
 

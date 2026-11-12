@@ -63,20 +63,22 @@ const snapshot = () => page.evaluate(() => {
   return { revision: api.state().revision, document: JSON.stringify(api.exportDocument()), commits: api.history().length };
 });
 const unchanged = (before, after) => before.revision === after.revision && before.document === after.document && before.commits === after.commits;
-const ready = async () => {
+const ready = async (requestVisible = true) => {
   await page.waitForFunction(() => !!window.__GRAPHYSX_HOST__ && !!window.__GRAPHYSX_NESTOR__, { timeout: SMOKE_TIMEOUT });
-  await page.waitForSelector(".gx-welcome [data-nestor-ask]", { timeout: SMOKE_TIMEOUT });
+  await page.waitForSelector(".gx-welcome [data-nestor-ask]", { state: requestVisible ? "visible" : "attached", timeout: SMOKE_TIMEOUT });
   await page.waitForFunction(() => window.__GRAPHYSX_HOST__.introPlaying === false, null, { timeout: 20000 });
 };
 
 try {
-  // 1. No provider: the field says so and the page makes no request.
+  // 1. No provider: the unused field stays hidden and disabled; the page makes no request.
   await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: SMOKE_TIMEOUT });
-  await ready();
+  await ready(false);
   out.noProvider = await page.evaluate(() => {
     const input = document.querySelector("[data-nestor-request]");
     const send = document.querySelector("[data-nestor-request-send]");
-    return { disabled: input?.disabled === true && send?.disabled === true, placeholder: input?.placeholder ?? null };
+    const form = document.querySelector("[data-nestor-ask]");
+    return { disabled: input?.disabled === true && send?.disabled === true, placeholder: input?.placeholder ?? null,
+      hidden: form?.hidden === true && form.getBoundingClientRect().height === 0 };
   });
   // Submitting the disabled form must do nothing at all.
   await page.evaluate(() => document.querySelector("[data-nestor-ask]")?.requestSubmit?.());
@@ -236,6 +238,7 @@ if (pageErrors.length) console.log("page errors:", pageErrors);
 
 const ok = !out.fatal
   && out.noProvider?.disabled === true
+  && out.noProvider?.hidden === true
   && /aucun modèle connecté/i.test(out.noProvider?.placeholder ?? "")
   && out.noProvider?.requests === 0
   && out.noProvider?.proposal === true

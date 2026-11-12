@@ -2,6 +2,7 @@ import {
   ACESFilmicToneMapping,
   AdditiveBlending,
   Box3,
+  CatmullRomCurve3,
   Clock,
   Color,
   CubeTexture,
@@ -344,6 +345,7 @@ export class PlatformHost {
     toTarget: Vector3;
     elapsed: number;
     duration: number;
+    path?: { positions: CatmullRomCurve3; targets: CatmullRomCurve3 };
   } | null = null;
 
   constructor(private readonly container: HTMLElement, options: PlatformHostOptions = {}) {
@@ -743,6 +745,29 @@ export class PlatformHost {
       elapsed: 0,
       duration: Math.max(0.15, duration),
     };
+  }
+
+  /** Travel through authored views in the existing focus tick. */
+  framePath(views: readonly { position: [number, number, number]; target: [number, number, number] }[], duration = 3): void {
+    const last = views.at(-1);
+    if (!last) return;
+    this.cancelIntro();
+    if (duration === 0) { this.frameView(last.position, last.target, 0); return; }
+    this.controls.autoRotate = false;
+    this.focusMove = {
+      fromPosition: this.camera.position.clone(), toPosition: new Vector3(...last.position),
+      fromTarget: this.controls.target.clone(), toTarget: new Vector3(...last.target), elapsed: 0, duration: Math.max(0.15, duration),
+      path: {
+        positions: new CatmullRomCurve3([this.camera.position.clone(), ...views.map((view) => new Vector3(...view.position))]),
+        targets: new CatmullRomCurve3([this.controls.target.clone(), ...views.map((view) => new Vector3(...view.target))]),
+      },
+    };
+  }
+
+  cancelCameraMove(): void {
+    this.focusMove = null;
+    this.controls.autoRotate = false;
+    this.cancelIntro();
   }
 
   /** Return to the product's authored front-door composition after Editor or Play. */
@@ -1513,8 +1538,13 @@ export class PlatformHost {
     move.elapsed += delta;
     const t = Math.min(1, move.elapsed / move.duration);
     const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    this.camera.position.lerpVectors(move.fromPosition, move.toPosition, eased);
-    this.controls.target.lerpVectors(move.fromTarget, move.toTarget, eased);
+    if (move.path) {
+      move.path.positions.getPoint(eased, this.camera.position);
+      move.path.targets.getPoint(eased, this.controls.target);
+    } else {
+      this.camera.position.lerpVectors(move.fromPosition, move.toPosition, eased);
+      this.controls.target.lerpVectors(move.fromTarget, move.toTarget, eased);
+    }
     if (t >= 1) {
       this.focusMove = null;
       this.controls.autoRotate = this.autoOrbit && !this.editor?.isVisible();

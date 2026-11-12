@@ -5333,3 +5333,35 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
 - `src/math-block.ts` ports AgentX `parsePlot`/`plotText`/`sceneOf` on the shared grammar; `test/fixtures/math-block-vectors.json` (94 blocks) comes from AgentX's own parser via `scripts/math-block-vectors.mjs`. Refusals are whole, in plain French with AgentX's message beneath; nothing is clamped.
 - Owner direction the same day: keep exactly one Math Lab. Removed `src/archive-math-lab.ts`, its Browse row, `__GRAPHYSX_CONTENT__.math*` and its thumbnail; the Math Lab row has a captured thumbnail. Kept `formula-field`, `api.formulas()`, editor chips and world vocabulary (agents and saved scenes use them).
 - Validation: unit tests, typecheck, lint, `smoke-math-lab` (desktop and phone captures inspected), full gate. See docs/MATH_LAB_PAGE.md.
+
+## 2026-11-11 — Archive custody and a clearer front door
+
+- Owner asked to keep GraphysX safe, separate current creations from prototypes/revivals,
+  revisit native C++/C# recovery and make the welcome/navigation understandable.
+- Work isolated in `codex/revival-front-door`, sibling worktree `GraphysX-Web-revival`,
+  from `origin/main` b61fe2a. The original main checkout was 85 commits behind; the
+  historical repository and its two modified handoff prompts were left untouched.
+- Reproducible read-only scan: 1,188 native files / 701 byte-distinct contents / 487 exact
+  copies; 30 solution/project descriptors. All 39 converted JSON records retain the same
+  parsed data. 424/433 original public files match bytes; three Arena text files only
+  differ in whitespace, while six original NightSky BMPs are represented by JPEGs.
+  `docs/REVIVAL_AND_UX.md` and `docs/legacy-revival-audit.json` preserve scope and evidence.
+  This is not deletion clearance or a claim that all 54 historical scenes are complete.
+- Added an ordinary v2 Cuisine model (76 source mesh parts; deterministic source-hash-locked
+  FBX converter, source units/UVs/normals/material groups) and source-backed ArduinoGUI
+  Intro Physics (two ten-cylinder families). Fidelity/adaptation/absence are explicit.
+  Original missing photograph, vertex strip/Coke binding/native picker remain absent.
+- Curated/archive/lab collections share scoped search/favorites. Welcome has Studio,
+  Creations, Play, Workshops, Archives & lab; unknown experiments default to the lab.
+  Old course/browser checks now select the intended collection explicitly.
+- Opt-in curved discovery uses the existing host focus tick; pointer/wheel input cancels
+  its timers, reduced motion cuts, and the ride does not author the world. DNA generation
+  changes the actual scene through api.update; browser checks compare rendered matrices.
+- Typecheck/lint/build pass. Full gate ran: 1,294 unit passes, four unchanged Windows Node 24
+  parent-directory fsync EPERM failures, one skip. It correctly skipped browser checks;
+  no full-green release claim. The dedicated revival browser journey passes (76 loaded
+  kitchen meshes, real falling native bodies, scoped galleries, mobile and motion handling).
+  Captures are under output/playwright/revival; scoped existing journeys run separately.
+- Remaining recovery work is source-linked in the audit: full CubX choreography, FlightX,
+  exact Maison consolidation, Unity/Common Room, vehicle worlds and device/notes fidelity.
+  No LAN/hardware transport, live model or headset acceptance was exercised.
