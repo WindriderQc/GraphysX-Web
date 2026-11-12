@@ -54,6 +54,11 @@ or the replay server, for example `http://localhost:5173/?app=island&source=http
   `WORLD_SNAPSHOT_EVERY_MS` (default 60000). They include physics, sessions, identity, journal
   tail and a SHA-256 envelope verified before resume. `/healthz.checkpoint.lastSaved` names
   the tick, identity, digest and successful write time. Corrupt checkpoints fail startup.
+  Checkpoint files are flushed before atomic replacement on every platform. POSIX also
+  flushes the parent directory. Windows Node does not provide that directory-flush path;
+  its receipt confirms a flushed file and completed replacement, not a separately flushed
+  parent namespace or a power-loss durability guarantee. File and rename failures still fail
+  the write; no accepted checkpoint/recording data is discarded to recover from an error.
   Set `WORLD_START_MODE=resume` to restore this file on service restart; a missing file is
   startup refusal, so recovery cannot silently become a fresh world. Initialize explicitly
   with `fresh` (default) or an existing native snapshot.

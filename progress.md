@@ -5383,3 +5383,13 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
 - Delivered locally on codex/revival-front-door. Original archive tracked changes remain
   exactly its two pre-existing handoff-prompt edits. No archive deletion, publishing,
   hardware transport or MCP expansion was performed. Remaining archaeology is in the audit.
+
+## 2026-11-12 — Continue revival through integration and release
+
+- Owner asked to continue all the way. Resume the existing isolated branch and preserve
+  the historical archive; integrate recoverable source-backed compositions, finish local
+  qualification, then carry the change through review/CI/public release.
+- Fixed the Windows-only directory FlushFileBuffers failure after checkpoint replacement.
+  All file flush/rename failures still propagate; POSIX directory fsync remains mandatory.
+  Windows' narrower namespace durability is documented, not silently overstated.
+  The unchanged world-reliability suite now passes 12/12 on Windows.
