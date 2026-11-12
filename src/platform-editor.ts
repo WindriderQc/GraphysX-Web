@@ -1320,7 +1320,6 @@ export class PlatformEditor {
       this.chip("+ Spin", attach({ type: "spin", axis: "y", speedDegrees: 45 })),
       this.chip("+ Bob", attach({ type: "bob", axis: "y", amplitude: 0.6, frequencyHz: 0.4 })),
       this.chip("+ Pulse", attach({ type: "pulse", minimumScale: 0.85, maximumScale: 1.25, frequencyHz: 0.5 })),
-      this.chip("+ FlightX", attach({ type: "flight", speed: 18, rollRateDegrees: 54, pitchUpDegrees: 24, pitchDownDegrees: 30 })),
     );
     rows.push(add);
     return this.section("Behaviours", rows);
