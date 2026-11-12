@@ -5448,3 +5448,20 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
   output/playwright/revival-postgate, revival-standard-final, output/verify. Detailed scope
   and source limitations are in docs/REVIVAL_AND_UX.md. PR142 CI is green; integrate/deploy
   next, with public revision/asset checks separate from local visual qualification.
+
+### DNA welcome creation journey — 2026-11-12
+
+- User request: "Start with the welcome DNA/physics experience: choose a mutation, see its effects, save the variant and open it in the Studio. All the way through testing and deployment!"
+- Isolated branch codex/dna-welcome in GraphysX-Web-dna from current origin/main 591fdbf; preserve original checkout, concurrent Nestor work and native archive.
+- Implement a deterministic reference/variant DNA comparison and ordinary canonical Rapier seed drops, local named persistence/resumption, and exact Studio handoff. Use the shared host and frame loop. Keep Garden creation and archive/prototype separation.
+- Qualification pending: scene/physics contracts, desktop/compact/reduced-motion browser journeys, storage failure/conflicts, standard game client with inspected captures, existing regression gate, CI and public deployment identity/journey.
+
+### DNA focused qualification — 2026-11-12
+
+- Added the welcome/Ateliers DNA route, reference/variant comparison with three single-gene choices, actual twin-seed Rapier drop, observed first-bounce markers, pause/reset and a persistent three-step navigation.
+- Named local save is read back before exposing the Studio link. Garden and DNA resume pointers remain separate. Existing names/stale slots are protected; failures retain the open variant. Studio opens paused and its edited document resumes without template replacement.
+- The actual-module Node contract suite passes 14/14, including deterministic rendered-matrix reload, both storage/browser validators and higher real bounce with identical body properties. Typecheck/lint pass in the focused run.
+- Focused browser journey passes at 1440x960, 390x844 and 320x740, including native radio keyboard control, reduced motion, physical pause/replay, exact authored save, Studio UI save/edit/resume, disabled incompatible helpers, existing-name/stale-tab conflicts, blocked storage and malformed-slot preservation. Zero browser/shader/HTTP errors.
+- Unmodified standard game-client SHA256 1210f58b47aadd9cb4b141fb4b2dc9e17a929aa1a813cdd26b5306a0d08b6808 passes both mutation and baseline physical-comparison scenarios. Inspected desktop/phone/320 captures, welcome, saved Studio action and both standard-client captures/state.
+- Receipts: output/dna-focused.log, output/dna-final-focused.log, output/playwright/dna-final/dna-receipt.json and output/playwright/dna-standard-{mutation,physics}. A final label-only pause-text adjustment is included in the upcoming fresh full gate.
+- Full default gate and production qualification follow; the native archive still has only its two pre-existing prompt edits.

@@ -150,6 +150,11 @@ destinations extend the single v2 product and do not reactivate the old browser 
 
 ## Remaining archaeology with concrete owners
 
+The new welcome creation journey is documented in [DNA_CREATION.md](DNA_CREATION.md):
+choose one structural mutation, compare its actual growth and twin-seed physics,
+save the complete variant locally, and open/resume that document in the Studio.
+It is a current creation experience, separate from the source-fidelity work below.
+
 | Historical evidence | Current limitation / next recovery |
 | --- | --- |
 | CubX/CubZ actors and native MenuManager | TVA studies are now reachable in Archives. Full actor/button geometry, coupled selection/opening choreography and exact historical pivots still need proof. |
