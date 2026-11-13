@@ -61,6 +61,7 @@ export const VERIFY_SMOKES = [
   { name: "editor", tier: "core", script: "scripts/smoke-editor.mjs", covers: "editor: library palette, model + texture + behaviour, bloom authoring, exit path" },
   { name: "editor-drafts", tier: "core", script: "scripts/smoke-editor-drafts.mjs", covers: "independent autosave recovery after opening another scene, reload, named save and legacy drafts" },
   { name: "first-creation", tier: "core", script: "scripts/smoke-first-creation.mjs", covers: "Center entry, native creation, named save, resume, editor handoff and mobile layout" },
+  { name: "dna-creation", tier: "core", script: "scripts/smoke-dna-creation.mjs", covers: "Welcome mutation, measured twin-seed physics, pause/reset, local variant save/resume, conflicts, Studio edits and compact/reduced-motion layouts" },
   { name: "top20", tier: "deep", script: "scripts/smoke-top20.mjs", covers: "top-20 release: redo, draft recovery, import/copy/slots/palette, shelf personalization, accessible display, touch/gamepad/pause/fullscreen" },
   { name: "standalone", tier: "core", script: "scripts/smoke-standalone.mjs", covers: "?host=standalone: agent API, tool bridge, human editor" },
   { name: "levels", tier: "core", script: "scripts/smoke-levels.mjs", covers: "levels workbench: paint, fill, ASCII round trip, undo, create" },

@@ -1,0 +1,45 @@
+.gx-dna{position:absolute;inset:0;z-index:24;color:#edf5f1;font:14px/1.4 var(--gx-font,system-ui);pointer-events:none;--dna-mint:#9ce8d6;--dna-peach:#ffbf8f}
+.gx-dna *{box-sizing:border-box}.gx-dna [hidden]{display:none!important}
+.gx-dna button,.gx-dna input,.gx-dna a,.gx-dna summary{font:inherit;pointer-events:auto}
+.gx-dna button,.gx-dna a,.gx-dna summary{touch-action:manipulation}
+.gx-dna button{min-height:44px;border:1px solid #a4d9d638;border-radius:10px;background:#203f49;color:inherit;padding:9px 12px;cursor:pointer}
+.gx-dna button:disabled{opacity:.45;cursor:default}
+.gx-dna :is(button,a,input,summary):focus-visible{outline:2px solid #ffe3ac;outline-offset:3px}
+.gx-dna-header{position:absolute;top:18px;left:24px;right:24px;display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:auto}
+.gx-dna-header>span{font-size:12px;letter-spacing:.08em;color:#c1d9db}.gx-dna-header b{color:#80b5b5;margin:0 10px}
+.gx-dna-header button{background:#122e3bcc;backdrop-filter:blur(12px)}
+.gx-dna-card{position:absolute;left:24px;top:82px;bottom:20px;width:338px;overflow:auto;padding:23px;border:1px solid #8cc7bb45;border-radius:20px;background:linear-gradient(145deg,#15333ded,#0f2632f5);box-shadow:0 22px 70px #020f1e55;pointer-events:auto;scrollbar-width:thin;scrollbar-color:#6e9b96 transparent}
+.gx-dna-steps{position:sticky;top:0;z-index:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;background:#14323e;padding:5px 0 10px;margin:-8px 0 12px}.gx-dna-steps button{font-size:10px;min-height:44px;padding:8px 3px;color:#cde2dc}.gx-dna :is(fieldset,.gx-dna-experiment,.gx-dna-save){scroll-margin-top:62px}
+.gx-dna-kicker{font-size:10px;letter-spacing:.12em;color:var(--dna-mint);display:flex;justify-content:space-between;gap:8px}.gx-dna-kicker>span{color:#9bb9bc;font-size:8px;align-self:center}
+.gx-dna h1{font-size:39px;line-height:1.04;letter-spacing:-.045em;font-weight:650;margin:14px 0;color:#f1eee1}
+.gx-dna-intro{font-size:12px;line-height:1.6;color:#bed4d4;margin:12px 0 22px}
+.gx-dna fieldset{padding:0;border:0;margin:0}.gx-dna legend,.gx-dna h2,.gx-dna-save>label{font-size:12px;font-weight:650;margin:0 0 10px;display:flex;align-items:center;gap:9px;padding:0}
+.gx-dna :is(legend,h2,label)>span:first-child:not(:last-child){min-width:0}
+.gx-dna legend>span,.gx-dna h2>span,.gx-dna-save>label>span{display:inline-grid;place-items:center;width:21px;height:21px;border:1px solid #71978f66;border-radius:50%;color:var(--dna-mint);font-size:10px;flex:none}
+[data-dna-choices]{display:grid;gap:7px}[data-dna-choices]>label{display:flex;align-items:center;gap:10px;min-height:49px;padding:8px 10px;border:1px solid #86b7b02e;border-radius:10px;cursor:pointer;background:#1e414856}
+[data-dna-choices]>label:has(:checked){border-color:#ffd0a8a8;background:#62504355}[data-dna-choices]>label:has(:focus-visible){outline:2px solid #ffe3ac;outline-offset:2px}
+[data-dna-choices] input{accent-color:var(--dna-peach);width:16px;height:16px;flex:none;margin:0}[data-dna-choices] b{display:block;font-size:12px}[data-dna-choices] small{display:block;color:#b9cdcd;font-size:10px;line-height:1.4;margin-top:1px}
+.gx-dna-comparison{display:grid;grid-template-columns:1fr 1fr;margin:13px 0 20px;gap:10px}.gx-dna-comparison>div+div{border-left:1px solid #89b7ad36;padding-left:10px}.gx-dna-comparison b{font-size:11px;color:var(--dna-mint);display:block}.gx-dna-comparison>div+div b{color:var(--dna-peach)}.gx-dna-comparison span{font-size:10px;display:block;margin-top:3px;color:#d4e0dc}
+.gx-dna-experiment{border-top:1px solid #85b4ac32;border-bottom:1px solid #85b4ac32;padding:17px 0 11px}.gx-dna-experiment>p:first-of-type{font-size:11px;color:#b4cdcd;line-height:1.6;margin:0 0 10px}
+.gx-dna-drop-actions{display:flex;gap:6px;flex-wrap:wrap}.gx-dna-drop-actions button{font-size:11px;padding:9px 10px}.gx-dna-drop-actions [data-dna-drop]{background:var(--dna-mint);color:#102c32;font-weight:700;flex:1}.gx-dna-drop-actions [data-dna-reset]{width:44px}
+.gx-dna-readout{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.gx-dna-readout b{font-size:10px;color:var(--dna-mint);display:block}.gx-dna-readout>div+div b{color:var(--dna-peach)}.gx-dna-readout span{font-variant-numeric:tabular-nums;font-size:10px;color:#d1e1dc;display:block;margin-top:3px}
+.gx-dna-result{font-size:11px;line-height:1.5;color:#e9dbbd;min-height:32px;margin:10px 0 0}
+.gx-dna-save{margin-top:18px}.gx-dna-save>div{display:flex;gap:6px}.gx-dna-save input{background:#0a2530;color:#f0eee3;border:1px solid #86b7b05e;border-radius:9px;min-width:0;width:100%;padding:10px;font-size:12px;height:44px}.gx-dna-save button{font-size:11px;flex:none}.gx-dna-save small{font-size:9px;color:#a6c2c2;display:block;margin-top:6px}
+.gx-dna-notice{font-size:11px;line-height:1.5;color:#e6ddc6;margin:10px 0}.gx-dna-notice:empty{display:none}.gx-dna-studio{display:block;padding:12px 10px;min-height:44px;border-radius:10px;color:#102b30;background:var(--dna-peach);font-size:12px;font-weight:700;text-align:center;text-decoration:none;margin-top:12px}
+.gx-dna-about{font-size:10px;color:#aec8c8;margin-top:12px}.gx-dna-about summary{min-height:44px;display:flex;align-items:center;cursor:pointer}.gx-dna-about summary:before{content:'+';padding-right:9px}.gx-dna-about[open] summary:before{content:'−'}.gx-dna-about p{line-height:1.6;margin:0 0 10px}
+.gx-dna-scene-labels{position:absolute;top:95px;left:calc(50% - 86px);right:8%;display:flex;justify-content:space-between;gap:24px;color:var(--dna-mint);font-size:10px;letter-spacing:.1em}.gx-dna-scene-labels span{display:flex;align-items:center;gap:9px;background:#132e3bcc;border:1px solid #9ce8d638;border-radius:30px;padding:8px 13px}.gx-dna-scene-labels span+span{color:var(--dna-peach);border-color:#ffbf8f38}.gx-dna-scene-labels b{font-weight:500;font-size:12px;letter-spacing:0}
+@media(min-width:741px) and (max-height:820px){.gx-dna-card{padding:18px}.gx-dna h1{font-size:32px;margin:10px 0}.gx-dna-intro{margin:10px 0 16px}.gx-dna-experiment{padding-top:13px}.gx-dna-comparison{margin-bottom:14px}}
+@media(max-width:740px){.gx-dna-header{top:10px;left:12px;right:12px;gap:6px}.gx-dna-header>span{font-size:9px;letter-spacing:0}.gx-dna-header b{margin:0 4px}.gx-dna-header button{font-size:11px;padding:9px}.gx-dna-card{top:auto;left:10px;right:10px;bottom:calc(8px + env(safe-area-inset-bottom));width:auto;max-height:52%;padding:17px 16px;border-radius:18px;background:#102d38f5}.gx-dna-kicker>span{font-size:8px}.gx-dna h1{font-size:28px;line-height:1.05;margin:10px 0}.gx-dna h1 br{display:none}.gx-dna-intro{font-size:11px;margin:9px 0 15px}.gx-dna-intro br{display:none}[data-dna-choices]{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}[data-dna-choices]>label{padding:9px 5px;min-height:58px;gap:5px;align-items:center;flex-direction:column;text-align:center}[data-dna-choices] b{font-size:10px}[data-dna-choices] small{display:none}.gx-dna-scene-labels{top:76px;left:8%;right:8%;gap:12px}.gx-dna-scene-labels span{font-size:9px;padding:6px 10px}.gx-dna-scene-labels b{font-size:11px}.gx-dna-comparison{margin:12px 0 16px}.gx-dna-about summary{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.gx-dna *{scroll-behavior:auto}}
+.gx-dna-card{display:flex;flex-direction:column;overflow:hidden;padding:0}
+.gx-dna-body{flex:1;min-height:0;overflow:auto;padding:0 23px 23px;scrollbar-width:thin;scrollbar-color:#6e9b96 transparent}
+.gx-dna-steps{position:relative;top:auto;flex:none;padding:14px 23px 10px;margin:0}
+.gx-dna :is(fieldset,.gx-dna-experiment,.gx-dna-save){scroll-margin-top:8px}
+.gx-dna-scene-labels{inset:0;display:block;pointer-events:none}
+.gx-dna-scene-labels>span{position:absolute;width:max-content;transform:translate(-50%,-100%)}
+.gx-dna-peaks{position:absolute;inset:0;pointer-events:none}.gx-dna-peaks>span{position:absolute;display:flex;align-items:center;gap:7px;transform:translate(-7px,-50%);font-size:11px;color:var(--dna-mint);text-shadow:0 1px 4px #061c27;background:#122e3bc9;border-radius:12px;padding:3px 7px 3px 0}.gx-dna-peaks>span+span{color:var(--dna-peach)}.gx-dna-peaks>span:before{content:'';width:12px;height:12px;border:1px dashed currentColor;border-radius:50%}
+@media(min-width:741px) and (max-height:820px){.gx-dna-body{padding:0 18px 18px}.gx-dna-steps{padding:12px 18px 10px}}
+@media(max-width:740px){.gx-dna-card{height:52%;padding:0}.gx-dna-body{padding:0 16px 16px}.gx-dna-steps{padding:10px 16px}}
+.gx-dna-peaks>span+span{flex-direction:row-reverse;transform:translate(calc(-100% + 7px),-50%)}
+body:has(.gx-dna) .gx-display-settings{top:64px;bottom:auto;right:12px}
+body:has(.gx-dna) .gx-display-panel{top:100%;bottom:auto}
