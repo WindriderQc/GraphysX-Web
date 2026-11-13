@@ -1,0 +1,1 @@
+Original procedural artwork created for GraphysX by scripts/build-quest3-assets.mjs. Copyright 2026 Yanik; ownership retained by the repository owner. No third-party artwork.

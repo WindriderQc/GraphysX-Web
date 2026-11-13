@@ -16,6 +16,7 @@ export const VERIFY_STATIC_CHECKS = {
 // reports it as not run unless `--gpu-receptions` is given on a machine with a GPU.
 // See "GPU receptions" in docs/CI_PERFORMANCE.md.
 export const VERIFY_SMOKES = [
+  { name: "quest3", tier: "core", script: "scripts/smoke-quest3.mjs", covers: "NACRE: real native glTF PBR/KTX2, baked lightmaps, instance batches/LOD, portable API round-trip, material undo, save/mobile and synthetic XR profiles; not headset acceptance" },
   { name: "ten-workshop", tier: "apps", script: "scripts/smoke-ten-workshop.mjs", covers: "Unified Math Lab: make-ten and subtraction practice, count/add exploration, shared links and history, local recovery and editor handoff" },
   { name: "vr-lab", tier: "core", script: "scripts/smoke-vr-lab.mjs", covers: "VR lab: desktop fallback and synthetic XR lifecycle/input, local controller models/button animation, hands, cancelled grabs, host post/inset restoration; not headset acceptance" },
   { name: "llmx-core-embed", tier: "apps", script: "scripts/smoke-llmx-core-embed.mjs", covers: "Core-hosted Forge module: native scoped routes, Family cookie, one text turn, graphical assets and mobile" },

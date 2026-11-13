@@ -985,6 +985,12 @@ export function mountWelcome(
     vr.textContent = "Atelier VR · Mains et manettes";
     Object.assign(vr.style, { color: "#98f1d6", padding: "12px", textDecoration: "none" });
     list.append(vr);
+    const quest3 = document.createElement("a");
+    quest3.className = "gx-go-quest3";
+    quest3.href = import.meta.env.BASE_URL + "?app=quest3";
+    quest3.textContent = "NACRE · Observatoire orbital VR";
+    Object.assign(quest3.style, { color: "#98f1d6", padding: "12px", textDecoration: "none" });
+    list.append(quest3);
     if (hooks?.onOpenIsland) {
       const island = document.createElement("button");
       island.type = "button";

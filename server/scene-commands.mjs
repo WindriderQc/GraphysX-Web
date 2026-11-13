@@ -6,6 +6,7 @@
 // refuses to load; declining an unproven command is safer than persisting it.
 
 import { resolveAgentAppearance } from "./agent-appearance.mjs";
+import { resolveModelPresentation } from "./model-presentation.mjs";
 import { materializeMeshCommand } from "./mesh-authoring.mjs";
 import { MOTION_FIELDS, validateMotionBehavior } from "./motion-behaviors.mjs";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates, MESH_FIELDS, MESH_GROUP_FIELDS, MESH_LIMITS, PIXEL_FIELDS, PIXEL_LIMITS } from "./inline-mesh.mjs";
@@ -61,7 +62,7 @@ export const FIELDS = Object.freeze({
   ]),
   geometry: Object.freeze(["width", "height", "depth", "radius", "tube", "radialSegments"]),
   path: Object.freeze(["points", "closed", "tension"]),
-  asset: Object.freeze(["id", "url", "format", "fitSize", "alphaTest", "colorKey", "colorKeyTolerance"]),
+  asset: Object.freeze(["id", "url", "format", "fitSize", "alphaTest", "colorKey", "colorKeyTolerance", "instances", "lods", "lightmap"]),
   agent: Object.freeze(["role", "status", "perceptionRadius", "capabilities", "origin"]),
   sound: Object.freeze(["source", "volume", "loop", "autoplay", "positional", "refDistance"]),
   emitter: Object.freeze([
@@ -151,7 +152,7 @@ export const ENUMS = Object.freeze({
   forceFieldShapes: Object.freeze(["sphere", "box", "infinite"]),
   surfaceSketches: Object.freeze(["waveform", "grid-pulse", "plasma"]),
   shaderIds: Object.freeze(["archive-ppl", "archive-meshlight"]),
-  assetFormats: Object.freeze(["graphysx-mesh-json"]),
+  assetFormats: Object.freeze(["graphysx-mesh-json", "gltf"]),
 });
 
 /**
@@ -484,6 +485,7 @@ function validatePath(value, label) {
 
 function validateAsset(value, label, allowImportedMedia = false) {
   allowedKeys(value, setOf(FIELDS.asset), label);
+  resolveModelPresentation(value);
   if (value.id !== undefined) requireString(value.id, `${label}.id`, { maximum: LIMITS.strings.textureId });
   if (value.url !== undefined) {
     requireString(value.url, `${label}.url`, { maximum: LIMITS.strings.url });
@@ -809,6 +811,7 @@ function validateEntityFields(entity, label, allowImportedMedia = false) {
   else if (entity.path !== undefined) reject("Only spline entities accept a path");
   if (entity.type === "model") validateAsset(entity.asset, `${label}.asset`, allowImportedMedia);
   else if (entity.asset !== undefined) reject("Only model entities accept an asset");
+  if (entity.asset?.format === "gltf" && entity.physics) reject("Native glTF models use separate primitive physics proxies");
   for (const key of ["agent", "emitter", "sound", "terrain", "water", "flock", "crowd", "formula", "dna", "forceField"]) {
     if (entity[key] !== undefined) validateTypedConfig(entity, key, entity[key], `${label}.${key}`, { merged: true });
   }

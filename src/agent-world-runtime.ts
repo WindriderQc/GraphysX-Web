@@ -1,5 +1,6 @@
 import { resolveAgentAppearance, type AgentAppearance } from "../server/agent-appearance.mjs";
 import { LOCAL_SCENE_PREFIX } from "./local-scenes";
+import type { RenderDiagnosticSnapshot } from "./render-diagnostics";
 import { AgentWorldVoxelFace, findVoxelFace, resolveAgentWorldFace } from "./agent-world-face";
 import { createAgentRobot, findAgentRobot } from "./agent-world-robot";
 import { assertInlineMesh, assertInlinePixels, assertMeshSceneBudget, assertMeshTextureCoordinates } from "../server/inline-mesh.mjs";
@@ -107,6 +108,8 @@ import {
   TorusGeometry,
   Vector3
 } from "three";
+import type { WebGLRenderer } from "three";
+import { resolveModelPresentation } from "../server/model-presentation.mjs";
 import { DDSLoader } from "three/examples/jsm/loaders/DDSLoader.js";
 import { RapierPhysicsEngine, validateRapierBody } from "./physics/rapier-physics-engine";
 import type {
@@ -1140,6 +1143,8 @@ export type AgentWorldCommitReceipt = {
 };
 
 export type AgentWorldState = {
+  /** Host measurements only; absent from portable scene documents. */
+  diagnostics?: RenderDiagnosticSnapshot | null;
   schema: typeof GRAPHYSX_AGENT_WORLD_STATE_SCHEMA;
   apiVersion: "2.0";
   world: { id: string; label: string };
@@ -1655,12 +1660,15 @@ export class AgentWorldRuntime {
   /** Total generative-surface redraws — a smoke asserts this climbs with frameCount (one loop). */
   private surfaceRedraws = 0;
 
+  hostDiagnostics: (() => RenderDiagnosticSnapshot) | null = null;
+
   constructor(
     definition: AgentWorldDefinition = GRAPHYSX_AGENT_DEMO_WORLD,
     physicsWorld: PhysicsEngine = new RapierPhysicsEngine({
       gravity: vectorFromTuple(DEFAULT_ENVIRONMENT.physics.gravity),
       allowSleep: true,
     }),
+    private readonly modelRenderer?: WebGLRenderer,
   ) {
     this.physicsWorld = physicsWorld;
     this.group.name = "GraphysXAgentWorldV2";
@@ -2421,6 +2429,7 @@ export class AgentWorldRuntime {
       : null;
     return {
       schema: GRAPHYSX_AGENT_WORLD_STATE_SCHEMA,
+      diagnostics: this.hostDiagnostics?.() ?? null,
       apiVersion: "2.0",
       world: { id: this.definition.id, label: this.definition.label },
       revision: this.revision,
@@ -4009,7 +4018,7 @@ export class AgentWorldRuntime {
           triangleCount: collisionMesh.triangleCount,
         });
       },
-    } : undefined).then(() => {
+    } : undefined, this.modelRenderer).then(() => {
       if (this.entities.get(runtime.definition.id) !== runtime || runtime.object.userData.graphysxDisposed) return;
       runtime.assetState = { ...asset, status: "ready" };
       this.applyResolvedEntity(runtime);
@@ -4129,7 +4138,7 @@ export class AgentWorldRuntime {
             : definition.material);
         }
       }
-      if (child instanceof AmbientLight || child instanceof DirectionalLight || child instanceof PointLight) {
+      if (definition.type !== "model" && (child instanceof AmbientLight || child instanceof DirectionalLight || child instanceof PointLight)) {
         child.color.set(definition.material.color);
         child.intensity = definition.intensity;
         if (child instanceof PointLight) child.distance = definition.distance;
@@ -4156,6 +4165,7 @@ export class AgentWorldRuntime {
     const interactions = this.resolveInteractions(source.interactions ?? [], allowUnresolvedLookAt);
     const path = resolveSplinePath(source.type, source.path);
     const asset = source.type === "model" ? resolveAgentWorldModelAsset(source.asset) : null;
+    if (asset?.format === "gltf" && source.physics) throw new Error("Native glTF models use separate primitive physics proxies");
     if (source.type !== "model" && source.asset) throw new Error("Only model entities accept an asset");
     const modelMaterialOverrides = source.type === "model"
       ? resolveAgentWorldModelMaterialOverrides(source.modelMaterialOverrides)
@@ -5742,7 +5752,10 @@ function serializeEntity(definition: ResolvedEntity): AgentWorldEntityDefinition
         ...(definition.asset.id ? { id: definition.asset.id } : {}),
         url: definition.asset.url,
         format: definition.asset.format,
-        fitSize: definition.asset.fitSize
+        fitSize: definition.asset.fitSize,
+        ...(definition.asset.alphaTest ? { alphaTest: definition.asset.alphaTest } : {}),
+        ...(definition.asset.colorKey ? { colorKey: definition.asset.colorKey, colorKeyTolerance: definition.asset.colorKeyTolerance } : {}),
+        ...resolveModelPresentation(definition.asset),
       }
     } : {}),
     ...(definition.agent ? { agent: deepClone(definition.agent) } : {}),
@@ -5858,6 +5871,13 @@ function disposeObjectTree(root: Object3D): void {
       }
     }
     const map = "map" in material && material.map instanceof Texture ? material.map : null;
+    // Native PBR models can own roughness, metalness, emissive, AO and baked light maps.
+    for (const value of Object.values(material)) {
+      if (value instanceof Texture && !disposedTextures.has(value)) {
+        value.dispose(); disposedTextures.add(value);
+        if (typeof ImageBitmap !== "undefined" && value.image instanceof ImageBitmap) value.image.close();
+      }
+    }
     if (map && !disposedTextures.has(map)) {
       map.dispose();
       disposedTextures.add(map);
@@ -5872,7 +5892,7 @@ function disposeObjectTree(root: Object3D): void {
   };
   // An overridden slot keeps its immutable source material detached from mesh.material.
   // Include it in whole-entity teardown, while the Sets protect shared source maps/materials.
-  sourceAgentWorldModelMaterials(root).forEach(disposeMaterial);
+  root.traverse(child => sourceAgentWorldModelMaterials(child).forEach(disposeMaterial));
   root.traverse((child) => {
     const face = findVoxelFace(child);
     if (face) {
@@ -5910,6 +5930,9 @@ function disposeObjectTree(root: Object3D): void {
       return;
     }
     if (!(child instanceof Mesh) && !(child instanceof Line)) return;
+    const ownedMesh = child as Mesh & { isInstancedMesh?: boolean; dispose?: () => void; skeleton?: { dispose(): void } };
+    if (ownedMesh.isInstancedMesh) ownedMesh.dispose?.();
+    ownedMesh.skeleton?.dispose();
     child.geometry?.dispose();
     const materials = Array.isArray(child.material) ? child.material : [child.material];
     materials.forEach(disposeMaterial);
