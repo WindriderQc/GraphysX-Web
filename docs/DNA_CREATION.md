@@ -73,3 +73,25 @@ also run separately with inspected canvas captures and projected application sta
 
 Release qualification and public deployment receipts are recorded in `progress.md`
 and ignored `output/`; local browser proof is separate from CI and public identity.
+
+### Qualified delivery — 2026-11-12
+
+The full default release gate at `d308ba08ab6a7bd7080e29cae8e7d29069a394e1`
+passes all126 controls (120 executable smokes and6 static/physics checks), with
+1303 Node passes, one conditional skip and zero failures. The three dedicated
+hardware-GPU receptions are explicitly outside that run.
+
+The final bounded compatibility guard at `abd6356f805384728cd47e1cba1aca52020a28ab`
+is qualified by another complete Node suite, typecheck, lint, fresh build, DNA,
+Garden, revival and Studio browser journeys, and both unmodified standard-client
+scenarios. No shared runtime, routing, server or assets changed after the full gate.
+All three mutations were visually inspected on desktop and320px; 390px, keyboard,
+reduced motion, real-time bounce, incomplete observations and save/resume failures
+are covered. The final Studio case changes platform restitution and retains the
+exact edited document with incompatible experiment helpers disabled.
+
+Local receipts: `output/dna-full-qualified-receipt.json`, `output/dna-postgate-receipt.json`,
+`output/dna-full-release.log`, `output/dna-postgate.log`, and captures in
+`output/playwright/dna-postgate/`. Publication and exact public revision checks
+are followed in [PR143](https://github.com/WindriderQc/GraphysX-Web/pull/143).
+Mobile coverage is browser emulation; physical-device acceptance is separate.
