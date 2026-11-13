@@ -141,6 +141,11 @@ try {
   await xr.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.vr.session.snapshot.phase==='active');
   assert.equal(await xr.evaluate(()=>window.__questSession.frameRate),90);
   await xr.waitForFunction(()=>window.__GRAPHYSX__.observe().diagnostics.scope==='immersive-vr');
+  await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.view(1));
+  await xr.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-equipment').children[0].levels[0].object.visible);
+  await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.view(2));
+  await xr.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-equipment').children[0].levels[1].object.visible);
+  receipt.syntheticXrLod=true;
   await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.vr.session.exit());
   assert.deepEqual(await xr.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.camera.position.toArray()),await xr.evaluate(()=>window.__questCamera));
   assert.equal(await xr.locator('.nacre-ui').getAttribute('data-immersive'),'false');
