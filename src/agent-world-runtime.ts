@@ -5892,7 +5892,12 @@ function disposeObjectTree(root: Object3D): void {
   };
   // An overridden slot keeps its immutable source material detached from mesh.material.
   // Include it in whole-entity teardown, while the Sets protect shared source maps/materials.
-  root.traverse(child => sourceAgentWorldModelMaterials(child).forEach(disposeMaterial));
+  root.traverse(child => {
+    // A whole-world replacement also owns pending loads on descendant entity roots.
+    // Mark those roots before clearing the tree so late decodes cannot attach there.
+    child.userData.graphysxDisposed = true;
+    sourceAgentWorldModelMaterials(child).forEach(disposeMaterial);
+  });
   root.traverse((child) => {
     const face = findVoxelFace(child);
     if (face) {

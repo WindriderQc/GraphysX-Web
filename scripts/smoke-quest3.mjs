@@ -78,6 +78,35 @@ try {
   assert.deepEqual(canonical(restored),canonical(document));
   await page.waitForFunction(()=>window.__GRAPHYSX__.state().entities.filter(e=>e.asset).every(e=>e.asset.status==='ready'));
   receipt.roundTrip=true;
+  // Hold a real native model request across a complete world replacement. A late
+  // completion must release its own resources rather than attach to an orphan group.
+  let releaseNative, nativeRequested;
+  const nativeGate=new Promise(resolve=>{releaseNative=resolve;});
+  const nativeSeen=new Promise(resolve=>{nativeRequested=resolve;});
+  const nativePattern='**/assets/quest3/star.glb?cancel-native=1';
+  const holdNative=async route=>{nativeRequested();await nativeGate;await route.continue();};
+  await page.route(nativePattern,holdNative);
+  try {
+    await page.evaluate(()=>{
+      const {host}=window.__GRAPHYSX_QUEST3__;
+      const result=host.api.spawn({id:'cancelled-native',type:'model',asset:{format:'gltf',url:'/assets/quest3/star.glb?cancel-native=1'}});
+      if(!result.ok)throw Error(result.error);
+      const object=host.world.getEntityObject('cancelled-native');window.__cancelledNative=object;
+      let disposed=object.userData.graphysxDisposed===true;
+      Object.defineProperty(object.userData,'graphysxDisposed',{configurable:true,enumerable:true,get(){window.__cancelledNativeChecked=true;return disposed;},set(value){disposed=value;}});
+    });
+    await nativeSeen;
+    await page.evaluate(()=>{
+      const api=window.__GRAPHYSX__,saved=api.export();saved.entities=saved.entities.filter(e=>e.id!=='cancelled-native');
+      const result=api.create(saved);if(!result.ok)throw Error(result.error);
+      window.__cancelledNativeChecked=false;
+    });
+    releaseNative();
+    await page.waitForFunction(()=>window.__cancelledNativeChecked);
+    assert.equal(await page.evaluate(()=>window.__cancelledNative.children.length),0,'a cancelled model must not attach decoded geometry to its detached owner');
+    await page.waitForFunction(()=>window.__GRAPHYSX__.state().entities.filter(e=>e.asset).every(e=>e.asset.status==='ready'));
+    receipt.pendingModelCancellation=true;
+  } finally { releaseNative();await page.unroute(nativePattern,holdNative); }
   for(const [id,url,extra,reason] of [
     ['missing-baked-uv','/assets/quest3/equipment-low.glb',{lightmap:{url:'/assets/quest3/station-light.ktx2'}},'TEXCOORD_1'],
     ['skinned-batch','/assets/xr/profiles/generic-hand/left.glb',{instances:[{}]},'static meshes'],

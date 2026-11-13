@@ -69,6 +69,7 @@ export function instanceGltf(root: Group, instances: NonNullable<ResolvedAgentWo
 }
 
 export async function loadNativeGltf(target: Group, asset: ResolvedAgentWorldModelAsset, renderer?: WebGLRenderer): Promise<void> {
+  if (target.userData.graphysxDisposed) return;
   const ktx = renderer ? new KTX2Loader().setTranscoderPath(`${import.meta.env?.BASE_URL ?? "/"}assets/codecs/basis/`).setWorkerLimit(2).detectSupport(renderer) : null;
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   if (ktx) loader.setKTX2Loader(ktx);
@@ -81,6 +82,7 @@ export async function loadNativeGltf(target: Group, asset: ResolvedAgentWorldMod
     for (const source of sources) {
       const gltf = await loader.loadAsync(source.url);
       owned.add(gltf.scene);
+      if (target.userData.graphysxDisposed) { disposeNativeTree(owned); return; }
       if (asset.instances && gltf.animations.length) throw new Error("Animated glTF models cannot be static instance batches");
       loaded.push({ root: gltf.scene, distance: source.distance });
     }
@@ -91,6 +93,7 @@ export async function loadNativeGltf(target: Group, asset: ResolvedAgentWorldMod
       } else lightmap = await new TextureLoader().loadAsync(asset.lightmap.url);
       lightmap.colorSpace = SRGBColorSpace; lightmap.flipY = false; lightmap.channel = 1;
     }
+    if (target.userData.graphysxDisposed) { disposeNativeTree(owned); lightmap?.dispose(); return; }
     const bounds = new Box3().setFromObject(loaded[0]!.root);
     const dimensions = bounds.getSize(new Vector3());
     const extent = Math.max(dimensions.x, dimensions.y, dimensions.z);

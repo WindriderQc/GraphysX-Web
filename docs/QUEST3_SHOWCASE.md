@@ -53,6 +53,8 @@ gx.observe().diagnostics;
 
 The shared browser/server validator checks the same presentation shape and limits.
 Presentation data survives export/create/save/load and appears in observations.
+Removing an entity or replacing the whole world invalidates pending model roots.
+Late decodes release their resources instead of attaching to detached scene objects.
 Native glTF models use separate ordinary primitive physics proxies; assigning a
 rigid body to a native visual model is refused. Existing recovered mesh colliders
 are unchanged. Lights embedded in a GLB remain part of its source scene and should
