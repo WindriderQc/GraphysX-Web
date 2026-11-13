@@ -106,6 +106,7 @@ try {
     assert.equal(await page.evaluate(()=>window.__cancelledNative.children.length),0,'a cancelled model must not attach decoded geometry to its detached owner');
     await page.waitForFunction(()=>window.__GRAPHYSX__.state().entities.filter(e=>e.asset).every(e=>e.asset.status==='ready'));
     receipt.pendingModelCancellation=true;
+    console.log('NACRE: pending native model cancellation passed.');
   } finally { releaseNative();await page.unroute(nativePattern,holdNative); }
   for(const [id,url,extra,reason] of [
     ['missing-baked-uv','/assets/quest3/equipment-low.glb',{lightmap:{url:'/assets/quest3/station-light.ktx2'}},'TEXCOORD_1'],
@@ -133,6 +134,11 @@ try {
   });
   await xr.goto(new URL('?app=quest3',base).href);
   await xr.waitForFunction(()=>window.__GRAPHYSX_QUEST3__?.vr.session.snapshot.phase==='ready');
+  await xr.waitForFunction(()=>{
+    const models=window.__GRAPHYSX__.state().entities.filter(entity=>entity.asset);
+    if(models.some(entity=>entity.asset.status==='error'))throw Error('XR fixture assets failed to load');
+    return models.length===6&&models.every(entity=>entity.asset.status==='ready');
+  });
   await xr.evaluate(()=>{
     const {host}=window.__GRAPHYSX_QUEST3__;window.__questCamera=host.camera.position.toArray();
     host.renderer.xr.setSession=async()=>{};host.renderer.xr.getReferenceSpace=()=>new EventTarget();
