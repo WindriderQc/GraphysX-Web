@@ -1,0 +1,143 @@
+{
+  "generator": "scripts/build-quest3-assets.mjs",
+  "encoder": "BinomialLLC/basis_universal v2_50",
+  "encoderHashes": {
+    "basis_encoder.js": "d225ce1e7012609bcfbe338351c8778d95eb1c19d404314d513b2b2df94a6ffb",
+    "basis_encoder.wasm": "48d4e39ccaa1e290a17d00c13b353a728227bb439108d5e6c944fe6ab80552db"
+  },
+  "bake": {
+    "method": "CPU direct lighting with AABB shadows and sampled ambient occlusion; no global illumination claim",
+    "resolution": 512,
+    "triangles": 348,
+    "lights": [
+      {
+        "p": [
+          -4.8,
+          3.8,
+          -2
+        ],
+        "c": [
+          0.22,
+          0.72,
+          1
+        ],
+        "power": 3.4
+      },
+      {
+        "p": [
+          4.8,
+          3.8,
+          -2
+        ],
+        "c": [
+          1,
+          0.57,
+          0.21
+        ],
+        "power": 3.4
+      },
+      {
+        "p": [
+          -4.8,
+          3.8,
+          -8
+        ],
+        "c": [
+          0.22,
+          0.72,
+          1
+        ],
+        "power": 3.4
+      },
+      {
+        "p": [
+          4.8,
+          3.8,
+          -8
+        ],
+        "c": [
+          1,
+          0.57,
+          0.21
+        ],
+        "power": 3.4
+      },
+      {
+        "p": [
+          -4.8,
+          3.8,
+          -14
+        ],
+        "c": [
+          0.22,
+          0.72,
+          1
+        ],
+        "power": 3.4
+      },
+      {
+        "p": [
+          4.8,
+          3.8,
+          -14
+        ],
+        "c": [
+          1,
+          0.57,
+          0.21
+        ],
+        "power": 3.4
+      },
+      {
+        "p": [
+          -4.8,
+          3.8,
+          -21
+        ],
+        "c": [
+          0.22,
+          0.72,
+          1
+        ],
+        "power": 3.4
+      },
+      {
+        "p": [
+          4.8,
+          3.8,
+          -21
+        ],
+        "c": [
+          1,
+          0.57,
+          0.21
+        ],
+        "power": 3.4
+      },
+      {
+        "p": [
+          0,
+          2.8,
+          -11
+        ],
+        "c": [
+          0.2,
+          0.9,
+          1
+        ],
+        "power": 4
+      }
+    ]
+  },
+  "station": {
+    "url": "/assets/quest3/station.glb",
+    "bytes": 46752,
+    "fitSize": 28.200000286102295,
+    "centre": [
+      0,
+      2.8499999940395355,
+      -10.000000238418579
+    ]
+  },
+  "provenance": "Original procedural artwork created for GraphysX; repository owner retains ownership"
+}

@@ -165,7 +165,12 @@ async function waitForExactCollider(
 }
 
 // Opt-in VR entry. Keep the XR factories out of ordinary routes until requested.
-if (appParam === "vr-lab") {
+if (appParam === "quest3") {
+  root.style.position = "fixed";
+  root.style.inset = "0";
+  void import("./quest3-showcase").then(({ mountQuest3Showcase }) => mountQuest3Showcase(root))
+    .catch((error: unknown) => showStartupError(root, error));
+} else if (appParam === "vr-lab") {
   root.style.position = "fixed";
   root.style.inset = "0";
   void import("./vr-lab-app").then(({ mountVrLab }) => mountVrLab(root))
@@ -992,6 +997,12 @@ if (appParam === "vr-lab") {
           // as a composed row. main.ts supplies it because framing needs the host, which the
           // shelf deliberately does not have.
           composed: [
+            {
+              id: "nacre-quest3", label: "NACRE · Observatoire orbital",
+              summary: "Une station sci-fi à explorer sur écran ou dans votre Quest. Galerie vitrée, réacteur et belvédère planétaire.",
+              meta: "Création originale · WebXR · Quest 3",
+              open: () => { window.location.assign(import.meta.env.BASE_URL + "?app=quest3"); },
+            },
             ...(["native-intro"] as const).map((scene) => ({
               id: `archive-${scene}`,
               label: "Intro Physics · ArduinoGUI C#",

@@ -75,7 +75,7 @@ const describe = {
     geometry: "Primitive dimensions in metres: width/height/depth (box, plane), radius/tube (sphere, torus, cylinder, cone).",
     mesh: "Inline indexed triangles (mesh entities only). Flat positions and indices; optional normals, UVs, groups and materials. Replacing update.mesh is one undoable change. See fields.mesh and limits.mesh.",
     path: "Spline control points (spline entities only): `{ points: [[x,y,z], …], closed?, tension? }`.",
-    asset: "Model entities only: a curated id from `modelAssetIds`, or a root-relative / HTTPS URL.",
+    asset: "Model entities only: a curated id or URL. format gltf preserves native PBR. glTF supports lightmap {url,intensity?} on TEXCOORD_1, instances of local transforms (max 2048), and lods [{url,distance}] strictly increasing (max 3). Select/transform the batch as one entity; use separate primitive physics proxies.",
     emitter: "Particle emitter config (emitter entities only).",
     sound: "Placed audio source (sound entities only); `source` is a sound id or URL.",
     terrain: "Heightmap terrain (terrain entities only).",

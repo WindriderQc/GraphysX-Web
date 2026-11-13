@@ -22,7 +22,7 @@ test('local generic controller has all animated component nodes and stays in the
  assert.ok(model.buffers.every(buffer=>buffer.uri.startsWith('data:')));
  const manifest=await productAssetManifest();
  const xr=await xrAssetManifest();
- assert.equal(xr.length,9);
+ assert.equal(xr.length,12);
  for(const file of ['profilesList.json','generic-trigger/profile.json','generic-trigger/controller.gltf']){
   assert.ok(manifest.files.includes(`/assets/xr/profiles/${file}`));
   assert.ok(xr.includes(`/assets/xr/profiles/${file}`));
@@ -46,7 +46,7 @@ test('vendored hands and Touch controllers are pinned, self-contained and shippe
    assert.equal(gltf.skins.length,1);assert.equal(gltf.skins[0].joints.length,25);
    for(const name of ['wrist','thumb-tip','index-finger-tip','middle-finger-tip','ring-finger-tip','pinky-finger-tip'])assert.ok(names.has(name),name);
   }else{
-   const profile=await read('oculus-touch-v3/profile.json');
+   const profile=await read(`${file.split('/')[0]}/profile.json`);
    const side=file.includes('/left.')?'left':'right';
    const layout=profile.layouts[side];assert.equal(layout.assetPath,`${side}.glb`);
    assert.ok(names.has(layout.rootNodeName));
