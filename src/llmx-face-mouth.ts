@@ -64,8 +64,10 @@ export const MOUTH_LOOK = Object.freeze({
   // The Forge's own amber (llmx-forge.ts PALETTE.amber), the colour of its round particles,
   // rather than a red that looked like a hot mouth.
   ember: "#ff9a4a",
-  emberSpeak: 0.62,
-  emberThink: 0.4,
+  // A trace at depth, never a horizontal light bar between the teeth. The lifted lips now
+  // carry the opening visibly, so the old interior intensity is no longer needed to signal it.
+  emberSpeak: 0.18,
+  emberThink: 0.12,
   emberThinkRate: 1.3,
   /** Glow weight by depth: the far wall full, the deep throat fading out toward the lips. */
   glowFrom: 0.3,

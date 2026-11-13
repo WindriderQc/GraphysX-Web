@@ -46,19 +46,20 @@ import {
  * from the host's one frame loop. There is no second `requestAnimationFrame` here and no call
  * to any service: the rig is told what to express, it does not go and find out.
  *
- * ## Why three meshes and not one
+ * ## Six instanced meshes
  *
  * Cubes are split by what they need rather than by where they are:
  *
  * - **static metal** — cranium and temple fins. Nothing an expression does moves them, so their
- *   matrices are written once at assembly and never touched again. That is the majority of the
- *   mask, and it is what makes a denser, better-looking sculpt affordable.
+ *   matrices are written once at assembly and never touched again, keeping fixed shell work
+ *   outside the per-frame update.
  * - **animated metal** — brow, sockets, cheeks, nose, jaw, lips. Rewritten per frame.
- * - **eyes** — the mask's only emissive material, and the only feature a viewer reads presence
- *   from. Its own mesh so its emissive can rise and fall without touching the metal.
+ * - **iris** and **sclera/pupil** — separate optical surfaces; the iris glows independently.
+ * - **mouth interior** — matte walls and restrained teeth, with an ember deep behind them.
+ * - **liner** — a static copy behind the shell that closes small sampling seams.
  *
- * Three draw calls for the whole face, and roughly 3,200 of 5,500 cubes rewritten per frame
- * instead of all of them.
+ * Six draw calls for the rig. Each tier keeps a static slice; only its animated slice is
+ * rewritten once assembled. The host may add its own halo or shadow pass.
  *
  * The expression maths itself is not here — it is in `llmx-face-pose.ts`, shared with the unit
  * tests and the offline preview tool, so a wrong mouth is reproducible without a browser.
@@ -132,6 +133,7 @@ const RESPONSE = {
   attention: 0.45,
   think: 0.7,
   warmth: 0.9,
+  expression: 0.22,
   build: 0.05,
 };
 
@@ -378,6 +380,8 @@ export class AgentWorldVoxelFace {
     current.attention = approach(current.attention, target.attention, RESPONSE.attention, dt);
     current.think = approach(current.think, target.think, RESPONSE.think, dt);
     current.warmth = approach(current.warmth, target.warmth, RESPONSE.warmth, dt);
+    current.curiosity = approach(current.curiosity, target.curiosity, RESPONSE.expression, dt);
+    current.surprise = approach(current.surprise, target.surprise, RESPONSE.expression, dt);
     current.breath += dt * 0.9;
 
     // A head that listens leans. Applied to the rig's own group, so the host's anchor is

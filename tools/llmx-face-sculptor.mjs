@@ -126,7 +126,7 @@ export const ANCHORS = {
    * stylisation, not a proportion error.
    */
   eye: { x: 0.29, y: 0.1, z: 0.38, radius: 0.152 },
-  brow: { x: 0.31, y: 0.3, z: 0.37 },
+  brow: { x: 0.31, y: 0.33, z: 0.37 },
   cheek: { x: 0.43, y: -0.08, z: 0.28 },
   mouth: { y: -0.52, z: 0.42, halfWidth: 0.27 },
   /** Jaw hinge, behind and above the chin. Jaw voxels rotate about this X axis. */
@@ -190,11 +190,12 @@ function maskDistance(x, y, z) {
   // The mid-face already carries the cheeks. An added forward ellipsoid formed two rectangular
   // shelves under the eyes at portrait scale, so let the orbital rim meet this shared surface.
   // A hollow below the cheeks gives the mask its gaunt shape.
-  d = smax(d, -sdEllipsoid(ax - 0.4, y + 0.36, z - 0.36, 0.15, 0.11, 0.16), 0.09);
+  d = smax(d, -sdEllipsoid(ax - 0.4, y + 0.36, z - 0.36, 0.125, 0.09, 0.13), 0.08);
 
-  // Brow ridge, dipping toward the nose and pushed forward so it actually overhangs the eyes.
-  // This single angle is most of the mask's character.
-  d = smin(d, sdCapsule(ax, y, z, 0.05, 0.22, 0.43, 0.52, 0.33, 0.26, 0.12), 0.055);
+  // A tapered arch integrated into the same shell. The old heavy inward slope read as a
+  // permanent scowl; an inner rise, crest and softer outer tail can actually change expression.
+  d = smin(d, sdCapsule(ax, y, z, 0.075, 0.295, 0.438, 0.285, 0.365, 0.37, 0.083), 0.05);
+  d = smin(d, sdCapsule(ax, y, z, 0.285, 0.365, 0.37, 0.525, 0.3, 0.265, 0.07), 0.05);
 
   // Nose: a blade widening downward, with wings, and a bridge — a thin ridge from between the
   // brows to the tip, so the profile has a line rather than a slope.
@@ -211,8 +212,11 @@ function maskDistance(x, y, z) {
   // open drawer. A lip is a rim, one or two cubes deep; the mouth reads by its aperture.
   // Author a relaxed mouth. Speech opens this narrow seam in the shared pose model;
   // a tall resting cut leaves the face permanently surprised, regardless of audio.
-  d = smin(d, sdEllipsoid(x, y + 0.485, z - 0.4, 0.26, 0.035, 0.085), 0.04);
-  d = smin(d, sdEllipsoid(x, y + 0.563, z - 0.4, 0.255, 0.045, 0.085), 0.04);
+  const lipArc = 0.02 * Math.min(ax / ANCHORS.mouth.halfWidth, 1) ** 2;
+  // Two joined upper lobes and a fuller lower rim: height and contour supply the volume,
+  // while their shallow depth avoids the old projecting drawer or a tube around the mouth.
+  d = smin(d, sdEllipsoid(ax - 0.075, y + 0.482 - lipArc, z - 0.47, 0.2, 0.05, 0.082), 0.055);
+  d = smin(d, sdEllipsoid(x, y + 0.575 - lipArc, z - 0.458, 0.255, 0.062, 0.082), 0.055);
 
   // Swept-back temple fins and a crown fin — where the mask stops being a face and becomes
   // machinery. Capsules sweeping up and back, not slabs: a flat panel reads as a billboard from
@@ -295,7 +299,7 @@ function mawDistance(x, y, z) {
 /** The lid is a cap over the top of the eyeball; it rotates down to blink. */
 function lidDistance(x, y, z) {
   const { x: ex, y: ey, z: ez, radius } = ANCHORS.eye;
-  const shell = Math.abs(len(Math.abs(x) - ex, y - ey, z - ez) - (radius + 0.034)) - 0.026;
+  const shell = Math.abs(len(Math.abs(x) - ex, y - ey, z - ez) - (radius + 0.022)) - 0.026;
   // The lid caps the top third of the eyeball, not its top half. A half-covered eyeball leaves
   // only a crescent of cyan along the bottom rim, and a bottom crescent reads as a gaze aimed
   // at the floor no matter where the eye is actually pointed. Soft edge so the lid line is not
@@ -304,14 +308,14 @@ function lidDistance(x, y, z) {
 }
 
 /** Where the upper lid's cap plane cuts the eyeball: everything below it is the open eye. */
-const UPPER_LID_LINE = ANCHORS.eye.y + ANCHORS.eye.radius * 0.58;
+const UPPER_LID_LINE = ANCHORS.eye.y + ANCHORS.eye.radius * 0.66;
 /** Where the lower lid's cap plane cuts the eyeball: everything above it is the open eye. */
-const LOWER_LID_LINE = ANCHORS.eye.y - ANCHORS.eye.radius * 0.68;
+const LOWER_LID_LINE = ANCHORS.eye.y - ANCHORS.eye.radius * 0.72;
 
 /** The lower lid: the same shell, capping the bottom fifth of the eyeball. */
 function lowerLidDistance(x, y, z) {
   const { x: ex, y: ey, z: ez, radius } = ANCHORS.eye;
-  const shell = Math.abs(len(Math.abs(x) - ex, y - ey, z - ez) - (radius + 0.034)) - 0.026;
+  const shell = Math.abs(len(Math.abs(x) - ex, y - ey, z - ez) - (radius + 0.022)) - 0.018;
   return smax(shell, y - LOWER_LID_LINE, 0.03);
 }
 
