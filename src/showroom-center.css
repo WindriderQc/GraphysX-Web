@@ -12,6 +12,8 @@
   box-shadow:0 5px 22px #52bfaa26;color:#0b2a2e;
 }
 .gx-welcome.gx-welcome--center .gx-create-new:hover{background:#b4f6e5}
+.gx-welcome.gx-welcome--center .gx-create-garden{color:#c4dddd;border:1px solid #91bdb844;background:#1b3946}
+.gx-welcome.gx-welcome--center .gx-dna-resume{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gx-welcome.gx-welcome--center .gx-tour-start{min-height:36px;padding-inline:10px}
 .gx-welcome.gx-welcome--center .gx-actions{
   position:fixed;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom));
@@ -53,7 +55,7 @@
   }
   .gx-welcome.gx-welcome--center:not(.gx-welcome--touring) .gx-welcome-card .gx-eyebrow{gap:6px;font-size:9px}
   .gx-welcome.gx-welcome--center .gx-create-entry{gap:5px}
-  .gx-welcome.gx-welcome--center .gx-create-entry a{font-size:12px;min-height:41px;padding:7px 9px}
+  .gx-welcome.gx-welcome--center .gx-create-entry a{font-size:12px;min-height:44px;padding:7px 9px}
   .gx-welcome.gx-welcome--center .gx-actions{
     left:10px;right:10px;bottom:calc(9px + env(safe-area-inset-bottom));width:auto;
   }

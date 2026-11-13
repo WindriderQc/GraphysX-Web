@@ -8,7 +8,7 @@ import { after, before, test } from "node:test";
 import { build } from "vite";
 import { applyCommands, validateStoredSceneDefinition } from "../server/scene-commands.mjs";
 
-let temporary, AgentWorldRuntime, createAgentWorldApi, createBridge, invoke, requestSchema, archiveWorlds, motionWorlds;
+let temporary, AgentWorldRuntime, createAgentWorldApi, createBridge, invoke, requestSchema, archiveWorlds, motionWorlds, dnaCreation;
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 
 before(async () => {
@@ -28,6 +28,7 @@ before(async () => {
           connection: join(root, "src/graphysx-agent-connection.ts"),
           archive: join(root, "src/archive-worlds.ts"),
           motion: join(root, "src/archive-world-motion.ts"),
+          dnaCreation: join(root, "src/dna-creation-scene.ts"),
         },
         output: { format: "es", entryFileNames: "[name].mjs", chunkFileNames: "chunks/[name]-[hash].mjs" },
       },
@@ -40,6 +41,7 @@ before(async () => {
   ({ createGraphysXAgentToolBridge: createBridge, GRAPHYSX_AGENT_TOOL_REQUEST_SCHEMA: requestSchema } = await load("bridge"));
   ({ invokeGraphysXAgentTool: invoke } = await load("connection"));
   archiveWorlds = await load("archive"); motionWorlds = await load("motion");
+  dnaCreation = await load("dnaCreation");
   // Only the window transport is substituted. The scene, validators, API factory,
   // tool manifest, dispatch and simulation are the production implementations.
   const window = Object.assign(new EventTarget(), {
@@ -88,6 +90,94 @@ const records = ({ runtime, api }) => structuredClone({
 const snapshot = w => ({ ...records(w), state: w.api.state(), document: w.api.exportDocument(), exported: w.api.export() });
 const request = (method, args) => ({ schema: requestSchema, id: "live-test", method, args });
 const accepted = result => { assert.equal(result.ok, true, result.error); return result.value; };
+
+test("DNA mutations cross browser/storage validation and reload identical geometry with one changed gene", t => {
+  const { composeDnaCreation, DNA_MUTATIONS, dnaMutationCommands, dnaCreationCanTune, dnaCreationMeasurements } = dnaCreation;
+  const initial = composeDnaCreation();
+  assert.doesNotThrow(() => validateStoredSceneDefinition(initial));
+  const runtime = new AgentWorldRuntime(initial), api = createAgentWorldApi(runtime);
+  t.after(() => runtime.dispose());
+  const original = api.exportDocument(), reference = original.entities.find(entity => entity.id === "dna-reference");
+  const matrices = world => {
+    const values = [];
+    world.getEntityObject("dna-variant").traverse(object => { if (object.isInstancedMesh) values.push([...object.instanceMatrix.array]); });
+    return values;
+  };
+  const originalMatrices = matrices(runtime);
+  for (const mutation of DNA_MUTATIONS) {
+    const commands = dnaMutationCommands(mutation);
+    assert.doesNotThrow(() => applyCommands(api.exportDocument(), commands));
+    accepted(api.transaction(commands));
+    const document = api.exportDocument();
+    assert.doesNotThrow(() => validateStoredSceneDefinition(document));
+    assert.equal(dnaCreationCanTune(document), true);
+    assert.deepEqual(document.entities.find(entity => entity.id === "dna-reference"), reference);
+    const variant = document.entities.find(entity => entity.id === "dna-variant");
+    assert.deepEqual(Object.keys(variant.dna.genome).filter(gene => variant.dna.genome[gene] !== reference.dna.genome[gene]), [mutation.gene]);
+    assert.notDeepEqual(matrices(runtime), originalMatrices, mutation.id + " changes rendered geometry");
+    const restored = new AgentWorldRuntime(structuredClone(document));
+    assert.deepEqual(matrices(restored), matrices(runtime), mutation.id + " survives an exact document reload");
+    restored.dispose();
+    assert.equal(dnaCreationMeasurements(document).variant.truncated, false);
+  }
+  const edited = api.exportDocument();
+  edited.entities.find(entity => entity.id === "dna-variant").transform.position[0] += 1;
+  assert.equal(dnaCreationCanTune(edited), false, "Studio transforms disable template helpers");
+  const scaledPad = structuredClone(original);
+  scaledPad.entities.find(entity => entity.id === "dna-pad-variant").transform.scale = [1, 2, 1];
+  assert.equal(dnaCreationCanTune(scaledPad), false, "changed platforms cannot silently falsify the comparison");
+  for (const [id, field, value] of [
+    ["dna-pad-variant", "restitution", 0.93], ["dna-pad-reference", "friction", 0.7],
+  ]) {
+    const changed = structuredClone(original);
+    changed.entities.find(entity => entity.id === id).physics[field] = value;
+    assert.doesNotThrow(() => validateStoredSceneDefinition(changed));
+    const before = structuredClone(changed);
+    assert.equal(dnaCreationCanTune(changed), false, "changed " + field + " disables the identical-condition experiment");
+    assert.deepEqual(changed, before, "checking compatibility never rewrites the edited document");
+  }
+  for (const id of ["dna-reference", "dna-seed-variant", "dna-pad-reference"]) {
+    const hidden = structuredClone(original);
+    hidden.entities.find(entity => entity.id === id).visible = false;
+    assert.equal(dnaCreationCanTune(hidden), false, "hidden " + id + " disables the visual experiment");
+  }
+  const steered = structuredClone(original);
+  steered.entities.find(entity => entity.id === "dna-seed-variant").steering = { force: 30, speedCap: 4 };
+  assert.doesNotThrow(() => validateStoredSceneDefinition(steered));
+  assert.equal(dnaCreationCanTune(steered), false, "custom seed steering disables the free-fall comparison");
+  const interactive = structuredClone(original);
+  interactive.entities.find(entity => entity.id === "dna-pad-reference").interactions = [{ id: "studio-seed-kick", type: "apply-impulse", targetIds: ["dna-seed-variant"], impulse: [3, 0, 0] }];
+  assert.doesNotThrow(() => validateStoredSceneDefinition(interactive));
+  assert.equal(dnaCreationCanTune(interactive), false, "custom experiment interactions stay under Studio control");
+});
+
+test("DNA height drives real identical-body Rapier bounce while authored launch poses stay stable", t => {
+  const runtime = new AgentWorldRuntime(dnaCreation.composeDnaCreation()), api = createAgentWorldApi(runtime);
+  t.after(() => runtime.dispose());
+  accepted(api.transaction(dnaCreation.dnaMutationCommands(dnaCreation.DNA_MUTATIONS[0])));
+  const document = api.exportDocument();
+  const seeds = document.entities.filter(entity => entity.id.startsWith("dna-seed-"));
+  assert.deepEqual(seeds[0].physics, seeds[1].physics);
+  const measured = dnaCreation.dnaCreationMeasurements(document);
+  for (const side of dnaCreation.DNA_SIDES) {
+    assert.equal(document.entities.find(entity => entity.id === "dna-seed-" + side).transform.position[1], dnaCreation.DNA_PAD_TOP + measured[side].height);
+  }
+  const peaks = [0, 0], bounced = [false, false];
+  for (let frame = 0; frame < 210; frame++) {
+    accepted(api.step(1 / 60));
+    const states = api.query({ ids: ["dna-seed-reference", "dna-seed-variant"] });
+    dnaCreation.DNA_SIDES.forEach((side, index) => {
+      const seed = states.find(entity => entity.id === "dna-seed-" + side);
+      if (seed.physics.linearVelocity[1] > 0.1) bounced[index] = true;
+      if (bounced[index]) peaks[index] = Math.max(peaks[index], seed.position[1] - dnaCreation.DNA_PAD_TOP - dnaCreation.DNA_SEED_RADIUS);
+    });
+  }
+  assert.deepEqual(bounced, [true, true]);
+  assert.ok(peaks[1] > peaks[0] * 1.45, JSON.stringify(peaks));
+  assert.deepEqual(api.exportDocument(), document);
+  accepted(api.transaction(dnaCreation.dnaSeedResetCommands(document)));
+  assert.deepEqual(api.exportDocument(), document);
+});
 
 test("the real public API has exact bridge parity and live mutations are discoverable", t => {
   const { bridge } = world(t);

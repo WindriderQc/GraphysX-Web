@@ -5448,3 +5448,42 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
   output/playwright/revival-postgate, revival-standard-final, output/verify. Detailed scope
   and source limitations are in docs/REVIVAL_AND_UX.md. PR142 CI is green; integrate/deploy
   next, with public revision/asset checks separate from local visual qualification.
+
+### DNA welcome creation journey — 2026-11-12
+
+- User request: "Start with the welcome DNA/physics experience: choose a mutation, see its effects, save the variant and open it in the Studio. All the way through testing and deployment!"
+- Isolated branch codex/dna-welcome in GraphysX-Web-dna from current origin/main 591fdbf; preserve original checkout, concurrent Nestor work and native archive.
+- Implement a deterministic reference/variant DNA comparison and ordinary canonical Rapier seed drops, local named persistence/resumption, and exact Studio handoff. Use the shared host and frame loop. Keep Garden creation and archive/prototype separation.
+- Qualification pending: scene/physics contracts, desktop/compact/reduced-motion browser journeys, storage failure/conflicts, standard game client with inspected captures, existing regression gate, CI and public deployment identity/journey.
+
+### DNA focused qualification — 2026-11-12
+
+- Added the welcome/Ateliers DNA route, reference/variant comparison with three single-gene choices, actual twin-seed Rapier drop, observed first-bounce markers, pause/reset and a persistent three-step navigation.
+- Named local save is read back before exposing the Studio link. Garden and DNA resume pointers remain separate. Existing names/stale slots are protected; failures retain the open variant. Studio opens paused and its edited document resumes without template replacement.
+- The actual-module Node contract suite passes 14/14, including deterministic rendered-matrix reload, both storage/browser validators and higher real bounce with identical body properties. Typecheck/lint pass in the focused run.
+- Focused browser journey passes at 1440x960, 390x844 and 320x740, including native radio keyboard control, reduced motion, physical pause/replay, exact authored save, Studio UI save/edit/resume, disabled incompatible helpers, existing-name/stale-tab conflicts, blocked storage and malformed-slot preservation. Zero browser/shader/HTTP errors.
+- Unmodified standard game-client SHA256 1210f58b47aadd9cb4b141fb4b2dc9e17a929aa1a813cdd26b5306a0d08b6808 passes both mutation and baseline physical-comparison scenarios. Inspected desktop/phone/320 captures, welcome, saved Studio action and both standard-client captures/state.
+- Receipts: output/dna-focused.log, output/dna-final-focused.log, output/playwright/dna-final/dna-receipt.json and output/playwright/dna-standard-{mutation,physics}. A final label-only pause-text adjustment is included in the upcoming fresh full gate.
+- Full default gate and production qualification follow; the native archive still has only its two pre-existing prompt edits.
+
+### DNA observation-gap regression — 2026-11-12
+
+- Paused our own full run at the first browser journey after 1303 Node passes /1 conditional skip, typecheck/lint/build and both Rapier probes passed. Preserve output/dna-pre-gap-partial.log; this interrupted run is not a completed release gate.
+- Review identified external api.step() skipping telemetry samples. The real browser reproducer on 9188198 stays running after a two-second unobserved step (output/dna-gap-before.log). A later rebound must not be reported as the first.
+- The observer now rejects a simulation-time gap over 100ms, pauses and reports an incomplete observation. Normal host frames are capped at 50ms; deterministic workshop stepping samples every 1/60 second.
+- Added independent browser assertions for the rejected gap and a complete real-time host bounce without advanceTime. A fresh full gate will qualify the corrected revision. Removed an extra CSS EOF blank line found by git diff --check.
+- Corrected focused qualification passes all three viewports, keyboard/reduced-motion controls, rejected observation gap and the independent real-time host bounce. Both standard-client scenarios pass again with zero browser/shader/HTTP errors. Before/after reproducer: output/dna-gap-{before,after}.log; current focused log/captures were refreshed against the correction.
+
+### DNA full gate and final compatibility guard — 2026-11-12
+
+- Full fresh gate at d308ba08ab6a7bd7080e29cae8e7d29069a394e1 passes all126 checks: 120 default executable smokes and6 static/physics controls, with1303 Node passes /1 conditional skip /0 failures. The3 dedicated GPU receptions remain explicitly not run. Exact result: output/dna-full-exit.json and output/dna-full-qualified-receipt.json; complete log output/dna-full-release.log.
+- Final review reproduced a narrow DNA helper defect: a Studio-edited platform restitution still permitted the identical-condition comparison. The added real-document contract fails before the guard (output/dna-platform-guard-before.log). Helpers now also reject changed platform friction/restitution, hidden apparatus and custom seed steering/interactions, while preserving the edited document.
+- The focused Studio browser case now changes platform restitution rather than only moving the tree; existing tree-transform and pad-scale contracts remain. Added screenshots for every mutation in all three viewports. No shared runtime, welcome routing, server or assets changed after the full gate; final Node/static/fresh-build and DNA/Garden/revival/editor verification follows this bounded helper correction.
+- A newly added interaction fixture initially omitted its stable ID and was correctly refused by the unchanged storage validator. The fixture now supplies its required ID; no validator/assertion was weakened. Retained diagnostic: output/dna-postgate-invalid-fixture.log.
+
+### DNA final local delivery qualification — 2026-11-12
+
+- Final helper implementation abd6356f805384728cd47e1cba1aca52020a28ab passes full Node1303/1conditional skip/0fail, typecheck, lint and fresh build. The complete DNA/Garden/revival/Studio browser journeys and both standard-client scenarios pass with no browser/shader/HTTP errors.
+- Inspected the final standard-client captures/state and the height, opening-angle and branching variants, including both wider/dense phenotypes on320px. Models, scene controls, save/Studio links and first-bounce markers stay visible. Real-time and deterministic physical runs both pass; saved platform edits remain intact and helpers are disabled when conditions differ.
+- Receipts: output/dna-postgate-exit.json exit0, output/dna-postgate-receipt.json and output/dna-postgate.log. Full126-check proof at d308ba0 remains output/dna-full-release.log and dna-full-qualified-receipt.json. Changes after it are restricted to the DNA compatibility predicate, its tests and documentation; git diff confirms shared runtime/routing/server/assets unchanged.
+- PR143 final-source CI is green (run43343495878); documentation-only receipt commit follows. Main/public baseline is still591fdbf. Merge, deployment artifact/public release identity and public browser verification follow; no original checkout or historical archive cleanup is authorized or performed.

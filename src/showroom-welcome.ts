@@ -1,6 +1,6 @@
 import type { NestorConsoleTopic, NestorPresentation } from "./showroom-nestor";
 import { summarizeProposal } from "./coauthor-proposal";
-import { readFirstCreationResume } from "./local-scenes";
+import { readDnaCreationResume, readFirstCreationResume } from "./local-scenes";
 import "./showroom-center.css";
 import { describeTourPosition } from "./nestor-tour";
 import type { NestorTourState } from "./nestor-tour";
@@ -438,9 +438,16 @@ export function mountWelcome(
     entry.className = "gx-create-entry";
     entry.lang = "fr";
     const create = document.createElement("a");
-    create.className = "gx-create-new";
+    create.className = "gx-create-garden";
     create.href = import.meta.env.BASE_URL + "?app=creation";
     create.textContent = "✦ Créer une scène";
+    const dna = document.createElement("a");
+    dna.className = "gx-create-new";
+    dna.href = import.meta.env.BASE_URL + "?app=dna";
+    dna.textContent = "Créer une variante ADN ↗";
+    const dnaResume = document.createElement("a");
+    dnaResume.className = "gx-create-resume gx-dna-resume";
+    dnaResume.href = import.meta.env.BASE_URL + "?app=dna&resume=1";
     const resume = document.createElement("a");
     resume.className = "gx-create-resume";
     resume.href = import.meta.env.BASE_URL + "?app=creation&resume=1";
@@ -450,11 +457,14 @@ export function mountWelcome(
       const saved = readFirstCreationResume();
       resume.hidden = !saved;
       name.textContent = saved?.name ?? "";
+      const dnaSaved = readDnaCreationResume();
+      dnaResume.hidden = !dnaSaved;
+      dnaResume.textContent = dnaSaved ? "Reprendre l’ADN · " + dnaSaved.name : "";
     };
     updateResume();
     window.addEventListener("pageshow", updateResume);
     window.addEventListener("storage", updateResume);
-    entry.append(create, resume);
+    entry.append(dna, dnaResume, create, resume);
     overlay.querySelector("[data-nestor-briefing]")?.after(entry);
   }
   const dispose = () => {
@@ -958,6 +968,11 @@ export function mountWelcome(
     apps.className = "gx-center-apps";
     apps.innerHTML = '<summary>Ateliers <small>Robots, mondes, données</small></summary><div class="gx-center-apps-list"><span>À découvrir</span></div>';
     const list = apps.querySelector(".gx-center-apps-list")!;
+    const dna = document.createElement("a");
+    dna.href = import.meta.env.BASE_URL + "?app=dna";
+    dna.textContent = "ADN × physique · Créer une variante";
+    Object.assign(dna.style, { color: "#98f1d6", padding: "12px", textDecoration: "none" });
+    list.append(dna);
     const math = document.createElement("a");
     math.className = "gx-go-ten-workshop";
     math.href = import.meta.env.BASE_URL + "math-lab.html?level=numbers";
