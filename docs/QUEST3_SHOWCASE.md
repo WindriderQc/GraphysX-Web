@@ -34,7 +34,8 @@ PlatformHost, World API, material slots, persistence and single frame loop.
    transforms and up to three lower-detail models at strictly increasing distances.
    Three's real InstancedMesh and LOD are used, with 12% LOD hysteresis. NACRE
    instances the ribs, equipment, inlays and 420 stars. The equipment switches to
-   a simpler GLB at 14 m. Batch bounds are computed for frustum culling. LOD chooses
+   a simpler GLB at 8 m, so arrival/observation use the lighter model and the reactor
+   viewpoint exposes the detailed version. Batch bounds are computed for frustum culling. LOD chooses
    a level for the whole entity, not each instance: use spatial chunks for large
    worlds. Picking, material editing and transforms operate on the batch as one
    entity. Animated, skinned, morphed or nested instance batches are refused.

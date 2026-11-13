@@ -28,7 +28,7 @@ export function createQuest3Scene(): AgentWorldDefinition {
     }),
     native("nacre-equipment", "/assets/quest3/equipment.glb", .8, [0,0,-10], {
       instances: [-1,1].flatMap(side => Array.from({length:9},(_,i)=>({ position: [side*5.6,1.38,8-i*2.2], rotationDegrees: [0,side<0?90:-90,0] }))),
-      lods: [{ url: "/assets/quest3/equipment-low.glb", distance: 14 }],
+      lods: [{ url: "/assets/quest3/equipment-low.glb", distance: 8 }],
     }),
     { id: "nacre-reactor-core", type: "cylinder", geometry: { radius: .55, height: 3.8, radialSegments: 32 }, transform: { position: [0,2.7,-11] }, material: { color: "#5dcddd", emissive: "#28c5e1", emissiveIntensity: 1.8, metalness: .35, roughness: .28 }, castShadow: false },
     { id: "nacre-control", type: "box", geometry: { width: .55, height: .13, depth: .38 }, transform: { position: [.75,1.05,-.9], rotationDegrees: [-12,0,0] }, material: { color: "#64dacb", emissive: "#159c99", emissiveIntensity: .5, roughness: .3 }, tags: ["nacre", "interactive"] },
