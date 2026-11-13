@@ -77,14 +77,16 @@ export function dnaCreationCanTune(document: AgentWorldDefinition | null): boole
     const knownDna = dna === JSON.stringify(resolveAgentWorldDna(dnaForMutation())) ||
       side === "variant" && DNA_MUTATIONS.some((mutation) => dna === JSON.stringify(resolveAgentWorldDna(dnaForMutation(mutation))));
     return tree?.type === "dna-tree" && !!tree.dna && !tree.parentId && !tree.behaviors?.length &&
-      knownDna && identity(tree) && identity(pad) && identity(seed) &&
+      tree.visible !== false && !tree.interactions?.length && knownDna && identity(tree) && identity(pad) && identity(seed) &&
       matches(tree.transform?.position, [X[side], DNA_PAD_TOP, -1.2]) &&
       (!tree.transform?.scale || matches(tree.transform.scale, [1, 1, 1])) &&
       (!tree.transform?.rotationDegrees || matches(tree.transform.rotationDegrees, [0, 0, 0])) &&
       pad?.type === "box" && !pad.parentId && !pad.behaviors?.length && pad.physics?.mode === "static" &&
+      pad.visible !== false && !pad.interactions?.length && pad.physics.friction === 0.2 && pad.physics.restitution === 0.72 &&
       matches(pad.transform?.position, [X[side], 0.075, 3.1]) &&
       pad.geometry?.width === 1.8 && pad.geometry.height === 0.35 && pad.geometry.depth === 1.8 &&
       seed?.type === "sphere" && !seed.parentId && !seed.behaviors?.length && seed.geometry?.radius === DNA_SEED_RADIUS &&
+      seed.visible !== false && !seed.interactions?.length && !seed.steering &&
       seed.physics?.mode === "dynamic" && seed.physics.mass === 1 && seed.physics.restitution === 0.72 && seed.physics.friction === 0.2 &&
       guide?.type === "cylinder" && !guide.parentId && !guide.behaviors?.length &&
       resolveAgentWorldDna(tree.dna).trees === 1 && resolveAgentWorldDna(tree.dna).growSeconds === 0 && resolveAgentWorldDna(tree.dna).seasonSeconds === 0;

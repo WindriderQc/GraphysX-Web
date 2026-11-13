@@ -126,6 +126,29 @@ test("DNA mutations cross browser/storage validation and reload identical geomet
   const scaledPad = structuredClone(original);
   scaledPad.entities.find(entity => entity.id === "dna-pad-variant").transform.scale = [1, 2, 1];
   assert.equal(dnaCreationCanTune(scaledPad), false, "changed platforms cannot silently falsify the comparison");
+  for (const [id, field, value] of [
+    ["dna-pad-variant", "restitution", 0.93], ["dna-pad-reference", "friction", 0.7],
+  ]) {
+    const changed = structuredClone(original);
+    changed.entities.find(entity => entity.id === id).physics[field] = value;
+    assert.doesNotThrow(() => validateStoredSceneDefinition(changed));
+    const before = structuredClone(changed);
+    assert.equal(dnaCreationCanTune(changed), false, "changed " + field + " disables the identical-condition experiment");
+    assert.deepEqual(changed, before, "checking compatibility never rewrites the edited document");
+  }
+  for (const id of ["dna-reference", "dna-seed-variant", "dna-pad-reference"]) {
+    const hidden = structuredClone(original);
+    hidden.entities.find(entity => entity.id === id).visible = false;
+    assert.equal(dnaCreationCanTune(hidden), false, "hidden " + id + " disables the visual experiment");
+  }
+  const steered = structuredClone(original);
+  steered.entities.find(entity => entity.id === "dna-seed-variant").steering = { force: 30, speedCap: 4 };
+  assert.doesNotThrow(() => validateStoredSceneDefinition(steered));
+  assert.equal(dnaCreationCanTune(steered), false, "custom seed steering disables the free-fall comparison");
+  const interactive = structuredClone(original);
+  interactive.entities.find(entity => entity.id === "dna-pad-reference").interactions = [{ id: "studio-seed-kick", type: "apply-impulse", targetIds: ["dna-seed-variant"], impulse: [3, 0, 0] }];
+  assert.doesNotThrow(() => validateStoredSceneDefinition(interactive));
+  assert.equal(dnaCreationCanTune(interactive), false, "custom experiment interactions stay under Studio control");
 });
 
 test("DNA height drives real identical-body Rapier bounce while authored launch poses stay stable", t => {

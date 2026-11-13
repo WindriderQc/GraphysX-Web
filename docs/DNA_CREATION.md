@@ -55,6 +55,8 @@ The Studio URL loads that exact named document and explicitly pauses it. Studio
 edits survive subsequent DNA resumption. If the comparison apparatus/genome was
 changed incompatibly, mutation/drop helpers are disabled; the saved document is
 not rebuilt from a template. Additional ordinary authored scenery is retained.
+This includes changed platform friction/restitution, hidden apparatus, and custom
+seed steering or interactions. The workshop preserves those Studio edits.
 
 ## Qualification
 

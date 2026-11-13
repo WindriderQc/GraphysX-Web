@@ -52,6 +52,8 @@ try {
       assert.equal(genome[gene], value);
       assert.deepEqual(Object.keys(genome).filter((key) => genome[key] !== reference.dna.genome[key]), [gene], "one actual gene changes at a time");
       assert.equal((await read(page)).canTune, true);
+      await draw(page);
+      await page.screenshot({ path: path.join(artifacts, `dna-${gene}-${device}.png`) });
     }
     const mutated = await documentOf(page);
     const selected = app.getByRole("radio", { name: /Plus haut/ });
@@ -121,7 +123,10 @@ try {
     assert.deepEqual(canonical(await documentOf(page)), canonical(mutated), "Studio opens every authored field of the saved document");
     if (device === "desktop") {
       const edited = await page.evaluate(() => {
-        const result = window.__GRAPHYSX__.update("dna-variant", { transform: { position: [4.2, 0.25, -1.2] }, label: "Studio specimen" });
+        const result = window.__GRAPHYSX__.transaction([
+          { op: "update", id: "dna-variant", patch: { label: "Studio specimen" } },
+          { op: "update", id: "dna-pad-variant", patch: { physics: { mode: "static", restitution: 0.93 } } },
+        ]);
         if (!result.ok) throw new Error(result.error);
         return window.__GRAPHYSX__.exportDocument();
       });
