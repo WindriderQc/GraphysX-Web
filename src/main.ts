@@ -32,6 +32,7 @@ import type { IslandApplication } from "./island-app";
 import type { FirstCreationApplication } from "./first-creation-app";
 import type { DnaCreationApplication } from "./dna-creation-app";
 import type { CubzMenuApplication } from "./cubz-menu-app";
+import type { SceneBrowser } from "./scene-browser";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
 import { nestorTopicRequest, type NestorConsoleTopic } from "./showroom-nestor";
@@ -488,6 +489,7 @@ if (appParam === "quest3") {
     // can respect the route before the application's import has finished.
     let applicationOpen = false;
     let returnFromApplicationStudio = false;
+    let sceneBrowser: SceneBrowser | null = null;
     const openApplication = (id: string): boolean => {
       if (id !== "make-ten" && id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island" && id !== "creation" && id !== "dna" && id !== "cubx") return false;
       if (applicationOpen) return true;
@@ -515,7 +517,11 @@ if (appParam === "quest3") {
           }, () => {
             appSurface?.dispose(); appSurface = null; applicationOpen = false;
             returnFromApplicationStudio = true;
-            history.replaceState(null, "", import.meta.env.BASE_URL + "?host=editor");
+            const studioLocation = new URL(import.meta.env.BASE_URL, window.location.href);
+            studioLocation.searchParams.set("host", "editor");
+            if (explicitStore) studioLocation.searchParams.set("store", explicitStore);
+            history.replaceState(null, "", studioLocation.pathname + studioLocation.search);
+            sceneBrowser?.setEnabled(!nestorBlockedByLiveSession());
             host.applyEnvironment();
             enterBrowsedEditor();
           });
@@ -1595,6 +1601,7 @@ if (appParam === "quest3") {
         // A play/application route is one coherent surface, not an editor with game controls
         // layered over it. The store can answer after the application is already open, so the
         // browser must cede its chrome here at mount time as well as live-session authority.
+        sceneBrowser = browser;
         if (liveSessionRequested || applicationOpen) browser.setEnabled(false);
         Object.assign(window, { __GRAPHYSX_SCENE_BROWSER__: browser, __GRAPHYSX_SCENE_STORE__: { client, browser } });
 

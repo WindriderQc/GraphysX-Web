@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { applySmokeTimeout, launchSmokeBrowser } from "./smoke-harness.mjs";
+import { startSceneStore } from "../server/scene-store.mjs";
 
 const base = process.env.SMOKE_BASE || "http://127.0.0.1:4209/";
 const artifacts = process.env.SMOKE_ARTIFACTS || path.resolve("output/playwright/cubz-menu");
@@ -227,6 +229,32 @@ try {
     assert.deepEqual(errors, [], device + ": no browser, shader, HTTP or transport errors");
     receipts.push({ device, touch: true, width, height, errors });
     await context.close(); console.log("PASS CubZ: " + device + " touch choice/open/diagnostic/return/Studio, usable 44px controls and reduced motion.");
+  }
+  if (["127.0.0.1", "localhost", "[::1]"].includes(new URL(base).hostname)) {
+    const temporaryBase = path.resolve(tmpdir());
+    const directory = await mkdtemp(path.join(temporaryBase, "graphysx-cubz-store-"));
+    let store, context;
+    try {
+      store = await startSceneStore({ port: 0, dir: directory, token: "" });
+      context = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
+      const page = applySmokeTimeout(await context.newPage()), errors = errorsFor(page);
+      const url = new URL("?app=cubx&intro=0", base); url.searchParams.set("store", store.url);
+      await page.goto(url.href);
+      await page.locator('[data-cubz-choice="0"]').waitFor();
+      await page.waitForFunction(() => Boolean(window.__GRAPHYSX_SCENE_BROWSER__));
+      assert.equal(await page.evaluate(() => window.__GRAPHYSX_SCENE_BROWSER__.element.hidden), true, "store chrome is ceded to the menu");
+      await page.click("[data-cubz-studio]"); await page.waitForSelector(".gx-ed-toolbar");
+      assert.equal(await page.evaluate(() => window.__GRAPHYSX_SCENE_BROWSER__.element.hidden), false, "Studio restores an already-mounted store browser");
+      assert.equal(new URL(page.url()).searchParams.get("store"), store.url, "explicit store address survives the Studio route");
+      await capture(page, "cubz-studio-with-store");
+      assert.deepEqual(errors, []); receipts.push({ device: "local-store-handoff", scope: "isolated loopback fixture, no homelab or production writes", errors });
+      console.log("PASS CubZ: same-page Studio restores optional store chrome and keeps the explicit backend.");
+    } finally {
+      await context?.close(); await store?.close();
+      const resolved = path.resolve(directory);
+      assert.equal(path.dirname(resolved), temporaryBase); assert.ok(path.basename(resolved).startsWith("graphysx-cubz-store-"));
+      await rm(resolved, { recursive: true, force: true });
+    }
   }
   await writeFile(path.join(artifacts, "cubz-menu-receipt.json"), JSON.stringify(receipts, null, 2));
 } finally { await browser.close(); }
