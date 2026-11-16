@@ -35,7 +35,7 @@
 .gx-cubz-secondary { display: flex; gap: 8px; margin: 8px 0 12px; }
 .gx-cubz-secondary button { padding: 5px 2px; font-size: 10px; border: 0; background: transparent; text-decoration: underline; text-underline-offset: 4px; flex: 1; }
 .gx-cubz .gx-cubz-studio { width: 100%; background: var(--cubz-accent); border-color: var(--cubz-accent); color: #0b2b31; font-size: 11px; font-weight: 600; }
-.gx-cubz .gx-cubz-studio:hover { background: #b3f3d8; color: #0b2b31; }
+.gx-cubz button.gx-cubz-studio:hover:not(:disabled) { background: #b3f3d8; color: #0b2b31; }
 .gx-cubz-note:empty { display: none; }
 .gx-cubz-note { font-size: 11px; color: #e6cb9e; line-height: 1.6; }
 .gx-cubz-source { margin-top: 16px; font-size: 10px; color: var(--cubz-muted); line-height: 1.65; }

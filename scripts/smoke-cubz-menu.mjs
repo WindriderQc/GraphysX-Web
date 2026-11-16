@@ -45,6 +45,19 @@ try {
   assert.equal((await read(page)).phase, "idle");
   assert.equal((await snapshot(page)).meshes.length, 44);
   assert.equal(await page.evaluate(() => JSON.parse(window.render_game_to_text()).discovery.cameraMoving), false, "reduced motion skips arrival");
+  await page.locator("[data-cubz-studio]").hover();
+  const studioContrast = await page.locator("[data-cubz-studio]").evaluate(button => {
+    const style = getComputedStyle(button);
+    const luminance = color => {
+      const channels = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => value / 255);
+      const linear = channels.map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+      return linear[0] * .2126 + linear[1] * .7152 + linear[2] * .0722;
+    };
+    const foreground = luminance(style.color), background = luminance(style.backgroundColor);
+    return (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
+  });
+  assert.ok(studioContrast >= 4.5, "hovered Studio action retains readable text contrast");
+  await capture(page, "cubz-studio-hover"); await page.mouse.move(700, 80);
   await capture(page, "cubz-desktop-closed");
   for (let choice = 0; choice < 8; choice++) {
     await clickPaused(page, `[data-cubz-choice="${choice}"]`);
@@ -194,7 +207,7 @@ try {
   await page.click("[data-cubz-studio]"); await page.waitForSelector(".gx-ed-toolbar");
   assert.deepEqual(await page.evaluate(() => window.__GRAPHYSX__.exportDocument()), foreign, "replacing the scene keeps its identity and authored fields when entering Studio");
   assert.deepEqual(errors, [], "desktop: no browser, shader, HTTP or transport errors");
-  receipts.push({ device: "desktop", choices: 8, studioMaxMatrixError: Math.max(...differences), errors });
+  receipts.push({ device: "desktop", choices: 8, studioMaxMatrixError: Math.max(...differences), studioHoverContrast: studioContrast, errors });
   await context.close();
   console.log("PASS CubZ: canvas pick/drag, hidden actors, diagnostics, native waiting actor, keyboard, exact Studio pose, save/export/reload.");
 
