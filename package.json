@@ -17,6 +17,7 @@
     "smoke:revival": "node scripts/smoke-revival.mjs",
     "smoke:dna-creation": "node scripts/smoke-dna-creation.mjs",
     "smoke:archive-worlds": "node scripts/smoke-archive-worlds.mjs",
+    "smoke:cubz-menu": "node scripts/smoke-cubz-menu.mjs",
     "audit:legacy": "node scripts/audit-legacy-revival.mjs",
     "assets:cuisine": "node scripts/vendor-archive-cuisine.mjs && node scripts/build-asset-catalog.mjs",
     "assets:maison": "node scripts/vendor-archive-cuisine.mjs ../GraphysX maison && node scripts/build-asset-catalog.mjs",

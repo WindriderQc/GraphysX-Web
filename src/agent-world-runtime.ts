@@ -2433,7 +2433,9 @@ export class AgentWorldRuntime {
       apiVersion: "2.0",
       world: { id: this.definition.id, label: this.definition.label },
       revision: this.revision,
-      elapsedSeconds: Number(this.elapsedSeconds.toFixed(3)),
+      // Authored clips and pose copies must sample the same clock as rendering.
+      // Rounding here could freeze a discrete visibility key just before its boundary.
+      elapsedSeconds: this.elapsedSeconds,
       surfaceRedraws: this.surfaceRedraws,
       paused: this.paused,
       entityCount: entityStates.length,
@@ -2952,7 +2954,8 @@ export class AgentWorldRuntime {
     const runtime = this.requireEntity(id);
     const index = runtime.definition.behaviors.findIndex((behavior) => behavior.id === behaviorId);
     if (index < 0) throw new Error(`Unknown behavior on ${id}: ${behaviorId}`);
-    runtime.definition.behaviors.splice(index, 1);
+    const [removed] = runtime.definition.behaviors.splice(index, 1);
+    if (removed.type === "keyframes" && removed.visibility && !runtime.definition.behaviors.some(behavior => behavior.type === "keyframes" && behavior.visibility)) runtime.object.visible = runtime.definition.visible;
     if (!runtime.definition.behaviors.some((behavior) => behavior.type === "flight")) runtime.flightPose = undefined;
   }
 
@@ -3454,7 +3457,7 @@ export class AgentWorldRuntime {
         } else if (behavior.type === "follow-spline") {
           this.applyFollowSpline(runtime, behavior);
         } else if (behavior.type === "keyframes") {
-          sampleKeyframeTrack(behavior, this.elapsedSeconds, object.position, object.quaternion);
+          sampleKeyframeTrack(behavior, this.elapsedSeconds, object.position, object.quaternion, object);
         } else if (behavior.type === "flight") {
           const pose = this.ensureFlightPose(runtime);
           stepFlight(pose, behavior, deltaSeconds);

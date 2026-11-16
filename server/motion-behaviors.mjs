@@ -1,6 +1,6 @@
 /** Shared document/runtime validation for source animation and kinematic flight. */
 export const MOTION_FIELDS = Object.freeze({
-  keyframes: Object.freeze(["id", "type", "durationSeconds", "startSeconds", "loop", "positions", "rotations"]),
+  keyframes: Object.freeze(["id", "type", "durationSeconds", "startSeconds", "loop", "positions", "rotations", "scales", "visibility"]),
   flight: Object.freeze(["id", "type", "speed", "rollRateDegrees", "pitchUpDegrees", "pitchDownDegrees"]),
 });
 
@@ -19,17 +19,27 @@ export function validateMotionBehavior(behavior) {
   if (!Number.isFinite(behavior.durationSeconds) || behavior.durationSeconds <= 0 || behavior.durationSeconds > 3600) throw new Error("keyframes.durationSeconds must be > 0 and <= 3600");
   if (behavior.startSeconds !== undefined && (!Number.isFinite(behavior.startSeconds) || behavior.startSeconds < 0 || behavior.startSeconds > 1e9)) throw new Error("Invalid keyframes.startSeconds");
   if (behavior.loop !== undefined && typeof behavior.loop !== "boolean") throw new Error("keyframes.loop must be boolean");
-  if (!behavior.positions?.length && !behavior.rotations?.length) throw new Error("Keyframes require a position or rotation track");
-  for (const [name, width] of [["positions", 4], ["rotations", 5]]) {
+  if (!behavior.positions?.length && !behavior.rotations?.length && !behavior.scales?.length && !behavior.visibility?.length) throw new Error("Keyframes require a position, rotation, scale or visibility track");
+  for (const [name, width] of [["positions", 4], ["rotations", 5], ["scales", 4]]) {
     const keys = behavior[name];
     if (keys === undefined) continue;
-    if (!Array.isArray(keys) || !keys.length || keys.length > 512) throw new Error(`keyframes.${name} needs 1..512 keys`);
+    if (!Array.isArray(keys) || !keys.length || keys.length > 1024) throw new Error(`keyframes.${name} needs 1..1024 keys`);
     let previous = -1;
     for (const key of keys) {
       if (!Array.isArray(key) || key.length !== width || !key.every(value => typeof value === "number" && Number.isFinite(value))) throw new Error(`Invalid keyframes.${name} key`);
       if (key[0] < 0 || key[0] > behavior.durationSeconds || key[0] <= previous) throw new Error("Keyframe times must be strictly increasing within the clip");
       if (name === "positions" && key.slice(1).some(value => Math.abs(value) > 10000)) throw new Error("Keyframe positions must be within +/-10000");
+      if (name === "scales" && key.slice(1).some(value => Math.abs(value) > 1000)) throw new Error("Keyframe scales must be within +/-1000");
       if (name === "rotations" && (Math.hypot(...key.slice(1)) < 1e-6 || key.slice(1).some(value => Math.abs(value) > 1.001))) throw new Error("Invalid keyframe quaternion");
+      previous = key[0];
+    }
+  }
+  if (behavior.visibility !== undefined) {
+    if (!Array.isArray(behavior.visibility) || !behavior.visibility.length || behavior.visibility.length > 1024) throw new Error("keyframes.visibility needs 1..1024 keys");
+    let previous = -1;
+    for (const key of behavior.visibility) {
+      if (!Array.isArray(key) || key.length !== 2 || !Number.isFinite(key[0]) || typeof key[1] !== "boolean") throw new Error("Invalid keyframes.visibility key");
+      if (key[0] < 0 || key[0] > behavior.durationSeconds || key[0] <= previous) throw new Error("Visibility key times must be strictly increasing within the clip");
       previous = key[0];
     }
   }

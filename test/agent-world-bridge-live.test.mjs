@@ -1,6 +1,6 @@
 // Real public API + bridge + relay boundary + Rapier. No browser, server or port.
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -8,7 +8,7 @@ import { after, before, test } from "node:test";
 import { build } from "vite";
 import { applyCommands, validateStoredSceneDefinition } from "../server/scene-commands.mjs";
 
-let temporary, AgentWorldRuntime, createAgentWorldApi, createBridge, invoke, requestSchema, archiveWorlds, motionWorlds, dnaCreation;
+let temporary, AgentWorldRuntime, createAgentWorldApi, createBridge, invoke, requestSchema, archiveWorlds, motionWorlds, dnaCreation, cubz, motion;
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 
 before(async () => {
@@ -29,6 +29,8 @@ before(async () => {
           archive: join(root, "src/archive-worlds.ts"),
           motion: join(root, "src/archive-world-motion.ts"),
           dnaCreation: join(root, "src/dna-creation-scene.ts"),
+          cubz: join(root, "src/cubz-menu-scene.ts"),
+          motionSampler: join(root, "src/agent-world-motion.ts"),
         },
         output: { format: "es", entryFileNames: "[name].mjs", chunkFileNames: "chunks/[name]-[hash].mjs" },
       },
@@ -42,6 +44,7 @@ before(async () => {
   ({ invokeGraphysXAgentTool: invoke } = await load("connection"));
   archiveWorlds = await load("archive"); motionWorlds = await load("motion");
   dnaCreation = await load("dnaCreation");
+  cubz = await load("cubz"); motion = await load("motionSampler");
   // Only the window transport is substituted. The scene, validators, API factory,
   // tool manifest, dispatch and simulation are the production implementations.
   const window = Object.assign(new EventTarget(), {
@@ -383,6 +386,101 @@ test("the bridge validates request envelopes and keeps internal/prototype paths 
   assert.deepEqual(snapshot(w), before);
 });
 
+test("visibility and scale keyframes share clock, exact boundaries, loop, detach and stored document", t => {
+  const w = world(t);
+  const step = w.api.step(1 / 60);
+  assert.equal(w.api.state().elapsedSeconds, step.value, "public clock retains the exact shared simulation time");
+  accepted(w.api.create(scene()));
+  const behavior = { id: "reveal", type: "keyframes", durationSeconds: 2, scales: [[0, 1, 1, 1], [2, 3, 5, -1]], visibility: [[0, true], [1, false], [2, true]] };
+  accepted(w.api.spawn({ id: "reveal-box", type: "box", visible: false, behaviors: [behavior] }));
+  const object = w.runtime.getEntityObject("reveal-box");
+  for (const [seconds, expected] of [[0, true], [.999, true], [1, false], [1.5, false], [2, true], [7, true]]) {
+    motion.sampleKeyframeTrack(behavior, seconds, object.position, object.quaternion, object);
+    assert.equal(object.visible, expected, `exact discrete boundary at ${seconds}`);
+  }
+  motion.sampleKeyframeTrack({ ...behavior, loop: true }, 3, object.position, object.quaternion, object);
+  assert.equal(object.visible, false);
+  motion.sampleKeyframeTrack({ ...behavior, loop: true }, 4, object.position, object.quaternion, object);
+  assert.equal(object.visible, true);
+  accepted(w.api.pause(true));
+  const authored = w.api.exportDocument(), revision = w.api.state().revision;
+  accepted(w.api.step(1));
+  assert.equal(object.visible, false);
+  assert.ok(object.scale.distanceTo({ x: 2, y: 3, z: 0 }) < 1e-5);
+  w.runtime.update(1); assert.equal(object.visible, false, "paused host does not advance tracks");
+  accepted(w.api.step(3)); assert.equal(object.visible, true);
+  assert.deepEqual(w.api.exportDocument(), authored); assert.equal(w.api.state().revision, revision);
+  assert.doesNotThrow(() => validateStoredSceneDefinition(authored));
+  accepted(w.api.detachBehavior("reveal-box", "reveal"));
+  assert.equal(object.visible, false, "detaching visibility immediately restores authored visibility");
+  accepted(w.api.undo());
+  assert.equal(w.api.query({ ids: ["reveal-box"] })[0].behaviors[0].id, "reveal");
+  const fresh = new AgentWorldRuntime(authored); t.after(() => fresh.dispose());
+  fresh.step(3); assert.equal(fresh.getEntityObject("reveal-box").visible, true);
+});
+
+test("complete CubZ actors use source meshes and one authored cycle for every choice, including direct zero and reverse seven", t => {
+  const data = JSON.parse(readFileSync(new URL("../public/assets/ports/archive-cubz-menu.json", import.meta.url), "utf8"));
+  const w = world(t);
+  accepted(w.api.create(cubz.buildCubzMenu(data))); accepted(w.api.pause(true));
+  accepted(w.api.spawn({ id: "user-child", type: "box", parentId: "cubz-screensaver-n1", visible: false, behaviors: [{ id: "cubz-user-spin", type: "spin", speedDegrees: 5 }] }));
+  const sourceCount = w.api.query({ tag: "cubz-source-mesh" }).length;
+  assert.equal(sourceCount, 132);
+  for (const actor of cubz.CUBZ_ACTORS) {
+    const rig = w.runtime.getEntityObject(`cubz-${actor}-rig`);
+    rig.updateWorldMatrix(true, true);
+    const reflection = rig.matrix.clone().makeScale(1, 1, -1);
+    for (const node of data.actors[actor].nodes) {
+      const expected = rig.matrixWorld.clone().multiply(reflection).multiply(rig.matrix.clone().fromArray(node.worldMatrix)).multiply(reflection);
+      const actual = w.runtime.getEntityObject(`cubz-${actor}-n${node.id}`).matrixWorld;
+      assert.ok(Math.max(...expected.elements.map((value, i) => Math.abs(value - actual.elements[i]))) < 1e-5, `${actor}/${node.name}: source hierarchy/world matrix agrees after one reflection`);
+    }
+    const meshes = w.api.query({ tag: "cubz-source-mesh" }).filter(entity => entity.id.startsWith(`cubz-${actor}-`));
+    assert.equal(meshes.reduce((sum, entity) => sum + entity.mesh.vertexCount, 0), 2968);
+    assert.equal(meshes.reduce((sum, entity) => sum + entity.mesh.triangleCount, 0), 3136);
+  }
+  const initial = w.runtime.getEntityObject("cubz-rotation-n1").quaternion.clone();
+  for (let choice = 0; choice < 8; choice++) {
+    accepted(w.api.transaction(cubz.cubzSequenceCommands(data, w.api.exportDocument(), "open", choice, w.api.state().elapsedSeconds)));
+    assert.equal(cubz.cubzMenuState(w.api.exportDocument(), w.api.state().elapsedSeconds).phase, choice ? "rotating" : "opening");
+    const authored = w.api.exportDocument(), revision = w.api.state().revision;
+    accepted(w.api.step(3));
+    assert.equal(cubz.cubzMenuState(authored, w.api.state().elapsedSeconds).phase, "opened");
+    assert.equal(w.runtime.getEntityObject("cubz-open-rig").visible, true);
+    assert.equal(w.runtime.getEntityObject("cubz-rotation-rig").visible, false);
+    assert.equal(w.runtime.getEntityObject(`cubz-menu-${choice}`).visible, true);
+    assert.equal(w.api.state().revision, revision); assert.deepEqual(w.api.exportDocument(), authored);
+    assert.doesNotThrow(() => validateStoredSceneDefinition(authored));
+    const pose = cubz.cubzStudioPose(authored, w.api.state().elapsedSeconds);
+    assert.equal(pose.entities.filter(entity => entity.tags?.includes("cubz-source-mesh")).length, 132);
+    assert.ok(pose.entities.some(entity => entity.id === "user-child"), "a user child under a hidden source actor is preserved");
+    assert.equal(pose.entities.some(entity => entity.behaviors?.some(behavior => behavior.id === "cubz-source" || behavior.id === "cubz-visibility" || behavior.id.startsWith("cubz-program-"))), false);
+    assert.equal(pose.entities.find(entity => entity.id === "user-child").behaviors[0].id, "cubz-user-spin", "foreign behavior with a similar prefix survives");
+    assert.doesNotThrow(() => validateStoredSceneDefinition(pose));
+    if (choice === 7) {
+      const fresh = new AgentWorldRuntime(authored); t.after(() => fresh.dispose());
+      fresh.step(Math.min(30, w.api.state().elapsedSeconds));
+      // Stored data includes the program and all 3 rigs, not a host callback state machine.
+      assert.equal(fresh.exportDocument().entities.filter(entity => entity.tags?.includes("cubz-source-mesh")).length, 132);
+    }
+    accepted(w.api.transaction(cubz.cubzSequenceCommands(data, authored, "return", choice, w.api.state().elapsedSeconds)));
+    accepted(w.api.step(3));
+    assert.equal(cubz.cubzMenuState(w.api.exportDocument(), w.api.state().elapsedSeconds).phase, "idle");
+    assert.equal(w.runtime.getEntityObject("cubz-open-rig").visible, false);
+    assert.equal(w.runtime.getEntityObject("cubz-rotation-rig").visible, true);
+    assert.ok(w.runtime.getEntityObject("cubz-rotation-n1").quaternion.angleTo(initial) < 1e-4, `choice ${choice} returns along its own source range`);
+  }
+  accepted(w.api.transaction(cubz.cubzSequenceCommands(data, w.api.exportDocument(), "saver", 0, w.api.state().elapsedSeconds)));
+  accepted(w.api.step(12.5));
+  assert.equal(w.runtime.getEntityObject("cubz-screensaver-rig").visible, true);
+  const halfway = w.runtime.getEntityObject("cubz-screensaver-n1").quaternion.clone();
+  accepted(w.api.step(25));
+  assert.ok(w.runtime.getEntityObject("cubz-screensaver-n1").quaternion.angleTo(halfway) < 1e-4, "751 source-frame loop repeats on the shared clock");
+  accepted(w.api.transaction(cubz.cubzResetCommands(w.api.exportDocument())));
+  assert.equal(w.runtime.getEntityObject("cubz-screensaver-rig").visible, false);
+  assert.equal(w.runtime.getEntityObject("cubz-rotation-rig").visible, true);
+});
+
 test("source keyframes interpolate on the shared clock, hold, reverse and survive document validation", t => {
   const w = world(t);
   accepted(w.api.spawn({ id: "track", type: "box", behaviors: [{ id: "clip", type: "keyframes", durationSeconds: 2,
@@ -467,6 +565,13 @@ test("all recovered worlds and TVA ranges cross the actual storage validator; ma
     { type: "keyframes", durationSeconds: 2, positions: [[1, 0, 0, 0], [1, 2, 0, 0]] },
     { type: "keyframes", durationSeconds: 2, rotations: [[0, 0, 0, 0, 0]] },
     { type: "keyframes", durationSeconds: 2, positions: [[0, 10001, 0, 0]] },
+    { type: "keyframes", durationSeconds: 2, visibility: [[0, 1]] },
+    { type: "keyframes", durationSeconds: 2, visibility: [[1, true], [1, false]] },
+    { type: "keyframes", durationSeconds: 2, visibility: [[3, false]] },
+    { type: "keyframes", durationSeconds: 2, visibility: [] },
+    { type: "keyframes", durationSeconds: 2, scales: [[0, 1001, 1, 1]] },
+    { type: "keyframes", durationSeconds: 2, scales: [[0, 1, NaN, 1]] },
+    { type: "keyframes", durationSeconds: 2, visibility: Array.from({ length: 1025 }, (_, i) => [i / 1024, true]) },
   ]) {
     const before = snapshot(w);
     assert.equal(w.api.attachBehavior("plain", { id: "bad", ...behavior }).ok, false);

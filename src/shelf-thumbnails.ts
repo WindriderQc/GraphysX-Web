@@ -6,6 +6,7 @@ import type { AgentLevelState } from "./agent-level-library";
  * `scripts/capture-shelf-thumbnails.mjs` regenerates the files from the real product route.
  */
 export const SHELF_SCENE_THUMBNAIL_IDS: ReadonlySet<string> = new Set([
+  "archive-cubz-menu",
   "archive-cubz-tracks",
   "archive-flightx",
   "archive-unity-arena",
