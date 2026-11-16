@@ -19,6 +19,9 @@ export const XR_ASSETS = [
   "/assets/xr/profiles/oculus-touch-v3/profile.json",
   "/assets/xr/profiles/oculus-touch-v3/left.glb",
   "/assets/xr/profiles/oculus-touch-v3/right.glb",
+  "/assets/xr/profiles/meta-quest-touch-plus/profile.json",
+  "/assets/xr/profiles/meta-quest-touch-plus/left.glb",
+  "/assets/xr/profiles/meta-quest-touch-plus/right.glb",
   "/assets/xr/profiles/LICENSE.md",
 ];
 export interface VrInputAction {

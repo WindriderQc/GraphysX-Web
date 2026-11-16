@@ -2,12 +2,14 @@ import { Group, PerspectiveCamera, Vector3 } from "three";
 import type { PlatformHost } from "../platform-host";
 import { VrInputRig, type VrInputAction } from "./vr-input";
 import { VrSessionController } from "./vr-session";
+import { QUEST_PROFILES, negotiateQuestRate, type QuestProfile } from "./quest-profile";
 
 export interface PlatformVrOptions {
   /** Meters, floor-level spawn and yaw only. Desktop framing is never assumed to be safe. */
   position?: [number, number, number];
   yaw?: number;
   onAction?: (event: VrInputAction) => void;
+  profile?: QuestProfile;
 }
 
 /** Reusable opt-in adapter. No app rules, locomotion, secondary loop or scene serialization. */
@@ -22,6 +24,7 @@ export class PlatformVr {
   private readonly unsubscribe: () => void;
   private disposed = false;
   private releaseReferenceSpace: (() => void) | null = null;
+  rate: Awaited<ReturnType<typeof negotiateQuestRate>> | null = null;
 
   constructor(private readonly host: PlatformHost, options: PlatformVrOptions = {}) {
     if (host.mode !== "scene" || PlatformVr.owners.has(host)) {
@@ -49,8 +52,14 @@ export class PlatformVr {
         this.rig.position.copy(this.floorPosition);
         if (this.referenceSpace === "local") this.rig.position.y += 1.6;
         host.renderer.xr.setReferenceSpaceType(this.referenceSpace);
+        if (options.profile) host.renderer.xr.setFramebufferScaleFactor(QUEST_PROFILES[options.profile].scale);
         await host.renderer.xr.setSession(session);
         if (this.session.session !== session) return;
+        if (options.profile) {
+          host.renderer.xr.setFoveation(QUEST_PROFILES[options.profile].foveation);
+          this.rate = await negotiateQuestRate(session, options.profile);
+          if (this.session.session !== session) return;
+        }
         const space = host.renderer.xr.getReferenceSpace();
         if (space) {
           const reset = () => this.input.setActive(false);

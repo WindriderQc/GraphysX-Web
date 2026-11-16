@@ -86,6 +86,9 @@ export async function productAssetManifest() {
   const wanted = new Set();
   // The XR adapter uses same-origin generic input profiles, never a required model CDN.
   for (const url of await xrAssetManifest()) wanted.add(url);
+  for (const source of ["src/quest3-scene.ts", "src/agent-world-gltf.ts"]) {
+    for (const url of await anyAssetLiterals(source)) wanted.add(url);
+  }
 
   // Skies: every set in the vocabulary, all six cube faces. Whole directory rather than
   // guessing face names off `extension`, so a set with an odd file still ships complete.

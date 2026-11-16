@@ -1,3 +1,4 @@
+import { RenderDiagnostics } from "./render-diagnostics";
 import {
   ACESFilmicToneMapping,
   AdditiveBlending,
@@ -200,6 +201,8 @@ function chooseRenderProfile(width: number, lightRender = false): PlatformRender
  * 388 KB race monolith — this is the clean spine the platform runs on.
  */
 export class PlatformHost {
+  readonly diagnostics = new RenderDiagnostics();
+  private lastDiagnosticFrameTime: number | null = null;
   readonly renderer: WebGLRenderer;
   readonly scene = new Scene();
   readonly camera: PerspectiveCamera;
@@ -430,7 +433,8 @@ export class PlatformHost {
     this.dayNightHemi.visible = false;
     this.scene.add(this.dayNightSun, this.dayNightMoon, this.dayNightHemi);
 
-    this.world = new AgentWorldRuntime(options.world ?? GRAPHYSX_AGENT_DEMO_WORLD);
+    this.world = new AgentWorldRuntime(options.world ?? GRAPHYSX_AGENT_DEMO_WORLD, undefined, this.renderer);
+    this.world.hostDiagnostics = () => this.diagnostics.snapshot();
     this.scene.add(this.world.group);
     this.refreshWaterSurfaces();
     this.audio = new AgentWorldAudioLayer(this.camera, this.world);
@@ -1471,6 +1475,7 @@ export class PlatformHost {
 
   private tick(): void {
     if (this.disposed) return;
+    const cpuStarted = performance.now();
     const delta = this.clock.getDelta();
     // Freeze simulation while the gizmo is dragging (matches the reference behavior).
     if (!this.editor?.isTransforming()) this.world.update(delta);
@@ -1506,8 +1511,21 @@ export class PlatformHost {
     }
     // One render call either way — the composer's RenderPass is the same scene/camera
     // draw, followed by the passes the scene opted into.
-    if (this.composer && !this.immersiveCamera) this.composer.render();
-    else this.renderer.render(this.scene, this.immersiveCamera ?? this.camera);
+    // Count the complete main frame, including composer/reflection/shadow passes.
+    // Restore the caller's setting before independent after-render inset consumers run.
+    const previousAutoReset = this.renderer.info.autoReset;
+    this.renderer.info.autoReset = false;
+    this.renderer.info.reset();
+    try {
+      if (this.composer && !this.immersiveCamera) this.composer.render();
+      else this.renderer.render(this.scene, this.immersiveCamera ?? this.camera);
+    } finally { this.renderer.info.autoReset = previousAutoReset; }
+    const renderedInterval = this.lastDiagnosticFrameTime === null ? 0 : cpuStarted - this.lastDiagnosticFrameTime;
+    this.lastDiagnosticFrameTime = cpuStarted;
+    this.diagnostics.record(this.immersiveCamera ? "immersive-vr" : "desktop", renderedInterval, performance.now() - cpuStarted, {
+      calls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles,
+      geometries: this.renderer.info.memory.geometries, textures: this.renderer.info.memory.textures,
+    });
     // Desktop insets can change scissor/viewport and render extra cameras. Never send them
     // into the headset framebuffer. They resume unchanged when the XR adapter exits.
     for (const listener of this.immersiveCamera ? [] : this.afterRenderListeners) {

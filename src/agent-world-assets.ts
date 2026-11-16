@@ -15,6 +15,8 @@ import {
   Texture,
   TextureLoader
 } from "three";
+import { resolveModelPresentation, type ModelPresentation } from "../server/model-presentation.mjs";
+import type { WebGLRenderer } from "three";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
   inferModelMaterialRole,
@@ -25,9 +27,9 @@ import {
 } from "./agent-world-model-materials";
 import { isHeadless } from "./headless";
 
-export type AgentWorldModelFormat = "graphysx-mesh-json";
+export type AgentWorldModelFormat = "graphysx-mesh-json" | "gltf";
 
-export type AgentWorldModelAsset = {
+export type AgentWorldModelAsset = ModelPresentation & {
   id?: string;
   url?: string;
   format?: AgentWorldModelFormat;
@@ -212,7 +214,7 @@ export type AgentWorldModelCollisionMesh = {
 
 export type ResolvedAgentWorldModelAsset = Required<
   Pick<AgentWorldModelAsset, "format" | "fitSize" | "alphaTest" | "colorKeyTolerance">
-> & {
+> & ModelPresentation & {
   id: string | null;
   url: string;
   colorKey: string | null;
@@ -284,7 +286,7 @@ export function resolveAgentWorldModelAsset(source?: AgentWorldModelAsset): Reso
   const catalogAsset = id ? allAgentWorldAssets().find((candidate) => candidate.id === id) : null;
   if (id && !catalogAsset && !source.url?.trim()) throw new Error(`Unknown model asset: ${id}`);
   const format = source.format ?? catalogAsset?.format ?? "graphysx-mesh-json";
-  if (format !== "graphysx-mesh-json") throw new Error(`Unsupported model format: ${String(format)}`);
+  if (format !== "graphysx-mesh-json" && format !== "gltf") throw new Error(`Unsupported model format: ${String(format)}`);
   const url = source.url?.trim() || catalogAsset?.url || "";
   if (!url) throw new Error("A model entity requires a loadable asset URL");
   const fitSize = source.fitSize ?? 4;
@@ -303,7 +305,7 @@ export function resolveAgentWorldModelAsset(source?: AgentWorldModelAsset): Reso
   if (!Number.isFinite(colorKeyTolerance) || colorKeyTolerance < 0 || colorKeyTolerance > 1) {
     throw new Error("asset.colorKeyTolerance must be between 0 and 1");
   }
-  return { id, url, format, fitSize, alphaTest, colorKey, colorKeyTolerance };
+  return { id, url, format, fitSize, alphaTest, colorKey, colorKeyTolerance, ...resolveModelPresentation({ ...source, format }) };
 }
 
 type AgentWorldAssetFetch = (url: string) => Promise<Response>;
@@ -323,7 +325,13 @@ export async function loadAgentWorldModel(
   target: Group,
   asset: ResolvedAgentWorldModelAsset,
   collision?: AgentWorldModelCollisionRequest,
+  renderer?: WebGLRenderer,
 ): Promise<void> {
+  if (asset.format === "gltf") {
+    if (collision) throw new Error("Native glTF models use separate primitive physics proxies");
+    const { loadNativeGltf } = await import("./agent-world-gltf");
+    return loadNativeGltf(target, asset, renderer);
+  }
   const response = await assetFetch(asset.url);
   if (!response.ok) throw new Error(`Model request failed (${response.status}): ${asset.url}`);
   const payload = await response.json() as AssetPayload;

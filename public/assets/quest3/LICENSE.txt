@@ -1,0 +1,1 @@
+Station artwork created for GraphysX by scripts/build-quest3-assets.mjs. Copyright 2026 Yanik; ownership retained by the repository owner. Earth imagery reuses the existing GraphysX sbqc/orbital assets; original source paths and hashes are recorded in build.json. No new external artwork was downloaded.

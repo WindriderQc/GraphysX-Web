@@ -1,4 +1,7 @@
 {
+  "meta-quest-touch-plus": {
+    "path": "meta-quest-touch-plus/profile.json"
+  },
   "generic-trigger": {
     "path": "generic-trigger/profile.json"
   },
