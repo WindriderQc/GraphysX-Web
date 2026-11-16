@@ -108,3 +108,19 @@ diagnostic colors, waiting animation, a partial-pose Studio handoff, normal save
 reload, and touch at 390px and 320px with reduced motion. It belongs to the full gate;
 screenshots and receipts are produced under the selected smoke artifact directory.
 Physical touch-device acceptance and native-engine visual parity remain separate.
+
+Local release evidence, 2026-11-16: the complete shared-runtime gate passed 128 controls
+at `4783555` (1312 Node passes, one conditional skip). The three GPU receptions were
+explicitly not run. That runtime, motion validator/vocabulary and editor picking remain
+unchanged in the final implementation. CubZ-only navigation/preservation improvements
+then passed a fresh 1313 Node tests, one conditional skip, static/build/physics checks and
+all six affected browser journeys at `7834c1e` (CubZ, revival, archive worlds, DNA, editor,
+scene store). Three previously failing short-screen/Studio cases were reproduced against
+the earlier build and passed against the final one.
+
+The final CSS/test-only delta at `64c702b` passed lint, a fresh build, the complete CubZ
+journey and the byte-identical standard game client. Captures were inspected. The partial
+pose's maximum world-matrix difference was `1.574e-7`; the settled Studio hover contrast
+was `11.91:1`. Two-finger input actually moved the shared camera without authoring a
+scene change. Optional store handoff used an isolated loopback fixture, with no homelab
+or production writes. Publication is tracked by PR146 and the main deployment workflow.
