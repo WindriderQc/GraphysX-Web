@@ -6,6 +6,9 @@ export type KeyframeTrackBehavior = {
   /** Seconds within the clip, followed by a local position or quaternion. */
   positions?: [number, number, number, number][];
   rotations?: [number, number, number, number, number][];
+  scales?: [number, number, number, number][];
+  /** Discrete, local visibility. At a key's exact time its value takes effect. */
+  visibility?: [number, boolean][];
 };
 export type FlightBehavior = {
   id?: string; type: "flight"; speed?: number; rollRateDegrees?: number; pitchUpDegrees?: number; pitchDownDegrees?: number;
@@ -13,7 +16,7 @@ export type FlightBehavior = {
 export type FlightInput = { roll?: number; pitch?: number; thrust?: number; airbrake?: boolean; reset?: boolean };
 export type FlightPose = { position: Vector3; rotation: Quaternion; input: Required<Omit<FlightInput, "reset">> };
 
-export function sampleKeyframeTrack(behavior: KeyframeTrackBehavior, seconds: number, position: Vector3, rotation: Quaternion): void {
+export function sampleKeyframeTrack(behavior: KeyframeTrackBehavior, seconds: number, position: Vector3, rotation: Quaternion, object?: { visible: boolean; scale?: Vector3 }): void {
   const elapsed = Math.max(0, seconds - (behavior.startSeconds ?? 0));
   const time = behavior.loop ? elapsed % behavior.durationSeconds : Math.min(elapsed, behavior.durationSeconds);
   const sample = (keys: number[][], apply: (a: number[], b: number[], alpha: number) => void): void => {
@@ -28,6 +31,14 @@ export function sampleKeyframeTrack(behavior: KeyframeTrackBehavior, seconds: nu
   if (behavior.rotations?.length) sample(behavior.rotations, (a, b, alpha) => {
     rotation.set(a[1], a[2], a[3], a[4]).normalize().slerp(new Quaternion(b[1], b[2], b[3], b[4]).normalize(), alpha);
   });
+  if (object?.scale && behavior.scales?.length) sample(behavior.scales, (a, b, alpha) => {
+    object.scale!.set(a[1] + (b[1] - a[1]) * alpha, a[2] + (b[2] - a[2]) * alpha, a[3] + (b[3] - a[3]) * alpha);
+  });
+  if (object && behavior.visibility?.length) {
+    const keys = behavior.visibility;
+    const next = keys.findIndex((key) => key[0] > time);
+    object.visible = keys[Math.max(0, next < 0 ? keys.length - 1 : next - 1)][1];
+  }
 }
 
 export function validatedFlightInput(input: FlightInput): FlightInput {

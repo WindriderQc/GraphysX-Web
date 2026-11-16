@@ -138,6 +138,8 @@ export async function productAssetManifest() {
   // than the asset catalog (they are a world, not palette vocabulary), so the release
   // manifest scrapes that module the same way it scrapes the level styles.
   for (const url of await anyAssetLiterals("src/archive-world1-manifest.ts")) wanted.add(url);
+  // Complete TVA rigs load only on the CubZ route; their source data is not JS boot code.
+  for (const url of await anyAssetLiterals("src/cubz-menu-scene.ts")) wanted.add(url);
 
   // The front-door galleries are generated release assets rather than runtime vocabulary.
   // Claim the whole generated directory so `npm run assets:shelf-thumbnails` can add or

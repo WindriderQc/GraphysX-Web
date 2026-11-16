@@ -7,6 +7,8 @@ import { buildNativeIntro, buildArchiveCuisine, CUISINE_PROVENANCE, NATIVE_INTRO
 test("unknown prototypes cannot silently graduate into curated creations", () => {
   assert.equal(sceneCollection("glow-garden"), "creations");
   assert.equal(sceneCollection("archive-cuisine"), "archive");
+  assert.equal(sceneCollection("archive-cubz-menu"), "archive");
+  assert.equal(sceneCollection("archive-cubz-tracks"), "lab");
   assert.equal(sceneCollection("physics-sketchbook"), "lab");
   assert.equal(sceneCollection("future-experiment"), "lab");
   assert.equal(gameCollection("ballsy-slime"), "creations");
