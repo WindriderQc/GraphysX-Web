@@ -37,6 +37,7 @@ test("CubZ decoder rejects truncated chunks, wrong counts, invalid hierarchy, in
     bytes => bytes.writeInt32LE(0, body(bytes, "MHI2")),
     bytes => bytes.writeUInt16LE(3, body(bytes, "MAMD") + 220),
     bytes => bytes.writeFloatLE(NaN, body(bytes, "MANI") + 28),
+    bytes => bytes.writeFloatLE(Infinity, body(bytes, "MANS") + 264),
     bytes => bytes.writeUInt32LE(31, body(bytes, "MAMD") + 68),
   ];
   for (const mutate of mutations) { const bytes = fixture(); mutate(bytes); assert.throws(() => decodeCubzActor(bytes, "broken.tva")); }
@@ -51,6 +52,15 @@ test("the pinned complete CubZ rigs are a claimed lazy product asset", async () 
     assert.equal(source.actors[id].sha256, hash); assert.equal(source.actors[id].meshes.length, 44);
     assert.equal(source.actors[id].meshes.reduce((sum, mesh) => sum + mesh.vertexCount, 0), 2968);
     assert.equal(source.actors[id].meshes.reduce((sum, mesh) => sum + mesh.triangleCount, 0), 3136);
+    for (const mesh of source.actors[id].meshes) {
+      assert.equal(new Set(mesh.indices).size, mesh.vertexCount, `${id}/${mesh.nodeId}: all exported vertices are referenced`);
+      for (let at = 0; at < mesh.indices.length; at += 3) {
+        const [a, b, c] = mesh.indices.slice(at, at + 3).map(index => mesh.positions.slice(index * 3, index * 3 + 3));
+        const u = b.map((value, axis) => value - a[axis]), v = c.map((value, axis) => value - a[axis]);
+        assert.ok(Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]) > 1e-6,
+          `${id}/${mesh.nodeId}/${at / 3}: decoded indices form a real source triangle`);
+      }
+    }
   }
   assert.ok(source.missing.some(value => value.includes("Btn32")));
   assert.ok((await productAssetManifest()).files.includes("/assets/ports/archive-cubz-menu.json"));

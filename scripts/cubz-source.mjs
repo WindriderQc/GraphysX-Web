@@ -69,7 +69,7 @@ export function decodeCubzActor(bytes, source) {
   const ranges = Array.from({ length: words[4] }, (_, id) => {
     const at = rangeChunk.start + id * 280;
     const start = bytes.readFloatLE(at + 260), end = bytes.readFloatLE(at + 264), fps = bytes.readFloatLE(at + 268);
-    assert.ok(Number.isFinite(start) && end >= start && fps > 0 && Number.isFinite(fps), "Invalid source range");
+    assert.ok(Number.isFinite(start) && Number.isFinite(end) && end >= start && fps > 0 && Number.isFinite(fps), "Invalid source range");
     return { id, name: nameAt(bytes, at), start, end, fps };
   });
   const tracks = chunks.filter((entry) => entry.tag === "MANI").map((entry) => {
