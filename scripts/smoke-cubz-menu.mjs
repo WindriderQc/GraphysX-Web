@@ -61,6 +61,7 @@ try {
     assert.ok((await snapshot(page)).meshes.every(id => id.startsWith("cubz-rotation-")));
   }
   console.log("PASS CubZ: all eight coupled source-actor cycles, direct first choice and same-range reverse.");
+  await page.setViewportSize({ width: 1280, height: 720 });
   await clickPaused(page, '[data-cubz-choice="1"]');
   const pauseControl = await page.locator("[data-cubz-pause]").evaluate(button => {
     button.click(); const resumed = !window.__GRAPHYSX__.state().paused;
@@ -72,8 +73,17 @@ try {
   assert.equal((await snapshot(page)).elapsed, frozenTime, "deterministic player hook respects pause");
   await page.click("[data-cubz-skip]");
   assert.equal((await read(page)).phase, "opened");
+  assert.equal(await page.locator("[data-cubz-inside]").evaluate(section => {
+    const card = section.closest(".gx-cubz-card").getBoundingClientRect();
+    return [...section.querySelectorAll("button")].every(button => {
+      const bounds = button.getBoundingClientRect();
+      return bounds.top >= card.top && bounds.bottom <= card.bottom && bounds.left >= card.left && bounds.right <= card.right;
+    });
+  }), true, "all four opened actions are visible on a short desktop without manual scrolling");
+  await capture(page, "cubz-short-desktop-menu");
   await clickPaused(page, "[data-cubz-close]"); await page.click("[data-cubz-skip]");
   assert.equal((await read(page)).phase, "idle");
+  await page.setViewportSize({ width: 1440, height: 960 }); await draw(page);
 
   // A hidden foreground mesh must not steal the actual canvas click. No private
   // player state is modified: the fixture enters through ordinary authored API data.
@@ -162,9 +172,25 @@ try {
   assert.equal(saved.entities.filter(entity => entity.tags?.includes("cubz-source-mesh")).length, 132);
   const downloadEvent = page.waitForEvent("download"); await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Export", exact: true }).click();
   const download = await downloadEvent; await download.saveAs(path.join(artifacts, "cubz-studio-pose.json"));
+  await page.click(".gx-ed-exit");
+  await page.waitForFunction(() => document.querySelector(".gx-welcome--center") || document.querySelector(".gx-cubz [data-cubz-choice]"));
+  assert.equal(await page.locator(".gx-welcome--center").isVisible(), true, "Studio Home returns to the welcome, not the captured CubZ startup route");
+  assert.equal(await page.locator(".gx-cubz").count(), 0);
   await page.goto(new URL("?host=editor&paused=1&localScene=CubZ%20smoke%20pose", base).href);
   await page.waitForFunction(() => window.__GRAPHYSX__?.state()?.world.id === "archive-cubz-menu-pose");
   assert.equal(await page.evaluate(() => window.__GRAPHYSX__.query({ tag: "cubz-source-mesh" }).length), 132);
+  await page.goto(new URL("?app=cubx&intro=0", base).href);
+  await page.locator('[data-cubz-choice="0"]').waitFor();
+  await page.evaluate(() => {
+    window.__GRAPHYSX__.create({ schema: "graphysx.agent-world/v2", id: "kept-user-scene", label: "Kept user scene", entities: [
+      { id: "kept-user-box", type: "box", transform: { position: [4, 3, 0], rotationDegrees: [400, 10, 0] } },
+    ] });
+    window.__GRAPHYSX__.pause(true);
+  });
+  await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application?.phase === "unavailable");
+  const foreign = await page.evaluate(() => window.__GRAPHYSX__.exportDocument());
+  await page.click("[data-cubz-studio]"); await page.waitForSelector(".gx-ed-toolbar");
+  assert.deepEqual(await page.evaluate(() => window.__GRAPHYSX__.exportDocument()), foreign, "replacing the scene keeps its identity and authored fields when entering Studio");
   assert.deepEqual(errors, [], "desktop: no browser, shader, HTTP or transport errors");
   receipts.push({ device: "desktop", choices: 8, studioMaxMatrixError: Math.max(...differences), errors });
   await context.close();

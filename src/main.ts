@@ -487,6 +487,7 @@ if (appParam === "quest3") {
     // surface module so later host chrome (notably the asynchronously mounted scene browser)
     // can respect the route before the application's import has finished.
     let applicationOpen = false;
+    let returnFromApplicationStudio = false;
     const openApplication = (id: string): boolean => {
       if (id !== "make-ten" && id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island" && id !== "creation" && id !== "dna" && id !== "cubx") return false;
       if (applicationOpen) return true;
@@ -513,7 +514,9 @@ if (appParam === "quest3") {
             window.location.assign(import.meta.env.BASE_URL);
           }, () => {
             appSurface?.dispose(); appSurface = null; applicationOpen = false;
+            returnFromApplicationStudio = true;
             history.replaceState(null, "", import.meta.env.BASE_URL + "?host=editor");
+            host.applyEnvironment();
             enterBrowsedEditor();
           });
         }).catch((error: unknown) => showStartupError(root, error));
@@ -1210,7 +1213,7 @@ if (appParam === "quest3") {
     const directSceneApp = (appParam === "make-ten" || appParam === "ev3-lab" || appParam === "creation" || appParam === "dna" || appParam === "cubx") && !editorFirst && !storeScene && !liveSessionRequested;
     const host = new PlatformHost(root, {
       world: directSceneApp ? {
-        schema: "graphysx.agent-world/v2", id: appParam + "-startup", label: appParam === "creation" || appParam === "dna" ? "GraphysX" : "KidX",
+        schema: "graphysx.agent-world/v2", id: appParam + "-startup", label: appParam === "creation" || appParam === "dna" || appParam === "cubx" ? "GraphysX" : "KidX",
         environment: { background: "#142d38", sky: null }, entities: [],
       } : undefined,
       autoOrbit: appParam !== "cubx" && appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "dna" && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx",
@@ -1234,6 +1237,12 @@ if (appParam === "quest3") {
       onExitEditor: editorFirst
         ? (localScene ? () => window.location.assign(import.meta.env.BASE_URL) : undefined)
         : () => {
+            // A same-page app-to-Studio copy must not replay the captured startup
+            // ?app route when the editor's Home action rebuilds the front door.
+            if (returnFromApplicationStudio) {
+              window.location.assign(import.meta.env.BASE_URL);
+              return;
+            }
             if (restoreShowroomOnEditorExit) {
               restoreShowroom();
               focusFrontDoor();

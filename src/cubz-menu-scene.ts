@@ -193,13 +193,16 @@ export function cubzColorCommands(document: AgentWorldDefinition, diagnostic: bo
 
 /** A deliberate copy of the visible pose, ready for normal Studio save/export/edit. */
 export function cubzStudioPose(document: AgentWorldDefinition, elapsed: number): AgentWorldDefinition {
+  if (cubzMenuState(document, elapsed).phase === "unavailable") return structuredClone(document);
   const copy = structuredClone(document);
   for (const entity of copy.entities) {
+    const owned = entity.behaviors?.filter(behavior => ownsPlayback(entity, behavior)) ?? [];
+    if (!owned.length) continue;
     const position = new Vector3(...(entity.transform?.position ?? [0, 0, 0]));
     const degrees = entity.transform?.rotationDegrees ?? [0, 0, 0];
     const rotation = new Quaternion().setFromEuler(new Euler(...degrees.map(value => value / radiansToDegrees) as Tuple3));
     const pose = { visible: entity.visible ?? true, scale: new Vector3(...(entity.transform?.scale ?? [1, 1, 1])) };
-    for (const behavior of entity.behaviors ?? []) if (behavior.type === "keyframes" && ownsPlayback(entity, behavior)) sampleKeyframeTrack(behavior, elapsed, position, rotation, pose);
+    for (const behavior of owned) if (behavior.type === "keyframes") sampleKeyframeTrack(behavior, elapsed, position, rotation, pose);
     const euler = new Euler().setFromQuaternion(rotation);
     entity.transform = { position: position.toArray(), rotationDegrees: [euler.x, euler.y, euler.z].map(value => value * radiansToDegrees) as Tuple3, scale: pose.scale.toArray() };
     entity.visible = pose.visible;

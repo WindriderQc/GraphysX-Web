@@ -72,18 +72,25 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
       button.setAttribute("aria-pressed", String(Number(button.dataset.cubzChoice) === current.choice));
     });
     find("[data-cubz-inside]").hidden = current.phase !== "opened";
+    const menuTitle = current.choice === null ? "Le menu est ouvert." : `Bloc ${current.choice + 1} · menu ouvert`;
+    if (find("#gx-cubz-menu-title").textContent !== menuTitle) find("#gx-cubz-menu-title").textContent = menuTitle;
     find<HTMLButtonElement>("[data-cubz-close]").disabled = current.phase !== "opened";
+    find("[data-cubz-close]").hidden = current.phase !== "opened";
     find<HTMLButtonElement>("[data-cubz-pause]").disabled = !busy && current.phase !== "screensaver";
+    find("[data-cubz-pause]").hidden = !busy && current.phase !== "screensaver";
     find("[data-cubz-pause]").textContent = paused ? "Reprendre" : "Pause";
     find<HTMLButtonElement>("[data-cubz-skip]").disabled = !busy;
+    find("[data-cubz-skip]").hidden = !busy;
     find<HTMLButtonElement>("[data-cubz-reset]").disabled = unavailable;
     find<HTMLButtonElement>("[data-cubz-saver]").disabled = current.phase !== "idle";
+    const studioLabel = unavailable ? "Continuer dans le Studio ↗" : "Emporter cette pose dans le Studio ↗";
+    if (find("[data-cubz-studio]").textContent !== studioLabel) find("[data-cubz-studio]").textContent = studioLabel;
     if (find("[data-cubz-note]").textContent !== notice) find("[data-cubz-note]").textContent = notice;
     if (current.phase !== lastPhase) {
       lastPhase = current.phase;
       if (current.phase === "opened" || current.phase === "idle") api.pause(true);
-      if (compact.matches && current.phase === "opened") find("[data-cubz-inside]").scrollIntoView({ block: "start" });
-      if (compact.matches && current.phase === "idle") find(".gx-cubz-card").scrollTop = 0;
+      if (current.phase === "opened") find("[data-cubz-inside]").scrollIntoView({ block: "start" });
+      if (current.phase === "idle") find(".gx-cubz-card").scrollTop = 0;
     }
   };
   const apply = (commands: Parameters<typeof api.transaction>[0]) => {
@@ -101,8 +108,11 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
     api.pause(true); observeDocument();
     const current = api.exportDocument();
     if (!current) return;
-    const result = api.create(cubzStudioPose(current, api.state()?.elapsedSeconds ?? 0));
-    if (!result.ok) { notice = "La copie n’a pas pu s’ouvrir. La scène est conservée."; refresh(); return; }
+    const elapsed = api.state()?.elapsedSeconds ?? 0;
+    if (cubzMenuState(current, elapsed).phase !== "unavailable") {
+      const result = api.create(cubzStudioPose(current, elapsed));
+      if (!result.ok) { notice = "La copie n’a pas pu s’ouvrir. La scène est conservée."; refresh(); return; }
+    }
     api.pause(true); onStudio();
   };
   const action = (id: CubzAction) => {
@@ -133,7 +143,7 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
     const duration = (current.choice === 0 ? 0 : 28 / 30) + 50 / 30;
     api.pause(true); api.step((1 - current.progress) * duration + 1 / 60); refresh();
   });
-  const reframe = () => frame();
+  const reframe = () => { frame(); if (state().phase === "opened") find("[data-cubz-inside]").scrollIntoView({ block: "start" }); };
   find("[data-cubz-frame]").addEventListener("click", reframe);
   compact.addEventListener("change", reframe); reduced.addEventListener("change", reframe);
 
@@ -181,7 +191,7 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
       while (remaining > 1e-8 && !api.state()?.paused) { const seconds = Math.min(1 / 60, remaining); api.step(seconds); remaining -= seconds; refresh(); }
     },
     dispose() {
-      disposed = true; unsubscribe();
+      disposed = true; unsubscribe(); host.cancelCameraMove();
       compact.removeEventListener("change", reframe); reduced.removeEventListener("change", reframe);
       canvas.removeEventListener("pointerdown", pointerDown); canvas.removeEventListener("pointerup", pointerUp); canvas.removeEventListener("pointercancel", pointerCancel);
       window.removeEventListener("blur", pointerCancel);

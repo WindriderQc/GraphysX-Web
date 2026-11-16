@@ -89,6 +89,10 @@ world clock. The Studio action deliberately samples the current local TRS/visibi
 a static copy instead. All actors and user children remain in that copy, including hidden
 ones. Only the menu's exact owned playback IDs are removed; foreign behaviors survive.
 Menu and Studio picking both ignore meshes with any hidden ancestor.
+The opened action grid is brought into view on short screens. Studio's Home action
+returns to the actual welcome; it does not replay the captured CubZ startup route.
+If another document replaces the rig, helpers disable and Studio opens that document
+unchanged. Foreign entities are never normalized or baked by the pose helper.
 
 ## Validation
 

@@ -419,11 +419,18 @@ test("visibility and scale keyframes share clock, exact boundaries, loop, detach
   fresh.step(3); assert.equal(fresh.getEntityObject("reveal-box").visible, true);
 });
 
+test("CubZ pose helper preserves an unrelated document and returns an independent copy", () => {
+  const authored = scene(), copy = cubz.cubzStudioPose(authored, 17.123456);
+  assert.deepEqual(copy, authored);
+  assert.notEqual(copy, authored); copy.entities[0].label = "Copy only";
+  assert.notDeepEqual(copy, authored);
+});
+
 test("complete CubZ actors use source meshes and one authored cycle for every choice, including direct zero and reverse seven", t => {
   const data = JSON.parse(readFileSync(new URL("../public/assets/ports/archive-cubz-menu.json", import.meta.url), "utf8"));
   const w = world(t);
   accepted(w.api.create(cubz.buildCubzMenu(data))); accepted(w.api.pause(true));
-  accepted(w.api.spawn({ id: "user-child", type: "box", parentId: "cubz-screensaver-n1", visible: false, behaviors: [{ id: "cubz-user-spin", type: "spin", speedDegrees: 5 }] }));
+  accepted(w.api.spawn({ id: "user-child", type: "box", parentId: "cubz-screensaver-n1", visible: false, transform: { rotationDegrees: [400, 10, 0] }, behaviors: [{ id: "cubz-user-spin", type: "spin", speedDegrees: 5 }] }));
   const sourceCount = w.api.query({ tag: "cubz-source-mesh" }).length;
   assert.equal(sourceCount, 132);
   for (const actor of cubz.CUBZ_ACTORS) {
@@ -456,6 +463,7 @@ test("complete CubZ actors use source meshes and one authored cycle for every ch
     assert.ok(pose.entities.some(entity => entity.id === "user-child"), "a user child under a hidden source actor is preserved");
     assert.equal(pose.entities.some(entity => entity.behaviors?.some(behavior => behavior.id === "cubz-source" || behavior.id === "cubz-visibility" || behavior.id.startsWith("cubz-program-"))), false);
     assert.equal(pose.entities.find(entity => entity.id === "user-child").behaviors[0].id, "cubz-user-spin", "foreign behavior with a similar prefix survives");
+    assert.deepEqual(pose.entities.find(entity => entity.id === "user-child"), authored.entities.find(entity => entity.id === "user-child"), "foreign authored fields are not normalized or baked");
     assert.doesNotThrow(() => validateStoredSceneDefinition(pose));
     if (choice === 7) {
       const fresh = new AgentWorldRuntime(authored); t.after(() => fresh.dispose());
