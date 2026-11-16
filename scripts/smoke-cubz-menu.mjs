@@ -214,6 +214,23 @@ try {
     const choice = page.locator('[data-cubz-choice="6"]'); await choice.scrollIntoViewIfNeeded();
     const bounds = await choice.boundingBox(); assert.ok(bounds.height >= 44 && bounds.width >= 44);
     await capture(page, `cubz-${device}-closed`);
+    const pinchPoint = await page.evaluate(() => {
+      const host = window.__GRAPHYSX_HOST__, object = host.world.getEntityObject("cubz-rotation-m2");
+      object.geometry.computeBoundingBox();
+      const point = object.localToWorld(object.geometry.boundingBox.getCenter(object.position.clone())).project(host.camera);
+      const rect = host.renderer.domElement.getBoundingClientRect();
+      return { x: rect.left + (point.x + 1) * rect.width / 2, y: rect.top + (1 - point.y) * rect.height / 2 };
+    });
+    const beforePinch = (await snapshot(page)).revision;
+    const touch = await context.newCDPSession(page);
+    const first = { id: 0, x: pinchPoint.x, y: pinchPoint.y };
+    await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [first, { id: 1, x: pinchPoint.x + 35, y: pinchPoint.y }] });
+    await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [first, { id: 1, x: pinchPoint.x + 60, y: pinchPoint.y }] });
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await touch.detach(); await draw(page);
+    assert.equal((await read(page)).phase, "idle", "a two-finger camera gesture cannot select the stationary finger's block");
+    assert.equal((await snapshot(page)).revision, beforePinch, "camera pinch authors no scene changes");
+    await page.locator("[data-cubz-frame]").tap();
     await choice.tap();
     await page.waitForFunction(() => JSON.parse(window.render_game_to_text()).application?.phase === "opened");
     assert.equal((await read(page)).choice, 6);

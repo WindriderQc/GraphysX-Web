@@ -168,11 +168,15 @@ export async function mountCubzMenu(root: HTMLElement, host: PlatformHost, onExi
     }
     return null;
   };
-  const pointerDown = (event: PointerEvent) => { if (event.button === 0 && event.isPrimary) down = { x: event.clientX, y: event.clientY, id: event.pointerId }; };
+  const pointerDown = (event: PointerEvent) => {
+    // A second finger belongs to camera navigation, even if the first stays still.
+    if (!event.isPrimary || event.button !== 0) { down = null; return; }
+    down = { x: event.clientX, y: event.clientY, id: event.pointerId };
+  };
   const pointerCancel = () => { down = null; };
   const pointerUp = (event: PointerEvent) => {
     const start = down; down = null;
-    if (!start || start.id !== event.pointerId || Math.hypot(start.x - event.clientX, start.y - event.clientY) > 7) return;
+    if (!start || event.button !== 0 || start.id !== event.pointerId || Math.hypot(start.x - event.clientX, start.y - event.clientY) > 7) return;
     const tags = pick(event), current = state();
     const choice = tags?.find(tag => tag.startsWith("cubz-choice-"));
     const selectedAction = tags?.find(tag => tag.startsWith("cubz-action-"));
