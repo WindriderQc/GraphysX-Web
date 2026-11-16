@@ -46,6 +46,10 @@ try {
   assert.equal((await snapshot(page)).meshes.length, 44);
   assert.equal(await page.evaluate(() => JSON.parse(window.render_game_to_text()).discovery.cameraMoving), false, "reduced motion skips arrival");
   await page.locator("[data-cubz-studio]").hover();
+  await page.locator("[data-cubz-studio]").evaluate(async button => {
+    getComputedStyle(button).backgroundColor;
+    await Promise.all(button.getAnimations().map(animation => animation.finished.catch(() => {})));
+  });
   const studioContrast = await page.locator("[data-cubz-studio]").evaluate(button => {
     const style = getComputedStyle(button);
     const luminance = color => {
@@ -232,7 +236,7 @@ try {
       object.geometry.computeBoundingBox();
       const point = object.localToWorld(object.geometry.boundingBox.getCenter(object.position.clone())).project(host.camera);
       const rect = host.renderer.domElement.getBoundingClientRect();
-      return { x: rect.left + (point.x + 1) * rect.width / 2, y: rect.top + (1 - point.y) * rect.height / 2 };
+      return { x: rect.left + (point.x + 1) * rect.width / 2, y: rect.top + (1 - point.y) * rect.height / 2, distance: host.camera.position.distanceTo(host.orbitTarget) };
     });
     const beforePinch = (await snapshot(page)).revision;
     const touch = await context.newCDPSession(page);
@@ -241,6 +245,8 @@ try {
     await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [first, { id: 1, x: pinchPoint.x + 60, y: pinchPoint.y }] });
     await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await touch.detach(); await draw(page);
+    const pinchedDistance = await page.evaluate(() => window.__GRAPHYSX_HOST__.camera.position.distanceTo(window.__GRAPHYSX_HOST__.orbitTarget));
+    assert.ok(Math.abs(pinchedDistance - pinchPoint.distance) > .05, "two-finger input actually zooms the shared camera");
     assert.equal((await read(page)).phase, "idle", "a two-finger camera gesture cannot select the stationary finger's block");
     assert.equal((await snapshot(page)).revision, beforePinch, "camera pinch authors no scene changes");
     await page.locator("[data-cubz-frame]").tap();
