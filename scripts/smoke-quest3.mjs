@@ -34,7 +34,9 @@ try {
   // Actual composer work must not collapse to the last fullscreen pass's count.
   const postFrame=await page.evaluate(()=>{const {host}=window.__GRAPHYSX_QUEST3__;host.setPostEnabled(true);return host.frameCount;});
   await page.waitForFunction(frame=>window.__GRAPHYSX_QUEST3__.host.frameCount>frame+2,postFrame);
-  assert.ok(await page.evaluate(()=>window.__GRAPHYSX__.observe().diagnostics.calls)>render.diagnostics.calls,'composer diagnostics include the scene and all passes');
+  const postCalls=await page.evaluate(()=>window.__GRAPHYSX__.observe().diagnostics.calls);
+  assert.ok(postCalls>render.diagnostics.calls,'composer diagnostics include the scene and all passes: plain='+render.diagnostics.calls+', post='+postCalls);
+  receipt.composerCalls={plain:render.diagnostics.calls,post:postCalls};
   await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.setPostEnabled(false));
   // Exercise rendered cadence, not just the still-running animation-loop clock.
   const demandFrame=await page.evaluate(()=>{const {host}=window.__GRAPHYSX_QUEST3__;host.api.pause(true);host.setRenderOnDemand(true);return host.frameCount;});

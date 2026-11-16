@@ -63,6 +63,12 @@ be authored sparingly for mobile XR.
 
 ## Scene and controls
 
+Earth reuses the existing orbital observatory's surface, cloud and night-light
+images from public/assets/sbqc/orbital. A local CPU composite bakes the fixed sun,
+cloud coverage and atmospheric limb tint into one 2048x1024 KTX2 map on the native
+GLB. Input paths, hashes and sun direction are recorded in build.json. Its lighting
+and clouds remain fixed; the planet keeps a single draw call.
+
 Desktop supports orbit inspection and three arrival/reactor/observation views.
 In VR, headset motion stays native and the player starts at meter scale on the deck.
 The in-world console provides reactor standby, an explicit jump to the observation
@@ -85,7 +91,8 @@ npm run verify -- --wait --checks=quest3,vr-lab,model-recentre,roundtrip,scene-c
 npm run verify -- --wait
 ```
 
-Asset generation uses only the local CPU. Its optional offline Basis encoder is
+Asset generation uses only the local CPU, with the pinned development dependency
+@napi-rs/canvas decoding the existing Earth imagery. Its offline Basis encoder is
 downloaded from pinned `BinomialLLC/basis_universal v2_50` into ignored
 `output/quest3/tools`; it is not shipped. The generated build manifest records its
 hashes, the light sources and bake parameters. Original artwork, decoder notices,
