@@ -252,7 +252,7 @@ try {
     const directory = await mkdtemp(path.join(temporaryBase, "graphysx-cubz-store-"));
     let store, context;
     try {
-      store = await startSceneStore({ port: 0, dir: directory, token: "" });
+      store = await startSceneStore({ host: "127.0.0.1", port: 0, dir: directory, token: "" });
       context = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
       const page = applySmokeTimeout(await context.newPage()), errors = errorsFor(page);
       const url = new URL("?app=cubx&intro=0", base); url.searchParams.set("store", store.url);
