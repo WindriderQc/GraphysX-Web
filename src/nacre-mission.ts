@@ -7,6 +7,7 @@ export const NACRE = {
   dock: [1, 1.18, -8.15] as [number, number, number],
   destination: [0, 1.6, -22.5] as [number, number, number],
   chargeSeconds: 4.8, doorSeconds: 3.2, snapDistance: .44,
+  planetModel: "/assets/quest3/planet-mission-v1.glb",
 };
 export const NACRE_PHASES = ["standby", "cell", "carrying", "docked", "charging", "opening", "ready", "complete"] as const;
 export type NacrePhase = typeof NACRE_PHASES[number];
@@ -192,6 +193,18 @@ export class NacreMission {
     if (!phase) { this.owner = null; return; }
     if (this.pendingRestore) {
       this.pendingRestore = false;
+      // The briefly published first mission used the original immutable GLB URL.
+      // Upgrade only that mission composition; original single-layer saves stay intact.
+      const planet = this.world.api.query({ ids: ["nacre-planet"] })[0];
+      if (planet?.asset?.url === "/assets/quest3/planet.glb" && this.world.api.query({ ids: ["nacre-clouds"] }).length) {
+        const saved = this.world.api.export(), model = saved?.entities.find(entity => entity.id === "nacre-planet");
+        if (saved && model?.asset) {
+          model.asset.url = NACRE.planetModel;
+          const result = this.world.api.create(saved);
+          if (!result.ok) this.notice = "La station n’a pas pu reprendre sa Terre.";
+          return; // The new world.loaded generation restores its checkpoint next frame.
+        }
+      }
       // Durable checkpoints survive export/load; tracked hands and partial startup do not.
       if (phase === "carrying") { this.change([this.phaseCommand("cell"), this.setCell([...NACRE.home])]); phase = "cell"; }
       if (phase === "charging") { this.change([this.phaseCommand("docked"), ...this.energy(0, false), ...this.pulse("nacre-reactor-core", false)]); phase = "docked"; }

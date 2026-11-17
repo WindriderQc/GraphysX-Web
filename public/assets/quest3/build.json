@@ -131,6 +131,10 @@
   },
   "planet": {
     "method": "Existing orbital Earth surface and night lights with baked fixed sun/limb tint; separate transparent PBR cloud layer",
+    "model": "planet-mission-v1.glb",
+    "surface": "planet-surface-v1.ktx2",
+    "legacyModel": "planet.glb",
+    "legacySurface": "planet.ktx2",
     "width": 2048,
     "height": 1024,
     "sun": [
