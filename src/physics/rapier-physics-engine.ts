@@ -8,6 +8,8 @@ import type {
   World,
 } from "@dimforge/rapier3d-compat";
 import RAPIER from "./rapier-runtime";
+import { RapierVehicleFleet } from "./rapier-vehicles";
+import { validateVehicleDefinition } from "../../server/vehicle-definition.mjs";
 import {
   createRapierConvexHullColliderDesc,
   createRapierTrimeshColliderDesc,
@@ -31,6 +33,9 @@ import type {
   PhysicsStepOptions,
   PhysicsTransform,
   PhysicsVector3,
+  PhysicsVehicleDefinition,
+  PhysicsVehicleInput,
+  PhysicsVehicleReadout,
 } from "./physics-engine";
 
 export interface RapierPhysicsEngineOptions {
@@ -112,6 +117,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
   private readonly materials = new Map<string, PhysicsMaterialDefinition>();
   private readonly defaultMaterial: PhysicsMaterialDefinition;
   private readonly allowSleep: boolean;
+  private readonly vehicles = new RapierVehicleFleet(() => this.world, handle => this.recordFor(handle).body);
   private accumulator = 0;
   private disposed = false;
 
@@ -178,6 +184,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
       if (joint.first === handle || joint.second === handle) this.removeJoint(jointHandle);
     }
     this.forcedBodies.delete(record.body);
+    this.vehicles.remove(handle);
     this.world.removeRigidBody(record.body);
     this.bodies.delete(handle);
   }
@@ -196,6 +203,10 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     this.joints.set(handle, { joint, first, second });
     return handle;
   }
+
+  configureVehicle(handle: PhysicsBodyHandle, definition: PhysicsVehicleDefinition | null): void { this.vehicles.configure(handle, definition); }
+  driveVehicle(handle: PhysicsBodyHandle, input: PhysicsVehicleInput): void { this.recordFor(handle); this.vehicles.drive(handle, input); }
+  readVehicle(handle: PhysicsBodyHandle): PhysicsVehicleReadout | null { this.recordFor(handle); return this.vehicles.read(handle); }
 
   removeJoint(handle: PhysicsJointHandle): void {
     this.assertLive();
@@ -219,6 +230,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
 
     let substeps = 0;
     while (this.accumulator >= fixedTimeStep && substeps < maxSubSteps) {
+      this.vehicles.step(fixedTimeStep);
       this.world.step();
       // Rapier user forces/torques persist until reset, while the engine contract models
       // applyForce as a one-step input. Reset after every internal step so catch-up frames do
@@ -446,7 +458,8 @@ export class RapierPhysicsEngine implements PhysicsEngine {
 
   saveState(): PhysicsEngineState {
     this.assertLive();
-    return { format: STATE_FORMAT, bytes: this.world.takeSnapshot(), accumulator: this.accumulator };
+    const vehicles = this.vehicles.save();
+    return { format: STATE_FORMAT, bytes: this.world.takeSnapshot(), accumulator: this.accumulator, ...(vehicles.length ? { vehicles } : {}) };
   }
 
   stateId(handle: PhysicsStateHandle): number {
@@ -475,6 +488,13 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     if (bodyIds.size !== this.bodies.size || characterIds.size !== this.characters.size || jointIds.size !== this.joints.size) {
       throw new Error("Every live body, character and joint must be bound when restoring");
     }
+    for (const stateVehicle of state.vehicles ?? []) {
+      validateVehicleDefinition(stateVehicle.definition);
+      if (!Number.isFinite(stateVehicle.bodyId) || !Number.isFinite(stateVehicle.readout?.speed) || !Number.isFinite(stateVehicle.readout?.steering)
+        || stateVehicle.readout?.wheels?.length !== stateVehicle.definition.wheels.length
+        || stateVehicle.readout.wheels.some(wheel => !Number.isFinite(wheel.suspensionLength) || !Number.isFinite(wheel.rotation) || typeof wheel.contact !== "boolean")
+        || ["thrust", "turn", "brake"].some(key => !Number.isFinite(stateVehicle.input?.[key as keyof PhysicsVehicleInput]))) throw new Error("Invalid saved vehicle state");
+    }
     const restored = RAPIER.World.restoreSnapshot(state.bytes);
     if (!restored) throw new Error("Rapier could not read the saved physics state");
     // Resolve every binding before changing anything, so a bad state leaves this engine intact.
@@ -487,6 +507,10 @@ export class RapierPhysicsEngine implements PhysicsEngine {
       for (const [handle, id] of jointIds) jointTargets.set(handle, requireSaved(restored.getImpulseJoint(id), "joint", id));
       for (const [handle, target] of bodyTargets) {
         if (target.numColliders() !== this.recordFor(handle).colliders.length) throw new Error(`Saved body ${target.handle} has a different shape`);
+      }
+      for (const vehicle of state.vehicles ?? []) {
+        const target = restored.getRigidBody(vehicle.bodyId);
+        if (!target || (!target.isDynamic() && !target.isKinematic())) throw new Error("Saved vehicle chassis must be dynamic or temporarily kinematic");
       }
     } catch (error) {
       restored.free();
@@ -502,6 +526,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
     for (const body of extraBodies) restored.removeRigidBody(body);
 
     for (const record of this.characters.values()) this.world.removeCharacterController(record.controller);
+    this.vehicles.clear();
     const previous = this.world;
     this.world = restored;
     previous.free();
@@ -520,6 +545,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
       const record = this.joints.get(handle);
       if (record) record.joint = joint;
     }
+    this.vehicles.restore(state.vehicles ?? [], bodyIds);
     this.forcedBodies.clear();
     this.accumulator = state.accumulator;
   }
@@ -538,6 +564,7 @@ export class RapierPhysicsEngine implements PhysicsEngine {
 
   dispose(): void {
     if (this.disposed) return;
+    this.vehicles.clear();
     this.joints.clear();
     this.bodies.clear();
     this.characters.clear();

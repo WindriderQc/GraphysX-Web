@@ -123,6 +123,8 @@ export async function buildAssetCatalog() {
   // props. Keeping them catalogued is what makes the release asset manifest retain them.
   for (const file of (await readdir(PORT_DIR)).filter((name) => name.endsWith(".json")).sort()) {
     const payload = JSON.parse(await readFile(join(PORT_DIR, file), "utf8"));
+    // Source records (such as the full CubZ actor data) are not model payloads.
+    if (!Array.isArray(payload.meshes)) continue;
     entries.push({
       id: file.slice(0, -5),
       label: payload.catalog?.label ?? labelOf(file.slice(0, -5).replace(/^archive-/, "")),
@@ -132,6 +134,11 @@ export async function buildAssetCatalog() {
       source: payload.provenance?.archiveSource ?? "",
     });
   }
+  const impreza = JSON.parse(await readFile(join(PORT_DIR, "impreza", "manifest.json"), "utf8"));
+  for (const [key, model] of Object.entries(impreza.models)) entries.push({
+    id: model.id, label: { chassis: "Impreza · châssis TVM", leftWheel: "Impreza · roue gauche TVM", rightWheel: "Impreza · roue droite TVM", ring: "RacinX · anneau TVM" }[key],
+    category: key === "ring" ? "prop" : "vehicle", format: "graphysx-mesh-json", url: model.url, source: model.source,
+  });
   // Original KidX models use the same native format and release discovery as imported assets.
   const kidXDirectory = join(ROOT, "public", "assets", "kidx");
   for (const file of (await readdir(kidXDirectory)).filter((name) => name.endsWith(".json")).sort()) {

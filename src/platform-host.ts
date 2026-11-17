@@ -662,6 +662,13 @@ export class PlatformHost {
     return this.controls.target.clone();
   }
 
+  /** Application camera ownership, while retaining the single host OrbitControls instance. */
+  get orbitEnabled(): boolean { return this.controls.enabled; }
+  setOrbitEnabled(enabled: boolean): void {
+    this.desktopControlsEnabled = enabled;
+    this.controls.enabled = enabled && !this.immersiveCamera;
+  }
+
   /** True while a {@link focusOn} move is still easing. */
   get focusing(): boolean {
     return this.focusMove !== null;
