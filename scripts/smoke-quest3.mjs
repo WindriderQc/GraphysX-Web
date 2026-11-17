@@ -22,6 +22,8 @@ const audioState=page=>page.evaluate(()=>{
 });
 try {
   const page=applySmokeTimeout(await browser.newPage({viewport:{width:1440,height:960},hasTouch:true}));
+  const legacyPlanetRequests=[];
+  page.on('request',request=>{if(/\/assets\/quest3\/planet\.(?:glb|ktx2)(?:\?|$)/.test(request.url()))legacyPlanetRequests.push(request.url());});
   page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
   await page.goto(new URL('?app=quest3',base).href);
   await page.waitForFunction(()=>{
@@ -32,21 +34,27 @@ try {
   });
   await page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.diagnostics.snapshot().samples>3);
   const document=await page.evaluate(()=>window.__GRAPHYSX__.export());validateStoredSceneDefinition(document);
+  assert.deepEqual(legacyPlanetRequests,[],'a fresh mission cannot reuse year-cached planet URLs');
+  assert.equal(document.entities.find(e=>e.id==='nacre-planet').asset.url,'/assets/quest3/planet-mission-v1.glb');
   assert.equal(document.entities.find(e=>e.id==='nacre-stars').asset.instances.length,420);
   const render=await page.evaluate(()=>{
     const {host}=window.__GRAPHYSX_QUEST3__;const batches=[],maps=[];
     host.world.group.traverse(o=>{if(o.isInstancedMesh)batches.push(o.count);if(o.isMesh)for(const m of Array.isArray(o.material)?o.material:[o.material]){
       if(m.lightMap)maps.push({compressed:m.lightMap.isCompressedTexture,channel:m.lightMap.channel});
     }});
-    return {batches,maps,stationColors:host.api.query({ids:['nacre-station']})[0].materialSlots.map(s=>s.color),diagnostics:host.api.observe().diagnostics};
+    return {batches,maps,stationColors:host.api.query({ids:['nacre-station']})[0].materialSlots.map(s=>s.color),diagnostics:host.api.observe().diagnostics,
+      contextLost:host.renderer.getContext().isContextLost(),frame:host.frameCount,hostDiagnostics:host.diagnostics.snapshot(),
+      camera:host.camera.position.toArray(),worldVisible:host.world.group.visible};
   });
   assert.ok(render.batches.includes(420));assert.ok(render.batches.includes(18));assert.ok(render.maps.length>0);assert.ok(render.maps.every(m=>m.compressed&&m.channel===1));
   assert.equal(render.diagnostics.gpuMs,null);receipt.render=render;
   assert.ok(render.stationColors.includes('#243647'),'native PBR source colors must survive host reconciliation');
+  assert.equal(render.contextLost,false);assert.ok(render.diagnostics.calls>0,'prepared scenes have submitted real geometry');
   // Actual composer work must not collapse to the last fullscreen pass's count.
   const postFrame=await page.evaluate(()=>{const {host}=window.__GRAPHYSX_QUEST3__;host.setPostEnabled(true);return host.frameCount;});
   await page.waitForFunction(frame=>window.__GRAPHYSX_QUEST3__.host.frameCount>frame+2,postFrame);
   const postCalls=await page.evaluate(()=>window.__GRAPHYSX__.observe().diagnostics.calls);
+  if(!render.diagnostics.calls||!postCalls)console.log('NACRE render diagnostics:',JSON.stringify({render,postCalls,errors}));
   assert.ok(postCalls>render.diagnostics.calls,'composer diagnostics include the scene and all passes: plain='+render.diagnostics.calls+', post='+postCalls);
   receipt.composerCalls={plain:render.diagnostics.calls,post:postCalls};
   await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.setPostEnabled(false));
@@ -122,6 +130,22 @@ try {
   assert.deepEqual(await page.evaluate(()=>['nacre-door-left','nacre-door-right'].map(id=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject(id).position.x)),[-9.5,9.5]);
   assert.equal(await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.holding),false);
   receipt.desktopMission={completed:true,doorMidpoint:doorX,animation,audio,saveCheckpoint:true};
+  await page.evaluate(()=>{
+    const api=window.__GRAPHYSX__,saved=api.export(),planet=saved.entities.find(e=>e.id==='nacre-planet');
+    planet.asset.url='/assets/quest3/planet.glb';planet.tags.push('owner:cached-mission');
+    const loaded=api.create(saved);if(!loaded.ok)throw Error(loaded.error);
+  });
+  await page.waitForFunction(()=>window.__GRAPHYSX__.query({ids:['nacre-planet']})[0].asset.url==='/assets/quest3/planet-mission-v1.glb');
+  await ready(page);
+  const upgraded=await page.evaluate(()=>window.__GRAPHYSX__.export().entities.find(e=>e.id==='nacre-planet'));
+  assert.equal(upgraded.asset.fitSize,36);assert.ok(upgraded.tags.includes('owner:cached-mission'));
+  assert.equal(await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.mission.phase),'complete');
+  const originalStation={...document,label:'Original NACRE station',entities:document.entities.filter(e=>['nacre-planet','nacre-ambient','nacre-sun'].includes(e.id)).map(e=>e.id==='nacre-planet'?{...e,asset:{...e.asset,url:'/assets/quest3/planet.glb'}}:e)};
+  await page.evaluate(saved=>window.__GRAPHYSX__.create(saved),originalStation);await ready(page);
+  assert.equal(await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.mission.phase),null);
+  assert.equal(await page.evaluate(()=>window.__GRAPHYSX__.query({ids:['nacre-planet']})[0].asset.url),'/assets/quest3/planet.glb');
+  assert.equal(await page.evaluate(()=>window.__GRAPHYSX__.export().label),'Original NACRE station');
+  receipt.immutablePlanetUrls={freshMission:true,cachedMissionUpgraded:true,originalStationPreserved:true};
   // Restore the unchanged source document before the original all-fields round trip.
   await page.evaluate(document=>window.__GRAPHYSX__.create(document),document);await ready(page);
   // Three's actual LOD evaluation, rather than a metadata-only assertion.
@@ -262,6 +286,9 @@ try {
   await xr.evaluate(async()=>{window.__questGrip(0,[1,1.18,-8.15]);await window.advanceTime(17);window.__GRAPHYSX_QUEST3__.vr.input.slots[0].ray.dispatchEvent({type:'squeezeend'});});
   await phase(xr,'docked');await xr.evaluate(()=>window.__questSelect('nacre-control'));await phase(xr,'charging');
   await advance(xr,8200);await phase(xr,'ready');
+  await xr.evaluate(()=>{const api=window.__GRAPHYSX__,saved=api.export();const result=api.create(saved);if(!result.ok)throw Error(result.error);});
+  await ready(xr);await phase(xr,'ready');
+  receipt.xrWorldReloadReady=true;
   const xrAudio=await audioState(xr);assert.equal(xrAudio.listener,true);assert.equal(xrAudio.playing,1);
   const hiddenAudio=await xr.evaluate(()=>{
     window.__questSession.visibilityState='hidden';window.__questSession.dispatchEvent(new Event('visibilitychange'));

@@ -208,9 +208,13 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     if(warming||visualReady||disposed)return;
     if(!models.length||models.some(e=>e.asset?.status!=="ready"))return;
     warming=true;const version=loadVersion;
-    void host.renderer.compileAsync(host.scene,host.camera).then(()=>{
+    void host.renderer.compileAsync(host.scene,vr.session.session?vr.camera:host.camera).then(()=>{
       if(disposed||version!==loadVersion)return;
-      readyOff=host.subscribeAfterRender(()=>{readyOff?.();readyOff=null;visualReady=true;warming=false;});host.requestRender();
+      const compiledFrame=host.frameCount;
+      readyOff=host.subscribeFrame(()=>{
+        if(host.frameCount<=compiledFrame||host.renderer.getContext().isContextLost()||host.diagnostics.snapshot().calls===0)return;
+        readyOff?.();readyOff=null;visualReady=true;warming=false;
+      });host.requestRender();
     }).catch(()=>{if(disposed||version!==loadVersion)return;warming=false;renderFailure=true;announce("La préparation du rendu n’a pas abouti.");});
   }
   const assetOff=host.world.subscribeEvents(event=>{
@@ -264,7 +268,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
   const advanceTime=async(ms:number)=>{
     if(!Number.isFinite(ms)||ms<0||ms>30000)throw Error("Advance time must be 0..30000 ms.");
     if(!visualReady||movingView)await new Promise<void>((resolve,reject)=>{
-      const off=host.subscribeAfterRender(()=>{
+      const off=host.subscribeFrame(()=>{
         if(disposed||renderFailure||models.some(e=>e.asset?.status==="error")){off();reject(Error("NACRE could not prepare its rendering."));}
         else if(visualReady&&!movingView){off();resolve();}
       });host.requestRender();

@@ -6,6 +6,8 @@ export const QUEST3_ASSETS = [
   "/assets/quest3/station.glb", "/assets/quest3/station-light.ktx2", "/assets/quest3/equipment.glb",
   "/assets/quest3/equipment-low.glb", "/assets/quest3/panels.ktx2", "/assets/quest3/rib.glb",
   "/assets/quest3/inlay.glb", "/assets/quest3/star.glb", "/assets/quest3/planet.glb", "/assets/quest3/planet.ktx2",
+  // Retain the original planet pair above for browser-local stations saved before the mission.
+  "/assets/quest3/planet-mission-v1.glb", "/assets/quest3/planet-surface-v1.ktx2",
   "/assets/quest3/clouds.glb", "/assets/quest3/clouds.ktx2", "/assets/quest3/power-cell.glb", "/assets/quest3/blast-door.glb",
   "/assets/quest3/audio/pickup.wav", "/assets/quest3/audio/latch.wav", "/assets/quest3/audio/success.wav",
   "/assets/quest3/audio/charge-loop.wav", "/assets/quest3/audio/reactor-loop.wav", "/assets/quest3/audio/door-loop.wav",
@@ -29,7 +31,7 @@ export function createQuest3Scene(): AgentWorldDefinition {
     {id:"nacre-ambient",type:"ambient-light",intensity:.16,material:{color:"#87b6d4"}},
     {id:"nacre-sun",type:"directional-light",intensity:.8,transform:{position:[-16,7.6,11]},material:{color:"#d9eff3"},castShadow:false},
     native("nacre-station","/assets/quest3/station.glb",build.station.fitSize,build.station.centre as [number,number,number],{lightmap:{url:"/assets/quest3/station-light.ktx2",intensity:1.15}}),
-    {...native("nacre-planet","/assets/quest3/planet.glb",36,[1,9,-58]),behaviors:[{type:"spin",axis:"y",speedDegrees:.075}]},
+    {...native("nacre-planet",NACRE.planetModel,36,[1,9,-58]),behaviors:[{type:"spin",axis:"y",speedDegrees:.075}]},
     {...native("nacre-clouds","/assets/quest3/clouds.glb",36.55,[1,9,-58]),behaviors:[{type:"spin",axis:"y",speedDegrees:.32}]},
     native("nacre-ribs","/assets/quest3/rib.glb",13.5,[0,0,0],{instances:[-22,-18,-14,-10,-6,-2,2].map(z=>({position:[0,2.95,z]}))}),
     native("nacre-inlays","/assets/quest3/inlay.glb",1.4,[0,0,0],{instances:[-1,1].flatMap(side=>Array.from({length:16},(_,i)=>({position:[side*4.95,.012,1-i*1.5]})))}),

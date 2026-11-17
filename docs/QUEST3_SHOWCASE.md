@@ -70,6 +70,14 @@ transparent PBR cloud shell rotates above it at a different speed. Input paths,
 hashes and sun direction are recorded in build.json. The surface's illumination
 is baked; it is not a physically changing day/night terminator.
 
+The public asset origin caches `/assets/` for one year. The mission uses
+`planet-mission-v1.glb` and its `planet-surface-v1.ktx2` dependency; both URLs must
+be versioned when their bytes change. The original `planet.glb` / `planet.ktx2`
+pair retains its first-published cloud composite byte for byte for older saved
+stations. Saved worlds from the first mission release upgrade that one model URL
+through the World API while retaining authored fields. Original single-layer and
+custom Earth stations remain unchanged.
+
 The mini mission starts with an unpowered reactor and closed blast doors. Take
 the energy cell, carry it to the reactor socket, release it within 44 cm, then
 start the reactor. Its 4.8-second charge reveals moving gyroscopes and particles,

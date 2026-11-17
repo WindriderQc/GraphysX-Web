@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { RenderDiagnostics } from '../src/render-diagnostics.ts';
 import { negotiateQuestRate } from '../src/xr/quest-profile.ts';
 import { resolveModelPresentation } from '../server/model-presentation.mjs';
@@ -46,4 +47,14 @@ test('the release includes native models, complete KTX2 codecs and Quest 3 Touch
   assert.ok(equipment.extensionsRequired.includes('KHR_texture_basisu'));
   const ktx=await read('station-light.ktx2');assert.deepEqual([...ktx.subarray(0,12)],[171,75,84,88,32,50,48,187,13,10,26,10]);
   const bake=JSON.parse((await read('build.json')).toString());assert.ok(bake.bake.lights.length>0);assert.match(bake.bake.method,/AABB shadows/);
+});
+
+test('NACRE preserves the immutable original Earth and versions both new dependency URLs',async()=>{
+  const manifest=await productAssetManifest(),read=file=>readFile(new URL('../public/assets/quest3/'+file,import.meta.url));
+  for(const file of ['planet.glb','planet.ktx2','planet-mission-v1.glb','planet-surface-v1.ktx2'])assert.ok(manifest.files.includes('/assets/quest3/'+file));
+  const legacy=await read('planet.ktx2');
+  assert.equal(createHash('sha256').update(legacy).digest('hex'),'be194128bdb62a9268cccfc8c198fe7da0a05ec0b8ae1c6a5db7f650178d2a98');
+  const glb=await read('planet-mission-v1.glb'),doc=JSON.parse(glb.subarray(20,20+glb.readUInt32LE(12)).toString());
+  assert.equal(doc.images[0].uri,'planet-surface-v1.ktx2');
+  assert.notDeepEqual(await read('planet-surface-v1.ktx2'),legacy);
 });

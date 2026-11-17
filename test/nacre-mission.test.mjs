@@ -8,7 +8,7 @@ import { NACRE, NacreMission } from '../src/nacre-mission.ts';
 function fixture(){
   const entities=new Map(),objects=new Map(),listeners=new Set(),interactions=[];
   const ids=[NACRE.state,NACRE.cell,NACRE.socket,'nacre-reactor-core','nacre-reactor-light','nacre-control','nacre-reactor-particles',
-    'nacre-door-left','nacre-door-right','nacre-charge-sound','nacre-reactor-sound','nacre-door-sound','nacre-window-chime','nacre-station',
+    'nacre-door-left','nacre-door-right','nacre-charge-sound','nacre-reactor-sound','nacre-door-sound','nacre-window-chime','nacre-station','nacre-planet','nacre-clouds',
     ...Array.from({length:4},(_,i)=>'nacre-reactor-ring-'+i),...Array.from({length:3},(_,i)=>'nacre-gyro-'+i),
     ...['port','starboard'].flatMap(side=>[2,8,14,21].map(z=>'nacre-luminaire-'+side+'-'+z))];
   for(const id of ids){entities.set(id,{id,tags:[],behaviors:[],material:{},sound:{}});objects.set(id,new Group());}
@@ -16,6 +16,8 @@ function fixture(){
   objects.get(NACRE.cell).position.fromArray(NACRE.home);
   let seconds=0;
   const api={
+    export(){return{entities:[...entities.values()].map(e=>structuredClone(e))};},
+    create(saved){entities.clear();for(const e of saved.entities)entities.set(e.id,structuredClone(e));seconds=0;listeners.forEach(f=>f({type:'world.loaded'}));return{ok:true};},
     query({ids}){return ids.map(id=>entities.get(id)).filter(Boolean);},
     transaction(commands){
       if(commands.some(c=>!entities.has(c.id)))return{ok:false,error:'Unknown entity'};
@@ -97,6 +99,15 @@ test('NACRE fractional clocks reach the exact half-charge stage and final bounda
   f.advance(1.21);f.advance(1.19);
   assert.ok(f.entities.get('nacre-reactor-light').intensity>2,'half charge must advance beyond the first quarter stage');
   f.advance(2.4);assert.equal(f.mission.phase,'opening');f.mission.dispose();
+});
+
+test('NACRE upgrades the first mission planet URL while preserving original and custom stations',()=>{
+  const f=fixture(),planet=()=>f.entities.get('nacre-planet');
+  planet().asset={format:'gltf',url:'/assets/quest3/planet.glb',fitSize:36};f.mission.begin();f.load();
+  assert.equal(planet().asset.url,NACRE.planetModel);assert.equal(planet().asset.fitSize,36);assert.equal(f.mission.phase,'cell');
+  planet().asset.url='/assets/custom-earth.glb';f.load();assert.equal(planet().asset.url,'/assets/custom-earth.glb');
+  planet().asset.url='/assets/quest3/planet.glb';f.entities.delete(NACRE.state);f.load();
+  assert.equal(planet().asset.url,'/assets/quest3/planet.glb');assert.equal(f.mission.phase,null);f.mission.dispose();
 });
 test('NACRE reload restores stable checkpoints, not stale tracking or absolute animation time',()=>{
   const f=fixture(),m=f.mission;m.begin();m.take('right');f.load();

@@ -161,7 +161,7 @@ const trim=new Group();const luminous=new MeshBasicMaterial({color:'#67dce4'});l
 const star=new Group();star.add(new Mesh(new SphereGeometry(.5,4,3),new MeshBasicMaterial({color:'#c3d9eb'})));await glb('star.glb',star);
 // Reuse the observatory's actual Earth imagery. Bake the fixed sun/night lights
 // into the surface, keeping the original cloud alpha in a separately moving shell.
-const planetWidth=2048,planetHeight=1024,planetPixels=new Uint8Array(planetWidth*planetHeight*4),cloudPixels=new Uint8Array(planetWidth*planetHeight*4);
+const planetWidth=2048,planetHeight=1024,planetPixels=new Uint8Array(planetWidth*planetHeight*4),legacyPixels=new Uint8Array(planetWidth*planetHeight*4),cloudPixels=new Uint8Array(planetWidth*planetHeight*4);
 const earthInputs={day:'earth-day.jpg',night:'earth-night.jpg',clouds:'earth-clouds.png'};
 const earthSources={},earthPixels={};
 for(const [layer,name] of Object.entries(earthInputs)){
@@ -182,20 +182,28 @@ for(let row=0;row<planetHeight;row++)for(let col=0;col<planetWidth;col++){
   const t=Math.max(0,Math.min(1,(incidence+.12)/.32)),night=1-t*t*(3-2*t);
   const facing=x*view.x+y*view.y+z*view.z;
   const limb=facing>0?(1-facing)**4*(.035+.13*Math.sqrt(Math.max(0,incidence))):0;
+  const cloud=earthPixels.clouds[sample+3]/255*.88;
   for(let k=0;k<3;k++){
     const surface=linear[earthPixels.day[sample+k]]*daylight;
     const city=linear[earthPixels.night[sample+k]]*night*.9;
     const color=surface+city+limb*limbColor[k];
     planetPixels[index+k]=Math.max(0,Math.min(255,srgb(color)));
+    const litCloud=linear[earthPixels.clouds[sample+k]]*daylight;
+    legacyPixels[index+k]=Math.max(0,Math.min(255,srgb((surface+city)*(1-cloud)+litCloud*cloud+limb*limbColor[k])));
     cloudPixels[index+k]=earthPixels.clouds[sample+k];
   }
   planetPixels[index+3]=255;
+  legacyPixels[index+3]=255;
   cloudPixels[index+3]=earthPixels.clouds[sample+3];
 }
-await ktx('planet.ktx2',planetPixels,planetWidth,planetHeight);
+// Public assets are immutable for one year. Keep the original pair for saved
+// stations and give the changed surface AND its GLB fresh, versioned URLs.
+await ktx('planet.ktx2',legacyPixels,planetWidth,planetHeight);
+await ktx('planet-surface-v1.ktx2',planetPixels,planetWidth,planetHeight);
 const planet=new Group(),earthMaterial=new MeshBasicMaterial({color:'#ffffff'});earthMaterial.name='Observatory Earth';
 const earth=new Mesh(new SphereGeometry(1,96,64),earthMaterial);earth.name='EarthDayNightClouds';planet.add(earth);
 await glb('planet.glb',planet,'planet.ktx2');
+await glb('planet-mission-v1.glb',planet,'planet-surface-v1.ktx2');
 await ktx('clouds.ktx2',cloudPixels,planetWidth,planetHeight);
 const clouds=new Group(),cloudMaterial=new MeshStandardMaterial({color:'#dbeaff',roughness:1,metalness:0,transparent:true,opacity:.68,depthWrite:false});
 cloudMaterial.name='Moving Earth clouds';clouds.add(new Mesh(new SphereGeometry(1,64,48),cloudMaterial));
@@ -226,7 +234,7 @@ await ktx('panels.ktx2',pixels,panelSize,panelSize);
 const bounds=new Box3().setFromObject(source);const size=bounds.getSize(new Vector3()),centre=bounds.getCenter(new Vector3());
 const manifest={generator:'scripts/build-quest3-assets.mjs',encoder:'BinomialLLC/basis_universal v2_50',encoderHashes,
   bake:{method:'CPU direct lighting with AABB shadows and sampled ambient occlusion; no global illumination claim',resolution,triangles,lights},
-  planet:{method:'Existing orbital Earth surface and night lights with baked fixed sun/limb tint; separate transparent PBR cloud layer',width:planetWidth,height:planetHeight,sun:sun.toArray(),sources:earthSources},
+  planet:{method:'Existing orbital Earth surface and night lights with baked fixed sun/limb tint; separate transparent PBR cloud layer',model:'planet-mission-v1.glb',surface:'planet-surface-v1.ktx2',legacyModel:'planet.glb',legacySurface:'planet.ktx2',width:planetWidth,height:planetHeight,sun:sun.toArray(),sources:earthSources},
   station:{...station,fitSize:Math.max(size.x,size.y,size.z),centre:centre.toArray()},provenance:'Original GraphysX station artwork; Earth reuses the existing sbqc/orbital imagery recorded in planet.sources'};
 await writeFile(path.join(out,'build.json'),JSON.stringify(manifest,null,2)+'\n');
 await writeFile(path.join(out,'LICENSE.txt'),'Station artwork created for GraphysX by scripts/build-quest3-assets.mjs. Copyright 2026 Yanik; ownership retained by the repository owner. Earth imagery reuses the existing GraphysX sbqc/orbital assets; original source paths and hashes are recorded in build.json. No new external artwork was downloaded.\n');
