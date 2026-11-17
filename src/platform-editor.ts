@@ -489,6 +489,9 @@ export class PlatformEditor {
     }
   }
 
+  /** An application handing a document to Studio can reveal its subject in the inspector. */
+  selectEntity(id: string | null): void { this.select(id); }
+
   private syncGizmo(): void {
     const accepted = this.deps.api.state()?.selectedIds ?? [];
     if (this.selectedId && !accepted.includes(this.selectedId)) this.selectedId = null;

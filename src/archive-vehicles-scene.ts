@@ -9,6 +9,9 @@ import { archiveVehicleMesh } from "./archive-vehicles-manifest";
 
 /**
  * The Archive Garage — the recovered GraphysX vehicles, presented on the platform.
+ * The original TVM chassis/wheels and drivable Atmel/RacinX worlds are now a separate
+ * Archives destination, implemented in impreza-scene.ts. The older 3DS display below
+ * remains a gallery; its historical implementation notes do not describe that new rig.
  *
  * ## Why this file exists, and what it deliberately is not
  *

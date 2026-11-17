@@ -42,7 +42,7 @@ export const OPERATIONS = Object.freeze({
   "attach-behavior": { shape: { op: "attach-behavior", id: "<existing id>", behavior: "<behavior>" }, description: "Add a motion behavior to an entity. Transform behaviors on a physics body require kinematic physics." },
   "detach-behavior": { shape: { op: "detach-behavior", id: "<existing id>", behaviorId: "<behavior id>" }, description: "Remove a behavior by its id." },
   "interact": { shape: { op: "interact", id: "<existing id>", interactionId: "<optional interaction id>" }, description: "Fire an entity's authored interaction (toggle visibility, apply an impulse, play a sound). Omit `interactionId` to fire its first one." },
-  "steer": { shape: { op: "steer", id: "<existing id>", input: { headingDegrees: "number", thrust: "-1..1", turn: "-1..1", kick: "0..1", jump: "0..1" } }, description: "Drive a dynamic entity that carries a `steering` block. Every input field is optional." },
+  "steer": { shape: { op: "steer", id: "<existing id>", input: { headingDegrees: "number (heading rigs only)", thrust: "-1..1", turn: "-1..1", brake: "0..1 (vehicles only)", kick: "0..1", jump: "0..1" } }, description: "Drive a dynamic entity that carries a `steering` block. Every input field is optional." },
   "set-environment": { shape: { op: "set-environment", environment: "<environment>" }, description: "Change scene-wide looks: background, sky, lighting, bloom, fog envelope, day/night cycle, overlay, ground, gravity. Only the keys given change." },
   "select": { shape: { op: "select", ids: ["<existing id>"] }, description: "Highlight entities in the editor. Changes no document state." },
 });
@@ -84,7 +84,7 @@ const describe = {
     crowd: "Ground crowd of wanderers and pursuers (crowd entities only).",
     formula: "Math-game molecule field (formula-field entities only).",
     surface: "Live generative texture on a primitive mesh.",
-    steering: "Heading-based driving for a dynamic physics body.",
+    steering: "Heading-based driving, or a raycast vehicle rig, for a dynamic physics body.",
     dna: "Living Forest genome grove (dna-tree entities only).",
     forceField: "A field acting on other bodies, particles and flocks (force-field entities only).",
     agent: "Role, status and capabilities of an agent avatar (agent entities only).",
@@ -165,7 +165,7 @@ const describe = {
   formula: { preset: "Curated field from `formulaPresets`, or null.", kind: "parabola (a·x²+b·x+c) or slope (m·x+b).", lanes: "Rows along z.", perLane: "Molecules per lane.", spacing: "Metres between molecules.", moleculeSize: "Cube edge.", nearColor: "Gradient start.", farColor: "Gradient end." },
   sound: { source: "Sound id or URL.", volume: "0..1.", loop: "Default true.", autoplay: "Default true.", positional: "Attenuate with distance.", refDistance: "Metres before falloff." },
   surface: { sketch: "waveform, grid-pulse or plasma.", resolution: "Canvas px, 64..1024.", fps: "Redraws per second, 1..60.", emissive: "Also drive the emissive map.", tint: "#rrggbb multiplier." },
-  steering: { headingDegrees: "0 points -Z, 90 points +X.", force: "Newtons at full thrust.", speedCap: "m/s per direction.", turnRateDegrees: "Degrees per second.", kickImpulse: "Impulse at kick 1.", jumpImpulse: "Vertical impulse at jump 1.", arrowId: "Non-physics entity anchored to the body.", arrowLift: "Arrow height offset." },
+  steering: { headingDegrees: "0 points -Z, 90 points +X.", force: "Newtons at full thrust (heading rigs).", speedCap: "m/s per direction (heading rigs).", turnRateDegrees: "Degrees per second (heading rigs).", kickImpulse: "Impulse at kick 1.", jumpImpulse: "Vertical impulse at jump 1.", arrowId: "Non-physics entity anchored to the body.", arrowLift: "Arrow height offset.", vehicle: "Optional Y-up/-Z-forward raycast chassis rig: wheels[{entityId,connection:[x,y,z],steer,driven,brake}], radius, suspensionRestLength, suspensionStiffness, suspensionCompression, suspensionRelaxation, maxSuspensionTravel, maxSuspensionForce, frictionSlip, engineForce, brakeForce, maxSteerDegrees, steerRateDegrees, maxSpeed and optional steeringSpeedFactor (0..1). Wheel entities are non-physics roots. Thrust/turn/brake remain transient; heading follows the chassis." },
   agent: { role: "Short role text.", status: "Short status text.", perceptionRadius: "Metres.", capabilities: "Short labels.", origin: "Where the position sits on the body (geometry.height tall): feet (default) or center." },
   environment: {
     background: "Flat background and fog colour.", sky: "Skybox id from `skyIds`, or null for the flat colour.",

@@ -32,6 +32,7 @@ import type { IslandApplication } from "./island-app";
 import type { FirstCreationApplication } from "./first-creation-app";
 import type { DnaCreationApplication } from "./dna-creation-app";
 import type { CubzMenuApplication } from "./cubz-menu-app";
+import type { ImprezaApplication } from "./impreza-app";
 import type { SceneBrowser } from "./scene-browser";
 import type { LiveAgentPresenceController, LiveAgentPresenceState } from "./live-agent-presence";
 import type { LiveMissionRuntimeController, LiveMissionRuntimeState } from "./live-mission-runtime";
@@ -483,7 +484,7 @@ if (appParam === "quest3") {
      * Keyed by id rather than a boolean because this is the seam a second application uses, not
      * a special case for EV3.
      */
-    let appSurface: TenWorkshopApplication | KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | IslandApplication | FirstCreationApplication | DnaCreationApplication | CubzMenuApplication | null = null;
+    let appSurface: TenWorkshopApplication | KidxApplication | LlmXApplication | DiskxApplication | EcosystemApplication | NetxApplication | IslandApplication | FirstCreationApplication | DnaCreationApplication | CubzMenuApplication | ImprezaApplication | null = null;
     // Application surfaces own the whole play viewport. Keep this separate from the lazy
     // surface module so later host chrome (notably the asynchronously mounted scene browser)
     // can respect the route before the application's import has finished.
@@ -491,7 +492,7 @@ if (appParam === "quest3") {
     let returnFromApplicationStudio = false;
     let sceneBrowser: SceneBrowser | null = null;
     const openApplication = (id: string): boolean => {
-      if (id !== "make-ten" && id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island" && id !== "creation" && id !== "dna" && id !== "cubx") return false;
+      if (id !== "make-ten" && id !== "ev3-lab" && id !== "llmx" && id !== "diskx" && id !== "ecosystem" && id !== "netx" && id !== "island" && id !== "creation" && id !== "dna" && id !== "cubx" && id !== "impreza") return false;
       if (applicationOpen) return true;
       applicationOpen = true;
       requestShowroomInteraction(false);
@@ -524,6 +525,28 @@ if (appParam === "quest3") {
             sceneBrowser?.setEnabled(!nestorBlockedByLiveSession());
             host.applyEnvironment();
             enterBrowsedEditor();
+          });
+        }).catch((error: unknown) => showStartupError(root, error));
+        return true;
+      }
+      if (id === "impreza") {
+        showroomEnvironment?.(); showroomEnvironment = null;
+        void import("./impreza-app").then(async ({ mountImpreza }) => {
+          appSurface = await mountImpreza(root, host, () => {
+            appSurface?.dispose(); appSurface = null;
+            window.location.assign(import.meta.env.BASE_URL);
+          }, () => {
+            appSurface?.dispose(); appSurface = null; applicationOpen = false;
+            returnFromApplicationStudio = true;
+            const studioLocation = new URL(import.meta.env.BASE_URL, window.location.href);
+            studioLocation.searchParams.set("host", "editor");
+            if (explicitStore) studioLocation.searchParams.set("store", explicitStore);
+            history.replaceState(null, "", studioLocation.pathname + studioLocation.search);
+            sceneBrowser?.setEnabled(!nestorBlockedByLiveSession());
+            host.applyEnvironment(); enterBrowsedEditor();
+            void host.editorReady().then(editor => {
+              if (host.mode === "editor" && host.api.query({ ids: ["impreza-player"] }).length) editor?.selectEntity("impreza-player");
+            });
           });
         }).catch((error: unknown) => showStartupError(root, error));
         return true;
@@ -1107,6 +1130,18 @@ if (appParam === "quest3") {
                 return new Promise<void>(() => {});
               },
             },
+            {
+              id: "archive-impreza-worlds", label: "Impreza · les mondes retrouvés",
+              summary: "Retrouve le châssis TVM et ses quatre roues : conduis sur le terrain Atmel ou dans RacinX, puis ouvre une copie dans le Studio.",
+              meta: "2 CarScene C++ · modèles et textures d’origine · conduite Rapier adaptée · 100 anneaux RacinX",
+              open: () => {
+                const destination = new URL(import.meta.env.BASE_URL, window.location.href);
+                destination.searchParams.set("app", "impreza");
+                if (explicitStore) destination.searchParams.set("store", explicitStore);
+                window.location.assign(destination.href);
+                return new Promise<void>(() => {});
+              },
+            },
             ...([
               { world: "maison", id: "archive-maison", label: "Maison & Cuisine", summary: "Les deux compositions Blender complètes, leurs caméras sources et l’ancienne étude de volumes réunies dans un seul explorateur.", meta: "24 + 76 maillages sources · photo de cuisine absente · éclairage adapté" },
               { world: "arena", id: "archive-unity-arena", label: "Unity Arena", summary: "L’arène octogonale et son atlas peint à la main. La scène d’origine ne contenait aucun jeu ni script.", meta: "OBJ + atlas d’origine · caméra source · aucun gameplay inventé" },
@@ -1171,8 +1206,8 @@ if (appParam === "quest3") {
             {
               id: "archive-garage",
               label: "Archive Garage",
-              summary: "The recovered Impreza and Cobra on turntables, with the Piste Ovale as a table model.",
-              meta: "25 entities  ·  3 recovered meshes",
+              summary: "Galerie des anciens exports 3DS : Impreza, Cobra et maquette de la Piste Ovale. Pour conduire dans les scènes C++, ouvre Impreza · les mondes retrouvés.",
+              meta: "25 entités · galerie statique · distincte des mondes Atmel / RacinX",
               open: async () => {
                 const { composeArchiveVehicles, frameArchiveVehicles } = await import("./archive-vehicles-scene");
                 if (nestorBlockedByLiveSession()) return;
@@ -1216,13 +1251,13 @@ if (appParam === "quest3") {
     };
     // These applications own their scene from the first frame. Avoid booting the showroom
     // and its cubemap only to discard them when the app mounts.
-    const directSceneApp = (appParam === "make-ten" || appParam === "ev3-lab" || appParam === "creation" || appParam === "dna" || appParam === "cubx") && !editorFirst && !storeScene && !liveSessionRequested;
+    const directSceneApp = (appParam === "make-ten" || appParam === "ev3-lab" || appParam === "creation" || appParam === "dna" || appParam === "cubx" || appParam === "impreza") && !editorFirst && !storeScene && !liveSessionRequested;
     const host = new PlatformHost(root, {
       world: directSceneApp ? {
         schema: "graphysx.agent-world/v2", id: appParam + "-startup", label: appParam === "creation" || appParam === "dna" || appParam === "cubx" ? "GraphysX" : "KidX",
         environment: { background: "#142d38", sky: null }, entities: [],
       } : undefined,
-      autoOrbit: appParam !== "cubx" && appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "dna" && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx",
+      autoOrbit: appParam !== "impreza" && appParam !== "cubx" && appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "dna" && appParam !== "ev3-lab" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx",
       autoOrbitSpeed: 0.2,
       editorVisible: editorFirst,
       // CubX and its living shell are the focal point; the shore and physics stay below.
@@ -1231,7 +1266,7 @@ if (appParam === "quest3") {
       // screenshot harness should put you where you asked to be, immediately. `?intro=0`
       // opts out. The default welcome approaches slowly; application entry keeps its
       // existing short move. Both use the host's interruptible focus mechanism.
-      intro: appParam !== "cubx" && appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "dna" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx" && new URLSearchParams(window.location.search).get("intro") !== "0"
+      intro: appParam !== "impreza" && appParam !== "cubx" && appParam !== "make-ten" && !motionIsReduced() && !editorFirst && appParam !== "creation" && appParam !== "dna" && appParam !== "llmx" && appParam !== "diskx" && appParam !== "ecosystem" && appParam !== "netx" && new URLSearchParams(window.location.search).get("intro") !== "0"
         ? appParam ? true : { durationSeconds: 10, distanceScale: 2.15, azimuthDegrees: 18 }
         : false,
       // `?post=bloom` turns the demo post stack on for any route (bloom + SMAA through the

@@ -52,6 +52,8 @@ function entityViolation(entity, path) {
     ?? violation(entity.parentId, `${path}.parentId`)
     ?? violation(entity.steering?.arrowId, `${path}.steering.arrowId`);
   if (direct) return direct;
+  const vehicle = vehicleViolation(entity.steering?.vehicle, `${path}.steering.vehicle`);
+  if (vehicle) return vehicle;
   for (let index = 0; index < (entity.behaviors?.length ?? 0); index += 1) {
     const found = behaviorViolation(entity.behaviors[index], `${path}.behaviors[${index}]`);
     if (found) return found;
@@ -68,12 +70,23 @@ function patchViolation(patch, path) {
   const direct = violation(patch.parentId, `${path}.parentId`)
     ?? violation(patch.steering?.arrowId, `${path}.steering.arrowId`);
   if (direct) return direct;
+  const vehicle = vehicleViolation(patch.steering?.vehicle, `${path}.steering.vehicle`);
+  if (vehicle) return vehicle;
   for (let index = 0; index < (patch.behaviors?.length ?? 0); index += 1) {
     const found = behaviorViolation(patch.behaviors[index], `${path}.behaviors[${index}]`);
     if (found) return found;
   }
   for (let index = 0; index < (patch.interactions?.length ?? 0); index += 1) {
     const found = interactionViolation(patch.interactions[index], `${path}.interactions[${index}]`);
+    if (found) return found;
+  }
+  return null;
+}
+
+function vehicleViolation(vehicle, path) {
+  if (!Array.isArray(vehicle?.wheels)) return null;
+  for (const [index, wheel] of vehicle.wheels.entries()) {
+    const found = violation(wheel?.entityId, `${path}.wheels[${index}].entityId`);
     if (found) return found;
   }
   return null;
