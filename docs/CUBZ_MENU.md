@@ -142,3 +142,16 @@ pose's maximum world-matrix difference was `1.574e-7`; the settled Studio hover 
 was `11.91:1`. Two-finger input actually moved the shared camera without authoring a
 scene change. Optional store handoff used an isolated loopback fixture, with no homelab
 or production writes. Publication is tracked by PR146 and the main deployment workflow.
+
+Mechanical correction qualification, 2026-11-16: product revision `01d93fb` passed
+1,316 Node tests with one conditional skip, typecheck, lint, a fresh production build,
+physics probes and all three affected browser journeys (CubZ, revival, editor): nine
+controls in this focused gate. Actual renderer maximum endpoint-distance error was
+`2.215e-6` display units, central-pivot drift was zero, and fixed-core drift during
+opening was below `1.908e-6`. The partial-pose Studio copy differed by less than
+`1.717e-6` in world matrices. Desktop, 390px/320px touch and the isolated local-store
+handoff passed without browser/HTTP errors. The byte-identical standard game client
+then completed two opening iterations against that static build without errors.
+Mid-rotation, half-open flower, fully open, compact and Studio captures were inspected.
+This qualifies the correction's affected paths; it is not a rerun of the old full gate
+or physical-device/native-engine pixel acceptance. Publication evidence follows in PR147.
