@@ -108,7 +108,8 @@ loops. Original mono PCM sounds are synthesized offline without a service or CDN
 audibility, perceived direction and headset bass response still need listening.
 
 The desktop diagnostic is hidden by default. The in-world panel shows the next
-objective. Scene saving uses the existing named browser-local library; it is
+objective. On small screens, Options holds sound, save/resume, replay and
+diagnostics so the mission and complete Earth remain visible. Scene saving uses the existing named browser-local library; it is
 not a cross-device or server save. Reload preserves stable checkpoints. A saved
 held cell returns to the stand; interrupted charging returns to the docked state;
 interrupted door opening resumes fully open. Replay resets mission-owned fields
