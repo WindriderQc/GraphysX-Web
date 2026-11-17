@@ -11,14 +11,15 @@ await mkdir(artifacts, { recursive: true });
 const browser = await launchSmokeBrowser();
 const receipts = [];
 const source = JSON.parse(await readFile(new URL("../public/assets/ports/archive-cubz-menu.json", import.meta.url), "utf8"));
-const mechanicalNodes = Object.fromEntries(["rotation", "open"].map(id => [id, source.actors[id].nodes.filter(node => /^Box0[1-8]$|^Cylindre\d+$/.test(node.name)).map(node => ({ id: node.id, cylinder: node.name.startsWith("Cylindre") }))]));
+const mechanicalNodes = Object.fromEntries(["rotation", "open", "screensaver"].map(id => [id, source.actors[id].nodes.filter(node => /^Box0[1-8]$|^Cylindre\d+$/.test(node.name)).map(node => ({ id: node.id, cylinder: node.name.startsWith("Cylindre") }))]));
 const mechanicalPose = (page, actor) => page.evaluate(({ actor, nodes }) => {
   const world = window.__GRAPHYSX_HOST__.world;
   const points = nodes.flatMap(node => {
     const object = world.getEntityObject(`cubz-${actor}-n${node.id}`);
     return [0, node.cylinder ? 50 : 22.5].map(y => object.localToWorld(object.position.clone().set(0, y, 0)).toArray());
   });
-  const pivot = actor === "rotation" ? world.getEntityObject("cubz-rotation-n1").getWorldPosition(world.getEntityObject("cubz-rotation-n1").position.clone()).toArray() : null;
+  const pivotObject = actor === "rotation" ? world.getEntityObject("cubz-rotation-n1") : actor === "screensaver" ? world.getEntityObject("cubz-screensaver-pivot") : null;
+  const pivot = pivotObject?.getWorldPosition(pivotObject.position.clone()).toArray() ?? null;
   return { points, pivot };
 }, { actor, nodes: mechanicalNodes[actor] });
 const distance = (a, b) => Math.hypot(...a.map((value, index) => value - b[index]));
@@ -175,8 +176,11 @@ try {
   assert.deepEqual((await snapshot(page)).selected, ["cubz-open-rig"], "one selected actor includes all 44 source meshes");
   await capture(page, "cubz-diagnostic");
   await page.click("[data-cubz-reset]");
+  const waitingReference = await mechanicalPose(page, "screensaver");
   await clickPaused(page, "[data-cubz-saver]");
+  for (const seconds of [3.25, 9, 13]) { await advance(page, seconds); assertRigid(waitingReference, await mechanicalPose(page, "screensaver")); }
   await advance(page, 12.5);
+  assertRigid(waitingReference, await mechanicalPose(page, "screensaver"));
   assert.equal((await read(page)).phase, "screensaver");
   assert.ok((await snapshot(page)).meshes.every(id => id.startsWith("cubz-screensaver-")));
   await capture(page, "cubz-source-screensaver");

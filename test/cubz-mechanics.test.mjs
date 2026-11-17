@@ -105,3 +105,23 @@ test("the selected block reaches the front slot and the three petals open outwar
     }
   }
 });
+
+test("waiting keeps every connector attached and rotates the complete assembly around its fixed centre", () => {
+  const document = buildCubzMenu(data), actor = data.actors.screensaver;
+  const nodes = actor.nodes.filter(node => /^Box0[1-8]$|^Cylindre\d+$/.test(node.name));
+  const points = matrices => nodes.flatMap(node => [new Vector3(), new Vector3(0, node.name.startsWith("Cylindre") ? 50 : 22.5, 0)]
+    .map(point => point.applyMatrix4(matrices.get(`cubz-screensaver-n${node.id}`))));
+  const base = points(poseMatrices(document, [], 0));
+  const centre = values => nodes.reduce((sum, node, index) => /^Box/.test(node.name) ? sum.add(values[index * 2 + 1]) : sum, new Vector3()).multiplyScalar(1 / 8);
+  const centreAtRest = centre(base);
+  const commands = cubzSequenceCommands(data, document, "saver", 0, 0);
+  let travelled = 0;
+  for (let tick = 0; tick <= 100; tick++) {
+    const current = points(poseMatrices(document, commands, tick / 4));
+    assert.ok(centre(current).distanceTo(centreAtRest) < 1e-5, "waiting must keep the assembly centre in place");
+    for (let i = 0; i < current.length; i++) for (let j = 0; j < i; j++) assert.ok(Math.abs(current[i].distanceTo(current[j]) - base[i].distanceTo(base[j])) < 1e-5,
+      "waiting must not play the source clip's separate-piece disassembly");
+    travelled = Math.max(travelled, current[0].distanceTo(base[0]));
+  }
+  assert.ok(travelled > 1, "waiting visibly rotates the complete structure");
+});

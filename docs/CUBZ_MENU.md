@@ -49,15 +49,19 @@ matrices within `1.4e-5` degrees; using the stored rotation directly differs by 
 180 degrees. The pinned raw payload is unchanged.
 Triangle winding follows the exported normal orientation after reflection.
 
-All changing position, rotation and scale keys inside a chosen range survive. Only exactly
+All changing position, rotation and scale keys inside a chosen rotation/opening range survive. Only exactly
 constant channels compact; endpoints are sampled when clipping. Vectors interpolate
 linearly, normalized quaternions use slerp. The recovered engine was not run for a native
 pixel comparison, so continuous interpolation and historical appearance are not certified.
 
 The C++ supplies eight choices, seven selection ranges, the actor-swap sequence and four
 buttons per internal menu. Selection ranges are 28 frames at 30 fps; opening is 50 frames
-at 30 fps; the waiting actor is 750 frames at 30 fps. A Web loop of the waiting actor is
-an explicit presentation choice. The return reverses the **same selected range**: the
+at 30 fps; the recorded waiting actor is 750 frames at 30 fps. Its separate-piece motions
+disassemble the structure (up to 6.37 display units of endpoint-distance change after
+rotation-convention correction). The complete geometry, bind hierarchy and raw clip remain
+preserved. The menu instead uses a disclosed 25-second **rigid waiting rotation**, with
+two adapter groups around the original central pivot. This honours the owner's requirement
+that connectors stay with the cubes. No native mesh or pivot is edited. The return reverses the **same selected range**: the
 native `selected + 1` reverse bug could request nonexistent range 8. Direct choice zero
 also returns to usable idle controls. Source stop-frame thresholds are not simulated.
 
@@ -82,7 +86,9 @@ uninitialized eighth slot and cannot safely be merged into this choreography by 
 Each actor is ordinary v2 groups and inline meshes. Reusable `keyframes` behaviors carry
 positions, rotations, scales and discrete visibility; no second renderer or animation loop
 owns the scene. Visibility holds the latest key, including at its exact timestamp. Channels
-are bounded to 1024 keys so the waiting actor's 751 keys need no resampling. Browser and
+are bounded to 1024 keys, retaining capacity for the source's 751-key tracks. The rigid
+waiting adapter uses five quaternion keys on one common pivot; the inverse-offset group
+preserves every native node's original local matrix. Browser and
 storage validators share the same fields and limits. The public clock retains full
 simulation precision so a rounded timestamp cannot pause before a visibility boundary.
 
