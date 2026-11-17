@@ -5553,3 +5553,9 @@ Build séparé dans output/ballsy-slime/dist, lanceur Jouer-Ballsy-Slime.cmd sur
 - Two earlier browser runs logged welcome PMREM shader errors during navigation. Focused published-baseline/current comparisons with and without the isolated store did not reproduce them; the latest full Impreza journey records zero errors. Preserve failed-run diagnostics and require the complete release gate and public verification before declaring this shipped.
 - Unchanged standard client, full local gate, CI and deployment/public verification are still pending at this checkpoint. The historic archive and original checkout remain untouched.
 - Native driving UI reads a cheap clock header instead of cloning the full 512² inline heightfield through api.state on every frame/input. Full snapshots remain available to the public API and export.
+
+## 2026-11-17 — Qualify the shared runtime and preserve native Studio edits
+
+- The complete default local gate passed at 6cb7548: 129 checks, 1,334 Node tests passed and one conditional skip. Three opt-in GPU receptions were not run. Full captures/receipts are retained under output/impreza/full-verify-artifacts-6cb7548; the original log and exit receipt remain under output/impreza.
+- A focused reproduction then proved that the native Studio action discarded an authored addition and changed label while retaining the same world id. The handler now copies the current exported document rather than regenerating the archive composition. This restarts at the authored departure and retains edits; different-world preservation remains unchanged.
+- The Impreza browser journey now checks those same-world edits in Studio, Save and reload. This final fix changes only the native application, its journey and documentation; shared runtime/physics/host/editor bytes remain identical to the complete-gate baseline. Final affected-journey qualification and public deployment evidence are recorded with PR148.

@@ -2,9 +2,11 @@
 
 Open **Archives → Impreza · les mondes retrouvés**, or `/?app=impreza`.
 The welcome offers Atmel and RacinX, model inspection, free driving with keyboard or
-simultaneous touch, reset, pause and an editable Studio copy. Studio deliberately opens
-a fresh copy at the settled departure, retaining the vehicle rig; a driven position is
-not silently presented as an authored source spawn. Save/Export use the existing editor.
+simultaneous touch, reset, pause and an editable Studio copy. Studio copies the current
+authored document, preserving edits and additions made through the API, at its recorded
+departure. Normal mode records a settled start; source-height replay records the native
+high start. A driven position is not captured as a baked pose. Save/Export use the existing
+editor. Chapter selection and the departure reset reload the original source composition.
 
 ## Source custody
 

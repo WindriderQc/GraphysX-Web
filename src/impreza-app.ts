@@ -38,7 +38,7 @@ export async function mountImpreza(root: HTMLElement, host: PlatformHost, onExit
         <p>Dans Atmel, le témoin 0 est décalé de 6 m pour éviter son chevauchement natif avec le joueur. Les trois témoins sont sans IA. Dans RacinX, les adversaires étaient commentés. Beaucoup d’anneaux dépassent le terrain : ce tracé n’est pas une course terminée.</p>
         <p><b>Encore absent :</b> réseau natif, son moteur et équivalence TV3D/Newton. L’eau native à y=85 se retrouve 485 m au-dessus du terrain : elle reste masquée et éditable dans le Studio. L’ovale moderne et les voitures sans liaison source restent des expériences distinctes.</p>
         <button type="button" data-impreza-drop>Rejouer la chute du C++</button>
-        <p>Le Studio ouvre une copie au départ avec les pièces et leurs attaches, prête à modifier et à enregistrer. L’archive locale reste intacte.</p>
+        <p>Le Studio conserve tes modifications et reprend le départ enregistré, avec les pièces et leurs attaches. La conduite en cours ne devient pas une pose figée. L’archive locale reste intacte.</p>
       </details>
       <p class="gx-impreza-help">Glisse pour regarder · molette pour zoomer</p>
     </section>
@@ -112,7 +112,11 @@ export async function mountImpreza(root: HTMLElement, host: PlatformHost, onExit
   find("[data-impreza-studio]").addEventListener("click", () => {
     if (clock().worldId !== `archive-impreza-${world}`) { release(); api.pause(true); onStudio(); return; }
     if (!ready) return;
-    rebuild(world); api.pause(true); api.select([IMPREZA_PLAYER]); onStudio();
+    const authored = api.exportDocument(); if (!authored) return;
+    release(); api.pause(true);
+    const created = api.create(authored);
+    if (!created.ok) { notice = "La copie n’a pas pu s’ouvrir dans le Studio."; refresh(); return; }
+    api.pause(true); frame(); api.select([IMPREZA_PLAYER]); onStudio();
   });
   surface.querySelectorAll<HTMLButtonElement>("[data-impreza-world]").forEach(button => button.addEventListener("click", () => rebuild(button.dataset.imprezaWorld as ImprezaWorldId)));
   const keyAction = (code: string) => ({ ArrowUp: "forward", KeyW: "forward", KeyZ: "forward", ArrowDown: "reverse", KeyS: "reverse", ArrowLeft: "left", KeyA: "left", KeyQ: "left", ArrowRight: "right", KeyD: "right", Space: "brake" })[code];

@@ -118,6 +118,14 @@ try {
   assert.ok((await read(page)).player.every(Number.isFinite)); assert.ok((await read(page)).player[1] > -2 && (await read(page)).player[1] < 5, "The historic drop collides with the terrain; a 50m impact is allowed to roll the car");
   assert.ok(await wheelAlignment(page) < 1e-8, "Wheels remain attached through the source-height impact");
   console.log("PASS Impreza: source generations, all rings/height samples, hidden native water and source-height impact.");
+  await page.click("[data-impreza-reset]"); await ready(page);
+  const authoredEdits = await page.evaluate(() => {
+    const api = window.__GRAPHYSX__; api.pause(true);
+    const renamed = api.update("impreza-player", { label: "Impreza authored variant" });
+    const added = api.spawn({ id: "impreza-authored-fixture", label: "Preserved authored addition", type: "box", visible: false, transform: { position: [4, 3, 7] } });
+    return { renamed: renamed.ok, added: added.ok };
+  });
+  assert.deepEqual(authoredEdits, { renamed: true, added: true });
   await page.click("[data-impreza-studio]"); await page.locator(".gx-ed-toolbar").waitFor();
   phase = "studio-copy";
   assert.equal(new URL(page.url()).searchParams.get("app"), null);
@@ -125,6 +133,8 @@ try {
   await page.waitForFunction(() => window.__GRAPHYSX__.query({ ids: ["impreza-player"] })[0]?.asset?.status === "ready");
   assert.equal(await page.evaluate(() => window.__GRAPHYSX__.state().world.id), "archive-impreza-racinx");
   assert.equal(await page.evaluate(() => window.__GRAPHYSX__.state().paused), true);
+  const studioEdits = await page.evaluate(() => ({ label: window.__GRAPHYSX__.query({ ids: ["impreza-player"] })[0].label, additions: window.__GRAPHYSX__.query({ ids: ["impreza-authored-fixture"] }).length }));
+  assert.deepEqual(studioEdits, { label: "Impreza authored variant", additions: 1 }, "Studio retains edits and additions when the world id is unchanged");
   assert.deepEqual(await page.evaluate(() => window.__GRAPHYSX__.state().selectedIds), ["impreza-player"]);
   await page.waitForFunction(() => document.querySelector(".gx-ed-inspector")?.textContent.includes("impreza-player"));
   await capture(page, "impreza-studio");
@@ -133,6 +143,8 @@ try {
   await page.waitForFunction(() => Boolean(localStorage.getItem("graphysx.agent-world.v2.Impreza restored world")));
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("graphysx.agent-world.v2.Impreza restored world")));
   const savedRig = saved.entities.find(e => e.id === "impreza-player").steering;
+  assert.equal(saved.entities.find(e => e.id === "impreza-player").label, "Impreza authored variant");
+  assert.equal(saved.entities.filter(e => e.id === "impreza-authored-fixture").length, 1);
   assert.equal(savedRig.vehicle.wheels.length, 4);
   for (const field of ["thrust", "turn", "brake"]) assert.equal(Object.hasOwn(savedRig, field), false);
   const downloadEvent = page.waitForEvent("download"); await page.locator(".gx-ed-toolbar").getByRole("button", { name: "Export", exact: true }).click();
@@ -144,6 +156,8 @@ try {
   phase = "saved-reload";
   await page.waitForFunction(() => window.__GRAPHYSX__?.state()?.world.id === "archive-impreza-racinx");
   assert.equal(await page.evaluate(() => window.__GRAPHYSX__.query({ tag: "impreza-source-ring" }).length), 100);
+  assert.equal(await page.evaluate(() => window.__GRAPHYSX__.query({ ids: ["impreza-authored-fixture"] }).length), 1);
+  assert.equal(await page.evaluate(() => window.__GRAPHYSX__.query({ ids: ["impreza-player"] })[0].label), "Impreza authored variant");
   await page.goto(url()); await ready(page);
   phase = "changed-world-preservation";
   console.log("PASS Impreza: Studio copy, local Save, JSON Export, Home and saved reload.");
