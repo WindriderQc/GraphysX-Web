@@ -117,7 +117,11 @@ export function cubzSourceTrack(actor: CubzActor, track: SourceTrack, rangeId: n
     const frames = [...new Set([range.start, ...keys.filter(key => key[0] > range.start && key[0] < range.end).map(key => key[0]), range.end])];
     return frames.map(frame => {
       const values = sampleSource(keys, frame, quaternion);
-      if (quaternion) { values[0] *= -1; values[1] *= -1; }
+      // MANI stores passive rotations: every first key agrees with the independent
+      // MHI2 bind matrix only after conjugation. Convert to an active quaternion,
+      // then reflect Z like the geometry/matrices: S * R(q^-1) * S = (x,y,-z,w).
+      // Reflecting the stored quaternion directly flips cylinders and petal hinges.
+      if (quaternion) values[2] *= -1;
       else if (reflected) values[2] *= -1;
       return [offset + (reverse ? range.end - frame : frame - range.start) / range.fps, ...values];
     }).sort((a, b) => a[0] - b[0]);

@@ -41,7 +41,12 @@ MAMD positions, normals, UVs and triangles are recovered, not replacement boxes.
 parents and local matrices retain the actual pivots. A read-only source audit verified
 `parentWorld × localMatrix` against every stored world matrix to within `7.63e-6` native
 units. Local geometry is not transformed twice. The Web boundary reflects Z once on
-vertices/normals and conjugates matrices; quaternion reflection is `[-x,-y,z,w]`.
+vertices/normals and conjugates matrices. MANI keys are **passive rotations**: conjugate
+them before reflecting Z, producing Web quaternions `[x,y,-z,w]`. Applying reflection
+directly to the stored key in the first release inverted cylinder and panel axes.
+Across all 136 first rotation keys, conjugation agrees with the independent MHI2 bind
+matrices within `1.4e-5` degrees; using the stored rotation directly differs by up to
+180 degrees. The pinned raw payload is unchanged.
 Triangle winding follows the exported normal orientation after reflection.
 
 All changing position, rotation and scale keys inside a chosen range survive. Only exactly
@@ -95,6 +100,19 @@ If another document replaces the rig, helpers disable and Studio opens that docu
 unchanged. Foreign entities are never normalized or baked by the pose helper.
 
 ## Validation
+
+The owner reported disconnected cylinders and inward petals after the first release.
+Earlier receipts covered the UI, persistence and source decoding; they did not prove
+mechanical coherence. `test/cubz-mechanics.test.mjs` now calibrates animation against
+independent bind matrices, checks all endpoint-pair distances and the central pivot at
+every integer frame of all seven rotations, and checks fixed cores/hinges and outward
+movement of all three opening petals. The first two tests reproduce the published bug.
+The browser smoke also measures actual renderer endpoints midway and at the end of
+each rotation, fixed cores during opening, and captures the half-open flower.
+
+The stored rotation ranges leave up to 3.60 native units (0.144 display units) of residue
+at the front slot before the source actor swap. This source-export limitation remains
+explicit; the tests do not pretend the original recordings end on exact cardinal poses.
 
 `test/cubz-source.test.mjs` exercises counted binary fixtures, corruption rejection, pinned
 payload counts and release-asset inclusion. The actual public API/Rapier contract in
