@@ -31,7 +31,11 @@ type EnergyUniforms = {
 export function applyEnergyShader(material: MeshStandardMaterial, settings: EnergyShaderSettings | null): void {
   if (!settings) {
     if (material.userData.graphysxEnergyUniforms) {
+      // Three caches programs per material. Invalidate that cache when changing shader
+      // families, so returning to an old key cannot reuse another family's uniform table.
+      material.dispose();
       delete material.userData.graphysxEnergyUniforms;
+      delete material.userData.graphysxEnergyFlow;
       material.onBeforeCompile = () => {};
       material.customProgramCacheKey = () => "";
       material.transparent = material.opacity < 1;
@@ -43,8 +47,11 @@ export function applyEnergyShader(material: MeshStandardMaterial, settings: Ener
   }
   validateEnergyShader(settings);
   const previous: EnergyUniforms | undefined = material.userData.graphysxEnergyUniforms;
-  const uniforms: EnergyUniforms = {
-    gxEnergyTime: previous?.gxEnergyTime ?? { value: 0 },
+  // Compiled programs retain these exact uniform objects, even after needsUpdate. Keep
+  // their identities when reconfiguring the same material; replacing the table disconnects
+  // the new authored settings from a program Three legitimately reuses.
+  const uniforms: EnergyUniforms = previous ?? {
+    gxEnergyTime: { value: 0 },
     gxEnergyGain: { value: material.emissiveIntensity },
     gxEnergyRimColor: { value: new Color(settings.rimColor ?? "#53dfff") },
     gxEnergyRimPower: { value: settings.rimPower ?? 2.5 },
@@ -54,12 +61,22 @@ export function applyEnergyShader(material: MeshStandardMaterial, settings: Ener
     gxEnergyFlowScale: { value: settings.flowScale ?? 6 },
     gxEnergyFlowStrength: { value: settings.flowStrength ?? 0.35 },
   };
+  uniforms.gxEnergyGain.value = material.emissiveIntensity;
+  uniforms.gxEnergyRimColor.value.set(settings.rimColor ?? "#53dfff");
+  uniforms.gxEnergyRimPower.value = settings.rimPower ?? 2.5;
+  uniforms.gxEnergyRimIntensity.value = settings.rimIntensity ?? 1;
+  uniforms.gxEnergyRimOpacity.value = settings.rimOpacity ? 1 : 0;
+  uniforms.gxEnergyFlowSpeed.value = settings.flowSpeed ?? 0.4;
+  uniforms.gxEnergyFlowScale.value = settings.flowScale ?? 6;
+  uniforms.gxEnergyFlowStrength.value = settings.flowStrength ?? 0.35;
   material.userData.graphysxEnergyUniforms = uniforms;
   material.blending = settings.blend === "additive" ? AdditiveBlending : NormalBlending;
   material.transparent = material.opacity < 1 || settings.rimOpacity === true || settings.blend === "additive";
   material.depthWrite = material.opacity >= 0.5 && !settings.rimOpacity;
   if (material.transparent) material.depthWrite = false;
   const hasFlow = (settings.flowStrength ?? 0.35) > 0;
+  if (!previous || material.userData.graphysxEnergyFlow !== hasFlow) material.dispose();
+  material.userData.graphysxEnergyFlow = hasFlow;
   material.customProgramCacheKey = () => hasFlow ? "graphysx-energy/v1-flow" : "graphysx-energy/v1-rim";
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);

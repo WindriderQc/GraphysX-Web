@@ -184,22 +184,33 @@ try {
       {op:'spawn',entity:{id:'qa-energy-light',type:'point-light',intensity:4,marker:false,transform:{position:[50,3,0]},behaviors:[{...modulation,property:'intensity'}]}},
     ]));
     const object=()=>host.world.getEntityObject('qa-energy'),light=()=>host.world.getEntityObject('qa-energy-light');
+    const compiled=async()=>{await host.renderer.compileAsync(host.scene,host.camera);return host.renderer.properties.get(object().material).uniforms;};
     must(api.step(.125));close(object().material.emissiveIntensity,3,'material peak');close(light().intensity,6,'light peak');
+    const bound=await compiled();close(bound.gxEnergyGain.value,3,'compiled peak');
     const peakTime=object().material.userData.graphysxEnergyUniforms.gxEnergyTime.value;
     await new Promise(resolve=>setTimeout(resolve,80));close(object().material.userData.graphysxEnergyUniforms.gxEnergyTime.value,peakTime,'paused shader');
     must(api.step(.25));close(object().material.emissiveIntensity,1,'material trough');close(light().intensity,2,'light trough');
     close(host.world.getEntityObject('qa-energy-child').material.emissiveIntensity,3,'child brightness');
     close(api.export().entities.find(e=>e.id==='qa-energy').material.emissiveIntensity,2,'authored brightness');
     must(api.update('qa-energy',{material:{emissiveIntensity:4}}));close(object().material.emissiveIntensity,2,'reconfigured base');
+    close(bound.gxEnergyGain.value,2,'cached compiled gain after patch');
+    must(api.update('qa-energy',{material:{shader:{id:'energy',rimOpacity:true,blend:'additive',flowSpeed:1.7,rimPower:5,flowStrength:.2}}}));
+    close(bound.gxEnergyFlowSpeed.value,1.7,'cached compiled flow after patch');close(bound.gxEnergyRimPower.value,5,'cached compiled rim after patch');
     must(api.detachBehavior('qa-energy','brightness'));close(object().material.emissiveIntensity,4,'detached base');
     must(api.detachBehavior('qa-energy-light','brightness'));close(light().intensity,4,'detached light');
     must(api.update('qa-energy',{material:{shader:null}}));
     if(object().material.userData.graphysxEnergyUniforms)throw Error('Energy shader survived removal');
     if(object().material.transparent||!object().material.depthWrite||object().material.blending!==1)throw Error('Energy shell left stale transparency/blending');
-    must(api.undo());
-    if(!object().material.userData.graphysxEnergyUniforms)throw Error('Undo lost energy material');
+    if((await compiled()).gxEnergyGain)throw Error('PBR reused stale energy bindings');
+    must(api.update('qa-energy',{material:{shader:{id:'energy'}}}));
+    close((await compiled()).gxEnergyGain.value,4,'energy reactivation on the same material');
     must(api.update('qa-energy',{material:{shader:{id:'archive-ppl',bumpAmount:.1,lightPosition:[0,4,0]}}}));
     if(object().material.userData.graphysxEnergyUniforms||!object().material.userData.graphysxArchivePpl)throw Error('Energy hook survived archived shader switch');
+    if((await compiled()).gxEnergyGain)throw Error('Archived PPL reused stale energy bindings');
+    must(api.update('qa-energy',{material:{shader:{id:'energy',flowStrength:0}}}));
+    let active=await compiled();close(active.gxEnergyGain.value,4,'rim-only reactivation');close(active.gxEnergyFlowStrength.value,0,'compiled rim-only variant');
+    must(api.update('qa-energy',{material:{shader:{id:'energy',flowStrength:.6}}}));
+    active=await compiled();close(active.gxEnergyFlowStrength.value,.6,'compiled flowing variant');
     must(api.undo());
     if(object().material.userData.graphysxArchivePpl||!object().material.userData.graphysxEnergyUniforms)throw Error('Archived hook survived energy undo');
     // A native source material can arrive after its behavior. It must use its own PBR
@@ -218,7 +229,7 @@ try {
     const saved=api.export();must(api.create(saved));
     if(api.export().entities.find(e=>e.id==='qa-energy').material.shader.id!=='energy')throw Error('Round trip lost energy shader');
     must(api.create(before));
-    return {pauseStep:true,authoredBasePreserved:true,dynamicBody:true,ownedChildIsolation:true,detach:true,shaderUndo:true,archiveSwitch:true,nativeLateLoad:true,nativePatchDrift:false,roundTrip:true};
+    return {pauseStep:true,authoredBasePreserved:true,compiledUniformUpdates:true,compiledVariantCycles:true,dynamicBody:true,ownedChildIsolation:true,detach:true,shaderUndo:true,archiveSwitch:true,nativeLateLoad:true,nativePatchDrift:false,roundTrip:true};
   });
   await ready(page);
   // Hold a real native model request across a complete world replacement. A late

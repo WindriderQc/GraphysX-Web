@@ -72,3 +72,21 @@ test('published vocabulary teaches the accepted visual fields and their bounds',
   assert.ok(vocabulary.behaviors.modulate.fields.includes('startSeconds'));
   assert.equal(vocabulary.limits.modulate.frequencyHz[1],8);
 });
+
+test('a cached compiled shader keeps live uniform bindings across material reconfiguration',()=>{
+  const material=new MeshStandardMaterial({emissiveIntensity:.08});
+  applyEnergyShader(material,{id:'energy'});
+  const compiled={uniforms:{},vertexShader:'void main() {\n#include <project_vertex>\n}',fragmentShader:'void main() {\n#include <emissivemap_fragment>\n}'};
+  material.onBeforeCompile(compiled,{});
+  const binding=compiled.uniforms.gxEnergyGain,colour=compiled.uniforms.gxEnergyRimColor;
+  material.emissiveIntensity=1.2;
+  applyEnergyShader(material,{id:'energy',rimColor:'#ff8844',rimPower:5,flowSpeed:1.7});
+  updateEnergyShader(material,8);
+  assert.equal(compiled.uniforms.gxEnergyGain,binding);
+  assert.equal(binding.value,1.2);
+  assert.equal(compiled.uniforms.gxEnergyRimColor,colour);
+  assert.equal(colour.value.getHexString(),'ff8844');
+  assert.equal(compiled.uniforms.gxEnergyRimPower.value,5);
+  assert.equal(compiled.uniforms.gxEnergyFlowSpeed.value,1.7);
+  material.dispose();
+});
