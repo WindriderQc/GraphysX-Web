@@ -42,15 +42,19 @@ try {
     host.world.group.traverse(o=>{if(o.isInstancedMesh)batches.push(o.count);if(o.isMesh)for(const m of Array.isArray(o.material)?o.material:[o.material]){
       if(m.lightMap)maps.push({compressed:m.lightMap.isCompressedTexture,channel:m.lightMap.channel});
     }});
-    return {batches,maps,stationColors:host.api.query({ids:['nacre-station']})[0].materialSlots.map(s=>s.color),diagnostics:host.api.observe().diagnostics};
+    return {batches,maps,stationColors:host.api.query({ids:['nacre-station']})[0].materialSlots.map(s=>s.color),diagnostics:host.api.observe().diagnostics,
+      contextLost:host.renderer.getContext().isContextLost(),frame:host.frameCount,hostDiagnostics:host.diagnostics.snapshot(),
+      camera:host.camera.position.toArray(),worldVisible:host.world.group.visible};
   });
   assert.ok(render.batches.includes(420));assert.ok(render.batches.includes(18));assert.ok(render.maps.length>0);assert.ok(render.maps.every(m=>m.compressed&&m.channel===1));
   assert.equal(render.diagnostics.gpuMs,null);receipt.render=render;
   assert.ok(render.stationColors.includes('#243647'),'native PBR source colors must survive host reconciliation');
+  assert.equal(render.contextLost,false);assert.ok(render.diagnostics.calls>0,'prepared scenes have submitted real geometry');
   // Actual composer work must not collapse to the last fullscreen pass's count.
   const postFrame=await page.evaluate(()=>{const {host}=window.__GRAPHYSX_QUEST3__;host.setPostEnabled(true);return host.frameCount;});
   await page.waitForFunction(frame=>window.__GRAPHYSX_QUEST3__.host.frameCount>frame+2,postFrame);
   const postCalls=await page.evaluate(()=>window.__GRAPHYSX__.observe().diagnostics.calls);
+  if(!render.diagnostics.calls||!postCalls)console.log('NACRE render diagnostics:',JSON.stringify({render,postCalls,errors}));
   assert.ok(postCalls>render.diagnostics.calls,'composer diagnostics include the scene and all passes: plain='+render.diagnostics.calls+', post='+postCalls);
   receipt.composerCalls={plain:render.diagnostics.calls,post:postCalls};
   await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.setPostEnabled(false));
@@ -282,6 +286,9 @@ try {
   await xr.evaluate(async()=>{window.__questGrip(0,[1,1.18,-8.15]);await window.advanceTime(17);window.__GRAPHYSX_QUEST3__.vr.input.slots[0].ray.dispatchEvent({type:'squeezeend'});});
   await phase(xr,'docked');await xr.evaluate(()=>window.__questSelect('nacre-control'));await phase(xr,'charging');
   await advance(xr,8200);await phase(xr,'ready');
+  await xr.evaluate(()=>{const api=window.__GRAPHYSX__,saved=api.export();const result=api.create(saved);if(!result.ok)throw Error(result.error);});
+  await ready(xr);await phase(xr,'ready');
+  receipt.xrWorldReloadReady=true;
   const xrAudio=await audioState(xr);assert.equal(xrAudio.listener,true);assert.equal(xrAudio.playing,1);
   const hiddenAudio=await xr.evaluate(()=>{
     window.__questSession.visibilityState='hidden';window.__questSession.dispatchEvent(new Event('visibilitychange'));
