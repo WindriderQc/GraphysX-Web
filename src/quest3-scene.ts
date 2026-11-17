@@ -48,7 +48,7 @@ export function createQuest3Scene(): AgentWorldDefinition {
     {id:"nacre-reactor-light",type:"point-light",intensity:0,distance:12,marker:false,transform:{position:[0,2.8,-10.2]},material:{color:"#37cbe8"},castShadow:false},
     {...block("nacre-control",[.5,.13,.4],[1.55,1.04,-8.15],"#d5a653"),transform:{position:[1.55,1.04,-8.15],rotationDegrees:[-15,0,0]},material:{color:"#d5a653",emissive:"#169b98",emissiveIntensity:.12,roughness:.3},tags:["nacre","reactor-switch"]},
     block("nacre-control-stem",[.12,.88,.14],[1.55,.44,-8.15],"#203540"),
-    {id:"nacre-reactor-particles",type:"emitter",transform:{position:[0,2.7,-11]},emitter:{preset:"energy-orb",enabled:false,rate:12,maxParticles:64,lifetimeSeconds:1.8,volumeScale:.6,sizeScale:.35,color:"#58ddff",gravity:[0,.12,0],seed:42},tags:["nacre"]},
+    {id:"nacre-reactor-particles",type:"emitter",transform:{position:[0,2.7,-11]},emitter:{preset:"energy-orb",enabled:false,rate:12,maxParticles:64,lifetimeSeconds:1.8,speed:1.6,spread:1,volumeScale:.6,sizeScale:.75,color:"#58ddff",gravity:[0,.12,0],seed:42},tags:["nacre"]},
     native("nacre-door-left","/assets/quest3/blast-door.glb",6.5,[-3.25,3,-21.5]),
     native("nacre-door-right","/assets/quest3/blast-door.glb",6.5,[3.25,3,-21.5]),
     block("nacre-door-frame-top",[13.6,.25,.5],[0,6.15,-21.5],"#4a626a"),

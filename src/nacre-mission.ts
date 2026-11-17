@@ -50,12 +50,13 @@ export class NacreMission {
     if (phase !== "charging" && phase !== "opening") return online(phase) ? 1 : 0;
     const duration = phase === "charging" ? NACRE.chargeSeconds : NACRE.doorSeconds;
     const start = Number(this.tags().find(tag => tag.startsWith("started:"))?.slice(8) ?? 0);
-    return Number.isFinite(start) ? Math.max(0, Math.min(1, (this.world.getElapsedSeconds() - start) / duration)) : 0;
+    const progress = (this.world.getElapsedSeconds() - start) / duration;
+    return Number.isFinite(progress) ? progress >= 1 - 1e-9 ? 1 : Math.max(0, progress) : 0;
   }
 
   private phaseCommand(phase: NacrePhase): AgentWorldCommand {
     const tags = this.tags().filter(tag => !tag.startsWith("phase:") && !tag.startsWith("started:"));
-    return update(NACRE.state, { tags: [...tags, "phase:" + phase, "started:" + this.world.getElapsedSeconds().toFixed(6)] });
+    return update(NACRE.state, { tags: [...tags, "phase:" + phase, "started:" + this.world.getElapsedSeconds()] });
   }
   private change(commands: AgentWorldCommand[]): boolean {
     const result = this.world.api.transaction(commands);
@@ -198,9 +199,9 @@ export class NacreMission {
     }
     if (phase !== "carrying") this.owner = null;
     if (phase === "charging") {
-      const progress = this.progress, stage = Math.min(4, Math.floor(progress * 4));
-      if (stage !== this.lastStage) { this.lastStage = stage; this.change(this.energy(Math.max(.08, progress), false)); }
+      const progress = this.progress, stage = Math.min(4, Math.floor(progress * 4 + 1e-9));
       if (progress >= 1) this.openDoors();
+      else if (stage !== this.lastStage) { this.lastStage = stage; this.change(this.energy(Math.max(.08, progress), false)); }
     } else if (phase === "opening" && this.progress >= 1) {
       this.change([this.phaseCommand("ready"), ...this.doorCommands(true)]);
       this.notice = "Belvédère ouvert. Approchez de la Terre.";

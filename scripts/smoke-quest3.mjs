@@ -74,10 +74,25 @@ try {
   await page.click('.nacre-primary');await phase(page,'charging');await advance(page,2400);
   await page.waitForFunction(()=>window.__GRAPHYSX_QUEST3__.host.audio.playingCount>0);
   await page.screenshot({path:path.join(out,'nacre-reactor.png')});
+  console.log('NACRE charge probe:',JSON.stringify(await page.evaluate(()=>{
+    const {host,mission}=window.__GRAPHYSX_QUEST3__;return {phase:mission.phase,progress:mission.progress,seconds:host.world.getElapsedSeconds(),
+      light:host.api.query({ids:['nacre-reactor-light']})[0].intensity,tags:host.api.query({ids:['nacre-mission']})[0].tags,
+      camera:host.camera.position.toArray(),target:host.controls.target.toArray(),fov:host.camera.fov,
+      coreScale:host.world.getEntityObject('nacre-reactor-core').scale.toArray()};
+  })));
   assert.ok(await page.evaluate(()=>window.__GRAPHYSX__.query({ids:['nacre-reactor-light']})[0].intensity)>2);
   await advance(page,2500);await phase(page,'opening');await advance(page,1500);
   const doorX=await page.evaluate(()=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject('nacre-door-left').position.x);
   assert.ok(doorX< -3.25&&doorX> -9.5,'native keyframe tracks move the actual blast doors');
+  const particles=await page.evaluate(()=>{
+    const {host}=window.__GRAPHYSX_QUEST3__;let points;
+    host.world.getEntityObject('nacre-reactor-particles').traverse(o=>{if(o.isPoints)points=o;});
+    const position=points.geometry.getAttribute('position');let outside=0;
+    for(let i=0;i<points.geometry.drawRange.count;i++)if(Math.hypot(position.getX(i),position.getZ(i))>.65||Math.abs(position.getY(i))>2)outside++;
+    return {live:host.api.query({ids:['nacre-reactor-particles']})[0].emitter.liveParticles,outside};
+  });
+  assert.ok(particles.live>0&&particles.live<=64);assert.ok(particles.outside>0,'powered particles escape the opaque reactor core');
+  receipt.particles=particles;
   await page.screenshot({path:path.join(out,'nacre-opening.png')});
   await advance(page,1900);await phase(page,'ready');
   // Sample actual native transforms at non-symmetric phases, not behavior metadata.
@@ -179,9 +194,11 @@ try {
   }
   await advance(page,8200);await phase(page,'ready');
   await page.tap('.nacre-primary');await advance(page,0);await phase(page,'complete');
+  await page.waitForFunction(()=>document.querySelector('.nacre-ui').dataset.phase==='complete');
+  assert.equal(await page.locator('.nacre-caption h1').isVisible(),true,'the mobile victory message remains visible');
   assert.equal(await page.locator('.nacre-steps li[data-done="true"]').count(),3);
   await page.screenshot({path:path.join(out,'nacre-mobile-observation.png')});
-  await page.tap('.nacre-reset');await advance(page,0);await phase(page,'cell');
+  await page.tap('.nacre-menu summary');await page.tap('.nacre-reset');await advance(page,0);await phase(page,'cell');
   assert.deepEqual(await page.evaluate(()=>['nacre-door-left','nacre-door-right'].map(id=>window.__GRAPHYSX_QUEST3__.host.world.getEntityObject(id).position.x)),[-3.25,3.25]);
   receipt.mobileMission=true;
   await page.close();
@@ -223,7 +240,7 @@ try {
     }
     window.__questGrip=(index,world)=>{
       const slot=vr.input.slots[index];slot.grip.position.fromArray(world);vr.rig.worldToLocal(slot.grip.position);
-      slot.grip.quaternion.identity();vr.input.update(1/60);host.scene.updateMatrixWorld(true);
+      slot.grip.quaternion.identity();slot.grip.updateMatrix();vr.input.update(1/60);host.scene.updateMatrixWorld(true);
     };
     window.__questSelect=name=>{
       const slot=vr.input.slots[0],target=host.scene.getObjectByName(name)||host.world.getEntityObject(name);
@@ -231,9 +248,10 @@ try {
       host.scene.updateMatrixWorld(true);
       if(window.__GRAPHYSX_QUEST3__.holding)slot.ray.position.copy(slot.grip.position);
       else slot.ray.position.set(0,1.4,-.1);
+      slot.ray.updateMatrix();slot.ray.updateMatrixWorld(true);
       const origin=slot.ray.getWorldPosition(slot.ray.position.clone()),direction=target.getWorldPosition(origin.clone()).sub(origin).normalize();
       slot.ray.quaternion.setFromUnitVectors(direction.clone().set(0,0,-1),direction);
-      slot.ray.updateMatrixWorld(true);slot.ray.dispatchEvent({type:'selectstart'});slot.ray.dispatchEvent({type:'selectend'});
+      slot.ray.updateMatrix();slot.ray.updateMatrixWorld(true);slot.ray.dispatchEvent({type:'selectstart'});slot.ray.dispatchEvent({type:'selectend'});
     };
     window.__questGrip(0,[.65,1.12,.15]);vr.input.slots[0].ray.dispatchEvent({type:'squeezestart'});
   });

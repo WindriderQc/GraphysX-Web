@@ -91,6 +91,13 @@ test('NACRE mute and hidden-session audio gating preserve mission progress',()=>
   m.setAudible(false);assert.equal(f.entities.get('nacre-reactor-sound').sound.autoplay,false);
   m.setAudible(true);assert.equal(f.entities.get('nacre-reactor-sound').sound.autoplay,true);assert.equal(m.phase,'ready');m.dispose();
 });
+
+test('NACRE fractional clocks reach the exact half-charge stage and final boundary',()=>{
+  const f=fixture();f.advance(1.2345678);f.dock();f.mission.activate();f.mission.tick();
+  f.advance(1.21);f.advance(1.19);
+  assert.ok(f.entities.get('nacre-reactor-light').intensity>2,'half charge must advance beyond the first quarter stage');
+  f.advance(2.4);assert.equal(f.mission.phase,'opening');f.mission.dispose();
+});
 test('NACRE reload restores stable checkpoints, not stale tracking or absolute animation time',()=>{
   const f=fixture(),m=f.mission;m.begin();m.take('right');f.load();
   assert.equal(m.phase,'cell');assert.equal(m.holding,false);

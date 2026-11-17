@@ -9,7 +9,7 @@ import "./quest3-showcase.css";
 
 const VIEWS = [
   { label: "Cellule", position: [.9,1.65,1.6], target: [.6,1.25,-.7], floor: [0,0,1], yaw: 0 },
-  { label: "Réacteur", position: [1,1.65,-5.8], target: [.2,2.05,-10.7], floor: [1,0,-7.3], yaw: 0 },
+  { label: "Réacteur", position: [1,1.35,-5.8], target: [.2,2.35,-10.7], floor: [1,0,-7.3], yaw: 0 },
   { label: "Belvédère", position: [0,1.8,-22.5], target: [1,8,-58], floor: [0,.14,-22.5], yaw: 0 },
 ] as const;
 const HELP = {
@@ -44,7 +44,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
   const mission=new NacreMission(host.world,host.api);
   const value=new URLSearchParams(location.search).get("quality");
   const profile: QuestProfile=value&&Object.hasOwn(QUEST_PROFILES,value)?value as QuestProfile:"balanced";
-  let disposed=false,viewIndex=0,held:Held|null=null,lastCancelled=false,visualReady=false,warming=false,loadVersion=0,renderFailure=false;
+  let disposed=false,viewIndex=0,previewView=0,held:Held|null=null,lastCancelled=false,visualReady=false,warming=false,loadVersion=0,renderFailure=false;
   let readyOff:(()=>void)|null=null,sessionVisibilityOff:(()=>void)|null=null,lastSession:XRSession|null=null;
   const decor=new Group();host.scene.add(decor);
   const consoleGroup=new Group();consoleGroup.position.fromArray(VIEWS[0].floor);decor.add(consoleGroup);
@@ -54,7 +54,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
   const point=new Vector3(),direction=new Vector3(),rotation=new Quaternion(),scratch=new Vector3(),ndc=new Vector2();
   const ui=document.createElement("section");ui.className="nacre-ui";ui.lang="fr";
   ui.innerHTML='<header class="nacre-top"><div class="nacre-brand"><span class="nacre-mark">N</span> GRAPHYSX <span>/</span> EXPÉDITION 001</div><a href="'+import.meta.env.BASE_URL+'">Retour aux mondes ↗</a></header>'
-    +'<div class="nacre-status"><div role="status" class="nacre-loading">Préparation de la station…</div><div class="nacre-stats" hidden></div><div class="nacre-tools"><button class="nacre-audio" aria-pressed="false">Son activé</button><button class="nacre-save">Sauvegarder</button><button class="nacre-load" disabled>Reprendre</button><button class="nacre-reset">Rejouer</button><button class="nacre-diagnostic" aria-expanded="false">Diagnostic</button></div></div>'
+    +'<div class="nacre-status"><div role="status" class="nacre-loading">Préparation de la station…</div><div class="nacre-stats" hidden></div><details class="nacre-menu" open><summary>Options</summary><div class="nacre-tools"><button class="nacre-audio" aria-pressed="false">Son activé</button><button class="nacre-save">Sauvegarder</button><button class="nacre-load" disabled>Reprendre</button><button class="nacre-reset">Rejouer</button><button class="nacre-diagnostic" aria-expanded="false">Diagnostic</button></div></details></div>'
     +'<div class="nacre-caption"><div class="nacre-rule"></div><span class="nacre-eyebrow">NACRE / RÉTABLIR LE SIGNAL</span><h1>Ramenez<br>la lumière.</h1><p class="nacre-objective">Une cellule. Un réacteur. La Terre au bout du couloir.</p><ol class="nacre-steps" aria-label="Progression"><li>Cellule</li><li>Réacteur</li><li>Belvédère</li></ol><progress class="nacre-charge" max="1" value="0" hidden></progress><button class="nacre-primary" disabled>Préparation…</button><p class="nacre-help">PC : E / Espace pour agir · clic sur la cellule ou le socle.<br>Quest : poignée pour saisir, gâchette pour les commandes.</p></div>'
     +'<footer class="nacre-bottom"><nav class="nacre-nav" aria-label="Points d’observation">'+VIEWS.map((v,i)=>'<button data-view="'+i+'" aria-pressed="'+String(i===0)+'">'+String(i+1).padStart(2,"0")+" · "+v.label+"</button>").join("")+'</nav><div class="nacre-actions"><select aria-label="Qualité VR"><option value="balanced">VR · Équilibrée</option><option value="quality">VR · Qualité</option><option value="economy">VR · Économie</option></select><button class="nacre-enter" disabled>Vérification VR…</button></div></footer>';
   root.append(ui);
@@ -62,6 +62,8 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
   const primary=ui.querySelector<HTMLButtonElement>(".nacre-primary")!,enter=ui.querySelector<HTMLButtonElement>(".nacre-enter")!,quality=ui.querySelector<HTMLSelectElement>("select")!;
   const objective=ui.querySelector<HTMLElement>(".nacre-objective")!,headline=ui.querySelector<HTMLElement>("h1")!,charge=ui.querySelector<HTMLProgressElement>("progress")!;
   const soundButton=ui.querySelector<HTMLButtonElement>(".nacre-audio")!,resume=ui.querySelector<HTMLButtonElement>(".nacre-load")!;
+  const menu=ui.querySelector<HTMLDetailsElement>(".nacre-menu")!;
+  const previewFov=host.camera.fov;let compactUi:boolean|undefined;
   const savedName="NACRE · Ma station";resume.disabled=!host.api.state()?.savedWorlds.includes(savedName);quality.value=profile;
   let notice="",noticeUntil=0,drawnPanel="",uiClock=0,manualTime=false,manualRemainder=0,lastMissionNotice="",movingView=false,buttonLabel="";
   let models=host.api.query({type:"model"});
@@ -125,7 +127,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
       if(vr.referenceSpace==="local")vr.rig.position.y+=1.6;
       vr.rig.rotation.y=target.yaw;consoleGroup.position.copy(vr.floorPosition);consoleGroup.rotation.y=target.yaw;
       movingView=false;
-    }else{movingView=true;host.frameView([...target.position],[...target.target],.3);}
+    }else{previewView=index;resizePreview();movingView=true;host.frameView([...target.position],[...target.target],.3);}
     ui.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button,i)=>button.setAttribute("aria-pressed",String(i===index)));
     if(index===2){(vr.session.session?vr.camera:host.camera).getWorldPosition(point);mission.complete(point);}
   }
@@ -155,6 +157,7 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
   primary.addEventListener("click",primaryAction);
   ui.querySelectorAll<HTMLButtonElement>("[data-view]").forEach(b=>b.addEventListener("click",()=>view(Number(b.dataset.view))));
   soundButton.addEventListener("click",()=>mission.toggleMute());
+  menu.addEventListener("click",event=>{if(root.clientWidth<650&&(event.target as HTMLElement).closest("button"))menu.open=false;});
   ui.querySelector(".nacre-reset")!.addEventListener("click",()=>{held=null;if(mission.phase)mission.reset();else host.api.create(createQuest3Scene());view(0);});
   ui.querySelector(".nacre-diagnostic")!.addEventListener("click",event=>{stats.hidden=!stats.hidden;(event.currentTarget as HTMLElement).setAttribute("aria-expanded",String(!stats.hidden));});
   ui.querySelector(".nacre-save")!.addEventListener("click",()=>{mission.commitHeldPose();const result=host.api.save(savedName);resume.disabled=!result.ok;announce(result.ok?"Station sauvegardée dans ce navigateur.":"La sauvegarde n’a pas abouti.");});
@@ -191,8 +194,15 @@ export function mountQuest3Showcase(root: HTMLElement): {dispose(): Promise<void
     }
     audible();if(phase==="ready")resizePreview();
   });
-  const previewFov=host.camera.fov;
-  function resizePreview(){if(vr.session.session)return;host.camera.fov=root.clientWidth<650?75:previewFov;host.camera.updateProjectionMatrix();}
+  function resizePreview(){
+    if(vr.session.session)return;
+    const compact=root.clientWidth<650,width=root.clientWidth,height=root.clientHeight;
+    host.camera.fov=previewView===2?(compact?108:70):(compact?75:previewFov);
+    host.camera.clearViewOffset();
+    if(compact&&previewView===2&&width>0&&height>0)host.camera.setViewOffset(width,height,0,Math.round(height*.16),width,height);
+    host.camera.updateProjectionMatrix();
+    if(compact!==compactUi){menu.open=!compact;compactUi=compact;}
+  }
   window.addEventListener("resize",resizePreview);resizePreview();
   function prepareVisuals() {
     if(warming||visualReady||disposed)return;
