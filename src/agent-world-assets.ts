@@ -183,7 +183,7 @@ function recoveredPbrProfile(assetId: string | null, materialName: string): Reco
   if (assetId === "archive-ballctrl" || assetId === "archive-ballctrl-gridxl" || assetId === "archive-ballfire") {
     return { shading: "standard", roughness: 0.32, metalness: 0.1 };
   }
-  if (assetId === "archive-impreza") {
+  if (assetId === "archive-impreza" || assetId?.startsWith("archive-impreza-native-")) {
     if (/CHASIS\.JPG/i.test(materialName)) return { shading: "physical", roughness: 0.28, metalness: 0.12, clearcoat: 0.85, clearcoatRoughness: 0.18 };
     if (/VENTANAS/i.test(materialName)) return { shading: "physical", roughness: 0.12, metalness: 0.04, clearcoat: 0.72, clearcoatRoughness: 0.1, opacity: 0.42 };
     if (/UNDERCARRIAGE|CHASIS_A/i.test(materialName)) return { shading: "standard", roughness: 0.78, metalness: 0.02 };

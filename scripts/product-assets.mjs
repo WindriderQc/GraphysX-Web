@@ -140,6 +140,10 @@ export async function productAssetManifest() {
   for (const url of await anyAssetLiterals("src/archive-world1-manifest.ts")) wanted.add(url);
   // Complete TVA rigs load only on the CubZ route; their source data is not JS boot code.
   for (const url of await anyAssetLiterals("src/cubz-menu-scene.ts")) wanted.add(url);
+  // Native Impreza model payloads, their original textures and both source heightfields.
+  for (const url of await anyAssetLiterals("src/impreza-source.ts")) {
+    for (const asset of await modelManifestAssets(PUBLIC, url)) wanted.add(asset);
+  }
 
   // The front-door galleries are generated release assets rather than runtime vocabulary.
   // Claim the whole generated directory so `npm run assets:shelf-thumbnails` can add or
